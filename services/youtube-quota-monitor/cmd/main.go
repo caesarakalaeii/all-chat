@@ -52,6 +52,9 @@ func main() {
 
 	log := logger.NewLogger("youtube-quota-monitor", cfg.LogLevel)
 	defer log.Sync()
+	if cfg.DatabasePassword == "" {
+		log.Fatal("DATABASE_PASSWORD must be set")
+	}
 	log.Info("Starting YouTube Quota Monitor",
 		zap.Duration("interval", cfg.MonitorInterval),
 		zap.String("alert_channel", cfg.AlertChannel),

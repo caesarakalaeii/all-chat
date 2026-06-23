@@ -79,6 +79,9 @@ func main() {
 
 	// Load configuration from environment
 	config := loadConfig()
+	if config.DatabasePassword == "" {
+		log.Fatal("DATABASE_PASSWORD must be set")
+	}
 
 	// Validate Twitch credentials
 	if config.TwitchClientID == "" || config.TwitchClientSecret == "" {
@@ -399,7 +402,6 @@ type Config struct {
 	DatabaseName           string
 	RedisHost              string
 	RedisPort              string
-	JWTSecret              string
 	MessageProcessorURL    string
 	MessageProcessorAPIKey string
 	TwitchClientID         string
@@ -414,11 +416,10 @@ func loadConfig() *Config {
 		DatabaseHost:           getEnv("DATABASE_HOST", "localhost"),
 		DatabasePort:           getEnv("DATABASE_PORT", "5432"),
 		DatabaseUser:           getEnv("DATABASE_USER", "allchat"),
-		DatabasePassword:       getEnv("DATABASE_PASSWORD", "allchat_dev_password"),
+		DatabasePassword:       getEnv("DATABASE_PASSWORD", ""),
 		DatabaseName:           getEnv("DATABASE_NAME", "allchat"),
 		RedisHost:              getEnv("REDIS_HOST", "localhost"),
 		RedisPort:              getEnv("REDIS_PORT", "6379"),
-		JWTSecret:              getEnv("JWT_SECRET", "default-secret-change-in-production"),
 		MessageProcessorURL:    getEnv("MESSAGE_PROCESSOR_URL", "http://message-processor:8087"),
 		MessageProcessorAPIKey: getEnv("MESSAGE_PROCESSOR_API_KEY", ""),
 		TwitchClientID:         getEnv("TWITCH_CLIENT_ID", ""),

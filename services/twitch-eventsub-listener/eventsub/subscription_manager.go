@@ -47,6 +47,7 @@ type SubscriptionManager struct {
 	webhookSecret string // Webhook secret for signature verification
 	callbackURL   string // Public webhook callback URL
 	logger        *zap.Logger
+	httpClient    *http.Client // Dedicated client with timeout (audit L25)
 
 	// Track active subscriptions
 	mu            sync.RWMutex
@@ -62,6 +63,7 @@ func NewSubscriptionManager(clientID, clientSecret, webhookSecret, callbackURL s
 		callbackURL:   callbackURL,
 		logger:        logger,
 		subscriptions: make(map[string]string),
+		httpClient:    &http.Client{Timeout: 10 * time.Second},
 	}
 }
 
@@ -84,7 +86,7 @@ func (sm *SubscriptionManager) getAccessToken(ctx context.Context) (string, erro
 		return "", fmt.Errorf("failed to create token request: %w", err)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := sm.httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to request token: %w", err)
 	}
@@ -324,7 +326,7 @@ func (sm *SubscriptionManager) Unsubscribe(ctx context.Context, broadcasterID st
 		req.Header.Set("Client-Id", sm.clientID)
 		req.Header.Set("Authorization", "Bearer "+token)
 
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := sm.httpClient.Do(req)
 		if err != nil {
 			if firstErr == nil {
 				firstErr = fmt.Errorf("failed to delete subscription %s: %w", key, err)
@@ -379,7 +381,7 @@ func (sm *SubscriptionManager) UnsubscribeType(ctx context.Context, broadcasterI
 	req.Header.Set("Client-Id", sm.clientID)
 	req.Header.Set("Authorization", "Bearer "+token)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := sm.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to delete subscription: %w", err)
 	}
@@ -461,7 +463,7 @@ func (sm *SubscriptionManager) subscribeWithCondition(ctx context.Context, subsc
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := sm.httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to create subscription: %w", err)
 	}
@@ -536,7 +538,7 @@ func (sm *SubscriptionManager) GetUserIDByLogin(ctx context.Context, login strin
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Client-Id", sm.clientID)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := sm.httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to get user: %w", err)
 	}

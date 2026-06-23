@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -218,7 +219,7 @@ func TestTwitchOAuth_GetUserInfo(t *testing.T) {
 
 			// Override HTTP client to use mock server
 			client.client = &http.Client{
-				Timeout: 10 * time.Second,
+				Timeout:   10 * time.Second,
 				Transport: &mockTransport{server: server},
 			}
 
@@ -271,4 +272,29 @@ func TestTwitchOAuth_RefreshToken(t *testing.T) {
 	// Note: Full end-to-end token refresh testing is difficult to mock
 	// because the oauth2 library makes specific HTTP requests with form encoding.
 	// Integration tests should validate the actual OAuth flow.
+}
+
+// TestTwitchOAuth_GetAuthURLWithPKCE verifies that PKCE challenge params are present
+// in the generated auth URL (audit L4).
+func TestTwitchOAuth_GetAuthURLWithPKCE(t *testing.T) {
+	client := NewTwitchOAuth("test_id", "test_secret", "http://localhost:8080/callback")
+	authURL, verifier := client.GetAuthURLWithPKCE("state123")
+
+	if authURL == "" {
+		t.Fatal("GetAuthURLWithPKCE() returned empty URL")
+	}
+	if verifier == "" {
+		t.Fatal("GetAuthURLWithPKCE() returned empty verifier")
+	}
+	if len(verifier) < 43 {
+		t.Errorf("PKCE verifier too short: %d chars, need >= 43", len(verifier))
+	}
+
+	// The URL must contain code_challenge and code_challenge_method=S256
+	if !strings.Contains(authURL, "code_challenge=") {
+		t.Error("auth URL missing code_challenge parameter")
+	}
+	if !strings.Contains(authURL, "code_challenge_method=S256") {
+		t.Error("auth URL missing code_challenge_method=S256")
+	}
 }

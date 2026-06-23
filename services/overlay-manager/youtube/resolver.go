@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -45,9 +46,24 @@ var (
 )
 
 const (
-	innertubeAPIKey        = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
+	// defaultInnertubeAPIKey is the public InnerTube API key (same value used by
+	// youtube-listener-innertube). Kept as the fallback for innertubeAPIKey.
+	defaultInnertubeAPIKey = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
 	innertubeClientVersion = "2.20260312.01.00"
 )
+
+// innertubeAPIKey is the InnerTube API key used for resolve/browse calls.
+// Configurable via the ALLCHAT_INNERTUBE_KEY env var (audit L26); falls back to
+// the public web-client key when unset. Must match youtube-listener-innertube.
+var innertubeAPIKey = getEnvDefault("ALLCHAT_INNERTUBE_KEY", defaultInnertubeAPIKey)
+
+// getEnvDefault returns os.Getenv(key) when set and non-empty, else fallback.
+func getEnvDefault(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
 
 // Resolver resolves YouTube URLs/handles to channel IDs using the InnerTube API.
 // No YouTube Data API v3 quota is consumed.

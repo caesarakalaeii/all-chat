@@ -39,6 +39,16 @@ import Link from 'next/link'
 import { useViewerAuthStore } from '@/lib/stores/viewer-auth-store'
 import { viewerApi } from '@/lib/api/viewer'
 
+/*
+ * SECURITY (audit H4): postMessage targetOrigin must be an explicit origin,
+ * never '*', so the viewer JWT is delivered only to the All-Chat app that
+ * opened this popup — not to any other page that might hold a reference to
+ * this window.
+ */
+const POST_MESSAGE_TARGET_ORIGIN =
+  process.env.NEXT_PUBLIC_APP_URL ||
+  (typeof window !== 'undefined' ? window.location.origin : '*')
+
 function AuthSuccessContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -63,7 +73,7 @@ function AuthSuccessContent() {
               type: 'ALLCHAT_AUTH_ERROR',
               error: 'No authentication code received',
             },
-            '*'
+            POST_MESSAGE_TARGET_ORIGIN
           )
         }
         return
@@ -101,7 +111,7 @@ function AuthSuccessContent() {
             token,
             streamer,
           },
-          '*'
+          POST_MESSAGE_TARGET_ORIGIN
         )
 
         // Show success message briefly before closing

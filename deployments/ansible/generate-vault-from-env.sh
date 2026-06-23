@@ -37,7 +37,8 @@ set +a
 echo "✓ Loaded environment variables"
 echo ""
 
-# Validate required variables
+# Validate required variables — fail loud rather than baking weak defaults
+# into the vault (L30). Secrets with no safe default MUST be present in .env.
 REQUIRED_VARS=(
     "TWITCH_CLIENT_ID"
     "TWITCH_CLIENT_SECRET"
@@ -45,6 +46,9 @@ REQUIRED_VARS=(
     "TWITCH_BOT_OAUTH"
     "JWT_SECRET"
     "TOKEN_ENCRYPTION_KEY"
+    "DATABASE_PASSWORD"
+    "YOUTUBE_CLIENT_ID"
+    "YOUTUBE_CLIENT_SECRET"
 )
 
 MISSING_VARS=()
@@ -55,16 +59,14 @@ for var in "${REQUIRED_VARS[@]}"; do
 done
 
 if [ ${#MISSING_VARS[@]} -gt 0 ]; then
-    echo "⚠️  Warning: The following required variables are missing or empty in .env:"
+    echo "❌ Error: The following required variables are missing or empty in .env:"
     for var in "${MISSING_VARS[@]}"; do
         echo "  • $var"
     done
     echo ""
-    read -p "Continue anyway? (y/n): " continue_anyway
-    if [[ ! "$continue_anyway" =~ ^[Yy]$ ]]; then
-        echo "Please update your .env file and try again."
-        exit 1
-    fi
+    echo "Refusing to generate the vault with weak/default secrets."
+    echo "Populate these in .env (see .env.example) and re-run this script."
+    exit 1
 fi
 
 # Check if vault already exists
@@ -112,14 +114,14 @@ cat > "$VAULT_FILE" << EOF
 # =============================================================================
 # DATABASE CREDENTIALS
 # =============================================================================
-postgres_password: "${DATABASE_PASSWORD:-allchat_dev_password}"
+postgres_password: "${DATABASE_PASSWORD}"
 
 # =============================================================================
 # JWT AUTHENTICATION
 # =============================================================================
-jwt_secret: "${JWT_SECRET:-dev-secret-change-in-production}"
+jwt_secret: "${JWT_SECRET}"
 jwt_expiry_hours: "24"
-token_encryption_key: "${TOKEN_ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef}"
+token_encryption_key: "${TOKEN_ENCRYPTION_KEY}"
 
 # =============================================================================
 # TWITCH INTEGRATION
@@ -132,8 +134,8 @@ twitch_bot_oauth: "${TWITCH_BOT_OAUTH}"
 # =============================================================================
 # YOUTUBE INTEGRATION
 # =============================================================================
-youtube_client_id: "${YOUTUBE_CLIENT_ID:-your-youtube-client-id}"
-youtube_client_secret: "${YOUTUBE_CLIENT_SECRET:-your-youtube-client-secret}"
+youtube_client_id: "${YOUTUBE_CLIENT_ID}"
+youtube_client_secret: "${YOUTUBE_CLIENT_SECRET}"
 youtube_api_key: "${YOUTUBE_API_KEY:-}"
 
 # =============================================================================

@@ -15,7 +15,7 @@ RUN go mod download
 # Build
 RUN CGO_ENABLED=0 GOOS=linux go build -o /app/discord-listener ./cmd/
 
-FROM alpine:latest
+FROM alpine:3.23
 
 RUN apk --no-cache add ca-certificates tzdata
 

@@ -17,9 +17,19 @@ spec:
         app: postgres
         component: database
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        # postgres:16-alpine `postgres` user is uid 70. Run non-root (H6).
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        fsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: postgres
         image: postgres:16-alpine
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 5432
           name: postgres
@@ -41,6 +51,15 @@ spec:
         - name: migrations
           mountPath: /docker-entrypoint-initdb.d
           readOnly: true
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          # readOnlyRootFilesystem intentionally omitted: postgres writes
+          # /var/run/postgresql (socket), /tmp and PGDATA at runtime. Enabling
+          # it requires emptyDir mounts for those paths — deferred to avoid
+          # breakage.
         resources:
           requests:
             memory: "256Mi"

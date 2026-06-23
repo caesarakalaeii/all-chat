@@ -30,6 +30,15 @@
 import { create } from 'zustand'
 import type { ViewerInfo } from '../types/viewer'
 import { viewerApi } from '../api/viewer'
+import { inMemoryTokens } from '../auth/in-memory-store'
+
+/*
+ * SECURITY (audit H3): the viewer access token is mirrored to the in-memory
+ * store so API clients can read it without localStorage. It is still written
+ * to localStorage for legacy readers (settings/viewer page reads it directly
+ * in several places) — full removal is deferred to the httpOnly-cookie
+ * migration.
+ */
 
 interface ViewerAuthStore {
   viewerInfo: ViewerInfo | null
@@ -49,7 +58,9 @@ export const useViewerAuthStore = create<ViewerAuthStore>((set) => ({
   loading: true,
 
   setViewerToken: (token: string) => {
+    inMemoryTokens.setViewerAccessToken(token)
     if (typeof window !== 'undefined') {
+      // TODO(H3): remove localStorage write once legacy readers are migrated.
       localStorage.setItem('viewer_jwt_token', token)
     }
     set({ viewerToken: token })
@@ -60,6 +71,7 @@ export const useViewerAuthStore = create<ViewerAuthStore>((set) => ({
   },
 
   viewerLogout: () => {
+    inMemoryTokens.setViewerAccessToken(null)
     if (typeof window !== 'undefined') {
       localStorage.removeItem('viewer_jwt_token')
     }
@@ -79,6 +91,7 @@ export const useViewerAuthStore = create<ViewerAuthStore>((set) => ({
       return
     }
 
+    inMemoryTokens.setViewerAccessToken(token)
     set({ viewerToken: token })
 
     try {
@@ -86,6 +99,7 @@ export const useViewerAuthStore = create<ViewerAuthStore>((set) => ({
       set({ viewerInfo, loading: false })
     } catch {
       // Token invalid, clear it
+      inMemoryTokens.setViewerAccessToken(null)
       localStorage.removeItem('viewer_jwt_token')
       set({ viewerInfo: null, viewerToken: null, loading: false })
     }

@@ -106,8 +106,10 @@ func NewHandler(secret string, redis *redis.Client, db *pgxpool.Pool, publisher 
 
 // HandleEventSubWebhook processes incoming EventSub webhook notifications
 func (h *Handler) HandleEventSubWebhook(c *gin.Context) {
-	// Read request body
-	body, err := io.ReadAll(c.Request.Body)
+	// Read request body. Cap at 1MB before HMAC verification to prevent
+	// unauthenticated OOM via oversized POST bodies (audit M9). Twitch
+	// EventSub payloads are well under 1KB, so this never clips legitimate traffic.
+	body, err := io.ReadAll(io.LimitReader(c.Request.Body, 1<<20))
 	if err != nil {
 		h.logger.Error("Failed to read webhook body", zap.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
@@ -569,8 +571,28 @@ func (h *Handler) handleStreamOnline(ctx context.Context, eventData json.RawMess
 	// Publish cross-platform event for each overlay
 	for _, overlayID := range overlayIDs {
 		eventChannel := fmt.Sprintf("platform:event:%s", overlayID)
-		eventPayload := fmt.Sprintf(`{"platform":"twitch","channel":"%s","event":"stream.online","timestamp":"%s"}`,
-			event.BroadcasterUserName, time.Now().Format(time.RFC3339))
+		// Build the cross-platform event payload with json.Marshal instead of
+		// fmt.Sprintf so Twitch-supplied BroadcasterUserName cannot break JSON
+		// structure or inject fields (audit L19).
+		payloadObj := struct {
+			Platform  string `json:"platform"`
+			Channel   string `json:"channel"`
+			Event     string `json:"event"`
+			Timestamp string `json:"timestamp"`
+		}{
+			Platform:  "twitch",
+			Channel:   event.BroadcasterUserName,
+			Event:     "stream.online",
+			Timestamp: time.Now().Format(time.RFC3339),
+		}
+		eventPayload, err := json.Marshal(payloadObj)
+		if err != nil {
+			h.logger.Error("Failed to marshal cross-platform stream.online event",
+				zap.String("overlay_id", overlayID),
+				zap.Error(err),
+			)
+			continue
+		}
 
 		if err := h.redis.Publish(ctx, eventChannel, eventPayload).Err(); err != nil {
 			h.logger.Warn("Failed to publish cross-platform stream.online event",

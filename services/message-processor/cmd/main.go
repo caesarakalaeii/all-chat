@@ -104,7 +104,10 @@ func main() {
 	dbHost := getEnvOrDefault("DATABASE_HOST", "localhost")
 	dbPort := getEnvOrDefault("DATABASE_PORT", "5432")
 	dbUser := getEnvOrDefault("DATABASE_USER", "allchat")
-	dbPassword := getEnvOrDefault("DATABASE_PASSWORD", "allchat_dev_password")
+	dbPassword := getEnvOrDefault("DATABASE_PASSWORD", "")
+	if dbPassword == "" {
+		log.Fatal("DATABASE_PASSWORD must be set")
+	}
 	dbName := getEnvOrDefault("DATABASE_NAME", "allchat")
 
 	connString := fmt.Sprintf("postgres://%s:%s@%s:%s/%s",

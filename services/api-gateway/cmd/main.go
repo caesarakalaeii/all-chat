@@ -86,7 +86,10 @@ func main() {
 	dbHost := getEnvOrDefault("DATABASE_HOST", "localhost")
 	dbPort := getEnvOrDefault("DATABASE_PORT", "5432")
 	dbUser := getEnvOrDefault("DATABASE_USER", "allchat")
-	dbPassword := getEnvOrDefault("DATABASE_PASSWORD", "allchat_dev_password")
+	dbPassword := getEnvOrDefault("DATABASE_PASSWORD", "")
+	if dbPassword == "" {
+		log.Fatal("DATABASE_PASSWORD must be set")
+	}
 	dbName := getEnvOrDefault("DATABASE_NAME", "allchat")
 
 	connString := fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
@@ -140,6 +143,20 @@ func main() {
 	})
 	log.Info("Initialized rate limiter",
 		zap.Int("requests_per_minute", rateLimitPerMin),
+	)
+
+	// Stricter per-endpoint rate limiter for auth-sensitive routes (M7).
+	// Prevents brute-force / credential-stuffing on login, refresh, and token
+	// exchange endpoints. Default: 5 requests/min per IP.
+	authRateLimitPerMin := getEnvAsIntOrDefault("AUTH_RATE_LIMIT_PER_MINUTE", 5)
+	authRateLimiter := ratelimit.NewRateLimiter(ratelimit.Config{
+		RequestsPerMinute: authRateLimitPerMin,
+		KeyPrefix:         "api_gateway:auth",
+		RedisClient:       redisClient,
+		Logger:            log,
+	})
+	log.Info("Initialized auth rate limiter",
+		zap.Int("requests_per_minute", authRateLimitPerMin),
 	)
 
 	// Initialize metrics (available via /metrics endpoint)
@@ -421,8 +438,12 @@ func main() {
 	// Health check endpoint (no auth required)
 	router.GET("/health", healthHandler.CheckHealth)
 
-	// Prometheus metrics endpoint
-	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
+	// Prometheus metrics endpoint (M6: protected with admin JWT to prevent
+	// topology/latency data exposure to unauthenticated callers)
+	metricsGroup := router.Group("/")
+	metricsGroup.Use(sharedmiddleware.JWTAuth(userKeyChain))
+	metricsGroup.Use(sharedmiddleware.AdminOnly())
+	metricsGroup.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// Static pages (no auth required)
 	router.StaticFile("/legal/terms", "./static/legal/terms.html")
@@ -444,10 +465,10 @@ func main() {
 		publicAPI.GET("/stats", statsHandler.GetPlatformStats)
 
 		// Auth service routes
-		publicAPI.POST("/auth/login", proxyHandler.ForwardRequest)
-		publicAPI.GET("/auth/login", proxyHandler.ForwardRequest)
+		publicAPI.POST("/auth/login", authRateLimiter.Middleware(), proxyHandler.ForwardRequest)
+		publicAPI.GET("/auth/login", authRateLimiter.Middleware(), proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/callback", proxyHandler.ForwardRequest)
-		publicAPI.POST("/auth/refresh", proxyHandler.ForwardRequest)
+		publicAPI.POST("/auth/refresh", authRateLimiter.Middleware(), proxyHandler.ForwardRequest)
 
 		// Platform-specific OAuth routes
 		publicAPI.GET("/auth/twitch/login", proxyHandler.ForwardRequest)
@@ -473,16 +494,16 @@ func main() {
 		// Viewer OAuth routes (for sending messages)
 		publicAPI.GET("/auth/viewer/twitch/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/viewer/twitch/callback", proxyHandler.ForwardRequest)
-		publicAPI.POST("/auth/viewer/twitch/exchange", proxyHandler.ForwardRequest)
+		publicAPI.POST("/auth/viewer/twitch/exchange", authRateLimiter.Middleware(), proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/viewer/youtube/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/viewer/youtube/callback", proxyHandler.ForwardRequest)
-		publicAPI.POST("/auth/viewer/youtube/exchange", proxyHandler.ForwardRequest)
+		publicAPI.POST("/auth/viewer/youtube/exchange", authRateLimiter.Middleware(), proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/viewer/kick/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/viewer/kick/callback", proxyHandler.ForwardRequest)
-		publicAPI.POST("/auth/viewer/kick/exchange", proxyHandler.ForwardRequest)
+		publicAPI.POST("/auth/viewer/kick/exchange", authRateLimiter.Middleware(), proxyHandler.ForwardRequest)
 
 		// Auth code exchange (viewer trades code for JWT)
-		publicAPI.POST("/auth/viewer/token/exchange", proxyHandler.ForwardRequest)
+		publicAPI.POST("/auth/viewer/token/exchange", authRateLimiter.Middleware(), proxyHandler.ForwardRequest)
 
 		// Streamer info (public)
 		publicAPI.GET("/auth/streamers/:username", proxyHandler.ForwardRequest)
@@ -498,6 +519,10 @@ func main() {
 
 		// Phase 13: TTS streaming proxy — uses per-overlay tts_token JWT (not user JWT).
 		// Auth is enforced downstream in overlay-manager via the tts_token query param.
+		// NOTE (L15 defense-in-depth): this endpoint is public at the gateway level
+		// (no user JWT). The downstream tts_token provides the only auth layer, and
+		// that token is currently passed via URL query (see M17). Consider adding a
+		// gateway-level check or moving the token to a header as a future hardening step.
 		publicAPI.POST("/overlays/:id/tts", proxyHandler.ForwardRequest)
 
 		// Viewer cosmetics catalog (public — no auth required)
@@ -593,8 +618,9 @@ func main() {
 		protectedAPI.POST("/youtube/resolve", proxyHandler.ForwardRequest)
 		protectedAPI.POST("/overlays/youtube/resolve", proxyHandler.ForwardRequest)
 
-		// Internal API routes (protected - used by other services)
-		protectedAPI.POST("/internal/overlays/:id/sources/auto", proxyHandler.ForwardRequest)
+		// Internal API routes — moved to /internal group (L14): this was service-to-
+		// service (called by auth-service) but incorrectly sat under protectedAPI
+		// (user JWT). It is now in the internal group with service JWT auth.
 
 		// Moderation service routes (ADR-0017) — owner-only chat moderation.
 		// Ownership/source authorization is enforced again in moderation-service.
@@ -685,6 +711,9 @@ func main() {
 	internal.Use(sharedmiddleware.ServiceJWTAuth(serviceKeyChain, "share-service", "overlay-manager", "auth-service"))
 	{
 		internal.POST("/ws/notify", wsHandler.NotifyUser)
+		// Auto-source-activation: called by auth-service after OAuth callback to
+		// add a chat source. Proxied to overlay-manager (service JWT, not user JWT).
+		internal.POST("/overlays/:id/sources/auto", proxyHandler.ForwardRequest)
 	}
 
 	// Get port from environment

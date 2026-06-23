@@ -1,0 +1,111 @@
+name: Security Scans
+
+# S1 (SECURITY_AUDIT_REPORT.md): govulncheck per Go module + npm audit for
+# Node projects. Runs nightly and on PRs touching Go/Node code.
+# govulncheck gates on reachable vulnerabilities (exit code 3 = vulns found).
+# npm audit gates on high+ severity.
+
+on:
+  schedule:
+    # 03:00 UTC daily
+    - cron: '0 3 * * *'
+  pull_request:
+    paths:
+      - 'services/**'
+      - 'shared/**'
+      - 'test/**'
+      - 'frontend/**'
+      - '.github/workflows/security-scan.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # ------------------------------------------------------------------
+  # govulncheck: scan every Go module for REACHABLE vulnerabilities.
+  # Exit code 3 = vulnerabilities found (gate fails).
+  # ------------------------------------------------------------------
+  govulncheck:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          # Service modules
+          - services/api-gateway
+          - services/auth-service
+          - services/discord-listener
+          - services/emote-service
+          - services/kick-listener
+          - services/message-processor
+          - services/moderation-service
+          - services/overlay-manager
+          - services/payment-service
+          - services/share-service
+          - services/source-manager
+          - services/token-refresh-service
+          - services/twitch-eventsub-listener
+          - services/twitch-listener
+          - services/youtube-listener
+          - services/youtube-listener-innertube
+          - services/youtube-quota-monitor
+          # Shared modules
+          - shared
+          - shared/ratelimit
+          - shared/signing
+          - services/auth-service/shared/tracing
+          # Test modules
+          - test/contract/deletion
+          - test/contract/dual-listener
+          - test/contract/lifecycle
+          - test/contract/schema
+          - test/shared
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+          cache: true
+          cache-dependency-path: ${{ matrix.module }}/go.sum
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Run govulncheck on ${{ matrix.module }}
+        working-directory: ${{ matrix.module }}
+        # govulncheck exits 3 when reachable vulnerabilities are found.
+        # We gate on reachable vulns only (module-level advisories for
+        # uncalled code are reported but do not fail the gate).
+        run: govulncheck ./...
+
+  # ------------------------------------------------------------------
+  # npm audit: scan Node.js projects for high+ vulnerabilities.
+  # ------------------------------------------------------------------
+  npm-audit:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - frontend
+          - services/discord-bot
+          - services/tiktok-listener
+          - services/support-bot
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: ${{ matrix.project }}/package-lock.json
+
+      - name: npm audit (${{ matrix.project }})
+        working-directory: ${{ matrix.project }}
+        # --audit-level=high: fail on high or critical vulnerabilities.
+        # --omit=dev: production deps only (dev deps checked separately if needed).
+        run: npm audit --audit-level=high --omit=dev

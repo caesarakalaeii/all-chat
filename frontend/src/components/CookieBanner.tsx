@@ -25,7 +25,9 @@
  * This component displays a cookie consent banner that complies with GDPR requirements.
  *
  * Current Cookie Usage in All-Chat:
- * - Essential: localStorage items for authentication (jwt_token, refresh_token)
+ * - Essential: localStorage items for authentication (jwt_token). The refresh
+ *   token is stored in-memory only (audit H3) and is never persisted to
+ *   localStorage.
  * - Analytics: Self-hosted Umami — cookieless, sets nothing on the device, stores no personal data
  * - Functional: None (no additional functional cookies)
  * - Third-party: None (no third-party cookies)

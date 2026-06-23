@@ -124,7 +124,7 @@ func (d *Discovery) browseLiveCandidates(ctx context.Context, channelID string) 
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
 	if err != nil {
 		return nil, fmt.Errorf("read response body: %w", err)
 	}
@@ -307,7 +307,7 @@ func (d *Discovery) checkIsLiveViaPlayer(ctx context.Context, videoID string) (b
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
 	if err != nil {
 		return false, err
 	}
@@ -334,12 +334,17 @@ func (d *Discovery) checkIsLiveViaPlayer(ctx context.Context, videoID string) (b
 // Without the lockupViewModel path, discovery returns zero candidates for every
 // channel once YouTube switches a region to the new schema, breaking all
 // YouTube stream detection. Both walks share a single dedup set keyed by video ID.
+// maxCollectDepth caps recursion depth for the collect* helpers. YouTube
+// browse responses can be deeply nested; without a cap a malformed or
+// pathologically nested payload can exhaust the goroutine stack (audit L22).
+const maxCollectDepth = 20
+
 func collectLiveCandidatesFromBrowse(data interface{}) []LiveStreamCandidate {
 	var candidates []LiveStreamCandidate
 	seen := map[string]struct{}{}
-	var collect func(interface{})
-	collect = func(data interface{}) {
-		if len(candidates) >= 5 {
+	var collect func(interface{}, int)
+	collect = func(data interface{}, depth int) {
+		if len(candidates) >= 5 || depth > maxCollectDepth {
 			return
 		}
 		switch v := data.(type) {
@@ -371,15 +376,15 @@ func collectLiveCandidatesFromBrowse(data interface{}) []LiveStreamCandidate {
 				}
 			}
 			for _, val := range v {
-				collect(val)
+				collect(val, depth+1)
 			}
 		case []interface{}:
 			for _, item := range v {
-				collect(item)
+				collect(item, depth+1)
 			}
 		}
 	}
-	collect(data)
+	collect(data, 0)
 	return candidates
 }
 
@@ -568,9 +573,9 @@ func extractViewerCount(renderer map[string]interface{}) int {
 func collectVideoIDsFromBrowse(data interface{}) []string {
 	seen := map[string]struct{}{}
 	var ids []string
-	var collect func(interface{})
-	collect = func(data interface{}) {
-		if len(ids) >= 5 {
+	var collect func(interface{}, int)
+	collect = func(data interface{}, depth int) {
+		if len(ids) >= 5 || depth > maxCollectDepth {
 			return
 		}
 		switch v := data.(type) {
@@ -582,15 +587,15 @@ func collectVideoIDsFromBrowse(data interface{}) []string {
 				}
 			}
 			for _, val := range v {
-				collect(val)
+				collect(val, depth+1)
 			}
 		case []interface{}:
 			for _, item := range v {
-				collect(item)
+				collect(item, depth+1)
 			}
 		}
 	}
-	collect(data)
+	collect(data, 0)
 	return ids
 }
 
@@ -636,7 +641,7 @@ func (d *Discovery) GetInitialContinuation(ctx context.Context, videoID, channel
 		return "", "", fmt.Errorf("unexpected status code from next API: %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
 	if err != nil {
 		return "", "", fmt.Errorf("read response body: %w", err)
 	}
@@ -799,4 +804,3 @@ func extractContinuationFromLiveChatRenderer(renderer interface{}) string {
 	}
 	return ""
 }
-

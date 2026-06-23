@@ -19,6 +19,7 @@ package handlers
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/caesar/all-chat/services/api-gateway/models"
@@ -42,6 +43,9 @@ type ViewerWebSocketHandler struct {
 	chatReplayBuffer replay.ChatReplayBuffer
 	logger           *zap.Logger
 	upgrader         websocket.Upgrader
+	allowedOrigins   map[string]struct{}
+	allowedPrefixes  []string
+	allowAllOrigins  bool
 }
 
 // NewViewerWebSocketHandler creates a new viewer WebSocket handler
@@ -54,6 +58,11 @@ func NewViewerWebSocketHandler(
 	chatReplayBuffer replay.ChatReplayBuffer,
 	logger *zap.Logger,
 ) *ViewerWebSocketHandler {
+	// Apply the same origin allowlist as the owner WS handler (M8).
+	// Previously CheckOrigin returned true for all origins, allowing any
+	// malicious page to open /ws/chat/<streamer> via a victim's browser.
+	allowedOrigins, allowedPrefixes, allowAll := loadAllowedOrigins()
+
 	h := &ViewerWebSocketHandler{
 		wsManager:        wsManager,
 		subscriber:       subscriber,
@@ -62,21 +71,55 @@ func NewViewerWebSocketHandler(
 		replayBuffer:     replayBuffer,
 		chatReplayBuffer: chatReplayBuffer,
 		logger:           logger.Named("viewer-websocket"),
+		allowedOrigins:   allowedOrigins,
+		allowedPrefixes:  allowedPrefixes,
+		allowAllOrigins:  allowAll,
 	}
 
-	// Configure WebSocket upgrader with permissive origin check for viewers
-	// Viewers connect from browser extensions and web pages
+	if h.allowAllOrigins {
+		h.logger.Info("Viewer WebSocket origin allowlist disabled; allowing all origins")
+	} else {
+		h.logger.Info("Configured viewer WebSocket origin allowlist",
+			zap.Int("count", len(h.allowedOrigins)),
+		)
+	}
+
+	// Configure WebSocket upgrader with the shared origin allowlist (M8).
 	h.upgrader = websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
-		CheckOrigin: func(r *http.Request) bool {
-			// Allow all origins for viewer connections
-			// This is safe because viewers can't trigger polling or access secrets
-			return true
-		},
+		CheckOrigin:     h.checkOrigin,
 	}
 
 	return h
+}
+
+// checkOrigin enforces the configured origin allowlist for viewer connections (M8).
+func (h *ViewerWebSocketHandler) checkOrigin(r *http.Request) bool {
+	if h.allowAllOrigins {
+		return true
+	}
+
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		// Non-browser clients (e.g. curl) have no Origin header
+		return true
+	}
+
+	if _, ok := h.allowedOrigins[origin]; ok {
+		return true
+	}
+
+	for _, prefix := range h.allowedPrefixes {
+		if strings.HasPrefix(origin, prefix) {
+			return true
+		}
+	}
+
+	h.logger.Warn("Blocked viewer WebSocket connection from disallowed origin",
+		zap.String("origin", origin),
+	)
+	return false
 }
 
 // HandleViewerChatConnection handles WebSocket connection requests for viewers

@@ -59,6 +59,13 @@ import '@/styles/events.css'
 
 // ---- Utilities (identical to preview/page.tsx) ----------------------------
 
+// NOTE (M11): scopeCustomCss prefixes selectors so owner-authored CSS is
+// scoped to the preview root. It is NOT a full CSS sanitizer: `@import`,
+// `url(...)`, `expression()`, or escaped-selector tricks could still escape.
+// A complete CSS sanitiser is large and out of scope here; the blast radius
+// is capped by the CSP `style-src` directive added in next.config.js (M10),
+// which blocks external stylesheets and inline style injection vectors that
+// would otherwise be reachable via url()/@import.
 const scopeCustomCss = (css: string, scopeSelector: string, bodySelector: string): string => {
   if (!css.trim()) {
     return ''
@@ -282,6 +289,11 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
   // postMessage listener for live visual CSS updates from the editor
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
+      // M11: the editor that embeds this page is same-origin
+      // (/overlays/:id editor iframes /overlays/:id/preview/embed). Reject
+      // messages from any other origin so a malicious parent cannot inject
+      // CSS / TTS / filter settings into the preview.
+      if (event.origin !== window.location.origin) return
       // Live visual settings (CSS variables)
       if (event.data?.type === 'VISUAL_CSS_UPDATE') {
         const css = event.data.css as string
@@ -386,8 +398,10 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
     }
 
     window.addEventListener('message', handleMessage)
-    // Signal the editor that we're ready to receive visual CSS updates
-    window.parent.postMessage({ type: 'EMBED_READY' }, '*')
+    // Signal the editor that we're ready to receive visual CSS updates.
+    // M11: target only our own origin instead of '*' so the ready signal is
+    // not leaked cross-origin.
+    window.parent.postMessage({ type: 'EMBED_READY' }, window.location.origin)
     return () => {
       window.removeEventListener('message', handleMessage)
     }

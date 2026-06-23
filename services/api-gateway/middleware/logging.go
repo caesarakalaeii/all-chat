@@ -17,6 +17,8 @@
 package middleware
 
 import (
+	"net/url"
+	"strings"
 	"time"
 
 	sharedmw "github.com/caesar/all-chat/shared/middleware"
@@ -31,6 +33,18 @@ func Logging(log *zap.Logger) gin.HandlerFunc {
 		start := time.Now()
 		path := c.Request.URL.Path
 		query := c.Request.URL.RawQuery
+
+		// Redact JWT token from query string on WebSocket paths to prevent
+		// credential leakage into access logs (H5). Both /ws/overlay/:id and
+		// /ws/chat/:streamer accept ?token=<JWT> for authentication.
+		if strings.HasPrefix(path, "/ws/") && query != "" {
+			if values, err := url.ParseQuery(query); err == nil {
+				if values.Has("token") {
+					values.Set("token", "[REDACTED]")
+					query = values.Encode()
+				}
+			}
+		}
 
 		// Process request
 		c.Next()

@@ -82,7 +82,10 @@ func main() {
 	dbHost := listener.Env("DATABASE_HOST", "localhost")
 	dbPort := listener.Env("DATABASE_PORT", "5432")
 	dbUser := listener.Env("DATABASE_USER", "allchat")
-	dbPassword := listener.Env("DATABASE_PASSWORD", "allchat_dev_password")
+	dbPassword := listener.Env("DATABASE_PASSWORD", "")
+	if dbPassword == "" {
+		log.Fatal("DATABASE_PASSWORD must be set")
+	}
 	dbName := listener.Env("DATABASE_NAME", "allchat")
 
 	connString := fmt.Sprintf("postgres://%s:%s@%s:%s/%s",

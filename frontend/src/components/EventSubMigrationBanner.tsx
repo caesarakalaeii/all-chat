@@ -21,6 +21,7 @@
 import { useState } from 'react'
 import { Radio, X } from 'lucide-react'
 import { useAuthStore } from '@/lib/stores/auth-store'
+import { safeExternalRedirect } from '@/lib/auth/redirect-allowlist'
 import type { ChatSource } from '@/lib/types/overlay'
 
 const DISMISS_KEY = 'eventsub-migration-banner-dismissed'
@@ -81,7 +82,7 @@ export function EventSubMigrationBanner({
       })
       const data = await res.json()
       if (data.auth_url) {
-        window.location.href = data.auth_url
+        safeExternalRedirect(data.auth_url)
       } else {
         console.error('No auth_url returned for Twitch chat upgrade', data)
       }

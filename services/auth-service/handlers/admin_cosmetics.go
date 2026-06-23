@@ -76,6 +76,14 @@ type AdminCosmeticsHandler struct {
 	db  cosmeticsCatalogDB
 }
 
+// allowedCosmeticTables is the allow-list of table names that can be used in
+// SQL queries (audit L18). Any other table name is rejected to prevent SQL
+// injection via string-concatenated table identifiers.
+var allowedCosmeticTables = map[string]bool{
+	"cosmetic_frames": true,
+	"cosmetic_flairs": true,
+}
+
 // NewAdminCosmeticsHandler creates a new AdminCosmeticsHandler backed by a pgxpool.Pool.
 func NewAdminCosmeticsHandler(log *zap.Logger, pool *pgxpool.Pool) *AdminCosmeticsHandler {
 	return &AdminCosmeticsHandler{
@@ -97,6 +105,11 @@ func newAdminCosmeticsHandlerWithDB(log *zap.Logger, db cosmeticsCatalogDB) *Adm
 
 // listCatalogEntries queries a catalog table and returns all entries ordered by created_at ASC.
 func (h *AdminCosmeticsHandler) listCatalogEntries(c *gin.Context, table string) {
+	if !allowedCosmeticTables[table] {
+		h.log.Warn("Rejected unknown cosmetic table name", zap.String("table", table))
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid table"})
+		return
+	}
 	sql := `SELECT id, name, image_url, is_premium, created_at FROM ` + table + ` ORDER BY created_at ASC`
 	rows, err := h.db.Query(c.Request.Context(), sql)
 	if err != nil {
@@ -127,6 +140,11 @@ func (h *AdminCosmeticsHandler) listCatalogEntries(c *gin.Context, table string)
 
 // createCatalogEntry inserts a new catalog entry into the given table.
 func (h *AdminCosmeticsHandler) createCatalogEntry(c *gin.Context, table string) {
+	if !allowedCosmeticTables[table] {
+		h.log.Warn("Rejected unknown cosmetic table name", zap.String("table", table))
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid table"})
+		return
+	}
 	var req createCosmeticRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
@@ -156,6 +174,11 @@ func (h *AdminCosmeticsHandler) createCatalogEntry(c *gin.Context, table string)
 
 // deleteCatalogEntry removes a catalog entry by UUID from the given table.
 func (h *AdminCosmeticsHandler) deleteCatalogEntry(c *gin.Context, table string) {
+	if !allowedCosmeticTables[table] {
+		h.log.Warn("Rejected unknown cosmetic table name", zap.String("table", table))
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid table"})
+		return
+	}
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {

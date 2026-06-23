@@ -17,22 +17,47 @@ spec:
         app: redis
         component: cache
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        # redis:7-alpine `redis` user is uid 999. Run non-root (H6).
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: redis
         image: redis:7-alpine
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 6379
           name: redis
+        env:
+        # H7: Redis AUTH. Sourced from redis-auth Secret (default empty =
+        # AUTH disabled; populate the key out-of-band to enable requirepass).
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-auth
+              key: redis-password
         command:
-        - redis-server
-        - --appendonly
-        - "yes"
-        - --appendfsync
-        - everysec
-        - --maxmemory
-        - 512mb
-        - --maxmemory-policy
-        - allkeys-lru
+        - sh
+        - -c
+        - |
+          if [ -n "$REDIS_PASSWORD" ]; then
+            exec redis-server --requirepass "$REDIS_PASSWORD" --appendonly yes --appendfsync everysec --maxmemory 512mb --maxmemory-policy allkeys-lru
+          else
+            exec redis-server --appendonly yes --appendfsync everysec --maxmemory 512mb --maxmemory-policy allkeys-lru
+          fi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          # readOnlyRootFilesystem intentionally omitted: redis writes the AOF
+          # and RDB to the /data PVC plus runtime temp files. Enabling it requires
+          # emptyDir mounts for /tmp and /var/run — deferred to avoid breakage.
         volumeMounts:
         - name: redis-data
           mountPath: /data
@@ -46,16 +71,18 @@ spec:
         livenessProbe:
           exec:
             command:
-            - redis-cli
-            - ping
+            - sh
+            - -c
+            - redis-cli -a "$REDIS_PASSWORD" --no-auth-warning ping
           initialDelaySeconds: 10
           periodSeconds: 10
           timeoutSeconds: 3
         readinessProbe:
           exec:
             command:
-            - redis-cli
-            - ping
+            - sh
+            - -c
+            - redis-cli -a "$REDIS_PASSWORD" --no-auth-warning ping
           initialDelaySeconds: 5
           periodSeconds: 5
           timeoutSeconds: 3

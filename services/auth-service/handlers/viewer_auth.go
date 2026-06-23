@@ -228,9 +228,9 @@ func (h *ViewerAuthHandler) HandleTwitchCallback(c *gin.Context) {
 		return
 	}
 
-	// Verify state
+	// Verify state (atomic Get+Del to prevent TOCTOU, audit L5)
 	stateKey := fmt.Sprintf("viewer_oauth_state:twitch:%s", state)
-	stateJSON, err := h.redis.Get(c.Request.Context(), stateKey).Result()
+	stateJSON, err := h.redis.GetDel(c.Request.Context(), stateKey).Result()
 	if err != nil {
 		h.logger.Warn("Invalid or expired state",
 			zap.String("state", state),
@@ -239,9 +239,6 @@ func (h *ViewerAuthHandler) HandleTwitchCallback(c *gin.Context) {
 		h.redirectToFrontendWithError(c, "Invalid or expired state")
 		return
 	}
-
-	// Delete used state
-	h.redis.Del(c.Request.Context(), stateKey)
 
 	// Parse state data
 	var stateData map[string]string
@@ -335,7 +332,7 @@ func (h *ViewerAuthHandler) HandleTwitchCallback(c *gin.Context) {
 	}
 
 	// Store JWT under a short-lived auth code and redirect with the code
-	
+
 	authCode, err := h.storeAuthCode(c.Request.Context(), jwtToken)
 	if err != nil {
 		h.logger.Error("Failed to store auth code", zap.Error(err))
@@ -584,7 +581,8 @@ func (h *ViewerAuthHandler) HandleYouTubeCallback(c *gin.Context) {
 		return
 	}
 
-	stateData, err := h.redis.Get(c.Request.Context(), "oauth_state:"+state).Result()
+	// Retrieve state data from Redis (atomic Get+Del to prevent TOCTOU, audit L5)
+	stateData, err := h.redis.GetDel(c.Request.Context(), "oauth_state:"+state).Result()
 	if err != nil {
 		h.redirectToFrontendWithError(c, "Invalid or expired state")
 		return
@@ -596,7 +594,7 @@ func (h *ViewerAuthHandler) HandleYouTubeCallback(c *gin.Context) {
 		return
 	}
 
-	h.redis.Del(c.Request.Context(), "oauth_state:"+state)
+	// State was already deleted atomically by GetDel (audit L5).
 
 	token, err := h.youtubeProvider.ExchangeCode(c.Request.Context(), code)
 	if err != nil {
@@ -737,7 +735,6 @@ func (h *ViewerAuthHandler) HandleYouTubeCallback(c *gin.Context) {
 		return
 	}
 
-	
 	authCode, err := h.storeAuthCode(c.Request.Context(), jwtToken)
 	if err != nil {
 		h.logger.Error("Failed to store auth code", zap.Error(err))
@@ -805,8 +802,8 @@ func (h *ViewerAuthHandler) HandleKickCallback(c *gin.Context) {
 		return
 	}
 
-	// Retrieve state data from Redis
-	stateData, err := h.redis.Get(c.Request.Context(), "oauth_state:"+state).Result()
+	// Retrieve state data from Redis (atomic Get+Del to prevent TOCTOU, audit L5)
+	stateData, err := h.redis.GetDel(c.Request.Context(), "oauth_state:"+state).Result()
 	if err != nil {
 		h.redirectToFrontendWithError(c, "Invalid or expired state")
 		return
@@ -818,8 +815,7 @@ func (h *ViewerAuthHandler) HandleKickCallback(c *gin.Context) {
 		return
 	}
 
-	// Delete state from Redis
-	h.redis.Del(c.Request.Context(), "oauth_state:"+state)
+	// State was already deleted atomically by GetDel (audit L5).
 
 	// Get code verifier from stored state
 	codeVerifier, ok := storedState["code_verifier"]
@@ -949,7 +945,7 @@ func (h *ViewerAuthHandler) HandleKickCallback(c *gin.Context) {
 	}
 
 	// Store JWT under short-lived code and redirect
-	
+
 	authCode, err := h.storeAuthCode(c.Request.Context(), jwtToken)
 	if err != nil {
 		h.logger.Error("Failed to store auth code", zap.Error(err))

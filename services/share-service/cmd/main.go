@@ -53,6 +53,9 @@ func main() {
 
 	// Load configuration from environment
 	config := loadConfig()
+	if config.DatabasePassword == "" {
+		log.Fatal("DATABASE_PASSWORD must be set")
+	}
 
 	// Build JWT KeyChains from versioned env vars (D-10: user and service chains are isolated)
 	userKeyChain, err := sharedAuth.NewKeyChainFromEnv("JWT_SECRET")
@@ -289,7 +292,7 @@ func loadConfig() *Config {
 		DatabaseHost:     getEnv("DATABASE_HOST", "localhost"),
 		DatabasePort:     getEnv("DATABASE_PORT", "5432"),
 		DatabaseUser:     getEnv("DATABASE_USER", "allchat"),
-		DatabasePassword: getEnv("DATABASE_PASSWORD", "allchat_dev_password"),
+		DatabasePassword: getEnv("DATABASE_PASSWORD", ""),
 		DatabaseName:     getEnv("DATABASE_NAME", "allchat"),
 	}
 }

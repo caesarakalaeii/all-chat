@@ -702,9 +702,13 @@ describe('D-38 session fallback (ElevenLabs)', () => {
     expect(mockFetch).toHaveBeenCalled()
     const firstCall = mockFetch.mock.calls[0]
     const url = firstCall[0]
+    const opts = firstCall[1] as RequestInit
     expect(url).toContain('tts_token=jwt-xyz')
     expect(url).toContain('voice=voice-1')
-    expect(url).toContain('text=')
+    // SECURITY (audit M17): text is now sent in the JSON body, not the URL.
+    expect(url).not.toContain('text=')
+    expect(opts.body).toBeTruthy()
+    expect(String(opts.body)).toContain('"text"')
   })
 
   // Test 27
