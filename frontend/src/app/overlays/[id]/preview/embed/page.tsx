@@ -48,6 +48,7 @@ import { getBundledTheme } from '@/lib/theme-marketplace/bundled-themes'
 import { chatBubbleStyle, overlayContainerStyle } from '@/lib/utils/visual-inline-styles'
 import { AllChatBadge } from '@/components/AllChatBadge'
 import { PremiumBadge } from '@/components/PremiumBadge'
+import { EventContent } from '@/components/overlay/EventContent'
 import { shouldFilterMessage } from '@/lib/utils/filterMessage'
 import type { FilterSettings } from '@/lib/types/overlay'
 import { createSoundPlayer } from '@/lib/utils/soundPlayer'
@@ -451,14 +452,22 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
 
         // Phase 12: Load sound settings from display_settings
         const soundEnabled = display.notification_sound_enabled === true
-        const soundPreset = typeof display.notification_sound_preset === 'string'
-          ? display.notification_sound_preset : 'chime'
-        const soundVolume = typeof display.notification_sound_volume === 'number'
-          ? display.notification_sound_volume : 0.5
-        const soundCooldown = typeof display.notification_sound_cooldown === 'number'
-          ? display.notification_sound_cooldown : 500
-        const soundCustomUrl = typeof display.notification_sound_url === 'string'
-          ? display.notification_sound_url || undefined : undefined
+        const soundPreset =
+          typeof display.notification_sound_preset === 'string'
+            ? display.notification_sound_preset
+            : 'chime'
+        const soundVolume =
+          typeof display.notification_sound_volume === 'number'
+            ? display.notification_sound_volume
+            : 0.5
+        const soundCooldown =
+          typeof display.notification_sound_cooldown === 'number'
+            ? display.notification_sound_cooldown
+            : 500
+        const soundCustomUrl =
+          typeof display.notification_sound_url === 'string'
+            ? display.notification_sound_url || undefined
+            : undefined
 
         const newSoundSettings: SoundSettings = {
           enabled: soundEnabled,
@@ -486,8 +495,7 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
             display.tts_filter_mode === 'all' || display.tts_filter_mode === 'priority_only'
               ? display.tts_filter_mode
               : 'sample',
-          sample_rate:
-            typeof display.tts_sample_rate === 'number' ? display.tts_sample_rate : 0.25,
+          sample_rate: typeof display.tts_sample_rate === 'number' ? display.tts_sample_rate : 0.25,
           max_queue: typeof display.tts_max_queue === 'number' ? display.tts_max_queue : 5,
           messages_per_minute:
             typeof display.tts_messages_per_minute === 'number'
@@ -498,22 +506,20 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
               ? display.tts_user_cooldown_seconds
               : 30,
           staleness_seconds:
-            typeof display.tts_staleness_seconds === 'number'
-              ? display.tts_staleness_seconds
-              : 15,
+            typeof display.tts_staleness_seconds === 'number' ? display.tts_staleness_seconds : 15,
           priority_events: display.tts_priority_events !== false,
           priority_bits_min:
             typeof display.tts_priority_bits_min === 'number' ? display.tts_priority_bits_min : 0,
           read_username: display.tts_read_username !== false,
           read_platform: display.tts_read_platform === true,
           max_message_chars:
-            typeof display.tts_max_message_chars === 'number'
-              ? display.tts_max_message_chars
-              : 200,
+            typeof display.tts_max_message_chars === 'number' ? display.tts_max_message_chars : 200,
           skip_emote_only: display.tts_skip_emote_only !== false,
           skip_links: display.tts_skip_links !== false,
           enabled_platforms: Array.isArray(display.tts_enabled_platforms)
-            ? display.tts_enabled_platforms.filter((p: unknown): p is string => typeof p === 'string')
+            ? display.tts_enabled_platforms.filter(
+                (p: unknown): p is string => typeof p === 'string'
+              )
             : ['twitch', 'youtube', 'kick', 'tiktok', 'discord'],
         }
 
@@ -575,7 +581,9 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
     const unsubscribe = wsClient.onMessage(async (incoming) => {
       // Parse gradient JSON string → object (message processor sends it as a string)
       if (incoming.user?.name_gradient && typeof incoming.user.name_gradient === 'string') {
-        incoming.user.name_gradient = JSON.parse(incoming.user.name_gradient as unknown as string) as NameGradient
+        incoming.user.name_gradient = JSON.parse(
+          incoming.user.name_gradient as unknown as string
+        ) as NameGradient
       }
       const message = sortMessageBadges(await resolveTwitchBadgeIcons(incoming))
 
@@ -624,128 +632,9 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
   }, [])
 
   // Helper: render event-specific content (identical to preview/page.tsx)
-  const renderEventContent = (message: ChatMessage): React.ReactNode => {
-    const event = message.event!
-
-    const getEventIcon = () => {
-      switch (event.type) {
-        case 'subscription':
-        case 'resubscription':
-        case 'gift_subscription':
-        case 'kick_subscription':
-        case 'new_sponsor':
-          return '⭐'
-        case 'bits':
-          return '💎'
-        case 'raid':
-          return '🚀'
-        case 'channel_points':
-          return '🎁'
-        case 'super_chat':
-          return '💰'
-        case 'super_sticker':
-          return '🎨'
-        case 'gift':
-          return '🎁'
-        case 'follow':
-          return '❤️'
-        case 'like_aggregate':
-          return '👍'
-        case 'share':
-          return '🔗'
-        case 'member_milestone':
-          return '🎂'
-        case 'membership_gift':
-          return '🎁'
-        default:
-          return '✨'
-      }
-    }
-
-    const getEventTitle = () => {
-      switch (event.type) {
-        case 'subscription':
-          return 'New Subscriber!'
-        case 'resubscription':
-          return 'Resubscribed!'
-        case 'gift_subscription':
-          return 'Gift Subscription!'
-        case 'mystery_gift':
-          return 'Mystery Gift Bomb!'
-        case 'bits':
-          return 'Bits Cheered!'
-        case 'raid':
-          return 'Raid Incoming!'
-        case 'channel_points':
-          return 'Channel Points Redeemed!'
-        case 'super_chat':
-          return 'Super Chat!'
-        case 'super_sticker':
-          return 'Super Sticker!'
-        case 'new_sponsor':
-          return 'New Member!'
-        case 'member_milestone':
-          return 'Member Milestone!'
-        case 'membership_gift':
-          return 'Membership Gift!'
-        case 'gift':
-          return 'Gift Received!'
-        case 'follow':
-          return 'New Follower!'
-        case 'like_aggregate':
-          return 'Likes!'
-        case 'share':
-          return 'Stream Shared!'
-        default:
-          return 'Event!'
-      }
-    }
-
-    return (
-      <div className="event-content">
-        <div className="mb-1 flex items-center gap-3">
-          <span className="event-icon text-4xl leading-none">{getEventIcon()}</span>
-          <div className="flex-1">
-            <div className="event-title text-lg font-bold text-white">{getEventTitle()}</div>
-            <div
-              className="event-user text-sm font-semibold"
-              style={{ color: message.user?.color || '#FFFFFF' }}
-            >
-              {message.user?.display_name || message.user?.username}
-            </div>
-          </div>
-          {event.value && (
-            <div className="event-value text-2xl font-bold text-yellow-300">
-              {event.value.display_text}
-            </div>
-          )}
-        </div>
-        {message.message.text && (
-          <div className="event-message-text ml-14 text-sm text-slate-200">
-            {message.message.text}
-          </div>
-        )}
-        {event.metadata &&
-          Object.keys(event.metadata).length > 0 &&
-          (() => {
-            const m = event.metadata as Record<string, unknown>
-            const parts: string[] = []
-            if (m.viewer_count) parts.push(`${String(m.viewer_count)} viewers`)
-            if (m.months) parts.push(`${String(m.months)} months`)
-            if (m.streak) parts.push(`${String(m.streak)} month streak`)
-            if (m.gift_count) parts.push(`${String(m.gift_count)} gifts`)
-            if (m.bits) parts.push(`${String(m.bits)} bits`)
-            if (m.like_count) parts.push(`${String(m.like_count)} likes`)
-            if (m.diamonds) parts.push(`${String(m.diamonds)} diamonds`)
-            return parts.length > 0 ? (
-              <div className="event-metadata mt-1 ml-14 text-xs text-slate-400">
-                {parts.join(' • ')}
-              </div>
-            ) : null
-          })()}
-      </div>
-    )
-  }
+  const renderEventContent = (message: ChatMessage): React.ReactNode => (
+    <EventContent message={message} />
+  )
 
   return (
     <main className="min-h-screen bg-transparent">
@@ -872,9 +761,17 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                               <div className="flex gap-1">
                                 {message.user.badges.map((badge, index) =>
                                   badge.name === 'allchat' ? (
-                                    <AllChatBadge key={`${badge.name}-${index}`} size={16} title={badge.name} />
+                                    <AllChatBadge
+                                      key={`${badge.name}-${index}`}
+                                      size={16}
+                                      title={badge.name}
+                                    />
                                   ) : badge.name === 'allchat-premium' ? (
-                                    <PremiumBadge key={`${badge.name}-${index}`} size={16} title={badge.name} />
+                                    <PremiumBadge
+                                      key={`${badge.name}-${index}`}
+                                      size={16}
+                                      title={badge.name}
+                                    />
                                   ) : badge.icon_url ? (
                                     <Image
                                       key={`${badge.name}-${index}`}
@@ -899,15 +796,29 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                               ref={(el) => {
                                 if (el) {
                                   el.style.setProperty('text-shadow', 'none', 'important')
-                                  el.style.setProperty('-webkit-text-stroke', '0.5px rgba(0,0,0,0.5)', 'important')
+                                  el.style.setProperty(
+                                    '-webkit-text-stroke',
+                                    '0.5px rgba(0,0,0,0.5)',
+                                    'important'
+                                  )
                                   el.style.setProperty('color', 'transparent', 'important')
-                                  el.style.setProperty('-webkit-text-fill-color', 'transparent', 'important')
+                                  el.style.setProperty(
+                                    '-webkit-text-fill-color',
+                                    'transparent',
+                                    'important'
+                                  )
                                   el.style.setProperty('background-clip', 'text', 'important')
-                                  el.style.setProperty('-webkit-background-clip', 'text', 'important')
+                                  el.style.setProperty(
+                                    '-webkit-background-clip',
+                                    'text',
+                                    'important'
+                                  )
                                 }
                               }}
-                              className="chat-username text-sm font-semibold bg-clip-text text-transparent username-gradient"
-                              style={{ backgroundImage: buildGradientCSS(message.user.name_gradient) }}
+                              className="chat-username username-gradient bg-clip-text text-sm font-semibold text-transparent"
+                              style={{
+                                backgroundImage: buildGradientCSS(message.user.name_gradient),
+                              }}
                             >
                               {message.user.display_name}
                             </span>
@@ -948,9 +859,17 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                               <div className="flex gap-1">
                                 {message.user.badges.map((badge, index) =>
                                   badge.name === 'allchat' ? (
-                                    <AllChatBadge key={`${badge.name}-${index}`} size={16} title={badge.name} />
+                                    <AllChatBadge
+                                      key={`${badge.name}-${index}`}
+                                      size={16}
+                                      title={badge.name}
+                                    />
                                   ) : badge.name === 'allchat-premium' ? (
-                                    <PremiumBadge key={`${badge.name}-${index}`} size={16} title={badge.name} />
+                                    <PremiumBadge
+                                      key={`${badge.name}-${index}`}
+                                      size={16}
+                                      title={badge.name}
+                                    />
                                   ) : badge.icon_url ? (
                                     <Image
                                       key={`${badge.name}-${index}`}
