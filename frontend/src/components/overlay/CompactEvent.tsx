@@ -93,6 +93,16 @@ export function CompactEvent({ item }: { item: ViewItem }) {
           <span className="ml-2 font-semibold text-text-sub">{event.value.display_text}</span>
         )}
         {item.message?.text && <span className="ml-2 text-text-sub">{item.message.text}</span>}
+        {isSystem &&
+          typeof event.metadata?.description === 'string' &&
+          event.metadata.description && (
+            <span className="ml-2 text-text-sub">{event.metadata.description}</span>
+          )}
+        {isSystem &&
+          typeof event.metadata?.action_url === 'string' &&
+          event.metadata.action_url && (
+            <span className="ml-2 text-xs text-text-dim">→ {event.metadata.action_url}</span>
+          )}
       </div>
     </div>
   )

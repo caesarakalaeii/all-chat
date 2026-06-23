@@ -84,8 +84,24 @@ describe('ActivityPanel', () => {
   })
 
   it('renders the IRC listener deprecation migration notice', () => {
-    const system = [eventItem('s2', 'listener_deprecation_notice', '2026-05-31T10:02:00.000Z')]
-    render(<ActivityPanel events={[]} system={system} moderationLog={[]} />)
+    const item = eventItem('s2', 'listener_deprecation_notice', '2026-05-31T10:02:00.000Z')
+    item.event!.metadata = {
+      platform: 'twitch',
+      channel_id: 'xqc',
+      description:
+        'The legacy Twitch chat connection is being retired. Re-add your Twitch source to keep chat working.',
+      action_url: '/dashboard',
+    }
+    render(<ActivityPanel events={[]} system={[item]} moderationLog={[]} />)
     expect(screen.getByText('Action Needed')).toBeInTheDocument()
+    // The body must render — system notices have empty message.text, so the
+    // description from event.metadata is the only body. Without it the notice
+    // fires with no body and viewers can't tell what's happening.
+    expect(
+      screen.getByText(
+        'The legacy Twitch chat connection is being retired. Re-add your Twitch source to keep chat working.'
+      )
+    ).toBeInTheDocument()
+    expect(screen.getByText('→ /dashboard')).toBeInTheDocument()
   })
 })
