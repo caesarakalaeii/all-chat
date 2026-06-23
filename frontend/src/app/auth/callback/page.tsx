@@ -19,14 +19,17 @@
 /**
  * OAuth Callback Page
  *
- * Handles the OAuth callback from Twitch.
- * The backend redirects here with a JWT token in the URL query parameter.
+ * Handles the OAuth callback redirect from the backend.
+ * The backend stores tokens in Redis under a single-use code and redirects
+ * here with `?code=<uuid>`. This page POSTs the code to `/auth/exchange` to
+ * retrieve the JWT + refresh token, eliminating token exposure in the URL
+ * fragment (audit M1).
  *
  * Flow:
- * 1. Extract token from URL (?token=xxx)
- * 2. Store token in localStorage
- * 3. Fetch user info from API
- * 4. Redirect to dashboard
+ * 1. Read `code` from query string (?code=xxx)
+ * 2. POST to /auth/exchange to get {access_token, refresh_token, ...}
+ * 3. Store access token + in-memory refresh token
+ * 4. Fetch user info + redirect to dashboard (or redirect_to)
  *
  * This is a Client Component because it:
  * - Uses useEffect for side effects
@@ -56,15 +59,41 @@ function AuthCallbackContent() {
 
   useEffect(() => {
     const handleCallback = async () => {
-      // Get token from URL fragment (#access_token=xxx)
-      const hash = window.location.hash.substring(1) // Remove #
-      const params = new URLSearchParams(hash)
-      const token = params.get('access_token')
-      const refreshToken = params.get('refresh_token')
+      // Get short-lived auth code from query param (audit M1 — replaces URL
+      // fragment token exposure with code+POST exchange).
+      const code = searchParams.get('code')
+      if (!code) {
+        trackEvent('signin_failed', { reason: 'no_code' })
+        setError('No authentication code received')
+        setLoading(false)
+        return
+      }
 
-      if (!token) {
-        trackEvent('signin_failed', { reason: 'no_token' })
-        setError('No authentication token received')
+      // Exchange the single-use code for the token payload.
+      let token: string
+      let refreshToken: string | null = null
+      let redirectTo: string | null = null
+      let sourceAdded: string | null = null
+      let moderationEnabled: string | null = null
+      try {
+        const resp = await fetch('/api/v1/auth/exchange', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code }),
+        })
+        if (!resp.ok) {
+          throw new Error(`Exchange failed: ${resp.status}`)
+        }
+        const data = await resp.json()
+        token = data.access_token
+        refreshToken = data.refresh_token || null
+        redirectTo = data.redirect_to || null
+        sourceAdded = data.source_added || null
+        moderationEnabled = data.moderation_enabled || null
+      } catch (err) {
+        console.error('Token exchange failed:', err)
+        trackEvent('signin_failed', { reason: 'exchange_failed' })
+        setError('Authentication failed. The code may have expired — please try again.')
         setLoading(false)
         return
       }
@@ -83,13 +112,6 @@ function AuthCallbackContent() {
         // Fetch user info
         const user = await authApi.getMe()
         setUser(user)
-
-        // Check for redirect_to parameter (used when adding sources / enabling
-        // moderation via OAuth). `moderation_enabled` marks an opt-in moderation
-        // re-consent (ADR-0017) that returns to the overlay monitor, not settings.
-        const redirectTo = params.get('redirect_to')
-        const sourceAdded = params.get('source_added')
-        const moderationEnabled = params.get('moderation_enabled')
 
         // Distinct funnel steps: a completion marker means an OAuth source-add or
         // moderation re-consent finished, rather than a fresh sign-in.

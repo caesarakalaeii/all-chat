@@ -339,6 +339,9 @@ func main() {
 	// Token refresh
 	router.POST("/refresh", legacyAuthHandler.HandleRefresh)
 
+	// Streamer auth code exchange (single-use code → token payload, audit M1)
+	router.POST("/exchange", legacyAuthHandler.HandleStreamerTokenExchange)
+
 	// Viewer auth routes (separate from streamer auth)
 	router.GET("/viewer/twitch/login", viewerAuthHandler.HandleTwitchLogin)
 	router.GET("/viewer/twitch/callback", viewerAuthHandler.HandleTwitchCallback)

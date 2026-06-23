@@ -921,6 +921,72 @@ func TestHandleTTSUsesCfgVoiceIDWhenQueryParamMissing(t *testing.T) {
 		"upstream request must target /v1/text-to-speech/xyz/stream, got %s", gotPath)
 }
 
+// TestHandleTTSAuthHeaderAndBodyVoice — audit M17: tts_token can be sent
+// via Authorization: Bearer header and voice via JSON body instead of URL
+// query params (which leak into access logs).
+func TestHandleTTSAuthHeaderAndBodyVoice(t *testing.T) {
+	var gotPath string
+	upstream := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "audio/mpeg")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
+	f := newTestHandler(t, upstream)
+	defer f.upstreamTS.Close()
+
+	gates := &mockGateChecker{isPremiumResult: true}
+	r := newRouter(t, f.handler, gates, true, "user-1")
+	r.ServeHTTP(httptest.NewRecorder(),
+		httptest.NewRequest(http.MethodPost, "/overlay-authhdr/tts-config",
+			strings.NewReader(`{"api_key":"sk","voice_id":"cfg-voice"}`)))
+
+	token, err := ttspkg.SignOverlayToken("overlay-authhdr", f.repo.row.SigningSecret)
+	require.NoError(t, err)
+
+	// Send token via Authorization header + voice via JSON body — no query params.
+	req := httptest.NewRequest(http.MethodPost, "/overlay-authhdr/tts", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	req.Body = io.NopCloser(strings.NewReader(`{"text":"hello","voice":"body-voice"}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
+	assert.Contains(t, gotPath, "/v1/text-to-speech/body-voice/stream",
+		"voice must come from JSON body, got %s", gotPath)
+}
+
+// TestHandleTTSAuthHeaderFallsBackToQuery — backward compat: if no
+// Authorization header is present, the handler still accepts tts_token
+// via query param (audit M17 rollout safety).
+func TestHandleTTSAuthHeaderFallsBackToQuery(t *testing.T) {
+	upstream := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "audio/mpeg")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
+	f := newTestHandler(t, upstream)
+	defer f.upstreamTS.Close()
+
+	gates := &mockGateChecker{isPremiumResult: true}
+	r := newRouter(t, f.handler, gates, true, "user-1")
+	r.ServeHTTP(httptest.NewRecorder(),
+		httptest.NewRequest(http.MethodPost, "/overlay-fallback/tts-config",
+			strings.NewReader(`{"api_key":"sk","voice_id":"v1"}`)))
+
+	token, err := ttspkg.SignOverlayToken("overlay-fallback", f.repo.row.SigningSecret)
+	require.NoError(t, err)
+
+	// No Authorization header — token only in query param.
+	url := fmt.Sprintf("/overlay-fallback/tts?text=hi&tts_token=%s", token)
+	req := httptest.NewRequest(http.MethodPost, url, nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code, "query-param fallback must still work")
+}
+
 // TestHandleTTSCancelPropagates — cancel the client context mid-flight; the
 // upstream sees the connection close.
 func TestHandleTTSCancelPropagates(t *testing.T) {

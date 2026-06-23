@@ -211,7 +211,8 @@ func main() {
 	redisHost := listener.Env("REDIS_HOST", "localhost")
 	redisPort := listener.Env("REDIS_PORT", "6379")
 	rdb := redis.NewClient(&redis.Options{
-		Addr: fmt.Sprintf("%s:%s", redisHost, redisPort),
+		Addr:     fmt.Sprintf("%s:%s", redisHost, redisPort),
+		Password: listener.Env("REDIS_PASSWORD", ""),
 	})
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

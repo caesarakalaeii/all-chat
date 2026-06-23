@@ -97,7 +97,8 @@ func main() {
 	redisHost := getEnv("REDIS_HOST", "localhost")
 	redisPort := getEnv("REDIS_PORT", "6379")
 	redisClient := redis.NewClient(&redis.Options{
-		Addr: fmt.Sprintf("%s:%s", redisHost, redisPort),
+		Addr:     fmt.Sprintf("%s:%s", redisHost, redisPort),
+		Password: getEnv("REDIS_PASSWORD", ""),
 	})
 
 	var redisClientForJobs *redis.Client
@@ -181,7 +182,7 @@ func main() {
 
 	// API routes with authentication
 	api := router.Group("/api/v1")
-	api.Use(middleware.JWTAuth(userKeyChain)) // All routes require auth
+	api.Use(middleware.JWTAuthWithRevocation(userKeyChain, redisClient)) // All routes require auth
 	{
 		// User search - no premium required
 		api.GET("/users/search", searchHandler.SearchUsers)

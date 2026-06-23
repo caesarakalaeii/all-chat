@@ -119,6 +119,38 @@ func (h *ViewerAuthHandler) storeAuthCode(ctx context.Context, jwtToken string) 
 	return code, nil
 }
 
+// StreamerAuthPayload carries the streamer's auth tokens from the OAuth
+// callback redirect to the frontend via a short-lived single-use code,
+// eliminating token exposure in the URL fragment (audit M1).
+type StreamerAuthPayload struct {
+	AccessToken       string `json:"access_token"`
+	RefreshToken      string `json:"refresh_token"`
+	ExpiresIn         int64  `json:"expires_in"`
+	TokenType         string `json:"token_type"`
+	RedirectTo        string `json:"redirect_to,omitempty"`
+	SourceAdded       string `json:"source_added,omitempty"`
+	ModerationEnabled string `json:"moderation_enabled,omitempty"`
+}
+
+const streamerAuthCodeTTL = 60 * time.Second
+
+// storeStreamerAuthCode saves a streamer auth payload as JSON under a random
+// single-use code in Redis and returns the code. The frontend exchanges this
+// code via POST /exchange to retrieve the tokens, avoiding token exposure in
+// the URL fragment (audit M1).
+func storeStreamerAuthCode(ctx context.Context, rdb *redis.Client, payload StreamerAuthPayload) (string, error) {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("marshal streamer auth payload: %w", err)
+	}
+	code := uuid.New().String()
+	key := "streamer_auth_code:" + code
+	if err := rdb.Set(ctx, key, data, streamerAuthCodeTTL).Err(); err != nil {
+		return "", err
+	}
+	return code, nil
+}
+
 // HandleTokenExchange swaps a short-lived auth code for the JWT token.
 // POST /viewer/token/exchange { "code": "..." }
 func (h *ViewerAuthHandler) HandleTokenExchange(c *gin.Context) {

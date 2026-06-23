@@ -94,13 +94,13 @@ type aesCipher interface {
 
 // TTSHandler implements the seven Phase 13 TTS endpoints:
 //
-//   POST   /:id/tts-config               (D-11) premium
-//   DELETE /:id/tts-config               (D-12) premium
-//   POST   /:id/tts-config/rotate-token  (D-13) premium
-//   GET    /:id/tts-voices               (D-14) premium
-//   POST   /:id/tts-config/test          (D-15) premium
-//   POST   /:id/tts                      (D-16) tts_token JWT
-//   GET    /:id/tts-config               (Research Open Question 3) authed
+//	POST   /:id/tts-config               (D-11) premium
+//	DELETE /:id/tts-config               (D-12) premium
+//	POST   /:id/tts-config/rotate-token  (D-13) premium
+//	GET    /:id/tts-voices               (D-14) premium
+//	POST   /:id/tts-config/test          (D-15) premium
+//	POST   /:id/tts                      (D-16) tts_token JWT
+//	GET    /:id/tts-config               (Research Open Question 3) authed
 //
 // All endpoints except POST /:id/tts go through the user JWT + RequirePremium
 // gate; POST /:id/tts verifies a per-overlay tts_token JWT instead because
@@ -655,14 +655,17 @@ func (h *TTSHandler) HandleTTS(c *gin.Context) {
 		return
 	}
 
+	// Read JSON body once for both text and voice (audit M17: move
+	// tts_token → Authorization header, voice → JSON body).
+	var ttsReq struct {
+		Text  string `json:"text"`
+		Voice string `json:"voice"`
+	}
+	_ = c.ShouldBindJSON(&ttsReq)
+
 	text := c.Query("text")
 	if text == "" {
-		// Allow text in JSON body as a fallback.
-		var req struct {
-			Text string `json:"text"`
-		}
-		_ = c.ShouldBindJSON(&req)
-		text = req.Text
+		text = ttsReq.Text
 	}
 	if text == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "text is required"})
@@ -686,7 +689,15 @@ func (h *TTSHandler) HandleTTS(c *gin.Context) {
 		return
 	}
 
-	ttsToken := c.Query("tts_token")
+	// tts_token: prefer Authorization: Bearer header, fall back to query
+	// param for backward compat during client rollout (audit M17).
+	ttsToken := ""
+	if auth := c.GetHeader("Authorization"); strings.HasPrefix(auth, "Bearer ") {
+		ttsToken = strings.TrimPrefix(auth, "Bearer ")
+	}
+	if ttsToken == "" {
+		ttsToken = c.Query("tts_token")
+	}
 	if err := ttspkg.VerifyOverlayToken(ttsToken, overlayID, cfg.SigningSecret); err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
@@ -700,7 +711,12 @@ func (h *TTSHandler) HandleTTS(c *gin.Context) {
 		return
 	}
 
-	voiceID := c.Query("voice")
+	// voice: prefer JSON body, fall back to query param, then cfg.VoiceID
+	// (audit M17: move voice out of URL query into the request body).
+	voiceID := ttsReq.Voice
+	if voiceID == "" {
+		voiceID = c.Query("voice")
+	}
 	if voiceID == "" {
 		voiceID = cfg.VoiceID
 	}
@@ -751,7 +767,7 @@ func (h *TTSHandler) HandleTTS(c *gin.Context) {
 
 // HandleGetTTSConfig handles GET /:id/tts-config. Returns
 //
-//   {"has_elevenlabs_config": bool, "voice_id": "...", "obs_url": "..."}
+//	{"has_elevenlabs_config": bool, "voice_id": "...", "obs_url": "..."}
 //
 // Never includes api_key, encrypted_api_key, or tts_signing_secret — T-13-09.
 // The endpoint does NOT require premium: a user whose subscription has

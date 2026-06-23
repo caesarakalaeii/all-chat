@@ -200,12 +200,6 @@ export function useOverlayStream(
     if (lastSeenTimestampRef.current > 0) {
       params.push(`since=${lastSeenTimestampRef.current}`)
     }
-    if (options.token) {
-      // SECURITY (audit H5): token in WS query leaks into access logs. Preferred
-      // fix: send via WebSocket subprotocol once gateway supports it (separate
-      // agent scope). Gateway logging must redact `token` until then.
-      params.push(`token=${encodeURIComponent(options.token)}`)
-    }
     if (params.length > 0) {
       wsUrl += `?${params.join('&')}`
     }
@@ -220,7 +214,10 @@ export function useOverlayStream(
       }
     }
 
-    const ws = new WebSocket(wsUrl)
+    // SECURITY (audit H5): token sent via WebSocket subprotocol
+    // (`bearer.<token>`) instead of URL query to avoid leaking into
+    // access/proxy logs.
+    const ws = new WebSocket(wsUrl, options.token ? [`bearer.${options.token}`] : undefined)
     wsRef.current = ws
     lastActivityRef.current = 0 // no inbound frame yet on this socket
 

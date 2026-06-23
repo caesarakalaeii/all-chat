@@ -133,9 +133,10 @@ func (h *ViewerWebSocketHandler) HandleViewerChatConnection(c *gin.Context) {
 		return
 	}
 
-	// Optional JWT authentication from query parameter
-	// Anonymous viewers can connect to view chat, authenticated viewers can send messages
-	token := c.Query("token")
+	// Optional JWT authentication via Sec-WebSocket-Protocol subprotocol
+	// (preferred) or ?token= query param (backward compat). Keeps the token
+	// out of access logs (audit H5).
+	token, echoHeader := extractWSAuthToken(c.Request)
 	var viewerID string
 	var viewerUsername string
 	isAuthenticated := false
@@ -183,8 +184,9 @@ func (h *ViewerWebSocketHandler) HandleViewerChatConnection(c *gin.Context) {
 		return
 	}
 
-	// Upgrade HTTP connection to WebSocket
-	conn, err := h.upgrader.Upgrade(c.Writer, c.Request, nil)
+	// Upgrade HTTP connection to WebSocket. echoHeader (when non-nil) echoes
+	// the bearer.<token> subprotocol back so the browser accepts the handshake.
+	conn, err := h.upgrader.Upgrade(c.Writer, c.Request, echoHeader)
 	if err != nil {
 		h.logger.Error("Failed to upgrade WebSocket",
 			zap.String("streamer", streamerUsername),

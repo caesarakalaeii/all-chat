@@ -221,7 +221,7 @@ REDIS_PORT=6379
 ### Security
 - Token encryption uses AES-GCM (`shared/encryption/`); a versioned multi-key rotation API is available in `shared/encryption/versioned.go`
 - CORS allows `*` in dev (configure for production)
-- Service-to-service signing implemented in `shared/signing/` (Kubernetes NetworkPolicies still recommended)
+- Service-to-service signing is implemented in `shared/signing/` (HMAC-SHA256, constant-time compare, query+service-name signed, replay-protected) but NOT YET WIRED into any prod service; Kubernetes NetworkPolicies are the current service-to-service isolation control. See SECURITY_AUDIT_REPORT.md L2 + RESIDUALS.md
 
 ### Testing
 - Integration tests incomplete for YouTube Listener

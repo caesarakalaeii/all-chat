@@ -124,11 +124,8 @@ export function useNotificationSocket(
     const connect = () => {
       if (stopped) return
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-      // SECURITY (audit H5): token in WS query leaks into access logs. Preferred
-      // fix: send via WebSocket subprotocol once gateway supports it (separate
-      // agent scope). Gateway logging must redact `token` until then.
-      const wsUrl = `${protocol}//${window.location.host}/ws/overlay/${id}?token=${token}`
-      const sock = new WebSocket(wsUrl)
+      const wsUrl = `${protocol}//${window.location.host}/ws/overlay/${id}`
+      const sock = new WebSocket(wsUrl, [`bearer.${token}`])
       ws = sock
       lastActivity = 0 // no inbound frame yet on this socket
 

@@ -279,7 +279,7 @@ func main() {
 
 	// Protected routes (require JWT)
 	protected := router.Group("/")
-	protected.Use(middleware.JWTAuth(userKeyChain))
+	protected.Use(middleware.JWTAuthWithRevocation(userKeyChain, redisClient))
 	{
 		// Overlay CRUD routes (no :id prefix)
 		protected.POST("/", overlayHandler.HandleCreateOverlay)
@@ -338,7 +338,7 @@ func main() {
 
 	// Admin routes (JWT + Admin role required)
 	admin := router.Group("/admin")
-	admin.Use(middleware.JWTAuth(userKeyChain))
+	admin.Use(middleware.JWTAuthWithRevocation(userKeyChain, redisClient))
 	admin.Use(middleware.AdminOnly())
 	{
 		admin.GET("/overlays", adminHandler.ListOverlays)
