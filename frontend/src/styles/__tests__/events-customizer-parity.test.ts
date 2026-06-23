@@ -35,10 +35,7 @@ import { describe, expect, it } from 'vitest'
  * live overlay handles in React / structurally.
  */
 
-const CSS = readFileSync(
-  fileURLToPath(new URL('../events.css', import.meta.url)),
-  'utf8'
-)
+const CSS = readFileSync(fileURLToPath(new URL('../events.css', import.meta.url)), 'utf8')
 
 /** Variables the live overlay deliberately does NOT consume via CSS. */
 const LIVE_EXCEPTIONS = new Set<string>([
@@ -85,9 +82,7 @@ describe('events.css visual-customizer scope parity', () => {
 
     expect(preview.size).toBeGreaterThan(0)
 
-    const unhandled = [...preview].filter(
-      (v) => !live.has(v) && !LIVE_EXCEPTIONS.has(v)
-    )
+    const unhandled = [...preview].filter((v) => !live.has(v) && !LIVE_EXCEPTIONS.has(v))
 
     expect(
       unhandled,
@@ -112,9 +107,7 @@ describe('events.css visual-customizer scope parity', () => {
   it('scales emotes via the layout box, never transform: scale()', () => {
     expect(CSS).not.toMatch(/transform:\s*scale\(var\(--chat-emote-scale/)
     // both scopes size the emote height by the scale factor
-    const heightScaleRules = CSS.match(
-      /height:\s*calc\(1\.4em \* var\(--chat-emote-scale, 1\)\)/g
-    )
+    const heightScaleRules = CSS.match(/height:\s*calc\(1\.4em \* var\(--chat-emote-scale, 1\)\)/g)
     expect(heightScaleRules?.length).toBe(2)
   })
 
@@ -142,5 +135,36 @@ describe('events.css visual-customizer scope parity', () => {
     )
     // one per scope (preview + live), in the base `.break-words` rule
     expect(baseLineHeight?.length).toBe(2)
+  })
+})
+
+/**
+ * Regression guard for renderer drift (the bug this commit fixes): the live OBS
+ * overlay (`/overlay/[id]`) and the editor preview pane (`/overlays/[id]/preview/embed`)
+ * each used to carry their own copy of the event renderer. System-notice cases were
+ * added to the live overlay but not the preview, so every notice rendered as a
+ * generic "EVENT!" in the (narrow) preview pane. The renderer now lives only in the
+ * shared `<EventContent>` — this asserts neither route re-introduces its own.
+ */
+describe('overlay event-renderer parity', () => {
+  const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8')
+  const live = read('../../app/overlay/[id]/page.tsx')
+  const preview = read('../../app/overlays/[id]/preview/embed/page.tsx')
+
+  it('renders events on BOTH surfaces via the shared <EventContent>', () => {
+    for (const [name, src] of [
+      ['live overlay', live],
+      ['preview/embed', preview],
+    ] as const) {
+      expect(src, `${name} should import the shared EventContent`).toContain(
+        "from '@/components/overlay/EventContent'"
+      )
+      expect(src, `${name} should render <EventContent`).toContain('<EventContent')
+    }
+  })
+
+  it('keeps the event renderer in one place — no inline event-title switch in either route', () => {
+    expect(live, 'live overlay must not re-define getEventTitle').not.toContain('getEventTitle')
+    expect(preview, 'preview/embed must not re-define getEventTitle').not.toContain('getEventTitle')
   })
 })
