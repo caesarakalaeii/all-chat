@@ -107,14 +107,17 @@ func (p *ProxyHandler) ForwardRequest(c *gin.Context) {
 		return
 	}
 
-	// Copy headers from original request
+	// Copy headers from original request (strips sensitive client headers: L17)
 	copyHeaders(backendReq.Header, c.Request.Header)
 
 	// Forward request to backend
 	backendResp, err := p.client.Do(backendReq)
 	if err != nil {
+		// Log full error server-side via gin error chain; return generic message to
+		// client to avoid leaking backend internals (L11).
+		c.Error(err)
 		c.JSON(http.StatusBadGateway, gin.H{
-			"error": "backend service unavailable: " + err.Error(),
+			"error": "backend service unavailable",
 		})
 		return
 	}
@@ -135,8 +138,9 @@ func (p *ProxyHandler) ForwardRequest(c *gin.Context) {
 }
 
 // copyHeaders copies HTTP headers from src to dst, excluding hop-by-hop headers
+// and sensitive client headers that should not be forwarded to backends (L17).
 func copyHeaders(dst, src http.Header) {
-	// Headers that should not be proxied (hop-by-hop headers)
+	// Headers that should not be proxied (hop-by-hop + sensitive client headers)
 	hopHeaders := map[string]bool{
 		"Connection":          true,
 		"Keep-Alive":          true,
@@ -146,6 +150,11 @@ func copyHeaders(dst, src http.Header) {
 		"Trailers":            true,
 		"Transfer-Encoding":   true,
 		"Upgrade":             true,
+		// Sensitive client headers stripped before proxying to backends (L17):
+		// Cookie/Referer/Origin leak cross-site context that backends don't need.
+		"Cookie":  true,
+		"Referer": true,
+		"Origin":  true,
 	}
 
 	for key, values := range src {

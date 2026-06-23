@@ -18,7 +18,9 @@ package handlers
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
@@ -34,18 +36,19 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
+	"golang.org/x/oauth2"
 )
 
 // AuthHandler handles authentication endpoints
 type AuthHandler struct {
-	twitchOAuth    *oauth.TwitchOAuth
-	youtubeOAuth   *oauth.YouTubeOAuth
-	userRepo       *repository.UserRepository
-	redis          *redis.Client
-	userKeyChain   *auth.KeyChain
-	jwtExpiry      time.Duration
-	logger         *zap.Logger
-	metrics        *metrics.BusinessMetrics
+	twitchOAuth  *oauth.TwitchOAuth
+	youtubeOAuth *oauth.YouTubeOAuth
+	userRepo     *repository.UserRepository
+	redis        *redis.Client
+	userKeyChain *auth.KeyChain
+	jwtExpiry    time.Duration
+	logger       *zap.Logger
+	metrics      *metrics.BusinessMetrics
 }
 
 // NewAuthHandler creates a new auth handler
@@ -93,7 +96,15 @@ func (h *AuthHandler) HandleLogin(c *gin.Context) {
 		return
 	}
 
-	authURL := h.twitchOAuth.GetAuthURL(state)
+	// Generate auth URL with PKCE (audit L4)
+	authURL, codeVerifier := h.twitchOAuth.GetAuthURLWithPKCE(state)
+	// Store PKCE verifier in Redis for the callback
+	if err := h.redis.Set(c.Request.Context(), "oauth_verifier:twitch:"+state, codeVerifier, 10*time.Minute).Err(); err != nil {
+		h.logger.Error("Failed to store PKCE verifier", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{"auth_url": authURL})
 }
 
@@ -115,7 +126,15 @@ func (h *AuthHandler) HandleYouTubeLogin(c *gin.Context) {
 		return
 	}
 
-	authURL := h.youtubeOAuth.GetAuthURL(state)
+	// Generate auth URL with PKCE (audit L4)
+	authURL, codeVerifier := h.youtubeOAuth.GetAuthURLWithPKCE(state)
+	// Store PKCE verifier in Redis for the callback
+	if err := h.redis.Set(c.Request.Context(), "oauth_verifier:youtube:"+state, codeVerifier, 10*time.Minute).Err(); err != nil {
+		h.logger.Error("Failed to store PKCE verifier", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{"auth_url": authURL})
 }
 
@@ -129,19 +148,22 @@ func (h *AuthHandler) HandleCallback(c *gin.Context) {
 		return
 	}
 
-	// Verify state
-	exists, err := h.redis.Get(c.Request.Context(), "oauth_state:"+state).Result()
+	// Verify state (atomic Get+Del to prevent TOCTOU, audit L5)
+	exists, err := h.redis.GetDel(c.Request.Context(), "oauth_state:"+state).Result()
 	if err != nil || exists == "" {
 		h.logger.Warn("Invalid or expired state", zap.String("state", state))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid or expired state"})
 		return
 	}
 
-	// Delete used state
-	h.redis.Del(c.Request.Context(), "oauth_state:"+state)
-
-	// Exchange code for token
-	token, err := h.twitchOAuth.ExchangeCode(c.Request.Context(), code)
+	// Exchange code for token (with PKCE, audit L4)
+	codeVerifier, verifierErr := h.redis.GetDel(c.Request.Context(), "oauth_verifier:twitch:"+state).Result()
+	var token *oauth2.Token
+	if verifierErr == nil && codeVerifier != "" {
+		token, err = h.twitchOAuth.ExchangeCodeWithVerifier(c.Request.Context(), code, codeVerifier)
+	} else {
+		token, err = h.twitchOAuth.ExchangeCode(c.Request.Context(), code)
+	}
 	if err != nil {
 		h.logger.Error("Failed to exchange code", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to exchange code"})
@@ -232,6 +254,11 @@ func (h *AuthHandler) HandleCallback(c *gin.Context) {
 	}
 
 	// Redirect to frontend with token in URL fragment (more secure than query param)
+	// TODO(M1): Replace this fragment-based redirect with the viewer auth-code-via-Redis
+	// + POST exchange flow (viewer_auth.go HandleTokenExchange pattern) to eliminate token
+	// exposure in the URL fragment. This requires coordinated frontend changes
+	// (auth/callback/page.tsx) to POST to a new /auth/token/exchange endpoint instead of
+	// reading tokens from window.location.hash.
 	frontendURL := getEnvOrDefault("FRONTEND_URL", "http://localhost:3000")
 	redirectURL := fmt.Sprintf("%s/auth/callback#access_token=%s&refresh_token=%s&expires_in=%d&token_type=Bearer",
 		frontendURL,
@@ -239,6 +266,14 @@ func (h *AuthHandler) HandleCallback(c *gin.Context) {
 		token.RefreshToken,
 		int64(h.jwtExpiry.Seconds()),
 	)
+
+	// Track refresh token for reuse detection (audit M2).
+	if token.RefreshToken != "" {
+		rtKey := "refresh_token:" + refreshTokenHash(token.RefreshToken)
+		if err := h.redis.Set(c.Request.Context(), rtKey, user.ID, 14*24*time.Hour).Err(); err != nil {
+			h.logger.Warn("Failed to track refresh token for reuse detection", zap.Error(err))
+		}
+	}
 
 	c.Redirect(http.StatusFound, redirectURL)
 }
@@ -253,19 +288,22 @@ func (h *AuthHandler) HandleYouTubeCallback(c *gin.Context) {
 		return
 	}
 
-	// Verify state
-	exists, err := h.redis.Get(c.Request.Context(), "oauth_state:youtube:"+state).Result()
+	// Verify state (atomic Get+Del to prevent TOCTOU, audit L5)
+	exists, err := h.redis.GetDel(c.Request.Context(), "oauth_state:youtube:"+state).Result()
 	if err != nil || exists == "" {
 		h.logger.Warn("Invalid or expired state", zap.String("state", state))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid or expired state"})
 		return
 	}
 
-	// Delete used state
-	h.redis.Del(c.Request.Context(), "oauth_state:youtube:"+state)
-
-	// Exchange code for token
-	token, err := h.youtubeOAuth.ExchangeCode(c.Request.Context(), code)
+	// Exchange code for token (with PKCE, audit L4)
+	ytCodeVerifier, ytVerifierErr := h.redis.GetDel(c.Request.Context(), "oauth_verifier:youtube:"+state).Result()
+	var token *oauth2.Token
+	if ytVerifierErr == nil && ytCodeVerifier != "" {
+		token, err = h.youtubeOAuth.ExchangeCodeWithVerifier(c.Request.Context(), code, ytCodeVerifier)
+	} else {
+		token, err = h.youtubeOAuth.ExchangeCode(c.Request.Context(), code)
+	}
 	if err != nil {
 		h.logger.Error("Failed to exchange code", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to exchange code"})
@@ -371,6 +409,7 @@ func (h *AuthHandler) HandleYouTubeCallback(c *gin.Context) {
 	}
 
 	// Redirect to frontend with token in URL fragment
+	// TODO(M1): Replace with auth-code-via-Redis + POST exchange (see Twitch callback TODO).
 	frontendURL := getEnvOrDefault("FRONTEND_URL", "http://localhost:3000")
 	redirectURL := fmt.Sprintf("%s/auth/callback#access_token=%s&refresh_token=%s&expires_in=%d&token_type=Bearer",
 		frontendURL,
@@ -378,6 +417,14 @@ func (h *AuthHandler) HandleYouTubeCallback(c *gin.Context) {
 		token.RefreshToken,
 		int64(h.jwtExpiry.Seconds()),
 	)
+
+	// Track refresh token for reuse detection (audit M2).
+	if token.RefreshToken != "" {
+		rtKey := "refresh_token:" + refreshTokenHash(token.RefreshToken)
+		if err := h.redis.Set(c.Request.Context(), rtKey, user.ID, 14*24*time.Hour).Err(); err != nil {
+			h.logger.Warn("Failed to track refresh token for reuse detection", zap.Error(err))
+		}
+	}
 
 	c.Redirect(http.StatusFound, redirectURL)
 }
@@ -399,6 +446,21 @@ func (h *AuthHandler) HandleRefresh(c *gin.Context) {
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		return
+	}
+
+	// Refresh-token reuse detection (audit M2).
+	// Each refresh token is stored in Redis as refresh_token:<sha256> when issued.
+	// GetDel atomically retrieves and deletes it. If the key doesn't exist, the
+	// token was already used (potential reuse/theft) → reject.
+	tokenHash := refreshTokenHash(req.RefreshToken)
+	rtKey := "refresh_token:" + tokenHash
+	_, err := h.redis.GetDel(c.Request.Context(), rtKey).Result()
+	if err != nil {
+		h.logger.Warn("Refresh token reuse detected — token not in active set",
+			zap.String("refresh_token_hash", tokenHash[:16]),
+			zap.Error(err))
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Refresh token already used or invalid"})
 		return
 	}
 
@@ -432,6 +494,13 @@ func (h *AuthHandler) HandleRefresh(c *gin.Context) {
 		h.logger.Error("Failed to update tokens", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update tokens"})
 		return
+	}
+
+	// Track the new refresh token for reuse detection (audit M2).
+	// TTL matches the typical Twitch refresh-token lifetime.
+	newRTKey := "refresh_token:" + refreshTokenHash(token.RefreshToken)
+	if err := h.redis.Set(c.Request.Context(), newRTKey, user.ID, 14*24*time.Hour).Err(); err != nil {
+		h.logger.Warn("Failed to track new refresh token for reuse detection", zap.Error(err))
 	}
 
 	// Generate new JWT
@@ -547,4 +616,11 @@ func generateRandomString(length int) (string, error) {
 		return "", fmt.Errorf("failed to generate random bytes: %w", err)
 	}
 	return base64.URLEncoding.EncodeToString(bytes)[:length], nil
+}
+
+// refreshTokenHash returns a hex-encoded SHA-256 hash of the refresh token for
+// use as a Redis key (audit M2). Hashing avoids storing raw tokens in Redis.
+func refreshTokenHash(token string) string {
+	h := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(h[:])
 }

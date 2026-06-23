@@ -17,6 +17,7 @@
  */
 
 import { apiClient } from './client'
+import { safeExternalRedirect } from '../auth/redirect-allowlist'
 
 export interface PaymentStatus {
   connected: boolean
@@ -35,7 +36,7 @@ export async function getPaymentStatus(): Promise<PaymentStatus> {
 export async function startPatreonConnect(): Promise<void> {
   const data = await apiClient.get<{ auth_url: string }>('/api/v1/payment/patreon/connect')
   if (data.auth_url) {
-    window.location.href = data.auth_url
+    safeExternalRedirect(data.auth_url)
   }
 }
 

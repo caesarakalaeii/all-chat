@@ -42,6 +42,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { authApi } from '@/lib/api/auth'
+import { inMemoryTokens } from '@/lib/auth/in-memory-store'
 import { trackEvent } from '@/lib/analytics'
 import { InfinityLogo } from '@/components/InfinityLogo'
 
@@ -70,8 +71,12 @@ function AuthCallbackContent() {
 
       // Store token
       setToken(token)
-      if (refreshToken && typeof window !== 'undefined') {
-        localStorage.setItem('refresh_token', refreshToken)
+      // SECURITY (audit H3): refresh token is stored in-memory ONLY, never in
+      // localStorage, so XSS cannot read it from storage. It is lost on tab
+      // close/refresh — the user must re-authenticate (acceptable tradeoff).
+      // Full httpOnly-cookie migration is the longer-term fix (deferred).
+      if (refreshToken) {
+        inMemoryTokens.setRefreshToken(refreshToken)
       }
 
       try {
@@ -97,11 +102,20 @@ function AuthCallbackContent() {
         }
 
         if (redirectTo) {
+          // SECURITY (audit M12): validate redirect_to to prevent open redirect.
+          // Must be a relative path (starts with '/') and not protocol-relative
+          // ("//evil.com"). Mirrors the viewer flow at chat/auth-success/page.tsx.
+          const isSafeRedirect = redirectTo.startsWith('/') && !redirectTo.startsWith('//')
           // Source-add returns to overlay settings with a confirmation marker; the
           // moderation monitor reflects the new scope on its own capabilities fetch,
           // so it just navigates back cleanly.
           const redirectURL = sourceAdded ? `${redirectTo}?source_added=${sourceAdded}` : redirectTo
-          router.push(redirectURL)
+          if (isSafeRedirect) {
+            router.push(redirectURL)
+          } else {
+            console.warn('[AllChat] Blocked unsafe redirect_to:', redirectTo)
+            router.push('/dashboard')
+          }
         } else {
           // Default: redirect to dashboard
           router.push('/dashboard')

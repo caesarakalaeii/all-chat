@@ -1,0 +1,53 @@
+# Repo-root .dockerignore
+# Applies to service images built with the repository root as the build context
+# (e.g. docker-compose services with `context: ../`). Per-service .dockerignore
+# files exist for frontend, discord-bot, tiktok-listener and twitch-eventsub-listener
+# which build from their own directory context.
+#
+# NOTE: Go service Dockerfiles `COPY shared/` and `COPY services/<svc>/` plus
+# `COPY LICENSE` — those paths are intentionally NOT excluded here.
+
+# Version control
+.git
+.gitignore
+.github
+
+# IDE / editor
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment files (never bake into images)
+**/.env
+**/.env.*
+!**/.env.example
+
+# Node / JS build artifacts
+**/node_modules
+**/dist
+**/coverage
+**/.nyc_output
+**/.next
+**/out
+**/npm-debug.log*
+
+# Go build artifacts
+**/*.out
+**/coverage.*
+
+# Logs
+**/*.log
+
+# Repo artifacts not needed in service image build context
+docs/
+deployments/
+test/
+scripts/
+ansible/
+grafana/

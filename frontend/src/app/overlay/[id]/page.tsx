@@ -630,6 +630,14 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
       `,
         }}
       />
+      {/*
+       * SECURITY (audit L33): the following <style> blocks use
+       * dangerouslySetInnerHTML for owner-authored CSS (visual settings, theme,
+       * and raw custom_css) on a public overlay page. A CSP `style-src`
+       * directive must constrain the blast radius (frontend-hardening agent
+       * adds CSP via next.config.js headers). Do not remove this note until
+       * CSP is in place.
+       */}
       {visualSettingsCss.length > 0 && (
         <style dangerouslySetInnerHTML={{ __html: visualSettingsCss }} />
       )}

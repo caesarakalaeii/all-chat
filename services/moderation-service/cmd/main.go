@@ -59,6 +59,9 @@ func main() {
 	log.Info("Starting Moderation Service", zap.String("version", getEnv("APP_VERSION", "0.1.0")))
 
 	cfg := loadConfig()
+	if cfg.DatabasePassword == "" {
+		log.Fatal("DATABASE_PASSWORD must be set")
+	}
 
 	// JWT key chain for validating user tokens forwarded by the API gateway.
 	userKeyChain, err := sharedAuth.NewKeyChainFromEnv("JWT_SECRET")
@@ -321,7 +324,7 @@ func loadConfig() *Config {
 		DatabaseHost:        getEnv("DATABASE_HOST", "localhost"),
 		DatabasePort:        getEnv("DATABASE_PORT", "5432"),
 		DatabaseUser:        getEnv("DATABASE_USER", "allchat"),
-		DatabasePassword:    getEnv("DATABASE_PASSWORD", "allchat_dev_password"),
+		DatabasePassword:    getEnv("DATABASE_PASSWORD", ""),
 		DatabaseName:        getEnv("DATABASE_NAME", "allchat"),
 		TwitchClientID:      getEnv("TWITCH_CLIENT_ID", ""),
 		TwitchClientSecret:  getEnv("TWITCH_CLIENT_SECRET", ""),

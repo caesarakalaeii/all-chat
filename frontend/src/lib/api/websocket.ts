@@ -114,6 +114,13 @@ export class WebSocketClient {
 
     // Pass ?since= so the server's replay buffer flushes only the messages
     // we haven't already rendered (server uses an exclusive lower bound).
+    //
+    // SECURITY (audit H5): the JWT is passed as a query parameter so the
+    // gateway can authenticate the WS handshake. This leaks the token into
+    // access/proxy logs. The preferred fix is to send the token via the
+    // WebSocket subprotocol (new WebSocket(url, ['bearer', token])) once the
+    // gateway server-side supports it (separate agent scope). Until then the
+    // gateway logging middleware must redact the `token` query param.
     let url = `${WS_URL}/ws/overlay/${overlayId}?token=${token}`
     if (this.lastSeenTimestamp > 0) {
       url += `&since=${this.lastSeenTimestamp}`

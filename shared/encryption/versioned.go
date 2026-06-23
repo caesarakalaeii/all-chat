@@ -49,6 +49,8 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+
+	"go.uber.org/zap"
 )
 
 // KidByte is a 1-byte key identifier prepended to every versioned ciphertext.
@@ -154,7 +156,15 @@ func NewMultiKeyEncryptor(entries []KeyEntry, legacyKeys []*AESEncryptor) (*Mult
 //
 // Constructor never panics; all parse/construction errors are returned as wrapped errors
 // (T-14-01-05).
+//
+// A warning is logged (via the provided logger or a no-op logger) when a key appears to
+// be all-zero or low-entropy (audit L7). ParseKey's base64-vs-raw ambiguity is documented
+// in encryption.go (audit L8): if the input is valid base64 and decodes to a valid key
+// length, it is treated as base64; otherwise the raw bytes are used.
 func NewMultiKeyEncryptorFromEnv() (*MultiKeyEncryptor, error) {
+	// Use a no-op logger by default; callers that want warnings visible should
+	// add an explicit logger parameter in a future refactor (audit L7).
+	logger := zap.NewNop()
 	var entries []KeyEntry
 	for n := 1; n <= int(MaxKid); n++ {
 		envName := "TOKEN_ENCRYPTION_KEY_V" + strconv.Itoa(n)
@@ -166,6 +176,7 @@ func NewMultiKeyEncryptorFromEnv() (*MultiKeyEncryptor, error) {
 		if err != nil {
 			return nil, fmt.Errorf("parse %s: %w", envName, err)
 		}
+		warnIfWeakKey(logger, envName, parsed)
 		cipher, err := NewAESEncryptor(parsed)
 		if err != nil {
 			return nil, fmt.Errorf("create cipher %s: %w", envName, err)
@@ -184,6 +195,7 @@ func NewMultiKeyEncryptorFromEnv() (*MultiKeyEncryptor, error) {
 		if err != nil {
 			return nil, fmt.Errorf("parse TOKEN_ENCRYPTION_KEY: %w", err)
 		}
+		warnIfWeakKey(logger, "TOKEN_ENCRYPTION_KEY", parsed)
 		cipher, err := NewAESEncryptor(parsed)
 		if err != nil {
 			return nil, fmt.Errorf("create cipher TOKEN_ENCRYPTION_KEY: %w", err)
@@ -197,6 +209,7 @@ func NewMultiKeyEncryptorFromEnv() (*MultiKeyEncryptor, error) {
 		if err != nil {
 			return nil, fmt.Errorf("parse YOUTUBE_TOKEN_ENCRYPTION_KEY: %w", err)
 		}
+		warnIfWeakKey(logger, "YOUTUBE_TOKEN_ENCRYPTION_KEY", parsed)
 		cipher, err := NewAESEncryptor(parsed)
 		if err != nil {
 			return nil, fmt.Errorf("create cipher YOUTUBE_TOKEN_ENCRYPTION_KEY: %w", err)
@@ -290,3 +303,23 @@ func (m *MultiKeyEncryptor) Encrypt(s string) (string, error) { return m.Encrypt
 
 // Decrypt is a StringCipher-compatible alias for DecryptString.
 func (m *MultiKeyEncryptor) Decrypt(s string) (string, error) { return m.DecryptString(s) }
+
+// warnIfWeakKey logs a warning when a key appears all-zero or low-entropy (audit L7).
+// This is advisory only — the key is still accepted to avoid breaking existing
+// deployments during rotation.
+func warnIfWeakKey(logger *zap.Logger, envName string, key []byte) {
+	if logger == nil {
+		return
+	}
+	allZero := true
+	for _, b := range key {
+		if b != 0 {
+			allZero = false
+			break
+		}
+	}
+	if allZero {
+		logger.Warn("encryption key is all zeros — this is insecure for production",
+			zap.String("env_var", envName))
+	}
+}

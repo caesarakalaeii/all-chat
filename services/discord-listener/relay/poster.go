@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -40,6 +41,24 @@ var ErrRateLimited = errors.New("discord webhook rate limited")
 // ErrRateLimited. Anything longer blocks the drain goroutine and causes the
 // Redis Pub/Sub channel to overflow.
 const maxRetryAfter = 5 * time.Second
+
+// redactWebhookURL returns a tokenless representation of a Discord webhook URL
+// for logging. Discord webhook URLs embed the secret token in the path
+// (https://discord.com/api/webhooks/<id>/<token>); logging the full URL leaks
+// the token into logs (audit L20). On parse failure returns a fixed sentinel
+// rather than the raw URL.
+func redactWebhookURL(webhookURL string) string {
+	u, err := url.Parse(webhookURL)
+	if err != nil || u.Path == "" {
+		return "discord.com/api/webhooks/<invalid>"
+	}
+	// Expected path: /api/webhooks/<id>/<token>
+	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	if len(parts) >= 4 && parts[0] == "api" && parts[1] == "webhooks" {
+		return fmt.Sprintf("discord.com/api/webhooks/%s", parts[2])
+	}
+	return "discord.com/api/webhooks/<unrecognized>"
+}
 
 // RelayPayload holds the fields sent to a Discord webhook.
 type RelayPayload struct {
@@ -134,7 +153,7 @@ func (p *webhookPoster) doPost(ctx context.Context, webhookURL string, msg Relay
 		if retryAfterDur > maxRetryAfter || isRetry {
 			if p.logger != nil {
 				p.logger.Warn("Discord webhook 429: returning rate-limit error",
-					zap.String("webhook_url", webhookURL),
+					zap.String("webhook_id", redactWebhookURL(webhookURL)),
 					zap.Duration("retry_after", retryAfterDur),
 					zap.Bool("is_retry", isRetry),
 				)
@@ -145,7 +164,7 @@ func (p *webhookPoster) doPost(ctx context.Context, webhookURL string, msg Relay
 		// Short wait — sleep and retry once.
 		if p.logger != nil {
 			p.logger.Warn("Discord webhook 429: sleeping before retry",
-				zap.String("webhook_url", webhookURL),
+				zap.String("webhook_id", redactWebhookURL(webhookURL)),
 				zap.Duration("retry_after", retryAfterDur),
 			)
 		}
@@ -162,7 +181,7 @@ func (p *webhookPoster) doPost(ctx context.Context, webhookURL string, msg Relay
 		if p.logger != nil {
 			p.logger.Warn("Discord webhook POST dropped: permission denied or webhook not found",
 				zap.Int("status", resp.StatusCode),
-				zap.String("webhook_url", webhookURL),
+				zap.String("webhook_id", redactWebhookURL(webhookURL)),
 			)
 		}
 		return nil

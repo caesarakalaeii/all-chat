@@ -26,6 +26,7 @@ spec:
       containers:
         - name: youtube-listener-innertube
           image: allchat/youtube-listener-innertube:latest
+          imagePullPolicy: IfNotPresent
           ports:
             - name: http
               containerPort: 8080

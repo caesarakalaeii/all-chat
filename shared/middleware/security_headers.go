@@ -19,12 +19,21 @@ package middleware
 import "github.com/gin-gonic/gin"
 
 // SecurityHeaders adds standard security headers to all responses.
+//
+// HSTS (Strict-Transport-Security) is included for defense-in-depth when the
+// gateway sits behind a TLS-terminating ingress/load-balancer. It is only
+// effective when the client connects via HTTPS (audit L16). CSP is intentionally
+// NOT set here because per-route CSP is handled at the frontend layer (Next.js
+// headers() / nginx).
 func SecurityHeaders() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("X-Frame-Options", "DENY")
 		c.Header("X-Content-Type-Options", "nosniff")
 		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
 		c.Header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+		// HSTS: max-age 1 year, include subdomains, preload (audit L16).
+		// Only honored by browsers over HTTPS; harmless over HTTP.
+		c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
 		c.Next()
 	}
 }

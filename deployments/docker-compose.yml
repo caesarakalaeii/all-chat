@@ -1,5 +1,34 @@
 version: '3.9'
 
+# =============================================================================
+# All-Chat — full stack (dev / prod-like).
+#
+# SECURITY (M16): Internal ports are bound to 127.0.0.1 only, weak secret
+# fallbacks have been removed, and Redis auth is wired (default-off).
+#
+# REQUIRED ENVIRONMENT VARIABLES (no insecure defaults — set these before up):
+#   POSTGRES_PASSWORD           database + service DB password (use same value)
+#   REDIS_PASSWORD              Redis AUTH password (empty = AUTH disabled)
+#   JWT_SECRET                  JWT signing secret (>= 32 bytes)
+#   TOKEN_ENCRYPTION_KEY        AES-GCM master key (16/24/32 bytes)
+#   MESSAGE_PROCESSOR_API_KEY   shared API key for message-processor
+#   SERVICE_JWT_SECRET           service-to-service JWT signing secret
+#   TWITCH_CLIENT_ID / TWITCH_CLIENT_SECRET
+#   TWITCH_BOT_USERNAME / TWITCH_BOT_OAUTH
+#   YOUTUBE_CLIENT_ID / YOUTUBE_CLIENT_SECRET
+#   DISCORD_BOT_TOKEN / DISCORD_CHANNEL_ID
+#
+# Set them in your shell or in an .env file in this directory (docker-compose
+# auto-loads ./<dir>/.env). See ../../.env.example for the full list.
+#
+# REDIS AUTH NOTE: `redis-server` runs with `--requirepass "$REDIS_PASSWORD"`.
+# While REDIS_PASSWORD is empty, AUTH is disabled (services keep working). Once a
+# non-empty REDIS_PASSWORD is set, Redis requires AUTH — only services that read
+# REDIS_PASSWORD (api-gateway, source-manager, twitch-listener) will connect;
+# the other Go services hardcode an empty Redis password and must be updated
+# before enabling AUTH. Until then, leave REDIS_PASSWORD empty for dev.
+# =============================================================================
+
 services:
   # PostgreSQL database
   postgres:
@@ -8,9 +37,9 @@ services:
     environment:
       POSTGRES_DB: allchat
       POSTGRES_USER: allchat
-      POSTGRES_PASSWORD: allchat_dev_password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ../migrations:/docker-entrypoint-initdb.d:ro
@@ -26,22 +55,23 @@ services:
   redis:
     image: redis:7-alpine
     container_name: allchat-redis
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     command:
-      - redis-server
-      - --appendonly
-      - "yes"
-      - --appendfsync
-      - everysec
-      - --maxmemory
-      - 512mb
-      - --maxmemory-policy
-      - allkeys-lru
+      - sh
+      - -c
+      - |
+        if [ -n "$$REDIS_PASSWORD" ]; then
+          exec redis-server --requirepass "$$REDIS_PASSWORD" --appendonly yes --appendfsync everysec --maxmemory 512mb --maxmemory-policy allkeys-lru
+        else
+          exec redis-server --appendonly yes --appendfsync everysec --maxmemory 512mb --maxmemory-policy allkeys-lru
+        fi
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep PONG"]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -61,16 +91,17 @@ services:
       DATABASE_PORT: "5432"
       DATABASE_NAME: allchat
       DATABASE_USER: allchat
-      DATABASE_PASSWORD: allchat_dev_password
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       TWITCH_CLIENT_ID: ${TWITCH_CLIENT_ID}
       TWITCH_CLIENT_SECRET: ${TWITCH_CLIENT_SECRET}
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
-      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:?TOKEN_ENCRYPTION_KEY is required}
       JWT_EXPIRY_HOURS: "24"
     ports:
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
     depends_on:
       postgres:
         condition: service_healthy
@@ -93,15 +124,16 @@ services:
       DATABASE_PORT: "5432"
       DATABASE_NAME: allchat
       DATABASE_USER: allchat
-      DATABASE_PASSWORD: allchat_dev_password
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       REDIS_HOST: redis
       REDIS_PORT: "6379"
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       AUTH_SERVICE_URL: http://auth-service:8081
       MESSAGE_PROCESSOR_URL: http://message-processor:8087
-      MESSAGE_PROCESSOR_API_KEY: ${MESSAGE_PROCESSOR_API_KEY:-dev-mock-key}
+      MESSAGE_PROCESSOR_API_KEY: ${MESSAGE_PROCESSOR_API_KEY:?MESSAGE_PROCESSOR_API_KEY is required}
     ports:
-      - "8082:8082"
+      - "127.0.0.1:8082:8082"
     depends_on:
       postgres:
         condition: service_healthy
@@ -124,8 +156,9 @@ services:
       LOG_LEVEL: "info"
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     ports:
-      - "8083:8083"
+      - "127.0.0.1:8083:8083"
     depends_on:
       redis:
         condition: service_healthy
@@ -149,13 +182,14 @@ services:
       DATABASE_PORT: "5432"
       DATABASE_NAME: allchat
       DATABASE_USER: allchat
-      DATABASE_PASSWORD: allchat_dev_password
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       REDIS_HOST: redis
       REDIS_PORT: "6379"
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -186,13 +220,14 @@ services:
       DATABASE_PORT: "5432"
       DATABASE_NAME: allchat
       DATABASE_USER: allchat
-      DATABASE_PASSWORD: allchat_dev_password
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       SOURCE_MANAGER_URL: http://source-manager:8088
-      SOURCE_MANAGER_SECRET: ${SERVICE_JWT_SECRET:-dev-service-secret}
+      SOURCE_MANAGER_SECRET: ${SERVICE_JWT_SECRET:?SERVICE_JWT_SECRET is required}
     ports:
-      - "8085:8085"
+      - "127.0.0.1:8085:8085"
     depends_on:
       postgres:
         condition: service_healthy
@@ -215,13 +250,14 @@ services:
       DATABASE_PORT: "5432"
       DATABASE_NAME: allchat
       DATABASE_USER: allchat
-      DATABASE_PASSWORD: allchat_dev_password
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       EMOTE_SERVICE_URL: http://emote-service:8083
-      MOCK_MESSAGE_API_KEY: ${MESSAGE_PROCESSOR_API_KEY:-dev-mock-key}
+      MOCK_MESSAGE_API_KEY: ${MESSAGE_PROCESSOR_API_KEY:?MESSAGE_PROCESSOR_API_KEY is required}
     ports:
-      - "8087:8087"
+      - "127.0.0.1:8087:8087"
     depends_on:
       postgres:
         condition: service_healthy
@@ -246,12 +282,13 @@ services:
       DATABASE_PORT: "5432"
       DATABASE_NAME: allchat
       DATABASE_USER: allchat
-      DATABASE_PASSWORD: allchat_dev_password
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       REDIS_HOST: redis
       REDIS_PORT: "6379"
-      SERVICE_JWT_SECRET: ${SERVICE_JWT_SECRET:-dev-service-secret}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      SERVICE_JWT_SECRET: ${SERVICE_JWT_SECRET:?SERVICE_JWT_SECRET is required}
     ports:
-      - "8088:8088"
+      - "127.0.0.1:8088:8088"
     depends_on:
       postgres:
         condition: service_healthy
@@ -276,15 +313,16 @@ services:
       DATABASE_PORT: "5432"
       DATABASE_NAME: allchat
       DATABASE_USER: allchat
-      DATABASE_PASSWORD: allchat_dev_password
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       POLLING_INTERVAL_MS: "2000"
       QUOTA_LIMIT_DAILY: "1009000"
       SOURCE_MANAGER_URL: http://source-manager:8088
-      SOURCE_MANAGER_SECRET: ${SERVICE_JWT_SECRET:-dev-service-secret}
+      SOURCE_MANAGER_SECRET: ${SERVICE_JWT_SECRET:?SERVICE_JWT_SECRET is required}
     ports:
-      - "8086:8086"
+      - "127.0.0.1:8086:8086"
     depends_on:
       postgres:
         condition: service_healthy
@@ -310,12 +348,13 @@ services:
       DATABASE_PORT: "5432"
       DATABASE_NAME: allchat
       DATABASE_USER: allchat
-      DATABASE_PASSWORD: allchat_dev_password
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       QUOTA_MONITOR_INTERVAL: "30s"
     ports:
-      - "8093:8093"
+      - "127.0.0.1:8093:8093"
     depends_on:
       postgres:
         condition: service_healthy
@@ -336,7 +375,7 @@ services:
       NEXT_PUBLIC_API_URL: http://api-gateway:8080
       NEXT_PUBLIC_WS_URL: ws://api-gateway:8080
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       api-gateway:
         condition: service_started
@@ -355,6 +394,7 @@ services:
       DISCORD_CHANNEL_ID: ${DISCORD_CHANNEL_ID}
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       YOUTUBE_LISTENER_URL: http://youtube-quota-monitor:8093
       STATUS_UPDATE_INTERVAL: "3600000"
     depends_on:

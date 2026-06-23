@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -34,9 +35,11 @@ const (
 	// InnerTubeEndpoint is the base URL for InnerTube live chat API
 	InnerTubeEndpoint = "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat"
 
-	// DefaultAPIKey is the public InnerTube API key extracted from research
+	// defaultInnertubeAPIKey is the public InnerTube API key extracted from research.
+	// Kept as the fallback for DefaultAPIKey (configurable via ALLCHAT_INNERTUBE_KEY,
+	// audit L26) for rotation hygiene.
 	// TODO: Phase 10 - Extract API key dynamically from stream HTML
-	DefaultAPIKey = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
+	defaultInnertubeAPIKey = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
 
 	// DefaultClientVersion is the YouTube web client version
 	// Update periodically to match current YouTube web client
@@ -45,6 +48,20 @@ const (
 	// DefaultTimeout for HTTP requests
 	DefaultTimeout = 10 * time.Second
 )
+
+// DefaultAPIKey is the InnerTube API key used when ClientOptions.APIKey is empty.
+// Configurable via the ALLCHAT_INNERTUBE_KEY env var (audit L26); falls back to
+// the public web-client key when unset.
+var DefaultAPIKey = getEnvDefault("ALLCHAT_INNERTUBE_KEY", defaultInnertubeAPIKey)
+
+// getEnvDefault returns os.Getenv(key) when set and non-empty, else fallback.
+// Defined here (not shared) to avoid pulling shared into the innertube package.
+func getEnvDefault(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
 
 // Client handles communication with the InnerTube API
 type Client struct {
@@ -152,7 +169,7 @@ func (c *Client) GetLiveChatReplay(ctx context.Context, continuation string, vis
 	defer resp.Body.Close()
 
 	// Read response body for error reporting
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
 	if err != nil {
 		// Track parse error (failed to read body)
 		if c.metrics != nil {

@@ -58,6 +58,7 @@ import { useNotificationSocket } from '@/hooks/useNotificationSocket'
 import { parseCssToVisualSettings } from '@/lib/utils/theme-css-parser'
 import type { Theme } from '@/lib/theme-marketplace/types'
 import { toastManager } from '@/lib/toast'
+import { safeExternalRedirect } from '@/lib/auth/redirect-allowlist'
 import { trackEvent } from '@/lib/analytics'
 import { AppNav } from '@/components/AppNav'
 import { SplitView } from '@/components/SplitView'
@@ -773,7 +774,7 @@ function AddSourceForm({
       })
       const data = await res.json()
       if (data.auth_url) {
-        window.location.href = data.auth_url
+        safeExternalRedirect(data.auth_url)
       } else {
         console.error('No auth_url returned', data)
       }
@@ -1750,7 +1751,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
       })
       const data = await res.json()
       if (data.auth_url) {
-        window.location.href = data.auth_url
+        safeExternalRedirect(data.auth_url)
       } else {
         console.error('No auth_url returned for Twitch reconnect', data)
       }

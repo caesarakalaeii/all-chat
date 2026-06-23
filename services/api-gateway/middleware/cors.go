@@ -17,15 +17,20 @@
 package middleware
 
 import (
-	"github.com/gin-contrib/cors"
-	"github.com/gin-gonic/gin"
+	"log"
 	"os"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
 )
 
 // CORS returns a CORS middleware configured from environment variables
 func CORS() gin.HandlerFunc {
+	validateCORSConfig()
+
 	corsOrigin := getEnvOrDefault("CORS_ORIGIN", "http://localhost:3000")
 	allowedOrigins := parseOrigins(corsOrigin)
 
@@ -57,6 +62,24 @@ func CORS() gin.HandlerFunc {
 	}
 
 	return cors.New(config)
+}
+
+// corsValidationOnce ensures the wildcard + credentials check runs only once.
+var corsValidationOnce sync.Once
+
+// validateCORSConfig fails-fast at startup if CORS_ORIGIN=* is set while
+// AllowCredentials is enabled. A wildcard origin with credentials allows any
+// website to make authenticated cross-origin requests (H9 + L12).
+func validateCORSConfig() {
+	corsValidationOnce.Do(func() {
+		corsOrigin := strings.TrimSpace(getEnvOrDefault("CORS_ORIGIN", "http://localhost:3000"))
+		for _, o := range strings.Split(corsOrigin, ",") {
+			if strings.TrimSpace(o) == "*" {
+				log.Fatal("CORS_ORIGIN=* is not allowed when AllowCredentials is enabled; " +
+					"configure explicit origins via the CORS_ORIGIN env var")
+			}
+		}
+	})
 }
 
 // parseOrigins parses a comma-separated list of origins

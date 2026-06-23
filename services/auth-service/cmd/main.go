@@ -140,7 +140,10 @@ func main() {
 	dbHost := getEnvOrDefault("DATABASE_HOST", "localhost")
 	dbPort := getEnvOrDefault("DATABASE_PORT", "5432")
 	dbUser := getEnvOrDefault("DATABASE_USER", "allchat")
-	dbPassword := getEnvOrDefault("DATABASE_PASSWORD", "allchat_dev_password")
+	dbPassword := getEnvOrDefault("DATABASE_PASSWORD", "")
+	if dbPassword == "" {
+		log.Fatal("DATABASE_PASSWORD must be set")
+	}
 	dbName := getEnvOrDefault("DATABASE_NAME", "allchat")
 
 	connString := fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
@@ -355,7 +358,7 @@ func main() {
 
 	// Protected routes (require JWT)
 	protected := router.Group("/")
-	protected.Use(middleware.JWTAuth(userKeyChain))
+	protected.Use(middleware.JWTAuthWithRevocation(userKeyChain, redisClient))
 	{
 		protected.GET("/me", legacyAuthHandler.HandleGetMe)
 		protected.GET("/me/data-export", legacyAuthHandler.HandleDataExport)
@@ -394,7 +397,7 @@ func main() {
 
 	// Viewer protected routes (require viewer JWT)
 	viewerProtected := router.Group("/viewer")
-	viewerProtected.Use(middleware.JWTAuth(userKeyChain))
+	viewerProtected.Use(middleware.JWTAuthWithRevocation(userKeyChain, redisClient))
 	{
 		viewerProtected.GET("/me", viewerAuthHandler.HandleMe)
 		viewerProtected.POST("/logout", viewerAuthHandler.HandleLogout)
@@ -407,7 +410,7 @@ func main() {
 
 	// Admin routes (JWT + Admin role required)
 	admin := router.Group("/admin")
-	admin.Use(middleware.JWTAuth(userKeyChain))
+	admin.Use(middleware.JWTAuthWithRevocation(userKeyChain, redisClient))
 	admin.Use(middleware.AdminOnly())
 	{
 		admin.GET("/users", adminHandler.ListUsers)

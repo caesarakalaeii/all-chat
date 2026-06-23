@@ -118,7 +118,10 @@ func main() {
 	dbHost := listener.Env("DATABASE_HOST", "localhost")
 	dbPort := listener.Env("DATABASE_PORT", "5432")
 	dbUser := listener.Env("DATABASE_USER", "allchat")
-	dbPassword := listener.Env("DATABASE_PASSWORD", "allchat_dev_password")
+	dbPassword := listener.Env("DATABASE_PASSWORD", "")
+	if dbPassword == "" {
+		log.Fatal("DATABASE_PASSWORD must be set")
+	}
 	dbName := listener.Env("DATABASE_NAME", "allchat")
 
 	connString := fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
@@ -333,15 +336,15 @@ func main() {
 	router.GET("/quota/channels/:channel_id", quotaHandler.GetChannelQuota)
 	router.GET("/quota/history", quotaHandler.GetQuotaHistory)
 	router.GET("/quota/predictions", quotaHandler.GetQuotaPrediction)
-	router.GET("/quota/circuit-breakers", quotaHandler.GetCircuitBreakers)  // Circuit breaker visibility
-	router.POST("/quota/record", quotaHandler.RecordQuota)  // Legacy endpoint for external services
+	router.GET("/quota/circuit-breakers", quotaHandler.GetCircuitBreakers) // Circuit breaker visibility
+	router.POST("/quota/record", quotaHandler.RecordQuota)                 // Legacy endpoint for external services
 
 	// Cross-service quota coordination API
 	v1 := router.Group("/api/v1")
 	{
-		v1.POST("/quota/check", quotaHandler.CheckQuota)       // Check if quota available
-		v1.POST("/quota/reserve", quotaHandler.ReserveQuota)   // Reserve before API call
-		v1.POST("/quota/confirm", quotaHandler.ConfirmQuota)   // Confirm or rollback after call
+		v1.POST("/quota/check", quotaHandler.CheckQuota)     // Check if quota available
+		v1.POST("/quota/reserve", quotaHandler.ReserveQuota) // Reserve before API call
+		v1.POST("/quota/confirm", quotaHandler.ConfirmQuota) // Confirm or rollback after call
 	}
 
 	// Admin endpoints for manual intervention

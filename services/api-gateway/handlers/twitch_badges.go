@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -130,7 +131,8 @@ func (h *TwitchBadgeHandler) GetChannelBadges(c *gin.Context) {
 	}
 
 	cacheKey := fmt.Sprintf("channel:%s", roomID)
-	url := fmt.Sprintf("%s?broadcaster_id=%s", twitchBadgeChannelURL, roomID)
+	// Escape roomID to prevent query parameter injection (L10)
+	url := fmt.Sprintf("%s?broadcaster_id=%s", twitchBadgeChannelURL, url.QueryEscape(roomID))
 	h.serveBadges(c, url, cacheKey)
 }
 

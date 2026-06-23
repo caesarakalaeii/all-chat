@@ -15,9 +15,20 @@ spec:
       labels:
         app: support-bot
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       initContainers:
         - name: clone-all-chat
           image: alpine/git
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            # readOnlyRootFilesystem omitted: git writes temp/credential state.
           command: ['sh', '-c', 'git clone --depth 1 https://$GITHUB_TOKEN@github.com/$GITHUB_OWNER/all-chat.git /repos/all-chat']
           env:
             - name: GITHUB_TOKEN
@@ -32,6 +43,13 @@ spec:
               mountPath: /repos/all-chat
         - name: clone-all-chat-extension
           image: alpine/git
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            # readOnlyRootFilesystem omitted: git writes temp/credential state.
           command: ['sh', '-c', 'git clone --depth 1 https://$GITHUB_TOKEN@github.com/$GITHUB_OWNER/all-chat-extension.git /repos/all-chat-extension']
           env:
             - name: GITHUB_TOKEN
@@ -47,6 +65,13 @@ spec:
       containers:
         - name: support-bot
           image: support-bot:latest
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
           env:
             - name: DISCORD_BOT_TOKEN
               valueFrom:
@@ -76,6 +101,8 @@ spec:
             - name: all-chat-extension-repo
               mountPath: /repos/all-chat-extension
               readOnly: true
+            - name: tmp
+              mountPath: /tmp
           resources:
             requests:
               memory: "128Mi"
@@ -87,4 +114,6 @@ spec:
         - name: all-chat-repo
           emptyDir: {}
         - name: all-chat-extension-repo
+          emptyDir: {}
+        - name: tmp
           emptyDir: {}

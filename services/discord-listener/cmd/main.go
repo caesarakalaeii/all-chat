@@ -217,6 +217,11 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	// DATABASE_PASSWORD is required — fail-fast before attempting DB connection.
+	if listener.Env("DATABASE_PASSWORD", "") == "" {
+		log.Fatal("DATABASE_PASSWORD must be set")
+	}
+
 	dbPool, err := pgxpool.New(ctx, buildDatabaseDSN())
 	if err != nil {
 		log.Fatal("failed to connect to database for relay", zap.Error(err))
@@ -501,6 +506,6 @@ func buildDatabaseDSN() string {
 	port := listener.Env("DATABASE_PORT", "5432")
 	name := listener.Env("DATABASE_NAME", "allchat")
 	user := listener.Env("DATABASE_USER", "allchat")
-	password := listener.Env("DATABASE_PASSWORD", "allchat_dev_password")
+	password := listener.Env("DATABASE_PASSWORD", "")
 	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s", user, password, host, port, name)
 }

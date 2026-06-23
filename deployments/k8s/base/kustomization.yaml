@@ -11,6 +11,10 @@ resources:
   - postgres/deployment.yaml
   - postgres/configmap.yaml
   - redis/deployment.yaml
+  - redis/secret.yaml
+
+  # Network hardening (H7): default-deny + metadata-IP block.
+  - networkpolicies.yaml
 
   # Phase 1 - Foundation
   - auth-service/deployment.yaml
@@ -42,6 +46,13 @@ commonLabels:
   project: allchat
   managed-by: kustomize
 
+# TODO(prod): Pin every image below to an immutable digest (@sha256:...) instead
+# of the mutable `main` tag to prevent supply-chain drift (M13). The
+# imagePullPolicy on each Deployment is set to IfNotPresent so a cached image is
+# reused rather than re-pulled against a mutable tag. Generate digests from the
+# exact built image, e.g.:
+#   crane digest ghcr.io/caesarakalaeii/allchat-api-gateway:main
+# and replace newTag with `@sha256:<digest>` (use `digest:` field in kustomize).
 images:
   - name: allchat-auth-service:latest
     newName: ghcr.io/caesarakalaeii/allchat-auth-service

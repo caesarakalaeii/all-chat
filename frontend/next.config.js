@@ -48,6 +48,56 @@ const nextConfig = {
     ]
   },
 
+  // Security headers (M10). Per-route CSP + standard hardening. The overlay
+  // public route (/overlay/:id) gets frame-ancestors 'none' so it cannot be
+  // iframed by third parties; everything else allows 'self' framing (editor
+  // SplitView embeds /overlays/:id/preview/embed same-origin).
+  // TODO(prod): replace script-src 'unsafe-inline' with a per-request nonce
+  // (Next.js unstable_inline + generateNonce) once CSP-nonce middleware is in
+  // place; 'unsafe-inline' is required now for Next dev + inline RSC chunks.
+  async headers() {
+    const cspBase = [
+      "default-src 'self'",
+      "img-src 'self' data: https: static-cdn.jtvnw.net yt3.ggpht.com cdn.7tv.app cdn.betterttv.net cdn.frankerfacez.com files.kick.com ui-avatars.com cdn.discordapp.com",
+      "script-src 'self' 'unsafe-inline'",
+      "style-src 'self' 'unsafe-inline'",
+      "connect-src 'self' wss: ws: https:",
+      "font-src 'self' data:",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+    ]
+
+    const hardening = [
+      { key: 'X-Content-Type-Options', value: 'nosniff' },
+      { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+      { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), interest-cohort=()' },
+      // HSTS is honored by browsers only over HTTPS; safe to emit in dev (ignored on http).
+      { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
+    ]
+
+    return [
+      {
+        // Public overlay route: prevent third-party iframing.
+        source: '/overlay/:id*',
+        headers: [
+          ...hardening,
+          { key: 'Content-Security-Policy', value: [...cspBase, "frame-ancestors 'none'"].join('; ') },
+          { key: 'X-Frame-Options', value: 'DENY' },
+        ],
+      },
+      {
+        // Editor embed (same-origin iframe) + everything else.
+        source: '/:path*',
+        headers: [
+          ...hardening,
+          { key: 'Content-Security-Policy', value: [...cspBase, "frame-ancestors 'self'"].join('; ') },
+          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+        ],
+      },
+    ]
+  },
+
   // API rewrites - proxy to API Gateway
   // In development: localhost:8080
   // In production: api-gateway service (Docker/K8s networking)

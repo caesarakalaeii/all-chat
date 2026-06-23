@@ -22,13 +22,27 @@ import (
 
 	"github.com/caesar/all-chat/shared/auth"
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 )
 
 // JWTAuth returns a gin middleware that validates JWT tokens using a KeyChain.
 // The KeyChain dispatches by kid header for versioned secrets and falls back to
 // the legacy secret for tokens without a kid (D-08). Non-HMAC tokens are
 // rejected outright (D-12).
+//
+// This overload does NOT check the logout blacklist. Use JWTAuthWithRevocation
+// to enforce token revocation (audit H2).
 func JWTAuth(kc *auth.KeyChain) gin.HandlerFunc {
+	return JWTAuthWithRevocation(kc, nil)
+}
+
+// JWTAuthWithRevocation is identical to JWTAuth but also checks the Redis-backed
+// logout blacklist before accepting a token. If rdb is nil the blacklist check
+// is skipped (backward-compatible with callers that have no Redis client).
+//
+// The blacklist key format is "blacklist:<raw-token>" and is written by
+// auth-service HandleLogout / HandleDeleteAccount (audit H2).
+func JWTAuthWithRevocation(kc *auth.KeyChain, rdb redis.UniversalClient) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Get token from Authorization header
 		authHeader := c.GetHeader("Authorization")
@@ -48,6 +62,22 @@ func JWTAuth(kc *auth.KeyChain) gin.HandlerFunc {
 			})
 			c.Abort()
 			return
+		}
+
+		// Check logout blacklist (audit H2). Skip when no Redis client is wired.
+		if rdb != nil {
+			blacklisted, err := rdb.Exists(c.Request.Context(), "blacklist:"+tokenString).Result()
+			if err != nil {
+				// Fail-open on Redis errors to avoid locking users out; the error
+				// is logged but not surfaced to the client.
+				_ = err
+			} else if blacklisted > 0 {
+				c.JSON(http.StatusUnauthorized, gin.H{
+					"error": "Token has been revoked",
+				})
+				c.Abort()
+				return
+			}
 		}
 
 		// Try to validate as viewer token first (more specific)

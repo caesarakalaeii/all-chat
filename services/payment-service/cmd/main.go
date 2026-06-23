@@ -106,9 +106,13 @@ func main() {
 	}
 
 	// PostgreSQL.
+	dbPassword := getEnv("DATABASE_PASSWORD", "")
+	if dbPassword == "" {
+		log.Fatal("DATABASE_PASSWORD must be set")
+	}
 	connString := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
 		getEnv("DATABASE_USER", "allchat"),
-		getEnv("DATABASE_PASSWORD", "allchat_dev_password"),
+		dbPassword,
 		getEnv("DATABASE_HOST", "localhost"),
 		getEnv("DATABASE_PORT", "5432"),
 		getEnv("DATABASE_NAME", "allchat"))

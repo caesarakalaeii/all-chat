@@ -19,6 +19,8 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -508,8 +510,9 @@ func (h *PlatformAuthHandlerV2) generateAuthURL(
 ) (string, error) {
 	var authURL string
 
-	// Handle PKCE for Kick
-	if platform == oauth.PlatformKick {
+	// Handle PKCE for Kick, Twitch, and YouTube (audit L4)
+	switch platform {
+	case oauth.PlatformKick:
 		kickProvider, ok := provider.(*oauth.KickOAuth)
 		if !ok {
 			return "", fmt.Errorf("kick provider type assertion failed")
@@ -525,13 +528,38 @@ func (h *PlatformAuthHandlerV2) generateAuthURL(
 		if err != nil {
 			return "", fmt.Errorf("failed to store code verifier: %w", err)
 		}
-	} else if platform == oauth.PlatformTwitch && withChatScopes {
+
+	case oauth.PlatformTwitch:
 		twitchProvider, ok := provider.(*oauth.TwitchOAuth)
 		if !ok {
 			return "", fmt.Errorf("twitch provider type assertion failed")
 		}
-		authURL = twitchProvider.GetAuthURLWithChatScopes(stateStr)
-	} else {
+		if withChatScopes {
+			authURL = twitchProvider.GetAuthURLWithChatScopes(stateStr)
+		} else {
+			// Use PKCE for Twitch login (audit L4)
+			var codeVerifier string
+			authURL, codeVerifier = twitchProvider.GetAuthURLWithPKCE(stateStr)
+			verifierKey := fmt.Sprintf("oauth_verifier:%s:%s", platform, csrfToken)
+			if err := h.redis.Set(ctx, verifierKey, codeVerifier, 10*time.Minute).Err(); err != nil {
+				return "", fmt.Errorf("failed to store PKCE verifier: %w", err)
+			}
+		}
+
+	case oauth.PlatformYouTube:
+		ytProvider, ok := provider.(*oauth.YouTubeOAuth)
+		if !ok {
+			return "", fmt.Errorf("youtube provider type assertion failed")
+		}
+		// Use PKCE for YouTube (audit L4)
+		var codeVerifier string
+		authURL, codeVerifier = ytProvider.GetAuthURLWithPKCE(stateStr)
+		verifierKey := fmt.Sprintf("oauth_verifier:%s:%s", platform, csrfToken)
+		if err := h.redis.Set(ctx, verifierKey, codeVerifier, 10*time.Minute).Err(); err != nil {
+			return "", fmt.Errorf("failed to store PKCE verifier: %w", err)
+		}
+
+	default:
 		authURL = provider.GetAuthURL(stateStr)
 	}
 
@@ -585,9 +613,9 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 			return
 		}
 
-		// Verify state in Redis
+		// Verify state in Redis (atomic Get+Del to prevent TOCTOU, audit L5)
 		stateKey := fmt.Sprintf("oauth_state:%s:%s", platform, oauthState.CSRFToken)
-		storedState, err := h.redis.Get(c.Request.Context(), stateKey).Result()
+		storedState, err := h.redis.GetDel(c.Request.Context(), stateKey).Result()
 		if err != nil {
 			// Check for idempotency tombstone — handles double-callbacks from iOS Safari
 			// or Google issuing multiple auth codes for the same consent session.
@@ -596,14 +624,14 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 			if usedRedirectURL, tombErr := h.redis.Get(c.Request.Context(), usedKey).Result(); tombErr == nil {
 				h.logger.Info("Idempotent OAuth callback replay — replaying original redirect",
 					zap.String("platform", string(platform)),
-					zap.String("csrf_token", oauthState.CSRFToken),
+					zap.String("csrf_token_hash", hashTokenForLog(oauthState.CSRFToken)),
 				)
 				c.Redirect(http.StatusFound, usedRedirectURL)
 				return
 			}
 			h.logger.Warn("Invalid or expired state",
 				zap.String("platform", string(platform)),
-				zap.String("csrf_token", oauthState.CSRFToken),
+				zap.String("csrf_token_hash", hashTokenForLog(oauthState.CSRFToken)),
 			)
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid or expired state"})
 			return
@@ -618,8 +646,7 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 			return
 		}
 
-		// Delete used state
-		h.redis.Del(c.Request.Context(), stateKey)
+		// State was already deleted atomically by GetDel (audit L5).
 
 		// Exchange code for token (handle PKCE for Kick)
 		token, err := h.exchangeCodeForToken(c.Request.Context(), provider, platform, code, oauthState.CSRFToken)
@@ -795,6 +822,8 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 				redirectTo = fmt.Sprintf("/overlay/%s/view", oauthState.OverlayID)
 				completionMarker = fmt.Sprintf("moderation_enabled=%s", platform)
 			}
+			// TODO(M1): Replace fragment-based redirect with auth-code-via-Redis + POST exchange
+			// to eliminate token exposure in URL fragment. Requires coordinated frontend changes.
 			redirectURL := fmt.Sprintf("%s/auth/callback#access_token=%s&refresh_token=%s&expires_in=%d&token_type=Bearer&redirect_to=%s&%s",
 				h.frontendURL,
 				jwtToken,
@@ -813,6 +842,7 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 			h.redirectWithTombstone(c, platform, oauthState.CSRFToken, redirectURL)
 		} else {
 			// Regular login - redirect to auth callback with token
+			// TODO(M1): Replace fragment-based redirect with auth-code-via-Redis + POST exchange.
 			redirectURL := fmt.Sprintf("%s/auth/callback#access_token=%s&refresh_token=%s&expires_in=%d&token_type=Bearer",
 				h.frontendURL,
 				jwtToken,
@@ -898,24 +928,53 @@ func (h *PlatformAuthHandlerV2) exchangeCodeForToken(
 	code string,
 	csrfToken string,
 ) (*oauth2.Token, error) {
+	// Platforms that use PKCE: Kick, Twitch (login), YouTube (audit L4)
 	if platform == oauth.PlatformKick {
 		kickProvider, ok := provider.(*oauth.KickOAuth)
 		if !ok {
 			return nil, fmt.Errorf("kick provider type assertion failed")
 		}
 
-		// Retrieve code verifier from Redis
+		// Retrieve code verifier from Redis (atomic Get+Del, audit L5)
 		verifierKey := fmt.Sprintf("oauth_verifier:%s:%s", platform, csrfToken)
-		codeVerifier, err := h.redis.Get(ctx, verifierKey).Result()
+		codeVerifier, err := h.redis.GetDel(ctx, verifierKey).Result()
 		if err != nil {
 			return nil, fmt.Errorf("failed to retrieve PKCE verifier: %w", err)
 		}
 
-		// Delete used verifier
-		h.redis.Del(ctx, verifierKey)
-
-		// Exchange code with PKCE verifier
 		return kickProvider.ExchangeCodeWithPKCE(ctx, code, codeVerifier)
+	}
+
+	if platform == oauth.PlatformTwitch {
+		twitchProvider, ok := provider.(*oauth.TwitchOAuth)
+		if !ok {
+			return nil, fmt.Errorf("twitch provider type assertion failed")
+		}
+
+		// Check for PKCE verifier (present for login flow, absent for chat-scopes flow)
+		verifierKey := fmt.Sprintf("oauth_verifier:%s:%s", platform, csrfToken)
+		codeVerifier, err := h.redis.GetDel(ctx, verifierKey).Result()
+		if err == nil && codeVerifier != "" {
+			return twitchProvider.ExchangeCodeWithVerifier(ctx, code, codeVerifier)
+		}
+		// No PKCE verifier stored (e.g. chat-scopes add-source flow) — fall back
+		return twitchProvider.ExchangeCode(ctx, code)
+	}
+
+	if platform == oauth.PlatformYouTube {
+		ytProvider, ok := provider.(*oauth.YouTubeOAuth)
+		if !ok {
+			return nil, fmt.Errorf("youtube provider type assertion failed")
+		}
+
+		// Retrieve PKCE verifier from Redis (atomic Get+Del, audit L5)
+		verifierKey := fmt.Sprintf("oauth_verifier:%s:%s", platform, csrfToken)
+		codeVerifier, err := h.redis.GetDel(ctx, verifierKey).Result()
+		if err == nil && codeVerifier != "" {
+			return ytProvider.ExchangeCodeWithVerifier(ctx, code, codeVerifier)
+		}
+		// No PKCE verifier stored — fall back
+		return ytProvider.ExchangeCode(ctx, code)
 	}
 
 	return provider.ExchangeCode(ctx, code)
@@ -1133,8 +1192,8 @@ var preservableScopes = []string{
 	"user:write:chat", // Twitch chat-send grant (advanced-controls opt-in)
 	"moderator:manage:chat_messages",
 	"moderator:manage:banned_users",
-	"moderation:ban",                                    // Kick moderation grant (opt-in re-consent, ADR-0017)
-	"chat:write",                                        // Kick chat-send grant (advanced-controls opt-in)
+	"moderation:ban", // Kick moderation grant (opt-in re-consent, ADR-0017)
+	"chat:write",     // Kick chat-send grant (advanced-controls opt-in)
 	"https://www.googleapis.com/auth/youtube.force-ssl", // YouTube moderation grant (ADR-0017)
 }
 
@@ -1329,9 +1388,17 @@ func (h *PlatformAuthHandlerV2) redirectWithTombstone(c *gin.Context, platform o
 	if err := h.redis.Set(c.Request.Context(), usedKey, redirectURL, 60*time.Second).Err(); err != nil {
 		h.logger.Warn("Failed to store OAuth callback tombstone",
 			zap.String("platform", string(platform)),
-			zap.String("csrf_token", csrfToken),
+			zap.String("csrf_token_hash", hashTokenForLog(csrfToken)),
 			zap.Error(err),
 		)
 	}
 	c.Redirect(http.StatusFound, redirectURL)
+}
+
+// hashTokenForLog returns a truncated SHA-256 hash of a token for safe logging
+// (audit L6). Only the first 16 hex characters are returned to avoid leaking
+// the full token in log output.
+func hashTokenForLog(token string) string {
+	h := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(h[:])[:16]
 }

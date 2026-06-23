@@ -24,6 +24,7 @@
  */
 
 import { apiClient } from './client'
+import { inMemoryTokens } from '../auth/in-memory-store'
 import type {
   Overlay,
   OverlayConfig,
@@ -303,7 +304,9 @@ export const overlaysApi = {
   async testTTSKey(overlayId: string): Promise<TestKeyResult> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
     if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('jwt_token')
+      // SECURITY (audit H3): prefer the in-memory token; fall back to
+      // localStorage for legacy compatibility during the cookie migration.
+      const token = inMemoryTokens.getAccessToken() ?? localStorage.getItem('jwt_token')
       if (token) headers['Authorization'] = `Bearer ${token}`
     }
     try {

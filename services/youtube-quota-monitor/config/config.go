@@ -55,7 +55,7 @@ func Load() *Config {
 		DatabaseHost:     getEnv("DATABASE_HOST", "localhost"),
 		DatabasePort:     getEnv("DATABASE_PORT", "5432"),
 		DatabaseUser:     getEnv("DATABASE_USER", "allchat"),
-		DatabasePassword: getEnv("DATABASE_PASSWORD", "allchat_dev_password"),
+		DatabasePassword: getEnv("DATABASE_PASSWORD", ""),
 		DatabaseName:     getEnv("DATABASE_NAME", "allchat"),
 		RedisHost:        getEnv("REDIS_HOST", "localhost"),
 		RedisPort:        getEnv("REDIS_PORT", "6379"),
