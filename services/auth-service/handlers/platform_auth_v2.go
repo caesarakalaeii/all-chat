@@ -817,21 +817,29 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 			// (/overlay/{id}/view) where the streamer enabled it; a real source-add
 			// returns to overlay settings (ADR-0017).
 			redirectTo := fmt.Sprintf("/overlays/%s", oauthState.OverlayID)
-			completionMarker := fmt.Sprintf("source_added=%s", platform)
 			if oauthState.IsModeration() {
 				redirectTo = fmt.Sprintf("/overlay/%s/view", oauthState.OverlayID)
-				completionMarker = fmt.Sprintf("moderation_enabled=%s", platform)
 			}
-			// TODO(M1): Replace fragment-based redirect with auth-code-via-Redis + POST exchange
-			// to eliminate token exposure in URL fragment. Requires coordinated frontend changes.
-			redirectURL := fmt.Sprintf("%s/auth/callback#access_token=%s&refresh_token=%s&expires_in=%d&token_type=Bearer&redirect_to=%s&%s",
-				h.frontendURL,
-				jwtToken,
-				token.RefreshToken,
-				int64(h.jwtExpiry.Seconds()),
-				redirectTo,
-				completionMarker,
-			)
+			// Store tokens via short-lived auth code (audit M1 — no token in URL fragment).
+			payload := StreamerAuthPayload{
+				AccessToken:  jwtToken,
+				RefreshToken: token.RefreshToken,
+				ExpiresIn:    int64(h.jwtExpiry.Seconds()),
+				TokenType:    "Bearer",
+				RedirectTo:   redirectTo,
+			}
+			if oauthState.IsModeration() {
+				payload.ModerationEnabled = string(platform)
+			} else {
+				payload.SourceAdded = string(platform)
+			}
+			code, err := storeStreamerAuthCode(c.Request.Context(), h.redis, payload)
+			if err != nil {
+				h.logger.Error("Failed to store streamer auth code", zap.Error(err))
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate redirect"})
+				return
+			}
+			redirectURL := fmt.Sprintf("%s/auth/callback?code=%s", h.frontendURL, code)
 
 			h.logger.Info("Source added successfully via OAuth",
 				zap.String("platform", string(platform)),
@@ -841,14 +849,19 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 
 			h.redirectWithTombstone(c, platform, oauthState.CSRFToken, redirectURL)
 		} else {
-			// Regular login - redirect to auth callback with token
-			// TODO(M1): Replace fragment-based redirect with auth-code-via-Redis + POST exchange.
-			redirectURL := fmt.Sprintf("%s/auth/callback#access_token=%s&refresh_token=%s&expires_in=%d&token_type=Bearer",
-				h.frontendURL,
-				jwtToken,
-				token.RefreshToken,
-				int64(h.jwtExpiry.Seconds()),
-			)
+			// Regular login - redirect with short-lived auth code (audit M1).
+			code, err := storeStreamerAuthCode(c.Request.Context(), h.redis, StreamerAuthPayload{
+				AccessToken:  jwtToken,
+				RefreshToken: token.RefreshToken,
+				ExpiresIn:    int64(h.jwtExpiry.Seconds()),
+				TokenType:    "Bearer",
+			})
+			if err != nil {
+				h.logger.Error("Failed to store streamer auth code", zap.Error(err))
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate redirect"})
+				return
+			}
+			redirectURL := fmt.Sprintf("%s/auth/callback?code=%s", h.frontendURL, code)
 
 			h.logger.Info("User authenticated successfully",
 				zap.String("platform", string(platform)),

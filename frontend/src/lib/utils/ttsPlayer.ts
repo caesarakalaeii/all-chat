@@ -397,22 +397,15 @@ export function createTTSPlayer(
     if (!settings.ttsEndpoint || !settings.ttsToken) {
       throw new Error('ElevenLabs endpoint or token not configured')
     }
-    // SECURITY (audit M17): spoken text (PII) and the tts_token JWT were
-    // previously sent as query params, leaking into nginx/gateway access logs.
-    // `text` is now sent in the JSON body (the backend HandleTTS accepts a
-    // JSON body fallback). `tts_token` and `voice` remain in query because the
-    // backend reads them via c.Query() only — moving tts_token to an
-    // Authorization header requires a backend change in overlay-manager
-    // handlers/tts.go HandleTTS (separate agent scope). TODO: move tts_token
-    // to `Authorization: Bearer` once the backend supports it.
-    const url =
-      `${settings.ttsEndpoint}` +
-      `?tts_token=${encodeURIComponent(settings.ttsToken)}` +
-      `&voice=${encodeURIComponent(settings.voiceId ?? '')}`
-    const resp = await fetch(url, {
+    // SECURITY (audit M17): tts_token is sent via Authorization header and
+    // voice via JSON body — no longer leaked into nginx/gateway access logs.
+    const resp = await fetch(`${settings.ttsEndpoint}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${settings.ttsToken}`,
+      },
+      body: JSON.stringify({ text, voice: settings.voiceId ?? '' }),
     })
     if (!resp.ok) {
       throw new Error(`ElevenLabs proxy ${resp.status}`)

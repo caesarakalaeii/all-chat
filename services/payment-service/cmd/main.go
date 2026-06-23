@@ -216,7 +216,7 @@ func main() {
 	// keychain); each handler reads its own subject id (user_id / viewer_id) and
 	// 401s if the token is the wrong kind.
 	api := router.Group("/api/v1")
-	api.Use(middleware.JWTAuth(userKeyChain))
+	api.Use(middleware.JWTAuthWithRevocation(userKeyChain, redisClient))
 	{
 		// Streamer premium (ADR-0018).
 		api.GET("/payment/patreon/connect", oauthHandler.Connect)

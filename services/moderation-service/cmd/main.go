@@ -84,7 +84,8 @@ func main() {
 
 	// Redis for publishing reflect-back deletion events to chat:raw.
 	redisClient := redis.NewClient(&redis.Options{
-		Addr: fmt.Sprintf("%s:%s", getEnv("REDIS_HOST", "localhost"), getEnv("REDIS_PORT", "6379")),
+		Addr:     fmt.Sprintf("%s:%s", getEnv("REDIS_HOST", "localhost"), getEnv("REDIS_PORT", "6379")),
+		Password: getEnv("REDIS_PASSWORD", ""),
 	})
 	defer redisClient.Close()
 	if err := redisClient.Ping(context.Background()).Err(); err != nil {
@@ -234,8 +235,8 @@ func main() {
 
 	// All moderation routes require a valid user JWT (forwarded by the gateway).
 	api := router.Group("/api/v1/moderation")
-	api.Use(middleware.JWTAuth(userKeyChain)) // sets user_id + impersonation provenance
-	api.Use(rl.Middleware())                  // per-user rate limit (keys on user_id)
+	api.Use(middleware.JWTAuthWithRevocation(userKeyChain, redisClient)) // sets user_id + impersonation provenance
+	api.Use(rl.Middleware())                                             // per-user rate limit (keys on user_id)
 	api.Use(handler.IdempotencyMiddleware(redisClient, idempotencyTTL))
 
 	// Capabilities is ungated: owners outside the cohort still need it to learn the

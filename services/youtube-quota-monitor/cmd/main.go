@@ -75,7 +75,8 @@ func main() {
 
 	// Redis: publishes QuotaEvents to the channel the discord-bot subscribes to.
 	redisClient := redis.NewClient(&redis.Options{
-		Addr: fmt.Sprintf("%s:%s", cfg.RedisHost, cfg.RedisPort),
+		Addr:     fmt.Sprintf("%s:%s", cfg.RedisHost, cfg.RedisPort),
+		Password: os.Getenv("REDIS_PASSWORD"),
 	})
 	defer redisClient.Close()
 	if err := redisClient.Ping(context.Background()).Err(); err != nil {

@@ -21,6 +21,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -253,19 +254,22 @@ func (h *AuthHandler) HandleCallback(c *gin.Context) {
 		return
 	}
 
-	// Redirect to frontend with token in URL fragment (more secure than query param)
-	// TODO(M1): Replace this fragment-based redirect with the viewer auth-code-via-Redis
-	// + POST exchange flow (viewer_auth.go HandleTokenExchange pattern) to eliminate token
-	// exposure in the URL fragment. This requires coordinated frontend changes
-	// (auth/callback/page.tsx) to POST to a new /auth/token/exchange endpoint instead of
-	// reading tokens from window.location.hash.
+	// Redirect to frontend with a short-lived single-use auth code (not the token).
+	// The frontend exchanges the code via POST /exchange to retrieve the tokens,
+	// eliminating token exposure in the URL fragment (audit M1).
 	frontendURL := getEnvOrDefault("FRONTEND_URL", "http://localhost:3000")
-	redirectURL := fmt.Sprintf("%s/auth/callback#access_token=%s&refresh_token=%s&expires_in=%d&token_type=Bearer",
-		frontendURL,
-		jwtToken,
-		token.RefreshToken,
-		int64(h.jwtExpiry.Seconds()),
-	)
+	code, storeErr := storeStreamerAuthCode(c.Request.Context(), h.redis, StreamerAuthPayload{
+		AccessToken:  jwtToken,
+		RefreshToken: token.RefreshToken,
+		ExpiresIn:    int64(h.jwtExpiry.Seconds()),
+		TokenType:    "Bearer",
+	})
+	if storeErr != nil {
+		h.logger.Error("Failed to store streamer auth code", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate redirect"})
+		return
+	}
+	redirectURL := fmt.Sprintf("%s/auth/callback?code=%s", frontendURL, code)
 
 	// Track refresh token for reuse detection (audit M2).
 	if token.RefreshToken != "" {
@@ -408,15 +412,20 @@ func (h *AuthHandler) HandleYouTubeCallback(c *gin.Context) {
 		return
 	}
 
-	// Redirect to frontend with token in URL fragment
-	// TODO(M1): Replace with auth-code-via-Redis + POST exchange (see Twitch callback TODO).
+	// Redirect to frontend with a short-lived single-use auth code (audit M1).
 	frontendURL := getEnvOrDefault("FRONTEND_URL", "http://localhost:3000")
-	redirectURL := fmt.Sprintf("%s/auth/callback#access_token=%s&refresh_token=%s&expires_in=%d&token_type=Bearer",
-		frontendURL,
-		jwtToken,
-		token.RefreshToken,
-		int64(h.jwtExpiry.Seconds()),
-	)
+	code, storeErr := storeStreamerAuthCode(c.Request.Context(), h.redis, StreamerAuthPayload{
+		AccessToken:  jwtToken,
+		RefreshToken: token.RefreshToken,
+		ExpiresIn:    int64(h.jwtExpiry.Seconds()),
+		TokenType:    "Bearer",
+	})
+	if storeErr != nil {
+		h.logger.Error("Failed to store streamer auth code", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate redirect"})
+		return
+	}
+	redirectURL := fmt.Sprintf("%s/auth/callback?code=%s", frontendURL, code)
 
 	// Track refresh token for reuse detection (audit M2).
 	if token.RefreshToken != "" {
@@ -427,6 +436,40 @@ func (h *AuthHandler) HandleYouTubeCallback(c *gin.Context) {
 	}
 
 	c.Redirect(http.StatusFound, redirectURL)
+}
+
+// HandleStreamerTokenExchange swaps a short-lived auth code for the streamer's
+// token payload (access + refresh tokens). POST /exchange { "code": "..." }
+// (audit M1 — replaces URL-fragment token exposure with code+POST exchange).
+func (h *AuthHandler) HandleStreamerTokenExchange(c *gin.Context) {
+	var req struct {
+		Code string `json:"code" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "code is required"})
+		return
+	}
+
+	key := "streamer_auth_code:" + req.Code
+	data, err := h.redis.GetDel(c.Request.Context(), key).Result()
+	if err == redis.Nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired code"})
+		return
+	}
+	if err != nil {
+		h.logger.Error("Failed to retrieve streamer auth code", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+
+	var payload StreamerAuthPayload
+	if err := json.Unmarshal([]byte(data), &payload); err != nil {
+		h.logger.Error("Failed to unmarshal streamer auth payload", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, payload)
 }
 
 // getEnvOrDefault gets an environment variable or returns a default value

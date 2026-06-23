@@ -125,7 +125,8 @@ func main() {
 	redisHost := getEnv("REDIS_HOST", "localhost")
 	redisPort := getEnv("REDIS_PORT", "6379")
 	redisClient := redis.NewClient(&redis.Options{
-		Addr: fmt.Sprintf("%s:%s", redisHost, redisPort),
+		Addr:     fmt.Sprintf("%s:%s", redisHost, redisPort),
+		Password: getEnv("REDIS_PASSWORD", ""),
 	})
 	defer redisClient.Close()
 

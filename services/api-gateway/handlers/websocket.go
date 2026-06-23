@@ -50,6 +50,43 @@ func parseSinceQuery(raw string) int64 {
 	return v
 }
 
+// wsBearerPrefix is the subprotocol prefix used to carry a JWT over the
+// WebSocket handshake (audit H5). Clients pass ['bearer.<token>'] as the
+// WebSocket subprotocol; the gateway extracts the token and echoes the
+// subprotocol back so the browser accepts the connection. This keeps the
+// token out of the URL query string (and therefore out of access logs).
+const wsBearerPrefix = "bearer."
+
+// extractWSAuthToken resolves the JWT with subprotocol-first precedence
+// (audit H5):
+//  1. Sec-WebSocket-Protocol subprotocol of the form `bearer.<token>`
+//  2. Fallback to ?token= query param (backward compat during client rollout)
+//
+// When the token comes from the subprotocol, a response header is returned
+// that echoes the negotiated subprotocol back to the client — the WebSocket
+// spec requires the server to echo one of the offered subprotocols.
+func extractWSAuthToken(r *http.Request) (token string, echoHeader http.Header) {
+	// 1. Try Sec-WebSocket-Protocol subprotocol.
+	for _, raw := range r.Header.Values("Sec-WebSocket-Protocol") {
+		for _, proto := range strings.Split(raw, ",") {
+			proto = strings.TrimSpace(proto)
+			if strings.HasPrefix(proto, wsBearerPrefix) {
+				candidate := strings.TrimPrefix(proto, wsBearerPrefix)
+				if candidate == "" {
+					continue
+				}
+				token = candidate
+				echoHeader = http.Header{}
+				echoHeader.Set("Sec-WebSocket-Protocol", proto)
+				return token, echoHeader
+			}
+		}
+	}
+	// 2. Fall back to query param (backward compat during client rollout).
+	token = r.URL.Query().Get("token")
+	return token, nil
+}
+
 // WebSocketHandler handles WebSocket connections for overlays
 type WebSocketHandler struct {
 	wsManager        *wsconn.Manager
@@ -117,8 +154,10 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 		return
 	}
 
-	// Get JWT token from query parameter (optional for OBS)
-	token := c.Query("token")
+	// Resolve JWT from Sec-WebSocket-Protocol subprotocol first, then fall
+	// back to ?token= query param (backward compat during client rollout).
+	// The subprotocol path keeps the token out of access logs (audit H5).
+	token, echoHeader := extractWSAuthToken(c.Request)
 	var userID string
 	var username string
 
@@ -174,8 +213,9 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 		return
 	}
 
-	// Upgrade HTTP connection to WebSocket
-	conn, err := h.upgrader.Upgrade(c.Writer, c.Request, nil)
+	// Upgrade HTTP connection to WebSocket. echoHeader (when non-nil) echoes
+	// the bearer.<token> subprotocol back so the browser accepts the handshake.
+	conn, err := h.upgrader.Upgrade(c.Writer, c.Request, echoHeader)
 	if err != nil {
 		h.logger.Error("Failed to upgrade WebSocket",
 			zap.String("overlay_id", overlayID),
