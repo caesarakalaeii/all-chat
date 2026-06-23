@@ -101,7 +101,7 @@ func TestGetUsageToday(t *testing.T) {
 
 	tracker.mu.Lock()
 	tracker.usageToday = 5000
-	tracker.currentDate = time.Now().Format("2006-01-02")
+	tracker.currentDate = time.Now().In(YouTubePST).Format("2006-01-02")
 	tracker.mu.Unlock()
 
 	usage := tracker.GetUsageToday()
@@ -128,7 +128,7 @@ func TestGetRemainingQuota(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tracker.mu.Lock()
 			tracker.usageToday = tt.used
-			tracker.currentDate = time.Now().Format("2006-01-02")
+			tracker.currentDate = time.Now().In(YouTubePST).Format("2006-01-02")
 			tracker.mu.Unlock()
 
 			remaining := tracker.GetRemainingQuota()
