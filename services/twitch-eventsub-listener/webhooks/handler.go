@@ -52,6 +52,15 @@ type StreamEndEvent struct {
 	Timestamp     time.Time `json:"timestamp"`
 }
 
+// statusHeartbeatInterval bounds how often a channel's "connected" status heartbeat is
+// republished on delivered chat. A delivered message is proof the channel.chat.message
+// subscription is live, so this is what rehydrates the overlay indicator after an api-gateway
+// restart (the in-memory platformState cache is lost) or an eventsub-listener restart (existing
+// subscriptions are not re-verified, so the challenge-time publish does not re-fire). Tuned to
+// match the claim-refresh cadence so a channel's indicator recovers within one interval of chat
+// resuming.
+const statusHeartbeatInterval = 60 * time.Second
+
 // Handler handles Twitch EventSub webhook callbacks
 type Handler struct {
 	secret          []byte
@@ -68,6 +77,11 @@ type Handler struct {
 	// twitchchat.ClaimRefreshInterval) so high chat volume does not amplify into Redis writes.
 	claimMu          sync.Mutex
 	claimRefreshedAt map[string]time.Time
+
+	// statusPublishedAt throttles the per-channel "connected" status heartbeat (one publish per
+	// channel per statusHeartbeatInterval) so high chat volume does not amplify into Redis writes.
+	statusMu          sync.Mutex
+	statusPublishedAt map[string]time.Time
 }
 
 // NewHandler creates a new webhook handler. claims may be nil to disable chat-ownership claims
@@ -85,7 +99,8 @@ func NewHandler(secret string, redis *redis.Client, db *pgxpool.Pool, publisher 
 		claims:           claims,
 		registry:         reg,
 		logger:           logger,
-		claimRefreshedAt: make(map[string]time.Time),
+		claimRefreshedAt:  make(map[string]time.Time),
+		statusPublishedAt: make(map[string]time.Time),
 	}
 }
 
@@ -349,6 +364,32 @@ func (h *Handler) publishChatStatusForLogin(login, state string) {
 		ChannelID: strings.ToLower(login),
 		Status:    state,
 	})
+}
+
+// publishChatConnected emits a platform:status "connected" heartbeat for a channel that just
+// delivered a chat message, throttled to one publish per channel per statusHeartbeatInterval. A
+// delivered message is the definitive proof that the channel.chat.message subscription is live,
+// so this heartbeat — not the one-time challenge verification — is what keeps the overlay
+// indicator green across api-gateway and eventsub-listener restarts (the challenge-time publish
+// only fires when the subscription is first created; existing subscriptions are not re-verified on
+// restart). Best-effort and nil-safe; the Redis publish runs on a background goroutine so the
+// webhook response stays fast (mirroring the challenge path's `go h.publishChatStatus`).
+func (h *Handler) publishChatConnected(login string) {
+	if h.statusPublisher == nil || login == "" {
+		return
+	}
+	login = strings.ToLower(login)
+
+	now := time.Now()
+	h.statusMu.Lock()
+	if last, ok := h.statusPublishedAt[login]; ok && now.Sub(last) < statusHeartbeatInterval {
+		h.statusMu.Unlock()
+		return
+	}
+	h.statusPublishedAt[login] = now
+	h.statusMu.Unlock()
+
+	go h.publishChatStatusForLogin(login, "connected")
 }
 
 // handleChatSubRevoked reacts to a revoked channel.chat.message subscription: it releases the
@@ -783,8 +824,11 @@ func (h *Handler) handleChatMessage(ctx context.Context, eventData json.RawMessa
 	}
 
 	// A delivered chat message proves EventSub currently owns this channel's chat — refresh the
-	// ownership claim (throttled) so it stays excluded from IRC (ADR-0015).
+	// ownership claim (throttled) so it stays excluded from IRC (ADR-0015), and emit a throttled
+	// "connected" status heartbeat so the overlay indicator reflects this source as live (the
+	// challenge-time publish only fires once, on subscription creation).
 	h.refreshChatClaim(event.BroadcasterUserLogin, event.BroadcasterUserID)
+	h.publishChatConnected(event.BroadcasterUserLogin)
 
 	return h.publisher.Publish(ctx, rawMsg)
 }
