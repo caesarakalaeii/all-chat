@@ -30,6 +30,7 @@ import (
 	"github.com/caesar/all-chat/services/auth-service/models"
 	"github.com/caesar/all-chat/shared/quota"
 	"github.com/caesar/all-chat/shared/sendall"
+	"github.com/caesar/all-chat/shared/youtubetoken"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -43,6 +44,27 @@ const (
 	rateLimit1Min    = 20
 	rateLimit1Hour   = 100
 )
+
+// YouTubeTokenSource resolves the streamer's own YouTube broadcaster credential for a
+// channel (per-channel youtube_oauth_tokens preferred, users row fallback) and refreshes
+// it via Google's OAuth endpoint. auth-service uses this for streamer chat sends instead
+// of users.access_token: a streamer whose All-Chat login is Twitch has a Twitch token on
+// the users row, so sending it to the YouTube Data API 401s with "Invalid Credentials".
+// The valid YouTube token lives in youtube_oauth_tokens; this source reads it (shared
+// with moderation-service's ban dispatch via shared/youtubetoken so the two paths never
+// diverge on which token they use).
+type YouTubeTokenSource interface {
+	Resolve(ctx context.Context, userID, channelID string) (*youtubetoken.YouTubeCredential, error)
+	Refresh(ctx context.Context, cred *youtubetoken.YouTubeCredential) error
+}
+
+// WithYouTubeTokenSource wires the shared YouTube broadcaster-credential source used by
+// streamer chat sends. Required for YouTube sends to resolve the per-channel YouTube
+// token from youtube_oauth_tokens instead of the (possibly cross-platform) users token.
+func (h *ChatSendHandler) WithYouTubeTokenSource(ts YouTubeTokenSource) *ChatSendHandler {
+	h.ytTokenSource = ts
+	return h
+}
 
 // sendErrKind classifies a streamer-send failure so HandleStreamerSendMessage can map
 // it to the right HTTP status and a machine-readable code the monitor view reacts to
@@ -183,6 +205,13 @@ type ChatSendHandler struct {
 	cipher          StringEncryptor
 	youtubeAPIKey   string
 	redisClient     *redis.Client
+	// ytTokenSource resolves the streamer's own YouTube broadcaster credential for a
+	// channel from youtube_oauth_tokens (shared with moderation-service) and refreshes it
+	// via Google's OAuth endpoint. Streamer YouTube sends use this instead of
+	// user.AccessToken: a streamer whose All-Chat login is Twitch has a Twitch token on
+	// the users row, which 401s against the YouTube Data API. Nil ⇒ YouTube sends surface
+	// reauth_required (the monitor prompts Reconnect) rather than using the wrong token.
+	ytTokenSource YouTubeTokenSource
 	// ytQuota accounts YouTube sends (5 units each) against the shared
 	// youtube_quota_usage table via reserve-confirm-rollback (ADR-0006), so the
 	// youtube-quota-monitor reflects send usage and a depleted quota blocks sends.
@@ -609,6 +638,16 @@ func (h *ChatSendHandler) sendStreamerYouTubeMessage(ctx context.Context, user *
 		return fmt.Errorf("failed to get live chat ID: %w", err)
 	}
 
+	// Resolve the streamer's YouTube access token from youtube_oauth_tokens (shared
+	// source), NOT user.AccessToken: a streamer whose All-Chat login is Twitch has a
+	// Twitch token on the users row, which YouTube rejects with 401 "Invalid
+	// Credentials". A missing credential surfaces as reauth_required so the monitor
+	// prompts Reconnect.
+	accessToken, err := h.resolveYouTubeAccessToken(ctx, user.ID, channelID)
+	if err != nil {
+		return err
+	}
+
 	// Account the send against the shared youtube_quota_usage table (a send costs 5
 	// units) via reserve-confirm-rollback, so the youtube-quota-monitor reflects send
 	// usage and a depleted quota blocks the send. Reserve before sending, then confirm
@@ -641,7 +680,7 @@ func (h *ChatSendHandler) sendStreamerYouTubeMessage(ctx context.Context, user *
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", user.AccessToken))
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := h.httpClient.Do(req)
@@ -659,6 +698,31 @@ func (h *ChatSendHandler) sendStreamerYouTubeMessage(ctx context.Context, user *
 
 	h.settleYouTubeSendQuota(ctx, quota.QuotaCostYouTubeSend, true)
 	return nil
+}
+
+// resolveYouTubeAccessToken resolves a valid YouTube access token for the streamer's
+// active channel via the shared token source (youtube_oauth_tokens, refreshed in place),
+// surfacing reauth_required when no credential is linked or the source is unconfigured.
+// This replaces the old use of user.AccessToken, which for a non-YouTube-login streamer is
+// a different platform's token and 401s against the YouTube Data API. A token expiring
+// within 5 minutes is proactively refreshed so a foreseeable expiry doesn't cost the send.
+func (h *ChatSendHandler) resolveYouTubeAccessToken(ctx context.Context, userID, channelID string) (string, error) {
+	if h.ytTokenSource == nil {
+		return "", &streamerSendError{kind: sendErrReauth, msg: "youtube token source not configured"}
+	}
+	cred, err := h.ytTokenSource.Resolve(ctx, userID, channelID)
+	if err != nil {
+		if errors.Is(err, youtubetoken.ErrNoCredential) {
+			return "", &streamerSendError{kind: sendErrReauth, msg: "no YouTube credential linked for this channel; reconnect YouTube"}
+		}
+		return "", fmt.Errorf("resolve youtube credential: %w", err)
+	}
+	if !cred.ExpiresAt.IsZero() && time.Until(cred.ExpiresAt) < 5*time.Minute {
+		if rerr := h.ytTokenSource.Refresh(ctx, cred); rerr != nil {
+			h.log.Warn("proactive youtube token refresh failed; attempting with current token", zap.Error(rerr))
+		}
+	}
+	return cred.AccessToken, nil
 }
 
 // sendStreamerKickMessage sends a message to Kick chat as the streamer
