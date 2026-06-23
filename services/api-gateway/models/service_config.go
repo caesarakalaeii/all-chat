@@ -189,6 +189,15 @@ func NewServiceRegistry() (*ServiceRegistry, error) {
 		PathPrefix:  "/api/v1/admin/feature-gates",
 		StripPrefix: false,
 	}
+	// Admin beta-tester routes (ADR-0020) → share-service — separate prefix to avoid
+	// conflict with admin-users → auth-service, like admin/premium above.
+	registry.Services["share-service-admin-beta-tester"] = &ServiceConfig{
+		Name:        "share-service-admin-beta-tester",
+		BaseURL:     shareURL,
+		HealthPath:  "/health/live",
+		PathPrefix:  "/api/v1/admin/beta-tester",
+		StripPrefix: false,
+	}
 
 	// Admin maintenance window routes → overlay-manager
 	registry.Services["admin-maintenance"] = &ServiceConfig{
@@ -222,6 +231,36 @@ func NewServiceRegistry() (*ServiceRegistry, error) {
 		PathPrefix:    "/api/v1/test-stream",
 		StripPrefix:   true,
 		RewritePrefix: "/public/test-stream",
+	}
+
+	// Moderation Service (ADR-0017): authenticated chat-moderation write path.
+	// Serves /api/v1/moderation/* directly (no strip), like share-service.
+	moderationURL := getEnvOrDefault("MODERATION_SERVICE_URL", "http://localhost:8092")
+	registry.Services["moderation-service"] = &ServiceConfig{
+		Name:        "moderation-service",
+		BaseURL:     moderationURL,
+		HealthPath:  "/health/live",
+		PathPrefix:  "/api/v1/moderation",
+		StripPrefix: false,
+	}
+
+	// Payment Service (ADR-0018): Patreon premium connect/status + webhooks.
+	// Serves /api/v1/payment/* and /api/v1/webhooks/patreon directly (no strip),
+	// like share-service / moderation-service.
+	paymentURL := getEnvOrDefault("PAYMENT_SERVICE_URL", "http://localhost:8091")
+	registry.Services["payment-service"] = &ServiceConfig{
+		Name:        "payment-service",
+		BaseURL:     paymentURL,
+		HealthPath:  "/health/live",
+		PathPrefix:  "/api/v1/payment",
+		StripPrefix: false,
+	}
+	registry.Services["payment-webhooks"] = &ServiceConfig{
+		Name:        "payment-webhooks",
+		BaseURL:     paymentURL,
+		HealthPath:  "/health/live",
+		PathPrefix:  "/api/v1/webhooks/patreon",
+		StripPrefix: false,
 	}
 
 	// Validate all service URLs are set

@@ -89,6 +89,7 @@ func setupTestDB(t *testing.T) (*pgxpool.Pool, func()) {
 			profile_image_url TEXT,
 			is_admin BOOLEAN NOT NULL DEFAULT FALSE,
 			is_premium BOOLEAN NOT NULL DEFAULT FALSE,
+			is_beta_tester BOOLEAN NOT NULL DEFAULT FALSE,
 			is_banned BOOLEAN NOT NULL DEFAULT FALSE,
 			banned_at TIMESTAMP,
 			banned_reason TEXT,

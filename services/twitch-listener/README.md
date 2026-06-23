@@ -1,7 +1,7 @@
 # Twitch Listener
 
 > **⚠️ DEPRECATED — being retired in favour of the EventSub listener.** See
-> [ADR-0017](../../docs/adr/0017-twitch-irc-listener-deprecation.md). This service is in a
+> [ADR-0026](../../docs/adr/0026-twitch-irc-listener-deprecation.md). This service is in a
 > two-phase shutdown controlled by `TWITCH_IRC_DEPRECATION_MODE` (see
 > [Deprecation](#deprecation-adr-0017) below). Build new Twitch chat features on
 > `services/twitch-eventsub-listener`, not here.
@@ -70,12 +70,12 @@ SOURCE_MANAGER_SECRET=dev-service-secret
 PORT=8085
 LOG_LEVEL=info  # debug, info, warn, error
 
-# Deprecation gate (ADR-0017) — see "Deprecation" section below
+# Deprecation gate (ADR-0026) — see "Deprecation" section below
 TWITCH_IRC_DEPRECATION_MODE=off          # off | warn | enforce
 TWITCH_IRC_DEPRECATION_NOTICE_INTERVAL=5m # Go duration; how often warn-phase notices are sent
 ```
 
-## Deprecation (ADR-0017)
+## Deprecation (ADR-0026)
 
 The IRC listener is being retired in favour of the EventSub listener. Cutover is a two-phase,
 env-var-driven rollout (a pod restart applies each change):

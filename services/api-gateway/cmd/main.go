@@ -439,12 +439,18 @@ func main() {
 		publicAPI.GET("/auth/twitch/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/twitch/callback", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/twitch/add-source/:overlay_id", proxyHandler.ForwardRequest)
+		// Opt-in moderation re-consent (ADR-0017); auth-service applies its own JWT middleware.
+		publicAPI.GET("/auth/twitch/moderation/:overlay_id", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/youtube/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/youtube/callback", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/youtube/add-source/:overlay_id", proxyHandler.ForwardRequest)
+		// Opt-in moderation re-consent (ADR-0017); auth-service applies its own JWT middleware.
+		publicAPI.GET("/auth/youtube/moderation/:overlay_id", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/kick/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/kick/callback", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/kick/add-source/:overlay_id", proxyHandler.ForwardRequest)
+		// Opt-in moderation re-consent (ADR-0017); auth-service applies its own JWT middleware.
+		publicAPI.GET("/auth/kick/moderation/:overlay_id", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/tiktok/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/tiktok/callback", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/tiktok/add-source/:overlay_id", proxyHandler.ForwardRequest)
@@ -491,6 +497,12 @@ func main() {
 		publicAPI.POST("/test-stream/start", proxyHandler.ForwardRequest)
 		publicAPI.POST("/test-stream/stop", proxyHandler.ForwardRequest)
 		publicAPI.GET("/test-stream/status", proxyHandler.ForwardRequest)
+
+		// Payment service (ADR-0018) — public surfaces. The Patreon webhook is
+		// authenticated by its HMAC signature; the OAuth callback by a one-time
+		// Redis state. Both validated inside payment-service, so no gateway JWT.
+		publicAPI.POST("/webhooks/patreon", proxyHandler.ForwardRequest)
+		publicAPI.GET("/payment/patreon/callback", proxyHandler.ForwardRequest)
 	}
 
 	// Twitch badge proxy endpoints (public, but not part of /api/v1 service registry)
@@ -509,6 +521,10 @@ func main() {
 		protectedAPI.GET("/auth/me/data-export", proxyHandler.ForwardRequest) // DSGVO Art. 20 data portability
 		protectedAPI.POST("/auth/logout", proxyHandler.ForwardRequest)
 		protectedAPI.DELETE("/auth/me", proxyHandler.ForwardRequest)
+
+		// Streamer chat send (monitor view sends using the streamer's own OAuth
+		// tokens) -> auth-service POST /chat/send.
+		protectedAPI.POST("/auth/chat/send", proxyHandler.ForwardRequest)
 
 		// Discord guild management
 		protectedAPI.GET("/auth/discord/connect", proxyHandler.ForwardRequest)
@@ -566,6 +582,14 @@ func main() {
 		// Internal API routes (protected - used by other services)
 		protectedAPI.POST("/internal/overlays/:id/sources/auto", proxyHandler.ForwardRequest)
 
+		// Moderation service routes (ADR-0017) — owner-only chat moderation.
+		// Ownership/source authorization is enforced again in moderation-service.
+		protectedAPI.GET("/moderation/overlays/:id/capabilities", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/moderation/overlays/:id/delete", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/moderation/overlays/:id/timeout", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/moderation/overlays/:id/ban", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/moderation/overlays/:id/unban", proxyHandler.ForwardRequest)
+
 		// Share service routes (all protected - require JWT auth)
 		protectedAPI.GET("/users/search", proxyHandler.ForwardRequest)              // -> share-service
 		protectedAPI.GET("/shares/incoming", proxyHandler.ForwardRequest)           // -> share-service
@@ -576,6 +600,16 @@ func main() {
 		protectedAPI.POST("/shares/:id/reject", proxyHandler.ForwardRequest)        // -> share-service
 		protectedAPI.POST("/shares/:id/revoke", proxyHandler.ForwardRequest)        // -> share-service
 		protectedAPI.POST("/shares/:id/mark-seen", proxyHandler.ForwardRequest)     // -> share-service
+
+		// Payment service (ADR-0018) — authenticated surfaces (-> payment-service).
+		protectedAPI.GET("/payment/patreon/connect", proxyHandler.ForwardRequest)
+		protectedAPI.GET("/payment/status", proxyHandler.ForwardRequest)
+		protectedAPI.DELETE("/payment/patreon/connection", proxyHandler.ForwardRequest)
+		// Viewer premium (ADR-0019) — viewer-JWT authenticated (JWTAuth accepts both
+		// user and viewer tokens; payment-service reads viewer_id).
+		protectedAPI.GET("/payment/viewer/patreon/connect", proxyHandler.ForwardRequest)
+		protectedAPI.GET("/payment/viewer/status", proxyHandler.ForwardRequest)
+		protectedAPI.DELETE("/payment/viewer/patreon/connection", proxyHandler.ForwardRequest)
 		// User-facing upcoming maintenance (-> overlay-manager)
 		protectedAPI.GET("/maintenance/upcoming", proxyHandler.ForwardRequest)
 	}
@@ -586,6 +620,9 @@ func main() {
 	adminAPI.Use(sharedmiddleware.AdminOnly())
 	{
 		adminAPI.POST("/premium/users/:id", proxyHandler.ForwardRequest) // -> share-service
+
+		// Beta-tester role management (-> share-service, ADR-0020)
+		adminAPI.POST("/beta-tester/users/:id", proxyHandler.ForwardRequest)
 
 		// Feature gate management (-> share-service)
 		adminAPI.GET("/feature-gates", proxyHandler.ForwardRequest)

@@ -38,6 +38,7 @@ import (
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/caesar/all-chat/shared/middleware"
+	"github.com/caesar/all-chat/shared/premium"
 	"github.com/caesar/all-chat/shared/tracing"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
@@ -215,11 +216,16 @@ func main() {
 	viewerKickRedirectURL := defaultCallbackURL(frontendURL, "http://localhost:8080", "/api/v1/auth/viewer/kick/callback")
 	viewerKickOAuth := oauth.NewViewerKickOAuth(kickClientID, kickClientSecret, viewerKickRedirectURL)
 
+	// Viewer premium recompute (ADR-0019): derives viewers.is_premium from the
+	// viewer admin override + active viewer subscription + linked-streamer
+	// inheritance. Shared by the admin override path and the viewer↔streamer link.
+	viewerPremiumRecomputer := premium.NewRecomputer(db, log)
+
 	// Create viewer repository
-	viewerRepo := repository.NewViewerRepository(db, tokenCipher)
+	viewerRepo := repository.NewViewerRepository(db, tokenCipher, viewerPremiumRecomputer)
 
 	// Create viewer identity repository (Phase 28: cross-platform viewer linking)
-	viewerIdentityRepo := repository.NewViewerIdentityRepository(db)
+	viewerIdentityRepo := repository.NewViewerIdentityRepository(db, viewerPremiumRecomputer)
 
 	// Create handlers
 	platformAuthHandlerV2 := handlers.NewPlatformAuthHandlerV2(providers, userRepo, redisClient, userKeyChain, jwtExpiryHours, frontendURL, overlayManagerURL, log).WithMetrics(businessMetrics)
@@ -237,7 +243,7 @@ func main() {
 	healthHandler := handlers.NewHealthHandler(db, redisClient)
 	adminHandler := handlers.NewAdminHandler(userRepo, db, log, userKeyChain)
 	viewerCosmeticsHandler := handlers.NewViewerCosmeticsHandler(viewerIdentityRepo, redisClient, log)
-	chatSendHandler := handlers.NewChatSendHandler(log, viewerRepo, userRepo, db, twitchClientID, viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, tokenCipher, youtubeAPIKey, redisClient)
+	chatSendHandler := handlers.NewChatSendHandler(log, viewerRepo, userRepo, db, twitchClientID, viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, tokenCipher, youtubeAPIKey, redisClient, getEnvAsIntOrDefault("QUOTA_LIMIT_DAILY", 1009000))
 	streamerInfoHandler := handlers.NewStreamerInfoHandler(log, userRepo, db)
 	adminViewerHandler := handlers.NewAdminViewerHandler(log, viewerRepo)
 	adminCosmeticsHandler := handlers.NewAdminCosmeticsHandler(log, db)
@@ -350,6 +356,12 @@ func main() {
 		protected.GET("/twitch/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformTwitch))
 		protected.GET("/youtube/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformYouTube))
 		protected.GET("/kick/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformKick))
+
+		// Opt-in moderation re-consent (ADR-0017): requests only the moderation scopes
+		// for the ?actions= being enabled, on top of the existing grant. Twitch + Kick.
+		protected.GET("/twitch/moderation/:overlay_id", platformAuthHandlerV2.HandleEnableModeration(oauth.PlatformTwitch))
+		protected.GET("/kick/moderation/:overlay_id", platformAuthHandlerV2.HandleEnableModeration(oauth.PlatformKick))
+		protected.GET("/youtube/moderation/:overlay_id", platformAuthHandlerV2.HandleEnableModeration(oauth.PlatformYouTube))
 
 		// Discord guild management routes (require JWT)
 		if discordHandler != nil {

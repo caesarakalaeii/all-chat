@@ -16,17 +16,14 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+import type { ReactElement } from 'react'
+
 /**
- * Small platform brand glyph for the observability view. Uses official brand
- * colors so the platform is identifiable at a glance regardless of theme.
+ * The single per-platform SVG switch, factored out so both the single-glyph
+ * `PlatformGlyph` and the combined `PlatformGlyphs` share one source of truth
+ * (no duplicated SVG paths).
  */
-export function PlatformGlyph({
-  platform,
-  className = 'h-4 w-4',
-}: {
-  platform: string
-  className?: string
-}) {
+function platformSvg(platform: string, className: string): ReactElement | null {
   switch (platform) {
     case 'twitch':
       return (
@@ -88,4 +85,50 @@ export function PlatformGlyph({
     default:
       return null
   }
+}
+
+/**
+ * Small platform brand glyph for the observability view. Uses official brand
+ * colors so the platform is identifiable at a glance regardless of theme.
+ */
+export function PlatformGlyph({
+  platform,
+  className = 'h-4 w-4',
+}: {
+  platform: string
+  className?: string
+}) {
+  return platformSvg(platform, className)
+}
+
+/**
+ * Combined platform badge: renders several brand glyphs in a tight horizontal
+ * row. Used when a single message carries multiple platforms (a streamer's
+ * "send to all" echo collapsed into one message). Unknown platforms are skipped.
+ */
+export function PlatformGlyphs({
+  platforms,
+  className = 'h-4 w-4',
+}: {
+  platforms: string[]
+  className?: string
+}) {
+  const glyphs = platforms
+    .map((platform) => ({ platform, svg: platformSvg(platform, className) }))
+    .filter((g): g is { platform: string; svg: ReactElement } => g.svg !== null)
+
+  if (glyphs.length === 0) return null
+
+  return (
+    <span
+      className="inline-flex items-center gap-0.5"
+      aria-label={`Platforms: ${glyphs.map((g) => g.platform).join(', ')}`}
+    >
+      {glyphs.map(({ platform, svg }) => (
+        <span key={platform} className="inline-flex">
+          {svg}
+        </span>
+      ))}
+    </span>
+  )
 }

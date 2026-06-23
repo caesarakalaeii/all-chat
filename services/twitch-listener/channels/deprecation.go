@@ -28,7 +28,7 @@ import (
 )
 
 // DeprecationMode controls the Twitch IRC listener shutdown behaviour. The IRC
-// listener is being retired in favour of the EventSub listener (ADR-0017); this
+// listener is being retired in favour of the EventSub listener (ADR-0026); this
 // gate drives a two-phase rollout:
 //
 //   - warn:    join channels as usual, but publish an in-overlay migration

@@ -237,7 +237,7 @@ func (h *PlatformAuthHandler) HandleCallback(platform oauth.Platform) gin.Handle
 				return
 			}
 
-			if err := h.userRepo.StoreYouTubeToken(c.Request.Context(), user.ID, channelInfo.ChannelID, token); err != nil {
+			if err := h.userRepo.StoreYouTubeToken(c.Request.Context(), user.ID, channelInfo.ChannelID, token, oauth.ExtractGrantedScopes(token)); err != nil {
 				h.logger.Warn("Failed to store YouTube tokens for listener",
 					zap.String("user_id", user.ID),
 					zap.String("channel_id", channelInfo.ChannelID),

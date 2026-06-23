@@ -1,4 +1,4 @@
-# ADR-0017: Two-Phase Deprecation of the Twitch IRC Listener
+# ADR-0026: Two-Phase Deprecation of the Twitch IRC Listener
 
 **Date**: 2026-06-20
 **Status**: Accepted

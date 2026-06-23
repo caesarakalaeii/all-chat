@@ -105,6 +105,7 @@ Each service has a detailed README:
 - [twitch-eventsub-listener](./services/twitch-eventsub-listener/README.md) - EventSub webhooks (channel points, moderation)
 - [youtube-listener](./services/youtube-listener/README.md) - HTTP polling, quota tracking
 - [youtube-listener-innertube](./services/youtube-listener-innertube/README.md) - InnerTube API polling (no quota cost)
+- [youtube-quota-monitor](./services/youtube-quota-monitor/README.md) - Reads the shared YouTube quota table; exports the quota metric + publishes `quota:alerts` for the discord-bot (ADR-0023)
 - [kick-listener](./services/kick-listener/README.md) - Pusher WebSocket client
 - [tiktok-listener](./services/tiktok-listener/README.md) - Unofficial TikTok Live library
 - discord-listener — Discord channel chat relay (`services/discord-listener/`, no README yet)
@@ -112,6 +113,8 @@ Each service has a detailed README:
 - [overlay-manager](./services/overlay-manager/README.md) - Overlay CRUD, source configuration
 - [source-manager](./services/source-manager/README.md) - Leader election, active source registry
 - share-service — Shareable overlay links (`services/share-service/`, no README yet)
+- [moderation-service](./services/moderation-service/README.md) - Cross-platform chat moderation write-path (delete/timeout/ban, ADR-0017)
+- [payment-service](./services/payment-service/README.md) - Patreon premium entitlements; writes users.is_premium (streamer, ADR-0018) + viewers.is_premium (viewer split, ADR-0019)
 - [token-refresh-service](./services/token-refresh-service/README.md) - OAuth token refresh
 - [discord-bot](./services/discord-bot/README.md) - TypeScript Discord bot (community ops, not a listener)
 

@@ -51,6 +51,54 @@ func TestNewAddSourceState(t *testing.T) {
 	}
 }
 
+func TestNewModerationState(t *testing.T) {
+	state := NewModerationState("test-csrf-token", "overlay-123", "user-456")
+
+	// Moderation re-consent reuses the add-source action so the callback runs the
+	// same token/scope persistence; only the Purpose marker differs (ADR-0017).
+	if state.Action != ActionAddSource {
+		t.Errorf("Expected Action to be ActionAddSource (reuses add-source persistence), got '%s'", state.Action)
+	}
+	if !state.IsAddSource() {
+		t.Error("Expected IsAddSource() to be true for a moderation state")
+	}
+	if !state.IsModeration() {
+		t.Error("Expected IsModeration() to be true for a moderation state")
+	}
+	if state.OverlayID != "overlay-123" {
+		t.Errorf("Expected OverlayID to be 'overlay-123', got '%s'", state.OverlayID)
+	}
+	if state.UserID != "user-456" {
+		t.Errorf("Expected UserID to be 'user-456', got '%s'", state.UserID)
+	}
+	if err := state.Validate(); err != nil {
+		t.Errorf("Expected moderation state to validate, got %v", err)
+	}
+}
+
+func TestOAuthState_IsModeration(t *testing.T) {
+	if NewAddSourceState("csrf", "overlay-123", "user-456").IsModeration() {
+		t.Error("Expected a plain add-source state to NOT be a moderation state")
+	}
+	if NewLoginState("csrf").IsModeration() {
+		t.Error("Expected a login state to NOT be a moderation state")
+	}
+}
+
+func TestModerationState_RoundTripPreservesPurpose(t *testing.T) {
+	encoded, err := NewModerationState("csrf", "overlay-123", "user-456").Encode()
+	if err != nil {
+		t.Fatalf("Encode() error = %v", err)
+	}
+	decoded, err := DecodeOAuthState(encoded)
+	if err != nil {
+		t.Fatalf("DecodeOAuthState() error = %v", err)
+	}
+	if !decoded.IsModeration() {
+		t.Errorf("Expected decoded state to remain a moderation state, got purpose %q", decoded.Purpose)
+	}
+}
+
 func TestOAuthState_Encode(t *testing.T) {
 	tests := []struct {
 		name    string

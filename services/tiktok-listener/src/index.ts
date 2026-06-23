@@ -87,6 +87,11 @@ const TIKTOK_MAX_ERROR_BACKOFF_MS = parseInt(process.env.TIKTOK_MAX_ERROR_BACKOF
 const TIKTOK_HEARTBEAT_INTERVAL_MS = parseInt(process.env.TIKTOK_HEARTBEAT_INTERVAL_MS || '30000');
 const TIKTOK_HEARTBEAT_TIMEOUT_MS = parseInt(process.env.TIKTOK_HEARTBEAT_TIMEOUT_MS || '90000');
 
+// Hard cap on internal admin HTTP request bodies (/api/retry, /api/reset-backoff).
+// These accept small JSON payloads; capping prevents an oversized POST from spiking
+// process memory and risking an OOMKill.
+const MAX_REQUEST_BODY_BYTES = parseInt(process.env.MAX_REQUEST_BODY_BYTES || '65536'); // 64 KB
+
 // Message deduplication configuration
 const TIKTOK_DEDUP_TTL_MS = parseInt(process.env.TIKTOK_DEDUP_TTL_MS || '300000'); // 5 minutes
 const TIKTOK_DEDUP_CLEANUP_INTERVAL_MS = parseInt(process.env.TIKTOK_DEDUP_CLEANUP_INTERVAL_MS || '60000'); // 1 minute
@@ -200,6 +205,12 @@ class TikTokListenerService {
 
   // Connection state tracking to prevent concurrent connections
   private connectingStreams: Set<string> = new Set();
+
+  // Latest demanded usernames from the most recent DemandUpdate (the authoritative
+  // snapshot). connectToStream() re-checks this after its async live-status pre-check
+  // so a stream that loses demand mid-connection bails out instead of becoming an
+  // orphan (a live WebSocket + leadership lease with no downstream consumer).
+  private demandedUsernames: Set<string> = new Set();
 
   // Leadership coordination
   private sourceManagerClient?: SourceManagerClient;
@@ -420,9 +431,7 @@ class TikTokListenerService {
         }));
       } else if (req.url === '/api/retry' && req.method === 'POST') {
         // Force retry for a username
-        let body = '';
-        req.on('data', chunk => { body += chunk.toString(); });
-        req.on('end', () => {
+        this.readJsonBody(req, res, (body) => {
           try {
             const data = JSON.parse(body);
             if (!data.username) {
@@ -445,9 +454,7 @@ class TikTokListenerService {
         });
       } else if (req.url === '/api/reset-backoff' && req.method === 'POST') {
         // Reset backoff for username or all
-        let body = '';
-        req.on('data', chunk => { body += chunk.toString(); });
-        req.on('end', () => {
+        this.readJsonBody(req, res, (body) => {
           try {
             const data = body ? JSON.parse(body) : {};
 
@@ -487,6 +494,44 @@ class TikTokListenerService {
   }
 
   /**
+   * Read a request body as a string with a hard size cap.
+   *
+   * Bodies larger than MAX_REQUEST_BODY_BYTES are rejected with 413 and the socket
+   * is destroyed; onComplete only fires for requests that stay within the limit.
+   * The `exceeded` guard ensures we send the 413 response exactly once even if more
+   * 'data' chunks arrive before the socket finishes tearing down.
+   *
+   * @param req Incoming request
+   * @param res Response (used to send 413 if the cap is exceeded)
+   * @param onComplete Called with the full body once received within the limit
+   */
+  private readJsonBody(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    onComplete: (body: string) => void
+  ): void {
+    let body = '';
+    let exceeded = false;
+
+    req.on('data', (chunk) => {
+      if (exceeded) return;
+      body += chunk.toString();
+      if (body.length > MAX_REQUEST_BODY_BYTES) {
+        exceeded = true;
+        res.writeHead(413, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Request body too large' }));
+        req.destroy();
+      }
+    });
+
+    req.on('end', () => {
+      if (!exceeded) {
+        onComplete(body);
+      }
+    });
+  }
+
+  /**
    * Handle a demand update from source-manager (Phase 5).
    * Called on every DemandUpdate received via Redis Pub/Sub "source:demand".
    * Full-replacement snapshot: connects new streams, disconnects removed ones.
@@ -497,14 +542,38 @@ class TikTokListenerService {
 
     logger.info('Demand update received', { demanded_count: demanded.size });
 
-    if (demanded.size === 0) {
-      // Full idle: release leadership and disconnect all streams
-      for (const [username] of this.activeStreams.entries()) {
-        if (this.leadershipCoordinator) {
-          await this.leadershipCoordinator.release(username);
-        }
+    // Record the authoritative demand snapshot first, so any connection attempt
+    // already in flight (suspended on its async live-status pre-check) sees the
+    // updated set when it resumes and aborts if it lost demand.
+    this.demandedUsernames = new Set(demanded.keys());
+
+    // Prune every tracked stream that lost demand. A stream can be tracked in
+    // three places: active (connected), parked in the poller (offline, awaiting
+    // re-check), or mid-connection in connectingStreams. The previous code only
+    // iterated activeStreams, so a stream sitting in the poller — which may still
+    // hold a leadership lease claimed before it was found offline — was never
+    // released, and a stream mid-connection could go active with no demand at all.
+    // Here we release leadership and drop poller/active state for active and
+    // polled streams; connectingStreams entries abort themselves via the
+    // demandedUsernames check in connectToStream().
+    const trackedUsernames = new Set<string>([
+      ...this.activeStreams.keys(),
+      ...this.livePoller.getTargets().map(t => t.username),
+    ]);
+    for (const username of trackedUsernames) {
+      if (this.demandedUsernames.has(username)) continue;
+
+      if (this.leadershipCoordinator) {
+        await this.leadershipCoordinator.release(username);
+      }
+      this.livePoller.removeTarget(username);
+      if (this.activeStreams.has(username)) {
         await this.disconnectFromStream(username);
       }
+    }
+
+    // Go fully idle when there is no demand: stop the poller entirely.
+    if (demanded.size === 0) {
       if (this.livePollerRunning) {
         this.livePoller.stop();
         this.livePollerRunning = false;
@@ -518,17 +587,6 @@ class TikTokListenerService {
       this.livePoller.start();
       this.livePollerRunning = true;
       logger.info('LiveStreamPoller started (demand present)');
-    }
-
-    // Disconnect streams that lost demand and release their leadership
-    const demandedUsernames = new Set(demanded.keys());
-    for (const [username] of this.activeStreams.entries()) {
-      if (!demandedUsernames.has(username)) {
-        if (this.leadershipCoordinator) {
-          await this.leadershipCoordinator.release(username);
-        }
-        await this.disconnectFromStream(username);
-      }
     }
 
     // Claim leadership and connect new demanded streams
@@ -606,6 +664,18 @@ class TikTokListenerService {
 
       // NEW: Pre-check if user is live before attempting connection
       const statusResult = await this.statusChecker.checkLiveStatus(username);
+
+      // Demand may have been removed while we awaited the live-status check above
+      // (handleDemandUpdate runs on the same event loop and updates demandedUsernames).
+      // Abort before going active or re-parking in the poller so we don't leave an
+      // orphaned connection behind. Release any leadership lease we hold (no-op if none).
+      if (!this.demandedUsernames.has(username)) {
+        logger.info('Demand removed during connection attempt, aborting', { username, overlay_id: overlayId });
+        if (this.leadershipCoordinator) {
+          await this.leadershipCoordinator.release(username);
+        }
+        return;
+      }
 
       if (!statusResult.isLive) {
         // Distinguish between "user is offline" and "API/network error"
@@ -741,8 +811,14 @@ class TikTokListenerService {
       // Record error for backoff
       this.backoffManager.recordConnectionError(username, error as Error);
 
-      // Add to poller for retry
-      this.livePoller.addTarget(username, overlayId);
+      // Only schedule a retry if the stream is still demanded. If demand was pulled
+      // while we were connecting, re-parking it in the poller would re-create the
+      // orphan we are trying to avoid — release leadership instead.
+      if (this.demandedUsernames.has(username)) {
+        this.livePoller.addTarget(username, overlayId);
+      } else if (this.leadershipCoordinator) {
+        await this.leadershipCoordinator.release(username);
+      }
 
       // Don't delete from activeStreams - keep it for tracking
     } finally {

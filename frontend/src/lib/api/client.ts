@@ -47,7 +47,14 @@ const API_URL = getApiUrl()
 export class ApiError extends Error {
   constructor(
     public status: number,
-    message: string
+    message: string,
+    /**
+     * The parsed JSON error body, when the server returned one. Lets callers
+     * inspect contract-specific fields (e.g. the chat-send endpoint's `error`
+     * discriminant, `platform`, `details`, `retry_after_seconds`) instead of
+     * only the flattened `message`. Undefined if the body wasn't JSON.
+     */
+    public data?: Record<string, unknown>
   ) {
     super(message)
     this.name = 'ApiError'
@@ -78,18 +85,25 @@ class ApiClient {
       headers,
     })
 
-    if (response.status === 401) {
-      // Token expired or invalid, clear it
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('jwt_token')
-        window.location.href = '/'
-      }
-      throw new ApiError(401, 'Unauthorized')
-    }
-
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
-      throw new ApiError(response.status, errorData.error || response.statusText)
+      const errorData: Record<string, unknown> = await response
+        .json()
+        .catch(() => ({ error: 'Unknown error' }))
+      const errorValue = typeof errorData.error === 'string' ? errorData.error : undefined
+
+      if (response.status === 401) {
+        // A `reauth_required` 401 is an application-level signal (the platform
+        // OAuth token was revoked) that the caller surfaces inline — it must NOT
+        // trigger the generic "JWT expired → log out" path. Every other 401 means
+        // our own session token is invalid: clear it and bounce to the landing page.
+        if (errorValue !== 'reauth_required' && typeof window !== 'undefined') {
+          localStorage.removeItem('jwt_token')
+          window.location.href = '/'
+        }
+        throw new ApiError(401, errorValue || 'Unauthorized', errorData)
+      }
+
+      throw new ApiError(response.status, errorValue || response.statusText, errorData)
     }
 
     return response
@@ -100,10 +114,11 @@ class ApiClient {
     return response.json()
   }
 
-  async post<T>(endpoint: string, data: unknown): Promise<T> {
+  async post<T>(endpoint: string, data: unknown, headers?: Record<string, string>): Promise<T> {
     const response = await this.fetch(endpoint, {
       method: 'POST',
       body: JSON.stringify(data),
+      ...(headers ? { headers } : {}),
     })
     return response.json()
   }

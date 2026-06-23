@@ -34,6 +34,7 @@ export interface User {
   profile_image_url?: string
   is_admin: boolean
   is_premium: boolean
+  is_beta_tester: boolean
   created_at: string
   updated_at: string
 }

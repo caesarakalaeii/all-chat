@@ -172,10 +172,11 @@ Platform Listeners (Twitch IRC, YouTube API, Kick Pusher, TikTok WS, Discord Bot
 | `api-gateway` | WebSocket server for overlays, HTTP routing, OAuth callbacks |
 | `auth-service` | Authentication, sessions, OAuth flows (Twitch, YouTube, Kick, Discord) |
 | `emote-service` | 7TV, BTTV, FFZ, and native emote resolution |
-| `twitch-listener` | Twitch IRC chat ingestion (⚠️ deprecated, ADR-0017 — migrating to `twitch-eventsub-listener`) |
+| `twitch-listener` | Twitch IRC chat ingestion (⚠️ deprecated, ADR-0026 — migrating to `twitch-eventsub-listener`) |
 | `twitch-eventsub-listener` | Twitch EventSub webhooks (channel points, moderation, raids) |
 | `youtube-listener` | YouTube Data API polling with quota tracking |
 | `youtube-listener-innertube` | YouTube InnerTube API polling (zero quota cost) |
+| `youtube-quota-monitor` | Reads the shared YouTube quota table; exports the quota metric + publishes `quota:alerts` for the discord-bot (ADR-0023) |
 | `kick-listener` | Kick chat via Pusher WebSocket |
 | `tiktok-listener` | TikTok live chat via unofficial connector |
 | `discord-listener` | Discord channel chat relay |
@@ -183,6 +184,8 @@ Platform Listeners (Twitch IRC, YouTube API, Kick Pusher, TikTok WS, Discord Bot
 | `overlay-manager` | Overlay CRUD, source configuration, settings |
 | `source-manager` | Leader election, active source tracking, demand coordination |
 | `share-service` | Shareable overlay link generation |
+| `moderation-service` | Cross-platform chat moderation write-path: delete / timeout / ban (ADR-0017) |
+| `payment-service` | Patreon premium entitlements: grants `users.is_premium` (streamer, ADR-0018) and `viewers.is_premium` (viewer split, ADR-0019) from subscriptions |
 | `token-refresh-service` | OAuth token refresh on schedule |
 
 ### Tech Stack
@@ -241,10 +244,11 @@ Architecture decisions are documented as ADRs in [`docs/adr/`](./docs/adr/README
 - **ADR-0006**: YouTube quota reserve-confirm-rollback pattern
 - **ADR-0007**: Leadership rebalancing for auto-scaling listeners
 - **ADR-0008**: Feature gate infrastructure for premium capabilities
+- **ADR-0020**: Beta-tester role + early-access feature gates (extends ADR-0008; a beta-tester is premium plus early-access, granted via an admin button — no data migration)
 - **ADR-0013**: Public overlay observability view + shared `useOverlayStream` hook
 - **ADR-0014**: Linger upstream capture demand symmetric with the downstream pub/sub linger
 - **ADR-0015**: Dynamic EventSub chat-ownership claim — IRC is the always-on fallback; EventSub owns a channel only while it is actively delivering chat (no silent loss across the partition)
-- **ADR-0017**: Two-phase deprecation of the Twitch IRC listener — `warn` nudges connected sources to re-add their Twitch source (in-overlay notice), `enforce` stops joining channels
+- **ADR-0026**: Two-phase deprecation of the Twitch IRC listener — `warn` nudges connected sources to re-add their Twitch source (in-overlay notice), `enforce` stops joining channels
 
 ### Documentation
 
@@ -296,6 +300,7 @@ Built on the shoulders of:
 
 ## Support
 
+- [Back us on Patreon](https://patreon.com/all_chat) — unlock premium (streamer €5 / viewer €2)
 - [Discord community](https://discord.gg/xCGBSuz39P)
 - [GitHub Issues](https://github.com/caesarakalaeii/all-chat/issues)
 - [GitHub Discussions](https://github.com/caesarakalaeii/all-chat/discussions)

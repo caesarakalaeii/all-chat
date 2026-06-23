@@ -43,6 +43,12 @@ export interface ModEntryData {
   banDuration?: number
   source: 'replay' | 'live'
   at: number
+  /**
+   * Set on entries created optimistically by a moderator action in this view,
+   * so the matching server-pushed deletion can be deduped and the entry can be
+   * rolled back if the action fails. Absent on entries derived purely from WS.
+   */
+  clientId?: string
 }
 
 /** A moderation-log entry with a stable id for rendering. */
@@ -104,7 +110,7 @@ export function deletionKind(meta: DeletionMetadata): ModKind {
 export function toModEntry(
   meta: DeletionMetadata,
   source: 'replay' | 'live',
-  at: number,
+  at: number
 ): ModEntryData {
   return {
     kind: deletionKind(meta),
@@ -115,6 +121,19 @@ export function toModEntry(
     source,
     at,
   }
+}
+
+/**
+ * A stable signature for a deletion, used to dedupe an optimistic moderation
+ * entry against the server-pushed deletion that confirms the same action.
+ */
+export function deletionSignature(meta: DeletionMetadata): string {
+  return [
+    meta.deletion_type,
+    meta.target_uuid ?? '',
+    meta.target_user_id ?? '',
+    meta.ban_duration ?? 0,
+  ].join(':')
 }
 
 /** Does this deletion target the given item? */
@@ -167,7 +186,7 @@ export function mergeByAgg(prev: ViewItem[], updated: ViewItem, cap: number): Vi
  */
 export function shouldAutoScroll(
   metrics: { scrollHeight: number; scrollTop: number; clientHeight: number },
-  threshold = 40,
+  threshold = 40
 ): boolean {
   return metrics.scrollHeight - metrics.scrollTop - metrics.clientHeight <= threshold
 }

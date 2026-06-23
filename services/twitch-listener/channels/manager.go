@@ -89,7 +89,7 @@ type Manager struct {
 	statusPublisher         *status.Publisher        // Publishes platform status to Redis Pub/Sub
 	initialSyncDone         bool                     // Set to true after the first SyncChannels completes (legacy, kept for vet)
 
-	// IRC listener deprecation gate (ADR-0017). Configured once at startup via
+	// IRC listener deprecation gate (ADR-0026). Configured once at startup via
 	// SetDeprecationConfig before Start(); read-only thereafter.
 	deprecation     DeprecationConfig
 	noticePublisher DeprecationNoticePublisher // nil unless deprecation warn mode is active
@@ -182,7 +182,7 @@ func (m *Manager) excludeEventSubOwnedChannels(ctx context.Context, desired []st
 	return kept
 }
 
-// SetDeprecationConfig configures the IRC-listener deprecation gate (ADR-0017).
+// SetDeprecationConfig configures the IRC-listener deprecation gate (ADR-0026).
 // Must be called before Start(). publisher may be nil when no notices are sent
 // (off or enforce mode); a non-positive NoticeInterval defaults to
 // DefaultDeprecationNoticeInterval.
@@ -229,7 +229,7 @@ func (m *Manager) Start(ctx context.Context) error {
 		m.logger.Warn("Database connection not configured, skipping LISTEN/NOTIFY watcher")
 	}
 
-	// IRC deprecation WARN phase (ADR-0017): periodically nudge every connected
+	// IRC deprecation WARN phase (ADR-0026): periodically nudge every connected
 	// source to migrate. Only runs when a notice publisher is wired; enforce mode
 	// has no connected sources to notify, off mode has nothing to say.
 	if m.deprecation.Mode == DeprecationWarn && m.noticePublisher != nil {
@@ -313,7 +313,7 @@ func (m *Manager) syncLoop(ctx context.Context) {
 }
 
 // deprecationNoticeLoop periodically reminds every connected source that the IRC
-// listener is being retired (ADR-0017). It runs only during the warn phase.
+// listener is being retired (ADR-0026). It runs only during the warn phase.
 func (m *Manager) deprecationNoticeLoop(ctx context.Context) {
 	defer m.wg.Done()
 
@@ -537,7 +537,7 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 		return err
 	}
 
-	// IRC deprecation ENFORCE phase (ADR-0017): the listener is retired and must
+	// IRC deprecation ENFORCE phase (ADR-0026): the listener is retired and must
 	// not join any Twitch channel. Empty the desired set so the normal PART path
 	// disconnects anything still joined and no new JOINs are issued. Users keep
 	// chat by re-adding their source, which routes them to the EventSub listener.

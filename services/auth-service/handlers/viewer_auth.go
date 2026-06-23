@@ -46,7 +46,7 @@ type StringEncryptor interface {
 type ViewerIdentityRepo interface {
 	GetOrCreateViewerByPlatform(ctx context.Context, platform, platformUserID string) (uuid.UUID, error)
 	LinkPlatformToViewer(ctx context.Context, viewerID uuid.UUID, platform, platformUserID string) error
-	LinkViewerToUser(ctx context.Context, platform, platformUserID string, userID string, isPremium bool) error
+	LinkViewerToUser(ctx context.Context, platform, platformUserID, userID string) error
 	GetViewerIsPremium(ctx context.Context, viewerID uuid.UUID) (bool, error)
 	GetLinkedPlatforms(ctx context.Context, viewerID uuid.UUID) ([]repository.LinkedPlatform, error)
 	UnlinkPlatform(ctx context.Context, viewerID uuid.UUID, platform string) error
@@ -320,7 +320,7 @@ func (h *ViewerAuthHandler) HandleTwitchCallback(c *gin.Context) {
 		// so the message enricher can read badges without extra lookups.
 		if linkErr := h.identityRepo.LinkViewerToUser(
 			c.Request.Context(), session.Platform, session.PlatformUserID,
-			linkedStreamer.ID, linkedStreamer.IsPremium,
+			linkedStreamer.ID,
 		); linkErr != nil {
 			h.logger.Warn("Failed to link viewer to user account", zap.Error(linkErr))
 		}
@@ -725,7 +725,7 @@ func (h *ViewerAuthHandler) HandleYouTubeCallback(c *gin.Context) {
 	if viewerIDYT != uuid.Nil && linkedStreamerYT != nil {
 		if linkErr := h.identityRepo.LinkViewerToUser(
 			c.Request.Context(), session.Platform, session.PlatformUserID,
-			linkedStreamerYT.ID, linkedStreamerYT.IsPremium,
+			linkedStreamerYT.ID,
 		); linkErr != nil {
 			h.logger.Warn("Failed to link viewer to user account", zap.Error(linkErr))
 		}
@@ -934,7 +934,7 @@ func (h *ViewerAuthHandler) HandleKickCallback(c *gin.Context) {
 	if viewerIDKick != uuid.Nil && linkedStreamerKick != nil {
 		if linkErr := h.identityRepo.LinkViewerToUser(
 			c.Request.Context(), session.Platform, session.PlatformUserID,
-			linkedStreamerKick.ID, linkedStreamerKick.IsPremium,
+			linkedStreamerKick.ID,
 		); linkErr != nil {
 			h.logger.Warn("Failed to link viewer to user account", zap.Error(linkErr))
 		}

@@ -190,7 +190,7 @@ func main() {
 	// Inject status publisher into channel manager
 	channelMgr.SetStatusPublisher(statusPublisher)
 
-	// IRC listener deprecation gate (ADR-0017). Two-phase retirement controlled by
+	// IRC listener deprecation gate (ADR-0026). Two-phase retirement controlled by
 	// TWITCH_IRC_DEPRECATION_MODE: "warn" keeps serving chat but nudges connected
 	// sources to migrate, "enforce" stops joining channels entirely. Default "off".
 	deprecationMode := channels.ParseDeprecationMode(listener.Env("TWITCH_IRC_DEPRECATION_MODE", "off"))
@@ -214,7 +214,7 @@ func main() {
 		NoticeInterval: noticeInterval,
 	}, noticePublisher)
 	if deprecationMode != channels.DeprecationOff {
-		log.Warn("Twitch IRC listener is DEPRECATED (ADR-0017)",
+		log.Warn("Twitch IRC listener is DEPRECATED (ADR-0026)",
 			zap.String("mode", deprecationMode.String()),
 			zap.Duration("notice_interval", noticeInterval),
 		)

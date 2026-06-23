@@ -176,6 +176,10 @@ Body: {
 # List sources for overlay
 GET /api/v1/overlays/:overlay_id/sources
 Authorization: Bearer <jwt-token>
+# Each Twitch source carries two computed booleans used by the IRC→EventSub migration UI:
+#   chat_via_eventsub — channel owner granted chat scopes, so chat is read via EventSub (else IRC)
+#   is_own_channel    — the requesting user owns this channel and can re-consent to migrate it
+#                       (true for Twitch-login owners and ADR-0016 linked-credential owners)
 
 # Activate/deactivate source
 PATCH /api/v1/overlays/:overlay_id/sources/:source_id

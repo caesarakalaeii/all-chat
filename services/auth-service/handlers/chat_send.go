@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -27,6 +28,8 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/auth-service/models"
+	"github.com/caesar/all-chat/shared/quota"
+	"github.com/caesar/all-chat/shared/sendall"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -40,6 +43,69 @@ const (
 	rateLimit1Min    = 20
 	rateLimit1Hour   = 100
 )
+
+// sendErrKind classifies a streamer-send failure so HandleStreamerSendMessage can map
+// it to the right HTTP status and a machine-readable code the monitor view reacts to
+// (e.g. prompt the advanced-controls opt-in on a missing scope).
+type sendErrKind string
+
+const (
+	sendErrUpstream     sendErrKind = "send_failed"     // platform 5xx / network → 502
+	sendErrMissingScope sendErrKind = "missing_scope"   // platform 403 → 403, prompt opt-in
+	sendErrReauth       sendErrKind = "reauth_required" // platform 401 → 401, prompt re-login
+	sendErrOffline      sendErrKind = "stream_offline"  // not live → 422
+	sendErrQuota        sendErrKind = "quota_exhausted" // YouTube send quota depleted → 422
+)
+
+// streamerSendError carries a classified streamer-send failure.
+type streamerSendError struct {
+	kind sendErrKind
+	msg  string
+}
+
+func (e *streamerSendError) Error() string { return e.msg }
+
+// classifyPlatformStatus maps a platform HTTP error response to a typed send error:
+// 401 ⇒ re-auth (token expired/invalid), 403 ⇒ missing scope (prompt the opt-in),
+// anything else ⇒ an upstream failure. Previously every platform error surfaced as a
+// raw 502, so the monitor could not tell "needs re-consent" from "platform hiccup".
+func classifyPlatformStatus(platform string, status int, body string) *streamerSendError {
+	switch status {
+	case http.StatusUnauthorized:
+		return &streamerSendError{kind: sendErrReauth, msg: fmt.Sprintf("%s auth rejected (401): %s", platform, body)}
+	case http.StatusForbidden:
+		return &streamerSendError{kind: sendErrMissingScope, msg: fmt.Sprintf("%s missing send scope (403): %s", platform, body)}
+	default:
+		return &streamerSendError{kind: sendErrUpstream, msg: fmt.Sprintf("%s API error: status=%d body=%s", platform, status, body)}
+	}
+}
+
+// streamerSendHTTPResponse maps a send error to (HTTP status, JSON body) for the
+// streamer endpoint. Typed errors map directly; an untyped error falls back to the
+// text-based classifier (e.g. "not currently live" → 422).
+func streamerSendHTTPResponse(platform string, err error) (int, gin.H) {
+	var se *streamerSendError
+	if errors.As(err, &se) {
+		switch se.kind {
+		case sendErrMissingScope:
+			return http.StatusForbidden, gin.H{"error": string(sendErrMissingScope), "platform": platform}
+		case sendErrReauth:
+			return http.StatusUnauthorized, gin.H{"error": string(sendErrReauth), "platform": platform}
+		case sendErrOffline:
+			return http.StatusUnprocessableEntity, gin.H{"error": string(sendErrOffline), "platform": platform, "details": "The streamer is not currently live."}
+		case sendErrQuota:
+			return http.StatusUnprocessableEntity, gin.H{"error": string(sendErrQuota), "platform": platform, "details": "YouTube send quota is exhausted. Please try again later."}
+		}
+	}
+	status, desc := classifySendError(err.Error())
+	code := string(sendErrUpstream)
+	if status == http.StatusUnauthorized {
+		code = string(sendErrReauth)
+	} else if status == http.StatusUnprocessableEntity {
+		code = "unavailable"
+	}
+	return status, gin.H{"error": code, "platform": platform, "details": desc}
+}
 
 // classifySendError returns the appropriate HTTP status code and a user-friendly
 // description based on the error message. Prevents returning 502 for errors that
@@ -117,6 +183,11 @@ type ChatSendHandler struct {
 	cipher          StringEncryptor
 	youtubeAPIKey   string
 	redisClient     *redis.Client
+	// ytQuota accounts YouTube sends (5 units each) against the shared
+	// youtube_quota_usage table via reserve-confirm-rollback (ADR-0006), so the
+	// youtube-quota-monitor reflects send usage and a depleted quota blocks sends.
+	// Nil ⇒ accounting skipped (fail-open).
+	ytQuota *quota.Reserver
 }
 
 // NewChatSendHandler creates a new chat send handler
@@ -132,6 +203,7 @@ func NewChatSendHandler(
 	cipher StringEncryptor,
 	youtubeAPIKey string,
 	redisClient *redis.Client,
+	youtubeQuotaLimit int,
 ) *ChatSendHandler {
 	return &ChatSendHandler{
 		log:             log.Named("chat-send"),
@@ -146,6 +218,7 @@ func NewChatSendHandler(
 		cipher:          cipher,
 		youtubeAPIKey:   youtubeAPIKey,
 		redisClient:     redisClient,
+		ytQuota:         quota.NewReserver(db, youtubeQuotaLimit),
 	}
 }
 
@@ -153,8 +226,8 @@ func NewChatSendHandler(
 type SendMessageRequest struct {
 	StreamerUsername string `json:"streamer_username" binding:"required"`
 	Message          string `json:"message" binding:"required"`
-	Platform         string `json:"platform"`  // Optional: if viewer has multiple platforms
-	VideoID          string `json:"video_id"`  // Optional: YouTube video ID from extension (bypasses unreliable search.list discovery)
+	Platform         string `json:"platform"` // Optional: if viewer has multiple platforms
+	VideoID          string `json:"video_id"` // Optional: YouTube video ID from extension (bypasses unreliable search.list discovery)
 }
 
 // SendMessageResponse is the response after sending a message
@@ -394,6 +467,18 @@ func (h *ChatSendHandler) HandleStreamerSendMessage(c *gin.Context) {
 		zap.String("user_id", userID),
 		zap.String("username", user.Username))
 
+	// "all" fans out to every connected platform and returns per-platform results.
+	if req.Platform == "all" {
+		h.handleStreamerSendToAll(c, ctx, user, req.Message)
+		return
+	}
+
+	// Single-platform send. Rate-limit against the streamer's own limits (one unit).
+	if ok, retryAfter := h.reserveStreamerRate(ctx, user.ID, 1); !ok {
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "rate_limited", "retry_after_seconds": retryAfter})
+		return
+	}
+
 	// Send message based on target platform
 	var messageErr error
 	switch req.Platform {
@@ -412,8 +497,9 @@ func (h *ChatSendHandler) HandleStreamerSendMessage(c *gin.Context) {
 	}
 
 	if messageErr != nil {
-		h.log.Error("Failed to send streamer message", zap.Error(messageErr), zap.String("platform", req.Platform))
-		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to send message", "details": messageErr.Error()})
+		status, body := streamerSendHTTPResponse(req.Platform, messageErr)
+		h.log.Warn("Failed to send streamer message", zap.Error(messageErr), zap.String("platform", req.Platform), zap.Int("status", status))
+		c.JSON(status, body)
 		return
 	}
 
@@ -505,7 +591,7 @@ func (h *ChatSendHandler) sendStreamerTwitchMessage(ctx context.Context, user *m
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return fmt.Errorf("twitch API error: status=%d body=%s", resp.StatusCode, string(body))
+		return classifyPlatformStatus("twitch", resp.StatusCode, string(body))
 	}
 
 	return nil
@@ -523,6 +609,15 @@ func (h *ChatSendHandler) sendStreamerYouTubeMessage(ctx context.Context, user *
 		return fmt.Errorf("failed to get live chat ID: %w", err)
 	}
 
+	// Account the send against the shared youtube_quota_usage table (a send costs 5
+	// units) via reserve-confirm-rollback, so the youtube-quota-monitor reflects send
+	// usage and a depleted quota blocks the send. Reserve before sending, then confirm
+	// on success / roll back on failure. Fails open when accounting is unavailable.
+	ok := h.reserveYouTubeSendQuota(ctx, quota.QuotaCostYouTubeSend)
+	if !ok {
+		return &streamerSendError{kind: sendErrQuota, msg: "youtube send blocked: daily quota exhausted"}
+	}
+
 	reqBody := map[string]interface{}{
 		"snippet": map[string]interface{}{
 			"liveChatId": liveChatID,
@@ -535,12 +630,14 @@ func (h *ChatSendHandler) sendStreamerYouTubeMessage(ctx context.Context, user *
 
 	bodyBytes, err := json.Marshal(reqBody)
 	if err != nil {
+		h.settleYouTubeSendQuota(ctx, quota.QuotaCostYouTubeSend, false)
 		return fmt.Errorf("failed to marshal request body: %w", err)
 	}
 
 	url := "https://www.googleapis.com/youtube/v3/liveChat/messages?part=snippet"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(bodyBytes))
 	if err != nil {
+		h.settleYouTubeSendQuota(ctx, quota.QuotaCostYouTubeSend, false)
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
@@ -549,15 +646,18 @@ func (h *ChatSendHandler) sendStreamerYouTubeMessage(ctx context.Context, user *
 
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
+		h.settleYouTubeSendQuota(ctx, quota.QuotaCostYouTubeSend, false)
 		return fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return fmt.Errorf("youtube API error: status=%d body=%s", resp.StatusCode, string(body))
+		h.settleYouTubeSendQuota(ctx, quota.QuotaCostYouTubeSend, false)
+		return classifyPlatformStatus("youtube", resp.StatusCode, string(body))
 	}
 
+	h.settleYouTubeSendQuota(ctx, quota.QuotaCostYouTubeSend, true)
 	return nil
 }
 
@@ -595,10 +695,294 @@ func (h *ChatSendHandler) sendStreamerKickMessage(ctx context.Context, user *mod
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return fmt.Errorf("kick API error: status=%d body=%s", resp.StatusCode, string(body))
+		return classifyPlatformStatus("kick", resp.StatusCode, string(body))
 	}
 
 	return nil
+}
+
+// streamerSendResult is one platform's outcome in a send-to-all response.
+type streamerSendResult struct {
+	Platform  string `json:"platform"`
+	Success   bool   `json:"success"`
+	Error     string `json:"error,omitempty"`
+	ErrorKind string `json:"error_kind,omitempty"`
+}
+
+// sendResultErrorKind classifies a per-platform send failure for the send-to-all response.
+// A typed *streamerSendError carries its kind directly; an untyped error (e.g. YouTube
+// live-chat-ID discovery failing) is run through the same text classifier the single-send
+// path uses, so the monitor shows a meaningful kind (stream_offline, reauth_required)
+// instead of a blanket send_failed.
+func sendResultErrorKind(err error) sendErrKind {
+	var se *streamerSendError
+	if errors.As(err, &se) {
+		return se.kind
+	}
+	switch status, _ := classifySendError(err.Error()); status {
+	case http.StatusUnauthorized:
+		return sendErrReauth
+	case http.StatusUnprocessableEntity:
+		return sendErrOffline
+	default:
+		return sendErrUpstream
+	}
+}
+
+// sendAllAction is how the send-to-all dedup registration must be reconciled once the real
+// per-platform outcomes are known. The combined pill is pre-registered with the full
+// intended set before sending (so fast echoes are always recognised); afterwards it has to
+// be corrected, because a platform echoes its copy back ONLY if its send actually succeeded.
+type sendAllAction int
+
+const (
+	sendAllNoChange sendAllAction = iota // every intended platform succeeded; full set is correct
+	sendAllRewrite                       // partial success with ≥2 winners; shrink the pill to them
+	sendAllDelete                        // <2 winners; drop the group so the lone echo shows normally
+)
+
+// sendAllReconcile is the decision produced by decideSendAllPill: the action to apply and
+// the platform set (the successes, in the caller's deterministic order) the pill should show.
+type sendAllReconcile struct {
+	action    sendAllAction
+	platforms []string
+}
+
+// decideSendAllPill derives the reconcile decision from the per-platform results. The pill
+// must list exactly the platforms whose send succeeded (and thus will echo back): all
+// succeeded ⇒ leave the pre-registered set; ≥2 succeeded but some failed ⇒ rewrite to the
+// winners; ≤1 succeeded ⇒ delete the group so the survivor renders as an ordinary message
+// (the combined pill is only meaningful for >1 platform — see ChatRow's length>1 gate).
+func decideSendAllPill(intended []string, results []streamerSendResult) sendAllReconcile {
+	ok := make(map[string]bool, len(results))
+	for _, r := range results {
+		if r.Success {
+			ok[r.Platform] = true
+		}
+	}
+	success := make([]string, 0, len(intended))
+	for _, p := range intended {
+		if ok[p] {
+			success = append(success, p)
+		}
+	}
+	switch {
+	case len(success) == len(intended):
+		return sendAllReconcile{action: sendAllNoChange, platforms: success}
+	case len(success) >= 2:
+		return sendAllReconcile{action: sendAllRewrite, platforms: success}
+	default:
+		return sendAllReconcile{action: sendAllDelete, platforms: success}
+	}
+}
+
+// handleStreamerSendToAll fans the message out to every platform the streamer is
+// connected on (Twitch/YouTube/Kick — TikTok has no send API, Discord no streamer
+// path), pre-registers the dedup group so the echoed-back copies collapse into one
+// combined-pill message, and returns per-platform results. Partial success is normal
+// (e.g. YouTube quota-blocked while Twitch + Kick succeed).
+func (h *ChatSendHandler) handleStreamerSendToAll(c *gin.Context, ctx context.Context, user *models.User, message string) {
+	// Candidate platforms: those the streamer has a platform identity on. senderID is
+	// the platform-native id that appears as the author on the echoed-back message.
+	idsByPlatform := map[string]string{}
+	if user.TwitchID != nil && *user.TwitchID != "" {
+		idsByPlatform["twitch"] = *user.TwitchID
+	}
+	if user.KickID != nil && *user.KickID != "" {
+		idsByPlatform["kick"] = *user.KickID
+	}
+	if ytChannelID, ytErr := h.getActiveYouTubeChannelID(ctx, user.ID); ytErr == nil && ytChannelID != "" {
+		idsByPlatform["youtube"] = ytChannelID
+	}
+
+	if len(idsByPlatform) == 0 {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "no_sendable_platform", "details": "No connected platform is configured for sending."})
+		return
+	}
+
+	// Rate-limit per platform (the plan's send-to-all accounting): N platforms = N units.
+	if ok, retryAfter := h.reserveStreamerRate(ctx, user.ID, len(idsByPlatform)); !ok {
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "rate_limited", "retry_after_seconds": retryAfter})
+		return
+	}
+
+	// Deterministic platform order so the combined pill / primary platform is stable.
+	platforms := make([]string, 0, len(idsByPlatform))
+	for _, p := range []string{"twitch", "youtube", "kick"} {
+		if _, ok := idsByPlatform[p]; ok {
+			platforms = append(platforms, p)
+		}
+	}
+
+	// Pre-register the echoes (only meaningful for ≥2 targets) BEFORE sending, so the
+	// message-processor recognises each platform's echo and collapses them into one. The
+	// set is provisional: it lists every intended platform, and is reconciled below to the
+	// platforms that actually succeed (a platform echoes back only if its send did).
+	groupID := ""
+	if len(platforms) >= 2 {
+		groupID = uuid.NewString()
+		h.writeSendAllKeys(ctx, idsByPlatform, message, platforms, groupID)
+	}
+
+	results := make([]streamerSendResult, 0, len(platforms))
+	anySuccess := false
+	for _, platform := range platforms {
+		var sendErr error
+		switch platform {
+		case "twitch":
+			sendErr = h.sendStreamerTwitchMessage(ctx, user, message)
+		case "kick":
+			sendErr = h.sendStreamerKickMessage(ctx, user, message)
+		case "youtube":
+			sendErr = h.sendStreamerYouTubeMessage(ctx, user, message)
+		}
+		if sendErr != nil {
+			kind := sendResultErrorKind(sendErr)
+			results = append(results, streamerSendResult{Platform: platform, Success: false, Error: string(kind), ErrorKind: string(kind)})
+			h.log.Warn("send-to-all platform failed", zap.String("platform", platform), zap.String("error_kind", string(kind)), zap.Error(sendErr))
+		} else {
+			anySuccess = true
+			results = append(results, streamerSendResult{Platform: platform, Success: true})
+		}
+	}
+
+	// Reconcile the dedup registration with reality so the combined pill lists ONLY the
+	// platforms that actually received the message. Without this, a platform that failed
+	// (e.g. YouTube not live / quota-blocked) would still render in the pill, because the
+	// set was pre-registered before any outcome was known.
+	if groupID != "" {
+		switch d := decideSendAllPill(platforms, results); d.action {
+		case sendAllRewrite:
+			h.writeSendAllKeys(ctx, idsByPlatform, message, d.platforms, groupID)
+		case sendAllDelete:
+			h.deleteSendAllKeys(ctx, idsByPlatform, message)
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": anySuccess, "results": results})
+}
+
+// writeSendAllKeys (re)writes the send-to-all dedup keys for a message so the collapsed
+// combined pill lists exactly includePlatforms, all sharing one group id. For every
+// candidate platform identity in idsByPlatform: if it is in includePlatforms its key is
+// SET (group id + the includePlatforms set); otherwise its key is DELETED — a platform
+// that did not receive the message must never appear in the pill and will never echo.
+// Used twice per send-to-all: first with the full intended set (pre-register, so fast
+// echoes are recognised), then with the success set (reconcile). Best-effort: a Redis
+// error only degrades dedup for that one platform. See shared/sendall.
+func (h *ChatSendHandler) writeSendAllKeys(ctx context.Context, idsByPlatform map[string]string, message string, includePlatforms []string, groupID string) {
+	if h.redisClient == nil {
+		return
+	}
+	include := make(map[string]bool, len(includePlatforms))
+	for _, p := range includePlatforms {
+		include[p] = true
+	}
+	payload, err := json.Marshal(sendall.Registration{GroupID: groupID, Platforms: includePlatforms})
+	if err != nil {
+		h.log.Warn("send-to-all: failed to marshal registration", zap.Error(err))
+		return
+	}
+	for platform, senderID := range idsByPlatform {
+		if senderID == "" {
+			continue
+		}
+		key := sendall.Key(platform, senderID, message)
+		if include[platform] {
+			if err := h.redisClient.Set(ctx, key, payload, sendall.TTL).Err(); err != nil {
+				h.log.Warn("send-to-all: failed to write echo key", zap.String("platform", platform), zap.Error(err))
+			}
+		} else if err := h.redisClient.Del(ctx, key).Err(); err != nil {
+			h.log.Warn("send-to-all: failed to drop echo key", zap.String("platform", platform), zap.Error(err))
+		}
+	}
+}
+
+// deleteSendAllKeys removes every send-to-all dedup key for this message across the given
+// platform identities. Used when fewer than two platforms ultimately succeeded, so there is
+// no combined pill to render: the single surviving echo (if any) then flows through as an
+// ordinary single-platform message rather than a one-glyph "combined" pill. Best-effort.
+func (h *ChatSendHandler) deleteSendAllKeys(ctx context.Context, idsByPlatform map[string]string, message string) {
+	if h.redisClient == nil {
+		return
+	}
+	for platform, senderID := range idsByPlatform {
+		if senderID == "" {
+			continue
+		}
+		if err := h.redisClient.Del(ctx, sendall.Key(platform, senderID, message)).Err(); err != nil {
+			h.log.Warn("send-to-all: failed to clear echo key", zap.String("platform", platform), zap.Error(err))
+		}
+	}
+}
+
+// reserveStreamerRate enforces the streamer's send rate limits (rateLimit1Min per
+// minute, rateLimit1Hour per hour) using fixed Redis windows, charging n units (a
+// send-to-all charges one per target platform). Returns (allowed, retryAfterSeconds).
+// Fails open if Redis is unavailable — rate limiting is a safeguard, not a gate.
+func (h *ChatSendHandler) reserveStreamerRate(ctx context.Context, userID string, n int) (bool, int) {
+	if h.redisClient == nil || n <= 0 {
+		return true, 0
+	}
+	check := func(key string, limit int, window time.Duration) (bool, int) {
+		val, err := h.redisClient.IncrBy(ctx, key, int64(n)).Result()
+		if err != nil {
+			return true, 0 // fail open
+		}
+		if val == int64(n) {
+			h.redisClient.Expire(ctx, key, window)
+		}
+		if val > int64(limit) {
+			ttl, _ := h.redisClient.TTL(ctx, key).Result()
+			secs := int(ttl.Seconds())
+			if secs < 1 {
+				secs = 1
+			}
+			return false, secs
+		}
+		return true, 0
+	}
+	if ok, retry := check("streamer_send_rl:min:"+userID, rateLimit1Min, time.Minute); !ok {
+		return false, retry
+	}
+	if ok, retry := check("streamer_send_rl:hr:"+userID, rateLimit1Hour, time.Hour); !ok {
+		return false, retry
+	}
+	return true, 0
+}
+
+// reserveYouTubeSendQuota reserves units for a send against the shared
+// youtube_quota_usage table (ADR-0006). Returns false only when the daily quota is
+// genuinely exhausted (the send must be BLOCKED). FAILS OPEN (returns true) when
+// accounting is not configured or the DB errors — a quota hiccup must never block a
+// streamer's own chat, and a send is cheap vs. the daily limit.
+func (h *ChatSendHandler) reserveYouTubeSendQuota(ctx context.Context, units int) bool {
+	if h.ytQuota == nil {
+		return true
+	}
+	ok, err := h.ytQuota.Reserve(ctx, units)
+	if err != nil {
+		h.log.Warn("youtube quota reserve failed; allowing send", zap.Error(err))
+		return true
+	}
+	return ok
+}
+
+// settleYouTubeSendQuota confirms (success=true) or rolls back (success=false) a prior
+// reservation. Best-effort: a settle failure only skews the quota counter slightly.
+func (h *ChatSendHandler) settleYouTubeSendQuota(ctx context.Context, units int, success bool) {
+	if h.ytQuota == nil {
+		return
+	}
+	var err error
+	if success {
+		err = h.ytQuota.Confirm(ctx, units)
+	} else {
+		err = h.ytQuota.Rollback(ctx, units)
+	}
+	if err != nil {
+		h.log.Warn("youtube quota settle failed", zap.Bool("success", success), zap.Error(err))
+	}
 }
 
 // checkRateLimit checks if the viewer is within rate limits

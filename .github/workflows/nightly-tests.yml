@@ -29,10 +29,12 @@ jobs:
           - twitch-listener
           - twitch-eventsub-listener
           - youtube-listener
+          - youtube-quota-monitor
           - message-processor
           - share-service
           - source-manager
           - token-refresh-service
+          - moderation-service
           - discord-listener
     steps:
       - uses: actions/checkout@v6

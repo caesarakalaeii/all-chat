@@ -136,10 +136,12 @@ func (m *mockOverlays) GetByIDAndUserID(_ context.Context, overlayID, _ string) 
 
 // mockGateChecker implements sharedMiddleware.GateChecker.
 type mockGateChecker struct {
-	isPremiumResult bool
+	isPremiumResult     bool
+	isEarlyAccessResult bool
 }
 
-func (m *mockGateChecker) IsPremium(_ string) bool { return m.isPremiumResult }
+func (m *mockGateChecker) IsPremium(_ string) bool     { return m.isPremiumResult }
+func (m *mockGateChecker) IsEarlyAccess(_ string) bool { return m.isEarlyAccessResult }
 
 // ---- Shared fixtures -------------------------------------------------------
 
@@ -1105,6 +1107,9 @@ func (s *stubSourceRepo) CreateOrUpdateAuto(_ context.Context, _ *models.ChatSou
 	return nil
 }
 func (s *stubSourceRepo) ListByOverlayID(_ context.Context, _ string) ([]*models.ChatSource, error) {
+	return nil, nil
+}
+func (s *stubSourceRepo) ListByOverlayIDForUser(_ context.Context, _, _ string) ([]*models.ChatSource, error) {
 	return nil, nil
 }
 func (s *stubSourceRepo) GetByID(_ context.Context, _ string) (*models.ChatSource, error) {

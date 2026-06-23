@@ -280,14 +280,90 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
-### ADR-0017: Two-Phase Deprecation of the Twitch IRC Listener
+### ADR-0017: Chat Moderation Write-Path
+
+**Status**: ✅ Accepted
+**Date**: 2026-06-19
+**Problem**: All-Chat is read-only end-to-end; streamers want to delete/timeout/ban from the dashboard, requiring the first authenticated write to platform moderation APIs
+**Decision**: New `moderation-service` reached via the gateway proxy; broadcaster's-own-token identity; owner-only authz (+ no shared_overlay); reuse the existing `message_deletion` reflect-back pipeline; least-privilege opt-in re-consent minimised to enabled actions; impersonated moderation allowed but attributed to the admin; Twitch full, Kick/Discord new clients, YouTube gated, TikTok unsupported
+**Impact**: Isolates a high-blast-radius capability with its own authz/audit/rate-limits; zero new event types; amends ADR-0012 (force-ssl re-added only for opt-in YouTube moderators)
+**→ Read**: [0017-chat-moderation-write-path.md](./0017-chat-moderation-write-path.md)
+
+---
+
+### ADR-0018: Premium Entitlements via Patreon
+
+**Status**: ✅ Accepted
+**Date**: 2026-06-20
+**Problem**: `users.is_premium` is admin-granted only; we want self-serve premium by backing All-Chat's own Patreon, without breaking admin comps or the premium read path
+**Decision**: New `payment-service` (Patreon OAuth connect + HMAC-MD5 webhooks + reconcile job); `users.is_premium` becomes a derived column = `(premium_admin_override IS TRUE) OR (override IS NULL AND active subscription)`, recomputed by `shared/premium.RecomputePremium`; identity via Patreon OAuth; status from Patreon's own grace-aware signal; single-replica reconcile backstop
+**Impact**: Premium readers unchanged; admin comps survive lapses and payment never clobbers admin decisions; convergent/idempotent write path; Patreon-only (Ko-fi deferred)
+**→ Read**: [0018-premium-entitlements-via-patreon.md](./0018-premium-entitlements-via-patreon.md)
+
+---
+
+### ADR-0019: Split Streamer vs Viewer Premium via a Polymorphic Patreon Subject
+
+**Status**: ✅ Accepted
+**Date**: 2026-06-20
+**Problem**: `users.is_premium` (streamer features) and `viewers.is_premium` (cosmetic badge) are conflated; pure viewers (no `users` account) have no way to buy a cheaper viewer subscription
+**Decision**: Generalize the ADR-0018 pipeline to a polymorphic subject (`user` | `viewer`) + tier-driven `product`; viewers connect Patreon via a viewer-JWT flow in payment-service; `viewers.is_premium` becomes a single-writer derived column via `RecomputeViewer` (admin override + active viewer sub OR inherited streamer premium)
+**Impact**: One payment stack serves both products; viewer premium gains the convergent/clobber-free guarantees of the user side and fixes the inherited-premium-never-revoked staleness; one Patreon account grants one identity (documented)
+**→ Read**: [0019-split-streamer-viewer-premium.md](./0019-split-streamer-viewer-premium.md)
+
+---
+
+### ADR-0020: Beta-Tester Role + Early-Access Feature Gates
+
+**Status**: ✅ Accepted
+**Date**: 2026-06-20
+**Problem**: Thank the ~5 pre-monetization premium users with a standing role granting all premium features plus early-access ones; there is no role above premium, and a blanket grandfather `UPDATE` would re-run every pod start (009-incident class) and sweep in paid users
+**Decision**: `users.is_beta_tester` folded into the `is_premium` derivation (a beta-tester is premium) + a `feature_gates.early_access` dimension enforced by a DB-backed `RequireEarlyAccess` (mirrors `RequirePremium`, fresh on grant); grandfathering is manual via an admin "Grant Beta Tester" button — no data migration. JWT-role gating rejected (stale until re-login)
+**Impact**: Reuses ADR-0018 `Recompute`/`Effective` + ADR-0008 gates with no new authz subsystem; beta-testers pass every premium gate transparently; grant/revoke is fresh and convergent
+**→ Read**: [0020-beta-tester-role.md](./0020-beta-tester-role.md)
+
+---
+
+### ADR-0023: Decoupled YouTube Quota Monitor
+
+**Status**: ✅ Accepted
+**Date**: 2026-06-22
+**Problem**: The quota-based `youtube-listener` (the only exporter of `listener_quota_usage_percentage` and publisher of `quota:alerts`) is no longer deployed, so YouTube quota alerting went dark — even though `moderation-service` (bans) and `auth-service` (sends) still spend official quota against the shared `youtube_quota_usage` table; `auth-service` wasn't even counting sends (it failed open against the dead listener)
+**Decision**: Extract a canonical `shared/quota` (state machine + `QuotaEvent`/`Notifier` + `Reserver`); switch `auth-service` sends to direct-SQL reserve-confirm-rollback; add a dedicated single-replica `youtube-quota-monitor` that reads the shared table, exports the Prometheus quota gauges, publishes `quota:alerts`, sweeps stale reservations, and serves `/quota/status` for the discord-bot poll
+**Impact**: Restores both alert paths (Prometheus + discord-bot) with one owner and no duplicate alerts; sends are now accounted; builds on ADR-0006 (reserve-confirm-rollback) and ADR-0022 (alerting source of truth, in caesar-deployment); single replica is load-bearing for alert dedup only — accounting stays DB-atomic. (No ADR-0022 in this repo: 0022 lives in caesar-deployment, so this is 0023.)
+**→ Read**: [0023-decoupled-youtube-quota-monitor.md](./0023-decoupled-youtube-quota-monitor.md)
+
+---
+
+### ADR-0024: Streamer Send-to-All Combined Pill via Pre-Register + Reconcile
+
+**Status**: ✅ Accepted
+**Date**: 2026-06-22
+**Problem**: A streamer "send to all" collapses the per-platform echoes into one combined-pill message, but the pill was pre-registered with the *intended* platform set, so a failed platform (e.g. YouTube not live) still showed in the badge
+**Decision**: Keep the pre-registration before fan-out (so fast echoes are recognised, no duplicates/loss), then reconcile the dedup group to the *actual* success set — rewrite survivors when ≥2 succeed, delete the group when <2 succeed; per-platform `error_kind` now classified like the single-send path. (ADR-0021/0022 live in caesar-deployment; numbering is shared across both repos, so this is 0024)
+**→ Read**: [0024-send-to-all-combined-pill.md](./0024-send-to-all-combined-pill.md)
+
+---
+
+### ADR-0025: InnerTube Listener Caches activeLiveChatId for Streamer Sends
+
+**Status**: ✅ Accepted
+**Date**: 2026-06-22
+**Problem**: Streamer sends to YouTube from the monitor always failed: auth-service's `youtube:stream:state` live-chat-id cache (strategy 1) was never populated because the deployed InnerTube listener never obtains the official `activeLiveChatId`, forcing the unreliable `search.list` fallback (observed 403 accountDelegationForbidden)
+**Decision**: The InnerTube listener resolves `activeLiveChatId` once per stream via Data API `videos.list` (1 quota unit, gated by `YOUTUBE_API_KEY`), publishes the existing `youtube:stream:state` contract, refreshes it on a heartbeat, and deletes on stream end. Ingestion stays quota-free; disabled with no key. Rejected redeploying the decommissioned quota listener
+**Impact**: YouTube send-to-all works in the InnerTube-only deployment via the reliable videos.list path; small, intentional break from strict zero-quota (~1 unit/stream). (ADR-0021/0022 in caesar-deployment, so this is 0025)
+**→ Read**: [0025-innertube-livechatid-cache.md](./0025-innertube-livechatid-cache.md)
+
+---
+
+### ADR-0026: Two-Phase Deprecation of the Twitch IRC Listener
 
 **Status**: ✅ Accepted
 **Date**: 2026-06-20
 **Problem**: The IRC listener is being retired for EventSub, but a streamer's source only moves when they re-add their Twitch source — killing IRC silently would lose chat for IRC-only channels with no warning and no obvious fix
 **Decision**: A two-phase env-var gate `TWITCH_IRC_DEPRECATION_MODE` (`off`→`warn`→`enforce`): `warn` keeps serving chat and publishes a `listener_deprecation_notice` system event to every connected source every 5m (reusing the system-event pipeline); `enforce` empties the desired set so the listener joins no channels
 **Impact**: Reversible, no-code rollout; users warned in-overlay with a re-add CTA before chat stops; notice fan-out is duplicate-free across replicas via leadership-by-join; fail-safe default (unknown value = off)
-**→ Read**: [0017-twitch-irc-listener-deprecation.md](./0017-twitch-irc-listener-deprecation.md)
+**→ Read**: [0026-twitch-irc-listener-deprecation.md](./0026-twitch-irc-listener-deprecation.md)
 
 ---
 
@@ -412,13 +488,13 @@ Create a new ADR if:
 
 ## Summary
 
-**Total ADRs**: 15
+**Total ADRs**: 19
 **Status**: All accepted (✅)
-**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation, overlay observability view, demand linger, EventSub chat-ownership partition)
+**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation, overlay observability view, demand linger, EventSub chat-ownership partition, linked Twitch credentials, chat moderation write-path, premium entitlements via Patreon, streamer/viewer premium split)
 
 **Most Referenced**:
 1. ADR-0002 (Redis patterns) - Referenced by all listeners, message processor
 2. ADR-0001 (Go layout) - Referenced by all services
 3. ADR-0006 (Quota tracking) - Referenced by YouTube listener, overlay manager
 
-**Last Updated**: 2026-06-03
+**Last Updated**: 2026-06-20

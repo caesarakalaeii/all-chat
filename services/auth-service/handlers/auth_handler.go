@@ -357,7 +357,7 @@ func (h *AuthHandler) HandleYouTubeCallback(c *gin.Context) {
 		h.logger.Warn("Failed to resolve YouTube channel (non-fatal, skipping token store)", zap.Error(err))
 	} else {
 		// Store YouTube OAuth tokens for YouTube Listener
-		if err := h.userRepo.StoreYouTubeToken(c.Request.Context(), user.ID, channelInfo.ChannelID, token); err != nil {
+		if err := h.userRepo.StoreYouTubeToken(c.Request.Context(), user.ID, channelInfo.ChannelID, token, oauth.ExtractGrantedScopes(token)); err != nil {
 			h.logger.Error("Failed to store YouTube tokens", zap.Error(err))
 		}
 	}

@@ -98,7 +98,7 @@ export class BackoffManager {
       this.MAX_OFFLINE_BACKOFF_MS
     );
 
-    state.nextCheckTime = Date.now() + state.currentBackoffMs;
+    state.nextCheckTime = Date.now() + state.currentBackoffMs + this.jitterMs(state.currentBackoffMs);
 
     this.logger.info('User offline - increasing backoff', {
       username,
@@ -129,7 +129,7 @@ export class BackoffManager {
       this.MAX_ERROR_BACKOFF_MS
     );
 
-    state.nextCheckTime = Date.now() + state.currentBackoffMs;
+    state.nextCheckTime = Date.now() + state.currentBackoffMs + this.jitterMs(state.currentBackoffMs);
 
     this.logger.warn('Connection error - increasing backoff', {
       username,
@@ -190,7 +190,7 @@ export class BackoffManager {
     state.consecutiveErrors = 0;
     state.currentBackoffMs = this.BASE_OFFLINE_BACKOFF_MS; // Start at 20 seconds
     state.lastCheckTime = Date.now();
-    state.nextCheckTime = Date.now() + state.currentBackoffMs;
+    state.nextCheckTime = Date.now() + state.currentBackoffMs + this.jitterMs(state.currentBackoffMs);
   }
 
   /**
@@ -273,6 +273,23 @@ export class BackoffManager {
         ? states.reduce((sum, s) => sum + s.consecutiveErrors, 0) / states.length
         : 0
     };
+  }
+
+  /**
+   * Compute ±10% random jitter for a backoff delay.
+   *
+   * Without jitter, every channel that reaches the same backoff interval (e.g.
+   * many channels capped at MAX_OFFLINE_BACKOFF_MS, or all channels failing at
+   * once during a TikTok API blip) schedules its next check at the exact same
+   * wall-clock instant and fires simultaneously — a thundering herd against
+   * TikTok's API. Spreading each next-check by ±10% decorrelates them.
+   *
+   * @param delayMs Backoff delay the jitter is relative to
+   * @returns Offset in the range [-delayMs*0.1, +delayMs*0.1]
+   * @private
+   */
+  private jitterMs(delayMs: number): number {
+    return delayMs * 0.1 * (Math.random() * 2 - 1);
   }
 
   /**

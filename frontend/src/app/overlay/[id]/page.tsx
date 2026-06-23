@@ -742,6 +742,39 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
     }
   }
 
+  // Platform badge — single platform, or a combined badge when a message carries
+  // multiple (a streamer's "send to all" echo collapsed into one message). Honors
+  // the configured style (icon | text); for length ≤ 1 it renders exactly as before.
+  const PlatformBadge = ({ message }: { message: ChatMessage }) => {
+    const multi = Array.isArray(message.platforms) && message.platforms.length > 1
+    const platforms = multi ? (message.platforms as string[]) : [message.platform]
+    const title = platforms.join(', ')
+
+    if (platformBadgeStyle === 'icon') {
+      return (
+        <span
+          className="platform-badge platform-badge-icon flex items-center gap-0.5"
+          title={title}
+        >
+          {platforms.map((p) => (
+            <PlatformIcon key={p} platform={p} />
+          ))}
+        </span>
+      )
+    }
+    // Text style: join multiple platforms with '+', colored by the primary platform.
+    return (
+      <span
+        className={clsx(
+          'platform-badge platform-badge-text text-xs font-semibold uppercase',
+          getPlatformColor(message.platform)
+        )}
+      >
+        {platforms.join('+')}
+      </span>
+    )
+  }
+
   return (
     <div className="min-h-screen w-full bg-transparent p-4">
       {/* Hide scrollbars and ensure transparent background */}
@@ -824,25 +857,9 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                   {/* Username and Platform */}
                   <div className="mb-1 flex flex-wrap items-center gap-2">
                     {/* Platform badge - render based on position and style settings */}
-                    {showPlatformBadge &&
-                      platformBadgePosition === 'before' &&
-                      (platformBadgeStyle === 'icon' ? (
-                        <span
-                          className="platform-badge platform-badge-icon flex items-center"
-                          title={message.platform}
-                        >
-                          <PlatformIcon platform={message.platform} />
-                        </span>
-                      ) : (
-                        <span
-                          className={clsx(
-                            'platform-badge platform-badge-text text-xs font-semibold uppercase',
-                            getPlatformColor(message.platform)
-                          )}
-                        >
-                          {message.platform}
-                        </span>
-                      ))}
+                    {showPlatformBadge && platformBadgePosition === 'before' && (
+                      <PlatformBadge message={message} />
+                    )}
 
                     {/* Regular Badges (before username when position is 'before') */}
                     {showBadges &&
@@ -937,25 +954,9 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                     )}
 
                     {/* Platform badge after username (original position) */}
-                    {showPlatformBadge &&
-                      platformBadgePosition === 'after' &&
-                      (platformBadgeStyle === 'icon' ? (
-                        <span
-                          className="platform-badge platform-badge-icon flex items-center"
-                          title={message.platform}
-                        >
-                          <PlatformIcon platform={message.platform} />
-                        </span>
-                      ) : (
-                        <span
-                          className={clsx(
-                            'platform-badge platform-badge-text text-xs font-semibold uppercase',
-                            getPlatformColor(message.platform)
-                          )}
-                        >
-                          {message.platform}
-                        </span>
-                      ))}
+                    {showPlatformBadge && platformBadgePosition === 'after' && (
+                      <PlatformBadge message={message} />
+                    )}
 
                     {/* Shared Chat Indicator */}
                     {isSharedChat && (
