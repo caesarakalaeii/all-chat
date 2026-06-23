@@ -40,6 +40,7 @@ import (
 	"github.com/caesar/all-chat/shared/middleware"
 	"github.com/caesar/all-chat/shared/premium"
 	"github.com/caesar/all-chat/shared/tracing"
+	"github.com/caesar/all-chat/shared/youtubetoken"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -243,7 +244,7 @@ func main() {
 	healthHandler := handlers.NewHealthHandler(db, redisClient)
 	adminHandler := handlers.NewAdminHandler(userRepo, db, log, userKeyChain)
 	viewerCosmeticsHandler := handlers.NewViewerCosmeticsHandler(viewerIdentityRepo, redisClient, log)
-	chatSendHandler := handlers.NewChatSendHandler(log, viewerRepo, userRepo, db, twitchClientID, viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, tokenCipher, youtubeAPIKey, redisClient, getEnvAsIntOrDefault("QUOTA_LIMIT_DAILY", 1009000))
+	chatSendHandler := handlers.NewChatSendHandler(log, viewerRepo, userRepo, db, twitchClientID, viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, tokenCipher, youtubeAPIKey, redisClient, getEnvAsIntOrDefault("QUOTA_LIMIT_DAILY", 1009000)).WithYouTubeTokenSource(youtubetoken.NewYouTubeSource(db, tokenCipher, youtubeClientID, youtubeClientSecret))
 	streamerInfoHandler := handlers.NewStreamerInfoHandler(log, userRepo, db)
 	adminViewerHandler := handlers.NewAdminViewerHandler(log, viewerRepo)
 	adminCosmeticsHandler := handlers.NewAdminCosmeticsHandler(log, db)

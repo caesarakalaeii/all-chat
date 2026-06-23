@@ -35,14 +35,18 @@ import (
 	"strings"
 	"time"
 
+	"github.com/caesar/all-chat/shared/youtubetoken"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// ErrNoCredential indicates the requesting user holds no Twitch credential for the
-// channel — they are not the broadcaster (or never linked Twitch). The handler maps
-// this to 422: "you do not hold moderator credentials for this channel".
-var ErrNoCredential = errors.New("tokens: no twitch credential for user/channel")
+// ErrNoCredential indicates the requesting user holds no credential for the channel —
+// they are not the broadcaster (or never linked the platform). Shared with
+// shared/youtubetoken so a missing YouTube credential returned by the (aliased)
+// YouTubeSource.Resolve is recognised identically by the moderation dispatch path and
+// the scope checkers. The handler maps this to 422: "you do not hold moderator
+// credentials for this channel".
+var ErrNoCredential = youtubetoken.ErrNoCredential
 
 // defaultTwitchTokenURL is Twitch's OAuth token endpoint (refresh grant).
 const defaultTwitchTokenURL = "https://id.twitch.tv/oauth2/token"

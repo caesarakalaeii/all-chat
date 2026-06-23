@@ -59,9 +59,6 @@ func TestYouTubeResolve_OtherUserIsNoCredential(t *testing.T) {
 }
 
 func TestYouTubeRefresh_PersistsAndKeepsScopes(t *testing.T) {
-	src, _, cleanup := setupYouTubeSource(t)
-	defer cleanup()
-
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.NoError(t, r.ParseForm())
 		assert.Equal(t, "refresh_token", r.Form.Get("grant_type"))
@@ -70,7 +67,8 @@ func TestYouTubeRefresh_PersistsAndKeepsScopes(t *testing.T) {
 		_, _ = w.Write([]byte(`{"access_token":"newYAcc","expires_in":3599}`))
 	}))
 	defer srv.Close()
-	src.tokenURL = srv.URL
+	src, _, cleanup := setupYouTubeSource(t, WithTokenURL(srv.URL))
+	defer cleanup()
 
 	cred, err := src.Resolve(context.Background(), ytUserY, "UCanything")
 	require.NoError(t, err)
@@ -122,15 +120,13 @@ func TestYouTubeResolve_LinkedWrongChannelIsNoCredential(t *testing.T) {
 }
 
 func TestYouTubeRefresh_LinkedPersistsToLinkedRow(t *testing.T) {
-	src, _, cleanup := setupYouTubeSource(t)
-	defer cleanup()
-
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"access_token":"linkedYNewAcc","expires_in":3599}`))
 	}))
 	defer srv.Close()
-	src.tokenURL = srv.URL
+	src, _, cleanup := setupYouTubeSource(t, WithTokenURL(srv.URL))
+	defer cleanup()
 
 	cred, err := src.Resolve(context.Background(), ytLinkedT, "UClinked")
 	require.NoError(t, err)
@@ -142,7 +138,7 @@ func TestYouTubeRefresh_LinkedPersistsToLinkedRow(t *testing.T) {
 	assert.Contains(t, reread.GrantedScopes, ytForceSSL, "a refresh must not clobber linked granted_scopes")
 }
 
-func setupYouTubeSource(t *testing.T) (*YouTubeSource, Cipher, func()) {
+func setupYouTubeSource(t *testing.T, opts ...Option) (*YouTubeSource, Cipher, func()) {
 	t.Helper()
 	ctx := context.Background()
 
@@ -234,7 +230,7 @@ func setupYouTubeSource(t *testing.T) (*YouTubeSource, Cipher, func()) {
 		ytLinkedT, enc("laccLinked"), enc("lrefLinked"), exp, []string{"https://www.googleapis.com/auth/youtube.readonly", ytForceSSL})
 	require.NoError(t, err)
 
-	src := NewYouTubeSource(pool, cipher, "test-client-id", "test-client-secret")
+	src := NewYouTubeSource(pool, cipher, "test-client-id", "test-client-secret", opts...)
 	return src, cipher, func() {
 		pool.Close()
 		_ = container.Terminate(ctx)
