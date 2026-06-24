@@ -61,6 +61,11 @@ const wsBearerPrefix = "bearer."
 // (audit H5):
 //  1. Sec-WebSocket-Protocol subprotocol of the form `bearer.<token>`
 //  2. Fallback to ?token= query param (backward compat during client rollout)
+//  3. Fallback to the httpOnly access_token cookie (audit H3). The owner
+//     overlay WS handshake is same-origin, so the browser sends the httpOnly
+//     cookie automatically — lets the streamer's monitor view authenticate
+//     without a JS-readable token. No echo header needed (cookie path, not
+//     subprotocol negotiation).
 //
 // When the token comes from the subprotocol, a response header is returned
 // that echoes the negotiated subprotocol back to the client — the WebSocket
@@ -84,7 +89,18 @@ func extractWSAuthToken(r *http.Request) (token string, echoHeader http.Header) 
 	}
 	// 2. Fall back to query param (backward compat during client rollout).
 	token = r.URL.Query().Get("token")
-	return token, nil
+	if token != "" {
+		return token, nil
+	}
+	// 3. Fall back to the httpOnly access_token cookie (audit H3). The owner
+	// overlay WS handshake is same-origin, so the browser sends the httpOnly
+	// cookie automatically — lets the streamer's monitor view authenticate
+	// without a JS-readable token. No echo header needed (cookie path, not
+	// subprotocol negotiation).
+	if ck, err := r.Cookie(auth.CookieAccessToken); err == nil && ck.Value != "" {
+		return ck.Value, nil
+	}
+	return "", nil
 }
 
 // WebSocketHandler handles WebSocket connections for overlays
