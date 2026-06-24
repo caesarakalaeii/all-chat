@@ -19,7 +19,6 @@ package handlers
 import (
 	"context"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/caesar/all-chat/services/api-gateway/models"
@@ -27,6 +26,7 @@ import (
 	"github.com/caesar/all-chat/services/api-gateway/subscription"
 	wsconn "github.com/caesar/all-chat/services/api-gateway/websocket"
 	"github.com/caesar/all-chat/shared/auth"
+	sharedmiddleware "github.com/caesar/all-chat/shared/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
@@ -35,17 +35,15 @@ import (
 // ViewerWebSocketHandler handles WebSocket connections for viewers
 // Viewers connect via /ws/chat/{streamer_username} without knowing the overlay ID
 type ViewerWebSocketHandler struct {
-	wsManager        *wsconn.Manager
-	subscriber       *subscription.Subscriber
-	repo             *subscription.Repository
-	userKeyChain     *auth.KeyChain
-	replayBuffer     replay.DeletionReplayBuffer
-	chatReplayBuffer replay.ChatReplayBuffer
-	logger           *zap.Logger
-	upgrader         websocket.Upgrader
-	allowedOrigins   map[string]struct{}
-	allowedPrefixes  []string
-	allowAllOrigins  bool
+	wsManager         *wsconn.Manager
+	subscriber        *subscription.Subscriber
+	repo              *subscription.Repository
+	userKeyChain      *auth.KeyChain
+	replayBuffer      replay.DeletionReplayBuffer
+	chatReplayBuffer  replay.ChatReplayBuffer
+	logger            *zap.Logger
+	upgrader          websocket.Upgrader
+	allowedOriginList []string
 }
 
 // NewViewerWebSocketHandler creates a new viewer WebSocket handler
@@ -61,26 +59,24 @@ func NewViewerWebSocketHandler(
 	// Apply the same origin allowlist as the owner WS handler (M8).
 	// Previously CheckOrigin returned true for all origins, allowing any
 	// malicious page to open /ws/chat/<streamer> via a victim's browser.
-	allowedOrigins, allowedPrefixes, allowAll := loadAllowedOrigins()
+	allowedOriginList := loadAllowedOrigins()
 
 	h := &ViewerWebSocketHandler{
-		wsManager:        wsManager,
-		subscriber:       subscriber,
-		repo:             repo,
-		userKeyChain:     userKeyChain,
-		replayBuffer:     replayBuffer,
-		chatReplayBuffer: chatReplayBuffer,
-		logger:           logger.Named("viewer-websocket"),
-		allowedOrigins:   allowedOrigins,
-		allowedPrefixes:  allowedPrefixes,
-		allowAllOrigins:  allowAll,
+		wsManager:         wsManager,
+		subscriber:        subscriber,
+		repo:              repo,
+		userKeyChain:      userKeyChain,
+		replayBuffer:      replayBuffer,
+		chatReplayBuffer:  chatReplayBuffer,
+		logger:            logger.Named("viewer-websocket"),
+		allowedOriginList: allowedOriginList,
 	}
 
-	if h.allowAllOrigins {
+	if sharedmiddleware.OriginAllowed(allowedOriginList, "*") {
 		h.logger.Info("Viewer WebSocket origin allowlist disabled; allowing all origins")
 	} else {
 		h.logger.Info("Configured viewer WebSocket origin allowlist",
-			zap.Int("count", len(h.allowedOrigins)),
+			zap.Int("count", len(allowedOriginList)),
 		)
 	}
 
@@ -96,24 +92,14 @@ func NewViewerWebSocketHandler(
 
 // checkOrigin enforces the configured origin allowlist for viewer connections (M8).
 func (h *ViewerWebSocketHandler) checkOrigin(r *http.Request) bool {
-	if h.allowAllOrigins {
-		return true
-	}
-
 	origin := r.Header.Get("Origin")
 	if origin == "" {
 		// Non-browser clients (e.g. curl) have no Origin header
 		return true
 	}
 
-	if _, ok := h.allowedOrigins[origin]; ok {
+	if sharedmiddleware.OriginAllowed(h.allowedOriginList, origin) {
 		return true
-	}
-
-	for _, prefix := range h.allowedPrefixes {
-		if strings.HasPrefix(origin, prefix) {
-			return true
-		}
 	}
 
 	h.logger.Warn("Blocked viewer WebSocket connection from disallowed origin",

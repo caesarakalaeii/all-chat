@@ -155,7 +155,7 @@ https_port: 8443
 # APPLICATION CONFIGURATION
 # =============================================================================
 log_level: "${LOG_LEVEL:-info}"
-cors_origin: "${CORS_ALLOWED_ORIGINS:-http://localhost:3000}"
+cors_origin: "${CORS_ORIGINS:-http://localhost:3000}"
 polling_interval_ms: "2000"
 quota_limit_daily: "10000"
 

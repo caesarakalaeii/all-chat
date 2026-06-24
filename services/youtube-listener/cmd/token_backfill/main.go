@@ -38,7 +38,7 @@ func main() {
 	// YOUTUBE_TOKEN_ENCRYPTION_KEY as legacy fallback.
 	// NOTE: The new sweeper from Plan 14-06 supersedes this binary. This binary
 	// remains compiled for historical reproducibility but is not in the rotation runbook.
-	encryptor, err := encryption.NewMultiKeyEncryptorFromEnv()
+	encryptor, err := encryption.NewMultiKeyEncryptorFromEnvWithLogger(log)
 	if err != nil {
 		log.Fatal("Failed to initialize encryptor (TOKEN_ENCRYPTION_KEY_V1 must be set)", zap.Error(err))
 	}

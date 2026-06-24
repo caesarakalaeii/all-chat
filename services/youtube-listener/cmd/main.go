@@ -107,7 +107,7 @@ func main() {
 	// and YOUTUBE_TOKEN_ENCRYPTION_KEY as a legacy fallback so that tokens encrypted
 	// before Phase 14 still decrypt transparently. TOKEN_ENCRYPTION_KEY is also a
 	// legacy fallback (unified chain, D-04).
-	tokenEncryptor, err := encryption.NewMultiKeyEncryptorFromEnv()
+	tokenEncryptor, err := encryption.NewMultiKeyEncryptorFromEnvWithLogger(log)
 	if err != nil {
 		log.Fatal("Failed to initialize token encryptor (TOKEN_ENCRYPTION_KEY_V1 must be set)", zap.Error(err))
 	}

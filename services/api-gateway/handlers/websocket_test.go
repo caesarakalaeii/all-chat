@@ -61,3 +61,55 @@ func TestExtractWSAuthToken_NoTokenNoCookie(t *testing.T) {
 		t.Errorf("echo should be nil")
 	}
 }
+
+// TestOriginAllowedForWS_CookieWithEmptyOriginRejected (audit I1) verifies that
+// a request carrying the access_token cookie with NO Origin header is rejected.
+// A browser always sends Origin on a WS handshake; a missing Origin + cookie
+// signals a CSRF attempt (attacker page suppressing Origin with victim's cookie).
+func TestOriginAllowedForWS_CookieWithEmptyOriginRejected(t *testing.T) {
+	allowed := []string{"https://allch.at"}
+	req := httptest.NewRequest("GET", "/ws/overlay/abc", nil)
+	req.AddCookie(&http.Cookie{Name: "access_token", Value: "cookie-jwt"})
+	// No Origin header set.
+	if originAllowedForWS(allowed, req) {
+		t.Error("want false (cookie + empty origin), got true")
+	}
+}
+
+// TestOriginAllowedForWS_CookieWithAllowedOriginAccepted (audit I1) verifies
+// that a browser request with the access_token cookie AND an allowed Origin
+// passes the check (legitimate streamer monitor view).
+func TestOriginAllowedForWS_CookieWithAllowedOriginAccepted(t *testing.T) {
+	allowed := []string{"https://allch.at"}
+	req := httptest.NewRequest("GET", "/ws/overlay/abc", nil)
+	req.Header.Set("Origin", "https://allch.at")
+	req.AddCookie(&http.Cookie{Name: "access_token", Value: "cookie-jwt"})
+	if !originAllowedForWS(allowed, req) {
+		t.Error("want true (cookie + allowed origin), got false")
+	}
+}
+
+// TestOriginAllowedForWS_NoCookieEmptyOriginAllowed (audit I1) verifies that a
+// non-browser client (no access cookie, no Origin) is allowed — e.g. OBS or a
+// service authenticating via the subprotocol or ?token= query param.
+func TestOriginAllowedForWS_NoCookieEmptyOriginAllowed(t *testing.T) {
+	allowed := []string{"https://allch.at"}
+	req := httptest.NewRequest("GET", "/ws/overlay/abc", nil)
+	// No cookie, no Origin.
+	if !originAllowedForWS(allowed, req) {
+		t.Error("want true (no cookie + empty origin = non-browser), got false")
+	}
+}
+
+// TestOriginAllowedForWS_NoCookieDisallowedOriginRejected (audit I1) verifies
+// that a request without a cookie but with a disallowed Origin is rejected —
+// the standard origin allowlist still applies regardless of auth path.
+func TestOriginAllowedForWS_NoCookieDisallowedOriginRejected(t *testing.T) {
+	allowed := []string{"https://allch.at"}
+	req := httptest.NewRequest("GET", "/ws/overlay/abc", nil)
+	req.Header.Set("Origin", "https://evil.com")
+	// No cookie.
+	if originAllowedForWS(allowed, req) {
+		t.Error("want false (disallowed origin), got true")
+	}
+}

@@ -74,25 +74,35 @@ const nextConfig = {
       { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), interest-cohort=()' },
       // HSTS is honored by browsers only over HTTPS; safe to emit in dev (ignored on http).
       { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
+      // Legacy framing fallback. CSP frame-ancestors is the authoritative defense
+      // (set per-route below); this covers older browsers that ignore CSP.
+      // Overridden to DENY on non-embeddable overlay routes (audit L6 —
+      // previously both DENY and SAMEORIGIN were emitted for overlay paths
+      // because the catch-all also matched /overlay/:id*).
+      { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
     ]
 
     return [
       {
-        // Public overlay route: prevent third-party iframing.
+        // Editor embed (same-origin iframe) + everything else. X-Frame-Options
+        // SAMEORIGIN comes from the shared hardening array.
+        source: '/:path*',
+        headers: [
+          ...hardening,
+          { key: 'Content-Security-Policy', value: [...cspBase, "frame-ancestors 'self'"].join('; ') },
+        ],
+      },
+      {
+        // Public overlay route: prevent third-party iframing. Listed AFTER the
+        // catch-all so its stricter headers override for /overlay/* paths
+        // (audit L6 — previously both routes set X-Frame-Options, emitting
+        // conflicting DENY + SAMEORIGIN). The explicit DENY below overrides
+        // the hardening default (SAMEORIGIN) within this entry.
         source: '/overlay/:id*',
         headers: [
           ...hardening,
           { key: 'Content-Security-Policy', value: [...cspBase, "frame-ancestors 'none'"].join('; ') },
           { key: 'X-Frame-Options', value: 'DENY' },
-        ],
-      },
-      {
-        // Editor embed (same-origin iframe) + everything else.
-        source: '/:path*',
-        headers: [
-          ...hardening,
-          { key: 'Content-Security-Policy', value: [...cspBase, "frame-ancestors 'self'"].join('; ') },
-          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
         ],
       },
     ]

@@ -157,14 +157,26 @@ func NewMultiKeyEncryptor(entries []KeyEntry, legacyKeys []*AESEncryptor) (*Mult
 // Constructor never panics; all parse/construction errors are returned as wrapped errors
 // (T-14-01-05).
 //
-// A warning is logged (via the provided logger or a no-op logger) when a key appears to
-// be all-zero or low-entropy (audit L7). ParseKey's base64-vs-raw ambiguity is documented
-// in encryption.go (audit L8): if the input is valid base64 and decodes to a valid key
-// length, it is treated as base64; otherwise the raw bytes are used.
+// A warning is logged when a key appears to be all-zero or low-entropy (audit L5/L7).
+// ParseKey's base64-vs-raw ambiguity is documented in encryption.go (audit L8): if
+// the input is valid base64 and decodes to a valid key length, it is treated as base64;
+// otherwise the raw bytes are used.
+//
+// NewMultiKeyEncryptorFromEnv uses a no-op logger (backward compat). Production callers
+// should use NewMultiKeyEncryptorFromEnvWithLogger to actually surface weak-key
+// warnings (audit L5 — warnIfWeakKey was previously dead code, always called with
+// zap.NewNop(), so warnings were never emitted).
 func NewMultiKeyEncryptorFromEnv() (*MultiKeyEncryptor, error) {
-	// Use a no-op logger by default; callers that want warnings visible should
-	// add an explicit logger parameter in a future refactor (audit L7).
-	logger := zap.NewNop()
+	return NewMultiKeyEncryptorFromEnvWithLogger(zap.NewNop())
+}
+
+// NewMultiKeyEncryptorFromEnvWithLogger is identical to NewMultiKeyEncryptorFromEnv
+// but threads a real logger so weak-key warnings are actually emitted (audit L5).
+// A nil logger is treated as a no-op (safe to call with nil in tests).
+func NewMultiKeyEncryptorFromEnvWithLogger(logger *zap.Logger) (*MultiKeyEncryptor, error) {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
 	var entries []KeyEntry
 	for n := 1; n <= int(MaxKid); n++ {
 		envName := "TOKEN_ENCRYPTION_KEY_V" + strconv.Itoa(n)
@@ -304,9 +316,10 @@ func (m *MultiKeyEncryptor) Encrypt(s string) (string, error) { return m.Encrypt
 // Decrypt is a StringCipher-compatible alias for DecryptString.
 func (m *MultiKeyEncryptor) Decrypt(s string) (string, error) { return m.DecryptString(s) }
 
-// warnIfWeakKey logs a warning when a key appears all-zero or low-entropy (audit L7).
-// This is advisory only — the key is still accepted to avoid breaking existing
-// deployments during rotation.
+// warnIfWeakKey logs a warning when a key appears all-zero (audit L5/L7). This is
+// advisory only — the key is still accepted to avoid breaking existing deployments
+// during rotation. Callers must pass a real (non-no-op) logger for warnings to be
+// emitted; NewMultiKeyEncryptorFromEnvWithLogger threads the service logger through.
 func warnIfWeakKey(logger *zap.Logger, envName string, key []byte) {
 	if logger == nil {
 		return

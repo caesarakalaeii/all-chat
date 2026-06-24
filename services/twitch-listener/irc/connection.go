@@ -296,7 +296,7 @@ func (cm *ConnectionManager) Connect(ctx context.Context) error {
 			default:
 			}
 
-			backoff := listener.JitteredBackoff(attempt)
+			backoff := nextBackoff(attempt)
 
 			if err != nil {
 				cm.logger.Error("IRC connection error, reconnecting",
@@ -334,13 +334,27 @@ func (cm *ConnectionManager) Connect(ctx context.Context) error {
 			cm.client = newClient
 			cm.mu.Unlock()
 
-			// Reset attempt counter on each fresh client (mirrors the original
-			// end-of-loop backoff reset; handleConnect sets connected=true on success).
-			attempt = 0
+			// M7: only reset the attempt counter when the connection was actually
+			// established (handleConnect set connected=true before Connect() returned).
+			// Previously this reset ran unconditionally every iteration, so
+			// JitteredBackoff was always called with attempt=0 → random sub-1s
+			// delay that never escalated, undermining the thundering-herd defense
+			// (relevant given nightly listener crashloops during Redis/kured reboots).
+			if wasConnected {
+				attempt = 0
+			}
 		}
 	}()
 
 	return nil
+}
+
+// nextBackoff computes the reconnect backoff delay for a given attempt count.
+// It delegates to the shared listener.JitteredBackoff (full jitter, base 1s,
+// cap 30s). Extracted as a named function so the escalation behavior can be
+// unit-tested without standing up a real IRC connection (audit M7).
+func nextBackoff(attempt int) time.Duration {
+	return listener.JitteredBackoff(attempt)
 }
 
 // connectionWatchdog periodically checks for zombie IRC connections.

@@ -28,12 +28,14 @@ metadata:
     cert-manager.io/cluster-issuer: letsencrypt-prod
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/proxy-body-size: "2m"
-    # WebSocket upgrade support (chat overlays).
-    nginx.ingress.kubernetes.io/configuration-snippet: |
-      proxy_set_header Upgrade $http_upgrade;
-      proxy_set_header Connection "upgrade";
-      proxy_read_timeout 3600s;
-      proxy_send_timeout 3600s;
+    # WebSocket long-lived connections (chat overlays). ingress-nginx auto-detects
+    # the Upgrade header and handles the WebSocket upgrade natively, so no
+    # configuration-snippet is needed (and that annotation is disabled by
+    # default since ingress-nginx v1.9, audit L14). The built-in timeout
+    # annotations below extend the proxy read/send windows so idle WS
+    # connections (stream chat) are not prematurely terminated.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
 spec:
   ingressClassName: nginx
   tls:

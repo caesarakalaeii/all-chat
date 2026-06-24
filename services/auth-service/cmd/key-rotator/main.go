@@ -126,7 +126,7 @@ func run(ctx context.Context, args []string, env map[string]string) int {
 		}
 	}
 
-	encryptor, err := encryption.NewMultiKeyEncryptorFromEnv()
+	encryptor, err := encryption.NewMultiKeyEncryptorFromEnvWithLogger(logger)
 	if err != nil {
 		logger.Error("encryption init failed", zap.Error(err))
 		return 1

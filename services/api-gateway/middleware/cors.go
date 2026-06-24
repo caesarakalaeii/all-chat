@@ -23,6 +23,7 @@ import (
 	"sync"
 	"time"
 
+	sharedmiddleware "github.com/caesar/all-chat/shared/middleware"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
@@ -36,23 +37,7 @@ func CORS() gin.HandlerFunc {
 
 	config := cors.Config{
 		AllowOriginFunc: func(origin string) bool {
-			// Check exact matches first
-			for _, allowed := range allowedOrigins {
-				if allowed == "*" {
-					return true
-				}
-				if allowed == origin {
-					return true
-				}
-				// Handle wildcard patterns (e.g., chrome-extension://*, moz-extension://*)
-				if strings.HasSuffix(allowed, "/*") {
-					prefix := strings.TrimSuffix(allowed, "/*")
-					if strings.HasPrefix(origin, prefix) {
-						return true
-					}
-				}
-			}
-			return false
+			return sharedmiddleware.OriginAllowed(allowedOrigins, origin)
 		},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},

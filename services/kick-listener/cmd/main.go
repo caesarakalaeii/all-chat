@@ -156,7 +156,7 @@ func main() {
 	// Optional: if TOKEN_ENCRYPTION_KEY_V1 is not set, cipher is nil and only
 	// plaintext rows (encryption_version=0) are supported.
 	var tokenCipher *encryption.MultiKeyEncryptor
-	if cipher, cipherErr := encryption.NewMultiKeyEncryptorFromEnv(); cipherErr == nil {
+	if cipher, cipherErr := encryption.NewMultiKeyEncryptorFromEnvWithLogger(log); cipherErr == nil {
 		tokenCipher = cipher
 		log.Info("kick token cipher initialized", zap.Uint8("current_kid", tokenCipher.CurrentKid()))
 	} else {

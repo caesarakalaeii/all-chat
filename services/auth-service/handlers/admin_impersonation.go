@@ -97,6 +97,19 @@ func (h *AuthHandler) HandleStopImpersonation(c *gin.Context) {
 		MaxAge:   int(h.jwtExpiry.Seconds()),
 	})
 
+	// I3: blacklist the impersonation JWT so it can't be replayed after the
+	// admin stops impersonating. Previously the impersonation token stayed
+	// valid until natural JWT expiry — a leaked/stolen impersonation token
+	// remained usable to act as the target user for the full access-token
+	// lifetime. Mirrors HandleLogout's blacklist (TTL = jwtExpiry).
+	if token != "" {
+		if err := h.redis.Set(c.Request.Context(), "blacklist:"+token, "1", h.jwtExpiry).Err(); err != nil {
+			h.logger.Warn("Failed to blacklist impersonation JWT on stop",
+				zap.String("jti", claims.ID),
+				zap.Error(err))
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"user": gin.H{"id": adminUser.ID, "username": adminUser.Username, "is_admin": adminUser.IsAdmin},
 	})

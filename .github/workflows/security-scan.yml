@@ -72,7 +72,11 @@ jobs:
           cache-dependency-path: ${{ matrix.module }}/go.sum
 
       - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+        # Pinned to a tagged release (audit L9) — @latest would pull an
+        # unreviewed version on every run, risking a supply-chain or
+        # behavior-change surprise in the security gate itself. Bump
+        # deliberately after reviewing the release notes.
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
 
       - name: Run govulncheck on ${{ matrix.module }}
         working-directory: ${{ matrix.module }}

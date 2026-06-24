@@ -94,7 +94,7 @@ func main() {
 	// Reads TOKEN_ENCRYPTION_KEY_V1 (required) and TOKEN_ENCRYPTION_KEY (legacy fallback).
 	// NOTE: Deployment manifest must mount token-encryption-key as TOKEN_ENCRYPTION_KEY
 	// (not ENCRYPTION_KEY). Plan 14-07 owns the manifest rename.
-	encryptor, err := encryption.NewMultiKeyEncryptorFromEnv()
+	encryptor, err := encryption.NewMultiKeyEncryptorFromEnvWithLogger(log)
 	if err != nil {
 		log.Fatal("Failed to initialize encryption (TOKEN_ENCRYPTION_KEY_V1 must be set)", zap.Error(err))
 	}

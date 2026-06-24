@@ -271,7 +271,9 @@ func (h *AuthHandler) HandleCallback(c *gin.Context) {
 		},
 	})
 	if storeErr != nil {
-		h.logger.Error("Failed to store streamer auth code", zap.Error(err))
+		// L4: log storeErr (the storeStreamerAuthCode error), not err (the stale
+		// token-exchange error from above).
+		h.logger.Error("Failed to store streamer auth code", zap.Error(storeErr))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate redirect"})
 		return
 	}
@@ -433,7 +435,9 @@ func (h *AuthHandler) HandleYouTubeCallback(c *gin.Context) {
 		},
 	})
 	if storeErr != nil {
-		h.logger.Error("Failed to store streamer auth code", zap.Error(err))
+		// L4: log storeErr (the storeStreamerAuthCode error), not err (the stale
+		// channel/token-exchange error from above).
+		h.logger.Error("Failed to store streamer auth code", zap.Error(storeErr))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate redirect"})
 		return
 	}
@@ -485,6 +489,21 @@ func (h *AuthHandler) HandleStreamerTokenExchange(c *gin.Context) {
 	// so they are not exposed to frontend JavaScript or logged in responses.
 	auth.SetAuthCookies(c, payload.AccessToken, payload.RefreshToken,
 		time.Duration(payload.ExpiresIn)*time.Second, 14*24*time.Hour)
+
+	// C2: seed the refresh-token reuse-detection key on initial cookie issue.
+	// HandleRefresh does GetDel("refresh_token:"+hash) and treats a miss as token
+	// theft → 401 + ClearAuthCookies. The production login path (HandleCallback →
+	// /exchange → here) previously never seeded that key (only the legacy
+	// HandleCallback/HandleYouTubeCallback seeded it), so the first /refresh after
+	// any real login was misclassified as reuse and force-logged-out every user.
+	// Mirror the seeding in HandleCallback so the first refresh succeeds.
+	if payload.RefreshToken != "" {
+		rtKey := "refresh_token:" + refreshTokenHash(payload.RefreshToken)
+		if err := h.redis.Set(c.Request.Context(), rtKey, payload.User.ID, 14*24*time.Hour).Err(); err != nil {
+			h.logger.Warn("Failed to track refresh token for reuse detection on exchange",
+				zap.Error(err))
+		}
+	}
 
 	// Body carries only non-secret data for the UI.
 	c.JSON(http.StatusOK, gin.H{
@@ -556,9 +575,31 @@ func (h *AuthHandler) HandleRefresh(c *gin.Context) {
 	// Refresh OAuth token
 	token, err := h.twitchOAuth.RefreshToken(c.Request.Context(), refreshToken)
 	if err != nil {
-		h.logger.Error("Failed to refresh token", zap.Error(err))
-		auth.ClearAuthCookies(c) // audit H3
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Failed to refresh token"})
+		// L2: the reuse GetDel above already consumed the key. A transient upstream
+		// 5xx / network error must NOT permanently invalidate a valid session —
+		// restore the key so the user can retry, and return 503 (not 401). Only a
+		// genuine Twitch 400/401 (token revoked / invalid_grant) is terminal: keep
+		// the cookies-cleared + 401 path so a dead token can't be re-used.
+		var retrErr *oauth2.RetrieveError
+		if errors.As(err, &retrErr) && retrErr.Response != nil &&
+			(retrErr.Response.StatusCode == http.StatusBadRequest || retrErr.Response.StatusCode == http.StatusUnauthorized) {
+			h.logger.Warn("Refresh token rejected by provider (terminal)",
+				zap.String("refresh_token_hash", tokenHash[:16]),
+				zap.Int("status", retrErr.Response.StatusCode),
+				zap.Error(err))
+			auth.ClearAuthCookies(c) // audit H3
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Failed to refresh token"})
+			return
+		}
+		// Transient failure — restore the reuse key so the next /refresh isn't
+		// misread as theft, and surface a retryable status.
+		h.logger.Warn("Transient refresh failure — restoring reuse key for retry",
+			zap.String("refresh_token_hash", tokenHash[:16]),
+			zap.Error(err))
+		if setErr := h.redis.Set(c.Request.Context(), rtKey, "1", 14*24*time.Hour).Err(); setErr != nil {
+			h.logger.Warn("Failed to restore refresh-token reuse key", zap.Error(setErr))
+		}
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Refresh provider temporarily unavailable, please retry"})
 		return
 	}
 
@@ -714,19 +755,37 @@ func (h *AuthHandler) HandleDeleteAccount(c *gin.Context) {
 		return
 	}
 
-	// Best-effort blacklist of the token used for this request
-	authHeader := c.GetHeader("Authorization")
-	if strings.HasPrefix(authHeader, "Bearer ") {
-		token := strings.TrimPrefix(authHeader, "Bearer ")
-		if token != "" {
-			if err := h.redis.Set(c.Request.Context(), "blacklist:"+token, "1", h.jwtExpiry).Err(); err != nil {
-				h.logger.Warn("Failed to blacklist token after account deletion",
-					zap.String("user_id", userID),
-					zap.Error(err),
-				)
-			}
+	// Best-effort blacklist of the token used for this request. Prefer the
+	// X-Access-Token header forwarded by the gateway AuthCookieForward middleware
+	// (raw Cookie stripped by L17); fall back to the Authorization header.
+	token := c.GetHeader("X-Access-Token")
+	if token == "" {
+		authHeader := c.GetHeader("Authorization")
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			token = strings.TrimPrefix(authHeader, "Bearer ")
 		}
 	}
+	if token != "" {
+		if err := h.redis.Set(c.Request.Context(), "blacklist:"+token, "1", h.jwtExpiry).Err(); err != nil {
+			h.logger.Warn("Failed to blacklist token after account deletion",
+				zap.String("user_id", userID),
+				zap.Error(err),
+			)
+		}
+	}
+
+	// L3: bring account deletion to parity with /logout — revoke the refresh-token
+	// reuse key (forwarded as X-Refresh-Token by AuthCookieForward) and clear the
+	// auth cookies so the browser drops the now-orphaned session.
+	if rt := c.GetHeader("X-Refresh-Token"); rt != "" {
+		rtKey := "refresh_token:" + refreshTokenHash(rt)
+		if err := h.redis.Del(c.Request.Context(), rtKey).Err(); err != nil {
+			h.logger.Warn("Failed to revoke refresh token on account deletion",
+				zap.String("user_id", userID),
+				zap.Error(err))
+		}
+	}
+	auth.ClearAuthCookies(c)
 
 	c.JSON(http.StatusOK, gin.H{"message": "Account deleted successfully"})
 }

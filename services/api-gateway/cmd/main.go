@@ -60,6 +60,11 @@ func main() {
 		zap.String("version", getEnvOrDefault("APP_VERSION", "dev")),
 	)
 
+	// Wire the shared-middleware revocation logger (L1) so JWT blacklist-check
+	// failures surface instead of being silently dropped (the old code did
+	// `_ = err` despite the comment claiming it logged).
+	sharedmiddleware.SetLogger(log)
+
 	// Initialize OpenTelemetry tracing
 	tracingEnabled := getEnvOrDefault("OTEL_ENABLED", "false") == "true"
 	if tracingEnabled {
@@ -396,6 +401,26 @@ func main() {
 	// Create router
 	router := gin.New()
 
+	// M3: restrict trusted proxies so c.ClientIP() (used by the global + auth
+	// rate limiters) reflects the real edge IP, not an attacker-spoofed
+	// X-Forwarded-For. Default trusts RFC1918 private ranges (the ingress/LB
+	// hops in a typical k8s cluster behind ingress-nginx); override via
+	// TRUSTED_PROXIES (comma-separated CIDRs/IPs). Set TRUSTED_PROXIES="" to
+	// trust none (ClientIP = direct RemoteAddr).
+	trustedProxies := getEnvOrDefault("TRUSTED_PROXIES", "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16")
+	var proxyList []string
+	if trustedProxies != "" {
+		for _, p := range strings.Split(trustedProxies, ",") {
+			if p = strings.TrimSpace(p); p != "" {
+				proxyList = append(proxyList, p)
+			}
+		}
+	}
+	if err := router.SetTrustedProxies(proxyList); err != nil {
+		log.Fatal("Failed to set trusted proxies", zap.Error(err))
+	}
+	log.Info("Trusted proxies configured", zap.Strings("proxies", proxyList))
+
 	// Apply global middleware
 	router.Use(gin.Recovery()) // Panic recovery
 	router.Use(sharedmiddleware.SecurityHeaders())
@@ -438,16 +463,13 @@ func main() {
 	// Health check endpoint (no auth required)
 	router.GET("/health", healthHandler.CheckHealth)
 
-	// Prometheus metrics endpoint (M6: protected with admin JWT to prevent
-	// topology/latency data exposure to unauthenticated callers)
-	metricsGroup := router.Group("/")
-	metricsGroup.Use(
-		localmiddleware.CookieToBearer(),
-		sharedmiddleware.JWTAuthWithRevocation(userKeyChain, redisClient),
-		sharedmiddleware.OriginCheck(localmiddleware.LoadHTTPAllowedOrigins()),
-		sharedmiddleware.AdminOnly(),
-	)
-	metricsGroup.GET("/metrics", gin.WrapH(promhttp.Handler()))
+	// Prometheus metrics endpoint. NOT admin-gated (audit B2): Prometheus
+	// presents no JWT, so the M6 admin-JWT chain made /metrics return 401 and
+	// silently broke scraping (dashboards/alerts went blind). Scrape access is
+	// already restricted at the network level — the monitoring namespace is
+	// allowed to reach 8080 via NetworkPolicy, and the metrics surface carries
+	// no secrets.
+	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// Static pages (no auth required)
 	router.StaticFile("/legal/terms", "./static/legal/terms.html")
@@ -473,6 +495,16 @@ func main() {
 		publicAPI.GET("/auth/login", authRateLimiter.Middleware(), proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/callback", proxyHandler.ForwardRequest)
 		publicAPI.POST("/auth/refresh", authRateLimiter.Middleware(), localmiddleware.AuthCookieForward(), sharedmiddleware.OriginCheck(localmiddleware.LoadHTTPAllowedOrigins()), proxyHandler.ForwardRequest)
+
+		// Streamer/admin single-use code → cookie exchange (audit H3 / C1). The
+		// frontend OAuth callback POSTs the one-time code here; auth-service sets
+		// the httpOnly access+refresh cookies and returns the non-secret user
+		// payload. This route was MISSING, so every fresh streamer/admin login
+		// 404'd at the gateway before reaching the proxy (Set-Cookie never reached
+		// the browser). Rate-limited like the other auth-sensitive endpoints; no
+		// cookie/origin middleware needed (no cookie yet at exchange time — the
+		// client sends a JSON {code} body; the proxy passes Set-Cookie back).
+		publicAPI.POST("/auth/exchange", authRateLimiter.Middleware(), proxyHandler.ForwardRequest)
 
 		// Platform-specific OAuth routes
 		publicAPI.GET("/auth/twitch/login", proxyHandler.ForwardRequest)
@@ -568,7 +600,7 @@ func main() {
 		protectedAPI.GET("/auth/me/data-export", proxyHandler.ForwardRequest) // DSGVO Art. 20 data portability
 		protectedAPI.POST("/auth/logout", localmiddleware.AuthCookieForward(), proxyHandler.ForwardRequest)
 		protectedAPI.POST("/auth/stop-impersonation", localmiddleware.AuthCookieForward(), proxyHandler.ForwardRequest)
-		protectedAPI.DELETE("/auth/me", proxyHandler.ForwardRequest)
+		protectedAPI.DELETE("/auth/me", localmiddleware.AuthCookieForward(), proxyHandler.ForwardRequest)
 
 		// Streamer chat send (monitor view sends using the streamer's own OAuth
 		// tokens) -> auth-service POST /chat/send.

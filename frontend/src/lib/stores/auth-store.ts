@@ -55,7 +55,7 @@ interface AuthStore {
   stopImpersonation: () => Promise<void>
 }
 
-export const useAuthStore = create<AuthStore>((set) => ({
+export const useAuthStore = create<AuthStore>((set, get) => ({
   user: null,
   loading: true,
   isImpersonating: false,
@@ -98,25 +98,64 @@ export const useAuthStore = create<AuthStore>((set) => ({
   },
 
   startImpersonation: async (targetUserId: string) => {
-    const res = await authApi.impersonate(targetUserId) // POST /admin/users/:id/impersonate — sets cookie
-    // The endpoint returns a partial user ({id,username,display_name}); the
-    // store holds it for immediate UI (banner/nav). is_admin is intentionally
-    // absent for the impersonated (non-admin) view.
-    set({
-      user: res.user as unknown as User,
-      isImpersonating: true,
-      impersonatedUsername: res.user.username,
-    })
+    // POST /admin/users/:id/impersonate — server sets an impersonated-user
+    // access cookie. The response only carries a partial user
+    // ({id,username,display_name}), so fetch the full User via /auth/me to
+    // avoid an inconsistent store shape (audit L12 — previously a
+    // `as unknown as User` double-cast masked the missing fields).
+    const res = await authApi.impersonate(targetUserId)
+    try {
+      const me = await authApi.getMe()
+      set({
+        user: me,
+        isImpersonating: true,
+        impersonatedUsername: me.username,
+      })
+    } catch {
+      // Cookie swap succeeded but /auth/me failed — fall back to merging the
+      // partial response into the current user so the banner still shows.
+      const current = get().user
+      const partial: Partial<User> = {
+        id: res.user.id,
+        username: res.user.username,
+      }
+      if (res.user.display_name) {
+        partial.display_name = res.user.display_name
+      }
+      set({
+        user: current ? { ...current, ...partial } : null,
+        isImpersonating: true,
+        impersonatedUsername: res.user.username,
+      })
+    }
   },
 
   stopImpersonation: async () => {
-    const res = await authApi.stopImpersonation() // POST /auth/stop-impersonation — restores admin cookie
-    // The endpoint returns a partial user ({id,username,is_admin}); the store
-    // holds it for immediate UI until the next /auth/me refresh.
-    set({
-      user: res.user as unknown as User,
-      isImpersonating: false,
-      impersonatedUsername: null,
-    })
+    // POST /auth/stop-impersonation — server restores the admin access cookie.
+    // The response only carries a partial user ({id,username,is_admin}), so
+    // fetch the full User via /auth/me for a consistent store shape (audit L12).
+    const res = await authApi.stopImpersonation()
+    try {
+      const me = await authApi.getMe()
+      set({
+        user: me,
+        isImpersonating: false,
+        impersonatedUsername: null,
+      })
+    } catch {
+      // Cookie swap succeeded but /auth/me failed — fall back to merging the
+      // partial response into the current user.
+      const current = get().user
+      const partial: Partial<User> = {
+        id: res.user.id,
+        username: res.user.username,
+        is_admin: res.user.is_admin,
+      }
+      set({
+        user: current ? { ...current, ...partial } : null,
+        isImpersonating: false,
+        impersonatedUsername: null,
+      })
+    }
   },
 }))

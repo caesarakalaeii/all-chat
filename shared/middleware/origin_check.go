@@ -19,9 +19,46 @@ package middleware
 import (
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
+
+// OriginAllowed reports whether origin is permitted by the allowlist. It is the
+// single shared origin-matcher used by OriginCheck (CSRF defense), the CORS
+// middleware, and the WebSocket origin checkers (audit M4 — previously three
+// divergent implementations: OriginCheck did exact-only matching while CORS
+// supported "/*" suffix wildcards and WS supported "*" suffix wildcards, so an
+// extension origin like moz-extension://<uuid> passed CORS but was 403'd by
+// OriginCheck on every state-changing request).
+//
+// Matching rules (applied per entry, first match wins):
+//   - "*"          → allow all origins
+//   - exact match  → origin == entry
+//   - "/*" suffix  → prefix match on entry minus "/*" (CORS format,
+//     e.g. "moz-extension:///*" → prefix "moz-extension://")
+//   - "*" suffix  → prefix match on entry minus "*"  (WS format,
+//     e.g. "moz-extension://*"  → prefix "moz-extension://")
+func OriginAllowed(allowed []string, origin string) bool {
+	for _, a := range allowed {
+		if a == "*" || a == origin {
+			return true
+		}
+		// Wildcard suffix patterns. Check "/*" first (more specific) so that
+		// "moz-extension:///*" strips to "moz-extension://" rather than
+		// "moz-extension:///".
+		if strings.HasSuffix(a, "/*") {
+			if strings.HasPrefix(origin, strings.TrimSuffix(a, "/*")) {
+				return true
+			}
+		} else if strings.HasSuffix(a, "*") {
+			if strings.HasPrefix(origin, strings.TrimSuffix(a, "*")) {
+				return true
+			}
+		}
+	}
+	return false
+}
 
 // OriginCheck is a stateless CSRF defense paired with SameSite=Lax cookies.
 // On state-changing methods (POST/PUT/DELETE/PATCH), if the request carries
@@ -30,10 +67,6 @@ import (
 // Authorization header). Safe methods (GET/HEAD/OPTIONS) are not checked.
 // See docs/pi/specs/2026-06-23-h3-cookie-auth-design.md.
 func OriginCheck(allowed []string) gin.HandlerFunc {
-	allowedSet := make(map[string]bool, len(allowed))
-	for _, o := range allowed {
-		allowedSet[o] = true
-	}
 	return func(c *gin.Context) {
 		switch c.Request.Method {
 		case http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch:
@@ -57,7 +90,7 @@ func OriginCheck(allowed []string) gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		if !allowedSet[origin] {
+		if !OriginAllowed(allowed, origin) {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "origin not allowed"})
 			return
 		}

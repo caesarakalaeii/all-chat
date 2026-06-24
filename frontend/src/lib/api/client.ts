@@ -44,6 +44,22 @@ function getApiUrl(): string {
 
 const API_URL = getApiUrl()
 
+// M8 (code part): cookie auth (SameSite=Lax + credentials:'same-origin') only
+// works when the frontend and the API gateway share an origin. A misconfigured
+// NEXT_PUBLIC_API_URL (cross-origin) silently breaks login with no obvious
+// error. Warn loudly in dev so the invariant is caught early; suppressed in
+// production (prod ingress already serves both from allch.at).
+if (
+  typeof window !== 'undefined' &&
+  window.location.origin !== API_URL &&
+  process.env.NODE_ENV !== 'production'
+) {
+  console.warn(
+    '[AllChat] API base origin differs from window origin — cookie auth requires same-origin. ' +
+      'Set NEXT_PUBLIC_API_URL or serve both from the same origin.'
+  )
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -64,7 +80,11 @@ export class ApiError extends Error {
 class ApiClient {
   private refreshPromise: Promise<boolean> | null = null
 
-  private async fetch(endpoint: string, options: RequestInit = {}): Promise<Response> {
+  private async fetch(
+    endpoint: string,
+    options: RequestInit = {},
+    retried = false
+  ): Promise<Response> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...(options.headers as Record<string, string>),
@@ -73,7 +93,14 @@ class ApiClient {
     const url = endpoint.startsWith('http') ? endpoint : `${API_URL}${endpoint}`
     const response = await fetch(url, { ...options, headers, credentials: 'same-origin' })
 
-    if (response.status === 401 && !endpoint.startsWith('/auth/refresh') && !endpoint.startsWith('/auth/login')) {
+    // L7: the guard prefixes must match the real endpoints (/api/v1/auth/...),
+    // not the dead /auth/... prefixes that never matched — otherwise 401s on
+    // /auth/refresh & /auth/login would wrongly trigger the refresh→retry path.
+    if (
+      response.status === 401 &&
+      !endpoint.startsWith('/api/v1/auth/refresh') &&
+      !endpoint.startsWith('/api/v1/auth/login')
+    ) {
       // Try to determine if this is a `reauth_required` 401 (platform OAuth token
       // revoked) — that's an application-level signal the caller surfaces inline;
       // it must NOT trigger the generic refresh→retry path.
@@ -90,9 +117,18 @@ class ApiClient {
         // Try one cookie-based refresh, then retry the original request once.
         const ok = await this.tryRefresh()
         if (ok) {
-          return fetch(url, { ...options, headers, credentials: 'same-origin' })
+          // M2: route the retry back through this.fetch (not a bare fetch) so the
+          // retried response goes through the same !response.ok / ApiError /
+          // reauth_required handling. The `retried` guard prevents infinite
+          // recursion if the retried request also returns 401.
+          if (!retried) {
+            return this.fetch(endpoint, options, true)
+          }
+          // Already retried — fall through to the generic error path below so a
+          // second 401/403/500 surfaces as a structured ApiError instead of a raw
+          // SyntaxError from the caller's .json().
         }
-        // refresh failed — bounce to login
+        // refresh failed (or retry exhausted) — bounce to login
         if (typeof window !== 'undefined') {
           window.location.href = '/'
         }
