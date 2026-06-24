@@ -619,26 +619,37 @@ func (h *AuthHandler) HandleGetMe(c *gin.Context) {
 
 // HandleLogout logs out the user
 func (h *AuthHandler) HandleLogout(c *gin.Context) {
-	// Extract token from Authorization header
-	authHeader := c.GetHeader("Authorization")
-	if authHeader == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing authorization header"})
+	// Read token from X-Access-Token (gateway AuthCookieForward) or
+	// Authorization (backward compat).
+	token := c.GetHeader("X-Access-Token")
+	if token == "" {
+		authHeader := c.GetHeader("Authorization")
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			token = strings.TrimPrefix(authHeader, "Bearer ")
+		}
+	}
+	if token == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
 
-	token := strings.TrimPrefix(authHeader, "Bearer ")
-	if token == authHeader {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid authorization header"})
-		return
-	}
-
-	// Add token to blacklist in Redis (expires after JWT expiry time)
-	err := h.redis.Set(c.Request.Context(), "blacklist:"+token, "1", h.jwtExpiry).Err()
-	if err != nil {
+	// Blacklist the access JWT (expires after JWT expiry).
+	if err := h.redis.Set(c.Request.Context(), "blacklist:"+token, "1", h.jwtExpiry).Err(); err != nil {
 		h.logger.Error("Failed to blacklist token", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to logout"})
 		return
 	}
+
+	// Revoke the refresh token family entry (audit H3).
+	if rt := c.GetHeader("X-Refresh-Token"); rt != "" {
+		rtKey := "refresh_token:" + refreshTokenHash(rt)
+		if err := h.redis.Del(c.Request.Context(), rtKey).Err(); err != nil {
+			h.logger.Warn("Failed to revoke refresh token on logout", zap.Error(err))
+		}
+	}
+
+	// Clear the auth cookies.
+	auth.ClearAuthCookies(c)
 
 	c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully"})
 }
