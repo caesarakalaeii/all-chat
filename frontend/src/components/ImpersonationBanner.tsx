@@ -24,13 +24,17 @@ import { useAuthStore } from '@/lib/stores/auth-store'
 
 export default function ImpersonationBanner() {
   const router = useRouter()
-  const { isImpersonating, impersonatedUsername, stopImpersonation, init } = useAuthStore()
+  const { isImpersonating, impersonatedUsername, stopImpersonation } = useAuthStore()
 
   const handleExitImpersonation = async () => {
-    stopImpersonation()
-
-    // Re-initialise the auth store so user/token state reflects the restored admin session
-    await init()
+    // H3 cookie auth: the server restores the admin access cookie and returns
+    // the restored admin user — no client-side token swap. The store is
+    // updated from the response, so a separate init()/me re-fetch is unneeded.
+    try {
+      await stopImpersonation()
+    } catch (err) {
+      console.error('Failed to stop impersonation:', err)
+    }
 
     // Redirect back to admin panel
     router.push('/admin/users')

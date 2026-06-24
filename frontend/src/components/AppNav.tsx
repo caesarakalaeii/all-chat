@@ -38,17 +38,17 @@ const inactiveClass =
 export function AppNav() {
   const pathname = usePathname()
   const router = useRouter()
-  const { user, token, logout } = useAuthStore()
+  const { user, logout } = useAuthStore()
   const { viewerToken, viewerLogout } = useViewerAuthStore()
 
-  const isLoggedIn = !!token || !!viewerToken
+  const isLoggedIn = !!user || !!viewerToken
 
   function isActive(href: string): boolean {
     return pathname === href || pathname.startsWith(href + '/')
   }
 
   function handleLogout() {
-    if (token) logout()
+    if (user) logout()
     if (viewerToken) viewerLogout()
     router.push('/')
   }

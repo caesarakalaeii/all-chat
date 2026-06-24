@@ -158,7 +158,7 @@ function NumberInput({
 // ---------------------------------------------------------------------------
 export default function EventSettingsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
-  const { token } = useAuthStore()
+  const { user } = useAuthStore()
   const router = useRouter()
   const [settings, setSettings] = useState<EventSettings | null>(null)
   const [loading, setLoading] = useState(true)
@@ -166,19 +166,17 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
   const [activeTab, setActiveTab] = useState<Tab>('global')
 
   useEffect(() => {
-    if (!token) {
+    if (!user) {
       router.push('/')
       return
     }
 
-    fetch(`/api/v1/overlays/${id}/event-settings`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    fetch(`/api/v1/overlays/${id}/event-settings`)
       .then((res) => (res.ok ? res.json() : Promise.reject('Failed to load')))
       .then(setSettings)
       .catch(() => toastManager.add({ title: 'Failed to load event settings', type: 'error' }))
       .finally(() => setLoading(false))
-  }, [id, token, router])
+  }, [id, user, router])
 
   const update = (key: keyof EventSettings, value: boolean | number) => {
     if (!settings) return
@@ -186,12 +184,12 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
   }
 
   const handleSave = async () => {
-    if (!settings || !token) return
+    if (!settings || !user) return
     setSaving(true)
     try {
       const res = await fetch(`/api/v1/overlays/${id}/event-settings`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings),
       })
       if (!res.ok) throw new Error()

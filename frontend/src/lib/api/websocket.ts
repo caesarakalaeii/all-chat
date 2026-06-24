@@ -98,9 +98,9 @@ export class WebSocketClient {
   /**
    * Connect to WebSocket for a specific overlay
    */
-  connect(overlayId: string, token: string) {
+  connect(overlayId: string, token?: string | null) {
     this.overlayId = overlayId
-    this.token = token
+    this.token = token ?? ''
     this.stopped = false
     this.clearLivenessTimers()
     this.lastActivity = 0 // no inbound frame yet on this socket
@@ -115,17 +115,20 @@ export class WebSocketClient {
     // Pass ?since= so the server's replay buffer flushes only the messages
     // we haven't already rendered (server uses an exclusive lower bound).
     //
-    // SECURITY (audit H5): the JWT is sent via the WebSocket subprotocol
-    // (`bearer.<token>`) instead of the URL query string so it does not leak
-    // into access/proxy logs. The gateway extracts the token from the
-    // Sec-WebSocket-Protocol header and echoes it back for the handshake.
+    // SECURITY (audit H5): when a token is provided, it is sent via the
+    // WebSocket subprotocol (`bearer.<token>`) instead of the URL query string
+    // so it does not leak into access/proxy logs. The gateway extracts the
+    // token from the Sec-WebSocket-Protocol header and echoes it back for the
+    // handshake. With no token (H3 cookie auth), the owner overlay WS handshake
+    // is same-origin, so the browser sends the httpOnly access cookie and the
+    // gateway authenticates via CookieToBearer.
     let url = `${WS_URL}/ws/overlay/${overlayId}`
     if (this.lastSeenTimestamp > 0) {
       url += `?since=${this.lastSeenTimestamp}`
     }
     console.log('[WebSocket] Connecting to:', url)
 
-    this.ws = new WebSocket(url, [`bearer.${token}`])
+    this.ws = new WebSocket(url, this.token ? [`bearer.${this.token}`] : undefined)
 
     this.ws.onopen = () => {
       console.log('[WebSocket] Connected')

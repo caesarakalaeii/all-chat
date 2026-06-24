@@ -43,7 +43,7 @@ interface ProtectedRouteProps {
 
 export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRouteProps) {
   const router = useRouter()
-  const { user, token, loading, init } = useAuthStore()
+  const { user, loading, init } = useAuthStore()
   const isHydrated = useHydrated()
 
   useEffect(() => {
@@ -57,14 +57,14 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
       return // Still hydrating or loading
     }
 
-    if (!token || !user) {
+    if (!user) {
       router.push('/')
       return
     }
-  }, [token, user, loading, isHydrated, router])
+  }, [user, loading, isHydrated, router])
 
   // Show loading state while initializing or checking auth
-  if (!isHydrated || loading || !token || !user) {
+  if (!isHydrated || loading || !user) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-bg">
         <InfinityLogo size={64} />

@@ -17,85 +17,30 @@
  */
 
 /**
- * In-memory (non-persisted) token storage — SECURITY (audit H3).
+ * In-memory (non-persisted) viewer token storage — SECURITY (audit H3).
  *
- * Refresh tokens are stored ONLY in these module-level variables, never in
- * localStorage. This means an XSS payload cannot read the refresh token from
- * storage: it would have to be actively running while the token is in memory,
- * and the token is irrecoverably lost when the tab is closed or refreshed.
+ * The streamer/admin token paths were removed in the H3 cookie-auth migration
+ * (the streamer access token now lives only in an httpOnly cookie). This store
+ * now holds ONLY the viewer access token, which the viewer flow
+ * (`viewer-auth-store.ts`, `api/viewer.ts`) still mirrors here so the viewer
+ * API client can read it without touching localStorage. The viewer token is
+ * also still written to localStorage for legacy readers; full removal is
+ * deferred to a later viewer cookie-auth migration.
  *
- * Access (JWT) tokens are mirrored here so API clients can prefer the in-memory
- * copy. Access tokens are still also written to localStorage for legacy readers
- * (admin/settings pages that read `jwt_token` directly) — full removal is
- * deferred to the httpOnly-cookie migration.
- *
- * LONG-TERM FIX (deferred): move all tokens to httpOnly; Secure;
- * SameSite=Strict cookies set by the backend, eliminating XSS token theft
- * entirely. This in-memory store is an interim mitigation per the security
- * audit's "minimum fix" allowance.
+ * Storing the viewer token in a module-level variable means an XSS payload
+ * cannot read it from storage: it must be actively running while the token is
+ * in memory, and the token is irrecoverably lost when the tab is closed or
+ * refreshed.
  */
 
-let refreshToken: string | null = null
-let accessToken: string | null = null
-let adminToken: string | null = null
-let impersonating = false
-let impersonatedUsername: string | null = null
 let viewerAccessToken: string | null = null
 
 export const inMemoryTokens = {
-  // ---- Refresh token (streamer) — in-memory ONLY, never persisted. ----
-  getRefreshToken(): string | null {
-    return refreshToken
-  },
-  setRefreshToken(token: string | null): void {
-    refreshToken = token
-  },
-
-  // ---- Access token (streamer JWT) — mirrored from localStorage. ----
-  getAccessToken(): string | null {
-    return accessToken
-  },
-  setAccessToken(token: string | null): void {
-    accessToken = token
-  },
-
-  // ---- Admin token (impersonation restore) — mirrored. ----
-  getAdminToken(): string | null {
-    return adminToken
-  },
-  setAdminToken(token: string | null): void {
-    adminToken = token
-  },
-
-  // ---- Impersonation state — mirrored. ----
-  getImpersonating(): boolean {
-    return impersonating
-  },
-  setImpersonating(val: boolean): void {
-    impersonating = val
-  },
-  getImpersonatedUsername(): string | null {
-    return impersonatedUsername
-  },
-  setImpersonatedUsername(name: string | null): void {
-    impersonatedUsername = name
-  },
-
   // ---- Viewer access token — mirrored. ----
   getViewerAccessToken(): string | null {
     return viewerAccessToken
   },
   setViewerAccessToken(token: string | null): void {
     viewerAccessToken = token
-  },
-
-  /** Clear every in-memory token (used on logout). */
-  clearAll(): void {
-    refreshToken = null
-    accessToken = null
-    adminToken = null
-    impersonating = false
-    impersonatedUsername = null
-    viewerAccessToken = null
   },
 }
