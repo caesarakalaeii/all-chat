@@ -117,6 +117,53 @@ func TestHandleRefresh_BackwardCompatJSONBody(t *testing.T) {
 	}
 }
 
+// TestHandleLogout_ClearsCookiesAndRevokesRefresh verifies that /logout
+// blacklists the access JWT, revokes the refresh-token Redis key, and clears
+// the auth cookies (audit H3). It exercises the X-Access-Token / X-Refresh-Token
+// header path that the gateway AuthCookieForward middleware forwards from the
+// httpOnly cookies (raw Cookie stripped by L17 origin_check).
+func TestHandleLogout_ClearsCookiesAndRevokesRefresh(t *testing.T) {
+	rdb := miniredis.RunT(t)
+	defer rdb.Close()
+	// pre-seed a refresh_token:<hash>
+	hash := refreshTokenHash("some-rt")
+	rdb.Set("refresh_token:"+hash, "user-1")
+
+	h := newTestAuthHandler(t, redis.NewClient(&redis.Options{Addr: rdb.Addr()}))
+	router := gin.New()
+	router.POST("/logout", h.HandleLogout)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/logout", nil)
+	req.Header.Set("X-Access-Token", "jwt-to-blacklist")
+	req.Header.Set("X-Refresh-Token", "some-rt")
+	router.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+
+	// access token blacklisted
+	if !rdb.Exists("blacklist:jwt-to-blacklist") {
+		t.Error("access token not blacklisted")
+	}
+	// refresh token Redis key deleted
+	if rdb.Exists("refresh_token:" + hash) {
+		t.Error("refresh token not revoked")
+	}
+
+	// cookies cleared
+	var cleared int
+	for _, c := range w.Result().Cookies() {
+		if c.Value == "" || c.MaxAge == -1 {
+			cleared++
+		}
+	}
+	if cleared < 2 {
+		t.Errorf("want 2 cleared cookies, got %d", cleared)
+	}
+}
+
 // TestHandleStreamerTokenExchange_SetsCookies_OmitsTokensFromBody verifies
 // that the M1 code-exchange endpoint issues httpOnly cookies for the access
 // and refresh tokens (audit H3) and does NOT echo the tokens back in the JSON
