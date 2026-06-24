@@ -28,6 +28,7 @@ import { Dialog } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toastManager } from '@/lib/toast'
 import { viewerApi } from '@/lib/api/viewer'
+import { PATREON_JOIN_URL } from '@/lib/constants'
 import type { PaymentStatus } from '@/lib/api/payment'
 
 function statusLabel(status?: string): string {
@@ -146,7 +147,7 @@ function ViewerPremiumContent() {
               <p className="text-sm text-text-sub">
                 Not a patron yet?{' '}
                 <a
-                  href="https://patreon.com/all_chat"
+                  href={PATREON_JOIN_URL}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="font-medium text-twitch hover:underline"
