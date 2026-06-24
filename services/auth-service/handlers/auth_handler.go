@@ -548,6 +548,7 @@ func (h *AuthHandler) HandleRefresh(c *gin.Context) {
 		h.logger.Warn("Refresh token reuse detected — token not in active set",
 			zap.String("refresh_token_hash", tokenHash[:16]),
 			zap.Error(err))
+		auth.ClearAuthCookies(c) // clear stale cookies so the client re-auths (audit H3)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Refresh token already used or invalid"})
 		return
 	}
@@ -556,6 +557,7 @@ func (h *AuthHandler) HandleRefresh(c *gin.Context) {
 	token, err := h.twitchOAuth.RefreshToken(c.Request.Context(), refreshToken)
 	if err != nil {
 		h.logger.Error("Failed to refresh token", zap.Error(err))
+		auth.ClearAuthCookies(c) // audit H3
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Failed to refresh token"})
 		return
 	}
@@ -572,6 +574,7 @@ func (h *AuthHandler) HandleRefresh(c *gin.Context) {
 	user, err := h.userRepo.GetByTwitchID(c.Request.Context(), twitchUser.ID)
 	if err != nil {
 		h.logger.Error("User not found", zap.Error(err))
+		auth.ClearAuthCookies(c) // audit H3
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
 		return
 	}

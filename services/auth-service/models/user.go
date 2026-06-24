@@ -43,14 +43,6 @@ type User struct {
 	UpdatedAt       time.Time  `json:"updated_at"`
 }
 
-// TokenResponse represents JWT token response
-type TokenResponse struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	ExpiresIn    int64  `json:"expires_in"`
-	TokenType    string `json:"token_type"`
-}
-
 // TwitchUserInfo represents Twitch user data from OAuth
 type TwitchUserInfo struct {
 	ID              string `json:"id"`

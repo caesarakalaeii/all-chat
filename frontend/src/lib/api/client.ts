@@ -62,7 +62,6 @@ export class ApiError extends Error {
 }
 
 class ApiClient {
-  private refreshing = false
   private refreshPromise: Promise<boolean> | null = null
 
   private async fetch(endpoint: string, options: RequestInit = {}): Promise<Response> {
