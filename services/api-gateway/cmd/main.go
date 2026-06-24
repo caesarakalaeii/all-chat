@@ -441,8 +441,12 @@ func main() {
 	// Prometheus metrics endpoint (M6: protected with admin JWT to prevent
 	// topology/latency data exposure to unauthenticated callers)
 	metricsGroup := router.Group("/")
-	metricsGroup.Use(sharedmiddleware.JWTAuth(userKeyChain))
-	metricsGroup.Use(sharedmiddleware.AdminOnly())
+	metricsGroup.Use(
+		localmiddleware.CookieToBearer(),
+		sharedmiddleware.JWTAuthWithRevocation(userKeyChain, redisClient),
+		sharedmiddleware.OriginCheck(localmiddleware.LoadHTTPAllowedOrigins()),
+		sharedmiddleware.AdminOnly(),
+	)
 	metricsGroup.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// Static pages (no auth required)
@@ -468,7 +472,7 @@ func main() {
 		publicAPI.POST("/auth/login", authRateLimiter.Middleware(), proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/login", authRateLimiter.Middleware(), proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/callback", proxyHandler.ForwardRequest)
-		publicAPI.POST("/auth/refresh", authRateLimiter.Middleware(), proxyHandler.ForwardRequest)
+		publicAPI.POST("/auth/refresh", authRateLimiter.Middleware(), localmiddleware.AuthCookieForward(), sharedmiddleware.OriginCheck(localmiddleware.LoadHTTPAllowedOrigins()), proxyHandler.ForwardRequest)
 
 		// Platform-specific OAuth routes
 		publicAPI.GET("/auth/twitch/login", proxyHandler.ForwardRequest)
@@ -553,12 +557,17 @@ func main() {
 
 	// Protected routes (JWT auth required for streamers/admins and viewers)
 	protectedAPI := router.Group("/api/v1")
-	protectedAPI.Use(sharedmiddleware.JWTAuth(userKeyChain))
+	protectedAPI.Use(
+		localmiddleware.CookieToBearer(),
+		sharedmiddleware.JWTAuthWithRevocation(userKeyChain, redisClient),
+		sharedmiddleware.OriginCheck(localmiddleware.LoadHTTPAllowedOrigins()),
+	)
 	{
 		// Auth service - protected routes
 		protectedAPI.GET("/auth/me", proxyHandler.ForwardRequest)
 		protectedAPI.GET("/auth/me/data-export", proxyHandler.ForwardRequest) // DSGVO Art. 20 data portability
-		protectedAPI.POST("/auth/logout", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/auth/logout", localmiddleware.AuthCookieForward(), proxyHandler.ForwardRequest)
+		protectedAPI.POST("/auth/stop-impersonation", localmiddleware.AuthCookieForward(), proxyHandler.ForwardRequest)
 		protectedAPI.DELETE("/auth/me", proxyHandler.ForwardRequest)
 
 		// Streamer chat send (monitor view sends using the streamer's own OAuth
@@ -656,8 +665,12 @@ func main() {
 
 	// Admin routes (require JWT + admin role — defense-in-depth at gateway level)
 	adminAPI := router.Group("/api/v1/admin")
-	adminAPI.Use(sharedmiddleware.JWTAuth(userKeyChain))
-	adminAPI.Use(sharedmiddleware.AdminOnly())
+	adminAPI.Use(
+		localmiddleware.CookieToBearer(),
+		sharedmiddleware.JWTAuthWithRevocation(userKeyChain, redisClient),
+		sharedmiddleware.OriginCheck(localmiddleware.LoadHTTPAllowedOrigins()),
+		sharedmiddleware.AdminOnly(),
+	)
 	{
 		adminAPI.POST("/premium/users/:id", proxyHandler.ForwardRequest) // -> share-service
 
