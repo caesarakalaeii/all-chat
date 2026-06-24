@@ -43,17 +43,6 @@ export interface User {
   updated_at: string
 }
 
-export interface AuthState {
-  user: User | null
-  token: string | null
-  loading: boolean
-}
-
 export interface LoginResponse {
   auth_url: string
-}
-
-export interface TokenResponse {
-  token: string
-  user: User
 }
