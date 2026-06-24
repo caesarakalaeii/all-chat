@@ -51,6 +51,72 @@ func newTestAuthHandler(t *testing.T, rdb *redis.Client) *AuthHandler {
 	)
 }
 
+// TestHandleRefresh_MissingTokenReturns400 verifies that /refresh returns 400
+// when no refresh token is supplied (neither the X-Refresh-Token header nor a
+// JSON body). This is the first line of defense: a missing token must never
+// reach the reuse-detection path.
+func TestHandleRefresh_MissingTokenReturns400(t *testing.T) {
+	rdb := miniredis.RunT(t)
+	defer rdb.Close()
+	h := newTestAuthHandler(t, redis.NewClient(&redis.Options{Addr: rdb.Addr()}))
+	router := gin.New()
+	router.POST("/refresh", h.HandleRefresh)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/refresh", nil) // no X-Refresh-Token, no body
+	router.ServeHTTP(w, req)
+	if w.Code != 400 {
+		t.Errorf("want 400 (refresh token required), got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+// TestHandleRefresh_ReuseDetectedReturns401 verifies that a refresh token not
+// present in the active Redis set is rejected with 401 (reuse/theft signal).
+// The token is never sent to Twitch — only the Redis GetDel lookup runs.
+func TestHandleRefresh_ReuseDetectedReturns401(t *testing.T) {
+	rdb := miniredis.RunT(t)
+	defer rdb.Close()
+	// do NOT seed refresh_token:<hash> — GetDel returns nil → reuse path
+	h := newTestAuthHandler(t, redis.NewClient(&redis.Options{Addr: rdb.Addr()}))
+	router := gin.New()
+	router.POST("/refresh", h.HandleRefresh)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/refresh", nil)
+	req.Header.Set("X-Refresh-Token", "never-issued-rt")
+	router.ServeHTTP(w, req)
+	if w.Code != 401 {
+		t.Errorf("want 401 (reuse/invalid), got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+// TestHandleRefresh_BackwardCompatJSONBody verifies the deprecated JSON-body
+// fallback is still read. The token is seeded in Redis so it passes reuse
+// detection; it then fails at Twitch refresh (no network in CI), which is
+// fine — the assertion is only that the token was READ (NOT 400).
+func TestHandleRefresh_BackwardCompatJSONBody(t *testing.T) {
+	rdb := miniredis.RunT(t)
+	defer rdb.Close()
+	// seed the refresh token so it passes reuse-detection, then fails at Twitch refresh
+	// (which is fine — we're only asserting the JSON-body fallback is READ, not that refresh succeeds)
+	hash := refreshTokenHash("jsonbody-rt")
+	rdb.Set("refresh_token:"+hash, "user-1")
+	h := newTestAuthHandler(t, redis.NewClient(&redis.Options{Addr: rdb.Addr()}))
+	router := gin.New()
+	router.POST("/refresh", h.HandleRefresh)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/refresh", strings.NewReader(`{"refresh_token":"jsonbody-rt"}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	// It should get past the "refresh token required" check (so NOT 400) — it will then
+	// fail at Twitch.RefreshToken (real HTTP to twitch.tv, no network in CI) → 401 or 500.
+	// Asserting NOT 400 proves the JSON-body fallback path was taken.
+	if w.Code == 400 {
+		t.Errorf("JSON-body refresh token not read; got 400 (refresh token required), body=%s", w.Body.String())
+	}
+}
+
 // TestHandleStreamerTokenExchange_SetsCookies_OmitsTokensFromBody verifies
 // that the M1 code-exchange endpoint issues httpOnly cookies for the access
 // and refresh tokens (audit H3) and does NOT echo the tokens back in the JSON

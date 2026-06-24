@@ -493,14 +493,34 @@ func getEnvOrDefault(key, defaultValue string) string {
 	return defaultValue
 }
 
-// HandleRefresh refreshes an expired JWT using Twitch refresh token
+// HandleRefresh rotates the session by exchanging a Twitch refresh token for
+// a fresh access token and reissuing httpOnly cookies (audit H3). The refresh
+// token is read from the X-Refresh-Token header (forwarded by the gateway
+// AuthCookieForward middleware; the raw Cookie is stripped by L17 before it
+// reaches auth-service). A JSON-body fallback is kept for backward compat
+// during the rollout (deprecated).
+//
+// TODO(H3-integration): the success-path cookie rotation (SetAuthCookies +
+// redacted body) is not unit-tested because TwitchOAuth hits real Twitch
+// endpoints (no interface). Verify end-to-end via a manual/integration test
+// once deployed. Error paths (missing token, reuse detection, JSON-body
+// fallback) are unit-tested in auth_handler_test.go.
 func (h *AuthHandler) HandleRefresh(c *gin.Context) {
-	var req struct {
-		RefreshToken string `json:"refresh_token" binding:"required"`
+	// Read refresh token from the X-Refresh-Token header (forwarded by the
+	// gateway AuthCookieForward middleware; the raw Cookie is stripped by L17
+	// before reaching auth-service). Fallback to JSON body for backward compat
+	// during rollout (deprecated).
+	refreshToken := c.GetHeader("X-Refresh-Token")
+	if refreshToken == "" {
+		var req struct {
+			RefreshToken string `json:"refresh_token"`
+		}
+		if err := c.ShouldBindJSON(&req); err == nil {
+			refreshToken = req.RefreshToken
+		}
 	}
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+	if refreshToken == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "refresh token required"})
 		return
 	}
 
@@ -508,7 +528,7 @@ func (h *AuthHandler) HandleRefresh(c *gin.Context) {
 	// Each refresh token is stored in Redis as refresh_token:<sha256> when issued.
 	// GetDel atomically retrieves and deletes it. If the key doesn't exist, the
 	// token was already used (potential reuse/theft) → reject.
-	tokenHash := refreshTokenHash(req.RefreshToken)
+	tokenHash := refreshTokenHash(refreshToken)
 	rtKey := "refresh_token:" + tokenHash
 	_, err := h.redis.GetDel(c.Request.Context(), rtKey).Result()
 	if err != nil {
@@ -520,7 +540,7 @@ func (h *AuthHandler) HandleRefresh(c *gin.Context) {
 	}
 
 	// Refresh OAuth token
-	token, err := h.twitchOAuth.RefreshToken(c.Request.Context(), req.RefreshToken)
+	token, err := h.twitchOAuth.RefreshToken(c.Request.Context(), refreshToken)
 	if err != nil {
 		h.logger.Error("Failed to refresh token", zap.Error(err))
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Failed to refresh token"})
@@ -558,7 +578,7 @@ func (h *AuthHandler) HandleRefresh(c *gin.Context) {
 		h.logger.Warn("Failed to track new refresh token for reuse detection", zap.Error(err))
 	}
 
-	// Generate new JWT
+	// Issue new access JWT.
 	jwtToken, err := auth.GenerateTokenWithKid(h.userKeyChain.LatestKid(), user.ID, user.Username, string(h.userKeyChain.LatestSecret()), h.jwtExpiry, user.IsAdmin)
 	if err != nil {
 		h.logger.Error("Failed to generate JWT", zap.Error(err))
@@ -566,11 +586,15 @@ func (h *AuthHandler) HandleRefresh(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, models.TokenResponse{
-		AccessToken:  jwtToken,
-		RefreshToken: token.RefreshToken,
-		ExpiresIn:    int64(h.jwtExpiry.Seconds()),
-		TokenType:    "Bearer",
+	// Rotate cookies (audit H3). Tokens live in httpOnly cookies, not the body,
+	// so they are not exposed to frontend JavaScript or logged in responses.
+	auth.SetAuthCookies(c, jwtToken, token.RefreshToken, h.jwtExpiry, 14*24*time.Hour)
+
+	// Body carries only non-secret data for the UI.
+	c.JSON(http.StatusOK, gin.H{
+		"expires_in": int(h.jwtExpiry.Seconds()),
+		"token_type": "Bearer",
+		"user":       gin.H{"id": user.ID, "username": user.Username, "is_admin": user.IsAdmin},
 	})
 }
 
