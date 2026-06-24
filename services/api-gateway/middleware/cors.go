@@ -82,6 +82,14 @@ func validateCORSConfig() {
 	})
 }
 
+// LoadHTTPAllowedOrigins reads CORS_ORIGIN (comma-separated) and returns the
+// HTTP allowlist. Shared by the CORS middleware and the CSRF OriginCheck
+// (H3). Default is http://localhost:3000 for local dev.
+func LoadHTTPAllowedOrigins() []string {
+	corsOrigin := getEnvOrDefault("CORS_ORIGIN", "http://localhost:3000")
+	return parseOrigins(corsOrigin)
+}
+
 // parseOrigins parses a comma-separated list of origins
 func parseOrigins(origins string) []string {
 	if origins == "*" {
