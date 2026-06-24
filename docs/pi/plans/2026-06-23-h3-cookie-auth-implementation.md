@@ -241,7 +241,7 @@ func TestGenerateImpersonationJWTWithKid_ConfigurableExpiryAndJTI(t *testing.T) 
 }
 ```
 
-> NOTE: confirm the exact `ValidateJWTWithKeyChain` signature + `KeyChain` field names (`ByKid`, `LatestKid`) in `shared/auth/jwt.go` before finalizing the test. Adapt the test to the real signature. The assertion intent: the new function respects the passed `expiry` (30m, not the old hardcoded 2h), sets `ImpersonatedBy`, and sets a non-empty `jti` (`claims.ID`).
+> NOTE: `KeyChain` has **unexported** fields `byKid`/`latestKid` (lowercase); since the test is in `package auth`, use `&auth.KeyChain{byKid: map[string][]byte{kid: secret}, latestKid: kid}`. Adapt to the real `ValidateJWTWithKeyChain` signature (it may take `*KeyChain` + a separate secret lookup — check `shared/auth/jwt.go`). The assertions: the new function respects the passed `expiry` (30m, not the old hardcoded 2h), sets `ImpersonatedBy`, and sets a non-empty `jti` (`claims.ID`).
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -296,7 +296,27 @@ func generateJTI() (string, error) {
 
 Add imports `"crypto/rand"`, `"encoding/hex"` to `jwt.go` if not present.
 
-Keep a backward-compat shim so the existing caller compiles during the transition — OR update the single caller in Task 3. Simplest: update the caller now (Task 2 Step 3b):
+Keep a backward-compat shim so existing tests compile during the transition, AND update the two existing test callers. Do both:
+
+- [ ] **Step 3c: Add backward-compat shim**
+
+In `shared/auth/jwt.go`, after `GenerateImpersonationJWTWithKidExpiry`, add:
+
+```go
+// GenerateImpersonationJWTWithKid is a backward-compat wrapper for callers that
+// don't need a custom expiry (legacy 2h). Prefer GenerateImpersonationJWTWithKidExpiry.
+func GenerateImpersonationJWTWithKid(kid, adminUserID, adminUsername, targetUserID, targetUsername, targetTwitchID, secret string) (string, error) {
+	return GenerateImpersonationJWTWithKidExpiry(kid, adminUserID, adminUsername, targetUserID, targetUsername, targetTwitchID, []byte(secret), 2*time.Hour)
+}
+```
+
+- [ ] **Step 3d: Update existing test callers in `keychains_test.go`**
+
+Find the two call sites (`shared/auth/keychains_test.go:364` and `:449`) that invoke `GenerateImpersonationJWTWithKid` with the old signature. These still compile (the shim keeps the name), but if either asserts the hardcoded 2h expiry, update the assertion to match (the shim still uses 2h, so no assertion change needed — only confirm they still pass). Run:
+```
+cd shared/auth && go test ./...
+```
+Expected: PASS (shim keeps old callers working).
 
 - [ ] **Step 3b: Update the single caller**
 
@@ -719,7 +739,7 @@ At the end, replace the `c.JSON(http.StatusOK, models.TokenResponse{...})` with 
 	})
 ```
 
-Add the `auth` import if not present.
+Add the `auth` import if not present + `"strings"` (used in the fallback below).
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -901,6 +921,27 @@ cd services/auth-service && go test -run 'TestImpersonateUser_SetsCookieAndStash
 ```
 Expected: FAIL.
 
+- [ ] **Step 3a0: Add `redis` + `jwtExpiry` to `AdminHandler`**
+
+In `services/auth-service/handlers/admin.go`, add fields to the `AdminHandler` struct (around line 31):
+```go
+type AdminHandler struct {
+	repo         repository.UserRepository
+	db           *pgxpool.Pool
+	logger       *zap.Logger
+	userKeyChain *auth.KeyChain
+	redis        *redis.Client    // NEW (H3 impersonation stash)
+	jwtExpiry    time.Duration    // NEW (H3 impersonation cookie TTL)
+}
+```
+Update `NewAdminHandler` (around line 39) to accept + set them:
+```go
+func NewAdminHandler(repo repository.UserRepository, db *pgxpool.Pool, logger *zap.Logger, kc *auth.KeyChain, rdb *redis.Client, jwtExpiry time.Duration) *AdminHandler {
+	return &AdminHandler{repo: repo, db: db, logger: logger, userKeyChain: kc, redis: rdb, jwtExpiry: jwtExpiry}
+}
+```
+Update the call site in `services/auth-service/cmd/main.go` (find `NewAdminHandler(...)`) to pass the `redisClient` + `jwtExpiry` (already in scope in main.go — `legacyAuthHandler` has the same values). Confirm exact field names/types against the current struct.
+
 - [ ] **Step 3a: Modify `ImpersonateUser` to set cookie + stash**
 
 In `services/auth-service/handlers/admin.go`, after generating the token (currently returns `gin.H{"impersonation_token": token}`), replace the response tail:
@@ -938,7 +979,7 @@ In `services/auth-service/handlers/admin.go`, after generating the token (curren
 	})
 ```
 
-> NOTE: `AdminHandler` needs a `redis` client + `jwtExpiry` field. Confirm both exist; if not, add them to the struct + constructor wiring in `cmd/main.go`. Check `services/auth-service/handlers/admin.go` struct def + `cmd/main.go` adminHandler construction.
+> NOTE: `AdminHandler` needs a `redis` client + `jwtExpiry` field — it currently lacks both. Step 3a0 below adds them. Step 3a then uses them.
 
 - [ ] **Step 3b: Create `HandleStopImpersonation`**
 
@@ -966,8 +1007,8 @@ func (h *AuthHandler) HandleStopImpersonation(c *gin.Context) {
 	token := c.GetHeader("X-Access-Token")
 	if token == "" {
 		authHeader := c.GetHeader("Authorization")
-		if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
-			token = authHeader[7:]
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			token = strings.TrimPrefix(authHeader, "Bearer ")
 		}
 	}
 	if token == "" {
@@ -1365,7 +1406,7 @@ Apply the same to `adminAPI` (find its `protectedAPI.Use(...)`/`admin.Use(...)`)
 ```go
 		publicAPI.POST("/auth/refresh", authRateLimiter.Middleware(), middleware.AuthCookieForward(), sharedmiddleware.OriginCheck(middleware.LoadHTTPAllowedOrigins()), proxyHandler.ForwardRequest)
 ```
-For `/auth/logout` (already in protectedAPI group) + `/auth/stop-impersonation` (new), wire `AuthCookieForward` on those specific routes:
+For `/auth/logout` (already registered at `cmd/main.go:547` as `protectedAPI.POST("/auth/logout", proxyHandler.ForwardRequest)` — MODIFY that existing line, don't add a duplicate) + `/auth/stop-impersonation` (new), wire `AuthCookieForward` on those specific routes:
 
 ```go
 		protectedAPI.POST("/auth/logout", middleware.AuthCookieForward(), proxyHandler.ForwardRequest)
