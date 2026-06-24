@@ -108,14 +108,28 @@ func main() {
 
 	log.Info("Connected to PostgreSQL successfully")
 
-	// Connect to Redis
+	// Connect to Redis, retrying with backoff so a transient Redis outage
+	// (e.g. the pod being rescheduled onto another node) does not crash-loop
+	// this service. The retry is cancelled on shutdown signals so SIGTERM still
+	// terminates the process promptly while it is waiting for Redis.
 	log.Info("Connecting to Redis",
 		zap.String("host", config.RedisHost),
 		zap.String("port", config.RedisPort),
 	)
 
-	redisAddr := fmt.Sprintf("%s:%s", config.RedisHost, config.RedisPort)
-	redisClient, err := sharedRedis.NewClientWithTracing(redisAddr, "", tracingEnabled)
+	redisAddr := sharedRedis.BuildDSN(config.RedisHost, config.RedisPort)
+
+	startupCtx, stopStartup := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	redisClient, err := sharedRedis.NewClientWithRetry(startupCtx, redisAddr, getEnv("REDIS_PASSWORD", ""), tracingEnabled,
+		sharedRedis.DefaultRetryOptions(),
+		func(attempt int, err error, backoff time.Duration) {
+			log.Warn("Redis not reachable, retrying with backoff",
+				zap.Int("attempt", attempt),
+				zap.Duration("backoff", backoff),
+				zap.Error(err),
+			)
+		})
+	stopStartup()
 	if err != nil {
 		log.Fatal("Failed to connect to Redis", zap.Error(err))
 	}

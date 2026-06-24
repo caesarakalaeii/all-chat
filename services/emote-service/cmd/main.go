@@ -79,21 +79,28 @@ func main() {
 		}
 	}
 
-	// Initialize Redis client
+	// Connect to Redis, retrying with backoff so a transient Redis outage
+	// (e.g. the pod being rescheduled onto another node) does not crash-loop
+	// this service. The retry is cancelled on shutdown signals so SIGTERM still
+	// terminates the process promptly while it is waiting for Redis.
 	log.Info("Connecting to Redis")
 	redisAddr := sharedRedis.BuildDSN(redisHost, redisPort)
-	redisClient, err := sharedRedis.NewClient(redisAddr, "")
+
+	startupCtx, stopStartup := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	redisClient, err := sharedRedis.NewClientWithRetry(startupCtx, redisAddr, getEnv("REDIS_PASSWORD", ""), tracingEnabled,
+		sharedRedis.DefaultRetryOptions(),
+		func(attempt int, err error, backoff time.Duration) {
+			log.Warn("Redis not reachable, retrying with backoff",
+				zap.Int("attempt", attempt),
+				zap.Duration("backoff", backoff),
+				zap.Error(err),
+			)
+		})
+	stopStartup()
 	if err != nil {
 		log.Fatal("Failed to connect to Redis", zap.Error(err))
 	}
 	defer redisClient.Close()
-
-	// Test Redis connection
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := redisClient.Ping(ctx).Err(); err != nil {
-		log.Fatal("Failed to ping Redis", zap.Error(err))
-	}
 	log.Info("Connected to Redis")
 
 	// Initialize metrics (available via /metrics endpoint)
