@@ -78,6 +78,13 @@ export class DemandSubscriber {
     this.logger.info('Subscribing to demand channel', { channel });
 
     const subscriber = this.redisClient.duplicate();
+    // The duplicated client needs its own 'error' listener — node-redis throws
+    // on an 'error' event with no listener, which would crash the process when
+    // the Pub/Sub socket drops (e.g. during a Redis blip). The reconnectStrategy
+    // is inherited from the parent client's options via duplicate().
+    subscriber.on('error', (err: Error) => {
+      this.logger.error('Redis subscriber client error', { error: err.message });
+    });
     await subscriber.connect();
     this.subscriberClient = subscriber;
 
