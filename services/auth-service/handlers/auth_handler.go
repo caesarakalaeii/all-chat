@@ -263,6 +263,12 @@ func (h *AuthHandler) HandleCallback(c *gin.Context) {
 		RefreshToken: token.RefreshToken,
 		ExpiresIn:    int64(h.jwtExpiry.Seconds()),
 		TokenType:    "Bearer",
+		User: &StreamerAuthUser{
+			ID:          user.ID,
+			Username:    user.Username,
+			DisplayName: user.DisplayName,
+			IsAdmin:     user.IsAdmin,
+		},
 	})
 	if storeErr != nil {
 		h.logger.Error("Failed to store streamer auth code", zap.Error(err))
@@ -419,6 +425,12 @@ func (h *AuthHandler) HandleYouTubeCallback(c *gin.Context) {
 		RefreshToken: token.RefreshToken,
 		ExpiresIn:    int64(h.jwtExpiry.Seconds()),
 		TokenType:    "Bearer",
+		User: &StreamerAuthUser{
+			ID:          user.ID,
+			Username:    user.Username,
+			DisplayName: user.DisplayName,
+			IsAdmin:     user.IsAdmin,
+		},
 	})
 	if storeErr != nil {
 		h.logger.Error("Failed to store streamer auth code", zap.Error(err))
@@ -481,6 +493,7 @@ func (h *AuthHandler) HandleStreamerTokenExchange(c *gin.Context) {
 		"redirect_to":        payload.RedirectTo,
 		"source_added":       payload.SourceAdded,
 		"moderation_enabled": payload.ModerationEnabled,
+		"user":               payload.User,
 	})
 }
 
@@ -598,7 +611,11 @@ func (h *AuthHandler) HandleRefresh(c *gin.Context) {
 	})
 }
 
-// HandleGetMe returns current user info
+// HandleGetMe returns current user info. When the JWT carries an
+// ImpersonatedBy claim (set by JWTAuthWithRevocation into the context as
+// "impersonated_by"), the response includes an "impersonating" flag + the
+// admin's identifier so the frontend can restore isImpersonating across page
+// reloads (audit H3).
 func (h *AuthHandler) HandleGetMe(c *gin.Context) {
 	// Extract user ID from JWT (set by middleware)
 	userID, exists := c.Get("user_id")
@@ -614,7 +631,19 @@ func (h *AuthHandler) HandleGetMe(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, user)
+	// Marshal the user to a map to preserve the existing response shape while
+	// allowing the impersonation fields to be appended only when set.
+	resp := gin.H{}
+	if raw, err := json.Marshal(user); err == nil {
+		_ = json.Unmarshal(raw, &resp)
+	}
+	if ib, ok := c.Get("impersonated_by"); ok {
+		if ibStr, ok := ib.(string); ok && ibStr != "" {
+			resp["impersonating"] = true
+			resp["impersonated_by"] = ibStr
+		}
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 // HandleLogout logs out the user
