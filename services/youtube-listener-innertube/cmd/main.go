@@ -35,9 +35,9 @@ import (
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/publisher"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/streams"
 	"github.com/caesar/all-chat/shared/listener"
+	sharedredis "github.com/caesar/all-chat/shared/redis"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -106,17 +106,30 @@ func main() {
 	)
 
 	// 4. Redis client
-	redisClient := redis.NewClient(&redis.Options{
-		Addr: fmt.Sprintf("%s:%s", redisHost, redisPort),
-	})
-	defer redisClient.Close()
+	// Connect to Redis, retrying with backoff so a transient Redis outage
+	// (e.g. the pod being rescheduled onto another node) does not crash-loop
+	// this service. The retry is cancelled on shutdown signals so SIGTERM still
+	// terminates the process promptly while it is waiting for Redis.
+	tracingEnabled := listener.Env("OTEL_ENABLED", "false") == "true"
+	redisAddr := sharedredis.BuildDSN(redisHost, redisPort)
 
-	// Test Redis connection
-	if err := redisClient.Ping(ctx).Err(); err != nil {
+	startupCtx, stopStartup := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
+	redisClient, err := sharedredis.NewClientWithRetry(startupCtx, redisAddr, listener.Env("REDIS_PASSWORD", ""), tracingEnabled,
+		sharedredis.DefaultRetryOptions(),
+		func(attempt int, err error, backoff time.Duration) {
+			logger.Warn("Redis not reachable, retrying with backoff",
+				zap.Int("attempt", attempt),
+				zap.Duration("backoff", backoff),
+				zap.Error(err),
+			)
+		})
+	stopStartup()
+	if err != nil {
 		logger.Fatal("Failed to connect to Redis", zap.Error(err))
 	}
-	logger.Info("Connected to Redis",
-		zap.String("addr", fmt.Sprintf("%s:%s", redisHost, redisPort)))
+	defer redisClient.Close()
+
+	logger.Info("Connected to Redis", zap.String("addr", redisAddr))
 
 	// 5. Initialize components
 	// Fetch current InnerTube client version + API key from YouTube at startup.

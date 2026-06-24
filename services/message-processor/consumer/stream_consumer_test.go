@@ -153,6 +153,54 @@ func TestStreamConsumer_BUSYGROUPHandledWithContains(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestStreamConsumer_RecreatesGroupOnNOGROUP verifies that if the consumer group
+// is missing — e.g. Redis was reset / failed over to an empty instance, as in a
+// full HA cutover — readAndProcess recreates the group instead of spinning on
+// read errors, and resumes delivering messages.
+func TestStreamConsumer_RecreatesGroupOnNOGROUP(t *testing.T) {
+	mr, err := miniredis.Run()
+	require.NoError(t, err)
+	defer mr.Close()
+
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer client.Close()
+
+	ctx := context.Background()
+
+	// A message exists in the stream, but NO consumer group has been created —
+	// exactly the state after a cutover to a fresh, empty Redis.
+	_, err = client.XAdd(ctx, &redis.XAddArgs{
+		Stream: StreamKey,
+		ID:     "*",
+		Values: map[string]interface{}{"data": `{"message_id":"nogroup1","platform":"twitch","channel_id":"ch1","timestamp":"2026-01-01T00:00:00Z"}`},
+	}).Result()
+	require.NoError(t, err)
+
+	handlerCalls := 0
+	c := &StreamConsumer{
+		client:  client,
+		logger:  zaptest.NewLogger(t),
+		metrics: sharedTestMetrics,
+		handler: func(ctx context.Context, msg *models.RawChatMessage) error {
+			handlerCalls++
+			return nil
+		},
+		consumerName:   "test-consumer",
+		stopCh:         make(chan struct{}),
+		msgIDRegistry:  registry.NewRedisRegistry(client, time.Hour),
+		deletionBuffer: registry.NewRedisDeletionBuffer(client, time.Hour),
+	}
+
+	// First read hits NOGROUP (no group yet). It must recover by recreating the
+	// group and return nil rather than erroring.
+	require.NoError(t, c.readAndProcess(ctx))
+
+	// The group now exists, so the next read delivers the pending message —
+	// proving the consumer recovered and resumed processing without a restart.
+	require.NoError(t, c.readAndProcess(ctx))
+	assert.Equal(t, 1, handlerCalls)
+}
+
 func TestStreamConsumer_ProcessAndAckSendsToCorrectGroup(t *testing.T) {
 	mr, err := miniredis.Run()
 	require.NoError(t, err)

@@ -41,6 +41,7 @@ function makeMockSubscriberClient() {
 
   return {
     connect: vi.fn().mockResolvedValue(undefined),
+    on: vi.fn(),
     disconnect: vi.fn().mockResolvedValue(undefined),
     unsubscribe: vi.fn().mockResolvedValue(undefined),
     subscribe: vi.fn().mockImplementation(
@@ -92,6 +93,27 @@ describe('DemandSubscriber', () => {
       expect.any(Function)
     );
     expect(subscriber.getIsSubscribed()).toBe(true);
+  });
+
+  it('registers an error handler on the duplicated client that logs instead of throwing', async () => {
+    const subscriber = new DemandSubscriber(
+      mockRedis as any,
+      handler,
+      mockLogger
+    );
+
+    await subscriber.subscribe();
+
+    // An 'error' listener must be attached: node-redis throws on an 'error'
+    // event with no listener, which would crash the whole process when the
+    // Pub/Sub socket drops (e.g. during a Redis blip / node reboot).
+    expect(mockRedis._subscriberClient.on).toHaveBeenCalledWith('error', expect.any(Function));
+
+    // The handler must swallow the error (log, not re-throw).
+    const errorCall = mockRedis._subscriberClient.on.mock.calls.find((c) => c[0] === 'error');
+    const onError = errorCall?.[1] as (err: Error) => void;
+    expect(() => onError(new Error('Socket closed unexpectedly'))).not.toThrow();
+    expect(mockLogger.error).toHaveBeenCalled();
   });
 
   it('filters by tiktok platform and calls handler with correct Map', async () => {

@@ -184,6 +184,20 @@ func (c *StreamConsumer) readAndProcess(ctx context.Context) error {
 		if err == redis.Nil {
 			return nil
 		}
+		// NOGROUP: the stream/consumer group no longer exists — e.g. Redis was
+		// reset or failed over to an empty instance (a full HA cutover, not a
+		// normal Sentinel failover, which preserves replicated state). Recreate
+		// the group and retry on the next loop instead of spinning on read errors.
+		if strings.Contains(err.Error(), "NOGROUP") {
+			c.logger.Warn("Consumer group missing (NOGROUP); recreating",
+				zap.String("group", ConsumerGroup),
+				zap.String("stream", StreamKey),
+			)
+			if cerr := c.createConsumerGroup(ctx); cerr != nil {
+				return fmt.Errorf("recreate consumer group after NOGROUP: %w", cerr)
+			}
+			return nil
+		}
 		c.metrics.RecordStreamError("message-processor", "read_error")
 		return fmt.Errorf("failed to read from stream: %w", err)
 	}

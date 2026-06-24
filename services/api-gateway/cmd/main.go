@@ -100,14 +100,28 @@ func main() {
 
 	log.Info("Connected to PostgreSQL")
 
-	// Connect to Redis (for WebSocket Pub/Sub)
+	// Connect to Redis (for WebSocket Pub/Sub), retrying with backoff so a
+	// transient Redis outage (e.g. the pod being rescheduled onto another node)
+	// does not crash-loop this service. The retry is cancelled on shutdown
+	// signals so SIGTERM still terminates the process promptly while it is
+	// waiting for Redis.
 	redisHost := getEnvOrDefault("REDIS_HOST", "localhost")
 	redisPort := getEnvOrDefault("REDIS_PORT", "6379")
-	redisPassword := getEnvOrDefault("REDIS_PASSWORD", "")
-	redisClient, err := sharedredis.NewClientWithTracing(
-		fmt.Sprintf("%s:%s", redisHost, redisPort), redisPassword, tracingEnabled)
+	redisAddr := sharedredis.BuildDSN(redisHost, redisPort)
+
+	startupCtx, stopStartup := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
+	redisClient, err := sharedredis.NewClientWithRetry(startupCtx, redisAddr, getEnvOrDefault("REDIS_PASSWORD", ""), tracingEnabled,
+		sharedredis.DefaultRetryOptions(),
+		func(attempt int, err error, backoff time.Duration) {
+			log.Warn("Redis not reachable, retrying with backoff",
+				zap.Int("attempt", attempt),
+				zap.Duration("backoff", backoff),
+				zap.Error(err),
+			)
+		})
+	stopStartup()
 	if err != nil {
-		log.Fatal("Failed to create Redis client", zap.Error(err))
+		log.Fatal("Failed to connect to Redis", zap.Error(err))
 	}
 	defer redisClient.Close()
 

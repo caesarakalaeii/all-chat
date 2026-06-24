@@ -64,6 +64,10 @@ const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
 const LOG_FORMAT = process.env.LOG_FORMAT || 'json'; // 'json' or 'simple'
 const REDIS_HOST = process.env.REDIS_HOST || 'localhost';
 const REDIS_PORT = parseInt(process.env.REDIS_PORT || '6379');
+// Cap for Redis (re)connect backoff. node-redis retries up to this delay so a
+// transient outage (e.g. the redis pod restarting during a node reboot) is
+// ridden out instead of crashing the pod into CrashLoopBackOff.
+const REDIS_RECONNECT_MAX_DELAY_MS = 5000;
 const DATABASE_HOST = process.env.DATABASE_HOST || 'localhost';
 const DATABASE_PORT = parseInt(process.env.DATABASE_PORT || '5432');
 const DATABASE_USER = process.env.DATABASE_USER || 'allchat';
@@ -222,12 +226,26 @@ class TikTokListenerService {
   private livePollerRunning: boolean = false;
 
   constructor() {
-    // Initialize Redis client
+    // Initialize Redis client.
+    // reconnectStrategy makes node-redis keep retrying (with capped backoff)
+    // instead of giving up, so a transient Redis outage — e.g. the
+    // single-replica redis pod going down during a node reboot — is ridden out
+    // rather than crashing the pod.
     this.redis = createClient({
       socket: {
         host: REDIS_HOST,
-        port: REDIS_PORT
+        port: REDIS_PORT,
+        reconnectStrategy: (retries: number): number =>
+          Math.min((retries + 1) * 500, REDIS_RECONNECT_MAX_DELAY_MS)
       }
+    });
+
+    // node-redis emits socket errors as 'error' events; an EventEmitter with no
+    // 'error' listener throws, which would crash the whole process on any Redis
+    // blip (this was the cause of the overnight TargetDown crashloop). Logging
+    // it here lets the reconnectStrategy reconnect instead.
+    this.redis.on('error', (err: Error) => {
+      logger.error('Redis client error', { error: err.message });
     });
 
     // Initialize PostgreSQL pool
@@ -286,9 +304,16 @@ class TikTokListenerService {
       coordination_enabled: !!SERVICE_JWT_SECRET
     });
 
+    // Start the HTTP server FIRST so the liveness/readiness/metrics endpoints
+    // are available immediately. This keeps the Prometheus scrape target up (so
+    // a dependency blip no longer surfaces as TargetDown) and keeps the pod
+    // alive while Redis is briefly unreachable. Readiness gates on
+    // this.redis.isReady, so traffic is still held off until Redis is connected.
+    this.startHttpServer();
+
     try {
-      // Connect to Redis
-      await this.redis.connect();
+      // Connect to Redis, retrying instead of crashing if it is briefly down.
+      await this.connectRedisWithRetry();
       logger.info('Connected to Redis', { host: REDIS_HOST, port: REDIS_PORT });
 
       // Test database connection
@@ -324,9 +349,6 @@ class TikTokListenerService {
       // Start like aggregation publisher
       this.startLikeAggregationPublisher();
 
-      // Start HTTP server for health checks
-      this.startHttpServer();
-
       // Initialize demand subscriber (Phase 5)
       // Replaces old pollActiveStreams / startDatabaseListener approach.
       // source-manager publishes full-snapshot DemandUpdates to "source:demand".
@@ -359,6 +381,39 @@ class TikTokListenerService {
     } catch (error) {
       logger.error('Failed to start service', { error });
       throw error;
+    }
+  }
+
+  /**
+   * Connect to Redis, retrying with capped backoff instead of throwing.
+   *
+   * node-redis's reconnectStrategy only governs reconnections AFTER an initial
+   * successful connect — the first connect() still rejects if Redis is
+   * unreachable. Previously that rejection propagated to process.exit(1),
+   * turning a transient Redis outage (e.g. the single-replica redis pod going
+   * down during a node reboot) into a CrashLoopBackOff. We retry until Redis is
+   * reachable; the HTTP server is already up, so the pod stays alive (liveness)
+   * and reports not-ready (readiness) until the connection succeeds.
+   */
+  private async connectRedisWithRetry(): Promise<void> {
+    let attempt = 0;
+    while (true) {
+      try {
+        await this.redis.connect();
+        return;
+      } catch (error) {
+        if (this.isShuttingDown) {
+          throw error;
+        }
+        attempt++;
+        const delayMs = Math.min(attempt * 500, REDIS_RECONNECT_MAX_DELAY_MS);
+        logger.warn('Redis connection attempt failed, retrying', {
+          attempt,
+          retry_in_ms: delayMs,
+          error: error instanceof Error ? error.message : String(error)
+        });
+        await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+      }
     }
   }
 
