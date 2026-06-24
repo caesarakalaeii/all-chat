@@ -28,7 +28,7 @@ The **api-gateway is the cookie boundary.** It reads the httpOnly cookie, valida
 ```
 Browser
   │ Cookie: access_token (httpOnly, Secure, SameSite=Lax, Path=/)
-  │ Cookie: refresh_token (httpOnly, Secure, SameSite=Lax, Path=/api/v1/auth/refresh)
+  │ Cookie: refresh_token (httpOnly, Secure, SameSite=Lax, Path=/api/v1/auth/)
   ▼
 api-gateway JWTAuth
   ├─ read cookie (fallback: Authorization: Bearer — backward compat)
@@ -68,7 +68,7 @@ The Problem statement names impersonation tokens as part of the XSS-theft surfac
 - JSON body: `{user:{id,username,display_name}, impersonating:true}` (no tokens).
 
 ### `POST /api/v1/auth/stop-impersonation` (auth-service, requires an impersonated JWT)
-- Read the current access cookie; if it has an `impersonated_by` claim, look up the stashed admin identity in Redis, issue a fresh admin access JWT, `Set-Cookie` it (restores admin session), delete the Redis stash key.
+- Read the current access token from the `X-Access-Token` header (forwarded by `AuthCookieForward`); if it has an `impersonated_by` claim, look up the stashed admin identity in Redis, issue a fresh admin access JWT, `Set-Cookie` it (restores admin session), delete the Redis stash key.
 - If the current token is NOT an impersonated one, `400` (nothing to stop).
 - JSON body: `{user:{admin profile}}`.
 
@@ -94,31 +94,31 @@ Current: returns JSON `{access_token, refresh_token, expires_in, token_type, red
 Change:
 - Build access JWT + refresh token as today.
 - `Set-Cookie: access_token=...; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=<jwtexp>`
-- `Set-Cookie: refresh_token=...; HttpOnly; Secure; SameSite=Lax; Path=/api/v1/auth/refresh; Max-Age=1209600`
+- `Set-Cookie: refresh_token=...; HttpOnly; Secure; SameSite=Lax; Path=/api/v1/auth/; Max-Age=1209600`
 - Store refresh-token hash in Redis (M2 reuse detection — unchanged).
 - JSON body: `{expires_in, token_type, redirect_to, user:{id,username,display_name,is_admin}, source_added?, moderation_enabled?}`. **No tokens in body.**
 
 ### `POST /api/v1/auth/refresh`
 Current: reads `refresh_token` from JSON body; returns `{access_token, refresh_token, expires_in}`.
 Change:
-- Read refresh token from **cookie** `refresh_token` (fallback: JSON body `{refresh_token}` — backward compat during rollout, deprecated).
+- Read refresh token from the `X-Refresh-Token` header (forwarded by gateway `AuthCookieForward` — raw cookie is stripped by L17 before reaching auth-service; do NOT call `c.Cookie()`). Fallback: JSON body `{refresh_token}` (backward compat during rollout, deprecated).
 - Reuse-detection via `GetDel` on `refresh_token:<hash>` Redis key (unchanged).
-- On success: rotate both cookies (new access + new refresh `Set-Cookie`), update Redis hash, return `{expires_in, token_type, user:...}` only.
+- On success: rotate both cookies (new access `Set-Cookie` Path=`/`; new refresh `Set-Cookie` Path=`/api/v1/auth/`), update Redis hash, return `{expires_in, token_type, user:...}` only.
 - On failure: `401`; **clear both cookies** (`Max-Age=0`).
 
 ### `POST /api/v1/auth/logout`
 Current: reads `Authorization: Bearer`, blacklists token in Redis.
 Change:
-- Read token from cookie (fallback: Authorization).
+- Read token from the `X-Access-Token` header (forwarded by `AuthCookieForward`; raw cookie stripped by L17). Fallback: `Authorization: Bearer`.
 - Blacklist access JWT (`blacklist:<token>`, TTL = remaining JWT exp) — unchanged.
-- `Set-Cookie: access_token=; Max-Age=0; Path=/` + `Set-Cookie: refresh_token=; Max-Age=0; Path=/api/v1/auth/refresh`.
+- `Set-Cookie: access_token=; Max-Age=0; Path=/` + `Set-Cookie: refresh_token=; Max-Age=0; Path=/api/v1/auth/`.
 - Delete refresh-token Redis key (revoke the family entry).
 
 ## Gateway (api-gateway)
 
 ### Cookie forwarding to auth-service (L17 interaction — critical)
 
-> **Problem:** The gateway proxy's L17 strip (`handlers/proxy.go:153-157`) removes `Cookie`/`Referer`/`Origin` from **all** proxied requests. `/api/v1/auth/refresh`, `/auth/logout`, and `/auth/stop-impersonation` are **public** proxied routes — so the browser-sent cookies would be stripped before auth-service sees them. `Set-Cookie` (response) passes through fine, but `Cookie` (request) does not. The JSON-body refresh fallback is also dead because the frontend cannot read an httpOnly cookie. Without this, the refresh flow is broken (users logged out when the access JWT expires).
+> **Problem:** The gateway proxy's L17 strip (`handlers/proxy.go:153-157`) removes `Cookie`/`Referer`/`Origin` from **all** proxied requests. `/api/v1/auth/refresh`, `/auth/logout`, and `/auth/stop-impersonation` are proxied routes — so the browser-sent cookies would be stripped before auth-service sees them. `Set-Cookie` (response) passes through fine, but `Cookie` (request) does not. The JSON-body refresh fallback is also dead because the frontend cannot read an httpOnly cookie. Without this, the refresh flow is broken (users logged out when the access JWT expires).
 
 **Fix:** a gateway middleware `AuthCookieForward()` applied to the auth routes that need cookie access (`/auth/refresh`, `/auth/logout`, `/auth/stop-impersonation`). (`/auth/refresh` is public; `/auth/logout` is on `protectedAPI`; `/auth/stop-impersonation` is on `protectedAPI` — the middleware is applied to all three regardless of public/protected since it only copies cookie→header and is a no-op when no cookie present.)
 
@@ -182,7 +182,7 @@ In `apiClient` (the shared fetch wrapper `client.ts`):
 ## Testing
 
 ### Unit
-- auth-service: `HandleRefresh` reads from cookie; `HandleExchange` sets cookies; `HandleLogout` clears cookies. Use `httptest.NewRecorder` + assert `Set-Cookie` headers. Mock Redis (miniredis).
+- auth-service: `HandleRefresh` reads from the `X-Refresh-Token` header; `HandleExchange` sets cookies; `HandleLogout` clears cookies. Use `httptest.NewRecorder` + assert `Set-Cookie` headers. Mock Redis (miniredis).
 - gateway `JWTAuth`: cookie-first resolution; Authorization fallback; both-absent path. Existing tests extended.
 - `shared/middleware/origin_check.go`: allow/absent/deny cases.
 
@@ -204,6 +204,10 @@ Three file-disjoint domains for parallel agents:
 1. **auth-service** — issuance (`/exchange`, `/refresh`), `/logout` cookie clear, impersonation (`/admin/users/:id/impersonate`, `/auth/stop-impersonation` + Redis stash; reads `X-Access-Token`/`X-Refresh-Token` headers forwarded by gateway), reuse-detection unchanged. Files: `services/auth-service/handlers/auth_handler.go` (+impersonation handlers or a new `admin_impersonation.go`), `viewer_auth.go` (streamer payload helper stays), `cmd/main.go` (register `/stop-impersonation`).
 2. **gateway** — NEW `middleware/cookie_to_bearer.go` normalization middleware wired before `sharedmiddleware.JWTAuth` (protected routes); NEW `middleware/auth_cookie_forward.go` on public auth routes (`/auth/refresh`, `/auth/logout`, `/auth/stop-impersonation`) to forward cookies as `X-Access-Token`/`X-Refresh-Token` (bypassing L17 strip); new `shared/middleware/origin_check.go` + wire on mutating routes (loads `CORS_ORIGIN`); register gateway route `protectedAPI.POST("/auth/stop-impersonation", proxyHandler.ForwardRequest)`; verify `Set-Cookie` response passthrough. Files: `services/api-gateway/middleware/cookie_to_bearer.go` (+test), `middleware/auth_cookie_forward.go` (+test), `cmd/main.go` (wire both + stop-impersonation route), `shared/middleware/origin_check.go` (+test).
 3. **frontend** — `client.ts`/`overlays.ts`/`chat.ts`/`moderation.ts` remove token attach; 401-interceptor; `auth-store.ts` cookie-derive + scope in-memory store removal to streamer/admin fields; `startImpersonation`/`stopImpersonation` rewrite to call the new endpoints (no token swap); callback reads body only. Files under `frontend/src/`.
+
+### Refresh-during-impersonation edge case
+
+If an impersonated access JWT expires while the admin is still impersonating, the frontend 401-interceptor calls `/auth/refresh`. The refresh token is bound to the admin, so the refresh handler issues a new **admin** access JWT (not impersonated). This safely reverts the session to admin (no escalation), but the frontend `impersonating` flag is now stale. Acceptable: impersonation is meant to be short-lived (within access-JWT expiry). The frontend `stopImpersonation` can also detect a non-impersonated token and reset the flag.
 
 ## Open questions for implementation
 
