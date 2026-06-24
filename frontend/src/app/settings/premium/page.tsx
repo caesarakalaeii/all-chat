@@ -28,6 +28,7 @@ import { Card } from '@/components/ui/card'
 import { Dialog } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toastManager } from '@/lib/toast'
+import { PATREON_JOIN_URL } from '@/lib/constants'
 import {
   disconnectPatreon,
   getPaymentStatus,
@@ -147,7 +148,7 @@ function PremiumContent() {
               <p className="text-sm text-text-sub">
                 Not a patron yet?{' '}
                 <a
-                  href="https://patreon.com/all_chat"
+                  href={PATREON_JOIN_URL}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="font-medium text-twitch hover:underline"

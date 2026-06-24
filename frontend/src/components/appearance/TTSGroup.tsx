@@ -24,6 +24,7 @@ import { trackEvent } from '@/lib/analytics'
 import { ToggleSwitch } from './ToggleSwitch'
 import { SliderControl } from './SliderControl'
 import { PremiumBadge } from '@/components/PremiumBadge'
+import { PremiumUpsellLink } from '@/components/PremiumUpsellLink'
 import { useBrowserVoices } from '@/lib/hooks/useBrowserVoices'
 import type { DisplaySettings } from '@/lib/types/overlay'
 
@@ -323,9 +324,13 @@ function ApiKeyInput({
       {!hasSavedKey && (
         <div>
           <p className="mb-1 text-xs text-text-dim">
-            {isPremium
-              ? 'Your key is encrypted server-side and never returned.'
-              : 'Upgrade to Premium to use ElevenLabs voices.'}
+            {isPremium ? (
+              'Your key is encrypted server-side and never returned.'
+            ) : (
+              <>
+                <PremiumUpsellLink /> to use ElevenLabs voices.
+              </>
+            )}
           </p>
           <div className="flex gap-2">
             <input
@@ -690,7 +695,7 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
             <div className="flex flex-col items-center gap-2 text-center">
               <PremiumBadge />
               <span className="text-xs text-text-dim">
-                Upgrade to Premium to use ElevenLabs voices.
+                <PremiumUpsellLink /> to use ElevenLabs voices.
               </span>
             </div>
           </div>
@@ -828,7 +833,7 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
             </label>
             {!isPremium && (
               <p className="text-xs text-text-dim">
-                Upgrade to Premium to use ElevenLabs voices.
+                <PremiumUpsellLink /> to use ElevenLabs voices.
               </p>
             )}
           </fieldset>

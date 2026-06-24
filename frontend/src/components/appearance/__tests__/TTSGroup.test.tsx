@@ -964,9 +964,10 @@ describe('TTSGroup', () => {
       isPremium: false,
       hasElevenLabsConfig: false,
     })
-    // The upgrade-to-premium copy renders (overlay message)
-    const upgradeMatches = screen.getAllByText(/Upgrade to Premium to use ElevenLabs voices\./)
-    expect(upgradeMatches.length).toBeGreaterThan(0)
+    // The upgrade-to-premium copy renders as an upsell link to /upgrade
+    const upgradeLinks = screen.getAllByRole('link', { name: /Upgrade to Premium/i })
+    expect(upgradeLinks.length).toBeGreaterThan(0)
+    expect(upgradeLinks[0].getAttribute('href')).toBe('/upgrade')
     // API-key input exists but is disabled
     const input = screen.queryByLabelText(/ElevenLabs API key/i) as HTMLInputElement | null
     if (input) {

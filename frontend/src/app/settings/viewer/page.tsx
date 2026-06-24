@@ -20,6 +20,7 @@
 
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import Link from 'next/link'
 import { AppNav } from '@/components/AppNav'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -318,6 +319,18 @@ function ColorGradientCard({ claims }: { claims: ViewerJWTClaims }) {
         </button>
       </div>
 
+      {!claims.is_premium && (
+        <p className="mb-4 text-xs text-text-dim">
+          Gradient names are a viewer premium cosmetic.{' '}
+          <Link
+            href="/settings/viewer/premium"
+            className="font-medium text-twitch hover:underline"
+          >
+            Unlock viewer premium
+          </Link>
+        </p>
+      )}
+
       {/* Solid Color tab panel */}
       {activeTab === 'solid' && (
         <div>
@@ -615,6 +628,18 @@ function AvatarCosmeticsCard({ claims }: { claims: ViewerJWTClaims }) {
       <p className="text-text-sub text-sm mb-4">
         Choose a frame and flair for your avatar
       </p>
+
+      {!isPremium && (
+        <p className="mb-4 text-xs text-text-dim">
+          Some frames and flairs are viewer premium.{' '}
+          <Link
+            href="/settings/viewer/premium"
+            className="font-medium text-twitch hover:underline"
+          >
+            Unlock viewer premium
+          </Link>
+        </p>
+      )}
 
       {/* Avatar Frame section */}
       <div className="mb-6">
