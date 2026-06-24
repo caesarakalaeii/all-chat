@@ -52,7 +52,7 @@ Issued by auth-service via `Set-Cookie` (response headers pass through the gatew
 | Cookie | Path | Lifetime | Notes |
 |---|---|---|---|
 | `access_token` | `/` | JWT exp (hours, env `JWT_EXPIRY_HOURS`) | Sent to every same-origin request. |
-| `refresh_token` | `/api/v1/auth/refresh` | 14d (matches Redis refresh-token TTL) | Path-scoped: only sent to the refresh endpoint, minimizing exposure surface. |
+| `refresh_token` | `/api/v1/auth/` | 14d (matches Redis refresh-token TTL) | Path-scoped to the auth routes: sent to `/refresh`, `/logout`, `/stop-impersonation` so all can read+revoke it. (Not `/`-scoped — minimizes exposure to non-auth routes. Gateway L17 strips `Cookie` before forwarding to backends anyway, so only auth-service sees it.) |
 
 Cookie names (`access_token`, `refresh_token`) are defined as constants in `shared/auth/cookie.go` (new file) so auth-service (issuer) and gateway (reader) share one source of truth.
 
@@ -62,7 +62,7 @@ The Problem statement names impersonation tokens as part of the XSS-theft surfac
 
 ### `POST /api/v1/admin/users/:id/impersonate` (auth-service, admin-only)
 - Validate the caller is admin (existing `AdminOnly`).
-- Issue a NEW access JWT for the target user (the impersonated identity) using the **normal access-JWT generator** (`GenerateTokenWithKid`, env-configured `jwtExpiry`) — NOT the existing `GenerateImpersonationJWTWithKid` (which hardcodes 2h); that legacy function can be retired in a follow-up. **Stash the admin's identity** in Redis under a key bound to this impersonation session: `impersonation:<impersonated-jwt-jti>` → `{admin_user_id, admin_username, started_at}` (TTL = access JWT exp). The impersonated JWT carries a claim `impersonated_by:<admin_id>` (existing `GenerateTokenWithKid` path already supports the `ImpersonatedBy` claim via `shared/auth/jwt.go`; gateway `JWTAuth` already reads `claims.ImpersonatedBy` into context — reuse) so backends can audit.
+- Issue a NEW access JWT for the target user (the impersonated identity) using `GenerateImpersonationJWTWithKid` — **but first add a configurable `expiry time.Duration` parameter** to that function (replacing its hardcoded `2 * time.Hour`), so impersonation JWTs use the env-configured `jwtExpiry`. Keep its existing `ImpersonatedBy`/`ImpersonatedUser` claim semantics (`shared/auth/jwt.go` — `GenerateTokenWithKid` does NOT set those claims; only `GenerateImpersonationJWTWithKid` does). **Stash the admin's identity** in Redis under a key bound to this impersonation session: `impersonation:<impersonated-jwt-jti>` → `{admin_user_id, admin_username, started_at}` (TTL = access JWT exp). The function does not currently set `jti` (`RegisteredClaims.ID`) — **the implementer must generate a UUID and set `claims.ID`** so the Redis stash key can bind to it. The impersonated JWT carries the `impersonated_by:<admin_id>` claim (gateway `JWTAuth` already reads `claims.ImpersonatedBy` into context — reuse) so backends can audit.
 - `Set-Cookie: access_token=<impersonated-jwt>; ...` (replaces the admin's access cookie in the browser).
 - Do NOT touch the refresh cookie (refresh stays bound to the admin; impersonation is access-JWT-only and short-lived).
 - JSON body: `{user:{id,username,display_name}, impersonating:true}` (no tokens).
@@ -120,9 +120,9 @@ Change:
 
 > **Problem:** The gateway proxy's L17 strip (`handlers/proxy.go:153-157`) removes `Cookie`/`Referer`/`Origin` from **all** proxied requests. `/api/v1/auth/refresh`, `/auth/logout`, and `/auth/stop-impersonation` are **public** proxied routes — so the browser-sent cookies would be stripped before auth-service sees them. `Set-Cookie` (response) passes through fine, but `Cookie` (request) does not. The JSON-body refresh fallback is also dead because the frontend cannot read an httpOnly cookie. Without this, the refresh flow is broken (users logged out when the access JWT expires).
 
-**Fix:** a gateway middleware `AuthCookieForward()` applied to the auth public routes (`/auth/refresh`, `/auth/logout`, `/auth/stop-impersonation`) that reads the `access_token` and/or `refresh_token` cookies and sets them as **non-stripped custom headers** `X-Access-Token` / `X-Refresh-Token` on the proxied request. L17 strips `Cookie`/`Referer`/`Origin` but NOT `X-Access-Token`/`X-Refresh-Token` (custom headers, not in the hop list), so they pass through to auth-service. Consistent with the `CookieToBearer` pattern (gateway normalizes cookies → headers; backends unchanged).
+**Fix:** a gateway middleware `AuthCookieForward()` applied to the auth routes that need cookie access (`/auth/refresh`, `/auth/logout`, `/auth/stop-impersonation`). (`/auth/refresh` is public; `/auth/logout` is on `protectedAPI`; `/auth/stop-impersonation` is on `protectedAPI` — the middleware is applied to all three regardless of public/protected since it only copies cookie→header and is a no-op when no cookie present.)
 
-auth-service reads, in precedence order: `X-Access-Token` / `X-Refresh-Token` header → cookie (for non-proxied calls) → JSON body / `Authorization` (backward compat). Wire `AuthCookieForward()` on the public auth routes in `cmd/main.go`.
+auth-service reads, in precedence order: `X-Access-Token` / `X-Refresh-Token` header → cookie (for non-proxied calls) → JSON body / `Authorization` (backward compat). Wire `AuthCookieForward()` on the three auth routes in `cmd/main.go`.
 
 ### `middleware/cookie_to_bearer.go` — NEW normalization middleware (the cookie boundary)
 
@@ -143,8 +143,9 @@ func CookieToBearer() gin.HandlerFunc {
 ```
 
 - Wired in `cmd/main.go` on the protected/admin/metrics groups BEFORE `sharedmiddleware.JWTAuth(...)`, e.g. `protected.Use(middleware.CookieToBearer(), sharedmiddleware.JWTAuthWithRevocation(userKeyChain, redisClient))`.
+  - **Behavioral change to call out:** `protectedAPI`/`adminAPI`/`metricsGroup` currently use `JWTAuth` (no revocation). This migration switches them to `JWTAuthWithRevocation` (H2 blacklist check on every request). Sound + already applied to auth-service in the prior commit; here it extends to the gateway. Document in the impl plan.
+  - **Note:** `shared.JWTAuth` only READS `Authorization`; it does not rewrite it. `CookieToBearer` is what sets `c.Request.Header["Authorization"]` to the normalized Bearer (its `c.Request.Header.Set(...)` line). End result correct: backend sees `Authorization: Bearer`. The spec's earlier phrasing misattributed this to `JWTAuth` — corrected here.
 - **Backward compat:** if no cookie but `Authorization: Bearer` present (non-browser clients / old builds), `JWTAuth` reads it as today. If neither, anonymous/OBS paths proceed as today.
-- On success `JWTAuth` already sets `c.Request.Header["Authorization"]` to the normalized Bearer (its existing behavior), so backends see the unchanged contract.
 
 ### CSRF Origin-check middleware
 New `shared/middleware/origin_check.go` (`OriginCheck(allowedOrigins []string)`), wired on the gateway for mutating methods. Pure-stateless. Shared so it can be unit-tested in isolation.
