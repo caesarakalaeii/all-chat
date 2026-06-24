@@ -469,7 +469,19 @@ func (h *AuthHandler) HandleStreamerTokenExchange(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, payload)
+	// Issue httpOnly cookies (audit H3). Tokens live in cookies, not the body,
+	// so they are not exposed to frontend JavaScript or logged in responses.
+	auth.SetAuthCookies(c, payload.AccessToken, payload.RefreshToken,
+		time.Duration(payload.ExpiresIn)*time.Second, 14*24*time.Hour)
+
+	// Body carries only non-secret data for the UI.
+	c.JSON(http.StatusOK, gin.H{
+		"expires_in":         payload.ExpiresIn,
+		"token_type":         payload.TokenType,
+		"redirect_to":        payload.RedirectTo,
+		"source_added":       payload.SourceAdded,
+		"moderation_enabled": payload.ModerationEnabled,
+	})
 }
 
 // getEnvOrDefault gets an environment variable or returns a default value
