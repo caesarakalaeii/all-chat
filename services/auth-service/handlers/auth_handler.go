@@ -17,6 +17,7 @@
 package handlers
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -562,6 +563,37 @@ func (h *AuthHandler) HandleRefresh(c *gin.Context) {
 	// token was already used (potential reuse/theft) → reject.
 	tokenHash := refreshTokenHash(refreshToken)
 	rtKey := "refresh_token:" + tokenHash
+
+	// Concurrency guard (PR #478 review M1): browsers routinely fire near-
+	// simultaneous /refresh calls (multiple tabs, a retried slow request,
+	// StrictMode double-invoke). Without this lock exactly one wins the single-use
+	// GetDel below and every other concurrent request mis-classifies as theft →
+	// ClearAuthCookies + 401, force-logging-out a legitimate user. Serialize per
+	// token hash: only the lock holder rotates; a concurrent duplicate gets a
+	// retryable 409 and keeps its cookies (the holder's Set-Cookie updates the
+	// shared cookie jar, so the duplicate's client just retries the original
+	// request). Theft detection is preserved — a stolen token replayed when no
+	// rotation is in flight finds no lock and still hits the GetDel-miss reuse
+	// path. The short TTL self-heals if a rotation crashes mid-flight. Redis
+	// errors fail open to the pre-existing behaviour.
+	lockKey := "refresh_lock:" + tokenHash
+	if locked, lockErr := h.redis.SetNX(c.Request.Context(), lockKey, "1", 15*time.Second).Result(); lockErr == nil {
+		if !locked {
+			h.logger.Info("Concurrent refresh for same token — returning retryable 409",
+				zap.String("refresh_token_hash", tokenHash[:16]))
+			c.JSON(http.StatusConflict, gin.H{"error": "refresh already in progress, please retry"})
+			return
+		}
+		// We hold the lock; release it on every exit path (best-effort, the TTL is
+		// the backstop). Use a detached context so cleanup isn't skipped when the
+		// request context is already done.
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			h.redis.Del(ctx, lockKey)
+		}()
+	}
+
 	_, err := h.redis.GetDel(c.Request.Context(), rtKey).Result()
 	if err != nil {
 		h.logger.Warn("Refresh token reuse detected — token not in active set",

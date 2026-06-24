@@ -50,6 +50,9 @@ func main() {
 	logLevel := getEnv("LOG_LEVEL", "info")
 	log := logger.NewLogger("payment-service", logLevel)
 	defer log.Sync()
+	// Surface JWT revocation (logout-blacklist) check failures from the shared
+	// middleware instead of dropping them to a no-op logger (PR #478 review L3).
+	middleware.SetLogger(log)
 
 	log.Info("Starting Payment Service", zap.String("version", getEnv("APP_VERSION", "dev")))
 

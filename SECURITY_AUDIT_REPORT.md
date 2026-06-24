@@ -135,7 +135,7 @@ The dominant residual risk is **infra/config hardening** (zero k8s `securityCont
 - **Fix:** Add Ingress + cert-manager ClusterIssuer + TLS secret (or terminate at cloud LB + document).
 
 ### M15 — Real secrets in local `.env` + `CHANGE_ME` JWT
-- **Loc:** `.env` (gitignored, not committed) — `TWITCH_CLIENT_SECRET=1pqh...`, `TWITCH_BOT_OAUTH=oauth:z38q...`, `YOUTUBE_API_KEY=AIzaSyBs2z...`, `JWT_SECRET=CHANGE_ME`
+- **Loc:** `.env` (gitignored, not committed) — `TWITCH_CLIENT_SECRET=<redacted>`, `TWITCH_BOT_OAUTH=oauth:<redacted>`, `YOUTUBE_API_KEY=<redacted>`, `JWT_SECRET=CHANGE_ME` (real-value prefixes redacted — do not commit any portion of live secrets, even truncated)
 - **Fix:** Rotate leaked Twitch/YouTube creds; purge stale `.env` or move to secret manager; never store `CHANGE_ME`.
 
 ### M16 — docker-compose publishes internal ports to host + weak defaults
