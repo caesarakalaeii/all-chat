@@ -62,7 +62,7 @@ The Problem statement names impersonation tokens as part of the XSS-theft surfac
 
 ### `POST /api/v1/admin/users/:id/impersonate` (auth-service, admin-only)
 - Validate the caller is admin (existing `AdminOnly`).
-- Issue a NEW access JWT for the target user (the impersonated identity). **Stash the admin's identity** in Redis under a key bound to this impersonation session: `impersonation:<impersonated-jwt-jti>` → `{admin_user_id, admin_username, started_at}` (TTL = access JWT exp). The impersonated JWT carries a claim `impersonated_by:<admin_id>` so backends can audit.
+- Issue a NEW access JWT for the target user (the impersonated identity) using the **normal access-JWT generator** (`GenerateTokenWithKid`, env-configured `jwtExpiry`) — NOT the existing `GenerateImpersonationJWTWithKid` (which hardcodes 2h); that legacy function can be retired in a follow-up. **Stash the admin's identity** in Redis under a key bound to this impersonation session: `impersonation:<impersonated-jwt-jti>` → `{admin_user_id, admin_username, started_at}` (TTL = access JWT exp). The impersonated JWT carries a claim `impersonated_by:<admin_id>` (existing `GenerateTokenWithKid` path already supports the `ImpersonatedBy` claim via `shared/auth/jwt.go`; gateway `JWTAuth` already reads `claims.ImpersonatedBy` into context — reuse) so backends can audit.
 - `Set-Cookie: access_token=<impersonated-jwt>; ...` (replaces the admin's access cookie in the browser).
 - Do NOT touch the refresh cookie (refresh stays bound to the admin; impersonation is access-JWT-only and short-lived).
 - JSON body: `{user:{id,username,display_name}, impersonating:true}` (no tokens).
@@ -115,6 +115,14 @@ Change:
 - Delete refresh-token Redis key (revoke the family entry).
 
 ## Gateway (api-gateway)
+
+### Cookie forwarding to auth-service (L17 interaction — critical)
+
+> **Problem:** The gateway proxy's L17 strip (`handlers/proxy.go:153-157`) removes `Cookie`/`Referer`/`Origin` from **all** proxied requests. `/api/v1/auth/refresh`, `/auth/logout`, and `/auth/stop-impersonation` are **public** proxied routes — so the browser-sent cookies would be stripped before auth-service sees them. `Set-Cookie` (response) passes through fine, but `Cookie` (request) does not. The JSON-body refresh fallback is also dead because the frontend cannot read an httpOnly cookie. Without this, the refresh flow is broken (users logged out when the access JWT expires).
+
+**Fix:** a gateway middleware `AuthCookieForward()` applied to the auth public routes (`/auth/refresh`, `/auth/logout`, `/auth/stop-impersonation`) that reads the `access_token` and/or `refresh_token` cookies and sets them as **non-stripped custom headers** `X-Access-Token` / `X-Refresh-Token` on the proxied request. L17 strips `Cookie`/`Referer`/`Origin` but NOT `X-Access-Token`/`X-Refresh-Token` (custom headers, not in the hop list), so they pass through to auth-service. Consistent with the `CookieToBearer` pattern (gateway normalizes cookies → headers; backends unchanged).
+
+auth-service reads, in precedence order: `X-Access-Token` / `X-Refresh-Token` header → cookie (for non-proxied calls) → JSON body / `Authorization` (backward compat). Wire `AuthCookieForward()` on the public auth routes in `cmd/main.go`.
 
 ### `middleware/cookie_to_bearer.go` — NEW normalization middleware (the cookie boundary)
 
@@ -192,8 +200,8 @@ In `apiClient` (the shared fetch wrapper `client.ts`):
 
 Three file-disjoint domains for parallel agents:
 
-1. **auth-service** — issuance (`/exchange`, `/refresh`), `/logout` cookie clear, impersonation (`/admin/users/:id/impersonate`, `/auth/stop-impersonation` + Redis stash), reuse-detection unchanged. Files: `services/auth-service/handlers/auth_handler.go` (+impersonation handlers or a new `admin_impersonation.go`), `viewer_auth.go` (streamer payload helper stays), `cmd/main.go` (register `/stop-impersonation`).
-2. **gateway** — NEW `middleware/cookie_to_bearer.go` normalization middleware wired before `sharedmiddleware.JWTAuth`; new `shared/middleware/origin_check.go` + wire on mutating routes (loads `CORS_ORIGIN`); verify `Set-Cookie` response passthrough (L17 strip is request-only, confirmed). Files: `services/api-gateway/middleware/cookie_to_bearer.go` (+test), `cmd/main.go` (wire before JWTAuth), `shared/middleware/origin_check.go` (+test).
+1. **auth-service** — issuance (`/exchange`, `/refresh`), `/logout` cookie clear, impersonation (`/admin/users/:id/impersonate`, `/auth/stop-impersonation` + Redis stash; reads `X-Access-Token`/`X-Refresh-Token` headers forwarded by gateway), reuse-detection unchanged. Files: `services/auth-service/handlers/auth_handler.go` (+impersonation handlers or a new `admin_impersonation.go`), `viewer_auth.go` (streamer payload helper stays), `cmd/main.go` (register `/stop-impersonation`).
+2. **gateway** — NEW `middleware/cookie_to_bearer.go` normalization middleware wired before `sharedmiddleware.JWTAuth` (protected routes); NEW `middleware/auth_cookie_forward.go` on public auth routes (`/auth/refresh`, `/auth/logout`, `/auth/stop-impersonation`) to forward cookies as `X-Access-Token`/`X-Refresh-Token` (bypassing L17 strip); new `shared/middleware/origin_check.go` + wire on mutating routes (loads `CORS_ORIGIN`); register gateway route `protectedAPI.POST("/auth/stop-impersonation", proxyHandler.ForwardRequest)`; verify `Set-Cookie` response passthrough. Files: `services/api-gateway/middleware/cookie_to_bearer.go` (+test), `middleware/auth_cookie_forward.go` (+test), `cmd/main.go` (wire both + stop-impersonation route), `shared/middleware/origin_check.go` (+test).
 3. **frontend** — `client.ts`/`overlays.ts`/`chat.ts`/`moderation.ts` remove token attach; 401-interceptor; `auth-store.ts` cookie-derive + scope in-memory store removal to streamer/admin fields; `startImpersonation`/`stopImpersonation` rewrite to call the new endpoints (no token swap); callback reads body only. Files under `frontend/src/`.
 
 ## Open questions for implementation
