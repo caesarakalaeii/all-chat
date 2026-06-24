@@ -17,6 +17,8 @@
 package auth
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -403,10 +405,16 @@ func GenerateTokenWithKid(kid, userID, username, secret string, expiry time.Dura
 	return token.SignedString([]byte(secret))
 }
 
-// GenerateImpersonationJWTWithKid is identical to GenerateImpersonationJWT but
-// sets token.Header["kid"] before signing.
-func GenerateImpersonationJWTWithKid(kid, adminUserID, adminUsername, targetUserID, targetUsername, targetTwitchID, secret string) (string, error) {
+// GenerateImpersonationJWTWithKidExpiry signs an impersonation JWT with a
+// configurable expiry (replaces the legacy hardcoded 2h). Sets a jti so
+// callers can bind server-side state (e.g. impersonation: Redis stash) to
+// the token. (audit H3)
+func GenerateImpersonationJWTWithKidExpiry(kid, adminUserID, adminUsername, targetUserID, targetUsername, targetTwitchID string, secret []byte, expiry time.Duration) (string, error) {
 	roles := []string{"user", "admin"}
+	jti, err := generateJTI()
+	if err != nil {
+		return "", fmt.Errorf("generate jti: %w", err)
+	}
 	claims := Claims{
 		UserID:           targetUserID,
 		TwitchID:         targetTwitchID,
@@ -415,14 +423,30 @@ func GenerateImpersonationJWTWithKid(kid, adminUserID, adminUsername, targetUser
 		ImpersonatedBy:   adminUserID,
 		ImpersonatedUser: targetUserID,
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        jti,
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(2 * time.Hour)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiry)),
 			Issuer:    "all-chat-admin",
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	token.Header["kid"] = kid
-	return token.SignedString([]byte(secret))
+	return token.SignedString(secret)
+}
+
+// GenerateImpersonationJWTWithKid is a backward-compat wrapper for callers that
+// don't need a custom expiry (legacy 2h). Prefer GenerateImpersonationJWTWithKidExpiry.
+func GenerateImpersonationJWTWithKid(kid, adminUserID, adminUsername, targetUserID, targetUsername, targetTwitchID, secret string) (string, error) {
+	return GenerateImpersonationJWTWithKidExpiry(kid, adminUserID, adminUsername, targetUserID, targetUsername, targetTwitchID, []byte(secret), 2*time.Hour)
+}
+
+// generateJTI returns a URL-safe random token ID (jti claim).
+func generateJTI() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
 }
 
 // GenerateServiceJWTWithKid is identical to GenerateServiceJWT but sets
