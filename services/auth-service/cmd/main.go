@@ -257,7 +257,7 @@ func main() {
 		log.Info("Seeded allchat_total_users_by_platform from database", zap.Any("counts", counts))
 	}
 	healthHandler := handlers.NewHealthHandler(db, redisClient)
-	adminHandler := handlers.NewAdminHandler(userRepo, db, log, userKeyChain)
+	adminHandler := handlers.NewAdminHandler(userRepo, db, log, userKeyChain, redisClient, time.Duration(jwtExpiryHours)*time.Hour)
 	viewerCosmeticsHandler := handlers.NewViewerCosmeticsHandler(viewerIdentityRepo, redisClient, log)
 	chatSendHandler := handlers.NewChatSendHandler(log, viewerRepo, userRepo, db, twitchClientID, viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, tokenCipher, youtubeAPIKey, redisClient, getEnvAsIntOrDefault("QUOTA_LIMIT_DAILY", 1009000)).WithYouTubeTokenSource(youtubetoken.NewYouTubeSource(db, tokenCipher, youtubeClientID, youtubeClientSecret))
 	streamerInfoHandler := handlers.NewStreamerInfoHandler(log, userRepo, db)
@@ -366,6 +366,7 @@ func main() {
 		protected.GET("/me", legacyAuthHandler.HandleGetMe)
 		protected.GET("/me/data-export", legacyAuthHandler.HandleDataExport)
 		protected.POST("/logout", legacyAuthHandler.HandleLogout)
+		protected.POST("/stop-impersonation", legacyAuthHandler.HandleStopImpersonation)
 		protected.DELETE("/me", legacyAuthHandler.HandleDeleteAccount)
 
 		// Streamer chat send (uses streamer's own OAuth tokens)
