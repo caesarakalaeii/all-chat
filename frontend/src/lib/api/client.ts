@@ -62,51 +62,72 @@ export class ApiError extends Error {
 }
 
 class ApiClient {
-  private async fetch(endpoint: string, options: RequestInit = {}): Promise<Response> {
-    // Get token from localStorage (client-side only)
-    let token: string | null = null
-    if (typeof window !== 'undefined') {
-      token = localStorage.getItem('jwt_token')
-    }
+  private refreshing = false
+  private refreshPromise: Promise<boolean> | null = null
 
+  private async fetch(endpoint: string, options: RequestInit = {}): Promise<Response> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...(options.headers as Record<string, string>),
     }
 
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`
-    }
-
     const url = endpoint.startsWith('http') ? endpoint : `${API_URL}${endpoint}`
+    const response = await fetch(url, { ...options, headers, credentials: 'same-origin' })
 
-    const response = await fetch(url, {
-      ...options,
-      headers,
-    })
-
-    if (!response.ok) {
-      const errorData: Record<string, unknown> = await response
-        .json()
-        .catch(() => ({ error: 'Unknown error' }))
-      const errorValue = typeof errorData.error === 'string' ? errorData.error : undefined
-
-      if (response.status === 401) {
-        // A `reauth_required` 401 is an application-level signal (the platform
-        // OAuth token was revoked) that the caller surfaces inline — it must NOT
-        // trigger the generic "JWT expired → log out" path. Every other 401 means
-        // our own session token is invalid: clear it and bounce to the landing page.
-        if (errorValue !== 'reauth_required' && typeof window !== 'undefined') {
-          localStorage.removeItem('jwt_token')
+    if (response.status === 401 && !endpoint.startsWith('/auth/refresh') && !endpoint.startsWith('/auth/login')) {
+      // Try to determine if this is a `reauth_required` 401 (platform OAuth token
+      // revoked) — that's an application-level signal the caller surfaces inline;
+      // it must NOT trigger the generic refresh→retry path.
+      let errorValue: string | undefined
+      try {
+        const errorData = await response.clone().json().catch(() => ({} as Record<string, unknown>))
+        errorValue = typeof (errorData as Record<string, unknown>).error === 'string'
+          ? (errorData as Record<string, unknown>).error as string
+          : undefined
+      } catch {
+        errorValue = undefined
+      }
+      if (errorValue !== 'reauth_required') {
+        // Try one cookie-based refresh, then retry the original request once.
+        const ok = await this.tryRefresh()
+        if (ok) {
+          return fetch(url, { ...options, headers, credentials: 'same-origin' })
+        }
+        // refresh failed — bounce to login
+        if (typeof window !== 'undefined') {
           window.location.href = '/'
         }
-        throw new ApiError(401, errorValue || 'Unauthorized', errorData)
+        throw new ApiError(401, errorValue || 'Unauthorized', { error: errorValue || 'Unauthorized' })
       }
+      // reauth_required: fall through to the generic error path (no refresh, no redirect)
+    }
 
+    if (!response.ok) {
+      const errorData: Record<string, unknown> = await response.json().catch(() => ({ error: 'Unknown error' }))
+      const errorValue = typeof errorData.error === 'string' ? errorData.error : undefined
       throw new ApiError(response.status, errorValue || response.statusText, errorData)
     }
 
     return response
+  }
+
+  private async tryRefresh(): Promise<boolean> {
+    if (this.refreshPromise) return this.refreshPromise
+    this.refreshPromise = (async () => {
+      try {
+        const r = await fetch(`${API_URL}/api/v1/auth/refresh`, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+        })
+        return r.ok
+      } catch {
+        return false
+      } finally {
+        this.refreshPromise = null
+      }
+    })()
+    return this.refreshPromise
   }
 
   async get<T>(endpoint: string): Promise<T> {
