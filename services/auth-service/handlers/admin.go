@@ -19,6 +19,7 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/caesar/all-chat/services/auth-service/repository"
 	"github.com/caesar/all-chat/shared/auth"
@@ -176,14 +177,15 @@ func (h *AdminHandler) ImpersonateUser(c *gin.Context) {
 	}
 
 	// Generate impersonation JWT
-	token, err := auth.GenerateImpersonationJWTWithKid(
+	token, err := auth.GenerateImpersonationJWTWithKidExpiry(
 		h.userKeyChain.LatestKid(),
 		adminUserID.(string),
 		adminUsername.(string),
 		targetUser.ID,
 		targetUser.Username,
 		targetTwitchID,
-		string(h.userKeyChain.LatestSecret()),
+		h.userKeyChain.LatestSecret(),
+		2*time.Hour, // TODO(Task 7): use h.jwtExpiry once AdminHandler gains the field
 	)
 	if err != nil {
 		h.logger.Error("Failed to generate impersonation token",

@@ -453,3 +453,32 @@ func TestValidateJWTWithKeyChain_AcceptsImpersonationIssuer(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "target-2", claims.UserID)
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// H3: configurable expiry + jti on impersonation JWT (audit H3)
+// ─────────────────────────────────────────────────────────────────────────────
+
+func TestGenerateImpersonationJWTWithKid_ConfigurableExpiryAndJTI(t *testing.T) {
+	kid := "v1"
+	secret := []byte("0123456789abcdef0123456789abcdef")
+	tok, err := GenerateImpersonationJWTWithKidExpiry(kid, "admin-1", "admin", "user-2", "user", "twitch-9", secret, 30*time.Minute)
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+
+	kc := NewKeyChain(map[string][]byte{kid: secret}, nil, kid)
+	claims, err := ValidateJWTWithKeyChain(tok, kc)
+	if err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+
+	if claims.ImpersonatedBy != "admin-1" {
+		t.Errorf("impersonated_by=%s", claims.ImpersonatedBy)
+	}
+	if claims.ID == "" {
+		t.Error("jti not set")
+	}
+	if !claims.ExpiresAt.Time.After(time.Now().Add(29 * time.Minute)) {
+		t.Errorf("expiry not respected: %v", claims.ExpiresAt.Time)
+	}
+}
