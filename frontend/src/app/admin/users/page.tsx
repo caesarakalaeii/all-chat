@@ -79,17 +79,11 @@ export default function UsersPage() {
   useEffect(() => {
     async function fetchUsers() {
       try {
-        const token = localStorage.getItem('jwt_token')
-        if (!token) {
-          setError('Not authenticated')
-          setLoading(false)
-          return
-        }
-
+        // Auth is via the httpOnly session cookie (same-origin); the gateway
+        // CookieToBearer middleware copies the access cookie to Authorization
+        // before backend validation (no JS-readable token).
         const response = await fetch('/api/v1/admin/users', {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          credentials: 'same-origin',
         })
 
         if (!response.ok) {
@@ -118,11 +112,8 @@ export default function UsersPage() {
       }
 
       try {
-        const token = localStorage.getItem('jwt_token')
         const response = await fetch(`/api/v1/admin/user-overlays/${selectedUser.id}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          credentials: 'same-origin',
         })
 
         if (response.ok) {
@@ -140,9 +131,8 @@ export default function UsersPage() {
   // Refetch users helper
   const refetchUsers = async () => {
     try {
-      const token = localStorage.getItem('jwt_token')
       const response = await fetch('/api/v1/admin/users', {
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: 'same-origin',
       })
       if (response.ok) {
         const data = await response.json()
@@ -176,13 +166,12 @@ export default function UsersPage() {
 
     setBanLoading(true)
     try {
-      const token = localStorage.getItem('jwt_token')
       const response = await fetch(`/api/v1/admin/users/${userToBan.id}/ban`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
+        credentials: 'same-origin',
         body: JSON.stringify({ reason }),
       })
 
@@ -211,12 +200,9 @@ export default function UsersPage() {
   // Handle unban user (called from Dialog confirm)
   const handleUnbanUser = async (userId: string, username: string) => {
     try {
-      const token = localStorage.getItem('jwt_token')
       const response = await fetch(`/api/v1/admin/users/${userId}/unban`, {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        credentials: 'same-origin',
       })
 
       if (!response.ok) {
@@ -236,13 +222,12 @@ export default function UsersPage() {
   const handleSetPremium = async (userId: string, username: string, isPremium: boolean) => {
     setPremiumLoading(true)
     try {
-      const token = localStorage.getItem('jwt_token')
       const response = await fetch(`/api/v1/admin/premium/users/${userId}`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
+        credentials: 'same-origin',
         body: JSON.stringify({ is_premium: isPremium }),
       })
 
@@ -277,13 +262,12 @@ export default function UsersPage() {
   const handleSetBetaTester = async (userId: string, username: string, isBetaTester: boolean) => {
     setBetaLoading(true)
     try {
-      const token = localStorage.getItem('jwt_token')
       const response = await fetch(`/api/v1/admin/beta-tester/users/${userId}`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
+        credentials: 'same-origin',
         body: JSON.stringify({ is_beta_tester: isBetaTester }),
       })
 

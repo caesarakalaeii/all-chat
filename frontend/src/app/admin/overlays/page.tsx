@@ -61,17 +61,11 @@ export default function OverlaysPage() {
   useEffect(() => {
     async function fetchOverlays() {
       try {
-        const token = localStorage.getItem('jwt_token')
-        if (!token) {
-          setError('Not authenticated')
-          setLoading(false)
-          return
-        }
-
+        // Auth is via the httpOnly session cookie (same-origin); the gateway
+        // CookieToBearer middleware copies the access cookie to Authorization
+        // before backend validation (no JS-readable token).
         const response = await fetch('/api/v1/admin/overlays', {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          credentials: 'same-origin',
         })
 
         if (!response.ok) {
@@ -104,10 +98,8 @@ export default function OverlaysPage() {
 
     async function fetchActiveOverlays() {
       try {
-        const token = localStorage.getItem('jwt_token')
-        if (!token) return
         const response = await fetch('/api/v1/admin/overlays/active', {
-          headers: { Authorization: `Bearer ${token}` },
+          credentials: 'same-origin',
         })
         if (response.ok) {
           const ids: string[] = await response.json()
@@ -133,11 +125,8 @@ export default function OverlaysPage() {
 
       setSourcesLoading(true)
       try {
-        const token = localStorage.getItem('jwt_token')
         const response = await fetch(`/api/v1/admin/overlays/${selectedOverlay.id}/sources`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          credentials: 'same-origin',
         })
 
         if (response.ok) {
