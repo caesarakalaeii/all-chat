@@ -32,13 +32,25 @@ export const TIKTOK_USERNAME_MAX_LENGTH = 24;
 export const TIKTOK_USERNAME_MIN_LENGTH = 2;
 
 /**
- * Regular expression matching valid TikTok usernames.
+ * Regular expression matching structurally-valid TikTok usernames.
  *
- * - Starts and ends with an alphanumeric character.
- * - Middle characters may also include `_` and `.`.
- * - Total length 2–24 characters.
+ * Accepts {@link TIKTOK_USERNAME_MIN_LENGTH}–{@link TIKTOK_USERNAME_MAX_LENGTH}
+ * characters from the set `[letters, digits, underscore, dot]`. The length bounds
+ * are derived from the exported constants so the documented and enforced bounds
+ * cannot silently diverge.
+ *
+ * This is a permissive char-class + length check, not a full TikTok-handle
+ * validator: it intentionally rejects whitespace, `@`, `/`, backslashes, control
+ * characters and any non-ASCII/unicode (which is what matters for safely passing
+ * the value to the downstream live-status lookup). It does NOT enforce TikTok's
+ * cosmetic rules (e.g. no leading/trailing dot), so a structurally-odd handle
+ * like `..` passes here and simply fails the lookup. (Underscores and dots are
+ * allowed at any position, including the edges — matching TikTok, which permits
+ * leading/trailing underscores.)
  */
-export const TIKTOK_USERNAME_PATTERN = /^[a-zA-Z0-9_.]{2,24}$/;
+export const TIKTOK_USERNAME_PATTERN = new RegExp(
+  `^[a-zA-Z0-9_.]{${TIKTOK_USERNAME_MIN_LENGTH},${TIKTOK_USERNAME_MAX_LENGTH}}$`,
+);
 
 /**
  * Result of TikTok username validation.

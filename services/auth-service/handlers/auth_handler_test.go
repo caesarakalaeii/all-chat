@@ -90,6 +90,39 @@ func TestHandleRefresh_ReuseDetectedReturns401(t *testing.T) {
 	}
 }
 
+// TestHandleRefresh_ConcurrentReturns409WithoutConsumingToken verifies the
+// concurrency guard (PR #478 review M1): when a refresh for the same token is
+// already in flight (the refresh_lock:<hash> key is held), a duplicate request
+// gets a retryable 409 and the active refresh_token:<hash> is NOT consumed —
+// so a legitimate multi-tab user is not mis-classified as token theft and
+// force-logged-out. The token never reaches Twitch.
+func TestHandleRefresh_ConcurrentReturns409WithoutConsumingToken(t *testing.T) {
+	rdb := miniredis.RunT(t)
+	defer rdb.Close()
+	hash := refreshTokenHash("inflight-rt")
+	// Active token present (valid session) ...
+	rdb.Set("refresh_token:"+hash, "user-1")
+	// ... and a concurrent refresh already holds the per-token lock.
+	rdb.Set("refresh_lock:"+hash, "1")
+	h := newTestAuthHandler(t, redis.NewClient(&redis.Options{Addr: rdb.Addr()}))
+	router := gin.New()
+	router.POST("/refresh", h.HandleRefresh)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/refresh", nil)
+	req.Header.Set("X-Refresh-Token", "inflight-rt")
+	router.ServeHTTP(w, req)
+
+	if w.Code != 409 {
+		t.Errorf("want 409 (concurrent refresh), got %d body=%s", w.Code, w.Body.String())
+	}
+	// The active token must survive — a 409 must not consume it (else the retry
+	// would itself be treated as reuse).
+	if !rdb.Exists("refresh_token:" + hash) {
+		t.Error("active refresh_token key was consumed on a concurrent 409; want it preserved")
+	}
+}
+
 // TestHandleRefresh_BackwardCompatJSONBody verifies the deprecated JSON-body
 // fallback is still read. The token is seeded in Redis so it passes reuse
 // detection; it then fails at Twitch refresh (no network in CI), which is

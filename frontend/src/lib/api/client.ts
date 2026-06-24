@@ -77,8 +77,19 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Outcome of a cookie-refresh attempt.
+ * - 'refreshed': /refresh returned 200; the access cookie was rotated.
+ * - 'concurrent': /refresh returned 409 — another in-flight refresh (e.g. a
+ *   second tab) is rotating the same token. Its Set-Cookie updates the shared
+ *   cookie jar, so the caller should retry the original request rather than
+ *   treat this as a hard failure (PR #478 review M1).
+ * - 'failed': refresh failed; the caller should bounce to login.
+ */
+type RefreshResult = 'refreshed' | 'concurrent' | 'failed'
+
 class ApiClient {
-  private refreshPromise: Promise<boolean> | null = null
+  private refreshPromise: Promise<RefreshResult> | null = null
 
   private async fetch(
     endpoint: string,
@@ -115,13 +126,19 @@ class ApiClient {
       }
       if (errorValue !== 'reauth_required') {
         // Try one cookie-based refresh, then retry the original request once.
-        const ok = await this.tryRefresh()
-        if (ok) {
+        const result = await this.tryRefresh()
+        if (result === 'refreshed' || result === 'concurrent') {
           // M2: route the retry back through this.fetch (not a bare fetch) so the
           // retried response goes through the same !response.ok / ApiError /
           // reauth_required handling. The `retried` guard prevents infinite
           // recursion if the retried request also returns 401.
           if (!retried) {
+            if (result === 'concurrent') {
+              // A concurrent refresh (another tab) is rotating the cookie; give it
+              // a brief moment to land its Set-Cookie, then retry with the fresh
+              // cookie instead of force-logging-out (PR #478 review M1).
+              await new Promise((resolve) => setTimeout(resolve, 400))
+            }
             return this.fetch(endpoint, options, true)
           }
           // Already retried — fall through to the generic error path below so a
@@ -146,7 +163,7 @@ class ApiClient {
     return response
   }
 
-  private async tryRefresh(): Promise<boolean> {
+  private async tryRefresh(): Promise<RefreshResult> {
     if (this.refreshPromise) return this.refreshPromise
     this.refreshPromise = (async () => {
       try {
@@ -155,9 +172,14 @@ class ApiClient {
           credentials: 'same-origin',
           headers: { 'Content-Type': 'application/json' },
         })
-        return r.ok
+        if (r.ok) return 'refreshed'
+        // 409: a concurrent /refresh for the same token is in flight. Don't treat
+        // it as a logout-worthy failure — the in-flight request rotates the shared
+        // cookie, so signal the caller to retry the original request (review M1).
+        if (r.status === 409) return 'concurrent'
+        return 'failed'
       } catch {
-        return false
+        return 'failed'
       } finally {
         this.refreshPromise = null
       }

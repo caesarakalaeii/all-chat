@@ -38,6 +38,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useViewerAuthStore } from '@/lib/stores/viewer-auth-store'
 import { viewerApi } from '@/lib/api/viewer'
+import { isAllowedExternalRedirect } from '@/lib/auth/redirect-allowlist'
 
 /*
  * SECURITY (audit H4): postMessage targetOrigin must be an explicit origin,
@@ -130,9 +131,12 @@ function AuthSuccessContent() {
         const viewerInfo = await viewerApi.getMe()
         setViewerInfo(viewerInfo)
 
-        // Explicit redirect_to takes highest priority (e.g. /settings/viewer)
+        // Explicit redirect_to takes highest priority (e.g. /settings/viewer).
+        // Validate via the shared allowlist (rejects protocol-relative //evil.com,
+        // backslash /\evil.com, and off-allowlist hosts) — the bare startsWith('/')
+        // check here was an open redirect (PR #478 review M2).
         const redirectTo = searchParams.get('redirect_to')
-        if (redirectTo && redirectTo.startsWith('/')) {
+        if (redirectTo && isAllowedExternalRedirect(redirectTo)) {
           router.push(redirectTo)
           return
         }
