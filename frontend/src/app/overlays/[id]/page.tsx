@@ -61,6 +61,7 @@ import { toastManager } from '@/lib/toast'
 import { trackEvent } from '@/lib/analytics'
 import { AppNav } from '@/components/AppNav'
 import { SplitView } from '@/components/SplitView'
+import { PremiumUpsellLink } from '@/components/PremiumUpsellLink'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -501,6 +502,11 @@ function StreamSelectionPanel({
           {STREAM_STRATEGIES.find((s) => s.value === strategy) && (
             <p className="mt-1 text-xs text-text-sub/60">
               {STREAM_STRATEGIES.find((s) => s.value === strategy)?.description}
+            </p>
+          )}
+          {!isPremium && (
+            <p className="mt-1 text-xs text-text-dim">
+              <PremiumUpsellLink /> to use advanced stream selection.
             </p>
           )}
         </div>
@@ -2245,11 +2251,21 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                   </button>
                 </div>
                 <p className="mb-4 text-sm text-text-sub">
-                  Sharing your overlay is a premium feature. Upgrade your account to share your chat
+                  Sharing your overlay is a premium feature.{' '}
+                  <PremiumUpsellLink>Upgrade your account</PremiumUpsellLink> to share your chat
                   with other streamers.
                 </p>
                 <p className="mb-5 text-sm text-text-sub">
-                  For more information and to get access, join our Discord community.
+                  Questions? Join our{' '}
+                  <a
+                    href="https://discord.gg/xCGBSuz39P"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-twitch hover:underline"
+                  >
+                    Discord community
+                  </a>
+                  .
                 </p>
                 <div className="flex gap-2">
                   <Button
@@ -2259,14 +2275,9 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                   >
                     Close
                   </Button>
-                  <a
-                    href="https://discord.gg/xCGBSuz39P"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex-1"
-                  >
-                    <Button className="w-full">Join Discord</Button>
-                  </a>
+                  <Link href="/upgrade" className="flex-1">
+                    <Button className="w-full">Upgrade</Button>
+                  </Link>
                 </div>
               </div>
             </div>

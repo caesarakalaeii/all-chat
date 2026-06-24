@@ -23,6 +23,7 @@ import React from 'react'
 import { ToggleSwitch } from './ToggleSwitch'
 import { SliderControl } from './SliderControl'
 import { PremiumBadge } from '@/components/PremiumBadge'
+import { PremiumUpsellLink } from '@/components/PremiumUpsellLink'
 import { PRESET_NAMES } from '@/lib/utils/soundPlayer'
 import type { DisplaySettings } from '@/lib/types/overlay'
 import { trackEvent } from '@/lib/analytics'
@@ -113,7 +114,7 @@ export function SoundGroup({ displaySettings, onChange, isPremium, onPreview }: 
                 Custom sound URL
                 {!isPremium && (
                   <span className="ml-1 text-xs text-text-dim">
-                    — Upload your own notification sound (Premium)
+                    — Upload your own notification sound (<PremiumUpsellLink>Premium</PremiumUpsellLink>)
                   </span>
                 )}
               </p>
