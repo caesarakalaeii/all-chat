@@ -55,7 +55,7 @@ interface UserOverlay {
 
 export default function UsersPage() {
   const router = useRouter()
-  const { token: authToken, startImpersonation, init: initAuth } = useAuthStore()
+  const { startImpersonation } = useAuthStore()
   const [users, setUsers] = useState<User[]>([])
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [userOverlays, setUserOverlays] = useState<UserOverlay[]>([])
@@ -153,32 +153,12 @@ export default function UsersPage() {
     }
   }
 
-  // Handle impersonation (called from Dialog confirm)
+  // Handle impersonation (called from Dialog confirm). H3 cookie auth: the
+  // server sets an impersonated-user access cookie; no token is swapped in JS.
   const handleImpersonate = async (userId: string) => {
     setImpersonating(true)
     try {
-      const token = authToken || localStorage.getItem('jwt_token')
-      const response = await fetch(`/api/v1/admin/users/${userId}/impersonate`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to impersonate user')
-      }
-
-      const data = await response.json()
-
-      // Update the auth store with the impersonation token — this also updates localStorage
-      // atomically and makes the banner visible immediately via reactive store subscription.
-      startImpersonation(data.token, data.username)
-
-      // Re-initialise auth store so user object reflects impersonated user
-      await initAuth()
-
+      await startImpersonation(userId)
       // Redirect to home page
       router.push('/')
     } catch (err) {

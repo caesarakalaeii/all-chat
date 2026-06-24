@@ -173,7 +173,7 @@ const FEATURE_CARDS = [
 // LandingPage
 // ---------------------------------------------------------------------------
 export default function HomeClient() {
-  const { user, token, init } = useAuthStore()
+  const { user, init } = useAuthStore()
   const [msgCounts, setMsgCounts] = useState<Record<Platform, number> | null>(null)
 
   const { cardRefs, glowRefs } = useMagneticGlow(TOTAL_CARDS)
@@ -191,7 +191,7 @@ export default function HomeClient() {
       .catch(() => {}) // fail silently — stats are decorative
   }, [])
 
-  const isLoggedIn = !!(user && token)
+  const isLoggedIn = !!user
 
   // Tailwind JIT needs static class strings — map auth_provider to button styles
   const DASHBOARD_BUTTON_STYLES: Record<string, { bg: string; ring: string; text: string }> = {

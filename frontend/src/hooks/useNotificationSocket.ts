@@ -67,7 +67,7 @@ export function useNotificationSocket(
   })
 
   useEffect(() => {
-    if (!id || !token) return
+    if (!id) return
 
     let stopped = false
     let ws: WebSocket | null = null
@@ -125,7 +125,11 @@ export function useNotificationSocket(
       if (stopped) return
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
       const wsUrl = `${protocol}//${window.location.host}/ws/overlay/${id}`
-      const sock = new WebSocket(wsUrl, [`bearer.${token}`])
+      // H3 cookie auth: when a token is provided, send it via the `bearer.*`
+      // subprotocol (audit H5). With no token, the owner overlay WS handshake
+      // is same-origin, so the browser sends the httpOnly access cookie and the
+      // gateway authenticates via CookieToBearer.
+      const sock = new WebSocket(wsUrl, token ? [`bearer.${token}`] : undefined)
       ws = sock
       lastActivity = 0 // no inbound frame yet on this socket
 

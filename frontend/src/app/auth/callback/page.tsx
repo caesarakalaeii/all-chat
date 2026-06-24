@@ -44,15 +44,14 @@ import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuthStore } from '@/lib/stores/auth-store'
-import { authApi } from '@/lib/api/auth'
-import { inMemoryTokens } from '@/lib/auth/in-memory-store'
+import type { User } from '@/lib/types/auth'
 import { trackEvent } from '@/lib/analytics'
 import { InfinityLogo } from '@/components/InfinityLogo'
 
 function AuthCallbackContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { setToken, setUser } = useAuthStore()
+  const { setUser } = useAuthStore()
 
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
@@ -69,9 +68,10 @@ function AuthCallbackContent() {
         return
       }
 
-      // Exchange the single-use code for the token payload.
-      let token: string
-      let refreshToken: string | null = null
+      // Exchange the single-use code for the authenticated session. H3 cookie
+      // auth: the server sets the httpOnly access cookie; the body carries the
+      // user + redirect target (no tokens are exposed to JS).
+      let user: User | null = null
       let redirectTo: string | null = null
       let sourceAdded: string | null = null
       let moderationEnabled: string | null = null
@@ -85,8 +85,7 @@ function AuthCallbackContent() {
           throw new Error(`Exchange failed: ${resp.status}`)
         }
         const data = await resp.json()
-        token = data.access_token
-        refreshToken = data.refresh_token || null
+        user = data.user ?? null
         redirectTo = data.redirect_to || null
         sourceAdded = data.source_added || null
         moderationEnabled = data.moderation_enabled || null
@@ -98,19 +97,13 @@ function AuthCallbackContent() {
         return
       }
 
-      // Store token
-      setToken(token)
-      // SECURITY (audit H3): refresh token is stored in-memory ONLY, never in
-      // localStorage, so XSS cannot read it from storage. It is lost on tab
-      // close/refresh — the user must re-authenticate (acceptable tradeoff).
-      // Full httpOnly-cookie migration is the longer-term fix (deferred).
-      if (refreshToken) {
-        inMemoryTokens.setRefreshToken(refreshToken)
-      }
-
+      // SECURITY (audit H3): the access token lives only in an httpOnly cookie
+      // set by the server; no token is stored in JS/localStorage. Login state is
+      // established directly from the exchange response's user object.
       try {
-        // Fetch user info
-        const user = await authApi.getMe()
+        if (!user) {
+          throw new Error('No user in exchange response')
+        }
         setUser(user)
 
         // Distinct funnel steps: a completion marker means an OAuth source-add or
@@ -151,7 +144,7 @@ function AuthCallbackContent() {
     }
 
     handleCallback()
-  }, [searchParams, setToken, setUser, router])
+  }, [searchParams, setUser, router])
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-bg">

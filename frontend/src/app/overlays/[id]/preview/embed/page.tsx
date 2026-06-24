@@ -35,7 +35,6 @@ import Image from 'next/image'
 import { use, useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
-import { useAuthStore } from '@/lib/stores/auth-store'
 import { WebSocketClient } from '@/lib/api/websocket'
 import { overlaysApi } from '@/lib/api/overlays'
 import type { ChatMessage, NameGradient } from '@/lib/types/message'
@@ -201,7 +200,6 @@ function ensureGoogleFontLoaded(fontFamily: string): void {
 
 export default function OverlayEmbedPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
-  const { token } = useAuthStore()
 
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [maxMessages, setMaxMessages] = useState(50)
@@ -407,10 +405,8 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
     }
   }, [])
 
-  // Load overlay config
+  // Load overlay config (H3 cookie auth: same-origin cookie + CookieToBearer).
   useEffect(() => {
-    if (!token) return
-
     const loadConfig = async () => {
       try {
         const config = await overlaysApi.getConfig(id)
@@ -580,17 +576,16 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
     }
 
     loadConfig()
-  }, [id, token, handleTTSFallback])
+  }, [id, handleTTSFallback])
 
-  // Initialize WebSocket connection
+  // Initialize WebSocket connection. H3 cookie auth: the owner overlay WS
+  // handshake is same-origin, so the browser sends the httpOnly access cookie
+  // automatically and the gateway authenticates without a JS-readable token.
   useEffect(() => {
-    // No auth redirect — just show empty transparent page if no token
-    if (!token) return
-
     const wsClient = new WebSocketClient()
     wsClientRef.current = wsClient
 
-    wsClient.connect(id, token)
+    wsClient.connect(id)
 
     const unsubscribe = wsClient.onMessage(async (incoming) => {
       // Parse gradient JSON string → object (message processor sends it as a string)
@@ -621,7 +616,7 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
       wsClient.disconnect()
       clearInterval(interval)
     }
-  }, [id, token, maxMessages])
+  }, [id, maxMessages])
 
   // Trim buffer when maxMessages changes
   useEffect(() => {

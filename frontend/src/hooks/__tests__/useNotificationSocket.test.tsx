@@ -32,6 +32,7 @@ class MockWebSocket {
   static instances: MockWebSocket[] = []
 
   url: string
+  protocols: string[] | undefined
   readyState = MockWebSocket.CONNECTING
   closed = false
   sent: string[] = []
@@ -40,8 +41,9 @@ class MockWebSocket {
   onerror: ((ev?: unknown) => void) | null = null
   onclose: ((ev?: unknown) => void) | null = null
 
-  constructor(url: string) {
+  constructor(url: string, protocols?: string[] | string) {
     this.url = url
+    this.protocols = Array.isArray(protocols) ? protocols : protocols ? [protocols] : undefined
     MockWebSocket.instances.push(this)
   }
   send(data: string) {
@@ -80,16 +82,22 @@ afterEach(() => {
 })
 
 describe('useNotificationSocket', () => {
-  it('does not connect without an id or token', () => {
+  it('does not connect without an id', () => {
     renderHook(() => useNotificationSocket(undefined, 't', () => {}))
-    renderHook(() => useNotificationSocket('o1', undefined, () => {}))
     expect(MockWebSocket.instances).toHaveLength(0)
+  })
+
+  it('connects without a token (H3 cookie auth — gateway reads the access cookie)', () => {
+    renderHook(() => useNotificationSocket('o1', undefined, () => {}))
+    expect(MockWebSocket.instances).toHaveLength(1)
+    expect(latest().url).toContain('/ws/overlay/o1')
+    expect(latest().protocols).toBeUndefined()
   })
 
   it('opens an authenticated socket for the overlay', () => {
     renderHook(() => useNotificationSocket('o1', 'tok', () => {}))
     expect(latest().url).toContain('/ws/overlay/o1')
-    expect(latest().url).toContain('token=tok')
+    expect(latest().protocols).toEqual(['bearer.tok'])
   })
 
   it('delivers parsed envelopes to the callback', async () => {

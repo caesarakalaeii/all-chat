@@ -668,14 +668,12 @@ function SourceListSkeleton() {
 // Admins also get a manual channel ID form for any platform.
 function AddSourceForm({
   overlayId,
-  token,
   onAddTikTok,
   onAddManual,
   onSourceAdded,
   isAdmin = false,
 }: {
   overlayId: string
-  token: string
   onAddTikTok: (username: string) => void
   onAddManual?: (platform: string, channelId: string) => void
   onSourceAdded?: () => void
@@ -765,13 +763,12 @@ function AddSourceForm({
     }
   }
 
-  // Fetch the OAuth auth_url from the backend (with Authorization header),
-  // then redirect the browser to it — same pattern as the login flow.
+  // Fetch the OAuth auth_url from the backend, then redirect the browser to
+  // it — same pattern as the login flow. H3 cookie auth: the access cookie is
+  // sent same-origin and CookieToBearer derives the Authorization header.
   const startOAuth = async (endpoint: string) => {
     try {
-      const res = await fetch(endpoint, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      const res = await fetch(endpoint)
       const data = await res.json()
       if (data.auth_url) {
         safeExternalRedirect(data.auth_url)
@@ -1111,7 +1108,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   const { id } = use(params)
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { token, user } = useAuthStore()
+  const { user } = useAuthStore()
 
   // --- Overlay / sources state ---
   const [overlay, setOverlay] = useState<Overlay | null>(null)
@@ -1483,13 +1480,13 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   }, [sendCssToIframe])
 
   // Load overlay, sources, accepted shares and config
-  // Note: `router` is intentionally excluded from deps — it is only used for the
-  // `!token` redirect guard which ProtectedRoute already handles. Including router
+  // Note: `router` is intentionally excluded from deps — it is only used for
+  // the redirect guard which ProtectedRoute already handles. Including router
   // causes loadData to re-run whenever the Next.js router object reference changes
   // (e.g. during API proxy processing), which would overwrite user-set extension
   // overlay state with stale DB data.
   useEffect(() => {
-    if (!token) {
+    if (!user) {
       router.push('/')
       return
     }
@@ -1682,14 +1679,17 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     return () => {
       cancelled = true
     }
-  }, [id, token]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [id, user]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Real-time owner notifications (e.g. share_revoked) over a self-healing
-  // authenticated socket. The previous inline socket had no reconnect and no
-  // liveness detection, so a single drop — clean or half-open — silently killed
-  // these notifications for the rest of the session; useNotificationSocket
-  // reconnects with backoff and detects half-open paths via a heartbeat watchdog.
-  useNotificationSocket(id, token, (envelope) => {
+  // authenticated socket. H3 cookie auth: the owner overlay WS handshake is
+  // same-origin, so the browser sends the httpOnly access cookie automatically
+  // and the gateway authenticates without a JS-readable token (audit H3 / Task 11b).
+  // The previous inline socket had no reconnect and no liveness detection, so a
+  // single drop — clean or half-open — silently killed these notifications for
+  // the rest of the session; useNotificationSocket reconnects with backoff and
+  // detects half-open paths via a heartbeat watchdog.
+  useNotificationSocket(id, undefined, (envelope) => {
     if (envelope.type === 'share_revoked') {
       const data = envelope.data as { revoked_by_username?: string } | undefined
       const revoker = data?.revoked_by_username || 'someone'
@@ -1746,9 +1746,8 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   // EventSub listener on the next sync.
   async function handleReconnectTwitchChat() {
     try {
-      const res = await fetch(`/api/v1/auth/twitch/add-source/${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      // H3 cookie auth: same-origin cookie + CookieToBearer.
+      const res = await fetch(`/api/v1/auth/twitch/add-source/${id}`)
       const data = await res.json()
       if (data.auth_url) {
         safeExternalRedirect(data.auth_url)
@@ -2504,7 +2503,6 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
 
                 <AddSourceForm
                   overlayId={id}
-                  token={token ?? ''}
                   onAddTikTok={handleAddTikTokSource}
                   onAddManual={handleAddManual}
                   onSourceAdded={() => overlaysApi.getSources(id).then(setSources).catch(console.error)}

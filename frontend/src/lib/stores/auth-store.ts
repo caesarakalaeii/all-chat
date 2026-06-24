@@ -17,31 +17,28 @@
  */
 
 /**
- * Authentication Store (Zustand)
+ * Authentication Store (Zustand) — H3 cookie-auth.
  *
- * Global state management for user authentication.
- * Stores user info and JWT token in memory and localStorage.
+ * Login state is derived from the httpOnly access cookie: `init` calls
+ * `GET /auth/me`, which succeeds only when the cookie is valid. The store no
+ * longer holds a JS-readable access token (cookies are httpOnly), so there is
+ * no `token` state and no localStorage token juggling.
+ *
+ * Impersonation is server-driven: `startImpersonation(targetUserId)` POSTs the
+ * admin endpoint which sets an impersonated-user access cookie; the backend
+ * returns the impersonated user. `stopImpersonation` restores the admin cookie
+ * the same way. No token is ever swapped in JS.
  *
  * Usage in components:
- *   const { user, token, login, logout } = useAuthStore();
+ *   const { user, loading, logout } = useAuthStore();
  */
 
 import { create } from 'zustand'
 import type { User } from '../types/auth'
 import { authApi } from '../api/auth'
-import { inMemoryTokens } from '../auth/in-memory-store'
-
-/*
- * SECURITY (audit H3): refresh tokens are stored ONLY in the in-memory store
- * (see lib/auth/in-memory-store.ts), never in localStorage. Access JWTs are
- * mirrored to the in-memory store so API clients can prefer it, but are still
- * written to localStorage for legacy readers (admin/settings pages) — full
- * removal is deferred to the httpOnly-cookie migration.
- */
 
 interface AuthStore {
   user: User | null
-  token: string | null
   loading: boolean
 
   // Impersonation state
@@ -49,47 +46,35 @@ interface AuthStore {
   impersonatedUsername: string | null
 
   // Actions
-  setToken: (token: string) => void
   setUser: (user: User) => void
-  logout: () => void
+  logout: () => Promise<void>
   init: () => Promise<void>
 
   // Impersonation actions
-  startImpersonation: (token: string, username: string) => void
-  stopImpersonation: () => void
+  startImpersonation: (targetUserId: string) => Promise<void>
+  stopImpersonation: () => Promise<void>
 }
 
-export const useAuthStore = create<AuthStore>((set, get) => ({
+export const useAuthStore = create<AuthStore>((set) => ({
   user: null,
-  token: null,
   loading: true,
   isImpersonating: false,
   impersonatedUsername: null,
-
-  setToken: (token: string) => {
-    inMemoryTokens.setAccessToken(token)
-    if (typeof window !== 'undefined') {
-      // TODO(H3): remove localStorage write once all legacy readers are
-      // migrated to the in-memory store / httpOnly cookies.
-      localStorage.setItem('jwt_token', token)
-    }
-    set({ token })
-  },
 
   setUser: (user: User) => {
     set({ user, loading: false })
   },
 
-  logout: () => {
-    inMemoryTokens.clearAll()
-    if (typeof window !== 'undefined') {
-      // TODO(H3): remove localStorage clears once legacy readers are migrated.
-      localStorage.removeItem('jwt_token')
-      localStorage.removeItem('admin_token')
-      localStorage.removeItem('impersonating')
-      localStorage.removeItem('impersonated_user')
+  logout: async () => {
+    try {
+      await authApi.logout() // POST /auth/logout — cookie cleared server-side
+    } catch {
+      // ignore — clearing is best-effort
     }
-    set({ user: null, token: null, loading: false, isImpersonating: false, impersonatedUsername: null })
+    set({ user: null, loading: false, isImpersonating: false, impersonatedUsername: null })
+    if (typeof window !== 'undefined') {
+      window.location.href = '/'
+    }
   },
 
   init: async () => {
@@ -97,80 +82,34 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       set({ loading: false })
       return
     }
-
-    const token = localStorage.getItem('jwt_token')
-    if (!token) {
-      set({ loading: false })
-      return
-    }
-
-    // Mirror the restored access token into the in-memory store so API
-    // clients can read it without touching localStorage.
-    inMemoryTokens.setAccessToken(token)
-
-    // Restore impersonation state from localStorage on init (e.g. after page reload)
-    const isImpersonating = localStorage.getItem('impersonating') === 'true'
-    const impersonatedUsername = localStorage.getItem('impersonated_user') || null
-    inMemoryTokens.setImpersonating(isImpersonating)
-    inMemoryTokens.setImpersonatedUsername(impersonatedUsername)
-
-    set({ token, isImpersonating, impersonatedUsername })
-
     try {
-      const user = await authApi.getMe()
+      const user = await authApi.getMe() // GET /auth/me — succeeds if access cookie valid
       set({ user, loading: false })
-    } catch (error) {
-      // Token invalid, clear it
-      inMemoryTokens.clearAll()
-      localStorage.removeItem('jwt_token')
-      localStorage.removeItem('admin_token')
-      localStorage.removeItem('impersonating')
-      localStorage.removeItem('impersonated_user')
-      set({ user: null, token: null, loading: false, isImpersonating: false, impersonatedUsername: null })
+    } catch {
+      set({ user: null, loading: false })
     }
   },
 
-  startImpersonation: (token: string, username: string) => {
-    // Save the current admin token before overwriting
-    const currentToken = get().token
-    if (currentToken) {
-      inMemoryTokens.setAdminToken(currentToken)
-    }
-    inMemoryTokens.setAccessToken(token)
-    inMemoryTokens.setImpersonating(true)
-    inMemoryTokens.setImpersonatedUsername(username)
-    if (typeof window !== 'undefined') {
-      // TODO(H3): remove localStorage writes once legacy readers are migrated.
-      if (currentToken) {
-        localStorage.setItem('admin_token', currentToken)
-      }
-      localStorage.setItem('jwt_token', token)
-      localStorage.setItem('impersonating', 'true')
-      localStorage.setItem('impersonated_user', username)
-    }
-    set({ token, isImpersonating: true, impersonatedUsername: username })
+  startImpersonation: async (targetUserId: string) => {
+    const res = await authApi.impersonate(targetUserId) // POST /admin/users/:id/impersonate — sets cookie
+    // The endpoint returns a partial user ({id,username,display_name}); the
+    // store holds it for immediate UI (banner/nav). is_admin is intentionally
+    // absent for the impersonated (non-admin) view.
+    set({
+      user: res.user as unknown as User,
+      isImpersonating: true,
+      impersonatedUsername: res.user.username,
+    })
   },
 
-  stopImpersonation: () => {
-    const adminToken = inMemoryTokens.getAdminToken() ?? (typeof window !== 'undefined' ? localStorage.getItem('admin_token') : null)
-    if (adminToken) {
-      inMemoryTokens.setAccessToken(adminToken)
-      inMemoryTokens.setAdminToken(null)
-    }
-    inMemoryTokens.setImpersonating(false)
-    inMemoryTokens.setImpersonatedUsername(null)
-    if (typeof window !== 'undefined') {
-      if (adminToken) {
-        localStorage.setItem('jwt_token', adminToken)
-        localStorage.removeItem('admin_token')
-      }
-      localStorage.removeItem('impersonating')
-      localStorage.removeItem('impersonated_user')
-
-      const restoredToken = localStorage.getItem('jwt_token')
-      set({ token: restoredToken, isImpersonating: false, impersonatedUsername: null })
-    } else {
-      set({ token: adminToken, isImpersonating: false, impersonatedUsername: null })
-    }
+  stopImpersonation: async () => {
+    const res = await authApi.stopImpersonation() // POST /auth/stop-impersonation — restores admin cookie
+    // The endpoint returns a partial user ({id,username,is_admin}); the store
+    // holds it for immediate UI until the next /auth/me refresh.
+    set({
+      user: res.user as unknown as User,
+      isImpersonating: false,
+      impersonatedUsername: null,
+    })
   },
 }))
