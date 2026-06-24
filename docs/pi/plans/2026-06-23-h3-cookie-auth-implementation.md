@@ -53,8 +53,8 @@
 Three disjoint domains for parallel execution. Domain ordering shows dependencies; within each, tasks are sequential (TDD).
 
 - **Domain A (shared + auth-service):** Tasks 1–7. No cross-domain deps.
-- **Domain B (gateway):** Tasks 8–13. Depends on Task 1 (`shared/auth/cookie.go` constants) + Task 4 (`shared/middleware/origin_check.go`). Run B after A, or at least after Task 1+4.
-- **Domain C (frontend):** Tasks 14–20. Depends on A+B being deployable (backend contract), but TypeScript changes can be written against the documented contract. Run C in parallel with B; integrate last.
+- **Domain B (gateway):** Tasks 8–11. Depends on Task 1 (`shared/auth/cookie.go` constants) + Task 4 (`shared/middleware/origin_check.go`). Run B after A, or at least after Task 1+4.
+- **Domain C (frontend):** Tasks 12–16. Depends on A+B being deployable (backend contract), but TypeScript changes can be written against the documented contract. Run C in parallel with B; integrate last.
 
 ---
 
@@ -405,9 +405,10 @@ func TestHandleStreamerTokenExchange_SetsCookies_OmitsTokensFromBody(t *testing.
 	if !gotAccess { t.Error("access cookie not set") }
 	if !gotRefresh { t.Error("refresh cookie not set") }
 
-	// body must NOT contain tokens
+	// body must NOT contain tokens (check the JSON keys, not substrings, to avoid
+	// false positives if redirect_to contains "acc"/"ref").
 	body := w.Body.String()
-	if strings.Contains(body, "acc") || strings.Contains(body, "ref") {
+	if strings.Contains(body, `"access_token"`) || strings.Contains(body, `"refresh_token"`) {
 		t.Errorf("tokens leaked in body: %s", body)
 	}
 	if strings.Contains(body, "redirect_to") == false { t.Error("redirect_to missing from body") }
@@ -944,7 +945,7 @@ Update the call site in `services/auth-service/cmd/main.go` (find `NewAdminHandl
 
 - [ ] **Step 3a: Modify `ImpersonateUser` to set cookie + stash**
 
-In `services/auth-service/handlers/admin.go`, after generating the token (currently returns `gin.H{"impersonation_token": token}`), replace the response tail:
+In `services/auth-service/handlers/admin.go`, after generating the token (currently returns `gin.H{"token": token, ...}` at ~line 219), replace the response tail:
 
 ```go
 	// Stash the admin identity in Redis keyed by the new JWT's jti, so
@@ -991,6 +992,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/caesar/all-chat/shared/auth"
 	"github.com/gin-gonic/gin"
