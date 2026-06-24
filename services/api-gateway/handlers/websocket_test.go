@@ -17,9 +17,47 @@
 package handlers
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 )
 
 func TestNotifyUser(t *testing.T) {
 	t.Skip("Wave 0 stub - implement in Wave 2")
+}
+
+func TestExtractWSAuthToken_ReadsAccessCookie(t *testing.T) {
+	req := httptest.NewRequest("GET", "/ws/overlay/abc", nil)
+	req.AddCookie(&http.Cookie{Name: "access_token", Value: "cookie-jwt"})
+	tok, echo := extractWSAuthToken(req)
+	if tok != "cookie-jwt" {
+		t.Errorf("token=%q want cookie-jwt", tok)
+	}
+	if echo != nil {
+		t.Errorf("echo header should be nil for cookie path, got %v", echo)
+	}
+}
+
+func TestExtractWSAuthToken_SubprotocolBeatsCookie(t *testing.T) {
+	req := httptest.NewRequest("GET", "/ws/overlay/abc", nil)
+	req.Header.Set("Sec-WebSocket-Protocol", "bearer.subproto-jwt")
+	req.AddCookie(&http.Cookie{Name: "access_token", Value: "cookie-jwt"})
+	tok, echo := extractWSAuthToken(req)
+	if tok != "subproto-jwt" {
+		t.Errorf("token=%q want subproto-jwt (subprotocol precedence)", tok)
+	}
+	if echo == nil || echo.Get("Sec-WebSocket-Protocol") != "bearer.subproto-jwt" {
+		t.Errorf("echo header should be set for subprotocol path")
+	}
+}
+
+func TestExtractWSAuthToken_NoTokenNoCookie(t *testing.T) {
+	req := httptest.NewRequest("GET", "/ws/overlay/abc", nil)
+	tok, echo := extractWSAuthToken(req)
+	if tok != "" {
+		t.Errorf("token=%q want empty", tok)
+	}
+	if echo != nil {
+		t.Errorf("echo should be nil")
+	}
 }
