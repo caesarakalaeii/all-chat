@@ -83,8 +83,15 @@ export const useAuthStore = create<AuthStore>((set) => ({
       return
     }
     try {
-      const user = await authApi.getMe() // GET /auth/me — succeeds if access cookie valid
-      set({ user, loading: false })
+      const me = await authApi.getMe() // GET /auth/me — succeeds if access cookie valid
+      // Restore impersonation state from the JWT's ImpersonatedBy claim so the
+      // banner + admin-route guards survive a page reload (audit H3).
+      set({
+        user: me,
+        loading: false,
+        isImpersonating: !!me.impersonating,
+        impersonatedUsername: me.impersonating ? me.username : null,
+      })
     } catch {
       set({ user: null, loading: false })
     }

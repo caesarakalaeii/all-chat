@@ -827,6 +827,12 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 				ExpiresIn:    int64(h.jwtExpiry.Seconds()),
 				TokenType:    "Bearer",
 				RedirectTo:   redirectTo,
+				User: &StreamerAuthUser{
+					ID:          user.ID,
+					Username:    user.Username,
+					DisplayName: user.DisplayName,
+					IsAdmin:     user.IsAdmin,
+				},
 			}
 			if oauthState.IsModeration() {
 				payload.ModerationEnabled = string(platform)
@@ -855,6 +861,12 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 				RefreshToken: token.RefreshToken,
 				ExpiresIn:    int64(h.jwtExpiry.Seconds()),
 				TokenType:    "Bearer",
+				User: &StreamerAuthUser{
+					ID:          user.ID,
+					Username:    user.Username,
+					DisplayName: user.DisplayName,
+					IsAdmin:     user.IsAdmin,
+				},
 			})
 			if err != nil {
 				h.logger.Error("Failed to store streamer auth code", zap.Error(err))

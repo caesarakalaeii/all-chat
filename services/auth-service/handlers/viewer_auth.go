@@ -130,6 +130,17 @@ type StreamerAuthPayload struct {
 	RedirectTo        string `json:"redirect_to,omitempty"`
 	SourceAdded       string `json:"source_added,omitempty"`
 	ModerationEnabled string `json:"moderation_enabled,omitempty"`
+	// User carries the authenticated streamer's profile for the UI (no tokens).
+	// Added in H3 so /exchange returns the user without a separate /auth/me call.
+	User *StreamerAuthUser `json:"user,omitempty"`
+}
+
+// StreamerAuthUser is the non-secret user profile returned by /exchange.
+type StreamerAuthUser struct {
+	ID          string `json:"id"`
+	Username    string `json:"username"`
+	DisplayName string `json:"display_name,omitempty"`
+	IsAdmin     bool   `json:"is_admin"`
 }
 
 const streamerAuthCodeTTL = 60 * time.Second

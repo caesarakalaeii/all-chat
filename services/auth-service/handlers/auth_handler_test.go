@@ -183,6 +183,11 @@ func TestHandleStreamerTokenExchange_SetsCookies_OmitsTokensFromBody(t *testing.
 		RedirectTo:        "/dashboard",
 		SourceAdded:       "twitch",
 		ModerationEnabled: "true",
+		User: &StreamerAuthUser{
+			ID:       "user-1",
+			Username: "u",
+			IsAdmin:  false,
+		},
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {
@@ -232,5 +237,11 @@ func TestHandleStreamerTokenExchange_SetsCookies_OmitsTokensFromBody(t *testing.
 	}
 	if !strings.Contains(body, "expires_in") {
 		t.Errorf("expires_in missing from response body: %s", body)
+	}
+	if !strings.Contains(body, "user") {
+		t.Errorf("user missing from response body: %s", body)
+	}
+	if !strings.Contains(body, "user-1") {
+		t.Errorf("user id missing from response body: %s", body)
 	}
 }

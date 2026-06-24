@@ -35,6 +35,10 @@ export interface User {
   is_admin: boolean
   is_premium: boolean
   is_beta_tester: boolean
+  // Impersonation state surfaced from /auth/me when the JWT carries an
+  // ImpersonatedBy claim (audit H3). Absent when not impersonating.
+  impersonating?: boolean
+  impersonated_by?: string
   created_at: string
   updated_at: string
 }
