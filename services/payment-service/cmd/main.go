@@ -100,7 +100,7 @@ func main() {
 	}
 
 	// Token encryption (TOKEN_ENCRYPTION_KEY_V1).
-	encryptor, err := encryption.NewMultiKeyEncryptorFromEnv()
+	encryptor, err := encryption.NewMultiKeyEncryptorFromEnvWithLogger(log)
 	if err != nil {
 		log.Fatal("Failed to initialize encryption (TOKEN_ENCRYPTION_KEY_V1 must be set)", zap.Error(err))
 	}

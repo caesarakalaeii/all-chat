@@ -130,7 +130,7 @@ func main() {
 	}
 	log.Info("JWT key chain initialized", zap.String("latest_kid", userKeyChain.LatestKid()))
 
-	tokenCipher, err := encryption.NewMultiKeyEncryptorFromEnv()
+	tokenCipher, err := encryption.NewMultiKeyEncryptorFromEnvWithLogger(log)
 	if err != nil {
 		log.Fatal("failed to initialize token cipher (TOKEN_ENCRYPTION_KEY_V1 must be set; legacy TOKEN_ENCRYPTION_KEY optional)", zap.Error(err))
 	}

@@ -30,6 +30,7 @@ import (
 	"github.com/caesar/all-chat/services/api-gateway/subscription"
 	wsconn "github.com/caesar/all-chat/services/api-gateway/websocket"
 	"github.com/caesar/all-chat/shared/auth"
+	sharedmiddleware "github.com/caesar/all-chat/shared/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
@@ -105,18 +106,16 @@ func extractWSAuthToken(r *http.Request) (token string, echoHeader http.Header) 
 
 // WebSocketHandler handles WebSocket connections for overlays
 type WebSocketHandler struct {
-	wsManager        *wsconn.Manager
-	subscriber       *subscription.Subscriber
-	repo             *subscription.Repository
-	statusSubscriber *subscription.StatusSubscriber
-	userKeyChain     *auth.KeyChain
-	replayBuffer     replay.DeletionReplayBuffer
-	chatReplayBuffer replay.ChatReplayBuffer
-	logger           *zap.Logger
-	upgrader         websocket.Upgrader
-	allowAllOrigins  bool
-	allowedOrigins   map[string]struct{}
-	allowedPrefixes  []string
+	wsManager         *wsconn.Manager
+	subscriber        *subscription.Subscriber
+	repo              *subscription.Repository
+	statusSubscriber  *subscription.StatusSubscriber
+	userKeyChain      *auth.KeyChain
+	replayBuffer      replay.DeletionReplayBuffer
+	chatReplayBuffer  replay.ChatReplayBuffer
+	logger            *zap.Logger
+	upgrader          websocket.Upgrader
+	allowedOriginList []string
 }
 
 // NewWebSocketHandler creates a new WebSocket handler
@@ -130,19 +129,17 @@ func NewWebSocketHandler(
 	chatReplayBuffer replay.ChatReplayBuffer,
 	logger *zap.Logger,
 ) *WebSocketHandler {
-	allowedOrigins, allowedPrefixes, allowAll := loadAllowedOrigins()
+	allowedOriginList := loadAllowedOrigins()
 	h := &WebSocketHandler{
-		wsManager:        wsManager,
-		subscriber:       subscriber,
-		repo:             repo,
-		statusSubscriber: statusSubscriber,
-		userKeyChain:     userKeyChain,
-		replayBuffer:     replayBuffer,
-		chatReplayBuffer: chatReplayBuffer,
-		logger:           logger,
-		allowedOrigins:   allowedOrigins,
-		allowedPrefixes:  allowedPrefixes,
-		allowAllOrigins:  allowAll,
+		wsManager:         wsManager,
+		subscriber:        subscriber,
+		repo:              repo,
+		statusSubscriber:  statusSubscriber,
+		userKeyChain:      userKeyChain,
+		replayBuffer:      replayBuffer,
+		chatReplayBuffer:  chatReplayBuffer,
+		logger:            logger,
+		allowedOriginList: allowedOriginList,
 	}
 
 	h.upgrader = websocket.Upgrader{
@@ -151,11 +148,11 @@ func NewWebSocketHandler(
 		CheckOrigin:     h.checkOrigin,
 	}
 
-	if h.allowAllOrigins {
+	if sharedmiddleware.OriginAllowed(allowedOriginList, "*") {
 		logger.Info("WebSocket origin allowlist disabled; allowing all origins")
 	} else {
 		logger.Info("Configured WebSocket origin allowlist",
-			zap.Int("count", len(h.allowedOrigins)),
+			zap.Int("count", len(allowedOriginList)),
 		)
 	}
 
@@ -379,65 +376,55 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 	// The WebSocket connection will continue in the background
 }
 
-func loadAllowedOrigins() (map[string]struct{}, []string, bool) {
+func loadAllowedOrigins() []string {
 	value := strings.TrimSpace(os.Getenv("WEBSOCKET_ALLOWED_ORIGINS"))
 	if value == "" {
 		// Deny all when not configured — set WEBSOCKET_ALLOWED_ORIGINS explicitly or use "*" to allow all
-		return make(map[string]struct{}), nil, false
+		return nil
 	}
 
-	allowed := make(map[string]struct{})
-	var prefixes []string
-	allowAll := false
+	var result []string
 	for _, origin := range strings.Split(value, ",") {
 		origin = strings.TrimSpace(origin)
-		if origin == "" {
-			continue
+		if origin != "" {
+			result = append(result, origin)
 		}
-		if origin == "*" {
-			allowAll = true
-			continue
-		}
-		// Entries ending with "/*" are treated as prefix matches
-		// e.g. "chrome-extension://*" matches any chrome extension origin
-		if strings.HasSuffix(origin, "*") {
-			prefixes = append(prefixes, strings.TrimSuffix(origin, "*"))
-			continue
-		}
-		allowed[origin] = struct{}{}
 	}
+	return result
+}
 
-	if allowAll {
-		return nil, nil, true
+// originAllowedForWS is the pure origin-check logic extracted from
+// checkOrigin for testability (audit I1). A browser always sends an Origin
+// header on a WebSocket handshake, so when the request carries the access_token
+// cookie (the cookie-auth path, audit H3) an empty Origin is rejected as a
+// CSRF defense-in-depth — an attacker page that suppresses Origin cannot
+// open the owner socket even if it somehow has the victim's cookie. Empty
+// Origin is still allowed for non-browser clients that authenticate via the
+// subprotocol or ?token= query param (no cookie, no browser context).
+// Non-empty Origin is validated against the allowlist via the shared M4
+// matcher (exact + `*` + `/*` suffix).
+func originAllowedForWS(allowed []string, r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	hasAccessCookie := false
+	if ck, err := r.Cookie(auth.CookieAccessToken); err == nil && ck.Value != "" {
+		hasAccessCookie = true
 	}
-
-	return allowed, prefixes, false
+	if origin == "" {
+		// Non-browser client (subprotocol/query token, no cookie) — allowed.
+		// Browser with access cookie but suppressed Origin — reject (I1).
+		return !hasAccessCookie
+	}
+	return sharedmiddleware.OriginAllowed(allowed, origin)
 }
 
 func (h *WebSocketHandler) checkOrigin(r *http.Request) bool {
-	if h.allowAllOrigins {
-		return true
+	if !originAllowedForWS(h.allowedOriginList, r) {
+		h.logger.Warn("Blocked WebSocket connection from disallowed or missing origin",
+			zap.String("origin", r.Header.Get("Origin")),
+		)
+		return false
 	}
-
-	origin := r.Header.Get("Origin")
-	if origin == "" {
-		return true
-	}
-
-	if _, ok := h.allowedOrigins[origin]; ok {
-		return true
-	}
-
-	for _, prefix := range h.allowedPrefixes {
-		if strings.HasPrefix(origin, prefix) {
-			return true
-		}
-	}
-
-	h.logger.Warn("Blocked WebSocket connection from disallowed origin",
-		zap.String("origin", origin),
-	)
-	return false
+	return true
 }
 
 // NotifyUser sends a notification to a specific user via WebSocket

@@ -24,6 +24,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -62,7 +64,30 @@ const (
 	// single-shot test sample). POST /tts streaming MAY exceed this because
 	// we rely on context cancellation instead.
 	ttsHTTPTimeout = 30 * time.Second
+
+	// maxTTSBodyBytes caps the POST /tts request body before JSON decoding to
+	// prevent memory-exhaustion DoS (audit L8). 1 MiB is ample for the small
+	// {text, voice} JSON payload (text itself is capped at maxTTSText=5000).
+	maxTTSBodyBytes = 1 << 20 // 1 MiB
 )
+
+// validVoiceIDRe restricts voiceID to the safe character set used by
+// ElevenLabs voice IDs (alphanumerics, hyphens, underscores). This prevents
+// path traversal / query injection when the value is interpolated into the
+// upstream URL path (audit L8).
+var validVoiceIDRe = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+
+// validateAndEscapeVoiceID validates voiceID against the allowed character
+// set and returns its url.PathEscape'd form for safe interpolation into the
+// upstream URL path (audit L8 — prevents path-injection / SSRF into the
+// ElevenLabs upstream). Returns ok=false if the voice ID is empty or
+// contains disallowed characters.
+func validateAndEscapeVoiceID(voiceID string) (escaped string, ok bool) {
+	if !validVoiceIDRe.MatchString(voiceID) {
+		return "", false
+	}
+	return url.PathEscape(voiceID), true
+}
 
 // ---- Narrow interfaces (test seams) ----------------------------------------
 
@@ -270,6 +295,12 @@ func (h *TTSHandler) HandleSaveTTSConfig(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "voice_id is required"})
 		return
 	}
+	// L8: validate voice_id format before persisting so a stored value can
+	// never carry path-traversal characters into a later upstream URL build.
+	if !validVoiceIDRe.MatchString(req.VoiceID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "voice_id contains invalid characters"})
+		return
+	}
 
 	encrypted, err := h.cipher.EncryptString(req.APIKey)
 	if err != nil {
@@ -313,6 +344,12 @@ func (h *TTSHandler) HandleSaveVoice(c *gin.Context) {
 	voiceID := strings.TrimSpace(req.VoiceID)
 	if voiceID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "voice_id is required"})
+		return
+	}
+	// L8: validate voice_id format before persisting so a stored value can
+	// never carry path-traversal characters into a later upstream URL build.
+	if !validVoiceIDRe.MatchString(voiceID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "voice_id contains invalid characters"})
 		return
 	}
 
@@ -600,12 +637,20 @@ func (h *TTSHandler) HandleTestKey(c *gin.Context) {
 	}
 
 	// Step 2: POST /v1/text-to-speech/{voice}/stream with the sample text.
+	// L8: validate + escape the stored voice ID before interpolating into the
+	// upstream URL path (defense-in-depth: the save handlers now validate on
+	// write, but pre-existing rows may predate that check).
+	escapedVoice, ok := validateAndEscapeVoiceID(cfg.VoiceID)
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "stored voice_id is invalid"})
+		return
+	}
 	body, _ := json.Marshal(map[string]interface{}{
 		"text":     ttsSampleText,
 		"model_id": ttsModel,
 	})
 	ttsURL := fmt.Sprintf("%s/v1/text-to-speech/%s/stream",
-		h.elevenLabsBaseURL, cfg.VoiceID)
+		h.elevenLabsBaseURL, escapedVoice)
 	ttsReq, err := http.NewRequestWithContext(c.Request.Context(), http.MethodPost,
 		ttsURL, bytes.NewReader(body))
 	if err != nil {
@@ -654,6 +699,11 @@ func (h *TTSHandler) HandleTTS(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "overlay id is required"})
 		return
 	}
+
+	// L8: bound the request body before any JSON decode to prevent
+	// memory-exhaustion DoS. 1 MiB is ample for the small {text, voice}
+	// payload (text itself is capped at maxTTSText=5000 chars downstream).
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxTTSBodyBytes)
 
 	// Read JSON body once for both text and voice (audit M17: move
 	// tts_token → Authorization header, voice → JSON body).
@@ -721,11 +771,22 @@ func (h *TTSHandler) HandleTTS(c *gin.Context) {
 		voiceID = cfg.VoiceID
 	}
 
+	// L8: validate + escape the voice ID before interpolating it into the
+	// upstream URL path. voiceID can come from the JSON body, query param,
+	// or the stored config — any of which could carry path-traversal / query
+	// characters (e.g. "../", "?", "#") that would redirect the request to
+	// an unintended upstream path.
+	escapedVoice, ok := validateAndEscapeVoiceID(voiceID)
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "voice contains invalid characters"})
+		return
+	}
+
 	body, _ := json.Marshal(map[string]interface{}{
 		"text":     text,
 		"model_id": ttsModel,
 	})
-	ttsURL := fmt.Sprintf("%s/v1/text-to-speech/%s/stream", h.elevenLabsBaseURL, voiceID)
+	ttsURL := fmt.Sprintf("%s/v1/text-to-speech/%s/stream", h.elevenLabsBaseURL, escapedVoice)
 	upstreamReq, err := http.NewRequestWithContext(c.Request.Context(), http.MethodPost,
 		ttsURL, bytes.NewReader(body))
 	if err != nil {

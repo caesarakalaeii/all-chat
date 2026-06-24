@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/caesar/all-chat/services/auth-service/models"
@@ -275,6 +276,13 @@ func (h *ViewerAuthHandler) HandleTwitchCallback(c *gin.Context) {
 	stateKey := fmt.Sprintf("viewer_oauth_state:twitch:%s", state)
 	stateJSON, err := h.redis.GetDel(c.Request.Context(), stateKey).Result()
 	if err != nil {
+		// I2: check for an idempotency tombstone from a prior invocation with the
+		// same state (iOS Safari prefetch, Google multi-code). If present, replay
+		// the original redirect instead of hard-failing with "Invalid or expired
+		// state".
+		if h.replayCallbackTombstone(c, stateKey) {
+			return
+		}
 		h.logger.Warn("Invalid or expired state",
 			zap.String("state", state),
 			zap.Error(err),
@@ -341,7 +349,7 @@ func (h *ViewerAuthHandler) HandleTwitchCallback(c *gin.Context) {
 	// Check if a linked streamer account exists and is banned
 	linkedStreamer := h.findLinkedStreamer(c.Request.Context(), session.Platform, session.PlatformUserID)
 	if linkedStreamer != nil && linkedStreamer.IsBanned {
-		c.Redirect(http.StatusFound, fmt.Sprintf("%s/auth/banned", h.frontendURL))
+		h.redirectWithTombstone(c, stateKey, fmt.Sprintf("%s/auth/banned", h.frontendURL))
 		return
 	}
 
@@ -391,7 +399,7 @@ func (h *ViewerAuthHandler) HandleTwitchCallback(c *gin.Context) {
 		redirectURL += fmt.Sprintf("&redirect_to=%s", redirectTo)
 	}
 
-	c.Redirect(http.StatusFound, redirectURL)
+	h.redirectWithTombstone(c, stateKey, redirectURL)
 }
 
 // HandleMe returns the current viewer's information
@@ -580,6 +588,38 @@ func (h *ViewerAuthHandler) redirectToFrontendWithError(c *gin.Context, errorMsg
 	c.Redirect(http.StatusFound, redirectURL)
 }
 
+// redirectWithTombstone stores the final redirect URL under a short-lived "used"
+// tombstone (60s) and performs the redirect. On a duplicate OAuth callback
+// (iOS Safari prefetch, Google multi-code) the state was already consumed by
+// GetDel; replayCallbackTombstone replays this redirect instead of
+// hard-failing with "Invalid or expired state". Mirrors
+// platform_auth_v2.redirectWithTombstone (audit I2).
+func (h *ViewerAuthHandler) redirectWithTombstone(c *gin.Context, stateKey, redirectURL string) {
+	usedKey := stateKey + ":used"
+	if err := h.redis.Set(c.Request.Context(), usedKey, redirectURL, 60*time.Second).Err(); err != nil {
+		h.logger.Warn("Failed to store viewer OAuth callback tombstone",
+			zap.String("state_key", stateKey),
+			zap.Error(err))
+	}
+	c.Redirect(http.StatusFound, redirectURL)
+}
+
+// replayCallbackTombstone checks for a stored redirect from a prior callback
+// invocation with the same state. Returns true if it replayed the redirect
+// (caller should return). Used when GetDel on the state key misses — a
+// duplicate callback that was already processed. (audit I2)
+func (h *ViewerAuthHandler) replayCallbackTombstone(c *gin.Context, stateKey string) bool {
+	usedKey := stateKey + ":used"
+	redirectURL, err := h.redis.Get(c.Request.Context(), usedKey).Result()
+	if err != nil {
+		return false
+	}
+	h.logger.Info("Idempotent viewer OAuth callback replay — replaying original redirect",
+		zap.String("state_key", stateKey))
+	c.Redirect(http.StatusFound, redirectURL)
+	return true
+}
+
 // HandleYouTubeLogin initiates the OAuth flow for viewers on YouTube
 func (h *ViewerAuthHandler) HandleYouTubeLogin(c *gin.Context) {
 	streamer := c.Query("streamer")
@@ -625,8 +665,14 @@ func (h *ViewerAuthHandler) HandleYouTubeCallback(c *gin.Context) {
 	}
 
 	// Retrieve state data from Redis (atomic Get+Del to prevent TOCTOU, audit L5)
-	stateData, err := h.redis.GetDel(c.Request.Context(), "oauth_state:"+state).Result()
+	stateKey := "oauth_state:" + state
+	stateData, err := h.redis.GetDel(c.Request.Context(), stateKey).Result()
 	if err != nil {
+		// I2: idempotency tombstone — replay original redirect on a duplicate
+		// callback instead of hard-failing (iOS Safari prefetch, Google multi-code).
+		if h.replayCallbackTombstone(c, stateKey) {
+			return
+		}
 		h.redirectToFrontendWithError(c, "Invalid or expired state")
 		return
 	}
@@ -751,7 +797,7 @@ func (h *ViewerAuthHandler) HandleYouTubeCallback(c *gin.Context) {
 	// Check if a linked streamer account exists and is banned
 	linkedStreamerYT := h.findLinkedStreamer(c.Request.Context(), session.Platform, session.PlatformUserID)
 	if linkedStreamerYT != nil && linkedStreamerYT.IsBanned {
-		c.Redirect(http.StatusFound, fmt.Sprintf("%s/auth/banned", h.frontendURL))
+		h.redirectWithTombstone(c, stateKey, fmt.Sprintf("%s/auth/banned", h.frontendURL))
 		return
 	}
 
@@ -793,7 +839,7 @@ func (h *ViewerAuthHandler) HandleYouTubeCallback(c *gin.Context) {
 		redirectURL += fmt.Sprintf("&redirect_to=%s", redirectTo)
 	}
 
-	c.Redirect(http.StatusFound, redirectURL)
+	h.redirectWithTombstone(c, stateKey, redirectURL)
 }
 
 // HandleKickLogin initiates the OAuth flow for viewers on Kick
@@ -846,8 +892,14 @@ func (h *ViewerAuthHandler) HandleKickCallback(c *gin.Context) {
 	}
 
 	// Retrieve state data from Redis (atomic Get+Del to prevent TOCTOU, audit L5)
-	stateData, err := h.redis.GetDel(c.Request.Context(), "oauth_state:"+state).Result()
+	stateKey := "oauth_state:" + state
+	stateData, err := h.redis.GetDel(c.Request.Context(), stateKey).Result()
 	if err != nil {
+		// I2: idempotency tombstone — replay original redirect on a duplicate
+		// callback instead of hard-failing (iOS Safari prefetch, Google multi-code).
+		if h.replayCallbackTombstone(c, stateKey) {
+			return
+		}
 		h.redirectToFrontendWithError(c, "Invalid or expired state")
 		return
 	}
@@ -958,7 +1010,7 @@ func (h *ViewerAuthHandler) HandleKickCallback(c *gin.Context) {
 	// Check if a linked streamer account exists and is banned
 	linkedStreamerKick := h.findLinkedStreamer(c.Request.Context(), session.Platform, session.PlatformUserID)
 	if linkedStreamerKick != nil && linkedStreamerKick.IsBanned {
-		c.Redirect(http.StatusFound, fmt.Sprintf("%s/auth/banned", h.frontendURL))
+		h.redirectWithTombstone(c, stateKey, fmt.Sprintf("%s/auth/banned", h.frontendURL))
 		return
 	}
 
@@ -1004,7 +1056,7 @@ func (h *ViewerAuthHandler) HandleKickCallback(c *gin.Context) {
 		redirectURL += fmt.Sprintf("&redirect_to=%s", redirectTo)
 	}
 
-	c.Redirect(http.StatusFound, redirectURL)
+	h.redirectWithTombstone(c, stateKey, redirectURL)
 }
 
 // resolveViewerID returns the durable viewer UUID for the given platform session.
@@ -1130,14 +1182,28 @@ func (h *ViewerAuthHandler) HandleUnlinkPlatform(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Platform unlinked successfully"})
 }
 
-// sanitizeRedirectPath ensures redirect_to is a safe relative path (starts with /, no scheme).
-// This prevents open redirect attacks.
+// sanitizeRedirectPath ensures redirect_to is a safe relative path (starts with /,
+// no scheme). This prevents open redirect attacks.
+//
+// Security: rejects protocol-relative URLs (//evil.com) and backslashes
+// (browsers normalize \ → /, so /\evil.com becomes //evil.com — cross-origin).
+// See audit M1.
 func sanitizeRedirectPath(path string) string {
 	if path == "" {
 		return ""
 	}
 	// Must start with / and must not contain :// (no absolute URLs)
 	if len(path) < 1 || path[0] != '/' || len(path) > 200 {
+		return ""
+	}
+	// Reject protocol-relative URLs (//evil.com) — browsers treat these as
+	// cross-origin navigations.
+	if len(path) >= 2 && path[1] == '/' {
+		return ""
+	}
+	// Reject backslashes: browsers normalize \ → /, so /\evil.com becomes
+	// //evil.com (cross-origin). (audit M1)
+	if strings.ContainsRune(path, '\\') {
 		return ""
 	}
 	for i := 0; i < len(path)-2; i++ {

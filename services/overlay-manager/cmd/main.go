@@ -152,7 +152,7 @@ func main() {
 	// Phase 13+14: Multi-key AES-GCM cipher for overlay_tts_configs.encrypted_api_key.
 	// Reads TOKEN_ENCRYPTION_KEY_V1 (required) plus TOKEN_ENCRYPTION_KEY (legacy fallback).
 	// Same unified chain used by auth-service (D-04).
-	tokenCipher, err := encryption.NewMultiKeyEncryptorFromEnv()
+	tokenCipher, err := encryption.NewMultiKeyEncryptorFromEnvWithLogger(log)
 	if err != nil {
 		log.Fatal("failed to initialize token cipher (TOKEN_ENCRYPTION_KEY_V1 must be set)", zap.Error(err))
 	}

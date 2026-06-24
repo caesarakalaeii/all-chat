@@ -11,7 +11,12 @@ resources:
   - postgres/deployment.yaml
   - postgres/configmap.yaml
   - redis/deployment.yaml
-  - redis/secret.yaml
+  # redis/secret.yaml is intentionally NOT listed under resources (audit M5).
+  # Shipping the empty-valued redis-auth Secret as an apply-able resource meant
+  # any `kubectl apply -k` overwrote a live REDIS_PASSWORD back to empty,
+  # silently disabling Redis AUTH. The Secret must be managed out-of-band
+  # (sealed-secrets / external-secrets / kubectl create secret) BEFORE enabling
+  # --requirepass. See redis/secret.yaml for the reference manifest + instructions.
 
   # Network hardening (H7): default-deny + metadata-IP block.
   - networkpolicies.yaml

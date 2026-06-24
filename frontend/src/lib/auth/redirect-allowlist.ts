@@ -45,6 +45,12 @@ const ALLOWED_EXTERNAL_HOSTS = new Set([
 export function isAllowedExternalRedirect(url: string): boolean {
   if (!url) return false
 
+  // Reject backslashes (audit M1): browsers normalize \ → /, so a URL like
+  // /\evil.com passes the startsWith('/') && !startsWith('//') guard but
+  // navigates to evil.com. Reject any backslash before the relative-path
+  // shortcut.
+  if (url.indexOf('\\') !== -1) return false
+
   // Relative same-origin path (but not protocol-relative "//evil.com").
   if (url.startsWith('/') && !url.startsWith('//')) return true
 

@@ -164,7 +164,101 @@ func TestHandleLogout_ClearsCookiesAndRevokesRefresh(t *testing.T) {
 	}
 }
 
-// TestHandleStreamerTokenExchange_SetsCookies_OmitsTokensFromBody verifies
+// TestHandleStreamerTokenExchange_SeedsRefreshTokenReuseKey (audit C2)
+// verifies that /exchange seeds the refresh_token:<hash> reuse-detection key
+// when issuing cookies. Without this, HandleRefresh's GetDel treats the FIRST
+// refresh after a real login as token theft → 401 + ClearAuthCookies, force-
+// logging out every user. The handler must Set the key so the first /refresh
+// succeeds.
+func TestHandleStreamerTokenExchange_SeedsRefreshTokenReuseKey(t *testing.T) {
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer rdb.Close()
+
+	h := newTestAuthHandler(t, rdb)
+
+	rt := "exchange-issued-refresh-token"
+	code := "code-c2"
+	payload := StreamerAuthPayload{
+		AccessToken:  "acc-jwt",
+		RefreshToken: rt,
+		ExpiresIn:    3600,
+		TokenType:    "Bearer",
+		User:         &StreamerAuthUser{ID: "user-c2", Username: "u"},
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	mr.Set("streamer_auth_code:"+code, string(data))
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.POST("/exchange", h.HandleStreamerTokenExchange)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/exchange", strings.NewReader(`{"code":"`+code+`"}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("exchange status=%d body=%s", w.Code, w.Body.String())
+	}
+
+	// C2 invariant: the reuse key MUST exist after exchange so the first /refresh
+	// isn't misclassified as theft.
+	rtKey := "refresh_token:" + refreshTokenHash(rt)
+	if !mr.Exists(rtKey) {
+		t.Fatalf("C2 regression: refresh-token reuse key not seeded by /exchange; " +
+			"first /refresh after login would force-logout the user")
+	}
+}
+
+// TestHandleRefresh_AfterExchange_DoesNotForceLogout (audit C2 + C5) verifies
+// the end-to-end contract that C1+C2 restore: after /exchange seeds the reuse
+// key, a /refresh with that token passes the GetDel reuse check (does NOT 401).
+// It stops short of calling Twitch (no network in CI) — the assertion is that
+// the reuse-detection gate is OPEN (not 401-reuse), proving the first refresh
+// after login is no longer misread as theft. Pre-C2 this returned 401
+// "Refresh token already used or invalid".
+func TestHandleRefresh_AfterExchange_DoesNotForceLogout(t *testing.T) {
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer rdb.Close()
+
+	h := newTestAuthHandler(t, rdb)
+
+	rt := "exchange-issued-refresh-token"
+	// Simulate the C2 seeding that /exchange now performs.
+	rtKey := "refresh_token:" + refreshTokenHash(rt)
+	mr.Set(rtKey, "user-c2")
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.POST("/refresh", h.HandleRefresh)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/refresh", nil)
+	req.Header.Set("X-Refresh-Token", rt)
+	router.ServeHTTP(w, req)
+
+	// The reuse check passed iff we did NOT get the reuse 401. The request then
+	// proceeds to Twitch.RefreshToken (real HTTP, no network in CI) → some
+	// non-401 error (503 transient or 401 terminal). Either way it must NOT be
+	// the "Refresh token already used or invalid" reuse 401.
+	if w.Code == 401 {
+		var body map[string]string
+		_ = json.Unmarshal(w.Body.Bytes(), &body)
+		if body["error"] == "Refresh token already used or invalid" {
+			t.Fatalf("C2 regression: first /refresh after exchange was misread as "+
+				"reuse (401) even though /exchange seeded the key; body=%s", w.Body.String())
+		}
+	}
+	// Reuse key was consumed by GetDel (proving the gate ran and passed).
+	if mr.Exists(rtKey) {
+		t.Fatalf("reuse key not consumed by /refresh GetDel")
+	}
+}
+
 // that the M1 code-exchange endpoint issues httpOnly cookies for the access
 // and refresh tokens (audit H3) and does NOT echo the tokens back in the JSON
 // body — only non-secret UI fields (expires_in, redirect_to, etc.) are returned.

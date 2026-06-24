@@ -87,6 +87,36 @@ The Problem statement names impersonation tokens as part of the XSS-theft surfac
 - If **both absent**: allow (non-browser API clients authenticate via `Authorization: Bearer` fallback — those carry no `Origin`/`Referer` and rely on the token).
 - Stateless, ~40 lines, OWASP-recommended modern pattern. No frontend change.
 
+## Same-origin deployment invariant (critical)
+
+Cookie-based auth **only works if the frontend and the API gateway share an
+origin.** The `access_token` and `refresh_token` cookies are `SameSite=Lax` +
+host-only, so the browser sends them only on same-origin requests. The frontend
+fetch wrappers use `credentials: 'same-origin'` (the Next.js default).
+
+**If the frontend and gateway are cross-origin, the cookies are never sent and
+login silently fails** — there is no error surfaced to the user or the console
+beyond the dev-mode origin-mismatch warning added in `client.ts`.
+
+### Production requirement
+
+Both must be served from one origin. The standard deployment is a single ingress
+(e.g. `allch.at`) that serves the Next.js app and proxies `/api/*` to the
+api-gateway. `NEXT_PUBLIC_API_URL` must resolve to `window.location.origin`.
+
+### Dev caveat
+
+The default dev split (frontend `:3000`, gateway `:8080`) is cross-origin, so
+cookie auth does not work out of the box. Either proxy `/api/*` through Next.js
+rewrites to make it same-origin, or use the `Authorization: Bearer` backward-
+compat fallback during development.
+
+### If cross-origin is ever needed
+
+A cross-origin cookie deployment requires: `credentials: 'include'`,
+`SameSite=None; Secure`, a strict CORS allowlist, and revisiting the CSRF
+strategy. This is **out of scope** for the current rollout and not implemented.
+
 ## Issuance (auth-service)
 
 ### `POST /api/v1/auth/exchange` (streamer login completion — M1 code exchange)

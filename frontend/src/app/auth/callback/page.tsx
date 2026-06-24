@@ -46,6 +46,7 @@ import Link from 'next/link'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import type { User } from '@/lib/types/auth'
 import { trackEvent } from '@/lib/analytics'
+import { isAllowedExternalRedirect } from '@/lib/auth/redirect-allowlist'
 import { InfinityLogo } from '@/components/InfinityLogo'
 
 function AuthCallbackContent() {
@@ -117,10 +118,11 @@ function AuthCallbackContent() {
         }
 
         if (redirectTo) {
-          // SECURITY (audit M12): validate redirect_to to prevent open redirect.
-          // Must be a relative path (starts with '/') and not protocol-relative
-          // ("//evil.com"). Mirrors the viewer flow at chat/auth-success/page.tsx.
-          const isSafeRedirect = redirectTo.startsWith('/') && !redirectTo.startsWith('//')
+          // SECURITY (audit M1/M12): validate redirect_to to prevent open redirect.
+          // Uses the shared allowlist helper which also rejects backslash-based
+          // bypasses (browsers normalize \ → /, so /\evil.com would navigate to
+          // evil.com). Mirrors the viewer flow at chat/auth-success/page.tsx.
+          const isSafeRedirect = isAllowedExternalRedirect(redirectTo)
           // Source-add returns to overlay settings with a confirmation marker; the
           // moderation monitor reflects the new scope on its own capabilities fetch,
           // so it just navigates back cleanly.

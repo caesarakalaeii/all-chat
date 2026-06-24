@@ -23,6 +23,68 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func TestOriginAllowed_WildcardStarSuffix_MatchesExtensionOrigin(t *testing.T) {
+	// M4: moz-extension://* (WS-format wildcard) must match a real extension origin.
+	allowed := []string{"moz-extension://*", "https://allch.at"}
+	if !OriginAllowed(allowed, "moz-extension://7d4f8b2e-1234-abcd") {
+		t.Error("moz-extension://* should match moz-extension://<uuid>")
+	}
+}
+
+func TestOriginAllowed_WildcardSlashStarSuffix_MatchesExtensionOrigin(t *testing.T) {
+	// M4: moz-extension:///* (CORS-format wildcard) must match a real extension origin.
+	allowed := []string{"moz-extension:///*", "https://allch.at"}
+	if !OriginAllowed(allowed, "moz-extension://7d4f8b2e-1234-abcd") {
+		t.Error("moz-extension:///* should match moz-extension://<uuid>")
+	}
+}
+
+func TestOriginAllowed_ExactMatch(t *testing.T) {
+	allowed := []string{"https://allch.at", "https://app.allch.at"}
+	if !OriginAllowed(allowed, "https://allch.at") {
+		t.Error("exact match should return true")
+	}
+	if !OriginAllowed(allowed, "https://app.allch.at") {
+		t.Error("exact match should return true")
+	}
+}
+
+func TestOriginAllowed_UnrelatedOriginRejected(t *testing.T) {
+	allowed := []string{"https://allch.at", "moz-extension://*"}
+	if OriginAllowed(allowed, "https://evil.example") {
+		t.Error("unrelated origin should be rejected")
+	}
+}
+
+func TestOriginAllowed_ChromeExtensionWildcard(t *testing.T) {
+	allowed := []string{"chrome-extension://*"}
+	if !OriginAllowed(allowed, "chrome-extension://abcdef123456") {
+		t.Error("chrome-extension://* should match chrome-extension://<id>")
+	}
+	if OriginAllowed(allowed, "moz-extension://abcdef123456") {
+		t.Error("chrome-extension://* should NOT match moz-extension origin")
+	}
+}
+
+func TestOriginAllowed_StandaloneStarAllowsAll(t *testing.T) {
+	allowed := []string{"*"}
+	if !OriginAllowed(allowed, "https://anything.com") {
+		t.Error("* should allow all origins")
+	}
+	if !OriginAllowed(allowed, "moz-extension://abc") {
+		t.Error("* should allow extension origins")
+	}
+}
+
+func TestOriginAllowed_EmptyListRejectsAll(t *testing.T) {
+	if OriginAllowed([]string{}, "https://allch.at") {
+		t.Error("empty allowlist should reject all origins")
+	}
+	if OriginAllowed(nil, "https://allch.at") {
+		t.Error("nil allowlist should reject all origins")
+	}
+}
+
 func TestOriginCheck_AllowsAllowedOrigin(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()

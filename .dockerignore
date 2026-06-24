@@ -49,5 +49,9 @@ docs/
 deployments/
 test/
 scripts/
+# The migrations image (migrations/Dockerfile, build context: repo root) COPYs
+# scripts/run-migrations.sh, so un-exclude that one file (audit B1 — empty
+# exclusion broke the migrations image build with "not found").
+!scripts/run-migrations.sh
 ansible/
 grafana/

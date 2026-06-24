@@ -125,7 +125,7 @@ func main() {
 
 	// Twitch (delete/timeout/ban/unban) needs the token cipher (to decrypt broadcaster
 	// tokens) AND the Twitch app credentials (Client-Id header + refresh grant).
-	cipher, cipherErr := encryption.NewMultiKeyEncryptorFromEnv()
+	cipher, cipherErr := encryption.NewMultiKeyEncryptorFromEnvWithLogger(log)
 	switch {
 	case cipherErr != nil:
 		log.Warn("Token cipher unavailable (set TOKEN_ENCRYPTION_KEY_V1); Twitch moderation runs in dry-run", zap.Error(cipherErr))
