@@ -51,17 +51,11 @@ export default function SourcesPage() {
   useEffect(() => {
     async function fetchSources() {
       try {
-        const token = localStorage.getItem('jwt_token')
-        if (!token) {
-          setError('Not authenticated')
-          setLoading(false)
-          return
-        }
-
+        // Auth is via the httpOnly session cookie (same-origin); the gateway
+        // CookieToBearer middleware copies the access cookie to Authorization
+        // before backend validation (no JS-readable token).
         const response = await fetch('/api/v1/admin/sources', {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          credentials: 'same-origin',
         })
 
         if (!response.ok) {
