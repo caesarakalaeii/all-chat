@@ -20,7 +20,7 @@ import { Check, MessagesSquare, Radio, ShieldCheck, Sparkles, Volume2 } from 'lu
 import Link from 'next/link'
 import { AppNav } from '@/components/AppNav'
 import { Card } from '@/components/ui/card'
-import { buttonVariants } from '@/components/ui/button'
+import { Button } from '@/components/ui/button'
 import { PATREON_JOIN_URL } from '@/lib/constants'
 
 export const metadata = {
@@ -88,20 +88,18 @@ export default function UpgradePage() {
             applies automatically to your account.
           </p>
           <div className="flex flex-col items-center justify-center gap-3 pt-2 sm:flex-row">
-            <a
-              href={PATREON_JOIN_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={buttonVariants({ variant: 'gradient', size: 'lg' })}
+            <Button
+              variant="gradient"
+              size="lg"
+              render={
+                <a href={PATREON_JOIN_URL} target="_blank" rel="noopener noreferrer" />
+              }
             >
               Subscribe on Patreon
-            </a>
-            <Link
-              href="/settings/premium"
-              className={buttonVariants({ variant: 'outline', size: 'lg' })}
-            >
+            </Button>
+            <Button variant="outline" size="lg" render={<Link href="/settings/premium" />}>
               Already a patron? Connect Patreon
-            </Link>
+            </Button>
           </div>
         </header>
 
