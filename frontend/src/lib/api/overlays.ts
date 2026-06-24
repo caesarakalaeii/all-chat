@@ -24,7 +24,6 @@
  */
 
 import { apiClient } from './client'
-import { inMemoryTokens } from '../auth/in-memory-store'
 import type {
   Overlay,
   OverlayConfig,
@@ -298,21 +297,17 @@ export const overlaysApi = {
    * Backend: POST /api/v1/overlays/:id/tts-config/test.
    *
    * Response on success is audio/mpeg + `x-characters-remaining` / `x-characters-limit`
-   * headers — the standard `apiClient.post` assumes JSON, so use `fetch` directly and
-   * replicate the Bearer-token auth pattern from `client.ts`.
+   * headers — the standard `apiClient.post` assumes JSON, so use `fetch` directly.
+   * Auth is via the httpOnly session cookie (same-origin), matching `apiClient`
+   * (`credentials: 'same-origin'`) — no `Authorization` header is attached here.
    */
   async testTTSKey(overlayId: string): Promise<TestKeyResult> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    if (typeof window !== 'undefined') {
-      // SECURITY (audit H3): prefer the in-memory token; fall back to
-      // localStorage for legacy compatibility during the cookie migration.
-      const token = inMemoryTokens.getAccessToken() ?? localStorage.getItem('jwt_token')
-      if (token) headers['Authorization'] = `Bearer ${token}`
-    }
     try {
       const r = await fetch(`/api/v1/overlays/${overlayId}/tts-config/test`, {
         method: 'POST',
         headers,
+        credentials: 'same-origin',
       })
       if (!r.ok) {
         // Best-effort parse the structured error body so the UI can render
