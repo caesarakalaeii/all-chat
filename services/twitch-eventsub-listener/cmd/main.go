@@ -32,6 +32,7 @@ import (
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/claimexport"
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/eventsub"
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/publisher"
+	"github.com/caesar/all-chat/services/twitch-eventsub-listener/scopeexport"
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/status"
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/webhooks"
 	"github.com/caesar/all-chat/shared/database"
@@ -182,6 +183,13 @@ func main() {
 	// migration dashboard can subtract already-migrated channels from "still on IRC" panels
 	// (ADR-0015). Runs on every replica; duplicate series dedupe in PromQL.
 	go claimexport.ExportOwnedChannels(ctx, chatClaims, "twitch-eventsub-listener", log)
+
+	// Report the IRC→EventSub migration backlog (active Twitch channels lacking chat scope) as a
+	// gauge derived from granted OAuth scope. Unlike the dashboard's message-activity panels — which
+	// are skewed by demand-gated IRC fallback traffic and never drain to zero — this is the
+	// authoritative "still needs to migrate" signal and the correct gate for the IRC sunset
+	// (ADR-0026). Runs on every replica; duplicate series dedupe under `max by (migration_state)`.
+	go scopeexport.Export(ctx, db, "twitch-eventsub-listener", log)
 
 	// Message-ID registry (native Twitch id → internal UUID), shared format with twitch-listener
 	// and read by message-processor to resolve single-message deletions. Same 1h TTL as IRC so the
