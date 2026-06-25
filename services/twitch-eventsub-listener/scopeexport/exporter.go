@@ -31,7 +31,7 @@
 // This gauge is derived from granted OAuth scope — a config fact, not chat traffic — so it
 // is the authoritative "still needs to migrate" signal and the correct gate for the IRC
 // listener sunset (ADR-0026): it is safe to enforce only once the unscoped_has_cred backlog
-// is drained (unscoped_no_cred can never migrate; see below).
+// is drained (unscoped_no_cred needs a Twitch link first — see below — not necessarily permanent).
 package scopeexport
 
 import (
@@ -58,10 +58,13 @@ const (
 	// stateUnscopedHasCred: owner has a Twitch credential but it lacks chat scope →
 	// re-adding the source (re-consent) migrates them. The warn-phase nudge targets these.
 	stateUnscopedHasCred = "unscoped_has_cred"
-	// stateUnscopedNoCred: no owner credential exists at all (third-party channel added as a
-	// source, or an unlinked own-channel). EventSub's channel.chat.message subscription needs
-	// the broadcaster's own authorized token, so these can NEVER move off IRC — they go dark
-	// permanently at enforce and no in-product action by the connected user can fix them.
+	// stateUnscopedNoCred: no Twitch OAuth token on file for the channel. In practice this is
+	// usually an own-channel whose owner logged in via another platform (YouTube/Kick) and added
+	// the Twitch source without linking Twitch — fixable by linking a Twitch credential with
+	// user:read:chat to the existing account (ADR-0016 cross-platform consent), which the same
+	// warn-phase nudge drives. Genuinely permanent only when the channel owner has no all-chat
+	// account at all (true third-party). Until a token is linked EventSub cannot subscribe, so the
+	// channel stays on IRC and loses chat at enforce.
 	stateUnscopedNoCred = "unscoped_no_cred"
 )
 
