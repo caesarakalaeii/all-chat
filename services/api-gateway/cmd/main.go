@@ -150,15 +150,20 @@ func main() {
 		zap.Int("requests_per_minute", rateLimitPerMin),
 	)
 
-	// Stricter per-endpoint rate limiter for auth-sensitive routes (M7).
-	// Prevents brute-force / credential-stuffing on login, refresh, and token
-	// exchange endpoints. Default: 5 requests/min per IP.
-	authRateLimitPerMin := getEnvAsIntOrDefault("AUTH_RATE_LIMIT_PER_MINUTE", 5)
+	// Stricter rate limiter for auth-sensitive routes (M7). Prevents brute-force /
+	// credential-stuffing on login, refresh, and token exchange. Applied per
+	// endpoint via MiddlewareScoped (audit #14) so automatic /auth/refresh traffic
+	// cannot exhaust the interactive login/exchange budget for a shared egress IP
+	// (CGNAT/corporate NAT). Default raised to 20/min/IP per bucket to tolerate
+	// concurrent users behind one NAT. Fails CLOSED (audit #15): during a Redis
+	// outage these endpoints deny rather than silently drop the brute-force defense.
+	authRateLimitPerMin := getEnvAsIntOrDefault("AUTH_RATE_LIMIT_PER_MINUTE", 20)
 	authRateLimiter := ratelimit.NewRateLimiter(ratelimit.Config{
 		RequestsPerMinute: authRateLimitPerMin,
 		KeyPrefix:         "api_gateway:auth",
 		RedisClient:       redisClient,
 		Logger:            log,
+		FailClosed:        getEnvAsBoolOrDefault("AUTH_RATE_LIMIT_FAIL_CLOSED", true),
 	})
 	log.Info("Initialized auth rate limiter",
 		zap.Int("requests_per_minute", authRateLimitPerMin),
@@ -378,7 +383,7 @@ func main() {
 	badgeHandler := handlers.NewTwitchBadgeHandler(log, twitchClientID, twitchClientSecret)
 	avatarProxyHandler := handlers.NewAvatarProxyHandler(redisClient, log)
 	statsHandler := handlers.NewStatsHandler(redisClient)
-	wsHandler := handlers.NewWebSocketHandler(wsManager, subscriber, subRepo, statusSubscriber, userKeyChain, replayBuffer, chatReplayBuffer, log)
+	wsHandler := handlers.NewWebSocketHandler(wsManager, subscriber, subRepo, statusSubscriber, userKeyChain, replayBuffer, chatReplayBuffer, redisClient, log)
 
 	// Create viewer WebSocket handler (same origin policy as owner handler)
 	viewerWsHandler := handlers.NewViewerWebSocketHandler(
@@ -491,10 +496,10 @@ func main() {
 		publicAPI.GET("/stats", statsHandler.GetPlatformStats)
 
 		// Auth service routes
-		publicAPI.POST("/auth/login", authRateLimiter.Middleware(), proxyHandler.ForwardRequest)
-		publicAPI.GET("/auth/login", authRateLimiter.Middleware(), proxyHandler.ForwardRequest)
+		publicAPI.POST("/auth/login", authRateLimiter.MiddlewareScoped("login"), proxyHandler.ForwardRequest)
+		publicAPI.GET("/auth/login", authRateLimiter.MiddlewareScoped("login"), proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/callback", proxyHandler.ForwardRequest)
-		publicAPI.POST("/auth/refresh", authRateLimiter.Middleware(), localmiddleware.AuthCookieForward(), sharedmiddleware.OriginCheck(localmiddleware.LoadHTTPAllowedOrigins()), proxyHandler.ForwardRequest)
+		publicAPI.POST("/auth/refresh", authRateLimiter.MiddlewareScoped("refresh"), localmiddleware.AuthCookieForward(), sharedmiddleware.OriginCheck(localmiddleware.LoadHTTPAllowedOrigins()), proxyHandler.ForwardRequest)
 
 		// Streamer/admin single-use code → cookie exchange (audit H3 / C1). The
 		// frontend OAuth callback POSTs the one-time code here; auth-service sets
@@ -504,7 +509,7 @@ func main() {
 		// the browser). Rate-limited like the other auth-sensitive endpoints; no
 		// cookie/origin middleware needed (no cookie yet at exchange time — the
 		// client sends a JSON {code} body; the proxy passes Set-Cookie back).
-		publicAPI.POST("/auth/exchange", authRateLimiter.Middleware(), proxyHandler.ForwardRequest)
+		publicAPI.POST("/auth/exchange", authRateLimiter.MiddlewareScoped("exchange"), proxyHandler.ForwardRequest)
 
 		// Platform-specific OAuth routes
 		publicAPI.GET("/auth/twitch/login", proxyHandler.ForwardRequest)
@@ -530,16 +535,16 @@ func main() {
 		// Viewer OAuth routes (for sending messages)
 		publicAPI.GET("/auth/viewer/twitch/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/viewer/twitch/callback", proxyHandler.ForwardRequest)
-		publicAPI.POST("/auth/viewer/twitch/exchange", authRateLimiter.Middleware(), proxyHandler.ForwardRequest)
+		publicAPI.POST("/auth/viewer/twitch/exchange", authRateLimiter.MiddlewareScoped("viewer_exchange"), proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/viewer/youtube/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/viewer/youtube/callback", proxyHandler.ForwardRequest)
-		publicAPI.POST("/auth/viewer/youtube/exchange", authRateLimiter.Middleware(), proxyHandler.ForwardRequest)
+		publicAPI.POST("/auth/viewer/youtube/exchange", authRateLimiter.MiddlewareScoped("viewer_exchange"), proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/viewer/kick/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/viewer/kick/callback", proxyHandler.ForwardRequest)
-		publicAPI.POST("/auth/viewer/kick/exchange", authRateLimiter.Middleware(), proxyHandler.ForwardRequest)
+		publicAPI.POST("/auth/viewer/kick/exchange", authRateLimiter.MiddlewareScoped("viewer_exchange"), proxyHandler.ForwardRequest)
 
 		// Auth code exchange (viewer trades code for JWT)
-		publicAPI.POST("/auth/viewer/token/exchange", authRateLimiter.Middleware(), proxyHandler.ForwardRequest)
+		publicAPI.POST("/auth/viewer/token/exchange", authRateLimiter.MiddlewareScoped("viewer_exchange"), proxyHandler.ForwardRequest)
 
 		// Streamer info (public)
 		publicAPI.GET("/auth/streamers/:username", proxyHandler.ForwardRequest)
@@ -614,7 +619,10 @@ func main() {
 
 		// Viewer protected routes
 		protectedAPI.GET("/auth/viewer/me", proxyHandler.ForwardRequest)
-		protectedAPI.POST("/auth/viewer/logout", proxyHandler.ForwardRequest)
+		// AuthCookieForward so the handler can blacklist the viewer token on logout
+		// (audit #18); harmless when the viewer authenticated via the Authorization
+		// bearer header (the common case — viewer tokens live in localStorage).
+		protectedAPI.POST("/auth/viewer/logout", localmiddleware.AuthCookieForward(), proxyHandler.ForwardRequest)
 		protectedAPI.POST("/auth/viewer/chat/send", proxyHandler.ForwardRequest)
 		protectedAPI.GET("/auth/viewer/cosmetics", proxyHandler.ForwardRequest)
 		protectedAPI.PATCH("/auth/viewer/cosmetics", proxyHandler.ForwardRequest)
@@ -820,6 +828,15 @@ func getEnvAsIntOrDefault(key string, defaultValue int) int {
 	if value := os.Getenv(key); value != "" {
 		if intValue, err := strconv.Atoi(value); err == nil {
 			return intValue
+		}
+	}
+	return defaultValue
+}
+
+func getEnvAsBoolOrDefault(key string, defaultValue bool) bool {
+	if value := os.Getenv(key); value != "" {
+		if b, err := strconv.ParseBool(value); err == nil {
+			return b
 		}
 	}
 	return defaultValue

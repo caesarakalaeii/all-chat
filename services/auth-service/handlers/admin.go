@@ -46,23 +46,28 @@ type adminUserRepository interface {
 
 // AdminHandler handles admin-specific endpoints
 type AdminHandler struct {
-	repo         adminUserRepository
-	db           *pgxpool.Pool
-	logger       *zap.Logger
-	userKeyChain *auth.KeyChain
-	redis        *redis.Client // H3 impersonation admin-identity stash
-	jwtExpiry    time.Duration // H3 impersonation cookie TTL
+	repo                adminUserRepository
+	db                  *pgxpool.Pool
+	logger              *zap.Logger
+	userKeyChain        *auth.KeyChain
+	redis               *redis.Client // H3 impersonation admin-identity stash
+	jwtExpiry           time.Duration // regular session JWT TTL
+	impersonationExpiry time.Duration // audit #20: short-lived impersonation token/stash/cookie TTL
 }
 
 // NewAdminHandler creates a new admin handler
-func NewAdminHandler(repo adminUserRepository, db *pgxpool.Pool, logger *zap.Logger, userKeyChain *auth.KeyChain, rdb *redis.Client, jwtExpiry time.Duration) *AdminHandler {
+func NewAdminHandler(repo adminUserRepository, db *pgxpool.Pool, logger *zap.Logger, userKeyChain *auth.KeyChain, rdb *redis.Client, jwtExpiry, impersonationExpiry time.Duration) *AdminHandler {
+	if impersonationExpiry <= 0 {
+		impersonationExpiry = 2 * time.Hour
+	}
 	return &AdminHandler{
-		repo:         repo,
-		db:           db,
-		logger:       logger,
-		userKeyChain: userKeyChain,
-		redis:        rdb,
-		jwtExpiry:    jwtExpiry,
+		repo:                repo,
+		db:                  db,
+		logger:              logger,
+		userKeyChain:        userKeyChain,
+		redis:               rdb,
+		jwtExpiry:           jwtExpiry,
+		impersonationExpiry: impersonationExpiry,
 	}
 }
 
@@ -170,6 +175,19 @@ func (h *AdminHandler) ImpersonateUser(c *gin.Context) {
 		return
 	}
 
+	// audit #7: reject chained impersonation. An impersonation token carries
+	// roles [user,admin], so an impersonated session passes AdminOnly; without
+	// this guard an admin could impersonate A, then impersonate B from A's
+	// session — laundering the DSGVO audit trail (the row would name the victim A
+	// as the acting admin, not the real admin). Impersonation must only ever
+	// originate from a genuine, non-impersonated admin session.
+	if ib, _ := c.Get("impersonated_by"); ib != nil {
+		if s, ok := ib.(string); ok && s != "" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "cannot impersonate while impersonating"})
+			return
+		}
+	}
+
 	// Get admin username from context
 	adminUsername, _ := c.Get("username")
 
@@ -205,7 +223,7 @@ func (h *AdminHandler) ImpersonateUser(c *gin.Context) {
 		targetUser.Username,
 		targetTwitchID,
 		h.userKeyChain.LatestSecret(),
-		h.jwtExpiry,
+		h.impersonationExpiry, // audit #20: short-lived, not the 24h session TTL
 	)
 	if err != nil {
 		h.logger.Error("Failed to generate impersonation token",
@@ -251,7 +269,7 @@ func (h *AdminHandler) ImpersonateUser(c *gin.Context) {
 		"admin_username": adminUsername.(string),
 	}
 	stashJSON, _ := json.Marshal(stash)
-	if err := h.redis.Set(c.Request.Context(), stashKey, string(stashJSON), h.jwtExpiry).Err(); err != nil {
+	if err := h.redis.Set(c.Request.Context(), stashKey, string(stashJSON), h.impersonationExpiry).Err(); err != nil {
 		h.logger.Error("Failed to stash admin identity for impersonation", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
@@ -265,7 +283,7 @@ func (h *AdminHandler) ImpersonateUser(c *gin.Context) {
 		HttpOnly: true,
 		Secure:   true,
 		SameSite: http.SameSiteLaxMode,
-		MaxAge:   int(h.jwtExpiry.Seconds()),
+		MaxAge:   int(h.impersonationExpiry.Seconds()),
 	})
 
 	c.JSON(http.StatusOK, gin.H{

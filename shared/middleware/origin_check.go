@@ -48,16 +48,35 @@ func OriginAllowed(allowed []string, origin string) bool {
 		// "moz-extension:///*" strips to "moz-extension://" rather than
 		// "moz-extension:///".
 		if strings.HasSuffix(a, "/*") {
-			if strings.HasPrefix(origin, strings.TrimSuffix(a, "/*")) {
+			if prefixMatchAtBoundary(origin, strings.TrimSuffix(a, "/*")) {
 				return true
 			}
 		} else if strings.HasSuffix(a, "*") {
-			if strings.HasPrefix(origin, strings.TrimSuffix(a, "*")) {
+			if prefixMatchAtBoundary(origin, strings.TrimSuffix(a, "*")) {
 				return true
 			}
 		}
 	}
 	return false
+}
+
+// prefixMatchAtBoundary reports whether origin starts with prefix at a safe
+// boundary (audit #16). A bare strings.HasPrefix would let an allowlist entry
+// like "https://allch.at*" match "https://allch.at.evil.com", defeating the
+// CSRF/CORS origin check. A match is only accepted when the prefix is
+// scheme-only (ends in "://", the intended extension-wildcard form such as
+// "moz-extension://") OR the matched boundary is end-of-string or a path
+// separator — so "https://allch.at/*" still matches "https://allch.at" and
+// "https://allch.at/x" but never "https://allch.at.evil.com".
+func prefixMatchAtBoundary(origin, prefix string) bool {
+	if !strings.HasPrefix(origin, prefix) {
+		return false
+	}
+	if strings.HasSuffix(prefix, "://") {
+		return true
+	}
+	rest := origin[len(prefix):]
+	return rest == "" || rest[0] == '/'
 }
 
 // OriginCheck is a stateless CSRF defense paired with SameSite=Lax cookies.

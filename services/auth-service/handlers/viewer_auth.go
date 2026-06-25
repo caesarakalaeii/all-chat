@@ -462,6 +462,26 @@ func (h *ViewerAuthHandler) HandleLogout(c *gin.Context) {
 		return
 	}
 
+	// audit #18: blacklist the viewer JWT so a leaked/cached copy stops
+	// authenticating after logout — parity with streamer/admin logout. Endpoints
+	// keyed on claims (e.g. /auth/viewer/cosmetics) don't re-check session
+	// liveness, so deleting the DB session alone left the token usable until
+	// natural expiry. Best-effort: the session is already gone, so a blacklist
+	// write failure must not fail the logout. The token arrives via X-Access-Token
+	// (gateway AuthCookieForward) or the Authorization bearer header (viewer
+	// tokens live in localStorage and are sent as a bearer).
+	token := c.GetHeader("X-Access-Token")
+	if token == "" {
+		if ah := c.GetHeader("Authorization"); strings.HasPrefix(ah, "Bearer ") {
+			token = strings.TrimPrefix(ah, "Bearer ")
+		}
+	}
+	if token != "" {
+		if err := h.redis.Set(c.Request.Context(), "blacklist:"+token, "1", h.jwtExpiry).Err(); err != nil {
+			h.logger.Warn("Failed to blacklist viewer token on logout", zap.Error(err))
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully"})
 }
 

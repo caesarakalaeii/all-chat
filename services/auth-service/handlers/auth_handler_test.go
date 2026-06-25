@@ -22,10 +22,12 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/caesar/all-chat/services/auth-service/oauth"
 	"github.com/caesar/all-chat/services/auth-service/repository"
+	"github.com/caesar/all-chat/shared/auth"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap/zaptest"
@@ -43,6 +45,7 @@ func newTestAuthHandler(t *testing.T, rdb *redis.Client) *AuthHandler {
 	return NewAuthHandler(
 		twitchOAuth,
 		youtubeOAuth,
+		nil, // kickOAuth
 		userRepo,
 		rdb,
 		testUserKeyChain("test-jwt-secret"),
@@ -274,10 +277,11 @@ func TestHandleRefresh_AfterExchange_DoesNotForceLogout(t *testing.T) {
 	req.Header.Set("X-Refresh-Token", rt)
 	router.ServeHTTP(w, req)
 
-	// The reuse check passed iff we did NOT get the reuse 401. The request then
-	// proceeds to Twitch.RefreshToken (real HTTP, no network in CI) → some
-	// non-401 error (503 transient or 401 terminal). Either way it must NOT be
-	// the "Refresh token already used or invalid" reuse 401.
+	// The reuse gate passed iff we did NOT get the reuse 401. The request then
+	// resolves the user (GetByID); with no DB in this unit test that returns a
+	// transient error, so the handler returns 503 and RESTORES the reuse key so
+	// the client can retry — it must never be the reuse 401, and the cookies must
+	// not be cleared.
 	if w.Code == 401 {
 		var body map[string]string
 		_ = json.Unmarshal(w.Body.Bytes(), &body)
@@ -286,9 +290,84 @@ func TestHandleRefresh_AfterExchange_DoesNotForceLogout(t *testing.T) {
 				"reuse (401) even though /exchange seeded the key; body=%s", w.Body.String())
 		}
 	}
-	// Reuse key was consumed by GetDel (proving the gate ran and passed).
-	if mr.Exists(rtKey) {
-		t.Fatalf("reuse key not consumed by /refresh GetDel")
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("want 503 (transient, retryable) past the reuse gate, got %d body=%s", w.Code, w.Body.String())
+	}
+	// audit #2/#5: a transient failure after the gate must leave the reuse key in
+	// place (restored) so the existing cookie token is retryable, not a lockout.
+	if !mr.Exists(rtKey) {
+		t.Fatalf("audit #2/#5 regression: reuse key not restored after a transient failure — " +
+			"the next /refresh would be misread as theft and force-logout the user")
+	}
+}
+
+// TestHandleRefresh_TransientRedisErrorDoesNotForceLogout verifies that a Redis
+// connection error on the reuse-key GetDel is NOT misclassified as token theft.
+// Given the documented single-replica Redis SPOF, conflating a blip with reuse
+// would force-log-out every refreshing user during an outage. The handler must
+// return a retryable 503 and NOT clear the auth cookies.
+func TestHandleRefresh_TransientRedisErrorDoesNotForceLogout(t *testing.T) {
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer rdb.Close()
+	h := newTestAuthHandler(t, rdb)
+	router := gin.New()
+	router.POST("/refresh", h.HandleRefresh)
+
+	mr.Close() // simulate Redis outage → GetDel returns a connection error
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/refresh", nil)
+	req.Header.Set("X-Refresh-Token", "some-rt")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("want 503 on transient Redis error, got %d body=%s", w.Code, w.Body.String())
+	}
+	for _, c := range w.Result().Cookies() {
+		if c.MaxAge == -1 {
+			t.Fatalf("auth cookies were cleared on a transient Redis error (would force-logout)")
+		}
+	}
+}
+
+// TestHandleRefresh_ImpersonationTokenEndsSession verifies that /refresh refuses
+// to silently rotate an impersonation session into the admin's own session
+// (audit #21). When the forwarded X-Access-Token carries an impersonated_by
+// claim, the handler returns 403 impersonation_ended so the client resyncs from
+// /auth/me instead of acting as the admin while the UI still shows
+// "impersonating". 403 (not 409) avoids colliding with the concurrent-refresh
+// retry path (review M1), which the client treats as retryable.
+func TestHandleRefresh_ImpersonationTokenEndsSession(t *testing.T) {
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer rdb.Close()
+	h := newTestAuthHandler(t, rdb)
+	router := gin.New()
+	router.POST("/refresh", h.HandleRefresh)
+
+	// Mint an impersonation JWT signed with the test keychain's secret.
+	kc := testUserKeyChain("test-jwt-secret")
+	impToken, err := auth.GenerateImpersonationJWTWithKidExpiry(
+		kc.LatestKid(), "admin-1", "admin", "target-1", "target", "twitch-1",
+		kc.LatestSecret(), time.Hour)
+	if err != nil {
+		t.Fatalf("mint impersonation jwt: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/refresh", nil)
+	req.Header.Set("X-Access-Token", impToken)
+	req.Header.Set("X-Refresh-Token", "any-rt")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("want 403 (impersonation_session_ended), got %d body=%s", w.Code, w.Body.String())
+	}
+	var body map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &body)
+	if body["impersonation_ended"] != true {
+		t.Errorf("want impersonation_ended=true, body=%s", w.Body.String())
 	}
 }
 

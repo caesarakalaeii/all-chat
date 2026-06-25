@@ -277,9 +277,24 @@ func (m *MultiKeyEncryptor) EncryptString(plaintext string) (string, error) {
 // Returns an error only when all keys in the chain (versioned + all legacy) fail AEAD
 // authentication.
 func (m *MultiKeyEncryptor) DecryptString(ciphertext string) (string, error) {
+	pt, _, err := m.DecryptStringWithKid(ciphertext)
+	return pt, err
+}
+
+// DecryptStringWithKid is identical to DecryptString but also reports the KidByte
+// that actually authenticated the ciphertext: the registered kid when the blob
+// decrypts via the versioned path, or LegacyKid (0x00) when a legacy fallback key
+// authenticated it — including a kid-less blob AND a legacy blob whose first byte
+// coincidentally collides with a registered kid (the false-positive case).
+//
+// The key-rotator relies on this to decide idempotency correctly (audit #12): a
+// blob is "already at the current kid" ONLY when the authenticating kid equals
+// CurrentKid, never merely when its first decoded byte equals CurrentKid — those
+// differ for the 1/256 collision blobs, which must still be re-encrypted.
+func (m *MultiKeyEncryptor) DecryptStringWithKid(ciphertext string) (string, KidByte, error) {
 	decoded, err := base64.StdEncoding.DecodeString(ciphertext)
 	if err != nil {
-		return "", fmt.Errorf("decode: %w", err)
+		return "", LegacyKid, fmt.Errorf("decode: %w", err)
 	}
 
 	// Versioned path: attempt if blob is long enough and kid is registered.
@@ -290,7 +305,7 @@ func (m *MultiKeyEncryptor) DecryptString(ciphertext string) (string, error) {
 			// AESEncryptor, which expects base64(nonce||ct||tag) without the kid byte.
 			legacyShaped := base64.StdEncoding.EncodeToString(decoded[1:])
 			if pt, aerr := cipher.DecryptString(legacyShaped); aerr == nil {
-				return pt, nil
+				return pt, kid, nil
 			}
 			// AEAD authentication failed: this is a false-positive kid byte on a legacy
 			// blob. Fall through to the legacy key chain (D-05 / T-14-01-01).
@@ -301,11 +316,11 @@ func (m *MultiKeyEncryptor) DecryptString(ciphertext string) (string, error) {
 	// The original (pre-kid-prefix) ciphertext string is passed as-is.
 	for _, lk := range m.legacyKeys {
 		if pt, lerr := lk.DecryptString(ciphertext); lerr == nil {
-			return pt, nil
+			return pt, LegacyKid, nil
 		}
 	}
 
-	return "", fmt.Errorf(
+	return "", LegacyKid, fmt.Errorf(
 		"decrypt: no key in chain (versioned kid map + %d legacy key(s)) authenticated the ciphertext",
 		len(m.legacyKeys))
 }

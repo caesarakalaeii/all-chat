@@ -30,6 +30,13 @@ import (
 // (Task 11 wires it). (audit H3)
 func AuthCookieForward() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// audit #17: these headers must originate ONLY from the gateway-read
+		// cookie, never from the inbound request. Without clearing first, a client
+		// with no cookie could smuggle X-Access-Token/X-Refresh-Token straight to
+		// auth-service (the proxy does not strip them), e.g. to force-logout or
+		// revoke another user's session given their raw token values.
+		c.Request.Header.Del("X-Access-Token")
+		c.Request.Header.Del("X-Refresh-Token")
 		if tok, err := c.Cookie(auth.CookieAccessToken); err == nil && tok != "" {
 			c.Request.Header.Set("X-Access-Token", tok)
 		}

@@ -154,7 +154,7 @@ func (r *Resolver) resolveHandleToChannelID(ctx context.Context, handle string) 
 		return "", fmt.Errorf("resolve_url returned status %d for @%s", resp.StatusCode, handle)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // audit #30: cap upstream body at 10 MiB
 	if err != nil {
 		return "", fmt.Errorf("read resolve_url response: %w", err)
 	}
@@ -194,7 +194,7 @@ func (r *Resolver) resolveVideoToChannelID(ctx context.Context, videoID string) 
 		return "", fmt.Errorf("oembed returned status %d for video %s", resp.StatusCode, videoID)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // audit #30: cap upstream body at 10 MiB
 	if err != nil {
 		return "", fmt.Errorf("read oembed response: %w", err)
 	}
@@ -280,7 +280,7 @@ func (r *Resolver) innertubeBrowse(ctx context.Context, browseID string) (map[st
 		return nil, fmt.Errorf("innertube browse returned status %d for %s", resp.StatusCode, browseID)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // audit #30: cap upstream body at 10 MiB
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}

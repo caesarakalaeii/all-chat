@@ -143,3 +143,27 @@ func TestOriginCheck_SkipsGet(t *testing.T) {
 		t.Errorf("GET should be allowed regardless of Origin, got %d", w.Code)
 	}
 }
+
+// TestOriginAllowed_HostBoundary guards audit #16: a host-wildcard allowlist
+// entry must not match a different host that merely shares a prefix. Extension
+// scheme-wildcards (prefix ends in "://") and legitimate path boundaries must
+// still match.
+func TestOriginAllowed_HostBoundary(t *testing.T) {
+	cases := []struct {
+		name    string
+		allowed []string
+		origin  string
+		want    bool
+	}{
+		{"star suffix must not cross host boundary", []string{"https://allch.at*"}, "https://allch.at.evil.com", false},
+		{"slashstar suffix must not cross host boundary", []string{"https://allch.at/*"}, "https://allch.at.evil.com", false},
+		{"slashstar still matches bare origin", []string{"https://allch.at/*"}, "https://allch.at", true},
+		{"slashstar still matches path boundary", []string{"https://allch.at/*"}, "https://allch.at/app", true},
+		{"extension scheme wildcard still matches", []string{"moz-extension://*"}, "moz-extension://abc-123", true},
+	}
+	for _, tc := range cases {
+		if got := OriginAllowed(tc.allowed, tc.origin); got != tc.want {
+			t.Errorf("%s: OriginAllowed(%v, %q) = %v, want %v", tc.name, tc.allowed, tc.origin, got, tc.want)
+		}
+	}
+}

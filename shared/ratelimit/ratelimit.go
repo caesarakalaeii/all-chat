@@ -37,6 +37,11 @@ type Config struct {
 	KeyPrefix         string        // Redis key prefix
 	RedisClient       *redis.Client // Redis client for distributed rate limiting
 	Logger            *zap.Logger
+	// FailClosed denies requests with 503 when Redis is unavailable instead of
+	// allowing them (audit #15). Use for security-critical limiters (e.g. the
+	// anti-brute-force auth limiter) so a Redis outage can't silently disable the
+	// only credential-stuffing defense. Leave false for availability limiters.
+	FailClosed bool
 }
 
 // RateLimiter provides rate limiting functionality
@@ -58,11 +63,24 @@ func NewRateLimiter(cfg Config) *RateLimiter {
 	return &RateLimiter{cfg: cfg}
 }
 
-// Middleware returns a Gin middleware that enforces rate limits
+// Middleware returns a Gin middleware that enforces rate limits with a single
+// shared bucket per client (IP/user) across all routes it is attached to.
 func (rl *RateLimiter) Middleware() gin.HandlerFunc {
+	return rl.middleware("")
+}
+
+// MiddlewareScoped returns a Gin middleware whose counter is isolated to the
+// named bucket (audit #14), so e.g. automatic /auth/refresh traffic cannot
+// exhaust the interactive /auth/login or /auth/exchange budget for a shared
+// egress IP. Each distinct bucket gets its own per-client counter.
+func (rl *RateLimiter) MiddlewareScoped(bucket string) gin.HandlerFunc {
+	return rl.middleware(bucket)
+}
+
+func (rl *RateLimiter) middleware(bucket string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Determine the rate limit key (IP address or user ID if authenticated)
-		key := rl.getClientKey(c)
+		key := rl.getClientKey(c, bucket)
 
 		// Check rate limit
 		allowed, remaining, resetTime, err := rl.checkLimit(c.Request.Context(), key)
@@ -70,6 +88,15 @@ func (rl *RateLimiter) Middleware() gin.HandlerFunc {
 			rl.cfg.Logger.Error("Rate limit check failed",
 				zap.Error(err),
 				zap.String("key", key))
+			if rl.cfg.FailClosed {
+				// audit #15: security-critical limiter — deny rather than allow when
+				// the backing store is down, so a Redis outage can't disable the
+				// brute-force defense.
+				c.Header("Retry-After", "5")
+				c.JSON(http.StatusServiceUnavailable, gin.H{"error": "rate limiter unavailable"})
+				c.Abort()
+				return
+			}
 			// On error, allow the request (fail open)
 			c.Next()
 			return
@@ -99,15 +126,20 @@ func (rl *RateLimiter) Middleware() gin.HandlerFunc {
 	}
 }
 
-// getClientKey determines the rate limit key for the client
-func (rl *RateLimiter) getClientKey(c *gin.Context) string {
+// getClientKey determines the rate limit key for the client. When bucket is
+// non-empty the counter is isolated to that bucket (audit #14).
+func (rl *RateLimiter) getClientKey(c *gin.Context, bucket string) string {
+	scope := rl.cfg.KeyPrefix
+	if bucket != "" {
+		scope = rl.cfg.KeyPrefix + ":" + bucket
+	}
 	// Try to get user ID from JWT context (if authenticated)
 	if userID, exists := c.Get("user_id"); exists {
-		return fmt.Sprintf("%s:user:%s", rl.cfg.KeyPrefix, userID)
+		return fmt.Sprintf("%s:user:%s", scope, userID)
 	}
 
 	// Fall back to IP address
-	return fmt.Sprintf("%s:ip:%s", rl.cfg.KeyPrefix, c.ClientIP())
+	return fmt.Sprintf("%s:ip:%s", scope, c.ClientIP())
 }
 
 // checkLimit checks if the request is within rate limits using Redis

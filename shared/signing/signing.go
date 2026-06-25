@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -40,7 +41,9 @@ const (
 	HeaderTimestamp = "X-Service-Timestamp"
 	HeaderService   = "X-Service-Name"
 
-	// Maximum age of signed requests (prevents replay attacks)
+	// Maximum age of signed requests. This BOUNDS the replay window; it is not
+	// full replay prevention — there is no per-request nonce/dedup, so a captured
+	// signed request can be replayed verbatim until it ages out (audit #27).
 	MaxRequestAge = 5 * time.Minute
 )
 
@@ -149,7 +152,8 @@ func (s *Signer) VerifyMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// Check request age (prevent replay attacks, audit M4)
+		// Check request age — bounds the replay window (not full replay
+		// prevention: no nonce/dedup, see MaxRequestAge / audit #27). (audit M4)
 		requestTime := time.Unix(timestamp, 0)
 		age := time.Since(requestTime)
 		if age > MaxRequestAge {
@@ -213,27 +217,30 @@ func (s *Signer) VerifyMiddleware() gin.HandlerFunc {
 	}
 }
 
-// computeSignature creates HMAC-SHA256 signature.
-// Format: HMAC-SHA256(secret, "method|path|query|service|timestamp|body_hash")
+// computeSignature creates an HMAC-SHA256 signature over the request fields.
 //
-// The query string and service name are included to prevent tampering with
-// query parameters or spoofing a different service identity (audit M5).
+// audit #26: each variable-length field is folded in as a fixed-width SHA-256
+// digest (and the timestamp as a fixed 8-byte big-endian value) rather than
+// being joined with a "|" delimiter. The old delimited form was ambiguous —
+// a literal "|" inside path/query/service let bytes shift across field
+// boundaries, so e.g. (path="/a", query="b|x") and (path="/a|b", query="x")
+// produced the SAME signature. Fixed-width framing removes any boundary, so
+// query/path/service-identity tampering genuinely cannot collide.
 func (s *Signer) computeSignature(method, path, rawQuery, serviceName string, timestamp int64, body []byte) string {
-	// Hash body
-	bodyHash := sha256.Sum256(body)
-
-	// Create message to sign
-	message := fmt.Sprintf("%s|%s|%s|%s|%d|%s",
-		method,
-		path,
-		rawQuery,
-		serviceName,
-		timestamp,
-		hex.EncodeToString(bodyHash[:]))
-
-	// Compute HMAC
 	h := hmac.New(sha256.New, s.secret)
-	h.Write([]byte(message))
+	writeField := func(b []byte) {
+		d := sha256.Sum256(b)
+		h.Write(d[:])
+	}
+	writeField([]byte(method))
+	writeField([]byte(path))
+	writeField([]byte(rawQuery))
+	writeField([]byte(serviceName))
+	var tsBuf [8]byte
+	binary.BigEndian.PutUint64(tsBuf[:], uint64(timestamp))
+	h.Write(tsBuf[:])
+	bodyHash := sha256.Sum256(body)
+	h.Write(bodyHash[:])
 
 	return hex.EncodeToString(h.Sum(nil))
 }

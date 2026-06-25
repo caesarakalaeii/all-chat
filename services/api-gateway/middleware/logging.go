@@ -17,8 +17,6 @@
 package middleware
 
 import (
-	"net/url"
-	"strings"
 	"time"
 
 	sharedmw "github.com/caesar/all-chat/shared/middleware"
@@ -32,19 +30,11 @@ func Logging(log *zap.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		path := c.Request.URL.Path
-		query := c.Request.URL.RawQuery
-
-		// Redact JWT token from query string on WebSocket paths to prevent
-		// credential leakage into access logs (H5). Both /ws/overlay/:id and
-		// /ws/chat/:streamer accept ?token=<JWT> for authentication.
-		if strings.HasPrefix(path, "/ws/") && query != "" {
-			if values, err := url.ParseQuery(query); err == nil {
-				if values.Has("token") {
-					values.Set("token", "[REDACTED]")
-					query = values.Encode()
-				}
-			}
-		}
+		// Redact credentials from the query string on ALL routes (audit H5/#24/#25):
+		// JWTs (?token=/?tts_token=/?access_token=/?refresh_token=) and OAuth
+		// ?code=/?state= must never reach access logs. Previously this was scoped to
+		// /ws/ + the "token" key only, leaking tts_token and OAuth code/state.
+		query := sharedmw.RedactQuery(c.Request.URL.RawQuery)
 
 		// Process request
 		c.Next()

@@ -44,6 +44,7 @@ import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges'
 import { sortMessageBadges } from '@/lib/badgeOrder'
 import { visualSettingsToCss } from '@/lib/utils/visual-settings-to-css'
 import { getBundledTheme } from '@/lib/theme-marketplace/bundled-themes'
+import { rewriteThemeFontImports } from '@/lib/theme-marketplace/font-proxy'
 import { chatBubbleStyle, overlayContainerStyle } from '@/lib/utils/visual-inline-styles'
 import { AllChatBadge } from '@/components/AllChatBadge'
 import { PremiumBadge } from '@/components/PremiumBadge'
@@ -432,7 +433,7 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
         // by scopedPreviewCss, mirroring the live overlay's theme→custom order.
         const themeCss =
           typeof config.theme_id === 'string' && config.theme_id
-            ? (getBundledTheme(config.theme_id)?.css ?? '')
+            ? rewriteThemeFontImports(getBundledTheme(config.theme_id)?.css ?? '')
             : ''
         const css = [themeCss, config.custom_css || ''].filter((s) => s.trim().length).join('\n')
         setCustomCss(css)

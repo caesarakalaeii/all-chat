@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -33,6 +34,7 @@ import (
 	sharedmiddleware "github.com/caesar/all-chat/shared/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
@@ -116,9 +118,15 @@ type WebSocketHandler struct {
 	logger            *zap.Logger
 	upgrader          websocket.Upgrader
 	allowedOriginList []string
+	// firstPartyOrigins are the exact same-origin app origins (FRONTEND_URL) that
+	// may authenticate the owner socket via the ambient access cookie (audit #8).
+	firstPartyOrigins []string
+	// rdb is consulted for the logout-revocation blacklist on WS auth (audit #19).
+	rdb redis.UniversalClient
 }
 
-// NewWebSocketHandler creates a new WebSocket handler
+// NewWebSocketHandler creates a new WebSocket handler. rdb may be nil (the
+// blacklist check is then skipped, matching JWTAuthWithRevocation).
 func NewWebSocketHandler(
 	wsManager *wsconn.Manager,
 	subscriber *subscription.Subscriber,
@@ -127,6 +135,7 @@ func NewWebSocketHandler(
 	userKeyChain *auth.KeyChain,
 	replayBuffer replay.DeletionReplayBuffer,
 	chatReplayBuffer replay.ChatReplayBuffer,
+	rdb redis.UniversalClient,
 	logger *zap.Logger,
 ) *WebSocketHandler {
 	allowedOriginList := loadAllowedOrigins()
@@ -140,6 +149,8 @@ func NewWebSocketHandler(
 		chatReplayBuffer:  chatReplayBuffer,
 		logger:            logger,
 		allowedOriginList: allowedOriginList,
+		firstPartyOrigins: loadFirstPartyWSOrigins(),
+		rdb:               rdb,
 	}
 
 	h.upgrader = websocket.Upgrader{
@@ -179,6 +190,18 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 
 	// If token provided, validate and check ownership
 	if token != "" {
+		// audit #19: the owner socket now also accepts the access cookie (H3), so it
+		// must honor the logout-revocation blacklist like the HTTP routes do —
+		// otherwise a logged-out/revoked token still streams the owner feed until
+		// expiry. Fail-open + log on a Redis error, matching JWTAuthWithRevocation.
+		if h.rdb != nil {
+			if n, bErr := h.rdb.Exists(ctx, "blacklist:"+token).Result(); bErr != nil {
+				h.logger.Warn("WS blacklist check failed (fail-open)", zap.Error(bErr))
+			} else if n > 0 {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
+				return
+			}
+		}
 		claims, err := auth.ValidateJWTWithKeyChain(token, h.userKeyChain)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
@@ -393,32 +416,68 @@ func loadAllowedOrigins() []string {
 	return result
 }
 
-// originAllowedForWS is the pure origin-check logic extracted from
-// checkOrigin for testability (audit I1). A browser always sends an Origin
-// header on a WebSocket handshake, so when the request carries the access_token
-// cookie (the cookie-auth path, audit H3) an empty Origin is rejected as a
-// CSRF defense-in-depth — an attacker page that suppresses Origin cannot
-// open the owner socket even if it somehow has the victim's cookie. Empty
-// Origin is still allowed for non-browser clients that authenticate via the
-// subprotocol or ?token= query param (no cookie, no browser context).
-// Non-empty Origin is validated against the allowlist via the shared M4
-// matcher (exact + `*` + `/*` suffix).
-func originAllowedForWS(allowed []string, r *http.Request) bool {
+// loadFirstPartyWSOrigins returns the exact same-origin app origin(s) from
+// FRONTEND_URL — the only origin that may authenticate the owner socket via the
+// ambient access cookie (audit #8). Returns nil when unset (e.g. local dev),
+// in which case originAllowedForWS falls back to the permissive WS allowlist so
+// the monitor view keeps working.
+func loadFirstPartyWSOrigins() []string {
+	v := strings.TrimSpace(os.Getenv("FRONTEND_URL"))
+	if v == "" {
+		return nil
+	}
+	if u, err := url.Parse(v); err == nil && u.Scheme != "" && u.Host != "" {
+		return []string{u.Scheme + "://" + u.Host}
+	}
+	return []string{v}
+}
+
+// originAllowedForWS is the pure origin-check logic extracted from checkOrigin
+// for testability (audit I1 + #8). A browser always sends an Origin header on a
+// WebSocket handshake.
+//
+//   - Cookie-auth path (the ambient httpOnly access_token cookie is present):
+//     this is only ever legitimately the same-origin monitor view. Extensions
+//     and OBS authenticate via the bearer subprotocol or ?token= and never rely
+//     on the cookie. So require a STRICT exact first-party Origin (FRONTEND_URL)
+//     — NOT the permissive WS allowlist, which includes wildcards like
+//     moz-extension://*. Otherwise any installed browser extension could open the
+//     victim's owner socket with their cookie (audit #8). Empty Origin + cookie
+//     is rejected (a browser always sends Origin → CSRF defense, audit I1). When
+//     no first-party origin is configured, fall back to the permissive allowlist.
+//   - Token path (no cookie): empty Origin is allowed (non-browser OBS client);
+//     a non-empty Origin is validated against the WS allowlist (exact + wildcard).
+func originAllowedForWS(allowed, firstParty []string, r *http.Request) bool {
 	origin := r.Header.Get("Origin")
 	hasAccessCookie := false
 	if ck, err := r.Cookie(auth.CookieAccessToken); err == nil && ck.Value != "" {
 		hasAccessCookie = true
 	}
+	if hasAccessCookie {
+		if origin == "" {
+			return false
+		}
+		if len(firstParty) == 0 {
+			// No first-party origin configured (local dev) — preserve prior
+			// behavior rather than hard-rejecting the monitor view.
+			return sharedmiddleware.OriginAllowed(allowed, origin)
+		}
+		for _, fp := range firstParty {
+			if origin == fp {
+				return true
+			}
+		}
+		return false
+	}
 	if origin == "" {
 		// Non-browser client (subprotocol/query token, no cookie) — allowed.
-		// Browser with access cookie but suppressed Origin — reject (I1).
-		return !hasAccessCookie
+		return true
 	}
 	return sharedmiddleware.OriginAllowed(allowed, origin)
 }
 
 func (h *WebSocketHandler) checkOrigin(r *http.Request) bool {
-	if !originAllowedForWS(h.allowedOriginList, r) {
+	if !originAllowedForWS(h.allowedOriginList, h.firstPartyOrigins, r) {
 		h.logger.Warn("Blocked WebSocket connection from disallowed or missing origin",
 			zap.String("origin", r.Header.Get("Origin")),
 		)

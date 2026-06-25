@@ -59,10 +59,18 @@ const nextConfig = {
     const cspBase = [
       "default-src 'self'",
       "img-src 'self' data: https: static-cdn.jtvnw.net yt3.ggpht.com cdn.7tv.app cdn.betterttv.net cdn.frankerfacez.com files.kick.com ui-avatars.com cdn.discordapp.com",
-      "script-src 'self' 'unsafe-inline'",
+      // embed.twitch.tv hosts the Twitch Embed SDK used by the credits/clips
+      // overlay route (audit #3); without it the SDK script is CSP-blocked and
+      // clips never play.
+      "script-src 'self' 'unsafe-inline' https://embed.twitch.tv",
       "style-src 'self' 'unsafe-inline'",
       "connect-src 'self' wss: ws: https:",
       "font-src 'self' data:",
+      // frame-src governs which iframes a page may embed. It MUST list 'self' (the
+      // editor's same-origin /overlays/:id/preview/embed iframe) plus the Twitch
+      // player domains the Embed SDK injects (audit #3) — once frame-src is
+      // specified it replaces the default-src 'self' fallback for frames.
+      "frame-src 'self' https://embed.twitch.tv https://player.twitch.tv https://www.twitch.tv https://clips.twitch.tv",
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",
