@@ -68,8 +68,8 @@
     {
       "id": 3,
       "type": "stat",
-      "title": "Permanently IRC-only (no owner credential)",
-      "description": "Unscoped channels with NO owner credential at all -- third-party channels added as a source, or unlinked own-channels. EventSub's channel.chat.message needs the broadcaster's own token, so these can never migrate and go dark permanently at enforce. No in-overlay nudge can fix them: needs a product decision (sunset comms / removal).",
+      "title": "No Twitch credential on file (needs Twitch link)",
+      "description": "Active unscoped channels with no Twitch OAuth token on file. Usually own-channels whose owner logged in via another platform (YouTube/Kick) and added the Twitch source without linking Twitch -- fixable by linking a Twitch credential with user:read:chat (ADR-0016 cross-platform consent), which the same warn-phase nudge drives. Permanent only when the channel owner has no all-chat account at all (true third-party). Until linked, served by IRC and lost at enforce.",
       "gridPos": { "h": 6, "w": 8, "x": 16, "y": 0 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
