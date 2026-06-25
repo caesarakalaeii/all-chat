@@ -52,6 +52,8 @@ func main() {
 	logLevel := getEnv("LOG_LEVEL", "info")
 	log := logger.NewLogger("overlay-manager", logLevel)
 	defer log.Sync()
+	// audit L1/#4: surface JWTAuthWithRevocation blacklist-check Redis errors.
+	middleware.SetLogger(log)
 
 	log.Info("Starting Overlay Manager Service",
 		zap.String("version", getEnv("APP_VERSION", "0.1.0")),

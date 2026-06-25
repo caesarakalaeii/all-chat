@@ -139,6 +139,13 @@ WHERE google_id = $1
 
 // GetByID retrieves a user by ID
 func (r *UserRepository) GetByID(ctx context.Context, id string) (*models.User, error) {
+	// Defensive: a nil pool is a misconfiguration; return a clear (non-not-found)
+	// error rather than panicking deep in pgx. Callers that distinguish
+	// transient-vs-terminal (e.g. HandleRefresh) then treat it as retryable
+	// instead of force-logging-out the user.
+	if r.db == nil {
+		return nil, fmt.Errorf("user repository: nil database pool")
+	}
 	query := `
 SELECT id, twitch_id, google_id, kick_id, auth_provider, username, display_name, profile_image_url,
            is_admin, is_premium, is_beta_tester, is_banned, banned_at, banned_reason, banned_by,

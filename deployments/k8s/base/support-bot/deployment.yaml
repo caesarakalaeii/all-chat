@@ -67,6 +67,13 @@ spec:
           image: support-bot:latest
           imagePullPolicy: IfNotPresent
           securityContext:
+            # audit #29: enforce non-root on the secret-reading main container to
+            # restore the H6 invariant (the image already runs as `USER node`/uid
+            # 1000, so this is a guard, not a behavior change). NOT set pod-level
+            # because the alpine/git initContainers have no non-root user baked in
+            # and would crash; they keep root but drop ALL caps + no-privesc above.
+            runAsNonRoot: true
+            runAsUser: 1000
             allowPrivilegeEscalation: false
             capabilities:
               drop:

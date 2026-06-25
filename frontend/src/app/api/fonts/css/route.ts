@@ -35,6 +35,17 @@ const ALLOWED_FAMILIES: ReadonlySet<string> = new Set([
   'Roboto',
   'Open Sans',
   'Montserrat',
+  // Bundled-theme fonts (audit #11): theme CSS @imports these through this
+  // same-origin proxy so viewer IPs never reach Google (DSGVO). Keep in sync
+  // with src/lib/theme-marketplace/bundled-themes.generated.ts @import families.
+  'Inter',
+  'Monoton',
+  'Orbitron',
+  'Press Start 2P',
+  'VT323',
+  'Share Tech Mono',
+  'Source Code Pro',
+  'Space Grotesk',
 ])
 
 // Stable WOFF2-capable UA so Google returns modern woff2 faces. Without this
@@ -51,17 +62,24 @@ function parseFamilyParam(raw: string): string | null {
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const familyRaw = request.nextUrl.searchParams.get('family')
-  if (!familyRaw) {
+  // Support multiple family= params (audit #11): bundled theme @imports combine
+  // several families in one request, e.g. css2?family=Rajdhani:...&family=Share+Tech+Mono.
+  // Every family is validated against the allowlist before being forwarded.
+  const familyRaws = request.nextUrl.searchParams.getAll('family')
+  if (familyRaws.length === 0) {
     return new NextResponse('missing family parameter', { status: 400 })
   }
 
-  const validated = parseFamilyParam(familyRaw)
-  if (!validated) {
-    return new NextResponse('family not in allowlist', { status: 400 })
+  const validatedFamilies: string[] = []
+  for (const raw of familyRaws) {
+    const validated = parseFamilyParam(raw)
+    if (!validated) {
+      return new NextResponse('family not in allowlist', { status: 400 })
+    }
+    validatedFamilies.push(`family=${encodeURIComponent(validated)}`)
   }
 
-  const upstream = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(validated)}&display=swap`
+  const upstream = `https://fonts.googleapis.com/css2?${validatedFamilies.join('&')}&display=swap`
   let css: string
   try {
     const res = await fetch(upstream, {

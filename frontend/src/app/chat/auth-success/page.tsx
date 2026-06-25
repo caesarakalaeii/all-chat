@@ -41,14 +41,30 @@ import { viewerApi } from '@/lib/api/viewer'
 import { isAllowedExternalRedirect } from '@/lib/auth/redirect-allowlist'
 
 /*
- * SECURITY (audit H4): postMessage targetOrigin must be an explicit origin,
- * never '*', so the viewer JWT is delivered only to the All-Chat app that
- * opened this popup — not to any other page that might hold a reference to
- * this window.
+ * SECURITY (audit H4 + #10): postMessage targetOrigin must be an explicit
+ * origin, never '*', so the viewer JWT is delivered only to a known-good
+ * opener. The opener is NOT this app's origin — this popup is opened from the
+ * browser extension's content script running on a platform page (twitch.tv /
+ * youtube.com / kick.com), so it must target those origins. The H4 fix
+ * (targetOrigin = window.location.origin = allch.at) silently dropped the
+ * token because the opener is twitch.tv, breaking extension login. The browser
+ * delivers a message only to the window whose origin matches, so iterating this
+ * allowlist delivers exactly once to the real opener and to nobody else. Keep in
+ * sync with the extension manifest content_scripts matches.
  */
-const POST_MESSAGE_TARGET_ORIGIN =
-  process.env.NEXT_PUBLIC_APP_URL ||
-  (typeof window !== 'undefined' ? window.location.origin : '*')
+const ALLOWED_OPENER_ORIGINS = [
+  'https://www.twitch.tv',
+  'https://www.youtube.com',
+  'https://studio.youtube.com',
+  'https://kick.com',
+  ...(typeof window !== 'undefined' ? [window.location.origin] : []),
+]
+
+function postToOpener(opener: Window, payload: Record<string, unknown>) {
+  for (const origin of ALLOWED_OPENER_ORIGINS) {
+    opener.postMessage(payload, origin)
+  }
+}
 
 function AuthSuccessContent() {
   const router = useRouter()
@@ -69,13 +85,10 @@ function AuthSuccessContent() {
 
         // Notify opener (extension) about error
         if (window.opener) {
-          window.opener.postMessage(
-            {
-              type: 'ALLCHAT_AUTH_ERROR',
-              error: 'No authentication code received',
-            },
-            POST_MESSAGE_TARGET_ORIGIN
-          )
+          postToOpener(window.opener, {
+            type: 'ALLCHAT_AUTH_ERROR',
+            error: 'No authentication code received',
+          })
         }
         return
       }
@@ -106,14 +119,11 @@ function AuthSuccessContent() {
       if (isExtensionPopup) {
         // Extension flow: post message to opener and close
         console.log('[AllChat Auth] Posting token to extension opener')
-        window.opener.postMessage(
-          {
-            type: 'ALLCHAT_AUTH_SUCCESS',
-            token,
-            streamer,
-          },
-          POST_MESSAGE_TARGET_ORIGIN
-        )
+        postToOpener(window.opener, {
+          type: 'ALLCHAT_AUTH_SUCCESS',
+          token,
+          streamer,
+        })
 
         // Show success message briefly before closing
         setLoading(false)

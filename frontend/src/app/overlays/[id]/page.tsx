@@ -1440,6 +1440,10 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   // --- EMBED_READY: re-send CSS, filter settings, sound settings, and TTS settings when embed page signals its listener is registered ---
   useEffect(() => {
     const handleEmbedReady = (event: MessageEvent) => {
+      // audit #23: validate the sender origin, mirroring the embed-side M11 check.
+      // The preview iframe is always same-origin (components/SplitView.tsx), so any
+      // cross-origin EMBED_READY is not from our embed and must be ignored.
+      if (event.origin !== window.location.origin) return
       if (event.data?.type !== 'EMBED_READY') return
       sendCssToIframe(visualSettingsRef.current)
       // Also send current filter settings to the embed on ready

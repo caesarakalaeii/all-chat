@@ -445,7 +445,7 @@ func (h *PlatformAuthHandlerV2) HandleEnableModeration(platform oauth.Platform) 
 			var codeVerifier string
 			authURL, codeVerifier = p.GetAuthURLWithScopesPKCE(stateStr, extra)
 			verifierKey := fmt.Sprintf("oauth_verifier:%s:%s", platform, csrfToken)
-			if err := h.redis.Set(c.Request.Context(), verifierKey, codeVerifier, 10*time.Minute).Err(); err != nil {
+			if err := h.redis.Set(c.Request.Context(), verifierKey, codeVerifier, 30*time.Minute).Err(); err != nil {
 				h.logger.Error("Failed to store PKCE verifier", zap.Error(err))
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 				return
@@ -524,7 +524,7 @@ func (h *PlatformAuthHandlerV2) generateAuthURL(
 
 		// Store code verifier in Redis for later use during token exchange
 		verifierKey := fmt.Sprintf("oauth_verifier:%s:%s", platform, csrfToken)
-		err := h.redis.Set(ctx, verifierKey, codeVerifier, 10*time.Minute).Err()
+		err := h.redis.Set(ctx, verifierKey, codeVerifier, 30*time.Minute).Err()
 		if err != nil {
 			return "", fmt.Errorf("failed to store code verifier: %w", err)
 		}
@@ -541,7 +541,7 @@ func (h *PlatformAuthHandlerV2) generateAuthURL(
 			var codeVerifier string
 			authURL, codeVerifier = twitchProvider.GetAuthURLWithPKCE(stateStr)
 			verifierKey := fmt.Sprintf("oauth_verifier:%s:%s", platform, csrfToken)
-			if err := h.redis.Set(ctx, verifierKey, codeVerifier, 10*time.Minute).Err(); err != nil {
+			if err := h.redis.Set(ctx, verifierKey, codeVerifier, 30*time.Minute).Err(); err != nil {
 				return "", fmt.Errorf("failed to store PKCE verifier: %w", err)
 			}
 		}
@@ -555,7 +555,7 @@ func (h *PlatformAuthHandlerV2) generateAuthURL(
 		var codeVerifier string
 		authURL, codeVerifier = ytProvider.GetAuthURLWithPKCE(stateStr)
 		verifierKey := fmt.Sprintf("oauth_verifier:%s:%s", platform, csrfToken)
-		if err := h.redis.Set(ctx, verifierKey, codeVerifier, 10*time.Minute).Err(); err != nil {
+		if err := h.redis.Set(ctx, verifierKey, codeVerifier, 30*time.Minute).Err(); err != nil {
 			return "", fmt.Errorf("failed to store PKCE verifier: %w", err)
 		}
 
@@ -982,7 +982,12 @@ func (h *PlatformAuthHandlerV2) exchangeCodeForToken(
 		if err == nil && codeVerifier != "" {
 			return twitchProvider.ExchangeCodeWithVerifier(ctx, code, codeVerifier)
 		}
-		// No PKCE verifier stored (e.g. chat-scopes add-source flow) — fall back
+		// No PKCE verifier stored — legitimate for the chat-scopes add-source flow,
+		// but for a PKCE login it means the verifier expired before the callback
+		// (audit #9/#22). Log so a verifier-miss is diagnosable instead of surfacing
+		// only as an opaque "Failed to exchange code" 500.
+		h.logger.Debug("No PKCE verifier found; using non-PKCE exchange",
+			zap.String("platform", string(platform)))
 		return twitchProvider.ExchangeCode(ctx, code)
 	}
 
@@ -998,7 +1003,11 @@ func (h *PlatformAuthHandlerV2) exchangeCodeForToken(
 		if err == nil && codeVerifier != "" {
 			return ytProvider.ExchangeCodeWithVerifier(ctx, code, codeVerifier)
 		}
-		// No PKCE verifier stored — fall back
+		// No PKCE verifier stored — legitimate for the YouTube moderation re-consent
+		// flow (GetAuthURLWithScopes stores none), but for a PKCE login it means the
+		// verifier expired before the callback (audit #9/#22). Log for diagnosability.
+		h.logger.Debug("No PKCE verifier found; using non-PKCE exchange",
+			zap.String("platform", string(platform)))
 		return ytProvider.ExchangeCode(ctx, code)
 	}
 

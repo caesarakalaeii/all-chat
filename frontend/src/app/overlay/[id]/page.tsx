@@ -49,6 +49,7 @@ import { useOverlayStream } from '@/hooks/useOverlayStream'
 import { buildGradientCSS } from '@/lib/utils/gradient'
 import { visualSettingsToCss } from '@/lib/utils/visual-settings-to-css'
 import { getBundledTheme } from '@/lib/theme-marketplace/bundled-themes'
+import { rewriteThemeFontImports } from '@/lib/theme-marketplace/font-proxy'
 import { chatBubbleStyle, overlayContainerStyle } from '@/lib/utils/visual-inline-styles'
 import { isDisplayVisible } from '@/lib/utils/displayVisibility'
 import type { VisualSettings } from '@/lib/types/visual-settings'
@@ -328,7 +329,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
     setCustomCss(typeof config.custom_css === 'string' ? config.custom_css : '')
     setThemeCss(
       typeof config.theme_id === 'string' && config.theme_id
-        ? (getBundledTheme(config.theme_id)?.css ?? '')
+        ? rewriteThemeFontImports(getBundledTheme(config.theme_id)?.css ?? '')
         : ''
     )
 

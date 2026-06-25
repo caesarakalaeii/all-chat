@@ -111,3 +111,29 @@ spec:
       ports:
         - protocol: TCP
           port: 8080
+---
+# audit #28: the base ships a discord-listener ServiceMonitor (and the gateway
+# /metrics endpoint), but default-deny-all + allow-intra-namespace only permit
+# same-namespace pods. A Prometheus pod in a separate "monitoring" namespace is
+# then dropped at the CNI, so the scrape silently fails ("target down") on a
+# fresh `kubectl apply -k`. Allow the monitoring namespace to reach the scraped
+# metrics ports. (Prod deploys from caesar-deployment, which already has this.)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-monitoring-scrape
+  namespace: allchat
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8080 # api-gateway /metrics (B2)
+        - protocol: TCP
+          port: 8086 # discord-listener /metrics (servicemonitor.yaml)

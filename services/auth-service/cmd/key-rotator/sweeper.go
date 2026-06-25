@@ -18,7 +18,6 @@ package main
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"time"
 
@@ -146,18 +145,22 @@ func (s *Sweeper) encryptIfNotCurrentKid(stored string) (string, bool, error) {
 	if stored == "" {
 		return "", false, nil
 	}
-	// Fast-path: check if the stored blob is already at the current kid.
-	// minVersionedBlobLen = 1(kid) + 12(nonce) + 16(tag) = 29 bytes raw → decoded len >= 29.
-	decoded, err := base64.StdEncoding.DecodeString(stored)
-	if err == nil && len(decoded) >= 29 && decoded[0] == s.encryptor.CurrentKid() {
-		return stored, false, nil // already on current kid
-	}
-	// Decrypt using any key in the chain (versioned or legacy).
-	plaintext, err := s.encryptor.DecryptString(stored)
+	// Decrypt via the chain and learn WHICH kid actually authenticated the blob
+	// (audit #12). The old byte-only fast-path (decoded[0] == CurrentKid) was
+	// unsafe: a kid-less legacy blob whose nonce[0] coincidentally equals the
+	// current kid byte (probability 1/256) was mis-classified as "already current"
+	// and skipped, so it never gained a kid prefix — and became permanently
+	// undecryptable once the legacy key was retired. A blob is genuinely current
+	// ONLY when it authenticated under the current kid, not merely when its first
+	// byte matches.
+	plaintext, kid, err := s.encryptor.DecryptStringWithKid(stored)
 	if err != nil {
 		return "", false, fmt.Errorf("decrypt: %w", err)
 	}
-	// Re-encrypt under the current kid.
+	if kid == s.encryptor.CurrentKid() {
+		return stored, false, nil // genuinely already on the current kid
+	}
+	// Re-encrypt under the current kid (legacy, kid-less, or false-positive blob).
 	reencrypted, err := s.encryptor.EncryptString(plaintext)
 	if err != nil {
 		return "", false, fmt.Errorf("re-encrypt: %w", err)
@@ -168,8 +171,8 @@ func (s *Sweeper) encryptIfNotCurrentKid(stored string) (string, bool, error) {
 // --- users ---
 
 type userUpdate struct {
-	ID          string
-	AccessToken string
+	ID           string
+	AccessToken  string
 	RefreshToken string
 }
 
@@ -349,16 +352,26 @@ func (s *Sweeper) flushViewerSessionsBatch(ctx context.Context, batch []viewerSe
 
 // --- youtube_oauth_tokens ---
 
+// sweepYouTubeOAuthTokens handles youtube_oauth_tokens with the same two
+// sub-policies as kick (audit #13 — youtube previously had NO v0 branch and ran
+// encryptIfNotCurrentKid unconditionally, so every encryption_version==0
+// plaintext row failed the Decrypt step, was counted as an error, and was left
+// plaintext at rest — the encrypt-at-rest goal silently unmet, and the error
+// counter inflated so real failures were indistinguishable from v0 noise):
+//
+// encryption_version == 0: plaintext written before encryption rollout —
+// ENCRYPT DIRECTLY (no Decrypt step) and set encryption_version=1.
+//
+// encryption_version >= 1: versioned ciphertext — run encryptIfNotCurrentKid.
 type youtubeTokenUpdate struct {
-	UserID       string
-	ChannelID    string
-	AccessToken  string
-	RefreshToken string
+	UserID        string
+	ChannelID     string
+	AccessToken   string
+	RefreshToken  string
+	SetEncVersion int
 }
 
 func (s *Sweeper) sweepYouTubeOAuthTokens(ctx context.Context) error {
-	// Select all rows (including v0 plaintext from before backfill); encryptIfNotCurrentKid
-	// handles both plaintext and versioned ciphertext.
 	const query = `SELECT user_id, channel_id, COALESCE(access_token,''), COALESCE(refresh_token,''), encryption_version FROM youtube_oauth_tokens ORDER BY user_id, channel_id`
 	rows, err := s.pool.Query(ctx, query)
 	if err != nil {
@@ -375,31 +388,58 @@ func (s *Sweeper) sweepYouTubeOAuthTokens(ctx context.Context) error {
 		}
 		s.metrics.RowsScanned["youtube_oauth_tokens"]++
 
-		newAt, atChanged, err := s.encryptIfNotCurrentKid(at)
-		if err != nil {
-			s.logger.Warn("youtube access_token re-encrypt error",
-				zap.String("user_id", userID),
-				zap.String("channel_id", channelID),
-				zap.Error(err),
-			)
-			s.metrics.Errors["youtube_oauth_tokens"]++
-			continue
+		if encVer == 0 {
+			// v0: plaintext — encrypt directly without a Decrypt step.
+			newAt, err := s.encryptor.EncryptString(at)
+			if err != nil {
+				s.logger.Warn("youtube v0 access_token encrypt error",
+					zap.String("user_id", userID),
+					zap.String("channel_id", channelID),
+					zap.Error(err),
+				)
+				s.metrics.Errors["youtube_oauth_tokens"]++
+				continue
+			}
+			newRt, err := s.encryptor.EncryptString(rt)
+			if err != nil {
+				s.logger.Warn("youtube v0 refresh_token encrypt error",
+					zap.String("user_id", userID),
+					zap.String("channel_id", channelID),
+					zap.Error(err),
+				)
+				s.metrics.Errors["youtube_oauth_tokens"]++
+				continue
+			}
+			batch = append(batch, youtubeTokenUpdate{userID, channelID, newAt, newRt, 1})
+		} else {
+			// v1+: versioned ciphertext — standard re-encryption check.
+			newAt, atChanged, err := s.encryptIfNotCurrentKid(at)
+			if err != nil {
+				s.logger.Warn("youtube access_token re-encrypt error",
+					zap.String("user_id", userID),
+					zap.String("channel_id", channelID),
+					zap.Error(err),
+				)
+				s.metrics.Errors["youtube_oauth_tokens"]++
+				continue
+			}
+			newRt, rtChanged, err := s.encryptIfNotCurrentKid(rt)
+			if err != nil {
+				s.logger.Warn("youtube refresh_token re-encrypt error",
+					zap.String("user_id", userID),
+					zap.String("channel_id", channelID),
+					zap.Error(err),
+				)
+				s.metrics.Errors["youtube_oauth_tokens"]++
+				continue
+			}
+			if !atChanged && !rtChanged {
+				s.metrics.RowsSkipped["youtube_oauth_tokens"]++
+				continue
+			}
+			batch = append(batch, youtubeTokenUpdate{userID, channelID, newAt, newRt, encVer})
 		}
-		newRt, rtChanged, err := s.encryptIfNotCurrentKid(rt)
-		if err != nil {
-			s.logger.Warn("youtube refresh_token re-encrypt error",
-				zap.String("user_id", userID),
-				zap.String("channel_id", channelID),
-				zap.Error(err),
-			)
-			s.metrics.Errors["youtube_oauth_tokens"]++
-			continue
-		}
-		if !atChanged && !rtChanged {
-			s.metrics.RowsSkipped["youtube_oauth_tokens"]++
-			continue
-		}
-		batch = append(batch, youtubeTokenUpdate{userID, channelID, newAt, newRt})
+
 		if len(batch) >= s.batchSize {
 			if err := s.flushYouTubeBatch(ctx, batch); err != nil {
 				return err
@@ -427,8 +467,8 @@ func (s *Sweeper) flushYouTubeBatch(ctx context.Context, batch []youtubeTokenUpd
 	b := &pgx.Batch{}
 	for _, yt := range batch {
 		b.Queue(
-			`UPDATE youtube_oauth_tokens SET access_token=$1, refresh_token=$2, encryption_version=1, updated_at=NOW() WHERE user_id=$3 AND channel_id=$4`,
-			yt.AccessToken, yt.RefreshToken, yt.UserID, yt.ChannelID,
+			`UPDATE youtube_oauth_tokens SET access_token=$1, refresh_token=$2, encryption_version=$3, updated_at=NOW() WHERE user_id=$4 AND channel_id=$5`,
+			yt.AccessToken, yt.RefreshToken, yt.SetEncVersion, yt.UserID, yt.ChannelID,
 		)
 	}
 	br := s.pool.SendBatch(ctx, b)

@@ -84,7 +84,7 @@ func TestImpersonateUser_SetsCookieAndStashesAdmin(t *testing.T) {
 		return targetUser, nil
 	}}
 
-	h := NewAdminHandler(repo, nil, zaptest.NewLogger(t), kc, redisClient, time.Hour)
+	h := NewAdminHandler(repo, nil, zaptest.NewLogger(t), kc, redisClient, time.Hour, time.Hour)
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()

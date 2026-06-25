@@ -145,8 +145,13 @@ class ApiClient {
           // second 401/403/500 surfaces as a structured ApiError instead of a raw
           // SyntaxError from the caller's .json().
         }
-        // refresh failed (or retry exhausted) — bounce to login
-        if (typeof window !== 'undefined') {
+        // refresh failed (or retry exhausted). Do NOT navigate for the auth probe
+        // (/api/v1/auth/me): init() runs it on EVERY page including the public
+        // landing page, so a self-redirect to '/' creates an infinite full-page
+        // reload loop for logged-out visitors (they can never sign in). Let the
+        // caller drive navigation instead — init() catches and sets user:null, and
+        // ProtectedRoute pushes '/' via the SPA router when user is null (audit #1).
+        if (typeof window !== 'undefined' && !endpoint.startsWith('/api/v1/auth/me')) {
           window.location.href = '/'
         }
         throw new ApiError(401, errorValue || 'Unauthorized', { error: errorValue || 'Unauthorized' })

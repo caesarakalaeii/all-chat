@@ -315,3 +315,20 @@ func TestSigningTransport_WithBody(t *testing.T) {
 	respBody, _ := io.ReadAll(resp.Body)
 	assert.Contains(t, string(respBody), "hello")
 }
+
+// TestComputeSignature_NoCrossFieldCollision guards audit #26: the per-field
+// fixed-width framing must make field-boundary shifts impossible. Under the old
+// "|"-delimited format, (path="/a", query="b|x") and (path="/a|b", query="x")
+// hashed identically. They must now diverge.
+func TestComputeSignature_NoCrossFieldCollision(t *testing.T) {
+	s := mustNewSigner(t, "svc", testSecret, zap.NewNop())
+	const ts = int64(1000)
+	a := s.computeSignature("POST", "/a", "b|x", "y", ts, nil)
+	b := s.computeSignature("POST", "/a|b", "x", "y", ts, nil)
+	assert.NotEqual(t, a, b, "path/query boundary shift must not collide")
+
+	// Same shift between rawQuery and serviceName must also diverge.
+	c := s.computeSignature("POST", "/p", "q", "svc-a", ts, nil)
+	d := s.computeSignature("POST", "/p", "q|svc", "a", ts, nil)
+	assert.NotEqual(t, c, d, "query/service boundary shift must not collide")
+}

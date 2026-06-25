@@ -261,6 +261,46 @@ func TestSweeper_EncryptIfNotCurrentKid_LegacyKidless(t *testing.T) {
 	assert.Equal(t, plaintext, decrypted)
 }
 
+// TestSweeper_EncryptIfNotCurrentKid_LegacyKidlessCollidingFirstByte guards
+// audit #12: a kid-less legacy blob whose first decoded byte coincidentally
+// equals the current kid (the 1/256 case) MUST still be re-encrypted, not
+// skipped. The old byte-only fast-path mis-classified it as "already current"
+// and left it un-migrated, becoming undecryptable after legacy-key retirement.
+func TestSweeper_EncryptIfNotCurrentKid_LegacyKidlessCollidingFirstByte(t *testing.T) {
+	legacyKey := keyBytes("legacy-key-32bytes-padding-xxxx")
+	enc := makeTestEncryptor(t, legacyKey) // CurrentKid() == 0x01
+	logger := zaptest.NewLogger(t)
+	s := NewSweeper(nil, enc, logger)
+
+	legacyCipher, err := encryption.NewAESEncryptor(legacyKey)
+	require.NoError(t, err)
+	plaintext := "legacy-token-colliding-first-byte"
+
+	// The legacy nonce is random, so retry until the first decoded byte collides
+	// with the current kid (deterministic in practice: P(hit)=1/256 per attempt).
+	var legacyBlob string
+	for i := 0; i < 100000; i++ {
+		b, err := legacyCipher.EncryptString(plaintext)
+		require.NoError(t, err)
+		raw, derr := base64.StdEncoding.DecodeString(b)
+		require.NoError(t, derr)
+		if raw[0] == enc.CurrentKid() {
+			legacyBlob = b
+			break
+		}
+	}
+	require.NotEmpty(t, legacyBlob, "failed to construct a colliding-first-byte legacy blob")
+
+	result, changed, err := s.encryptIfNotCurrentKid(legacyBlob)
+	require.NoError(t, err)
+	assert.True(t, changed, "audit #12: colliding-first-byte legacy blob MUST be re-encrypted, not skipped")
+	assert.NotEqual(t, legacyBlob, result)
+
+	decrypted, err := enc.DecryptString(result)
+	require.NoError(t, err)
+	assert.Equal(t, plaintext, decrypted)
+}
+
 // TestSweeper_EncryptIfNotCurrentKid_DecryptFails: garbage blob → returns ("", false, error).
 func TestSweeper_EncryptIfNotCurrentKid_DecryptFails(t *testing.T) {
 	enc := makeTestEncryptor(t, nil)
@@ -597,6 +637,53 @@ func TestSweeper_KickV0EncryptsDirect(t *testing.T) {
 	assert.Equal(t, plainRt, decRt)
 
 	assert.Equal(t, 1, version, "encryption_version should be updated to 1 after direct encryption")
+}
+
+// TestSweeper_YouTubeV0EncryptsDirect guards audit #13: youtube v0 (plaintext)
+// rows must be encrypted directly (no Decrypt step) and bumped to
+// encryption_version=1 — previously the sweep ran encryptIfNotCurrentKid
+// unconditionally, so every v0 row failed Decrypt, was counted as an error, and
+// stayed plaintext at rest.
+func TestSweeper_YouTubeV0EncryptsDirect(t *testing.T) {
+	pool, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	enc := makeTestEncryptor(t, nil)
+	logger := zaptest.NewLogger(t)
+
+	// Insert a v0 youtube row (plaintext).
+	plainAt := "yt-plaintext-access-token"
+	plainRt := "yt-plaintext-refresh-token"
+	_, err := pool.Exec(ctx, `INSERT INTO youtube_oauth_tokens (user_id, channel_id, access_token, refresh_token, encryption_version) VALUES ('u-v0', 'c-v0', $1, $2, 0)`,
+		plainAt, plainRt)
+	require.NoError(t, err)
+
+	s := NewSweeper(pool, enc, logger, WithBatchDelay(0))
+	err = s.sweepYouTubeOAuthTokens(ctx)
+	require.NoError(t, err)
+
+	assert.Equal(t, int64(1), s.metrics.RowsScanned["youtube_oauth_tokens"])
+	assert.Equal(t, int64(1), s.metrics.RowsReEncrypted["youtube_oauth_tokens"])
+	assert.Equal(t, int64(0), s.metrics.Errors["youtube_oauth_tokens"], "v0 row must not be counted as an error")
+
+	// Verify the stored tokens are now encrypted and decrypt back to plaintext.
+	var storedAt, storedRt string
+	var version int
+	err = pool.QueryRow(ctx, `SELECT access_token, refresh_token, encryption_version FROM youtube_oauth_tokens WHERE user_id='u-v0' AND channel_id='c-v0'`).
+		Scan(&storedAt, &storedRt, &version)
+	require.NoError(t, err)
+	assert.NotEqual(t, plainAt, storedAt, "access_token must no longer be plaintext")
+
+	decAt, err := enc.DecryptString(storedAt)
+	require.NoError(t, err)
+	assert.Equal(t, plainAt, decAt)
+
+	decRt, err := enc.DecryptString(storedRt)
+	require.NoError(t, err)
+	assert.Equal(t, plainRt, decRt)
+
+	assert.Equal(t, 1, version, "encryption_version should be 1 after direct encryption")
 }
 
 // TestSweeper_Idempotent runs SweepAll twice and verifies the second run touches 0 rows.

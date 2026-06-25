@@ -54,6 +54,10 @@ func main() {
 	logLevel := getEnvOrDefault("LOG_LEVEL", "info")
 	log := logger.NewLogger("auth-service", logLevel)
 	defer log.Sync()
+	// audit L1/#4: route JWTAuthWithRevocation blacklist-check Redis errors to this
+	// service's logger (the package default is a no-op), so a fail-open revocation
+	// during a Redis outage is observable instead of silently swallowed.
+	middleware.SetLogger(log)
 
 	log.Info("Starting Auth Service",
 		zap.String("version", getEnvOrDefault("APP_VERSION", "dev")),
@@ -245,7 +249,7 @@ func main() {
 
 	// Create handlers
 	platformAuthHandlerV2 := handlers.NewPlatformAuthHandlerV2(providers, userRepo, redisClient, userKeyChain, jwtExpiryHours, frontendURL, overlayManagerURL, log).WithMetrics(businessMetrics)
-	legacyAuthHandler := handlers.NewAuthHandler(twitchOAuth, youtubeOAuth, userRepo, redisClient, userKeyChain, jwtExpiryHours, log).WithMetrics(businessMetrics)
+	legacyAuthHandler := handlers.NewAuthHandler(twitchOAuth, youtubeOAuth, kickOAuth, userRepo, redisClient, userKeyChain, jwtExpiryHours, log).WithMetrics(businessMetrics)
 	viewerAuthHandler := handlers.NewViewerAuthHandler(viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, viewerRepo, viewerIdentityRepo, userRepo, redisClient, userKeyChain, jwtExpiryHours, frontendURL, tokenCipher, log).WithMetrics(businessMetrics)
 
 	// Seed the persistent total-users gauge from the database so Grafana retains
@@ -257,7 +261,10 @@ func main() {
 		log.Info("Seeded allchat_total_users_by_platform from database", zap.Any("counts", counts))
 	}
 	healthHandler := handlers.NewHealthHandler(db, redisClient)
-	adminHandler := handlers.NewAdminHandler(userRepo, db, log, userKeyChain, redisClient, time.Duration(jwtExpiryHours)*time.Hour)
+	// audit #20: impersonation tokens are short-lived (default 2h), independent of
+	// the 24h session JWT, so a leaked impersonation token has a small window.
+	impersonationExpiry := time.Duration(getEnvAsIntOrDefault("IMPERSONATION_EXPIRY_HOURS", 2)) * time.Hour
+	adminHandler := handlers.NewAdminHandler(userRepo, db, log, userKeyChain, redisClient, time.Duration(jwtExpiryHours)*time.Hour, impersonationExpiry)
 	viewerCosmeticsHandler := handlers.NewViewerCosmeticsHandler(viewerIdentityRepo, redisClient, log)
 	chatSendHandler := handlers.NewChatSendHandler(log, viewerRepo, userRepo, db, twitchClientID, viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, tokenCipher, youtubeAPIKey, redisClient, getEnvAsIntOrDefault("QUOTA_LIMIT_DAILY", 1009000)).WithYouTubeTokenSource(youtubetoken.NewYouTubeSource(db, tokenCipher, youtubeClientID, youtubeClientSecret))
 	streamerInfoHandler := handlers.NewStreamerInfoHandler(log, userRepo, db)

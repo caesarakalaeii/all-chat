@@ -45,6 +45,7 @@ import (
 type AuthHandler struct {
 	twitchOAuth  *oauth.TwitchOAuth
 	youtubeOAuth *oauth.YouTubeOAuth
+	kickOAuth    *oauth.KickOAuth
 	userRepo     *repository.UserRepository
 	redis        *redis.Client
 	userKeyChain *auth.KeyChain
@@ -53,10 +54,14 @@ type AuthHandler struct {
 	metrics      *metrics.BusinessMetrics
 }
 
-// NewAuthHandler creates a new auth handler
+// NewAuthHandler creates a new auth handler. kickOAuth may be nil when Kick is
+// not configured; HandleRefresh dispatches the streamer's refresh to the
+// provider that minted the session token (audit #6), so all three must be
+// passed when available.
 func NewAuthHandler(
 	twitchOAuth *oauth.TwitchOAuth,
 	youtubeOAuth *oauth.YouTubeOAuth,
+	kickOAuth *oauth.KickOAuth,
 	userRepo *repository.UserRepository,
 	redisClient *redis.Client,
 	userKeyChain *auth.KeyChain,
@@ -66,6 +71,7 @@ func NewAuthHandler(
 	return &AuthHandler{
 		twitchOAuth:  twitchOAuth,
 		youtubeOAuth: youtubeOAuth,
+		kickOAuth:    kickOAuth,
 		userRepo:     userRepo,
 		redis:        redisClient,
 		userKeyChain: userKeyChain,
@@ -533,12 +539,35 @@ func getEnvOrDefault(key, defaultValue string) string {
 // reaches auth-service). A JSON-body fallback is kept for backward compat
 // during the rollout (deprecated).
 //
-// TODO(H3-integration): the success-path cookie rotation (SetAuthCookies +
-// redacted body) is not unit-tested because TwitchOAuth hits real Twitch
-// endpoints (no interface). Verify end-to-end via a manual/integration test
-// once deployed. Error paths (missing token, reuse detection, JSON-body
-// fallback) are unit-tested in auth_handler_test.go.
+// HandleRefresh resolves the session owner from the reuse-key's stored user ID,
+// dispatches the refresh to the provider that minted the session (Twitch /
+// YouTube / Kick — audit #6), persists + rotates, and reissues httpOnly cookies.
+//
+// Failure discipline (audit #2 + #5): the rule is that whenever a 5xx is
+// returned the refresh token in the client's cookie MUST still have a live
+// Redis reuse key, so a transient blip is retryable rather than a permanent
+// lockout. A genuine reuse-miss or provider 400/401 (revoked token) clears the
+// cookies; transient Redis/DB/provider errors restore the key and return 503.
 func (h *AuthHandler) HandleRefresh(c *gin.Context) {
+	// audit #21: refuse to silently rotate an impersonation session into the
+	// admin's own session. The access token is forwarded as X-Access-Token by
+	// the gateway AuthCookieForward middleware; if it carries an impersonation
+	// claim, end the impersonation explicitly instead of issuing a plain admin
+	// JWT (which would leave the UI showing "impersonating" while acting as admin).
+	// Use 403 (not 409): the client reserves a 409 from /refresh for the
+	// concurrent-refresh retry path (review M1); a 403 is treated as a terminal
+	// refresh failure → the session is re-derived from /auth/me, which is exactly
+	// the resync we want here.
+	if at := c.GetHeader("X-Access-Token"); at != "" {
+		if claims, vErr := auth.ValidateJWTWithKeyChain(at, h.userKeyChain); vErr == nil && claims.ImpersonatedBy != "" {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error":               "impersonation_session_ended",
+				"impersonation_ended": true,
+			})
+			return
+		}
+	}
+
 	// Read refresh token from the X-Refresh-Token header (forwarded by the
 	// gateway AuthCookieForward middleware; the raw Cookie is stripped by L17
 	// before reaching auth-service). Fallback to JSON body for backward compat
@@ -558,12 +587,10 @@ func (h *AuthHandler) HandleRefresh(c *gin.Context) {
 	}
 
 	// Refresh-token reuse detection (audit M2).
-	// Each refresh token is stored in Redis as refresh_token:<sha256> when issued.
-	// GetDel atomically retrieves and deletes it. If the key doesn't exist, the
-	// token was already used (potential reuse/theft) → reject.
+	// Each refresh token is stored in Redis as refresh_token:<sha256> when issued,
+	// with the owning user's ID as the value. GetDel atomically retrieves+deletes.
 	tokenHash := refreshTokenHash(refreshToken)
 	rtKey := "refresh_token:" + tokenHash
-
 	// Concurrency guard (PR #478 review M1): browsers routinely fire near-
 	// simultaneous /refresh calls (multiple tabs, a retried slow request,
 	// StrictMode double-invoke). Without this lock exactly one wins the single-use
@@ -594,28 +621,69 @@ func (h *AuthHandler) HandleRefresh(c *gin.Context) {
 		}()
 	}
 
-	_, err := h.redis.GetDel(c.Request.Context(), rtKey).Result()
-	if err != nil {
+	storedUserID, err := h.redis.GetDel(c.Request.Context(), rtKey).Result()
+	if err == redis.Nil || (err == nil && storedUserID == "") {
+		// Genuine miss: the token is not in the active set → reuse/theft. Terminal.
 		h.logger.Warn("Refresh token reuse detected — token not in active set",
-			zap.String("refresh_token_hash", tokenHash[:16]),
-			zap.Error(err))
+			zap.String("refresh_token_hash", tokenHash[:16]))
 		auth.ClearAuthCookies(c) // clear stale cookies so the client re-auths (audit H3)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Refresh token already used or invalid"})
 		return
 	}
-
-	// Refresh OAuth token
-	token, err := h.twitchOAuth.RefreshToken(c.Request.Context(), refreshToken)
 	if err != nil {
-		// L2: the reuse GetDel above already consumed the key. A transient upstream
-		// 5xx / network error must NOT permanently invalidate a valid session —
-		// restore the key so the user can retry, and return 503 (not 401). Only a
-		// genuine Twitch 400/401 (token revoked / invalid_grant) is terminal: keep
-		// the cookies-cleared + 401 path so a dead token can't be re-used.
+		// Transient Redis error (the documented single-replica SPOF). Do NOT treat
+		// a connection blip as theft — that would force-log-out every refreshing
+		// user during a Redis outage. The key was NOT consumed (GetDel errored), so
+		// the client's cookie token is still valid; return a retryable 503.
+		h.logger.Warn("Refresh reuse-key lookup failed (transient) — not treating as reuse",
+			zap.String("refresh_token_hash", tokenHash[:16]),
+			zap.Error(err))
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Refresh temporarily unavailable, please retry"})
+		return
+	}
+
+	// restoreReuseKey re-seeds the OLD reuse key so a transient downstream failure
+	// (before cookie rotation) leaves the client's existing cookie token retryable.
+	restoreReuseKey := func() {
+		if setErr := h.redis.Set(c.Request.Context(), rtKey, storedUserID, 14*24*time.Hour).Err(); setErr != nil {
+			h.logger.Warn("Failed to restore refresh-token reuse key", zap.Error(setErr))
+		}
+	}
+
+	// Resolve the session owner up front from the reuse-key value. This both
+	// removes the fragile GetUserInfo/GetByTwitchID round-trips (audit #2/#5) and
+	// lets us dispatch to the correct OAuth provider (audit #6).
+	user, err := h.userRepo.GetByID(c.Request.Context(), storedUserID)
+	if err != nil {
+		if errors.Is(err, repository.ErrUserNotFound) {
+			h.logger.Warn("Refresh for unknown user — terminal", zap.String("user_id", storedUserID))
+			auth.ClearAuthCookies(c) // audit H3
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
+			return
+		}
+		// Transient DB error (CNPG failover, pool exhaustion). Restore the key and
+		// surface a retryable status — do NOT clear cookies (audit #5).
+		h.logger.Warn("Transient DB error resolving refresh user — restoring reuse key",
+			zap.String("user_id", storedUserID), zap.Error(err))
+		restoreReuseKey()
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Service temporarily unavailable, please retry"})
+		return
+	}
+
+	// Dispatch the refresh to the provider that minted the session (audit #6).
+	// Sending a Google/Kick refresh token to Twitch (the old unconditional path)
+	// produced a 400 invalid_grant → terminal force-logout for every YouTube/Kick
+	// streamer at each token expiry.
+	token, err := h.refreshForProvider(c.Request.Context(), user.AuthProvider, refreshToken)
+	if err != nil {
+		// Terminal provider rejection (400/401: token revoked / invalid_grant) →
+		// clear cookies. Anything else (5xx, network, unsupported provider) is
+		// transient/retryable → restore key + 503 (audit L2 + #5).
 		var retrErr *oauth2.RetrieveError
 		if errors.As(err, &retrErr) && retrErr.Response != nil &&
 			(retrErr.Response.StatusCode == http.StatusBadRequest || retrErr.Response.StatusCode == http.StatusUnauthorized) {
 			h.logger.Warn("Refresh token rejected by provider (terminal)",
+				zap.String("provider", user.AuthProvider),
 				zap.String("refresh_token_hash", tokenHash[:16]),
 				zap.Int("status", retrErr.Response.StatusCode),
 				zap.Error(err))
@@ -623,61 +691,43 @@ func (h *AuthHandler) HandleRefresh(c *gin.Context) {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Failed to refresh token"})
 			return
 		}
-		// Transient failure — restore the reuse key so the next /refresh isn't
-		// misread as theft, and surface a retryable status.
 		h.logger.Warn("Transient refresh failure — restoring reuse key for retry",
+			zap.String("provider", user.AuthProvider),
 			zap.String("refresh_token_hash", tokenHash[:16]),
 			zap.Error(err))
-		if setErr := h.redis.Set(c.Request.Context(), rtKey, "1", 14*24*time.Hour).Err(); setErr != nil {
-			h.logger.Warn("Failed to restore refresh-token reuse key", zap.Error(setErr))
-		}
+		restoreReuseKey()
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Refresh provider temporarily unavailable, please retry"})
 		return
 	}
 
-	// Get user info to find user ID
-	twitchUser, err := h.twitchOAuth.GetUserInfoTwitch(c.Request.Context(), token.AccessToken)
+	// Issue the new access JWT before persisting so a rare JWT-gen failure can
+	// restore the old key (the old provider refresh token may already be spent,
+	// but the retry then fails cleanly rather than locking out on a transient).
+	jwtToken, err := auth.GenerateTokenWithKid(h.userKeyChain.LatestKid(), user.ID, user.Username, string(h.userKeyChain.LatestSecret()), h.jwtExpiry, user.IsAdmin)
 	if err != nil {
-		h.logger.Error("Failed to get user info", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get user info"})
+		h.logger.Error("Failed to generate JWT", zap.Error(err))
+		restoreReuseKey()
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Failed to issue session, please retry"})
 		return
 	}
 
-	// Get user from database
-	user, err := h.userRepo.GetByTwitchID(c.Request.Context(), twitchUser.ID)
-	if err != nil {
-		h.logger.Error("User not found", zap.Error(err))
-		auth.ClearAuthCookies(c) // audit H3
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
-		return
-	}
-
-	// Update tokens in database
-	err = h.userRepo.UpdateTokens(c.Request.Context(), user.ID, token.AccessToken, token.RefreshToken, token.Expiry)
-	if err != nil {
-		h.logger.Error("Failed to update tokens", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update tokens"})
-		return
-	}
-
-	// Track the new refresh token for reuse detection (audit M2).
-	// TTL matches the typical Twitch refresh-token lifetime.
+	// Audit #2: seed the NEW reuse key AND rotate the cookies up front, BEFORE the
+	// DB write. From here the client holds a token whose reuse key exists, so a
+	// failed UpdateTokens is a retryable inconsistency, not a lockout.
 	newRTKey := "refresh_token:" + refreshTokenHash(token.RefreshToken)
 	if err := h.redis.Set(c.Request.Context(), newRTKey, user.ID, 14*24*time.Hour).Err(); err != nil {
 		h.logger.Warn("Failed to track new refresh token for reuse detection", zap.Error(err))
 	}
-
-	// Issue new access JWT.
-	jwtToken, err := auth.GenerateTokenWithKid(h.userKeyChain.LatestKid(), user.ID, user.Username, string(h.userKeyChain.LatestSecret()), h.jwtExpiry, user.IsAdmin)
-	if err != nil {
-		h.logger.Error("Failed to generate JWT", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
-		return
-	}
-
-	// Rotate cookies (audit H3). Tokens live in httpOnly cookies, not the body,
-	// so they are not exposed to frontend JavaScript or logged in responses.
+	// Rotate cookies (audit H3). Tokens live in httpOnly cookies, not the body.
 	auth.SetAuthCookies(c, jwtToken, token.RefreshToken, h.jwtExpiry, 14*24*time.Hour)
+
+	// Persist the rotated provider tokens (best-effort: the session is already
+	// valid via the rotated cookie + Redis key; a stale DB token self-heals on the
+	// next successful refresh).
+	if err := h.userRepo.UpdateTokens(c.Request.Context(), user.ID, token.AccessToken, token.RefreshToken, token.Expiry); err != nil {
+		h.logger.Warn("Failed to persist rotated tokens (session still valid)",
+			zap.String("user_id", user.ID), zap.Error(err))
+	}
 
 	// Body carries only non-secret data for the UI.
 	c.JSON(http.StatusOK, gin.H{
@@ -685,6 +735,23 @@ func (h *AuthHandler) HandleRefresh(c *gin.Context) {
 		"token_type": "Bearer",
 		"user":       gin.H{"id": user.ID, "username": user.Username, "is_admin": user.IsAdmin},
 	})
+}
+
+// refreshForProvider dispatches an OAuth refresh to the provider that issued the
+// session (audit #6). An unsupported/unconfigured provider returns a non-terminal
+// error so the caller treats it as retryable (503) rather than clearing cookies.
+func (h *AuthHandler) refreshForProvider(ctx context.Context, provider, refreshToken string) (*oauth2.Token, error) {
+	switch provider {
+	case "youtube", "google":
+		return h.youtubeOAuth.RefreshToken(ctx, refreshToken)
+	case "kick":
+		if h.kickOAuth == nil {
+			return nil, fmt.Errorf("kick refresh not configured")
+		}
+		return h.kickOAuth.RefreshToken(ctx, refreshToken)
+	default: // "twitch" and legacy empty provider
+		return h.twitchOAuth.RefreshToken(ctx, refreshToken)
+	}
 }
 
 // HandleGetMe returns current user info. When the JWT carries an
