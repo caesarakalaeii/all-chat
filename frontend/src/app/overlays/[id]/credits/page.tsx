@@ -62,7 +62,7 @@ const ThemeMarketplaceModal = dynamic(
 export default function CreditRollConfigPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
-  const { token } = useAuthStore()
+  const { user } = useAuthStore()
 
   const [overlay, setOverlay] = useState<Overlay | null>(null)
   const [config, setConfig] = useState<Partial<CreditRollConfig>>({
@@ -99,7 +99,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
   const [copiedCreditsUrl, setCopiedCreditsUrl] = useState(false)
 
   useEffect(() => {
-    if (!token) {
+    if (!user) {
       router.push('/')
       return
     }
@@ -130,7 +130,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
     }
 
     loadData()
-  }, [id, token, router])
+  }, [id, user, router])
 
   const handleSave = async () => {
     setSaving(true)

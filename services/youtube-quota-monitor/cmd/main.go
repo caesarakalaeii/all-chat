@@ -52,6 +52,9 @@ func main() {
 
 	log := logger.NewLogger("youtube-quota-monitor", cfg.LogLevel)
 	defer log.Sync()
+	if cfg.DatabasePassword == "" {
+		log.Fatal("DATABASE_PASSWORD must be set")
+	}
 	log.Info("Starting YouTube Quota Monitor",
 		zap.Duration("interval", cfg.MonitorInterval),
 		zap.String("alert_channel", cfg.AlertChannel),
@@ -72,7 +75,8 @@ func main() {
 
 	// Redis: publishes QuotaEvents to the channel the discord-bot subscribes to.
 	redisClient := redis.NewClient(&redis.Options{
-		Addr: fmt.Sprintf("%s:%s", cfg.RedisHost, cfg.RedisPort),
+		Addr:     fmt.Sprintf("%s:%s", cfg.RedisHost, cfg.RedisPort),
+		Password: os.Getenv("REDIS_PASSWORD"),
 	})
 	defer redisClient.Close()
 	if err := redisClient.Ping(context.Background()).Err(); err != nil {

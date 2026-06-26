@@ -64,16 +64,11 @@ export default function AdminDashboard() {
   useEffect(() => {
     async function fetchStats() {
       try {
-        const token = localStorage.getItem('jwt_token')
-        if (!token) {
-          setLoading(false)
-          return
-        }
-
+        // Auth is via the httpOnly session cookie (same-origin); the gateway
+        // CookieToBearer middleware copies the access cookie to Authorization
+        // before backend validation (no JS-readable token).
         const response = await fetch('/api/v1/admin/stats', {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          credentials: 'same-origin',
         })
 
         if (response.ok) {

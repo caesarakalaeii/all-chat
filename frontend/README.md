@@ -149,20 +149,57 @@ docker run -p 3000:3000 \
   allchat-frontend
 ```
 
+## Same-origin requirement (cookie auth)
+
+Streamer/admin authentication uses **httpOnly cookies** (`access_token` +
+`refresh_token`, `SameSite=Lax`, host-only path). This requires the frontend
+and the API gateway to be served from the **same origin** — otherwise the
+browser will not send the cookies and login silently fails with no obvious
+error.
+
+### Production
+
+In production, both are served behind a single ingress that terminates TLS
+and routes `/api/*` to the gateway. For example, `allch.at` serves the Next.js
+app and proxies `/api/*` to the api-gateway. `NEXT_PUBLIC_API_URL` must resolve
+to the **same origin** as the frontend window (`window.location.origin`).
+
+### Development
+
+The default dev setup (frontend `:3000`, gateway `:8080`) is **cross-origin** —
+cookies will not be sent. To use cookie auth locally either:
+
+1. Serve both from one origin (e.g. configure Next.js rewrites to proxy
+   `/api/*` to `localhost:8080`), **or**
+2. Use the token-based dev fallback (set `NEXT_PUBLIC_API_URL` to the gateway
+   and rely on the `Authorization: Bearer` backward-compat path).
+
+A dev-mode console warning is emitted by `src/lib/api/client.ts` when the API
+base origin differs from `window.location.origin`.
+
+> If a cross-origin deployment is ever needed: `credentials: 'include'` +
+> `SameSite=None` + strict CORS allowlist + revisiting CSRF are required (out
+> of scope for the current rollout).
+
+See: [H3 cookie-auth design spec](../docs/pi/specs/2026-06-23-h3-cookie-auth-design.md).
+
 ## Environment Variables
 
 Create `.env.local` for development:
 
 ```bash
+# ⚠️ Cookie auth requires same-origin — see "Same-origin requirement" above.
+# For same-origin dev: omit this or set it to window.location.origin.
 NEXT_PUBLIC_API_URL=http://localhost:8080
 NEXT_PUBLIC_WS_URL=ws://localhost:8080
 ```
 
-For production:
+For production (must be same-origin as the frontend):
 
 ```bash
-NEXT_PUBLIC_API_URL=https://api.allchat.yourdomain.com
-NEXT_PUBLIC_WS_URL=wss://api.allchat.yourdomain.com
+# Same origin as the frontend (ingress proxies /api/* to the gateway)
+NEXT_PUBLIC_API_URL=https://allch.at
+NEXT_PUBLIC_WS_URL=wss://allch.at
 ```
 
 ## Code Organization

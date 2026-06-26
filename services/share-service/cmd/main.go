@@ -46,6 +46,9 @@ func main() {
 	logLevel := getEnv("LOG_LEVEL", "info")
 	log := logger.NewLogger("share-service", logLevel)
 	defer log.Sync()
+	// Surface JWT revocation (logout-blacklist) check failures from the shared
+	// middleware instead of dropping them to a no-op logger (PR #478 review L3).
+	middleware.SetLogger(log)
 
 	log.Info("Starting Share Service",
 		zap.String("version", getEnv("APP_VERSION", "0.1.0")),
@@ -53,6 +56,9 @@ func main() {
 
 	// Load configuration from environment
 	config := loadConfig()
+	if config.DatabasePassword == "" {
+		log.Fatal("DATABASE_PASSWORD must be set")
+	}
 
 	// Build JWT KeyChains from versioned env vars (D-10: user and service chains are isolated)
 	userKeyChain, err := sharedAuth.NewKeyChainFromEnv("JWT_SECRET")
@@ -94,7 +100,8 @@ func main() {
 	redisHost := getEnv("REDIS_HOST", "localhost")
 	redisPort := getEnv("REDIS_PORT", "6379")
 	redisClient := redis.NewClient(&redis.Options{
-		Addr: fmt.Sprintf("%s:%s", redisHost, redisPort),
+		Addr:     fmt.Sprintf("%s:%s", redisHost, redisPort),
+		Password: getEnv("REDIS_PASSWORD", ""),
 	})
 
 	var redisClientForJobs *redis.Client
@@ -178,7 +185,7 @@ func main() {
 
 	// API routes with authentication
 	api := router.Group("/api/v1")
-	api.Use(middleware.JWTAuth(userKeyChain)) // All routes require auth
+	api.Use(middleware.JWTAuthWithRevocation(userKeyChain, redisClient)) // All routes require auth
 	{
 		// User search - no premium required
 		api.GET("/users/search", searchHandler.SearchUsers)
@@ -289,7 +296,7 @@ func loadConfig() *Config {
 		DatabaseHost:     getEnv("DATABASE_HOST", "localhost"),
 		DatabasePort:     getEnv("DATABASE_PORT", "5432"),
 		DatabaseUser:     getEnv("DATABASE_USER", "allchat"),
-		DatabasePassword: getEnv("DATABASE_PASSWORD", "allchat_dev_password"),
+		DatabasePassword: getEnv("DATABASE_PASSWORD", ""),
 		DatabaseName:     getEnv("DATABASE_NAME", "allchat"),
 	}
 }

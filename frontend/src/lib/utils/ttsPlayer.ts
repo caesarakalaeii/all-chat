@@ -397,12 +397,16 @@ export function createTTSPlayer(
     if (!settings.ttsEndpoint || !settings.ttsToken) {
       throw new Error('ElevenLabs endpoint or token not configured')
     }
-    const url =
-      `${settings.ttsEndpoint}` +
-      `?tts_token=${encodeURIComponent(settings.ttsToken)}` +
-      `&voice=${encodeURIComponent(settings.voiceId ?? '')}` +
-      `&text=${encodeURIComponent(text)}`
-    const resp = await fetch(url, { method: 'POST' })
+    // SECURITY (audit M17): tts_token is sent via Authorization header and
+    // voice via JSON body — no longer leaked into nginx/gateway access logs.
+    const resp = await fetch(`${settings.ttsEndpoint}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${settings.ttsToken}`,
+      },
+      body: JSON.stringify({ text, voice: settings.voiceId ?? '' }),
+    })
     if (!resp.ok) {
       throw new Error(`ElevenLabs proxy ${resp.status}`)
     }

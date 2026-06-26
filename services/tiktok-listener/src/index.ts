@@ -71,7 +71,11 @@ const REDIS_RECONNECT_MAX_DELAY_MS = 5000;
 const DATABASE_HOST = process.env.DATABASE_HOST || 'localhost';
 const DATABASE_PORT = parseInt(process.env.DATABASE_PORT || '5432');
 const DATABASE_USER = process.env.DATABASE_USER || 'allchat';
-const DATABASE_PASSWORD = process.env.DATABASE_PASSWORD || 'allchat_dev_password';
+const DATABASE_PASSWORD = process.env.DATABASE_PASSWORD || '';
+if (!DATABASE_PASSWORD) {
+  console.error('DATABASE_PASSWORD must be set');
+  process.exit(1);
+}
 const DATABASE_NAME = process.env.DATABASE_NAME || 'allchat';
 const HTTP_PORT = parseInt(process.env.PORT || '8089');
 const DEMAND_SAFETY_INTERVAL_MS = parseInt(process.env.DEMAND_SAFETY_INTERVAL_MS || '60000'); // 60 seconds
@@ -103,6 +107,7 @@ const TIKTOK_DEDUP_MAX_CACHE_SIZE = parseInt(process.env.TIKTOK_DEDUP_MAX_CACHE_
 
 // Import logger interface
 import { Logger } from './types/logger.js';
+import { validateTikTokUsername } from './types/validation.js';
 
 // Simple, reliable logger using console (Winston was causing issues)
 // Outputs JSON format for log aggregation
@@ -706,6 +711,17 @@ class TikTokListenerService {
    * Per CONTEXT.md: "TikTok connection state migration for unofficial library - Cannot transfer connection handles, must disconnect/reconnect"
    */
   private async connectToStream(username: string, overlayId: string): Promise<void> {
+    // Reject malformed usernames before any connection attempt (audit L24).
+    const usernameCheck = validateTikTokUsername(username);
+    if (!usernameCheck.valid) {
+      logger.warn('Rejecting connection to invalid TikTok username', {
+        username,
+        overlay_id: overlayId,
+        reason: usernameCheck.reason,
+      });
+      return;
+    }
+
     // Mark as connecting to prevent concurrent attempts
     if (this.connectingStreams.has(username)) {
       logger.debug('Already connecting to stream, skipping duplicate attempt', { username, overlay_id: overlayId });

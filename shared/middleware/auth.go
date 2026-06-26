@@ -19,16 +19,60 @@ package middleware
 import (
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/caesar/all-chat/shared/auth"
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
 )
+
+// revocationLogger is the logger used by JWTAuthWithRevocation for blacklist
+// check failures. Defaults to a no-op logger (backward compat with callers that
+// never wire one); services call SetLogger at startup to surface failures.
+// (audit L1 — previously the blacklist Redis error was silently dropped via
+// `_ = err` despite the comment claiming it was logged.)
+var (
+	revocationLoggerMu sync.RWMutex
+	revocationLogger   = zap.NewNop()
+)
+
+// SetLogger wires the logger used by JWT blacklist-check failure paths. Services
+// should call it once at startup (after their own logger is initialized) so
+// revocation Redis errors are emitted instead of silently dropped (audit L1).
+func SetLogger(l *zap.Logger) {
+	if l == nil {
+		l = zap.NewNop()
+	}
+	revocationLoggerMu.Lock()
+	revocationLogger = l
+	revocationLoggerMu.Unlock()
+}
+
+func revocationLog() *zap.Logger {
+	revocationLoggerMu.RLock()
+	defer revocationLoggerMu.RUnlock()
+	return revocationLogger
+}
 
 // JWTAuth returns a gin middleware that validates JWT tokens using a KeyChain.
 // The KeyChain dispatches by kid header for versioned secrets and falls back to
 // the legacy secret for tokens without a kid (D-08). Non-HMAC tokens are
 // rejected outright (D-12).
+//
+// This overload does NOT check the logout blacklist. Use JWTAuthWithRevocation
+// to enforce token revocation (audit H2).
 func JWTAuth(kc *auth.KeyChain) gin.HandlerFunc {
+	return JWTAuthWithRevocation(kc, nil)
+}
+
+// JWTAuthWithRevocation is identical to JWTAuth but also checks the Redis-backed
+// logout blacklist before accepting a token. If rdb is nil the blacklist check
+// is skipped (backward-compatible with callers that have no Redis client).
+//
+// The blacklist key format is "blacklist:<raw-token>" and is written by
+// auth-service HandleLogout / HandleDeleteAccount (audit H2).
+func JWTAuthWithRevocation(kc *auth.KeyChain, rdb redis.UniversalClient) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Get token from Authorization header
 		authHeader := c.GetHeader("Authorization")
@@ -48,6 +92,25 @@ func JWTAuth(kc *auth.KeyChain) gin.HandlerFunc {
 			})
 			c.Abort()
 			return
+		}
+
+		// Check logout blacklist (audit H2). Skip when no Redis client is wired.
+		if rdb != nil {
+			blacklisted, err := rdb.Exists(c.Request.Context(), "blacklist:"+tokenString).Result()
+			if err != nil {
+				// Fail-open on Redis errors to avoid locking users out (audit L1).
+				// The error is now actually emitted (it was previously dropped via
+				// `_ = err` despite the comment claiming it was logged); consider
+				// failing closed for admin routes in a future pass.
+				revocationLog().Warn("Blacklist check failed (fail-open)",
+					zap.Error(err))
+			} else if blacklisted > 0 {
+				c.JSON(http.StatusUnauthorized, gin.H{
+					"error": "Token has been revoked",
+				})
+				c.Abort()
+				return
+			}
 		}
 
 		// Try to validate as viewer token first (more specific)

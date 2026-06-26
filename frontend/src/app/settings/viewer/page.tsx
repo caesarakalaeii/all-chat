@@ -25,6 +25,7 @@ import { AppNav } from '@/components/AppNav'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { buildGradientCSS } from '@/lib/utils/gradient'
+import { safeExternalRedirect } from '@/lib/auth/redirect-allowlist'
 import type { NameGradient } from '@/lib/types/message'
 import { UserAvatar } from '@/components/UserAvatar'
 
@@ -81,7 +82,7 @@ async function viewerLogin(platform: 'twitch' | 'youtube' | 'kick') {
     const response = await fetch(`/api/v1/auth/viewer/${platform}/login?${params}`)
     const data = await response.json()
     if (data.auth_url) {
-      window.location.href = data.auth_url
+      safeExternalRedirect(data.auth_url)
     }
   } catch {
     // silently ignore — user stays on page
@@ -103,7 +104,7 @@ async function viewerConnect(platform: 'twitch' | 'youtube' | 'kick', viewerID: 
     const response = await fetch(`/api/v1/auth/viewer/${platform}/login?${params}`)
     const data = await response.json()
     if (data.auth_url) {
-      window.location.href = data.auth_url
+      safeExternalRedirect(data.auth_url)
     }
   } catch {
     // silently ignore — user stays on page

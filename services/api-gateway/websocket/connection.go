@@ -48,18 +48,18 @@ type AuthCallback func(token string) (viewerID, username string, ok bool)
 
 // Connection wraps a WebSocket connection for an overlay
 type Connection struct {
-	conn            *websocket.Conn
-	overlayID       string
-	userID          string
-	send            chan []byte
-	done            chan struct{} // closed exactly once by close(); signals shutdown
-	replayBuffer    replay.DeletionReplayBuffer
-	logger          *zap.Logger
-	mu              sync.Mutex
-	closed          bool
-	isViewer        bool // True for viewer connections (extension, public viewers)
-	authenticated   bool
-	onAuth          AuthCallback
+	conn          *websocket.Conn
+	overlayID     string
+	userID        string
+	send          chan []byte
+	done          chan struct{} // closed exactly once by close(); signals shutdown
+	replayBuffer  replay.DeletionReplayBuffer
+	logger        *zap.Logger
+	mu            sync.Mutex
+	closed        bool
+	isViewer      bool // True for viewer connections (extension, public viewers)
+	authenticated bool
+	onAuth        AuthCallback
 }
 
 // NewConnection creates a new WebSocket connection for overlay owners
@@ -195,6 +195,8 @@ func (c *Connection) close() {
 func (c *Connection) readPump(ctx context.Context) {
 	defer c.Close()
 
+	// Enforce max inbound message size to prevent OOM via oversized frames (H1).
+	c.conn.SetReadLimit(MaxMessageSize)
 	c.conn.SetReadDeadline(time.Now().Add(PongWait))
 	c.conn.SetPongHandler(func(string) error {
 		c.conn.SetReadDeadline(time.Now().Add(PongWait))

@@ -23,6 +23,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { useViewerAuthStore } from '@/lib/stores/viewer-auth-store'
+import { viewerApi } from '@/lib/api/viewer'
 import { InfinityLogo } from '@/components/InfinityLogo'
 
 const activeClass =
@@ -38,18 +39,26 @@ const inactiveClass =
 export function AppNav() {
   const pathname = usePathname()
   const router = useRouter()
-  const { user, token, logout } = useAuthStore()
+  const { user, logout } = useAuthStore()
   const { viewerToken, viewerLogout } = useViewerAuthStore()
 
-  const isLoggedIn = !!token || !!viewerToken
+  const isLoggedIn = !!user || !!viewerToken
 
   function isActive(href: string): boolean {
     return pathname === href || pathname.startsWith(href + '/')
   }
 
   function handleLogout() {
-    if (token) logout()
-    if (viewerToken) viewerLogout()
+    if (user) logout()
+    if (viewerToken) {
+      // audit #18: hit the backend (blacklists the viewer JWT) while the token is
+      // still attached, THEN clear local state. viewerApi.logout() reads the token
+      // synchronously when invoked, so the in-flight request keeps its bearer
+      // header even though viewerLogout() clears it next. Fire-and-forget — don't
+      // block navigation on a network error.
+      viewerApi.logout().catch(() => {})
+      viewerLogout()
+    }
     router.push('/')
   }
 

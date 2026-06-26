@@ -30,7 +30,11 @@ func Logging(log *zap.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		path := c.Request.URL.Path
-		query := c.Request.URL.RawQuery
+		// Redact credentials from the query string on ALL routes (audit H5/#24/#25):
+		// JWTs (?token=/?tts_token=/?access_token=/?refresh_token=) and OAuth
+		// ?code=/?state= must never reach access logs. Previously this was scoped to
+		// /ws/ + the "token" key only, leaking tts_token and OAuth code/state.
+		query := sharedmw.RedactQuery(c.Request.URL.RawQuery)
 
 		// Process request
 		c.Next()

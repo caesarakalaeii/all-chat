@@ -50,6 +50,29 @@ export const authApi = {
   },
 
   /**
+   * Admin impersonates a user. Server sets an impersonated-user access cookie.
+   * Returns the impersonated user (no token — cookie is httpOnly).
+   */
+  async impersonate(
+    targetUserId: string
+  ): Promise<{
+    user: { id: string; username: string; display_name?: string }
+    impersonating: boolean
+  }> {
+    return apiClient.post(`/api/v1/admin/users/${targetUserId}/impersonate`, {})
+  },
+
+  /**
+   * Stop impersonating; server restores the admin access cookie.
+   * Returns the restored admin user.
+   */
+  async stopImpersonation(): Promise<{
+    user: { id: string; username: string; is_admin: boolean }
+  }> {
+    return apiClient.post('/api/v1/auth/stop-impersonation', {})
+  },
+
+  /**
    * Delete the authenticated user's account
    */
   async deleteAccount(): Promise<void> {

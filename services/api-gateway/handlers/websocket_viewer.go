@@ -26,6 +26,7 @@ import (
 	"github.com/caesar/all-chat/services/api-gateway/subscription"
 	wsconn "github.com/caesar/all-chat/services/api-gateway/websocket"
 	"github.com/caesar/all-chat/shared/auth"
+	sharedmiddleware "github.com/caesar/all-chat/shared/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
@@ -34,14 +35,15 @@ import (
 // ViewerWebSocketHandler handles WebSocket connections for viewers
 // Viewers connect via /ws/chat/{streamer_username} without knowing the overlay ID
 type ViewerWebSocketHandler struct {
-	wsManager        *wsconn.Manager
-	subscriber       *subscription.Subscriber
-	repo             *subscription.Repository
-	userKeyChain     *auth.KeyChain
-	replayBuffer     replay.DeletionReplayBuffer
-	chatReplayBuffer replay.ChatReplayBuffer
-	logger           *zap.Logger
-	upgrader         websocket.Upgrader
+	wsManager         *wsconn.Manager
+	subscriber        *subscription.Subscriber
+	repo              *subscription.Repository
+	userKeyChain      *auth.KeyChain
+	replayBuffer      replay.DeletionReplayBuffer
+	chatReplayBuffer  replay.ChatReplayBuffer
+	logger            *zap.Logger
+	upgrader          websocket.Upgrader
+	allowedOriginList []string
 }
 
 // NewViewerWebSocketHandler creates a new viewer WebSocket handler
@@ -54,29 +56,56 @@ func NewViewerWebSocketHandler(
 	chatReplayBuffer replay.ChatReplayBuffer,
 	logger *zap.Logger,
 ) *ViewerWebSocketHandler {
+	// Apply the same origin allowlist as the owner WS handler (M8).
+	// Previously CheckOrigin returned true for all origins, allowing any
+	// malicious page to open /ws/chat/<streamer> via a victim's browser.
+	allowedOriginList := loadAllowedOrigins()
+
 	h := &ViewerWebSocketHandler{
-		wsManager:        wsManager,
-		subscriber:       subscriber,
-		repo:             repo,
-		userKeyChain:     userKeyChain,
-		replayBuffer:     replayBuffer,
-		chatReplayBuffer: chatReplayBuffer,
-		logger:           logger.Named("viewer-websocket"),
+		wsManager:         wsManager,
+		subscriber:        subscriber,
+		repo:              repo,
+		userKeyChain:      userKeyChain,
+		replayBuffer:      replayBuffer,
+		chatReplayBuffer:  chatReplayBuffer,
+		logger:            logger.Named("viewer-websocket"),
+		allowedOriginList: allowedOriginList,
 	}
 
-	// Configure WebSocket upgrader with permissive origin check for viewers
-	// Viewers connect from browser extensions and web pages
+	if sharedmiddleware.OriginAllowed(allowedOriginList, "*") {
+		h.logger.Info("Viewer WebSocket origin allowlist disabled; allowing all origins")
+	} else {
+		h.logger.Info("Configured viewer WebSocket origin allowlist",
+			zap.Int("count", len(allowedOriginList)),
+		)
+	}
+
+	// Configure WebSocket upgrader with the shared origin allowlist (M8).
 	h.upgrader = websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
-		CheckOrigin: func(r *http.Request) bool {
-			// Allow all origins for viewer connections
-			// This is safe because viewers can't trigger polling or access secrets
-			return true
-		},
+		CheckOrigin:     h.checkOrigin,
 	}
 
 	return h
+}
+
+// checkOrigin enforces the configured origin allowlist for viewer connections (M8).
+func (h *ViewerWebSocketHandler) checkOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		// Non-browser clients (e.g. curl) have no Origin header
+		return true
+	}
+
+	if sharedmiddleware.OriginAllowed(h.allowedOriginList, origin) {
+		return true
+	}
+
+	h.logger.Warn("Blocked viewer WebSocket connection from disallowed origin",
+		zap.String("origin", origin),
+	)
+	return false
 }
 
 // HandleViewerChatConnection handles WebSocket connection requests for viewers
@@ -90,9 +119,10 @@ func (h *ViewerWebSocketHandler) HandleViewerChatConnection(c *gin.Context) {
 		return
 	}
 
-	// Optional JWT authentication from query parameter
-	// Anonymous viewers can connect to view chat, authenticated viewers can send messages
-	token := c.Query("token")
+	// Optional JWT authentication via Sec-WebSocket-Protocol subprotocol
+	// (preferred) or ?token= query param (backward compat). Keeps the token
+	// out of access logs (audit H5).
+	token, echoHeader := extractWSAuthToken(c.Request)
 	var viewerID string
 	var viewerUsername string
 	isAuthenticated := false
@@ -140,8 +170,9 @@ func (h *ViewerWebSocketHandler) HandleViewerChatConnection(c *gin.Context) {
 		return
 	}
 
-	// Upgrade HTTP connection to WebSocket
-	conn, err := h.upgrader.Upgrade(c.Writer, c.Request, nil)
+	// Upgrade HTTP connection to WebSocket. echoHeader (when non-nil) echoes
+	// the bearer.<token> subprotocol back so the browser accepts the handshake.
+	conn, err := h.upgrader.Upgrade(c.Writer, c.Request, echoHeader)
 	if err != nil {
 		h.logger.Error("Failed to upgrade WebSocket",
 			zap.String("streamer", streamerUsername),

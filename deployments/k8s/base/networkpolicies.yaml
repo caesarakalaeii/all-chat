@@ -1,0 +1,139 @@
+# NetworkPolicies for the allchat namespace.
+#
+# SECURITY (H7): The cluster previously had ZERO NetworkPolicies, so any pod
+# could reach Redis (which held chat streams, pub/sub and OAuth session cache)
+# and Postgres. This file installs a default-deny posture plus the minimum
+# allow rules required for service-to-service and external (listener) traffic,
+# and explicitly blocks egress to the cloud metadata endpoint.
+#
+# Policies:
+#   1. default-deny-all          — deny all ingress + egress to every pod.
+#   2. allow-dns-egress           — allow DNS (kube-dns) for all pods.
+#   3. allow-egress-internet      — allow egress to the internet AND cluster
+#                                   service IPs, EXCEPT 169.254.169.254
+#                                   (cloud metadata IMDS — SSRF/cred-leak block).
+#   4. allow-intra-namespace       — allow pods in allchat to reach each other
+#                                   (covers api-gateway->services, listeners->redis,
+#                                   auth-service->postgres, etc.).
+#   5. allow-external-api-gateway — allow external (LoadBalancer / Ingress)
+#                                   traffic to reach api-gateway:8080 only.
+#
+# NOTE: Intra-namespace ingress is intentionally broad to avoid breaking
+# service-to-service discovery. Tighter per-service ingress allow-lists can be
+# layered on top later without touching these defaults.
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: allchat
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: allchat
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    # kube-dns (CoreDNS) — typical label k8s-app=kube-dns in kube-system.
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Fallback: kube-dns reached by IP in the service CIDR is covered by
+    # allow-egress-internet below (0.0.0.0/0 except metadata).
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-internet
+  namespace: allchat
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    # Allow egress to everywhere (internet + cluster service IPs) EXCEPT the
+    # cloud metadata endpoint. This covers listener egress to Twitch IRC/IRC,
+    # YouTube API, Discord gateway, Kick Pusher, TikTok, Patreon, etc. and
+    # in-cluster Redis/Postgres ClusterIPs, while blocking IMDS abuse.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 169.254.169.254/32
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-intra-namespace
+  namespace: allchat
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    # Allow any allchat pod to receive traffic from any other allchat pod.
+    - from:
+        - podSelector: {}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-external-api-gateway
+  namespace: allchat
+spec:
+  podSelector:
+    matchLabels:
+      app: api-gateway
+  policyTypes:
+    - Ingress
+  ingress:
+    # External traffic (LoadBalancer / Ingress) to the API gateway only.
+    - from:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+# audit #28: the base ships a discord-listener ServiceMonitor (and the gateway
+# /metrics endpoint), but default-deny-all + allow-intra-namespace only permit
+# same-namespace pods. A Prometheus pod in a separate "monitoring" namespace is
+# then dropped at the CNI, so the scrape silently fails ("target down") on a
+# fresh `kubectl apply -k`. Allow the monitoring namespace to reach the scraped
+# metrics ports. (Prod deploys from caesar-deployment, which already has this.)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-monitoring-scrape
+  namespace: allchat
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8080 # api-gateway /metrics (B2)
+        - protocol: TCP
+          port: 8086 # discord-listener /metrics (servicemonitor.yaml)

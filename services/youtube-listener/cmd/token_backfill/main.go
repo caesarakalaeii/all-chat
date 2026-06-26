@@ -38,9 +38,14 @@ func main() {
 	// YOUTUBE_TOKEN_ENCRYPTION_KEY as legacy fallback.
 	// NOTE: The new sweeper from Plan 14-06 supersedes this binary. This binary
 	// remains compiled for historical reproducibility but is not in the rotation runbook.
-	encryptor, err := encryption.NewMultiKeyEncryptorFromEnv()
+	encryptor, err := encryption.NewMultiKeyEncryptorFromEnvWithLogger(log)
 	if err != nil {
 		log.Fatal("Failed to initialize encryptor (TOKEN_ENCRYPTION_KEY_V1 must be set)", zap.Error(err))
+	}
+
+	// DATABASE_PASSWORD is required when DATABASE_URL is not set.
+	if os.Getenv("DATABASE_URL") == "" && getEnvOrDefault("DATABASE_PASSWORD", "") == "" {
+		log.Fatal("DATABASE_PASSWORD must be set (or set DATABASE_URL)")
 	}
 
 	connString := buildConnString()
@@ -130,7 +135,7 @@ func buildConnString() string {
 	host := getEnvOrDefault("DATABASE_HOST", "localhost")
 	port := getEnvOrDefault("DATABASE_PORT", "5432")
 	user := getEnvOrDefault("DATABASE_USER", "allchat")
-	password := getEnvOrDefault("DATABASE_PASSWORD", "allchat_dev_password")
+	password := getEnvOrDefault("DATABASE_PASSWORD", "")
 	dbName := getEnvOrDefault("DATABASE_NAME", "allchat")
 
 	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s", user, password, host, port, dbName)

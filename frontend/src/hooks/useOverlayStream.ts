@@ -200,9 +200,6 @@ export function useOverlayStream(
     if (lastSeenTimestampRef.current > 0) {
       params.push(`since=${lastSeenTimestampRef.current}`)
     }
-    if (options.token) {
-      params.push(`token=${encodeURIComponent(options.token)}`)
-    }
     if (params.length > 0) {
       wsUrl += `?${params.join('&')}`
     }
@@ -217,7 +214,10 @@ export function useOverlayStream(
       }
     }
 
-    const ws = new WebSocket(wsUrl)
+    // SECURITY (audit H5): token sent via WebSocket subprotocol
+    // (`bearer.<token>`) instead of URL query to avoid leaking into
+    // access/proxy logs.
+    const ws = new WebSocket(wsUrl, options.token ? [`bearer.${options.token}`] : undefined)
     wsRef.current = ws
     lastActivityRef.current = 0 // no inbound frame yet on this socket
 

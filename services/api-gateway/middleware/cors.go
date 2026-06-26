@@ -17,37 +17,27 @@
 package middleware
 
 import (
-	"github.com/gin-contrib/cors"
-	"github.com/gin-gonic/gin"
+	"log"
 	"os"
 	"strings"
+	"sync"
 	"time"
+
+	sharedmiddleware "github.com/caesar/all-chat/shared/middleware"
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
 )
 
 // CORS returns a CORS middleware configured from environment variables
 func CORS() gin.HandlerFunc {
+	validateCORSConfig()
+
 	corsOrigin := getEnvOrDefault("CORS_ORIGIN", "http://localhost:3000")
 	allowedOrigins := parseOrigins(corsOrigin)
 
 	config := cors.Config{
 		AllowOriginFunc: func(origin string) bool {
-			// Check exact matches first
-			for _, allowed := range allowedOrigins {
-				if allowed == "*" {
-					return true
-				}
-				if allowed == origin {
-					return true
-				}
-				// Handle wildcard patterns (e.g., chrome-extension://*, moz-extension://*)
-				if strings.HasSuffix(allowed, "/*") {
-					prefix := strings.TrimSuffix(allowed, "/*")
-					if strings.HasPrefix(origin, prefix) {
-						return true
-					}
-				}
-			}
-			return false
+			return sharedmiddleware.OriginAllowed(allowedOrigins, origin)
 		},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
@@ -57,6 +47,42 @@ func CORS() gin.HandlerFunc {
 	}
 
 	return cors.New(config)
+}
+
+// corsValidationOnce ensures the wildcard + credentials check runs only once.
+var corsValidationOnce sync.Once
+
+// validateCORSConfig fails-fast at startup if CORS_ORIGIN=* is set while
+// AllowCredentials is enabled. A wildcard origin with credentials allows any
+// website to make authenticated cross-origin requests (H9 + L12).
+func validateCORSConfig() {
+	corsValidationOnce.Do(func() {
+		corsOrigin := strings.TrimSpace(getEnvOrDefault("CORS_ORIGIN", "http://localhost:3000"))
+		for _, o := range strings.Split(corsOrigin, ",") {
+			o = strings.TrimSpace(o)
+			if o == "*" {
+				log.Fatal("CORS_ORIGIN=* is not allowed when AllowCredentials is enabled; " +
+					"configure explicit origins via the CORS_ORIGIN env var")
+			}
+			// PR #478 review L4: OriginAllowed treats a trailing '*' as a prefix
+			// match (intended for non-http schemes like moz-extension://*). A
+			// wildcard inside an http(s) origin (e.g. "https://allch.at*") would let
+			// a sibling look-alike ("https://allch.at.evil.com") pass both the
+			// credentialed-CORS check and the CSRF OriginCheck. Reject it at startup.
+			if (strings.HasPrefix(o, "http://") || strings.HasPrefix(o, "https://")) && strings.Contains(o, "*") {
+				log.Fatalf("CORS_ORIGIN entry %q contains a wildcard in an http(s) origin; "+
+					"prefix-wildcards are only safe for non-http schemes (e.g. moz-extension://*)", o)
+			}
+		}
+	})
+}
+
+// LoadHTTPAllowedOrigins reads CORS_ORIGIN (comma-separated) and returns the
+// HTTP allowlist. Shared by the CORS middleware and the CSRF OriginCheck
+// (H3). Default is http://localhost:3000 for local dev.
+func LoadHTTPAllowedOrigins() []string {
+	corsOrigin := getEnvOrDefault("CORS_ORIGIN", "http://localhost:3000")
+	return parseOrigins(corsOrigin)
 }
 
 // parseOrigins parses a comma-separated list of origins

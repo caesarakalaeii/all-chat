@@ -17,13 +17,16 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/caesar/all-chat/shared/auth"
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 )
 
 func TestAdminOnly_NoRoles(t *testing.T) {
@@ -331,5 +334,92 @@ func TestJWTAuth_NormalTokenHasNoImpersonation(t *testing.T) {
 
 	if gotImpersonatedBy != "" || gotImpersonatedUser != "" {
 		t.Errorf("normal token must not set impersonation keys, got by=%q user=%q", gotImpersonatedBy, gotImpersonatedUser)
+	}
+}
+
+// TestJWTAuth_BlacklistedTokenRejected verifies that a token in the logout
+// blacklist is rejected with 401 (audit H2).
+func TestJWTAuth_BlacklistedTokenRejected(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("failed to start miniredis: %v", err)
+	}
+	defer mr.Close()
+
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer rdb.Close()
+
+	kc := auth.NewKeyChain(
+		map[string][]byte{"v1": []byte("test-secret-v1")},
+		[]byte("test-secret"),
+		"v1",
+	)
+
+	token, err := auth.GenerateToken("user-123", "testuser", "test-secret", time.Hour, true)
+	if err != nil {
+		t.Fatalf("failed to generate token: %v", err)
+	}
+
+	// Blacklist the token
+	if err := rdb.Set(context.Background(), "blacklist:"+token, "1", time.Hour).Err(); err != nil {
+		t.Fatalf("failed to blacklist token: %v", err)
+	}
+
+	router := gin.New()
+	router.Use(JWTAuthWithRevocation(kc, rdb))
+	router.GET("/protected", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for blacklisted token, got %d", resp.Code)
+	}
+}
+
+// TestJWTAuth_NonBlacklistedTokenAccepted verifies that a valid token NOT in
+// the blacklist is accepted (audit H2).
+func TestJWTAuth_NonBlacklistedTokenAccepted(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("failed to start miniredis: %v", err)
+	}
+	defer mr.Close()
+
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer rdb.Close()
+
+	kc := auth.NewKeyChain(
+		map[string][]byte{"v1": []byte("test-secret-v1")},
+		[]byte("test-secret"),
+		"v1",
+	)
+
+	token, err := auth.GenerateToken("user-123", "testuser", "test-secret", time.Hour, true)
+	if err != nil {
+		t.Fatalf("failed to generate token: %v", err)
+	}
+
+	router := gin.New()
+	router.Use(JWTAuthWithRevocation(kc, rdb))
+	router.GET("/protected", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200 for valid non-blacklisted token, got %d", resp.Code)
 	}
 }

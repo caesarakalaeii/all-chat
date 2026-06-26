@@ -1,0 +1,66 @@
+# TLS termination for the All-Chat API gateway.
+#
+# SECURITY (M14): The base manifests expose api-gateway as a raw LoadBalancer
+# on plain HTTP (port 8080) with no TLS resource. This overlay adds an Ingress
+# with cert-manager-issued TLS so traffic is encrypted at the cluster edge.
+#
+# ENABLEMENT:
+#   1. Install cert-manager in the cluster (https://cert-manager.io/docs/installation/).
+#   2. Apply the ClusterIssuer in this directory:
+#        kubectl apply -f deployments/k8s/overlays/tls/cluster-issuer.yaml
+#   3. Apply this Ingress:
+#        kubectl apply -f deployments/k8s/overlays/tls/ingress.yaml
+#   4. Point the allch.at DNS A/AAAA record at the Ingress controller's
+#      external IP (or the cloud load balancer fronting it).
+#
+# These manifests are intentionally NOT wired into the base kustomization.yaml
+# so that applying the base layer remains unchanged (no dependency on an
+# ingress controller or cert-manager). Enable them as an overlay.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api-gateway-tls
+  namespace: allchat
+  labels:
+    app: api-gateway
+    component: gateway
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "2m"
+    # WebSocket long-lived connections (chat overlays). ingress-nginx auto-detects
+    # the Upgrade header and handles the WebSocket upgrade natively, so no
+    # configuration-snippet is needed (and that annotation is disabled by
+    # default since ingress-nginx v1.9, audit L14). The built-in timeout
+    # annotations below extend the proxy read/send windows so idle WS
+    # connections (stream chat) are not prematurely terminated.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - allch.at
+        - www.allch.at
+      secretName: allchat-tls
+  rules:
+    - host: allch.at
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  number: 8080
+    - host: www.allch.at
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  number: 8080

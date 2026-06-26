@@ -26,6 +26,7 @@
 
 import { TikTokLiveConnection } from 'tiktok-live-connector';
 import { Logger } from '../types/logger.js';
+import { assertValidTikTokUsername } from '../types/validation.js';
 
 /**
  * Result of a live status check
@@ -76,6 +77,9 @@ export class TikTokStatusChecker {
    * @returns LiveStatusResult with isLive flag and optional roomId
    */
   async checkLiveStatus(username: string): Promise<LiveStatusResult> {
+    // Reject malformed usernames before any network activity (audit L24).
+    assertValidTikTokUsername(username);
+
     // Check cache first to prevent rapid duplicate checks
     // UPDATED: Use dynamic TTL from cache entry
     const cached = this.statusCache.get(username);

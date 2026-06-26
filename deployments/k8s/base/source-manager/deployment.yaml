@@ -18,10 +18,27 @@ spec:
         component: controller
     spec:
       serviceAccountName: source-manager
+      # source-manager requires the API token for coordination.k8s.io leases,
+      # so automountServiceAccountToken is left enabled (default true).
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: source-manager
         image: localhost:5000/allchat-source-manager:latest
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          readOnlyRootFilesystem: true
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
         ports:
         - containerPort: 8083
           name: http
@@ -68,6 +85,11 @@ spec:
             configMapKeyRef:
               name: allchat-config
               key: REDIS_PORT
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-auth
+              key: redis-password
         - name: POD_NAME
           valueFrom:
             fieldRef:
@@ -97,6 +119,9 @@ spec:
           initialDelaySeconds: 10
           periodSeconds: 5
           timeoutSeconds: 3
+      volumes:
+      - name: tmp
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

@@ -17,6 +17,7 @@
  */
 
 import { apiClient } from './client'
+import { safeExternalRedirect } from '../auth/redirect-allowlist'
 import type { DiscordSourceConfig } from '@/lib/types/overlay'
 
 export interface DiscordGuild {
@@ -59,7 +60,7 @@ export async function disconnectGuild(guildId: string): Promise<void> {
 export async function startDiscordOAuth(): Promise<void> {
   const data = await apiClient.get<{ bot_invite_url: string }>('/api/v1/auth/discord/connect')
   if (data.bot_invite_url) {
-    window.location.href = data.bot_invite_url
+    safeExternalRedirect(data.bot_invite_url)
   }
 }
 
@@ -72,7 +73,7 @@ export async function startDiscordModerationReinvite(): Promise<void> {
     '/api/v1/auth/discord/connect?moderation=true',
   )
   if (data.bot_invite_url) {
-    window.location.href = data.bot_invite_url
+    safeExternalRedirect(data.bot_invite_url)
   }
 }
 

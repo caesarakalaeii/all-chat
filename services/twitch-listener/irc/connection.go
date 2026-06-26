@@ -26,6 +26,7 @@ import (
 	"github.com/caesar/all-chat/services/twitch-listener/publisher"
 	"github.com/caesar/all-chat/services/twitch-listener/status"
 	"github.com/caesar/all-chat/services/twitch-listener/zombie"
+	"github.com/caesar/all-chat/shared/listener"
 	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/gempir/go-twitch-irc/v4"
 	"go.uber.org/zap"
@@ -231,10 +232,10 @@ const (
 // JOIN-rejection NOTICE msg_id values that mean "do not re-attempt this JOIN".
 // See https://dev.twitch.tv/docs/irc/msg-id/ for the full list.
 const (
-	twitchMsgIDBanned                  = "msg_banned"
-	twitchMsgIDChannelSuspended        = "msg_channel_suspended"
-	twitchMsgIDRoomNotFound            = "msg_room_not_found"
-	twitchMsgIDConcurrentChannelLimit  = "msg_concurrent_channel_limit_reached"
+	twitchMsgIDBanned                 = "msg_banned"
+	twitchMsgIDChannelSuspended       = "msg_channel_suspended"
+	twitchMsgIDRoomNotFound           = "msg_room_not_found"
+	twitchMsgIDConcurrentChannelLimit = "msg_concurrent_channel_limit_reached"
 )
 
 // Connect establishes connection to Twitch IRC with automatic reconnection.
@@ -255,8 +256,11 @@ func (cm *ConnectionManager) Connect(ctx context.Context) error {
 	cm.wg.Add(1)
 	go func() {
 		defer cm.wg.Done()
-		backoff := 5 * time.Second
-		const maxBackoff = 60 * time.Second
+		// Jittered exponential backoff (full jitter) prevents thundering-herd
+		// reconnects when the IRC gateway drops many pods at once. Uses the
+		// shared listener helper (base 1s, cap 30s) instead of pure doubling
+		// (audit L21).
+		attempt := 0
 
 		for {
 			err := cm.client.Connect()
@@ -292,16 +296,20 @@ func (cm *ConnectionManager) Connect(ctx context.Context) error {
 			default:
 			}
 
+			backoff := nextBackoff(attempt)
+
 			if err != nil {
 				cm.logger.Error("IRC connection error, reconnecting",
 					zap.Error(err),
 					zap.Duration("backoff", backoff),
+					zap.Int("attempt", attempt),
 				)
 				cm.metrics.RecordConnectionAttempt("twitch", "twitch-listener", "failed")
 				cm.metrics.RecordError("twitch", "twitch-listener", "connection", "error")
 			} else {
 				cm.logger.Warn("IRC connection closed cleanly, reconnecting",
 					zap.Duration("backoff", backoff),
+					zap.Int("attempt", attempt),
 				)
 			}
 
@@ -313,11 +321,7 @@ func (cm *ConnectionManager) Connect(ctx context.Context) error {
 			case <-time.After(backoff):
 			}
 
-			// Increase backoff for next attempt (capped)
-			backoff = backoff * 2
-			if backoff > maxBackoff {
-				backoff = maxBackoff
-			}
+			attempt++
 
 			// Create fresh client — the old client's internal state is stale after Connect() returns
 			cm.logger.Info("Creating new IRC client for reconnection")
@@ -330,12 +334,27 @@ func (cm *ConnectionManager) Connect(ctx context.Context) error {
 			cm.client = newClient
 			cm.mu.Unlock()
 
-			// Reset backoff on successful connect (handleConnect sets connected=true)
-			backoff = 5 * time.Second
+			// M7: only reset the attempt counter when the connection was actually
+			// established (handleConnect set connected=true before Connect() returned).
+			// Previously this reset ran unconditionally every iteration, so
+			// JitteredBackoff was always called with attempt=0 → random sub-1s
+			// delay that never escalated, undermining the thundering-herd defense
+			// (relevant given nightly listener crashloops during Redis/kured reboots).
+			if wasConnected {
+				attempt = 0
+			}
 		}
 	}()
 
 	return nil
+}
+
+// nextBackoff computes the reconnect backoff delay for a given attempt count.
+// It delegates to the shared listener.JitteredBackoff (full jitter, base 1s,
+// cap 30s). Extracted as a named function so the escalation behavior can be
+// unit-tested without standing up a real IRC connection (audit M7).
+func nextBackoff(attempt int) time.Duration {
+	return listener.JitteredBackoff(attempt)
 }
 
 // connectionWatchdog periodically checks for zombie IRC connections.

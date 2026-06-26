@@ -178,6 +178,25 @@ func (t *TwitchOAuth) ExchangeCode(ctx context.Context, code string) (*oauth2.To
 	return token, nil
 }
 
+// GetAuthURLWithPKCE generates the OAuth authorization URL with PKCE (audit L4).
+// Returns the auth URL and the code verifier that the caller must store for the
+// token exchange.
+func (t *TwitchOAuth) GetAuthURLWithPKCE(state string) (string, string) {
+	verifier := oauth2.GenerateVerifier()
+	authURL := t.config.AuthCodeURL(state, oauth2.S256ChallengeOption(verifier))
+	return authURL, verifier
+}
+
+// ExchangeCodeWithVerifier exchanges the authorization code using a PKCE code
+// verifier (audit L4).
+func (t *TwitchOAuth) ExchangeCodeWithVerifier(ctx context.Context, code, codeVerifier string) (*oauth2.Token, error) {
+	token, err := t.config.Exchange(ctx, code, oauth2.VerifierOption(codeVerifier))
+	if err != nil {
+		return nil, fmt.Errorf("failed to exchange code with PKCE: %w", err)
+	}
+	return token, nil
+}
+
 // GetPlatform returns the platform identifier
 func (t *TwitchOAuth) GetPlatform() Platform {
 	return PlatformTwitch

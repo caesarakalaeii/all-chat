@@ -211,11 +211,17 @@ func main() {
 	redisHost := listener.Env("REDIS_HOST", "localhost")
 	redisPort := listener.Env("REDIS_PORT", "6379")
 	rdb := redis.NewClient(&redis.Options{
-		Addr: fmt.Sprintf("%s:%s", redisHost, redisPort),
+		Addr:     fmt.Sprintf("%s:%s", redisHost, redisPort),
+		Password: listener.Env("REDIS_PASSWORD", ""),
 	})
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	// DATABASE_PASSWORD is required — fail-fast before attempting DB connection.
+	if listener.Env("DATABASE_PASSWORD", "") == "" {
+		log.Fatal("DATABASE_PASSWORD must be set")
+	}
 
 	dbPool, err := pgxpool.New(ctx, buildDatabaseDSN())
 	if err != nil {
@@ -501,6 +507,6 @@ func buildDatabaseDSN() string {
 	port := listener.Env("DATABASE_PORT", "5432")
 	name := listener.Env("DATABASE_NAME", "allchat")
 	user := listener.Env("DATABASE_USER", "allchat")
-	password := listener.Env("DATABASE_PASSWORD", "allchat_dev_password")
+	password := listener.Env("DATABASE_PASSWORD", "")
 	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s", user, password, host, port, name)
 }

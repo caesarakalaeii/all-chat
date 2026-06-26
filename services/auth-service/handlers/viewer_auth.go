@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/caesar/all-chat/services/auth-service/models"
@@ -114,6 +115,49 @@ func (h *ViewerAuthHandler) storeAuthCode(ctx context.Context, jwtToken string) 
 	code := uuid.New().String()
 	key := "auth_code:" + code
 	if err := h.redis.Set(ctx, key, jwtToken, authCodeTTL).Err(); err != nil {
+		return "", err
+	}
+	return code, nil
+}
+
+// StreamerAuthPayload carries the streamer's auth tokens from the OAuth
+// callback redirect to the frontend via a short-lived single-use code,
+// eliminating token exposure in the URL fragment (audit M1).
+type StreamerAuthPayload struct {
+	AccessToken       string `json:"access_token"`
+	RefreshToken      string `json:"refresh_token"`
+	ExpiresIn         int64  `json:"expires_in"`
+	TokenType         string `json:"token_type"`
+	RedirectTo        string `json:"redirect_to,omitempty"`
+	SourceAdded       string `json:"source_added,omitempty"`
+	ModerationEnabled string `json:"moderation_enabled,omitempty"`
+	// User carries the authenticated streamer's profile for the UI (no tokens).
+	// Added in H3 so /exchange returns the user without a separate /auth/me call.
+	User *StreamerAuthUser `json:"user,omitempty"`
+}
+
+// StreamerAuthUser is the non-secret user profile returned by /exchange.
+type StreamerAuthUser struct {
+	ID          string `json:"id"`
+	Username    string `json:"username"`
+	DisplayName string `json:"display_name,omitempty"`
+	IsAdmin     bool   `json:"is_admin"`
+}
+
+const streamerAuthCodeTTL = 60 * time.Second
+
+// storeStreamerAuthCode saves a streamer auth payload as JSON under a random
+// single-use code in Redis and returns the code. The frontend exchanges this
+// code via POST /exchange to retrieve the tokens, avoiding token exposure in
+// the URL fragment (audit M1).
+func storeStreamerAuthCode(ctx context.Context, rdb *redis.Client, payload StreamerAuthPayload) (string, error) {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("marshal streamer auth payload: %w", err)
+	}
+	code := uuid.New().String()
+	key := "streamer_auth_code:" + code
+	if err := rdb.Set(ctx, key, data, streamerAuthCodeTTL).Err(); err != nil {
 		return "", err
 	}
 	return code, nil
@@ -228,10 +272,17 @@ func (h *ViewerAuthHandler) HandleTwitchCallback(c *gin.Context) {
 		return
 	}
 
-	// Verify state
+	// Verify state (atomic Get+Del to prevent TOCTOU, audit L5)
 	stateKey := fmt.Sprintf("viewer_oauth_state:twitch:%s", state)
-	stateJSON, err := h.redis.Get(c.Request.Context(), stateKey).Result()
+	stateJSON, err := h.redis.GetDel(c.Request.Context(), stateKey).Result()
 	if err != nil {
+		// I2: check for an idempotency tombstone from a prior invocation with the
+		// same state (iOS Safari prefetch, Google multi-code). If present, replay
+		// the original redirect instead of hard-failing with "Invalid or expired
+		// state".
+		if h.replayCallbackTombstone(c, stateKey) {
+			return
+		}
 		h.logger.Warn("Invalid or expired state",
 			zap.String("state", state),
 			zap.Error(err),
@@ -239,9 +290,6 @@ func (h *ViewerAuthHandler) HandleTwitchCallback(c *gin.Context) {
 		h.redirectToFrontendWithError(c, "Invalid or expired state")
 		return
 	}
-
-	// Delete used state
-	h.redis.Del(c.Request.Context(), stateKey)
 
 	// Parse state data
 	var stateData map[string]string
@@ -301,7 +349,7 @@ func (h *ViewerAuthHandler) HandleTwitchCallback(c *gin.Context) {
 	// Check if a linked streamer account exists and is banned
 	linkedStreamer := h.findLinkedStreamer(c.Request.Context(), session.Platform, session.PlatformUserID)
 	if linkedStreamer != nil && linkedStreamer.IsBanned {
-		c.Redirect(http.StatusFound, fmt.Sprintf("%s/auth/banned", h.frontendURL))
+		h.redirectWithTombstone(c, stateKey, fmt.Sprintf("%s/auth/banned", h.frontendURL))
 		return
 	}
 
@@ -335,7 +383,7 @@ func (h *ViewerAuthHandler) HandleTwitchCallback(c *gin.Context) {
 	}
 
 	// Store JWT under a short-lived auth code and redirect with the code
-	
+
 	authCode, err := h.storeAuthCode(c.Request.Context(), jwtToken)
 	if err != nil {
 		h.logger.Error("Failed to store auth code", zap.Error(err))
@@ -351,7 +399,7 @@ func (h *ViewerAuthHandler) HandleTwitchCallback(c *gin.Context) {
 		redirectURL += fmt.Sprintf("&redirect_to=%s", redirectTo)
 	}
 
-	c.Redirect(http.StatusFound, redirectURL)
+	h.redirectWithTombstone(c, stateKey, redirectURL)
 }
 
 // HandleMe returns the current viewer's information
@@ -412,6 +460,26 @@ func (h *ViewerAuthHandler) HandleLogout(c *gin.Context) {
 		h.logger.Error("Failed to delete viewer session", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
+	}
+
+	// audit #18: blacklist the viewer JWT so a leaked/cached copy stops
+	// authenticating after logout — parity with streamer/admin logout. Endpoints
+	// keyed on claims (e.g. /auth/viewer/cosmetics) don't re-check session
+	// liveness, so deleting the DB session alone left the token usable until
+	// natural expiry. Best-effort: the session is already gone, so a blacklist
+	// write failure must not fail the logout. The token arrives via X-Access-Token
+	// (gateway AuthCookieForward) or the Authorization bearer header (viewer
+	// tokens live in localStorage and are sent as a bearer).
+	token := c.GetHeader("X-Access-Token")
+	if token == "" {
+		if ah := c.GetHeader("Authorization"); strings.HasPrefix(ah, "Bearer ") {
+			token = strings.TrimPrefix(ah, "Bearer ")
+		}
+	}
+	if token != "" {
+		if err := h.redis.Set(c.Request.Context(), "blacklist:"+token, "1", h.jwtExpiry).Err(); err != nil {
+			h.logger.Warn("Failed to blacklist viewer token on logout", zap.Error(err))
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully"})
@@ -540,6 +608,38 @@ func (h *ViewerAuthHandler) redirectToFrontendWithError(c *gin.Context, errorMsg
 	c.Redirect(http.StatusFound, redirectURL)
 }
 
+// redirectWithTombstone stores the final redirect URL under a short-lived "used"
+// tombstone (60s) and performs the redirect. On a duplicate OAuth callback
+// (iOS Safari prefetch, Google multi-code) the state was already consumed by
+// GetDel; replayCallbackTombstone replays this redirect instead of
+// hard-failing with "Invalid or expired state". Mirrors
+// platform_auth_v2.redirectWithTombstone (audit I2).
+func (h *ViewerAuthHandler) redirectWithTombstone(c *gin.Context, stateKey, redirectURL string) {
+	usedKey := stateKey + ":used"
+	if err := h.redis.Set(c.Request.Context(), usedKey, redirectURL, 60*time.Second).Err(); err != nil {
+		h.logger.Warn("Failed to store viewer OAuth callback tombstone",
+			zap.String("state_key", stateKey),
+			zap.Error(err))
+	}
+	c.Redirect(http.StatusFound, redirectURL)
+}
+
+// replayCallbackTombstone checks for a stored redirect from a prior callback
+// invocation with the same state. Returns true if it replayed the redirect
+// (caller should return). Used when GetDel on the state key misses — a
+// duplicate callback that was already processed. (audit I2)
+func (h *ViewerAuthHandler) replayCallbackTombstone(c *gin.Context, stateKey string) bool {
+	usedKey := stateKey + ":used"
+	redirectURL, err := h.redis.Get(c.Request.Context(), usedKey).Result()
+	if err != nil {
+		return false
+	}
+	h.logger.Info("Idempotent viewer OAuth callback replay — replaying original redirect",
+		zap.String("state_key", stateKey))
+	c.Redirect(http.StatusFound, redirectURL)
+	return true
+}
+
 // HandleYouTubeLogin initiates the OAuth flow for viewers on YouTube
 func (h *ViewerAuthHandler) HandleYouTubeLogin(c *gin.Context) {
 	streamer := c.Query("streamer")
@@ -584,8 +684,15 @@ func (h *ViewerAuthHandler) HandleYouTubeCallback(c *gin.Context) {
 		return
 	}
 
-	stateData, err := h.redis.Get(c.Request.Context(), "oauth_state:"+state).Result()
+	// Retrieve state data from Redis (atomic Get+Del to prevent TOCTOU, audit L5)
+	stateKey := "oauth_state:" + state
+	stateData, err := h.redis.GetDel(c.Request.Context(), stateKey).Result()
 	if err != nil {
+		// I2: idempotency tombstone — replay original redirect on a duplicate
+		// callback instead of hard-failing (iOS Safari prefetch, Google multi-code).
+		if h.replayCallbackTombstone(c, stateKey) {
+			return
+		}
 		h.redirectToFrontendWithError(c, "Invalid or expired state")
 		return
 	}
@@ -596,7 +703,7 @@ func (h *ViewerAuthHandler) HandleYouTubeCallback(c *gin.Context) {
 		return
 	}
 
-	h.redis.Del(c.Request.Context(), "oauth_state:"+state)
+	// State was already deleted atomically by GetDel (audit L5).
 
 	token, err := h.youtubeProvider.ExchangeCode(c.Request.Context(), code)
 	if err != nil {
@@ -710,7 +817,7 @@ func (h *ViewerAuthHandler) HandleYouTubeCallback(c *gin.Context) {
 	// Check if a linked streamer account exists and is banned
 	linkedStreamerYT := h.findLinkedStreamer(c.Request.Context(), session.Platform, session.PlatformUserID)
 	if linkedStreamerYT != nil && linkedStreamerYT.IsBanned {
-		c.Redirect(http.StatusFound, fmt.Sprintf("%s/auth/banned", h.frontendURL))
+		h.redirectWithTombstone(c, stateKey, fmt.Sprintf("%s/auth/banned", h.frontendURL))
 		return
 	}
 
@@ -737,7 +844,6 @@ func (h *ViewerAuthHandler) HandleYouTubeCallback(c *gin.Context) {
 		return
 	}
 
-	
 	authCode, err := h.storeAuthCode(c.Request.Context(), jwtToken)
 	if err != nil {
 		h.logger.Error("Failed to store auth code", zap.Error(err))
@@ -753,7 +859,7 @@ func (h *ViewerAuthHandler) HandleYouTubeCallback(c *gin.Context) {
 		redirectURL += fmt.Sprintf("&redirect_to=%s", redirectTo)
 	}
 
-	c.Redirect(http.StatusFound, redirectURL)
+	h.redirectWithTombstone(c, stateKey, redirectURL)
 }
 
 // HandleKickLogin initiates the OAuth flow for viewers on Kick
@@ -805,9 +911,15 @@ func (h *ViewerAuthHandler) HandleKickCallback(c *gin.Context) {
 		return
 	}
 
-	// Retrieve state data from Redis
-	stateData, err := h.redis.Get(c.Request.Context(), "oauth_state:"+state).Result()
+	// Retrieve state data from Redis (atomic Get+Del to prevent TOCTOU, audit L5)
+	stateKey := "oauth_state:" + state
+	stateData, err := h.redis.GetDel(c.Request.Context(), stateKey).Result()
 	if err != nil {
+		// I2: idempotency tombstone — replay original redirect on a duplicate
+		// callback instead of hard-failing (iOS Safari prefetch, Google multi-code).
+		if h.replayCallbackTombstone(c, stateKey) {
+			return
+		}
 		h.redirectToFrontendWithError(c, "Invalid or expired state")
 		return
 	}
@@ -818,8 +930,7 @@ func (h *ViewerAuthHandler) HandleKickCallback(c *gin.Context) {
 		return
 	}
 
-	// Delete state from Redis
-	h.redis.Del(c.Request.Context(), "oauth_state:"+state)
+	// State was already deleted atomically by GetDel (audit L5).
 
 	// Get code verifier from stored state
 	codeVerifier, ok := storedState["code_verifier"]
@@ -919,7 +1030,7 @@ func (h *ViewerAuthHandler) HandleKickCallback(c *gin.Context) {
 	// Check if a linked streamer account exists and is banned
 	linkedStreamerKick := h.findLinkedStreamer(c.Request.Context(), session.Platform, session.PlatformUserID)
 	if linkedStreamerKick != nil && linkedStreamerKick.IsBanned {
-		c.Redirect(http.StatusFound, fmt.Sprintf("%s/auth/banned", h.frontendURL))
+		h.redirectWithTombstone(c, stateKey, fmt.Sprintf("%s/auth/banned", h.frontendURL))
 		return
 	}
 
@@ -949,7 +1060,7 @@ func (h *ViewerAuthHandler) HandleKickCallback(c *gin.Context) {
 	}
 
 	// Store JWT under short-lived code and redirect
-	
+
 	authCode, err := h.storeAuthCode(c.Request.Context(), jwtToken)
 	if err != nil {
 		h.logger.Error("Failed to store auth code", zap.Error(err))
@@ -965,7 +1076,7 @@ func (h *ViewerAuthHandler) HandleKickCallback(c *gin.Context) {
 		redirectURL += fmt.Sprintf("&redirect_to=%s", redirectTo)
 	}
 
-	c.Redirect(http.StatusFound, redirectURL)
+	h.redirectWithTombstone(c, stateKey, redirectURL)
 }
 
 // resolveViewerID returns the durable viewer UUID for the given platform session.
@@ -1091,14 +1202,28 @@ func (h *ViewerAuthHandler) HandleUnlinkPlatform(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Platform unlinked successfully"})
 }
 
-// sanitizeRedirectPath ensures redirect_to is a safe relative path (starts with /, no scheme).
-// This prevents open redirect attacks.
+// sanitizeRedirectPath ensures redirect_to is a safe relative path (starts with /,
+// no scheme). This prevents open redirect attacks.
+//
+// Security: rejects protocol-relative URLs (//evil.com) and backslashes
+// (browsers normalize \ → /, so /\evil.com becomes //evil.com — cross-origin).
+// See audit M1.
 func sanitizeRedirectPath(path string) string {
 	if path == "" {
 		return ""
 	}
 	// Must start with / and must not contain :// (no absolute URLs)
 	if len(path) < 1 || path[0] != '/' || len(path) > 200 {
+		return ""
+	}
+	// Reject protocol-relative URLs (//evil.com) — browsers treat these as
+	// cross-origin navigations.
+	if len(path) >= 2 && path[1] == '/' {
+		return ""
+	}
+	// Reject backslashes: browsers normalize \ → /, so /\evil.com becomes
+	// //evil.com (cross-origin). (audit M1)
+	if strings.ContainsRune(path, '\\') {
 		return ""
 	}
 	for i := 0; i < len(path)-2; i++ {

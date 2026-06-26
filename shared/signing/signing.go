@@ -17,8 +17,10 @@
 package signing
 
 import (
+	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -39,7 +41,9 @@ const (
 	HeaderTimestamp = "X-Service-Timestamp"
 	HeaderService   = "X-Service-Name"
 
-	// Maximum age of signed requests (prevents replay attacks)
+	// Maximum age of signed requests. This BOUNDS the replay window; it is not
+	// full replay prevention — there is no per-request nonce/dedup, so a captured
+	// signed request can be replayed verbatim until it ages out (audit #27).
 	MaxRequestAge = 5 * time.Minute
 )
 
@@ -49,8 +53,15 @@ var (
 	ErrMissingService   = errors.New("missing service name header")
 	ErrInvalidSignature = errors.New("invalid signature")
 	ErrRequestTooOld    = errors.New("request timestamp too old")
+	ErrRequestInFuture  = errors.New("request timestamp is too far in the future")
 	ErrInvalidTimestamp = errors.New("invalid timestamp format")
+	ErrSecretTooShort   = errors.New("signing secret must be at least 32 bytes")
 )
+
+// MaxFutureSkew is the maximum tolerance for request timestamps slightly ahead
+// of the server clock. Timestamps further in the future are rejected to close
+// the future-timestamp replay window (audit M4).
+const MaxFutureSkew = time.Minute
 
 // Signer signs HTTP requests with HMAC-SHA256
 type Signer struct {
@@ -59,8 +70,12 @@ type Signer struct {
 	logger      *zap.Logger
 }
 
-// NewSigner creates a new request signer
-func NewSigner(serviceName string, secret string, logger *zap.Logger) *Signer {
+// NewSigner creates a new request signer. Returns ErrSecretTooShort if the
+// secret is fewer than 32 bytes (audit L1).
+func NewSigner(serviceName string, secret string, logger *zap.Logger) (*Signer, error) {
+	if len(secret) < 32 {
+		return nil, fmt.Errorf("%w: got %d bytes", ErrSecretTooShort, len(secret))
+	}
 	if logger == nil {
 		logger = zap.NewNop()
 	}
@@ -68,7 +83,7 @@ func NewSigner(serviceName string, secret string, logger *zap.Logger) *Signer {
 		serviceName: serviceName,
 		secret:      []byte(secret),
 		logger:      logger,
-	}
+	}, nil
 }
 
 // SignRequest adds signature headers to an HTTP request
@@ -85,11 +100,11 @@ func (s *Signer) SignRequest(req *http.Request) error {
 			return fmt.Errorf("read request body: %w", err)
 		}
 		// Reset body for actual request
-		req.Body = io.NopCloser(io.Reader(io.MultiReader(io.Reader(io.NopCloser(io.Reader(body))))))
+		req.Body = io.NopCloser(bytes.NewReader(body))
 	}
 
-	// Create signature
-	signature := s.computeSignature(req.Method, req.URL.Path, timestamp, body)
+	// Create signature (includes query params + service name, audit M5)
+	signature := s.computeSignature(req.Method, req.URL.Path, req.URL.RawQuery, s.serviceName, timestamp, body)
 
 	// Add headers
 	req.Header.Set(HeaderSignature, signature)
@@ -137,14 +152,28 @@ func (s *Signer) VerifyMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// Check request age (prevent replay attacks)
+		// Check request age — bounds the replay window (not full replay
+		// prevention: no nonce/dedup, see MaxRequestAge / audit #27). (audit M4)
 		requestTime := time.Unix(timestamp, 0)
-		if time.Since(requestTime) > MaxRequestAge {
+		age := time.Since(requestTime)
+		if age > MaxRequestAge {
 			s.logger.Warn("Request timestamp too old",
 				zap.String("service", serviceName),
 				zap.Time("timestamp", requestTime),
-				zap.Duration("age", time.Since(requestTime)))
+				zap.Duration("age", age))
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "request too old"})
+			c.Abort()
+			return
+		}
+		// Reject future-dated timestamps: time.Since is negative for future ts,
+		// so without this check a future-dated request is accepted indefinitely
+		// until it "ages in" (audit M4).
+		if time.Until(requestTime) > MaxFutureSkew {
+			s.logger.Warn("Request timestamp too far in the future",
+				zap.String("service", serviceName),
+				zap.Time("timestamp", requestTime),
+				zap.Duration("future_skew", time.Until(requestTime)))
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "request timestamp in the future"})
 			c.Abort()
 			return
 		}
@@ -160,11 +189,11 @@ func (s *Signer) VerifyMiddleware() gin.HandlerFunc {
 				return
 			}
 			// Reset body for handlers
-			c.Request.Body = io.NopCloser(io.Reader(body))
+			c.Request.Body = io.NopCloser(bytes.NewReader(body))
 		}
 
-		// Compute expected signature
-		expectedSignature := s.computeSignature(c.Request.Method, c.Request.URL.Path, timestamp, body)
+		// Compute expected signature (includes query params + service name, audit M5)
+		expectedSignature := s.computeSignature(c.Request.Method, c.Request.URL.Path, c.Request.URL.RawQuery, serviceName, timestamp, body)
 
 		// Verify signature (constant-time comparison)
 		if !hmac.Equal([]byte(signature), []byte(expectedSignature)) {
@@ -188,36 +217,50 @@ func (s *Signer) VerifyMiddleware() gin.HandlerFunc {
 	}
 }
 
-// computeSignature creates HMAC-SHA256 signature
-// Format: HMAC-SHA256(secret, "method|path|timestamp|body_hash")
-func (s *Signer) computeSignature(method, path string, timestamp int64, body []byte) string {
-	// Hash body
-	bodyHash := sha256.Sum256(body)
-
-	// Create message to sign
-	message := fmt.Sprintf("%s|%s|%d|%s",
-		method,
-		path,
-		timestamp,
-		hex.EncodeToString(bodyHash[:]))
-
-	// Compute HMAC
+// computeSignature creates an HMAC-SHA256 signature over the request fields.
+//
+// audit #26: each variable-length field is folded in as a fixed-width SHA-256
+// digest (and the timestamp as a fixed 8-byte big-endian value) rather than
+// being joined with a "|" delimiter. The old delimited form was ambiguous —
+// a literal "|" inside path/query/service let bytes shift across field
+// boundaries, so e.g. (path="/a", query="b|x") and (path="/a|b", query="x")
+// produced the SAME signature. Fixed-width framing removes any boundary, so
+// query/path/service-identity tampering genuinely cannot collide.
+func (s *Signer) computeSignature(method, path, rawQuery, serviceName string, timestamp int64, body []byte) string {
 	h := hmac.New(sha256.New, s.secret)
-	h.Write([]byte(message))
+	writeField := func(b []byte) {
+		d := sha256.Sum256(b)
+		h.Write(d[:])
+	}
+	writeField([]byte(method))
+	writeField([]byte(path))
+	writeField([]byte(rawQuery))
+	writeField([]byte(serviceName))
+	var tsBuf [8]byte
+	binary.BigEndian.PutUint64(tsBuf[:], uint64(timestamp))
+	h.Write(tsBuf[:])
+	bodyHash := sha256.Sum256(body)
+	h.Write(bodyHash[:])
 
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// VerifySignature verifies a signature without using middleware
-func (s *Signer) VerifySignature(method, path string, timestamp int64, body []byte, signature string) error {
+// VerifySignature verifies a signature without using middleware. serviceName
+// and rawQuery must match what the signer used (audit M5). Future-dated
+// timestamps are rejected (audit M4).
+func (s *Signer) VerifySignature(method, path, rawQuery, serviceName string, timestamp int64, body []byte, signature string) error {
 	// Check timestamp
 	requestTime := time.Unix(timestamp, 0)
-	if time.Since(requestTime) > MaxRequestAge {
+	age := time.Since(requestTime)
+	if age > MaxRequestAge {
 		return ErrRequestTooOld
+	}
+	if time.Until(requestTime) > MaxFutureSkew {
+		return ErrRequestInFuture
 	}
 
 	// Compute expected signature
-	expectedSignature := s.computeSignature(method, path, timestamp, body)
+	expectedSignature := s.computeSignature(method, path, rawQuery, serviceName, timestamp, body)
 
 	// Verify
 	if !hmac.Equal([]byte(signature), []byte(expectedSignature)) {
@@ -233,7 +276,8 @@ type SigningTransport struct {
 	signer *Signer
 }
 
-// NewSigningTransport creates a transport that signs all requests
+// NewSigningTransport creates a transport that signs all requests.
+// The signer must be non-nil.
 func NewSigningTransport(base http.RoundTripper, signer *Signer) *SigningTransport {
 	if base == nil {
 		base = http.DefaultTransport
@@ -255,13 +299,17 @@ func (t *SigningTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 	return t.base.RoundTrip(req)
 }
 
-// NewSigningClient creates an HTTP client that automatically signs all requests
-func NewSigningClient(serviceName, secret string, logger *zap.Logger) *http.Client {
-	signer := NewSigner(serviceName, secret, logger)
+// NewSigningClient creates an HTTP client that automatically signs all requests.
+// Returns an error if the secret is fewer than 32 bytes (audit L1).
+func NewSigningClient(serviceName, secret string, logger *zap.Logger) (*http.Client, error) {
+	signer, err := NewSigner(serviceName, secret, logger)
+	if err != nil {
+		return nil, err
+	}
 	return &http.Client{
 		Transport: NewSigningTransport(nil, signer),
 		Timeout:   30 * time.Second,
-	}
+	}, nil
 }
 
 // anonymizeIP truncates the last octet (IPv4) or last 80 bits (IPv6) for

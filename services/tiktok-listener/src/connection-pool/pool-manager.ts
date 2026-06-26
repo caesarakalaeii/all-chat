@@ -31,6 +31,7 @@
 
 import { TikTokLiveConnection, WebcastEvent } from 'tiktok-live-connector';
 import { Logger } from '../types/logger.js';
+import { assertValidTikTokUsername } from '../types/validation.js';
 import { EventEmitter } from 'events';
 
 /**
@@ -133,6 +134,9 @@ export class ConnectionPoolManager {
     overlayId: string,
     subscriber: ConnectionSubscriber
   ): Promise<void> {
+    // Reject malformed usernames before they reach the WebSocket layer (audit L24).
+    assertValidTikTokUsername(username);
+
     // Get or create pooled connection
     let pooled = this.connections.get(username);
     

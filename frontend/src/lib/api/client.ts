@@ -44,6 +44,22 @@ function getApiUrl(): string {
 
 const API_URL = getApiUrl()
 
+// M8 (code part): cookie auth (SameSite=Lax + credentials:'same-origin') only
+// works when the frontend and the API gateway share an origin. A misconfigured
+// NEXT_PUBLIC_API_URL (cross-origin) silently breaks login with no obvious
+// error. Warn loudly in dev so the invariant is caught early; suppressed in
+// production (prod ingress already serves both from allch.at).
+if (
+  typeof window !== 'undefined' &&
+  window.location.origin !== API_URL &&
+  process.env.NODE_ENV !== 'production'
+) {
+  console.warn(
+    '[AllChat] API base origin differs from window origin — cookie auth requires same-origin. ' +
+      'Set NEXT_PUBLIC_API_URL or serve both from the same origin.'
+  )
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -61,52 +77,119 @@ export class ApiError extends Error {
   }
 }
 
-class ApiClient {
-  private async fetch(endpoint: string, options: RequestInit = {}): Promise<Response> {
-    // Get token from localStorage (client-side only)
-    let token: string | null = null
-    if (typeof window !== 'undefined') {
-      token = localStorage.getItem('jwt_token')
-    }
+/**
+ * Outcome of a cookie-refresh attempt.
+ * - 'refreshed': /refresh returned 200; the access cookie was rotated.
+ * - 'concurrent': /refresh returned 409 — another in-flight refresh (e.g. a
+ *   second tab) is rotating the same token. Its Set-Cookie updates the shared
+ *   cookie jar, so the caller should retry the original request rather than
+ *   treat this as a hard failure (PR #478 review M1).
+ * - 'failed': refresh failed; the caller should bounce to login.
+ */
+type RefreshResult = 'refreshed' | 'concurrent' | 'failed'
 
+class ApiClient {
+  private refreshPromise: Promise<RefreshResult> | null = null
+
+  private async fetch(
+    endpoint: string,
+    options: RequestInit = {},
+    retried = false
+  ): Promise<Response> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...(options.headers as Record<string, string>),
     }
 
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`
-    }
-
     const url = endpoint.startsWith('http') ? endpoint : `${API_URL}${endpoint}`
+    const response = await fetch(url, { ...options, headers, credentials: 'same-origin' })
 
-    const response = await fetch(url, {
-      ...options,
-      headers,
-    })
-
-    if (!response.ok) {
-      const errorData: Record<string, unknown> = await response
-        .json()
-        .catch(() => ({ error: 'Unknown error' }))
-      const errorValue = typeof errorData.error === 'string' ? errorData.error : undefined
-
-      if (response.status === 401) {
-        // A `reauth_required` 401 is an application-level signal (the platform
-        // OAuth token was revoked) that the caller surfaces inline — it must NOT
-        // trigger the generic "JWT expired → log out" path. Every other 401 means
-        // our own session token is invalid: clear it and bounce to the landing page.
-        if (errorValue !== 'reauth_required' && typeof window !== 'undefined') {
-          localStorage.removeItem('jwt_token')
+    // L7: the guard prefixes must match the real endpoints (/api/v1/auth/...),
+    // not the dead /auth/... prefixes that never matched — otherwise 401s on
+    // /auth/refresh & /auth/login would wrongly trigger the refresh→retry path.
+    if (
+      response.status === 401 &&
+      !endpoint.startsWith('/api/v1/auth/refresh') &&
+      !endpoint.startsWith('/api/v1/auth/login')
+    ) {
+      // Try to determine if this is a `reauth_required` 401 (platform OAuth token
+      // revoked) — that's an application-level signal the caller surfaces inline;
+      // it must NOT trigger the generic refresh→retry path.
+      let errorValue: string | undefined
+      try {
+        const errorData = await response.clone().json().catch(() => ({} as Record<string, unknown>))
+        errorValue = typeof (errorData as Record<string, unknown>).error === 'string'
+          ? (errorData as Record<string, unknown>).error as string
+          : undefined
+      } catch {
+        errorValue = undefined
+      }
+      if (errorValue !== 'reauth_required') {
+        // Try one cookie-based refresh, then retry the original request once.
+        const result = await this.tryRefresh()
+        if (result === 'refreshed' || result === 'concurrent') {
+          // M2: route the retry back through this.fetch (not a bare fetch) so the
+          // retried response goes through the same !response.ok / ApiError /
+          // reauth_required handling. The `retried` guard prevents infinite
+          // recursion if the retried request also returns 401.
+          if (!retried) {
+            if (result === 'concurrent') {
+              // A concurrent refresh (another tab) is rotating the cookie; give it
+              // a brief moment to land its Set-Cookie, then retry with the fresh
+              // cookie instead of force-logging-out (PR #478 review M1).
+              await new Promise((resolve) => setTimeout(resolve, 400))
+            }
+            return this.fetch(endpoint, options, true)
+          }
+          // Already retried — fall through to the generic error path below so a
+          // second 401/403/500 surfaces as a structured ApiError instead of a raw
+          // SyntaxError from the caller's .json().
+        }
+        // refresh failed (or retry exhausted). Do NOT navigate for the auth probe
+        // (/api/v1/auth/me): init() runs it on EVERY page including the public
+        // landing page, so a self-redirect to '/' creates an infinite full-page
+        // reload loop for logged-out visitors (they can never sign in). Let the
+        // caller drive navigation instead — init() catches and sets user:null, and
+        // ProtectedRoute pushes '/' via the SPA router when user is null (audit #1).
+        if (typeof window !== 'undefined' && !endpoint.startsWith('/api/v1/auth/me')) {
           window.location.href = '/'
         }
-        throw new ApiError(401, errorValue || 'Unauthorized', errorData)
+        throw new ApiError(401, errorValue || 'Unauthorized', { error: errorValue || 'Unauthorized' })
       }
+      // reauth_required: fall through to the generic error path (no refresh, no redirect)
+    }
 
+    if (!response.ok) {
+      const errorData: Record<string, unknown> = await response.json().catch(() => ({ error: 'Unknown error' }))
+      const errorValue = typeof errorData.error === 'string' ? errorData.error : undefined
       throw new ApiError(response.status, errorValue || response.statusText, errorData)
     }
 
     return response
+  }
+
+  private async tryRefresh(): Promise<RefreshResult> {
+    if (this.refreshPromise) return this.refreshPromise
+    this.refreshPromise = (async () => {
+      try {
+        const r = await fetch(`${API_URL}/api/v1/auth/refresh`, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+        })
+        if (r.ok) return 'refreshed'
+        // 409: a concurrent /refresh for the same token is in flight. Don't treat
+        // it as a logout-worthy failure — the in-flight request rotates the shared
+        // cookie, so signal the caller to retry the original request (review M1).
+        if (r.status === 409) return 'concurrent'
+        return 'failed'
+      } catch {
+        return 'failed'
+      } finally {
+        this.refreshPromise = null
+      }
+    })()
+    return this.refreshPromise
   }
 
   async get<T>(endpoint: string): Promise<T> {

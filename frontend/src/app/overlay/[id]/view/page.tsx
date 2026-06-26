@@ -60,7 +60,6 @@ import {
   buildUnbanRequest,
   moderationApi,
 } from '@/lib/api/moderation'
-import { useAuthStore } from '@/lib/stores/auth-store'
 import type { ChatMessage, DeletionMetadata } from '@/lib/types/message'
 import type { ModerationCapabilities, SourceCapability } from '@/lib/types/moderation'
 import type { EventSettings } from '@/lib/types/overlay'
@@ -94,7 +93,6 @@ const THEME_KEY = 'overlay-view-theme'
 
 export default function OverlayMonitorView({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
-  const token = useAuthStore((s) => s.token)
 
   const [items, setItems] = useState<ViewItem[]>([])
   const [moderationLog, setModerationLog] = useState<ModEntry[]>([])
@@ -146,7 +144,6 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
 
   const { config, sources, activeChannels, channelStatuses, connectionStatus, reconnectAttempts } =
     useOverlayStream(id, {
-      token: token ?? undefined,
       onChat,
       onMessageUpdate,
       onDeletion,
@@ -172,7 +169,6 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
   // Fetch moderation capabilities once the user is known. A non-owner gets
   // { is_owner:false, sources:[] }; any failure leaves moderation disabled.
   useEffect(() => {
-    if (!token) return
     let cancelled = false
     moderationApi
       .getCapabilities(id)
@@ -185,7 +181,7 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
     return () => {
       cancelled = true
     }
-  }, [id, token])
+  }, [id])
 
   // Restore saved view prefs once on mount (localStorage; client only).
   useEffect(() => {

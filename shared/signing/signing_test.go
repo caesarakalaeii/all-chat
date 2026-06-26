@@ -19,7 +19,6 @@ package signing
 import (
 	"bytes"
 	"io"
-	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"testing"
@@ -27,11 +26,34 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
 
+// 32-byte test secret that satisfies the minimum-length check (audit L1).
+const testSecret = "0123456789abcdef0123456789abcdef"
+
+func mustNewSigner(t *testing.T, serviceName, secret string, logger *zap.Logger) *Signer {
+	t.Helper()
+	s, err := NewSigner(serviceName, secret, logger)
+	require.NoError(t, err)
+	return s
+}
+
+func TestNewSigner_RejectsShortSecret(t *testing.T) {
+	_, err := NewSigner("svc", "short", zap.NewNop())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrSecretTooShort)
+}
+
+func TestNewSigner_AcceptsMinLengthSecret(t *testing.T) {
+	s, err := NewSigner("svc", testSecret, zap.NewNop())
+	require.NoError(t, err)
+	assert.NotNil(t, s)
+}
+
 func TestSignAndVerifyRequest(t *testing.T) {
-	signer := NewSigner("test-service", "test-secret", zap.NewNop())
+	signer := mustNewSigner(t, "test-service", testSecret, zap.NewNop())
 
 	// Create request
 	req := httptest.NewRequest("POST", "/api/test", bytes.NewBufferString(`{"key":"value"}`))
@@ -49,9 +71,8 @@ func TestSignAndVerifyRequest(t *testing.T) {
 func TestVerifyMiddleware_Success(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	secret := "test-secret"
-	signer := NewSigner("test-service", secret, zap.NewNop())
-	verifier := NewSigner("verifier-service", secret, zap.NewNop())
+	signer := mustNewSigner(t, "test-service", testSecret, zap.NewNop())
+	verifier := mustNewSigner(t, "verifier-service", testSecret, zap.NewNop())
 
 	router := gin.New()
 	router.Use(verifier.VerifyMiddleware())
@@ -76,7 +97,7 @@ func TestVerifyMiddleware_Success(t *testing.T) {
 func TestVerifyMiddleware_MissingSignature(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	verifier := NewSigner("verifier", "secret", zap.NewNop())
+	verifier := mustNewSigner(t, "verifier", testSecret, zap.NewNop())
 
 	router := gin.New()
 	router.Use(verifier.VerifyMiddleware())
@@ -96,7 +117,7 @@ func TestVerifyMiddleware_MissingSignature(t *testing.T) {
 func TestVerifyMiddleware_InvalidSignature(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	verifier := NewSigner("verifier", "correct-secret", zap.NewNop())
+	verifier := mustNewSigner(t, "verifier", testSecret, zap.NewNop())
 
 	router := gin.New()
 	router.Use(verifier.VerifyMiddleware())
@@ -105,7 +126,7 @@ func TestVerifyMiddleware_InvalidSignature(t *testing.T) {
 	})
 
 	// Sign with wrong secret
-	wrongSigner := NewSigner("test-service", "wrong-secret", zap.NewNop())
+	wrongSigner := mustNewSigner(t, "test-service", "0123456789abcdef0123456789abcdef_wrong", zap.NewNop())
 	req := httptest.NewRequest("GET", "/test", nil)
 	wrongSigner.SignRequest(req)
 
@@ -119,9 +140,8 @@ func TestVerifyMiddleware_InvalidSignature(t *testing.T) {
 func TestVerifyMiddleware_ExpiredRequest(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	secret := "test-secret"
-	signer := NewSigner("test-service", secret, zap.NewNop())
-	verifier := NewSigner("verifier", secret, zap.NewNop())
+	signer := mustNewSigner(t, "test-service", testSecret, zap.NewNop())
+	verifier := mustNewSigner(t, "verifier", testSecret, zap.NewNop())
 
 	router := gin.New()
 	router.Use(verifier.VerifyMiddleware())
@@ -132,7 +152,7 @@ func TestVerifyMiddleware_ExpiredRequest(t *testing.T) {
 	// Create request with old timestamp
 	req := httptest.NewRequest("GET", "/test", nil)
 	oldTimestamp := time.Now().Add(-10 * time.Minute).Unix()
-	signature := signer.computeSignature("GET", "/test", oldTimestamp, nil)
+	signature := signer.computeSignature("GET", "/test", "", "test-service", oldTimestamp, nil)
 
 	req.Header.Set(HeaderSignature, signature)
 	req.Header.Set(HeaderTimestamp, strconv.FormatInt(oldTimestamp, 10))
@@ -145,58 +165,103 @@ func TestVerifyMiddleware_ExpiredRequest(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "request too old")
 }
 
+func TestVerifyMiddleware_FutureTimestampRejected(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	signer := mustNewSigner(t, "test-service", testSecret, zap.NewNop())
+	verifier := mustNewSigner(t, "verifier", testSecret, zap.NewNop())
+
+	router := gin.New()
+	router.Use(verifier.VerifyMiddleware())
+	router.GET("/test", func(c *gin.Context) {
+		c.JSON(200, gin.H{"ok": true})
+	})
+
+	// Create request with future timestamp (audit M4)
+	req := httptest.NewRequest("GET", "/test", nil)
+	futureTimestamp := time.Now().Add(10 * time.Minute).Unix()
+	signature := signer.computeSignature("GET", "/test", "", "test-service", futureTimestamp, nil)
+
+	req.Header.Set(HeaderSignature, signature)
+	req.Header.Set(HeaderTimestamp, strconv.FormatInt(futureTimestamp, 10))
+	req.Header.Set(HeaderService, "test-service")
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, 401, w.Code)
+	assert.Contains(t, w.Body.String(), "future")
+}
+
 func TestComputeSignature_Consistency(t *testing.T) {
-	signer := NewSigner("test", "secret", zap.NewNop())
+	signer := mustNewSigner(t, "test", testSecret, zap.NewNop())
 
 	body := []byte("test body")
 	timestamp := time.Now().Unix()
+	query := "foo=bar"
+	svc := "test"
 
 	// Same inputs should produce same signature
-	sig1 := signer.computeSignature("POST", "/api/test", timestamp, body)
-	sig2 := signer.computeSignature("POST", "/api/test", timestamp, body)
+	sig1 := signer.computeSignature("POST", "/api/test", query, svc, timestamp, body)
+	sig2 := signer.computeSignature("POST", "/api/test", query, svc, timestamp, body)
 
 	assert.Equal(t, sig1, sig2)
 
 	// Different inputs should produce different signatures
-	sig3 := signer.computeSignature("GET", "/api/test", timestamp, body)
+	sig3 := signer.computeSignature("GET", "/api/test", query, svc, timestamp, body)
 	assert.NotEqual(t, sig1, sig3)
 
-	sig4 := signer.computeSignature("POST", "/api/different", timestamp, body)
+	sig4 := signer.computeSignature("POST", "/api/different", query, svc, timestamp, body)
 	assert.NotEqual(t, sig1, sig4)
 
-	sig5 := signer.computeSignature("POST", "/api/test", timestamp+1, body)
+	sig5 := signer.computeSignature("POST", "/api/test", query, svc, timestamp+1, body)
 	assert.NotEqual(t, sig1, sig5)
 
-	sig6 := signer.computeSignature("POST", "/api/test", timestamp, []byte("different body"))
+	sig6 := signer.computeSignature("POST", "/api/test", query, svc, timestamp, []byte("different body"))
 	assert.NotEqual(t, sig1, sig6)
+
+	// Different query produces different signature (audit M5)
+	sig7 := signer.computeSignature("POST", "/api/test", "different=query", svc, timestamp, body)
+	assert.NotEqual(t, sig1, sig7)
+
+	// Different service name produces different signature (audit M5)
+	sig8 := signer.computeSignature("POST", "/api/test", query, "other-service", timestamp, body)
+	assert.NotEqual(t, sig1, sig8)
 }
 
 func TestVerifySignature(t *testing.T) {
-	signer := NewSigner("test", "secret", zap.NewNop())
+	signer := mustNewSigner(t, "test", testSecret, zap.NewNop())
 
 	body := []byte("test data")
 	timestamp := time.Now().Unix()
-	signature := signer.computeSignature("POST", "/api/test", timestamp, body)
+	query := ""
+	svc := "test"
+	signature := signer.computeSignature("POST", "/api/test", query, svc, timestamp, body)
 
 	// Valid signature
-	err := signer.VerifySignature("POST", "/api/test", timestamp, body, signature)
+	err := signer.VerifySignature("POST", "/api/test", query, svc, timestamp, body, signature)
 	assert.NoError(t, err)
 
 	// Invalid signature
-	err = signer.VerifySignature("POST", "/api/test", timestamp, body, "invalid")
+	err = signer.VerifySignature("POST", "/api/test", query, svc, timestamp, body, "invalid")
 	assert.Equal(t, ErrInvalidSignature, err)
 
 	// Expired timestamp
 	oldTimestamp := time.Now().Add(-10 * time.Minute).Unix()
-	oldSignature := signer.computeSignature("POST", "/api/test", oldTimestamp, body)
-	err = signer.VerifySignature("POST", "/api/test", oldTimestamp, body, oldSignature)
+	oldSignature := signer.computeSignature("POST", "/api/test", query, svc, oldTimestamp, body)
+	err = signer.VerifySignature("POST", "/api/test", query, svc, oldTimestamp, body, oldSignature)
 	assert.Equal(t, ErrRequestTooOld, err)
+
+	// Future timestamp (audit M4)
+	futureTimestamp := time.Now().Add(10 * time.Minute).Unix()
+	futureSignature := signer.computeSignature("POST", "/api/test", query, svc, futureTimestamp, body)
+	err = signer.VerifySignature("POST", "/api/test", query, svc, futureTimestamp, body, futureSignature)
+	assert.Equal(t, ErrRequestInFuture, err)
 }
 
 func TestSigningTransport(t *testing.T) {
 	// Create test server that verifies signatures
-	secret := "test-secret"
-	verifier := NewSigner("server", secret, zap.NewNop())
+	verifier := mustNewSigner(t, "server", testSecret, zap.NewNop())
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -210,7 +275,8 @@ func TestSigningTransport(t *testing.T) {
 	defer server.Close()
 
 	// Create client with signing transport
-	client := NewSigningClient("test-client", secret, zap.NewNop())
+	client, err := NewSigningClient("test-client", testSecret, zap.NewNop())
+	require.NoError(t, err)
 
 	// Make request
 	resp, err := client.Get(server.URL + "/test")
@@ -222,8 +288,7 @@ func TestSigningTransport(t *testing.T) {
 }
 
 func TestSigningTransport_WithBody(t *testing.T) {
-	secret := "test-secret"
-	verifier := NewSigner("server", secret, zap.NewNop())
+	verifier := mustNewSigner(t, "server", testSecret, zap.NewNop())
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -238,7 +303,8 @@ func TestSigningTransport_WithBody(t *testing.T) {
 	defer server.Close()
 
 	// Create client with signing
-	client := NewSigningClient("test-client", secret, zap.NewNop())
+	client, err := NewSigningClient("test-client", testSecret, zap.NewNop())
+	require.NoError(t, err)
 
 	// Make POST request with body
 	body := bytes.NewBufferString(`{"message":"hello"}`)
@@ -248,4 +314,21 @@ func TestSigningTransport_WithBody(t *testing.T) {
 
 	respBody, _ := io.ReadAll(resp.Body)
 	assert.Contains(t, string(respBody), "hello")
+}
+
+// TestComputeSignature_NoCrossFieldCollision guards audit #26: the per-field
+// fixed-width framing must make field-boundary shifts impossible. Under the old
+// "|"-delimited format, (path="/a", query="b|x") and (path="/a|b", query="x")
+// hashed identically. They must now diverge.
+func TestComputeSignature_NoCrossFieldCollision(t *testing.T) {
+	s := mustNewSigner(t, "svc", testSecret, zap.NewNop())
+	const ts = int64(1000)
+	a := s.computeSignature("POST", "/a", "b|x", "y", ts, nil)
+	b := s.computeSignature("POST", "/a|b", "x", "y", ts, nil)
+	assert.NotEqual(t, a, b, "path/query boundary shift must not collide")
+
+	// Same shift between rawQuery and serviceName must also diverge.
+	c := s.computeSignature("POST", "/p", "q", "svc-a", ts, nil)
+	d := s.computeSignature("POST", "/p", "q|svc", "a", ts, nil)
+	assert.NotEqual(t, c, d, "query/service boundary shift must not collide")
 }

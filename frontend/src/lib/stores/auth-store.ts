@@ -17,13 +17,20 @@
  */
 
 /**
- * Authentication Store (Zustand)
+ * Authentication Store (Zustand) — H3 cookie-auth.
  *
- * Global state management for user authentication.
- * Stores user info and JWT token in memory and localStorage.
+ * Login state is derived from the httpOnly access cookie: `init` calls
+ * `GET /auth/me`, which succeeds only when the cookie is valid. The store no
+ * longer holds a JS-readable access token (cookies are httpOnly), so there is
+ * no `token` state and no localStorage token juggling.
+ *
+ * Impersonation is server-driven: `startImpersonation(targetUserId)` POSTs the
+ * admin endpoint which sets an impersonated-user access cookie; the backend
+ * returns the impersonated user. `stopImpersonation` restores the admin cookie
+ * the same way. No token is ever swapped in JS.
  *
  * Usage in components:
- *   const { user, token, login, logout } = useAuthStore();
+ *   const { user, loading, logout } = useAuthStore();
  */
 
 import { create } from 'zustand'
@@ -32,7 +39,6 @@ import { authApi } from '../api/auth'
 
 interface AuthStore {
   user: User | null
-  token: string | null
   loading: boolean
 
   // Impersonation state
@@ -40,42 +46,35 @@ interface AuthStore {
   impersonatedUsername: string | null
 
   // Actions
-  setToken: (token: string) => void
   setUser: (user: User) => void
-  logout: () => void
+  logout: () => Promise<void>
   init: () => Promise<void>
 
   // Impersonation actions
-  startImpersonation: (token: string, username: string) => void
-  stopImpersonation: () => void
+  startImpersonation: (targetUserId: string) => Promise<void>
+  stopImpersonation: () => Promise<void>
 }
 
 export const useAuthStore = create<AuthStore>((set, get) => ({
   user: null,
-  token: null,
   loading: true,
   isImpersonating: false,
   impersonatedUsername: null,
-
-  setToken: (token: string) => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('jwt_token', token)
-    }
-    set({ token })
-  },
 
   setUser: (user: User) => {
     set({ user, loading: false })
   },
 
-  logout: () => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('jwt_token')
-      localStorage.removeItem('admin_token')
-      localStorage.removeItem('impersonating')
-      localStorage.removeItem('impersonated_user')
+  logout: async () => {
+    try {
+      await authApi.logout() // POST /auth/logout — cookie cleared server-side
+    } catch {
+      // ignore — clearing is best-effort
     }
-    set({ user: null, token: null, loading: false, isImpersonating: false, impersonatedUsername: null })
+    set({ user: null, loading: false, isImpersonating: false, impersonatedUsername: null })
+    if (typeof window !== 'undefined') {
+      window.location.href = '/'
+    }
   },
 
   init: async () => {
@@ -83,60 +82,80 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       set({ loading: false })
       return
     }
-
-    const token = localStorage.getItem('jwt_token')
-    if (!token) {
-      set({ loading: false })
-      return
-    }
-
-    // Restore impersonation state from localStorage on init (e.g. after page reload)
-    const isImpersonating = localStorage.getItem('impersonating') === 'true'
-    const impersonatedUsername = localStorage.getItem('impersonated_user') || null
-
-    set({ token, isImpersonating, impersonatedUsername })
-
     try {
-      const user = await authApi.getMe()
-      set({ user, loading: false })
-    } catch (error) {
-      // Token invalid, clear it
-      localStorage.removeItem('jwt_token')
-      localStorage.removeItem('admin_token')
-      localStorage.removeItem('impersonating')
-      localStorage.removeItem('impersonated_user')
-      set({ user: null, token: null, loading: false, isImpersonating: false, impersonatedUsername: null })
+      const me = await authApi.getMe() // GET /auth/me — succeeds if access cookie valid
+      // Restore impersonation state from the JWT's ImpersonatedBy claim so the
+      // banner + admin-route guards survive a page reload (audit H3).
+      set({
+        user: me,
+        loading: false,
+        isImpersonating: !!me.impersonating,
+        impersonatedUsername: me.impersonating ? me.username : null,
+      })
+    } catch {
+      set({ user: null, loading: false })
     }
   },
 
-  startImpersonation: (token: string, username: string) => {
-    if (typeof window !== 'undefined') {
-      // Save the current admin token before overwriting
-      const currentToken = get().token
-      if (currentToken) {
-        localStorage.setItem('admin_token', currentToken)
+  startImpersonation: async (targetUserId: string) => {
+    // POST /admin/users/:id/impersonate — server sets an impersonated-user
+    // access cookie. The response only carries a partial user
+    // ({id,username,display_name}), so fetch the full User via /auth/me to
+    // avoid an inconsistent store shape (audit L12 — previously a
+    // `as unknown as User` double-cast masked the missing fields).
+    const res = await authApi.impersonate(targetUserId)
+    try {
+      const me = await authApi.getMe()
+      set({
+        user: me,
+        isImpersonating: true,
+        impersonatedUsername: me.username,
+      })
+    } catch {
+      // Cookie swap succeeded but /auth/me failed — fall back to merging the
+      // partial response into the current user so the banner still shows.
+      const current = get().user
+      const partial: Partial<User> = {
+        id: res.user.id,
+        username: res.user.username,
       }
-      localStorage.setItem('jwt_token', token)
-      localStorage.setItem('impersonating', 'true')
-      localStorage.setItem('impersonated_user', username)
+      if (res.user.display_name) {
+        partial.display_name = res.user.display_name
+      }
+      set({
+        user: current ? { ...current, ...partial } : null,
+        isImpersonating: true,
+        impersonatedUsername: res.user.username,
+      })
     }
-    set({ token, isImpersonating: true, impersonatedUsername: username })
   },
 
-  stopImpersonation: () => {
-    if (typeof window !== 'undefined') {
-      const adminToken = localStorage.getItem('admin_token')
-      if (adminToken) {
-        localStorage.setItem('jwt_token', adminToken)
-        localStorage.removeItem('admin_token')
+  stopImpersonation: async () => {
+    // POST /auth/stop-impersonation — server restores the admin access cookie.
+    // The response only carries a partial user ({id,username,is_admin}), so
+    // fetch the full User via /auth/me for a consistent store shape (audit L12).
+    const res = await authApi.stopImpersonation()
+    try {
+      const me = await authApi.getMe()
+      set({
+        user: me,
+        isImpersonating: false,
+        impersonatedUsername: null,
+      })
+    } catch {
+      // Cookie swap succeeded but /auth/me failed — fall back to merging the
+      // partial response into the current user.
+      const current = get().user
+      const partial: Partial<User> = {
+        id: res.user.id,
+        username: res.user.username,
+        is_admin: res.user.is_admin,
       }
-      localStorage.removeItem('impersonating')
-      localStorage.removeItem('impersonated_user')
-
-      const restoredToken = localStorage.getItem('jwt_token')
-      set({ token: restoredToken, isImpersonating: false, impersonatedUsername: null })
-    } else {
-      set({ isImpersonating: false, impersonatedUsername: null })
+      set({
+        user: current ? { ...current, ...partial } : null,
+        isImpersonating: false,
+        impersonatedUsername: null,
+      })
     }
   },
 }))

@@ -702,9 +702,20 @@ describe('D-38 session fallback (ElevenLabs)', () => {
     expect(mockFetch).toHaveBeenCalled()
     const firstCall = mockFetch.mock.calls[0]
     const url = firstCall[0]
-    expect(url).toContain('tts_token=jwt-xyz')
-    expect(url).toContain('voice=voice-1')
-    expect(url).toContain('text=')
+    const opts = firstCall[1] as RequestInit
+    // SECURITY (audit M17): tts_token moved to Authorization header, voice
+    // moved to JSON body — neither should appear in the URL query string.
+    expect(url).not.toContain('tts_token=')
+    expect(url).not.toContain('voice=')
+    expect(url).not.toContain('text=')
+    expect(opts.headers).toBeTruthy()
+    const headers = opts.headers as Record<string, string>
+    expect(headers['Authorization']).toBe('Bearer jwt-xyz')
+    expect(opts.body).toBeTruthy()
+    const bodyStr = String(opts.body)
+    expect(bodyStr).toContain('"text"')
+    expect(bodyStr).toContain('"voice"')
+    expect(bodyStr).toContain('voice-1')
   })
 
   // Test 27

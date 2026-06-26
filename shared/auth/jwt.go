@@ -17,6 +17,8 @@
 package auth
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -31,16 +33,28 @@ var (
 	ErrExpiredToken          = errors.New("token expired")
 	ErrNoVersionedJWTSecrets = errors.New("no versioned JWT secrets configured: set <PREFIX>_V1")
 	ErrUnknownKidNoLegacy    = errors.New("unknown kid and no legacy fallback secret")
+	ErrSecretTooShort        = errors.New("JWT secret must be at least 32 bytes")
+	ErrInvalidIssuer         = errors.New("invalid token issuer")
 )
+
+// Allowed user-token issuers. Regular user tokens use "all-chat"; impersonation
+// tokens use "all-chat-admin" (both validated via ValidateJWTWithKeyChain, audit L3).
+var allowedUserIssuers = map[string]bool{
+	"all-chat":       true,
+	"all-chat-admin": true,
+}
+
+// minSecretBytes is the minimum acceptable length for a JWT signing secret (audit M3).
+const minSecretBytes = 32
 
 // Claims represents the JWT claims for All-Chat
 type Claims struct {
-	UserID            string   `json:"sub"`
-	TwitchID          string   `json:"twitch_id"`
-	Username          string   `json:"username"`
-	Roles             []string `json:"roles"`
-	ImpersonatedBy    string   `json:"impersonated_by,omitempty"`    // Admin UserID who is impersonating
-	ImpersonatedUser  string   `json:"impersonated_user,omitempty"`  // Target user being impersonated
+	UserID           string   `json:"sub"`
+	TwitchID         string   `json:"twitch_id"`
+	Username         string   `json:"username"`
+	Roles            []string `json:"roles"`
+	ImpersonatedBy   string   `json:"impersonated_by,omitempty"`   // Admin UserID who is impersonating
+	ImpersonatedUser string   `json:"impersonated_user,omitempty"` // Target user being impersonated
 	jwt.RegisteredClaims
 }
 
@@ -65,13 +79,13 @@ func (c *Claims) GetActualUserID() string {
 
 // ViewerClaims represents JWT claims for viewer authentication
 type ViewerClaims struct {
-	ViewerID       string `json:"viewer_id"`        // durable viewer UUID (empty for old tokens)
+	ViewerID       string `json:"viewer_id"` // durable viewer UUID (empty for old tokens)
 	SessionID      string `json:"session_id"`
 	Platform       string `json:"platform"`
 	PlatformUserID string `json:"platform_user_id"`
 	Username       string `json:"username"`
-	DisplayName    string `json:"display_name"`     // for extension popup display
-	AvatarURL      string `json:"avatar_url"`       // for extension popup display
+	DisplayName    string `json:"display_name"` // for extension popup display
+	AvatarURL      string `json:"avatar_url"`   // for extension popup display
 	IsViewer       bool   `json:"is_viewer"`
 	IsPremium      bool   `json:"is_premium"` // true if viewer OR linked streamer account has premium
 	IsAdmin        bool   `json:"is_admin"`   // true if linked streamer account has admin role
@@ -138,7 +152,7 @@ func GenerateImpersonationJWT(adminUserID, adminUsername, targetUserID, targetUs
 	roles := []string{"user", "admin"}
 
 	claims := Claims{
-		UserID:           targetUserID,  // Use target user's ID as the primary ID
+		UserID:           targetUserID, // Use target user's ID as the primary ID
 		TwitchID:         targetTwitchID,
 		Username:         targetUsername,
 		Roles:            roles,
@@ -278,6 +292,10 @@ func NewKeyChainFromEnv(prefix string) (*KeyChain, error) {
 		if v == "" {
 			break
 		}
+		if len(v) < minSecretBytes {
+			return nil, fmt.Errorf("%w: %s is %d bytes, need at least %d",
+				ErrSecretTooShort, envName, len(v), minSecretBytes)
+		}
 		kid := "v" + strconv.Itoa(n)
 		byKid[kid] = []byte(v)
 		latestKid = kid
@@ -287,6 +305,10 @@ func NewKeyChainFromEnv(prefix string) (*KeyChain, error) {
 	}
 	var legacy []byte
 	if v := os.Getenv(prefix); v != "" {
+		if len(v) < minSecretBytes {
+			return nil, fmt.Errorf("%w: %s is %d bytes, need at least %d",
+				ErrSecretTooShort, prefix, len(v), minSecretBytes)
+		}
 		legacy = []byte(v)
 	}
 	return &KeyChain{byKid: byKid, legacy: legacy, latestKid: latestKid}, nil
@@ -383,10 +405,16 @@ func GenerateTokenWithKid(kid, userID, username, secret string, expiry time.Dura
 	return token.SignedString([]byte(secret))
 }
 
-// GenerateImpersonationJWTWithKid is identical to GenerateImpersonationJWT but
-// sets token.Header["kid"] before signing.
-func GenerateImpersonationJWTWithKid(kid, adminUserID, adminUsername, targetUserID, targetUsername, targetTwitchID, secret string) (string, error) {
+// GenerateImpersonationJWTWithKidExpiry signs an impersonation JWT with a
+// configurable expiry (replaces the legacy hardcoded 2h). Sets a jti so
+// callers can bind server-side state (e.g. impersonation: Redis stash) to
+// the token. (audit H3)
+func GenerateImpersonationJWTWithKidExpiry(kid, adminUserID, adminUsername, targetUserID, targetUsername, targetTwitchID string, secret []byte, expiry time.Duration) (string, error) {
 	roles := []string{"user", "admin"}
+	jti, err := generateJTI()
+	if err != nil {
+		return "", fmt.Errorf("generate jti: %w", err)
+	}
 	claims := Claims{
 		UserID:           targetUserID,
 		TwitchID:         targetTwitchID,
@@ -395,14 +423,30 @@ func GenerateImpersonationJWTWithKid(kid, adminUserID, adminUsername, targetUser
 		ImpersonatedBy:   adminUserID,
 		ImpersonatedUser: targetUserID,
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        jti,
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(2 * time.Hour)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiry)),
 			Issuer:    "all-chat-admin",
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	token.Header["kid"] = kid
-	return token.SignedString([]byte(secret))
+	return token.SignedString(secret)
+}
+
+// GenerateImpersonationJWTWithKid is a backward-compat wrapper for callers that
+// don't need a custom expiry (legacy 2h). Prefer GenerateImpersonationJWTWithKidExpiry.
+func GenerateImpersonationJWTWithKid(kid, adminUserID, adminUsername, targetUserID, targetUsername, targetTwitchID, secret string) (string, error) {
+	return GenerateImpersonationJWTWithKidExpiry(kid, adminUserID, adminUsername, targetUserID, targetUsername, targetTwitchID, []byte(secret), 2*time.Hour)
+}
+
+// generateJTI returns a URL-safe random token ID (jti claim).
+func generateJTI() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
 }
 
 // GenerateServiceJWTWithKid is identical to GenerateServiceJWT but sets
@@ -448,15 +492,21 @@ func ValidateJWTWithKeyChain(tokenString string, kc *KeyChain) (*Claims, error) 
 		}
 		return nil, ErrInvalidToken
 	}
-	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
-		return claims, nil
+	claims, ok := token.Claims.(*Claims)
+	if !ok || !token.Valid {
+		return nil, ErrInvalidToken
 	}
-	return nil, ErrInvalidToken
+	// Issuer validation (audit L3): accept "all-chat" (regular) and
+	// "all-chat-admin" (impersonation); reject empty/unknown issuers.
+	if !allowedUserIssuers[claims.Issuer] {
+		return nil, fmt.Errorf("%w: %q", ErrInvalidIssuer, claims.Issuer)
+	}
+	return claims, nil
 }
 
 // ValidateViewerJWTWithKeyChain validates a viewer JWT using multi-key dispatch via kc.KeyFunc.
 func ValidateViewerJWTWithKeyChain(tokenString string, kc *KeyChain) (*ViewerClaims, error) {
-	token, err := jwt.ParseWithClaims(tokenString, &ViewerClaims{}, kc.KeyFunc)
+	token, err := jwt.ParseWithClaims(tokenString, &ViewerClaims{}, kc.KeyFunc, jwt.WithIssuer("all-chat"))
 	if err != nil {
 		if errors.Is(err, jwt.ErrTokenExpired) {
 			return nil, ErrExpiredToken
@@ -474,7 +524,7 @@ func ValidateViewerJWTWithKeyChain(tokenString string, kc *KeyChain) (*ViewerCla
 // cross-chain isolation (D-10): a user-chain token will fail here because the HMAC
 // was computed with a different secret.
 func ValidateServiceJWTWithKeyChain(tokenString string, kc *KeyChain) (*ServiceClaims, error) {
-	token, err := jwt.ParseWithClaims(tokenString, &ServiceClaims{}, kc.KeyFunc)
+	token, err := jwt.ParseWithClaims(tokenString, &ServiceClaims{}, kc.KeyFunc, jwt.WithIssuer("all-chat-services"))
 	if err != nil {
 		if errors.Is(err, jwt.ErrTokenExpired) {
 			return nil, ErrExpiredToken
