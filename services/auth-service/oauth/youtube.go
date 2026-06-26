@@ -135,6 +135,29 @@ func (y *YouTubeOAuth) ExchangeCode(ctx context.Context, code string) (*oauth2.T
 	return token, nil
 }
 
+// GetAuthURLWithPKCE generates the OAuth authorization URL with PKCE (audit L4).
+// Returns the auth URL and the code verifier that the caller must store for the
+// token exchange.
+func (y *YouTubeOAuth) GetAuthURLWithPKCE(state string) (string, string) {
+	verifier := oauth2.GenerateVerifier()
+	authURL := y.config.AuthCodeURL(state,
+		oauth2.AccessTypeOffline,
+		oauth2.SetAuthURLParam("prompt", "select_account"),
+		oauth2.S256ChallengeOption(verifier),
+	)
+	return authURL, verifier
+}
+
+// ExchangeCodeWithVerifier exchanges the authorization code using a PKCE code
+// verifier (audit L4).
+func (y *YouTubeOAuth) ExchangeCodeWithVerifier(ctx context.Context, code, codeVerifier string) (*oauth2.Token, error) {
+	token, err := y.config.Exchange(ctx, code, oauth2.VerifierOption(codeVerifier))
+	if err != nil {
+		return nil, fmt.Errorf("failed to exchange code with PKCE: %w", err)
+	}
+	return token, nil
+}
+
 // GetPlatform returns the platform identifier
 func (y *YouTubeOAuth) GetPlatform() Platform {
 	return PlatformYouTube

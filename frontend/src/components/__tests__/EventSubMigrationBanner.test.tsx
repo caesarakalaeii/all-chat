@@ -26,10 +26,6 @@ import {
 } from '@/components/EventSubMigrationBanner'
 import type { ChatSource } from '@/lib/types/overlay'
 
-vi.mock('@/lib/stores/auth-store', () => ({
-  useAuthStore: () => ({ token: 'test-token' }),
-}))
-
 // jsdom in this project does not ship a working localStorage; stub one.
 function stubLocalStorage() {
   const store: Record<string, string> = {}
@@ -126,10 +122,9 @@ describe('EventSubMigrationBanner', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: /reconnect now/i }))
     await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith(
-        '/api/v1/auth/twitch/add-source/o9',
-        expect.objectContaining({ headers: { Authorization: 'Bearer test-token' } })
-      )
+      // H3 cookie auth: no Authorization header — the access cookie is sent
+      // same-origin and the gateway derives the bearer via CookieToBearer.
+      expect(fetchMock).toHaveBeenCalledWith('/api/v1/auth/twitch/add-source/o9')
     )
   })
 

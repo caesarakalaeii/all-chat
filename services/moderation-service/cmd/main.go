@@ -56,9 +56,15 @@ import (
 func main() {
 	log := logger.NewLogger("moderation-service", getEnv("LOG_LEVEL", "info"))
 	defer log.Sync()
+	// Surface JWT revocation (logout-blacklist) check failures from the shared
+	// middleware instead of dropping them to a no-op logger (PR #478 review L3).
+	middleware.SetLogger(log)
 	log.Info("Starting Moderation Service", zap.String("version", getEnv("APP_VERSION", "0.1.0")))
 
 	cfg := loadConfig()
+	if cfg.DatabasePassword == "" {
+		log.Fatal("DATABASE_PASSWORD must be set")
+	}
 
 	// JWT key chain for validating user tokens forwarded by the API gateway.
 	userKeyChain, err := sharedAuth.NewKeyChainFromEnv("JWT_SECRET")
@@ -81,7 +87,8 @@ func main() {
 
 	// Redis for publishing reflect-back deletion events to chat:raw.
 	redisClient := redis.NewClient(&redis.Options{
-		Addr: fmt.Sprintf("%s:%s", getEnv("REDIS_HOST", "localhost"), getEnv("REDIS_PORT", "6379")),
+		Addr:     fmt.Sprintf("%s:%s", getEnv("REDIS_HOST", "localhost"), getEnv("REDIS_PORT", "6379")),
+		Password: getEnv("REDIS_PASSWORD", ""),
 	})
 	defer redisClient.Close()
 	if err := redisClient.Ping(context.Background()).Err(); err != nil {
@@ -121,7 +128,7 @@ func main() {
 
 	// Twitch (delete/timeout/ban/unban) needs the token cipher (to decrypt broadcaster
 	// tokens) AND the Twitch app credentials (Client-Id header + refresh grant).
-	cipher, cipherErr := encryption.NewMultiKeyEncryptorFromEnv()
+	cipher, cipherErr := encryption.NewMultiKeyEncryptorFromEnvWithLogger(log)
 	switch {
 	case cipherErr != nil:
 		log.Warn("Token cipher unavailable (set TOKEN_ENCRYPTION_KEY_V1); Twitch moderation runs in dry-run", zap.Error(cipherErr))
@@ -233,8 +240,8 @@ func main() {
 
 	// All moderation routes require a valid user JWT (forwarded by the gateway).
 	api := router.Group("/api/v1/moderation")
-	api.Use(middleware.JWTAuth(userKeyChain)) // sets user_id + impersonation provenance
-	api.Use(rl.Middleware())                  // per-user rate limit (keys on user_id)
+	api.Use(middleware.JWTAuthWithRevocation(userKeyChain, redisClient)) // sets user_id + impersonation provenance
+	api.Use(rl.Middleware())                                             // per-user rate limit (keys on user_id)
 	api.Use(handler.IdempotencyMiddleware(redisClient, idempotencyTTL))
 
 	// Capabilities is ungated: owners outside the cohort still need it to learn the
@@ -330,7 +337,7 @@ func loadConfig() *Config {
 		DatabaseHost:        getEnv("DATABASE_HOST", "localhost"),
 		DatabasePort:        getEnv("DATABASE_PORT", "5432"),
 		DatabaseUser:        getEnv("DATABASE_USER", "allchat"),
-		DatabasePassword:    getEnv("DATABASE_PASSWORD", "allchat_dev_password"),
+		DatabasePassword:    getEnv("DATABASE_PASSWORD", ""),
 		DatabaseName:        getEnv("DATABASE_NAME", "allchat"),
 		TwitchClientID:      getEnv("TWITCH_CLIENT_ID", ""),
 		TwitchClientSecret:  getEnv("TWITCH_CLIENT_SECRET", ""),

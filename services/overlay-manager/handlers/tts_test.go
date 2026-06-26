@@ -921,6 +921,72 @@ func TestHandleTTSUsesCfgVoiceIDWhenQueryParamMissing(t *testing.T) {
 		"upstream request must target /v1/text-to-speech/xyz/stream, got %s", gotPath)
 }
 
+// TestHandleTTSAuthHeaderAndBodyVoice — audit M17: tts_token can be sent
+// via Authorization: Bearer header and voice via JSON body instead of URL
+// query params (which leak into access logs).
+func TestHandleTTSAuthHeaderAndBodyVoice(t *testing.T) {
+	var gotPath string
+	upstream := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "audio/mpeg")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
+	f := newTestHandler(t, upstream)
+	defer f.upstreamTS.Close()
+
+	gates := &mockGateChecker{isPremiumResult: true}
+	r := newRouter(t, f.handler, gates, true, "user-1")
+	r.ServeHTTP(httptest.NewRecorder(),
+		httptest.NewRequest(http.MethodPost, "/overlay-authhdr/tts-config",
+			strings.NewReader(`{"api_key":"sk","voice_id":"cfg-voice"}`)))
+
+	token, err := ttspkg.SignOverlayToken("overlay-authhdr", f.repo.row.SigningSecret)
+	require.NoError(t, err)
+
+	// Send token via Authorization header + voice via JSON body — no query params.
+	req := httptest.NewRequest(http.MethodPost, "/overlay-authhdr/tts", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	req.Body = io.NopCloser(strings.NewReader(`{"text":"hello","voice":"body-voice"}`))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
+	assert.Contains(t, gotPath, "/v1/text-to-speech/body-voice/stream",
+		"voice must come from JSON body, got %s", gotPath)
+}
+
+// TestHandleTTSAuthHeaderFallsBackToQuery — backward compat: if no
+// Authorization header is present, the handler still accepts tts_token
+// via query param (audit M17 rollout safety).
+func TestHandleTTSAuthHeaderFallsBackToQuery(t *testing.T) {
+	upstream := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "audio/mpeg")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
+	f := newTestHandler(t, upstream)
+	defer f.upstreamTS.Close()
+
+	gates := &mockGateChecker{isPremiumResult: true}
+	r := newRouter(t, f.handler, gates, true, "user-1")
+	r.ServeHTTP(httptest.NewRecorder(),
+		httptest.NewRequest(http.MethodPost, "/overlay-fallback/tts-config",
+			strings.NewReader(`{"api_key":"sk","voice_id":"v1"}`)))
+
+	token, err := ttspkg.SignOverlayToken("overlay-fallback", f.repo.row.SigningSecret)
+	require.NoError(t, err)
+
+	// No Authorization header — token only in query param.
+	url := fmt.Sprintf("/overlay-fallback/tts?text=hi&tts_token=%s", token)
+	req := httptest.NewRequest(http.MethodPost, url, nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code, "query-param fallback must still work")
+}
+
 // TestHandleTTSCancelPropagates — cancel the client context mid-flight; the
 // upstream sees the connection close.
 func TestHandleTTSCancelPropagates(t *testing.T) {
@@ -1118,6 +1184,182 @@ func (s *stubSourceRepo) GetByID(_ context.Context, _ string) (*models.ChatSourc
 func (s *stubSourceRepo) Delete(_ context.Context, _ string) error { return nil }
 func (s *stubSourceRepo) UpdateConfig(_ context.Context, _ string, _ map[string]interface{}) error {
 	return nil
+}
+
+// ---- L8: voiceID validation + body bounding (audit L8) ------------------
+
+// TestHandleTTSRejectsMaliciousVoiceID verifies that a voiceID containing
+// path-traversal characters (e.g. "../") in the JSON body is rejected with
+// 400 instead of being interpolated raw into the ElevenLabs upstream URL
+// path (audit L8 — SSRF / path-injection).
+func TestHandleTTSRejectsMaliciousVoiceID(t *testing.T) {
+	upstream := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// If the handler forwards the request, the path would contain the
+		// unescaped traversal. We should never reach here.
+		t.Errorf("upstream should not be called; got path=%s", r.URL.Path)
+	})
+	f := newTestHandler(t, upstream)
+	defer f.upstreamTS.Close()
+
+	gates := &mockGateChecker{isPremiumResult: true}
+	r := newRouter(t, f.handler, gates, true, "user-1")
+
+	// Save a valid config so the signing secret + config exist.
+	r.ServeHTTP(httptest.NewRecorder(),
+		httptest.NewRequest(http.MethodPost, "/overlay-l8/tts-config",
+			strings.NewReader(`{"api_key":"sk","voice_id":"v1"}`)))
+
+	token, err := ttspkg.SignOverlayToken("overlay-l8", f.repo.row.SigningSecret)
+	require.NoError(t, err)
+
+	cases := []struct {
+		name    string
+		voice   string
+		viaBody bool
+	}{
+		{"path traversal in body", `../../../etc/passwd`, true},
+		{"query injection in body", `v1?foo=bar`, true},
+		{"fragment in body", `v1#evil`, true},
+		{"path traversal in query", `../../../etc/passwd`, false},
+		{"query injection in query", `v1?foo=bar`, false},
+		{"empty-ish with slash", `v/1`, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var body io.Reader
+			if tc.viaBody {
+				body = strings.NewReader(fmt.Sprintf(`{"text":"hi","voice":%q}`, tc.voice))
+			} else {
+				body = strings.NewReader(`{"text":"hi"}`)
+			}
+			urlStr := fmt.Sprintf("/overlay-l8/tts?tts_token=%s", token)
+			if !tc.viaBody {
+				urlStr += "&voice=" + tc.voice
+			}
+			req := httptest.NewRequest(http.MethodPost, urlStr, body)
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			assert.Equal(t, http.StatusBadRequest, w.Code,
+				"malicious voice=%q should be rejected; body=%s", tc.voice, w.Body.String())
+		})
+	}
+}
+
+// TestHandleTTSAcceptsValidVoiceIDs verifies that legitimate voice IDs
+// (alphanumerics, hyphens, underscores) pass the L8 validation and reach the
+// upstream. Regression guard for the validation added in L8.
+func TestHandleTTSAcceptsValidVoiceIDs(t *testing.T) {
+	upstream := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "audio/mpeg")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
+	f := newTestHandler(t, upstream)
+	defer f.upstreamTS.Close()
+
+	gates := &mockGateChecker{isPremiumResult: true}
+	r := newRouter(t, f.handler, gates, true, "user-1")
+
+	r.ServeHTTP(httptest.NewRecorder(),
+		httptest.NewRequest(http.MethodPost, "/overlay-valid/tts-config",
+			strings.NewReader(`{"api_key":"sk","voice_id":"v1"}`)))
+
+	token, err := ttspkg.SignOverlayToken("overlay-valid", f.repo.row.SigningSecret)
+	require.NoError(t, err)
+
+	validVoices := []string{"v1", "voice-123", "my_voice", "ABCdef123_-"}
+	for _, v := range validVoices {
+		t.Run(v, func(t *testing.T) {
+			urlStr := fmt.Sprintf("/overlay-valid/tts?text=hi&voice=%s&tts_token=%s", v, token)
+			req := httptest.NewRequest(http.MethodPost, urlStr, nil)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			assert.Equal(t, http.StatusOK, w.Code,
+				"valid voice=%q should reach upstream; body=%s", v, w.Body.String())
+		})
+	}
+}
+
+// TestHandleTTSBodyBoundedByMaxBytesReader verifies that an oversized POST
+// body is rejected before expensive processing (audit L8 — memory-exhaustion
+// DoS). The body limit is 1 MiB; sending >1 MiB must produce a 400.
+func TestHandleTTSBodyBoundedByMaxBytesReader(t *testing.T) {
+	f := newTestHandler(t, nil)
+
+	gates := &mockGateChecker{isPremiumResult: true}
+	r := newRouter(t, f.handler, gates, true, "user-1")
+
+	r.ServeHTTP(httptest.NewRecorder(),
+		httptest.NewRequest(http.MethodPost, "/overlay-body/tts-config",
+			strings.NewReader(`{"api_key":"sk","voice_id":"v1"}`)))
+
+	token, err := ttspkg.SignOverlayToken("overlay-body", f.repo.row.SigningSecret)
+	require.NoError(t, err)
+
+	// Build a JSON body just over 1 MiB.
+	padding := strings.Repeat("x", (1<<20)+100)
+	body := fmt.Sprintf(`{"text":"%s"}`, padding)
+	urlStr := fmt.Sprintf("/overlay-body/tts?tts_token=%s", token)
+	req := httptest.NewRequest(http.MethodPost, urlStr, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	// MaxBytesReader triggers a 400 (gin ShouldBindJSON returns an error that
+	// the handler maps to 400 "invalid request body").
+	assert.Equal(t, http.StatusBadRequest, w.Code,
+		"oversized body should be rejected; got body=%s", w.Body.String())
+}
+
+// TestSaveTTSConfigRejectsInvalidVoiceID verifies that POST /tts-config
+// rejects a voice_id containing path-traversal characters before persisting
+// (audit L8 — prevents storing a malicious value that later gets
+// interpolated into the upstream URL in HandleTestKey).
+func TestSaveTTSConfigRejectsInvalidVoiceID(t *testing.T) {
+	f := newTestHandler(t, nil)
+	gates := &mockGateChecker{isPremiumResult: true}
+	r := newRouter(t, f.handler, gates, true, "user-1")
+
+	cases := []string{"../etc", "v?x", "v#y", "v/1", "v 1"}
+	for _, v := range cases {
+		t.Run(v, func(t *testing.T) {
+			body := strings.NewReader(fmt.Sprintf(`{"api_key":"sk","voice_id":%q}`, v))
+			req := httptest.NewRequest(http.MethodPost, "/overlay-save/tts-config", body)
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			assert.Equal(t, http.StatusBadRequest, w.Code,
+				"voice_id=%q should be rejected", v)
+		})
+	}
+}
+
+// TestSaveVoiceRejectsInvalidVoiceID verifies that PATCH /tts-config/voice
+// rejects a voice_id containing path-traversal characters before persisting
+// (audit L8).
+func TestSaveVoiceRejectsInvalidVoiceID(t *testing.T) {
+	f := newTestHandler(t, nil)
+	gates := &mockGateChecker{isPremiumResult: true}
+	r := newRouter(t, f.handler, gates, true, "user-1")
+
+	// Save an initial config so UpdateVoiceID has a row to update.
+	r.ServeHTTP(httptest.NewRecorder(),
+		httptest.NewRequest(http.MethodPost, "/overlay-voice/tts-config",
+			strings.NewReader(`{"api_key":"sk","voice_id":"v1"}`)))
+
+	cases := []string{"../etc", "v?x", "v#y", "v/1"}
+	for _, v := range cases {
+		t.Run(v, func(t *testing.T) {
+			body := strings.NewReader(fmt.Sprintf(`{"voice_id":%q}`, v))
+			req := httptest.NewRequest(http.MethodPatch, "/overlay-voice/tts-config/voice", body)
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			assert.Equal(t, http.StatusBadRequest, w.Code,
+				"voice_id=%q should be rejected", v)
+		})
+	}
 }
 
 // Ensure the file compiles under the handlers package even if downstream

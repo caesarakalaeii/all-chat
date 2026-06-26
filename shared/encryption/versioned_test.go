@@ -28,12 +28,15 @@ import (
 	"github.com/caesar/all-chat/shared/encryption"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // Golden test vector constants (T-14-01-03, T-14-01-04).
-//   Plaintext: "test-token-value"
-//   Key: 32 bytes of 0x00
-//   Nonce: 12 bytes of 0x00 (deterministic — for tests only, never use in production)
+//
+//	Plaintext: "test-token-value"
+//	Key: 32 bytes of 0x00
+//	Nonce: 12 bytes of 0x00 (deterministic — for tests only, never use in production)
 //
 // To regenerate: go test ./shared/encryption/... -update
 // Regeneration writes new golden files from the same deterministic inputs, so the
@@ -60,7 +63,7 @@ func TestMain(m *testing.M) {
 // Key and nonce are all-zero — these are test-only values and cannot be production secrets.
 func regenerateGoldens() {
 	plaintext := []byte(goldenPlaintext)
-	key := make([]byte, 32) // all zeros
+	key := make([]byte, 32)   // all zeros
 	nonce := make([]byte, 12) // all zeros
 
 	block, err := aes.NewCipher(key)
@@ -392,7 +395,7 @@ func TestNewMultiKeyEncryptorFromEnv_YouTubeLegacy(t *testing.T) {
 	ytKeyB64 := base64.StdEncoding.EncodeToString(thirdKey32())
 
 	t.Setenv("TOKEN_ENCRYPTION_KEY_V1", v1KeyB64)
-	t.Setenv("TOKEN_ENCRYPTION_KEY", "")       // intentionally absent
+	t.Setenv("TOKEN_ENCRYPTION_KEY", "") // intentionally absent
 	t.Setenv("YOUTUBE_TOKEN_ENCRYPTION_KEY", ytKeyB64)
 
 	enc, err := encryption.NewMultiKeyEncryptorFromEnv()
@@ -448,4 +451,45 @@ func TestKidRangeReserved(t *testing.T) {
 		)
 		require.NoError(t, err, "kid 0x7F is within the valid range 0x01..0x7F")
 	})
+}
+
+// TestNewMultiKeyEncryptorFromEnvWithLogger_WarnsOnAllZeroKey (audit L5) verifies
+// that when a real logger is threaded via NewMultiKeyEncryptorFromEnvWithLogger,
+// warnIfWeakKey actually emits a warning for an all-zero key. Pre-L5 the function
+// was always called with zap.NewNop(), so the warning was silently dropped.
+func TestNewMultiKeyEncryptorFromEnvWithLogger_WarnsOnAllZeroKey(t *testing.T) {
+	// zeroKey32 base64-encoded — all-zero key triggers the weak-key warning.
+	zeroKeyB64 := base64.StdEncoding.EncodeToString(zeroKey32())
+	t.Setenv("TOKEN_ENCRYPTION_KEY_V1", zeroKeyB64)
+	t.Setenv("TOKEN_ENCRYPTION_KEY_V2", "")
+	t.Setenv("TOKEN_ENCRYPTION_KEY", "")
+	t.Setenv("YOUTUBE_TOKEN_ENCRYPTION_KEY", "")
+
+	var buf strings.Builder
+	enc := zapcore.NewConsoleEncoder(zapcore.EncoderConfig{
+		LevelKey:    "level",
+		MessageKey:  "msg",
+		EncodeLevel: zapcore.CapitalLevelEncoder,
+	})
+	core := zapcore.NewCore(enc, zapcore.AddSync(&buf), zapcore.WarnLevel)
+	logger := zap.New(core)
+
+	_, err := encryption.NewMultiKeyEncryptorFromEnvWithLogger(logger)
+	require.NoError(t, err, "all-zero key is accepted (advisory warning, not fail-closed)")
+
+	output := buf.String()
+	assert.Contains(t, output, "all zeros", "weak-key warning must be emitted with a real logger")
+	assert.Contains(t, output, "TOKEN_ENCRYPTION_KEY_V1")
+}
+
+// TestNewMultiKeyEncryptorFromEnvWithLogger_NilLoggerSafe verifies that passing a
+// nil logger does not panic (nil-safe default to no-op).
+func TestNewMultiKeyEncryptorFromEnvWithLogger_NilLoggerSafe(t *testing.T) {
+	v1KeyB64 := base64.StdEncoding.EncodeToString(altKey32())
+	t.Setenv("TOKEN_ENCRYPTION_KEY_V1", v1KeyB64)
+	t.Setenv("TOKEN_ENCRYPTION_KEY_V2", "")
+
+	enc, err := encryption.NewMultiKeyEncryptorFromEnvWithLogger(nil)
+	require.NoError(t, err)
+	assert.NotNil(t, enc)
 }

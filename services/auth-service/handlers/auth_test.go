@@ -61,6 +61,7 @@ func TestAuthHandlerCreation(t *testing.T) {
 	handler := NewAuthHandler(
 		twitchOAuth,
 		youtubeOAuth,
+		nil, // kickOAuth
 		userRepo,
 		redisClient,
 		testUserKeyChain("test-jwt-secret"),
@@ -120,6 +121,7 @@ func TestAuthHandlerLogout(t *testing.T) {
 			handler := NewAuthHandler(
 				twitchOAuth,
 				nil,
+				nil, // kickOAuth
 				userRepo,
 				redisClient,
 				testUserKeyChain("test-jwt-secret"),
@@ -169,6 +171,7 @@ func TestAuthHandlerGetMe_Unauthorized(t *testing.T) {
 	handler := NewAuthHandler(
 		twitchOAuth,
 		nil,
+		nil, // kickOAuth
 		userRepo,
 		redisClient,
 		testUserKeyChain("test-jwt-secret"),

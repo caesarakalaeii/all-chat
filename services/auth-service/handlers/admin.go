@@ -17,31 +17,57 @@
 package handlers
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
-	"github.com/caesar/all-chat/services/auth-service/repository"
+	"github.com/caesar/all-chat/services/auth-service/models"
 	"github.com/caesar/all-chat/shared/auth"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
+// adminUserRepository is the subset of *repository.UserRepository methods used
+// by AdminHandler. Declared as an interface so the handler can be unit-tested
+// with a fake repository — the concrete UserRepository requires a live DB
+// pool (GetUserByID panics on a nil pool) and cannot be substituted otherwise.
+type adminUserRepository interface {
+	GetAllUsers(ctx context.Context) ([]*models.User, error)
+	GetUserByID(ctx context.Context, userID string) (*models.User, error)
+	BanUser(ctx context.Context, userID, adminID, reason string) error
+	BanPlatformID(ctx context.Context, platform, platformID, adminID, reason string) error
+	UnbanUser(ctx context.Context, userID string) error
+	GetBannedUsers(ctx context.Context, limit, offset int) ([]*models.User, error)
+}
+
 // AdminHandler handles admin-specific endpoints
 type AdminHandler struct {
-	repo         *repository.UserRepository
-	db           *pgxpool.Pool
-	logger       *zap.Logger
-	userKeyChain *auth.KeyChain
+	repo                adminUserRepository
+	db                  *pgxpool.Pool
+	logger              *zap.Logger
+	userKeyChain        *auth.KeyChain
+	redis               *redis.Client // H3 impersonation admin-identity stash
+	jwtExpiry           time.Duration // regular session JWT TTL
+	impersonationExpiry time.Duration // audit #20: short-lived impersonation token/stash/cookie TTL
 }
 
 // NewAdminHandler creates a new admin handler
-func NewAdminHandler(repo *repository.UserRepository, db *pgxpool.Pool, logger *zap.Logger, userKeyChain *auth.KeyChain) *AdminHandler {
+func NewAdminHandler(repo adminUserRepository, db *pgxpool.Pool, logger *zap.Logger, userKeyChain *auth.KeyChain, rdb *redis.Client, jwtExpiry, impersonationExpiry time.Duration) *AdminHandler {
+	if impersonationExpiry <= 0 {
+		impersonationExpiry = 2 * time.Hour
+	}
 	return &AdminHandler{
-		repo:         repo,
-		db:           db,
-		logger:       logger,
-		userKeyChain: userKeyChain,
+		repo:                repo,
+		db:                  db,
+		logger:              logger,
+		userKeyChain:        userKeyChain,
+		redis:               rdb,
+		jwtExpiry:           jwtExpiry,
+		impersonationExpiry: impersonationExpiry,
 	}
 }
 
@@ -149,6 +175,19 @@ func (h *AdminHandler) ImpersonateUser(c *gin.Context) {
 		return
 	}
 
+	// audit #7: reject chained impersonation. An impersonation token carries
+	// roles [user,admin], so an impersonated session passes AdminOnly; without
+	// this guard an admin could impersonate A, then impersonate B from A's
+	// session — laundering the DSGVO audit trail (the row would name the victim A
+	// as the acting admin, not the real admin). Impersonation must only ever
+	// originate from a genuine, non-impersonated admin session.
+	if ib, _ := c.Get("impersonated_by"); ib != nil {
+		if s, ok := ib.(string); ok && s != "" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "cannot impersonate while impersonating"})
+			return
+		}
+	}
+
 	// Get admin username from context
 	adminUsername, _ := c.Get("username")
 
@@ -176,14 +215,15 @@ func (h *AdminHandler) ImpersonateUser(c *gin.Context) {
 	}
 
 	// Generate impersonation JWT
-	token, err := auth.GenerateImpersonationJWTWithKid(
+	token, err := auth.GenerateImpersonationJWTWithKidExpiry(
 		h.userKeyChain.LatestKid(),
 		adminUserID.(string),
 		adminUsername.(string),
 		targetUser.ID,
 		targetUser.Username,
 		targetTwitchID,
-		string(h.userKeyChain.LatestSecret()),
+		h.userKeyChain.LatestSecret(),
+		h.impersonationExpiry, // audit #20: short-lived, not the 24h session TTL
 	)
 	if err != nil {
 		h.logger.Error("Failed to generate impersonation token",
@@ -200,23 +240,54 @@ func (h *AdminHandler) ImpersonateUser(c *gin.Context) {
 		zap.String("target_id", targetUserID),
 		zap.String("target_username", targetUser.Username))
 
-	// DSGVO Art. 5(2) accountability: persist audit record
-	_, auditErr := h.db.Exec(c.Request.Context(),
-		`INSERT INTO impersonation_audit_log (admin_user_id, admin_username, target_user_id, target_username)
+	// DSGVO Art. 5(2) accountability: persist audit record. Best-effort and
+	// non-fatal — guarded so the handler works without a DB (tests / non-DB
+	// deployments).
+	if h.db != nil {
+		_, auditErr := h.db.Exec(c.Request.Context(),
+			`INSERT INTO impersonation_audit_log (admin_user_id, admin_username, target_user_id, target_username)
 		 VALUES ($1, $2, $3, $4)`,
-		adminUserID.(string), adminUsername.(string), targetUserID, targetUser.Username)
-	if auditErr != nil {
-		h.logger.Error("Failed to write impersonation audit log",
-			zap.String("admin_id", adminUserID.(string)),
-			zap.String("target_id", targetUserID),
-			zap.Error(auditErr))
+			adminUserID.(string), adminUsername.(string), targetUserID, targetUser.Username)
+		if auditErr != nil {
+			h.logger.Error("Failed to write impersonation audit log",
+				zap.String("admin_id", adminUserID.(string)),
+				zap.String("target_id", targetUserID),
+				zap.Error(auditErr))
+		}
 	}
 
+	// Stash the admin identity in Redis keyed by the new JWT's jti, so
+	// /stop-impersonation can restore the admin session. TTL = jwtExpiry.
+	impClaims, err := auth.ValidateJWTWithKeyChain(token, h.userKeyChain)
+	if err != nil || impClaims == nil || impClaims.ID == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read impersonation jti"})
+		return
+	}
+	stashKey := "impersonation:" + impClaims.ID
+	stash := map[string]string{
+		"admin_user_id":  adminUserID.(string),
+		"admin_username": adminUsername.(string),
+	}
+	stashJSON, _ := json.Marshal(stash)
+	if err := h.redis.Set(c.Request.Context(), stashKey, string(stashJSON), h.impersonationExpiry).Err(); err != nil {
+		h.logger.Error("Failed to stash admin identity for impersonation", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+
+	// Set the impersonated access cookie (replaces the admin's cookie).
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     auth.CookieAccessToken,
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   int(h.impersonationExpiry.Seconds()),
+	})
+
 	c.JSON(http.StatusOK, gin.H{
-		"token":         token,
-		"user_id":       targetUser.ID,
-		"username":      targetUser.Username,
-		"expires_in":    7200, // 2 hours in seconds
+		"user":          gin.H{"id": targetUser.ID, "username": targetUser.Username, "display_name": targetUser.DisplayName},
 		"impersonating": true,
 	})
 }

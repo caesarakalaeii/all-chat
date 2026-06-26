@@ -3,6 +3,17 @@ version: '3.9'
 # Frontend Development Environment
 # Minimal services needed for frontend testing and development
 # Usage: docker-compose -f docker-compose.frontend.yml up
+#
+# SECURITY (M16): Internal ports are bound to 127.0.0.1 and Redis auth is wired
+# (default-off). Dev secret defaults are overridable via env so prod-like values
+# can be supplied without editing the file. This is the DEV profile — do NOT use
+# these defaults in production; set real values via env / .env instead.
+#
+# REDIS AUTH: `redis-server` runs with `--requirepass "$REDIS_PASSWORD"`. While
+# REDIS_PASSWORD is empty (default) AUTH is disabled. Setting a non-empty value
+# enables AUTH — only services that read REDIS_PASSWORD (api-gateway,
+# source-manager, twitch-listener) connect; others hardcode empty and must be
+# updated first. Leave empty for frontend dev.
 
 services:
   # PostgreSQL database
@@ -12,9 +23,9 @@ services:
     environment:
       POSTGRES_DB: allchat
       POSTGRES_USER: allchat
-      POSTGRES_PASSWORD: dev_password_123
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev_password_123}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - frontend_postgres_data:/var/lib/postgresql/data
       - ./migrations/init:/docker-entrypoint-initdb.d:ro
@@ -30,20 +41,23 @@ services:
   redis:
     image: redis:7-alpine
     container_name: allchat-frontend-redis
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     command:
-      - redis-server
-      - --appendonly
-      - "yes"
-      - --maxmemory
-      - 256mb
-      - --maxmemory-policy
-      - allkeys-lru
+      - sh
+      - -c
+      - |
+        if [ -n "$$REDIS_PASSWORD" ]; then
+          exec redis-server --requirepass "$$REDIS_PASSWORD" --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+        else
+          exec redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+        fi
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - frontend_redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep PONG"]
       interval: 5s
       timeout: 3s
       retries: 3
@@ -63,10 +77,11 @@ services:
       DATABASE_PORT: "5432"
       DATABASE_NAME: allchat
       DATABASE_USER: allchat
-      DATABASE_PASSWORD: dev_password_123
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-dev_password_123}
       REDIS_HOST: redis
       REDIS_PORT: "6379"
-      JWT_SECRET: frontend-dev-secret-12345
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:-frontend-dev-secret-12345}
       TWITCH_CLIENT_ID: ${TWITCH_CLIENT_ID}
       TWITCH_CLIENT_SECRET: ${TWITCH_CLIENT_SECRET}
       MESSAGE_PROCESSOR_URL: http://message-processor:8087
@@ -77,7 +92,7 @@ services:
       TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef}
       OVERLAY_PUBLIC_BASE_URL: ${OVERLAY_PUBLIC_BASE_URL:-http://localhost:3000}
     ports:
-      - "8082:8082"
+      - "127.0.0.1:8082:8082"
     depends_on:
       postgres:
         condition: service_healthy
@@ -100,14 +115,15 @@ services:
       DATABASE_PORT: "5432"
       DATABASE_NAME: allchat
       DATABASE_USER: allchat
-      DATABASE_PASSWORD: dev_password_123
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-dev_password_123}
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       EMOTE_SERVICE_URL: ""  # Disable emote enrichment for frontend testing
       MOCK_MESSAGE_API_KEY: dev-frontend-key
       MESSAGE_AGE_CUTOFF_SECONDS: "600"  # 10 minutes for testing
     ports:
-      - "8087:8087"
+      - "127.0.0.1:8087:8087"
     depends_on:
       postgres:
         condition: service_healthy
@@ -130,13 +146,14 @@ services:
       DATABASE_PORT: "5432"
       DATABASE_NAME: allchat
       DATABASE_USER: allchat
-      DATABASE_PASSWORD: dev_password_123
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-dev_password_123}
       REDIS_HOST: redis
       REDIS_PORT: "6379"
-      JWT_SECRET: frontend-dev-secret-12345
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:-frontend-dev-secret-12345}
       API_GATEWAY_URL: http://api-gateway:8080
     ports:
-      - "8090:8090"
+      - "127.0.0.1:8090:8090"
     depends_on:
       postgres:
         condition: service_healthy
@@ -163,16 +180,17 @@ services:
       DATABASE_PORT: "5432"
       DATABASE_NAME: allchat
       DATABASE_USER: allchat
-      DATABASE_PASSWORD: dev_password_123
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-dev_password_123}
       REDIS_HOST: redis
       REDIS_PORT: "6379"
-      JWT_SECRET: frontend-dev-secret-12345
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:-frontend-dev-secret-12345}
       TWITCH_CLIENT_ID: ${TWITCH_CLIENT_ID}
       TWITCH_CLIENT_SECRET: ${TWITCH_CLIENT_SECRET}
       CORS_ORIGIN: "*"  # Allow all origins for frontend dev
       WEBSOCKET_ALLOWED_ORIGINS: "*"
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     depends_on:
       postgres:
         condition: service_healthy

@@ -50,6 +50,9 @@ func main() {
 	logLevel := getEnv("LOG_LEVEL", "info")
 	log := logger.NewLogger("payment-service", logLevel)
 	defer log.Sync()
+	// Surface JWT revocation (logout-blacklist) check failures from the shared
+	// middleware instead of dropping them to a no-op logger (PR #478 review L3).
+	middleware.SetLogger(log)
 
 	log.Info("Starting Payment Service", zap.String("version", getEnv("APP_VERSION", "dev")))
 
@@ -100,15 +103,19 @@ func main() {
 	}
 
 	// Token encryption (TOKEN_ENCRYPTION_KEY_V1).
-	encryptor, err := encryption.NewMultiKeyEncryptorFromEnv()
+	encryptor, err := encryption.NewMultiKeyEncryptorFromEnvWithLogger(log)
 	if err != nil {
 		log.Fatal("Failed to initialize encryption (TOKEN_ENCRYPTION_KEY_V1 must be set)", zap.Error(err))
 	}
 
 	// PostgreSQL.
+	dbPassword := getEnv("DATABASE_PASSWORD", "")
+	if dbPassword == "" {
+		log.Fatal("DATABASE_PASSWORD must be set")
+	}
 	connString := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
 		getEnv("DATABASE_USER", "allchat"),
-		getEnv("DATABASE_PASSWORD", "allchat_dev_password"),
+		dbPassword,
 		getEnv("DATABASE_HOST", "localhost"),
 		getEnv("DATABASE_PORT", "5432"),
 		getEnv("DATABASE_NAME", "allchat"))
@@ -212,7 +219,7 @@ func main() {
 	// keychain); each handler reads its own subject id (user_id / viewer_id) and
 	// 401s if the token is the wrong kind.
 	api := router.Group("/api/v1")
-	api.Use(middleware.JWTAuth(userKeyChain))
+	api.Use(middleware.JWTAuthWithRevocation(userKeyChain, redisClient))
 	{
 		// Streamer premium (ADR-0018).
 		api.GET("/payment/patreon/connect", oauthHandler.Connect)

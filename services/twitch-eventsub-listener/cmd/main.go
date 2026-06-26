@@ -126,7 +126,8 @@ func main() {
 	redisHost := listener.Env("REDIS_HOST", "localhost")
 	redisPort := listener.Env("REDIS_PORT", "6379")
 	redisClient := redis.NewClient(&redis.Options{
-		Addr: fmt.Sprintf("%s:%s", redisHost, redisPort),
+		Addr:     fmt.Sprintf("%s:%s", redisHost, redisPort),
+		Password: listener.Env("REDIS_PASSWORD", ""),
 	})
 	defer redisClient.Close()
 
@@ -140,7 +141,7 @@ func main() {
 	// Reads TOKEN_ENCRYPTION_KEY_V1 (required) and TOKEN_ENCRYPTION_KEY (legacy fallback).
 	// NOTE: Deployment manifest currently mounts ENCRYPTION_KEY; Plan 14-07 renames it to
 	// TOKEN_ENCRYPTION_KEY. This service will fail to start until Plan 14-07 ships.
-	tokenCipher, err := encryption.NewMultiKeyEncryptorFromEnv()
+	tokenCipher, err := encryption.NewMultiKeyEncryptorFromEnvWithLogger(log)
 	if err != nil {
 		log.Fatal("Failed to initialize token cipher (TOKEN_ENCRYPTION_KEY_V1 must be set)", zap.Error(err))
 	}

@@ -35,7 +35,6 @@ import Image from 'next/image'
 import { use, useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
-import { useAuthStore } from '@/lib/stores/auth-store'
 import { WebSocketClient } from '@/lib/api/websocket'
 import { overlaysApi } from '@/lib/api/overlays'
 import type { ChatMessage, NameGradient } from '@/lib/types/message'
@@ -45,6 +44,7 @@ import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges'
 import { sortMessageBadges } from '@/lib/badgeOrder'
 import { visualSettingsToCss } from '@/lib/utils/visual-settings-to-css'
 import { getBundledTheme } from '@/lib/theme-marketplace/bundled-themes'
+import { rewriteThemeFontImports } from '@/lib/theme-marketplace/font-proxy'
 import { chatBubbleStyle, overlayContainerStyle } from '@/lib/utils/visual-inline-styles'
 import { AllChatBadge } from '@/components/AllChatBadge'
 import { PremiumBadge } from '@/components/PremiumBadge'
@@ -59,6 +59,13 @@ import '@/styles/events.css'
 
 // ---- Utilities (identical to preview/page.tsx) ----------------------------
 
+// NOTE (M11): scopeCustomCss prefixes selectors so owner-authored CSS is
+// scoped to the preview root. It is NOT a full CSS sanitizer: `@import`,
+// `url(...)`, `expression()`, or escaped-selector tricks could still escape.
+// A complete CSS sanitiser is large and out of scope here; the blast radius
+// is capped by the CSP `style-src` directive added in next.config.js (M10),
+// which blocks external stylesheets and inline style injection vectors that
+// would otherwise be reachable via url()/@import.
 const scopeCustomCss = (css: string, scopeSelector: string, bodySelector: string): string => {
   if (!css.trim()) {
     return ''
@@ -194,7 +201,6 @@ function ensureGoogleFontLoaded(fontFamily: string): void {
 
 export default function OverlayEmbedPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
-  const { token } = useAuthStore()
 
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [maxMessages, setMaxMessages] = useState(50)
@@ -282,6 +288,11 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
   // postMessage listener for live visual CSS updates from the editor
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
+      // M11: the editor that embeds this page is same-origin
+      // (/overlays/:id editor iframes /overlays/:id/preview/embed). Reject
+      // messages from any other origin so a malicious parent cannot inject
+      // CSS / TTS / filter settings into the preview.
+      if (event.origin !== window.location.origin) return
       // Live visual settings (CSS variables)
       if (event.data?.type === 'VISUAL_CSS_UPDATE') {
         const css = event.data.css as string
@@ -386,17 +397,17 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
     }
 
     window.addEventListener('message', handleMessage)
-    // Signal the editor that we're ready to receive visual CSS updates
-    window.parent.postMessage({ type: 'EMBED_READY' }, '*')
+    // Signal the editor that we're ready to receive visual CSS updates.
+    // M11: target only our own origin instead of '*' so the ready signal is
+    // not leaked cross-origin.
+    window.parent.postMessage({ type: 'EMBED_READY' }, window.location.origin)
     return () => {
       window.removeEventListener('message', handleMessage)
     }
   }, [])
 
-  // Load overlay config
+  // Load overlay config (H3 cookie auth: same-origin cookie + CookieToBearer).
   useEffect(() => {
-    if (!token) return
-
     const loadConfig = async () => {
       try {
         const config = await overlaysApi.getConfig(id)
@@ -422,7 +433,7 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
         // by scopedPreviewCss, mirroring the live overlay's theme→custom order.
         const themeCss =
           typeof config.theme_id === 'string' && config.theme_id
-            ? (getBundledTheme(config.theme_id)?.css ?? '')
+            ? rewriteThemeFontImports(getBundledTheme(config.theme_id)?.css ?? '')
             : ''
         const css = [themeCss, config.custom_css || ''].filter((s) => s.trim().length).join('\n')
         setCustomCss(css)
@@ -566,17 +577,16 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
     }
 
     loadConfig()
-  }, [id, token, handleTTSFallback])
+  }, [id, handleTTSFallback])
 
-  // Initialize WebSocket connection
+  // Initialize WebSocket connection. H3 cookie auth: the owner overlay WS
+  // handshake is same-origin, so the browser sends the httpOnly access cookie
+  // automatically and the gateway authenticates without a JS-readable token.
   useEffect(() => {
-    // No auth redirect — just show empty transparent page if no token
-    if (!token) return
-
     const wsClient = new WebSocketClient()
     wsClientRef.current = wsClient
 
-    wsClient.connect(id, token)
+    wsClient.connect(id)
 
     const unsubscribe = wsClient.onMessage(async (incoming) => {
       // Parse gradient JSON string → object (message processor sends it as a string)
@@ -607,7 +617,7 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
       wsClient.disconnect()
       clearInterval(interval)
     }
-  }, [id, token, maxMessages])
+  }, [id, maxMessages])
 
   // Trim buffer when maxMessages changes
   useEffect(() => {

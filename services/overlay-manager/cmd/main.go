@@ -52,6 +52,8 @@ func main() {
 	logLevel := getEnv("LOG_LEVEL", "info")
 	log := logger.NewLogger("overlay-manager", logLevel)
 	defer log.Sync()
+	// audit L1/#4: surface JWTAuthWithRevocation blacklist-check Redis errors.
+	middleware.SetLogger(log)
 
 	log.Info("Starting Overlay Manager Service",
 		zap.String("version", getEnv("APP_VERSION", "0.1.0")),
@@ -79,6 +81,9 @@ func main() {
 
 	// Load configuration from environment
 	config := loadConfig()
+	if config.DatabasePassword == "" {
+		log.Fatal("DATABASE_PASSWORD must be set")
+	}
 
 	// Validate Twitch credentials
 	if config.TwitchClientID == "" || config.TwitchClientSecret == "" {
@@ -149,7 +154,7 @@ func main() {
 	// Phase 13+14: Multi-key AES-GCM cipher for overlay_tts_configs.encrypted_api_key.
 	// Reads TOKEN_ENCRYPTION_KEY_V1 (required) plus TOKEN_ENCRYPTION_KEY (legacy fallback).
 	// Same unified chain used by auth-service (D-04).
-	tokenCipher, err := encryption.NewMultiKeyEncryptorFromEnv()
+	tokenCipher, err := encryption.NewMultiKeyEncryptorFromEnvWithLogger(log)
 	if err != nil {
 		log.Fatal("failed to initialize token cipher (TOKEN_ENCRYPTION_KEY_V1 must be set)", zap.Error(err))
 	}
@@ -276,7 +281,7 @@ func main() {
 
 	// Protected routes (require JWT)
 	protected := router.Group("/")
-	protected.Use(middleware.JWTAuth(userKeyChain))
+	protected.Use(middleware.JWTAuthWithRevocation(userKeyChain, redisClient))
 	{
 		// Overlay CRUD routes (no :id prefix)
 		protected.POST("/", overlayHandler.HandleCreateOverlay)
@@ -335,7 +340,7 @@ func main() {
 
 	// Admin routes (JWT + Admin role required)
 	admin := router.Group("/admin")
-	admin.Use(middleware.JWTAuth(userKeyChain))
+	admin.Use(middleware.JWTAuthWithRevocation(userKeyChain, redisClient))
 	admin.Use(middleware.AdminOnly())
 	{
 		admin.GET("/overlays", adminHandler.ListOverlays)
@@ -399,7 +404,6 @@ type Config struct {
 	DatabaseName           string
 	RedisHost              string
 	RedisPort              string
-	JWTSecret              string
 	MessageProcessorURL    string
 	MessageProcessorAPIKey string
 	TwitchClientID         string
@@ -414,11 +418,10 @@ func loadConfig() *Config {
 		DatabaseHost:           getEnv("DATABASE_HOST", "localhost"),
 		DatabasePort:           getEnv("DATABASE_PORT", "5432"),
 		DatabaseUser:           getEnv("DATABASE_USER", "allchat"),
-		DatabasePassword:       getEnv("DATABASE_PASSWORD", "allchat_dev_password"),
+		DatabasePassword:       getEnv("DATABASE_PASSWORD", ""),
 		DatabaseName:           getEnv("DATABASE_NAME", "allchat"),
 		RedisHost:              getEnv("REDIS_HOST", "localhost"),
 		RedisPort:              getEnv("REDIS_PORT", "6379"),
-		JWTSecret:              getEnv("JWT_SECRET", "default-secret-change-in-production"),
 		MessageProcessorURL:    getEnv("MESSAGE_PROCESSOR_URL", "http://message-processor:8087"),
 		MessageProcessorAPIKey: getEnv("MESSAGE_PROCESSOR_API_KEY", ""),
 		TwitchClientID:         getEnv("TWITCH_CLIENT_ID", ""),

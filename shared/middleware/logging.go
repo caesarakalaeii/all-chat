@@ -17,18 +17,50 @@
 package middleware
 
 import (
+	"net/url"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
 
+// sensitiveQueryKeys are query parameters that must never reach access logs:
+// JWTs (token/tts_token/access_token/refresh_token) and OAuth handshake values
+// (code/state). See audit H5/#24/#25.
+var sensitiveQueryKeys = []string{"token", "tts_token", "access_token", "refresh_token", "code", "state"}
+
+// RedactQuery returns rawQuery with the values of any known-sensitive parameters
+// replaced by [REDACTED], on ANY route (audit #24/#25 — the prior redaction was
+// scoped to /ws/ and the "token" key only, leaking tts_token and OAuth code/state
+// on other routes). Returns rawQuery unchanged when it contains no sensitive key
+// or cannot be parsed.
+func RedactQuery(rawQuery string) string {
+	if rawQuery == "" {
+		return rawQuery
+	}
+	values, err := url.ParseQuery(rawQuery)
+	if err != nil {
+		return rawQuery
+	}
+	changed := false
+	for _, k := range sensitiveQueryKeys {
+		if values.Has(k) {
+			values.Set(k, "[REDACTED]")
+			changed = true
+		}
+	}
+	if !changed {
+		return rawQuery
+	}
+	return values.Encode()
+}
+
 // Logging returns a gin middleware that logs HTTP requests
 func Logging(logger *zap.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		path := c.Request.URL.Path
-		query := c.Request.URL.RawQuery
+		query := RedactQuery(c.Request.URL.RawQuery)
 
 		// Process request
 		c.Next()

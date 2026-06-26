@@ -49,6 +49,8 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+
+	"go.uber.org/zap"
 )
 
 // KidByte is a 1-byte key identifier prepended to every versioned ciphertext.
@@ -154,7 +156,27 @@ func NewMultiKeyEncryptor(entries []KeyEntry, legacyKeys []*AESEncryptor) (*Mult
 //
 // Constructor never panics; all parse/construction errors are returned as wrapped errors
 // (T-14-01-05).
+//
+// A warning is logged when a key appears to be all-zero or low-entropy (audit L5/L7).
+// ParseKey's base64-vs-raw ambiguity is documented in encryption.go (audit L8): if
+// the input is valid base64 and decodes to a valid key length, it is treated as base64;
+// otherwise the raw bytes are used.
+//
+// NewMultiKeyEncryptorFromEnv uses a no-op logger (backward compat). Production callers
+// should use NewMultiKeyEncryptorFromEnvWithLogger to actually surface weak-key
+// warnings (audit L5 — warnIfWeakKey was previously dead code, always called with
+// zap.NewNop(), so warnings were never emitted).
 func NewMultiKeyEncryptorFromEnv() (*MultiKeyEncryptor, error) {
+	return NewMultiKeyEncryptorFromEnvWithLogger(zap.NewNop())
+}
+
+// NewMultiKeyEncryptorFromEnvWithLogger is identical to NewMultiKeyEncryptorFromEnv
+// but threads a real logger so weak-key warnings are actually emitted (audit L5).
+// A nil logger is treated as a no-op (safe to call with nil in tests).
+func NewMultiKeyEncryptorFromEnvWithLogger(logger *zap.Logger) (*MultiKeyEncryptor, error) {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
 	var entries []KeyEntry
 	for n := 1; n <= int(MaxKid); n++ {
 		envName := "TOKEN_ENCRYPTION_KEY_V" + strconv.Itoa(n)
@@ -166,6 +188,7 @@ func NewMultiKeyEncryptorFromEnv() (*MultiKeyEncryptor, error) {
 		if err != nil {
 			return nil, fmt.Errorf("parse %s: %w", envName, err)
 		}
+		warnIfWeakKey(logger, envName, parsed)
 		cipher, err := NewAESEncryptor(parsed)
 		if err != nil {
 			return nil, fmt.Errorf("create cipher %s: %w", envName, err)
@@ -184,6 +207,7 @@ func NewMultiKeyEncryptorFromEnv() (*MultiKeyEncryptor, error) {
 		if err != nil {
 			return nil, fmt.Errorf("parse TOKEN_ENCRYPTION_KEY: %w", err)
 		}
+		warnIfWeakKey(logger, "TOKEN_ENCRYPTION_KEY", parsed)
 		cipher, err := NewAESEncryptor(parsed)
 		if err != nil {
 			return nil, fmt.Errorf("create cipher TOKEN_ENCRYPTION_KEY: %w", err)
@@ -197,6 +221,7 @@ func NewMultiKeyEncryptorFromEnv() (*MultiKeyEncryptor, error) {
 		if err != nil {
 			return nil, fmt.Errorf("parse YOUTUBE_TOKEN_ENCRYPTION_KEY: %w", err)
 		}
+		warnIfWeakKey(logger, "YOUTUBE_TOKEN_ENCRYPTION_KEY", parsed)
 		cipher, err := NewAESEncryptor(parsed)
 		if err != nil {
 			return nil, fmt.Errorf("create cipher YOUTUBE_TOKEN_ENCRYPTION_KEY: %w", err)
@@ -252,9 +277,24 @@ func (m *MultiKeyEncryptor) EncryptString(plaintext string) (string, error) {
 // Returns an error only when all keys in the chain (versioned + all legacy) fail AEAD
 // authentication.
 func (m *MultiKeyEncryptor) DecryptString(ciphertext string) (string, error) {
+	pt, _, err := m.DecryptStringWithKid(ciphertext)
+	return pt, err
+}
+
+// DecryptStringWithKid is identical to DecryptString but also reports the KidByte
+// that actually authenticated the ciphertext: the registered kid when the blob
+// decrypts via the versioned path, or LegacyKid (0x00) when a legacy fallback key
+// authenticated it — including a kid-less blob AND a legacy blob whose first byte
+// coincidentally collides with a registered kid (the false-positive case).
+//
+// The key-rotator relies on this to decide idempotency correctly (audit #12): a
+// blob is "already at the current kid" ONLY when the authenticating kid equals
+// CurrentKid, never merely when its first decoded byte equals CurrentKid — those
+// differ for the 1/256 collision blobs, which must still be re-encrypted.
+func (m *MultiKeyEncryptor) DecryptStringWithKid(ciphertext string) (string, KidByte, error) {
 	decoded, err := base64.StdEncoding.DecodeString(ciphertext)
 	if err != nil {
-		return "", fmt.Errorf("decode: %w", err)
+		return "", LegacyKid, fmt.Errorf("decode: %w", err)
 	}
 
 	// Versioned path: attempt if blob is long enough and kid is registered.
@@ -265,7 +305,7 @@ func (m *MultiKeyEncryptor) DecryptString(ciphertext string) (string, error) {
 			// AESEncryptor, which expects base64(nonce||ct||tag) without the kid byte.
 			legacyShaped := base64.StdEncoding.EncodeToString(decoded[1:])
 			if pt, aerr := cipher.DecryptString(legacyShaped); aerr == nil {
-				return pt, nil
+				return pt, kid, nil
 			}
 			// AEAD authentication failed: this is a false-positive kid byte on a legacy
 			// blob. Fall through to the legacy key chain (D-05 / T-14-01-01).
@@ -276,11 +316,11 @@ func (m *MultiKeyEncryptor) DecryptString(ciphertext string) (string, error) {
 	// The original (pre-kid-prefix) ciphertext string is passed as-is.
 	for _, lk := range m.legacyKeys {
 		if pt, lerr := lk.DecryptString(ciphertext); lerr == nil {
-			return pt, nil
+			return pt, LegacyKid, nil
 		}
 	}
 
-	return "", fmt.Errorf(
+	return "", LegacyKid, fmt.Errorf(
 		"decrypt: no key in chain (versioned kid map + %d legacy key(s)) authenticated the ciphertext",
 		len(m.legacyKeys))
 }
@@ -290,3 +330,24 @@ func (m *MultiKeyEncryptor) Encrypt(s string) (string, error) { return m.Encrypt
 
 // Decrypt is a StringCipher-compatible alias for DecryptString.
 func (m *MultiKeyEncryptor) Decrypt(s string) (string, error) { return m.DecryptString(s) }
+
+// warnIfWeakKey logs a warning when a key appears all-zero (audit L5/L7). This is
+// advisory only — the key is still accepted to avoid breaking existing deployments
+// during rotation. Callers must pass a real (non-no-op) logger for warnings to be
+// emitted; NewMultiKeyEncryptorFromEnvWithLogger threads the service logger through.
+func warnIfWeakKey(logger *zap.Logger, envName string, key []byte) {
+	if logger == nil {
+		return
+	}
+	allZero := true
+	for _, b := range key {
+		if b != 0 {
+			allZero = false
+			break
+		}
+	}
+	if allZero {
+		logger.Warn("encryption key is all zeros — this is insecure for production",
+			zap.String("env_var", envName))
+	}
+}

@@ -37,6 +37,7 @@ import { toastManager } from '@/lib/toast'
 import { LayoutGrid, Zap, Palette, Puzzle, LogIn, Plus, MonitorPlay, Code2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { trackEvent } from '@/lib/analytics'
+import { safeExternalRedirect } from '@/lib/auth/redirect-allowlist'
 
 // ---------------------------------------------------------------------------
 // InfinityLogo — animated 4-colour infinity snake inside a chat bubble
@@ -172,7 +173,7 @@ const FEATURE_CARDS = [
 // LandingPage
 // ---------------------------------------------------------------------------
 export default function HomeClient() {
-  const { user, token, init } = useAuthStore()
+  const { user, init } = useAuthStore()
   const [msgCounts, setMsgCounts] = useState<Record<Platform, number> | null>(null)
 
   const { cardRefs, glowRefs } = useMagneticGlow(TOTAL_CARDS)
@@ -190,7 +191,7 @@ export default function HomeClient() {
       .catch(() => {}) // fail silently — stats are decorative
   }, [])
 
-  const isLoggedIn = !!(user && token)
+  const isLoggedIn = !!user
 
   // Tailwind JIT needs static class strings — map auth_provider to button styles
   const DASHBOARD_BUTTON_STYLES: Record<string, { bg: string; ring: string; text: string }> = {
@@ -206,7 +207,7 @@ export default function HomeClient() {
       const response = await fetch('/api/v1/auth/twitch/login')
       const data = await response.json()
       if (data.auth_url) {
-        window.location.href = data.auth_url
+        safeExternalRedirect(data.auth_url)
       } else {
         toastManager.add({ title: 'Login failed', description: 'No auth URL returned. Try again.' })
       }
@@ -221,7 +222,7 @@ export default function HomeClient() {
       const response = await fetch('/api/v1/auth/youtube/login')
       const data = await response.json()
       if (data.auth_url) {
-        window.location.href = data.auth_url
+        safeExternalRedirect(data.auth_url)
       } else {
         toastManager.add({ title: 'Login failed', description: 'No auth URL returned. Try again.' })
       }
@@ -236,7 +237,7 @@ export default function HomeClient() {
       const response = await fetch('/api/v1/auth/kick/login')
       const data = await response.json()
       if (data.auth_url) {
-        window.location.href = data.auth_url
+        safeExternalRedirect(data.auth_url)
       } else {
         toastManager.add({ title: 'Login failed', description: 'No auth URL returned. Try again.' })
       }

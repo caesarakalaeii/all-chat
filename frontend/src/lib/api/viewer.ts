@@ -25,6 +25,8 @@
 
 import type { ViewerInfo } from '../types/viewer'
 import type { PaymentStatus } from './payment'
+import { inMemoryTokens } from '../auth/in-memory-store'
+import { safeExternalRedirect } from '../auth/redirect-allowlist'
 
 /**
  * Custom API client for viewer requests
@@ -32,10 +34,11 @@ import type { PaymentStatus } from './payment'
  */
 class ViewerApiClient {
   private async fetch(endpoint: string, options: RequestInit = {}): Promise<Response> {
-    // Get viewer token from localStorage (different from streamer token)
+    // Get viewer token — prefer in-memory store (audit H3), fall back to
+    // localStorage for legacy compatibility during the cookie migration.
     let token: string | null = null
     if (typeof window !== 'undefined') {
-      token = localStorage.getItem('viewer_jwt_token')
+      token = inMemoryTokens.getViewerAccessToken() ?? localStorage.getItem('viewer_jwt_token')
     }
 
     const headers: Record<string, string> = {
@@ -57,6 +60,7 @@ class ViewerApiClient {
 
     if (response.status === 401) {
       // Viewer token expired or invalid, clear it
+      inMemoryTokens.setViewerAccessToken(null)
       if (typeof window !== 'undefined') {
         localStorage.removeItem('viewer_jwt_token')
       }
@@ -127,7 +131,8 @@ export const viewerApi = {
       '/api/v1/payment/viewer/patreon/connect'
     )
     if (data.auth_url) {
-      window.location.href = data.auth_url
+      // SECURITY (audit L32): validate the redirect host before navigating.
+      safeExternalRedirect(data.auth_url)
     }
   },
 

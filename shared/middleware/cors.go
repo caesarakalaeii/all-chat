@@ -140,8 +140,13 @@ func CORS() gin.HandlerFunc {
 	})
 }
 
-// CORSFromEnv creates CORS middleware from environment variables
-// Reads: ENVIRONMENT, CORS_ORIGINS (comma-separated), BROWSER_EXTENSION_ID
+// CORSFromEnv creates CORS middleware from environment variables.
+// Reads: ENVIRONMENT, CORS_ORIGINS (comma-separated), BROWSER_EXTENSION_ID.
+//
+// If CORS_ORIGINS contains "*" the function logs a warning and removes it to
+// prevent the dangerous combination of wildcard origin + AllowCredentials:true
+// (audit H9/L12). gin-contrib/cors would otherwise reflect any origin with
+// credentials, enabling cross-origin credentialed access from any site.
 func CORSFromEnv(logger *zap.Logger) gin.HandlerFunc {
 	env := os.Getenv("ENVIRONMENT")
 	if env == "" {
@@ -150,9 +155,18 @@ func CORSFromEnv(logger *zap.Logger) gin.HandlerFunc {
 
 	var customOrigins []string
 	if corsOrigins := os.Getenv("CORS_ORIGINS"); corsOrigins != "" {
-		customOrigins = strings.Split(corsOrigins, ",")
-		for i, origin := range customOrigins {
-			customOrigins[i] = strings.TrimSpace(origin)
+		raw := strings.Split(corsOrigins, ",")
+		for _, origin := range raw {
+			origin = strings.TrimSpace(origin)
+			if origin == "*" {
+				if logger != nil {
+					logger.Warn("CORS_ORIGINS contains '*' which is unsafe with AllowCredentials:true; ignoring wildcard")
+				}
+				continue
+			}
+			if origin != "" {
+				customOrigins = append(customOrigins, origin)
+			}
 		}
 	}
 

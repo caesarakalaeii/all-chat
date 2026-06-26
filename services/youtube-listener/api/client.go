@@ -435,7 +435,7 @@ func (c *Client) streamChatMessagesHTTP(ctx context.Context, liveChatID, pageTok
 	defer resp.Body.Close()
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		body, readErr := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
 		if readErr == nil {
 			apiErr = googleapi.CheckResponseWithBody(resp, body)
 		} else {
@@ -559,7 +559,7 @@ func (c *Client) getChatMessagesStream(ctx context.Context, liveChatID, pageToke
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
 	if err != nil {
 		return nil, err
 	}

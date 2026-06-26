@@ -94,7 +94,7 @@ func main() {
 	// Reads TOKEN_ENCRYPTION_KEY_V1 (required) and TOKEN_ENCRYPTION_KEY (legacy fallback).
 	// NOTE: Deployment manifest must mount token-encryption-key as TOKEN_ENCRYPTION_KEY
 	// (not ENCRYPTION_KEY). Plan 14-07 owns the manifest rename.
-	encryptor, err := encryption.NewMultiKeyEncryptorFromEnv()
+	encryptor, err := encryption.NewMultiKeyEncryptorFromEnvWithLogger(log)
 	if err != nil {
 		log.Fatal("Failed to initialize encryption (TOKEN_ENCRYPTION_KEY_V1 must be set)", zap.Error(err))
 	}
@@ -104,7 +104,10 @@ func main() {
 	dbHost := getEnv("DATABASE_HOST", "localhost")
 	dbPort := getEnv("DATABASE_PORT", "5432")
 	dbUser := getEnv("DATABASE_USER", "allchat")
-	dbPassword := getEnv("DATABASE_PASSWORD", "allchat_dev_password")
+	dbPassword := getEnv("DATABASE_PASSWORD", "")
+	if dbPassword == "" {
+		log.Fatal("DATABASE_PASSWORD must be set")
+	}
 	dbName := getEnv("DATABASE_NAME", "allchat")
 
 	connString := fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
@@ -122,7 +125,8 @@ func main() {
 	redisHost := getEnv("REDIS_HOST", "localhost")
 	redisPort := getEnv("REDIS_PORT", "6379")
 	redisClient := redis.NewClient(&redis.Options{
-		Addr: fmt.Sprintf("%s:%s", redisHost, redisPort),
+		Addr:     fmt.Sprintf("%s:%s", redisHost, redisPort),
+		Password: getEnv("REDIS_PASSWORD", ""),
 	})
 	defer redisClient.Close()
 

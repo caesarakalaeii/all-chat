@@ -19,14 +19,17 @@
 /**
  * OAuth Callback Page
  *
- * Handles the OAuth callback from Twitch.
- * The backend redirects here with a JWT token in the URL query parameter.
+ * Handles the OAuth callback redirect from the backend.
+ * The backend stores tokens in Redis under a single-use code and redirects
+ * here with `?code=<uuid>`. This page POSTs the code to `/auth/exchange` to
+ * retrieve the JWT + refresh token, eliminating token exposure in the URL
+ * fragment (audit M1).
  *
  * Flow:
- * 1. Extract token from URL (?token=xxx)
- * 2. Store token in localStorage
- * 3. Fetch user info from API
- * 4. Redirect to dashboard
+ * 1. Read `code` from query string (?code=xxx)
+ * 2. POST to /auth/exchange to get {access_token, refresh_token, ...}
+ * 3. Store access token + in-memory refresh token
+ * 4. Fetch user info + redirect to dashboard (or redirect_to)
  *
  * This is a Client Component because it:
  * - Uses useEffect for side effects
@@ -41,50 +44,68 @@ import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuthStore } from '@/lib/stores/auth-store'
-import { authApi } from '@/lib/api/auth'
+import type { User } from '@/lib/types/auth'
 import { trackEvent } from '@/lib/analytics'
+import { isAllowedExternalRedirect } from '@/lib/auth/redirect-allowlist'
 import { InfinityLogo } from '@/components/InfinityLogo'
 
 function AuthCallbackContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { setToken, setUser } = useAuthStore()
+  const { setUser } = useAuthStore()
 
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const handleCallback = async () => {
-      // Get token from URL fragment (#access_token=xxx)
-      const hash = window.location.hash.substring(1) // Remove #
-      const params = new URLSearchParams(hash)
-      const token = params.get('access_token')
-      const refreshToken = params.get('refresh_token')
-
-      if (!token) {
-        trackEvent('signin_failed', { reason: 'no_token' })
-        setError('No authentication token received')
+      // Get short-lived auth code from query param (audit M1 — replaces URL
+      // fragment token exposure with code+POST exchange).
+      const code = searchParams.get('code')
+      if (!code) {
+        trackEvent('signin_failed', { reason: 'no_code' })
+        setError('No authentication code received')
         setLoading(false)
         return
       }
 
-      // Store token
-      setToken(token)
-      if (refreshToken && typeof window !== 'undefined') {
-        localStorage.setItem('refresh_token', refreshToken)
+      // Exchange the single-use code for the authenticated session. H3 cookie
+      // auth: the server sets the httpOnly access cookie; the body carries the
+      // user + redirect target (no tokens are exposed to JS).
+      let user: User | null = null
+      let redirectTo: string | null = null
+      let sourceAdded: string | null = null
+      let moderationEnabled: string | null = null
+      try {
+        const resp = await fetch('/api/v1/auth/exchange', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code }),
+        })
+        if (!resp.ok) {
+          throw new Error(`Exchange failed: ${resp.status}`)
+        }
+        const data = await resp.json()
+        user = data.user ?? null
+        redirectTo = data.redirect_to || null
+        sourceAdded = data.source_added || null
+        moderationEnabled = data.moderation_enabled || null
+      } catch (err) {
+        console.error('Token exchange failed:', err)
+        trackEvent('signin_failed', { reason: 'exchange_failed' })
+        setError('Authentication failed. The code may have expired — please try again.')
+        setLoading(false)
+        return
       }
 
+      // SECURITY (audit H3): the access token lives only in an httpOnly cookie
+      // set by the server; no token is stored in JS/localStorage. Login state is
+      // established directly from the exchange response's user object.
       try {
-        // Fetch user info
-        const user = await authApi.getMe()
+        if (!user) {
+          throw new Error('No user in exchange response')
+        }
         setUser(user)
-
-        // Check for redirect_to parameter (used when adding sources / enabling
-        // moderation via OAuth). `moderation_enabled` marks an opt-in moderation
-        // re-consent (ADR-0017) that returns to the overlay monitor, not settings.
-        const redirectTo = params.get('redirect_to')
-        const sourceAdded = params.get('source_added')
-        const moderationEnabled = params.get('moderation_enabled')
 
         // Distinct funnel steps: a completion marker means an OAuth source-add or
         // moderation re-consent finished, rather than a fresh sign-in.
@@ -97,11 +118,21 @@ function AuthCallbackContent() {
         }
 
         if (redirectTo) {
+          // SECURITY (audit M1/M12): validate redirect_to to prevent open redirect.
+          // Uses the shared allowlist helper which also rejects backslash-based
+          // bypasses (browsers normalize \ → /, so /\evil.com would navigate to
+          // evil.com). Mirrors the viewer flow at chat/auth-success/page.tsx.
+          const isSafeRedirect = isAllowedExternalRedirect(redirectTo)
           // Source-add returns to overlay settings with a confirmation marker; the
           // moderation monitor reflects the new scope on its own capabilities fetch,
           // so it just navigates back cleanly.
           const redirectURL = sourceAdded ? `${redirectTo}?source_added=${sourceAdded}` : redirectTo
-          router.push(redirectURL)
+          if (isSafeRedirect) {
+            router.push(redirectURL)
+          } else {
+            console.warn('[AllChat] Blocked unsafe redirect_to:', redirectTo)
+            router.push('/dashboard')
+          }
         } else {
           // Default: redirect to dashboard
           router.push('/dashboard')
@@ -115,7 +146,7 @@ function AuthCallbackContent() {
     }
 
     handleCallback()
-  }, [searchParams, setToken, setUser, router])
+  }, [searchParams, setUser, router])
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-bg">

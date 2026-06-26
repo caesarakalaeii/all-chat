@@ -397,3 +397,88 @@ func TestKeyChain_LatestKidAndSecret(t *testing.T) {
 	assert.Equal(t, "v2", kc.LatestKid())
 	assert.Equal(t, v2, kc.LatestSecret())
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// M3: minimum secret length enforcement
+// ─────────────────────────────────────────────────────────────────────────────
+
+func TestKeyChain_NewFromEnv_RejectsShortVersionedSecret(t *testing.T) {
+	t.Setenv("JWT_SECRET_V1", "tooshort")
+	_, err := NewKeyChainFromEnv("JWT_SECRET")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrSecretTooShort)
+}
+
+func TestKeyChain_NewFromEnv_RejectsShortLegacySecret(t *testing.T) {
+	t.Setenv("JWT_SECRET_V1", repeatSecret('a', 32))
+	t.Setenv("JWT_SECRET", "tooshort")
+	_, err := NewKeyChainFromEnv("JWT_SECRET")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrSecretTooShort)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// L3: issuer validation
+// ─────────────────────────────────────────────────────────────────────────────
+
+func TestValidateJWTWithKeyChain_RejectsWrongIssuer(t *testing.T) {
+	secret := repeatSecret('a', 32)
+	kc := NewKeyChain(map[string][]byte{"v1": []byte(secret)}, nil, "v1")
+
+	claims := Claims{
+		UserID: "u1",
+		RegisteredClaims: jwt.RegisteredClaims{
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+			Issuer:    "evil-issuer",
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	token.Header["kid"] = "v1"
+	tok, err := token.SignedString([]byte(secret))
+	require.NoError(t, err)
+
+	_, err = ValidateJWTWithKeyChain(tok, kc)
+	require.Error(t, err)
+}
+
+func TestValidateJWTWithKeyChain_AcceptsImpersonationIssuer(t *testing.T) {
+	secret := repeatSecret('i', 32)
+	kc := NewKeyChain(map[string][]byte{"v1": []byte(secret)}, nil, "v1")
+
+	tok, err := GenerateImpersonationJWTWithKid("v1", "admin-1", "admin-alice", "target-2", "target-bob", "target-twitch", secret)
+	require.NoError(t, err)
+
+	claims, err := ValidateJWTWithKeyChain(tok, kc)
+	require.NoError(t, err)
+	assert.Equal(t, "target-2", claims.UserID)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// H3: configurable expiry + jti on impersonation JWT (audit H3)
+// ─────────────────────────────────────────────────────────────────────────────
+
+func TestGenerateImpersonationJWTWithKid_ConfigurableExpiryAndJTI(t *testing.T) {
+	kid := "v1"
+	secret := []byte("0123456789abcdef0123456789abcdef")
+	tok, err := GenerateImpersonationJWTWithKidExpiry(kid, "admin-1", "admin", "user-2", "user", "twitch-9", secret, 30*time.Minute)
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+
+	kc := NewKeyChain(map[string][]byte{kid: secret}, nil, kid)
+	claims, err := ValidateJWTWithKeyChain(tok, kc)
+	if err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+
+	if claims.ImpersonatedBy != "admin-1" {
+		t.Errorf("impersonated_by=%s", claims.ImpersonatedBy)
+	}
+	if claims.ID == "" {
+		t.Error("jti not set")
+	}
+	if !claims.ExpiresAt.Time.After(time.Now().Add(29 * time.Minute)) {
+		t.Errorf("expiry not respected: %v", claims.ExpiresAt.Time)
+	}
+}

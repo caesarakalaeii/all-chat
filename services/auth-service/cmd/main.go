@@ -54,6 +54,10 @@ func main() {
 	logLevel := getEnvOrDefault("LOG_LEVEL", "info")
 	log := logger.NewLogger("auth-service", logLevel)
 	defer log.Sync()
+	// audit L1/#4: route JWTAuthWithRevocation blacklist-check Redis errors to this
+	// service's logger (the package default is a no-op), so a fail-open revocation
+	// during a Redis outage is observable instead of silently swallowed.
+	middleware.SetLogger(log)
 
 	log.Info("Starting Auth Service",
 		zap.String("version", getEnvOrDefault("APP_VERSION", "dev")),
@@ -130,7 +134,7 @@ func main() {
 	}
 	log.Info("JWT key chain initialized", zap.String("latest_kid", userKeyChain.LatestKid()))
 
-	tokenCipher, err := encryption.NewMultiKeyEncryptorFromEnv()
+	tokenCipher, err := encryption.NewMultiKeyEncryptorFromEnvWithLogger(log)
 	if err != nil {
 		log.Fatal("failed to initialize token cipher (TOKEN_ENCRYPTION_KEY_V1 must be set; legacy TOKEN_ENCRYPTION_KEY optional)", zap.Error(err))
 	}
@@ -140,7 +144,10 @@ func main() {
 	dbHost := getEnvOrDefault("DATABASE_HOST", "localhost")
 	dbPort := getEnvOrDefault("DATABASE_PORT", "5432")
 	dbUser := getEnvOrDefault("DATABASE_USER", "allchat")
-	dbPassword := getEnvOrDefault("DATABASE_PASSWORD", "allchat_dev_password")
+	dbPassword := getEnvOrDefault("DATABASE_PASSWORD", "")
+	if dbPassword == "" {
+		log.Fatal("DATABASE_PASSWORD must be set")
+	}
 	dbName := getEnvOrDefault("DATABASE_NAME", "allchat")
 
 	connString := fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
@@ -242,7 +249,7 @@ func main() {
 
 	// Create handlers
 	platformAuthHandlerV2 := handlers.NewPlatformAuthHandlerV2(providers, userRepo, redisClient, userKeyChain, jwtExpiryHours, frontendURL, overlayManagerURL, log).WithMetrics(businessMetrics)
-	legacyAuthHandler := handlers.NewAuthHandler(twitchOAuth, youtubeOAuth, userRepo, redisClient, userKeyChain, jwtExpiryHours, log).WithMetrics(businessMetrics)
+	legacyAuthHandler := handlers.NewAuthHandler(twitchOAuth, youtubeOAuth, kickOAuth, userRepo, redisClient, userKeyChain, jwtExpiryHours, log).WithMetrics(businessMetrics)
 	viewerAuthHandler := handlers.NewViewerAuthHandler(viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, viewerRepo, viewerIdentityRepo, userRepo, redisClient, userKeyChain, jwtExpiryHours, frontendURL, tokenCipher, log).WithMetrics(businessMetrics)
 
 	// Seed the persistent total-users gauge from the database so Grafana retains
@@ -254,7 +261,10 @@ func main() {
 		log.Info("Seeded allchat_total_users_by_platform from database", zap.Any("counts", counts))
 	}
 	healthHandler := handlers.NewHealthHandler(db, redisClient)
-	adminHandler := handlers.NewAdminHandler(userRepo, db, log, userKeyChain)
+	// audit #20: impersonation tokens are short-lived (default 2h), independent of
+	// the 24h session JWT, so a leaked impersonation token has a small window.
+	impersonationExpiry := time.Duration(getEnvAsIntOrDefault("IMPERSONATION_EXPIRY_HOURS", 2)) * time.Hour
+	adminHandler := handlers.NewAdminHandler(userRepo, db, log, userKeyChain, redisClient, time.Duration(jwtExpiryHours)*time.Hour, impersonationExpiry)
 	viewerCosmeticsHandler := handlers.NewViewerCosmeticsHandler(viewerIdentityRepo, redisClient, log)
 	chatSendHandler := handlers.NewChatSendHandler(log, viewerRepo, userRepo, db, twitchClientID, viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, tokenCipher, youtubeAPIKey, redisClient, getEnvAsIntOrDefault("QUOTA_LIMIT_DAILY", 1009000)).WithYouTubeTokenSource(youtubetoken.NewYouTubeSource(db, tokenCipher, youtubeClientID, youtubeClientSecret))
 	streamerInfoHandler := handlers.NewStreamerInfoHandler(log, userRepo, db)
@@ -336,6 +346,9 @@ func main() {
 	// Token refresh
 	router.POST("/refresh", legacyAuthHandler.HandleRefresh)
 
+	// Streamer auth code exchange (single-use code → token payload, audit M1)
+	router.POST("/exchange", legacyAuthHandler.HandleStreamerTokenExchange)
+
 	// Viewer auth routes (separate from streamer auth)
 	router.GET("/viewer/twitch/login", viewerAuthHandler.HandleTwitchLogin)
 	router.GET("/viewer/twitch/callback", viewerAuthHandler.HandleTwitchCallback)
@@ -355,11 +368,12 @@ func main() {
 
 	// Protected routes (require JWT)
 	protected := router.Group("/")
-	protected.Use(middleware.JWTAuth(userKeyChain))
+	protected.Use(middleware.JWTAuthWithRevocation(userKeyChain, redisClient))
 	{
 		protected.GET("/me", legacyAuthHandler.HandleGetMe)
 		protected.GET("/me/data-export", legacyAuthHandler.HandleDataExport)
 		protected.POST("/logout", legacyAuthHandler.HandleLogout)
+		protected.POST("/stop-impersonation", legacyAuthHandler.HandleStopImpersonation)
 		protected.DELETE("/me", legacyAuthHandler.HandleDeleteAccount)
 
 		// Streamer chat send (uses streamer's own OAuth tokens)
@@ -394,7 +408,7 @@ func main() {
 
 	// Viewer protected routes (require viewer JWT)
 	viewerProtected := router.Group("/viewer")
-	viewerProtected.Use(middleware.JWTAuth(userKeyChain))
+	viewerProtected.Use(middleware.JWTAuthWithRevocation(userKeyChain, redisClient))
 	{
 		viewerProtected.GET("/me", viewerAuthHandler.HandleMe)
 		viewerProtected.POST("/logout", viewerAuthHandler.HandleLogout)
@@ -407,7 +421,7 @@ func main() {
 
 	// Admin routes (JWT + Admin role required)
 	admin := router.Group("/admin")
-	admin.Use(middleware.JWTAuth(userKeyChain))
+	admin.Use(middleware.JWTAuthWithRevocation(userKeyChain, redisClient))
 	admin.Use(middleware.AdminOnly())
 	{
 		admin.GET("/users", adminHandler.ListUsers)

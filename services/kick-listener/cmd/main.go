@@ -82,7 +82,10 @@ func main() {
 	dbHost := listener.Env("DATABASE_HOST", "localhost")
 	dbPort := listener.Env("DATABASE_PORT", "5432")
 	dbUser := listener.Env("DATABASE_USER", "allchat")
-	dbPassword := listener.Env("DATABASE_PASSWORD", "allchat_dev_password")
+	dbPassword := listener.Env("DATABASE_PASSWORD", "")
+	if dbPassword == "" {
+		log.Fatal("DATABASE_PASSWORD must be set")
+	}
 	dbName := listener.Env("DATABASE_NAME", "allchat")
 
 	connString := fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
@@ -153,7 +156,7 @@ func main() {
 	// Optional: if TOKEN_ENCRYPTION_KEY_V1 is not set, cipher is nil and only
 	// plaintext rows (encryption_version=0) are supported.
 	var tokenCipher *encryption.MultiKeyEncryptor
-	if cipher, cipherErr := encryption.NewMultiKeyEncryptorFromEnv(); cipherErr == nil {
+	if cipher, cipherErr := encryption.NewMultiKeyEncryptorFromEnvWithLogger(log); cipherErr == nil {
 		tokenCipher = cipher
 		log.Info("kick token cipher initialized", zap.Uint8("current_kid", tokenCipher.CurrentKid()))
 	} else {

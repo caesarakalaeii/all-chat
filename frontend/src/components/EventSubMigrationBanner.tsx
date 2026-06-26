@@ -20,7 +20,7 @@
 
 import { useState } from 'react'
 import { Radio, X } from 'lucide-react'
-import { useAuthStore } from '@/lib/stores/auth-store'
+import { safeExternalRedirect } from '@/lib/auth/redirect-allowlist'
 import type { ChatSource } from '@/lib/types/overlay'
 
 const DISMISS_KEY = 'eventsub-migration-banner-dismissed'
@@ -66,7 +66,6 @@ export function EventSubMigrationBanner({
 }: {
   sourcesByOverlay: Record<string, ChatSource[]>
 }) {
-  const { token } = useAuthStore()
   const [dismissed, setDismissed] = useState(
     () => typeof window !== 'undefined' && window.localStorage.getItem(DISMISS_KEY) === '1'
   )
@@ -76,12 +75,13 @@ export function EventSubMigrationBanner({
 
   async function handleUpgrade() {
     try {
-      const res = await fetch(`/api/v1/auth/twitch/add-source/${channels[0].overlayId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      // H3 cookie auth: the access cookie is sent same-origin and the gateway's
+      // CookieToBearer middleware derives the Authorization header — no
+      // JS-readable token is needed.
+      const res = await fetch(`/api/v1/auth/twitch/add-source/${channels[0].overlayId}`)
       const data = await res.json()
       if (data.auth_url) {
-        window.location.href = data.auth_url
+        safeExternalRedirect(data.auth_url)
       } else {
         console.error('No auth_url returned for Twitch chat upgrade', data)
       }

@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -30,8 +31,10 @@ import (
 	"github.com/caesar/all-chat/services/api-gateway/subscription"
 	wsconn "github.com/caesar/all-chat/services/api-gateway/websocket"
 	"github.com/caesar/all-chat/shared/auth"
+	sharedmiddleware "github.com/caesar/all-chat/shared/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
@@ -50,23 +53,80 @@ func parseSinceQuery(raw string) int64 {
 	return v
 }
 
-// WebSocketHandler handles WebSocket connections for overlays
-type WebSocketHandler struct {
-	wsManager        *wsconn.Manager
-	subscriber       *subscription.Subscriber
-	repo             *subscription.Repository
-	statusSubscriber *subscription.StatusSubscriber
-	userKeyChain     *auth.KeyChain
-	replayBuffer     replay.DeletionReplayBuffer
-	chatReplayBuffer replay.ChatReplayBuffer
-	logger           *zap.Logger
-	upgrader         websocket.Upgrader
-	allowAllOrigins  bool
-	allowedOrigins   map[string]struct{}
-	allowedPrefixes  []string
+// wsBearerPrefix is the subprotocol prefix used to carry a JWT over the
+// WebSocket handshake (audit H5). Clients pass ['bearer.<token>'] as the
+// WebSocket subprotocol; the gateway extracts the token and echoes the
+// subprotocol back so the browser accepts the connection. This keeps the
+// token out of the URL query string (and therefore out of access logs).
+const wsBearerPrefix = "bearer."
+
+// extractWSAuthToken resolves the JWT with subprotocol-first precedence
+// (audit H5):
+//  1. Sec-WebSocket-Protocol subprotocol of the form `bearer.<token>`
+//  2. Fallback to ?token= query param (backward compat during client rollout)
+//  3. Fallback to the httpOnly access_token cookie (audit H3). The owner
+//     overlay WS handshake is same-origin, so the browser sends the httpOnly
+//     cookie automatically — lets the streamer's monitor view authenticate
+//     without a JS-readable token. No echo header needed (cookie path, not
+//     subprotocol negotiation).
+//
+// When the token comes from the subprotocol, a response header is returned
+// that echoes the negotiated subprotocol back to the client — the WebSocket
+// spec requires the server to echo one of the offered subprotocols.
+func extractWSAuthToken(r *http.Request) (token string, echoHeader http.Header) {
+	// 1. Try Sec-WebSocket-Protocol subprotocol.
+	for _, raw := range r.Header.Values("Sec-WebSocket-Protocol") {
+		for _, proto := range strings.Split(raw, ",") {
+			proto = strings.TrimSpace(proto)
+			if strings.HasPrefix(proto, wsBearerPrefix) {
+				candidate := strings.TrimPrefix(proto, wsBearerPrefix)
+				if candidate == "" {
+					continue
+				}
+				token = candidate
+				echoHeader = http.Header{}
+				echoHeader.Set("Sec-WebSocket-Protocol", proto)
+				return token, echoHeader
+			}
+		}
+	}
+	// 2. Fall back to query param (backward compat during client rollout).
+	token = r.URL.Query().Get("token")
+	if token != "" {
+		return token, nil
+	}
+	// 3. Fall back to the httpOnly access_token cookie (audit H3). The owner
+	// overlay WS handshake is same-origin, so the browser sends the httpOnly
+	// cookie automatically — lets the streamer's monitor view authenticate
+	// without a JS-readable token. No echo header needed (cookie path, not
+	// subprotocol negotiation).
+	if ck, err := r.Cookie(auth.CookieAccessToken); err == nil && ck.Value != "" {
+		return ck.Value, nil
+	}
+	return "", nil
 }
 
-// NewWebSocketHandler creates a new WebSocket handler
+// WebSocketHandler handles WebSocket connections for overlays
+type WebSocketHandler struct {
+	wsManager         *wsconn.Manager
+	subscriber        *subscription.Subscriber
+	repo              *subscription.Repository
+	statusSubscriber  *subscription.StatusSubscriber
+	userKeyChain      *auth.KeyChain
+	replayBuffer      replay.DeletionReplayBuffer
+	chatReplayBuffer  replay.ChatReplayBuffer
+	logger            *zap.Logger
+	upgrader          websocket.Upgrader
+	allowedOriginList []string
+	// firstPartyOrigins are the exact same-origin app origins (FRONTEND_URL) that
+	// may authenticate the owner socket via the ambient access cookie (audit #8).
+	firstPartyOrigins []string
+	// rdb is consulted for the logout-revocation blacklist on WS auth (audit #19).
+	rdb redis.UniversalClient
+}
+
+// NewWebSocketHandler creates a new WebSocket handler. rdb may be nil (the
+// blacklist check is then skipped, matching JWTAuthWithRevocation).
 func NewWebSocketHandler(
 	wsManager *wsconn.Manager,
 	subscriber *subscription.Subscriber,
@@ -75,21 +135,22 @@ func NewWebSocketHandler(
 	userKeyChain *auth.KeyChain,
 	replayBuffer replay.DeletionReplayBuffer,
 	chatReplayBuffer replay.ChatReplayBuffer,
+	rdb redis.UniversalClient,
 	logger *zap.Logger,
 ) *WebSocketHandler {
-	allowedOrigins, allowedPrefixes, allowAll := loadAllowedOrigins()
+	allowedOriginList := loadAllowedOrigins()
 	h := &WebSocketHandler{
-		wsManager:        wsManager,
-		subscriber:       subscriber,
-		repo:             repo,
-		statusSubscriber: statusSubscriber,
-		userKeyChain:     userKeyChain,
-		replayBuffer:     replayBuffer,
-		chatReplayBuffer: chatReplayBuffer,
-		logger:           logger,
-		allowedOrigins:   allowedOrigins,
-		allowedPrefixes:  allowedPrefixes,
-		allowAllOrigins:  allowAll,
+		wsManager:         wsManager,
+		subscriber:        subscriber,
+		repo:              repo,
+		statusSubscriber:  statusSubscriber,
+		userKeyChain:      userKeyChain,
+		replayBuffer:      replayBuffer,
+		chatReplayBuffer:  chatReplayBuffer,
+		logger:            logger,
+		allowedOriginList: allowedOriginList,
+		firstPartyOrigins: loadFirstPartyWSOrigins(),
+		rdb:               rdb,
 	}
 
 	h.upgrader = websocket.Upgrader{
@@ -98,11 +159,11 @@ func NewWebSocketHandler(
 		CheckOrigin:     h.checkOrigin,
 	}
 
-	if h.allowAllOrigins {
+	if sharedmiddleware.OriginAllowed(allowedOriginList, "*") {
 		logger.Info("WebSocket origin allowlist disabled; allowing all origins")
 	} else {
 		logger.Info("Configured WebSocket origin allowlist",
-			zap.Int("count", len(h.allowedOrigins)),
+			zap.Int("count", len(allowedOriginList)),
 		)
 	}
 
@@ -117,8 +178,10 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 		return
 	}
 
-	// Get JWT token from query parameter (optional for OBS)
-	token := c.Query("token")
+	// Resolve JWT from Sec-WebSocket-Protocol subprotocol first, then fall
+	// back to ?token= query param (backward compat during client rollout).
+	// The subprotocol path keeps the token out of access logs (audit H5).
+	token, echoHeader := extractWSAuthToken(c.Request)
 	var userID string
 	var username string
 
@@ -127,6 +190,18 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 
 	// If token provided, validate and check ownership
 	if token != "" {
+		// audit #19: the owner socket now also accepts the access cookie (H3), so it
+		// must honor the logout-revocation blacklist like the HTTP routes do —
+		// otherwise a logged-out/revoked token still streams the owner feed until
+		// expiry. Fail-open + log on a Redis error, matching JWTAuthWithRevocation.
+		if h.rdb != nil {
+			if n, bErr := h.rdb.Exists(ctx, "blacklist:"+token).Result(); bErr != nil {
+				h.logger.Warn("WS blacklist check failed (fail-open)", zap.Error(bErr))
+			} else if n > 0 {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
+				return
+			}
+		}
 		claims, err := auth.ValidateJWTWithKeyChain(token, h.userKeyChain)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
@@ -174,8 +249,9 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 		return
 	}
 
-	// Upgrade HTTP connection to WebSocket
-	conn, err := h.upgrader.Upgrade(c.Writer, c.Request, nil)
+	// Upgrade HTTP connection to WebSocket. echoHeader (when non-nil) echoes
+	// the bearer.<token> subprotocol back so the browser accepts the handshake.
+	conn, err := h.upgrader.Upgrade(c.Writer, c.Request, echoHeader)
 	if err != nil {
 		h.logger.Error("Failed to upgrade WebSocket",
 			zap.String("overlay_id", overlayID),
@@ -323,65 +399,91 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 	// The WebSocket connection will continue in the background
 }
 
-func loadAllowedOrigins() (map[string]struct{}, []string, bool) {
+func loadAllowedOrigins() []string {
 	value := strings.TrimSpace(os.Getenv("WEBSOCKET_ALLOWED_ORIGINS"))
 	if value == "" {
 		// Deny all when not configured — set WEBSOCKET_ALLOWED_ORIGINS explicitly or use "*" to allow all
-		return make(map[string]struct{}), nil, false
+		return nil
 	}
 
-	allowed := make(map[string]struct{})
-	var prefixes []string
-	allowAll := false
+	var result []string
 	for _, origin := range strings.Split(value, ",") {
 		origin = strings.TrimSpace(origin)
+		if origin != "" {
+			result = append(result, origin)
+		}
+	}
+	return result
+}
+
+// loadFirstPartyWSOrigins returns the exact same-origin app origin(s) from
+// FRONTEND_URL — the only origin that may authenticate the owner socket via the
+// ambient access cookie (audit #8). Returns nil when unset (e.g. local dev),
+// in which case originAllowedForWS falls back to the permissive WS allowlist so
+// the monitor view keeps working.
+func loadFirstPartyWSOrigins() []string {
+	v := strings.TrimSpace(os.Getenv("FRONTEND_URL"))
+	if v == "" {
+		return nil
+	}
+	if u, err := url.Parse(v); err == nil && u.Scheme != "" && u.Host != "" {
+		return []string{u.Scheme + "://" + u.Host}
+	}
+	return []string{v}
+}
+
+// originAllowedForWS is the pure origin-check logic extracted from checkOrigin
+// for testability (audit I1 + #8). A browser always sends an Origin header on a
+// WebSocket handshake.
+//
+//   - Cookie-auth path (the ambient httpOnly access_token cookie is present):
+//     this is only ever legitimately the same-origin monitor view. Extensions
+//     and OBS authenticate via the bearer subprotocol or ?token= and never rely
+//     on the cookie. So require a STRICT exact first-party Origin (FRONTEND_URL)
+//     — NOT the permissive WS allowlist, which includes wildcards like
+//     moz-extension://*. Otherwise any installed browser extension could open the
+//     victim's owner socket with their cookie (audit #8). Empty Origin + cookie
+//     is rejected (a browser always sends Origin → CSRF defense, audit I1). When
+//     no first-party origin is configured, fall back to the permissive allowlist.
+//   - Token path (no cookie): empty Origin is allowed (non-browser OBS client);
+//     a non-empty Origin is validated against the WS allowlist (exact + wildcard).
+func originAllowedForWS(allowed, firstParty []string, r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	hasAccessCookie := false
+	if ck, err := r.Cookie(auth.CookieAccessToken); err == nil && ck.Value != "" {
+		hasAccessCookie = true
+	}
+	if hasAccessCookie {
 		if origin == "" {
-			continue
+			return false
 		}
-		if origin == "*" {
-			allowAll = true
-			continue
+		if len(firstParty) == 0 {
+			// No first-party origin configured (local dev) — preserve prior
+			// behavior rather than hard-rejecting the monitor view.
+			return sharedmiddleware.OriginAllowed(allowed, origin)
 		}
-		// Entries ending with "/*" are treated as prefix matches
-		// e.g. "chrome-extension://*" matches any chrome extension origin
-		if strings.HasSuffix(origin, "*") {
-			prefixes = append(prefixes, strings.TrimSuffix(origin, "*"))
-			continue
+		for _, fp := range firstParty {
+			if origin == fp {
+				return true
+			}
 		}
-		allowed[origin] = struct{}{}
+		return false
 	}
-
-	if allowAll {
-		return nil, nil, true
+	if origin == "" {
+		// Non-browser client (subprotocol/query token, no cookie) — allowed.
+		return true
 	}
-
-	return allowed, prefixes, false
+	return sharedmiddleware.OriginAllowed(allowed, origin)
 }
 
 func (h *WebSocketHandler) checkOrigin(r *http.Request) bool {
-	if h.allowAllOrigins {
-		return true
+	if !originAllowedForWS(h.allowedOriginList, h.firstPartyOrigins, r) {
+		h.logger.Warn("Blocked WebSocket connection from disallowed or missing origin",
+			zap.String("origin", r.Header.Get("Origin")),
+		)
+		return false
 	}
-
-	origin := r.Header.Get("Origin")
-	if origin == "" {
-		return true
-	}
-
-	if _, ok := h.allowedOrigins[origin]; ok {
-		return true
-	}
-
-	for _, prefix := range h.allowedPrefixes {
-		if strings.HasPrefix(origin, prefix) {
-			return true
-		}
-	}
-
-	h.logger.Warn("Blocked WebSocket connection from disallowed origin",
-		zap.String("origin", origin),
-	)
-	return false
+	return true
 }
 
 // NotifyUser sends a notification to a specific user via WebSocket
