@@ -204,4 +204,19 @@ export const moderationApi = {
       idempotencyHeader()
     )
   },
+
+  /**
+   * Force the youtube-listener to re-discover the overlay's live stream. Recovers the
+   * "platform shows connected but no chat" case where YouTube keeps reporting an
+   * ended/crashed stream as live. Owner-only (any owner — not a premium gate); the
+   * channel(s) are resolved server-side, so no body is needed. A 429 means the
+   * per-channel cooldown is still active.
+   */
+  forceYouTubeRediscover(overlayId: string): Promise<ModerationResult> {
+    return apiClient.post<ModerationResult>(
+      `/api/v1/moderation/overlays/${overlayId}/youtube/rediscover`,
+      {},
+      idempotencyHeader()
+    )
+  },
 }

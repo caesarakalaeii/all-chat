@@ -33,7 +33,7 @@
 'use client'
 
 import clsx from 'clsx'
-import { ExternalLink, Info, SlidersHorizontal } from 'lucide-react'
+import { ExternalLink, Info, RotateCw, SlidersHorizontal } from 'lucide-react'
 import Link from 'next/link'
 import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
@@ -51,6 +51,7 @@ import { ViewSettingsBar } from '@/components/overlay/ViewSettingsBar'
 import { ResizableSplit } from '@/components/ResizableSplit'
 import { useOverlayStream } from '@/hooks/useOverlayStream'
 import { authApi } from '@/lib/api/auth'
+import { ApiError } from '@/lib/api/client'
 import { startDiscordModerationReinvite } from '@/lib/api/discord'
 import {
   buildBanRequest,
@@ -304,6 +305,29 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
     [capabilities]
   )
 
+  // YouTube stream re-discovery: owner self-service recovery for the "platform shows
+  // connected but no chat" case (YouTube keeps reporting an ended/crashed stream as
+  // live). Shown only to the owner when the overlay carries a YouTube source.
+  const hasYouTubeSource = useMemo(
+    () => Array.from(sources.values()).some((s) => s.platform === 'youtube'),
+    [sources]
+  )
+  const [rediscovering, setRediscovering] = useState(false)
+  const handleYouTubeRediscover = useCallback(async () => {
+    setRediscovering(true)
+    try {
+      await moderationApi.forceYouTubeRediscover(id)
+      toast.success('Re-discovering YouTube stream…')
+    } catch (err) {
+      const status = err instanceof ApiError ? err.status : 0
+      if (status === 429) toast.error('Please wait a moment before retrying')
+      else if (status === 403) toast.error('Not authorized for this overlay')
+      else toast.error('Could not trigger re-discovery')
+    } finally {
+      setRediscovering(false)
+    }
+  }, [id])
+
   // --- Optimistic moderation actions ---------------------------------------
 
   // Apply an optimistic mark + log entry, fire the API, and roll back on error.
@@ -459,6 +483,17 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
           <LayoutPicker layout={layout} onChange={updateLayout} />
           <ViewSettingsBar prefs={prefs} onChange={updatePrefs} />
           <OverlayViewThemeToggle light={light} onToggle={() => setLight((v) => !v)} />
+          {isOwner && hasYouTubeSource && (
+            <button
+              onClick={handleYouTubeRediscover}
+              disabled={rediscovering}
+              title="Force YouTube to re-discover the live stream — use if chat stopped after a stream crash or restart"
+              className="flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-sub transition-colors hover:border-border-md hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <RotateCw className={clsx('h-3.5 w-3.5', rediscovering && 'animate-spin')} />
+              Re-discover YouTube
+            </button>
+          )}
           <Link
             href={`/overlay/${id}`}
             target="_blank"

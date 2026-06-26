@@ -113,10 +113,11 @@ type Handler struct {
 	pub      DeletionEmitter
 	audit    Recorder
 	scopes   ScopeChecker
-	send     SendChecker
-	dispatch Dispatcher
-	gate     FeatureGate
-	logger   *zap.Logger
+	send       SendChecker
+	dispatch   Dispatcher
+	gate       FeatureGate
+	rediscover RediscoverPublisher // optional; nil = YouTube rediscovery unavailable
+	logger     *zap.Logger
 }
 
 // New creates a moderation Handler. The feature gate defaults to OpenGate (always

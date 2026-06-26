@@ -1004,6 +1004,88 @@ func (m *Manager) stopPollerAfterDebounce(channelID string, delay time.Duration)
 	}
 }
 
+// ForceRediscoverChannel forcibly restarts stream discovery for a channel. It
+// recovers the "platform shows connected but no chat" case where YouTube keeps
+// reporting an ended/crashed stream as live: the poller sits on a dead video ID
+// (cached in Redis and held under leadership) so the periodic sync skips it and no
+// messages flow until the empty-continuation timeout eventually fails over. An
+// overlay owner triggers this from the /view monitor (moderation-service publishes
+// on the youtube:control channel) to recover immediately.
+//
+// It stops any poller this pod runs for the channel, cancels any in-progress
+// discovery, clears the cached video mapping + stream-state + give-up marker, then
+// kicks an immediate sync so a fresh discovery picks up the current live stream (or
+// correctly reports offline). Safe to run on every pod: only the leader holds the
+// poller, the Redis deletes are idempotent, and leadership election serialises who
+// re-polls. overlayID is informational (logging only).
+func (m *Manager) ForceRediscoverChannel(ctx context.Context, channelID, overlayID string) {
+	m.logger.Info("Forced rediscovery requested",
+		zap.String("channel_id", channelID),
+		zap.String("overlay_id", overlayID),
+	)
+
+	m.mu.Lock()
+	// Stop the poller this pod runs for the channel, if any (mirrors the teardown in
+	// stopPollerAfterDebounce, minus the source-deactivation — we want it to come back).
+	for videoID, stream := range m.activeStreams {
+		if stream.ChannelID != channelID {
+			continue
+		}
+		if p, exists := m.pollers[videoID]; exists {
+			m.logger.Info("Stopping poller for forced rediscovery",
+				zap.String("channel_id", channelID),
+				zap.String("video_id", videoID),
+			)
+			p.Stop()
+			delete(m.pollers, videoID)
+			delete(m.activeStreams, videoID)
+			if m.leader != nil {
+				m.leader.Release(videoID)
+			}
+			if m.batchDetector != nil {
+				if err := m.batchDetector.Cleanup(channelID); err != nil {
+					m.logger.Warn("Failed to cleanup batch detector during forced rediscovery",
+						zap.String("channel_id", channelID), zap.Error(err))
+				}
+			}
+			if m.deletionBuffer != nil {
+				m.deletionBuffer.Cleanup(channelID)
+			}
+		}
+		break
+	}
+	// Cancel any in-progress discovery loop and drop its slot so the kick below can
+	// start fresh (startAsyncDiscovery bails while m.discovering[channelID] is set).
+	if state, ok := m.discovering[channelID]; ok {
+		if state.CancelFunc != nil {
+			state.CancelFunc()
+		}
+		delete(m.discovering, channelID)
+	}
+	m.mu.Unlock()
+
+	// Clear the give-up marker so a channel parked after maxDiscoveryDuration polls again.
+	m.gaveUpMu.Lock()
+	delete(m.gaveUpDiscovery, channelID)
+	m.gaveUpMu.Unlock()
+
+	// Evict the cached video mapping + stream-state so discovery can't immediately
+	// re-select the dead video and a streamer send no longer targets a dead chat.
+	if err := m.repository.DeleteChannelVideoMapping(ctx, channelID); err != nil {
+		m.logger.Warn("Failed to clear channel video mapping during forced rediscovery",
+			zap.String("channel_id", channelID), zap.Error(err))
+	}
+	if err := m.repository.DeleteStreamState(ctx, channelID); err != nil {
+		m.logger.Warn("Failed to clear stream state during forced rediscovery",
+			zap.String("channel_id", channelID), zap.Error(err))
+	}
+
+	// Kick an immediate sync — the canonical "discover now" path (mirrors
+	// UpdateDemandedChannels). It re-reads the source's stream_select strategy from
+	// source-manager and starts a fresh poller for the current live stream.
+	go m.syncSources(context.Background())
+}
+
 // handleLeadershipLoss handles loss of leadership for a stream
 // Called by LeadershipCoordinator when leadership is lost
 func (m *Manager) handleLeadershipLoss(ctx context.Context, videoID string) {

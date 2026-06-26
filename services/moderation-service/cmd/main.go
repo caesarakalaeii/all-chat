@@ -198,6 +198,8 @@ func main() {
 	modHandler.SetFeatureGate(moderationGate{gates: gateCache, repo: repo})
 	// Wire the chat-send capability checker so capabilities report can_send per source.
 	modHandler.SetSendChecker(handler.MultiSendChecker(sendCheckers))
+	// Wire the YouTube stream re-discovery publisher (owner-triggered recovery from /view).
+	modHandler.SetRediscoverPublisher(publisher.NewRediscoverPublisher(redisClient, log))
 
 	if cfg.GinMode == "release" {
 		gin.SetMode(gin.ReleaseMode)
@@ -238,6 +240,13 @@ func main() {
 	// Capabilities is ungated: owners outside the cohort still need it to learn the
 	// feature is gated (it reports enabled:false) so the dashboard shows the right UX.
 	api.GET("/overlays/:id/capabilities", modHandler.HandleCapabilities)
+
+	// Stream re-discovery is a reliability recovery (not a moderation action): it is
+	// owner-gated only — available to every overlay owner, not just the premium
+	// moderation cohort — so it lives on the base group, outside the premium `actions`
+	// group below. Ownership is verified in the handler; the per-channel cooldown lives
+	// in the publisher.
+	api.POST("/overlays/:id/youtube/rediscover", modHandler.HandleYouTubeRediscover)
 
 	// The write actions are gated to the moderation rollout cohort (ADR-0008): a
 	// non-cohort user gets 403 here even though capabilities already hid the controls
