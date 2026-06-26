@@ -17,23 +17,31 @@
 package handlers
 
 import (
+	"context"
+	"errors"
 	"net/http"
 
-	"github.com/caesar/all-chat/services/auth-service/repository"
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 )
+
+// streamerInfoDB is a minimal interface over *pgxpool.Pool so the lookup
+// branches can be unit-tested without a live database.
+type streamerInfoDB interface {
+	Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row
+}
 
 // StreamerInfoHandler handles requests for streamer information
 type StreamerInfoHandler struct {
 	log      *zap.Logger
-	userRepo *repository.UserRepository
-	db       *pgxpool.Pool
+	userRepo UserRepositoryInterface
+	db       streamerInfoDB
 }
 
 // NewStreamerInfoHandler creates a new streamer info handler
-func NewStreamerInfoHandler(log *zap.Logger, userRepo *repository.UserRepository, db *pgxpool.Pool) *StreamerInfoHandler {
+func NewStreamerInfoHandler(log *zap.Logger, userRepo UserRepositoryInterface, db streamerInfoDB) *StreamerInfoHandler {
 	return &StreamerInfoHandler{
 		log:      log.Named("streamer-info"),
 		userRepo: userRepo,
@@ -98,10 +106,21 @@ func (h *StreamerInfoHandler) HandleGetStreamerInfo(c *gin.Context) {
 		var userID, foundUsername string
 		err = h.db.QueryRow(ctx, channelQuery, username).Scan(&userID, &foundUsername)
 		if err != nil {
-			h.log.Error("Streamer not found by username or channel_id",
+			if errors.Is(err, pgx.ErrNoRows) {
+				// Expected: a viewer/extension looked up a streamer or channel
+				// that isn't configured in All-Chat. This is a normal 404, not an
+				// error — log at debug to avoid flooding error logs (and the
+				// stacktrace the production logger attaches at error level).
+				h.log.Debug("Streamer not found by username or channel_id",
+					zap.String("lookup_value", username))
+				c.JSON(http.StatusNotFound, gin.H{"error": "streamer not found"})
+				return
+			}
+			// Unexpected database error — surface as 500 rather than a misleading 404.
+			h.log.Error("Channel_id lookup query failed",
 				zap.Error(err),
 				zap.String("lookup_value", username))
-			c.JSON(http.StatusNotFound, gin.H{"error": "streamer not found"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to look up streamer"})
 			return
 		}
 
