@@ -263,6 +263,46 @@ func main() {
 		}
 	}()
 
+	// Manual stream re-discovery (owner-triggered from /view via moderation-service).
+	// Recovers from YouTube reporting an ended/crashed stream as still live: the
+	// listener can sit on a dead video ID until the empty-continuation timeout fails
+	// over; this lets the streamer force recovery immediately. Broadcast to all pods —
+	// only the leader holds the poller, and leadership election serialises re-polling.
+	go func() {
+		pubsub := redisClient.Subscribe(ctx, "youtube:control")
+		defer pubsub.Close()
+
+		logger.Info("Subscribed to youtube:control for manual stream rediscovery")
+
+		ch := pubsub.Channel()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case msg, ok := <-ch:
+				if !ok {
+					return
+				}
+				var cmd struct {
+					Action    string `json:"action"`
+					OverlayID string `json:"overlay_id"`
+					ChannelID string `json:"channel_id"`
+				}
+				if err := json.Unmarshal([]byte(msg.Payload), &cmd); err != nil {
+					logger.Warn("Failed to parse youtube:control command", zap.Error(err))
+					continue
+				}
+				if cmd.Action != "rediscover" || cmd.ChannelID == "" {
+					logger.Warn("Ignoring unknown youtube:control command",
+						zap.String("action", cmd.Action),
+						zap.String("channel_id", cmd.ChannelID))
+					continue
+				}
+				streamManager.ForceRediscoverChannel(ctx, cmd.ChannelID, cmd.OverlayID)
+			}
+		}
+	}()
+
 	// 7. HTTP server with metrics and health checks
 	if logLevel == "debug" {
 		gin.SetMode(gin.DebugMode)

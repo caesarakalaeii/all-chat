@@ -603,6 +603,10 @@ func main() {
 		protectedAPI.POST("/moderation/overlays/:id/timeout", proxyHandler.ForwardRequest)
 		protectedAPI.POST("/moderation/overlays/:id/ban", proxyHandler.ForwardRequest)
 		protectedAPI.POST("/moderation/overlays/:id/unban", proxyHandler.ForwardRequest)
+		// Owner-triggered YouTube stream re-discovery (served by moderation-service, but
+		// owner-gated only — not a premium moderation action). Recovers chat when YouTube
+		// keeps reporting an ended/crashed stream as live.
+		protectedAPI.POST("/moderation/overlays/:id/youtube/rediscover", proxyHandler.ForwardRequest)
 
 		// Share service routes (all protected - require JWT auth)
 		protectedAPI.GET("/users/search", proxyHandler.ForwardRequest)              // -> share-service
