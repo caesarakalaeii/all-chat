@@ -576,6 +576,16 @@ func containsScope(scopes []string, want string) bool {
 	return false
 }
 
+// grantedYouTubeChannelAccess reports whether the granted scopes include the
+// youtube.readonly scope required to resolve a streamer's channel
+// (channels?mine=true) when adding a YouTube source. Google's granular consent
+// screen lets a user approve the profile scope while declining youtube.readonly;
+// when that happens the add-source flow cannot resolve a channel and must prompt
+// the user to re-approve rather than failing with an opaque 500.
+func grantedYouTubeChannelAccess(grantedScopes []string) bool {
+	return containsScope(grantedScopes, oauth.YouTubeReadonlyScope)
+}
+
 // HandleCallback handles the OAuth callback for any platform
 func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -703,15 +713,30 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 			// Only fetch channel info when adding a source, not during login
 			// This saves YouTube API quota and allows login without a channel
 			if oauthState.IsAddSource() {
+				// Google's granular consent lets a user approve the profile scope while
+				// declining youtube.readonly. Without it GetPrimaryChannel 403s and the
+				// source can't be created — redirect with an actionable error instead of
+				// an opaque 500 so the streamer knows to re-approve the YouTube
+				// permission. (prod outage: streamers stuck on a broken callback page)
+				if !grantedYouTubeChannelAccess(oauth.ExtractGrantedScopes(token)) {
+					h.logger.Warn("YouTube add-source missing youtube.readonly; user declined channel access on consent screen",
+						zap.String("platform_user_id", platformUser.GetID()),
+						zap.String("overlay_id", oauthState.OverlayID))
+					h.redirectWithTombstone(c, platform, oauthState.CSRFToken,
+						h.youtubeAddSourceErrorURL(oauthState, "youtube_permission_required"))
+					return
+				}
+
 				channelInfo, channelErr := youtubeProvider.GetPrimaryChannel(c.Request.Context(), token.AccessToken)
 				if channelErr != nil {
 					h.logger.Error("Failed to resolve YouTube channel for add-source",
 						zap.Error(channelErr),
 						zap.String("platform_user_id", platformUser.GetID()))
-					c.JSON(http.StatusInternalServerError, gin.H{
-						"error":   "Unable to resolve YouTube channel. Please ensure your Google account has a YouTube channel.",
-						"details": channelErr.Error(),
-					})
+					// Scope was granted but the channel still couldn't be resolved (no
+					// channel on the Google account, or a transient API error). Redirect
+					// with an actionable error rather than returning a raw 500.
+					h.redirectWithTombstone(c, platform, oauthState.CSRFToken,
+						h.youtubeAddSourceErrorURL(oauthState, "youtube_no_channel"))
 					return
 				}
 				youtubeChannel = channelInfo
@@ -1411,6 +1436,16 @@ func (h *PlatformAuthHandlerV2) addSourceToOverlay(
 	}
 
 	return nil
+}
+
+// youtubeAddSourceErrorURL builds the frontend redirect for a YouTube add-source
+// failure, returning the user to the page the flow was launched from: the overlay
+// monitor for a moderation re-consent (ADR-0017), otherwise overlay settings.
+func (h *PlatformAuthHandlerV2) youtubeAddSourceErrorURL(state *oauth.OAuthState, errCode string) string {
+	if state.IsModeration() {
+		return fmt.Sprintf("%s/overlay/%s/view?error=%s", h.frontendURL, state.OverlayID, errCode)
+	}
+	return fmt.Sprintf("%s/overlays/%s?error=%s", h.frontendURL, state.OverlayID, errCode)
 }
 
 // redirectWithTombstone performs an OAuth redirect and stores an idempotency tombstone in Redis.

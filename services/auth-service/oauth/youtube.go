@@ -30,6 +30,13 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
+// YouTubeReadonlyScope is the Google OAuth scope required to resolve a streamer's
+// YouTube channel (channels?part=...&mine=true) in GetPrimaryChannel and used by the
+// youtube-listener for polling. Google's granular consent screen lets a user approve
+// the profile scope while declining this one, so the callback must verify it was
+// actually granted before relying on it. See ADR 0012.
+const YouTubeReadonlyScope = "https://www.googleapis.com/auth/youtube.readonly"
+
 // YouTubeOAuth handles YouTube/Google OAuth 2.0 flow
 type YouTubeOAuth struct {
 	config *oauth2.Config
@@ -57,7 +64,7 @@ func NewYouTubeOAuth(clientID, clientSecret, redirectURL string) *YouTubeOAuth {
 		// liveChat/messages/stream against the streamer's account.
 		// See ADR 0012.
 		Scopes: []string{
-			"https://www.googleapis.com/auth/youtube.readonly",
+			YouTubeReadonlyScope,
 			"https://www.googleapis.com/auth/userinfo.profile",
 		},
 		Endpoint: google.Endpoint,

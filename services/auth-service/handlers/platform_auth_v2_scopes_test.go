@@ -89,3 +89,27 @@ func TestSplitActions(t *testing.T) {
 	assert.Empty(t, splitActions(""))
 	assert.Empty(t, splitActions("  ,  ,"))
 }
+
+// Google's granular consent screen lets a user approve the profile scope while
+// declining youtube.readonly. The YouTube add-source flow needs youtube.readonly to
+// resolve the channel (channels?mine=true); when it is absent the callback must
+// surface an actionable error instead of letting GetPrimaryChannel 403 into an
+// opaque 500. grantedYouTubeChannelAccess is that gate. (prod outage 2026-06-27)
+func TestGrantedYouTubeChannelAccess(t *testing.T) {
+	profile := "https://www.googleapis.com/auth/userinfo.profile"
+	tests := []struct {
+		name   string
+		scopes []string
+		want   bool
+	}{
+		{"approved youtube.readonly", []string{profile, oauth.YouTubeReadonlyScope}, true},
+		{"declined youtube.readonly on consent screen", []string{"profile", profile}, false},
+		{"only profile granted", []string{profile}, false},
+		{"no scopes granted", nil, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, grantedYouTubeChannelAccess(tt.scopes))
+		})
+	}
+}

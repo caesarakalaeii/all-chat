@@ -1719,6 +1719,20 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
       })
       overlaysApi.getSources(id).then(setSources).catch(console.error)
       window.history.replaceState({}, '', `/overlays/${id}`)
+    } else if (error === 'youtube_permission_required') {
+      toastManager.add({
+        title: 'YouTube permission required',
+        description:
+          'To add your YouTube channel, you must allow All-Chat to see your YouTube account. Please try again and approve the YouTube permission on the Google screen.',
+        type: 'error',
+      })
+    } else if (error === 'youtube_no_channel') {
+      toastManager.add({
+        title: 'No YouTube channel found',
+        description:
+          'We could not find a YouTube channel on that Google account. Make sure the account has a YouTube channel, then try again.',
+        type: 'error',
+      })
     } else if (error === 'failed_to_add_source') {
       toastManager.add({
         title: 'Failed to add source',
