@@ -43,4 +43,19 @@ describe('isAllowedExternalRedirect', () => {
   it('allows allowlisted external hosts', () => {
     expect(isAllowedExternalRedirect('https://twitch.tv/path')).toBe(true)
   })
+
+  // Regression: PR #478 introduced the allowlist but omitted Google and Kick, so
+  // safeExternalRedirect silently blocked the YouTube/Kick OAuth auth_url and the
+  // login button did nothing (prod outage 2026-06-27).
+  it('allows the YouTube / Google OAuth host', () => {
+    expect(isAllowedExternalRedirect('https://accounts.google.com/o/oauth2/auth?client_id=x')).toBe(true)
+  })
+
+  it('allows the Kick OAuth host', () => {
+    expect(isAllowedExternalRedirect('https://id.kick.com/oauth/authorize?client_id=x')).toBe(true)
+  })
+
+  it('rejects an unknown external host', () => {
+    expect(isAllowedExternalRedirect('https://evil.example.com/oauth')).toBe(false)
+  })
 })

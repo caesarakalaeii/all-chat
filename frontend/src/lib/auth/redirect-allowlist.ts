@@ -25,14 +25,19 @@
  * navigating, so a compromised or rogue backend response cannot redirect the
  * user to an attacker-controlled site.
  *
- * Allowed external hosts: Twitch OAuth (id.twitch.tv, twitch.tv), Patreon
- * (patreon.com), Discord (discord.com), and the app's own origin. Relative
- * same-origin paths (starting with `/` but not `//`) are always allowed.
+ * Allowed external hosts: Twitch OAuth (id.twitch.tv, twitch.tv), Google/YouTube
+ * OAuth (accounts.google.com), Kick OAuth (id.kick.com), Patreon (patreon.com),
+ * Discord (discord.com), and the app's own origin. Relative same-origin paths
+ * (starting with `/` but not `//`) are always allowed.
  */
 
 const ALLOWED_EXTERNAL_HOSTS = new Set([
   'twitch.tv',
   'id.twitch.tv',
+  // YouTube/streamer + viewer login: oauth2 google.Endpoint → accounts.google.com
+  'accounts.google.com',
+  // Kick streamer + viewer login: kickAuthURL → id.kick.com/oauth/authorize
+  'id.kick.com',
   'patreon.com',
   'discord.com',
 ])
