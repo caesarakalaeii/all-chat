@@ -1608,9 +1608,16 @@ func (h *ChatSendHandler) getYouTubeLiveChatIDFromAPI(ctx context.Context, chann
 	return videoResult.Items[0].LiveStreamingDetails.ActiveLiveChatID, nil
 }
 
-// getActiveYouTubeChannelID gets the channel ID of the active YouTube source for a streamer
+// getActiveYouTubeChannelID gets the channel ID of the active YouTube source for a streamer.
 // This is retrieved from overlay_chat_sources rather than users.google_id because the
-// active channel may change when streamers switch between different YouTube channels
+// active channel may change when streamers switch between different YouTube channels (and a
+// streamer whose All-Chat login is not YouTube has no google_id at all).
+//
+// It deliberately does NOT gate on overlays.is_public_for_viewers: chat send is now only
+// driven by the streamer's own monitor view, where they send to their own live chat, so
+// whether the overlay is shared with viewers is irrelevant. Requiring public previously made
+// a streamer with a private overlay get the misleading "The streamer has not configured this
+// platform in All-Chat." error despite YouTube being configured.
 func (h *ChatSendHandler) getActiveYouTubeChannelID(ctx context.Context, streamerUserID string) (string, error) {
 	query := `
 		SELECT ocs.channel_id
@@ -1619,7 +1626,6 @@ func (h *ChatSendHandler) getActiveYouTubeChannelID(ctx context.Context, streame
 		WHERE o.user_id = $1
 		  AND ocs.platform = 'youtube'
 		  AND ocs.is_active = true
-		  AND o.is_public_for_viewers = true
 		LIMIT 1
 	`
 
