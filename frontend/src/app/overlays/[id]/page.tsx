@@ -772,11 +772,32 @@ function AddSourceForm({
       const data = await res.json()
       if (data.auth_url) {
         safeExternalRedirect(data.auth_url)
-      } else {
-        console.error('No auth_url returned', data)
+        return
       }
+      // Backend short-circuit: the streamer already has valid credentials with
+      // the required scopes (e.g. reconnecting Twitch after removing the source),
+      // so the source was added directly without an OAuth reflow. Refresh the
+      // source list instead of silently doing nothing.
+      if (res.ok && data.source_added) {
+        onSourceAdded?.()
+        toastManager.add({ title: 'Source added', type: 'success' })
+        return
+      }
+      // Anything else is a failure — surface it rather than failing silently.
+      console.error('Failed to start add-source flow', data)
+      toastManager.add({
+        title: 'Could not connect',
+        description:
+          typeof data.error === 'string' ? data.error : 'Please try again.',
+        type: 'error',
+      })
     } catch (err) {
       console.error('Failed to initiate OAuth', err)
+      toastManager.add({
+        title: 'Could not connect',
+        description: 'Please try again.',
+        type: 'error',
+      })
     }
   }
   const [adminChannelId, setAdminChannelId] = useState('')
