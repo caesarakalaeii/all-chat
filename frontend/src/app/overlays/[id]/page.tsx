@@ -46,6 +46,7 @@ import { ChevronLeft, ChevronRight, X, Clipboard, Share2, Puzzle } from 'lucide-
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { overlaysApi } from '@/lib/api/overlays'
 import type { TTSConfigMetadata, ElevenLabsVoice, TestKeyResult } from '@/lib/api/overlays'
+import { startAddSourceReflow } from '@/lib/api/add-source'
 import { sharesApi } from '@/lib/api/shares'
 import { getGuilds, getGuildChannels, updateSourceConfig } from '@/lib/api/discord'
 import type { DiscordGuild, ChannelCategory } from '@/lib/api/discord'
@@ -763,42 +764,31 @@ function AddSourceForm({
     }
   }
 
-  // Fetch the OAuth auth_url from the backend, then redirect the browser to
-  // it — same pattern as the login flow. H3 cookie auth: the access cookie is
-  // sent same-origin and CookieToBearer derives the Authorization header.
+  // Start the add-source OAuth reflow and act on the result. Routed through
+  // startAddSourceReflow (apiClient) so under H3 cookie auth an expired access
+  // cookie is refreshed and the request retried, instead of dead-ending with
+  // "Authorization header required".
   const startOAuth = async (endpoint: string) => {
-    try {
-      const res = await fetch(endpoint)
-      const data = await res.json()
-      if (data.auth_url) {
-        safeExternalRedirect(data.auth_url)
-        return
-      }
-      // Backend short-circuit: the streamer already has valid credentials with
-      // the required scopes (e.g. reconnecting Twitch after removing the source),
-      // so the source was added directly without an OAuth reflow. Refresh the
-      // source list instead of silently doing nothing.
-      if (res.ok && data.source_added) {
-        onSourceAdded?.()
-        toastManager.add({ title: 'Source added', type: 'success' })
-        return
-      }
-      // Anything else is a failure — surface it rather than failing silently.
-      console.error('Failed to start add-source flow', data)
-      toastManager.add({
-        title: 'Could not connect',
-        description:
-          typeof data.error === 'string' ? data.error : 'Please try again.',
-        type: 'error',
-      })
-    } catch (err) {
-      console.error('Failed to initiate OAuth', err)
-      toastManager.add({
-        title: 'Could not connect',
-        description: 'Please try again.',
-        type: 'error',
-      })
+    const result = await startAddSourceReflow(endpoint)
+    if (result.kind === 'redirect') {
+      safeExternalRedirect(result.authUrl)
+      return
     }
+    if (result.kind === 'added') {
+      // Backend short-circuit: the streamer already has valid credentials with
+      // the required scopes (e.g. reconnecting Twitch after removing the
+      // source), so the source was added directly without an OAuth reflow.
+      // Refresh the source list instead of silently doing nothing.
+      onSourceAdded?.()
+      toastManager.add({ title: 'Source added', type: 'success' })
+      return
+    }
+    // Surface the failure rather than failing silently.
+    toastManager.add({
+      title: 'Could not connect',
+      description: result.message,
+      type: 'error',
+    })
   }
   const [adminChannelId, setAdminChannelId] = useState('')
   const [isAdminAdding, setIsAdminAdding] = useState(false)
@@ -1784,18 +1774,23 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   // user:read:chat + user:bot + channel:bot; once granted, the channel moves to the
   // EventSub listener on the next sync.
   async function handleReconnectTwitchChat() {
-    try {
-      // H3 cookie auth: same-origin cookie + CookieToBearer.
-      const res = await fetch(`/api/v1/auth/twitch/add-source/${id}`)
-      const data = await res.json()
-      if (data.auth_url) {
-        safeExternalRedirect(data.auth_url)
-      } else {
-        console.error('No auth_url returned for Twitch reconnect', data)
-      }
-    } catch (err) {
-      console.error('Failed to start Twitch chat reconnect', err)
+    const result = await startAddSourceReflow(`/api/v1/auth/twitch/add-source/${id}`)
+    if (result.kind === 'redirect') {
+      safeExternalRedirect(result.authUrl)
+      return
     }
+    if (result.kind === 'added') {
+      // Already holds the chat scopes — nothing to re-grant; refresh so the
+      // now-migrated source reflects its EventSub state.
+      void overlaysApi.getSources(id).then(setSources).catch(console.error)
+      toastManager.add({ title: 'Twitch chat connected', type: 'success' })
+      return
+    }
+    toastManager.add({
+      title: 'Could not reconnect Twitch chat',
+      description: result.message,
+      type: 'error',
+    })
   }
 
   async function handleAddTikTokSource(username: string) {
