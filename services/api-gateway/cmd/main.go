@@ -511,25 +511,36 @@ func main() {
 		// client sends a JSON {code} body; the proxy passes Set-Cookie back).
 		publicAPI.POST("/auth/exchange", authRateLimiter.MiddlewareScoped("exchange"), proxyHandler.ForwardRequest)
 
-		// Platform-specific OAuth routes
+		// Platform-specific OAuth routes.
+		//
+		// login/callback are genuinely public (no token yet). add-source and the
+		// moderation re-consent reflow, however, REQUIRE the caller's JWT:
+		// auth-service reads it from the Authorization header both to identify the
+		// user and to re-forward the token to overlay-manager. They stay in
+		// publicAPI (not protectedAPI) so auth-service keeps doing that validation
+		// itself, but under H3 cookie auth the browser sends the access_token
+		// cookie instead of an Authorization header — and the proxy strips the raw
+		// Cookie before forwarding (L17). So these routes need CookieToBearer to
+		// normalize cookie → Bearer at the gateway; without it auth-service 401s
+		// with "Authorization header required".
 		publicAPI.GET("/auth/twitch/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/twitch/callback", proxyHandler.ForwardRequest)
-		publicAPI.GET("/auth/twitch/add-source/:overlay_id", proxyHandler.ForwardRequest)
+		publicAPI.GET("/auth/twitch/add-source/:overlay_id", localmiddleware.CookieToBearer(), proxyHandler.ForwardRequest)
 		// Opt-in moderation re-consent (ADR-0017); auth-service applies its own JWT middleware.
-		publicAPI.GET("/auth/twitch/moderation/:overlay_id", proxyHandler.ForwardRequest)
+		publicAPI.GET("/auth/twitch/moderation/:overlay_id", localmiddleware.CookieToBearer(), proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/youtube/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/youtube/callback", proxyHandler.ForwardRequest)
-		publicAPI.GET("/auth/youtube/add-source/:overlay_id", proxyHandler.ForwardRequest)
+		publicAPI.GET("/auth/youtube/add-source/:overlay_id", localmiddleware.CookieToBearer(), proxyHandler.ForwardRequest)
 		// Opt-in moderation re-consent (ADR-0017); auth-service applies its own JWT middleware.
-		publicAPI.GET("/auth/youtube/moderation/:overlay_id", proxyHandler.ForwardRequest)
+		publicAPI.GET("/auth/youtube/moderation/:overlay_id", localmiddleware.CookieToBearer(), proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/kick/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/kick/callback", proxyHandler.ForwardRequest)
-		publicAPI.GET("/auth/kick/add-source/:overlay_id", proxyHandler.ForwardRequest)
+		publicAPI.GET("/auth/kick/add-source/:overlay_id", localmiddleware.CookieToBearer(), proxyHandler.ForwardRequest)
 		// Opt-in moderation re-consent (ADR-0017); auth-service applies its own JWT middleware.
-		publicAPI.GET("/auth/kick/moderation/:overlay_id", proxyHandler.ForwardRequest)
+		publicAPI.GET("/auth/kick/moderation/:overlay_id", localmiddleware.CookieToBearer(), proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/tiktok/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/tiktok/callback", proxyHandler.ForwardRequest)
-		publicAPI.GET("/auth/tiktok/add-source/:overlay_id", proxyHandler.ForwardRequest)
+		publicAPI.GET("/auth/tiktok/add-source/:overlay_id", localmiddleware.CookieToBearer(), proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/discord/callback", proxyHandler.ForwardRequest)
 
 		// Viewer OAuth routes (for sending messages)
