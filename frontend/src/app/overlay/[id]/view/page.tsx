@@ -50,7 +50,6 @@ import { OverlayViewThemeToggle } from '@/components/overlay/OverlayViewThemeTog
 import { ViewSettingsBar } from '@/components/overlay/ViewSettingsBar'
 import { ResizableSplit } from '@/components/ResizableSplit'
 import { useOverlayStream } from '@/hooks/useOverlayStream'
-import { authApi } from '@/lib/api/auth'
 import { ApiError } from '@/lib/api/client'
 import { startDiscordModerationReinvite } from '@/lib/api/discord'
 import {
@@ -238,19 +237,34 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
     [id]
   )
 
-  // Re-login when a send fails with `reauth_required` (the platform OAuth token
-  // was revoked). Re-runs the platform's OAuth login (the canonical entry the
-  // landing page uses); falls back to Twitch when no platform is reported.
-  const reauthenticate = useCallback(async (platform?: string) => {
-    const p =
-      platform === 'twitch' || platform === 'youtube' || platform === 'kick' ? platform : 'twitch'
-    try {
-      const url = await authApi.getLoginUrl(p)
-      window.location.href = url
-    } catch {
-      toast.error('Could not start re-login. Please try again.')
-    }
-  }, [])
+  // Re-consent when a send fails with `reauth_required` (the streamer's platform
+  // send token expired or was revoked). Chat sending requires the advanced-controls
+  // grant — Twitch `user:write:chat`, Kick `chat:write`, YouTube force-ssl — which is
+  // issued ONLY by the moderation/advanced-controls re-consent. A plain login can NOT
+  // restore it: login omits the send scope, skips force_verify (so Twitch silently
+  // reissues the old, narrower grant), and its callback lands on the dashboard.
+  // Re-running the advanced-controls consent reissues a fresh token as a superset of
+  // the streamer's existing grant (force_verify) and its callback returns here
+  // (/overlay/{id}/view). Mirrors enableModeration; Discord has no send path so it is
+  // never the reauth target. Falls back to Twitch when no platform is reported.
+  const reauthenticate = useCallback(
+    async (platform?: string) => {
+      try {
+        let url: string | null = null
+        if (platform === 'kick') {
+          url = await moderationApi.getKickConsentUrl(id, ['timeout', 'ban', 'unban'])
+        } else if (platform === 'youtube') {
+          url = await moderationApi.getYouTubeConsentUrl(id, ['ban'])
+        } else {
+          url = await moderationApi.getTwitchConsentUrl(id, ['delete', 'timeout', 'ban', 'unban'])
+        }
+        if (url) window.location.href = url
+      } catch {
+        toast.error('Could not start re-login. Please try again.')
+      }
+    },
+    [id]
+  )
 
   // Restore the saved theme once on mount.
   useEffect(() => {
