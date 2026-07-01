@@ -329,6 +329,11 @@ func (c *StreamConsumer) processMessage(ctx context.Context, msg redis.XMessage)
 	c.metrics.RecordMessageProcessed("message-processor", rawMsg.Platform, "handler", "success")
 	c.metrics.ProcessingDuration.WithLabelValues("message-processor", rawMsg.Platform).Observe(time.Since(start).Seconds())
 
+	// Engagement (issue #523): forward candidate vote/wager chat commands to the
+	// engagement service. Best-effort and gated on a cheap text pre-check + a Redis
+	// EXISTS flag, so ordinary chat pays only the in-process pre-check.
+	c.forwardEngagementCommand(ctx, rawMsg)
+
 	return nil
 }
 

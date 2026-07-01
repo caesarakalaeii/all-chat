@@ -697,6 +697,19 @@ func main() {
 			processorMetrics.RecordMessagePublished("message-processor", overlay.OverlayID, rawMsg.Platform, "success")
 			processorMetrics.FanoutDuration.WithLabelValues("message-processor").Observe(time.Since(startPublish).Seconds())
 			publishedToAnyOverlay = true
+
+			// Engagement points (issue #523): republish event-bearing messages
+			// (subs/bits/donations/gifts) to the earn channel. Best-effort Pub/Sub —
+			// a missed event just means an unpaid earn, never a corrupted balance.
+			// `unified` is already scoped to this overlay, so the award lands in the
+			// right per-overlay economy.
+			if unified.Event != nil {
+				if payload, jerr := unified.ToJSON(); jerr == nil {
+					if perr := redisClient.Publish(ctx, models.ChannelEngagementEvents, payload).Err(); perr != nil {
+						log.Debug("publish engagement earn event failed", zap.Error(perr))
+					}
+				}
+			}
 		}
 
 		// Increment daily platform message counter once per unique message.
