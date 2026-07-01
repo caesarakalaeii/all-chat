@@ -202,7 +202,10 @@ func (s *Subscriber) Subscribe(ctx context.Context, overlayID string) error {
 	// Update channel: TikTok like aggregate updates
 	mainChannel := fmt.Sprintf("overlay:%s", overlayID)
 	updateChannel := fmt.Sprintf("overlay:%s:updates", overlayID)
-	pubsub := s.client.Subscribe(ctx, mainChannel, updateChannel)
+	// Engagement snapshots (issue #523): aggregate poll/prediction state.
+	pollChannel := fmt.Sprintf("overlay:%s:poll", overlayID)
+	predictionChannel := fmt.Sprintf("overlay:%s:prediction", overlayID)
+	pubsub := s.client.Subscribe(ctx, mainChannel, updateChannel, pollChannel, predictionChannel)
 
 	// Verify subscription
 	if _, err := pubsub.Receive(ctx); err != nil {
@@ -352,13 +355,16 @@ func (s *Subscriber) resubscribe(overlayID string) {
 		isViewerOnly := s.viewerOnly[overlayID]
 
 		var pubsub *redis.PubSub
+		// Engagement snapshots (issue #523) reach both OBS overlays and viewers.
+		pollChannel := fmt.Sprintf("overlay:%s:poll", overlayID)
+		predictionChannel := fmt.Sprintf("overlay:%s:prediction", overlayID)
 		if isViewerOnly {
 			channel := fmt.Sprintf("overlay:%s", overlayID)
-			pubsub = s.client.Subscribe(context.Background(), channel)
+			pubsub = s.client.Subscribe(context.Background(), channel, pollChannel, predictionChannel)
 		} else {
 			mainChannel := fmt.Sprintf("overlay:%s", overlayID)
 			updateChannel := fmt.Sprintf("overlay:%s:updates", overlayID)
-			pubsub = s.client.Subscribe(context.Background(), mainChannel, updateChannel)
+			pubsub = s.client.Subscribe(context.Background(), mainChannel, updateChannel, pollChannel, predictionChannel)
 		}
 
 		if _, err := pubsub.Receive(context.Background()); err != nil {
@@ -472,9 +478,12 @@ func (s *Subscriber) SubscribeViewerOnly(ctx context.Context, overlayID string) 
 		return nil
 	}
 
-	// Subscribe to Redis channel (viewer-only: main channel only, no updates channel)
+	// Subscribe to Redis channel (viewer-only: main channel, plus engagement
+	// snapshots so viewers see live poll/prediction state; no TikTok updates channel).
 	channel := fmt.Sprintf("overlay:%s", overlayID)
-	pubsub := s.client.Subscribe(ctx, channel)
+	pollChannel := fmt.Sprintf("overlay:%s:poll", overlayID)
+	predictionChannel := fmt.Sprintf("overlay:%s:prediction", overlayID)
+	pubsub := s.client.Subscribe(ctx, channel, pollChannel, predictionChannel)
 
 	// Verify subscription
 	if _, err := pubsub.Receive(ctx); err != nil {

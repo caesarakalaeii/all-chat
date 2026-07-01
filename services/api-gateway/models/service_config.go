@@ -263,6 +263,19 @@ func NewServiceRegistry() (*ServiceRegistry, error) {
 		StripPrefix: false,
 	}
 
+	// Engagement Service (issue #523): polls, predictions, and viewer points.
+	// Serves /api/v1/engagement/* directly (no strip), like moderation-service.
+	// Owner routes need a user JWT; viewer routes a viewer JWT; the public
+	// active-poll/active-prediction reads are unauthenticated (OBS overlay).
+	engagementURL := getEnvOrDefault("ENGAGEMENT_SERVICE_URL", "http://localhost:8093")
+	registry.Services["engagement-service"] = &ServiceConfig{
+		Name:        "engagement-service",
+		BaseURL:     engagementURL,
+		HealthPath:  "/health/live",
+		PathPrefix:  "/api/v1/engagement",
+		StripPrefix: false,
+	}
+
 	// Validate all service URLs are set
 	for name, service := range registry.Services {
 		if service.BaseURL == "" {
