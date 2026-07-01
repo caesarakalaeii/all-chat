@@ -45,6 +45,7 @@ jobs:
       token-refresh-service: ${{ steps.changes.outputs.token-refresh-service }}
       moderation-service: ${{ steps.changes.outputs.moderation-service }}
       payment-service: ${{ steps.changes.outputs.payment-service }}
+      engagement-service: ${{ steps.changes.outputs.engagement-service }}
       share-service: ${{ steps.changes.outputs.share-service }}
       discord-bot: ${{ steps.changes.outputs.discord-bot }}
       discord-listener: ${{ steps.changes.outputs.discord-listener }}
@@ -109,6 +110,10 @@ jobs:
             payment-service:
               - 'services/payment-service/**'
               - 'shared/**'
+            engagement-service:
+              - 'services/engagement-service/**'
+              - 'shared/**'
+              - 'services/message-processor/**'
             share-service:
               - 'services/share-service/**'
               - 'shared/**'
@@ -187,6 +192,9 @@ jobs:
           - name: payment-service
             changed: ${{ needs.detect-changes.outputs.payment-service }}
             path: services/payment-service
+          - name: engagement-service
+            changed: ${{ needs.detect-changes.outputs.engagement-service }}
+            path: services/engagement-service
           - name: share-service
             changed: ${{ needs.detect-changes.outputs.share-service }}
             path: services/share-service
