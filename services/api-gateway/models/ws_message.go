@@ -45,6 +45,14 @@ const (
 
 	// WSMessageTypePlatformStatus is sent when platform connection status changes
 	WSMessageTypePlatformStatus WSMessageType = "platform_status"
+
+	// WSMessageTypePollUpdate carries an aggregate poll snapshot (issue #523).
+	// Broadcast to the overlay; the payload's state field conveys active vs ended.
+	WSMessageTypePollUpdate WSMessageType = "poll_update"
+
+	// WSMessageTypePredictionUpdate carries an aggregate prediction snapshot
+	// (issue #523). Broadcast to the overlay; state conveys active/locked/resolved.
+	WSMessageTypePredictionUpdate WSMessageType = "prediction_update"
 )
 
 // WSMessage is the wrapper for all WebSocket messages

@@ -231,8 +231,13 @@ func main() {
 		// Main channel: overlay:{id} -> regular messages/events
 		// Update channel: overlay:{id}:updates -> TikTok like aggregate updates
 		msgType := models.WSMessageTypeChatMessage
-		if len(channel) > 8 && channel[len(channel)-8:] == ":updates" {
+		switch {
+		case strings.HasSuffix(channel, ":updates"):
 			msgType = models.WSMessageTypeMessageUpdate
+		case strings.HasSuffix(channel, ":poll"):
+			msgType = models.WSMessageTypePollUpdate
+		case strings.HasSuffix(channel, ":prediction"):
+			msgType = models.WSMessageTypePredictionUpdate
 		}
 
 		// Check if this is a deletion event for replay buffer
@@ -495,6 +500,11 @@ func main() {
 		// Platform message stats (last 24h)
 		publicAPI.GET("/stats", statsHandler.GetPlatformStats)
 
+		// Engagement service (issue #523) — public aggregate reads for the OBS
+		// overlay widgets and web page (no auth; no per-viewer data). -> engagement-service.
+		publicAPI.GET("/engagement/overlays/:id/active-poll", proxyHandler.ForwardRequest)
+		publicAPI.GET("/engagement/overlays/:id/active-prediction", proxyHandler.ForwardRequest)
+
 		// Auth service routes
 		publicAPI.POST("/auth/login", authRateLimiter.MiddlewareScoped("login"), proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/login", authRateLimiter.MiddlewareScoped("login"), proxyHandler.ForwardRequest)
@@ -716,6 +726,25 @@ func main() {
 		protectedAPI.DELETE("/payment/viewer/patreon/connection", proxyHandler.ForwardRequest)
 		// User-facing upcoming maintenance (-> overlay-manager)
 		protectedAPI.GET("/maintenance/upcoming", proxyHandler.ForwardRequest)
+
+		// Engagement service (issue #523) — polls, predictions, points (-> engagement-service).
+		// JWTAuth accepts both user and viewer tokens; engagement-service enforces which
+		// each route needs (owner ownership check vs viewer_id) and verifies authorization
+		// itself. Owner management:
+		protectedAPI.POST("/engagement/overlays/:id/polls", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/engagement/overlays/:id/polls/:pollId/close", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/engagement/overlays/:id/predictions", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/engagement/overlays/:id/predictions/:pid/lock", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/engagement/overlays/:id/predictions/:pid/resolve", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/engagement/overlays/:id/predictions/:pid/cancel", proxyHandler.ForwardRequest)
+		protectedAPI.GET("/engagement/overlays/:id/points/config", proxyHandler.ForwardRequest)
+		protectedAPI.PUT("/engagement/overlays/:id/points/config", proxyHandler.ForwardRequest)
+		// Viewer participation (web page / extension):
+		protectedAPI.POST("/engagement/overlays/:id/polls/:pollId/vote", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/engagement/overlays/:id/predictions/:pid/wager", proxyHandler.ForwardRequest)
+		protectedAPI.GET("/engagement/viewers/me/points", proxyHandler.ForwardRequest)
+		protectedAPI.GET("/engagement/viewers/me/engagement", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/engagement/viewers/me/heartbeat", proxyHandler.ForwardRequest)
 	}
 
 	// Admin routes (require JWT + admin role — defense-in-depth at gateway level)
