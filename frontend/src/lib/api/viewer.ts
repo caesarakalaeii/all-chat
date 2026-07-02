@@ -25,6 +25,7 @@
 
 import type { ViewerInfo } from '../types/viewer'
 import type { PaymentStatus } from './payment'
+import type { Poll, Prediction, ViewerEngagement } from '../types/engagement'
 import { inMemoryTokens } from '../auth/in-memory-store'
 import { safeExternalRedirect } from '../auth/redirect-allowlist'
 
@@ -138,5 +139,46 @@ export const viewerApi = {
 
   async disconnectPatreon(): Promise<void> {
     await viewerApiClient.delete('/api/v1/payment/viewer/patreon/connection')
+  },
+
+  // --- Engagement (issue #523): viewer-scoped polls/predictions/points ---
+
+  /**
+   * Private per-viewer snapshot for an overlay economy: balance (+ points name)
+   * plus the viewer's current vote and wager. Pull-first delivery (the overlay
+   * WebSocket is broadcast-only and can't carry per-viewer data).
+   */
+  async getEngagement(overlayId: string): Promise<ViewerEngagement> {
+    return viewerApiClient.get<ViewerEngagement>(
+      `/api/v1/engagement/viewers/me/engagement?overlay_id=${encodeURIComponent(overlayId)}`
+    )
+  },
+
+  /** Cast/change a poll vote from the web page (option is 1-based). Returns the updated poll. */
+  async votePoll(overlayId: string, pollId: string, optionIdx: number): Promise<Poll> {
+    return viewerApiClient.post<Poll>(
+      `/api/v1/engagement/overlays/${overlayId}/polls/${pollId}/vote`,
+      { option_idx: optionIdx }
+    )
+  },
+
+  /** Place a points wager on a prediction outcome (outcome is 1-based). */
+  async wagerPrediction(
+    overlayId: string,
+    predictionId: string,
+    outcomeIdx: number,
+    amount: number
+  ): Promise<{ balance: number; prediction?: Prediction }> {
+    return viewerApiClient.post<{ balance: number; prediction?: Prediction }>(
+      `/api/v1/engagement/overlays/${overlayId}/predictions/${predictionId}/wager`,
+      { outcome_idx: outcomeIdx, amount }
+    )
+  },
+
+  /** Watch-time heartbeat (awards points, deduped per minute server-side). */
+  async engagementHeartbeat(overlayId: string): Promise<{ balance: number }> {
+    return viewerApiClient.post<{ balance: number }>('/api/v1/engagement/viewers/me/heartbeat', {
+      overlay_id: overlayId,
+    })
   },
 }
