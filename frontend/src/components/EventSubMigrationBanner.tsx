@@ -21,6 +21,8 @@
 import { useState } from 'react'
 import { Radio, X } from 'lucide-react'
 import { safeExternalRedirect } from '@/lib/auth/redirect-allowlist'
+import { startAddSourceReflow } from '@/lib/api/add-source'
+import { toastManager } from '@/lib/toast'
 import type { ChatSource } from '@/lib/types/overlay'
 
 const DISMISS_KEY = 'eventsub-migration-banner-dismissed'
@@ -74,20 +76,27 @@ export function EventSubMigrationBanner({
   if (dismissed || channels.length === 0) return null
 
   async function handleUpgrade() {
-    try {
-      // H3 cookie auth: the access cookie is sent same-origin and the gateway's
-      // CookieToBearer middleware derives the Authorization header — no
-      // JS-readable token is needed.
-      const res = await fetch(`/api/v1/auth/twitch/add-source/${channels[0].overlayId}`)
-      const data = await res.json()
-      if (data.auth_url) {
-        safeExternalRedirect(data.auth_url)
-      } else {
-        console.error('No auth_url returned for Twitch chat upgrade', data)
-      }
-    } catch (err) {
-      console.error('Failed to start Twitch chat upgrade', err)
+    // Routed through startAddSourceReflow (apiClient) so an expired access
+    // cookie is refreshed and retried under H3 cookie auth instead of failing.
+    const result = await startAddSourceReflow(
+      `/api/v1/auth/twitch/add-source/${channels[0].overlayId}`
+    )
+    if (result.kind === 'redirect') {
+      safeExternalRedirect(result.authUrl)
+      return
     }
+    if (result.kind === 'added') {
+      // Already authorized with the chat scopes — the channel is moving to
+      // EventSub; hide the nudge.
+      toastManager.add({ title: 'Twitch chat connected', type: 'success' })
+      setDismissed(true)
+      return
+    }
+    toastManager.add({
+      title: 'Could not start the upgrade',
+      description: result.message,
+      type: 'error',
+    })
   }
 
   function handleDismiss() {
