@@ -58,7 +58,8 @@ export default defineConfig([
   // classnames-order is disabled — Prettier (prettier-plugin-tailwindcss) handles class ordering.
   // no-contradicting-classname disabled (false positives with v4 custom tokens).
   // getSourceCode() used by classnames-order is deprecated in ESLint v10 — disable to avoid crash.
-  ...tailwind.configs['flat/recommended'],
+  // v4.0.4 exports a single flat config object (configs['flat/recommended'] was removed)
+  tailwind.configs.recommended,
   {
     rules: {
       // Disabled — Prettier (prettier-plugin-tailwindcss) handles class ordering
@@ -77,7 +78,8 @@ export default defineConfig([
       tailwindcss: {
         // Point to Tailwind v4 CSS entry point (not tailwind.config.js)
         // Must be absolute path — plugin runs as worker from a different cwd
-        config: join(__dirname, 'src/app/globals.css'),
+        // v4.0.4 renamed the setting from `config` to `cssConfigPath`
+        cssConfigPath: join(__dirname, 'src/app/globals.css'),
       },
     },
   },
