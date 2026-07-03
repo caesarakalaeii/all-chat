@@ -12,7 +12,7 @@ require (
 	github.com/prometheus/client_golang v1.23.2
 	github.com/redis/go-redis/v9 v9.21.0
 	github.com/stretchr/testify v1.11.1
-	github.com/testcontainers/testcontainers-go v0.42.0
+	github.com/testcontainers/testcontainers-go v0.43.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.42.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.68.0
 	go.uber.org/zap v1.28.0
@@ -66,7 +66,7 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/go-archive v0.2.0 // indirect
-	github.com/moby/moby/api v1.54.1 // indirect
+	github.com/moby/moby/api v1.54.2 // indirect
 	github.com/moby/moby/client v0.4.0 // indirect
 	github.com/moby/patternmatcher v0.6.1 // indirect
 	github.com/moby/sys/sequential v0.6.0 // indirect
@@ -88,7 +88,7 @@ require (
 	github.com/quic-go/quic-go v0.59.0 // indirect
 	github.com/redis/go-redis/extra/rediscmd/v9 v9.19.0 // indirect
 	github.com/redis/go-redis/extra/redisotel/v9 v9.19.0 // indirect
-	github.com/shirou/gopsutil/v4 v4.26.3 // indirect
+	github.com/shirou/gopsutil/v4 v4.26.5 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/tklauser/go-sysconf v0.3.16 // indirect
 	github.com/tklauser/numcpus v0.11.0 // indirect
