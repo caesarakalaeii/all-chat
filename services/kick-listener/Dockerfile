@@ -17,7 +17,7 @@ RUN go mod download
 RUN CGO_ENABLED=0 GOOS=linux go build -o /app/kick-listener ./cmd
 
 # Runtime stage
-FROM alpine:3.23
+FROM alpine:3.24
 
 # Install CA certificates for HTTPS
 RUN apk --no-cache add ca-certificates tzdata
