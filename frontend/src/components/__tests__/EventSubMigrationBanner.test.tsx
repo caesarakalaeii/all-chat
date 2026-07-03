@@ -122,9 +122,13 @@ describe('EventSubMigrationBanner', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: /reconnect now/i }))
     await waitFor(() =>
-      // H3 cookie auth: no Authorization header — the access cookie is sent
-      // same-origin and the gateway derives the bearer via CookieToBearer.
-      expect(fetchMock).toHaveBeenCalledWith('/api/v1/auth/twitch/add-source/o9')
+      // Routed through apiClient: same-origin request (origin-prefixed URL) with
+      // credentials so the httpOnly access cookie is sent (H3 cookie auth). No
+      // Authorization header — the gateway derives the bearer via CookieToBearer.
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/auth/twitch/add-source/o9'),
+        expect.objectContaining({ credentials: 'same-origin' })
+      )
     )
   })
 
