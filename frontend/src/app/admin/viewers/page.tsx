@@ -35,6 +35,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import clsx from 'clsx'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { apiClient } from '@/lib/api/client'
 import { formatDistanceToNow } from 'date-fns'
@@ -43,6 +44,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog } from '@/components/ui/dialog'
 import { toastManager } from '@/lib/toast'
+import { PremiumDurationChooser } from '@/components/admin/PremiumDurationChooser'
 
 interface ViewerSession {
   id: string
@@ -54,6 +56,7 @@ interface ViewerSession {
   message_count_1min: number
   message_count_1hour: number
   is_premium: boolean
+  premium_expires_at?: string | null
   viewer_id: string | null
   is_banned: boolean
   banned_at: string | null
@@ -74,6 +77,10 @@ export default function AdminViewersPage() {
   const [unbanDialogViewer, setUnbanDialogViewer] = useState<ViewerSession | null>(null)
   const [premiumDialogViewer, setPremiumDialogViewer] = useState<ViewerSession | null>(null)
   const [premiumLoading, setPremiumLoading] = useState(false)
+  // Time-limited grant selection (ADR-0027). null seconds = permanent; valid=false
+  // means the custom day count is empty/out of range and the grant is blocked.
+  const [grantDurationSeconds, setGrantDurationSeconds] = useState<number | null>(null)
+  const [grantDurationValid, setGrantDurationValid] = useState(true)
 
   useEffect(() => {
     if (!user?.is_admin) {
@@ -141,12 +148,17 @@ export default function AdminViewersPage() {
     }
   }
 
-  const handleTogglePremium = async (viewer: ViewerSession) => {
+  // durationSeconds (grant only) makes the grant time-limited (ADR-0027); null/
+  // undefined grants permanently. Ignored when revoking.
+  const handleTogglePremium = async (viewer: ViewerSession, durationSeconds?: number | null) => {
     try {
       setPremiumLoading(true)
-      await apiClient.post(`/api/v1/admin/viewers/${viewer.id}/premium`, {
-        is_premium: !viewer.is_premium,
-      })
+      const granting = !viewer.is_premium
+      const body: { is_premium: boolean; duration_seconds?: number } = { is_premium: granting }
+      if (granting && durationSeconds != null) {
+        body.duration_seconds = durationSeconds
+      }
+      await apiClient.post(`/api/v1/admin/viewers/${viewer.id}/premium`, body)
       toastManager.add({
         title: `${viewer.username} premium ${viewer.is_premium ? 'revoked' : 'granted'}`,
         type: 'success',
@@ -174,12 +186,18 @@ export default function AdminViewersPage() {
     }
     return (
       <button
-        className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium transition-colors ${
+        className={clsx(
+          'inline-flex items-center rounded px-2 py-0.5 text-xs font-medium transition-colors',
           viewer.is_premium
             ? 'bg-amber-400/10 text-amber-400 hover:bg-amber-400/20'
             : 'bg-surface-2 text-text-dim hover:bg-surface-2/80'
-        }`}
-        onClick={() => setPremiumDialogViewer(viewer)}
+        )}
+        onClick={() => {
+          // Reset the duration selection to the default (Permanent) each open.
+          setGrantDurationSeconds(null)
+          setGrantDurationValid(true)
+          setPremiumDialogViewer(viewer)
+        }}
       >
         {viewer.is_premium ? 'Premium' : 'Free'}
       </button>
@@ -386,12 +404,28 @@ export default function AdminViewersPage() {
                 ? 'They will lose access to gradients, avatar frames, and flairs.'
                 : 'They will be able to use gradients, avatar frames, and flairs.'}
             </Dialog.Description>
+            {premiumDialogViewer.is_premium ? (
+              premiumDialogViewer.premium_expires_at && (
+                <p className="mt-2 text-xs font-medium text-amber-400/80">
+                  Time-limited &mdash; expires{' '}
+                  {new Date(premiumDialogViewer.premium_expires_at).toLocaleString()}
+                </p>
+              )
+            ) : (
+              <PremiumDurationChooser
+                disabled={premiumLoading}
+                onChange={(seconds, valid) => {
+                  setGrantDurationSeconds(seconds)
+                  setGrantDurationValid(valid)
+                }}
+              />
+            )}
             <div className="mt-6 flex justify-end gap-3">
               <Dialog.Close render={<Button variant="outline">Cancel</Button>} />
               <Button
                 variant="default"
-                disabled={premiumLoading}
-                onClick={() => handleTogglePremium(premiumDialogViewer)}
+                disabled={premiumLoading || (!premiumDialogViewer.is_premium && !grantDurationValid)}
+                onClick={() => handleTogglePremium(premiumDialogViewer, grantDurationSeconds)}
               >
                 {premiumLoading
                   ? 'Updating...'

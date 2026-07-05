@@ -23,6 +23,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -33,6 +34,8 @@ import (
 type mockEntitlementWriter struct {
 	premiumUserID string
 	premiumValue  bool
+	premiumTTL    *time.Duration
+	premiumCalled bool
 	premiumErr    error
 
 	betaUserID string
@@ -40,9 +43,11 @@ type mockEntitlementWriter struct {
 	betaErr    error
 }
 
-func (m *mockEntitlementWriter) UpdateUserPremium(_ context.Context, userID string, isPremium bool) error {
+func (m *mockEntitlementWriter) UpdateUserPremium(_ context.Context, userID string, isPremium bool, ttl *time.Duration) error {
 	m.premiumUserID = userID
 	m.premiumValue = isPremium
+	m.premiumTTL = ttl
+	m.premiumCalled = true
 	return m.premiumErr
 }
 
@@ -112,10 +117,9 @@ func TestSetUserBetaTester_InternalError(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
 
-// TestSetUserPremium_NotFound locks in the prefix-match fix: the repo returns
-// "user not found: <id>", which must map to 404 (previously fell through to 500).
-func TestSetUserPremium_NotFound(t *testing.T) {
-	repo := &mockEntitlementWriter{premiumErr: errors.New("user not found: u-42")}
+// premiumRouter wires SetUserPremium behind the production param shape
+// (/admin/premium/users/:id), injecting an admin user_id like JWTAuth would.
+func premiumRouter(repo userEntitlementWriter) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	h := NewAdminHandler(repo, zap.NewNop())
@@ -123,7 +127,55 @@ func TestSetUserPremium_NotFound(t *testing.T) {
 		c.Set("user_id", "admin-1")
 		c.Next()
 	}, h.SetUserPremium)
+	return r
+}
 
-	w := postJSON(r, "/admin/premium/users/u-42", `{"is_premium":true}`)
+// TestSetUserPremium_NotFound locks in the prefix-match fix: the repo returns
+// "user not found: <id>", which must map to 404 (previously fell through to 500).
+func TestSetUserPremium_NotFound(t *testing.T) {
+	repo := &mockEntitlementWriter{premiumErr: errors.New("user not found: u-42")}
+	w := postJSON(premiumRouter(repo), "/admin/premium/users/u-42", `{"is_premium":true}`)
 	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+// TestSetUserPremium_PermanentGrant: no duration_seconds => permanent grant (nil ttl).
+func TestSetUserPremium_PermanentGrant(t *testing.T) {
+	repo := &mockEntitlementWriter{}
+	w := postJSON(premiumRouter(repo), "/admin/premium/users/u-42", `{"is_premium":true}`)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "u-42", repo.premiumUserID)
+	assert.True(t, repo.premiumValue)
+	assert.Nil(t, repo.premiumTTL, "a grant with no duration must pass a nil ttl (permanent)")
+}
+
+// TestSetUserPremium_TimeLimitedGrant: a positive duration_seconds becomes the ttl.
+func TestSetUserPremium_TimeLimitedGrant(t *testing.T) {
+	repo := &mockEntitlementWriter{}
+	w := postJSON(premiumRouter(repo), "/admin/premium/users/u-42", `{"is_premium":true,"duration_seconds":604800}`)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.True(t, repo.premiumValue)
+	if assert.NotNil(t, repo.premiumTTL, "a positive duration must be passed as a ttl") {
+		assert.Equal(t, 7*24*time.Hour, *repo.premiumTTL)
+	}
+}
+
+// TestSetUserPremium_RejectsNonPositiveDuration: zero/negative durations are 400.
+func TestSetUserPremium_RejectsNonPositiveDuration(t *testing.T) {
+	for _, body := range []string{`{"is_premium":true,"duration_seconds":0}`, `{"is_premium":true,"duration_seconds":-5}`} {
+		repo := &mockEntitlementWriter{}
+		w := postJSON(premiumRouter(repo), "/admin/premium/users/u-42", body)
+		assert.Equal(t, http.StatusBadRequest, w.Code, body)
+		assert.False(t, repo.premiumCalled, "repo must not be called for an invalid duration: %s", body)
+	}
+}
+
+// TestSetUserPremium_RejectsOverCapDuration: durations beyond the ~10y cap are 400.
+func TestSetUserPremium_RejectsOverCapDuration(t *testing.T) {
+	repo := &mockEntitlementWriter{}
+	// 11 years in seconds, well over the 10y cap.
+	w := postJSON(premiumRouter(repo), "/admin/premium/users/u-42", `{"is_premium":true,"duration_seconds":346896000}`)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.False(t, repo.premiumCalled, "repo must not be called for an over-cap duration")
 }
