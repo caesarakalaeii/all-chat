@@ -4,7 +4,7 @@ go 1.23
 
 require (
 	github.com/caesar/all-chat/test/shared v0.0.0
-	github.com/redis/go-redis/v9 v9.0.5
+	github.com/redis/go-redis/v9 v9.6.3
 	github.com/sebdah/goldie/v2 v2.5.3
 	github.com/stretchr/testify v1.8.4
 	go.uber.org/zap v1.24.0

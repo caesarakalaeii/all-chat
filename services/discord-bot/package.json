@@ -8,7 +8,12 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js"
   },
-  "keywords": ["discord", "bot", "quota", "monitoring"],
+  "keywords": [
+    "discord",
+    "bot",
+    "quota",
+    "monitoring"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
@@ -16,8 +21,11 @@
     "@opentelemetry/auto-instrumentations-node": "^0.39.4",
     "@opentelemetry/exporter-trace-otlp-grpc": "^0.45.1",
     "@opentelemetry/sdk-node": "^0.45.1",
+    "axios": "^1.6.7",
     "discord.js": "^14.14.1",
-    "redis": "^4.6.13",
-    "axios": "^1.6.7"
+    "redis": "^4.6.13"
+  },
+  "overrides": {
+    "undici": "^6.27.0"
   }
 }
