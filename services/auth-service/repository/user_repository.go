@@ -615,7 +615,7 @@ func (r *UserRepository) decryptToken(token string) (string, error) {
 func (r *UserRepository) GetAllUsers(ctx context.Context) ([]*models.User, error) {
 	query := `
 SELECT u.id, u.twitch_id, u.google_id, u.kick_id, u.auth_provider, u.username, u.display_name, u.profile_image_url,
-       u.is_admin, u.is_premium, u.is_beta_tester,
+       u.is_admin, u.is_premium, u.is_beta_tester, u.premium_admin_override_expires_at,
        (u.is_banned OR bpi.platform_id IS NOT NULL) AS is_banned,
        COALESCE(u.banned_at, bpi.banned_at) AS banned_at,
        COALESCE(u.banned_reason, bpi.reason) AS banned_reason,
@@ -651,7 +651,8 @@ ORDER BY u.created_at DESC
 		err := rows.Scan(
 			&user.ID, &user.TwitchID, &user.GoogleID, &user.KickID, &user.AuthProvider,
 			&user.Username, &user.DisplayName, &profileImageURL,
-			&user.IsAdmin, &user.IsPremium, &user.IsBetaTester, &user.IsBanned, &user.BannedAt, &user.BannedReason, &user.BannedBy,
+			&user.IsAdmin, &user.IsPremium, &user.IsBetaTester, &user.PremiumExpiresAt,
+			&user.IsBanned, &user.BannedAt, &user.BannedReason, &user.BannedBy,
 			&user.CreatedAt, &user.UpdatedAt,
 		)
 		if err != nil {

@@ -57,6 +57,18 @@ via `viewer_sessions.user_id`, so the message-processor `ViewerBadgeEnricher` an
 viewer JWT readers stay unchanged. `auth-service` (admin override, viewer↔streamer
 link) and `payment-service` (viewer subscription) both call `RecomputeViewer`.
 
+### Time-limited admin overrides + the expiry sweep (ADR-0027)
+
+An admin premium grant (user or viewer) may carry an optional `premium_admin_override_expires_at`
+deadline — a comp/trial that reverts on its own. `Recompute`/`RecomputeViewer` treat an
+override past its expiry as absent (premium falls through to the subscription), evaluated
+against the DB clock, so `is_premium` is correct on any recompute. Because the column is
+materialized, a grant that lapses with **no** other write would otherwise stay stale, so
+payment-service also runs the single-replica **`OverrideExpirySweeper`** (`reconcile/override_expiry.go`,
+`PAYMENT_OVERRIDE_SWEEP_INTERVAL`): each pass clears due overrides and recomputes, with a
+guarded atomic clear that never clobbers a concurrent re-grant. The admin endpoints compute
+the deadline server-side as `NOW() + duration_seconds`.
+
 ## Endpoints
 
 | Method | Path | Auth | Purpose |
@@ -107,6 +119,8 @@ keep no separate grace timer.
 | `PAYMENT_RECONCILE_INTERVAL` | no | `6h` | reconcile cadence |
 | `PATREON_TOKEN_REFRESH_BUFFER` | no | `24h` | refresh tokens expiring within this window |
 | `PAYMENT_RECONCILE_BATCH_SIZE` | no | `500` | connections re-queried per pass |
+| `PAYMENT_OVERRIDE_SWEEP_INTERVAL` | no | `5m` | admin override-expiry sweep cadence (ADR-0027) |
+| `PAYMENT_OVERRIDE_SWEEP_BATCH_SIZE` | no | `500` | expired overrides cleared per subject-kind per pass |
 | `JWT_SECRET_V1` | yes | – | validates user JWTs |
 | `TOKEN_ENCRYPTION_KEY_V1` | yes | – | encrypts stored Patreon tokens |
 | `DATABASE_*`, `REDIS_*`, `FRONTEND_URL` | – | localhost | standard |

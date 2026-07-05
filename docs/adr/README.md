@@ -367,6 +367,17 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0027: Time-Limited Admin Premium Overrides
+
+**Status**: ✅ Accepted
+**Date**: 2026-07-05
+**Problem**: Admin premium grants (`users`/`viewers.premium_admin_override`, ADR-0018/0019) were permanent-until-revoked; we want to grant premium for a limited time (a comp/trial) that reverts on its own — but `is_premium` is materialized and ADR-0018 kept the rule time-free
+**Decision**: Add an optional `premium_admin_override_expires_at` to both tables; `Recompute`/`RecomputeViewer` nullify an expired override in SQL against the DB clock (so `Effective` stays an unchanged time-free boolean, subscription half untouched); a single-replica payment-service sweep clears lapsed grants with a guarded atomic clear+recompute (never clobbers a re-grant). Grant length is a server-computed `NOW()+duration`
+**Impact**: Time-limited grants for users and viewers; readers + `Effective` unchanged; correct on any recompute, converges within one sweep interval (≤5m) otherwise; narrow scoped amendment to ADR-0018's time-free property (override input only)
+**→ Read**: [0027-time-limited-admin-premium-overrides.md](./0027-time-limited-admin-premium-overrides.md)
+
+---
+
 ## How to Create a New ADR
 
 ### Step 1: Determine ADR Number

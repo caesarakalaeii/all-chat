@@ -324,6 +324,7 @@ func (r *ViewerRepository) ListAll(ctx context.Context, limit, offset int) ([]mo
 		       vs.last_message_at, vs.message_count_1min, vs.message_count_1hour,
 		       vs.rate_limit_reset_1min, vs.rate_limit_reset_1hour,
 		       COALESCE(v.is_premium, false) AS is_premium,
+		       v.premium_admin_override_expires_at,
 		       vs.viewer_id,
 		       vs.is_banned, vs.banned_at, vs.banned_reason,
 		       vs.created_at, vs.updated_at
@@ -358,6 +359,7 @@ func (r *ViewerRepository) ListAll(ctx context.Context, limit, offset int) ([]mo
 			&session.RateLimitReset1Min,
 			&session.RateLimitReset1Hour,
 			&session.IsPremium,
+			&session.PremiumExpiresAt,
 			&session.ViewerID,
 			&session.IsBanned,
 			&session.BannedAt,
@@ -427,7 +429,12 @@ func (r *ViewerRepository) UnbanViewer(ctx context.Context, sessionID uuid.UUID)
 // clears the override (NULL) so premium then follows any active viewer subscription
 // or linked-streamer inheritance. A hard viewer-premium ban (override FALSE) is
 // reserved for a future explicit admin action.
-func (r *ViewerRepository) SetViewerPremium(ctx context.Context, sessionID uuid.UUID, isPremium bool) error {
+//
+// ttl makes the grant time-limited (ADR-0027): non-nil grants viewer premium only
+// until NOW()+ttl, after which RecomputeViewer (and the payment-service sweep) treat
+// the override as absent. ttl is only meaningful when granting; a nil ttl (or any
+// revoke) clears the expiry. The deadline is computed from the database clock.
+func (r *ViewerRepository) SetViewerPremium(ctx context.Context, sessionID uuid.UUID, isPremium bool, ttl *time.Duration) error {
 	var viewerID uuid.UUID
 	err := r.db.QueryRow(ctx,
 		`SELECT viewer_id FROM viewer_sessions WHERE id = $1 AND viewer_id IS NOT NULL`, sessionID).Scan(&viewerID)
@@ -443,8 +450,19 @@ func (r *ViewerRepository) SetViewerPremium(ctx context.Context, sessionID uuid.
 		v := true
 		override = &v
 	}
-	if _, err := r.db.Exec(ctx,
-		`UPDATE viewers SET premium_admin_override = $2 WHERE id = $1`, viewerID, override); err != nil {
+	var ttlSeconds *float64
+	if isPremium && ttl != nil {
+		s := ttl.Seconds()
+		ttlSeconds = &s
+	}
+	if _, err := r.db.Exec(ctx, `
+		UPDATE viewers
+		SET premium_admin_override = $2,
+		    premium_admin_override_expires_at = CASE
+		        WHEN $3::double precision IS NULL THEN NULL
+		        ELSE NOW() + make_interval(secs => $3::double precision)
+		    END
+		WHERE id = $1`, viewerID, override, ttlSeconds); err != nil {
 		return fmt.Errorf("failed to update viewer premium override: %w", err)
 	}
 

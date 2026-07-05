@@ -19,6 +19,7 @@ package handlers
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/caesar/all-chat/services/auth-service/repository"
 	"github.com/gin-gonic/gin"
@@ -129,10 +130,17 @@ func (h *AdminViewerHandler) HandleUnbanViewer(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Viewer unbanned successfully"})
 }
 
-// SetPremiumRequest is the request body for setting viewer premium status
+// SetPremiumRequest is the request body for setting viewer premium status.
+// DurationSeconds (optional, positive) makes the grant time-limited (ADR-0027);
+// omit it for a permanent grant. It is ignored when revoking.
 type SetPremiumRequest struct {
-	IsPremium bool `json:"is_premium"`
+	IsPremium       bool   `json:"is_premium"`
+	DurationSeconds *int64 `json:"duration_seconds"`
 }
+
+// maxViewerPremiumGrantSeconds caps a time-limited viewer premium grant (ADR-0027)
+// at ~10 years, mirroring the streamer side (share-service).
+const maxViewerPremiumGrantSeconds int64 = 10 * 365 * 24 * 60 * 60
 
 // HandleSetViewerPremium grants or revokes premium status for a viewer
 func (h *AdminViewerHandler) HandleSetViewerPremium(c *gin.Context) {
@@ -149,8 +157,22 @@ func (h *AdminViewerHandler) HandleSetViewerPremium(c *gin.Context) {
 		return
 	}
 
+	var ttl *time.Duration
+	if req.DurationSeconds != nil {
+		if *req.DurationSeconds <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "duration_seconds must be positive"})
+			return
+		}
+		if *req.DurationSeconds > maxViewerPremiumGrantSeconds {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "duration_seconds exceeds maximum"})
+			return
+		}
+		d := time.Duration(*req.DurationSeconds) * time.Second
+		ttl = &d
+	}
+
 	ctx := c.Request.Context()
-	if err := h.viewerRepo.SetViewerPremium(ctx, sessionID, req.IsPremium); err != nil {
+	if err := h.viewerRepo.SetViewerPremium(ctx, sessionID, req.IsPremium, ttl); err != nil {
 		h.log.Error("Failed to set viewer premium", zap.Error(err), zap.String("session_id", sessionIDStr))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update viewer premium status"})
 		return
@@ -163,10 +185,15 @@ func (h *AdminViewerHandler) HandleSetViewerPremium(c *gin.Context) {
 	h.log.Info("Viewer premium status updated",
 		zap.String("session_id", sessionIDStr),
 		zap.Bool("is_premium", req.IsPremium),
+		zap.Bool("time_limited", ttl != nil),
 	)
-	c.JSON(http.StatusOK, gin.H{
+	resp := gin.H{
 		"message":    "Viewer premium " + action + " successfully",
 		"session_id": sessionIDStr,
 		"is_premium": req.IsPremium,
-	})
+	}
+	if ttl != nil && req.IsPremium {
+		resp["duration_seconds"] = int64(ttl.Seconds())
+	}
+	c.JSON(http.StatusOK, resp)
 }

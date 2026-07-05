@@ -19,6 +19,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/caesar/all-chat/shared/premium"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -40,16 +41,36 @@ func NewPremiumRepository(db *pgxpool.Pool, recomputer *premium.Recomputer, logg
 // force-grant (override TRUE) that survives Patreon subscription lapses; revoking
 // clears the override (NULL) so premium then follows any active subscription. A hard
 // premium-ban (override FALSE) is reserved for a future explicit admin action.
-func (r *PremiumRepository) UpdateUserPremium(ctx context.Context, userID string, isPremium bool) error {
+//
+// ttl makes the grant time-limited (ADR-0027): non-nil grants premium only until
+// NOW()+ttl, after which Recompute (and the payment-service sweep) treat the override
+// as absent. ttl is only meaningful when granting; a nil ttl (or any revoke) clears
+// the expiry, leaving a permanent grant / clean slate. The expiry is computed from
+// the database clock (NOW()) so the grant lasts exactly ttl regardless of app clock.
+func (r *PremiumRepository) UpdateUserPremium(ctx context.Context, userID string, isPremium bool, ttl *time.Duration) error {
 	var override *bool
 	if isPremium {
 		v := true
 		override = &v
 	}
 
-	result, err := r.db.Exec(ctx,
-		"UPDATE users SET premium_admin_override = $1 WHERE id = $2",
-		override, userID)
+	// Seconds for the expiry, computed server-side as NOW() + make_interval(secs => $2).
+	// nil => no expiry (permanent grant, or a revoke that clears any prior expiry).
+	var ttlSeconds *float64
+	if isPremium && ttl != nil {
+		s := ttl.Seconds()
+		ttlSeconds = &s
+	}
+
+	result, err := r.db.Exec(ctx, `
+		UPDATE users
+		SET premium_admin_override = $1,
+		    premium_admin_override_expires_at = CASE
+		        WHEN $2::double precision IS NULL THEN NULL
+		        ELSE NOW() + make_interval(secs => $2::double precision)
+		    END
+		WHERE id = $3`,
+		override, ttlSeconds, userID)
 	if err != nil {
 		r.logger.Error("Failed to update premium override",
 			zap.String("user_id", userID),
@@ -71,7 +92,8 @@ func (r *PremiumRepository) UpdateUserPremium(ctx context.Context, userID string
 
 	r.logger.Info("Premium override updated",
 		zap.String("user_id", userID),
-		zap.Bool("is_premium", isPremium))
+		zap.Bool("is_premium", isPremium),
+		zap.Bool("time_limited", ttlSeconds != nil))
 
 	return nil
 }

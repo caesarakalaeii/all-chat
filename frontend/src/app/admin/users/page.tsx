@@ -28,6 +28,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog } from '@/components/ui/dialog'
 import { toastManager } from '@/lib/toast'
 import { useAuthStore } from '@/lib/stores/auth-store'
+import { PremiumDurationChooser } from '@/components/admin/PremiumDurationChooser'
 
 interface User {
   id: string
@@ -41,6 +42,7 @@ interface User {
   kick_id?: string
   is_premium: boolean
   is_beta_tester: boolean
+  premium_expires_at?: string | null
   is_banned: boolean
   banned_at?: string
   banned_reason?: string
@@ -72,6 +74,10 @@ export default function UsersPage() {
   const [unbanDialogUser, setUnbanDialogUser] = useState<User | null>(null)
   const [premiumDialogUser, setPremiumDialogUser] = useState<User | null>(null)
   const [premiumLoading, setPremiumLoading] = useState(false)
+  // Time-limited grant selection (ADR-0027). null seconds = permanent; valid=false
+  // means the custom day count is empty/out of range and the grant is blocked.
+  const [grantDurationSeconds, setGrantDurationSeconds] = useState<number | null>(null)
+  const [grantDurationValid, setGrantDurationValid] = useState(true)
   const [betaDialogUser, setBetaDialogUser] = useState<User | null>(null)
   const [betaLoading, setBetaLoading] = useState(false)
 
@@ -218,17 +224,27 @@ export default function UsersPage() {
     }
   }
 
-  // Handle premium toggle
-  const handleSetPremium = async (userId: string, username: string, isPremium: boolean) => {
+  // Handle premium toggle. durationSeconds (grant only) makes it time-limited
+  // (ADR-0027); null/undefined grants permanently. Ignored when revoking.
+  const handleSetPremium = async (
+    userId: string,
+    username: string,
+    isPremium: boolean,
+    durationSeconds?: number | null
+  ) => {
     setPremiumLoading(true)
     try {
+      const body: { is_premium: boolean; duration_seconds?: number } = { is_premium: isPremium }
+      if (isPremium && durationSeconds != null) {
+        body.duration_seconds = durationSeconds
+      }
       const response = await fetch(`/api/v1/admin/premium/users/${userId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         credentials: 'same-origin',
-        body: JSON.stringify({ is_premium: isPremium }),
+        body: JSON.stringify(body),
       })
 
       if (!response.ok) {
@@ -245,9 +261,18 @@ export default function UsersPage() {
       setPremiumDialogUser(null)
       await refetchUsers()
 
-      // Update selectedUser in place so the panel reflects the change immediately
+      // Update selectedUser in place so the panel reflects the change immediately.
+      // The server computes the exact deadline from its own clock; this local
+      // estimate (accurate to a few seconds) is refreshed by refetchUsers() on the
+      // next selection.
       if (selectedUser?.id === userId) {
-        setSelectedUser((u) => (u ? { ...u, is_premium: isPremium } : u))
+        const expiresAt =
+          isPremium && durationSeconds != null
+            ? new Date(Date.now() + durationSeconds * 1000).toISOString()
+            : null
+        setSelectedUser((u) =>
+          u ? { ...u, is_premium: isPremium, premium_expires_at: expiresAt } : u
+        )
       }
     } catch (err: any) {
       toastManager.add({ title: err.message || 'Failed to update premium status', type: 'error' })
@@ -622,6 +647,12 @@ export default function UsersPage() {
                         <p className="mt-1 text-xs text-amber-400/70">
                           This user can create and accept share requests.
                         </p>
+                        {selectedUser.premium_expires_at && (
+                          <p className="mt-1 text-xs font-medium text-amber-400/70">
+                            Time-limited &mdash; expires{' '}
+                            {new Date(selectedUser.premium_expires_at).toLocaleString()}
+                          </p>
+                        )}
                       </div>
                       <Dialog.Root
                         open={
@@ -686,7 +717,13 @@ export default function UsersPage() {
                           <Button
                             variant="outline"
                             className="w-full border-amber-500/40 text-amber-400 hover:border-amber-500/60 hover:bg-amber-500/10"
-                            onClick={() => setPremiumDialogUser(selectedUser)}
+                            onClick={() => {
+                              // Reset the duration selection to the default (Permanent)
+                              // each time the grant dialog opens.
+                              setGrantDurationSeconds(null)
+                              setGrantDurationValid(true)
+                              setPremiumDialogUser(selectedUser)
+                            }}
                           >
                             Grant Premium
                           </Button>
@@ -699,6 +736,13 @@ export default function UsersPage() {
                         <Dialog.Description>
                           They will be able to create and accept chat overlay share requests.
                         </Dialog.Description>
+                        <PremiumDurationChooser
+                          disabled={premiumLoading}
+                          onChange={(seconds, valid) => {
+                            setGrantDurationSeconds(seconds)
+                            setGrantDurationValid(valid)
+                          }}
+                        />
                         <div className="mt-6 flex justify-end gap-3">
                           <Dialog.Close
                             render={
@@ -709,9 +753,14 @@ export default function UsersPage() {
                           />
                           <Button
                             variant="default"
-                            disabled={premiumLoading}
+                            disabled={premiumLoading || !grantDurationValid}
                             onClick={() =>
-                              handleSetPremium(selectedUser.id, selectedUser.username, true)
+                              handleSetPremium(
+                                selectedUser.id,
+                                selectedUser.username,
+                                true,
+                                grantDurationSeconds
+                              )
                             }
                           >
                             {premiumLoading ? 'Saving...' : 'Grant Premium'}

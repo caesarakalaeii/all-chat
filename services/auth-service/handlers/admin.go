@@ -86,21 +86,22 @@ func (h *AdminHandler) ListUsers(c *gin.Context) {
 
 	// Return users without sensitive information
 	type UserResponse struct {
-		ID              string  `json:"id"`
-		Username        string  `json:"username"`
-		DisplayName     string  `json:"display_name"`
-		AuthProvider    string  `json:"auth_provider"`
-		ProfileImageURL string  `json:"profile_image_url"`
-		CreatedAt       string  `json:"created_at"`
-		TwitchID        *string `json:"twitch_id"`
-		YouTubeID       *string `json:"youtube_id"`
-		KickID          *string `json:"kick_id"`
-		IsPremium       bool    `json:"is_premium"`
-		IsBetaTester    bool    `json:"is_beta_tester"`
-		IsBanned        bool    `json:"is_banned"`
-		BannedAt        *string `json:"banned_at,omitempty"`
-		BannedReason    *string `json:"banned_reason,omitempty"`
-		BannedBy        *string `json:"banned_by,omitempty"`
+		ID               string  `json:"id"`
+		Username         string  `json:"username"`
+		DisplayName      string  `json:"display_name"`
+		AuthProvider     string  `json:"auth_provider"`
+		ProfileImageURL  string  `json:"profile_image_url"`
+		CreatedAt        string  `json:"created_at"`
+		TwitchID         *string `json:"twitch_id"`
+		YouTubeID        *string `json:"youtube_id"`
+		KickID           *string `json:"kick_id"`
+		IsPremium        bool    `json:"is_premium"`
+		IsBetaTester     bool    `json:"is_beta_tester"`
+		PremiumExpiresAt *string `json:"premium_expires_at,omitempty"`
+		IsBanned         bool    `json:"is_banned"`
+		BannedAt         *string `json:"banned_at,omitempty"`
+		BannedReason     *string `json:"banned_reason,omitempty"`
+		BannedBy         *string `json:"banned_by,omitempty"`
 	}
 
 	response := make([]UserResponse, len(users))
@@ -111,22 +112,31 @@ func (h *AdminHandler) ListUsers(c *gin.Context) {
 			bannedAt = &formatted
 		}
 
+		// premium_expires_at: the deadline of a time-limited admin grant (ADR-0027).
+		// Absent => permanent grant / not admin-granted.
+		var premiumExpiresAt *string
+		if user.PremiumExpiresAt != nil {
+			formatted := user.PremiumExpiresAt.Format("2006-01-02T15:04:05Z07:00")
+			premiumExpiresAt = &formatted
+		}
+
 		response[i] = UserResponse{
-			ID:              user.ID,
-			Username:        user.Username,
-			DisplayName:     user.DisplayName,
-			AuthProvider:    user.AuthProvider,
-			ProfileImageURL: user.ProfileImageURL,
-			CreatedAt:       user.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-			TwitchID:        user.TwitchID,
-			YouTubeID:       user.GoogleID,
-			KickID:          user.KickID,
-			IsPremium:       user.IsPremium,
-			IsBetaTester:    user.IsBetaTester,
-			IsBanned:        user.IsBanned,
-			BannedAt:        bannedAt,
-			BannedReason:    user.BannedReason,
-			BannedBy:        user.BannedBy,
+			ID:               user.ID,
+			Username:         user.Username,
+			DisplayName:      user.DisplayName,
+			AuthProvider:     user.AuthProvider,
+			ProfileImageURL:  user.ProfileImageURL,
+			CreatedAt:        user.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			TwitchID:         user.TwitchID,
+			YouTubeID:        user.GoogleID,
+			KickID:           user.KickID,
+			IsPremium:        user.IsPremium,
+			IsBetaTester:     user.IsBetaTester,
+			PremiumExpiresAt: premiumExpiresAt,
+			IsBanned:         user.IsBanned,
+			BannedAt:         bannedAt,
+			BannedReason:     user.BannedReason,
+			BannedBy:         user.BannedBy,
 		}
 	}
 

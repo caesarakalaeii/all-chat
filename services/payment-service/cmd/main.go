@@ -178,6 +178,22 @@ func main() {
 		}
 	}()
 
+	// Time-limited admin premium overrides (ADR-0027): a fast, cheap sweep that
+	// clears lapsed grants and recomputes is_premium. Runs on the same single-replica
+	// lifecycle as the Patreon reconcile job, on its own (shorter) interval since a
+	// day-scale comp should not linger a full reconcile cycle past its deadline.
+	overrideSweeper := reconcile.NewOverrideExpirySweeper(
+		db, recomputer,
+		getDuration("PAYMENT_OVERRIDE_SWEEP_INTERVAL", 5*time.Minute),
+		getInt("PAYMENT_OVERRIDE_SWEEP_BATCH_SIZE", 500),
+		log,
+	)
+	go func() {
+		if err := overrideSweeper.Start(reconcileCtx); err != nil && err != context.Canceled {
+			log.Error("Override-expiry sweeper stopped with error", zap.Error(err))
+		}
+	}()
+
 	// HTTP server.
 	httpRequests := promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "http_requests_total", Help: "Total HTTP requests",
