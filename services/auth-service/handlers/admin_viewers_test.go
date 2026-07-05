@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -34,8 +35,8 @@ import (
 // mockViewerRepo implements the subset of ViewerRepository used by AdminViewerHandler.
 type mockViewerRepo struct {
 	repository.ViewerRepository
-	listAllFn         func(limit, offset int) ([]models.ViewerSession, error)
-	setViewerPremiumFn func(sessionID uuid.UUID, isPremium bool) error
+	listAllFn          func(limit, offset int) ([]models.ViewerSession, error)
+	setViewerPremiumFn func(sessionID uuid.UUID, isPremium bool, ttl *time.Duration) error
 }
 
 func setupAdminViewerRouter(t *testing.T, mock *mockViewerRepo) *gin.Engine {
@@ -93,5 +94,32 @@ func TestHandleSetViewerPremium_InvalidBody(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
+// TestHandleSetViewerPremium_RejectsBadDuration: a non-positive or over-cap
+// duration_seconds is rejected with 400 before any DB access (ADR-0027). A nil repo
+// proves the validation short-circuits before the repo is touched.
+func TestHandleSetViewerPremium_RejectsBadDuration(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	logger := zap.NewNop()
+	handler := &AdminViewerHandler{log: logger, viewerRepo: nil}
+	r := gin.New()
+	r.POST("/admin/viewers/:session_id/premium", handler.HandleSetViewerPremium)
+
+	sessionID := uuid.New().String()
+	// 0, negative, and 11 years (over the ~10y cap).
+	for _, body := range []string{
+		`{"is_premium":true,"duration_seconds":0}`,
+		`{"is_premium":true,"duration_seconds":-1}`,
+		`{"is_premium":true,"duration_seconds":346896000}`,
+	} {
+		req := httptest.NewRequest(http.MethodPost, "/admin/viewers/"+sessionID+"/premium", bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("expected 400 for body %s, got %d", body, w.Code)
+		}
 	}
 }
