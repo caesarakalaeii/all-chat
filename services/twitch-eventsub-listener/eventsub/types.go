@@ -326,3 +326,56 @@ type SubscriptionInfo struct {
 	CreatedAt time.Time              `json:"created_at"`
 	Cost      int                    `json:"cost"`
 }
+
+// PollChoice is one choice on a channel.poll.* event. The per-method vote
+// breakdowns (bits_votes, channel_points_votes) are already included in votes.
+type PollChoice struct {
+	ID                 string `json:"id"`
+	Title              string `json:"title"`
+	Votes              int64  `json:"votes"` // absent (0) on begin
+	ChannelPointsVotes int64  `json:"channel_points_votes"`
+	BitsVotes          int64  `json:"bits_votes"`
+}
+
+// PollEvent is the payload of channel.poll.begin / .progress / .end (all v1).
+// Reference: https://dev.twitch.tv/docs/eventsub/eventsub-reference/#channel-poll-begin-event
+type PollEvent struct {
+	ID                   string       `json:"id"`
+	BroadcasterUserID    string       `json:"broadcaster_user_id"`
+	BroadcasterUserLogin string       `json:"broadcaster_user_login"`
+	BroadcasterUserName  string       `json:"broadcaster_user_name"`
+	Title                string       `json:"title"`
+	Choices              []PollChoice `json:"choices"`
+	StartedAt            time.Time    `json:"started_at"`
+	EndsAt               *time.Time   `json:"ends_at,omitempty"`  // begin/progress
+	EndedAt              *time.Time   `json:"ended_at,omitempty"` // end
+	Status               string       `json:"status,omitempty"`   // end: completed|archived|terminated
+}
+
+// PredictionEventOutcome is one outcome on a channel.prediction.* event.
+// top_predictors is intentionally not modeled — mirroring only needs aggregates.
+type PredictionEventOutcome struct {
+	ID            string `json:"id"`
+	Title         string `json:"title"`
+	Color         string `json:"color"` // pink|blue
+	Users         int64  `json:"users"`
+	ChannelPoints int64  `json:"channel_points"`
+}
+
+// PredictionEvent is the payload of channel.prediction.begin / .progress /
+// .lock / .end (all v1).
+// Reference: https://dev.twitch.tv/docs/eventsub/eventsub-reference/#channel-prediction-begin-event
+type PredictionEvent struct {
+	ID                   string                   `json:"id"`
+	BroadcasterUserID    string                   `json:"broadcaster_user_id"`
+	BroadcasterUserLogin string                   `json:"broadcaster_user_login"`
+	BroadcasterUserName  string                   `json:"broadcaster_user_name"`
+	Title                string                   `json:"title"`
+	Outcomes             []PredictionEventOutcome `json:"outcomes"`
+	StartedAt            time.Time                `json:"started_at"`
+	LocksAt              *time.Time               `json:"locks_at,omitempty"`  // begin/progress
+	LockedAt             *time.Time               `json:"locked_at,omitempty"` // lock
+	EndedAt              *time.Time               `json:"ended_at,omitempty"`  // end
+	WinningOutcomeID     string                   `json:"winning_outcome_id,omitempty"`
+	Status               string                   `json:"status,omitempty"` // end: resolved|canceled
+}

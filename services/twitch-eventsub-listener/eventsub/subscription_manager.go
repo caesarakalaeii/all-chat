@@ -217,6 +217,40 @@ func (sm *SubscriptionManager) SubscribeToStreamOnline(ctx context.Context, broa
 	return sm.subscribeWithCondition(ctx, "stream.online", broadcasterID, token, "1", condition, cacheKey)
 }
 
+// Poll subscriptions (channel.poll.*, all v1, plain broadcaster_user_id condition).
+// They require the broadcaster's channel:read:polls grant, validated by Twitch at
+// creation time; a scope error means the owner hasn't opted into engagement mirroring
+// and is handled non-fatally by the caller (issue #523, task H).
+func (sm *SubscriptionManager) SubscribeToPollBegin(ctx context.Context, broadcasterID string) (string, error) {
+	return sm.Subscribe(ctx, "channel.poll.begin", broadcasterID, "1")
+}
+
+func (sm *SubscriptionManager) SubscribeToPollProgress(ctx context.Context, broadcasterID string) (string, error) {
+	return sm.Subscribe(ctx, "channel.poll.progress", broadcasterID, "1")
+}
+
+func (sm *SubscriptionManager) SubscribeToPollEnd(ctx context.Context, broadcasterID string) (string, error) {
+	return sm.Subscribe(ctx, "channel.poll.end", broadcasterID, "1")
+}
+
+// Prediction subscriptions (channel.prediction.*, all v1). Require the broadcaster's
+// channel:read:predictions grant; same non-fatal scope-error handling as polls.
+func (sm *SubscriptionManager) SubscribeToPredictionBegin(ctx context.Context, broadcasterID string) (string, error) {
+	return sm.Subscribe(ctx, "channel.prediction.begin", broadcasterID, "1")
+}
+
+func (sm *SubscriptionManager) SubscribeToPredictionProgress(ctx context.Context, broadcasterID string) (string, error) {
+	return sm.Subscribe(ctx, "channel.prediction.progress", broadcasterID, "1")
+}
+
+func (sm *SubscriptionManager) SubscribeToPredictionLock(ctx context.Context, broadcasterID string) (string, error) {
+	return sm.Subscribe(ctx, "channel.prediction.lock", broadcasterID, "1")
+}
+
+func (sm *SubscriptionManager) SubscribeToPredictionEnd(ctx context.Context, broadcasterID string) (string, error) {
+	return sm.Subscribe(ctx, "channel.prediction.end", broadcasterID, "1")
+}
+
 // SubscribeToChatMessages creates a channel.chat.message subscription for reading chat.
 //
 // For own-channel reading the broadcaster authorizes their own channel, so the condition

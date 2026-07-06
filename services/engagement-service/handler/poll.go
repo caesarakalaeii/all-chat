@@ -54,6 +54,20 @@ func (h *Handler) CreatePoll(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "poll needs a question and 2–5 options"})
 		return
 	}
+	// Don't open an All-Chat poll while a mirrored Twitch poll is live on this
+	// overlay (Twitch owns that round). The reverse ordering — a Twitch poll
+	// beginning while an All-Chat poll runs — is handled at read time by
+	// GetActiveDisplayPoll, which keeps the All-Chat poll on display so the owner
+	// can still close it.
+	if live, err := h.repo.HasLiveNativePoll(c.Request.Context(), overlayID); err != nil {
+		h.log.Error("check live native poll", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not create poll"})
+		return
+	} else if live {
+		c.JSON(http.StatusConflict, gin.H{"error": "a Twitch poll is currently live on this overlay"})
+		return
+	}
+
 	allowChange := true
 	if req.AllowChange != nil {
 		allowChange = *req.AllowChange
@@ -111,7 +125,7 @@ func (h *Handler) GetActivePoll(c *gin.Context) {
 	if !ok {
 		return
 	}
-	poll, err := h.repo.GetActivePoll(c.Request.Context(), overlayID)
+	poll, err := h.repo.GetActiveDisplayPoll(c.Request.Context(), overlayID)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "no active poll"})
