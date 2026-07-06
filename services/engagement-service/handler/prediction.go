@@ -79,6 +79,7 @@ func (h *Handler) CreatePrediction(c *gin.Context) {
 	}
 	h.markActive(c, overlayID, pred.ID)
 	h.pub.PublishPrediction(c.Request.Context(), pred)
+	h.announcer.AnnouncePrediction(overlayID, pred) // opt-in chat announce (H4-2); best-effort, non-blocking
 	c.JSON(http.StatusCreated, pred)
 }
 
@@ -96,13 +97,13 @@ func (h *Handler) LockPrediction(c *gin.Context) {
 	if !ok {
 		return
 	}
-	pred, err := h.repo.LockPrediction(c.Request.Context(), pid)
+	pred, err := h.repo.LockPrediction(c.Request.Context(), pid, overlayID)
 	if err != nil {
 		h.log.Error("lock prediction", zap.Error(err))
 		c.JSON(statusForRepoErr(err), gin.H{"error": "could not lock prediction"})
 		return
 	}
-	h.clearActive(c, overlayID, pred.ID) // locked → no more wagers accepted
+	h.clearActive(c, pred.ID) // locked → no more wagers accepted
 	h.pub.PublishPrediction(c.Request.Context(), pred)
 	c.JSON(http.StatusOK, pred)
 }
@@ -135,13 +136,13 @@ func (h *Handler) ResolvePrediction(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "winning_outcome_id must be a valid uuid"})
 		return
 	}
-	pred, err := h.repo.ResolvePrediction(c.Request.Context(), pid, winning)
+	pred, err := h.repo.ResolvePrediction(c.Request.Context(), pid, winning, overlayID)
 	if err != nil {
 		h.log.Error("resolve prediction", zap.Error(err))
 		c.JSON(statusForRepoErr(err), gin.H{"error": "could not resolve prediction"})
 		return
 	}
-	h.clearActive(c, overlayID, pred.ID)
+	h.clearActive(c, pred.ID)
 	h.pub.PublishPrediction(c.Request.Context(), pred)
 	c.JSON(http.StatusOK, pred)
 }
@@ -160,13 +161,13 @@ func (h *Handler) CancelPrediction(c *gin.Context) {
 	if !ok {
 		return
 	}
-	pred, err := h.repo.CancelPrediction(c.Request.Context(), pid)
+	pred, err := h.repo.CancelPrediction(c.Request.Context(), pid, overlayID)
 	if err != nil {
 		h.log.Error("cancel prediction", zap.Error(err))
 		c.JSON(statusForRepoErr(err), gin.H{"error": "could not cancel prediction"})
 		return
 	}
-	h.clearActive(c, overlayID, pred.ID)
+	h.clearActive(c, pred.ID)
 	h.pub.PublishPrediction(c.Request.Context(), pred)
 	c.JSON(http.StatusOK, pred)
 }

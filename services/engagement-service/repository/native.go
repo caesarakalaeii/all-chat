@@ -104,9 +104,13 @@ func (r *Repository) UpsertNativePoll(ctx context.Context, overlayID uuid.UUID, 
 // Twitch outcome id) is resolved to the mirrored outcome row on resolution.
 //
 // Like UpsertNativePoll, the state update is MONOTONIC (CREATED<ACTIVE<LOCKED<
-// RESOLVED|CANCELED) so a late/redelivered event can't downgrade a terminal or
-// locked round; tallies use GREATEST and timestamps COALESCE. A blocked stale
-// event returns (nil, nil) so the caller skips broadcasting.
+// RESOLVED|CANCELED) so a late/redelivered event can't downgrade a locked round;
+// tallies use GREATEST and timestamps COALESCE. The two terminal states share the
+// top rank, so an extra guard makes them mutually ABSORBING: once RESOLVED or
+// CANCELED, a differing terminal (or any other) state can't overwrite it — otherwise
+// a redelivered CANCELED could laterally flip a RESOLVED round's outcome (L-C1). A
+// same-state redelivery still passes (allowing a late tally correction). A blocked
+// stale event returns (nil, nil) so the caller skips broadcasting.
 func (r *Repository) UpsertNativePrediction(ctx context.Context, overlayID uuid.UUID, externalID, title, state, winningExternalID string, outcomes []NativeOutcomeInput, autoLockAt, lockedAt, resolvedAt *time.Time) (*models.Prediction, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
@@ -125,6 +129,7 @@ func (r *Repository) UpsertNativePrediction(ctx context.Context, overlayID uuid.
 		               resolved_at = COALESCE(EXCLUDED.resolved_at, predictions.resolved_at)
 		 WHERE (CASE predictions.state WHEN 'CREATED' THEN 0 WHEN 'ACTIVE' THEN 1 WHEN 'LOCKED' THEN 2 ELSE 3 END)
 		    <= (CASE EXCLUDED.state WHEN 'CREATED' THEN 0 WHEN 'ACTIVE' THEN 1 WHEN 'LOCKED' THEN 2 ELSE 3 END)
+		   AND NOT (predictions.state IN ('RESOLVED','CANCELED') AND EXCLUDED.state <> predictions.state)
 		 RETURNING id`,
 		overlayID, models.SourceTwitchNative, externalID, title, state, autoLockAt, lockedAt, resolvedAt).Scan(&pid)
 	if errors.Is(err, pgx.ErrNoRows) {

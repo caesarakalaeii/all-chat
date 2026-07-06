@@ -84,12 +84,12 @@ type Prediction struct {
 
 // PredictionOutcome is one side of a prediction, with its live wagered pool.
 type PredictionOutcome struct {
-	ID         uuid.UUID `json:"id"`
-	Idx        int       `json:"idx"`
-	Label      string    `json:"label"`
-	Color      *string   `json:"color,omitempty"`
-	TotalPts   int64     `json:"total_points"`
-	Entrants   int64     `json:"entrants"`
+	ID       uuid.UUID `json:"id"`
+	Idx      int       `json:"idx"`
+	Label    string    `json:"label"`
+	Color    *string   `json:"color,omitempty"`
+	TotalPts int64     `json:"total_points"`
+	Entrants int64     `json:"entrants"`
 }
 
 // EarnConfig is the per-overlay points earning configuration.
@@ -105,23 +105,28 @@ type EarnConfig struct {
 	ChatPerMinute  int64     `json:"chat_per_minute"`
 	WatchPerMinute int64     `json:"watch_per_minute"`
 	Enabled        bool      `json:"enabled"`
+	// AnnounceOnStart posts the round question + numbered options + participate link
+	// to chat when a poll/prediction opens. Opt-in (default false): it needs the
+	// Twitch send scope (user:write:chat), reusing the moderation send path (ADR-0027).
+	AnnounceOnStart bool `json:"announce_on_start"`
 }
 
 // DefaultEarnConfig returns the built-in defaults used when an overlay has no
 // points_earn_config row yet. Mirrors the column defaults in migration 067.
 func DefaultEarnConfig(overlayID uuid.UUID) EarnConfig {
 	return EarnConfig{
-		OverlayID:      overlayID,
-		PointsName:     "Points",
-		BitsMultiplier: 1,
-		USDMultiplier:  100,
-		SubHigh:        500,
-		SubMedium:      300,
-		SubLow:         150,
-		GiftPerSub:     150,
-		ChatPerMinute:  5,
-		WatchPerMinute: 2,
-		Enabled:        true,
+		OverlayID:       overlayID,
+		PointsName:      "Points",
+		BitsMultiplier:  1,
+		USDMultiplier:   100,
+		SubHigh:         500,
+		SubMedium:       300,
+		SubLow:          150,
+		GiftPerSub:      150,
+		ChatPerMinute:   5,
+		WatchPerMinute:  2,
+		Enabled:         true,
+		AnnounceOnStart: false,
 	}
 }
 

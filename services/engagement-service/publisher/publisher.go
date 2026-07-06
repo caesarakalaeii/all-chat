@@ -80,11 +80,22 @@ func (p *Publisher) publish(ctx context.Context, channel string, payload any) {
 	}
 }
 
+// engagementChannelsKey is the reverse index of the exact active-flag keys SetActive
+// wrote for an engagement. ClearActive reads it so it removes precisely those keys,
+// rather than re-deriving the channel list at close time — which would miss a key
+// (leaking a stale flag) if the overlay's source channels changed while the round
+// was live (L-C4). It carries activeTTL so a crash before ClearActive still self-heals.
+func engagementChannelsKey(engagementID uuid.UUID) string {
+	return fmt.Sprintf("engagement:channels:%s", engagementID)
+}
+
 // SetActive flags every source channel of an overlay as having a live engagement,
 // so message-processor forwards chat commands from those channels. Refcounted by
-// engagement id (a SET member per active poll/prediction); the set auto-clears
-// when the last engagement ends.
+// engagement id (a SET member per active poll/prediction); the key auto-clears when
+// the last engagement ends. The exact keys are also recorded in a per-engagement
+// reverse index so ClearActive can target them precisely.
 func (p *Publisher) SetActive(ctx context.Context, engagementID uuid.UUID, channels []repository.ChannelRef) {
+	revKey := engagementChannelsKey(engagementID)
 	for _, c := range channels {
 		key := mpmodels.EngagementActiveKey(c.Platform, c.ChannelID)
 		if err := p.rdb.SAdd(ctx, key, engagementID.String()).Err(); err != nil {
@@ -92,17 +103,31 @@ func (p *Publisher) SetActive(ctx context.Context, engagementID uuid.UUID, chann
 			continue
 		}
 		_ = p.rdb.Expire(ctx, key, activeTTL).Err()
+		if err := p.rdb.SAdd(ctx, revKey, key).Err(); err != nil {
+			p.log.Warn("record active channel failed", zap.String("key", revKey), zap.Error(err))
+		}
 	}
+	_ = p.rdb.Expire(ctx, revKey, activeTTL).Err()
 }
 
-// ClearActive removes an engagement's active flag from its channels. When a
-// channel has no other live engagement the key disappears and the hot path stops
-// forwarding its commands.
-func (p *Publisher) ClearActive(ctx context.Context, engagementID uuid.UUID, channels []repository.ChannelRef) {
-	for _, c := range channels {
-		key := mpmodels.EngagementActiveKey(c.Platform, c.ChannelID)
+// ClearActive removes an engagement's active flag from exactly the channels it was
+// set on (read from the reverse index), then drops the index. When a channel has no
+// other live engagement the flag key disappears and the hot path stops forwarding
+// its commands. Not re-deriving the channel list means a source add/remove/rename
+// between open and close can't strand a flag on a key SetActive never touched (L-C4).
+func (p *Publisher) ClearActive(ctx context.Context, engagementID uuid.UUID) {
+	revKey := engagementChannelsKey(engagementID)
+	keys, err := p.rdb.SMembers(ctx, revKey).Result()
+	if err != nil {
+		p.log.Warn("read active channels index failed", zap.String("key", revKey), zap.Error(err))
+		return
+	}
+	for _, key := range keys {
 		if err := p.rdb.SRem(ctx, key, engagementID.String()).Err(); err != nil {
 			p.log.Warn("clear active flag failed", zap.String("key", key), zap.Error(err))
 		}
+	}
+	if err := p.rdb.Del(ctx, revKey).Err(); err != nil {
+		p.log.Warn("delete active channels index failed", zap.String("key", revKey), zap.Error(err))
 	}
 }

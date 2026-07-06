@@ -91,6 +91,7 @@ func (h *Handler) CreatePoll(c *gin.Context) {
 
 	h.markActive(c, overlayID, poll.ID)
 	h.pub.PublishPoll(c.Request.Context(), poll)
+	h.announcer.AnnouncePoll(overlayID, poll) // opt-in chat announce (H4-2); best-effort, non-blocking
 	c.JSON(http.StatusCreated, poll)
 }
 
@@ -108,13 +109,13 @@ func (h *Handler) ClosePoll(c *gin.Context) {
 	if !ok {
 		return
 	}
-	poll, err := h.repo.ClosePoll(c.Request.Context(), pollID)
+	poll, err := h.repo.ClosePoll(c.Request.Context(), pollID, overlayID)
 	if err != nil {
 		h.log.Error("close poll", zap.Error(err))
 		c.JSON(statusForRepoErr(err), gin.H{"error": "could not close poll"})
 		return
 	}
-	h.clearActive(c, overlayID, poll.ID)
+	h.clearActive(c, poll.ID)
 	h.pub.PublishPoll(c.Request.Context(), poll)
 	c.JSON(http.StatusOK, poll)
 }
@@ -189,12 +190,8 @@ func (h *Handler) markActive(c *gin.Context, overlayID, engagementID uuid.UUID) 
 	h.pub.SetActive(c.Request.Context(), engagementID, channels)
 }
 
-// clearActive removes an engagement's active flag from the overlay's channels.
-func (h *Handler) clearActive(c *gin.Context, overlayID, engagementID uuid.UUID) {
-	channels, err := h.repo.SourceChannelsForOverlay(c.Request.Context(), overlayID)
-	if err != nil {
-		h.log.Warn("load source channels for active flag", zap.Error(err))
-		return
-	}
-	h.pub.ClearActive(c.Request.Context(), engagementID, channels)
+// clearActive removes an engagement's active flag from exactly the channels it was
+// set on (resolved from the reverse index inside the publisher, not re-derived here).
+func (h *Handler) clearActive(c *gin.Context, engagementID uuid.UUID) {
+	h.pub.ClearActive(c.Request.Context(), engagementID)
 }

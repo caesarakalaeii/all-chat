@@ -22,6 +22,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -62,6 +63,11 @@ func (c *CommandConsumer) Run(ctx context.Context) {
 	}
 	c.log.Info("engagement command consumer started", zap.String("consumer", c.consumerName))
 
+	// Reclaim entries orphaned by a crashed/rescheduled pod (this consumer name is
+	// per-pod), then keep sweeping so votes/wagers are never stranded (H3).
+	drainPEL(ctx, c.rdb, mpmodels.StreamEngagementCommands, consumerGroup, c.consumerName, c.log, c.safeHandle)
+	go periodicDrain(ctx, c.rdb, mpmodels.StreamEngagementCommands, consumerGroup, c.consumerName, c.log, c.safeHandle)
+
 	for {
 		if ctx.Err() != nil {
 			return
@@ -82,7 +88,14 @@ func (c *CommandConsumer) Run(ctx context.Context) {
 		}
 		for _, stream := range res {
 			for _, msg := range stream.Messages {
-				c.handle(ctx, msg)
+				// Ack only when the message is fully handled or is permanently
+				// unprocessable. A transient DB failure returns an error and leaves the
+				// entry pending so a later read/drain retries it (H2) — RecordVote/Wager
+				// dedupe per (round, viewer), so redelivery can't double-count.
+				if err := c.safeHandle(ctx, msg); err != nil {
+					c.log.Warn("engagement command deferred for retry", zap.String("id", msg.ID), zap.Error(err))
+					continue
+				}
 				if err := c.rdb.XAck(ctx, mpmodels.StreamEngagementCommands, consumerGroup, msg.ID).Err(); err != nil {
 					c.log.Warn("xack engagement command", zap.String("id", msg.ID), zap.Error(err))
 				}
@@ -91,43 +104,73 @@ func (c *CommandConsumer) Run(ctx context.Context) {
 	}
 }
 
-func (c *CommandConsumer) handle(ctx context.Context, msg redis.XMessage) {
+// safeHandle runs handle under a recover so one poison message can't kill the
+// consumer goroutine (they run unsupervised — a panic would silently stop consuming
+// for the pod's life). A recovered panic is treated as permanent (returns nil → ack):
+// it would recur on every redelivery, so leaving it pending would poison the PEL.
+func (c *CommandConsumer) safeHandle(ctx context.Context, msg redis.XMessage) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			c.log.Error("panic handling engagement command", zap.Any("panic", r), zap.String("id", msg.ID))
+			err = nil
+		}
+	}()
+	return c.handle(ctx, msg)
+}
+
+// handle applies a chat command. It returns nil when the message is fully handled
+// or is permanently unprocessable (so the caller acks), and a non-nil error only on
+// a transient DB/tx failure (so the caller leaves it pending for retry, H2). Business
+// rejections (closed round, bad option, insufficient, already-wagered, native) are
+// NOT errors — the chat path must never wedge the stream on an ordinary user mistake.
+func (c *CommandConsumer) handle(ctx context.Context, msg redis.XMessage) error {
 	raw, ok := msg.Values[mpmodels.FieldEngagementData].(string)
 	if !ok {
-		return
+		return nil // phantom/trimmed entry — nothing to do
 	}
 	var job mpmodels.CommandJob
 	if err := json.Unmarshal([]byte(raw), &job); err != nil {
 		c.log.Warn("unmarshal command job", zap.Error(err))
-		return
+		return nil // malformed JSON never parses — permanent, ack
 	}
 
 	kind, idx, amount, ok := parseCommand(job.Text)
 	if !ok {
-		return
+		return nil // not a command
 	}
 
 	overlays, err := c.repo.OverlaysForChannel(ctx, job.Platform, job.ChannelID)
-	if err != nil || len(overlays) == 0 {
-		return
+	if err != nil {
+		return fmt.Errorf("overlays for channel: %w", err) // transient DB error → retry
+	}
+	if len(overlays) == 0 {
+		return nil // no overlay sources this channel — nothing to do
 	}
 	viewerID, err := c.repo.GetOrCreateViewerByPlatform(ctx, job.Platform, job.UserID)
 	if err != nil {
-		c.log.Warn("resolve viewer for command", zap.Error(err))
-		return
+		return fmt.Errorf("resolve viewer for command: %w", err) // transient → retry
 	}
 	srcMsgID := parseUUIDOrNil(job.MessageID)
 
+	// Accumulate transient errors across overlays: a DB failure on one overlay must
+	// leave the entry pending, but a business rejection or no-active-round on another
+	// must not. Redelivery is safe because the writes dedupe per (round, viewer) and
+	// the replay index is now scoped per round (migration 071), so re-running an
+	// already-applied overlay is a no-op rather than a poison unique_violation.
+	var retryErr error
 	for _, overlayID := range overlays {
 		switch kind {
 		case cmdVote:
 			poll, err := c.repo.GetActivePoll(ctx, overlayID)
 			if err != nil {
+				if !errors.Is(err, repository.ErrNotFound) {
+					retryErr = errors.Join(retryErr, fmt.Errorf("get active poll: %w", err))
+				}
 				continue // no active poll on this overlay
 			}
 			accepted, err := c.repo.RecordVote(ctx, poll.ID, viewerID, idx, job.Platform, srcMsgID)
 			if err != nil {
-				c.log.Warn("record chat vote", zap.Error(err))
+				retryErr = errors.Join(retryErr, fmt.Errorf("record chat vote: %w", err))
 				continue
 			}
 			if accepted {
@@ -138,20 +181,31 @@ func (c *CommandConsumer) handle(ctx context.Context, msg redis.XMessage) {
 		case cmdWager:
 			pred, err := c.repo.GetActivePrediction(ctx, overlayID)
 			if err != nil {
+				if !errors.Is(err, repository.ErrNotFound) {
+					retryErr = errors.Join(retryErr, fmt.Errorf("get active prediction: %w", err))
+				}
 				continue
 			}
 			res, err := c.repo.Wager(ctx, pred.ID, viewerID, overlayID, idx, amount, job.Platform, srcMsgID)
 			if err != nil {
-				c.log.Warn("record chat wager", zap.Error(err))
+				retryErr = errors.Join(retryErr, fmt.Errorf("record chat wager: %w", err))
 				continue
 			}
 			if res.Accepted {
 				if updated, err := c.repo.GetPrediction(ctx, pred.ID); err == nil {
 					c.pub.PublishPrediction(ctx, updated)
 				}
+			} else if res.Reason != "" {
+				// Not an error (typo'd amount, already bet, broke, or a mirrored Twitch
+				// round). Debug-log so operators can see why chat bets aren't landing
+				// without spamming Warn at chat volume (L-U1).
+				c.log.Debug("chat wager rejected",
+					zap.String("reason", res.Reason), zap.String("platform", job.Platform),
+					zap.String("user", job.UserID), zap.Int64("amount", amount))
 			}
 		}
 	}
+	return retryErr
 }
 
 type cmdKind int

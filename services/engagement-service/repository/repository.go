@@ -79,6 +79,20 @@ func (r *Repository) VerifyOverlayOwnership(ctx context.Context, overlayID, user
 	return exists, nil
 }
 
+// OverlayOwner returns the user id that owns overlayID, or ErrNotFound. Used by the
+// announcer to send the round announcement as the overlay's streamer.
+func (r *Repository) OverlayOwner(ctx context.Context, overlayID uuid.UUID) (string, error) {
+	var userID string
+	err := r.db.QueryRow(ctx, `SELECT user_id FROM overlays WHERE id = $1`, overlayID).Scan(&userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("overlay owner: %w", err)
+	}
+	return userID, nil
+}
+
 // IsUserPremium reports whether the streamer user has premium access.
 func (r *Repository) IsUserPremium(ctx context.Context, userID string) (bool, error) {
 	const q = `SELECT is_premium FROM users WHERE id = $1`
@@ -98,8 +112,13 @@ type ChannelRef struct {
 // OverlaysForChannel returns the overlay ids that carry (platform, channelID) as
 // a source. A single channel may feed several overlays. shared_overlay excluded.
 func (r *Repository) OverlaysForChannel(ctx context.Context, platform, channelID string) ([]uuid.UUID, error) {
+	// channel_id is stored with the streamer's original casing, but callers pass a
+	// canonical lowercase login (the native-mirror producer lowercases the Twitch
+	// broadcaster login, ADR-0029). Compare case-insensitively so a source stored as
+	// "CaesarLP" still matches "caesarlp"; a functional index on LOWER(channel_id)
+	// (migration 071) keeps this cheap.
 	const q = `SELECT overlay_id FROM overlay_chat_sources
-	           WHERE platform = $1 AND channel_id = $2 AND platform <> $3`
+	           WHERE platform = $1 AND LOWER(channel_id) = LOWER($2) AND platform <> $3`
 	rows, err := r.db.Query(ctx, q, platform, channelID, sharedOverlayPlatform)
 	if err != nil {
 		return nil, fmt.Errorf("overlays for channel: %w", err)
@@ -264,10 +283,10 @@ func (r *Repository) GetEarnConfig(ctx context.Context, overlayID uuid.UUID) (mo
 	c.OverlayID = overlayID
 	err := r.db.QueryRow(ctx,
 		`SELECT points_name, bits_multiplier, usd_multiplier, sub_high, sub_medium, sub_low,
-		        gift_per_sub, chat_per_minute, watch_per_minute, enabled
+		        gift_per_sub, chat_per_minute, watch_per_minute, enabled, announce_on_start
 		 FROM points_earn_config WHERE overlay_id = $1`, overlayID).
 		Scan(&c.PointsName, &c.BitsMultiplier, &c.USDMultiplier, &c.SubHigh, &c.SubMedium, &c.SubLow,
-			&c.GiftPerSub, &c.ChatPerMinute, &c.WatchPerMinute, &c.Enabled)
+			&c.GiftPerSub, &c.ChatPerMinute, &c.WatchPerMinute, &c.Enabled, &c.AnnounceOnStart)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return models.DefaultEarnConfig(overlayID), nil
 	}
@@ -282,16 +301,16 @@ func (r *Repository) UpsertEarnConfig(ctx context.Context, c models.EarnConfig) 
 	_, err := r.db.Exec(ctx,
 		`INSERT INTO points_earn_config
 		   (overlay_id, points_name, bits_multiplier, usd_multiplier, sub_high, sub_medium, sub_low,
-		    gift_per_sub, chat_per_minute, watch_per_minute, enabled, updated_at)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())
+		    gift_per_sub, chat_per_minute, watch_per_minute, enabled, announce_on_start, updated_at)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW())
 		 ON CONFLICT (overlay_id) DO UPDATE SET
 		   points_name=EXCLUDED.points_name, bits_multiplier=EXCLUDED.bits_multiplier,
 		   usd_multiplier=EXCLUDED.usd_multiplier, sub_high=EXCLUDED.sub_high,
 		   sub_medium=EXCLUDED.sub_medium, sub_low=EXCLUDED.sub_low, gift_per_sub=EXCLUDED.gift_per_sub,
 		   chat_per_minute=EXCLUDED.chat_per_minute, watch_per_minute=EXCLUDED.watch_per_minute,
-		   enabled=EXCLUDED.enabled, updated_at=NOW()`,
+		   enabled=EXCLUDED.enabled, announce_on_start=EXCLUDED.announce_on_start, updated_at=NOW()`,
 		c.OverlayID, c.PointsName, c.BitsMultiplier, c.USDMultiplier, c.SubHigh, c.SubMedium, c.SubLow,
-		c.GiftPerSub, c.ChatPerMinute, c.WatchPerMinute, c.Enabled)
+		c.GiftPerSub, c.ChatPerMinute, c.WatchPerMinute, c.Enabled, c.AnnounceOnStart)
 	if err != nil {
 		return fmt.Errorf("upsert earn config: %w", err)
 	}

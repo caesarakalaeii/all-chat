@@ -77,11 +77,11 @@ func (r *Repository) CreatePoll(ctx context.Context, overlayID uuid.UUID, questi
 }
 
 // scanPoll loads a poll header (without options) using q.
-func (r *Repository) scanPoll(ctx context.Context, q dbtx, where string, arg any) (*models.Poll, error) {
+func (r *Repository) scanPoll(ctx context.Context, q dbtx, where string, args ...any) (*models.Poll, error) {
 	var p models.Poll
 	err := q.QueryRow(ctx,
 		`SELECT id, overlay_id, source, external_id, question, state, allow_change, created_at, ends_at, closed_at
-		 FROM polls WHERE `+where, arg).
+		 FROM polls WHERE `+where, args...).
 		Scan(&p.ID, &p.OverlayID, &p.Source, &p.ExternalID, &p.Question, &p.State, &p.AllowChange,
 			&p.CreatedAt, &p.EndsAt, &p.ClosedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -160,18 +160,29 @@ func (r *Repository) GetPoll(ctx context.Context, pollID uuid.UUID) (*models.Pol
 	return r.scanPoll(ctx, r.db, `id = $1`, pollID)
 }
 
-// ClosePoll transitions an ACTIVE poll to CLOSED (guarded). Returns the poll.
-func (r *Repository) ClosePoll(ctx context.Context, pollID uuid.UUID) (*models.Poll, error) {
+// GetPollForOverlay returns a poll by id scoped to an overlay. A id owned by a
+// different overlay (or missing) yields ErrNotFound → 404, so an owner of overlay A
+// cannot read or close a poll on overlay B.
+func (r *Repository) GetPollForOverlay(ctx context.Context, pollID, overlayID uuid.UUID) (*models.Poll, error) {
+	return r.scanPoll(ctx, r.db, `id = $1 AND overlay_id = $2`, pollID, overlayID)
+}
+
+// ClosePoll transitions an ACTIVE poll to CLOSED (guarded), scoped to overlayID so
+// a caller can only close a poll on an overlay they own. Returns the poll (idempotent
+// close). No source filter: closing a mirrored twitch_native poll from the panel is
+// allowed, mirroring GetActiveDisplayPoll's precedence rule.
+func (r *Repository) ClosePoll(ctx context.Context, pollID, overlayID uuid.UUID) (*models.Poll, error) {
 	tag, err := r.db.Exec(ctx,
-		`UPDATE polls SET state = 'CLOSED', closed_at = NOW() WHERE id = $1 AND state = 'ACTIVE'`, pollID)
+		`UPDATE polls SET state = 'CLOSED', closed_at = NOW() WHERE id = $1 AND overlay_id = $2 AND state = 'ACTIVE'`, pollID, overlayID)
 	if err != nil {
 		return nil, fmt.Errorf("close poll: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		// Already closed or not found — surface current state (idempotent close).
-		return r.GetPoll(ctx, pollID)
+		// Already closed, not found, or not this overlay's poll — surface current state
+		// only when it belongs to this overlay (else ErrNotFound → 404).
+		return r.GetPollForOverlay(ctx, pollID, overlayID)
 	}
-	return r.GetPoll(ctx, pollID)
+	return r.GetPollForOverlay(ctx, pollID, overlayID)
 }
 
 // RecordVote records (or changes) a viewer's vote by option index. Returns
