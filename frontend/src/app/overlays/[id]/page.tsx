@@ -50,6 +50,9 @@ import { startAddSourceReflow } from '@/lib/api/add-source'
 import { sharesApi } from '@/lib/api/shares'
 import { getGuilds, getGuildChannels, updateSourceConfig } from '@/lib/api/discord'
 import type { DiscordGuild, ChannelCategory } from '@/lib/api/discord'
+import { ApiError } from '@/lib/api/client'
+import { engagementApi } from '@/lib/api/engagement'
+import type { EarnConfig } from '@/lib/types/engagement'
 import type { Overlay, ChatSource, DiscordSourceConfig, FilterSettings, DisplaySettings } from '@/lib/types/overlay'
 import type { ChatMessage } from '@/lib/types/message'
 import type { AcceptedShare } from '@/lib/types/share'
@@ -660,6 +663,225 @@ function SourceListSkeleton() {
       {[0, 1].map((i) => (
         <Skeleton key={i} className="h-[60px] w-full rounded-xl" />
       ))}
+    </div>
+  )
+}
+
+// ---- Engagement (polls, predictions & viewer points — issue #523) -----------
+
+type EarnNumberKey =
+  | 'bits_multiplier'
+  | 'usd_multiplier'
+  | 'sub_high'
+  | 'sub_medium'
+  | 'sub_low'
+  | 'gift_per_sub'
+  | 'chat_per_minute'
+  | 'watch_per_minute'
+
+const EARN_NUMBER_FIELDS: ReadonlyArray<{
+  key: EarnNumberKey
+  label: string
+  hint: string
+  float?: boolean
+}> = [
+  { key: 'bits_multiplier', label: 'Points per bit', hint: 'Twitch cheers', float: true },
+  { key: 'usd_multiplier', label: 'Points per USD', hint: 'donations & Super Chats', float: true },
+  { key: 'sub_high', label: 'Tier 3 sub', hint: 'Twitch Tier 3' },
+  { key: 'sub_medium', label: 'Tier 2 sub', hint: 'Twitch Tier 2' },
+  { key: 'sub_low', label: 'Base sub / member', hint: 'Tier 1, Prime, Kick & YouTube members' },
+  { key: 'gift_per_sub', label: 'Per gifted sub', hint: 'awarded to the gifter' },
+  { key: 'chat_per_minute', label: 'Chatting, per minute', hint: 'active chatters' },
+  { key: 'watch_per_minute', label: 'Watching, per minute', hint: 'participation page open' },
+]
+
+// Earn config lives on the engagement-service (own endpoint, like the TTS
+// config), so this panel loads and saves independently of Save Configuration.
+function EngagementPanel({ overlayId }: { overlayId: string }) {
+  const [config, setConfig] = useState<EarnConfig | null>(null)
+  const [numbers, setNumbers] = useState<Record<EarnNumberKey, string> | null>(null)
+  const [loadError, setLoadError] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [copiedPath, setCopiedPath] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    engagementApi
+      .getConfig(overlayId)
+      .then((cfg) => {
+        if (cancelled) return
+        setConfig(cfg)
+        setNumbers(
+          Object.fromEntries(EARN_NUMBER_FIELDS.map((f) => [f.key, String(cfg[f.key])])) as Record<
+            EarnNumberKey,
+            string
+          >
+        )
+      })
+      .catch(() => {
+        if (!cancelled) setLoadError(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [overlayId])
+
+  const handleSave = async () => {
+    if (!config || !numbers) return
+    const parsed = {} as Record<EarnNumberKey, number>
+    for (const f of EARN_NUMBER_FIELDS) {
+      const n = Number(numbers[f.key])
+      if (!Number.isFinite(n) || n < 0) {
+        toastManager.add({ title: `Invalid value for "${f.label}"`, type: 'error' })
+        return
+      }
+      // All point amounts are int64 server-side; only the multipliers take decimals.
+      if (!f.float && !Number.isInteger(n)) {
+        toastManager.add({ title: `"${f.label}" must be a whole number`, type: 'error' })
+        return
+      }
+      parsed[f.key] = n
+    }
+    setSaving(true)
+    try {
+      // PUT is a full upsert — send the complete object.
+      const saved = await engagementApi.updateConfig(overlayId, {
+        ...config,
+        ...parsed,
+        points_name: config.points_name.trim() || 'Points',
+      })
+      setConfig(saved)
+      setNumbers(
+        Object.fromEntries(EARN_NUMBER_FIELDS.map((f) => [f.key, String(saved[f.key])])) as Record<
+          EarnNumberKey,
+          string
+        >
+      )
+      toastManager.add({ title: 'Engagement settings saved', type: 'success' })
+    } catch (err) {
+      toastManager.add({
+        title: 'Failed to save engagement settings',
+        description: err instanceof ApiError ? err.message : undefined,
+        type: 'error',
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const shareLinks: ReadonlyArray<{ label: string; path: string; desc: string }> = [
+    {
+      label: 'OBS poll widget',
+      path: `/overlay/${overlayId}/poll`,
+      desc: 'Browser source that shows the live poll',
+    },
+    {
+      label: 'OBS prediction widget',
+      path: `/overlay/${overlayId}/prediction`,
+      desc: 'Browser source that shows the live prediction',
+    },
+    {
+      label: 'Viewer participation page',
+      path: `/overlay/${overlayId}/participate`,
+      desc: 'Viewers vote, wager and check their balance — no install needed',
+    },
+  ]
+
+  const copyLink = async (path: string) => {
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}${path}`)
+      setCopiedPath(path)
+      setTimeout(() => setCopiedPath(null), 2000)
+    } catch {
+      toastManager.add({ title: 'Could not copy the link', type: 'error' })
+    }
+  }
+
+  if (loadError) {
+    return (
+      <p className="text-destructive text-xs">
+        Could not load engagement settings. Reload the page to try again.
+      </p>
+    )
+  }
+  if (!config || !numbers) {
+    return <Skeleton className="h-40 w-full rounded-lg" />
+  }
+
+  return (
+    <div className="space-y-4">
+      <label className="flex cursor-pointer items-center gap-2 text-sm text-text">
+        <input
+          type="checkbox"
+          checked={config.enabled}
+          onChange={(e) => setConfig({ ...config, enabled: e.target.checked })}
+          className="accent-twitch size-4"
+        />
+        Enable viewer points
+      </label>
+      <p className="text-xs text-text-sub">
+        Viewers earn {config.points_name.trim() || 'Points'} by chatting, watching and supporting
+        the stream, and wager them on predictions. Run polls and predictions from the Monitor
+        View; viewers join straight from chat (<code>!vote 2</code> or just <code>2</code>,{' '}
+        <code>!predict 1 500</code>) — no install required.
+      </p>
+
+      <div>
+        <label htmlFor="earn-points-name" className="mb-1 block text-xs text-text-sub">
+          Points name
+        </label>
+        <Input
+          id="earn-points-name"
+          value={config.points_name}
+          onChange={(e) => setConfig({ ...config, points_name: e.target.value })}
+          placeholder="Points"
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        {EARN_NUMBER_FIELDS.map((f) => (
+          <div key={f.key}>
+            <label htmlFor={`earn-${f.key}`} className="mb-1 block text-xs text-text-sub">
+              {f.label}
+            </label>
+            <input
+              id={`earn-${f.key}`}
+              type="number"
+              min={0}
+              step={f.float ? 'any' : 1}
+              value={numbers[f.key]}
+              onChange={(e) => setNumbers({ ...numbers, [f.key]: e.target.value })}
+              className="w-full rounded-md border border-border bg-bg px-2 py-1 text-xs text-text"
+            />
+            <p className="mt-0.5 text-[11px] text-text-sub/70">{f.hint}</p>
+          </div>
+        ))}
+      </div>
+
+      <Button size="sm" className="w-full" disabled={saving} onClick={() => void handleSave()}>
+        {saving ? 'Saving...' : 'Save Engagement Settings'}
+      </Button>
+
+      <div className="space-y-2 border-t border-border pt-3">
+        <p className="text-xs font-medium text-text">Widget & viewer links</p>
+        {shareLinks.map((link) => (
+          <div key={link.path} className="flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs text-text">{link.label}</p>
+              <p className="text-[11px] text-text-sub/70">{link.desc}</p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0 text-xs"
+              onClick={() => void copyLink(link.path)}
+            >
+              {copiedPath === link.path ? 'Copied!' : 'Copy link'}
+            </Button>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -2777,6 +2999,16 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                     )}
                   </div>
                 </div>
+              </CollapsibleSection>
+
+              {/* Engagement section — polls, predictions & viewer points (issue #523) */}
+              <CollapsibleSection
+                id="engagement"
+                title="Engagement"
+                storageKey="editor-panel-sections-v1"
+                defaultOpen={false}
+              >
+                <EngagementPanel overlayId={id} />
               </CollapsibleSection>
 
               {/* Expert section — collapsed by default */}

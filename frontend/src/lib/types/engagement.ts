@@ -76,3 +76,37 @@ export interface ViewerEngagement {
   wager_outcome_id?: string
   wager_amount?: number
 }
+
+/**
+ * Per-overlay points-earning config (owner only, GET/PUT /overlays/:id/points/config).
+ * The PUT is a full upsert — always send the complete object. Sub tiers are the
+ * normalized "high"/"medium"/"low" (Twitch Tier 3/2/1; unknown tiers fall back to low).
+ */
+export interface EarnConfig {
+  overlay_id: string
+  points_name: string
+  bits_multiplier: number
+  usd_multiplier: number
+  sub_high: number
+  sub_medium: number
+  sub_low: number
+  gift_per_sub: number
+  chat_per_minute: number
+  watch_per_minute: number
+  enabled: boolean
+}
+
+/** Owner request to POST /overlays/:id/polls (2–5 options). */
+export interface CreatePollRequest {
+  question: string
+  options: string[]
+  allow_change?: boolean
+  duration_seconds?: number
+}
+
+/** Owner request to POST /overlays/:id/predictions (2–10 outcomes). */
+export interface CreatePredictionRequest {
+  title: string
+  outcomes: string[]
+  auto_lock_seconds?: number
+}
