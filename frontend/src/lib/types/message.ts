@@ -143,7 +143,19 @@ export interface PlatformStatus {
 }
 
 export interface WebSocketMessage {
-  type: 'chat_message' | 'message_update' | 'ping' | 'pong' | 'error' | 'platform_status';
+  // 'poll_update' / 'prediction_update' carry engagement snapshots (issue #523). The
+  // gateway fans them out on the overlay socket; clients treat them as a "refetch now"
+  // signal and pull the authoritative state from the HTTP endpoint (which applies the
+  // All-Chat-over-native display precedence), so the payload body isn't relied on.
+  type:
+    | 'chat_message'
+    | 'message_update'
+    | 'ping'
+    | 'pong'
+    | 'error'
+    | 'platform_status'
+    | 'poll_update'
+    | 'prediction_update';
   data?: ChatMessage | PlatformStatus;
   timestamp?: string;
   error?: string;

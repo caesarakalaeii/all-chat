@@ -64,6 +64,16 @@ export class WebSocketClient {
   private ws: WebSocket | null = null
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null
   private messageCallbacks: ((message: ChatMessage) => void)[] = []
+  // Engagement-only clients (issue #523, useEngagementLive) share the overlay socket
+  // but must NOT touch chat: they don't render chat_message frames and must not read,
+  // write, or ?since=-replay the `ws_last_seen_<overlay>` watermark — otherwise a
+  // second connection on the Monitor view would race the chat pane's own connection
+  // over that key and could skip chat messages on reconnect.
+  private engagementOnly = false
+  // Engagement (issue #523): poll_update / prediction_update frames are delivered as
+  // a "something changed, refetch" signal. Consumers keep their HTTP poll as the
+  // source of truth (it applies display precedence) and use this only to cut latency.
+  private engagementCallbacks: ((kind: 'poll' | 'prediction') => void)[] = []
   private reconnectAttempts = 0
   private overlayId: string = ''
   private token: string = ''
@@ -98,18 +108,22 @@ export class WebSocketClient {
   /**
    * Connect to WebSocket for a specific overlay
    */
-  connect(overlayId: string, token?: string | null) {
+  connect(overlayId: string, token?: string | null, engagementOnly = false) {
     this.overlayId = overlayId
     this.token = token ?? ''
+    this.engagementOnly = engagementOnly
     this.stopped = false
     this.clearLivenessTimers()
     this.lastActivity = 0 // no inbound frame yet on this socket
 
-    // Load last seen timestamp from localStorage (survives page reload)
+    // Load last seen timestamp from localStorage (survives page reload). Skipped for
+    // engagement-only clients so they never share/advance the chat replay watermark.
     const storageKey = `ws_last_seen_${overlayId}`
-    const storedTimestamp = localStorage.getItem(storageKey)
-    if (storedTimestamp) {
-      this.lastSeenTimestamp = parseInt(storedTimestamp, 10)
+    if (!engagementOnly) {
+      const storedTimestamp = localStorage.getItem(storageKey)
+      if (storedTimestamp) {
+        this.lastSeenTimestamp = parseInt(storedTimestamp, 10)
+      }
     }
 
     // Pass ?since= so the server's replay buffer flushes only the messages
@@ -123,7 +137,7 @@ export class WebSocketClient {
     // is same-origin, so the browser sends the httpOnly access cookie and the
     // gateway authenticates via CookieToBearer.
     let url = `${WS_URL}/ws/overlay/${overlayId}`
-    if (this.lastSeenTimestamp > 0) {
+    if (!engagementOnly && this.lastSeenTimestamp > 0) {
       url += `?since=${this.lastSeenTimestamp}`
     }
     console.log('[WebSocket] Connecting to:', url)
@@ -144,7 +158,7 @@ export class WebSocketClient {
       try {
         const wsMessage: WebSocketMessage = JSON.parse(event.data)
 
-        if (wsMessage.type === 'chat_message' && wsMessage.data) {
+        if (wsMessage.type === 'chat_message' && wsMessage.data && !this.engagementOnly) {
           const chat = wsMessage.data as ChatMessage
           if (this.markIdSeen(chat.id)) {
             // Already rendered — drop duplicate.
@@ -165,6 +179,10 @@ export class WebSocketClient {
               timestamp: new Date().toISOString(),
             })
           )
+        } else if (wsMessage.type === 'poll_update') {
+          this.engagementCallbacks.forEach((cb) => cb('poll'))
+        } else if (wsMessage.type === 'prediction_update') {
+          this.engagementCallbacks.forEach((cb) => cb('prediction'))
         } else if (wsMessage.type === 'error') {
           console.error('[WebSocket] Server error:', wsMessage.error)
         }
@@ -258,6 +276,18 @@ export class WebSocketClient {
     this.messageCallbacks.push(callback)
     return () => {
       this.messageCallbacks = this.messageCallbacks.filter((cb) => cb !== callback)
+    }
+  }
+
+  /**
+   * Register a callback fired when a poll/prediction update arrives on the overlay
+   * socket (issue #523). The callback should refetch the authoritative state; the
+   * frame is a signal, not the source of truth. Returns an unsubscribe function.
+   */
+  onEngagementUpdate(callback: (kind: 'poll' | 'prediction') => void): () => void {
+    this.engagementCallbacks.push(callback)
+    return () => {
+      this.engagementCallbacks = this.engagementCallbacks.filter((cb) => cb !== callback)
     }
   }
 

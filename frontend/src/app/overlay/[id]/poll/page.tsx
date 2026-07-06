@@ -29,6 +29,7 @@
 
 import { use, useCallback, useEffect, useState } from 'react'
 import type { Poll } from '@/lib/types/engagement'
+import { useEngagementLive } from '@/lib/hooks/useEngagementLive'
 
 const POLL_INTERVAL_MS = 2000
 
@@ -61,6 +62,12 @@ export default function PollOverlayPage({ params }: { params: Promise<{ id: stri
     }
   }, [fetchPoll])
 
+  // Near-real-time refresh: refetch immediately on a poll_update WS frame instead of
+  // waiting for the next 2s tick (L-D1). The interval above remains the fallback.
+  useEngagementLive(id, (kind) => {
+    if (kind === 'poll') void fetchPoll()
+  })
+
   // 1s ticker so the "remaining" countdown updates smoothly between fetches.
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000)
@@ -89,7 +96,7 @@ export default function PollOverlayPage({ params }: { params: Promise<{ id: stri
                   style={{ width: `${pct}%` }}
                 />
                 <div className="relative flex h-full items-center justify-between px-3 text-sm font-semibold">
-                  <span className="truncate">{o.label}</span>
+                  <span className="truncate">{o.idx}. {o.label}</span>
                   <span className="tabular-nums">
                     {pct}% ({o.votes.toLocaleString()})
                   </span>

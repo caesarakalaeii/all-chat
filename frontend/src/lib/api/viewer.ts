@@ -100,6 +100,23 @@ class ViewerApiClient {
 
 const viewerApiClient = new ViewerApiClient()
 
+/**
+ * apiErrorReason extracts the machine-readable `reason` code the API attaches to a
+ * rejected request body (e.g. a wager rejection: {error, reason:"insufficient"}). The
+ * client puts the parsed body on `error.data`; this reads it without an `any` cast so
+ * callers can map the reason to human copy (issue #523, L-U2).
+ */
+export function apiErrorReason(err: unknown): string | undefined {
+  if (err && typeof err === 'object' && 'data' in err) {
+    const data = (err as { data?: unknown }).data
+    if (data && typeof data === 'object' && 'reason' in data) {
+      const reason = (data as { reason?: unknown }).reason
+      if (typeof reason === 'string') return reason
+    }
+  }
+  return undefined
+}
+
 export const viewerApi = {
   /**
    * Get current viewer information using stored JWT token

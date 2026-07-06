@@ -94,6 +94,8 @@ export interface EarnConfig {
   chat_per_minute: number
   watch_per_minute: number
   enabled: boolean
+  /** Post the round + participate link to chat on start (opt-in; needs the Twitch send scope). */
+  announce_on_start: boolean
 }
 
 /** Owner request to POST /overlays/:id/polls (2–5 options). */

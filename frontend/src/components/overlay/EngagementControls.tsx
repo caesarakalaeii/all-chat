@@ -39,6 +39,7 @@ import toast from 'react-hot-toast'
 
 import { ApiError } from '@/lib/api/client'
 import { engagementApi } from '@/lib/api/engagement'
+import { useEngagementLive } from '@/lib/hooks/useEngagementLive'
 import type { Poll, Prediction } from '@/lib/types/engagement'
 
 const REFRESH_MS = 3000
@@ -139,7 +140,7 @@ function TallyBar({
           {leading}
           <span className="truncate">{label}</span>
         </span>
-        <span className="shrink-0 text-text-sub tabular-nums">{detail}</span>
+        <span className="shrink-0 text-text tabular-nums">{detail}</span>
       </div>
     </div>
   )
@@ -167,6 +168,9 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
   const [prediction, setPrediction] = useState<Prediction | null>(null)
   const [busy, setBusy] = useState(false)
   const [confirmCancel, setConfirmCancel] = useState(false)
+  // Payout is irreversible, so it gets the same two-step echoing confirm the
+  // (reversible) cancel already has — the stronger guardrail on the stronger action (M3).
+  const [confirmResolve, setConfirmResolve] = useState(false)
   // Bumped around every mutation so a refresh whose fetches straddled the
   // mutation can't overwrite the fresher post-mutation state (or wipe the
   // final tallies at the next 404).
@@ -216,6 +220,10 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
     }
   }, [refresh])
 
+  // Near-real-time refresh on a poll/prediction WS frame (L-D1); the interval remains
+  // the fallback / source of truth.
+  useEngagementLive(overlayId, () => void refresh())
+
   const run = useCallback(
     async (call: () => Promise<void>, failMsg: string) => {
       if (busy) return
@@ -235,6 +243,9 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
 
   // --- Poll actions ----------------------------------------------------------
 
+  // NOTE: a round's question/title and options are immutable once started — there is
+  // no edit endpoint — so proofread before Start; fixing a typo means close/cancel +
+  // recreate (costly for a prediction that already has wagers) (L-U8).
   const startPoll = () => {
     const labels = options.map((o) => o.trim()).filter(Boolean)
     if (!question.trim() || labels.length < 2) {
@@ -300,10 +311,13 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
     }
     void run(async () => {
       const resolved = await engagementApi.resolvePrediction(overlayId, pid, winnerId)
+      setConfirmResolve(false)
       if (resolved.state !== 'RESOLVED') {
-        // The service only resolves LOCKED predictions; anything else is a no-op.
+        // The service only resolves LOCKED predictions; the Pay-out button only renders
+        // while LOCKED, so this is a lost race (auto-lock/refresh), not user error —
+        // acknowledge it neutrally rather than scolding (L-U7).
         setPrediction(resolved)
-        toast.error('Lock the prediction before resolving')
+        toast('The prediction is no longer locked — refresh and try again')
         return
       }
       setPrediction(resolved)
@@ -337,12 +351,17 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
     }
   }, [overlayId])
 
-  // Disarm the cancel confirmation if it isn't acted on quickly.
+  // Disarm the cancel/payout confirmations if they aren't acted on quickly.
   useEffect(() => {
     if (!confirmCancel) return
     const t = setTimeout(() => setConfirmCancel(false), 5000)
     return () => clearTimeout(t)
   }, [confirmCancel])
+  useEffect(() => {
+    if (!confirmResolve) return
+    const t = setTimeout(() => setConfirmResolve(false), 5000)
+    return () => clearTimeout(t)
+  }, [confirmResolve])
 
   // --- Render ----------------------------------------------------------------
 
@@ -377,14 +396,14 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
               {poll.options.map((o) => (
                 <TallyBar
                   key={o.id}
-                  label={o.label}
+                  label={`${o.idx}. ${o.label}`}
                   detail={`${pollTotal > 0 ? Math.round((o.votes / pollTotal) * 100) : 0}% (${o.votes.toLocaleString()})`}
                   pct={pollTotal > 0 ? Math.round((o.votes / pollTotal) * 100) : 0}
                   accent="twitch"
                 />
               ))}
               <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                <span className="text-[11px] text-text-dim">
+                <span className="text-[11px] text-text-sub">
                   {pollTotal.toLocaleString()} votes
                   {poll.ends_at &&
                     poll.state === 'ACTIVE' &&
@@ -412,7 +431,7 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                 )}
               </div>
               {pollNative && (
-                <p className="text-[11px] text-text-dim">
+                <p className="text-[11px] text-text-sub">
                   Mirrored from Twitch — viewers vote in the Twitch UI/chat
                 </p>
               )}
@@ -460,20 +479,22 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                 </label>
               </div>
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[11px] text-text-dim">
-                  Viewers vote from chat: <code>!vote 2</code> or just <code>2</code>
+                <span className="text-[11px] text-text-sub">
+                  Viewers vote on the{' '}
+                  <a
+                    href={`/overlay/${overlayId}/participate`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                  >
+                    participate page
+                  </a>{' '}
+                  or from chat (<code>!vote 2</code> or just <code>2</code>)
                 </span>
                 <button type="button" onClick={startPoll} disabled={busy} className={primaryButtonClass}>
                   Start poll
                 </button>
               </div>
-              <button
-                type="button"
-                onClick={() => void startMirrorConsent()}
-                className="text-[11px] text-text-dim underline transition-colors hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
-              >
-                Mirror native Twitch polls &amp; predictions
-              </button>
             </div>
           )}
         </div>
@@ -505,7 +526,7 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                 {prediction.outcomes.map((o) => (
                   <TallyBar
                     key={o.id}
-                    label={o.label}
+                    label={`${o.idx}. ${o.label}`}
                     detail={`${o.total_points.toLocaleString()} pts · ${o.entrants.toLocaleString()} entrants`}
                     pct={predTotal > 0 ? Math.round((o.total_points / predTotal) * 100) : 0}
                     accent="sky"
@@ -515,19 +536,22 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                           type="radio"
                           name="engagement-winner"
                           checked={winnerId === o.id}
-                          onChange={() => setWinnerId(o.id)}
+                          onChange={() => {
+                            setWinnerId(o.id)
+                            setConfirmResolve(false) // re-arm the payout confirm when the winner changes
+                          }}
                           aria-label={`Winning outcome: ${o.label}`}
-                          className="accent-twitch"
+                          className="accent-twitch focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
                         />
                       ) : prediction.winning_outcome_id === o.id ? (
-                        <span title="Winning outcome">🏆</span>
+                        <span title="Winning outcome" aria-label="Winning outcome">🏆</span>
                       ) : undefined
                     }
                   />
                 ))}
               </div>
               <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                <span className="text-[11px] text-text-dim">
+                <span className="text-[11px] text-text-sub">
                   {predTotal.toLocaleString()} points wagered
                   {prediction.auto_lock_at &&
                     prediction.state === 'ACTIVE' &&
@@ -547,12 +571,28 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                   {!predNative && prediction.state === 'LOCKED' && (
                     <button
                       type="button"
-                      onClick={() => resolvePrediction(prediction.id)}
+                      onClick={() => {
+                        if (!winnerId) {
+                          toast.error('Pick the winning outcome first')
+                          return
+                        }
+                        // First click arms; second click (echoing "final?") commits — the
+                        // irreversible payout now has friction matching the cancel confirm (M3).
+                        if (!confirmResolve) {
+                          setConfirmResolve(true)
+                          return
+                        }
+                        resolvePrediction(prediction.id)
+                      }}
                       disabled={busy || !winnerId}
                       title={winnerId ? undefined : 'Select the winning outcome first'}
                       className={primaryButtonClass}
                     >
-                      {winnerLabel ? `Pay out "${winnerLabel}"` : 'Resolve'}
+                      {!winnerLabel
+                        ? 'Resolve'
+                        : confirmResolve
+                          ? `Pay out "${winnerLabel}" — final?`
+                          : `Pay out "${winnerLabel}"`}
                     </button>
                   )}
                   {!predNative &&
@@ -592,12 +632,12 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                 </div>
               </div>
               {prediction.state === 'LOCKED' && !predNative && (
-                <p className="text-[11px] text-text-dim">
+                <p className="text-[11px] text-text-sub">
                   Pick the winning outcome, then pay out. Payouts are final.
                 </p>
               )}
               {predNative && (
-                <p className="text-[11px] text-text-dim">
+                <p className="text-[11px] text-text-sub">
                   Mirrored from Twitch — runs on Twitch channel points
                 </p>
               )}
@@ -634,8 +674,17 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                 s
               </label>
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[11px] text-text-dim">
-                  Viewers wager from chat: <code>!predict 1 500</code>
+                <span className="text-[11px] text-text-sub">
+                  Viewers wager on the{' '}
+                  <a
+                    href={`/overlay/${overlayId}/participate`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                  >
+                    participate page
+                  </a>{' '}
+                  (they can see their balance) — or from chat: <code>!predict 1 500</code>
                 </span>
                 <button
                   type="button"
@@ -649,6 +698,25 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Twitch native mirroring — a stable, always-visible control (M4), so it's
+          discoverable regardless of whether a round is running (it used to be a buried
+          link shown only in the poll create form). The consent flow returns here, and
+          the note sets the expectation that a native round only mirrors after the next
+          channel sync (M5), so a streamer who just enabled it doesn't think it's broken. */}
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
+        <p className="text-[11px] text-text-sub">
+          Mirror native Twitch polls &amp; predictions onto your overlays (read-only). Opt-in; takes
+          effect after the next channel sync (a stream restart or re-adding the source).
+        </p>
+        <button
+          type="button"
+          onClick={() => void startMirrorConsent()}
+          className={secondaryButtonClass}
+        >
+          Enable Twitch mirroring
+        </button>
       </div>
     </section>
   )
