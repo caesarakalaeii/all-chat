@@ -29,6 +29,7 @@
 import { use, useCallback, useEffect, useState } from 'react'
 import clsx from 'clsx'
 import type { Prediction } from '@/lib/types/engagement'
+import { useEngagementLive } from '@/lib/hooks/useEngagementLive'
 
 const POLL_INTERVAL_MS = 2000
 
@@ -62,6 +63,12 @@ export default function PredictionOverlayPage({ params }: { params: Promise<{ id
     }
   }, [fetchPrediction])
 
+  // Near-real-time refresh on a prediction_update WS frame (L-D1); the 2s interval
+  // above remains the fallback / source of truth.
+  useEngagementLive(id, (kind) => {
+    if (kind === 'prediction') void fetchPrediction()
+  })
+
   // RESOLVED/CANCELED predictions are briefly still returned by /active; hide once gone.
   if (!prediction || (prediction.state !== 'ACTIVE' && prediction.state !== 'LOCKED' && prediction.state !== 'RESOLVED')) {
     return null
@@ -92,8 +99,15 @@ export default function PredictionOverlayPage({ params }: { params: Promise<{ id
                   style={{ width: `${pct}%` }}
                 />
                 <div className="relative flex h-full items-center justify-between px-3 text-sm font-semibold">
-                  <span className="truncate">
-                    {o.label} {isWinner && <span aria-hidden>👑</span>}
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <span className="truncate">{o.idx}. {o.label}</span>
+                    {/* Winner conveyed by a labelled pill (not colour/emoji alone) so it
+                        has an accessible name and reads for colourblind viewers (L-A1). */}
+                    {isWinner && (
+                      <span className="shrink-0 rounded bg-yellow-400 px-1.5 py-0.5 text-[10px] font-bold uppercase text-black">
+                        Winner
+                      </span>
+                    )}
                   </span>
                   <span className="tabular-nums">
                     {o.total_points.toLocaleString()} pts · {pct}%

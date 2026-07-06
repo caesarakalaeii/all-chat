@@ -599,8 +599,10 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         />
       )}
 
-      {/* Poll & prediction controls — owner only (issue #523). */}
-      {isOwner && showEngagement && <EngagementControls overlayId={id} />}
+      {/* Poll & prediction controls — owner only (issue #523). key={id} remounts on an
+          in-tab overlay switch so a finished round + half-typed create form don't leak
+          across overlays (L-C5). */}
+      {isOwner && showEngagement && <EngagementControls key={id} overlayId={id} />}
 
       {/* Resizable Chat | Activity — orientation/order driven by the layout picker. */}
       <ResizableSplit

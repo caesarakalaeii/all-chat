@@ -684,6 +684,7 @@ const EARN_NUMBER_FIELDS: ReadonlyArray<{
   label: string
   hint: string
   float?: boolean
+  comingSoon?: boolean
 }> = [
   { key: 'bits_multiplier', label: 'Points per bit', hint: 'Twitch cheers', float: true },
   { key: 'usd_multiplier', label: 'Points per USD', hint: 'donations & Super Chats', float: true },
@@ -691,8 +692,15 @@ const EARN_NUMBER_FIELDS: ReadonlyArray<{
   { key: 'sub_medium', label: 'Tier 2 sub', hint: 'Twitch Tier 2' },
   { key: 'sub_low', label: 'Base sub / member', hint: 'Tier 1, Prime, Kick & YouTube members' },
   { key: 'gift_per_sub', label: 'Per gifted sub', hint: 'awarded to the gifter' },
-  { key: 'chat_per_minute', label: 'Chatting, per minute', hint: 'active chatters' },
-  { key: 'watch_per_minute', label: 'Watching, per minute', hint: 'participation page open' },
+  // chat_per_minute has no producer in v1 (nothing publishes engagement:chat), so it
+  // never accrues — flag it disabled so streamers don't configure a dead dimension (M6).
+  { key: 'chat_per_minute', label: 'Chatting, per minute', hint: 'active chatters', comingSoon: true },
+  // watch_per_minute rewards participation-PAGE focus time (heartbeat), not stream-watch time (M6).
+  {
+    key: 'watch_per_minute',
+    label: 'Participation page, per min',
+    hint: 'while the viewer keeps the participate page open (not stream-watch time)',
+  },
 ]
 
 // Earn config lives on the engagement-service (own endpoint, like the TTS
@@ -730,6 +738,7 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
     if (!config || !numbers) return
     const parsed = {} as Record<EarnNumberKey, number>
     for (const f of EARN_NUMBER_FIELDS) {
+      if (f.comingSoon) continue // not editable yet; the stored value is preserved via ...config
       const n = Number(numbers[f.key])
       if (!Number.isFinite(n) || n < 0) {
         toastManager.add({ title: `Invalid value for "${f.label}"`, type: 'error' })
@@ -797,6 +806,16 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
     }
   }
 
+  // Twitch native mirroring opt-in (ADR-0029). Adds read-only channel:read:polls /
+  // predictions scopes; the consent flow returns to the Monitor view.
+  const startMirrorConsent = async () => {
+    try {
+      window.location.href = await engagementApi.getTwitchMirrorConsentUrl(overlayId)
+    } catch {
+      toastManager.add({ title: 'Could not start Twitch consent. Please try again.', type: 'error' })
+    }
+  }
+
   if (loadError) {
     return (
       <p className="text-destructive text-xs">
@@ -820,11 +839,29 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
         Enable viewer points
       </label>
       <p className="text-xs text-text-sub">
-        Viewers earn {config.points_name.trim() || 'Points'} by chatting, watching and supporting
-        the stream, and wager them on predictions. Run polls and predictions from the Monitor
-        View; viewers join straight from chat (<code>!vote 2</code> or just <code>2</code>,{' '}
-        <code>!predict 1 500</code>) — no install required.
+        Viewers earn {config.points_name.trim() || 'Points'} by supporting the stream (subs, bits,
+        donations, gifts) and by keeping the participation page open, and wager them on
+        predictions. Run polls and predictions from the Monitor View; viewers join straight from
+        chat (<code>!vote 2</code> or just <code>2</code>, <code>!predict 1 500</code>) or the
+        participation page — no install required.
       </p>
+
+      <div>
+        <label className="flex cursor-pointer items-center gap-2 text-sm text-text">
+          <input
+            type="checkbox"
+            checked={config.announce_on_start}
+            onChange={(e) => setConfig({ ...config, announce_on_start: e.target.checked })}
+            className="accent-twitch size-4"
+          />
+          Announce new rounds in chat
+        </label>
+        <p className="mt-0.5 text-[11px] text-text-sub/70">
+          Posts the question, numbered options and the participate link to your chat when a round
+          starts. Needs the “advanced controls” send permission (the same grant the Monitor view’s
+          chat sending uses) — without it the announcement is skipped.
+        </p>
+      </div>
 
       <div>
         <label htmlFor="earn-points-name" className="mb-1 block text-xs text-text-sub">
@@ -850,10 +887,14 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
               min={0}
               step={f.float ? 'any' : 1}
               value={numbers[f.key]}
+              disabled={f.comingSoon}
               onChange={(e) => setNumbers({ ...numbers, [f.key]: e.target.value })}
-              className="w-full rounded-md border border-border bg-bg px-2 py-1 text-xs text-text"
+              className={cn('w-full rounded-md border border-border bg-bg px-2 py-1 text-xs text-text', f.comingSoon && 'opacity-50')}
             />
-            <p className="mt-0.5 text-[11px] text-text-sub/70">{f.hint}</p>
+            <p className="mt-0.5 text-[11px] text-text-sub/70">
+              {f.hint}
+              {f.comingSoon && ' (coming soon)'}
+            </p>
           </div>
         ))}
       </div>
@@ -881,6 +922,39 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
             </Button>
           </div>
         ))}
+        {/* L-Docs1: browser-source setup guidance for the two OBS widgets. */}
+        <p className="text-[11px] text-text-sub/70">
+          In OBS/Streamlabs: add a <span className="font-medium">Browser Source</span>, paste a
+          widget URL, and set it to your canvas size (e.g. 1920×1080). The widgets are transparent
+          and only appear while a round is live.
+        </p>
+        {/* L-U9: the participation link is meant to be shared with viewers (on-screen / panels). */}
+        <p className="text-[11px] text-text-sub/70">
+          Share the participation link with mobile viewers — put it on-screen or in your channel
+          panels so they can join without the extension.
+        </p>
+      </div>
+
+      {/* Twitch native mirroring (M4/M5): a labelled, discoverable control with the
+          resync-expectation note, so a streamer who opts in knows it activates on the
+          next channel sync rather than immediately. The consent flow returns to the
+          Monitor view, where the mirrored rounds appear. */}
+      <div className="space-y-2 border-t border-border pt-3">
+        <p className="text-xs font-medium text-text">Twitch native mirroring</p>
+        <p className="text-[11px] text-text-sub/70">
+          Mirror your native Twitch polls &amp; predictions onto All-Chat overlays (read-only —
+          viewers still vote in Twitch). Opt-in; it adds read-only Twitch scopes and takes effect
+          after the next channel sync (a stream restart or re-adding the source).
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="text-xs"
+          onClick={() => void startMirrorConsent()}
+        >
+          Enable Twitch mirroring
+        </Button>
       </div>
     </div>
   )

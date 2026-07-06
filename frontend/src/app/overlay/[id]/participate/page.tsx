@@ -22,15 +22,21 @@
  * platform account (reusing the viewer OAuth→JWT flow), then votes, wagers points,
  * and sees their balance. Tier 2 of the participation model: chat commands are the
  * universal baseline, this page + the extension are the richer paths.
+ *
+ * Styling note: the app is dark-only (no `dark:` variant is configured — see
+ * globals.css), so this page uses the semantic design tokens (bg-surface / text-text
+ * / border-border …) directly rather than `dark:`-gated slate colours, which never
+ * activated on a fixed near-black body (M-A1).
  */
 
 'use client'
 
-import { use, useCallback, useEffect, useState } from 'react'
+import { use, useCallback, useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
-import { viewerApi } from '@/lib/api/viewer'
+import { apiErrorReason, viewerApi } from '@/lib/api/viewer'
 import { inMemoryTokens } from '@/lib/auth/in-memory-store'
 import { safeExternalRedirect } from '@/lib/auth/redirect-allowlist'
+import { useEngagementLive } from '@/lib/hooks/useEngagementLive'
 import type { Poll, Prediction, ViewerEngagement } from '@/lib/types/engagement'
 
 const REFRESH_MS = 3000
@@ -46,6 +52,32 @@ function hasViewerToken(): boolean {
   return Boolean(inMemoryTokens.getViewerAccessToken() ?? localStorage.getItem('viewer_jwt_token'))
 }
 
+function isUnauthorized(err: unknown): boolean {
+  return err instanceof Error && err.message === 'Unauthorized'
+}
+
+// wagerRejectionCopy maps the server's machine reason for a rejected wager to human
+// copy (L-U2), so a failure surfaces something actionable instead of the opaque
+// "wager not accepted". Reasons: repository/predictions.go WagerResult.Reason.
+function wagerRejectionCopy(reason: string | undefined, pointsName: string, balance: number): string | null {
+  switch (reason) {
+    case 'not_found':
+      return 'This prediction is no longer available.'
+    case 'not_active':
+      return 'Betting is closed for this round.'
+    case 'bad_outcome':
+      return 'That outcome is not valid.'
+    case 'already_wagered':
+      return 'You already placed a wager this round.'
+    case 'insufficient':
+      return `Not enough ${pointsName}. You have ${balance.toLocaleString()}.`
+    case 'native':
+      return 'This prediction runs on Twitch channel points.'
+    default:
+      return null
+  }
+}
+
 export default function ParticipatePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const [authed, setAuthed] = useState<boolean | null>(null)
@@ -55,44 +87,93 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
   const [wagerAmount, setWagerAmount] = useState('')
   const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // M2: a transient banner shown when a prediction the viewer wagered on ends, so the
+  // section doesn't just silently unmount (the active endpoint stops returning the
+  // round on resolve). Retained until a new round begins.
+  const [settled, setSettled] = useState<{ outcomeLabel: string; amount: number } | null>(null)
+  const wageredRoundRef = useRef<{ id: string; outcomeLabel: string; amount: number } | null>(null)
 
-  const loadPublic = useCallback(async () => {
+  // fetchPublic / fetchPrivate return their data so refresh() can apply everything in
+  // ONE state update — avoiding the multi-commit flicker of separate async chains (N1).
+  const fetchPublic = useCallback(async (): Promise<{ poll: Poll | null; prediction: Prediction | null } | null> => {
     try {
       const [pRes, prRes] = await Promise.all([
         fetch(`/api/v1/engagement/overlays/${id}/active-poll`, { cache: 'no-store' }),
         fetch(`/api/v1/engagement/overlays/${id}/active-prediction`, { cache: 'no-store' }),
       ])
-      setPoll(pRes.ok ? ((await pRes.json()) as Poll) : null)
-      setPrediction(prRes.ok ? ((await prRes.json()) as Prediction) : null)
+      return {
+        poll: pRes.ok ? ((await pRes.json()) as Poll) : null,
+        prediction: prRes.ok ? ((await prRes.json()) as Prediction) : null,
+      }
     } catch {
-      /* keep last render on transient errors */
+      return null // keep last render on transient errors
     }
   }, [id])
 
-  const loadPrivate = useCallback(async () => {
+  const fetchPrivate = useCallback(async (): Promise<ViewerEngagement | 'unauth' | null> => {
     try {
-      setEngagement(await viewerApi.getEngagement(id))
-      setAuthed(true)
+      return await viewerApi.getEngagement(id)
     } catch (err) {
-      if (err instanceof Error && err.message === 'Unauthorized') setAuthed(false)
+      return isUnauthorized(err) ? 'unauth' : null
     }
   }, [id])
+
+  const refresh = useCallback(async () => {
+    const authedNow = hasViewerToken()
+    const [pub, priv] = await Promise.all([
+      fetchPublic(),
+      authedNow ? fetchPrivate() : Promise.resolve<ViewerEngagement | 'unauth' | null>(null),
+    ])
+    const eng = priv && priv !== 'unauth' ? priv : null
+    if (pub) {
+      setPoll(pub.poll)
+      setPrediction(pub.prediction)
+      // M2: track the viewer's wagered round while it's live, and raise the settled
+      // banner when it ends (the active endpoint stops returning it on resolve, so the
+      // section would otherwise just silently unmount). Done here in the async refresh
+      // rather than a render-triggered effect to avoid a cascading re-render.
+      if (pub.prediction) {
+        setSettled(null)
+        // A different round is live now → drop the stale wager ref regardless of whether
+        // this tick's private fetch succeeded (else a transient failure at a fast round
+        // handoff could later fire a settled banner for a round the viewer never wagered).
+        if (wageredRoundRef.current && wageredRoundRef.current.id !== pub.prediction.id) {
+          wageredRoundRef.current = null
+        }
+        if (eng?.wager_outcome_id) {
+          const o = pub.prediction.outcomes.find((x) => x.id === eng.wager_outcome_id)
+          if (o) {
+            wageredRoundRef.current = { id: pub.prediction.id, outcomeLabel: o.label, amount: eng.wager_amount ?? 0 }
+          }
+        }
+      } else if (wageredRoundRef.current) {
+        setSettled({ outcomeLabel: wageredRoundRef.current.outcomeLabel, amount: wageredRoundRef.current.amount })
+        wageredRoundRef.current = null
+      }
+    }
+    if (priv === 'unauth') {
+      setAuthed(false)
+      setEngagement(null)
+    } else if (priv) {
+      setEngagement(priv)
+      setAuthed(true)
+    } else {
+      setAuthed(authedNow)
+    }
+  }, [fetchPublic, fetchPrivate])
 
   useEffect(() => {
-    const kick = setTimeout(() => {
-      setAuthed(hasViewerToken())
-      void loadPublic()
-      if (hasViewerToken()) void loadPrivate()
-    }, 0)
-    const refresh = setInterval(() => {
-      void loadPublic()
-      if (hasViewerToken()) void loadPrivate()
-    }, REFRESH_MS)
+    const kick = setTimeout(() => void refresh(), 0)
+    const t = setInterval(() => void refresh(), REFRESH_MS)
     return () => {
       clearTimeout(kick)
-      clearInterval(refresh)
+      clearInterval(t)
     }
-  }, [loadPublic, loadPrivate])
+  }, [refresh])
+
+  // Near-real-time refresh on a poll/prediction WS frame (L-D1); the interval remains
+  // the fallback / source of truth.
+  useEngagementLive(id, () => void refresh())
 
   // Watch-time heartbeat while the tab is open and the viewer is logged in.
   useEffect(() => {
@@ -126,14 +207,18 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
       setNotice(null)
       try {
         await viewerApi.votePoll(id, poll.id, optionIdx)
-        await Promise.all([loadPublic(), loadPrivate()])
+        await refresh()
       } catch (err) {
+        if (isUnauthorized(err)) {
+          setAuthed(false) // session expired mid-vote → bounce to login (L-U10)
+          return
+        }
         setNotice(err instanceof Error ? err.message : 'Vote failed')
       } finally {
         setBusy(false)
       }
     },
-    [poll, busy, id, loadPublic, loadPrivate]
+    [poll, busy, id, refresh]
   )
 
   const wager = useCallback(
@@ -145,30 +230,41 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
         setNotice('Enter a positive amount to wager.')
         return
       }
+      const balance = engagement?.balance ?? 0
+      if (amount > balance) {
+        // Pre-empt the server 'insufficient' with a clearer, local message (L-U3).
+        setNotice(`Not enough ${engagement?.points_name ?? 'Points'} — you have ${balance.toLocaleString()}.`)
+        return
+      }
       setBusy(true)
       setNotice(null)
       try {
         await viewerApi.wagerPrediction(id, prediction.id, outcomeIdx, amount)
         setWagerAmount('')
-        await Promise.all([loadPublic(), loadPrivate()])
+        await refresh()
       } catch (err) {
-        setNotice(err instanceof Error ? err.message : 'Wager failed')
+        if (isUnauthorized(err)) {
+          setAuthed(false) // L-U10
+          return
+        }
+        const copy = wagerRejectionCopy(apiErrorReason(err), engagement?.points_name ?? 'Points', engagement?.balance ?? 0)
+        setNotice(copy ?? (err instanceof Error ? err.message : 'Wager failed'))
       } finally {
         setBusy(false)
       }
     },
-    [prediction, busy, wagerAmount, id, loadPublic, loadPrivate]
+    [prediction, busy, wagerAmount, id, engagement, refresh]
   )
 
   if (authed === null) {
-    return <main className="mx-auto max-w-md p-6 text-center text-slate-400">Loading…</main>
+    return <main className="mx-auto max-w-md p-6 text-center text-text-sub">Loading…</main>
   }
 
   if (!authed) {
     return (
       <main className="mx-auto max-w-md space-y-4 p-6 text-center">
         <h1 className="text-xl font-bold">Join the fun</h1>
-        <p className="text-slate-400">Log in with your platform account to vote and wager.</p>
+        <p className="text-text-sub">Log in with your platform account to vote and wager.</p>
         <div className="flex flex-col gap-2">
           {PLATFORMS.map((p) => (
             <button
@@ -180,6 +276,11 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
             </button>
           ))}
         </div>
+        {/* N2: TikTok/Discord have no web login — point those viewers at chat commands. */}
+        <p className="text-sm text-text-sub">
+          Watching on TikTok or Discord? Take part with the on-screen chat commands — web login isn&apos;t
+          available for those platforms yet.
+        </p>
       </main>
     )
   }
@@ -191,25 +292,43 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
   // Mirrored native Twitch rounds show live tallies but are read-only here.
   const pollNative = poll?.source === 'twitch_native'
   const predNative = prediction?.source === 'twitch_native'
+  const balance = engagement?.balance ?? 0
+  const pointsName = engagement?.points_name ?? 'Points'
 
   return (
     <main className="mx-auto max-w-md space-y-6 p-4">
       <header className="flex items-center justify-between">
         <h1 className="text-lg font-bold">Participate</h1>
-        <span className="rounded-full bg-black/10 px-3 py-1 text-sm font-semibold dark:bg-white/10">
-          🔥 {(engagement?.balance ?? 0).toLocaleString()} {engagement?.points_name ?? 'Points'}
+        <span
+          className="rounded-full bg-surface-2 px-3 py-1 text-sm font-semibold text-text"
+          aria-live="polite"
+          aria-atomic="true"
+          aria-label={`Balance: ${balance.toLocaleString()} ${pointsName}`}
+        >
+          <span aria-hidden="true">🔥</span> {balance.toLocaleString()} {pointsName}
         </span>
       </header>
 
-      {notice && <p className="rounded-md bg-red-500/15 px-3 py-2 text-sm text-red-400">{notice}</p>}
+      {notice && (
+        <p role="alert" className="rounded-md bg-red-500/15 px-3 py-2 text-sm text-red-400">
+          {notice}
+        </p>
+      )}
+
+      {settled && (
+        <p role="status" className="rounded-md bg-surface-2 px-3 py-2 text-sm text-text">
+          Your prediction on “{settled.outcomeLabel}” settled — you wagered {settled.amount.toLocaleString()}{' '}
+          {pointsName}. Check your balance above.
+        </p>
+      )}
 
       {poll && poll.state === 'ACTIVE' && (
         <section className="space-y-2">
-          <h2 className="flex items-center gap-2 font-semibold">📊 {poll.question}</h2>
+          <h2 className="flex items-center gap-2 font-semibold">
+            <span aria-hidden="true">📊</span> {poll.question}
+          </h2>
           {pollNative && (
-            <p className="text-sm text-slate-500">
-              This poll runs on Twitch — vote in Twitch chat or the Twitch app.
-            </p>
+            <p className="text-sm text-text-sub">This poll runs on Twitch — vote in Twitch chat or the Twitch app.</p>
           )}
           {poll.options.map((o) => {
             const pct = pollTotal > 0 ? Math.round((o.votes / pollTotal) * 100) : 0
@@ -219,17 +338,25 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
                 key={o.id}
                 onClick={() => void vote(o.idx)}
                 disabled={busy || pollNative}
+                title={pollNative ? 'Vote in Twitch chat' : busy ? 'Working…' : undefined}
                 className={clsx(
                   'relative flex w-full items-center justify-between overflow-hidden rounded-lg border px-3 py-2 text-left',
-                  mine ? 'border-purple-500' : 'border-slate-300 dark:border-slate-700',
+                  mine ? 'border-purple-500' : 'border-border',
                   (busy || pollNative) && 'opacity-60'
                 )}
               >
                 <span className="absolute inset-y-0 left-0 bg-purple-500/15" style={{ width: `${pct}%` }} />
                 <span className="relative font-medium">
-                  {o.label} {mine && '✓'}
+                  {o.idx}. {o.label}
+                  {mine && (
+                    <>
+                      {' '}
+                      <span aria-hidden="true">✓</span>
+                      <span className="sr-only">(your vote)</span>
+                    </>
+                  )}
                 </span>
-                <span className="relative text-sm tabular-nums text-slate-500">
+                <span className="relative text-sm tabular-nums text-text-sub">
                   {pct}% ({o.votes.toLocaleString()})
                 </span>
               </button>
@@ -241,57 +368,82 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
       {prediction && (prediction.state === 'ACTIVE' || prediction.state === 'LOCKED') && (
         <section className="space-y-2">
           <h2 className="flex items-center gap-2 font-semibold">
-            🔮 {prediction.title}
-            {prediction.state === 'LOCKED' && <span className="text-sm text-slate-500">🔒 locked</span>}
+            <span aria-hidden="true">🔮</span> {prediction.title}
+            {prediction.state === 'LOCKED' && (
+              <span className="text-sm text-text-sub">
+                <span aria-hidden="true">🔒</span> locked
+              </span>
+            )}
           </h2>
-          {predNative && (
-            <p className="text-sm text-slate-500">This prediction runs on Twitch channel points.</p>
-          )}
-          {!alreadyWagered && predOpen && (
-            <input
-              type="number"
-              min={1}
-              inputMode="numeric"
-              value={wagerAmount}
-              onChange={(e) => setWagerAmount(e.target.value)}
-              placeholder={`Amount to wager (${engagement?.points_name ?? 'Points'})`}
-              disabled={predNative}
-              className={clsx(
-                'w-full rounded-lg border border-slate-300 px-3 py-2 dark:border-slate-700 dark:bg-transparent',
-                predNative && 'opacity-60'
-              )}
-            />
+          {predNative && <p className="text-sm text-text-sub">This prediction runs on Twitch channel points.</p>}
+          {!alreadyWagered && predOpen && !predNative && (
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-xs text-text-sub">
+                <span>
+                  You have {balance.toLocaleString()} {pointsName}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setWagerAmount(String(balance))}
+                  className="rounded px-1.5 py-0.5 font-medium text-text-sub underline hover:text-text focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:outline-none"
+                >
+                  Max
+                </button>
+              </div>
+              <input
+                type="number"
+                min={1}
+                max={balance}
+                inputMode="numeric"
+                value={wagerAmount}
+                onChange={(e) => setWagerAmount(e.target.value)}
+                placeholder={`Amount to wager (${pointsName})`}
+                className="w-full rounded-lg border border-border bg-transparent px-3 py-2 text-text placeholder:text-text-dim"
+              />
+            </div>
           )}
           {prediction.outcomes.map((o) => {
             const pct = predTotal > 0 ? Math.round((o.total_points / predTotal) * 100) : 0
             const mine = engagement?.wager_outcome_id === o.id
+            const disabled = busy || alreadyWagered || !predOpen || predNative
+            const title = predNative
+              ? 'Runs on Twitch channel points'
+              : alreadyWagered
+                ? 'You already wagered this round'
+                : !predOpen
+                  ? 'Betting is closed'
+                  : busy
+                    ? 'Working…'
+                    : undefined
             return (
               <button
                 key={o.id}
                 onClick={() => void wager(o.idx)}
-                disabled={busy || alreadyWagered || !predOpen || predNative}
+                disabled={disabled}
+                title={title}
                 className={clsx(
                   'relative flex w-full items-center justify-between overflow-hidden rounded-lg border px-3 py-2 text-left',
-                  mine ? 'border-sky-500' : 'border-slate-300 dark:border-slate-700',
-                  (busy || alreadyWagered || !predOpen || predNative) && 'opacity-60'
+                  mine ? 'border-sky-500' : 'border-border',
+                  disabled && 'opacity-60'
                 )}
               >
                 <span className="absolute inset-y-0 left-0 bg-sky-500/15" style={{ width: `${pct}%` }} />
                 <span className="relative font-medium">
-                  {o.label} {mine && `· your wager: ${(engagement?.wager_amount ?? 0).toLocaleString()}`}
+                  {o.idx}. {o.label}
+                  {mine && ` · your wager: ${(engagement?.wager_amount ?? 0).toLocaleString()}`}
                 </span>
-                <span className="relative text-sm tabular-nums text-slate-500">
+                <span className="relative text-sm tabular-nums text-text-sub">
                   {o.total_points.toLocaleString()} · {pct}%
                 </span>
               </button>
             )
           })}
-          {alreadyWagered && <p className="text-sm text-slate-500">You&apos;ve locked in your wager for this round.</p>}
+          {alreadyWagered && <p className="text-sm text-text-sub">You&apos;ve locked in your wager for this round.</p>}
         </section>
       )}
 
       {!poll && !prediction && (
-        <p className="text-center text-slate-400">No active poll or prediction right now. Hang tight!</p>
+        <p className="text-center text-text-sub">No active poll or prediction right now. Hang tight!</p>
       )}
     </main>
   )
