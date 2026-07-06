@@ -29,6 +29,15 @@ type ProcessorMetrics struct {
 	ProcessingDuration     *prometheus.HistogramVec
 	StageDuration          *prometheus.HistogramVec
 
+	// Chat content health: total chat messages vs. those arriving with empty
+	// text. A sudden spike in the empty ratio for a platform is the signature of
+	// a decoder/library break (e.g. an unofficial listener whose upstream schema
+	// drifted) where messages still flow but their text silently vanishes —
+	// invisible to liveness/error/lag alerts. Events (gift/follow/like) are
+	// excluded; only real chat messages are counted.
+	ChatMessages      *prometheus.CounterVec
+	ChatMessagesEmpty *prometheus.CounterVec
+
 	// Emote Enrichment
 	EmoteLookups           *prometheus.CounterVec
 	EmoteCacheEntries      *prometheus.GaugeVec
@@ -86,6 +95,20 @@ func NewProcessorMetrics() *ProcessorMetrics {
 				Buckets: []float64{0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1},
 			},
 			[]string{"service", "platform", "stage"},
+		),
+		ChatMessages: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "processor_chat_messages_total",
+				Help: "Chat messages (excluding events) consumed, by platform. Denominator for the empty-text ratio.",
+			},
+			[]string{"service", "platform"},
+		),
+		ChatMessagesEmpty: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "processor_chat_messages_empty_total",
+				Help: "Chat messages that arrived with empty/whitespace-only text, by platform. A high ratio signals a broken decoder.",
+			},
+			[]string{"service", "platform"},
 		),
 		EmoteLookups: promauto.NewCounterVec(
 			prometheus.CounterOpts{
@@ -195,6 +218,17 @@ func (m *ProcessorMetrics) RecordMessageConsumed(service, platform, consumerGrou
 // RecordMessageProcessed records a message processed through a pipeline stage
 func (m *ProcessorMetrics) RecordMessageProcessed(service, platform, stage, result string) {
 	m.MessagesProcessed.WithLabelValues(service, platform, stage, result).Inc()
+}
+
+// RecordChatText records a chat message's text presence, once per raw message.
+// Call only for real chat messages (not gift/follow/like events, which carry
+// synthetic text). When empty is true the message arrived with no visible text —
+// a per-platform spike in the empty ratio flags a broken/stale decoder.
+func (m *ProcessorMetrics) RecordChatText(service, platform string, empty bool) {
+	m.ChatMessages.WithLabelValues(service, platform).Inc()
+	if empty {
+		m.ChatMessagesEmpty.WithLabelValues(service, platform).Inc()
+	}
 }
 
 // RecordEmoteLookup records an emote provider lookup

@@ -332,6 +332,11 @@ func main() {
 			} else {
 				sendAllGroup = reg
 			}
+
+			// Chat-content health (once per raw chat message): track empty-text
+			// ratio per platform so a broken decoder — messages still flowing but
+			// their text silently gone — trips an alert without a user report.
+			processorMetrics.RecordChatText("message-processor", rawMsg.Platform, strings.TrimSpace(rawMsg.Text) == "")
 		}
 
 		// Process message for each overlay.
