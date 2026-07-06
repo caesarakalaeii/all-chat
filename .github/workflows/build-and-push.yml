@@ -287,6 +287,7 @@ jobs:
           - token-refresh-service
           - moderation-service
           - payment-service
+          - engagement-service
           - discord-listener
 
     steps:
@@ -321,3 +322,45 @@ jobs:
           cd services/support-bot
           npm ci
           npm test
+
+  # engagement-service authz/durability regression tests (idor_test, round5_test,
+  # native_mirror_test) are `//go:build integration` and need a real Postgres with the
+  # migrations applied, so they run in a dedicated job (they would t.Skipf without a DB).
+  test-engagement-integration:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: allchat
+          POSTGRES_PASSWORD: allchat_dev_password
+          POSTGRES_DB: allchat
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U allchat -d allchat"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+
+      - name: Apply migrations
+        env:
+          PGPASSWORD: allchat_dev_password
+        run: |
+          for f in $(ls migrations/[0-9]*.sql | grep -v _down | sort); do
+            psql -h localhost -p 5432 -U allchat -d allchat -v ON_ERROR_STOP=1 -q -f "$f"
+          done
+
+      - name: Run engagement-service integration tests
+        run: |
+          cd services/engagement-service
+          go mod download
+          go test -tags=integration -v ./repository/...
