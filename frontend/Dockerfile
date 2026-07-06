@@ -2,7 +2,9 @@
 # Multi-stage build for Next.js application
 
 # Stage 1: Dependencies
-FROM node:22-alpine AS deps
+# node:26-alpine ships npm 11.x, matching the version used to author package-lock.json
+# (lockfileVersion 3); node:22-alpine's npm 10.x rejects that lockfile as out-of-sync.
+FROM node:26-alpine AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
@@ -11,7 +13,7 @@ COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm ci
 
 # Stage 2: Builder
-FROM node:22-alpine AS builder
+FROM node:26-alpine AS builder
 WORKDIR /app
 
 # Copy dependencies from deps stage
@@ -39,7 +41,7 @@ RUN rm -rf .next
 RUN npm run build
 
 # Stage 3: Runner
-FROM node:22-alpine AS runner
+FROM node:26-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
