@@ -28,6 +28,7 @@
 'use client'
 
 import { use, useCallback, useEffect, useState } from 'react'
+import clsx from 'clsx'
 import type { Poll } from '@/lib/types/engagement'
 import { useEngagementLive } from '@/lib/hooks/useEngagementLive'
 
@@ -74,29 +75,57 @@ export default function PollOverlayPage({ params }: { params: Promise<{ id: stri
     return () => clearInterval(t)
   }, [])
 
-  if (!poll || poll.state !== 'ACTIVE') return null
+  // Admit a recently-CLOSED poll too: the backend serves it for a short grace window
+  // so the final tally is shown before the widget hides itself.
+  if (!poll || (poll.state !== 'ACTIVE' && poll.state !== 'CLOSED')) return null
 
   const total = poll.options.reduce((sum, o) => sum + o.votes, 0)
   const remaining = poll.ends_at ? Math.max(0, Math.floor((new Date(poll.ends_at).getTime() - now) / 1000)) : null
+  const isClosed = poll.state === 'CLOSED'
+  // Winning option (max votes) — highlighted with a TEXT label, not colour alone, so it
+  // reads for colourblind viewers (mirrors the prediction widget's RESOLVED "Winner" branch).
+  const maxVotes = poll.options.reduce((max, o) => Math.max(max, o.votes), 0)
+  const winnerId = isClosed && maxVotes > 0 ? poll.options.find((o) => o.votes === maxVotes)?.id : undefined
 
   return (
     <div className="min-h-screen bg-transparent p-4">
       <div className="mx-auto max-w-md rounded-xl bg-black/70 p-4 text-white shadow-lg backdrop-blur-sm">
         <div className="mb-3 flex items-center gap-2 text-lg font-bold">
           <span aria-hidden>📊</span>
-          <span>{poll.question}</span>
+          <span className="min-w-0 flex-1 truncate">{poll.question}</span>
+          {isClosed && (
+            <span className="shrink-0 rounded bg-white/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide">
+              Final
+            </span>
+          )}
         </div>
         <div className="space-y-2">
           {poll.options.map((o) => {
             const pct = total > 0 ? Math.round((o.votes / total) * 100) : 0
+            const isWinner = o.id === winnerId
             return (
-              <div key={o.id} className="relative h-8 overflow-hidden rounded-md bg-white/15">
+              <div
+                key={o.id}
+                className={clsx(
+                  'relative h-8 overflow-hidden rounded-md bg-white/15',
+                  isWinner && 'ring-2 ring-yellow-400'
+                )}
+              >
                 <div
                   className="absolute inset-y-0 left-0 bg-purple-500/70 transition-[width] duration-500"
                   style={{ width: `${pct}%` }}
                 />
                 <div className="relative flex h-full items-center justify-between px-3 text-sm font-semibold">
-                  <span className="truncate">{o.idx}. {o.label}</span>
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <span className="truncate">{o.idx}. {o.label}</span>
+                    {/* Winner conveyed by a labelled pill (not colour alone) so it has an
+                        accessible name and reads for colourblind viewers. */}
+                    {isWinner && (
+                      <span className="shrink-0 rounded bg-yellow-400 px-1.5 py-0.5 text-[10px] font-bold uppercase text-black">
+                        Winner
+                      </span>
+                    )}
+                  </span>
                   <span className="tabular-nums">
                     {pct}% ({o.votes.toLocaleString()})
                   </span>
@@ -105,10 +134,14 @@ export default function PollOverlayPage({ params }: { params: Promise<{ id: stri
             )
           })}
         </div>
-        {remaining !== null && (
-          <div className="mt-3 text-right text-sm text-white/80 tabular-nums">
-            ⏱ {Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, '0')} remaining
-          </div>
+        {isClosed ? (
+          <div className="mt-3 text-right text-sm font-semibold text-white/80">Final results</div>
+        ) : (
+          remaining !== null && (
+            <div className="mt-3 text-right text-sm text-white/80 tabular-nums">
+              ⏱ {Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, '0')} remaining
+            </div>
+          )
         )}
       </div>
     </div>

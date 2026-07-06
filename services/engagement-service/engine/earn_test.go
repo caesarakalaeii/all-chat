@@ -17,6 +17,7 @@
 package engine
 
 import (
+	"math"
 	"testing"
 
 	"github.com/caesar/all-chat/services/engagement-service/models"
@@ -25,7 +26,14 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func defCfg() models.EarnConfig { return models.DefaultEarnConfig(uuid.New()) }
+// defCfg returns the built-in defaults with earning ENABLED. DefaultEarnConfig is
+// opt-in (Enabled=false, see TestDefaultEarnConfig_OptInDisabled), so the award tests
+// must turn it on explicitly.
+func defCfg() models.EarnConfig {
+	c := models.DefaultEarnConfig(uuid.New())
+	c.Enabled = true
+	return c
+}
 
 func TestPointsForEvent_Bits(t *testing.T) {
 	cfg := defCfg() // BitsMultiplier=1
@@ -97,4 +105,38 @@ func TestPointsForEvent_UnhandledAndDisabled(t *testing.T) {
 	disabled.Enabled = false
 	_, ok = PointsForEvent(disabled, &mpmodels.EventInfo{Type: "bits", Value: &mpmodels.EventValue{Amount: 100, Currency: "bits"}})
 	assert.False(t, ok, "disabled config awards nothing")
+}
+
+// TestDefaultEarnConfig_OptInDisabled locks in the U3 opt-in default: a never-
+// configured overlay accrues nothing until the streamer turns earning on.
+func TestDefaultEarnConfig_OptInDisabled(t *testing.T) {
+	def := models.DefaultEarnConfig(uuid.New())
+	assert.False(t, def.Enabled, "DefaultEarnConfig must default disabled (opt-in)")
+	_, ok := PointsForEvent(def, &mpmodels.EventInfo{Type: "bits", Value: &mpmodels.EventValue{Amount: 100, Currency: "bits"}})
+	assert.False(t, ok, "an un-configured overlay awards nothing")
+}
+
+// TestPointsForEvent_OverflowClamped guards M2: a hand-set / pre-constraint config
+// with absurd values must clamp a single event's award to maxEventPoints (a bounded
+// positive), never producing a wrapped/negative int64 or an undefined float→int
+// conversion.
+func TestPointsForEvent_OverflowClamped(t *testing.T) {
+	giftCfg := defCfg()
+	giftCfg.GiftPerSub = math.MaxInt64 / 2
+	award, ok := PointsForEvent(giftCfg, &mpmodels.EventInfo{Type: "gift_subscription", Value: &mpmodels.EventValue{Amount: 10, Currency: "gifts"}})
+	assert.True(t, ok)
+	assert.Equal(t, maxEventPoints, award.Delta, "overflowing gift multiply clamps to the cap")
+	assert.Positive(t, award.Delta)
+
+	bitsCfg := defCfg()
+	bitsCfg.BitsMultiplier = math.MaxFloat64
+	award, ok = PointsForEvent(bitsCfg, &mpmodels.EventInfo{Type: "bits", Value: &mpmodels.EventValue{Amount: 1e300, Currency: "bits"}})
+	assert.True(t, ok)
+	assert.Equal(t, maxEventPoints, award.Delta, "out-of-range float product clamps to the cap")
+
+	// Normal ranges are unaffected (the clamp helpers are no-ops here).
+	ok2 := defCfg()
+	normal, ok := PointsForEvent(ok2, &mpmodels.EventInfo{Type: "bits", Value: &mpmodels.EventValue{Amount: 250, Currency: "bits"}})
+	assert.True(t, ok)
+	assert.Equal(t, int64(250), normal.Delta)
 }

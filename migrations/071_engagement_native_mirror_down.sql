@@ -1,4 +1,4 @@
--- 070_engagement_native_mirror_down.sql
+-- 071_engagement_native_mirror_down.sql
 -- Reverses 070: drops the mirror tally columns and restores the global
 -- (source, external_id) mirror-idempotency indexes from 068/069.
 

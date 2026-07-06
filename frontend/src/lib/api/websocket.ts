@@ -264,7 +264,10 @@ export class WebSocketClient {
     this.reconnectTimeout = setTimeout(() => {
       this.reconnectTimeout = null
       this.reconnectAttempts++
-      this.connect(this.overlayId, this.token)
+      // Preserve engagementOnly across reconnect — otherwise an engagement-only socket
+      // silently downgrades to a full chat socket and starts writing the shared
+      // ws_last_seen_<overlay> watermark, racing the Monitor chat pane's own connection.
+      this.connect(this.overlayId, this.token, this.engagementOnly)
     }, delay)
   }
 

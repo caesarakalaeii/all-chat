@@ -66,8 +66,15 @@ func main() {
 		log.Fatal("JWT key chain init failed (JWT_SECRET_V1 must be set)", zap.Error(err))
 	}
 
-	connString := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
-		cfg.DatabaseUser, cfg.DatabasePassword, cfg.DatabaseHost, cfg.DatabasePort, cfg.DatabaseName)
+	// Bound server-side query time and lock waits on THIS service's pool so a runaway
+	// query or a contended row lock (Wager's SELECT … FOR UPDATE) fails fast instead
+	// of pinning a connection and serializing a consumer batch (M6). pgx forwards
+	// unrecognized DSN query params as startup runtime params, so these apply per
+	// session — scoped to engagement-service, not the shared pool helper (used by many
+	// services with different needs). Values in ms, env-tunable.
+	connString := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable&statement_timeout=%d&lock_timeout=%d",
+		cfg.DatabaseUser, cfg.DatabasePassword, cfg.DatabaseHost, cfg.DatabasePort, cfg.DatabaseName,
+		cfg.StatementTimeoutMs, cfg.LockTimeoutMs)
 	dbPool, err := database.NewPostgresPool(connString)
 	if err != nil {
 		log.Fatal("Failed to connect to database", zap.Error(err))
@@ -117,7 +124,8 @@ func main() {
 	go cmdConsumer.Run(bgCtx)
 	go earnConsumer.Run(bgCtx)
 	go nativeConsumer.Run(bgCtx)
-	go runSweeper(bgCtx, repo, pub, log, time.Duration(cfg.SweepIntervalSeconds)*time.Second)
+	go runSweeper(bgCtx, repo, pub, log, time.Duration(cfg.SweepIntervalSeconds)*time.Second,
+		time.Duration(cfg.NativeStaleTTLSeconds)*time.Second)
 
 	if cfg.GinMode == "release" {
 		gin.SetMode(gin.ReleaseMode)
@@ -205,8 +213,11 @@ func main() {
 
 // runSweeper periodically locks predictions past their auto_lock_at and closes
 // polls past their ends_at, then broadcasts the new state and clears the active
-// flags. Restart-safe: state lives in the DB, not in-memory timers.
-func runSweeper(ctx context.Context, repo *repository.Repository, pub *publisher.Publisher, log *zap.Logger, interval time.Duration) {
+// flags. It also force-closes mirrored twitch_native rounds stranded live past
+// nativeStaleTTL (a never-delivered terminal EventSub would otherwise 409-block
+// All-Chat rounds on that overlay forever, M1). Restart-safe: state lives in the DB,
+// not in-memory timers.
+func runSweeper(ctx context.Context, repo *repository.Repository, pub *publisher.Publisher, log *zap.Logger, interval, nativeStaleTTL time.Duration) {
 	if interval <= 0 {
 		interval = 10 * time.Second
 	}
@@ -237,6 +248,36 @@ func runSweeper(ctx context.Context, repo *repository.Repository, pub *publisher
 				}
 				pub.ClearActive(ctx, ref.PollID)
 			}
+			sweepStaleNative(ctx, repo, pub, log, nativeStaleTTL)
+		}
+	}
+}
+
+// sweepStaleNative force-closes mirrored twitch_native rounds that have been live
+// past nativeStaleTTL and broadcasts their now-terminal state so overlays clear.
+// Native rounds never set All-Chat active flags (they run on Twitch) and never move
+// viewer_points, so there is nothing to un-flag or refund. Disabled when
+// nativeStaleTTL <= 0.
+func sweepStaleNative(ctx context.Context, repo *repository.Repository, pub *publisher.Publisher, log *zap.Logger, nativeStaleTTL time.Duration) {
+	if nativeStaleTTL <= 0 {
+		return
+	}
+	stalePolls, err := repo.ForceCloseStaleNativePolls(ctx, nativeStaleTTL)
+	if err != nil {
+		log.Warn("native stale-poll sweep failed", zap.Error(err))
+	}
+	for _, ref := range stalePolls {
+		if poll, err := repo.GetPoll(ctx, ref.PollID); err == nil {
+			pub.PublishPoll(ctx, poll)
+		}
+	}
+	stalePreds, err := repo.ForceCloseStaleNativePredictions(ctx, nativeStaleTTL)
+	if err != nil {
+		log.Warn("native stale-prediction sweep failed", zap.Error(err))
+	}
+	for _, ref := range stalePreds {
+		if pred, err := repo.GetPrediction(ctx, ref.PredictionID); err == nil {
+			pub.PublishPrediction(ctx, pred)
 		}
 	}
 }
@@ -253,6 +294,9 @@ type Config struct {
 	RateLimitPerMin       int
 	IdempotencyTTLSeconds int
 	SweepIntervalSeconds  int
+	NativeStaleTTLSeconds int
+	StatementTimeoutMs    int
+	LockTimeoutMs         int
 }
 
 func loadConfig() *Config {
@@ -267,6 +311,11 @@ func loadConfig() *Config {
 		RateLimitPerMin:       getEnvInt("ENGAGEMENT_RATE_PER_MIN", 120),
 		IdempotencyTTLSeconds: getEnvInt("ENGAGEMENT_IDEMPOTENCY_TTL_SECONDS", 60),
 		SweepIntervalSeconds:  getEnvInt("ENGAGEMENT_SWEEP_INTERVAL_SECONDS", 10),
+		// 4h: comfortably longer than any real Twitch round (predictions cap ~30m of
+		// open + resolution window) yet well below "stranded forever" (M1).
+		NativeStaleTTLSeconds: getEnvInt("ENGAGEMENT_NATIVE_STALE_TTL_SECONDS", 14400),
+		StatementTimeoutMs:    getEnvInt("ENGAGEMENT_STATEMENT_TIMEOUT_MS", 5000),
+		LockTimeoutMs:         getEnvInt("ENGAGEMENT_LOCK_TIMEOUT_MS", 3000),
 	}
 }
 

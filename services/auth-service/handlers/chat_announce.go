@@ -28,7 +28,7 @@ import (
 
 // InternalAnnounceRequest is the body of POST /internal/chat/announce. Called
 // service-to-service (service JWT) by engagement-service to post an opt-in round-start
-// message to chat AS the overlay owner (ADR-0027, H4-2). user_id is the resolved
+// message to chat AS the overlay owner (ADR-0028, H4-2). user_id is the resolved
 // overlay owner; platforms is the overlay's sendable source platforms.
 type InternalAnnounceRequest struct {
 	UserID    string   `json:"user_id" binding:"required"`

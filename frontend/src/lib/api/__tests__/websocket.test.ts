@@ -162,4 +162,40 @@ describe('WebSocketClient — liveness & resilient reconnect', () => {
     vi.advanceTimersByTime(60000)
     expect(MockWebSocket.instances.length).toBe(count)
   })
+
+  it('preserves engagementOnly across reconnect (never writes the chat watermark)', () => {
+    vi.useFakeTimers()
+    const client = new WebSocketClient()
+    // Engagement-only socket: must never carry ?since= nor touch ws_last_seen_<overlay>.
+    client.connect('o1', null, true)
+    latest().simulateOpen()
+    expect(latest().url).not.toContain('?since=')
+
+    // A chat_message on the engagement-only socket must be ignored — no watermark write.
+    latest().simulateMessage({ type: 'chat_message', data: { id: 'm1', timestamp: '2026-01-01T00:00:00.000Z' } })
+    expect(localStorage.getItem('ws_last_seen_o1')).toBeNull()
+
+    // Trigger a reconnect: server closes the socket, backoff timer fires.
+    latest().simulateServerClose()
+    vi.advanceTimersByTime(35000)
+
+    // The reconnected socket must still be engagement-only: no ?since=, and a chat frame
+    // still leaves the watermark untouched (the bug downgraded it to a full chat socket).
+    latest().simulateOpen()
+    expect(latest().url).not.toContain('?since=')
+    latest().simulateMessage({ type: 'chat_message', data: { id: 'm2', timestamp: '2026-01-02T00:00:00.000Z' } })
+    expect(localStorage.getItem('ws_last_seen_o1')).toBeNull()
+
+    client.disconnect()
+  })
+
+  it('positive control: a full socket DOES write the chat watermark on a chat_message', () => {
+    vi.useFakeTimers()
+    const client = new WebSocketClient()
+    client.connect('o1', 'tok')
+    latest().simulateOpen()
+    latest().simulateMessage({ type: 'chat_message', data: { id: 'm1', timestamp: '2026-01-01T00:00:00.000Z' } })
+    expect(localStorage.getItem('ws_last_seen_o1')).toBe(String(Date.parse('2026-01-01T00:00:00.000Z')))
+    client.disconnect()
+  })
 })

@@ -149,6 +149,10 @@ func (h *Handler) WebVote(c *gin.Context) {
 	if !ok {
 		return
 	}
+	overlayID, ok := overlayIDParam(c)
+	if !ok {
+		return
+	}
 	pollID, ok := uuidParam(c, "pollId")
 	if !ok {
 		return
@@ -159,7 +163,10 @@ func (h *Handler) WebVote(c *gin.Context) {
 		return
 	}
 	platform := c.GetString("platform")
-	accepted, err := h.repo.RecordVote(c.Request.Context(), pollID, viewerID, req.OptionIdx, platform, nil)
+	// Bind the vote to the :id overlay in the path so a viewer cannot cast/change a
+	// vote on a poll owned by another overlay (cross-tenant tally integrity). Mirrors
+	// WebWager's overlay binding.
+	accepted, err := h.repo.RecordVote(c.Request.Context(), pollID, viewerID, overlayID, req.OptionIdx, platform, nil)
 	if err != nil {
 		h.log.Error("web vote", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not record vote"})

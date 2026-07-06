@@ -32,7 +32,8 @@ export interface PollOption {
 
 export interface Poll {
   id: string
-  overlay_id: string
+  // overlay_id is intentionally NOT serialized by the backend (it is an overlay
+  // bearer capability; engagement-service models tag it `json:"-"`).
   source: EngagementSource
   external_id?: string
   question: string
@@ -55,7 +56,7 @@ export interface PredictionOutcome {
 
 export interface Prediction {
   id: string
-  overlay_id: string
+  // overlay_id is intentionally NOT serialized by the backend (bearer capability).
   source: EngagementSource
   external_id?: string
   title: string

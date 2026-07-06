@@ -1,4 +1,4 @@
--- 071_engagement_dedup_scope_and_announce_down.sql
+-- 072_engagement_dedup_scope_and_announce_down.sql
 -- Reverses 071: drops the announce toggle + the LOWER(channel_id) functional index
 -- and un-scopes the (source_message_id) replay-dedup indexes.
 --

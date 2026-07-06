@@ -1,4 +1,4 @@
--- 068_engagement_polls.sql
+-- 069_engagement_polls.sql
 -- Description: Cross-platform polls (issue #523). All-Chat-native polls (source
 -- 'allchat', voted via chat command / web page / extension across every platform)
 -- and mirrored Twitch-native polls (source 'twitch_native', external_id = Twitch

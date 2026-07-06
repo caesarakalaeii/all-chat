@@ -133,19 +133,31 @@ func (r *Repository) GetActivePoll(ctx context.Context, overlayID uuid.UUID) (*m
 	return r.scanPoll(ctx, r.db, `overlay_id = $1 AND state = 'ACTIVE' AND source = 'allchat'`, overlayID)
 }
 
+// displayGraceSeconds is how long a just-ended round keeps being served by the
+// public display queries (GetActiveDisplayPoll / GetActiveDisplayPrediction) after
+// it closes/resolves, so the OBS widget and web page can render the final result —
+// the on-stream "who won" reveal — before the widget clears. A still-live round
+// always outranks a terminal one within the window (see the ORDER BY).
+const displayGraceSeconds = 20
+
 // GetActiveDisplayPoll returns the overlay's active poll of EITHER source for
-// public rendering (OBS widgets, web page, monitor). If an All-Chat and a
-// mirrored Twitch poll are somehow live at once — the create-time 409 blocks a
-// NEW All-Chat poll while a native one is live, but a native poll can begin on
-// Twitch after an All-Chat poll is already running — the All-Chat poll wins the
-// display so the owner can still close it from the control panel; once it ends,
-// the native poll shows. A poll has no points at stake, but keeping the rule
+// public rendering (OBS widgets, web page, monitor), plus a poll that closed within
+// the last displayGraceSeconds so the final tally is shown before it clears. If an
+// All-Chat and a mirrored Twitch poll are somehow live at once — the create-time
+// 409 blocks a NEW All-Chat poll while a native one is live, but a native poll can
+// begin on Twitch after an All-Chat poll is already running — the All-Chat poll
+// wins the display so the owner can still close it from the control panel; once it
+// ends, the native poll shows. A poll has no points at stake, but keeping the rule
 // identical to predictions avoids a surprising per-type difference.
 func (r *Repository) GetActiveDisplayPoll(ctx context.Context, overlayID uuid.UUID) (*models.Poll, error) {
 	var id uuid.UUID
 	err := r.db.QueryRow(ctx,
-		`SELECT id FROM polls WHERE overlay_id = $1 AND state = 'ACTIVE'
-		 ORDER BY (source = 'allchat') DESC, created_at DESC LIMIT 1`, overlayID).Scan(&id)
+		`SELECT id FROM polls
+		 WHERE overlay_id = $1
+		   AND (state = 'ACTIVE'
+		        OR (state = 'CLOSED' AND closed_at IS NOT NULL AND closed_at > NOW() - make_interval(secs => $2)))
+		 ORDER BY (state = 'ACTIVE') DESC, (source = 'allchat') DESC, created_at DESC LIMIT 1`,
+		overlayID, displayGraceSeconds).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -169,11 +181,14 @@ func (r *Repository) GetPollForOverlay(ctx context.Context, pollID, overlayID uu
 
 // ClosePoll transitions an ACTIVE poll to CLOSED (guarded), scoped to overlayID so
 // a caller can only close a poll on an overlay they own. Returns the poll (idempotent
-// close). No source filter: closing a mirrored twitch_native poll from the panel is
-// allowed, mirroring GetActiveDisplayPoll's precedence rule.
+// close). source='allchat' only: a mirrored twitch_native poll is read-only (Twitch
+// owns its lifecycle), and closing it here would not merely flip the mirror once — via
+// UpsertNativePoll's monotonic CLOSED>ACTIVE guard, every subsequent Twitch tally
+// event would then be dropped, permanently freezing the mirror. Matches the source
+// guard on the prediction lifecycle siblings.
 func (r *Repository) ClosePoll(ctx context.Context, pollID, overlayID uuid.UUID) (*models.Poll, error) {
 	tag, err := r.db.Exec(ctx,
-		`UPDATE polls SET state = 'CLOSED', closed_at = NOW() WHERE id = $1 AND overlay_id = $2 AND state = 'ACTIVE'`, pollID, overlayID)
+		`UPDATE polls SET state = 'CLOSED', closed_at = NOW() WHERE id = $1 AND overlay_id = $2 AND state = 'ACTIVE' AND source = 'allchat'`, pollID, overlayID)
 	if err != nil {
 		return nil, fmt.Errorf("close poll: %w", err)
 	}
@@ -185,18 +200,30 @@ func (r *Repository) ClosePoll(ctx context.Context, pollID, overlayID uuid.UUID)
 	return r.GetPollForOverlay(ctx, pollID, overlayID)
 }
 
-// RecordVote records (or changes) a viewer's vote by option index. Returns
-// accepted=false without error when the option index is invalid or the poll is
-// not active (the chat path must not error-spam). Idempotent per (poll, viewer).
-func (r *Repository) RecordVote(ctx context.Context, pollID, viewerID uuid.UUID, optionIdx int, platform string, sourceMessageID *uuid.UUID) (bool, error) {
+// RecordVote records (or changes) a viewer's vote by option index. overlayID is
+// the overlay from the request path (web) or the chat-command's resolved overlay:
+// the vote is bound to it, so a poll owned by a different overlay is rejected. Returns
+// accepted=false without error when the option index is invalid, the poll is not
+// active, or the overlay/source does not match (the chat path must not error-spam).
+// Idempotent per (poll, viewer).
+func (r *Repository) RecordVote(ctx context.Context, pollID, viewerID, overlayID uuid.UUID, optionIdx int, platform string, sourceMessageID *uuid.UUID) (bool, error) {
 	var state, source string
 	var allowChange bool
-	err := r.db.QueryRow(ctx, `SELECT state, allow_change, source FROM polls WHERE id = $1`, pollID).Scan(&state, &allowChange, &source)
+	var rowOverlayID uuid.UUID
+	err := r.db.QueryRow(ctx, `SELECT state, allow_change, source, overlay_id FROM polls WHERE id = $1`, pollID).Scan(&state, &allowChange, &source, &rowOverlayID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
 	if err != nil {
 		return false, fmt.Errorf("load poll for vote: %w", err)
+	}
+	// Bind the vote to the request/command overlay: a poll owned by a DIFFERENT
+	// overlay must not accept a vote routed via another overlay's path (cross-tenant
+	// tally integrity). Mirrors Wager's overlay binding. Silent (false, no error) like
+	// the source/state checks so the chat path never spams and there is no cross-tenant
+	// existence oracle.
+	if rowOverlayID != overlayID {
+		return false, nil
 	}
 	// All-Chat votes must never land on a mirrored Twitch poll — its votes live on
 	// Twitch and its tally comes from mirror_votes, so an inserted poll_votes row

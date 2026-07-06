@@ -65,7 +65,7 @@ func (c *NativeConsumer) Run(ctx context.Context) {
 	c.log.Info("engagement native consumer started", zap.String("consumer", c.consumerName))
 
 	// A missed lock/end would strand a mirrored round live on the overlay with no
-	// later event to self-heal from (ADR-0029), so reclaim orphaned entries (H3).
+	// later event to self-heal from (ADR-0030), so reclaim orphaned entries (H3).
 	drainPEL(ctx, c.rdb, mpmodels.StreamEngagementTwitchNative, nativeConsumerGroup, c.consumerName, c.log, c.safeHandle)
 	go periodicDrain(ctx, c.rdb, mpmodels.StreamEngagementTwitchNative, nativeConsumerGroup, c.consumerName, c.log, c.safeHandle)
 
@@ -112,7 +112,11 @@ func (c *NativeConsumer) safeHandle(ctx context.Context, msg redis.XMessage) (er
 			err = nil
 		}
 	}()
-	return c.handle(ctx, msg)
+	// Per-message deadline (see CommandConsumer.safeHandle) — bounds a stuck upsert so
+	// it can't wedge the native consumer or the PEL drain.
+	hctx, cancel := context.WithTimeout(ctx, handleTimeout)
+	defer cancel()
+	return c.handle(hctx, msg)
 }
 
 // handle mirrors one native lifecycle event. Returns nil on success or a
@@ -204,7 +208,7 @@ func (c *NativeConsumer) mirrorPoll(ctx context.Context, overlayID uuid.UUID, ev
 }
 
 // broadcastDisplayPoll publishes the overlay's DISPLAY poll rather than the specific
-// native round just upserted. The pub/sub channel is last-writer-wins, and ADR-0029
+// native round just upserted. The pub/sub channel is last-writer-wins, and ADR-0030
 // requires a live All-Chat round to keep the wire (it holds real wagered points and
 // must stay resolvable) — so broadcasting the native snapshot directly could clobber
 // it on any real-time consumer. GetActiveDisplayPoll applies that precedence; when
@@ -255,7 +259,7 @@ func (c *NativeConsumer) mirrorPrediction(ctx context.Context, overlayID uuid.UU
 
 // broadcastDisplayPrediction publishes the overlay's DISPLAY prediction, keeping a
 // live All-Chat round on the wire ahead of a mirrored Twitch one (see
-// broadcastDisplayPoll / ADR-0029). Falls back to the upserted row when none is
+// broadcastDisplayPoll / ADR-0030). Falls back to the upserted row when none is
 // active so a RESOLVED/CANCELED frame still propagates (M-C2).
 func (c *NativeConsumer) broadcastDisplayPrediction(ctx context.Context, overlayID uuid.UUID, upserted *models.Prediction) {
 	disp, err := c.repo.GetActiveDisplayPrediction(ctx, overlayID)

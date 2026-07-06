@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -49,6 +50,11 @@ type SubscriptionManager struct {
 	logger        *zap.Logger
 	httpClient    *http.Client // Dedicated client with timeout (audit L25)
 
+	// Endpoint overrides — default to the package consts EventSubAPIURL/TokenURL,
+	// but overridable in tests so HTTP interactions can be pointed at httptest servers.
+	apiURL   string
+	tokenURL string
+
 	// Track active subscriptions
 	mu            sync.RWMutex
 	subscriptions map[string]string // broadcaster_id -> subscription_id
@@ -64,6 +70,8 @@ func NewSubscriptionManager(clientID, clientSecret, webhookSecret, callbackURL s
 		logger:        logger,
 		subscriptions: make(map[string]string),
 		httpClient:    &http.Client{Timeout: 10 * time.Second},
+		apiURL:        EventSubAPIURL,
+		tokenURL:      TokenURL,
 	}
 }
 
@@ -78,10 +86,10 @@ func (sm *SubscriptionManager) getAccessToken(ctx context.Context) (string, erro
 	}
 
 	// Request new token using client credentials flow
-	url := fmt.Sprintf("%s?client_id=%s&client_secret=%s&grant_type=client_credentials",
-		TokenURL, sm.clientID, sm.clientSecret)
+	tokenURL := fmt.Sprintf("%s?client_id=%s&client_secret=%s&grant_type=client_credentials",
+		sm.tokenURL, sm.clientID, sm.clientSecret)
 
-	req, err := http.NewRequestWithContext(ctx, "POST", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "POST", tokenURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create token request: %w", err)
 	}
@@ -348,8 +356,8 @@ func (sm *SubscriptionManager) Unsubscribe(ctx context.Context, broadcasterID st
 
 	var firstErr error
 	for key, subscriptionID := range toDelete {
-		url := fmt.Sprintf("%s?id=%s", EventSubAPIURL, subscriptionID)
-		req, err := http.NewRequestWithContext(ctx, "DELETE", url, nil)
+		deleteURL := fmt.Sprintf("%s?id=%s", sm.apiURL, subscriptionID)
+		req, err := http.NewRequestWithContext(ctx, "DELETE", deleteURL, nil)
 		if err != nil {
 			if firstErr == nil {
 				firstErr = fmt.Errorf("failed to create delete request for %s: %w", key, err)
@@ -408,7 +416,7 @@ func (sm *SubscriptionManager) UnsubscribeType(ctx context.Context, broadcasterI
 		return fmt.Errorf("failed to get access token: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "DELETE", fmt.Sprintf("%s?id=%s", EventSubAPIURL, subscriptionID), nil)
+	req, err := http.NewRequestWithContext(ctx, "DELETE", fmt.Sprintf("%s?id=%s", sm.apiURL, subscriptionID), nil)
 	if err != nil {
 		return fmt.Errorf("failed to create delete request: %w", err)
 	}
@@ -488,7 +496,7 @@ func (sm *SubscriptionManager) subscribeWithCondition(ctx context.Context, subsc
 		return "", fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", EventSubAPIURL, bytes.NewReader(bodyBytes))
+	req, err := http.NewRequestWithContext(ctx, "POST", sm.apiURL, bytes.NewReader(bodyBytes))
 	if err != nil {
 		return "", fmt.Errorf("failed to create subscription request: %w", err)
 	}
@@ -504,6 +512,32 @@ func (sm *SubscriptionManager) subscribeWithCondition(ctx context.Context, subsc
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
+
+	// HTTP 409 = the subscription already exists on Twitch's side (e.g. a prior leadership
+	// term created it, then the in-memory cache was cleared on leadership change). The POST
+	// never returns the existing subscription id, so without reconciliation Unsubscribe /
+	// UnsubscribeType — which look up sm.subscriptions — become no-ops and the live Twitch
+	// subscription leaks. Fetch the existing id via GET and repopulate the cache so teardown
+	// works. This matters especially for the always-on channel.poll.* / channel.prediction.*
+	// types (#523/#524) whose 409s recur on every leadership change.
+	if resp.StatusCode == http.StatusConflict {
+		existingID, getErr := sm.getExistingSubscriptionID(ctx, subscriptionType, broadcasterID, token)
+		if getErr != nil {
+			return "", fmt.Errorf("subscription already exists (409) but failed to reconcile existing subscription for %s: %w", subscriptionType, getErr)
+		}
+
+		sm.mu.Lock()
+		sm.subscriptions[cacheKey] = existingID
+		sm.mu.Unlock()
+
+		sm.logger.Info("Reconciled existing EventSub subscription on 409",
+			zap.String("broadcaster_id", broadcasterID),
+			zap.String("subscription_id", existingID),
+			zap.String("type", subscriptionType),
+		)
+
+		return existingID, nil
+	}
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
 		return "", fmt.Errorf("subscription failed with status %d: %s", resp.StatusCode, string(body))
@@ -540,6 +574,66 @@ func (sm *SubscriptionManager) subscribeWithCondition(ctx context.Context, subsc
 	)
 
 	return subscriptionID, nil
+}
+
+// getExistingSubscriptionID looks up the id of an EventSub subscription that already exists on
+// Twitch's side by querying the subscriptions endpoint filtered by type + user_id. Used to
+// reconcile the in-memory cache after a POST returns HTTP 409 ("subscription already exists").
+// The caller must pass an already-obtained app access token (this method does not take sm.mu).
+// Returns the id of the row whose Type matches subscriptionType, preferring a Status == "enabled"
+// row when several are returned.
+func (sm *SubscriptionManager) getExistingSubscriptionID(ctx context.Context, subscriptionType, broadcasterID, token string) (string, error) {
+	getURL := sm.apiURL + "?type=" + url.QueryEscape(subscriptionType) + "&user_id=" + url.QueryEscape(broadcasterID)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", getURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create get-existing subscription request: %w", err)
+	}
+	req.Header.Set("Client-Id", sm.clientID)
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := sm.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to get existing subscription: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("get existing subscription failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var listResp struct {
+		Data []struct {
+			ID     string `json:"id"`
+			Status string `json:"status"`
+			Type   string `json:"type"`
+		} `json:"data"`
+		Total int `json:"total"`
+	}
+
+	if err := json.Unmarshal(body, &listResp); err != nil {
+		return "", fmt.Errorf("failed to decode existing subscription response: %w", err)
+	}
+
+	// Prefer an enabled row of the requested type; fall back to the first matching-type row.
+	fallbackID := ""
+	for _, row := range listResp.Data {
+		if row.Type != subscriptionType {
+			continue
+		}
+		if row.Status == "enabled" {
+			return row.ID, nil
+		}
+		if fallbackID == "" {
+			fallbackID = row.ID
+		}
+	}
+	if fallbackID != "" {
+		return fallbackID, nil
+	}
+
+	return "", fmt.Errorf("no existing subscription found for type %s and broadcaster %s", subscriptionType, broadcasterID)
 }
 
 // GetActiveSubscriptions returns the list of active broadcaster IDs

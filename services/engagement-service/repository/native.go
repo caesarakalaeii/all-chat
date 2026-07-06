@@ -200,3 +200,57 @@ func (r *Repository) HasLiveNativePrediction(ctx context.Context, overlayID uuid
 	}
 	return exists, nil
 }
+
+// ForceCloseStaleNativePolls force-closes mirrored Twitch polls stuck ACTIVE past
+// ttl, returning the affected (id, overlay_id) so the caller can broadcast the
+// terminal frame and clear active flags. Native rows have no terminal sweep of
+// their own (CloseExpired is source='allchat' only), so a never-delivered
+// channel.poll.end (revoked sub, rotated secret, source removed mid-round) would
+// otherwise strand the row live forever and permanently 409-block All-Chat polls on
+// the overlay (HasLiveNativePoll). created_at is the only always-present age column
+// for native rows (ends_at/closed_at are populated only when Twitch supplies them).
+func (r *Repository) ForceCloseStaleNativePolls(ctx context.Context, ttl time.Duration) ([]PollRef, error) {
+	rows, err := r.db.Query(ctx,
+		`UPDATE polls SET state = 'CLOSED', closed_at = NOW()
+		 WHERE source = $1 AND state = 'ACTIVE' AND created_at <= NOW() - make_interval(secs => $2)
+		 RETURNING id, overlay_id`,
+		models.SourceTwitchNative, int(ttl.Seconds()))
+	if err != nil {
+		return nil, fmt.Errorf("force-close stale native polls: %w", err)
+	}
+	defer rows.Close()
+	var out []PollRef
+	for rows.Next() {
+		var ref PollRef
+		if err := rows.Scan(&ref.PollID, &ref.OverlayID); err != nil {
+			return nil, fmt.Errorf("scan stale native poll ref: %w", err)
+		}
+		out = append(out, ref)
+	}
+	return out, rows.Err()
+}
+
+// ForceCloseStaleNativePredictions cancels mirrored Twitch predictions stuck
+// ACTIVE/LOCKED past ttl — CANCELED, not RESOLVED, because there is no known winner.
+// Native rows never touch viewer_points, so canceling a mirror has NO points-economy
+// side effect (no payout to reconcile, no refund). See ForceCloseStaleNativePolls.
+func (r *Repository) ForceCloseStaleNativePredictions(ctx context.Context, ttl time.Duration) ([]PredictionRef, error) {
+	rows, err := r.db.Query(ctx,
+		`UPDATE predictions SET state = 'CANCELED', resolved_at = NOW()
+		 WHERE source = $1 AND state IN ('ACTIVE','LOCKED') AND created_at <= NOW() - make_interval(secs => $2)
+		 RETURNING id, overlay_id`,
+		models.SourceTwitchNative, int(ttl.Seconds()))
+	if err != nil {
+		return nil, fmt.Errorf("force-close stale native predictions: %w", err)
+	}
+	defer rows.Close()
+	var out []PredictionRef
+	for rows.Next() {
+		var ref PredictionRef
+		if err := rows.Scan(&ref.PredictionID, &ref.OverlayID); err != nil {
+			return nil, fmt.Errorf("scan stale native prediction ref: %w", err)
+		}
+		out = append(out, ref)
+	}
+	return out, rows.Err()
+}

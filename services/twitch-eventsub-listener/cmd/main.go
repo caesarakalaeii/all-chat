@@ -366,7 +366,7 @@ func main() {
 			// until the owner runs the engagement re-consent). Best-effort like the moderation subs.
 			// Like every event sub here, these are created once when a channel is first tracked, so
 			// a grant made after tracking begins takes effect on the next channel (re)sync — a leader
-			// change, pod restart, or the channel being re-added (ADR-0029 known limitation).
+			// change, pod restart, or the channel being re-added (ADR-0030 known limitation).
 			for _, sub := range []struct {
 				name string
 				fn   func(context.Context, string) (string, error)

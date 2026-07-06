@@ -327,7 +327,7 @@ func main() {
 		// messages keep flowing into the buffer while the client reconnects.
 		// AddOnce uses a stable per-message SETNX marker so multi-pod writes
 		// converge on a single buffer entry — no cross-pod duplicates.
-		if count == 0 && overlayID != testStreamOverlayID {
+		if shouldBufferForReplay(msgType, overlayID, testStreamOverlayID, count) {
 			added, err := chatReplayBuffer.AddOnce(context.Background(), overlayID, unifiedMsg.ID, wsJSON, wsMsg.Timestamp)
 			if err != nil {
 				log.Warn("Failed to add message to chat replay buffer",
@@ -860,6 +860,23 @@ func main() {
 }
 
 // getEnvOrDefault gets an environment variable or returns a default value
+// shouldBufferForReplay reports whether a broadcast frame should be written to
+// the chat replay buffer. Frames are buffered only when this pod has no live
+// connections for the overlay (so a reconnecting client can catch up) and the
+// overlay is not the throwaway public test-stream overlay.
+//
+// Poll and prediction snapshot frames are excluded: they carry no top-level id
+// (so buffer dedup falls back to an unconditional per-pod write, creating
+// duplicate refetch signals on reconnect and evicting real chat history), and
+// they are ephemeral refetch signals that clients re-hydrate over HTTP on
+// reconnect. They must never enter the chat replay buffer.
+func shouldBufferForReplay(msgType models.WSMessageType, overlayID, testStreamOverlayID string, liveConnCount int) bool {
+	return liveConnCount == 0 &&
+		overlayID != testStreamOverlayID &&
+		msgType != models.WSMessageTypePollUpdate &&
+		msgType != models.WSMessageTypePredictionUpdate
+}
+
 func getEnvOrDefault(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value

@@ -1,4 +1,4 @@
-# ADR-0028: Viewer Points Economy & Prediction Payout Model
+# ADR-0029: Viewer Points Economy & Prediction Payout Model
 
 **Date**: 2026-07-01
 **Status**: Accepted
@@ -33,7 +33,7 @@ State machine `CREATED → ACTIVE → LOCKED → (RESOLVED | CANCELED)`, all tra
 Winners receive their stake plus `floor(losersPool * stake / winnersPool)`; the integer remainder goes to the largest-stake winner (tie-break: lowest viewer UUID). This conserves points exactly (`sum(credits) == sum(stakes)`), is deterministic, and is computed with `math/big` so a large pool can't overflow. Edge cases: **no winners** ⇒ refund every stake; **one-sided** ⇒ each winner just gets their stake back. Resolve is idempotent via the guarded transition + per-viewer `payout:` dedup keys. (Unit-tested in `engine/payout_test.go`.)
 
 ### Twitch-native predictions mirror state only — they do NOT use All-Chat points
-A `source = 'twitch_native'` prediction (mirrored from EventSub, ADR-0027 companion work) uses **Twitch Channel Points**, which All-Chat cannot debit or credit. engagement-service therefore records its state/tallies for unified display but **never** touches `viewer_points` for it. All-Chat points wagering applies only to `source = 'allchat'` predictions. Twitch-native *polls* may still award All-Chat participation points (no wager is involved). This is the only coherent semantic — anything else would either double-charge viewers or claim to move a currency we don't control.
+A `source = 'twitch_native'` prediction (mirrored from EventSub, ADR-0028 companion work) uses **Twitch Channel Points**, which All-Chat cannot debit or credit. engagement-service therefore records its state/tallies for unified display but **never** touches `viewer_points` for it. All-Chat points wagering applies only to `source = 'allchat'` predictions. Twitch-native *polls* may still award All-Chat participation points (no wager is involved). This is the only coherent semantic — anything else would either double-charge viewers or claim to move a currency we don't control.
 
 ## Considered Alternatives
 

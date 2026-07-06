@@ -24,12 +24,12 @@ import (
 
 func TestParseCommand(t *testing.T) {
 	tests := []struct {
-		name    string
-		text    string
-		kind    cmdKind
-		idx     int
-		amount  int64
-		wantOK  bool
+		name   string
+		text   string
+		kind   cmdKind
+		idx    int
+		amount int64
+		wantOK bool
 	}{
 		{"explicit vote", "!vote 2", cmdVote, 2, 0, true},
 		{"short vote alias", "!v 3", cmdVote, 3, 0, true},

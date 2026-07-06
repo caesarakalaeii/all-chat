@@ -806,7 +806,7 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
     }
   }
 
-  // Twitch native mirroring opt-in (ADR-0029). Adds read-only channel:read:polls /
+  // Twitch native mirroring opt-in (ADR-0030). Adds read-only channel:read:polls /
   // predictions scopes; the consent flow returns to the Monitor view.
   const startMirrorConsent = async () => {
     try {
@@ -856,7 +856,7 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
           />
           Announce new rounds in chat
         </label>
-        <p className="mt-0.5 text-[11px] text-text-sub/70">
+        <p className="mt-0.5 text-[11px] text-text-sub">
           Posts the question, numbered options and the participate link to your chat when a round
           starts. Needs the “advanced controls” send permission (the same grant the Monitor view’s
           chat sending uses) — without it the announcement is skipped.
@@ -891,7 +891,7 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
               onChange={(e) => setNumbers({ ...numbers, [f.key]: e.target.value })}
               className={cn('w-full rounded-md border border-border bg-bg px-2 py-1 text-xs text-text', f.comingSoon && 'opacity-50')}
             />
-            <p className="mt-0.5 text-[11px] text-text-sub/70">
+            <p className="mt-0.5 text-[11px] text-text-sub">
               {f.hint}
               {f.comingSoon && ' (coming soon)'}
             </p>
@@ -909,7 +909,7 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
           <div key={link.path} className="flex items-center gap-2">
             <div className="min-w-0 flex-1">
               <p className="text-xs text-text">{link.label}</p>
-              <p className="text-[11px] text-text-sub/70">{link.desc}</p>
+              <p className="text-[11px] text-text-sub">{link.desc}</p>
             </div>
             <Button
               type="button"
@@ -923,13 +923,13 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
           </div>
         ))}
         {/* L-Docs1: browser-source setup guidance for the two OBS widgets. */}
-        <p className="text-[11px] text-text-sub/70">
+        <p className="text-[11px] text-text-sub">
           In OBS/Streamlabs: add a <span className="font-medium">Browser Source</span>, paste a
           widget URL, and set it to your canvas size (e.g. 1920×1080). The widgets are transparent
           and only appear while a round is live.
         </p>
         {/* L-U9: the participation link is meant to be shared with viewers (on-screen / panels). */}
-        <p className="text-[11px] text-text-sub/70">
+        <p className="text-[11px] text-text-sub">
           Share the participation link with mobile viewers — put it on-screen or in your channel
           panels so they can join without the extension.
         </p>
@@ -941,7 +941,7 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
           Monitor view, where the mirrored rounds appear. */}
       <div className="space-y-2 border-t border-border pt-3">
         <p className="text-xs font-medium text-text">Twitch native mirroring</p>
-        <p className="text-[11px] text-text-sub/70">
+        <p className="text-[11px] text-text-sub">
           Mirror your native Twitch polls &amp; predictions onto All-Chat overlays (read-only —
           viewers still vote in Twitch). Opt-in; it adds read-only Twitch scopes and takes effect
           after the next channel sync (a stream restart or re-adding the source).

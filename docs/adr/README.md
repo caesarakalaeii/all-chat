@@ -378,36 +378,36 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
-### ADR-0027: Engagement Chat-Command Write-Path
+### ADR-0028: Engagement Chat-Command Write-Path
 
 **Status**: ✅ Accepted
 **Date**: 2026-07-01
 **Problem**: Cross-platform polls/predictions (issue #523) only pay off if the default, non-extension viewer can participate — gating on the low-adoption extension yields empty polls; how does a chat message become a validated vote/wager without regressing the message-processor hot path?
 **Decision**: message-processor does a cheap text pre-check + `EXISTS engagement:active:{platform}:{channel}` and forwards candidate commands to a durable `engagement:commands` stream; engagement-service parses/validates/writes off the hot path, resolving `viewer_id` via the existing `GetOrCreateViewerByPlatform`. Earning rides a separate best-effort `engagement:events` Pub/Sub. No platform-chat spam (send is opt-in); feedback via the broadcast tally + pull endpoint
 **Impact**: Universal, zero-install participation across all platforms; extension/web page become enhancements; hot path adds only a pre-check for command-shaped messages. (ADR-0021/0022 live in caesar-deployment; numbering is shared, so this is 0027)
-**→ Read**: [0027-engagement-chat-command-write-path.md](./0027-engagement-chat-command-write-path.md)
+**→ Read**: [0028-engagement-chat-command-write-path.md](./0028-engagement-chat-command-write-path.md)
 
 ---
 
-### ADR-0028: Viewer Points Economy & Prediction Payout Model
+### ADR-0029: Viewer Points Economy & Prediction Payout Model
 
 **Status**: ✅ Accepted
 **Date**: 2026-07-01
 **Problem**: Issue #523 adds All-Chat's first stateful virtual economy (viewer points + points-wagered predictions); its integrity model must be pinned down under concurrency, retries, and multi-replica Pub/Sub fan-out, and reconciled with Twitch's own Channel Points on mirrored predictions
 **Decision**: Per-overlay economy; append-only `points_transactions` ledger + materialized balance, idempotent via `UNIQUE dedup_key`; wagers guard `balance >= amt` under `SELECT ... FOR UPDATE`; payout = stake + proportional split of the losers' pool with the integer remainder to the largest stake (conserves points, `math/big`); guarded state transitions + restart-safe auto-lock sweep; **Twitch-native predictions mirror state only and never touch All-Chat points** (they use Twitch Channel Points); private balance delivery is pull-first (broadcast WS would leak it)
 **Impact**: Economy is correct-by-construction under retries/concurrency/fan-out; unit-tested payout conservation; points name is streamer-configurable (no hard-coded brand). (ADR numbering shared with caesar-deployment, so this is 0028)
-**→ Read**: [0028-viewer-points-economy-and-prediction-payout.md](./0028-viewer-points-economy-and-prediction-payout.md)
+**→ Read**: [0029-viewer-points-economy-and-prediction-payout.md](./0029-viewer-points-economy-and-prediction-payout.md)
 
 ---
 
-### ADR-0029: Twitch-Native Poll/Prediction Mirroring
+### ADR-0030: Twitch-Native Poll/Prediction Mirroring
 
 **Status**: ✅ Accepted
 **Date**: 2026-07-06
 **Problem**: A Twitch streamer can run polls/predictions through Twitch's own UI (settled in Channel Points); those rounds are invisible to All-Chat overlays, and reflecting them must never mix Twitch's currency with All-Chat viewer points or open a write path into a round Twitch owns
 **Decision**: Opt-in `channel:read:polls`/`predictions` re-consent (non-fatal scope errors); the EventSub listener normalizes `channel.poll.*`/`channel.prediction.*` to a shared `NativeEngagementEvent` on the **durable** `engagement:twitch-native` stream; engagement-service upserts `source='twitch_native'` rows (per overlay, keyed by migration-070's `(overlay_id, source, external_id)` index) storing aggregate `mirror_*` tallies and re-broadcasts via the existing publisher. **Currency isolation is structural**: native rows never set the chat-active flag, the vote/wager/ledger paths stay `source='allchat'`-only, and public rendering uses separate native-preferring display queries; read tallies are `computed + mirror` (exact because each source populates only one side). Live native rounds 409 the All-Chat create endpoints.
 **Impact**: Overlays reflect native Twitch rounds with zero new render/broadcast/type surface (the `source` discriminator does the work); points integrity is enforced by unreachability, not convention; invisible and cost-free on channels that don't opt in. (ADR numbering shared with caesar-deployment, so this is 0029)
-**→ Read**: [0029-twitch-native-engagement-mirroring.md](./0029-twitch-native-engagement-mirroring.md)
+**→ Read**: [0030-twitch-native-engagement-mirroring.md](./0030-twitch-native-engagement-mirroring.md)
 
 ---
 

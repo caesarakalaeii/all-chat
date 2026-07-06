@@ -1,4 +1,4 @@
-# ADR-0027: Engagement Chat-Command Write-Path
+# ADR-0028: Engagement Chat-Command Write-Path
 
 **Date**: 2026-07-01
 **Status**: Accepted
@@ -40,7 +40,7 @@ Every ingested chat message already carries a stable per-platform user id (`Unif
 
 ## Consequences
 
-- The extension and the no-install web page become *enhancements* (richer UI, private balance display, wager confirmation), not gates. Twitch viewers additionally get their native poll/prediction UI mirrored (see ADR-0028 for the points semantics).
+- The extension and the no-install web page become *enhancements* (richer UI, private balance display, wager confirmation), not gates. Twitch viewers additionally get their native poll/prediction UI mirrored (see ADR-0029 for the points semantics).
 - One new Redis stream (`engagement:commands`), one Pub/Sub channel (`engagement:events`), and one refcounted flag key family (`engagement:active:*`). The hot path gains a pre-check + at most one `EXISTS`/`XADD` for command-shaped messages on channels with a live engagement.
 - Chat-participation *points* (as opposed to votes) are deferred in v1 to keep the hot path free of a per-message Redis op; the earn consumer already supports the `engagement:chat` signal when a future revision decides the cost is worth it.
 - Multi-overlay channels: a `CommandJob` carries `(platform, channel_id)`; engagement-service resolves every overlay that carries the channel and applies to those with a live engagement.

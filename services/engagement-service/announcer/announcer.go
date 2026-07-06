@@ -27,6 +27,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -203,7 +204,30 @@ func (a *Announcer) postAnnounce(ctx context.Context, userID, message string, pl
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("announce endpoint returned %d", resp.StatusCode)
+		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return fmt.Errorf("announce endpoint returned %d: %s", resp.StatusCode, strings.TrimSpace(string(snippet)))
+	}
+	// auth-service returns 200 even when nothing was actually posted — no sendable
+	// platform is connected, or every per-platform send failed (missing user:write:chat
+	// scope, stream offline, …). The real outcome is in the body, not the status, so
+	// decode it: otherwise a fully-failed or no-op announce is silently treated as
+	// delivered and the per-platform error_kind is discarded.
+	var out announceResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return fmt.Errorf("decode announce response: %w", err)
+	}
+	if !out.Success {
+		detail := failedResults(out.Results)
+		if detail == "" {
+			detail = "no sendable platform connected"
+		}
+		return fmt.Errorf("announce not delivered (%s)", detail)
+	}
+	// Delivered on at least one platform; surface any partial failures so a streamer's
+	// mis-scoped/offline platform is visible without failing the best-effort announce.
+	if partial := failedResults(out.Results); partial != "" {
+		a.log.Warn("engagement chat announce partially delivered",
+			zap.String("user", userID), zap.String("failed", partial))
 	}
 	return nil
 }
@@ -228,4 +252,35 @@ type announceRequest struct {
 	UserID    string   `json:"user_id"`
 	Message   string   `json:"message"`
 	Platforms []string `json:"platforms"`
+}
+
+// announceResult mirrors one platform's outcome in the auth-service response.
+type announceResult struct {
+	Platform  string `json:"platform"`
+	Success   bool   `json:"success"`
+	ErrorKind string `json:"error_kind"`
+}
+
+// announceResponse is the body auth-service returns from /internal/chat/announce.
+// success is false when no platform was actually posted to (even on HTTP 200).
+type announceResponse struct {
+	Success bool             `json:"success"`
+	Results []announceResult `json:"results"`
+}
+
+// failedResults summarizes the non-successful platforms as "platform:error_kind"
+// for logs/errors; empty string when every result succeeded.
+func failedResults(results []announceResult) string {
+	var parts []string
+	for _, r := range results {
+		if r.Success {
+			continue
+		}
+		kind := r.ErrorKind
+		if kind == "" {
+			kind = "failed"
+		}
+		parts = append(parts, r.Platform+":"+kind)
+	}
+	return strings.Join(parts, ", ")
 }

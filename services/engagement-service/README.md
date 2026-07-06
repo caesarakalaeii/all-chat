@@ -4,7 +4,7 @@ Cross-platform **polls, predictions, and a per-overlay viewer points economy** (
 
 Participation is **universal and install-free**: viewers vote and wager by typing in native platform chat (`!vote 2`, a bare `2`, `!predict 1 500`) on Twitch/YouTube/Kick/TikTok. An authenticated web page and the browser extension are richer *enhancements*, not gates. Twitch viewers additionally get their native poll/prediction UI mirrored (state only — those use Twitch Channel Points, not All-Chat points).
 
-See **ADR-0027** (chat-command write-path) and **ADR-0028** (points economy + prediction payout model) for the why.
+See **ADR-0028** (chat-command write-path) and **ADR-0029** (points economy + prediction payout model) for the why.
 
 ## Architecture
 

@@ -1,4 +1,4 @@
--- 069_engagement_predictions.sql
+-- 070_engagement_predictions.sql
 -- Description: Cross-platform predictions (issue #523). All-Chat-native predictions
 -- (source 'allchat') wager viewer_points; winners split the losers' pool
 -- proportionally. Mirrored Twitch-native predictions (source 'twitch_native') are

@@ -1,8 +1,8 @@
--- 071_engagement_dedup_scope_and_announce.sql
+-- 072_engagement_dedup_scope_and_announce.sql
 -- Description: three engagement follow-ups (PR #524 review).
 --
 -- 1. Rescope the chat replay-dedup indexes to the round. A single chat message can
---    fan out to several overlays that source the same channel (ADR-0027); the vote
+--    fan out to several overlays that source the same channel (ADR-0028); the vote
 --    or wager recorded for each overlay carries the SAME source_message_id, so a
 --    GLOBAL unique index on source_message_id trips a unique_violation on the 2nd+
 --    overlay and silently drops those votes/wagers. Scope the dedup per round so

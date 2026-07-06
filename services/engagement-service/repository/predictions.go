@@ -31,9 +31,9 @@ import (
 // WagerResult reports the outcome of a wager attempt. Reason is a short machine
 // code the web handler maps to a 4xx and the chat consumer logs silently.
 type WagerResult struct {
-	Accepted    bool
-	Reason      string // "" on success; "not_found"|"not_active"|"bad_outcome"|"already_wagered"|"insufficient"|"native"
-	NewBalance  int64
+	Accepted   bool
+	Reason     string // "" on success; "not_found"|"not_active"|"bad_outcome"|"already_wagered"|"insufficient"|"native"
+	NewBalance int64
 }
 
 // CreatePrediction creates an ACTIVE All-Chat-native prediction with its outcomes.
@@ -134,17 +134,24 @@ func (r *Repository) GetActivePrediction(ctx context.Context, overlayID uuid.UUI
 }
 
 // GetActiveDisplayPrediction returns the overlay's live prediction of EITHER
-// source for public rendering. If both are somehow live, the All-Chat prediction
-// wins the display: it holds real wagered viewer points that MUST stay resolvable
-// from the control panel, so it can't be shadowed by a mirrored Twitch round
-// (which carries no All-Chat points). The create-time 409 already blocks a NEW
-// All-Chat prediction while a native one is live; this covers the reverse order
-// (a Twitch prediction beginning after an All-Chat one is already running).
+// source for public rendering, plus one resolved/canceled within the last
+// displayGraceSeconds so the OBS widget can show the "who won" reveal before it
+// clears. If both are somehow live, the All-Chat prediction wins the display: it
+// holds real wagered viewer points that MUST stay resolvable from the control
+// panel, so it can't be shadowed by a mirrored Twitch round (which carries no
+// All-Chat points). The create-time 409 already blocks a NEW All-Chat prediction
+// while a native one is live; this covers the reverse order (a Twitch prediction
+// beginning after an All-Chat one is already running). A still-live round always
+// outranks a terminal grace-window one (see the leading ORDER BY key).
 func (r *Repository) GetActiveDisplayPrediction(ctx context.Context, overlayID uuid.UUID) (*models.Prediction, error) {
 	var id uuid.UUID
 	err := r.db.QueryRow(ctx,
-		`SELECT id FROM predictions WHERE overlay_id = $1 AND state IN ('ACTIVE','LOCKED')
-		 ORDER BY (source = 'allchat') DESC, created_at DESC LIMIT 1`, overlayID).Scan(&id)
+		`SELECT id FROM predictions
+		 WHERE overlay_id = $1
+		   AND (state IN ('ACTIVE','LOCKED')
+		        OR (state IN ('RESOLVED','CANCELED') AND resolved_at IS NOT NULL AND resolved_at > NOW() - make_interval(secs => $2)))
+		 ORDER BY (state IN ('ACTIVE','LOCKED')) DESC, (source = 'allchat') DESC, created_at DESC LIMIT 1`,
+		overlayID, displayGraceSeconds).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -203,7 +210,7 @@ func (r *Repository) Wager(ctx context.Context, predictionID, viewerID, overlayI
 	if err != nil {
 		return WagerResult{}, fmt.Errorf("lock prediction row: %w", err)
 	}
-	// The balance is a per-(viewer, overlay) economy (ADR-0028). The caller passes
+	// The balance is a per-(viewer, overlay) economy (ADR-0029). The caller passes
 	// overlayID from the :id path, but resolution later credits the prediction's
 	// OWN overlay — so if the path overlay does not own this prediction, the stake
 	// would be debited from one economy and the payout minted into another
