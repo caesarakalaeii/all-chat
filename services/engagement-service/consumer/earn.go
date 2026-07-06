@@ -60,12 +60,24 @@ func (e *EarnConsumer) Run(ctx context.Context) {
 			}
 			switch msg.Channel {
 			case mpmodels.ChannelEngagementEvents:
-				e.handleEvent(ctx, []byte(msg.Payload))
+				e.safely("earn event", func() { e.handleEvent(ctx, []byte(msg.Payload)) })
 			case mpmodels.ChannelEngagementChat:
-				e.handleChat(ctx, []byte(msg.Payload))
+				e.safely("earn chat", func() { e.handleChat(ctx, []byte(msg.Payload)) })
 			}
 		}
 	}
+}
+
+// safely runs fn under a recover so one poison payload can't kill the Run goroutine
+// and silently stop earning for the pod's lifetime (L-C3). Pub/Sub has no ack, so a
+// recovered panic just logs — the payload is already consumed and won't redeliver.
+func (e *EarnConsumer) safely(what string, fn func()) {
+	defer func() {
+		if r := recover(); r != nil {
+			e.log.Error("panic in engagement earn handler", zap.String("handler", what), zap.Any("panic", r))
+		}
+	}()
+	fn()
 }
 
 // handleEvent awards points for a monetary/loyalty event. The unified message is

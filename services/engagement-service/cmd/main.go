@@ -38,6 +38,7 @@ import (
 	"github.com/caesar/all-chat/shared/middleware"
 	"github.com/caesar/all-chat/shared/ratelimit"
 
+	"github.com/caesar/all-chat/services/engagement-service/announcer"
 	"github.com/caesar/all-chat/services/engagement-service/consumer"
 	"github.com/caesar/all-chat/services/engagement-service/handler"
 	"github.com/caesar/all-chat/services/engagement-service/publisher"
@@ -87,7 +88,21 @@ func main() {
 
 	repo := repository.New(dbPool)
 	pub := publisher.New(redisClient, log)
-	h := handler.New(repo, pub, log)
+
+	// Chat announcer (issue #523, H4-2): posts round-start messages to chat via
+	// auth-service's internal send endpoint, authenticated with a service JWT. Both
+	// the key chain and the auth-service URL are optional — a missing one disables the
+	// announce (no-op) rather than failing round creation.
+	var serviceKeys *sharedAuth.KeyChain
+	if kc, err := sharedAuth.NewKeyChainFromEnv("SERVICE_JWT_SECRET"); err != nil {
+		log.Warn("SERVICE_JWT_SECRET not set; chat announce disabled", zap.Error(err))
+	} else {
+		serviceKeys = kc
+	}
+	announce := announcer.New(repo, getEnv("AUTH_SERVICE_URL", "http://auth-service:8081"),
+		getEnv("ENGAGEMENT_PUBLIC_BASE_URL", "https://allch.at"), serviceKeys, log)
+
+	h := handler.New(repo, pub, announce, log)
 
 	// Background consumers + auto-lock/close sweep share one cancellable context,
 	// stopped on shutdown before the HTTP server drains.
@@ -210,9 +225,7 @@ func runSweeper(ctx context.Context, repo *repository.Repository, pub *publisher
 				if pred, err := repo.GetPrediction(ctx, ref.PredictionID); err == nil {
 					pub.PublishPrediction(ctx, pred)
 				}
-				if chans, err := repo.SourceChannelsForOverlay(ctx, ref.OverlayID); err == nil {
-					pub.ClearActive(ctx, ref.PredictionID, chans)
-				}
+				pub.ClearActive(ctx, ref.PredictionID)
 			}
 			closed, err := repo.CloseExpired(ctx)
 			if err != nil {
@@ -222,9 +235,7 @@ func runSweeper(ctx context.Context, repo *repository.Repository, pub *publisher
 				if poll, err := repo.GetPoll(ctx, ref.PollID); err == nil {
 					pub.PublishPoll(ctx, poll)
 				}
-				if chans, err := repo.SourceChannelsForOverlay(ctx, ref.OverlayID); err == nil {
-					pub.ClearActive(ctx, ref.PollID, chans)
-				}
+				pub.ClearActive(ctx, ref.PollID)
 			}
 		}
 	}

@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -63,6 +64,11 @@ func (c *NativeConsumer) Run(ctx context.Context) {
 	}
 	c.log.Info("engagement native consumer started", zap.String("consumer", c.consumerName))
 
+	// A missed lock/end would strand a mirrored round live on the overlay with no
+	// later event to self-heal from (ADR-0029), so reclaim orphaned entries (H3).
+	drainPEL(ctx, c.rdb, mpmodels.StreamEngagementTwitchNative, nativeConsumerGroup, c.consumerName, c.log, c.safeHandle)
+	go periodicDrain(ctx, c.rdb, mpmodels.StreamEngagementTwitchNative, nativeConsumerGroup, c.consumerName, c.log, c.safeHandle)
+
 	for {
 		if ctx.Err() != nil {
 			return
@@ -83,7 +89,12 @@ func (c *NativeConsumer) Run(ctx context.Context) {
 		}
 		for _, stream := range res {
 			for _, msg := range stream.Messages {
-				c.handle(ctx, msg)
+				// Ack only on success/permanent; a transient upsert error leaves the
+				// entry pending so the mirrored lifecycle event is retried (H2/H3).
+				if err := c.safeHandle(ctx, msg); err != nil {
+					c.log.Warn("native engagement deferred for retry", zap.String("id", msg.ID), zap.Error(err))
+					continue
+				}
 				if err := c.rdb.XAck(ctx, mpmodels.StreamEngagementTwitchNative, nativeConsumerGroup, msg.ID).Err(); err != nil {
 					c.log.Warn("xack native engagement", zap.String("id", msg.ID), zap.Error(err))
 				}
@@ -92,33 +103,53 @@ func (c *NativeConsumer) Run(ctx context.Context) {
 	}
 }
 
-func (c *NativeConsumer) handle(ctx context.Context, msg redis.XMessage) {
+// safeHandle runs handle under a recover (see CommandConsumer.safeHandle). A
+// recovered panic is permanent (returns nil → ack) so it can't poison the PEL.
+func (c *NativeConsumer) safeHandle(ctx context.Context, msg redis.XMessage) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			c.log.Error("panic handling native engagement", zap.Any("panic", r), zap.String("id", msg.ID))
+			err = nil
+		}
+	}()
+	return c.handle(ctx, msg)
+}
+
+// handle mirrors one native lifecycle event. Returns nil on success or a
+// permanently unprocessable event (bad JSON, missing ids), and a non-nil error only
+// on a transient DB failure so the caller leaves it pending for retry (H2/H3).
+func (c *NativeConsumer) handle(ctx context.Context, msg redis.XMessage) error {
 	raw, ok := msg.Values[mpmodels.FieldEngagementData].(string)
 	if !ok {
-		return
+		return nil
 	}
 	var ev mpmodels.NativeEngagementEvent
 	if err := json.Unmarshal([]byte(raw), &ev); err != nil {
 		c.log.Warn("unmarshal native engagement event", zap.Error(err))
-		return
+		return nil // permanent
 	}
 	if ev.ExternalID == "" || ev.ChannelID == "" {
-		return
+		return nil // malformed — nothing to mirror
 	}
 
 	overlays, err := c.repo.OverlaysForChannel(ctx, ev.Platform, ev.ChannelID)
 	if err != nil {
-		c.log.Warn("overlays for native channel", zap.Error(err))
-		return
+		return fmt.Errorf("overlays for native channel: %w", err) // transient → retry
 	}
+	var retryErr error
 	for _, overlayID := range overlays {
 		switch ev.Kind {
 		case mpmodels.NativeKindPoll:
-			c.mirrorPoll(ctx, overlayID, ev)
+			if err := c.mirrorPoll(ctx, overlayID, ev); err != nil {
+				retryErr = errors.Join(retryErr, err)
+			}
 		case mpmodels.NativeKindPrediction:
-			c.mirrorPrediction(ctx, overlayID, ev)
+			if err := c.mirrorPrediction(ctx, overlayID, ev); err != nil {
+				retryErr = errors.Join(retryErr, err)
+			}
 		}
 	}
+	return retryErr
 }
 
 // nativePollState maps a Twitch poll lifecycle phase to our two-state poll
@@ -148,7 +179,7 @@ func nativePredictionState(phase, status string) string {
 	}
 }
 
-func (c *NativeConsumer) mirrorPoll(ctx context.Context, overlayID uuid.UUID, ev mpmodels.NativeEngagementEvent) {
+func (c *NativeConsumer) mirrorPoll(ctx context.Context, overlayID uuid.UUID, ev mpmodels.NativeEngagementEvent) error {
 	state := nativePollState(ev.Event)
 	var closedAt *time.Time
 	if state == models.PollClosed {
@@ -163,16 +194,36 @@ func (c *NativeConsumer) mirrorPoll(ctx context.Context, overlayID uuid.UUID, ev
 	}
 	poll, err := c.repo.UpsertNativePoll(ctx, overlayID, ev.ExternalID, ev.Title, state, outcomes, ev.EndsAt, closedAt)
 	if err != nil {
-		c.log.Warn("mirror native poll", zap.String("external_id", ev.ExternalID), zap.Error(err))
-		return
+		return fmt.Errorf("mirror native poll %s: %w", ev.ExternalID, err) // transient → retry
 	}
 	if poll == nil {
-		return // stale/out-of-order event was ignored — nothing new to broadcast
+		return nil // stale/out-of-order event was ignored — nothing new to broadcast
 	}
-	c.pub.PublishPoll(ctx, poll)
+	c.broadcastDisplayPoll(ctx, overlayID, poll)
+	return nil
 }
 
-func (c *NativeConsumer) mirrorPrediction(ctx context.Context, overlayID uuid.UUID, ev mpmodels.NativeEngagementEvent) {
+// broadcastDisplayPoll publishes the overlay's DISPLAY poll rather than the specific
+// native round just upserted. The pub/sub channel is last-writer-wins, and ADR-0029
+// requires a live All-Chat round to keep the wire (it holds real wagered points and
+// must stay resolvable) — so broadcasting the native snapshot directly could clobber
+// it on any real-time consumer. GetActiveDisplayPoll applies that precedence; when
+// nothing is active (e.g. the native round just closed) we fall back to the upserted
+// row so the terminal frame still propagates (M-C2).
+func (c *NativeConsumer) broadcastDisplayPoll(ctx context.Context, overlayID uuid.UUID, upserted *models.Poll) {
+	disp, err := c.repo.GetActiveDisplayPoll(ctx, overlayID)
+	switch {
+	case err == nil:
+		c.pub.PublishPoll(ctx, disp)
+	case errors.Is(err, repository.ErrNotFound):
+		c.pub.PublishPoll(ctx, upserted)
+	default:
+		c.log.Warn("resolve display poll for native broadcast", zap.Error(err))
+		c.pub.PublishPoll(ctx, upserted)
+	}
+}
+
+func (c *NativeConsumer) mirrorPrediction(ctx context.Context, overlayID uuid.UUID, ev mpmodels.NativeEngagementEvent) error {
 	state := nativePredictionState(ev.Event, ev.Status)
 	var lockedAt, resolvedAt *time.Time
 	switch state {
@@ -193,11 +244,28 @@ func (c *NativeConsumer) mirrorPrediction(ctx context.Context, overlayID uuid.UU
 	pred, err := c.repo.UpsertNativePrediction(ctx, overlayID, ev.ExternalID, ev.Title, state,
 		ev.WinningExternalID, outcomes, ev.LocksAt, lockedAt, resolvedAt)
 	if err != nil {
-		c.log.Warn("mirror native prediction", zap.String("external_id", ev.ExternalID), zap.Error(err))
-		return
+		return fmt.Errorf("mirror native prediction %s: %w", ev.ExternalID, err) // transient → retry
 	}
 	if pred == nil {
-		return // stale/out-of-order event was ignored — nothing new to broadcast
+		return nil // stale/out-of-order event was ignored — nothing new to broadcast
 	}
-	c.pub.PublishPrediction(ctx, pred)
+	c.broadcastDisplayPrediction(ctx, overlayID, pred)
+	return nil
+}
+
+// broadcastDisplayPrediction publishes the overlay's DISPLAY prediction, keeping a
+// live All-Chat round on the wire ahead of a mirrored Twitch one (see
+// broadcastDisplayPoll / ADR-0029). Falls back to the upserted row when none is
+// active so a RESOLVED/CANCELED frame still propagates (M-C2).
+func (c *NativeConsumer) broadcastDisplayPrediction(ctx context.Context, overlayID uuid.UUID, upserted *models.Prediction) {
+	disp, err := c.repo.GetActiveDisplayPrediction(ctx, overlayID)
+	switch {
+	case err == nil:
+		c.pub.PublishPrediction(ctx, disp)
+	case errors.Is(err, repository.ErrNotFound):
+		c.pub.PublishPrediction(ctx, upserted)
+	default:
+		c.log.Warn("resolve display prediction for native broadcast", zap.Error(err))
+		c.pub.PublishPrediction(ctx, upserted)
+	}
 }

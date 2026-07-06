@@ -23,6 +23,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/caesar/all-chat/services/engagement-service/announcer"
 	"github.com/caesar/all-chat/services/engagement-service/publisher"
 	"github.com/caesar/all-chat/services/engagement-service/repository"
 	"github.com/gin-gonic/gin"
@@ -30,16 +31,17 @@ import (
 	"go.uber.org/zap"
 )
 
-// Handler wires the repository and publisher into the HTTP layer.
+// Handler wires the repository, publisher, and chat announcer into the HTTP layer.
 type Handler struct {
-	repo *repository.Repository
-	pub  *publisher.Publisher
-	log  *zap.Logger
+	repo      *repository.Repository
+	pub       *publisher.Publisher
+	announcer *announcer.Announcer
+	log       *zap.Logger
 }
 
-// New creates a Handler.
-func New(repo *repository.Repository, pub *publisher.Publisher, log *zap.Logger) *Handler {
-	return &Handler{repo: repo, pub: pub, log: log}
+// New creates a Handler. announce may be a disabled Announcer (its methods no-op).
+func New(repo *repository.Repository, pub *publisher.Publisher, announce *announcer.Announcer, log *zap.Logger) *Handler {
+	return &Handler{repo: repo, pub: pub, announcer: announce, log: log}
 }
 
 // requireUser aborts unless a streamer (user) JWT authenticated the request. The

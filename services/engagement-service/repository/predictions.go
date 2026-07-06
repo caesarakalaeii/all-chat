@@ -76,11 +76,11 @@ func (r *Repository) CreatePrediction(ctx context.Context, overlayID uuid.UUID, 
 	return p, nil
 }
 
-func (r *Repository) scanPrediction(ctx context.Context, q dbtx, where string, arg any) (*models.Prediction, error) {
+func (r *Repository) scanPrediction(ctx context.Context, q dbtx, where string, args ...any) (*models.Prediction, error) {
 	var p models.Prediction
 	err := q.QueryRow(ctx,
 		`SELECT id, overlay_id, source, external_id, title, state, winning_outcome_id, auto_lock_at, created_at, locked_at, resolved_at
-		 FROM predictions WHERE `+where, arg).
+		 FROM predictions WHERE `+where, args...).
 		Scan(&p.ID, &p.OverlayID, &p.Source, &p.ExternalID, &p.Title, &p.State, &p.WinningOutcomeID,
 			&p.AutoLockAt, &p.CreatedAt, &p.LockedAt, &p.ResolvedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -159,15 +159,25 @@ func (r *Repository) GetPrediction(ctx context.Context, predictionID uuid.UUID) 
 	return r.scanPrediction(ctx, r.db, `id = $1`, predictionID)
 }
 
+// GetPredictionForOverlay returns a prediction by id scoped to an overlay. A id
+// that belongs to a different overlay (or does not exist) yields ErrNotFound, which
+// the handlers map to 404 — so an owner of overlay A can never read or mutate a
+// prediction owned by overlay B via the guarded lifecycle endpoints.
+func (r *Repository) GetPredictionForOverlay(ctx context.Context, predictionID, overlayID uuid.UUID) (*models.Prediction, error) {
+	return r.scanPrediction(ctx, r.db, `id = $1 AND overlay_id = $2`, predictionID, overlayID)
+}
+
 // LockPrediction transitions ACTIVE→LOCKED (guarded). Idempotent: returns the
-// current prediction whether or not this call performed the transition.
-func (r *Repository) LockPrediction(ctx context.Context, predictionID uuid.UUID) (*models.Prediction, error) {
+// current prediction whether or not this call performed the transition. Scoped to
+// overlayID so a caller can only lock a prediction on an overlay they own — a
+// mismatched (cross-tenant) id updates 0 rows and returns ErrNotFound.
+func (r *Repository) LockPrediction(ctx context.Context, predictionID, overlayID uuid.UUID) (*models.Prediction, error) {
 	if _, err := r.db.Exec(ctx,
 		`UPDATE predictions SET state = 'LOCKED', locked_at = NOW()
-		 WHERE id = $1 AND state = 'ACTIVE' AND source = 'allchat'`, predictionID); err != nil {
+		 WHERE id = $1 AND overlay_id = $2 AND state = 'ACTIVE' AND source = 'allchat'`, predictionID, overlayID); err != nil {
 		return nil, fmt.Errorf("lock prediction: %w", err)
 	}
-	return r.GetPrediction(ctx, predictionID)
+	return r.GetPredictionForOverlay(ctx, predictionID, overlayID)
 }
 
 // Wager places a viewer's stake on an outcome atomically: it row-locks the
@@ -185,12 +195,22 @@ func (r *Repository) Wager(ctx context.Context, predictionID, viewerID, overlayI
 	defer tx.Rollback(ctx)
 
 	var source, state string
-	err = tx.QueryRow(ctx, `SELECT source, state FROM predictions WHERE id = $1 FOR UPDATE`, predictionID).Scan(&source, &state)
+	var rowOverlayID uuid.UUID
+	err = tx.QueryRow(ctx, `SELECT source, state, overlay_id FROM predictions WHERE id = $1 FOR UPDATE`, predictionID).Scan(&source, &state, &rowOverlayID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return WagerResult{Reason: "not_found"}, nil
 	}
 	if err != nil {
 		return WagerResult{}, fmt.Errorf("lock prediction row: %w", err)
+	}
+	// The balance is a per-(viewer, overlay) economy (ADR-0028). The caller passes
+	// overlayID from the :id path, but resolution later credits the prediction's
+	// OWN overlay — so if the path overlay does not own this prediction, the stake
+	// would be debited from one economy and the payout minted into another
+	// (cross-economy inflation). Bind the debit to the prediction's real overlay;
+	// a mismatch is reported as not_found (no cross-tenant existence oracle).
+	if rowOverlayID != overlayID {
+		return WagerResult{Reason: "not_found"}, nil
 	}
 	if source != models.SourceAllChat {
 		return WagerResult{Reason: "native"}, nil
@@ -255,7 +275,7 @@ func (r *Repository) GetViewerEntry(ctx context.Context, predictionID, viewerID 
 // ResolvePrediction transitions LOCKED→RESOLVED and pays out winners in one tx.
 // Guarded + idempotent: a re-run after resolution is a no-op (winners are credited
 // exactly once via payout: dedup keys). All-Chat-native only.
-func (r *Repository) ResolvePrediction(ctx context.Context, predictionID, winningOutcomeID uuid.UUID) (*models.Prediction, error) {
+func (r *Repository) ResolvePrediction(ctx context.Context, predictionID, winningOutcomeID, overlayID uuid.UUID) (*models.Prediction, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin resolve: %w", err)
@@ -263,7 +283,6 @@ func (r *Repository) ResolvePrediction(ctx context.Context, predictionID, winnin
 	defer tx.Rollback(ctx)
 
 	// Validate the winning outcome belongs to this prediction.
-	var overlayID uuid.UUID
 	var exists bool
 	if err := tx.QueryRow(ctx,
 		`SELECT EXISTS(SELECT 1 FROM prediction_outcomes WHERE id = $1 AND prediction_id = $2)`,
@@ -274,20 +293,19 @@ func (r *Repository) ResolvePrediction(ctx context.Context, predictionID, winnin
 		return nil, ErrNotFound
 	}
 
+	// overlayID scopes the guarded UPDATE to the caller's overlay: a cross-tenant
+	// prediction id affects 0 rows and falls through to the scoped ErrNotFound tail.
 	tag, err := tx.Exec(ctx,
 		`UPDATE predictions SET state = 'RESOLVED', winning_outcome_id = $2, resolved_at = NOW()
-		 WHERE id = $1 AND state = 'LOCKED' AND source = 'allchat'`, predictionID, winningOutcomeID)
+		 WHERE id = $1 AND state = 'LOCKED' AND source = 'allchat' AND overlay_id = $3`, predictionID, winningOutcomeID, overlayID)
 	if err != nil {
 		return nil, fmt.Errorf("resolve prediction: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		// Not lockable/already resolved — idempotent no-op.
+		// Not lockable/already resolved, or not this overlay's prediction — idempotent
+		// no-op that returns the current row only when it belongs to this overlay.
 		_ = tx.Rollback(ctx)
-		return r.GetPrediction(ctx, predictionID)
-	}
-
-	if err := tx.QueryRow(ctx, `SELECT overlay_id FROM predictions WHERE id = $1`, predictionID).Scan(&overlayID); err != nil {
-		return nil, fmt.Errorf("load overlay for payout: %w", err)
+		return r.GetPredictionForOverlay(ctx, predictionID, overlayID)
 	}
 
 	entries, err := r.loadEntries(ctx, tx, predictionID)
@@ -316,26 +334,23 @@ func (r *Repository) ResolvePrediction(ctx context.Context, predictionID, winnin
 
 // CancelPrediction transitions a live prediction to CANCELED and refunds every
 // stake in one tx. Guarded + idempotent. All-Chat-native only.
-func (r *Repository) CancelPrediction(ctx context.Context, predictionID uuid.UUID) (*models.Prediction, error) {
+func (r *Repository) CancelPrediction(ctx context.Context, predictionID, overlayID uuid.UUID) (*models.Prediction, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin cancel: %w", err)
 	}
 	defer tx.Rollback(ctx)
 
-	var overlayID uuid.UUID
+	// overlayID scopes the guarded UPDATE to the caller's overlay (cross-tenant → 0 rows).
 	tag, err := tx.Exec(ctx,
 		`UPDATE predictions SET state = 'CANCELED', resolved_at = NOW()
-		 WHERE id = $1 AND state IN ('ACTIVE','LOCKED') AND source = 'allchat'`, predictionID)
+		 WHERE id = $1 AND state IN ('ACTIVE','LOCKED') AND source = 'allchat' AND overlay_id = $2`, predictionID, overlayID)
 	if err != nil {
 		return nil, fmt.Errorf("cancel prediction: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		_ = tx.Rollback(ctx)
-		return r.GetPrediction(ctx, predictionID)
-	}
-	if err := tx.QueryRow(ctx, `SELECT overlay_id FROM predictions WHERE id = $1`, predictionID).Scan(&overlayID); err != nil {
-		return nil, fmt.Errorf("load overlay for refund: %w", err)
+		return r.GetPredictionForOverlay(ctx, predictionID, overlayID)
 	}
 	entries, err := r.loadEntries(ctx, tx, predictionID)
 	if err != nil {
