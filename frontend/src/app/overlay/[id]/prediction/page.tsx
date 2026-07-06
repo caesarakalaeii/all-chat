@@ -69,7 +69,9 @@ export default function PredictionOverlayPage({ params }: { params: Promise<{ id
     if (kind === 'prediction') void fetchPrediction()
   })
 
-  // RESOLVED/CANCELED predictions are briefly still returned by /active; hide once gone.
+  // A backend grace window briefly serves a recently-resolved round after it ends, so the
+  // final RESOLVED tally shows before the widget hides itself; once the grace window lapses
+  // /active stops returning it and this hides.
   if (!prediction || (prediction.state !== 'ACTIVE' && prediction.state !== 'LOCKED' && prediction.state !== 'RESOLVED')) {
     return null
   }

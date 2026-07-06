@@ -1,4 +1,4 @@
--- 067_engagement_points.sql
+-- 068_engagement_points.sql
 -- Description: Viewer points economy (issue #523). Per-overlay (per channel-scope)
 -- virtual currency: a materialized balance plus an append-only ledger of record.
 -- points_transactions.dedup_key UNIQUE is the double-award / idempotency guard
@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS points_earn_config (
     gift_per_sub     BIGINT NOT NULL DEFAULT 150,           -- points to gifter per gifted sub
     chat_per_minute  BIGINT NOT NULL DEFAULT 5,             -- capped once per active minute
     watch_per_minute BIGINT NOT NULL DEFAULT 2,             -- per heartbeat minute-bucket
-    enabled          BOOLEAN NOT NULL DEFAULT TRUE,
+    enabled          BOOLEAN NOT NULL DEFAULT FALSE,        -- opt-in: no economy accrues until the streamer turns it on
     created_at       TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at       TIMESTAMP NOT NULL DEFAULT NOW()
 );

@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/caesar/all-chat/services/engagement-service/publisher"
 	"github.com/caesar/all-chat/services/engagement-service/repository"
@@ -35,6 +36,13 @@ import (
 )
 
 const consumerGroup = "engagement"
+
+// handleTimeout bounds each per-message handle so a stuck row lock (Wager's SELECT
+// … FOR UPDATE) or a slow query can't serialize the 64-message batch or wedge a
+// consumer goroutine forever. Exceeding it returns a ctx error, which the loop
+// treats as transient (leaves the entry pending for redelivery — safe, writes
+// dedupe per (round, viewer)). Shared by the command and native consumers.
+const handleTimeout = 5 * time.Second
 
 // CommandConsumer drains engagement:commands, resolves the durable viewer, and
 // applies votes/wagers to the overlay's live poll/prediction. Confirmations are
@@ -115,7 +123,12 @@ func (c *CommandConsumer) safeHandle(ctx context.Context, msg redis.XMessage) (e
 			err = nil
 		}
 	}()
-	return c.handle(ctx, msg)
+	// Per-message deadline: covers both the live loop and the PEL-drain path (both
+	// call safeHandle). defer cancel() is scoped to this call, not a loop, so it
+	// does not leak.
+	hctx, cancel := context.WithTimeout(ctx, handleTimeout)
+	defer cancel()
+	return c.handle(hctx, msg)
 }
 
 // handle applies a chat command. It returns nil when the message is fully handled
@@ -168,7 +181,7 @@ func (c *CommandConsumer) handle(ctx context.Context, msg redis.XMessage) error 
 				}
 				continue // no active poll on this overlay
 			}
-			accepted, err := c.repo.RecordVote(ctx, poll.ID, viewerID, idx, job.Platform, srcMsgID)
+			accepted, err := c.repo.RecordVote(ctx, poll.ID, viewerID, overlayID, idx, job.Platform, srcMsgID)
 			if err != nil {
 				retryErr = errors.Join(retryErr, fmt.Errorf("record chat vote: %w", err))
 				continue

@@ -114,7 +114,7 @@ type ChannelRef struct {
 func (r *Repository) OverlaysForChannel(ctx context.Context, platform, channelID string) ([]uuid.UUID, error) {
 	// channel_id is stored with the streamer's original casing, but callers pass a
 	// canonical lowercase login (the native-mirror producer lowercases the Twitch
-	// broadcaster login, ADR-0029). Compare case-insensitively so a source stored as
+	// broadcaster login, ADR-0030). Compare case-insensitively so a source stored as
 	// "CaesarLP" still matches "caesarlp"; a functional index on LOWER(channel_id)
 	// (migration 071) keeps this cheap.
 	const q = `SELECT overlay_id FROM overlay_chat_sources
@@ -160,9 +160,9 @@ func (r *Repository) SourceChannelsForOverlay(ctx context.Context, overlayID uui
 // platformUserID), creating the viewer + platform identity if absent. This is the
 // universal identity path for chat-command voters (no login). It re-implements the
 // auth-service resolver (ADR-0004: duplicate the small query rather than couple
-// services) and is race-safe: a concurrent create loses the UNIQUE(platform,
-// platform_user_id) insert and we re-read the winner (leaving a harmless orphan
-// viewers row in the rare race).
+// services). The create runs in ONE transaction: on a concurrent create the loser's
+// UNIQUE(platform, platform_user_id) insert affects 0 rows, so it rolls its viewers
+// row back (no orphan accumulation) and re-reads the winner.
 func (r *Repository) GetOrCreateViewerByPlatform(ctx context.Context, platform, platformUserID string) (uuid.UUID, error) {
 	var viewerID uuid.UUID
 	err := r.db.QueryRow(ctx,
@@ -175,11 +175,17 @@ func (r *Repository) GetOrCreateViewerByPlatform(ctx context.Context, platform, 
 		return uuid.Nil, fmt.Errorf("lookup viewer identity: %w", err)
 	}
 
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("begin create viewer: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
 	var newID uuid.UUID
-	if err := r.db.QueryRow(ctx, `INSERT INTO viewers DEFAULT VALUES RETURNING id`).Scan(&newID); err != nil {
+	if err := tx.QueryRow(ctx, `INSERT INTO viewers DEFAULT VALUES RETURNING id`).Scan(&newID); err != nil {
 		return uuid.Nil, fmt.Errorf("insert viewer: %w", err)
 	}
-	tag, err := r.db.Exec(ctx,
+	tag, err := tx.Exec(ctx,
 		`INSERT INTO viewer_platform_identities (viewer_id, platform, platform_user_id)
 		 VALUES ($1, $2, $3) ON CONFLICT (platform, platform_user_id) DO NOTHING`,
 		newID, platform, platformUserID)
@@ -187,7 +193,9 @@ func (r *Repository) GetOrCreateViewerByPlatform(ctx context.Context, platform, 
 		return uuid.Nil, fmt.Errorf("insert viewer identity: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		// Lost the race: another create won. Re-read the winner.
+		// Lost the race: another create won. Roll back our viewers row (no orphan) and
+		// re-read the winner on the pool — it committed on a different connection.
+		_ = tx.Rollback(ctx)
 		if err := r.db.QueryRow(ctx,
 			`SELECT viewer_id FROM viewer_platform_identities WHERE platform = $1 AND platform_user_id = $2`,
 			platform, platformUserID).Scan(&viewerID); err != nil {
@@ -195,7 +203,11 @@ func (r *Repository) GetOrCreateViewerByPlatform(ctx context.Context, platform, 
 		}
 		return viewerID, nil
 	}
-	// Best-effort cosmetics row so downstream lookups don't miss (non-fatal).
+	if err := tx.Commit(ctx); err != nil {
+		return uuid.Nil, fmt.Errorf("commit create viewer: %w", err)
+	}
+	// Best-effort cosmetics row so downstream lookups don't miss (non-fatal; kept out
+	// of the identity tx so its absence can't fail viewer resolution).
 	_, _ = r.db.Exec(ctx, `INSERT INTO viewer_cosmetics (viewer_id) VALUES ($1) ON CONFLICT DO NOTHING`, newID)
 	return newID, nil
 }

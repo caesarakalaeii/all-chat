@@ -94,10 +94,14 @@ func TestB1_CrossTenantPredictionLifecycle(t *testing.T) {
 	repo := repository.New(pool)
 	ctx := context.Background()
 
-	overlayA := seedOverlay(t, pool)
 	overlayB := seedOverlay(t, pool)
 
+	// Each subtest seeds its OWN overlayA: uniq_active_pred_per_overlay allows only one
+	// live (ACTIVE|LOCKED) All-Chat prediction per overlay, so a prediction left live by
+	// one subtest would otherwise block the next subtest's CreatePrediction on a shared
+	// overlay. overlayB (the attacker id) is stateless and safely shared.
 	t.Run("lock", func(t *testing.T) {
+		overlayA := seedOverlay(t, pool)
 		pred, err := repo.CreatePrediction(ctx, overlayA, "who wins?", []string{"a", "b"}, nil)
 		require.NoError(t, err)
 
@@ -113,6 +117,7 @@ func TestB1_CrossTenantPredictionLifecycle(t *testing.T) {
 	})
 
 	t.Run("resolve", func(t *testing.T) {
+		overlayA := seedOverlay(t, pool)
 		pred, err := repo.CreatePrediction(ctx, overlayA, "who wins?", []string{"a", "b"}, nil)
 		require.NoError(t, err)
 		_, err = repo.LockPrediction(ctx, pred.ID, overlayA)
@@ -131,6 +136,7 @@ func TestB1_CrossTenantPredictionLifecycle(t *testing.T) {
 	})
 
 	t.Run("cancel", func(t *testing.T) {
+		overlayA := seedOverlay(t, pool)
 		pred, err := repo.CreatePrediction(ctx, overlayA, "who wins?", []string{"a", "b"}, nil)
 		require.NoError(t, err)
 

@@ -45,14 +45,12 @@ func PointsForEvent(cfg models.EarnConfig, ev *mpmodels.EventInfo) (EarnAward, b
 	switch ev.Type {
 	case "bits":
 		amt := valueAmount(ev)
-		delta := int64(math.Round(amt * cfg.BitsMultiplier))
-		return awardIfPositive(delta, "earn_bits")
+		return awardIfPositive(scalePoints(amt, cfg.BitsMultiplier), "earn_bits")
 
 	case "super_chat", "super_sticker", "kick_donation":
 		// USD-denominated donations.
 		amt := valueAmount(ev)
-		delta := int64(math.Round(amt * cfg.USDMultiplier))
-		return awardIfPositive(delta, "earn_donation")
+		return awardIfPositive(scalePoints(amt, cfg.USDMultiplier), "earn_donation")
 
 	case "subscription", "resubscription", "new_sponsor", "member_milestone":
 		return awardIfPositive(subPoints(cfg, subTier(ev)), "earn_sub")
@@ -63,10 +61,47 @@ func PointsForEvent(cfg models.EarnConfig, ev *mpmodels.EventInfo) (EarnAward, b
 		if count < 1 {
 			count = 1
 		}
-		delta := int64(math.Round(count)) * cfg.GiftPerSub
-		return awardIfPositive(delta, "earn_gift")
+		return awardIfPositive(mulPoints(roundToInt64(count), cfg.GiftPerSub), "earn_gift")
 	}
 	return EarnAward{}, false
+}
+
+// maxEventPoints caps a single event's award. It is far above any realistic event
+// yet far below math.MaxInt64, so a misconfigured or pre-constraint multiplier/tier
+// can neither overflow int64 (a bare float→int64 conversion of an out-of-range value
+// is undefined in Go) nor push a balance toward overflow. Belt-and-suspenders with
+// the handler-side earn-config validation (which now also clamps config at write).
+const maxEventPoints int64 = 1_000_000_000_000 // 1e12
+
+// roundToInt64 rounds a non-negative float to an int64 award, clamped to
+// [0, maxEventPoints]. NaN/Inf/out-of-range clamp to 0 or the cap rather than
+// producing an undefined conversion.
+func roundToInt64(f float64) int64 {
+	v := math.Round(f)
+	if math.IsNaN(v) || v <= 0 {
+		return 0
+	}
+	if v >= float64(maxEventPoints) {
+		return maxEventPoints
+	}
+	return int64(v)
+}
+
+// scalePoints rounds amt*mult to a clamped int64 award (see roundToInt64).
+func scalePoints(amt, mult float64) int64 {
+	return roundToInt64(amt * mult)
+}
+
+// mulPoints multiplies two non-negative int64s, clamped to [0, maxEventPoints],
+// detecting overflow so a huge count*perUnit can't wrap.
+func mulPoints(a, b int64) int64 {
+	if a <= 0 || b <= 0 {
+		return 0
+	}
+	if a > maxEventPoints/b { // product would exceed the cap (also catches overflow)
+		return maxEventPoints
+	}
+	return a * b
 }
 
 // subPoints maps a normalized tier ("high"/"medium"/"low"/"") to configured points.

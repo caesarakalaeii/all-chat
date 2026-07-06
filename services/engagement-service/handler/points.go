@@ -19,6 +19,7 @@ package handler
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"time"
 
@@ -28,6 +29,54 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
+
+const (
+	// maxEarnPoints caps every per-event integer points config value (sub tiers,
+	// gift/chat/watch per unit). Matches the CHECK bound in the earn-config-guards
+	// migration and keeps int64 well clear of overflow in the earn engine.
+	maxEarnPoints int64 = 1_000_000
+	// maxMultiplier caps the float multipliers, staying within the NUMERIC(10,4) column.
+	maxMultiplier float64 = 100_000
+	// maxPointsNameLen matches the points_name VARCHAR(32) column (characters).
+	maxPointsNameLen = 32
+)
+
+// validateEarnConfig rejects negative or non-finite earn values (a clear owner
+// error → 400) and clamps the rest to sane maxima so a valid-but-huge value can't
+// overflow int64 in the earn engine or exceed the DB column bounds. It also trims
+// points_name to the column width (rune-safe). Mirrors the CHECK constraints in the
+// earn-config-guards migration.
+func validateEarnConfig(cfg *models.EarnConfig) error {
+	if math.IsNaN(cfg.BitsMultiplier) || math.IsInf(cfg.BitsMultiplier, 0) ||
+		math.IsNaN(cfg.USDMultiplier) || math.IsInf(cfg.USDMultiplier, 0) ||
+		cfg.BitsMultiplier < 0 || cfg.USDMultiplier < 0 {
+		return errors.New("multipliers must be non-negative, finite numbers")
+	}
+	for _, v := range []int64{cfg.SubHigh, cfg.SubMedium, cfg.SubLow, cfg.GiftPerSub, cfg.ChatPerMinute, cfg.WatchPerMinute} {
+		if v < 0 {
+			return errors.New("point values must be non-negative")
+		}
+	}
+	cfg.BitsMultiplier = math.Min(cfg.BitsMultiplier, maxMultiplier)
+	cfg.USDMultiplier = math.Min(cfg.USDMultiplier, maxMultiplier)
+	cfg.SubHigh = clampInt64(cfg.SubHigh, maxEarnPoints)
+	cfg.SubMedium = clampInt64(cfg.SubMedium, maxEarnPoints)
+	cfg.SubLow = clampInt64(cfg.SubLow, maxEarnPoints)
+	cfg.GiftPerSub = clampInt64(cfg.GiftPerSub, maxEarnPoints)
+	cfg.ChatPerMinute = clampInt64(cfg.ChatPerMinute, maxEarnPoints)
+	cfg.WatchPerMinute = clampInt64(cfg.WatchPerMinute, maxEarnPoints)
+	if r := []rune(cfg.PointsName); len(r) > maxPointsNameLen {
+		cfg.PointsName = string(r[:maxPointsNameLen])
+	}
+	return nil
+}
+
+func clampInt64(v, hi int64) int64 {
+	if v > hi {
+		return hi
+	}
+	return v
+}
 
 // GetBalance (viewer) returns the caller's point balance in one overlay economy.
 func (h *Handler) GetBalance(c *gin.Context) {
@@ -120,6 +169,10 @@ func (h *Handler) PutConfig(c *gin.Context) {
 		return
 	}
 	cfg.OverlayID = overlayID // never trust the body's id
+	if err := validateEarnConfig(&cfg); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 	if cfg.PointsName == "" {
 		cfg.PointsName = "Points"
 	}

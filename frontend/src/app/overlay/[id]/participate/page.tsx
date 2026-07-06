@@ -92,6 +92,10 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
   // round on resolve). Retained until a new round begins.
   const [settled, setSettled] = useState<{ outcomeLabel: string; amount: number } | null>(null)
   const wageredRoundRef = useRef<{ id: string; outcomeLabel: string; amount: number } | null>(null)
+  // M-A2: a single dedicated polite live region announces the prediction locking, rather
+  // than voicing the whole tally section on every 3s refresh (which would over-announce).
+  const [announcement, setAnnouncement] = useState('')
+  const prevPredStateRef = useRef<Prediction['state'] | null>(null)
 
   // fetchPublic / fetchPrivate return their data so refresh() can apply everything in
   // ONE state update — avoiding the multi-commit flicker of separate async chains (N1).
@@ -174,6 +178,25 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
   // Near-real-time refresh on a poll/prediction WS frame (L-D1); the interval remains
   // the fallback / source of truth.
   useEngagementLive(id, () => void refresh())
+
+  // M-A2: announce the prediction locking to screen readers when the state transitions
+  // ACTIVE → LOCKED. setState is deferred out of the effect body (never synchronous).
+  useEffect(() => {
+    const state = prediction?.state ?? null
+    const prev = prevPredStateRef.current
+    prevPredStateRef.current = state
+    if (prev !== 'LOCKED' && state === 'LOCKED') {
+      // Clear then set (both deferred, never synchronous) so a repeat lock on a later
+      // round re-announces even though the message text is identical — an unchanged
+      // aria-live node is not re-read by screen readers.
+      const clear = setTimeout(() => setAnnouncement(''), 0)
+      const set = setTimeout(() => setAnnouncement('Prediction locked — betting is closed.'), 50)
+      return () => {
+        clearTimeout(clear)
+        clearTimeout(set)
+      }
+    }
+  }, [prediction?.state])
 
   // Watch-time heartbeat while the tab is open and the viewer is logged in.
   useEffect(() => {
@@ -309,6 +332,12 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
         </span>
       </header>
 
+      {/* M-A2: dedicated polite status region — announces the prediction locking without
+          re-voicing the tally on every refresh. */}
+      <p role="status" aria-live="polite" className="sr-only">
+        {announcement}
+      </p>
+
       {notice && (
         <p role="alert" className="rounded-md bg-red-500/15 px-3 py-2 text-sm text-red-400">
           {notice}
@@ -356,7 +385,7 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
                     </>
                   )}
                 </span>
-                <span className="relative text-sm tabular-nums text-text-sub">
+                <span className="relative text-sm tabular-nums text-text">
                   {pct}% ({o.votes.toLocaleString()})
                 </span>
               </button>
@@ -390,7 +419,17 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
                   Max
                 </button>
               </div>
+              {balance <= 0 && (
+                <p className="text-xs text-text-sub">
+                  You have no {pointsName} yet. Earn them by keeping this page open and by supporting the
+                  stream (subs, bits, donations, gifts), then come back to wager.
+                </p>
+              )}
+              <label htmlFor="wager-amount" className="sr-only">
+                Amount to wager in {pointsName}
+              </label>
               <input
+                id="wager-amount"
                 type="number"
                 min={1}
                 max={balance}
@@ -432,7 +471,7 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
                   {o.idx}. {o.label}
                   {mine && ` · your wager: ${(engagement?.wager_amount ?? 0).toLocaleString()}`}
                 </span>
-                <span className="relative text-sm tabular-nums text-text-sub">
+                <span className="relative text-sm tabular-nums text-text">
                   {o.total_points.toLocaleString()} · {pct}%
                 </span>
               </button>

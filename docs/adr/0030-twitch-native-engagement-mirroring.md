@@ -1,4 +1,4 @@
-# ADR-0029: Twitch-Native Poll/Prediction Mirroring
+# ADR-0030: Twitch-Native Poll/Prediction Mirroring
 
 **Date**: 2026-07-06
 **Status**: Accepted
@@ -6,14 +6,14 @@
 
 ## Context and Problem Statement
 
-Issue #523 gives All-Chat its own polls, predictions, and viewer points (ADR-0027 write-path, ADR-0028 economy). A Twitch streamer, though, can *also* run polls/predictions through **Twitch's own native UI**, and their viewers vote/wager there using Twitch's own currency (Channel Points). Those rounds are invisible to All-Chat, so an overlay that combines Twitch with other platforms shows nothing while a native Twitch round is live on screen.
+Issue #523 gives All-Chat its own polls, predictions, and viewer points (ADR-0028 write-path, ADR-0029 economy). A Twitch streamer, though, can *also* run polls/predictions through **Twitch's own native UI**, and their viewers vote/wager there using Twitch's own currency (Channel Points). Those rounds are invisible to All-Chat, so an overlay that combines Twitch with other platforms shows nothing while a native Twitch round is live on screen.
 
 We want the overlay (and the no-install participation surfaces) to **reflect** a native Twitch poll/prediction — its question, options, and live tallies — without pretending All-Chat ran it. The hard constraints:
 
 - **Twitch owns the votes.** EventSub delivers per-option *aggregates*, never individual voters. All-Chat cannot reconstruct `poll_votes`/`prediction_entries` rows for a native round.
-- **Two currencies must not mix.** A native prediction settles in Twitch Channel Points. All-Chat viewer points must **never** be credited or debited for a mirrored round (this was already pinned in ADR-0028; this ADR is where it gets enforced end-to-end).
+- **Two currencies must not mix.** A native prediction settles in Twitch Channel Points. All-Chat viewer points must **never** be credited or debited for a mirrored round (this was already pinned in ADR-0029; this ADR is where it gets enforced end-to-end).
 - **Least privilege.** Reading polls/predictions needs `channel:read:polls` / `channel:read:predictions`. These are NOT login scopes — most streamers never grant them — so mirroring must be strictly opt-in and a missing grant must be a non-event, not a failure.
-- **Additive only.** Twitch viewers already participate in All-Chat rounds via chat commands (ADR-0027); this feature is a display enhancement, not a new participation path.
+- **Additive only.** Twitch viewers already participate in All-Chat rounds via chat commands (ADR-0028); this feature is a display enhancement, not a new participation path.
 
 ## Decision Drivers
 
@@ -33,7 +33,7 @@ We want the overlay (and the no-install participation surfaces) to **reflect** a
 
 ### How native events reach engagement-service
 3. **Durable Redis stream `engagement:twitch-native` (XADD in the listener webhook, XREADGROUP in engagement-service).**
-   - ✅ Survives an engagement-service restart; acked; mirrors the ADR-0027 command-stream posture. A lost lifecycle event would otherwise strand a round.
+   - ✅ Survives an engagement-service restart; acked; mirrors the ADR-0028 command-stream posture. A lost lifecycle event would otherwise strand a round.
    - ❌ One more stream + consumer group.
 4. **Best-effort Pub/Sub (like `engagement:events`).**
    - ❌ A dropped `end` leaves a poll ACTIVE forever on the overlay. Best-effort is fine for earns (a missed earn is an unpaid point); it is not fine for lifecycle state.
@@ -72,8 +72,8 @@ We want the overlay (and the no-install participation surfaces) to **reflect** a
 
 ## Related
 
-- **ADR-0027** — engagement chat-command write-path (the All-Chat participation path native mirroring sits beside).
-- **ADR-0028** — viewer points economy; first stated that native predictions mirror state only. This ADR enforces that end-to-end.
+- **ADR-0028** — engagement chat-command write-path (the All-Chat participation path native mirroring sits beside).
+- **ADR-0029** — viewer points economy; first stated that native predictions mirror state only. This ADR enforces that end-to-end.
 - **ADR-0012 / ADR-0017** — the opt-in Twitch re-consent scope-bundle pattern reused for the `engagement` action.
 - **ADR-0015** — IRC↔EventSub split; the EventSub listener this rides on.
 

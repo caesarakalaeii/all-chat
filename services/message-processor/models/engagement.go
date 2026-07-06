@@ -18,6 +18,7 @@ package models
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -60,9 +61,11 @@ type ChatActivity struct {
 // EngagementActiveKey is the Redis key the hot path checks (EXISTS) to decide
 // whether a chat message on (platform, channelID) could be an engagement command.
 // engagement-service maintains it as a refcounted SET while a poll/prediction is
-// live on that channel.
+// live on that channel. Both inputs are lowercased so the writer (which keys with
+// the DB-stored channel casing) and the reader (which keys with the
+// listener-lowercased casing) always agree on the same key.
 func EngagementActiveKey(platform, channelID string) string {
-	return fmt.Sprintf("engagement:active:%s:%s", platform, channelID)
+	return fmt.Sprintf("engagement:active:%s:%s", strings.ToLower(platform), strings.ToLower(channelID))
 }
 
 // CommandJob is a candidate engagement chat command forwarded by the hot path.
@@ -102,8 +105,8 @@ const (
 // aggregate tally (Twitch owns the individual votes/wagers, so only totals
 // cross this boundary).
 type NativeOutcome struct {
-	ExternalID string `json:"external_id"`     // Twitch choice/outcome id
-	Idx        int    `json:"idx"`             // 1-based, stable Twitch array order
+	ExternalID string `json:"external_id"` // Twitch choice/outcome id
+	Idx        int    `json:"idx"`         // 1-based, stable Twitch array order
 	Label      string `json:"label"`
 	Color      string `json:"color,omitempty"` // predictions: pink/blue
 	Votes      int64  `json:"votes"`           // polls: total votes

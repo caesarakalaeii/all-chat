@@ -17,6 +17,7 @@
 package handler
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -53,6 +54,24 @@ func IdempotencyMiddleware(rdb *redis.Client, ttl time.Duration) gin.HandlerFunc
 			c.AbortWithStatusJSON(http.StatusOK, gin.H{"status": "duplicate_ignored"})
 			return
 		}
+		// Release the marker on any non-success so a failed- or panicked-then-retried
+		// write is not swallowed as a fake 200 duplicate_ignored for the whole TTL. This
+		// runs in a defer so it also fires while gin.Recovery unwinds a panic (which it
+		// turns into a 500 only AFTER this inner defer): we recover here, release, then
+		// re-panic so Recovery still logs + 500s. The pre-handler SetNX still dedupes
+		// true concurrent double-clicks. Fresh context (the request ctx may be cancelled
+		// once the response is written); best-effort — the TTL is the backstop.
+		defer func() {
+			rec := recover()
+			if rec != nil || c.Writer.Status() >= http.StatusBadRequest {
+				delCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+				_ = rdb.Del(delCtx, redisKey).Err()
+				cancel()
+			}
+			if rec != nil {
+				panic(rec)
+			}
+		}()
 		c.Next()
 	}
 }

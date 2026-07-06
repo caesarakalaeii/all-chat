@@ -45,8 +45,12 @@ const (
 
 // Poll is an All-Chat-native or mirrored poll.
 type Poll struct {
-	ID          uuid.UUID    `json:"id"`
-	OverlayID   uuid.UUID    `json:"overlay_id"`
+	ID uuid.UUID `json:"id"`
+	// OverlayID routes the broadcast (the publisher builds overlay:{id}:poll from
+	// this Go field before marshaling) but is NEVER serialized: on a viewer WS
+	// frame, the ?since= replay, or the public OBS/HTTP read it would leak the
+	// overlay's bearer-capability id, which grants token-less OBS-feed access.
+	OverlayID   uuid.UUID    `json:"-"`
 	Source      string       `json:"source"`
 	ExternalID  *string      `json:"external_id,omitempty"`
 	Question    string       `json:"question"`
@@ -68,8 +72,9 @@ type PollOption struct {
 
 // Prediction is an All-Chat-native or mirrored prediction.
 type Prediction struct {
-	ID               uuid.UUID           `json:"id"`
-	OverlayID        uuid.UUID           `json:"overlay_id"`
+	ID uuid.UUID `json:"id"`
+	// OverlayID routes the broadcast but is NEVER serialized — see Poll.OverlayID.
+	OverlayID        uuid.UUID           `json:"-"`
 	Source           string              `json:"source"`
 	ExternalID       *string             `json:"external_id,omitempty"`
 	Title            string              `json:"title"`
@@ -107,12 +112,15 @@ type EarnConfig struct {
 	Enabled        bool      `json:"enabled"`
 	// AnnounceOnStart posts the round question + numbered options + participate link
 	// to chat when a poll/prediction opens. Opt-in (default false): it needs the
-	// Twitch send scope (user:write:chat), reusing the moderation send path (ADR-0027).
+	// Twitch send scope (user:write:chat), reusing the moderation send path (ADR-0028).
 	AnnounceOnStart bool `json:"announce_on_start"`
 }
 
 // DefaultEarnConfig returns the built-in defaults used when an overlay has no
-// points_earn_config row yet. Mirrors the column defaults in migration 067.
+// points_earn_config row yet. Mirrors the column defaults in migration 067 (kept
+// in sync by the enabled-default migration). Points earning is OPT-IN: Enabled
+// defaults false so no overlay silently accrues points (and names a currency)
+// before the streamer turns it on.
 func DefaultEarnConfig(overlayID uuid.UUID) EarnConfig {
 	return EarnConfig{
 		OverlayID:       overlayID,
@@ -125,7 +133,7 @@ func DefaultEarnConfig(overlayID uuid.UUID) EarnConfig {
 		GiftPerSub:      150,
 		ChatPerMinute:   5,
 		WatchPerMinute:  2,
-		Enabled:         true,
+		Enabled:         false,
 		AnnounceOnStart: false,
 	}
 }

@@ -1,4 +1,4 @@
--- 070_engagement_native_mirror.sql
+-- 071_engagement_native_mirror.sql
 -- Description: Twitch-native poll/prediction mirroring (issue #523, task H).
 -- Twitch owns the individual votes/wagers of a native round, so tallies arrive
 -- as per-option aggregates; the mirror_* columns store them (0 for allchat rows,
