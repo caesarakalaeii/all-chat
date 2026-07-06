@@ -61,6 +61,9 @@ type ProcessorMetrics struct {
 	DLQMessagesTotal   *prometheus.CounterVec
 	PublishRetryTotal  *prometheus.CounterVec
 	DLQWriteFailures   prometheus.Counter
+
+	// Engagement hot-path hook (issue #523): candidate vote/wager forwards.
+	EngagementForwardTotal *prometheus.CounterVec
 }
 
 // NewProcessorMetrics creates a new set of processor metrics
@@ -207,7 +210,21 @@ func NewProcessorMetrics() *ProcessorMetrics {
 				Help: "Total failures writing to the dead-letter queue",
 			},
 		),
+		EngagementForwardTotal: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "processor_engagement_forward_total",
+				Help: "Engagement vote/wager command forwards from the hot path, by result (hit|miss|error|dropped)",
+			},
+			[]string{"result"},
+		),
 	}
+}
+
+// RecordEngagementForward records the outcome of a hot-path engagement command
+// forward (hit = queued to the stream, miss = no live round, error = Redis failure,
+// dropped = forwarder buffer full).
+func (m *ProcessorMetrics) RecordEngagementForward(result string) {
+	m.EngagementForwardTotal.WithLabelValues(result).Inc()
 }
 
 // RecordMessageConsumed records a message consumed from Redis stream
