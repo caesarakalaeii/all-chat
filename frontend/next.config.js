@@ -61,8 +61,10 @@ const nextConfig = {
       "img-src 'self' data: https: static-cdn.jtvnw.net yt3.ggpht.com cdn.7tv.app cdn.betterttv.net cdn.frankerfacez.com files.kick.com ui-avatars.com cdn.discordapp.com",
       // embed.twitch.tv hosts the Twitch Embed SDK used by the credits/clips
       // overlay route (audit #3); without it the SDK script is CSP-blocked and
-      // clips never play.
-      "script-src 'self' 'unsafe-inline' https://embed.twitch.tv",
+      // clips never play. analytics.allch.at hosts the self-hosted Umami tracker
+      // (components/Analytics.tsx); without it the tracker script is CSP-blocked
+      // and no page views or custom events are recorded.
+      "script-src 'self' 'unsafe-inline' https://embed.twitch.tv https://analytics.allch.at",
       "style-src 'self' 'unsafe-inline'",
       "connect-src 'self' wss: ws: https:",
       "font-src 'self' data:",
