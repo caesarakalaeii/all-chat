@@ -411,6 +411,17 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0031: Streamer-Keyed Viewer Engagement Participation
+
+**Status**: ✅ Accepted
+**Date**: 2026-07-06
+**Problem**: The browser extension attaches to a stream by streamer *username* and never learns the overlay id (a viewer-withheld bearer capability), but every viewer participation endpoint is overlay-id-keyed — so the extension could only vote by posting a visible chat command, not through a proper UI
+**Decision**: Add streamer-keyed sibling endpoints `/api/v1/engagement/streamers/:username/{active,me,vote,wager,heartbeat}` that resolve username→public overlay server-side (reusing the viewer WebSocket's `GetPublicOverlayByUsername` query) and then call the **unchanged** overlay-keyed vote/wager/balance primitives. The overlay id lives only inside the handler, never serialized to the client; `RecordVote`/`Wager` already reject a poll/prediction from a different overlay, so a resolvable username grants no cross-overlay authority. The chat-command path (ADR-0028) stays the zero-install fallback for surfaces this can't cover
+**Impact**: The extension gets a proper no-chat-spam vote/wager/balance UI with only the streamer username + viewer JWT; the "viewers never learn the overlay id" boundary is preserved; no new points/tally logic or write path (a thin username→overlay adapter over ADR-0028/0029). (ADR numbering shared with caesar-deployment, so this is 0031)
+**→ Read**: [0031-streamer-keyed-viewer-engagement.md](./0031-streamer-keyed-viewer-engagement.md)
+
+---
+
 ## How to Create a New ADR
 
 ### Step 1: Determine ADR Number
