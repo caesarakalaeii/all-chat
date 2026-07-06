@@ -32,21 +32,54 @@ import (
 const engagementCommandsMaxLen = 10000
 
 // forwardEngagementCommand is the hot-path hook for issue #523. For a chat message
-// that *looks* like a vote/wager AND whose channel currently has a live engagement
-// (a cheap Redis EXISTS on a refcounted flag), it forwards a CommandJob to the
-// durable engagement:commands stream. All heavy work (grammar parse, viewer
-// resolution, DB writes) happens off the hot path in engagement-service. Entirely
-// best-effort: any error is logged and the chat message is unaffected.
-func (c *StreamConsumer) forwardEngagementCommand(ctx context.Context, raw *models.RawChatMessage) {
+// that *looks* like a vote/wager it hands the message off to the background forwarder
+// (runEngagementForwarder) so the Redis EXISTS/XADD round-trips never block the
+// consume loop (L-Perf1). Ordinary chat pays only the in-process looksLikeCommand
+// check. Entirely best-effort: if the forwarder buffer is full the candidate is
+// dropped and counted — a missed forward is a missed vote, never corruption.
+func (c *StreamConsumer) forwardEngagementCommand(raw *models.RawChatMessage) {
 	if raw.EventType != "" && raw.EventType != "chat_message" {
 		return // only real chat messages carry vote/wager commands
 	}
 	if !looksLikeCommand(raw.Text) {
-		return // fast in-process reject — no Redis call for ordinary chat
+		return // fast in-process reject — no Redis call, no channel op, for ordinary chat
 	}
+	select {
+	case c.engagementCh <- raw:
+	default:
+		c.metrics.RecordEngagementForward("dropped")
+	}
+}
+
+// runEngagementForwarder drains queued command-shaped chat messages off the hot path
+// and performs the live-round EXISTS check plus, on a hit, the XADD to the durable
+// engagement:commands stream. Runs for the consumer's lifetime.
+func (c *StreamConsumer) runEngagementForwarder(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-c.stopCh:
+			return
+		case raw := <-c.engagementCh:
+			c.forwardEngagementNow(ctx, raw)
+		}
+	}
+}
+
+// forwardEngagementNow does the actual EXISTS + XADD for one candidate. All heavy
+// work (grammar parse, viewer resolution, DB writes) still happens off in
+// engagement-service; this only routes the job to the durable stream.
+func (c *StreamConsumer) forwardEngagementNow(ctx context.Context, raw *models.RawChatMessage) {
 	key := models.EngagementActiveKey(raw.Platform, raw.ChannelID)
 	exists, err := c.client.Exists(ctx, key).Result()
-	if err != nil || exists == 0 {
+	if err != nil {
+		c.metrics.RecordEngagementForward("error")
+		c.logger.Debug("engagement active check failed", zap.Error(err))
+		return
+	}
+	if exists == 0 {
+		c.metrics.RecordEngagementForward("miss")
 		return // no live poll/prediction on this channel → nothing to forward
 	}
 
@@ -65,6 +98,7 @@ func (c *StreamConsumer) forwardEngagementCommand(ctx context.Context, raw *mode
 	}
 	data, err := json.Marshal(job)
 	if err != nil {
+		c.metrics.RecordEngagementForward("error")
 		return
 	}
 	if err := c.client.XAdd(ctx, &redis.XAddArgs{
@@ -73,8 +107,11 @@ func (c *StreamConsumer) forwardEngagementCommand(ctx context.Context, raw *mode
 		Approx: true,
 		Values: map[string]interface{}{models.FieldEngagementData: string(data)},
 	}).Err(); err != nil {
+		c.metrics.RecordEngagementForward("error")
 		c.logger.Debug("forward engagement command failed", zap.Error(err))
+		return
 	}
+	c.metrics.RecordEngagementForward("hit")
 }
 
 // looksLikeCommand is a cheap pre-filter: true when the trimmed text starts with

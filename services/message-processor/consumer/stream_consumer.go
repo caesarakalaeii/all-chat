@@ -65,7 +65,13 @@ type StreamConsumer struct {
 	deletionBuffer registry.DeletionBuffer
 	nativeDedup    NativeDeduplicator // nil disables native-id dedup
 	consumerName   string
+	engagementCh   chan *models.RawChatMessage // buffered hand-off to the engagement forwarder (issue #523)
 }
+
+// engagementForwardBufferSize bounds the hot-path→forwarder hand-off. Command-shaped
+// messages are rare (a '!' prefix or 1–2 digit line), so this absorbs a spam burst;
+// once full, forwards are dropped (best-effort, counted) rather than blocking the loop.
+const engagementForwardBufferSize = 1024
 
 // NewStreamConsumer creates a new Redis Streams consumer.
 // consumerName should be set to os.Hostname() by the caller for unique per-pod identification.
@@ -79,6 +85,7 @@ func NewStreamConsumer(client *redis.Client, logger *zap.Logger, m *metrics.Proc
 		msgIDRegistry:  msgIDRegistry,
 		deletionBuffer: deletionBuffer,
 		consumerName:   consumerName,
+		engagementCh:   make(chan *models.RawChatMessage, engagementForwardBufferSize),
 	}
 }
 
@@ -108,6 +115,9 @@ func (c *StreamConsumer) Start(ctx context.Context) error {
 		zap.String("group", ConsumerGroup),
 		zap.String("consumer", c.consumerName),
 	)
+
+	// Engagement (issue #523): drain forwarded vote/wager candidates off the hot path.
+	go c.runEngagementForwarder(ctx)
 
 	// Start consuming
 	go c.consumeLoop(ctx)
@@ -332,7 +342,7 @@ func (c *StreamConsumer) processMessage(ctx context.Context, msg redis.XMessage)
 	// Engagement (issue #523): forward candidate vote/wager chat commands to the
 	// engagement service. Best-effort and gated on a cheap text pre-check + a Redis
 	// EXISTS flag, so ordinary chat pays only the in-process pre-check.
-	c.forwardEngagementCommand(ctx, rawMsg)
+	c.forwardEngagementCommand(rawMsg)
 
 	return nil
 }
