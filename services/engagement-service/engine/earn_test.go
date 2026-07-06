@@ -45,13 +45,36 @@ func TestPointsForEvent_DonationUSD(t *testing.T) {
 
 func TestPointsForEvent_SubTiers(t *testing.T) {
 	cfg := defCfg() // high=500 medium=300 low=150
-	high, ok := PointsForEvent(cfg, &mpmodels.EventInfo{Type: "subscription", Tier: "high"})
-	assert.True(t, ok)
-	assert.Equal(t, int64(500), high.Delta)
 
-	low, ok := PointsForEvent(cfg, &mpmodels.EventInfo{Type: "subscription", Tier: ""})
+	// The classifier's display tier is "high" for EVERY Twitch sub — the raw
+	// plan in the event metadata decides the earn tier, not ev.Tier.
+	sub := func(plan string) *mpmodels.EventInfo {
+		return &mpmodels.EventInfo{
+			Type: "subscription", Tier: "high",
+			Metadata: map[string]interface{}{"tier": plan},
+		}
+	}
+
+	t3, ok := PointsForEvent(cfg, sub("3000"))
 	assert.True(t, ok)
-	assert.Equal(t, int64(150), low.Delta, "unknown tier falls back to base")
+	assert.Equal(t, int64(500), t3.Delta, "Twitch Tier 3 pays sub_high")
+
+	t2, ok := PointsForEvent(cfg, sub("2000"))
+	assert.True(t, ok)
+	assert.Equal(t, int64(300), t2.Delta, "Twitch Tier 2 pays sub_medium")
+
+	t1, ok := PointsForEvent(cfg, sub("1000"))
+	assert.True(t, ok)
+	assert.Equal(t, int64(150), t1.Delta, "Twitch Tier 1 pays the base tier despite display tier 'high'")
+
+	prime, ok := PointsForEvent(cfg, sub("Prime"))
+	assert.True(t, ok)
+	assert.Equal(t, int64(150), prime.Delta, "Prime subs pay the base tier")
+
+	// No plan metadata at all (Kick subs, YouTube memberships) → base tier.
+	low, ok := PointsForEvent(cfg, &mpmodels.EventInfo{Type: "subscription", Tier: "high"})
+	assert.True(t, ok)
+	assert.Equal(t, int64(150), low.Delta, "events without a paid plan fall back to base")
 }
 
 func TestPointsForEvent_GiftProportional(t *testing.T) {
