@@ -162,7 +162,81 @@ interface RawChatMessage {
   timestamp: string; // ISO 8601
   tags: Record<string, string>;
   event_type?: string; // "gift", "follow", "like_aggregate", "share", etc.
-  event_data?: Record<string, any>; // Event-specific payload
+  event_data?: Record<string, unknown>; // Event-specific payload
+}
+
+// Minimal typed views of the tiktok-live-connector v2.4+ event payloads.
+//
+// The library sources these message types from `tiktok-live-proto/v3` (a
+// transitive dependency we intentionally do not import directly). We only
+// declare the subset of fields this service consumes. Field names below reflect
+// the current TikTok wire protocol; several were renamed relative to the older
+// pre-v3 proto (noted inline) — that rename is why chat text silently vanished
+// on the pinned 2.1.0 build.
+interface TikTokImageModel {
+  urlList?: string[];
+}
+
+interface TikTokUser {
+  id?: string; // numeric user id (was `userId`)
+  nickname?: string; // display name
+  displayId?: string; // @handle (was `uniqueId`)
+  avatarThumb?: TikTokImageModel; // profile picture (was `profilePictureUrl`)
+}
+
+// Per-message relationship flags relative to the broadcasting anchor.
+interface TikTokUserIdentity {
+  isFollowerOfAnchor?: boolean;
+  isSubscriberOfAnchor?: boolean;
+  isModeratorOfAnchor?: boolean;
+}
+
+interface TikTokCommon {
+  msgId?: string;
+  createTime?: string;
+}
+
+interface TikTokChatData {
+  common?: TikTokCommon;
+  user?: TikTokUser;
+  userIdentity?: TikTokUserIdentity;
+  content?: string; // message text (was `comment`)
+}
+
+interface TikTokGift {
+  id?: string;
+  name?: string;
+  type?: number; // gift type: 1 = normal, 2 = streakable (was top-level `giftType`)
+  diamondCount?: number;
+}
+
+interface TikTokGiftData {
+  common?: TikTokCommon;
+  user?: TikTokUser;
+  giftId?: string; // now top-level (was `gift.giftId`)
+  repeatCount?: number;
+  gift?: TikTokGift;
+}
+
+interface TikTokLikeData {
+  common?: TikTokCommon;
+  user?: TikTokUser;
+  count?: number; // like count (was `likeCount`)
+}
+
+interface TikTokSocialData {
+  common?: TikTokCommon;
+  user?: TikTokUser;
+}
+
+// Reads the TikTok @handle, falling back to the numeric id then a placeholder.
+function tiktokUserHandle(user: TikTokUser | undefined): string {
+  return user?.displayId || user?.id || 'unknown';
+}
+
+// Reads the profile picture URL from the v3 avatar image model.
+function tiktokAvatarUrl(user: TikTokUser | undefined): string {
+  return user?.avatarThumb?.urlList?.[0] || '';
 }
 
 // Like aggregation window for tracking likes over 30-second periods
@@ -990,7 +1064,7 @@ class TikTokListenerService {
     }
   }
 
-  private async handleChatMessage(username: string, overlayId: string, data: any): Promise<void> {
+  private async handleChatMessage(username: string, overlayId: string, data: TikTokChatData): Promise<void> {
     try {
       // Record message for heartbeat monitoring
       this.heartbeatMonitor.recordMessage(username);
@@ -1015,12 +1089,14 @@ class TikTokListenerService {
         });
       }
 
+      const text = data.content || '';
+
       // Check for duplicate messages (prevents replay on reconnect)
-      if (this.messageDeduplicator.isDuplicate(msgId, username, data.comment || '')) {
+      if (this.messageDeduplicator.isDuplicate(msgId, username, text)) {
         logger.debug('Skipping duplicate message', {
           msg_id: msgId,
           username,
-          text_preview: (data.comment || '').substring(0, 50)
+          text_preview: text.substring(0, 50)
         });
         return; // Skip publishing duplicate
       }
@@ -1031,17 +1107,17 @@ class TikTokListenerService {
         platform: 'tiktok',
         channel_id: username,
         stream_id: undefined, // TikTok doesn't provide stream ID via unofficial lib
-        user_id: data.user?.uniqueId || data.user?.userId || 'unknown',
-        username: data.user?.nickname || data.user?.uniqueId || 'Anonymous',
-        text: data.comment || '',
+        user_id: tiktokUserHandle(data.user),
+        username: data.user?.nickname || data.user?.displayId || 'Anonymous',
+        text,
         timestamp: timestamp, // Use TikTok's native timestamp
         tags: {
           overlay_id: overlayId,
-          user_unique_id: data.user?.uniqueId || '',
-          profile_picture_url: data.user?.profilePictureUrl || '',
-          is_follower: data.user?.isFollower?.toString() || 'false',
-          is_subscriber: data.user?.isSubscriber?.toString() || 'false',
-          badge_level: data.user?.badgeLevel?.toString() || '0',
+          user_unique_id: data.user?.displayId || '',
+          profile_picture_url: tiktokAvatarUrl(data.user),
+          is_follower: (data.userIdentity?.isFollowerOfAnchor ?? false).toString(),
+          is_subscriber: (data.userIdentity?.isSubscriberOfAnchor ?? false).toString(),
+          badge_level: '0', // No per-user badge level in the v3 chat payload
           native_msg_id: msgId || '', // Store native ID for reference
           native_create_time: createTime || '' // Store native timestamp for reference
         }
@@ -1064,7 +1140,7 @@ class TikTokListenerService {
     }
   }
 
-  private async handleGift(username: string, overlayId: string, data: any): Promise<void> {
+  private async handleGift(username: string, overlayId: string, data: TikTokGiftData): Promise<void> {
     try {
       this.heartbeatMonitor.recordMessage(username);
 
@@ -1076,20 +1152,20 @@ class TikTokListenerService {
         message_id: msgId,
         platform: 'tiktok',
         channel_id: username,
-        user_id: data.user?.uniqueId || 'unknown',
+        user_id: tiktokUserHandle(data.user),
         username: data.user?.nickname || 'Anonymous',
         text: `Sent ${data.gift?.name || 'a gift'}`,
         timestamp: timestamp,
         tags: {
           overlay_id: overlayId,
-          user_unique_id: data.user?.uniqueId || '',
-          profile_picture_url: data.user?.profilePictureUrl || ''
+          user_unique_id: data.user?.displayId || '',
+          profile_picture_url: tiktokAvatarUrl(data.user)
         },
         event_type: 'gift',
         event_data: {
-          gift_id: data.gift?.giftId,
+          gift_id: data.giftId,
           gift_name: data.gift?.name,
-          gift_type: data.giftType, // 1 = normal, 2 = special
+          gift_type: data.gift?.type, // 1 = normal, 2 = streakable
           gift_count: data.repeatCount || 1,
           diamond_count: (data.gift?.diamondCount || 0) * (data.repeatCount || 1)
         }
@@ -1102,13 +1178,13 @@ class TikTokListenerService {
     }
   }
 
-  private async handleLike(username: string, overlayId: string, data: any): Promise<void> {
+  private async handleLike(username: string, overlayId: string, data: TikTokLikeData): Promise<void> {
     try {
       this.heartbeatMonitor.recordMessage(username);
 
-      const userId = data.user?.uniqueId || 'unknown';
+      const userId = tiktokUserHandle(data.user);
       const userNickname = data.user?.nickname || 'Anonymous';
-      const likeCount = data.likeCount || 1;
+      const likeCount = data.count || 1;
       const aggregationKey = `${username}:${userId}`;
 
       let aggregation = this.likeAggregations.get(aggregationKey);
@@ -1145,7 +1221,7 @@ class TikTokListenerService {
     }
   }
 
-  private async handleFollow(username: string, overlayId: string, data: any): Promise<void> {
+  private async handleFollow(username: string, overlayId: string, data: TikTokSocialData): Promise<void> {
     try {
       this.heartbeatMonitor.recordMessage(username);
 
@@ -1157,14 +1233,14 @@ class TikTokListenerService {
         message_id: msgId,
         platform: 'tiktok',
         channel_id: username,
-        user_id: data.user?.uniqueId || 'unknown',
+        user_id: tiktokUserHandle(data.user),
         username: data.user?.nickname || 'Anonymous',
         text: 'Followed',
         timestamp: timestamp,
         tags: {
           overlay_id: overlayId,
-          user_unique_id: data.user?.uniqueId || '',
-          profile_picture_url: data.user?.profilePictureUrl || ''
+          user_unique_id: data.user?.displayId || '',
+          profile_picture_url: tiktokAvatarUrl(data.user)
         },
         event_type: 'follow',
         event_data: {}
@@ -1177,7 +1253,7 @@ class TikTokListenerService {
     }
   }
 
-  private async handleShare(username: string, overlayId: string, data: any): Promise<void> {
+  private async handleShare(username: string, overlayId: string, data: TikTokSocialData): Promise<void> {
     try {
       this.heartbeatMonitor.recordMessage(username);
 
@@ -1189,14 +1265,14 @@ class TikTokListenerService {
         message_id: msgId,
         platform: 'tiktok',
         channel_id: username,
-        user_id: data.user?.uniqueId || 'unknown',
+        user_id: tiktokUserHandle(data.user),
         username: data.user?.nickname || 'Anonymous',
         text: 'Shared the stream',
         timestamp: timestamp,
         tags: {
           overlay_id: overlayId,
-          user_unique_id: data.user?.uniqueId || '',
-          profile_picture_url: data.user?.profilePictureUrl || ''
+          user_unique_id: data.user?.displayId || '',
+          profile_picture_url: tiktokAvatarUrl(data.user)
         },
         event_type: 'share',
         event_data: {}
