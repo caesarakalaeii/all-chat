@@ -120,7 +120,8 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
 
   const vote = useCallback(
     async (optionIdx: number) => {
-      if (!poll || busy) return
+      // Native Twitch rounds are mirrored read-only — voting happens on Twitch.
+      if (!poll || busy || poll.source === 'twitch_native') return
       setBusy(true)
       setNotice(null)
       try {
@@ -137,7 +138,8 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
 
   const wager = useCallback(
     async (outcomeIdx: number) => {
-      if (!prediction || busy) return
+      // Native Twitch rounds use Twitch channel points — no All-Chat wagers.
+      if (!prediction || busy || prediction.source === 'twitch_native') return
       const amount = Number.parseInt(wagerAmount, 10)
       if (!Number.isFinite(amount) || amount <= 0) {
         setNotice('Enter a positive amount to wager.')
@@ -186,6 +188,9 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
   const predTotal = prediction?.outcomes.reduce((s, o) => s + o.total_points, 0) ?? 0
   const alreadyWagered = Boolean(engagement?.wager_outcome_id)
   const predOpen = prediction?.state === 'ACTIVE'
+  // Mirrored native Twitch rounds show live tallies but are read-only here.
+  const pollNative = poll?.source === 'twitch_native'
+  const predNative = prediction?.source === 'twitch_native'
 
   return (
     <main className="mx-auto max-w-md space-y-6 p-4">
@@ -201,6 +206,11 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
       {poll && poll.state === 'ACTIVE' && (
         <section className="space-y-2">
           <h2 className="flex items-center gap-2 font-semibold">📊 {poll.question}</h2>
+          {pollNative && (
+            <p className="text-sm text-slate-500">
+              This poll runs on Twitch — vote in Twitch chat or the Twitch app.
+            </p>
+          )}
           {poll.options.map((o) => {
             const pct = pollTotal > 0 ? Math.round((o.votes / pollTotal) * 100) : 0
             const mine = engagement?.voted_option_id === o.id
@@ -208,11 +218,11 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
               <button
                 key={o.id}
                 onClick={() => void vote(o.idx)}
-                disabled={busy}
+                disabled={busy || pollNative}
                 className={clsx(
                   'relative flex w-full items-center justify-between overflow-hidden rounded-lg border px-3 py-2 text-left',
                   mine ? 'border-purple-500' : 'border-slate-300 dark:border-slate-700',
-                  busy && 'opacity-60'
+                  (busy || pollNative) && 'opacity-60'
                 )}
               >
                 <span className="absolute inset-y-0 left-0 bg-purple-500/15" style={{ width: `${pct}%` }} />
@@ -234,6 +244,9 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
             🔮 {prediction.title}
             {prediction.state === 'LOCKED' && <span className="text-sm text-slate-500">🔒 locked</span>}
           </h2>
+          {predNative && (
+            <p className="text-sm text-slate-500">This prediction runs on Twitch channel points.</p>
+          )}
           {!alreadyWagered && predOpen && (
             <input
               type="number"
@@ -242,7 +255,11 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
               value={wagerAmount}
               onChange={(e) => setWagerAmount(e.target.value)}
               placeholder={`Amount to wager (${engagement?.points_name ?? 'Points'})`}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 dark:border-slate-700 dark:bg-transparent"
+              disabled={predNative}
+              className={clsx(
+                'w-full rounded-lg border border-slate-300 px-3 py-2 dark:border-slate-700 dark:bg-transparent',
+                predNative && 'opacity-60'
+              )}
             />
           )}
           {prediction.outcomes.map((o) => {
@@ -252,11 +269,11 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
               <button
                 key={o.id}
                 onClick={() => void wager(o.idx)}
-                disabled={busy || alreadyWagered || !predOpen}
+                disabled={busy || alreadyWagered || !predOpen || predNative}
                 className={clsx(
                   'relative flex w-full items-center justify-between overflow-hidden rounded-lg border px-3 py-2 text-left',
                   mine ? 'border-sky-500' : 'border-slate-300 dark:border-slate-700',
-                  (busy || alreadyWagered || !predOpen) && 'opacity-60'
+                  (busy || alreadyWagered || !predOpen || predNative) && 'opacity-60'
                 )}
               >
                 <span className="absolute inset-y-0 left-0 bg-sky-500/15" style={{ width: `${pct}%` }} />

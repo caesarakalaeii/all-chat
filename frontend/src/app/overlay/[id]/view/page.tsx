@@ -33,7 +33,7 @@
 'use client'
 
 import clsx from 'clsx'
-import { ExternalLink, Info, RotateCw, SlidersHorizontal } from 'lucide-react'
+import { BarChart3, ExternalLink, Info, RotateCw, SlidersHorizontal } from 'lucide-react'
 import Link from 'next/link'
 import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
@@ -44,6 +44,7 @@ import { ActivityPanel } from '@/components/overlay/ActivityPanel'
 import { ChatPanel, type ChatPanelModeration } from '@/components/overlay/ChatPanel'
 import { ChatSendBar } from '@/components/overlay/ChatSendBar'
 import { ConnectionBadge } from '@/components/overlay/ConnectionBadge'
+import { EngagementControls } from '@/components/overlay/EngagementControls'
 import { LayoutPicker } from '@/components/overlay/LayoutPicker'
 import { ObservabilitySummary } from '@/components/overlay/ObservabilitySummary'
 import { OverlayViewThemeToggle } from '@/components/overlay/OverlayViewThemeToggle'
@@ -99,6 +100,7 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
   const [eventSettings, setEventSettings] = useState<EventSettings | null>(null)
   const [light, setLight] = useState(false)
   const [showDetails, setShowDetails] = useState(false)
+  const [showEngagement, setShowEngagement] = useState(false)
   const [prefs, setPrefs] = useState<MonitorViewPrefs>(DEFAULT_VIEW_PREFS)
   const [layout, setLayout] = useState<ViewLayout>(DEFAULT_VIEW_LAYOUT)
   const [capabilities, setCapabilities] = useState<ModerationCapabilities | null>(null)
@@ -490,6 +492,22 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
             <SlidersHorizontal className="h-3.5 w-3.5" />
             Details
           </button>
+          {isOwner && (
+            <button
+              onClick={() => setShowEngagement((v) => !v)}
+              aria-pressed={showEngagement}
+              title="Run polls and predictions for this overlay"
+              className={clsx(
+                'flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none',
+                showEngagement
+                  ? 'border-border-md bg-surface-2 text-text'
+                  : 'border-border text-text-sub hover:border-border-md hover:text-text'
+              )}
+            >
+              <BarChart3 className="h-3.5 w-3.5" />
+              Engagement
+            </button>
+          )}
           <LayoutPicker layout={layout} onChange={updateLayout} />
           <ViewSettingsBar prefs={prefs} onChange={updatePrefs} />
           <OverlayViewThemeToggle light={light} onToggle={() => setLight((v) => !v)} />
@@ -580,6 +598,9 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
           observedEventTypes={observedEventTypes}
         />
       )}
+
+      {/* Poll & prediction controls — owner only (issue #523). */}
+      {isOwner && showEngagement && <EngagementControls overlayId={id} />}
 
       {/* Resizable Chat | Activity — orientation/order driven by the layout picker. */}
       <ResizableSplit
