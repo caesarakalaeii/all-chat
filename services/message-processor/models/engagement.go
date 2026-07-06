@@ -77,3 +77,55 @@ type CommandJob struct {
 	Text      string    `json:"text"`
 	Timestamp time.Time `json:"timestamp"`
 }
+
+// StreamEngagementTwitchNative is the durable Redis Stream carrying normalized
+// Twitch-native poll/prediction lifecycle events (channel.poll.* /
+// channel.prediction.*), produced by twitch-eventsub-listener and consumed by
+// engagement-service, which mirrors them per overlay — state + aggregate tallies
+// only; native engagements never touch All-Chat points. Durable like the command
+// stream because a missed lock/end event would strand a mirrored round in a live
+// state on the overlay (there is no later event to self-heal from).
+const StreamEngagementTwitchNative = "engagement:twitch-native"
+
+// NativeEngagementEvent kinds and lifecycle phases.
+const (
+	NativeKindPoll       = "poll"
+	NativeKindPrediction = "prediction"
+
+	NativeEventBegin    = "begin"
+	NativeEventProgress = "progress"
+	NativeEventLock     = "lock"
+	NativeEventEnd      = "end"
+)
+
+// NativeOutcome is one Twitch poll choice or prediction outcome with its
+// aggregate tally (Twitch owns the individual votes/wagers, so only totals
+// cross this boundary).
+type NativeOutcome struct {
+	ExternalID string `json:"external_id"`     // Twitch choice/outcome id
+	Idx        int    `json:"idx"`             // 1-based, stable Twitch array order
+	Label      string `json:"label"`
+	Color      string `json:"color,omitempty"` // predictions: pink/blue
+	Votes      int64  `json:"votes"`           // polls: total votes
+	Points     int64  `json:"points"`          // predictions: channel points wagered
+	Users      int64  `json:"users"`           // predictions: entrants
+}
+
+// NativeEngagementEvent is one normalized lifecycle event of a Twitch-native
+// poll or prediction. ChannelID is the LOWERCASE broadcaster login — the same
+// identifier overlay_chat_sources.channel_id stores for twitch sources, so the
+// consumer can fan out to overlays without a Helix id→login lookup.
+type NativeEngagementEvent struct {
+	Kind              string          `json:"kind"`  // poll | prediction
+	Event             string          `json:"event"` // begin | progress | lock | end
+	Platform          string          `json:"platform"`
+	ChannelID         string          `json:"channel_id"`
+	ExternalID        string          `json:"external_id"` // Twitch poll/prediction id
+	Title             string          `json:"title"`
+	Outcomes          []NativeOutcome `json:"outcomes"`
+	Status            string          `json:"status,omitempty"` // end only: completed|archived|terminated / resolved|canceled
+	WinningExternalID string          `json:"winning_external_id,omitempty"`
+	EndsAt            *time.Time      `json:"ends_at,omitempty"`  // polls
+	LocksAt           *time.Time      `json:"locks_at,omitempty"` // predictions
+	Timestamp         time.Time       `json:"timestamp"`
+}

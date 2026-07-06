@@ -52,6 +52,16 @@ func (h *Handler) CreatePrediction(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "prediction needs a title and 2–10 outcomes"})
 		return
 	}
+	// Twitch precedence: don't open an All-Chat prediction while a mirrored Twitch
+	// prediction is live on this overlay.
+	if live, err := h.repo.HasLiveNativePrediction(c.Request.Context(), overlayID); err != nil {
+		h.log.Error("check live native prediction", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not create prediction"})
+		return
+	} else if live {
+		c.JSON(http.StatusConflict, gin.H{"error": "a Twitch prediction is currently live on this overlay"})
+		return
+	}
 	var autoLockAt *time.Time
 	if req.AutoLockSec > 0 {
 		t := time.Now().Add(time.Duration(req.AutoLockSec) * time.Second)
@@ -167,7 +177,7 @@ func (h *Handler) GetActivePrediction(c *gin.Context) {
 	if !ok {
 		return
 	}
-	pred, err := h.repo.GetActivePrediction(c.Request.Context(), overlayID)
+	pred, err := h.repo.GetActiveDisplayPrediction(c.Request.Context(), overlayID)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "no active prediction"})

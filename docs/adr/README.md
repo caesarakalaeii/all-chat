@@ -400,6 +400,17 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0029: Twitch-Native Poll/Prediction Mirroring
+
+**Status**: ✅ Accepted
+**Date**: 2026-07-06
+**Problem**: A Twitch streamer can run polls/predictions through Twitch's own UI (settled in Channel Points); those rounds are invisible to All-Chat overlays, and reflecting them must never mix Twitch's currency with All-Chat viewer points or open a write path into a round Twitch owns
+**Decision**: Opt-in `channel:read:polls`/`predictions` re-consent (non-fatal scope errors); the EventSub listener normalizes `channel.poll.*`/`channel.prediction.*` to a shared `NativeEngagementEvent` on the **durable** `engagement:twitch-native` stream; engagement-service upserts `source='twitch_native'` rows (per overlay, keyed by migration-070's `(overlay_id, source, external_id)` index) storing aggregate `mirror_*` tallies and re-broadcasts via the existing publisher. **Currency isolation is structural**: native rows never set the chat-active flag, the vote/wager/ledger paths stay `source='allchat'`-only, and public rendering uses separate native-preferring display queries; read tallies are `computed + mirror` (exact because each source populates only one side). Live native rounds 409 the All-Chat create endpoints.
+**Impact**: Overlays reflect native Twitch rounds with zero new render/broadcast/type surface (the `source` discriminator does the work); points integrity is enforced by unreachability, not convention; invisible and cost-free on channels that don't opt in. (ADR numbering shared with caesar-deployment, so this is 0029)
+**→ Read**: [0029-twitch-native-engagement-mirroring.md](./0029-twitch-native-engagement-mirroring.md)
+
+---
+
 ## How to Create a New ADR
 
 ### Step 1: Determine ADR Number

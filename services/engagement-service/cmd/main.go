@@ -98,8 +98,10 @@ func main() {
 	consumerName := fmt.Sprintf("engagement-%s-%d", hostname, os.Getpid())
 	cmdConsumer := consumer.NewCommandConsumer(redisClient, repo, pub, consumerName, log)
 	earnConsumer := consumer.NewEarnConsumer(redisClient, repo, log)
+	nativeConsumer := consumer.NewNativeConsumer(redisClient, repo, pub, consumerName, log)
 	go cmdConsumer.Run(bgCtx)
 	go earnConsumer.Run(bgCtx)
+	go nativeConsumer.Run(bgCtx)
 	go runSweeper(bgCtx, repo, pub, log, time.Duration(cfg.SweepIntervalSeconds)*time.Second)
 
 	if cfg.GinMode == "release" {

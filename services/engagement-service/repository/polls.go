@@ -98,10 +98,13 @@ func (r *Repository) scanPoll(ctx context.Context, q dbtx, where string, arg any
 	return &p, nil
 }
 
-// loadPollOptions returns options with live vote tallies, ordered by idx.
+// loadPollOptions returns options with live vote tallies, ordered by idx. The
+// tally is the All-Chat vote count plus mirror_votes: an All-Chat poll only has
+// the former (mirror_votes = 0), a Twitch-native poll only the latter (no
+// poll_votes rows), so the sum is exact for both sources.
 func (r *Repository) loadPollOptions(ctx context.Context, q dbtx, pollID uuid.UUID) ([]models.PollOption, error) {
 	rows, err := q.Query(ctx,
-		`SELECT o.id, o.idx, o.label, COALESCE(v.cnt, 0)
+		`SELECT o.id, o.idx, o.label, COALESCE(v.cnt, 0) + o.mirror_votes
 		 FROM poll_options o
 		 LEFT JOIN (SELECT option_id, COUNT(*) AS cnt FROM poll_votes WHERE poll_id = $1 GROUP BY option_id) v
 		        ON v.option_id = o.id
@@ -121,9 +124,35 @@ func (r *Repository) loadPollOptions(ctx context.Context, q dbtx, pollID uuid.UU
 	return opts, rows.Err()
 }
 
-// GetActivePoll returns the overlay's active All-Chat poll, or ErrNotFound.
+// GetActivePoll returns the overlay's active All-Chat poll, or ErrNotFound. This
+// is the write-path query: the chat-command consumer and the viewer's private
+// state resolve the poll to record/reflect an All-Chat vote, which never applies
+// to a mirrored Twitch poll — so it stays source='allchat' only. Public display
+// uses GetActiveDisplayPoll instead.
 func (r *Repository) GetActivePoll(ctx context.Context, overlayID uuid.UUID) (*models.Poll, error) {
 	return r.scanPoll(ctx, r.db, `overlay_id = $1 AND state = 'ACTIVE' AND source = 'allchat'`, overlayID)
+}
+
+// GetActiveDisplayPoll returns the overlay's active poll of EITHER source for
+// public rendering (OBS widgets, web page, monitor). If an All-Chat and a
+// mirrored Twitch poll are somehow live at once — the create-time 409 blocks a
+// NEW All-Chat poll while a native one is live, but a native poll can begin on
+// Twitch after an All-Chat poll is already running — the All-Chat poll wins the
+// display so the owner can still close it from the control panel; once it ends,
+// the native poll shows. A poll has no points at stake, but keeping the rule
+// identical to predictions avoids a surprising per-type difference.
+func (r *Repository) GetActiveDisplayPoll(ctx context.Context, overlayID uuid.UUID) (*models.Poll, error) {
+	var id uuid.UUID
+	err := r.db.QueryRow(ctx,
+		`SELECT id FROM polls WHERE overlay_id = $1 AND state = 'ACTIVE'
+		 ORDER BY (source = 'allchat') DESC, created_at DESC LIMIT 1`, overlayID).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get active display poll: %w", err)
+	}
+	return r.GetPoll(ctx, id)
 }
 
 // GetPoll returns a poll by id.
@@ -149,14 +178,21 @@ func (r *Repository) ClosePoll(ctx context.Context, pollID uuid.UUID) (*models.P
 // accepted=false without error when the option index is invalid or the poll is
 // not active (the chat path must not error-spam). Idempotent per (poll, viewer).
 func (r *Repository) RecordVote(ctx context.Context, pollID, viewerID uuid.UUID, optionIdx int, platform string, sourceMessageID *uuid.UUID) (bool, error) {
-	var state string
+	var state, source string
 	var allowChange bool
-	err := r.db.QueryRow(ctx, `SELECT state, allow_change FROM polls WHERE id = $1`, pollID).Scan(&state, &allowChange)
+	err := r.db.QueryRow(ctx, `SELECT state, allow_change, source FROM polls WHERE id = $1`, pollID).Scan(&state, &allowChange, &source)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
 	if err != nil {
 		return false, fmt.Errorf("load poll for vote: %w", err)
+	}
+	// All-Chat votes must never land on a mirrored Twitch poll — its votes live on
+	// Twitch and its tally comes from mirror_votes, so an inserted poll_votes row
+	// would corrupt the displayed count. Mirrors the source guard in Wager. Silent
+	// (return false, no error) like the state/option checks: the chat path never spams.
+	if source != models.SourceAllChat {
+		return false, nil
 	}
 	if state != models.PollActive {
 		return false, nil

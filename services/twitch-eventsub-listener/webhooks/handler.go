@@ -30,6 +30,7 @@ import (
 	"sync"
 	"time"
 
+	mpmodels "github.com/caesar/all-chat/services/message-processor/models"
 	"github.com/caesar/all-chat/services/message-processor/registry"
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/eventsub"
 	"github.com/caesar/all-chat/services/twitch-eventsub-listener/models"
@@ -473,6 +474,20 @@ func (h *Handler) routeEvent(ctx context.Context, subscriptionType string, event
 		return h.handleStreamOffline(ctx, eventData)
 	case "stream.online":
 		return h.handleStreamOnline(ctx, eventData)
+	case "channel.poll.begin":
+		return h.handlePollEvent(ctx, eventData, mpmodels.NativeEventBegin)
+	case "channel.poll.progress":
+		return h.handlePollEvent(ctx, eventData, mpmodels.NativeEventProgress)
+	case "channel.poll.end":
+		return h.handlePollEvent(ctx, eventData, mpmodels.NativeEventEnd)
+	case "channel.prediction.begin":
+		return h.handlePredictionEvent(ctx, eventData, mpmodels.NativeEventBegin)
+	case "channel.prediction.progress":
+		return h.handlePredictionEvent(ctx, eventData, mpmodels.NativeEventProgress)
+	case "channel.prediction.lock":
+		return h.handlePredictionEvent(ctx, eventData, mpmodels.NativeEventLock)
+	case "channel.prediction.end":
+		return h.handlePredictionEvent(ctx, eventData, mpmodels.NativeEventEnd)
 	default:
 		h.logger.Warn("Unhandled subscription type", zap.String("type", subscriptionType))
 		return nil

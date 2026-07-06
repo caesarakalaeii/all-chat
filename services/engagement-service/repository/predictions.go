@@ -97,11 +97,14 @@ func (r *Repository) scanPrediction(ctx context.Context, q dbtx, where string, a
 	return &p, nil
 }
 
-// loadOutcomes returns outcomes with live wagered pool + entrant counts.
+// loadOutcomes returns outcomes with live wagered pool + entrant counts. Like
+// poll options, the totals are the All-Chat wagers plus the mirror_* aggregates:
+// an All-Chat prediction only populates prediction_entries, a Twitch-native one
+// only the mirror columns, so the sum is exact for both sources.
 func (r *Repository) loadOutcomes(ctx context.Context, q dbtx, predictionID uuid.UUID) ([]models.PredictionOutcome, error) {
 	rows, err := q.Query(ctx,
 		`SELECT o.id, o.idx, o.label, o.color,
-		        COALESCE(e.total, 0), COALESCE(e.entrants, 0)
+		        COALESCE(e.total, 0) + o.mirror_points, COALESCE(e.entrants, 0) + o.mirror_entrants
 		 FROM prediction_outcomes o
 		 LEFT JOIN (SELECT outcome_id, SUM(amount) AS total, COUNT(*) AS entrants
 		            FROM prediction_entries WHERE prediction_id = $1 GROUP BY outcome_id) e
@@ -122,10 +125,33 @@ func (r *Repository) loadOutcomes(ctx context.Context, q dbtx, predictionID uuid
 	return outs, rows.Err()
 }
 
-// GetActivePrediction returns the overlay's live (ACTIVE or LOCKED) All-Chat prediction.
+// GetActivePrediction returns the overlay's live (ACTIVE or LOCKED) All-Chat
+// prediction. Write-path query (chat wagers + viewer private state), so
+// source='allchat' only; public display uses GetActiveDisplayPrediction.
 func (r *Repository) GetActivePrediction(ctx context.Context, overlayID uuid.UUID) (*models.Prediction, error) {
 	return r.scanPrediction(ctx, r.db,
 		`overlay_id = $1 AND state IN ('ACTIVE','LOCKED') AND source = 'allchat'`, overlayID)
+}
+
+// GetActiveDisplayPrediction returns the overlay's live prediction of EITHER
+// source for public rendering. If both are somehow live, the All-Chat prediction
+// wins the display: it holds real wagered viewer points that MUST stay resolvable
+// from the control panel, so it can't be shadowed by a mirrored Twitch round
+// (which carries no All-Chat points). The create-time 409 already blocks a NEW
+// All-Chat prediction while a native one is live; this covers the reverse order
+// (a Twitch prediction beginning after an All-Chat one is already running).
+func (r *Repository) GetActiveDisplayPrediction(ctx context.Context, overlayID uuid.UUID) (*models.Prediction, error) {
+	var id uuid.UUID
+	err := r.db.QueryRow(ctx,
+		`SELECT id FROM predictions WHERE overlay_id = $1 AND state IN ('ACTIVE','LOCKED')
+		 ORDER BY (source = 'allchat') DESC, created_at DESC LIMIT 1`, overlayID).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get active display prediction: %w", err)
+	}
+	return r.GetPrediction(ctx, id)
 }
 
 // GetPrediction returns a prediction by id.

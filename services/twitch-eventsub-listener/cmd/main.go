@@ -360,6 +360,42 @@ func main() {
 				successCount++
 			}
 
+			// Engagement mirroring (issue #523, task H): channel.poll.* + channel.prediction.*.
+			// Opt-in — they need the broadcaster's channel:read:polls / channel:read:predictions
+			// grant, so a scope error is expected and non-fatal (the channel simply isn't mirrored
+			// until the owner runs the engagement re-consent). Best-effort like the moderation subs.
+			// Like every event sub here, these are created once when a channel is first tracked, so
+			// a grant made after tracking begins takes effect on the next channel (re)sync — a leader
+			// change, pod restart, or the channel being re-added (ADR-0029 known limitation).
+			for _, sub := range []struct {
+				name string
+				fn   func(context.Context, string) (string, error)
+			}{
+				{"channel.poll.begin", subscriptionMgr.SubscribeToPollBegin},
+				{"channel.poll.progress", subscriptionMgr.SubscribeToPollProgress},
+				{"channel.poll.end", subscriptionMgr.SubscribeToPollEnd},
+				{"channel.prediction.begin", subscriptionMgr.SubscribeToPredictionBegin},
+				{"channel.prediction.progress", subscriptionMgr.SubscribeToPredictionProgress},
+				{"channel.prediction.lock", subscriptionMgr.SubscribeToPredictionLock},
+				{"channel.prediction.end", subscriptionMgr.SubscribeToPredictionEnd},
+			} {
+				if _, err := sub.fn(ctx, broadcasterID); err != nil {
+					if strings.Contains(err.Error(), "subscription already exists") {
+						successCount++
+					} else if isScopeError(err) {
+						scopeErrorCount++
+					} else {
+						log.Warn("Failed to subscribe to engagement event",
+							zap.String("broadcaster_id", broadcasterID),
+							zap.String("type", sub.name),
+							zap.Error(err))
+						failCount++
+					}
+				} else {
+					successCount++
+				}
+			}
+
 			// Chat (channel.chat.message) is NOT created here — it is managed separately via
 			// the subscribe_chat/unsubscribe_chat actions, gated on chat scope AND live-overlay
 			// demand. Keeping it out of "subscribe" ensures the event subscriptions above are
