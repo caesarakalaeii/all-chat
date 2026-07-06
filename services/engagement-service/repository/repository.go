@@ -93,6 +93,35 @@ func (r *Repository) OverlayOwner(ctx context.Context, overlayID uuid.UUID) (str
 	return userID, nil
 }
 
+// PublicOverlayForStreamer resolves a streamer's username to their oldest active,
+// public-for-viewers overlay id — the identical resolution the api-gateway's
+// /ws/chat/{streamer} viewer socket uses (api-gateway subscription/repository.go
+// GetPublicOverlayByUsername). It lets the browser extension and no-install viewer
+// page participate keyed by username, without ever learning the secret overlay id
+// (auth-service deliberately withholds it from viewers). Returns ok=false when the
+// streamer has no such overlay (unknown/private/inactive/banned) so callers 404.
+func (r *Repository) PublicOverlayForStreamer(ctx context.Context, username string) (uuid.UUID, bool, error) {
+	const q = `
+		SELECT o.id
+		FROM overlays o
+		JOIN users u ON o.user_id = u.id
+		WHERE u.username = $1
+		  AND o.is_active = true
+		  AND o.is_public_for_viewers = true
+		  AND u.is_banned = false
+		ORDER BY o.created_at ASC
+		LIMIT 1`
+	var id uuid.UUID
+	err := r.db.QueryRow(ctx, q, username).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, false, nil
+	}
+	if err != nil {
+		return uuid.Nil, false, fmt.Errorf("public overlay for streamer: %w", err)
+	}
+	return id, true, nil
+}
+
 // IsUserPremium reports whether the streamer user has premium access.
 func (r *Repository) IsUserPremium(ctx context.Context, userID string) (bool, error) {
 	const q = `SELECT is_premium FROM users WHERE id = $1`

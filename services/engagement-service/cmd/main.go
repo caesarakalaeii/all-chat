@@ -158,6 +158,9 @@ func main() {
 	pubGroup := router.Group("/api/v1/engagement")
 	pubGroup.GET("/overlays/:id/active-poll", h.GetActivePoll)
 	pubGroup.GET("/overlays/:id/active-prediction", h.GetActivePrediction)
+	// Streamer-keyed public aggregate (ADR-0031): the extension / no-install viewer
+	// page resolve by username, never learning the overlay id.
+	pubGroup.GET("/streamers/:username/active", h.GetStreamerActive)
 
 	// Authenticated routes. The shared middleware accepts either a streamer (owner)
 	// or viewer token; handlers enforce which one each route needs.
@@ -182,6 +185,14 @@ func main() {
 	auth.GET("/viewers/me/points", h.GetBalance)
 	auth.GET("/viewers/me/engagement", h.GetEngagement)
 	auth.POST("/viewers/me/heartbeat", h.Heartbeat)
+
+	// Streamer-keyed viewer participation (ADR-0031): the browser extension knows the
+	// streamer username, not the overlay id. These resolve username -> public overlay
+	// server-side and reuse the overlay-keyed vote/wager/balance logic above.
+	auth.GET("/streamers/:username/me", h.StreamerEngagement)
+	auth.POST("/streamers/:username/vote", h.StreamerVote)
+	auth.POST("/streamers/:username/wager", h.StreamerWager)
+	auth.POST("/streamers/:username/heartbeat", h.StreamerHeartbeat)
 
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,

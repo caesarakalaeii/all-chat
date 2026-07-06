@@ -504,6 +504,9 @@ func main() {
 		// overlay widgets and web page (no auth; no per-viewer data). -> engagement-service.
 		publicAPI.GET("/engagement/overlays/:id/active-poll", proxyHandler.ForwardRequest)
 		publicAPI.GET("/engagement/overlays/:id/active-prediction", proxyHandler.ForwardRequest)
+		// Streamer-keyed public aggregate (ADR-0031) — the browser extension / no-install
+		// viewer page resolve by username, so the overlay id never reaches the client.
+		publicAPI.GET("/engagement/streamers/:username/active", proxyHandler.ForwardRequest)
 
 		// Auth service routes
 		publicAPI.POST("/auth/login", authRateLimiter.MiddlewareScoped("login"), proxyHandler.ForwardRequest)
@@ -745,6 +748,12 @@ func main() {
 		protectedAPI.GET("/engagement/viewers/me/points", proxyHandler.ForwardRequest)
 		protectedAPI.GET("/engagement/viewers/me/engagement", proxyHandler.ForwardRequest)
 		protectedAPI.POST("/engagement/viewers/me/heartbeat", proxyHandler.ForwardRequest)
+		// Streamer-keyed viewer participation (ADR-0031) — the browser extension votes/
+		// wagers by streamer username; engagement-service resolves the public overlay.
+		protectedAPI.GET("/engagement/streamers/:username/me", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/engagement/streamers/:username/vote", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/engagement/streamers/:username/wager", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/engagement/streamers/:username/heartbeat", proxyHandler.ForwardRequest)
 	}
 
 	// Admin routes (require JWT + admin role — defense-in-depth at gateway level)
