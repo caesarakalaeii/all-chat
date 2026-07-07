@@ -211,6 +211,9 @@ func (h *Handler) WebWager(c *gin.Context) {
 	if !ok {
 		return
 	}
+	if !h.requireViewerParticipation(c, overlayID) {
+		return
+	}
 	var req wagerReq
 	if err := c.ShouldBindJSON(&req); err != nil || req.OutcomeIdx < 1 || req.Amount <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "outcome_idx (>=1) and positive amount required"})

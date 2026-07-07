@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/caesar/all-chat/services/engagement-service/publisher"
@@ -72,9 +73,17 @@ func (c *CommandConsumer) Run(ctx context.Context) {
 	c.log.Info("engagement command consumer started", zap.String("consumer", c.consumerName))
 
 	// Reclaim entries orphaned by a crashed/rescheduled pod (this consumer name is
-	// per-pod), then keep sweeping so votes/wagers are never stranded (H3).
+	// per-pod), then keep sweeping so votes/wagers are never stranded (H3). The periodic
+	// drain is tracked so Run doesn't return until it has stopped — the caller waits on Run
+	// before closing the DB/Redis clients, so no drain is mid-XAutoClaim at close (P3-13).
 	drainPEL(ctx, c.rdb, mpmodels.StreamEngagementCommands, consumerGroup, c.consumerName, c.log, c.safeHandle)
-	go periodicDrain(ctx, c.rdb, mpmodels.StreamEngagementCommands, consumerGroup, c.consumerName, c.log, c.safeHandle)
+	var drainWG sync.WaitGroup
+	drainWG.Add(1)
+	go func() {
+		defer drainWG.Done()
+		periodicDrain(ctx, c.rdb, mpmodels.StreamEngagementCommands, consumerGroup, c.consumerName, c.log, c.safeHandle)
+	}()
+	defer drainWG.Wait()
 
 	for {
 		if ctx.Err() != nil {
@@ -188,7 +197,9 @@ func (c *CommandConsumer) handle(ctx context.Context, msg redis.XMessage) error 
 				}
 				continue // no active poll on this overlay
 			}
-			accepted, err := c.repo.RecordVote(ctx, poll.ID, viewerID, overlayID, idx, job.Platform, srcMsgID)
+			// msg.ID's epoch-ms is the monotonic ordering token: a 5m-drained redelivery
+			// of an older vote can't revert a newer vote change (P3-3).
+			accepted, err := c.repo.RecordVote(ctx, poll.ID, viewerID, overlayID, idx, job.Platform, srcMsgID, streamEntryMillis(msg.ID))
 			if err != nil {
 				retryErr = errors.Join(retryErr, fmt.Errorf("record chat vote: %w", err))
 				continue
@@ -308,4 +319,19 @@ func parseUUIDOrNil(s string) *uuid.UUID {
 		return nil
 	}
 	return &id
+}
+
+// streamEntryMillis extracts the epoch-millisecond component of a Redis stream entry id
+// ("<ms>-<seq>") as a monotonic per-message ordering token for the poll-vote seq guard
+// (P3-3). Returns 0 on a malformed id, which sorts oldest so it never wins a change guard.
+func streamEntryMillis(id string) int64 {
+	ms := id
+	if i := strings.IndexByte(id, '-'); i >= 0 {
+		ms = id[:i]
+	}
+	n, err := strconv.ParseInt(ms, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return n
 }

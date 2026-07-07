@@ -137,12 +137,15 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
       // section would otherwise just silently unmount). Done here in the async refresh
       // rather than a render-triggered effect to avoid a cascading re-render.
       if (pub.prediction) {
-        setSettled(null)
-        // A different round is live now → drop the stale wager ref regardless of whether
-        // this tick's private fetch succeeded (else a transient failure at a fast round
-        // handoff could later fire a settled banner for a round the viewer never wagered).
+        // A DIFFERENT round is live than the one the viewer wagered on → the wagered round
+        // ended (fast round-to-round handoff). Raise its settled banner BEFORE adopting the
+        // new round, so the "your prediction settled" reveal isn't skipped (P3-11). Same
+        // round still live → no banner. Cleared unconditionally otherwise.
         if (wageredRoundRef.current && wageredRoundRef.current.id !== pub.prediction.id) {
+          setSettled({ outcomeLabel: wageredRoundRef.current.outcomeLabel, amount: wageredRoundRef.current.amount })
           wageredRoundRef.current = null
+        } else {
+          setSettled(null)
         }
         if (eng?.wager_outcome_id) {
           const o = pub.prediction.outcomes.find((x) => x.id === eng.wager_outcome_id)

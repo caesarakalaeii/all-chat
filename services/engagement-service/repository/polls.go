@@ -206,7 +206,11 @@ func (r *Repository) ClosePoll(ctx context.Context, pollID, overlayID uuid.UUID)
 // accepted=false without error when the option index is invalid, the poll is not
 // active, or the overlay/source does not match (the chat path must not error-spam).
 // Idempotent per (poll, viewer).
-func (r *Repository) RecordVote(ctx context.Context, pollID, viewerID, overlayID uuid.UUID, optionIdx int, platform string, sourceMessageID *uuid.UUID) (bool, error) {
+//
+// seq is a monotonic per-vote ordering token (chat: the Redis stream entry's epoch-ms;
+// web: request-time epoch-ms). A vote CHANGE is applied only when seq >= the stored seq,
+// so a 5m-drained redelivery of an OLDER vote can't revert a viewer's newer choice (P3-3).
+func (r *Repository) RecordVote(ctx context.Context, pollID, viewerID, overlayID uuid.UUID, optionIdx int, platform string, sourceMessageID *uuid.UUID, seq int64) (bool, error) {
 	var state, source string
 	var allowChange bool
 	var rowOverlayID uuid.UUID
@@ -245,14 +249,19 @@ func (r *Repository) RecordVote(ctx context.Context, pollID, viewerID, overlayID
 		return false, fmt.Errorf("resolve option: %w", err)
 	}
 
-	conflict := `DO UPDATE SET option_id = EXCLUDED.option_id, platform = EXCLUDED.platform, source_message_id = EXCLUDED.source_message_id`
+	// Guard the change on seq so a stale redelivery can't revert a newer vote (P3-3): a
+	// change applies only when its ordering token is >= the stored one. A same-seq
+	// redelivery still re-applies (idempotent). allow_change=false keeps first-vote-wins.
+	conflict := `DO UPDATE SET option_id = EXCLUDED.option_id, platform = EXCLUDED.platform,
+		source_message_id = EXCLUDED.source_message_id, seq = EXCLUDED.seq
+		WHERE EXCLUDED.seq >= poll_votes.seq`
 	if !allowChange {
 		conflict = `DO NOTHING`
 	}
 	_, err = r.db.Exec(ctx,
-		`INSERT INTO poll_votes (poll_id, viewer_id, option_id, platform, source_message_id)
-		 VALUES ($1,$2,$3,$4,$5) ON CONFLICT (poll_id, viewer_id) `+conflict,
-		pollID, viewerID, optionID, platform, sourceMessageID)
+		`INSERT INTO poll_votes (poll_id, viewer_id, option_id, platform, source_message_id, seq)
+		 VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (poll_id, viewer_id) `+conflict,
+		pollID, viewerID, optionID, platform, sourceMessageID, seq)
 	if err != nil {
 		return false, fmt.Errorf("record vote: %w", err)
 	}

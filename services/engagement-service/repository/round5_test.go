@@ -51,7 +51,7 @@ func TestG3_CrossTenantPollVote(t *testing.T) {
 	require.NoError(t, err)
 
 	// Attack: vote on overlay A's poll while naming overlay B.
-	accepted, err := repo.RecordVote(ctx, poll.ID, viewer, overlayB, 1, "twitch", nil)
+	accepted, err := repo.RecordVote(ctx, poll.ID, viewer, overlayB, 1, "twitch", nil, 1)
 	require.NoError(t, err)
 	assert.False(t, accepted, "a vote whose path overlay does not own the poll must be rejected")
 	n, err := repo.TotalVotes(ctx, poll.ID)
@@ -59,7 +59,7 @@ func TestG3_CrossTenantPollVote(t *testing.T) {
 	assert.EqualValues(t, 0, n, "no vote recorded for the cross-tenant attempt")
 
 	// Positive control: the correctly-scoped vote is accepted and counted.
-	accepted, err = repo.RecordVote(ctx, poll.ID, viewer, overlayA, 1, "twitch", nil)
+	accepted, err = repo.RecordVote(ctx, poll.ID, viewer, overlayA, 1, "twitch", nil, 1)
 	require.NoError(t, err)
 	require.True(t, accepted, "the correctly-scoped vote should be accepted")
 	n, err = repo.TotalVotes(ctx, poll.ID)

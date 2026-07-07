@@ -197,14 +197,17 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
       ])
       const nextPoll = pRes.ok ? ((await pRes.json()) as Poll) : null
       const nextPrediction = prRes.ok ? ((await prRes.json()) as Prediction) : null
+      // Only a genuine 404 means "no active round". A transient non-ok (5xx) must NOT blank
+      // the owner's live round (P3-9) — keep the previous render for that branch.
+      const pollGone = pRes.status === 404
+      const predGone = prRes.status === 404
       if (mutationEpochRef.current !== epoch) return // stale — a mutation landed meanwhile
-      // On 404 only clear a round that was still running (it ended elsewhere,
-      // e.g. auto-close); a finished one we're displaying stays until dismissed.
-      setPoll((prev) => nextPoll ?? (prev && prev.state !== 'ACTIVE' ? prev : null))
-      setPrediction(
-        (prev) =>
-          nextPrediction ??
-          (prev && prev.state !== 'ACTIVE' && prev.state !== 'LOCKED' ? prev : null)
+      // On 404 only clear a round that was still running (it ended elsewhere, e.g.
+      // auto-close); a finished one we're displaying stays until dismissed.
+      setPoll((prev) => nextPoll ?? (pollGone ? (prev && prev.state !== 'ACTIVE' ? prev : null) : prev))
+      setPrediction((prev) =>
+        nextPrediction ??
+        (predGone ? (prev && prev.state !== 'ACTIVE' && prev.state !== 'LOCKED' ? prev : null) : prev)
       )
     } catch {
       /* keep last render on transient errors */

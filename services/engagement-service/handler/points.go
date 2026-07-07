@@ -88,6 +88,9 @@ func (h *Handler) GetBalance(c *gin.Context) {
 	if !ok {
 		return
 	}
+	if !h.requireViewerParticipation(c, overlayID) {
+		return
+	}
 	bal, err := h.repo.GetBalance(c.Request.Context(), viewerID, overlayID)
 	if err != nil {
 		h.log.Error("get balance", zap.Error(err))
@@ -108,6 +111,9 @@ func (h *Handler) GetEngagement(c *gin.Context) {
 	}
 	overlayID, ok := overlayIDQuery(c)
 	if !ok {
+		return
+	}
+	if !h.requireViewerParticipation(c, overlayID) {
 		return
 	}
 	ctx := c.Request.Context()
@@ -204,6 +210,9 @@ func (h *Handler) Heartbeat(c *gin.Context) {
 	overlayID, err := uuid.Parse(req.OverlayID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "overlay_id must be a valid uuid"})
+		return
+	}
+	if !h.requireViewerParticipation(c, overlayID) {
 		return
 	}
 	ctx := c.Request.Context()

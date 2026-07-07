@@ -16,7 +16,10 @@
 
 package consumer
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // TestLooksLikeCommand covers the hot-path pre-filter, including the P2-5 fix: a leading
 // '+'/'-' ("+1" chat-agreement idiom) must NOT be treated as a bare-number vote candidate
@@ -34,11 +37,12 @@ func TestLooksLikeCommand(t *testing.T) {
 		{"hello", false},
 		{"", false},
 		{"   ", false},
-		{"123", false}, // 3 digits: too long for the bare shortcut
-		{"+1", false},  // P2-5: chat-agreement idiom, not a vote
-		{"-1", false},  // P2-5
-		{"+9", false},  // P2-5
-		{"9x", false},  // leading digit but not a number
+		{"123", false},                          // 3 digits: too long for the bare shortcut
+		{"+1", false},                           // P2-5: chat-agreement idiom, not a vote
+		{"-1", false},                           // P2-5
+		{"+9", false},                           // P2-5
+		{"9x", false},                           // leading digit but not a number
+		{"!" + strings.Repeat("x", 600), false}, // P3-6: over the byte cap, not a real command
 	}
 	for _, tc := range cases {
 		if got := looksLikeCommand(tc.text); got != tc.want {
