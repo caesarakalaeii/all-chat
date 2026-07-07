@@ -143,6 +143,12 @@ func (r *Repository) GetActivePrediction(ctx context.Context, overlayID uuid.UUI
 // while a native one is live; this covers the reverse order (a Twitch prediction
 // beginning after an All-Chat one is already running). A still-live round always
 // outranks a terminal grace-window one (see the leading ORDER BY key).
+//
+// Accepted trade-off: because live outranks terminal, a native round going ACTIVE
+// at the same moment an All-Chat round RESOLVED/CANCELED can win the display during
+// the latter's grace window and pre-empt its "who won" reveal frame. This is
+// display-only (points are already credited by resolve/cancel) and is accepted
+// rather than special-cased — the create-side 409 keeps both-live uncommon.
 func (r *Repository) GetActiveDisplayPrediction(ctx context.Context, overlayID uuid.UUID) (*models.Prediction, error) {
 	var id uuid.UUID
 	err := r.db.QueryRow(ctx,
@@ -276,11 +282,17 @@ func (r *Repository) Wager(ctx context.Context, predictionID, viewerID, overlayI
 		return WagerResult{Reason: "duplicate"}, nil
 	}
 
+	// Read the post-debit balance INSIDE the tx: applyLedger already debited
+	// viewer_points above, so this row holds the exact post-wager value and is
+	// immune to a concurrent uncommitted credit (unlike a racy post-commit read).
+	var newBal int64
+	if err := tx.QueryRow(ctx, `SELECT balance FROM viewer_points WHERE viewer_id = $1 AND overlay_id = $2`, viewerID, overlayID).Scan(&newBal); err != nil {
+		return WagerResult{}, fmt.Errorf("read post-debit balance: %w", err)
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return WagerResult{}, fmt.Errorf("commit wager: %w", err)
 	}
-	bal, _ := r.GetBalance(ctx, viewerID, overlayID)
-	return WagerResult{Accepted: true, NewBalance: bal}, nil
+	return WagerResult{Accepted: true, NewBalance: newBal}, nil
 }
 
 // GetViewerEntry returns a viewer's wager (outcome + amount) on a prediction, or nil.
@@ -356,7 +368,7 @@ func (r *Repository) ResolvePrediction(ctx context.Context, predictionID, winnin
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit resolve: %w", err)
 	}
-	return r.GetPrediction(ctx, predictionID)
+	return r.GetPredictionForOverlay(ctx, predictionID, overlayID)
 }
 
 // CancelPrediction transitions a live prediction to CANCELED and refunds every
@@ -392,7 +404,7 @@ func (r *Repository) CancelPrediction(ctx context.Context, predictionID, overlay
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit cancel: %w", err)
 	}
-	return r.GetPrediction(ctx, predictionID)
+	return r.GetPredictionForOverlay(ctx, predictionID, overlayID)
 }
 
 // loadEntries reads all wagers for a prediction (for payout/refund).

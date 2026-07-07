@@ -152,16 +152,28 @@ export class WebSocketClient {
     // is same-origin, so the browser sends the httpOnly access cookie and the
     // gateway authenticates via CookieToBearer.
     let url = `${WS_URL}/ws/overlay/${overlayId}`
+    const params = new URLSearchParams()
     if (viewerParticipant) {
       // Tell the gateway this is an anonymous viewer's participate tab: it must NOT
       // auto-activate the overlay's chat sources (which would sustain demand-based YouTube
       // polling driven by viewers with no owner in the loop). The streamer's OWN OBS
       // poll/prediction widgets are engagementOnly but do NOT set this — they must still
       // activate sources so Twitch-native rounds get mirrored. See the gateway (P2-3).
-      url += `?viewerParticipant=true`
-    } else if (!engagementOnly && this.lastSeenTimestamp > 0) {
-      url += `?since=${this.lastSeenTimestamp}`
+      params.set('viewerParticipant', 'true')
     }
+    if (engagementOnly) {
+      // Tell the gateway this socket must never receive chat frames — only
+      // poll/prediction updates. Filtered per-connection at broadcast time (#5).
+      params.set('engagementOnly', 'true')
+    }
+    if (!viewerParticipant && !engagementOnly && this.lastSeenTimestamp > 0) {
+      // Pass ?since= so the server's replay buffer flushes only the messages we
+      // haven't already rendered (server uses an exclusive lower bound). Not set for
+      // participate/engagement-only sockets, which never touch the chat watermark.
+      params.set('since', String(this.lastSeenTimestamp))
+    }
+    const qs = params.toString()
+    if (qs) url += `?${qs}`
     console.log('[WebSocket] Connecting to:', url)
 
     this.ws = new WebSocket(url, this.token ? [`bearer.${this.token}`] : undefined)

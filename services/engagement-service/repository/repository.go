@@ -372,6 +372,18 @@ func (r *Repository) GetBalance(ctx context.Context, viewerID, overlayID uuid.UU
 	return bal, nil
 }
 
+// WatchCreditsToday returns how many earn_watch credits this (viewer, overlay) has
+// received in the current day — used to cap watch-time farming on the client-driven
+// heartbeat path which has no server-observed liveness (PR #524 #4).
+func (r *Repository) WatchCreditsToday(ctx context.Context, viewerID, overlayID uuid.UUID) (int, error) {
+	const q = `SELECT COUNT(*) FROM points_transactions WHERE viewer_id = $1 AND overlay_id = $2 AND reason = 'earn_watch' AND created_at >= date_trunc('day', NOW())`
+	var n int
+	if err := r.db.QueryRow(ctx, q, viewerID, overlayID).Scan(&n); err != nil {
+		return 0, fmt.Errorf("watch credits today: %w", err)
+	}
+	return n, nil
+}
+
 // --- Earn config ---
 
 // GetEarnConfig returns the overlay's earn config, or built-in defaults if the

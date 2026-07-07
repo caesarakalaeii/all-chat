@@ -39,6 +39,9 @@ const (
 	maxMultiplier float64 = 100_000
 	// maxPointsNameLen matches the points_name VARCHAR(32) column (characters).
 	maxPointsNameLen = 32
+	// maxWatchCreditsPerDay bounds cumulative watch-time credits per (viewer, overlay)
+	// per day: one credit/min for 24h; an honest viewer is never throttled (PR #524 #4).
+	maxWatchCreditsPerDay = 1440
 )
 
 // validateEarnConfig rejects negative or non-finite earn values (a clear owner
@@ -197,6 +200,12 @@ type heartbeatReq struct {
 // Heartbeat (viewer) awards watch-time points, deduped to once per minute-bucket
 // per (viewer, overlay). Sent by the web page / extension roughly every 60s while
 // focused. The dedup key makes concurrent/duplicate beats idempotent.
+//
+// Accepted residual: watch credit is client-driven with no server-observed liveness
+// proof — a viewer can POST beats without actually watching. It is bounded by the
+// minute-bucket dedup (at most one credit/min), the per-(viewer, overlay) daily cap
+// (maxWatchCreditsPerDay), and the per-viewer request rate limit. Tightening beyond
+// this would require a gateway presence key proving an open overlay connection.
 func (h *Handler) Heartbeat(c *gin.Context) {
 	viewerID, ok := requireViewer(c)
 	if !ok {
@@ -223,6 +232,14 @@ func (h *Handler) Heartbeat(c *gin.Context) {
 		return
 	}
 	if !cfg.Enabled || cfg.WatchPerMinute <= 0 {
+		bal, _ := h.repo.GetBalance(ctx, viewerID, overlayID)
+		c.JSON(http.StatusOK, gin.H{"balance": bal})
+		return
+	}
+	// Daily watch-credit cap: heartbeat is credited on a bare client POST with no server-observed
+	// liveness, and the rate limiter is per-viewer global, so bound cumulative farming per
+	// (viewer, overlay) per day (PR #524 #4).
+	if n, err := h.repo.WatchCreditsToday(ctx, viewerID, overlayID); err == nil && n >= maxWatchCreditsPerDay {
 		bal, _ := h.repo.GetBalance(ctx, viewerID, overlayID)
 		c.JSON(http.StatusOK, gin.H{"balance": bal})
 		return

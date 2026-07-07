@@ -210,11 +210,29 @@ func (r *Repository) ClosePoll(ctx context.Context, pollID, overlayID uuid.UUID)
 // seq is a monotonic per-vote ordering token (chat: the Redis stream entry's epoch-ms;
 // web: request-time epoch-ms). A vote CHANGE is applied only when seq >= the stored seq,
 // so a 5m-drained redelivery of an OLDER vote can't revert a viewer's newer choice (P3-3).
+//
+// seq is deliberately EVENT time, not processing time — that is exactly what lets the guard
+// drop a delayed redelivery: a DB-side clock_timestamp() would stamp PROCESSING time (always
+// newest on redelivery) and reopen P3-3. Cross-source ordering (chat uses the Redis-server
+// clock, web uses the engagement-host clock) is therefore BEST-EFFORT and assumes both are
+// NTP-synced (they are co-located in the same cluster); same-source ordering is exact. Under
+// clock skew or an HA-Redis failover, a near-simultaneous cross-source change on one
+// (poll, viewer) may pick the wrong winner — accepted because polls carry no points, the
+// effect is bounded to that one viewer's own vote, and it self-corrects on the next vote.
 func (r *Repository) RecordVote(ctx context.Context, pollID, viewerID, overlayID uuid.UUID, optionIdx int, platform string, sourceMessageID *uuid.UUID, seq int64) (bool, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return false, fmt.Errorf("begin record vote: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
 	var state, source string
 	var allowChange bool
 	var rowOverlayID uuid.UUID
-	err := r.db.QueryRow(ctx, `SELECT state, allow_change, source, overlay_id FROM polls WHERE id = $1`, pollID).Scan(&state, &allowChange, &source, &rowOverlayID)
+	// FOR UPDATE row-locks the poll so a concurrent ClosePoll/CloseExpired serializes
+	// against this vote, closing the read-then-write TOCTOU where a poll observed ACTIVE
+	// here could be CLOSED before the INSERT lands. Mirrors Wager.
+	err = tx.QueryRow(ctx, `SELECT state, allow_change, source, overlay_id FROM polls WHERE id = $1 FOR UPDATE`, pollID).Scan(&state, &allowChange, &source, &rowOverlayID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
@@ -241,7 +259,7 @@ func (r *Repository) RecordVote(ctx context.Context, pollID, viewerID, overlayID
 	}
 
 	var optionID uuid.UUID
-	err = r.db.QueryRow(ctx, `SELECT id FROM poll_options WHERE poll_id = $1 AND idx = $2`, pollID, optionIdx).Scan(&optionID)
+	err = tx.QueryRow(ctx, `SELECT id FROM poll_options WHERE poll_id = $1 AND idx = $2`, pollID, optionIdx).Scan(&optionID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil // out-of-range option: silently ignore
 	}
@@ -258,14 +276,19 @@ func (r *Repository) RecordVote(ctx context.Context, pollID, viewerID, overlayID
 	if !allowChange {
 		conflict = `DO NOTHING`
 	}
-	_, err = r.db.Exec(ctx,
+	tag, err := tx.Exec(ctx,
 		`INSERT INTO poll_votes (poll_id, viewer_id, option_id, platform, source_message_id, seq)
 		 VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (poll_id, viewer_id) `+conflict,
 		pollID, viewerID, optionID, platform, sourceMessageID, seq)
 	if err != nil {
 		return false, fmt.Errorf("record vote: %w", err)
 	}
-	return true, nil
+	if err := tx.Commit(ctx); err != nil {
+		return false, fmt.Errorf("commit record vote: %w", err)
+	}
+	// A seq-guarded (stale redelivery) or DO NOTHING (first-vote-wins) blocked write
+	// affects 0 rows — report accepted=false so the caller does not re-broadcast state.
+	return tag.RowsAffected() > 0, nil
 }
 
 // GetViewerVote returns the option a viewer voted for on a poll, or nil.

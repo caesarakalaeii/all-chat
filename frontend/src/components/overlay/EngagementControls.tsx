@@ -366,6 +366,15 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
     return () => clearTimeout(t)
   }, [confirmResolve])
 
+  // Reset the winner selection and armed confirmations when the ACTIVE round identity changes
+  // underneath us (e.g. a fast LOCKED round A -> LOCKED round B handoff via refresh()). Otherwise
+  // a winnerId from the previous round keeps Resolve enabled and would post a foreign outcome id.
+  useEffect(() => {
+    setWinnerId('')
+    setConfirmResolve(false)
+    setConfirmCancel(false)
+  }, [prediction?.id])
+
   // --- Render ----------------------------------------------------------------
 
   const pollTotal = poll?.options.reduce((s, o) => s + o.votes, 0) ?? 0

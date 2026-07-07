@@ -173,6 +173,17 @@ func (h *Handler) CancelPrediction(c *gin.Context) {
 }
 
 // GetActivePrediction (public) returns the overlay's live prediction.
+//
+// This is a public UNAUTHENTICATED render seam keyed by the overlay UUID. The
+// OBS/render path holds no token, so we cannot distinguish the owner from a viewer
+// and therefore do NOT apply the is_public_for_viewers gate here — gating would black
+// out the streamer's OWN OBS widget the moment they set is_public_for_viewers=false
+// (which defaults to true). The overlay UUID is itself a bearer capability that
+// auth-service withholds from viewers, so this discloses only the live title + tally
+// to a holder of the private overlay id — not a cross-tenant leak. The
+// is_public_for_viewers gate IS enforced on every viewer-authored surface
+// (vote/wager/balance/heartbeat via requireViewerParticipation) and on the
+// username-keyed GetStreamerActive read. See PR #524 review finding #3.
 func (h *Handler) GetActivePrediction(c *gin.Context) {
 	overlayID, ok := overlayIDParam(c)
 	if !ok {

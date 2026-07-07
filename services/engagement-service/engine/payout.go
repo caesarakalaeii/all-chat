@@ -26,6 +26,12 @@ import (
 	"github.com/google/uuid"
 )
 
+// maxPool caps the accumulated stake pool so a pathological set of wagers can't overflow
+// int64 before the big.Int proportional split. Mirrors engine/earn.go's maxEventPoints:
+// far above any realistic pool yet well clear of math.MaxInt64, preserving the
+// sum(Credits)==sum(stakes) conservation guarantee.
+const maxPool int64 = 1_000_000_000_000_000 // 1e15
+
 // WagerEntry is one viewer's stake on one outcome. At most one per viewer per
 // prediction (enforced by the DB primary key), so ViewerID is unique across the set.
 type WagerEntry struct {
@@ -57,9 +63,9 @@ func ComputePayouts(entries []WagerEntry, winning uuid.UUID) PayoutResult {
 	var total, winnersPool int64
 	winners := make([]WagerEntry, 0, len(entries))
 	for _, e := range entries {
-		total += e.Amount
+		total = addClamp(total, e.Amount)
 		if e.OutcomeID == winning {
-			winnersPool += e.Amount
+			winnersPool = addClamp(winnersPool, e.Amount)
 			winners = append(winners, e)
 		}
 	}
@@ -99,4 +105,17 @@ func ComputePayouts(entries []WagerEntry, winning uuid.UUID) PayoutResult {
 		credits[winners[0].ViewerID] += remainder
 	}
 	return PayoutResult{Credits: credits, Refund: false}
+}
+
+// addClamp adds a non-negative stake to a running pool, clamping at maxPool so int64 can't
+// wrap. Amounts are non-negative (the write path rejects amount<=0). Clamping (not erroring)
+// keeps ComputePayouts' signature; the big.Int split still conserves the clamped pool.
+func addClamp(pool, amount int64) int64 {
+	if amount <= 0 {
+		return pool
+	}
+	if pool > maxPool-amount {
+		return maxPool
+	}
+	return pool + amount
 }

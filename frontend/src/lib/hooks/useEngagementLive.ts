@@ -34,15 +34,20 @@ import { WebSocketClient } from '../api/websocket'
  * tells the gateway to skip source auto-activation and bounds reconnects, so a viewer tab
  * on an inactive overlay can't drive YouTube quota or reconnect-storm (P2-3). The
  * streamer's OWN OBS poll/prediction display widgets (and the owner monitor) leave it
- * false so they still auto-activate sources — required for Twitch-native round mirroring —
- * and reconnect indefinitely for the whole stream.
+ * false so they still auto-activate sources — required for Twitch-native round mirroring.
+ *
+ * `opts.maxReconnectAttempts` is overridable: it defaults to 8 for viewer-participant tabs
+ * and to 0 (unlimited) otherwise. The OBS display widgets pass an explicit bound (8) so they
+ * still auto-activate sources (viewerParticipant stays false) yet can't reconnect-storm the
+ * gateway on a persistently-failing handshake (#6).
  */
 export function useEngagementLive(
   overlayId: string,
   onSignal: (kind: 'poll' | 'prediction') => void,
-  opts?: { viewerParticipant?: boolean }
+  opts?: { viewerParticipant?: boolean; maxReconnectAttempts?: number }
 ) {
   const viewerParticipant = opts?.viewerParticipant ?? false
+  const maxReconnectAttempts = opts?.maxReconnectAttempts ?? (viewerParticipant ? 8 : 0)
   // Keep the latest callback in a ref so re-renders don't churn the socket. Updated in
   // an effect (never during render) so the connection effect below can depend only on
   // overlayId and still call the freshest callback.
@@ -53,12 +58,13 @@ export function useEngagementLive(
 
   useEffect(() => {
     if (!overlayId) return
-    // Bound reconnects only for the anonymous participate socket: it's a latency
-    // accelerator over the page's HTTP poll, so on a persistently-failing handshake it must
-    // give up rather than storm the gateway from every viewer tab. OBS display widgets keep
-    // unlimited reconnects (they must survive any blip for the whole stream).
-    const client = viewerParticipant
-      ? new WebSocketClient({ maxReconnectAttempts: 8 })
+    // Bound reconnects whenever a positive attempt cap is set: it's a latency accelerator
+    // over the page's HTTP poll, so on a persistently-failing handshake it must give up
+    // rather than storm the gateway. The anonymous participate socket bounds via the
+    // viewerParticipant default (8); OBS display widgets pass an explicit bound (8) while
+    // staying viewerParticipant=false. maxReconnectAttempts=0 means unlimited.
+    const client = maxReconnectAttempts > 0
+      ? new WebSocketClient({ maxReconnectAttempts })
       : new WebSocketClient()
     const unsubscribe = client.onEngagementUpdate((kind) => cbRef.current(kind))
     // engagementOnly=true: this socket only wants poll/prediction signals — it must not

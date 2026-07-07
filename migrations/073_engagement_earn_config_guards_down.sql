@@ -1,5 +1,5 @@
 -- 073_engagement_earn_config_guards_down.sql
--- Reverse 072: drop the earn-config CHECK bounds and restore the pre-072 enabled
+-- Reverse 073: drop the earn-config CHECK bounds and restore the pre-073 enabled
 -- default (TRUE). Existing row values are left as-is.
 
 ALTER TABLE points_earn_config ALTER COLUMN enabled SET DEFAULT TRUE;

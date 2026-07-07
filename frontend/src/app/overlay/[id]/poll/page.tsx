@@ -67,7 +67,7 @@ export default function PollOverlayPage({ params }: { params: Promise<{ id: stri
   // waiting for the next 2s tick (L-D1). The interval above remains the fallback.
   useEngagementLive(id, (kind) => {
     if (kind === 'poll') void fetchPoll()
-  })
+  }, { maxReconnectAttempts: 8 })
 
   // 1s ticker so the "remaining" countdown updates smoothly between fetches.
   useEffect(() => {

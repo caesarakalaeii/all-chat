@@ -96,6 +96,10 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
   // than voicing the whole tally section on every 3s refresh (which would over-announce).
   const [announcement, setAnnouncement] = useState('')
   const prevPredStateRef = useRef<Prediction['state'] | null>(null)
+  // Bumped around every viewer mutation (vote/wager) so an interval/WS refresh whose fetches
+  // straddled the mutation can't overwrite the fresher post-mutation snapshot (mirrors
+  // EngagementControls' mutationEpochRef).
+  const mutationEpochRef = useRef(0)
 
   // fetchPublic / fetchPrivate return their data so refresh() can apply everything in
   // ONE state update — avoiding the multi-commit flicker of separate async chains (N1).
@@ -123,11 +127,15 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
   }, [id])
 
   const refresh = useCallback(async () => {
+    const epoch = mutationEpochRef.current
     const authedNow = hasViewerToken()
     const [pub, priv] = await Promise.all([
       fetchPublic(),
       authedNow ? fetchPrivate() : Promise.resolve<ViewerEngagement | 'unauth' | null>(null),
     ])
+    // A vote/wager landed while these fetches were in flight → this snapshot is stale
+    // and would clobber the fresher post-mutation state; drop it (its own refresh wins).
+    if (mutationEpochRef.current !== epoch) return
     const eng = priv && priv !== 'unauth' ? priv : null
     if (pub) {
       setPoll(pub.poll)
@@ -233,8 +241,10 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
       if (!poll || busy || poll.source === 'twitch_native') return
       setBusy(true)
       setNotice(null)
+      mutationEpochRef.current += 1 // invalidate any in-flight refresh
       try {
         await viewerApi.votePoll(id, poll.id, optionIdx)
+        mutationEpochRef.current += 1 // so this mutation's own refresh captures the newest epoch and wins
         await refresh()
       } catch (err) {
         if (isUnauthorized(err)) {
@@ -266,8 +276,10 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
       }
       setBusy(true)
       setNotice(null)
+      mutationEpochRef.current += 1 // invalidate any in-flight refresh
       try {
         await viewerApi.wagerPrediction(id, prediction.id, outcomeIdx, amount)
+        mutationEpochRef.current += 1 // so this mutation's own refresh captures the newest epoch and wins
         setWagerAmount('')
         await refresh()
       } catch (err) {

@@ -262,6 +262,14 @@ func (h *Handler) StreamerHeartbeat(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"balance": bal})
 		return
 	}
+	// Daily watch-credit cap: heartbeat is credited on a bare client POST with no server-observed
+	// liveness, and the rate limiter is per-viewer global, so bound cumulative farming per
+	// (viewer, overlay) per day (PR #524 #4).
+	if n, err := h.repo.WatchCreditsToday(ctx, viewerID, overlayID); err == nil && n >= maxWatchCreditsPerDay {
+		bal, _ := h.repo.GetBalance(ctx, viewerID, overlayID)
+		c.JSON(http.StatusOK, gin.H{"balance": bal})
+		return
+	}
 	bucket := time.Now().Unix() / 60
 	dedup := fmt.Sprintf("watch:%s:%s:%d", viewerID, overlayID, bucket)
 	if _, err := h.repo.AwardPoints(ctx, viewerID, overlayID, cfg.WatchPerMinute, "earn_watch", "heartbeat", nil, dedup); err != nil {
