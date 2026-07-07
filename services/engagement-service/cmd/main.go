@@ -182,6 +182,12 @@ func main() {
 	idemTTL := time.Duration(cfg.IdempotencyTTLSeconds) * time.Second
 
 	// Public read endpoints (OBS overlay + web page render aggregate state; no auth).
+	// These two overlay-keyed reads are an intentional render seam: the OBS/render path
+	// holds no token, so they are deliberately NOT gated on is_public_for_viewers (that
+	// would black out the streamer's own widget when they flip the toggle off). The overlay
+	// UUID is a bearer capability withheld from viewers; viewer gating lives on the
+	// authenticated group below (requireViewerParticipation) and on the username-keyed
+	// GetStreamerActive read. See #3.
 	pubGroup := router.Group("/api/v1/engagement")
 	pubGroup.GET("/overlays/:id/active-poll", h.GetActivePoll)
 	pubGroup.GET("/overlays/:id/active-prediction", h.GetActivePrediction)

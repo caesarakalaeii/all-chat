@@ -186,6 +186,11 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 	// (required so the eventsub listener tracks the channel and mirrors Twitch-native rounds).
 	skipSourceActivation := c.Query("viewerParticipant") == "true"
 
+	// engagementOnly marks a poll/prediction-only socket (the streamer's OBS widgets or a
+	// participate tab). Such a socket must never receive chat/update frames — only
+	// poll/prediction updates. Enforced per-connection at broadcast time (#5).
+	engagementOnly := c.Query("engagementOnly") == "true"
+
 	// Resolve JWT from Sec-WebSocket-Protocol subprotocol first, then fall
 	// back to ?token= query param (backward compat during client rollout).
 	// The subprotocol path keeps the token out of access logs (audit H5).
@@ -270,6 +275,9 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 
 	// Create WebSocket connection wrapper
 	wsConn := wsconn.NewConnection(conn, overlayID, userID, h.replayBuffer, h.logger)
+	if engagementOnly {
+		wsConn.SetEngagementOnly(true)
+	}
 
 	// Activate all sources for this overlay (auto-activation on connect). Skipped for an
 	// anonymous viewer participate tab: it only consumes the poll/prediction broadcast and
@@ -305,9 +313,16 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 		return
 	}
 
-	// Add connection to manager
-	// Use background context here too since connection lives beyond HTTP request
-	h.wsManager.AddConnection(context.Background(), wsConn)
+	// Add connection to manager.
+	// Use background context here too since connection lives beyond HTTP request.
+	// viewerParticipant/engagement-only sockets attach WITHOUT the overlay:connected
+	// demand signal so anonymous participate tabs can't sustain demand-based upstream
+	// capture with no owner in the loop (P2-3).
+	if skipSourceActivation {
+		h.wsManager.AddConnectionNoDemand(context.Background(), wsConn)
+	} else {
+		h.wsManager.AddConnection(context.Background(), wsConn)
+	}
 
 	// Start the read/write pumps BEFORE the initial burst below. The writePump
 	// is what drains the send channel; if we enqueue the connect burst

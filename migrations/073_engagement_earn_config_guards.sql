@@ -13,14 +13,14 @@
 
 -- Normalize any pre-existing out-of-range rows first so ADD CONSTRAINT can't fail
 -- validation on data written before these bounds existed.
-UPDATE points_earn_config SET bits_multiplier  = LEAST(GREATEST(bits_multiplier, 0), 100000);
-UPDATE points_earn_config SET usd_multiplier   = LEAST(GREATEST(usd_multiplier, 0), 100000);
-UPDATE points_earn_config SET sub_high         = LEAST(GREATEST(sub_high, 0), 1000000);
-UPDATE points_earn_config SET sub_medium       = LEAST(GREATEST(sub_medium, 0), 1000000);
-UPDATE points_earn_config SET sub_low          = LEAST(GREATEST(sub_low, 0), 1000000);
-UPDATE points_earn_config SET gift_per_sub     = LEAST(GREATEST(gift_per_sub, 0), 1000000);
-UPDATE points_earn_config SET chat_per_minute  = LEAST(GREATEST(chat_per_minute, 0), 1000000);
-UPDATE points_earn_config SET watch_per_minute = LEAST(GREATEST(watch_per_minute, 0), 1000000);
+UPDATE points_earn_config SET bits_multiplier  = LEAST(GREATEST(bits_multiplier, 0), 100000) WHERE bits_multiplier < 0 OR bits_multiplier > 100000;
+UPDATE points_earn_config SET usd_multiplier   = LEAST(GREATEST(usd_multiplier, 0), 100000) WHERE usd_multiplier < 0 OR usd_multiplier > 100000;
+UPDATE points_earn_config SET sub_high         = LEAST(GREATEST(sub_high, 0), 1000000) WHERE sub_high < 0 OR sub_high > 1000000;
+UPDATE points_earn_config SET sub_medium       = LEAST(GREATEST(sub_medium, 0), 1000000) WHERE sub_medium < 0 OR sub_medium > 1000000;
+UPDATE points_earn_config SET sub_low          = LEAST(GREATEST(sub_low, 0), 1000000) WHERE sub_low < 0 OR sub_low > 1000000;
+UPDATE points_earn_config SET gift_per_sub     = LEAST(GREATEST(gift_per_sub, 0), 1000000) WHERE gift_per_sub < 0 OR gift_per_sub > 1000000;
+UPDATE points_earn_config SET chat_per_minute  = LEAST(GREATEST(chat_per_minute, 0), 1000000) WHERE chat_per_minute < 0 OR chat_per_minute > 1000000;
+UPDATE points_earn_config SET watch_per_minute = LEAST(GREATEST(watch_per_minute, 0), 1000000) WHERE watch_per_minute < 0 OR watch_per_minute > 1000000;
 
 DO $$
 BEGIN

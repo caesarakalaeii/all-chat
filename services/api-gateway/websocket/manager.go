@@ -33,7 +33,7 @@ import (
 
 // OverlayConnectionEvent represents an overlay connection/disconnection event
 type OverlayConnectionEvent struct {
-	Type      string    `json:"type"`       // "connected" or "disconnected"
+	Type      string    `json:"type"` // "connected" or "disconnected"
 	OverlayID string    `json:"overlay_id"`
 	Timestamp time.Time `json:"timestamp"`
 }
@@ -48,8 +48,8 @@ type Manager struct {
 	db          *pgxpool.Pool // For bumping overlays.last_connected_at on attach + heartbeat
 
 	// Grace period tracking for disconnection events
-	gracePeriodTimers map[string]*time.Timer
-	gracePeriodMu     sync.Mutex
+	gracePeriodTimers     map[string]*time.Timer
+	gracePeriodMu         sync.Mutex
 	disconnectGracePeriod time.Duration
 
 	// Heartbeat tracking for connection TTL
@@ -71,6 +71,11 @@ type Manager struct {
 
 	// Session management for credit roll
 	sessionManager *sessions.SessionManager
+
+	// noDemandOverlays holds overlay IDs whose only connections are viewerParticipant/
+	// engagement-only sockets — they must NOT set or refresh the overlay:connected demand
+	// key (P2-3). Cleared the moment a demand-bearing connection attaches.
+	noDemandOverlays map[string]bool
 }
 
 // NewManager creates a new WebSocket manager
@@ -133,6 +138,7 @@ func NewManager(logger *zap.Logger, m *metrics.GatewayMetrics, redisClient *redi
 		disconnectLingerTTL:   disconnectLingerTTL,
 		stopHeartbeat:         make(chan struct{}),
 		sessionManager:        sessions.NewSessionManager(redisClient, db, logger, gracePeriod),
+		noDemandOverlays:      make(map[string]bool),
 	}
 
 	// Start heartbeat goroutine to refresh connection TTLs
@@ -141,8 +147,23 @@ func NewManager(logger *zap.Logger, m *metrics.GatewayMetrics, redisClient *redi
 	return mgr
 }
 
-// AddConnection adds a connection to the appropriate pool
+// AddConnection adds a connection to the appropriate pool.
 func (m *Manager) AddConnection(ctx context.Context, conn *Connection) {
+	m.addConnection(ctx, conn, false)
+}
+
+// AddConnectionNoDemand adds a connection without setting the overlay:connected
+// demand signal — used for viewerParticipant/engagement-only sockets that must
+// not sustain demand-based upstream capture (P2-3).
+func (m *Manager) AddConnectionNoDemand(ctx context.Context, conn *Connection) {
+	m.addConnection(ctx, conn, true)
+}
+
+// addConnection adds a connection to the appropriate pool. When skipDemand is
+// true, the overlay:connected demand key is neither set on first connection nor
+// (via refreshConnectionTTLs) refreshed while the overlay's only connections are
+// demand-free — see noDemandOverlays (P2-3).
+func (m *Manager) addConnection(ctx context.Context, conn *Connection, skipDemand bool) {
 	overlayID := conn.OverlayID()
 
 	// Ensure session exists (creates new or reactivates existing)
@@ -202,15 +223,34 @@ func (m *Manager) AddConnection(ctx context.Context, conn *Connection) {
 		zap.Int("pool_size", pool.Size()),
 	)
 
-	// Publish overlay connection event if this is the first connection
-	if isFirstConnection {
+	// Track whether this overlay is currently demand-free. A demand-bearing
+	// connection clears the flag; a demand-free first connection sets it so the
+	// heartbeat won't recreate the demand key (P2-3).
+	wasNoDemand := m.noDemandOverlays[overlayID]
+	if skipDemand {
+		if isFirstConnection {
+			m.noDemandOverlays[overlayID] = true
+		}
+	} else {
+		delete(m.noDemandOverlays, overlayID)
+	}
+
+	// Publish the overlay:connected demand signal for the first demand-bearing
+	// attach — either the pool's first connection, or the first demand-bearing
+	// connection to an overlay that was until now demand-free (so an owner joining
+	// after an anonymous participate tab gets demand immediately, not only on the
+	// next heartbeat). Never for demand-free sockets, which must not set the key.
+	if !skipDemand && (isFirstConnection || wasNoDemand) {
 		m.publishConnectionEvent(ctx, overlayID, "connected")
 	}
 
 	// Bump overlays.last_connected_at so twitch-listener keeps this overlay's
 	// channels in its desired set. Fire-and-forget on a goroutine — DB latency
-	// must not delay the WebSocket handshake completion.
-	go m.bumpLastConnectedAt(context.Background(), overlayID)
+	// must not delay the WebSocket handshake completion. Skipped for demand-free
+	// sockets so a viewer participate tab does not keep the overlay non-idle.
+	if !skipDemand {
+		go m.bumpLastConnectedAt(context.Background(), overlayID)
+	}
 }
 
 // bumpLastConnectedAt updates overlays.last_connected_at = NOW() for the given
@@ -330,6 +370,7 @@ func (m *Manager) RemoveConnection(conn *Connection) {
 	// Handle empty pool with grace period
 	if poolSize == 0 {
 		delete(m.pools, overlayID)
+		delete(m.noDemandOverlays, overlayID)
 		m.metrics.RecordSubscriptionEvent("api-gateway", "pool_destroyed")
 		m.logger.Info("Connection pool empty, starting grace period",
 			zap.String("overlay_id", overlayID),
@@ -411,6 +452,21 @@ func (m *Manager) BroadcastToOverlay(overlayID string, message []byte) int {
 	}
 
 	return pool.Broadcast(message)
+}
+
+// BroadcastToOverlayFiltered sends a message to all connections in an overlay
+// pool, skipping engagement-only connections when the frame is not a
+// poll/prediction update — so a participate tab never receives chat (#5).
+func (m *Manager) BroadcastToOverlayFiltered(overlayID string, message []byte, engagementFrame bool) int {
+	m.mu.RLock()
+	pool, exists := m.pools[overlayID]
+	m.mu.RUnlock()
+
+	if !exists {
+		return 0
+	}
+
+	return pool.BroadcastFiltered(message, engagementFrame)
 }
 
 // BroadcastToAll sends a message to all connected clients (all overlays)
@@ -531,6 +587,13 @@ func (m *Manager) refreshConnectionTTLs() {
 	m.mu.RLock()
 	overlayIDs := make([]string, 0, len(m.pools))
 	for overlayID := range m.pools {
+		// Skip demand-free overlays (viewerParticipant/engagement-only sockets):
+		// refreshing overlay:connected here would recreate the demand key the
+		// addConnection path deliberately withheld, re-arming demand-based upstream
+		// capture every heartbeat (P2-3).
+		if m.noDemandOverlays[overlayID] {
+			continue
+		}
 		overlayIDs = append(overlayIDs, overlayID)
 	}
 	m.mu.RUnlock()

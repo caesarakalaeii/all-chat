@@ -67,7 +67,7 @@ export default function PredictionOverlayPage({ params }: { params: Promise<{ id
   // above remains the fallback / source of truth.
   useEngagementLive(id, (kind) => {
     if (kind === 'prediction') void fetchPrediction()
-  })
+  }, { maxReconnectAttempts: 8 })
 
   // A backend grace window briefly serves a recently-resolved round after it ends, so the
   // final RESOLVED tally shows before the widget hides itself; once the grace window lapses

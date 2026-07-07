@@ -85,7 +85,7 @@ func (e *EarnConsumer) safely(what string, fn func()) {
 // the award lands in that overlay's economy.
 func (e *EarnConsumer) handleEvent(ctx context.Context, payload []byte) {
 	msg, err := mpmodels.FromJSON(payload)
-	if err != nil || msg.Event == nil || msg.OverlayID == "" || msg.User.ID == "" {
+	if err != nil || msg.Event == nil || msg.OverlayID == "" || msg.User.ID == "" || msg.ID == "" {
 		return
 	}
 	overlayID, err := uuid.Parse(msg.OverlayID)
@@ -105,9 +105,23 @@ func (e *EarnConsumer) handleEvent(ctx context.Context, payload []byte) {
 		e.log.Warn("resolve viewer for earn event", zap.Error(err))
 		return
 	}
-	// dedup per (overlay, message, reason): stable across replicas receiving the
+	// Prefer the stable Twitch-Eventsub-Message-Id (eventsub_message_id) as the dedup
+	// event id: it is constant across Twitch redeliveries, whereas msg.ID derives from a
+	// fresh per-call uuid on the earn-bearing EventSub producers, so a redelivery whose
+	// webhook dedup marker was lost would otherwise mint a new key and double-credit. Fall
+	// back to msg.ID for producers/platforms that don't stamp eventsub_message_id.
+	eventID := msg.ID
+	if msg.Event != nil {
+		if v, ok := msg.Event.Metadata["eventsub_message_id"].(string); ok && v != "" {
+			eventID = v
+		}
+	}
+	if eventID == "" {
+		return
+	}
+	// dedup per (overlay, event, reason): stable across replicas receiving the
 	// same published bytes, and distinct per overlay economy.
-	dedup := fmt.Sprintf("earn:%s:%s:%s", overlayID, msg.ID, award.Reason)
+	dedup := fmt.Sprintf("earn:%s:%s:%s", overlayID, eventID, award.Reason)
 	if _, err := e.repo.AwardPoints(ctx, viewerID, overlayID, award.Delta, award.Reason, "event", nil, dedup); err != nil {
 		e.log.Warn("award event points", zap.Error(err))
 	}

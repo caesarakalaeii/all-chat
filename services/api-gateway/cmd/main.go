@@ -310,7 +310,9 @@ func main() {
 		}
 
 		// Broadcast wrapped message to all live connections in this overlay.
-		count := wsManager.BroadcastToOverlay(overlayID, wsJSON)
+		// Engagement-only sockets (participate tabs) receive only poll/prediction
+		// update frames, never chat (#5).
+		count := wsManager.BroadcastToOverlayFiltered(overlayID, wsJSON, msgType == models.WSMessageTypePollUpdate || msgType == models.WSMessageTypePredictionUpdate)
 		log.Debug("Broadcast message to overlay",
 			zap.String("overlay_id", overlayID),
 			zap.Int("connections", count),

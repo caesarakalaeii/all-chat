@@ -17,6 +17,7 @@
 package engine
 
 import (
+	"math"
 	"testing"
 
 	"github.com/google/uuid"
@@ -136,4 +137,68 @@ func TestComputePayouts_Empty(t *testing.T) {
 	res := ComputePayouts(nil, uuid.New())
 	assert.True(t, res.Refund)
 	assert.Empty(t, res.Credits)
+}
+
+func TestComputePayouts_ManyWinnersOddLosersPoolConservesAndReclaims(t *testing.T) {
+	// 101 equal-stake winners split a single large ODD losers' pool. The floored shares
+	// leave a remainder < number-of-winners; it must land on the lowest-UUID winner
+	// (equal stakes → the sort's UUID tie-break decides). Expected numbers are derived
+	// from the code's floor+remainder rule, not hardcoded.
+	x, y := uuid.New(), uuid.New()
+	const n = 101
+	entries := make([]WagerEntry, 0, n+1)
+	winnerIDs := make([]uuid.UUID, 0, n)
+	for i := 0; i < n; i++ {
+		w := uuid.New()
+		winnerIDs = append(winnerIDs, w)
+		entries = append(entries, mkEntry(w, x, 1))
+	}
+	loser := uuid.New()
+	const losersStake int64 = 10_007
+	entries = append(entries, mkEntry(loser, y, losersStake))
+
+	res := ComputePayouts(entries, x)
+
+	assert.False(t, res.Refund)
+	assert.Equal(t, sumStakes(entries), sumCredits(res.Credits), "points conserved")
+	assert.Equal(t, int64(0), res.Credits[loser], "loser gets nothing")
+
+	perWinnerFloor := losersStake / int64(n)
+	remainder := losersStake - perWinnerFloor*int64(n)
+	assert.Less(t, remainder, int64(n), "remainder is strictly less than the winner count")
+
+	// The lowest-UUID winner receives the remainder (equal stakes → UUID tie-break).
+	lowest := winnerIDs[0]
+	for _, w := range winnerIDs[1:] {
+		if w.String() < lowest.String() {
+			lowest = w
+		}
+	}
+	for _, w := range winnerIDs {
+		want := int64(1) + perWinnerFloor
+		if w == lowest {
+			want += remainder
+		}
+		assert.Equal(t, want, res.Credits[w], "winner credit = stake + floored share (+ remainder for lowest UUID)")
+	}
+}
+
+func TestComputePayouts_NearMaxInt64PoolNoMintOrBurn(t *testing.T) {
+	// Two enormous stakes whose raw sum overflows int64. The accumulation clamps at
+	// maxPool so nothing wraps: no negative credits, the winner keeps positive points,
+	// and only the winner holds points. Guards the addClamp overflow clamp.
+	x, y := uuid.New(), uuid.New()
+	winner, loser := uuid.New(), uuid.New()
+	stake := int64(math.MaxInt64/2 - 1)
+	entries := []WagerEntry{mkEntry(winner, x, stake), mkEntry(loser, y, stake)}
+
+	res := ComputePayouts(entries, x)
+
+	assert.False(t, res.Refund)
+	for id, c := range res.Credits {
+		assert.GreaterOrEqual(t, c, int64(0), "no credit wrapped negative: %s", id)
+	}
+	assert.Greater(t, res.Credits[winner], int64(0), "winner holds positive points")
+	assert.Equal(t, int64(0), res.Credits[loser], "loser gets nothing")
+	assert.Equal(t, res.Credits[winner], sumCredits(res.Credits), "only the winner holds points")
 }

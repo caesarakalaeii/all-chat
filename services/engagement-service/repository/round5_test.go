@@ -290,3 +290,57 @@ func TestU1_DisplayPredictionServedDuringResolvedGrace(t *testing.T) {
 	_, err = repo.GetActiveDisplayPrediction(ctx, overlay)
 	assert.ErrorIs(t, err, repository.ErrNotFound, "past the grace window the round clears")
 }
+
+// TestADR0030_AllChatPredictionOutranksLiveNative: when an All-Chat prediction and a
+// live mirrored twitch_native prediction are both active on one overlay (the create-time
+// 409 only blocks the reverse order — a Twitch round can begin after an All-Chat one is
+// already running), the public display query must serve the All-Chat round so its real
+// wagered points stay resolvable from the control panel. The source-scoped partial unique
+// indexes allow one allchat + one twitch_native round live at once (no unique violation).
+func TestADR0030_AllChatPredictionOutranksLiveNative(t *testing.T) {
+	pool := newTestDB(t)
+	repo := repository.New(pool)
+	ctx := context.Background()
+	overlay := seedOverlay(t, pool)
+
+	ac, err := repo.CreatePrediction(ctx, overlay, "allchat who?", []string{"a", "b"}, nil)
+	require.NoError(t, err)
+	require.Equal(t, models.SourceAllChat, ac.Source)
+
+	native, err := repo.UpsertNativePrediction(ctx, overlay, "extp-adr30", "native who?", models.PredActive, "",
+		[]repository.NativeOutcomeInput{{ExternalID: "o1", Idx: 1, Label: "a", Points: 10, Entrants: 2}, {ExternalID: "o2", Idx: 2, Label: "b", Points: 5, Entrants: 1}}, nil, nil, nil)
+	require.NoError(t, err)
+	require.NotNil(t, native)
+	require.Equal(t, models.SourceTwitchNative, native.Source)
+
+	disp, err := repo.GetActiveDisplayPrediction(ctx, overlay)
+	require.NoError(t, err)
+	assert.Equal(t, models.SourceAllChat, disp.Source, "the All-Chat prediction wins the display over a live native one")
+	assert.Equal(t, ac.ID, disp.ID)
+}
+
+// TestADR0030_AllChatPollOutranksLiveNative: symmetric to the prediction case — an
+// All-Chat poll live alongside a mirrored twitch_native poll must win the public display
+// so the owner can still close it from the control panel. Keeping the poll rule identical
+// to predictions avoids a surprising per-type difference.
+func TestADR0030_AllChatPollOutranksLiveNative(t *testing.T) {
+	pool := newTestDB(t)
+	repo := repository.New(pool)
+	ctx := context.Background()
+	overlay := seedOverlay(t, pool)
+
+	ac, err := repo.CreatePoll(ctx, overlay, "allchat?", []string{"y", "n"}, true, nil)
+	require.NoError(t, err)
+	require.Equal(t, models.SourceAllChat, ac.Source)
+
+	native, err := repo.UpsertNativePoll(ctx, overlay, "ext-adr30", "native?", models.PollActive,
+		[]repository.NativeOutcomeInput{{ExternalID: "c1", Idx: 1, Label: "yes", Votes: 3}, {ExternalID: "c2", Idx: 2, Label: "no", Votes: 1}}, nil, nil)
+	require.NoError(t, err)
+	require.NotNil(t, native)
+	require.Equal(t, models.SourceTwitchNative, native.Source)
+
+	disp, err := repo.GetActiveDisplayPoll(ctx, overlay)
+	require.NoError(t, err)
+	assert.Equal(t, models.SourceAllChat, disp.Source, "the All-Chat poll wins the display over a live native one")
+	assert.Equal(t, ac.ID, disp.ID)
+}

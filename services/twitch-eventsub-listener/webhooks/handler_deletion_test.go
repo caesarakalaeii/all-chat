@@ -156,7 +156,7 @@ func TestRouteEvent_SingleDeletionPublished(t *testing.T) {
 		TargetUserLogin:      "spammer",
 		MessageID:            "native-123",
 	})
-	if err := h.routeEvent(context.Background(), "channel.chat.message_delete", ev); err != nil {
+	if err := h.routeEvent(context.Background(), "channel.chat.message_delete", ev, ""); err != nil {
 		t.Fatalf("routeEvent: %v", err)
 	}
 
@@ -179,7 +179,7 @@ func TestRouteEvent_BatchDeletionPublished(t *testing.T) {
 		TargetUserID:         "u123",
 		TargetUserLogin:      "spammer",
 	})
-	if err := h.routeEvent(context.Background(), "channel.chat.clear_user_messages", ev); err != nil {
+	if err := h.routeEvent(context.Background(), "channel.chat.clear_user_messages", ev, ""); err != nil {
 		t.Fatalf("routeEvent: %v", err)
 	}
 
@@ -195,7 +195,7 @@ func TestRouteEvent_ClearDeletionPublished(t *testing.T) {
 	t.Cleanup(func() { _ = rc.Close() })
 
 	ev, _ := json.Marshal(eventsub.ChatClearEvent{BroadcasterUserLogin: "CaesarLP"})
-	if err := h.routeEvent(context.Background(), "channel.chat.clear", ev); err != nil {
+	if err := h.routeEvent(context.Background(), "channel.chat.clear", ev, ""); err != nil {
 		t.Fatalf("routeEvent: %v", err)
 	}
 
