@@ -35,6 +35,7 @@ import (
 
 	sharedAuth "github.com/caesar/all-chat/shared/auth"
 	"github.com/caesar/all-chat/shared/database"
+	"github.com/caesar/all-chat/shared/featuregates"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/middleware"
 	"github.com/caesar/all-chat/shared/ratelimit"
@@ -97,6 +98,13 @@ func main() {
 	repo := repository.New(dbPool)
 	pub := publisher.New(redisClient, log)
 
+	// Feature-gate cache (ADR-0008): gates STARTING a poll/prediction behind premium,
+	// because opening a round posts to chat and consumes send quota (GateEngagement, seeded
+	// premium in migration 076; flip to free via the admin endpoint with no redeploy). The
+	// cache refreshes from the feature_gates table via Pub/Sub + a 60s ticker — zero DB hits
+	// at request time. Started under bgCtx so it stops on shutdown.
+	gateCache := featuregates.NewFeatureGateCache(dbPool, redisClient, log)
+
 	// Chat announcer (issue #523, H4-2): posts round-start messages to chat via
 	// auth-service's internal send endpoint, authenticated with a service JWT. Both
 	// the key chain and the auth-service URL are optional — a missing one disables the
@@ -116,6 +124,13 @@ func main() {
 	// stopped on shutdown before the HTTP server drains.
 	bgCtx, cancelBg := context.WithCancel(context.Background())
 	defer cancelBg()
+
+	// Start the feature-gate cache (initial DB load + Pub/Sub/ticker refresh). Non-fatal on
+	// error — the cache fails closed (unknown key ⇒ premium-required), so a load failure keeps
+	// engagement premium-gated rather than opening it to everyone.
+	if err := gateCache.Start(bgCtx); err != nil {
+		log.Warn("feature-gate cache start failed; engagement stays premium-gated (fail-closed)", zap.Error(err))
+	}
 
 	hostname, _ := os.Hostname()
 	consumerName := fmt.Sprintf("engagement-%s-%d", hostname, os.Getpid())
@@ -181,10 +196,14 @@ func main() {
 	auth.Use(rl.Middleware())
 	auth.Use(handler.IdempotencyMiddleware(redisClient, idemTTL))
 
-	// Owner-only management.
-	auth.POST("/overlays/:id/polls", h.CreatePoll)
+	// Owner-only management. STARTING a round is premium-gated (GateEngagement): opening a
+	// poll/prediction posts to chat + consumes send quota, so a non-premium owner gets 403
+	// here (defense in depth — the dashboard also hides the control). Managing an
+	// already-open round (close/lock/resolve/cancel) and the earn config are NOT gated.
+	requireEngagementPremium := middleware.RequirePremium(dbPool, gateCache, featuregates.GateEngagement, log)
+	auth.POST("/overlays/:id/polls", requireEngagementPremium, h.CreatePoll)
 	auth.POST("/overlays/:id/polls/:pollId/close", h.ClosePoll)
-	auth.POST("/overlays/:id/predictions", h.CreatePrediction)
+	auth.POST("/overlays/:id/predictions", requireEngagementPremium, h.CreatePrediction)
 	auth.POST("/overlays/:id/predictions/:pid/lock", h.LockPrediction)
 	auth.POST("/overlays/:id/predictions/:pid/resolve", h.ResolvePrediction)
 	auth.POST("/overlays/:id/predictions/:pid/cancel", h.CancelPrediction)
