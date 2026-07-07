@@ -217,7 +217,7 @@ func (h *Handler) WebWager(c *gin.Context) {
 		return
 	}
 	platform := c.GetString("platform")
-	res, err := h.repo.Wager(c.Request.Context(), pid, viewerID, overlayID, req.OutcomeIdx, req.Amount, platform, nil)
+	res, err := h.repo.Wager(c.Request.Context(), pid, viewerID, overlayID, req.OutcomeIdx, req.Amount, platform, nil, "")
 	if err != nil {
 		h.log.Error("web wager", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not place wager"})

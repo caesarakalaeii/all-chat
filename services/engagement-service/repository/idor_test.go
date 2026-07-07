@@ -19,7 +19,7 @@
 // Regression tests for the PR #524 review fixes B1 (cross-tenant IDOR on the
 // prediction/poll lifecycle) and H1 (cross-economy wager: debit the path overlay
 // but pay the prediction's real overlay). They exercise the real overlay_id SQL
-// predicates, so they need a Postgres with the engagement migrations (067–071)
+// predicates, so they need a Postgres with the engagement migrations (068–074)
 // applied. Run with: go test -tags=integration ./repository/...
 package repository_test
 
@@ -45,12 +45,12 @@ func newTestDB(t *testing.T) *pgxpool.Pool {
 	if err := pool.Ping(context.Background()); err != nil {
 		t.Skipf("requires DB: %v", err)
 	}
-	// The engagement tables must be present (migrations 067–071).
+	// The engagement tables must be present (engagement migrations 068–074).
 	var ok bool
 	if err := pool.QueryRow(context.Background(),
 		`SELECT to_regclass('public.predictions') IS NOT NULL`).Scan(&ok); err != nil || !ok {
 		pool.Close()
-		t.Skipf("requires engagement migrations (067–071): %v", err)
+		t.Skipf("requires engagement migrations (068–074): %v", err)
 	}
 	t.Cleanup(pool.Close)
 	return pool
@@ -197,7 +197,7 @@ func TestH1_WagerBindsDebitToPredictionOverlay(t *testing.T) {
 	require.NoError(t, err)
 
 	// Attack: wager on overlay A's prediction while naming overlay B in the path.
-	res, err := repo.Wager(ctx, pred.ID, viewer, overlayB, 1, 100, "twitch", nil)
+	res, err := repo.Wager(ctx, pred.ID, viewer, overlayB, 1, 100, "twitch", nil, "")
 	require.NoError(t, err)
 	assert.False(t, res.Accepted, "a wager whose path overlay does not own the prediction must be rejected")
 	assert.Equal(t, "not_found", res.Reason)
@@ -208,7 +208,7 @@ func TestH1_WagerBindsDebitToPredictionOverlay(t *testing.T) {
 	assert.EqualValues(t, 1000, balB, "no debit should land in the named (wrong) economy")
 
 	// Positive control: the correctly-scoped wager debits the prediction's own economy.
-	res, err = repo.Wager(ctx, pred.ID, viewer, overlayA, 1, 100, "twitch", nil)
+	res, err = repo.Wager(ctx, pred.ID, viewer, overlayA, 1, 100, "twitch", nil, "")
 	require.NoError(t, err)
 	require.True(t, res.Accepted, "the correctly-scoped wager should be accepted; reason=%q", res.Reason)
 	balA, _ = repo.GetBalance(ctx, viewer, overlayA)

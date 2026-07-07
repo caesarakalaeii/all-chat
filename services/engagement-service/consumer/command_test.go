@@ -47,6 +47,15 @@ func TestParseCommand(t *testing.T) {
 		{"two numbers not bare vote", "2 3", cmdNone, 0, 0, false},
 		{"large number ignored", "12345", cmdNone, 0, 0, false},
 		{"empty", "", cmdNone, 0, 0, false},
+
+		// P2-5: "+1"/"-1"/"+2" are chat-agreement idioms, NOT votes. strconv.Atoi would
+		// otherwise parse the leading sign and silently count them as option votes.
+		{"plus-one idiom not a vote", "+1", cmdNone, 0, 0, false},
+		{"plus-two idiom not a vote", "+2", cmdNone, 0, 0, false},
+		{"minus-one not a vote", "-1", cmdNone, 0, 0, false},
+		{"signed explicit vote rejected", "!vote +2", cmdNone, 0, 0, false},
+		{"signed wager option rejected", "!predict +1 500", cmdNone, 0, 0, false},
+		{"signed wager amount rejected", "!bet 1 +500", cmdNone, 0, 0, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

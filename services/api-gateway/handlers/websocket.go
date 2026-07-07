@@ -178,6 +178,14 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 		return
 	}
 
+	// viewerParticipant marks an anonymous viewer's participate tab. Such a socket
+	// subscribes for the public poll/prediction broadcasts but must NOT auto-activate the
+	// overlay's chat sources — otherwise every anonymous viewer tab would sustain
+	// demand-based YouTube polling with no owner in the loop (P2-3). The streamer's OWN OBS
+	// poll/prediction display widgets do NOT set this, so they still activate sources
+	// (required so the eventsub listener tracks the channel and mirrors Twitch-native rounds).
+	skipSourceActivation := c.Query("viewerParticipant") == "true"
+
 	// Resolve JWT from Sec-WebSocket-Protocol subprotocol first, then fall
 	// back to ?token= query param (backward compat during client rollout).
 	// The subprotocol path keeps the token out of access logs (audit H5).
@@ -263,9 +271,16 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 	// Create WebSocket connection wrapper
 	wsConn := wsconn.NewConnection(conn, overlayID, userID, h.replayBuffer, h.logger)
 
-	// Activate all sources for this overlay (auto-activation on connect)
-	activatedCount, err := h.repo.ActivateSourcesForOverlay(ctx, overlayID)
-	if err != nil {
+	// Activate all sources for this overlay (auto-activation on connect). Skipped for an
+	// anonymous viewer participate tab: it only consumes the poll/prediction broadcast and
+	// must not drive source activation / YouTube quota (P2-3). NOT skipped for the
+	// streamer's OBS poll/prediction display widgets, which must activate so Twitch-native
+	// rounds are mirrored.
+	if skipSourceActivation {
+		h.logger.Debug("viewer participate WS connection; skipping source auto-activation",
+			zap.String("overlay_id", overlayID),
+		)
+	} else if activatedCount, err := h.repo.ActivateSourcesForOverlay(ctx, overlayID); err != nil {
 		h.logger.Error("Failed to activate sources for overlay",
 			zap.String("overlay_id", overlayID),
 			zap.Error(err),

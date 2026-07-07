@@ -125,8 +125,11 @@ func looksLikeCommand(text string) bool {
 	if t[0] == '!' {
 		return true
 	}
-	// Bare 1–2 digit number → possible poll-vote shortcut.
-	if len(t) <= 2 {
+	// Bare 1–2 ASCII-digit number → possible poll-vote shortcut. Requiring a leading
+	// digit (not just Atoi, which accepts "+1"/"-1") keeps the "+1" chat-agreement idiom
+	// off the forward path; the engagement-service parser applies the same digits-only
+	// rule (P2-5).
+	if len(t) <= 2 && t[0] >= '0' && t[0] <= '9' {
 		if _, err := strconv.Atoi(t); err == nil {
 			return true
 		}

@@ -37,6 +37,7 @@ jobs:
           - services/auth-service
           - services/discord-listener
           - services/emote-service
+          - services/engagement-service
           - services/kick-listener
           - services/message-processor
           - services/moderation-service

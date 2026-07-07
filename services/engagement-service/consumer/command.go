@@ -91,6 +91,13 @@ func (c *CommandConsumer) Run(ctx context.Context) {
 			if ctx.Err() != nil || errors.Is(err, redis.Nil) {
 				continue
 			}
+			if isNoGroup(err) {
+				// A Redis reset dropped the group; recreate it so votes/wagers aren't
+				// silently dropped forever (P1-1). The next periodicDrain re-arms once
+				// the group exists again.
+				recoverConsumerGroup(ctx, c.rdb, mpmodels.StreamEngagementCommands, consumerGroup, c.log)
+				continue
+			}
 			c.log.Warn("xreadgroup engagement commands", zap.Error(err))
 			continue
 		}
@@ -168,8 +175,8 @@ func (c *CommandConsumer) handle(ctx context.Context, msg redis.XMessage) error 
 	// Accumulate transient errors across overlays: a DB failure on one overlay must
 	// leave the entry pending, but a business rejection or no-active-round on another
 	// must not. Redelivery is safe because the writes dedupe per (round, viewer) and
-	// the replay index is now scoped per round (migration 071), so re-running an
-	// already-applied overlay is a no-op rather than a poison unique_violation.
+	// the replay index is scoped per round (created directly in migrations 069/070), so
+	// re-running an already-applied overlay is a no-op rather than a poison unique_violation.
 	var retryErr error
 	for _, overlayID := range overlays {
 		switch kind {
@@ -199,7 +206,10 @@ func (c *CommandConsumer) handle(ctx context.Context, msg redis.XMessage) error 
 				}
 				continue
 			}
-			res, err := c.repo.Wager(ctx, pred.ID, viewerID, overlayID, idx, amount, job.Platform, srcMsgID)
+			// msg.ID (the Redis stream entry id) is the round-independent replay token:
+			// stable across redelivery/reclaim, so a redelivered wager can't double-debit
+			// even if a new round has since opened on this overlay (P2-1).
+			res, err := c.repo.Wager(ctx, pred.ID, viewerID, overlayID, idx, amount, job.Platform, srcMsgID, msg.ID)
 			if err != nil {
 				retryErr = errors.Join(retryErr, fmt.Errorf("record chat wager: %w", err))
 				continue
@@ -246,13 +256,13 @@ func parseCommand(text string) (kind cmdKind, idx int, amount int64, ok bool) {
 	if strings.HasPrefix(fields[0], "!") {
 		switch strings.ToLower(strings.TrimPrefix(fields[0], "!")) {
 		case "vote", "v":
-			if len(fields) >= 2 {
+			if len(fields) >= 2 && digitsOnly(fields[1]) {
 				if n, err := strconv.Atoi(fields[1]); err == nil && n >= 1 {
 					return cmdVote, n, 0, true
 				}
 			}
 		case "predict", "bet", "p":
-			if len(fields) >= 3 {
+			if len(fields) >= 3 && digitsOnly(fields[1]) && digitsOnly(fields[2]) {
 				n, err1 := strconv.Atoi(fields[1])
 				amt, err2 := strconv.ParseInt(fields[2], 10, 64)
 				if err1 == nil && err2 == nil && n >= 1 && amt > 0 {
@@ -264,12 +274,29 @@ func parseCommand(text string) (kind cmdKind, idx int, amount int64, ok bool) {
 	}
 
 	// Bare single integer → poll vote shortcut.
-	if len(fields) == 1 {
+	if len(fields) == 1 && digitsOnly(fields[0]) {
 		if n, err := strconv.Atoi(fields[0]); err == nil && n >= 1 && n <= 99 {
 			return cmdVote, n, 0, true
 		}
 	}
 	return cmdNone, 0, 0, false
+}
+
+// digitsOnly reports whether s is a non-empty run of ASCII digits. strconv.Atoi /
+// ParseInt accept a leading '+'/'-', so "+1" would parse as option 1 — but "+1" is one
+// of the most common chat-agreement idioms, and counting it (or "-1", "+2") as a vote /
+// wager option / amount silently mis-tallies a poll (P2-5). Requiring ASCII digits keeps
+// "+1"/"-2" as ordinary chat while a bare "1" still votes.
+func digitsOnly(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // parseUUIDOrNil returns a *uuid.UUID if s is a valid UUID (e.g. a Twitch message

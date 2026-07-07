@@ -18,6 +18,7 @@ package consumer
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -42,6 +43,32 @@ const (
 	// fine — only entries idle past MinIdle are actually reclaimed.
 	pelDrainInterval = 60 * time.Second
 )
+
+// isNoGroup reports whether err is a Redis NOGROUP error: the stream's consumer group
+// no longer exists. Producers reach the stream via XADD, which recreates the STREAM
+// after a full Redis reset / HA cutover to an empty instance but NOT the consumer GROUP,
+// so XReadGroup then returns NOGROUP forever and every vote/wager/native event is
+// silently dropped until the pod is manually restarted (P1-1). A normal Sentinel
+// failover preserves replicated state and does not trip this.
+func isNoGroup(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "NOGROUP")
+}
+
+// recoverConsumerGroup recreates a consumer group at the stream tail after a NOGROUP,
+// ignoring BUSYGROUP (a concurrent recreate). Both durable consumers call it from their
+// read loop so a Redis reset self-heals forward instead of spinning on NOGROUP. It
+// recreates at "$", so entries XADDed during the group-absent window are still lost —
+// this restores forward progress, not the outage-window gap. Mirrors message-processor's
+// stream_consumer NOGROUP branch.
+func recoverConsumerGroup(ctx context.Context, rdb *redis.Client, stream, group string, log *zap.Logger) {
+	log.Warn("engagement consumer group missing (NOGROUP); recreating",
+		zap.String("stream", stream), zap.String("group", group))
+	if err := rdb.XGroupCreateMkStream(ctx, stream, group, "$").Err(); err != nil &&
+		!strings.Contains(err.Error(), "BUSYGROUP") {
+		log.Warn("recreate engagement consumer group after NOGROUP",
+			zap.String("stream", stream), zap.Error(err))
+	}
+}
 
 // drainPEL reclaims idle pending entries on (stream, group) into consumer and
 // reprocesses them through process, mirroring message-processor/consumer/dlq.go.

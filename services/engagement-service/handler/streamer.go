@@ -104,6 +104,13 @@ func (h *Handler) GetStreamerActive(c *gin.Context) {
 // StreamerEngagement (viewer) returns the pull-first private snapshot — balance plus
 // the caller's current vote/wager on the resolved overlay's live round. Streamer-keyed
 // sibling of GET /viewers/me/engagement.
+//
+// It resolves the viewer's entry against the SAME round GetStreamerActive displays — the
+// display queries, which include the ~20s grace window after a round closes/resolves — so
+// the viewer's own ✓ / wager marker stays put during the on-stream "who won" reveal instead
+// of vanishing the instant the round leaves ACTIVE/LOCKED (extension PR #89, item 9). The
+// viewer's entry is inherently All-Chat-only, so a grace-window native round simply yields
+// no marker, matching what /active shows.
 func (h *Handler) StreamerEngagement(c *gin.Context) {
 	viewerID, ok := requireViewer(c)
 	if !ok {
@@ -123,12 +130,12 @@ func (h *Handler) StreamerEngagement(c *gin.Context) {
 	cfg, _ := h.repo.GetEarnConfig(ctx, overlayID)
 	out := models.ViewerEngagement{PointsName: cfg.PointsName, Balance: bal}
 
-	if poll, err := h.repo.GetActivePoll(ctx, overlayID); err == nil {
+	if poll, err := h.repo.GetActiveDisplayPoll(ctx, overlayID); err == nil {
 		if optID, err := h.repo.GetViewerVote(ctx, poll.ID, viewerID); err == nil {
 			out.VotedOptionID = optID
 		}
 	}
-	if pred, err := h.repo.GetActivePrediction(ctx, overlayID); err == nil {
+	if pred, err := h.repo.GetActiveDisplayPrediction(ctx, overlayID); err == nil {
 		if outcomeID, amount, err := h.repo.GetViewerEntry(ctx, pred.ID, viewerID); err == nil && outcomeID != nil {
 			out.WagerOutcome = outcomeID
 			out.WagerAmount = amount
@@ -213,7 +220,7 @@ func (h *Handler) StreamerWager(c *gin.Context) {
 		return
 	}
 	platform := c.GetString("platform")
-	res, err := h.repo.Wager(c.Request.Context(), predID, viewerID, overlayID, req.OutcomeIdx, req.Amount, platform, nil)
+	res, err := h.repo.Wager(c.Request.Context(), predID, viewerID, overlayID, req.OutcomeIdx, req.Amount, platform, nil, "")
 	if err != nil {
 		h.log.Error("streamer wager", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not place wager"})

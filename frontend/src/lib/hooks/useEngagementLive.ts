@@ -29,8 +29,20 @@ import { WebSocketClient } from '../api/websocket'
  * A no-op when overlayId is falsy. The socket connects on an anonymous/viewer basis
  * (no token) — the overlay poll/prediction broadcast is public — and is torn down on
  * unmount or overlayId change.
+ *
+ * `opts.viewerParticipant` (default false) marks the ANONYMOUS participate-page use: it
+ * tells the gateway to skip source auto-activation and bounds reconnects, so a viewer tab
+ * on an inactive overlay can't drive YouTube quota or reconnect-storm (P2-3). The
+ * streamer's OWN OBS poll/prediction display widgets (and the owner monitor) leave it
+ * false so they still auto-activate sources — required for Twitch-native round mirroring —
+ * and reconnect indefinitely for the whole stream.
  */
-export function useEngagementLive(overlayId: string, onSignal: (kind: 'poll' | 'prediction') => void) {
+export function useEngagementLive(
+  overlayId: string,
+  onSignal: (kind: 'poll' | 'prediction') => void,
+  opts?: { viewerParticipant?: boolean }
+) {
+  const viewerParticipant = opts?.viewerParticipant ?? false
   // Keep the latest callback in a ref so re-renders don't churn the socket. Updated in
   // an effect (never during render) so the connection effect below can depend only on
   // overlayId and still call the freshest callback.
@@ -41,14 +53,21 @@ export function useEngagementLive(overlayId: string, onSignal: (kind: 'poll' | '
 
   useEffect(() => {
     if (!overlayId) return
-    const client = new WebSocketClient()
+    // Bound reconnects only for the anonymous participate socket: it's a latency
+    // accelerator over the page's HTTP poll, so on a persistently-failing handshake it must
+    // give up rather than storm the gateway from every viewer tab. OBS display widgets keep
+    // unlimited reconnects (they must survive any blip for the whole stream).
+    const client = viewerParticipant
+      ? new WebSocketClient({ maxReconnectAttempts: 8 })
+      : new WebSocketClient()
     const unsubscribe = client.onEngagementUpdate((kind) => cbRef.current(kind))
     // engagementOnly=true: this socket only wants poll/prediction signals — it must not
-    // render chat or touch the shared chat replay watermark (see WebSocketClient).
-    client.connect(overlayId, null, true)
+    // render chat or touch the shared chat replay watermark. viewerParticipant gates the
+    // gateway's skip-source-activation separately (see the hook doc). See WebSocketClient.
+    client.connect(overlayId, null, true, viewerParticipant)
     return () => {
       unsubscribe()
       client.disconnect()
     }
-  }, [overlayId])
+  }, [overlayId, viewerParticipant])
 }

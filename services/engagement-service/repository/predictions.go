@@ -32,7 +32,7 @@ import (
 // code the web handler maps to a 4xx and the chat consumer logs silently.
 type WagerResult struct {
 	Accepted   bool
-	Reason     string // "" on success; "not_found"|"not_active"|"bad_outcome"|"already_wagered"|"insufficient"|"native"
+	Reason     string // "" on success; "not_found"|"not_active"|"bad_outcome"|"already_wagered"|"insufficient"|"native"|"duplicate"
 	NewBalance int64
 }
 
@@ -191,7 +191,11 @@ func (r *Repository) LockPrediction(ctx context.Context, predictionID, overlayID
 // prediction (so a concurrent lock/resolve serializes), enforces one wager per
 // viewer, and debits the balance under a guard. All-Chat-native only — a
 // twitch_native prediction uses Twitch Channel Points, so it is rejected here.
-func (r *Repository) Wager(ctx context.Context, predictionID, viewerID, overlayID uuid.UUID, outcomeIdx int, amount int64, platform string, sourceMessageID *uuid.UUID) (WagerResult, error) {
+//
+// replayToken, when non-empty (the chat path passes the Redis stream entry id), makes
+// the debit dedup ROUND-INDEPENDENT: see the dedupKey comment below. The web path passes
+// "" (a direct HTTP call has no redelivery).
+func (r *Repository) Wager(ctx context.Context, predictionID, viewerID, overlayID uuid.UUID, outcomeIdx int, amount int64, platform string, sourceMessageID *uuid.UUID, replayToken string) (WagerResult, error) {
 	if amount <= 0 {
 		return WagerResult{Reason: "bad_outcome"}, nil
 	}
@@ -246,15 +250,31 @@ func (r *Repository) Wager(ctx context.Context, predictionID, viewerID, overlayI
 		return WagerResult{Reason: "already_wagered"}, nil // one wager per viewer per prediction
 	}
 
-	applied, err := r.applyLedger(ctx, tx, viewerID, overlayID, -amount, "wager", "prediction", &predictionID,
-		fmt.Sprintf("wager:%s:%s", predictionID, viewerID))
+	// Round-independent replay dedup (P2-1). A redelivered chat wager (transient error +
+	// PEL drain, or an ambiguous tx.Commit) re-resolves the overlay's CURRENTLY active
+	// round — which may be a NEW round if the original one resolved in between. Keying the
+	// ledger dedup on (overlay, message) rather than (prediction, viewer) means the same
+	// chat message can never debit an overlay's economy twice, even across rounds, while
+	// still fanning ONE message out to N overlays (ADR-0028; the key includes overlayID).
+	// The web path has no redelivery, so it keeps the (prediction, viewer) key.
+	dedupKey := fmt.Sprintf("wager:%s:%s", predictionID, viewerID)
+	if replayToken != "" {
+		dedupKey = fmt.Sprintf("wager:overlay:%s:%s", overlayID, replayToken)
+	}
+	applied, err := r.applyLedger(ctx, tx, viewerID, overlayID, -amount, "wager", "prediction", &predictionID, dedupKey)
 	if errors.Is(err, ErrInsufficientBalance) {
 		return WagerResult{Reason: "insufficient"}, nil
 	}
 	if err != nil {
 		return WagerResult{}, err
 	}
-	_ = applied // always true here (fresh dedup key inside this tx)
+	if !applied {
+		// This message already placed a wager on this overlay (a redelivery, possibly now
+		// resolving to a DIFFERENT round than the original). Roll back the entry insert
+		// above (defer tx.Rollback) and report a no-op — never debit again, never leave a
+		// phantom entry on the new round.
+		return WagerResult{Reason: "duplicate"}, nil
+	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return WagerResult{}, fmt.Errorf("commit wager: %w", err)

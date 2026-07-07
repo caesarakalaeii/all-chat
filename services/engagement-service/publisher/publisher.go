@@ -29,6 +29,8 @@ import (
 	"github.com/caesar/all-chat/services/engagement-service/repository"
 	mpmodels "github.com/caesar/all-chat/services/message-processor/models"
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -36,6 +38,16 @@ import (
 // activeTTL is a safety net so an active flag left behind by a crash (before
 // ClearActive ran) eventually expires rather than routing chat commands forever.
 const activeTTL = 24 * time.Hour
+
+// setActiveFailures counts failures writing an engagement active-flag key to Redis. A
+// never-armed gate is otherwise invisible: the round is live and visible but the
+// message-processor reads EXISTS==0 and drops every chat vote (counted only as a "miss",
+// indistinguishable from a poll nobody voted on). Alert on a non-zero rate; the sweeper's
+// reconciler re-arms the flag, so a transient blip should show a bounded spike (P2-2).
+var setActiveFailures = promauto.NewCounter(prometheus.CounterOpts{
+	Name: "engagement_set_active_failures_total",
+	Help: "Failures writing an engagement active-flag key to Redis (never-armed hot-path gate).",
+})
 
 // Publisher fans engagement state out over Redis Pub/Sub and manages active flags.
 type Publisher struct {
@@ -99,6 +111,7 @@ func (p *Publisher) SetActive(ctx context.Context, engagementID uuid.UUID, chann
 	for _, c := range channels {
 		key := mpmodels.EngagementActiveKey(c.Platform, c.ChannelID)
 		if err := p.rdb.SAdd(ctx, key, engagementID.String()).Err(); err != nil {
+			setActiveFailures.Inc()
 			p.log.Warn("set active flag failed", zap.String("key", key), zap.Error(err))
 			continue
 		}

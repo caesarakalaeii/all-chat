@@ -45,9 +45,9 @@ listeners → chat:raw → mp ┤   → XADD engagement:commands  (durable; vote
 
 Owner routes verify overlay ownership; the shared JWT middleware accepts either a user or viewer token and the handlers enforce which each route needs.
 
-## Data model (migrations 067–069)
+## Data model (migrations 068–074)
 
-`viewer_points` (materialized balance, `CHECK balance>=0`), `points_transactions` (append-only ledger, `UNIQUE dedup_key`), `points_earn_config` (per-overlay multipliers + `points_name`), `polls`/`poll_options`/`poll_votes`, `predictions`/`prediction_outcomes`/`prediction_entries`. Partial unique indexes enforce one live All-Chat poll/prediction per overlay; primary keys enforce one vote/wager per viewer.
+`viewer_points` (materialized balance, `CHECK balance>=0`), `points_transactions` (append-only ledger, `UNIQUE dedup_key`), `points_earn_config` (per-overlay multipliers + `points_name`), `polls`/`poll_options`/`poll_votes`, `predictions`/`prediction_outcomes`/`prediction_entries`. Partial unique indexes enforce one live All-Chat poll/prediction per overlay; primary keys enforce one vote/wager per viewer. Mirror-idempotency (`(overlay_id, source, external_id)`) and chat replay-dedup (`(round, source_message_id)`) uniques are created **per-overlay / per-round directly in 069/070** so the runner replaying every migration on each pod start never rebuilds a global unique over legit multi-overlay data (P0-1); 071/072 only drop the retired global names, and 074 adds `predictions.sweep_canceled`.
 
 ## Integrity highlights
 
@@ -62,4 +62,5 @@ Owner routes verify overlay ownership; the shared JWT middleware accepts either 
 ## Testing
 
 - `go test ./...` — payout conservation/rounding, command grammar, earn rules.
-- End-to-end (Postgres + Redis + binary): apply migrations 067–069, seed an overlay/source/poll, `XADD engagement:commands` a `!vote`, assert `poll_votes`; `PUBLISH engagement:events` a bits event, assert `viewer_points`. See the plan for the full recipe.
+- End-to-end (Postgres + Redis + binary): apply migrations 068–074, seed an overlay/source/poll, `XADD engagement:commands` a `!vote`, assert `poll_votes`; `PUBLISH engagement:events` a bits event, assert `viewer_points`. See the plan for the full recipe.
+- Integration (`go test -tags=integration ./repository/...`, needs Postgres with 068–074): B1 IDOR, H1 cross-economy wager, P0-1 migration re-run over multi-overlay data, P2-1 round-independent wager dedup, P2-2 active-flag reconcile set, P2-4 sweep-cancel override.
