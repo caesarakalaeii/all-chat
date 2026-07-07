@@ -82,10 +82,13 @@ export default function PollOverlayPage({ params }: { params: Promise<{ id: stri
   const total = poll.options.reduce((sum, o) => sum + o.votes, 0)
   const remaining = poll.ends_at ? Math.max(0, Math.floor((new Date(poll.ends_at).getTime() - now) / 1000)) : null
   const isClosed = poll.state === 'CLOSED'
-  // Winning option (max votes) — highlighted with a TEXT label, not colour alone, so it
-  // reads for colourblind viewers (mirrors the prediction widget's RESOLVED "Winner" branch).
+  // Winning option(s) — highlighted with a TEXT label, not colour alone, so it reads for
+  // colourblind viewers (mirrors the prediction widget's RESOLVED "Winner" branch). When the
+  // top vote count is NOT unique it's a tie: label every tied option "Tie" rather than
+  // arbitrarily crowning the first max option (P3-12).
   const maxVotes = poll.options.reduce((max, o) => Math.max(max, o.votes), 0)
-  const winnerId = isClosed && maxVotes > 0 ? poll.options.find((o) => o.votes === maxVotes)?.id : undefined
+  const topOptions = isClosed && maxVotes > 0 ? poll.options.filter((o) => o.votes === maxVotes) : []
+  const isTie = topOptions.length > 1
 
   return (
     <div className="min-h-screen bg-transparent p-4">
@@ -102,13 +105,13 @@ export default function PollOverlayPage({ params }: { params: Promise<{ id: stri
         <div className="space-y-2">
           {poll.options.map((o) => {
             const pct = total > 0 ? Math.round((o.votes / total) * 100) : 0
-            const isWinner = o.id === winnerId
+            const isTop = topOptions.some((w) => w.id === o.id)
             return (
               <div
                 key={o.id}
                 className={clsx(
                   'relative h-8 overflow-hidden rounded-md bg-white/15',
-                  isWinner && 'ring-2 ring-yellow-400'
+                  isTop && 'ring-2 ring-yellow-400'
                 )}
               >
                 <div
@@ -118,11 +121,11 @@ export default function PollOverlayPage({ params }: { params: Promise<{ id: stri
                 <div className="relative flex h-full items-center justify-between px-3 text-sm font-semibold">
                   <span className="flex min-w-0 items-center gap-1.5">
                     <span className="truncate">{o.idx}. {o.label}</span>
-                    {/* Winner conveyed by a labelled pill (not colour alone) so it has an
-                        accessible name and reads for colourblind viewers. */}
-                    {isWinner && (
+                    {/* Winner/Tie conveyed by a labelled pill (not colour alone) so it has
+                        an accessible name and reads for colourblind viewers. */}
+                    {isTop && (
                       <span className="shrink-0 rounded bg-yellow-400 px-1.5 py-0.5 text-[10px] font-bold uppercase text-black">
-                        Winner
+                        {isTie ? 'Tie' : 'Winner'}
                       </span>
                     )}
                   </span>

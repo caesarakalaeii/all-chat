@@ -87,6 +87,25 @@ func TestComputePayouts_RemainderToLargestStake(t *testing.T) {
 	assert.Equal(t, int64(1), res.Credits[b])
 }
 
+func TestComputePayouts_RemainderToLargestStakeNotLowestUUID(t *testing.T) {
+	// Unequal winners: A stakes 3 (HIGHER UUID), B stakes 1 (lower UUID); losers' pool 3.
+	// Proportional floors are A=floor(3*3/4)=2, B=floor(3*1/4)=0 → distributed 2, remainder 1.
+	// The remainder must go to the LARGEST-STAKE winner (A) even though B has the lower UUID —
+	// proving the largest-stake rule dominates the UUID tie-break. (The existing equal-stake
+	// remainder test only exercised the tie-break, never "remainder to largest stake".)
+	a := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	b := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	c := uuid.New()
+	x, y := uuid.New(), uuid.New()
+	entries := []WagerEntry{mkEntry(a, x, 3), mkEntry(b, x, 1), mkEntry(c, y, 3)}
+
+	res := ComputePayouts(entries, x)
+
+	assert.Equal(t, sumStakes(entries), sumCredits(res.Credits), "points conserved")
+	assert.Equal(t, int64(6), res.Credits[a], "largest-stake winner: stake 3 + share 2 + remainder 1")
+	assert.Equal(t, int64(1), res.Credits[b], "smaller-stake winner: stake 1 + floored share 0, no remainder")
+}
+
 func TestComputePayouts_NoWinnersRefundsAll(t *testing.T) {
 	a, b := uuid.New(), uuid.New()
 	x, y, z := uuid.New(), uuid.New(), uuid.New()

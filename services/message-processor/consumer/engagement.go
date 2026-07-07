@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/caesar/all-chat/services/message-processor/models"
 	"github.com/redis/go-redis/v9"
@@ -30,6 +31,15 @@ import (
 // engagementCommandsMaxLen caps the engagement:commands stream so a stalled
 // engagement-service can't grow it unbounded (approximate trim, cheap).
 const engagementCommandsMaxLen = 10000
+
+// maxCommandTextBytes bounds a forwarded command candidate. A real vote/wager is a few
+// bytes ("!vote 2", "!bet 1 500", a bare number); the stream is entry-count-capped but not
+// byte-capped, so a multi-KB '!'-prefixed payload would otherwise be XADDed verbatim. Reject
+// anything larger — it cannot be a legitimate command (P3-6).
+const maxCommandTextBytes = 512
+
+// engagementDrainTimeout bounds the best-effort shutdown drain of the forwarder buffer.
+const engagementDrainTimeout = 2 * time.Second
 
 // forwardEngagementCommand is the hot-path hook for issue #523. For a chat message
 // that *looks* like a vote/wager it hands the message off to the background forwarder
@@ -53,16 +63,53 @@ func (c *StreamConsumer) forwardEngagementCommand(raw *models.RawChatMessage) {
 
 // runEngagementForwarder drains queued command-shaped chat messages off the hot path
 // and performs the live-round EXISTS check plus, on a hit, the XADD to the durable
-// engagement:commands stream. Runs for the consumer's lifetime.
+// engagement:commands stream. Runs for the consumer's lifetime. On shutdown it best-effort
+// drains whatever is still buffered so a rolling deploy during a live poll doesn't silently
+// drop already-acked vote candidates (P3-5).
 func (c *StreamConsumer) runEngagementForwarder(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
+			c.drainEngagementBuffer()
 			return
 		case <-c.stopCh:
+			c.drainEngagementBuffer()
 			return
 		case raw := <-c.engagementCh:
-			c.forwardEngagementNow(ctx, raw)
+			c.safeForward(ctx, raw)
+		}
+	}
+}
+
+// safeForward runs one forward under a recover so a poison candidate can't kill the
+// forwarder goroutine and silently stop all vote/wager forwarding for the pod's life (P3-5).
+func (c *StreamConsumer) safeForward(ctx context.Context, raw *models.RawChatMessage) {
+	defer func() {
+		if r := recover(); r != nil {
+			c.metrics.RecordEngagementForward("error")
+			c.logger.Error("panic forwarding engagement command", zap.Any("panic", r))
+		}
+	}()
+	c.forwardEngagementNow(ctx, raw)
+}
+
+// drainEngagementBuffer best-effort forwards candidates still buffered at shutdown. The
+// consumer's ctx is cancelled by then, so it uses a fresh bounded context; once that window
+// elapses (or Redis is gone) it counts the rest "abandoned" so the loss is observable rather
+// than a silent drop (P3-5). Non-blocking: returns as soon as the buffer is empty.
+func (c *StreamConsumer) drainEngagementBuffer() {
+	ctx, cancel := context.WithTimeout(context.Background(), engagementDrainTimeout)
+	defer cancel()
+	for {
+		select {
+		case raw := <-c.engagementCh:
+			if ctx.Err() != nil {
+				c.metrics.RecordEngagementForward("abandoned")
+				continue
+			}
+			c.safeForward(ctx, raw)
+		default:
+			return
 		}
 	}
 }
@@ -119,8 +166,8 @@ func (c *StreamConsumer) forwardEngagementNow(ctx context.Context, raw *models.R
 // shortcut). This keeps the Redis EXISTS check off the path for ordinary chat.
 func looksLikeCommand(text string) bool {
 	t := strings.TrimSpace(text)
-	if t == "" {
-		return false
+	if t == "" || len(t) > maxCommandTextBytes {
+		return false // empty, or too long to be a real vote/wager — don't forward (P3-6)
 	}
 	if t[0] == '!' {
 		return true

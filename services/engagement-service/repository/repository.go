@@ -122,7 +122,30 @@ func (r *Repository) PublicOverlayForStreamer(ctx context.Context, username stri
 	return id, true, nil
 }
 
-// IsUserPremium reports whether the streamer user has premium access.
+// OverlayPublicForViewers reports whether overlayID is currently accepting viewer
+// participation: active AND public-for-viewers AND the owner not banned — the SAME gate
+// /ws/chat/{streamer} and the streamer-keyed endpoints apply. The direct overlay-id viewer
+// endpoints (vote/wager/balance/engagement/heartbeat) call it so toggling public-for-viewers
+// OFF stops participation everywhere, not just on the username path (P3-4). The overlay UUID
+// is a durable capability, so this is defense-in-depth honoring the streamer's toggle, not a
+// cross-tenant control.
+func (r *Repository) OverlayPublicForViewers(ctx context.Context, overlayID uuid.UUID) (bool, error) {
+	const q = `SELECT EXISTS(
+		SELECT 1 FROM overlays o JOIN users u ON o.user_id = u.id
+		WHERE o.id = $1 AND o.is_active = true AND o.is_public_for_viewers = true AND u.is_banned = false)`
+	var ok bool
+	if err := r.db.QueryRow(ctx, q, overlayID).Scan(&ok); err != nil {
+		return false, fmt.Errorf("overlay public for viewers: %w", err)
+	}
+	return ok, nil
+}
+
+// IsUserPremium reports whether the streamer user has premium access. Currently UNCALLED:
+// engagement has no premium gate yet — whether polls/predictions/points are a premium
+// feature is a product decision deferred to the feature-gate phase (mirrors the moderation
+// service, which gates on this same helper). Kept as the ready seam for that gate rather
+// than presuming premium-only here (which would wrongly block free streamers). See PR #524
+// review P3-14.
 func (r *Repository) IsUserPremium(ctx context.Context, userID string) (bool, error) {
 	const q = `SELECT is_premium FROM users WHERE id = $1`
 	var premium bool

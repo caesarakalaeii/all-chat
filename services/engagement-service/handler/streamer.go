@@ -172,7 +172,7 @@ func (h *Handler) StreamerVote(c *gin.Context) {
 		return
 	}
 	platform := c.GetString("platform")
-	accepted, err := h.repo.RecordVote(c.Request.Context(), pollID, viewerID, overlayID, req.OptionIdx, platform, nil)
+	accepted, err := h.repo.RecordVote(c.Request.Context(), pollID, viewerID, overlayID, req.OptionIdx, platform, nil, time.Now().UnixMilli())
 	if err != nil {
 		h.log.Error("streamer vote", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not record vote"})

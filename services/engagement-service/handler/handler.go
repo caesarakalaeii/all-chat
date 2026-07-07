@@ -101,6 +101,24 @@ func (h *Handler) requireOwnedOverlay(c *gin.Context, userID string) (uuid.UUID,
 	return overlayID, true
 }
 
+// requireViewerParticipation aborts with 403 when the overlay is not currently accepting
+// viewer participation (inactive, not public-for-viewers, or owner banned), so toggling
+// public-for-viewers OFF stops the direct overlay-id viewer endpoints too — matching the
+// chat-WS and streamer-keyed gates (P3-4). Returns false when it has aborted the request.
+func (h *Handler) requireViewerParticipation(c *gin.Context, overlayID uuid.UUID) bool {
+	ok, err := h.repo.OverlayPublicForViewers(c.Request.Context(), overlayID)
+	if err != nil {
+		h.log.Error("check overlay public for viewers", zap.Error(err))
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "could not verify overlay"})
+		return false
+	}
+	if !ok {
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "overlay is not accepting viewer participation"})
+		return false
+	}
+	return true
+}
+
 // uuidParam parses a named path parameter as a UUID.
 func uuidParam(c *gin.Context, name string) (uuid.UUID, bool) {
 	id, err := uuid.Parse(c.Param(name))

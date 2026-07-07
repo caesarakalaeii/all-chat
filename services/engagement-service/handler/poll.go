@@ -157,6 +157,9 @@ func (h *Handler) WebVote(c *gin.Context) {
 	if !ok {
 		return
 	}
+	if !h.requireViewerParticipation(c, overlayID) {
+		return
+	}
 	var req voteReq
 	if err := c.ShouldBindJSON(&req); err != nil || req.OptionIdx < 1 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "option_idx (>=1) required"})
@@ -166,7 +169,7 @@ func (h *Handler) WebVote(c *gin.Context) {
 	// Bind the vote to the :id overlay in the path so a viewer cannot cast/change a
 	// vote on a poll owned by another overlay (cross-tenant tally integrity). Mirrors
 	// WebWager's overlay binding.
-	accepted, err := h.repo.RecordVote(c.Request.Context(), pollID, viewerID, overlayID, req.OptionIdx, platform, nil)
+	accepted, err := h.repo.RecordVote(c.Request.Context(), pollID, viewerID, overlayID, req.OptionIdx, platform, nil, time.Now().UnixMilli())
 	if err != nil {
 		h.log.Error("web vote", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not record vote"})

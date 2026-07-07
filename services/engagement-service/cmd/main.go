@@ -29,6 +29,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
@@ -121,11 +122,22 @@ func main() {
 	cmdConsumer := consumer.NewCommandConsumer(redisClient, repo, pub, consumerName, log)
 	earnConsumer := consumer.NewEarnConsumer(redisClient, repo, log)
 	nativeConsumer := consumer.NewNativeConsumer(redisClient, repo, pub, consumerName, log)
-	go cmdConsumer.Run(bgCtx)
-	go earnConsumer.Run(bgCtx)
-	go nativeConsumer.Run(bgCtx)
-	go runSweeper(bgCtx, repo, pub, log, time.Duration(cfg.SweepIntervalSeconds)*time.Second,
-		time.Duration(cfg.NativeStaleTTLSeconds)*time.Second)
+
+	// Track the background workers so shutdown can wait for them (and their PEL drains) to
+	// stop before the deferred dbPool/redisClient closes run — otherwise SIGTERM closes the
+	// pool out from under an in-flight consumer, logging spurious "closed pool" errors (P3-13).
+	var bgWG sync.WaitGroup
+	runBG := func(fn func(context.Context)) {
+		bgWG.Add(1)
+		go func() { defer bgWG.Done(); fn(bgCtx) }()
+	}
+	runBG(cmdConsumer.Run)
+	runBG(earnConsumer.Run)
+	runBG(nativeConsumer.Run)
+	runBG(func(ctx context.Context) {
+		runSweeper(ctx, repo, pub, log, time.Duration(cfg.SweepIntervalSeconds)*time.Second,
+			time.Duration(cfg.NativeStaleTTLSeconds)*time.Second)
+	})
 
 	if cfg.GinMode == "release" {
 		gin.SetMode(gin.ReleaseMode)
@@ -218,6 +230,18 @@ func main() {
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Error("Server forced to shutdown", zap.Error(err))
+	}
+
+	// Wait (bounded) for the background consumers + sweeper + PEL drains to stop before the
+	// deferred dbPool.Close()/redisClient.Close() run, so nothing is mid-query/-XAutoClaim
+	// when the clients close (P3-13). bgCtx was already cancelled above, so they're unwinding.
+	bgDone := make(chan struct{})
+	go func() { bgWG.Wait(); close(bgDone) }()
+	select {
+	case <-bgDone:
+		log.Info("Background workers stopped")
+	case <-time.After(10 * time.Second):
+		log.Warn("Timed out waiting for background workers to stop; proceeding with shutdown")
 	}
 	log.Info("Server exited")
 }

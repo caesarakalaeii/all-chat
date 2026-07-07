@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/caesar/all-chat/services/engagement-service/models"
@@ -65,9 +66,17 @@ func (c *NativeConsumer) Run(ctx context.Context) {
 	c.log.Info("engagement native consumer started", zap.String("consumer", c.consumerName))
 
 	// A missed lock/end would strand a mirrored round live on the overlay with no
-	// later event to self-heal from (ADR-0030), so reclaim orphaned entries (H3).
+	// later event to self-heal from (ADR-0030), so reclaim orphaned entries (H3). The
+	// periodic drain is tracked so Run doesn't return until it stops (P3-13, see
+	// CommandConsumer.Run).
 	drainPEL(ctx, c.rdb, mpmodels.StreamEngagementTwitchNative, nativeConsumerGroup, c.consumerName, c.log, c.safeHandle)
-	go periodicDrain(ctx, c.rdb, mpmodels.StreamEngagementTwitchNative, nativeConsumerGroup, c.consumerName, c.log, c.safeHandle)
+	var drainWG sync.WaitGroup
+	drainWG.Add(1)
+	go func() {
+		defer drainWG.Done()
+		periodicDrain(ctx, c.rdb, mpmodels.StreamEngagementTwitchNative, nativeConsumerGroup, c.consumerName, c.log, c.safeHandle)
+	}()
+	defer drainWG.Wait()
 
 	for {
 		if ctx.Err() != nil {
