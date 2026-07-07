@@ -198,4 +198,57 @@ describe('WebSocketClient — liveness & resilient reconnect', () => {
     expect(localStorage.getItem('ws_last_seen_o1')).toBe(String(Date.parse('2026-01-01T00:00:00.000Z')))
     client.disconnect()
   })
+
+  // P2-3: viewerParticipant is DISTINCT from engagementOnly. Only the anonymous participate
+  // tab sets it (gateway then skips source auto-activation); the streamer's OWN OBS
+  // poll/prediction widgets are engagementOnly but must NOT set it, so they still activate
+  // sources and Twitch-native rounds get mirrored.
+  it('only a viewerParticipant socket carries ?viewerParticipant=true; an OBS engagement widget does not', () => {
+    const participate = new WebSocketClient()
+    participate.connect('o1', null, true, true) // engagementOnly + viewerParticipant
+    expect(latest().url).toContain('viewerParticipant=true')
+    expect(latest().url).not.toContain('since=')
+    participate.disconnect()
+
+    const widget = new WebSocketClient()
+    widget.connect('o2', null, true) // engagementOnly only (OBS poll/prediction display widget)
+    expect(latest().url).not.toContain('viewerParticipant')
+    expect(latest().url).not.toContain('since=')
+    widget.disconnect()
+  })
+
+  it('a bounded client (participate) gives up after maxReconnectAttempts consecutive failures', () => {
+    vi.useFakeTimers()
+    const client = new WebSocketClient({ maxReconnectAttempts: 3 })
+    client.connect('o1', null, true, true)
+    // Handshake keeps failing (inactive overlay) — never opens, so failures are consecutive.
+    for (let i = 0; i < 10; i++) {
+      latest().simulateServerClose()
+      vi.advanceTimersByTime(35000)
+    }
+    const count = MockWebSocket.instances.length
+    latest().simulateServerClose()
+    vi.advanceTimersByTime(60000)
+    expect(MockWebSocket.instances.length).toBe(count) // gave up: no new sockets
+    client.disconnect()
+  })
+
+  it('a bounded client resets its budget on a successful open (a transient blip does not exhaust it)', () => {
+    vi.useFakeTimers()
+    const client = new WebSocketClient({ maxReconnectAttempts: 3 })
+    client.connect('o1', null, true, true)
+    // Each cycle opens successfully before dropping → the attempt counter resets, so a
+    // bounded client on an ACTIVE overlay still survives arbitrarily many blips.
+    for (let i = 0; i < 10; i++) {
+      latest().simulateOpen()
+      latest().simulateServerClose()
+      vi.advanceTimersByTime(35000)
+    }
+    const count = MockWebSocket.instances.length
+    latest().simulateOpen()
+    latest().simulateServerClose()
+    vi.advanceTimersByTime(35000)
+    expect(MockWebSocket.instances.length).toBeGreaterThan(count)
+    client.disconnect()
+  })
 })

@@ -23,7 +23,7 @@ Balance is keyed `(viewer_id, overlay_id)`. Rationale: earning rules, polls, and
 
 ### Ledger of record + materialized balance
 `points_transactions` is an append-only ledger; `viewer_points.balance` is a materialized cache updated in the **same transaction** as each ledger row.
-- **Idempotency** is a `UNIQUE` `dedup_key` on every transaction. Earning uses `earn:{overlay}:{message_id}:{reason}` (stable across the Pub/Sub fan-out, so N replicas credit once); wager uses `wager:{prediction}:{viewer}`; payout/refund use `payout|refund:{prediction}:{viewer}`. Insert is `ON CONFLICT (dedup_key) DO NOTHING`; the balance moves only when a row was actually inserted.
+- **Idempotency** is a `UNIQUE` `dedup_key` on every transaction. Earning uses `earn:{overlay}:{message_id}:{reason}` (stable across the Pub/Sub fan-out, so N replicas credit once); a **chat** wager uses `wager:overlay:{overlay}:{stream_entry_id}` (the Redis stream entry id, stable across redelivery/reclaim) so it is **round-independent** — a redelivered chat message can't debit twice even if the original round resolved and a new one opened before the redelivery, while one message still fans out to N overlays because the key includes the overlay (P2-1); a **web/extension** wager (no redelivery) uses `wager:{prediction}:{viewer}`; payout/refund use `payout|refund:{prediction}:{viewer}`. Insert is `ON CONFLICT (dedup_key) DO NOTHING`; the balance moves only when a row was actually inserted (and when the dedup fires on a redelivered chat wager the whole wager tx rolls back, so no phantom entry is left on the new round).
 - **Debits are guarded**: `UPDATE viewer_points SET balance = balance - amt WHERE balance >= amt` inside the wager transaction; 0 rows ⇒ insufficient ⇒ rollback (which also undoes the ledger insert). `CHECK (balance >= 0)` is the backstop.
 
 ### Prediction integrity
@@ -44,7 +44,7 @@ A `source = 'twitch_native'` prediction (mirrored from EventSub, ADR-0028 compan
 
 ## Consequences
 
-- New tables (migrations 067–069): `viewer_points`, `points_transactions`, `points_earn_config`, `polls`/`poll_options`/`poll_votes`, `predictions`/`prediction_outcomes`/`prediction_entries`.
+- New tables (migrations 068–070): `viewer_points`, `points_transactions`, `points_earn_config`, `polls`/`poll_options`/`poll_votes`, `predictions`/`prediction_outcomes`/`prediction_entries`.
 - The economy is safe under retries, concurrency, and multi-replica fan-out by construction (dedup keys + guarded transitions + conditional debits).
 - Points name is streamer-configurable (`points_earn_config.points_name`); no brand currency name is hard-coded.
 - Chat/watch passive earning is partial in v1 (watch via authenticated heartbeat; event-driven earning for Twitch/YouTube; Kick/TikTok event earning is limited by their listeners' current event support).

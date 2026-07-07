@@ -84,6 +84,12 @@ func (c *NativeConsumer) Run(ctx context.Context) {
 			if ctx.Err() != nil || errors.Is(err, redis.Nil) {
 				continue
 			}
+			if isNoGroup(err) {
+				// A Redis reset dropped the group; recreate it so mirrored Twitch
+				// lifecycle events aren't silently dropped forever (P1-1).
+				recoverConsumerGroup(ctx, c.rdb, mpmodels.StreamEngagementTwitchNative, nativeConsumerGroup, c.log)
+				continue
+			}
 			c.log.Warn("xreadgroup native engagement", zap.Error(err))
 			continue
 		}

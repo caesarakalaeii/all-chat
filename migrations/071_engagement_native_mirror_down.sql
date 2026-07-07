@@ -1,15 +1,9 @@
 -- 071_engagement_native_mirror_down.sql
--- Reverses 070: drops the mirror tally columns and restores the global
--- (source, external_id) mirror-idempotency indexes from 068/069.
-
-DROP INDEX IF EXISTS uniq_poll_overlay_source_external;
-CREATE UNIQUE INDEX IF NOT EXISTS uniq_poll_source_external
-    ON polls(source, external_id) WHERE external_id IS NOT NULL;
-
-DROP INDEX IF EXISTS uniq_prediction_overlay_source_external;
-CREATE UNIQUE INDEX IF NOT EXISTS uniq_prediction_source_external
-    ON predictions(source, external_id) WHERE external_id IS NOT NULL;
-
-ALTER TABLE poll_options DROP COLUMN IF EXISTS mirror_votes;
-ALTER TABLE prediction_outcomes DROP COLUMN IF EXISTS mirror_points;
+-- Reverses 071: drops the mirror tally columns. 071 no longer rescopes indexes
+-- (069/070 create them per-overlay directly), so this down path deliberately does NOT
+-- recreate any global (source, external_id) index — rebuilding a global unique over real
+-- multi-overlay data would abort (the P0-1 landmine, ex-P3-1). The per-overlay indexes
+-- are dropped with the polls/predictions tables in 069/070's down migrations.
 ALTER TABLE prediction_outcomes DROP COLUMN IF EXISTS mirror_entrants;
+ALTER TABLE prediction_outcomes DROP COLUMN IF EXISTS mirror_points;
+ALTER TABLE poll_options DROP COLUMN IF EXISTS mirror_votes;

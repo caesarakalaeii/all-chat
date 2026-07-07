@@ -18,9 +18,15 @@ CREATE TABLE IF NOT EXISTS polls (
     closed_at    TIMESTAMP
 );
 
--- Mirror idempotency: at most one row per Twitch poll id.
-CREATE UNIQUE INDEX IF NOT EXISTS uniq_poll_source_external
-    ON polls(source, external_id) WHERE external_id IS NOT NULL;
+-- Mirror idempotency: at most one mirrored row per (overlay, Twitch poll id). One
+-- Twitch poll fans out to EVERY overlay sourcing the channel (ADR-0028/0030), so the
+-- uniqueness is per-overlay, NOT global on (source, external_id) — a global unique would
+-- reject the second overlay's mirror row AND abort a migration RE-RUN once real
+-- multi-overlay data exists (the runner replays every up-migration on each pod start).
+-- Created in final per-overlay scope here so re-running this file is always a no-op
+-- (P0-1); 071 only drops the retired global name on any dev DB that has it.
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_poll_overlay_source_external
+    ON polls(overlay_id, source, external_id) WHERE external_id IS NOT NULL;
 
 -- At most one live All-Chat-native poll per overlay (Twitch-native excluded; a
 -- channel may briefly have both while mirroring, resolved by handler policy).
@@ -47,6 +53,12 @@ CREATE TABLE IF NOT EXISTS poll_votes (
     PRIMARY KEY (poll_id, viewer_id)                    -- one vote per viewer per poll
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS uniq_poll_vote_msg
-    ON poll_votes(source_message_id) WHERE source_message_id IS NOT NULL;
+-- Chat replay dedup, scoped to the round: a single chat message fans out to every
+-- overlay sourcing the channel (ADR-0028), so each overlay's poll legitimately records
+-- the SAME source_message_id. Uniqueness is per (poll_id, source_message_id), NOT global
+-- on source_message_id — a global unique would drop the 2nd+ overlay's vote AND abort a
+-- migration re-run over real multi-overlay data. Final scope here so a re-run is a no-op
+-- (P0-1); 072 only drops the retired global name on any dev DB that has it.
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_poll_vote_msg_round
+    ON poll_votes(poll_id, source_message_id) WHERE source_message_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_poll_votes_tally ON poll_votes(poll_id, option_id);

@@ -176,8 +176,10 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
   }, [refresh])
 
   // Near-real-time refresh on a poll/prediction WS frame (L-D1); the interval remains
-  // the fallback / source of truth.
-  useEngagementLive(id, () => void refresh())
+  // the fallback / source of truth. viewerParticipant: this is an anonymous viewer tab, so
+  // the gateway must not auto-activate sources (no viewer-driven YouTube quota) and
+  // reconnects are bounded (no storm from every tab) — P2-3.
+  useEngagementLive(id, () => void refresh(), { viewerParticipant: true })
 
   // M-A2: announce the prediction locking to screen readers when the state transitions
   // ACTIVE → LOCKED. setState is deferred out of the effect body (never synchronous).

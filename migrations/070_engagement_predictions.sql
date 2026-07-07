@@ -22,8 +22,13 @@ CREATE TABLE IF NOT EXISTS predictions (
     resolved_at        TIMESTAMP
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS uniq_prediction_source_external
-    ON predictions(source, external_id) WHERE external_id IS NOT NULL;
+-- Mirror idempotency: at most one mirrored row per (overlay, Twitch prediction id).
+-- Per-overlay, NOT global on (source, external_id) — one Twitch prediction fans out to
+-- every overlay sourcing the channel (ADR-0028/0030), and a global unique would reject
+-- the 2nd overlay's mirror row AND abort a migration re-run over real data. Final scope
+-- here so a re-run is a no-op (P0-1); 071 only drops the retired global name on dev DBs.
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_prediction_overlay_source_external
+    ON predictions(overlay_id, source, external_id) WHERE external_id IS NOT NULL;
 
 -- At most one live All-Chat-native prediction per overlay (ACTIVE or LOCKED).
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_active_pred_per_overlay
@@ -65,6 +70,11 @@ CREATE TABLE IF NOT EXISTS prediction_entries (
     PRIMARY KEY (prediction_id, viewer_id)              -- one wager per viewer per prediction
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS uniq_pred_entry_msg
-    ON prediction_entries(source_message_id) WHERE source_message_id IS NOT NULL;
+-- Chat replay dedup, scoped to the round (see 069's uniq_poll_vote_msg_round): one chat
+-- message fans out to every overlay sourcing the channel (ADR-0028), so each overlay's
+-- prediction legitimately records the SAME source_message_id. Per (prediction_id,
+-- source_message_id), NOT global — a global unique would drop the 2nd+ overlay's wager
+-- AND abort a re-run over real data. Final scope here (P0-1); 072 drops the retired name.
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_pred_entry_msg_round
+    ON prediction_entries(prediction_id, source_message_id) WHERE source_message_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_pred_entries_pool ON prediction_entries(prediction_id, outcome_id);

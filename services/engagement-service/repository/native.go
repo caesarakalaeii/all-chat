@@ -111,6 +111,13 @@ func (r *Repository) UpsertNativePoll(ctx context.Context, overlayID uuid.UUID, 
 // a redelivered CANCELED could laterally flip a RESOLVED round's outcome (L-C1). A
 // same-state redelivery still passes (allowing a late tally correction). A blocked
 // stale event returns (nil, nil) so the caller skips broadcasting.
+//
+// One EXCEPTION to the absorbing guard: a SYNTHETIC cancel written by the stale-sweep
+// (sweep_canceled=TRUE) is NOT authoritative — a LOCKED Twitch round has no forced-
+// resolution deadline, so the genuine terminal may still arrive. A genuine terminal
+// (any real mirror event carries sweep_canceled=FALSE) is therefore allowed to override
+// a synthetic cancel, and the row is re-tagged authoritative (P2-4). Genuine
+// RESOLVED<->CANCELED lateral flips stay blocked.
 func (r *Repository) UpsertNativePrediction(ctx context.Context, overlayID uuid.UUID, externalID, title, state, winningExternalID string, outcomes []NativeOutcomeInput, autoLockAt, lockedAt, resolvedAt *time.Time) (*models.Prediction, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
@@ -126,10 +133,16 @@ func (r *Repository) UpsertNativePrediction(ctx context.Context, overlayID uuid.
 		 DO UPDATE SET title = EXCLUDED.title, state = EXCLUDED.state,
 		               auto_lock_at = COALESCE(EXCLUDED.auto_lock_at, predictions.auto_lock_at),
 		               locked_at = COALESCE(EXCLUDED.locked_at, predictions.locked_at),
-		               resolved_at = COALESCE(EXCLUDED.resolved_at, predictions.resolved_at)
+		               resolved_at = COALESCE(EXCLUDED.resolved_at, predictions.resolved_at),
+		               sweep_canceled = FALSE
 		 WHERE (CASE predictions.state WHEN 'CREATED' THEN 0 WHEN 'ACTIVE' THEN 1 WHEN 'LOCKED' THEN 2 ELSE 3 END)
 		    <= (CASE EXCLUDED.state WHEN 'CREATED' THEN 0 WHEN 'ACTIVE' THEN 1 WHEN 'LOCKED' THEN 2 ELSE 3 END)
-		   AND NOT (predictions.state IN ('RESOLVED','CANCELED') AND EXCLUDED.state <> predictions.state)
+		   AND NOT (
+		       predictions.state IN ('RESOLVED','CANCELED')
+		       AND EXCLUDED.state <> predictions.state
+		       -- but a genuine terminal MAY override a synthetic (sweep) cancel:
+		       AND NOT (predictions.sweep_canceled AND EXCLUDED.state IN ('RESOLVED','CANCELED'))
+		   )
 		 RETURNING id`,
 		overlayID, models.SourceTwitchNative, externalID, title, state, autoLockAt, lockedAt, resolvedAt).Scan(&pid)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -234,9 +247,15 @@ func (r *Repository) ForceCloseStaleNativePolls(ctx context.Context, ttl time.Du
 // ACTIVE/LOCKED past ttl — CANCELED, not RESOLVED, because there is no known winner.
 // Native rows never touch viewer_points, so canceling a mirror has NO points-economy
 // side effect (no payout to reconcile, no refund). See ForceCloseStaleNativePolls.
+//
+// The cancel is tagged sweep_canceled=TRUE so it is a SYNTHETIC terminal, not a real
+// Twitch outcome: a LOCKED Twitch prediction has no forced-resolution deadline, so the
+// genuine channel.prediction.end may still arrive after this sweep fires. UpsertNative-
+// Prediction's absorbing guard lets a later genuine terminal override a synthetic cancel,
+// so the real winner still displays instead of a permanent wrong CANCELED (P2-4).
 func (r *Repository) ForceCloseStaleNativePredictions(ctx context.Context, ttl time.Duration) ([]PredictionRef, error) {
 	rows, err := r.db.Query(ctx,
-		`UPDATE predictions SET state = 'CANCELED', resolved_at = NOW()
+		`UPDATE predictions SET state = 'CANCELED', resolved_at = NOW(), sweep_canceled = TRUE
 		 WHERE source = $1 AND state IN ('ACTIVE','LOCKED') AND created_at <= NOW() - make_interval(secs => $2)
 		 RETURNING id, overlay_id`,
 		models.SourceTwitchNative, int(ttl.Seconds()))

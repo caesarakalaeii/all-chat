@@ -259,8 +259,38 @@ func runSweeper(ctx context.Context, repo *repository.Repository, pub *publisher
 				}
 				pub.ClearActive(ctx, ref.PollID)
 			}
+			reconcileActiveFlags(ctx, repo, pub, log)
 			sweepStaleNative(ctx, repo, pub, log, nativeStaleTTL)
 		}
+	}
+}
+
+// reconcileActiveFlags re-arms the hot-path active flag for every live All-Chat round.
+// CreatePoll/CreatePrediction set the flag AFTER committing the round, and SetActive only
+// logs (and now counts) on a Redis failure — so a transient blip at create time can leave
+// a round live and visible while its engagement:active:{platform}:{channel} SET was never
+// written, silently dropping every chat vote for the round. This periodic, idempotent
+// re-SetActive self-heals that (mirroring the DB-is-source-of-truth auto-lock/close sweep),
+// also covers the sub-millisecond commit→markActive crash window, and refreshes the 24h
+// active-flag TTL so a round living longer than a day never loses its gate (P2-2). It only
+// ARMS flags for ACTIVE rounds; ClearActive + the TTL handle teardown.
+func reconcileActiveFlags(ctx context.Context, repo *repository.Repository, pub *publisher.Publisher, log *zap.Logger) {
+	rounds, err := repo.ActiveAllChatEngagements(ctx)
+	if err != nil {
+		log.Warn("active-flag reconcile: list live rounds failed", zap.Error(err))
+		return
+	}
+	for _, ref := range rounds {
+		channels, err := repo.SourceChannelsForOverlay(ctx, ref.OverlayID)
+		if err != nil {
+			log.Warn("active-flag reconcile: source channels failed",
+				zap.String("overlay", ref.OverlayID.String()), zap.Error(err))
+			continue
+		}
+		if len(channels) == 0 {
+			continue
+		}
+		pub.SetActive(ctx, ref.EngagementID, channels)
 	}
 }
 

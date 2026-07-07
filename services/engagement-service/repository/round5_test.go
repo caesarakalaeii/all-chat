@@ -261,7 +261,7 @@ func TestU1_DisplayPredictionServedDuringResolvedGrace(t *testing.T) {
 
 	pred, err := repo.CreatePrediction(ctx, overlay, "who?", []string{"a", "b"}, nil)
 	require.NoError(t, err)
-	res, err := repo.Wager(ctx, pred.ID, viewer, overlay, 1, 100, "twitch", nil)
+	res, err := repo.Wager(ctx, pred.ID, viewer, overlay, 1, 100, "twitch", nil, "")
 	require.NoError(t, err)
 	require.True(t, res.Accepted, "reason=%q", res.Reason)
 	_, err = repo.LockPrediction(ctx, pred.ID, overlay)

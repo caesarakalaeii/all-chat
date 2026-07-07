@@ -145,7 +145,7 @@ func (r *Repository) OverlaysForChannel(ctx context.Context, platform, channelID
 	// canonical lowercase login (the native-mirror producer lowercases the Twitch
 	// broadcaster login, ADR-0030). Compare case-insensitively so a source stored as
 	// "CaesarLP" still matches "caesarlp"; a functional index on LOWER(channel_id)
-	// (migration 071) keeps this cheap.
+	// (migration 072) keeps this cheap.
 	const q = `SELECT overlay_id FROM overlay_chat_sources
 	           WHERE platform = $1 AND LOWER(channel_id) = LOWER($2) AND platform <> $3`
 	rows, err := r.db.Query(ctx, q, platform, channelID, sharedOverlayPlatform)
@@ -160,6 +160,40 @@ func (r *Repository) OverlaysForChannel(ctx context.Context, platform, channelID
 			return nil, fmt.Errorf("scan overlay id: %w", err)
 		}
 		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
+// EngagementRef identifies a live engagement and the overlay it belongs to. Used by the
+// active-flag reconciler to re-arm the hot-path gate for rounds that should have it set.
+type EngagementRef struct {
+	EngagementID uuid.UUID
+	OverlayID    uuid.UUID
+}
+
+// ActiveAllChatEngagements lists every live All-Chat round that SHOULD currently have its
+// hot-path active flag armed: ACTIVE polls and ACTIVE predictions. A LOCKED prediction no
+// longer accepts wagers, so its flag is intentionally cleared and it is excluded here;
+// twitch_native rows never arm the flag (they run on Twitch). The sweeper's reconciler
+// re-SetActives these so a flag a transient Redis failure never wrote at create time is
+// eventually armed (P2-2), restart-safe from the DB rather than in-memory state.
+func (r *Repository) ActiveAllChatEngagements(ctx context.Context) ([]EngagementRef, error) {
+	const q = `
+		SELECT id, overlay_id FROM polls WHERE state = 'ACTIVE' AND source = 'allchat'
+		UNION ALL
+		SELECT id, overlay_id FROM predictions WHERE state = 'ACTIVE' AND source = 'allchat'`
+	rows, err := r.db.Query(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("list active all-chat engagements: %w", err)
+	}
+	defer rows.Close()
+	var out []EngagementRef
+	for rows.Next() {
+		var ref EngagementRef
+		if err := rows.Scan(&ref.EngagementID, &ref.OverlayID); err != nil {
+			return nil, fmt.Errorf("scan active engagement ref: %w", err)
+		}
+		out = append(out, ref)
 	}
 	return out, rows.Err()
 }
