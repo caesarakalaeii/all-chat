@@ -53,6 +53,13 @@ const (
 	// (ADR-0017). Seeded premium-only so the write-path rolls out to a small
 	// cohort first; flip to is_premium=false to graduate to all users.
 	GateModeration = "moderation"
+
+	// GateEngagement is the feature key for starting All-Chat polls/predictions
+	// (issue #523). Seeded premium-only: opening a round posts the round + participate
+	// link to chat (announce_on_start), which consumes the streamer's send quota — a
+	// paid capability. Flip to is_premium=false to graduate to all users. Viewer
+	// participation and points earning are NOT gated by this.
+	GateEngagement = "engagement"
 )
 
 // FeatureGate represents a single row from the feature_gates table.

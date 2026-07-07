@@ -30,9 +30,9 @@ listeners → chat:raw → mp ┤   → XADD engagement:commands  (durable; vote
 |---|---|---|
 | `GET /overlays/:id/active-poll` | public | aggregate poll snapshot (OBS / web render) |
 | `GET /overlays/:id/active-prediction` | public | aggregate prediction snapshot |
-| `POST /overlays/:id/polls` | owner | create poll (`question`, 2–5 `options`, `allow_change?`, `duration_seconds?`) |
+| `POST /overlays/:id/polls` | owner · **premium** | create poll (`question`, 2–5 `options`, `allow_change?`, `duration_seconds?`) |
 | `POST /overlays/:id/polls/:pollId/close` | owner | close poll |
-| `POST /overlays/:id/predictions` | owner | create prediction (`title`, 2–10 `outcomes`, `auto_lock_seconds?`) |
+| `POST /overlays/:id/predictions` | owner · **premium** | create prediction (`title`, 2–10 `outcomes`, `auto_lock_seconds?`) |
 | `POST /overlays/:id/predictions/:pid/lock` | owner | stop accepting wagers |
 | `POST /overlays/:id/predictions/:pid/resolve` | owner | settle + pay out (`winning_outcome_id`) |
 | `POST /overlays/:id/predictions/:pid/cancel` | owner | void + refund all stakes |
@@ -45,7 +45,9 @@ listeners → chat:raw → mp ┤   → XADD engagement:commands  (durable; vote
 
 Owner routes verify overlay ownership; the shared JWT middleware accepts either a user or viewer token and the handlers enforce which each route needs.
 
-## Data model (migrations 068–074)
+**Premium gate (ADR-0008).** *Starting* a round — `POST …/polls` and `POST …/predictions` — is gated behind `shared/middleware.RequirePremium("engagement")`: opening a round posts the question + participate link to chat (`announce_on_start`) and thus consumes the streamer's send quota, so it is a premium capability. A non-premium owner gets `403`. Managing an already-open round (close/lock/resolve/cancel), the earn config, viewer participation, and points earning are **not** gated. The gate is seeded premium in migration 076; flip `feature_gates.is_premium=false` for `engagement` via the admin endpoint to graduate it to all users with no redeploy.
+
+## Data model (migrations 068–076)
 
 `viewer_points` (materialized balance, `CHECK balance>=0`), `points_transactions` (append-only ledger, `UNIQUE dedup_key`), `points_earn_config` (per-overlay multipliers + `points_name`), `polls`/`poll_options`/`poll_votes`, `predictions`/`prediction_outcomes`/`prediction_entries`. Partial unique indexes enforce one live All-Chat poll/prediction per overlay; primary keys enforce one vote/wager per viewer. Mirror-idempotency (`(overlay_id, source, external_id)`) and chat replay-dedup (`(round, source_message_id)`) uniques are created **per-overlay / per-round directly in 069/070** so the runner replaying every migration on each pod start never rebuilds a global unique over legit multi-overlay data (P0-1); 071/072 only drop the retired global names, and 074 adds `predictions.sweep_canceled`.
 
