@@ -31,6 +31,7 @@ import { useEffect, useRef, useCallback, useState } from 'react'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { InfinityLogo } from '@/components/InfinityLogo'
 import { FaqSection } from '@/components/FaqSection'
+import { ThemeSwitcher } from '@/components/ThemeSwitcher'
 import { PlatformBadge } from '@/components/ui/badge'
 import { PLATFORM_COLORS } from '@/lib/platform-colors'
 import { toastManager } from '@/lib/toast'
@@ -151,7 +152,7 @@ const TOTAL_CARDS = PLATFORMS.length + 3 // 4 stat cards + 3 feature cards
 const FEATURE_CARDS = [
   {
     icon: Palette,
-    title: '12 Themes, Full CSS Control',
+    title: '16 Themes, Full CSS Control',
     description:
       'From Win98 retro to cyberpunk neon. Pick a built-in theme or write your own CSS — your overlay, your brand.',
   },
@@ -282,30 +283,9 @@ export default function HomeClient() {
           — no bots, no setup, just a URL in OBS.
         </p>
 
-        {/* Platform stat cards — magnetic glow hero */}
-        <div className="mx-auto mb-12 grid w-full max-w-3xl grid-cols-2 gap-4 md:grid-cols-4">
-          {PLATFORMS.map((platform, i) => {
-            const count = msgCounts?.[platform]
-            return (
-              <MagGlowCard
-                key={platform}
-                cardRef={(el) => {
-                  cardRefs.current[i] = el
-                }}
-                glowRef={(el) => {
-                  glowRefs.current[i] = el
-                }}
-                glowColor={PLATFORM_GLOW_COLORS[platform]}
-              >
-                <PlatformBadge platform={platform} className="mb-3" />
-                <div className={cn('mb-1 text-2xl font-bold', PLATFORM_COLORS[platform].text)}>
-                  {count != null ? formatCount(count) : '—'}
-                </div>
-                <div className="text-xs text-text-sub">messages delivered this week</div>
-              </MagGlowCard>
-            )
-          })}
-        </div>
+        {/* Theme switcher — hero centerpiece. The built-in themes are a headline
+            selling point, so a live, customizable preview is the hero's main visual. */}
+        <ThemeSwitcher className="mb-12" />
 
         {/* CTA — dashboard link for logged-in users, login buttons otherwise */}
         {isLoggedIn ? (
@@ -388,6 +368,31 @@ export default function HomeClient() {
             </button>
           </div>
         )}
+
+        {/* Platform stat cards — social proof, demoted below the theme preview + CTA */}
+        <div className="mx-auto mt-14 grid w-full max-w-3xl grid-cols-2 gap-4 md:grid-cols-4">
+          {PLATFORMS.map((platform, i) => {
+            const count = msgCounts?.[platform]
+            return (
+              <MagGlowCard
+                key={platform}
+                cardRef={(el) => {
+                  cardRefs.current[i] = el
+                }}
+                glowRef={(el) => {
+                  glowRefs.current[i] = el
+                }}
+                glowColor={PLATFORM_GLOW_COLORS[platform]}
+              >
+                <PlatformBadge platform={platform} className="mb-3" />
+                <div className={cn('mb-1 text-2xl font-bold', PLATFORM_COLORS[platform].text)}>
+                  {count != null ? formatCount(count) : '—'}
+                </div>
+                <div className="text-xs text-text-sub">messages delivered this week</div>
+              </MagGlowCard>
+            )
+          })}
+        </div>
       </section>
 
       {/* ------------------------------------------------------------------ */}
@@ -538,12 +543,12 @@ export default function HomeClient() {
             </p>
             <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
               <Link
-                href="/docs"
-                onClick={() => trackEvent('cta_click', { cta: 'docs', location: 'promo' })}
+                href="/docs/api"
+                onClick={() => trackEvent('cta_click', { cta: 'api-docs', location: 'promo' })}
                 className="inline-flex items-center gap-2 rounded-lg bg-linear-to-r from-twitch to-tiktok px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
               >
                 <Code2 className="h-4 w-4" aria-hidden="true" />
-                Read the docs
+                Read the API docs
               </Link>
             </div>
           </div>
