@@ -1,0 +1,104 @@
+/* Visual Settings: uses CSS custom properties for live customization */
+/**
+ * Theme Name: Sticky Notes
+ * Description: Tilted paper notes with washi tape, warm paper colors and a handwritten font
+ * Tags: sticky, paper, handwritten, scrapbook, playful, tactile
+ * Author: All-Chat Team
+ * Version: 1.0.0
+ * Updated: 2026-07-08
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&display=swap');
+
+/* Message text is theme-controlled; usernames keep their viewer-defined color. */
+:root {
+  --chat-message-color: #2b2b2b;
+  --chat-timestamp-color: #6b6b6b;
+}
+
+body {
+  background: transparent !important;
+  font-family: 'Caveat', cursive !important;
+}
+
+.space-y-3 {
+  gap: var(--chat-message-gap, 14px) !important;
+}
+
+/* Paper note — tilted, soft shadow. Alternate tilt + paper color for rhythm. */
+.chat-message {
+  position: relative !important;
+  background: #fff8c4 !important;
+  border: none !important;
+  border-radius: 2px !important;
+  padding: 16px 16px 12px !important;
+  box-shadow: 2px 4px 10px rgba(0, 0, 0, 0.35) !important;
+  transform: rotate(-1.6deg) !important;
+}
+.space-y-3 > div:nth-child(even) {
+  transform: rotate(1.4deg) !important;
+  background: #cfe8ff !important;
+}
+.space-y-3 > div:nth-child(3n) {
+  background: #d7f0c2 !important;
+}
+
+/* Washi tape strip */
+.chat-message::before {
+  content: '' !important;
+  position: absolute !important;
+  top: -8px !important;
+  left: 50% !important;
+  transform: translateX(-50%) rotate(-3deg) !important;
+  width: 64px !important;
+  height: 18px !important;
+  background: rgba(255, 255, 255, 0.5) !important;
+  border-left: 1px dashed rgba(0, 0, 0, 0.15) !important;
+  border-right: 1px dashed rgba(0, 0, 0, 0.15) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Avatar — a taped little photo */
+.flex-shrink-0 img {
+  border: 3px solid #ffffff !important;
+  border-radius: 3px !important;
+  box-shadow: 1px 2px 4px rgba(0, 0, 0, 0.3) !important;
+  transform: rotate(-2deg) !important;
+}
+
+/* Username — handwriting, viewer color kept */
+.chat-username {
+  font-family: 'Caveat', cursive !important;
+  font-weight: 700 !important;
+  font-size: 1.5em !important;
+  line-height: 1 !important;
+}
+
+/* Platform tag — scribbled label */
+.platform-badge-text {
+  background: transparent !important;
+  color: rgba(0, 0, 0, 0.5) !important;
+  padding: 0 !important;
+  font-family: 'Caveat', cursive !important;
+  font-size: 1.1em !important;
+  letter-spacing: 0 !important;
+}
+
+/* Message — handwritten ink on paper */
+.chat-message .break-words.text-white {
+  color: #2b2b2b !important;
+  font-family: 'Caveat', cursive !important;
+  font-size: calc(var(--chat-font-size, 15px) * 1.35) !important;
+  line-height: 1.25 !important;
+}
+
+.chat-message .break-words img {
+  max-height: calc(24px * var(--chat-emote-scale, 1)) !important;
+  vertical-align: middle !important;
+}
+
+.text-slate-500 {
+  color: rgba(0, 0, 0, 0.4) !important;
+  font-family: 'Caveat', cursive !important;
+  font-size: calc(var(--chat-timestamp-font-size, 11px) * 1.25) !important;
+}
