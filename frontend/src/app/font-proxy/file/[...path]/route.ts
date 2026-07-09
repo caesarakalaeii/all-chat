@@ -22,12 +22,7 @@ import { NextResponse } from 'next/server'
 // the proxy narrow — it cannot be abused to fetch arbitrary gstatic content.
 const ALLOWED_PREFIX = 's/'
 
-const ALLOWED_EXTENSIONS: ReadonlySet<string> = new Set([
-  'woff2',
-  'woff',
-  'ttf',
-  'otf',
-])
+const ALLOWED_EXTENSIONS: ReadonlySet<string> = new Set(['woff2', 'woff', 'ttf', 'otf'])
 
 const CONTENT_TYPES: Record<string, string> = {
   woff2: 'font/woff2',

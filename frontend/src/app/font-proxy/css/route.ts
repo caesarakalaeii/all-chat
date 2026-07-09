@@ -99,10 +99,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   // Rewrite every https://fonts.gstatic.com/... URL to our file proxy so the
   // browser never connects to Google directly.
-  const rewritten = css.replace(
-    /https:\/\/fonts\.gstatic\.com\//g,
-    '/api/fonts/file/',
-  )
+  const rewritten = css.replace(/https:\/\/fonts\.gstatic\.com\//g, '/font-proxy/file/')
 
   return new NextResponse(rewritten, {
     status: 200,
