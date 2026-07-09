@@ -102,7 +102,7 @@ export default function ThemePreview({
   const uniqueId = `theme-preview-${themeId}`
 
   // Scope CSS when it changes. Route Google-Fonts @imports through the same-origin
-  // /api/fonts/css proxy first (like the real overlay/embed render paths do) — the
+  // /font-proxy/css proxy first (like the real overlay/embed render paths do) — the
   // site CSP blocks direct fonts.googleapis.com loads, so without this the preview
   // silently falls back to a system font. The proxy also keeps viewer IPs off Google
   // (DSGVO). See lib/theme-marketplace/font-proxy.ts.

@@ -33,9 +33,9 @@ export default function PrivacyPolicyPage() {
       <div className="space-y-4">
         <div className="rounded-xl border border-twitch/20 bg-twitch/5 p-5 text-text-sub">
           <strong className="text-text">TL;DR:</strong> All-Chat only collects the information we
-          need to authenticate with your streaming platforms and render chat in your overlays. Tokens
-          are encrypted, chat messages are automatically deleted after one hour, and we never sell
-          your data. We use cookieless, self-hosted analytics (no tracking cookies; see
+          need to authenticate with your streaming platforms and render chat in your overlays.
+          Tokens are encrypted, chat messages are automatically deleted after one hour, and we never
+          sell your data. We use cookieless, self-hosted analytics (no tracking cookies; see
           Section&nbsp;5.6).
         </div>
         <div className="rounded-xl border border-tiktok/20 bg-tiktok/5 p-5 text-text-sub">
@@ -137,10 +137,7 @@ export default function PrivacyPolicyPage() {
             If you choose to link multiple platform accounts as a viewer (e.g.&nbsp;Twitch +
             YouTube), we create a unified viewer profile that associates your platform identities.
             This is{' '}
-            <strong className="text-text">
-              opt-in only and requires your explicit action
-            </strong>
-            .
+            <strong className="text-text">opt-in only and requires your explicit action</strong>.
           </p>
           <p className="text-sm text-text-dim">
             Legal basis: Art.&nbsp;6(1)(a) DSGVO &ndash; your consent. You can unlink platforms at
@@ -189,7 +186,10 @@ export default function PrivacyPolicyPage() {
         <h3 className="text-lg font-semibold text-text">4.2 Safeguards</h3>
         <ul className={listClasses}>
           <li>OAuth tokens encrypted with AES-GCM before touching the database</li>
-          <li>HTTPS at the ingress layer for all external traffic; internal services isolated via Kubernetes network policies</li>
+          <li>
+            HTTPS at the ingress layer for all external traffic; internal services isolated via
+            Kubernetes network policies
+          </li>
           <li>Role-scoped infrastructure access and audit logging</li>
           <li>Regular dependency upgrades and security patching</li>
           <li>Security headers (X-Content-Type-Options, X-Frame-Options, Referrer-Policy)</li>
@@ -202,9 +202,7 @@ export default function PrivacyPolicyPage() {
 
       {/* --- Third Parties --- */}
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">
-          5. Data Sharing &amp; Third Parties
-        </h2>
+        <h2 className="text-2xl font-semibold text-text">5. Data Sharing &amp; Third Parties</h2>
 
         <h3 className="text-lg font-semibold text-text">5.1 Streaming Platform APIs</h3>
         <p>We connect to the following services to deliver the core product:</p>
@@ -226,23 +224,25 @@ export default function PrivacyPolicyPage() {
           <strong className="text-text">self-hosted on our infrastructure</strong>. The fonts used
           by the All-Chat interface are bundled at build time via Next.js, and fonts selectable for
           overlay customization are served through a server-side proxy at{' '}
-          <code className="rounded bg-surface-2 px-1 py-0.5 text-xs">/api/fonts/*</code>. Your
-          browser only connects to the All-Chat origin; <strong className="text-text">no IP
-          address, user agent, or request metadata is transmitted to Google</strong> when fonts
-          are loaded. This aligns with the Landgericht M&uuml;nchen I ruling on Google Fonts (20
-          January 2022, Az. 3 O 17493/20).
+          <code className="rounded bg-surface-2 px-1 py-0.5 text-xs">/font-proxy/*</code>. Your
+          browser only connects to the All-Chat origin;{' '}
+          <strong className="text-text">
+            no IP address, user agent, or request metadata is transmitted to Google
+          </strong>{' '}
+          when fonts are loaded. This aligns with the Landgericht M&uuml;nchen I ruling on Google
+          Fonts (20 January 2022, Az. 3 O 17493/20).
         </p>
         <p className="text-sm text-text-dim">
-          Legal basis: Art.&nbsp;6(1)(f) DSGVO &ndash; legitimate interest in delivering the
-          visual appearance of the overlay. The font files themselves are licensed under the SIL
-          Open Font License 1.1 or Apache 2.0.
+          Legal basis: Art.&nbsp;6(1)(f) DSGVO &ndash; legitimate interest in delivering the visual
+          appearance of the overlay. The font files themselves are licensed under the SIL Open Font
+          License 1.1 or Apache 2.0.
         </p>
 
         <h3 className="text-lg font-semibold text-text">5.3 Third-Party Frontend Resources</h3>
         <p>
           Overlay and dashboard pages may load the following external resources. Each request
-          transmits your <strong className="text-text">IP address</strong> and browser user agent
-          to the respective provider:
+          transmits your <strong className="text-text">IP address</strong> and browser user agent to
+          the respective provider:
         </p>
         <ul className={listClasses}>
           <li>
@@ -255,9 +255,9 @@ export default function PrivacyPolicyPage() {
           </li>
         </ul>
         <p className="text-sm text-text-dim">
-          Legal basis: Art.&nbsp;6(1)(f) DSGVO &ndash; legitimate interest in providing a
-          functional and visually complete overlay experience. You can avoid loading these by not
-          opening the theme marketplace and by providing a custom avatar URL.
+          Legal basis: Art.&nbsp;6(1)(f) DSGVO &ndash; legitimate interest in providing a functional
+          and visually complete overlay experience. You can avoid loading these by not opening the
+          theme marketplace and by providing a custom avatar URL.
         </p>
 
         <h3 className="text-lg font-semibold text-text">5.4 YouTube-Specific Notice</h3>
@@ -312,15 +312,14 @@ export default function PrivacyPolicyPage() {
         <p className="text-sm text-text-dim">
           Your <strong className="text-text">IP address is not stored</strong>: it is used only
           momentarily to derive the country and to generate a daily, salted hash for counting unique
-          visits, after which it is discarded. We do{' '}
-          <strong className="text-text">not</strong> track public overlay views (the pages OBS loads
-          as a browser source). You can block the analytics script with any browser content blocker
-          without affecting the site.
+          visits, after which it is discarded. We do <strong className="text-text">not</strong>{' '}
+          track public overlay views (the pages OBS loads as a browser source). You can block the
+          analytics script with any browser content blocker without affecting the site.
         </p>
         <p className="text-sm text-text-dim">
-          Because the tracker stores no information on, and reads none from, your device, it does not
-          require consent under &sect;&nbsp;25 TTDSG; the processing of the resulting data rests on
-          Art.&nbsp;6(1)(f) DSGVO &ndash; our legitimate interest in measuring and improving the
+          Because the tracker stores no information on, and reads none from, your device, it does
+          not require consent under &sect;&nbsp;25 TTDSG; the processing of the resulting data rests
+          on Art.&nbsp;6(1)(f) DSGVO &ndash; our legitimate interest in measuring and improving the
           service.
         </p>
       </section>
@@ -338,8 +337,8 @@ export default function PrivacyPolicyPage() {
             platform, when they expire (cleaned up after 7 days), or when you delete your account
           </li>
           <li>
-            <strong className="text-text">Chat messages sent through All-Chat:</strong> automatically
-            deleted after 1 hour
+            <strong className="text-text">Chat messages sent through All-Chat:</strong>{' '}
+            automatically deleted after 1 hour
           </li>
           <li>
             <strong className="text-text">Chat messages displayed in overlays:</strong> streamed
@@ -454,11 +453,10 @@ export default function PrivacyPolicyPage() {
         <h2 className="text-2xl font-semibold text-text">10. International Data Transfers</h2>
         <p>
           When you use streaming platform integrations, data is transferred to servers operated by
-          Twitch (Amazon, US), Google/YouTube (US), TikTok (various), and Kick (AU). These
-          transfers are necessary to perform the service you requested (Art.&nbsp;49(1)(b) DSGVO).
-          The GitHub API (theme marketplace) may also involve transfers to the US. Fonts are
-          self-hosted on our infrastructure and therefore do not involve any third-country
-          transfer when loaded.
+          Twitch (Amazon, US), Google/YouTube (US), TikTok (various), and Kick (AU). These transfers
+          are necessary to perform the service you requested (Art.&nbsp;49(1)(b) DSGVO). The GitHub
+          API (theme marketplace) may also involve transfers to the US. Fonts are self-hosted on our
+          infrastructure and therefore do not involve any third-country transfer when loaded.
         </p>
       </section>
 
@@ -477,8 +475,8 @@ export default function PrivacyPolicyPage() {
         <ul className={listClasses}>
           <li>All source code is publicly auditable under AGPL-3.0</li>
           <li>
-            No hidden tracking &mdash; our analytics are cookieless and documented (Section&nbsp;5.6),
-            and the whole stack is verifiable on GitHub
+            No hidden tracking &mdash; our analytics are cookieless and documented
+            (Section&nbsp;5.6), and the whole stack is verifiable on GitHub
           </li>
           <li>Privacy practices are open to community scrutiny</li>
         </ul>
@@ -535,8 +533,8 @@ export default function PrivacyPolicyPage() {
 
         <h3 className="text-lg font-semibold text-text">Discord</h3>
         <p>
-          When you connect a Discord server, we store the guild ID and name. Chat relay uses
-          webhook URLs you configure. We do not access server member lists or DMs.
+          When you connect a Discord server, we store the guild ID and name. Chat relay uses webhook
+          URLs you configure. We do not access server member lists or DMs.
         </p>
       </section>
 
