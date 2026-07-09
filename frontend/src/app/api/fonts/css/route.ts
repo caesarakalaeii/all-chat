@@ -46,6 +46,8 @@ const ALLOWED_FAMILIES: ReadonlySet<string> = new Set([
   'Share Tech Mono',
   'Source Code Pro',
   'Space Grotesk',
+  'Bangers',
+  'Caveat',
 ])
 
 // Stable WOFF2-capable UA so Google returns modern woff2 faces. Without this

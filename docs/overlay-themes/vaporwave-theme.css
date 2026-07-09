@@ -129,15 +129,12 @@ body {
   font-family: var(--chat-username-font-family, 'Orbitron', sans-serif) !important;
   font-size: var(--chat-username-font-size, 18px) !important;
   font-weight: var(--chat-username-font-weight, 900) !important;
-  background: linear-gradient(180deg, #ff0080, #00ffff, #ff00ff) !important;
-  -webkit-background-clip: text !important;
-  -webkit-text-fill-color: transparent !important;
-  background-clip: text !important;
-  filter: drop-shadow(0 0 10px rgba(255, 0, 128, 0.8)) drop-shadow(0 0 20px rgba(0, 255, 255, 0.6)) !important;
   text-transform: uppercase !important;
   letter-spacing: 0.05em !important;
-  position: relative !important;
-  z-index: 2 !important;
+  /* Keep the viewer's own name colour; add a neon glow in that same colour.
+     (No gradient fill — gradient names are a premium feature, and a viewer's
+     chosen colour must never be overwritten.) */
+  text-shadow: 0 0 8px currentColor, 0 0 16px currentColor !important;
   display: var(--chat-show-username, inline) !important;
 }
 

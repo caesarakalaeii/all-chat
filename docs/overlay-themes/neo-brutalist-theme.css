@@ -1,0 +1,111 @@
+/* Visual Settings: uses CSS custom properties for live customization */
+/**
+ * Theme Name: Neo Brutalist
+ * Description: Bold solid cards with thick black borders, hard offset shadows and chunky type
+ * Tags: brutalist, bold, graphic, high-contrast, punchy
+ * Author: All-Chat Team
+ * Version: 1.0.0
+ * Updated: 2026-07-08
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&display=swap');
+
+/* Message text + timestamp are theme-controlled; usernames keep their viewer color. */
+:root {
+  --chat-message-color: #111111;
+  --chat-timestamp-color: #000000;
+}
+
+body {
+  background: transparent !important;
+  font-family: 'Space Grotesk', sans-serif !important;
+}
+
+.space-y-3 {
+  gap: var(--chat-message-gap, 14px) !important;
+}
+
+.chat-message {
+  background: #ffffff !important;
+  border: 3px solid #000000 !important;
+  border-radius: 4px !important;
+  box-shadow: 6px 6px 0 #000000 !important;
+  padding: var(--chat-bubble-padding, 12px 14px) !important;
+  animation: brutalPop 0.18s ease-out !important;
+}
+
+@keyframes brutalPop {
+  0% {
+    transform: translate(-4px, -4px);
+    opacity: 0;
+  }
+  100% {
+    transform: translate(0, 0);
+    opacity: 1;
+  }
+}
+
+/* Per-card colour pop — cycle the hard offset shadow so neighbours differ */
+.space-y-3 > div:nth-child(4n + 2) {
+  box-shadow: 6px 6px 0 #ff5da2 !important;
+}
+.space-y-3 > div:nth-child(4n + 3) {
+  box-shadow: 6px 6px 0 #4dd2ff !important;
+}
+.space-y-3 > div:nth-child(4n) {
+  box-shadow: 6px 6px 0 #ffd23f !important;
+}
+
+/* Platform badge — solid black tag */
+.platform-badge-text {
+  background: #000000 !important;
+  color: #ffffff !important;
+  border-radius: 0 !important;
+  padding: 2px 7px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.05em !important;
+}
+
+/* Username — keep the viewer's own name color; a chunky black outline gives the
+   brutalist look and stays readable on the white card (technique from Minimal). */
+.chat-username {
+  font-weight: 800 !important;
+  paint-order: stroke fill !important;
+  -webkit-text-stroke: 2px #000000 !important;
+}
+
+/* Avatar — hard square */
+.flex-shrink-0 img {
+  border-radius: 4px !important;
+  border: 3px solid #000000 !important;
+  box-shadow: 3px 3px 0 #000000 !important;
+}
+
+/* User badges */
+.flex.items-center.gap-1 img {
+  border: 2px solid #000000 !important;
+  border-radius: 3px !important;
+  background: #ffffff !important;
+}
+
+/* Message text — black on the white card (also driven via --chat-message-color) */
+.chat-message .break-words.text-white {
+  color: #111111 !important;
+  font-size: var(--chat-font-size, 15px) !important;
+  font-weight: 600 !important;
+  line-height: var(--chat-line-height, 1.5) !important;
+}
+
+.chat-message .break-words img {
+  max-height: calc(26px * var(--chat-emote-scale, 1)) !important;
+  vertical-align: middle !important;
+}
+
+/* Timestamp */
+.text-slate-500 {
+  color: #000000 !important;
+  font-weight: 700 !important;
+  font-size: var(--chat-timestamp-font-size, 10px) !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+}

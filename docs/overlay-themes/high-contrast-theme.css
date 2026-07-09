@@ -184,7 +184,8 @@ body {
    breaks the viewer gradient. Theme authors should follow this pattern. */
 .font-semibold.text-sm:not(.text-transparent):not(.username-gradient),
 .username:not(.text-transparent):not(.username-gradient) {
-  color: var(--chat-username-color, inherit) !important;
+  /* No colour override — the viewer's own name colour shows; the black outline +
+     brighten filter below keep it legible whatever colour they picked. */
 
   /* Multi-layer text shadow for legibility with any user color */
   text-shadow:
