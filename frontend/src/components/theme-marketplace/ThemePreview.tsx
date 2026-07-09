@@ -42,6 +42,12 @@ interface ThemePreviewProps {
   height?: number
   /** Platform-badge style, mirroring the overlay's setting. Defaults to text. */
   platformBadge?: 'text' | 'icon'
+  /** Render the per-message timestamp. Defaults to true (matches the live overlay). */
+  showTimestamp?: boolean
+  /** Size the preview to its content instead of a fixed `height` (no scrollbar, no
+   *  empty padding) — used by the landing carousel so each theme shows at its true
+   *  height. Defaults to false (fixed-height, scrollable marketplace card). */
+  fit?: boolean
 }
 
 /**
@@ -89,6 +95,8 @@ export default function ThemePreview({
   themeId,
   height = 180,
   platformBadge = 'text',
+  showTimestamp = true,
+  fit = false,
 }: ThemePreviewProps) {
   const [scopedCss, setScopedCss] = useState('')
   const uniqueId = `theme-preview-${themeId}`
@@ -120,7 +128,7 @@ export default function ThemePreview({
         className={uniqueId}
         data-theme-preview={themeId}
         style={{
-          height: `${height}px`,
+          height: fit ? 'auto' : `${height}px`,
           background: 'black',
           overflow: 'hidden',
           position: 'relative',
@@ -134,7 +142,12 @@ export default function ThemePreview({
           badges → username) and timestamp — so a theme previews exactly as it renders live.
           text-left keeps it faithful even when a centered container (e.g. the hero) wraps it.
         */}
-        <div className="theme-preview-body overlay-live-body h-full space-y-3 overflow-y-auto p-2 text-left">
+        <div
+          className={clsx(
+            'theme-preview-body overlay-live-body space-y-3 p-2 text-left',
+            fit ? 'overflow-hidden' : 'h-full overflow-y-auto'
+          )}
+        >
           {messages.map((msg) => (
             <div
               key={msg.id}
@@ -211,7 +224,9 @@ export default function ThemePreview({
                   </div>
 
                   {/* Timestamp */}
-                  <div className="mt-1 text-xs text-slate-500">{SAMPLE_TIME}</div>
+                  {showTimestamp && (
+                    <div className="mt-1 text-xs text-slate-500">{SAMPLE_TIME}</div>
+                  )}
                 </div>
               </div>
             </div>
