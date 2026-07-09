@@ -25,8 +25,12 @@
 import type { ChatMessagePreview } from './types'
 
 /**
- * Sample messages for theme previews
- * Showcases different platforms with diverse content
+ * Sample messages for theme previews.
+ *
+ * Spans all four platforms and deliberately uses five distinct, viewer-style
+ * name colours (purple, blue, green, pink, gold) so previews showcase that every
+ * chatter keeps their own name colour — a core promise (and the reason themes
+ * must not override username colours; gradient names are a premium feature).
  */
 export const SAMPLE_PREVIEW_MESSAGES: ChatMessagePreview[] = [
   {
@@ -47,10 +51,10 @@ export const SAMPLE_PREVIEW_MESSAGES: ChatMessagePreview[] = [
           icon_url: 'https://static-cdn.jtvnw.net/badges/v1/5527c58c-fb7d-422d-b71b-f309dcb85cc1/1',
         },
       ],
-      color: '#9146ff',
+      color: '#A970FF',
     },
     message: {
-      text: 'Welcome everyone! 🎉',
+      text: 'Welcome in, everyone! 🎉',
       emotes: [],
     },
     timestamp: new Date().toISOString(),
@@ -64,14 +68,14 @@ export const SAMPLE_PREVIEW_MESSAGES: ChatMessagePreview[] = [
     channel_name: 'Preview',
     user: {
       id: 'user-2',
-      username: 'viewer123',
-      display_name: 'Viewer123',
-      avatar_url: 'https://i.pravatar.cc/100?img=2',
+      username: 'pixelpenguin',
+      display_name: 'PixelPenguin',
+      avatar_url: 'https://i.pravatar.cc/100?img=5',
       badges: [],
-      color: '#ff0000',
+      color: '#2EA8FF',
     },
     message: {
-      text: 'This theme looks amazing! 🔥',
+      text: 'this overlay looks so clean 🔥',
       emotes: [],
     },
     timestamp: new Date().toISOString(),
@@ -85,8 +89,8 @@ export const SAMPLE_PREVIEW_MESSAGES: ChatMessagePreview[] = [
     channel_name: 'Preview',
     user: {
       id: 'user-3',
-      username: 'modhelper',
-      display_name: 'ModHelper',
+      username: 'modsquad',
+      display_name: 'ModSquad',
       avatar_url: 'https://i.pravatar.cc/100?img=3',
       badges: [
         {
@@ -95,10 +99,52 @@ export const SAMPLE_PREVIEW_MESSAGES: ChatMessagePreview[] = [
           icon_url: 'https://static-cdn.jtvnw.net/badges/v1/3267646d-33f0-4b17-b3df-f923a41db1d0/1',
         },
       ],
-      color: '#00ff00',
+      color: '#22C55E',
     },
     message: {
-      text: 'Love the customization! 💜',
+      text: 'love the customization 💚',
+      emotes: [],
+    },
+    timestamp: new Date().toISOString(),
+    metadata: {},
+  },
+  {
+    id: 'preview-4',
+    overlay_id: 'preview',
+    platform: 'tiktok',
+    channel_id: 'preview',
+    channel_name: 'Preview',
+    user: {
+      id: 'user-4',
+      username: 'novabyte',
+      display_name: 'NovaByte',
+      avatar_url: 'https://i.pravatar.cc/100?img=8',
+      badges: [],
+      color: '#FF5C8A',
+    },
+    message: {
+      text: 'looks amazing on stream ✨',
+      emotes: [],
+    },
+    timestamp: new Date().toISOString(),
+    metadata: {},
+  },
+  {
+    id: 'preview-5',
+    overlay_id: 'preview',
+    platform: 'twitch',
+    channel_id: 'preview',
+    channel_name: 'Preview',
+    user: {
+      id: 'user-5',
+      username: 'sunnybeats',
+      display_name: 'SunnyBeats',
+      avatar_url: 'https://i.pravatar.cc/100?img=9',
+      badges: [],
+      color: '#F5A623',
+    },
+    message: {
+      text: 'how do I set this up?? 👀',
       emotes: [],
     },
     timestamp: new Date().toISOString(),

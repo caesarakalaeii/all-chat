@@ -24,7 +24,7 @@
  * ⚠️ MARKETING COPY — please review/approve wording before merge. Every claim below
  * is grounded in current product facts: supported platforms (Twitch/YouTube/Kick/
  * TikTok/Discord), OBS browser source, free & open source (AGPL-3.0), 7TV/BTTV/FFZ +
- * native emotes, 12 built-in themes + custom CSS, cookieless self-hosted analytics
+ * native emotes, 16 built-in themes + custom CSS, cookieless self-hosted analytics
  * with ~1h chat retention, and the browser extension.
  */
 export interface FaqItem {
@@ -55,7 +55,7 @@ export const FAQ_ITEMS: FaqItem[] = [
   {
     question: 'Can I customize how the overlay looks?',
     answer:
-      'Yes. Choose from 12 built-in themes or write your own CSS for full control over fonts, colors, and layout.',
+      'Yes. Choose from 16 built-in themes or write your own CSS for full control over fonts, colors, and layout.',
   },
   {
     question: 'Does All-Chat track my viewers or use cookies?',

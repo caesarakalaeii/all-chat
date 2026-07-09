@@ -51,6 +51,12 @@ body {
 
 /* Message container - Win98 window style */
 .space-y-3 > div {
+  /* The visual-customizer layer (events.css) forces message/timestamp colour via
+     these vars with layered !important — a plain color rule can't beat it, so set
+     the vars on the card (the message text inherits them). Dark ink for the light
+     Win98 field; usernames keep their viewer-defined colour. */
+  --chat-message-color: #000000;
+  --chat-timestamp-color: #000000;
   background: var(--chat-bubble-bg-color, #c0c0c0) !important;
   border: 2px solid;
   border-color: #ffffff #808080 #808080 #ffffff !important;
@@ -178,7 +184,7 @@ body {
   font-size: var(--chat-username-font-size, 11px) !important;
   font-family: var(--chat-username-font-family, inherit) !important;
   font-weight: var(--chat-username-font-weight, bold) !important;
-  color: var(--chat-username-color, inherit) !important;
+  /* No colour override — the viewer's own name colour must come through. */
   text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.5) !important;
   filter: none !important;
   display: var(--chat-show-username, inline) !important;

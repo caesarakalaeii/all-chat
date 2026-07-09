@@ -42,6 +42,7 @@ export type AnalyticsEvent =
   | 'moderation_enabled'
   | 'obs_url_copied'
   // Feature adoption
+  | 'theme_previewed'
   | 'theme_applied'
   | 'custom_css_saved'
   | 'tts_enabled'

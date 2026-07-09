@@ -23,6 +23,12 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap');
 
+/* Message text is theme-controlled — a dark plum stays readable on the light
+   pastel cards; usernames keep their viewer-defined color. */
+:root {
+  --chat-message-color: #42356b;
+}
+
 /* ============================================================
    CORE STYLES
    ============================================================ */
@@ -63,6 +69,30 @@ body {
   box-shadow:
     0 12px 48px rgba(255, 182, 193, 0.4),
     inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+}
+
+/* Per-card candy colours — cycle pink → blue → mint → lavender so no two
+   neighbouring notes match. Respects --chat-bubble-bg-color if the user sets it. */
+.space-y-3 > div:nth-child(4n + 2) {
+  background: var(
+    --chat-bubble-bg-color,
+    linear-gradient(135deg, rgba(200, 230, 255, 0.95) 0%, rgba(224, 240, 255, 0.95) 100%)
+  ) !important;
+  border-color: rgba(150, 200, 255, 0.6) !important;
+}
+.space-y-3 > div:nth-child(4n + 3) {
+  background: var(
+    --chat-bubble-bg-color,
+    linear-gradient(135deg, rgba(210, 245, 225, 0.95) 0%, rgba(230, 250, 240, 0.95) 100%)
+  ) !important;
+  border-color: rgba(150, 220, 180, 0.6) !important;
+}
+.space-y-3 > div:nth-child(4n) {
+  background: var(
+    --chat-bubble-bg-color,
+    linear-gradient(135deg, rgba(235, 220, 255, 0.95) 0%, rgba(245, 235, 255, 0.95) 100%)
+  ) !important;
+  border-color: rgba(200, 170, 240, 0.6) !important;
 }
 
 /* Sparkle decoration - Commented to prevent CSS leakage in marketplace */
@@ -157,9 +187,8 @@ body {
   font-family: var(--chat-font-family, 'Nunito', sans-serif) !important;
   font-size: var(--chat-font-size, 16px) !important;
   font-weight: var(--chat-font-weight, 600) !important;
-  color: var(--chat-message-color, #6b5b8c) !important;
+  color: var(--chat-message-color, #42356b) !important;
   line-height: var(--chat-line-height, 1.6) !important;
-  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8) !important;
 }
 
 .text-white.break-words img {

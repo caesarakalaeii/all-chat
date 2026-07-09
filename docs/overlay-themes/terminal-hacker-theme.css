@@ -121,8 +121,8 @@ body {
   font-family: var(--chat-username-font-family, 'Source Code Pro', monospace) !important;
   font-size: var(--chat-username-font-size, 15px) !important;
   font-weight: var(--chat-username-font-weight, 700) !important;
-  color: var(--chat-username-color, #00ff00) !important;
-  text-shadow: 0 0 8px rgba(0, 255, 0, 0.8) !important;
+  /* Keep the viewer's own name colour; the glow follows that colour. */
+  text-shadow: 0 0 8px currentColor !important;
   position: relative !important;
   z-index: 2 !important;
   letter-spacing: 0.02em !important;
