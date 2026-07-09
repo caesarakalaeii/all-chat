@@ -169,7 +169,7 @@ const PlatformIcon = ({ platform }: { platform: string }) => {
 }
 
 // ---- Font loader ----------------------------------------------------------
-// Fonts are proxied through /api/fonts/css so end-user IPs never reach Google
+// Fonts are proxied through /font-proxy/css so end-user IPs never reach Google
 // (DSGVO / "Google Fonts Urteil" LG München 2022-01-20, Az. 3 O 17493/20).
 
 const GOOGLE_FONT_NAMES = new Set([
@@ -193,7 +193,7 @@ function ensureGoogleFontLoaded(fontFamily: string): void {
   link.id = 'gfont-' + slug
   link.rel = 'stylesheet'
   const family = encodeURIComponent(`${fontFamily}:wght@400;600;700`)
-  link.href = `/api/fonts/css?family=${family}`
+  link.href = `/font-proxy/css?family=${family}`
   document.head.appendChild(link)
 }
 
@@ -361,9 +361,7 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
           rate: s.tts_rate ?? prev.rate,
           pitch: s.tts_pitch ?? prev.pitch,
           filter_mode: (s.tts_filter_mode ?? prev.filter_mode) as
-            | 'all'
-            | 'sample'
-            | 'priority_only',
+            'all' | 'sample' | 'priority_only',
           sample_rate: s.tts_sample_rate ?? prev.sample_rate,
           max_queue: s.tts_max_queue ?? prev.max_queue,
           messages_per_minute: s.tts_messages_per_minute ?? prev.messages_per_minute,
