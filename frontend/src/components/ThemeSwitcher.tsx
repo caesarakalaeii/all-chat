@@ -17,140 +17,181 @@
  */
 
 /**
- * ThemeSwitcher — live, one-click preview of the built-in overlay themes.
+ * ThemeSwitcher — auto-advancing showcase of a few hand-picked overlay themes.
  *
- * Used as the landing-page hero centerpiece: the built-in themes are a headline
- * selling point, so this shows what each one actually looks like instead of just
- * naming them. One live preview (reusing the marketplace `ThemePreview` engine,
- * which renders the real shipped CSS) plus a row of pills; clicking a pill
- * re-skins the same sample chat. Because it renders the bundled CSS directly
- * there are no screenshots to keep in sync, and only the active theme is mounted,
- * so exactly one theme's fonts load, on demand as the visitor clicks through.
+ * The landing hero teases the *best, most distinct* themes rather than dumping the
+ * whole catalogue on a new visitor: a small carousel cross-fades through a curated
+ * set (rendered with the real shipped CSS via the marketplace `ThemePreview`), with
+ * dots to step through manually. It shows only two sample messages with no timestamps
+ * so no scrollbar ever appears, and uses platform icon badges for a cleaner look.
+ *
+ * The full "N built-in themes" claim links to the docs; the complete catalogue lives
+ * in the dashboard, not the marketing page. (The per-theme contrast gate now lives on
+ * the /dev/theme-contrast harness, decoupled from this component — see
+ * tests/e2e/theme-contrast.spec.ts.)
  */
 
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import clsx from 'clsx'
 import ThemePreview from '@/components/theme-marketplace/ThemePreview'
-import { getBundledTheme } from '@/lib/theme-marketplace/bundled-themes'
+import { getBundledTheme, getBundledThemes } from '@/lib/theme-marketplace/bundled-themes'
 import { SAMPLE_PREVIEW_MESSAGES } from '@/lib/theme-marketplace/constants'
 import type { Theme } from '@/lib/theme-marketplace/types'
 import { Palette } from 'lucide-react'
 import { trackEvent } from '@/lib/analytics'
 
 /**
- * Curated subset of the bundled themes, ordered for visual punch and given
- * short pill labels. Kept as an explicit id→label list (rather than iterating
- * all BUNDLED_THEMES) so the labels stay compact and we skip the near-duplicate
- * `minimal-theme-fixed` variant — this is the "12 themes" the homepage
- * advertises. Any id that no longer resolves is dropped silently below, so a
- * theme rename can never crash the landing page.
+ * The curated showcase — four visually distinct looks that read well at a glance:
+ * a clean inline theme, comic speech balloons, tilted sticky notes, and a modern
+ * card layout. All use icon platform badges and hide timestamps for a tidy sample.
+ * Any id that no longer resolves is dropped silently so a rename can't crash the page.
  */
-const FEATURED_THEMES: ReadonlyArray<{ id: string; label: string; badge?: 'icon' }> = [
-  // Minimal leads and is the default — it's the look most streamers end up using.
+const SHOWCASE: ReadonlyArray<{ id: string; label: string }> = [
   { id: 'minimal-theme', label: 'Minimal' },
-  { id: 'trading-card-theme', label: 'Trading Card' },
   { id: 'comic-speech-theme', label: 'Comic' },
   { id: 'sticky-notes-theme', label: 'Sticky Notes' },
-  { id: 'neo-brutalist-theme', label: 'Neo Brutalist' },
-  { id: 'vaporwave-theme', label: 'Vaporwave' },
-  { id: 'cyberpunk-theme', label: 'Cyberpunk' },
-  { id: 'neon-glass-theme', label: 'Neon Glass' },
   { id: 'modern-dark-theme', label: 'Modern Dark' },
-  { id: 'terminal-hacker-theme', label: 'Terminal' },
-  { id: 'minecraft-theme', label: 'Minecraft' },
-  { id: 'win98-theme', label: 'Windows 98' },
-  { id: 'pastel-cute-theme', label: 'Pastel' },
-  { id: 'noita-minimal-theme', label: 'Noita' },
-  { id: 'high-contrast-theme', label: 'High Contrast' },
-  // Minimal Icon is built around the icon platform-badge style — preview it that way.
-  { id: 'minimal-icon-theme', label: 'Minimal Icon', badge: 'icon' },
 ]
 
 interface ResolvedTheme {
   id: string
   label: string
-  badge?: 'icon'
   theme: Theme
 }
 
-const RESOLVED_THEMES: ResolvedTheme[] = FEATURED_THEMES.flatMap((entry) => {
+const RESOLVED: ResolvedTheme[] = SHOWCASE.flatMap((entry) => {
   const theme = getBundledTheme(entry.id)
   return theme ? [{ ...entry, theme }] : []
 })
 
+/** Total shipped themes advertised in the caption (excludes the hidden alias). */
+const BUILTIN_COUNT = getBundledThemes().filter((t) => t.id !== 'minimal-theme-fixed').length
+
+/** Two short messages across two platforms — enough to show the look, never enough to scroll. */
+const SHOWCASE_MESSAGES = SAMPLE_PREVIEW_MESSAGES.slice(0, 2)
+
+const ROTATE_MS = 4200
+
 interface ThemeSwitcherProps {
   /** Extra classes for the outer wrapper — the caller owns margins/positioning. */
   className?: string
-  /** Preview viewport height in px. The hero uses a taller preview than the card. */
-  previewHeight?: number
 }
 
-export function ThemeSwitcher({ className, previewHeight = 300 }: ThemeSwitcherProps) {
-  const [activeId, setActiveId] = useState(RESOLVED_THEMES[0]?.id ?? '')
+export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
+  const [active, setActive] = useState(0)
+  const [paused, setPaused] = useState(false)
+  const [frameH, setFrameH] = useState<number>()
+  const slideRef = useRef<HTMLDivElement>(null)
+
+  // Auto-advance, paused while the visitor is hovering/focusing the widget and
+  // disabled entirely under prefers-reduced-motion.
+  useEffect(() => {
+    if (paused) return
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+    if (RESOLVED.length < 2) return
+    const id = setInterval(() => setActive((a) => (a + 1) % RESOLVED.length), ROTATE_MS)
+    return () => clearInterval(id)
+  }, [paused])
+
+  // Drive the frame height from the active slide's real content so every theme
+  // shows at its true size — no scrollbar and no dead padding. A ResizeObserver
+  // keeps it in sync as the theme's webfont finishes loading and reflows.
+  useLayoutEffect(() => {
+    const el = slideRef.current
+    if (!el) return
+    const update = () => setFrameH(el.offsetHeight)
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [active])
 
   // Defensive: nothing to show if the bundle was emptied/renamed wholesale.
-  if (RESOLVED_THEMES.length === 0) return null
+  if (RESOLVED.length === 0) return null
 
-  const active = RESOLVED_THEMES.find((t) => t.id === activeId) ?? RESOLVED_THEMES[0]
+  const current = RESOLVED[active] ?? RESOLVED[0]
+
+  const select = (i: number) => {
+    setActive(i)
+    trackEvent('theme_previewed', { theme: RESOLVED[i].id })
+  }
 
   return (
-    <div className={clsx('relative mx-auto w-full max-w-2xl', className)}>
-      <div className="mb-3 text-xs font-bold tracking-widest text-text-sub uppercase">
-        {RESOLVED_THEMES.length} built-in themes — no CSS required
-      </div>
+    <div
+      className={clsx('relative mx-auto w-full max-w-2xl', className)}
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      onFocusCapture={() => setPaused(true)}
+      onBlurCapture={() => setPaused(false)}
+    >
+      <p className="mb-3 text-xs font-bold tracking-widest text-text-sub uppercase">Themes</p>
 
-      {/* Live preview + caption — mirrors the marketplace ThemeCard composition */}
-      <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-2xl">
-        <ThemePreview
-          css={active.theme.css}
-          messages={SAMPLE_PREVIEW_MESSAGES}
-          themeId={active.theme.id}
-          height={previewHeight}
-          platformBadge={active.badge ?? 'text'}
-        />
-        <div aria-live="polite" className="border-t border-border p-4 text-left">
-          <h3 className="mb-1 text-base font-semibold text-text">{active.theme.name}</h3>
-          <p className="text-sm text-text-sub">{active.theme.description}</p>
-        </div>
-      </div>
-
-      {/* Theme pills — click to re-skin the preview above */}
       <div
+        className="overflow-hidden rounded-xl border border-border-md bg-surface"
         role="group"
-        aria-label="Preview a theme"
-        className="mt-4 flex flex-wrap justify-center gap-2"
+        aria-roledescription="carousel"
+        aria-label="Featured themes"
       >
-        {RESOLVED_THEMES.map((t) => {
-          const isActive = t.id === active.id
-          return (
-            <button
-              key={t.id}
-              type="button"
-              aria-pressed={isActive}
-              onClick={() => {
-                setActiveId(t.id)
-                trackEvent('theme_previewed', { theme: t.id })
-              }}
-              className={clsx(
-                'rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-twitch focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none',
-                isActive
-                  ? 'border-twitch bg-twitch text-white'
-                  : 'border-border bg-surface text-text-sub hover:border-twitch/50 hover:text-text'
-              )}
-            >
-              {t.label}
-            </button>
-          )
-        })}
+        {/* Only the active slide is mounted (one webfont at a time); the frame
+            eases between each theme's natural height. */}
+        <div
+          className="overflow-hidden transition-[height] duration-500 ease-out motion-reduce:transition-none"
+          style={{ height: frameH }}
+        >
+          <div
+            key={current.id}
+            ref={slideRef}
+            className="animate-[theme-fade_0.5s_ease-out] motion-reduce:animate-none"
+          >
+            <ThemePreview
+              css={current.theme.css}
+              messages={SHOWCASE_MESSAGES}
+              themeId={current.theme.id}
+              platformBadge="icon"
+              showTimestamp={false}
+              fit
+            />
+          </div>
+        </div>
+
+        {/* Caption + dots */}
+        <div className="flex items-center justify-between gap-4 border-t border-border p-4 text-left">
+          <div className="min-w-0">
+            <h3 className="truncate text-base font-semibold text-text">{current.theme.name}</h3>
+            <p className="truncate text-sm text-text-sub">{current.theme.description}</p>
+          </div>
+          <div
+            className="flex shrink-0 items-center gap-2"
+            role="group"
+            aria-label="Choose a theme"
+          >
+            {RESOLVED.map((t, i) => {
+              const isActive = i === active
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => select(i)}
+                  aria-label={`Show ${t.label}`}
+                  aria-current={isActive}
+                  className={clsx(
+                    'h-2.5 rounded-full transition-all focus-visible:ring-2 focus-visible:ring-twitch focus-visible:ring-offset-2 focus-visible:ring-offset-surface focus-visible:outline-none',
+                    isActive ? 'w-6 bg-twitch' : 'w-2.5 bg-border-md hover:bg-text-sub'
+                  )}
+                />
+              )
+            })}
+          </div>
+        </div>
       </div>
 
       <p className="mt-4 flex items-center justify-center gap-1.5 text-center text-sm text-text-sub">
         <Palette className="h-4 w-4 shrink-0" aria-hidden="true" />
         <span>
-          Make it yours — fonts, colors, sizing, spacing and more are all{' '}
+          {BUILTIN_COUNT} built-in themes — restyle any{' '}
           <Link
             href="/docs#customize"
             onClick={() =>
@@ -159,8 +200,8 @@ export function ThemeSwitcher({ className, previewHeight = 300 }: ThemeSwitcherP
             className="font-medium text-text underline decoration-dotted underline-offset-2 hover:text-twitch"
           >
             point-and-click
-          </Link>{' '}
-          (no CSS needed), or{' '}
+          </Link>
+          , or{' '}
           <Link
             href="/docs#custom-css"
             onClick={() =>
@@ -168,14 +209,14 @@ export function ThemeSwitcher({ className, previewHeight = 300 }: ThemeSwitcherP
             }
             className="font-medium text-text underline decoration-dotted underline-offset-2 hover:text-twitch"
           >
-            go deeper with your own CSS
+            write your own CSS
           </Link>
           .
         </span>
       </p>
 
-      <p className="mt-1.5 text-center text-xs text-text-sub">
-        Already have a theme from another tool?{' '}
+      <p className="mt-1.5 text-center text-sm text-text-sub">
+        Coming from another tool?{' '}
         <a
           href="https://discord.gg/xCGBSuz39P"
           target="_blank"
@@ -185,7 +226,7 @@ export function ThemeSwitcher({ className, previewHeight = 300 }: ThemeSwitcherP
         >
           Ask on Discord
         </a>{' '}
-        and we&apos;ll help you migrate it.
+        and we&apos;ll port your theme.
       </p>
     </div>
   )

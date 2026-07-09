@@ -25,13 +25,13 @@ type RGBA = { r: number; g: number; b: number; a: number }
 type Worst = { ratio: number; color: string; bg: string }
 
 /**
- * Runs in the page. For the currently-active preview, returns the worst message-
- * text contrast ratio: text colour vs the background composited up the ancestor
- * chain (solid backgroundColors + averaged gradient colour-stops) over the
+ * Runs in the page. For every rendered preview on the harness, returns the worst
+ * message-text contrast ratio: text colour vs the background composited up the
+ * ancestor chain (solid backgroundColors + averaged gradient colour-stops) over the
  * preview's black base. Type annotations are stripped when Playwright serialises
  * this into the browser.
  */
-function measureActivePreview(): { worst: Worst | null } {
+function measureAllPreviews(): { results: Array<{ themeId: string; worst: Worst | null }> } {
   const parse = (c: string | null | undefined): RGBA | null => {
     const m = c ? c.match(/rgba?\(([^)]+)\)/) : null
     if (!m) return null
@@ -99,63 +99,66 @@ function measureActivePreview(): { worst: Worst | null } {
   }
   const fmt = (c: RGBA): string => `rgb(${Math.round(c.r)},${Math.round(c.g)},${Math.round(c.b)})`
 
-  const preview = document.querySelector('[data-theme-preview]')
-  if (!preview) return { worst: null }
-  const msgs = Array.from(preview.querySelectorAll('.break-words'))
-  let worst: Worst | null = null
-  for (const el of msgs) {
-    const cs = getComputedStyle(el)
-    const color: RGBA = parse(cs.color) ?? { r: 0, g: 0, b: 0, a: 1 }
-    const bg = effBg(el)
-    const r = ratio(over(color, bg), bg)
-    if (!worst || r < worst.ratio) worst = { ratio: r, color: fmt(color), bg: fmt(bg) }
+  // Measure every rendered preview on the harness page in one pass.
+  const previews = Array.from(document.querySelectorAll('[data-theme-preview]'))
+  return {
+    results: previews.map((preview) => {
+      const themeId = preview.getAttribute('data-theme-preview') ?? '(unknown)'
+      const msgs = Array.from(preview.querySelectorAll('.break-words'))
+      let worst: Worst | null = null
+      for (const el of msgs) {
+        const cs = getComputedStyle(el)
+        const color: RGBA = parse(cs.color) ?? { r: 0, g: 0, b: 0, a: 1 }
+        const bg = effBg(el)
+        const r = ratio(over(color, bg), bg)
+        if (!worst || r < worst.ratio) worst = { ratio: r, color: fmt(color), bg: fmt(bg) }
+      }
+      return { themeId, worst }
+    }),
   }
-  return { worst }
 }
 
 test.describe('Theme readability', () => {
-  test('every homepage theme has readable message text', async ({ page }) => {
-    await page.goto('/')
-    const group = page.getByRole('group', { name: 'Preview a theme' })
-    await expect(group).toBeVisible()
+  test('every bundled theme has readable message text', async ({ page }) => {
+    // Dev-only harness renders every bundled theme through the real ThemePreview.
+    await page.goto('/dev/theme-contrast')
 
-    const pills = group.getByRole('button')
-    const count = await pills.count()
+    // Each theme mounts its own scoped <style>; wait until they're all applied so
+    // measurements reflect the themed colours, not the unstyled fallback.
+    const previews = page.locator('[data-theme-preview]')
+    const count = await previews.count()
     expect(count).toBeGreaterThan(0)
+    await page.waitForFunction((n: number) => {
+      const styled = Array.from(document.querySelectorAll('[data-theme-preview]')).filter((p) => {
+        const id = p.getAttribute('data-theme-preview')
+        const s = id ? document.querySelector(`style[data-theme-id="${id}"]`) : null
+        return !!s && !!s.textContent && s.textContent.includes(`theme-preview-${id}`)
+      })
+      return styled.length === n
+    }, count)
+
+    const { results } = await page.evaluate(measureAllPreviews)
 
     const failures: string[] = []
     const summary: string[] = []
-
-    for (let i = 0; i < count; i++) {
-      const pill = pills.nth(i)
-      const label = ((await pill.textContent()) ?? `#${i}`).trim()
-
-      await pill.click()
-      await expect(pill).toHaveAttribute('aria-pressed', 'true')
-
-      // Wait until the active theme's scoped <style> is actually applied.
-      const themeId = await page.locator('[data-theme-preview]').getAttribute('data-theme-preview')
-      if (themeId) {
-        await page.waitForFunction((id: string) => {
-          const s = document.querySelector(`style[data-theme-id="${id}"]`)
-          return !!s && !!s.textContent && s.textContent.includes(`theme-preview-${id}`)
-        }, themeId)
-      }
-
-      const { worst } = await page.evaluate(measureActivePreview)
+    for (const { themeId, worst } of results) {
       if (!worst) {
-        failures.push(`${label}: no message text found to measure`)
+        failures.push(`${themeId}: no message text found to measure`)
         continue
       }
-      summary.push(`  ${label.padEnd(16)} ${worst.ratio.toFixed(2)}:1  (${worst.color} on ${worst.bg})`)
+      summary.push(
+        `  ${themeId.padEnd(22)} ${worst.ratio.toFixed(2)}:1  (${worst.color} on ${worst.bg})`
+      )
       if (worst.ratio < MIN_MESSAGE_CONTRAST) {
         failures.push(
-          `${label}: message contrast ${worst.ratio.toFixed(2)}:1 — text ${worst.color} on ${worst.bg}`
+          `${themeId}: message contrast ${worst.ratio.toFixed(2)}:1 — text ${worst.color} on ${worst.bg}`
         )
       }
     }
 
-    console.log(`\nTheme message-text contrast (floor ${MIN_MESSAGE_CONTRAST}:1):\n${summary.join('\n')}\n`)
+    console.log(
+      `\nTheme message-text contrast (floor ${MIN_MESSAGE_CONTRAST}:1), ${results.length} themes:\n${summary.join('\n')}\n`
+    )
     expect(failures, `\nLow-contrast themes found:\n${failures.join('\n')}\n`).toEqual([])
   })
 })

@@ -48,17 +48,14 @@
   --color-border-md: oklch(from var(--color-neutral-100) l c h / 0.1);
   --color-text: var(--color-neutral-100);
   --color-text-sub: var(--color-neutral-400);
-  --color-text-dim: var(--color-neutral-600);
+  /* Tertiary text. Decoupled from neutral-600 (oklch 0.35 ≈ 1.8:1 on bg — failed
+     WCAG) and raised to ~4.4:1 so footnotes/captions/timestamps stay legible while
+     remaining a tier below --color-text-sub (~4.8:1). */
+  --color-text-dim: oklch(0.56 0.008 270);
 
   /* --------------------------------------------------
      TIER 3: COMPONENT TOKENS (specific-use)
      -------------------------------------------------- */
-
-  /* Stat card glows — 25% alpha versions of platform colors */
-  --color-stat-glow-twitch: color-mix(in oklch, var(--color-twitch) 25%, transparent);
-  --color-stat-glow-youtube: color-mix(in oklch, var(--color-youtube) 25%, transparent);
-  --color-stat-glow-kick: color-mix(in oklch, var(--color-kick) 25%, transparent);
-  --color-stat-glow-tiktok: color-mix(in oklch, var(--color-tiktok) 25%, transparent);
 
   /* Shadow glows for platform elements */
   --shadow-glow-twitch: 0 0 20px color-mix(in oklch, var(--color-twitch) 40%, transparent);
@@ -185,6 +182,16 @@
 @keyframes ring-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+/* Landing theme-carousel slide fade — document scope, same rationale as ring-spin */
+@keyframes theme-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 
