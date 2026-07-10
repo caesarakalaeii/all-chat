@@ -146,11 +146,15 @@ func (d *Discovery) browseLiveCandidates(ctx context.Context, channelID string) 
 // DiscoverLiveStream discovers the live video ID for a given channel ID.
 // Uses the InnerTube Browse API to list recent streams, then applies the
 // given selection strategy to choose among multiple concurrent streams.
-// strategy defaults to "first_found" if empty. matchTerm is only used
-// with "title_match" strategy.
+// strategy defaults to "most_viewers" if empty (issue #473): the old
+// "first_found" default grabbed candidates[0] in browse order, which on
+// multi-stream channels is often a low-engagement simulcast (e.g. a
+// 1-viewer vertical stream) with little or no chat, leaving the overlay
+// "connected but empty". The main stream is the most-watched one.
+// matchTerm is only used with "title_match" strategy.
 func (d *Discovery) DiscoverLiveStream(ctx context.Context, channelID, strategy, matchTerm string) (string, error) {
 	if strategy == "" {
-		strategy = StrategyFirstFound
+		strategy = StrategyMostViewers
 	}
 
 	d.logger.Info("discovering live stream",
@@ -236,17 +240,8 @@ func SelectStream(candidates []LiveStreamCandidate, strategy, matchTerm string) 
 	}
 
 	switch strategy {
-	case StrategyFirstFound, "":
+	case StrategyFirstFound:
 		return candidates[0], nil
-
-	case StrategyMostViewers:
-		best := candidates[0]
-		for _, c := range candidates[1:] {
-			if c.ViewerCount > best.ViewerCount {
-				best = c
-			}
-		}
-		return best, nil
 
 	case StrategyFewestViewers:
 		best := candidates[0]
@@ -271,8 +266,19 @@ func SelectStream(candidates []LiveStreamCandidate, strategy, matchTerm string) 
 		// No title match found — fall back to first
 		return candidates[0], nil
 
+	case StrategyMostViewers, "":
+		fallthrough
 	default:
-		return candidates[0], nil
+		// most_viewers is the default for empty/unknown strategies (issue #473):
+		// on multi-stream channels first_found grabbed candidates[0] in browse
+		// order, often a low-engagement simulcast with little/no chat.
+		best := candidates[0]
+		for _, c := range candidates[1:] {
+			if c.ViewerCount > best.ViewerCount {
+				best = c
+			}
+		}
+		return best, nil
 	}
 }
 
