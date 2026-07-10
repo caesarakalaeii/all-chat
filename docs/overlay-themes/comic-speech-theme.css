@@ -1,0 +1,116 @@
+/* Visual Settings: uses CSS custom properties for live customization */
+/**
+ * Theme Name: Comic Speech
+ * Description: Messages pop in speech balloons with a tail to the avatar, thick ink outlines and halftone
+ * Tags: comic, pop-art, speech-bubble, bold, playful
+ * Author: All-Chat Team
+ * Version: 1.0.0
+ * Updated: 2026-07-08
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Bangers&family=Poppins:wght@400;500;600&display=swap');
+
+/* Message text is theme-controlled; usernames keep their viewer-defined color. */
+:root {
+  --chat-message-color: #1a1a1a;
+  --chat-timestamp-color: #7a7a7a;
+}
+
+body {
+  background: transparent !important;
+  font-family: 'Poppins', sans-serif !important;
+}
+
+.space-y-3 {
+  gap: var(--chat-message-gap, 14px) !important;
+}
+
+/* The message container is invisible — the balloon is drawn on the content */
+.chat-message {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  overflow: visible !important;
+}
+
+.chat-message .flex.items-start.gap-3 {
+  align-items: center !important;
+  gap: 16px !important;
+}
+
+/* Avatar — inked circle */
+.flex-shrink-0 img {
+  border-radius: 50% !important;
+  border: 3px solid #000000 !important;
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.25) !important;
+}
+
+/* Content → the speech balloon */
+.chat-message .min-w-0.flex-1 {
+  position: relative !important;
+  background-color: #ffffff !important;
+  background-image: radial-gradient(rgba(0, 0, 0, 0.06) 1.2px, transparent 1.2px) !important;
+  background-size: 9px 9px !important;
+  border: 3px solid #000000 !important;
+  border-radius: 16px !important;
+  padding: 10px 14px !important;
+  box-shadow: 4px 4px 0 #000000 !important;
+}
+
+/* Balloon tail pointing at the avatar (outline + fill) */
+.chat-message .min-w-0.flex-1::before {
+  content: '' !important;
+  position: absolute !important;
+  left: -17px !important;
+  top: 16px !important;
+  border: 9px solid transparent !important;
+  border-right-color: #000000 !important;
+}
+.chat-message .min-w-0.flex-1::after {
+  content: '' !important;
+  position: absolute !important;
+  left: -11px !important;
+  top: 18px !important;
+  border: 7px solid transparent !important;
+  border-right-color: #ffffff !important;
+}
+
+/* Platform badge — little ink tab */
+.platform-badge-text {
+  background: #000000 !important;
+  color: #ffffff !important;
+  border-radius: 4px !important;
+  padding: 1px 7px !important;
+  font-family: 'Bangers', cursive !important;
+  letter-spacing: 0.08em !important;
+}
+
+/* Username — comic caps, viewer color kept, ink outline */
+.chat-username {
+  font-family: 'Bangers', cursive !important;
+  font-weight: 400 !important;
+  font-size: 1.2em !important;
+  letter-spacing: 0.03em !important;
+  paint-order: stroke fill !important;
+  -webkit-text-stroke: 1px #000000 !important;
+}
+
+/* Message text — dark ink on the balloon */
+.chat-message .break-words.text-white {
+  color: #1a1a1a !important;
+  font-family: 'Poppins', sans-serif !important;
+  font-size: var(--chat-font-size, 15px) !important;
+  font-weight: 500 !important;
+  line-height: var(--chat-line-height, 1.45) !important;
+}
+
+.chat-message .break-words img {
+  max-height: calc(24px * var(--chat-emote-scale, 1)) !important;
+  vertical-align: middle !important;
+}
+
+.text-slate-500 {
+  color: #8a8a8a !important;
+  font-size: var(--chat-timestamp-font-size, 11px) !important;
+}

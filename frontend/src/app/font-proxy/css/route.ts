@@ -46,6 +46,8 @@ const ALLOWED_FAMILIES: ReadonlySet<string> = new Set([
   'Share Tech Mono',
   'Source Code Pro',
   'Space Grotesk',
+  'Bangers',
+  'Caveat',
 ])
 
 // Stable WOFF2-capable UA so Google returns modern woff2 faces. Without this
@@ -97,10 +99,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   // Rewrite every https://fonts.gstatic.com/... URL to our file proxy so the
   // browser never connects to Google directly.
-  const rewritten = css.replace(
-    /https:\/\/fonts\.gstatic\.com\//g,
-    '/api/fonts/file/',
-  )
+  const rewritten = css.replace(/https:\/\/fonts\.gstatic\.com\//g, '/font-proxy/file/')
 
   return new NextResponse(rewritten, {
     status: 200,
