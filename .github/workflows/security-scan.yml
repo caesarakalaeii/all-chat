@@ -56,10 +56,17 @@ jobs:
           - shared/ratelimit
           - shared/signing
           - services/auth-service/shared/tracing
-          # Test modules
+          # Test modules (integration/contract harnesses; never shipped).
           - test/contract/deletion
           - test/contract/dual-listener
-          - test/contract/lifecycle
+          # test/contract/lifecycle is intentionally excluded from the security
+          # gate (#480): its lifecycle integration test reachably calls the Docker
+          # SDK (github.com/docker/docker) via testcontainers to spin up Postgres.
+          # The Docker SDK carries advisories with "Fixed in: N/A"
+          # (GO-2026-5746/5668/5617/4887) that can never be cleared and never ship
+          # in any deployed artifact. The gate scans shipped code; an unfixable
+          # test-only harness dep must not permanently red the whole matrix and
+          # mask real, actionable findings. The other test modules stay in.
           - test/contract/schema
           - test/shared
     steps:
