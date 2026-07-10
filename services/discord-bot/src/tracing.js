@@ -1,8 +1,7 @@
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-grpc';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
-import { Resource } from '@opentelemetry/resources';
-import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
+import { resourceFromAttributes } from '@opentelemetry/resources';
 
 let sdk;
 
@@ -22,10 +21,10 @@ export function initTracing() {
     });
 
     // Create a resource with service information
-    const resource = new Resource({
-      [SemanticResourceAttributes.SERVICE_NAME]: 'discord-bot',
-      [SemanticResourceAttributes.SERVICE_VERSION]: process.env.APP_VERSION || 'dev',
-      [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]: process.env.ENVIRONMENT || 'development',
+    const resource = resourceFromAttributes({
+      'service.name': 'discord-bot',
+      'service.version': process.env.APP_VERSION || 'dev',
+      'deployment.environment': process.env.ENVIRONMENT || 'development',
     });
 
     // Initialize the SDK
