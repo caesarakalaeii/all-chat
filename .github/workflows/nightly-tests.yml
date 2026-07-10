@@ -35,6 +35,7 @@ jobs:
           - source-manager
           - token-refresh-service
           - moderation-service
+          - engagement-service
           - discord-listener
     steps:
       - uses: actions/checkout@v7

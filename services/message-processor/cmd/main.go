@@ -244,6 +244,27 @@ func main() {
 	// Create event capture for credit roll sessions
 	eventCapture := sessions.NewEventCapture(redisClient, log)
 
+	// Async best-effort earn republish (P3-7): a gift-sub/raid burst enqueues event-bearing
+	// messages to engagement:events off the consume goroutine instead of running N synchronous
+	// Publishes inline, mirroring the L-Perf1 command-forward hand-off. Drop-and-count when the
+	// buffer is full — earn is already best-effort (a missed award, never a corrupted balance).
+	const earnEventBufferSize = 1024
+	earnEventCh := make(chan []byte, earnEventBufferSize)
+	earnRepublishCtx, earnRepublishCancel := context.WithCancel(ctx)
+	defer earnRepublishCancel()
+	go func() {
+		for {
+			select {
+			case <-earnRepublishCtx.Done():
+				return
+			case payload := <-earnEventCh:
+				if perr := redisClient.Publish(earnRepublishCtx, models.ChannelEngagementEvents, payload).Err(); perr != nil {
+					log.Debug("publish engagement earn event failed", zap.Error(perr))
+				}
+			}
+		}
+	}()
+
 	// Define message handler
 	messageHandler := func(ctx context.Context, rawMsg *models.RawChatMessage) error {
 		// Filter out old messages based on timestamp
@@ -697,6 +718,23 @@ func main() {
 			processorMetrics.RecordMessagePublished("message-processor", overlay.OverlayID, rawMsg.Platform, "success")
 			processorMetrics.FanoutDuration.WithLabelValues("message-processor").Observe(time.Since(startPublish).Seconds())
 			publishedToAnyOverlay = true
+
+			// Engagement points (issue #523): republish event-bearing messages
+			// (subs/bits/donations/gifts) to the earn channel. Best-effort Pub/Sub —
+			// a missed event just means an unpaid earn, never a corrupted balance.
+			// `unified` is already scoped to this overlay, so the award lands in the
+			// right per-overlay economy. Handed off ASYNC (P3-7) so a gift-sub/raid burst
+			// doesn't run N synchronous Publishes on the consume goroutine; drop-and-count
+			// when the bounded buffer is full.
+			if unified.Event != nil {
+				if payload, jerr := unified.ToJSON(); jerr == nil {
+					select {
+					case earnEventCh <- payload:
+					default:
+						processorMetrics.RecordEngagementForward("earn_dropped")
+					}
+				}
+			}
 		}
 
 		// Increment daily platform message counter once per unique message.
@@ -970,6 +1008,9 @@ func main() {
 
 	// Stop stream consumer
 	streamConsumer.Stop()
+
+	// Stop the async earn republisher (P3-7).
+	earnRepublishCancel()
 
 	// Shutdown HTTP server
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

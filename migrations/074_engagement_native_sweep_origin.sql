@@ -1,0 +1,14 @@
+-- 074_engagement_native_sweep_origin.sql
+-- Description: mark sweep-originated cancels on mirrored Twitch predictions (PR #524
+-- review P2-4). The 4h native stale-sweep force-CANCELS a native prediction stuck
+-- ACTIVE/LOCKED past the TTL. But a LOCKED Twitch prediction has NO forced-resolution
+-- deadline (only the betting window is capped), so the sweep can pre-empt a legitimately
+-- pending round; the genuine channel.prediction.end RESOLVED event then arrives and is
+-- blocked by the terminal-absorbing mirror guard (L-C1), leaving the overlay showing
+-- CANCELED with no winner forever. sweep_canceled tags a SYNTHETIC cancel so the mirror
+-- guard can let a later genuine Twitch terminal override it (twitch_native only), while
+-- still blocking a genuine RESOLVED<->CANCELED lateral flip.
+--
+-- Idempotent ADD COLUMN so a migration re-run — and a dev DB that already created the
+-- predictions table without the column — both converge (P0-1 discipline).
+ALTER TABLE predictions ADD COLUMN IF NOT EXISTS sweep_canceled BOOLEAN NOT NULL DEFAULT FALSE;

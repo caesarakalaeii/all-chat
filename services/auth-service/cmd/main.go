@@ -134,6 +134,14 @@ func main() {
 	}
 	log.Info("JWT key chain initialized", zap.String("latest_kid", userKeyChain.LatestKid()))
 
+	// Optional service JWT key chain: gates the internal service-to-service announce
+	// endpoint (engagement-service → chat, H4-2). Absent ⇒ the endpoint isn't
+	// registered (the announce feature simply stays dark), never a startup failure.
+	serviceKeyChain, svcErr := sharedAuth.NewKeyChainFromEnv("SERVICE_JWT_SECRET")
+	if svcErr != nil {
+		log.Warn("SERVICE_JWT_SECRET not set; internal chat announce endpoint disabled", zap.Error(svcErr))
+	}
+
 	tokenCipher, err := encryption.NewMultiKeyEncryptorFromEnvWithLogger(log)
 	if err != nil {
 		log.Fatal("failed to initialize token cipher (TOKEN_ENCRYPTION_KEY_V1 must be set; legacy TOKEN_ENCRYPTION_KEY optional)", zap.Error(err))
@@ -397,6 +405,17 @@ func main() {
 			protected.GET("/guilds/:guild_id/channels", discordHandler.HandleGetGuildChannels)
 			protected.DELETE("/guilds/:guild_id", discordHandler.HandleDisconnect)
 		}
+	}
+
+	// Internal service-to-service routes (require a service JWT, validated against the
+	// service key chain). engagement-service calls /internal/chat/announce to post an
+	// opt-in round-start message to chat as the overlay owner (ADR-0028, H4-2). Not
+	// proxied by the gateway (it only forwards explicit /auth/... routes), so this is
+	// reachable only pod-to-pod within the cluster.
+	if serviceKeyChain != nil {
+		internal := router.Group("/internal")
+		internal.Use(middleware.ServiceJWTAuth(serviceKeyChain, "engagement-service"))
+		internal.POST("/chat/announce", chatSendHandler.HandleInternalAnnounce)
 	}
 
 	// Public viewer catalog routes (no JWT required — cosmetic catalogs are not sensitive)

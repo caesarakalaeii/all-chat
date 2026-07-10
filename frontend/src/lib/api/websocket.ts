@@ -64,6 +64,21 @@ export class WebSocketClient {
   private ws: WebSocket | null = null
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null
   private messageCallbacks: ((message: ChatMessage) => void)[] = []
+  // Engagement-only clients (issue #523, useEngagementLive) share the overlay socket
+  // but must NOT touch chat: they don't render chat_message frames and must not read,
+  // write, or ?since=-replay the `ws_last_seen_<overlay>` watermark — otherwise a
+  // second connection on the Monitor view would race the chat pane's own connection
+  // over that key and could skip chat messages on reconnect.
+  private engagementOnly = false
+  // viewerParticipant marks the anonymous participate-page socket: it tells the gateway to
+  // skip source auto-activation (P2-3). It is SEPARATE from engagementOnly — the streamer's
+  // own OBS poll/prediction widgets are engagementOnly (no chat, no watermark) but must NOT
+  // set this, so they still activate sources and Twitch-native rounds get mirrored.
+  private viewerParticipant = false
+  // Engagement (issue #523): poll_update / prediction_update frames are delivered as
+  // a "something changed, refetch" signal. Consumers keep their HTTP poll as the
+  // source of truth (it applies display precedence) and use this only to cut latency.
+  private engagementCallbacks: ((kind: 'poll' | 'prediction') => void)[] = []
   private reconnectAttempts = 0
   private overlayId: string = ''
   private token: string = ''
@@ -82,6 +97,15 @@ export class WebSocketClient {
   // suppress (broadcast-to-closing-conn followed by replay-buffer write).
   private seenIds: Set<string> = new Set()
   private seenOrder: string[] = []
+  // 0 = unlimited reconnects: OBS/monitor overlay sockets must survive any number of
+  // network blips. A bounded value (the participate engagement socket) stops retrying
+  // after N consecutive failures so an inactive overlay can't reconnect-storm the gateway
+  // from every viewer tab — the participate page's HTTP poll stays the source of truth (P2-3).
+  private readonly maxReconnectAttempts: number
+
+  constructor(opts?: { maxReconnectAttempts?: number }) {
+    this.maxReconnectAttempts = opts?.maxReconnectAttempts ?? 0
+  }
 
   private markIdSeen(id: string): boolean {
     if (!id) return false
@@ -98,18 +122,23 @@ export class WebSocketClient {
   /**
    * Connect to WebSocket for a specific overlay
    */
-  connect(overlayId: string, token?: string | null) {
+  connect(overlayId: string, token?: string | null, engagementOnly = false, viewerParticipant = false) {
     this.overlayId = overlayId
     this.token = token ?? ''
+    this.engagementOnly = engagementOnly
+    this.viewerParticipant = viewerParticipant
     this.stopped = false
     this.clearLivenessTimers()
     this.lastActivity = 0 // no inbound frame yet on this socket
 
-    // Load last seen timestamp from localStorage (survives page reload)
+    // Load last seen timestamp from localStorage (survives page reload). Skipped for
+    // engagement-only clients so they never share/advance the chat replay watermark.
     const storageKey = `ws_last_seen_${overlayId}`
-    const storedTimestamp = localStorage.getItem(storageKey)
-    if (storedTimestamp) {
-      this.lastSeenTimestamp = parseInt(storedTimestamp, 10)
+    if (!engagementOnly) {
+      const storedTimestamp = localStorage.getItem(storageKey)
+      if (storedTimestamp) {
+        this.lastSeenTimestamp = parseInt(storedTimestamp, 10)
+      }
     }
 
     // Pass ?since= so the server's replay buffer flushes only the messages
@@ -123,9 +152,28 @@ export class WebSocketClient {
     // is same-origin, so the browser sends the httpOnly access cookie and the
     // gateway authenticates via CookieToBearer.
     let url = `${WS_URL}/ws/overlay/${overlayId}`
-    if (this.lastSeenTimestamp > 0) {
-      url += `?since=${this.lastSeenTimestamp}`
+    const params = new URLSearchParams()
+    if (viewerParticipant) {
+      // Tell the gateway this is an anonymous viewer's participate tab: it must NOT
+      // auto-activate the overlay's chat sources (which would sustain demand-based YouTube
+      // polling driven by viewers with no owner in the loop). The streamer's OWN OBS
+      // poll/prediction widgets are engagementOnly but do NOT set this — they must still
+      // activate sources so Twitch-native rounds get mirrored. See the gateway (P2-3).
+      params.set('viewerParticipant', 'true')
     }
+    if (engagementOnly) {
+      // Tell the gateway this socket must never receive chat frames — only
+      // poll/prediction updates. Filtered per-connection at broadcast time (#5).
+      params.set('engagementOnly', 'true')
+    }
+    if (!viewerParticipant && !engagementOnly && this.lastSeenTimestamp > 0) {
+      // Pass ?since= so the server's replay buffer flushes only the messages we
+      // haven't already rendered (server uses an exclusive lower bound). Not set for
+      // participate/engagement-only sockets, which never touch the chat watermark.
+      params.set('since', String(this.lastSeenTimestamp))
+    }
+    const qs = params.toString()
+    if (qs) url += `?${qs}`
     console.log('[WebSocket] Connecting to:', url)
 
     this.ws = new WebSocket(url, this.token ? [`bearer.${this.token}`] : undefined)
@@ -144,7 +192,7 @@ export class WebSocketClient {
       try {
         const wsMessage: WebSocketMessage = JSON.parse(event.data)
 
-        if (wsMessage.type === 'chat_message' && wsMessage.data) {
+        if (wsMessage.type === 'chat_message' && wsMessage.data && !this.engagementOnly) {
           const chat = wsMessage.data as ChatMessage
           if (this.markIdSeen(chat.id)) {
             // Already rendered — drop duplicate.
@@ -165,6 +213,10 @@ export class WebSocketClient {
               timestamp: new Date().toISOString(),
             })
           )
+        } else if (wsMessage.type === 'poll_update') {
+          this.engagementCallbacks.forEach((cb) => cb('poll'))
+        } else if (wsMessage.type === 'prediction_update') {
+          this.engagementCallbacks.forEach((cb) => cb('prediction'))
         } else if (wsMessage.type === 'error') {
           console.error('[WebSocket] Server error:', wsMessage.error)
         }
@@ -233,20 +285,35 @@ export class WebSocketClient {
   }
 
   /**
-   * Schedule a reconnect with capped exponential backoff. Unlike the old
-   * client this NEVER permanently gives up — an overlay left running for hours
-   * must survive any number of network blips. `reconnectTimeout` guards against
-   * double-scheduling when onclose and the watchdog both fire for one socket.
+   * Schedule a reconnect with capped exponential backoff. Unbounded by default (an
+   * overlay left running for hours must survive any number of network blips); a client
+   * constructed with maxReconnectAttempts gives up after that many CONSECUTIVE failures
+   * (reconnectAttempts resets to 0 on a successful open), so a bounded participate socket
+   * against an inactive overlay stops instead of storming (P2-3). `reconnectTimeout`
+   * guards against double-scheduling when onclose and the watchdog both fire for one socket.
    */
   private scheduleReconnect() {
     if (this.stopped || this.reconnectTimeout) return
+    if (this.maxReconnectAttempts > 0 && this.reconnectAttempts >= this.maxReconnectAttempts) {
+      this.stopped = true
+      console.warn(
+        `[WebSocket] Giving up after ${this.reconnectAttempts} consecutive reconnect attempts; ` +
+          `falling back to HTTP polling`
+      )
+      this.clearLivenessTimers()
+      return
+    }
     this.clearLivenessTimers()
     const delay = computeBackoffDelay(this.reconnectAttempts)
     console.log(`[WebSocket] Reconnecting in ${Math.round(delay)}ms (attempt ${this.reconnectAttempts + 1})`)
     this.reconnectTimeout = setTimeout(() => {
       this.reconnectTimeout = null
       this.reconnectAttempts++
-      this.connect(this.overlayId, this.token)
+      // Preserve engagementOnly + viewerParticipant across reconnect — otherwise an
+      // engagement-only socket silently downgrades to a full chat socket (writing the shared
+      // ws_last_seen_<overlay> watermark, racing the Monitor chat pane), and a participate
+      // socket would start auto-activating sources on reconnect.
+      this.connect(this.overlayId, this.token, this.engagementOnly, this.viewerParticipant)
     }, delay)
   }
 
@@ -258,6 +325,18 @@ export class WebSocketClient {
     this.messageCallbacks.push(callback)
     return () => {
       this.messageCallbacks = this.messageCallbacks.filter((cb) => cb !== callback)
+    }
+  }
+
+  /**
+   * Register a callback fired when a poll/prediction update arrives on the overlay
+   * socket (issue #523). The callback should refetch the authoritative state; the
+   * frame is a signal, not the source of truth. Returns an unsubscribe function.
+   */
+  onEngagementUpdate(callback: (kind: 'poll' | 'prediction') => void): () => void {
+    this.engagementCallbacks.push(callback)
+    return () => {
+      this.engagementCallbacks = this.engagementCallbacks.filter((cb) => cb !== callback)
     }
   }
 
