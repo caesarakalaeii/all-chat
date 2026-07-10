@@ -265,13 +265,16 @@ func TestSelectStream(t *testing.T) {
 		}
 	})
 
-	t.Run("empty strategy defaults to first_found", func(t *testing.T) {
+	t.Run("empty strategy defaults to most_viewers", func(t *testing.T) {
+		// #473: the default flipped from first_found to most_viewers so
+		// multi-stream channels land on the main (most-watched) stream
+		// rather than candidates[0] (often a low/no-chat simulcast).
 		result, err := SelectStream(candidates, "", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if result.VideoID != "vid1" {
-			t.Errorf("expected vid1, got %s", result.VideoID)
+		if result.VideoID != "vid2" {
+			t.Errorf("expected vid2 (most_viewers default), got %s", result.VideoID)
 		}
 	})
 
@@ -366,13 +369,13 @@ func TestSelectStream(t *testing.T) {
 		}
 	})
 
-	t.Run("unknown strategy falls back to first", func(t *testing.T) {
+	t.Run("unknown strategy falls back to most_viewers default", func(t *testing.T) {
 		result, err := SelectStream(candidates, "unknown_strategy", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if result.VideoID != "vid1" {
-			t.Errorf("expected vid1, got %s", result.VideoID)
+		if result.VideoID != "vid2" {
+			t.Errorf("expected vid2 (most_viewers default, #473), got %s", result.VideoID)
 		}
 	})
 
