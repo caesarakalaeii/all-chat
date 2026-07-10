@@ -28,11 +28,26 @@ import { useEffect, useState } from 'react'
 import clsx from 'clsx'
 import type { ChatMessagePreview } from '@/lib/theme-marketplace/types'
 import { PLATFORM_COLORS, type Platform } from '@/lib/platform-colors'
+import { rewriteThemeFontImports } from '@/lib/theme-marketplace/font-proxy'
+import { PlatformGlyph } from '@/components/overlay/PlatformGlyph'
+
+/** Static sample time for the preview timestamp — deterministic (no Date() in render). */
+const SAMPLE_TIME = '12:34'
 
 interface ThemePreviewProps {
   css: string
   messages: ChatMessagePreview[]
   themeId: string
+  /** Preview viewport height in px. Defaults to the marketplace card size. */
+  height?: number
+  /** Platform-badge style, mirroring the overlay's setting. Defaults to text. */
+  platformBadge?: 'text' | 'icon'
+  /** Render the per-message timestamp. Defaults to true (matches the live overlay). */
+  showTimestamp?: boolean
+  /** Size the preview to its content instead of a fixed `height` (no scrollbar, no
+   *  empty padding) — used by the landing carousel so each theme shows at its true
+   *  height. Defaults to false (fixed-height, scrollable marketplace card). */
+  fit?: boolean
 }
 
 /**
@@ -74,13 +89,29 @@ const scopeCustomCss = (css: string, scopeSelector: string, bodySelector: string
   })
 }
 
-export default function ThemePreview({ css, messages, themeId }: ThemePreviewProps) {
+export default function ThemePreview({
+  css,
+  messages,
+  themeId,
+  height = 180,
+  platformBadge = 'text',
+  showTimestamp = true,
+  fit = false,
+}: ThemePreviewProps) {
   const [scopedCss, setScopedCss] = useState('')
   const uniqueId = `theme-preview-${themeId}`
 
-  // Scope CSS when it changes
+  // Scope CSS when it changes. Route Google-Fonts @imports through the same-origin
+  // /font-proxy/css proxy first (like the real overlay/embed render paths do) — the
+  // site CSP blocks direct fonts.googleapis.com loads, so without this the preview
+  // silently falls back to a system font. The proxy also keeps viewer IPs off Google
+  // (DSGVO). See lib/theme-marketplace/font-proxy.ts.
   useEffect(() => {
-    const scoped = scopeCustomCss(css, `.${uniqueId}`, `.${uniqueId} .theme-preview-body`)
+    const scoped = scopeCustomCss(
+      rewriteThemeFontImports(css),
+      `.${uniqueId}`,
+      `.${uniqueId} .theme-preview-body`
+    )
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setScopedCss(scoped)
   }, [css, uniqueId])
@@ -97,16 +128,33 @@ export default function ThemePreview({ css, messages, themeId }: ThemePreviewPro
         className={uniqueId}
         data-theme-preview={themeId}
         style={{
-          height: '180px',
+          height: fit ? 'auto' : `${height}px`,
           background: 'black',
           overflow: 'hidden',
           position: 'relative',
           isolation: 'isolate',
         }}
       >
-        <div className="theme-preview-body h-full space-y-3 overflow-y-auto p-2">
+        {/*
+          Sample markup mirrors the live overlay renderer (app/overlay/[id]/page.tsx):
+          same class hooks (.overlay-live-body, .chat-message, .platform-badge[-text|-icon],
+          .chat-username, .break-words), data-platform attribute, badge order (platform →
+          badges → username) and timestamp — so a theme previews exactly as it renders live.
+          text-left keeps it faithful even when a centered container (e.g. the hero) wraps it.
+        */}
+        <div
+          className={clsx(
+            'theme-preview-body overlay-live-body space-y-3 p-2 text-left',
+            fit ? 'overflow-hidden' : 'h-full overflow-y-auto'
+          )}
+        >
           {messages.map((msg) => (
-            <div key={msg.id} className="rounded-lg bg-surface p-3 shadow-lg">
+            <div
+              key={msg.id}
+              data-platform={msg.platform}
+              data-username={msg.user.username}
+              className="chat-message rounded-lg bg-slate-900/90 p-3 shadow-lg backdrop-blur-sm"
+            >
               <div className="flex items-start gap-3">
                 {/* Avatar */}
                 <div className="flex-shrink-0">
@@ -120,49 +168,65 @@ export default function ThemePreview({ css, messages, themeId }: ThemePreviewPro
 
                 {/* Content */}
                 <div className="min-w-0 flex-1">
-                  <div className="mb-1 flex items-center gap-2">
-                    {/* Platform indicator */}
-                    <span
-                      className={clsx(
-                        'text-xs font-semibold uppercase',
-                        PLATFORM_COLORS[msg.platform as Platform]?.text ??
-                          PLATFORM_COLORS.system.text
-                      )}
-                    >
-                      {msg.platform}
-                    </span>
+                  <div className="mb-1 flex flex-wrap items-center gap-2">
+                    {/* Platform badge — text or icon, matching the overlay's setting */}
+                    {platformBadge === 'icon' ? (
+                      <span
+                        className="platform-badge platform-badge-icon flex items-center gap-0.5"
+                        title={msg.platform}
+                      >
+                        <PlatformGlyph platform={msg.platform} />
+                      </span>
+                    ) : (
+                      <span
+                        className={clsx(
+                          'platform-badge platform-badge-text text-xs font-semibold uppercase',
+                          PLATFORM_COLORS[msg.platform as Platform]?.text ??
+                            PLATFORM_COLORS.system.text
+                        )}
+                      >
+                        {msg.platform}
+                      </span>
+                    )}
+
+                    {/* User badges */}
+                    {msg.user.badges.some((b) => b.icon_url && !b.icon_url.startsWith('/')) && (
+                      <div className="flex items-center gap-1">
+                        {msg.user.badges
+                          .filter((b) => b.icon_url && !b.icon_url.startsWith('/'))
+                          .map((badge, idx) => (
+                            /* eslint-disable-next-line @next/next/no-img-element */
+                            <img
+                              key={idx}
+                              src={badge.icon_url}
+                              alt={badge.name}
+                              className="h-[1em] w-auto object-contain"
+                              onError={(e) => {
+                                ;(e.target as HTMLImageElement).style.display = 'none'
+                              }}
+                            />
+                          ))}
+                      </div>
+                    )}
 
                     {/* Username */}
-                    <span className="text-sm font-semibold" style={{ color: msg.user.color }}>
+                    <span
+                      className="chat-username text-sm font-semibold"
+                      style={{ color: msg.user.color }}
+                    >
                       {msg.user.display_name}
                     </span>
-
-                    {/* Badges */}
-                    {msg.user.badges.length > 0 &&
-                      msg.user.badges.some((b) => b.icon_url && !b.icon_url.startsWith('/')) && (
-                        <div className="flex gap-1">
-                          {msg.user.badges
-                            .filter((b) => b.icon_url && !b.icon_url.startsWith('/'))
-                            .map((badge, idx) => (
-                              /* eslint-disable-next-line @next/next/no-img-element */
-                              <img
-                                key={idx}
-                                src={badge.icon_url}
-                                alt={badge.name}
-                                className="h-4 w-4"
-                                onError={(e) => {
-                                  ;(e.target as HTMLImageElement).style.display = 'none'
-                                }}
-                              />
-                            ))}
-                        </div>
-                      )}
                   </div>
 
                   {/* Message text */}
                   <div className="break-words text-white" style={{ fontSize: '16px' }}>
                     {msg.message.text}
                   </div>
+
+                  {/* Timestamp */}
+                  {showTimestamp && (
+                    <div className="mt-1 text-xs text-slate-500">{SAMPLE_TIME}</div>
+                  )}
                 </div>
               </div>
             </div>

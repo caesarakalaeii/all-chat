@@ -18,68 +18,31 @@
 
 import Link from 'next/link'
 import type { ReactNode } from 'react'
-import hljs from 'highlight.js/lib/core'
-import javascript from 'highlight.js/lib/languages/javascript'
-import python from 'highlight.js/lib/languages/python'
-import json from 'highlight.js/lib/languages/json'
 import { AppNav } from '@/components/AppNav'
-
-// Register only the languages used below. Highlighting runs server-side (this is
-// a server component), so nothing ships to the client except the rendered HTML.
-hljs.registerLanguage('javascript', javascript)
-hljs.registerLanguage('python', python)
-hljs.registerLanguage('json', json)
+import { Code, Pre } from '@/components/docs/prose'
 
 export const metadata = {
-  title: 'Documentation | All-Chat',
+  title: 'Documentation',
   description:
-    'How to use All-Chat and how to connect third-party tools to the unified chat WebSocket stream (Twitch, YouTube, Kick, TikTok, Discord).',
+    'Get your All-Chat overlay live in OBS, pick from 16 built-in themes, and make it your own — no CSS required to start, full CSS control when you want it.',
   alternates: { canonical: '/docs' },
 }
 
-const TEST_OVERLAY_ID = '00000000-0000-4000-8000-000000000a11'
-
-function Code({ children }: { children: ReactNode }) {
-  return (
-    <code className="rounded bg-surface-2 px-1.5 py-0.5 font-mono text-[0.85em] text-text">
-      {children}
-    </code>
-  )
-}
-
-function Pre({ children, lang }: { children: string; lang?: 'javascript' | 'python' | 'json' }) {
-  const className =
-    'my-4 overflow-x-auto rounded-lg border border-border bg-surface-2 p-4 text-sm leading-relaxed text-text-sub'
-  if (!lang) {
-    return (
-      <pre className={className}>
-        <code className="font-mono">{children}</code>
-      </pre>
-    )
-  }
-  const highlighted = hljs.highlight(children, { language: lang, ignoreIllegals: true }).value
-  return (
-    <pre className={className}>
-      <code className="hljs font-mono" dangerouslySetInnerHTML={{ __html: highlighted }} />
-    </pre>
-  )
-}
-
-interface Field {
+/** A "variable / default / effect" row table for the CSS custom properties. */
+interface CssVar {
   name: string
-  type: string
-  desc: string
+  default: string
+  effect: string
 }
-
-function FieldTable({ rows }: { rows: Field[] }) {
+function CssVarTable({ rows }: { rows: CssVar[] }) {
   return (
     <div className="my-4 overflow-x-auto rounded-lg border border-border">
       <table className="w-full border-collapse text-left text-sm">
         <thead>
           <tr className="bg-surface-2 text-text">
-            <th className="px-4 py-2 font-semibold">Field</th>
-            <th className="px-4 py-2 font-semibold">Type</th>
-            <th className="px-4 py-2 font-semibold">Description</th>
+            <th className="px-4 py-2 font-semibold">Variable</th>
+            <th className="px-4 py-2 font-semibold">Default</th>
+            <th className="px-4 py-2 font-semibold">What it changes</th>
           </tr>
         </thead>
         <tbody>
@@ -88,8 +51,8 @@ function FieldTable({ rows }: { rows: Field[] }) {
               <td className="px-4 py-2">
                 <span className="font-mono text-text">{r.name}</span>
               </td>
-              <td className="px-4 py-2 font-mono text-text-dim">{r.type}</td>
-              <td className="px-4 py-2 text-text-sub">{r.desc}</td>
+              <td className="px-4 py-2 font-mono text-text-dim">{r.default}</td>
+              <td className="px-4 py-2 text-text-sub">{r.effect}</td>
             </tr>
           ))}
         </tbody>
@@ -98,16 +61,54 @@ function FieldTable({ rows }: { rows: Field[] }) {
   )
 }
 
+/** A "selector / kind / targets" hook table. */
+interface Hook {
+  selector: string
+  kind: string
+  targets: string
+}
+function HookTable({ rows }: { rows: Hook[] }) {
+  return (
+    <div className="my-4 overflow-x-auto rounded-lg border border-border">
+      <table className="w-full border-collapse text-left text-sm">
+        <thead>
+          <tr className="bg-surface-2 text-text">
+            <th className="px-4 py-2 font-semibold">Selector</th>
+            <th className="px-4 py-2 font-semibold">Kind</th>
+            <th className="px-4 py-2 font-semibold">Targets</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.selector} className="border-t border-border align-top">
+              <td className="px-4 py-2">
+                <span className="font-mono text-text">{r.selector}</span>
+              </td>
+              <td className="px-4 py-2 font-mono text-text-dim">{r.kind}</td>
+              <td className="px-4 py-2 text-text-sub">{r.targets}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function DevCallout({ children }: { children: ReactNode }) {
+  return (
+    <div className="rounded-lg border border-border bg-surface-2 p-5 text-sm text-text-sub">
+      {children}
+    </div>
+  )
+}
+
 const toc = [
   ['what-is-all-chat', 'What is All-Chat'],
-  ['getting-started', 'Getting started (streamers)'],
-  ['connect-a-tool', 'Connect a third-party tool'],
-  ['message-format', 'Message format'],
-  ['chat-messages', 'Chat messages'],
-  ['events', 'Events'],
-  ['status-messages', 'Status & control messages'],
-  ['reconnecting', 'Reconnecting & heartbeats'],
-  ['try-it-now', 'Try it now (no setup)'],
+  ['getting-started', 'Get your overlay live'],
+  ['themes', 'Pick a theme'],
+  ['customize', 'Make it your own'],
+  ['custom-css', 'Go further with CSS'],
+  ['fonts', 'Custom fonts'],
 ]
 
 export default function DocsPage() {
@@ -120,9 +121,15 @@ export default function DocsPage() {
             <p className="text-xs font-semibold tracking-[0.2em] text-twitch uppercase">
               All-Chat Docs
             </p>
-            <h1 className="text-3xl font-bold text-text">Documentation</h1>
+            <h1 className="text-3xl font-bold text-text">Streamer guide</h1>
             <p className="text-sm text-text-dim">
-              Using All-Chat and connecting third-party tools to the chat stream.
+              Get your overlay into OBS, choose a look, and make it your own.
+            </p>
+            <p className="text-sm text-text-sub">
+              Building a bot, alert box, or analytics tool?{' '}
+              <Link href="/docs/api" className="text-twitch hover:underline">
+                See the Developer API →
+              </Link>
             </p>
           </div>
 
@@ -147,357 +154,194 @@ export default function DocsPage() {
             <section id="what-is-all-chat">
               <h2>What is All-Chat</h2>
               <p>
-                All-Chat aggregates live chat from <strong>Twitch</strong>, <strong>YouTube</strong>
+                All-Chat pulls your live chat from <strong>Twitch</strong>, <strong>YouTube</strong>
                 , <strong>Kick</strong>, <strong>TikTok</strong> and <strong>Discord</strong> into a
-                single, normalized stream. You create an <em>overlay</em>, attach one or more chat
-                sources to it, and All-Chat delivers every message — and platform events like subs,
-                bits, raids, super chats and gifts — over one WebSocket in one unified format. 7TV,
-                BTTV and FFZ emotes are resolved and attached for you.
-              </p>
-              <p>
-                That single stream powers the browser overlay you add to OBS, and it is the same
-                stream any third-party tool can read to build bots, moderation tools, vote counters,
-                analytics, alerts, or anything else.
+                single overlay you drop into OBS. Every message lands in one feed — plus events like
+                subs, bits, raids, super chats and gifts — and 7TV, BTTV and FFZ emotes show up
+                automatically. No bots to invite, no chat widget to wire up.
               </p>
             </section>
 
             {/* Getting started */}
             <section id="getting-started">
-              <h2>Getting started (streamers)</h2>
+              <h2>Get your overlay live</h2>
               <ol className="list-decimal space-y-2 pl-6 text-text-sub">
                 <li>
-                  Sign in at <Link href="/">allch.at</Link> with your Twitch account.
+                  Sign in at <Link href="/">allch.at</Link> with your Twitch, YouTube, or Kick
+                  account.
                 </li>
                 <li>
                   In the dashboard, create an <strong>overlay</strong> and connect the platforms you
-                  stream on (Twitch, YouTube, Kick, TikTok, Discord). Each connected platform becomes
-                  a <em>chat source</em> on that overlay.
+                  stream on. Each connected platform becomes a <em>chat source</em> on that overlay —
+                  mix and match as many as you like.
                 </li>
                 <li>
                   Copy the overlay&apos;s browser-source URL and add it to OBS as a{' '}
-                  <strong>Browser Source</strong>. Chat appears as soon as the overlay connects.
+                  <strong>Browser Source</strong>. Chat appears the moment the overlay connects.
                 </li>
                 <li>
                   Sources are demand-driven: All-Chat starts listening when the overlay is open and
-                  winds down when nothing is connected, so you do not pay for idle listeners.
+                  winds down when nothing is connected, so you never pay for idle listeners.
                 </li>
               </ol>
             </section>
 
-            {/* Connect a third-party tool */}
-            <section id="connect-a-tool">
-              <h2>Connect a third-party tool</h2>
+            {/* Themes */}
+            <section id="themes">
+              <h2>Pick a theme</h2>
               <p>
-                Open a WebSocket to the overlay endpoint. Reading the stream is{' '}
-                <strong>anonymous</strong> — no token or account is required (this is the same
-                &quot;OBS mode&quot; the browser overlay uses):
+                All-Chat ships with <strong>16 built-in themes</strong> — from Modern Dark and
+                Minimal to Trading Card, Comic Speech, Sticky Notes, Vaporwave, Cyberpunk and more.
+                Applying
+                one takes a click and needs <strong>no CSS at all</strong>.
               </p>
-              <Pre>{`wss://allch.at/ws/overlay/{overlay_id}`}</Pre>
+              <ol className="list-decimal space-y-2 pl-6 text-text-sub">
+                <li>Open your overlay in the dashboard to edit it.</li>
+                <li>
+                  In the <strong>Theme</strong> section, browse the themes and apply one. The
+                  preview updates instantly.
+                </li>
+                <li>Save. Your OBS browser source picks up the new look on its next refresh.</li>
+              </ol>
               <p>
-                Your <Code>overlay_id</Code> is the UUID in your overlay&apos;s browser-source URL.
-                Want to try without an account first? Use the{' '}
-                <a href="#try-it-now">public test overlay</a>.
+                You can also preview every theme live on the{' '}
+                <Link href="/">home page</Link> before you sign in.
               </p>
-
-              <h3>Query parameters</h3>
-              <FieldTable
-                rows={[
-                  {
-                    name: '?token=',
-                    type: 'JWT (optional)',
-                    desc: 'Owner token. Only needed for owner-scoped access; omit it for read-only consumption.',
-                  },
-                  {
-                    name: '?since=',
-                    type: 'int (optional)',
-                    desc: 'Milliseconds since the Unix epoch. On connect, the server replays buffered messages newer than this timestamp so a reconnecting client can backfill the gap. Omit to start live.',
-                  },
-                ]}
-              />
-
-              <h3>Minimal example (JavaScript)</h3>
-              <Pre lang="javascript">{`const ws = new WebSocket(
-  "wss://allch.at/ws/overlay/${TEST_OVERLAY_ID}"
-)
-
-ws.onmessage = (e) => {
-  const msg = JSON.parse(e.data)
-  switch (msg.type) {
-    case "chat_message":
-    case "message_update": {
-      const d = msg.data
-      if (d.event) {
-        console.log("event", d.platform, d.event.type, d.event.value?.display_text)
-      } else {
-        console.log("chat", d.platform, d.user.display_name + ":", d.message.text)
-      }
-      break
-    }
-    case "ping":
-      ws.send(JSON.stringify({ type: "pong" }))
-      break
-    case "connected":
-    case "platform_status":
-      break
-  }
-}`}</Pre>
-
-              <h3>Minimal example (Python)</h3>
-              <Pre lang="python">{`# pip install websocket-client
-import json, websocket
-
-def on_message(ws, raw):
-    msg = json.loads(raw)
-    if msg["type"] in ("chat_message", "message_update"):
-        d = msg["data"]
-        if d.get("event"):
-            print("event", d["platform"], d["event"]["type"])
-        else:
-            print("chat", d["platform"], d["user"]["display_name"], d["message"]["text"])
-    elif msg["type"] == "ping":
-        ws.send(json.dumps({"type": "pong"}))
-
-ws = websocket.WebSocketApp(
-    "wss://allch.at/ws/overlay/${TEST_OVERLAY_ID}",
-    on_message=on_message,
-)
-ws.run_forever()`}</Pre>
             </section>
 
-            {/* Message format */}
-            <section id="message-format">
-              <h2>Message format</h2>
-              <p>Every frame is JSON with the same envelope:</p>
-              <Pre lang="json">{`{
-  "type": "chat_message",
-  "data": { ... },          // shape depends on "type" (omitted for ping/pong)
-  "timestamp": "2026-06-18T14:30:00Z"
-}`}</Pre>
-              <FieldTable
-                rows={[
-                  { name: 'type', type: 'string', desc: 'Message type (see below).' },
-                  { name: 'data', type: 'object', desc: 'Payload; shape depends on type. Omitted for ping/pong.' },
-                  { name: 'timestamp', type: 'string', desc: 'RFC 3339 timestamp of when the gateway sent the frame.' },
-                ]}
-              />
+            {/* Make it your own (no-code) */}
+            <section id="customize">
+              <h2>Make it your own</h2>
               <p>
-                <Code>type</Code> is one of:
+                A theme is a starting point — most of the time you can get exactly the look you want
+                <strong> without writing any code</strong>. In the overlay editor&apos;s{' '}
+                <strong>Appearance</strong> panel you can adjust, with sliders, toggles and color
+                pickers:
               </p>
-              <FieldTable
-                rows={[
-                  { name: 'chat_message', type: '', desc: 'A chat message or a platform event. data is the unified message object.' },
-                  { name: 'message_update', type: '', desc: 'An update to a previously sent message (e.g. TikTok like aggregates). Same data shape as chat_message.' },
-                  { name: 'connected', type: '', desc: 'Sent once on connect: { overlay_id, message }.' },
-                  { name: 'platform_status', type: '', desc: 'Connection status of a source platform.' },
-                  { name: 'ping', type: '', desc: 'Heartbeat from the server. Reply with { "type": "pong" }.' },
-                  { name: 'error', type: '', desc: 'Error notice: { code, message }.' },
-                ]}
-              />
-            </section>
-
-            {/* Chat messages */}
-            <section id="chat-messages">
-              <h2>Chat messages</h2>
-              <p>
-                For <Code>chat_message</Code> and <Code>message_update</Code>, <Code>data</Code> is
-                the unified message object:
-              </p>
-              <FieldTable
-                rows={[
-                  { name: 'id', type: 'string', desc: 'Unique message ID.' },
-                  { name: 'overlay_id', type: 'string', desc: 'Overlay this message was delivered to.' },
-                  { name: 'platform', type: 'string', desc: '"twitch" | "youtube" | "kick" | "tiktok" | "discord".' },
-                  { name: 'channel_id', type: 'string', desc: 'Platform channel identifier.' },
-                  { name: 'channel_name', type: 'string', desc: 'Human-readable channel name.' },
-                  { name: 'user', type: 'object', desc: 'Author info (see below).' },
-                  { name: 'message', type: 'object', desc: '{ text, emotes[] } (see below).' },
-                  { name: 'timestamp', type: 'string', desc: 'RFC 3339 message time (UTC).' },
-                  { name: 'metadata', type: 'object', desc: 'Free-form, platform-specific extras.' },
-                  { name: 'event', type: 'object?', desc: 'Present only when the message is a platform event (see Events). Absent for normal chat.' },
-                ]}
-              />
-
-              <h3>user</h3>
-              <FieldTable
-                rows={[
-                  { name: 'id', type: 'string', desc: 'Platform user ID.' },
-                  { name: 'username', type: 'string', desc: 'Login/handle.' },
-                  { name: 'display_name', type: 'string', desc: 'Display name.' },
-                  { name: 'color', type: 'string?', desc: 'Name color, hex (e.g. "#FF0000").' },
-                  { name: 'badges', type: 'Badge[]', desc: 'Author badges (see below).' },
-                  { name: 'avatar_url', type: 'string?', desc: 'Profile image URL when available.' },
-                  { name: 'pronouns', type: 'string?', desc: 'e.g. "she/her" when known.' },
-                  { name: 'name_gradient', type: 'string?', desc: 'Optional gradient descriptor (JSON string).' },
-                  { name: 'source_badges / source_user_id', type: '?', desc: 'Origin-channel identity for shared-chat messages.' },
-                  { name: 'avatar_frame_url / avatar_flair_url', type: 'string?', desc: 'Cosmetic frame/flair when set.' },
-                ]}
-              />
-
-              <h3>message and emotes</h3>
-              <p>
-                <Code>message</Code> is <Code>{`{ "text": string, "emotes": Emote[] }`}</Code>. Each{' '}
-                <Code>Emote</Code>:
-              </p>
-              <FieldTable
-                rows={[
-                  { name: 'code', type: 'string', desc: 'Emote text token, e.g. "Kappa".' },
-                  { name: 'provider', type: 'string', desc: '"twitch" | "7tv" | "bttv" | "ffz" | platform.' },
-                  { name: 'url', type: 'string', desc: 'CDN image URL.' },
-                  { name: 'positions', type: 'int[][]', desc: 'Array of [start, end] index pairs into text where the emote occurs.' },
-                ]}
-              />
-              <p>
-                Each <Code>Badge</Code> is <Code>{`{ "name", "version", "icon_url" }`}</Code> — e.g.{' '}
-                <Code>{`{ "name": "subscriber", "version": "12", "icon_url": "..." }`}</Code>.
-              </p>
-
-              <h3>Example</h3>
-              <Pre lang="json">{`{
-  "type": "chat_message",
-  "data": {
-    "id": "abc123",
-    "overlay_id": "${TEST_OVERLAY_ID}",
-    "platform": "twitch",
-    "channel_id": "12345",
-    "channel_name": "examplestreamer",
-    "user": {
-      "id": "67890",
-      "username": "viewer123",
-      "display_name": "Viewer123",
-      "color": "#1E90FF",
-      "badges": [{ "name": "subscriber", "version": "12", "icon_url": "https://.../sub.png" }]
-    },
-    "message": {
-      "text": "that was insane PogChamp",
-      "emotes": [
-        { "code": "PogChamp", "provider": "twitch", "url": "https://.../pogchamp.png", "positions": [[13, 20]] }
-      ]
-    },
-    "timestamp": "2026-06-18T14:30:00Z",
-    "metadata": {}
-  },
-  "timestamp": "2026-06-18T14:30:00Z"
-}`}</Pre>
-            </section>
-
-            {/* Events */}
-            <section id="events">
-              <h2>Events</h2>
-              <p>
-                Platform events (subs, bits, raids, donations, …) arrive as <Code>chat_message</Code>{' '}
-                frames whose <Code>data</Code> includes an <Code>event</Code> object. Normal chat has
-                no <Code>event</Code> field.
-              </p>
-              <FieldTable
-                rows={[
-                  { name: 'type', type: 'string', desc: 'Event type (see list below).' },
-                  { name: 'tier', type: 'string', desc: 'Relative prominence: "high" | "medium" | "low".' },
-                  { name: 'value', type: 'object?', desc: '{ amount: number, currency: string, display_text: string } — e.g. amount 250, currency "bits", display_text "250 bits".' },
-                  { name: 'duration', type: 'int', desc: 'Suggested on-screen display time, seconds.' },
-                  { name: 'is_update', type: 'bool', desc: 'true when this updates a prior event (e.g. TikTok like aggregates, delivered as message_update).' },
-                  { name: 'aggregation_id', type: 'string?', desc: 'Groups successive updates of the same aggregate.' },
-                  { name: 'metadata', type: 'object?', desc: 'Event-specific raw fields.' },
-                ]}
-              />
-              <h3>Event types by platform</h3>
               <ul>
-                <li>
-                  <strong className="text-twitch">Twitch</strong>: <Code>subscription</Code>,{' '}
-                  <Code>resubscription</Code>, <Code>gift_subscription</Code>,{' '}
-                  <Code>mystery_gift</Code>, <Code>bits</Code>, <Code>raid</Code>,{' '}
-                  <Code>channel_points</Code>, <Code>message_deletion</Code>
-                </li>
-                <li>
-                  <strong className="text-youtube">YouTube</strong>: <Code>super_chat</Code>,{' '}
-                  <Code>super_sticker</Code>, <Code>new_sponsor</Code>,{' '}
-                  <Code>member_milestone</Code>, <Code>membership_gift</Code>,{' '}
-                  <Code>gift_received</Code>
-                </li>
-                <li>
-                  <strong className="text-tiktok">TikTok</strong>: <Code>gift</Code>,{' '}
-                  <Code>like_aggregate</Code>, <Code>follow</Code>, <Code>share</Code>
-                </li>
+                <li>Font family, text size, weight, line height and letter spacing</li>
+                <li>Spacing, padding and message-bubble corners</li>
+                <li>Avatar and badge size</li>
+                <li>What to show or hide — avatars, badges, timestamps, usernames</li>
+                <li>Colors, including a name color per platform</li>
+                <li>How events like subs, raids and super chats appear</li>
               </ul>
-              <h3>Example (Twitch subscription)</h3>
-              <Pre lang="json">{`{
-  "type": "chat_message",
-  "data": {
-    "id": "evt-sub-1",
-    "overlay_id": "${TEST_OVERLAY_ID}",
-    "platform": "twitch",
-    "channel_id": "12345",
-    "channel_name": "examplestreamer",
-    "user": { "id": "999", "username": "newsub", "display_name": "NewSub", "badges": [] },
-    "message": { "text": "just subscribed!", "emotes": [] },
-    "timestamp": "2026-06-18T14:35:00Z",
-    "metadata": {},
-    "event": {
-      "type": "subscription",
-      "tier": "medium",
-      "duration": 8,
-      "is_update": false,
-      "value": { "amount": 1, "currency": "months", "display_text": "Tier 1 sub" }
-    }
-  },
-  "timestamp": "2026-06-18T14:35:00Z"
-}`}</Pre>
+              <p>
+                Start from the theme closest to what you want, then tweak these until it feels like
+                yours. If you need something the panel doesn&apos;t cover, drop down to CSS below.
+              </p>
             </section>
 
-            {/* Status messages */}
-            <section id="status-messages">
-              <h2>Status &amp; control messages</h2>
+            {/* Custom CSS */}
+            <section id="custom-css">
+              <h2>Go further with CSS</h2>
               <p>
-                On connect the server sends a <Code>connected</Code> frame, then a{' '}
-                <Code>platform_status</Code> frame per configured source so your UI can show
-                indicators immediately. <Code>platform_status</Code> data:
+                For full control, enable <strong>Custom CSS</strong> in the overlay editor&apos;s{' '}
+                <strong>Expert</strong> section and write your own styles. A few things worth
+                knowing:
               </p>
-              <FieldTable
+              <ul>
+                <li>Your CSS only affects your overlay — nothing else.</li>
+                <li>
+                  It loads <em>after</em> the theme, so you can start from a built-in theme and
+                  override just the parts you want.
+                </li>
+                <li>There&apos;s a live preview right next to the editor, so you see changes as you type.</li>
+              </ul>
+
+              <h3>Quick wins: style variables</h3>
+              <p>
+                The easiest lever needs no knowledge of class names. Set any of these variables on{' '}
+                <Code>:root</Code> and the overlay picks them up:
+              </p>
+              <CssVarTable
                 rows={[
-                  { name: 'platform', type: 'string', desc: 'Source platform.' },
-                  { name: 'channel_id', type: 'string', desc: 'Source channel.' },
-                  { name: 'channel_name', type: 'string?', desc: 'Human-readable channel name.' },
-                  { name: 'status', type: 'string', desc: '"connected" | "reconnecting" | "offline" | "quota_exceeded".' },
-                  { name: 'next_retry_at', type: 'string?', desc: 'RFC 3339 time of the next reconnect attempt, when applicable.' },
-                  { name: 'error_message', type: 'string?', desc: 'Human-readable detail when degraded.' },
+                  { name: '--chat-font-size', default: '1rem', effect: 'Message text size.' },
+                  { name: '--chat-font-family', default: 'inherit', effect: 'Message text font.' },
+                  { name: '--chat-message-color', default: '#ffffff', effect: 'Message text color.' },
+                  { name: '--chat-message-gap', default: '0.75rem', effect: 'Vertical space between messages.' },
+                  { name: '--chat-bubble-border-radius', default: '0.5rem', effect: 'Roundness of the message bubble.' },
+                  { name: '--chat-bubble-padding', default: '0.75rem', effect: 'Padding inside each message.' },
+                  { name: '--chat-avatar-size', default: '2.5rem', effect: 'Avatar width and height.' },
+                  { name: '--chat-username-font-size', default: '0.875rem', effect: 'Username size.' },
+                  { name: '--chat-emote-scale', default: '1', effect: 'Emote size multiplier.' },
+                  { name: '--chat-show-avatars', default: 'block', effect: 'Set to none to hide avatars.' },
+                  { name: '--chat-show-badges', default: 'flex', effect: 'Set to none to hide badges.' },
+                  { name: '--chat-show-timestamps', default: 'block', effect: 'Set to none to hide timestamps.' },
                 ]}
               />
-            </section>
+              <Pre lang="css">{`:root {
+  --chat-font-size: 20px;
+  --chat-message-gap: 12px;
+  --chat-show-timestamps: none;   /* hide timestamps */
+}`}</Pre>
 
-            {/* Reconnecting */}
-            <section id="reconnecting">
-              <h2>Reconnecting &amp; heartbeats</h2>
-              <ul>
-                <li>
-                  The server periodically sends <Code>{`{ "type": "ping" }`}</Code>. Reply with{' '}
-                  <Code>{`{ "type": "pong" }`}</Code>. (Most WebSocket libraries also answer
-                  low-level ping frames automatically.)
-                </li>
-                <li>
-                  If the socket drops, reconnect with backoff. To backfill messages missed during a
-                  brief disconnect, reconnect with <Code>?since=&lt;ms-epoch&gt;</Code> set to just
-                  before you lost the connection — the server replays buffered messages newer than
-                  that timestamp.
-                </li>
-                <li>
-                  Treat IDs as the dedup key when combining the replay buffer with live messages.
-                </li>
-              </ul>
-            </section>
-
-            {/* Try it now */}
-            <section id="try-it-now">
-              <h2>Try it now (no setup)</h2>
+              <h3>Finer control: target the chat parts</h3>
               <p>
-                There is a public test overlay that streams realistic fake traffic — random chat,
-                poll votes (the literal messages <Code>1</Code>, <Code>2</Code>, <Code>3</Code>,{' '}
-                <Code>4</Code>) and platform events — so you can build and validate an integration
-                without an account or a real channel. Just connect; traffic flows while a client is
-                connected and stops when the last one disconnects:
+                For anything the variables don&apos;t cover, style the overlay&apos;s elements
+                directly. These class names and data attributes are stable and safe to target:
               </p>
-              <Pre>{`wss://allch.at/ws/overlay/${TEST_OVERLAY_ID}`}</Pre>
+              <HookTable
+                rows={[
+                  { selector: '.overlay-live-body', kind: 'class', targets: 'The whole message list container.' },
+                  { selector: '.chat-message', kind: 'class', targets: 'One chat message bubble.' },
+                  { selector: '.chat-username', kind: 'class', targets: 'The author name.' },
+                  { selector: '.platform-badge', kind: 'class', targets: 'The platform tag/icon next to the name.' },
+                  { selector: '.event-message', kind: 'class', targets: 'A sub / raid / super chat / gift alert.' },
+                  { selector: '[data-platform="twitch"]', kind: 'attribute', targets: 'Messages from a platform (twitch, youtube, kick, tiktok, discord).' },
+                  { selector: '[data-username="…"]', kind: 'attribute', targets: 'Messages from a specific user.' },
+                ]}
+              />
+              <p>Example — give each platform its own accent stripe:</p>
+              <Pre lang="css">{`.chat-message[data-platform="twitch"]  { border-left: 4px solid #9146FF; }
+.chat-message[data-platform="youtube"] { border-left: 4px solid #FF0000; }
+.chat-message[data-platform="kick"]    { border-left: 4px solid #53FC18; }
+
+/* Make raid alerts pop */
+.event-message[class*="raid"] { transform: scale(1.1); }`}</Pre>
+              <DevCallout>
+                Want ready-made examples? Every built-in theme is just a CSS file you can read and
+                borrow from on{' '}
+                <a
+                  href="https://github.com/caesarakalaeii/all-chat/tree/main/docs/overlay-themes"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-twitch hover:underline"
+                >
+                  GitHub
+                </a>
+                . Already have a theme from another tool, or want help writing one? Ask in our{' '}
+                <a
+                  href="https://discord.gg/xCGBSuz39P"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-twitch hover:underline"
+                >
+                  Discord
+                </a>{' '}
+                and we&apos;re happy to help.
+              </DevCallout>
+            </section>
+
+            {/* Fonts */}
+            <section id="fonts">
+              <h2>Custom fonts</h2>
               <p>
-                Drop that URL into either example above and you should immediately see messages and
-                events stream in.
+                You can pull in a Google Font with a normal <Code>@import</Code>, then use it
+                anywhere in your CSS. To protect your viewers&apos; privacy, fonts are served through
+                All-Chat rather than directly from Google, so only these families are available:
+              </p>
+              <p className="text-sm text-text-sub">
+                Barlow, Barlow Condensed, Bebas Neue, Exo 2, Inter, Monoton, Montserrat, Nunito,
+                Open Sans, Orbitron, Oswald, Poppins, Press Start 2P, Rajdhani, Roboto, Share Tech
+                Mono, Source Code Pro, Space Grotesk, VT323.
+              </p>
+              <Pre lang="css">{`@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+:root { --chat-font-family: 'Press Start 2P', monospace; }`}</Pre>
+              <p>
+                Requesting a family that isn&apos;t on the list simply won&apos;t load — pick another
+                or leave the default.
               </p>
             </section>
           </div>
@@ -506,8 +350,8 @@ ws.run_forever()`}</Pre>
           <div className="mt-12 flex flex-col gap-3 border-t border-border pt-6 text-sm text-text-dim sm:flex-row sm:items-center sm:justify-between">
             <span>&copy; {new Date().getFullYear()} All-Chat</span>
             <div className="flex flex-wrap items-center gap-4">
-              <Link href="/" className="transition-colors hover:text-text">
-                Home
+              <Link href="/docs/api" className="transition-colors hover:text-text">
+                Developer API
               </Link>
               <Link href="/legal/privacy" className="transition-colors hover:text-text">
                 Privacy Policy

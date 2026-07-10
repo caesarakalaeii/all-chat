@@ -322,28 +322,11 @@ body {
 }
 
 /* ============================================
-   PLATFORM-SPECIFIC COLOR OVERRIDES
+   USERNAME COLOUR
    ============================================ */
 
-/* Twitch - dark mystic purple */
-.space-y-3 > div[data-platform="twitch"] .font-semibold.text-sm {
-  color: #8b6ba8 !important;
-}
-
-/* YouTube - dark crimson */
-.space-y-3 > div[data-platform="youtube"] .font-semibold.text-sm {
-  color: #a84442 !important;
-}
-
-/* Kick - mossy green */
-.space-y-3 > div[data-platform="kick"] .font-semibold.text-sm {
-  color: #6b8e6b !important;
-}
-
-/* TikTok - charcoal gray */
-.space-y-3 > div[data-platform="tiktok"] .font-semibold.text-sm {
-  color: #8a8a8a !important;
-}
+/* No per-platform colour override — each chatter keeps their own name colour.
+   The magical glow + black outline above keep it legible on the dark parchment. */
 
 /* ============================================
    RESPONSIVE ADJUSTMENTS

@@ -69,6 +69,14 @@ body {
   transform: translateX(4px) !important;
 }
 
+/* Per-card accent — cycle the left stripe indigo → cyan → emerald for variety */
+.space-y-3 > div:nth-child(3n + 2) {
+  border-left-color: rgba(34, 211, 238, 0.85) !important;
+}
+.space-y-3 > div:nth-child(3n) {
+  border-left-color: rgba(52, 211, 153, 0.85) !important;
+}
+
 /* ============================================================
    PLATFORM INDICATOR - MODERN BADGE
    ============================================================ */

@@ -18,15 +18,19 @@
 
 /**
  * rewriteThemeFontImports rewrites Google Fonts `@import url('https://fonts.googleapis.com/css2?...')`
- * stylesheet references in bundled-theme CSS to the same-origin `/api/fonts/css`
+ * stylesheet references in bundled-theme CSS to the same-origin `/font-proxy/css`
  * proxy (audit #11).
+ *
+ * The proxy lives under `/font-proxy/*` (NOT `/api/*`): the ingress routes
+ * `/api/*` to the api-gateway and next.config rewrites `/api/*` there too, so a
+ * proxy under `/api/fonts` was shadowed and 404'd in production.
  *
  * Why: the overlay CSP (`style-src 'self' 'unsafe-inline'`) blocks a direct
  * `@import` from fonts.googleapis.com, so themed overlays silently fell back to
  * the system font. Whitelisting Google in the CSP is NOT acceptable — the proxy
  * exists specifically so viewer IPs never hit Google directly (DSGVO / "Google
  * Fonts" ruling). The proxy validates each font family against an allowlist and
- * additionally rewrites the gstatic font binaries to `/api/fonts/file`, so after
+ * additionally rewrites the gstatic font binaries to `/font-proxy/file`, so after
  * this rewrite no overlay viewer ever connects to a Google host.
  *
  * Only the css2 stylesheet URL is rewritten; the query string (family axes +
@@ -34,8 +38,5 @@
  */
 export function rewriteThemeFontImports(css: string): string {
   if (!css) return css
-  return css.replace(
-    /https:\/\/fonts\.googleapis\.com\/css2\?([^'")\s]+)/g,
-    '/api/fonts/css?$1',
-  )
+  return css.replace(/https:\/\/fonts\.googleapis\.com\/css2\?([^'")\s]+)/g, '/font-proxy/css?$1')
 }
