@@ -37,6 +37,7 @@ jobs:
           - moderation-service
           - engagement-service
           - discord-listener
+          - support-bot
     steps:
       - uses: actions/checkout@v7
 

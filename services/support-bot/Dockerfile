@@ -1,36 +1,54 @@
-FROM node:20-alpine
+# Build stage
+FROM golang:1.25.6-alpine AS builder
 
 WORKDIR /app
 
-# Install claude CLI globally (provides the `claude` binary for subprocess queries)
-RUN npm install -g @anthropic-ai/claude-code
+# Copy modules this service depends on via replace directives
+COPY shared/ ./shared/
 
-# Install kubectl (match cluster server version v1.33.5)
-RUN apk add --no-cache curl && \
-    curl -LO "https://dl.k8s.io/release/v1.33.5/bin/linux/amd64/kubectl" && \
-    install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl && \
-    rm kubectl
+# Copy service files
+COPY services/support-bot/ ./services/support-bot/
 
-# Install mcp-grafana binary (Grafana MCP server for Claude subprocess)
-RUN curl -L "https://github.com/grafana/mcp-grafana/releases/download/v0.11.3/mcp-grafana_Linux_x86_64.tar.gz" \
-    -o /tmp/mcp-grafana.tar.gz && \
-    tar -xzf /tmp/mcp-grafana.tar.gz -C /usr/local/bin/ mcp-grafana && \
-    chmod 0755 /usr/local/bin/mcp-grafana && \
-    rm /tmp/mcp-grafana.tar.gz
+# Download dependencies
+WORKDIR /app/services/support-bot
+RUN go mod download
 
-# Copy package files
-COPY services/support-bot/package*.json ./
+# Build
+RUN CGO_ENABLED=0 GOOS=linux go build -o /app/support-bot ./cmd
 
-# Install all dependencies (tsx needed at runtime for TypeScript execution)
-RUN npm ci
+# Runtime stage
+FROM alpine:3.23
 
-# Copy source code
-COPY services/support-bot/src/ ./src/
-COPY services/support-bot/tsconfig.json ./
+# ca-certificates for HTTPS (GitHub, Grafana, the local LLM if TLS).
+RUN apk --no-cache add ca-certificates
+
+# kubectl for the read-only cluster tool (match cluster server version v1.33.5).
+# busybox wget (built into alpine) downloads it; no curl dependency needed.
+RUN wget -O /usr/local/bin/kubectl "https://dl.k8s.io/release/v1.33.5/bin/linux/amd64/kubectl" && \
+    chmod 0755 /usr/local/bin/kubectl
+
+# Create non-root user
+RUN addgroup -g 1000 appuser && \
+    adduser -D -u 1000 -G appuser appuser
+
+WORKDIR /app
+
+# Copy binary from builder
+COPY --from=builder /app/support-bot .
 COPY LICENSE ./LICENSE
 
-# Run as non-root user
-USER node
+RUN chown -R appuser:appuser /app
 
-# Start the bot
-CMD ["npm", "start"]
+USER appuser
+
+# kubectl caches under $HOME; point it at the writable tmpfs so the container can run
+# with a read-only root filesystem.
+ENV HOME=/tmp
+
+EXPOSE 8094
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8094/health/live || exit 1
+
+CMD ["./support-bot"]
