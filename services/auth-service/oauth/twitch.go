@@ -88,15 +88,17 @@ func (t *TwitchOAuth) GetAuthURLWithChatScopes(state string) string {
 	)
 }
 
-// twitchModerationScopeByAction maps a moderation action to the single Twitch OAuth
-// scope it requires. These scopes are requested ONLY through the dedicated opt-in
-// moderation re-consent flow and are never bundled into login or add-source
-// (ADR-0017, least privilege).
-var twitchModerationScopeByAction = map[string]string{
-	"delete":  "moderator:manage:chat_messages",
-	"timeout": "moderator:manage:banned_users",
-	"ban":     "moderator:manage:banned_users",
-	"unban":   "moderator:manage:banned_users",
+// twitchModerationScopesByAction maps a moderation action to the Twitch OAuth scopes
+// it requires. Most actions need exactly one scope; "engagement" (Twitch-native poll +
+// prediction mirroring via EventSub, issue #523) needs read access to both resources.
+// These scopes are requested ONLY through the dedicated opt-in re-consent flow and are
+// never bundled into login or add-source (ADR-0017, least privilege).
+var twitchModerationScopesByAction = map[string][]string{
+	"delete":     {"moderator:manage:chat_messages"},
+	"timeout":    {"moderator:manage:banned_users"},
+	"ban":        {"moderator:manage:banned_users"},
+	"unban":      {"moderator:manage:banned_users"},
+	"engagement": {"channel:read:polls", "channel:read:predictions"},
 }
 
 // ModerationScopesForActions returns the deduped, minimal set of Twitch scopes the
@@ -106,9 +108,11 @@ func ModerationScopesForActions(actions []string) []string {
 	seen := make(map[string]bool)
 	out := make([]string, 0, 2)
 	for _, a := range actions {
-		if scope, ok := twitchModerationScopeByAction[a]; ok && !seen[scope] {
-			seen[scope] = true
-			out = append(out, scope)
+		for _, scope := range twitchModerationScopesByAction[a] {
+			if !seen[scope] {
+				seen[scope] = true
+				out = append(out, scope)
+			}
 		}
 	}
 	return out

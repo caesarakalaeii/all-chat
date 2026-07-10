@@ -1,0 +1,12 @@
+-- 075_engagement_poll_vote_seq.sql
+-- Description: monotonic ordering guard for poll vote CHANGES (PR #524 review P3-3).
+-- RecordVote's ON CONFLICT ... DO UPDATE re-applied whatever option the message carried,
+-- so a 5m-drained redelivery of an OLD "!vote 1" could revert a viewer's NEWER "!vote 2".
+-- seq holds a monotonic per-vote token (chat: the Redis stream entry's epoch-ms; web:
+-- request-time epoch-ms); the update now applies only when EXCLUDED.seq >= poll_votes.seq,
+-- so a stale redelivery is a no-op. Tally-only (poll votes carry no points).
+--
+-- Idempotent ADD COLUMN so a migration re-run — and a dev DB that already created the
+-- poll_votes table without it — both converge (P0-1 discipline). Default 0 sorts below any
+-- real epoch-ms, so any genuine vote wins over a legacy pre-seq row.
+ALTER TABLE poll_votes ADD COLUMN IF NOT EXISTS seq BIGINT NOT NULL DEFAULT 0;

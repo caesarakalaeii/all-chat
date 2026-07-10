@@ -389,7 +389,7 @@ func (h *PlatformAuthHandlerV2) HandleEnableModeration(platform oauth.Platform) 
 			return
 		}
 		if len(modScopes) == 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "no valid moderation actions; expected ?actions=delete,timeout,ban,unban"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "no valid moderation actions; expected ?actions=delete,timeout,ban,unban,engagement"})
 			return
 		}
 		// This opt-in is the unified "advanced controls" consent: a single re-consent
@@ -1251,6 +1251,8 @@ var preservableScopes = []string{
 	"user:write:chat", // Twitch chat-send grant (advanced-controls opt-in)
 	"moderator:manage:chat_messages",
 	"moderator:manage:banned_users",
+	"channel:read:polls",       // Twitch engagement grant (poll mirroring, issue #523)
+	"channel:read:predictions", // Twitch engagement grant (prediction mirroring, issue #523)
 	"moderation:ban", // Kick moderation grant (opt-in re-consent, ADR-0017)
 	"chat:write",     // Kick chat-send grant (advanced-controls opt-in)
 	"https://www.googleapis.com/auth/youtube.force-ssl", // YouTube moderation grant (ADR-0017)

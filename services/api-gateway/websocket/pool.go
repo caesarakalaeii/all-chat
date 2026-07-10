@@ -95,6 +95,41 @@ func (p *Pool) Broadcast(message []byte) int {
 	return successCount
 }
 
+// BroadcastFiltered sends to all connections but skips engagement-only connections when
+// the frame is NOT a poll/prediction update — so a participate tab never receives chat.
+// Returns the number of successful sends. For viewer connections, overlay_id is stripped.
+func (p *Pool) BroadcastFiltered(message []byte, engagementFrame bool) int {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	successCount := 0
+	for conn := range p.connections {
+		// Engagement-only sockets only ever receive poll/prediction updates.
+		if conn.IsEngagementOnly() && !engagementFrame {
+			continue
+		}
+
+		// Strip overlay_id from message if this is a viewer connection
+		messageToSend := message
+		if conn.IsViewer() {
+			messageToSend = stripOverlayID(message)
+		}
+
+		if conn.Send(messageToSend) {
+			successCount++
+		}
+	}
+
+	p.logger.Debug("Filtered broadcast to pool",
+		zap.String("overlay_id", p.overlayID),
+		zap.Int("pool_size", len(p.connections)),
+		zap.Int("success_count", successCount),
+		zap.Bool("engagement_frame", engagementFrame),
+	)
+
+	return successCount
+}
+
 // stripOverlayID removes overlay_id field from WebSocket messages
 // This prevents leaking sensitive overlay IDs to viewers
 func stripOverlayID(message []byte) []byte {

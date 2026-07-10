@@ -138,6 +138,15 @@ func (rl *RateLimiter) getClientKey(c *gin.Context, bucket string) string {
 		return fmt.Sprintf("%s:user:%s", scope, userID)
 	}
 
+	// Viewer tokens set viewer_id, not user_id (shared/middleware/auth.go). Without
+	// this branch every authenticated viewer would fall through to the IP bucket, so
+	// all viewers behind one NAT/mobile-carrier egress share a single limit — easy
+	// collateral 429s and easy to exhaust a whole IP's budget (L-Sec1). Integrity is
+	// unaffected (writes dedupe), this only makes the limit per-viewer and fair.
+	if viewerID, exists := c.Get("viewer_id"); exists {
+		return fmt.Sprintf("%s:viewer:%s", scope, viewerID)
+	}
+
 	// Fall back to IP address
 	return fmt.Sprintf("%s:ip:%s", scope, c.ClientIP())
 }

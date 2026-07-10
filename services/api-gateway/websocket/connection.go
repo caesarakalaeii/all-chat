@@ -48,18 +48,21 @@ type AuthCallback func(token string) (viewerID, username string, ok bool)
 
 // Connection wraps a WebSocket connection for an overlay
 type Connection struct {
-	conn          *websocket.Conn
-	overlayID     string
-	userID        string
-	send          chan []byte
-	done          chan struct{} // closed exactly once by close(); signals shutdown
-	replayBuffer  replay.DeletionReplayBuffer
-	logger        *zap.Logger
-	mu            sync.Mutex
-	closed        bool
-	isViewer      bool // True for viewer connections (extension, public viewers)
-	authenticated bool
-	onAuth        AuthCallback
+	conn         *websocket.Conn
+	overlayID    string
+	userID       string
+	send         chan []byte
+	done         chan struct{} // closed exactly once by close(); signals shutdown
+	replayBuffer replay.DeletionReplayBuffer
+	logger       *zap.Logger
+	mu           sync.Mutex
+	closed       bool
+	isViewer     bool // True for viewer connections (extension, public viewers)
+	// isEngagementOnly is true for poll/prediction-only sockets that must not
+	// receive chat/update frames — only poll/prediction updates (#5).
+	isEngagementOnly bool
+	authenticated    bool
+	onAuth           AuthCallback
 }
 
 // NewConnection creates a new WebSocket connection for overlay owners
@@ -94,6 +97,17 @@ func NewViewerConnection(conn *websocket.Conn, overlayID, userID string, replayB
 // IsViewer returns true if this is a viewer connection
 func (c *Connection) IsViewer() bool {
 	return c.isViewer
+}
+
+// IsEngagementOnly returns true if this is a poll/prediction-only connection
+// that must not receive chat/update frames (#5).
+func (c *Connection) IsEngagementOnly() bool {
+	return c.isEngagementOnly
+}
+
+// SetEngagementOnly marks this connection as poll/prediction-only (#5).
+func (c *Connection) SetEngagementOnly(v bool) {
+	c.isEngagementOnly = v
 }
 
 // Start starts the read and write pumps for the connection
