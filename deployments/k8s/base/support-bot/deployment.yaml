@@ -6,7 +6,7 @@ metadata:
   labels:
     app: support-bot
 spec:
-  replicas: 1
+  replicas: 1 # Only 1 replica to avoid duplicate Discord responses
   selector:
     matchLabels:
       app: support-bot
@@ -15,20 +15,26 @@ spec:
       labels:
         app: support-bot
     spec:
-      automountServiceAccountToken: false
+      # The read-only kubectl tool authenticates as this ServiceAccount (get/list/watch
+      # only — see caesar-deployment support-bot-rbac.yaml). The token is auto-mounted so
+      # kubectl uses in-cluster config.
+      serviceAccountName: support-bot
       securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
         seccompProfile:
           type: RuntimeDefault
       initContainers:
+        # The read tools (read_file/glob/grep) are jailed to these checkouts.
         - name: clone-all-chat
           image: alpine/git
           imagePullPolicy: IfNotPresent
           securityContext:
+            runAsNonRoot: false # alpine/git has no non-root user baked in
             allowPrivilegeEscalation: false
             capabilities:
-              drop:
-                - ALL
-            # readOnlyRootFilesystem omitted: git writes temp/credential state.
+              drop: ["ALL"]
           command: ['sh', '-c', 'git clone --depth 1 https://$GITHUB_TOKEN@github.com/$GITHUB_OWNER/all-chat.git /repos/all-chat']
           env:
             - name: GITHUB_TOKEN
@@ -37,7 +43,7 @@ spec:
                   name: allchat-secrets
                   key: SUPPORT_BOT_GITHUB_TOKEN
             - name: GITHUB_OWNER
-              value: "moersener"
+              value: "caesarakalaeii"
           volumeMounts:
             - name: all-chat-repo
               mountPath: /repos/all-chat
@@ -45,11 +51,10 @@ spec:
           image: alpine/git
           imagePullPolicy: IfNotPresent
           securityContext:
+            runAsNonRoot: false
             allowPrivilegeEscalation: false
             capabilities:
-              drop:
-                - ALL
-            # readOnlyRootFilesystem omitted: git writes temp/credential state.
+              drop: ["ALL"]
           command: ['sh', '-c', 'git clone --depth 1 https://$GITHUB_TOKEN@github.com/$GITHUB_OWNER/all-chat-extension.git /repos/all-chat-extension']
           env:
             - name: GITHUB_TOKEN
@@ -58,7 +63,7 @@ spec:
                   name: allchat-secrets
                   key: SUPPORT_BOT_GITHUB_TOKEN
             - name: GITHUB_OWNER
-              value: "moersener"
+              value: "caesarakalaeii"
           volumeMounts:
             - name: all-chat-extension-repo
               mountPath: /repos/all-chat-extension
@@ -67,40 +72,106 @@ spec:
           image: support-bot:latest
           imagePullPolicy: IfNotPresent
           securityContext:
-            # audit #29: enforce non-root on the secret-reading main container to
-            # restore the H6 invariant (the image already runs as `USER node`/uid
-            # 1000, so this is a guard, not a behavior change). NOT set pod-level
-            # because the alpine/git initContainers have no non-root user baked in
-            # and would crash; they keep root but drop ALL caps + no-privesc above.
             runAsNonRoot: true
             runAsUser: 1000
             allowPrivilegeEscalation: false
             capabilities:
-              drop:
-                - ALL
+              drop: ["ALL"]
             readOnlyRootFilesystem: true
           env:
+            # --- Discord ---
             - name: DISCORD_BOT_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: allchat-secrets
                   key: SUPPORT_BOT_DISCORD_TOKEN
-            - name: CLAUDE_CODE_OAUTH_TOKEN
+            - name: DISCORD_CLIENT_ID
+              value: "1485959612334346342"
+            - name: DISCORD_GUILD_ID
+              value: "1441528700259663884"
+            # --- Local LLM (OpenAI-compatible). Point BASE_URL at your in-cluster model
+            #     server; MODEL must be a model that server serves. API key optional. ---
+            - name: LOCAL_LLM_BASE_URL
+              value: "http://local-llm.allchat.svc.cluster.local:8000"
+            - name: LOCAL_LLM_MODEL
+              value: "REPLACE_WITH_SERVED_MODEL_NAME"
+            - name: LOCAL_LLM_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: allchat-secrets
-                  key: CLAUDE_CODE_OAUTH_TOKEN
+                  key: SUPPORT_BOT_LLM_API_KEY
+                  optional: true
+            # --- GitHub ---
             - name: GITHUB_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: allchat-secrets
                   key: SUPPORT_BOT_GITHUB_TOKEN
             - name: GITHUB_OWNER
-              value: "moersener"
+              value: "caesarakalaeii"
+            - name: GITHUB_BOT_LOGIN
+              value: "REPLACE_WITH_BOT_GITHUB_LOGIN"
             - name: ALL_CHAT_REPO_PATH
               value: "/repos/all-chat"
             - name: ALL_CHAT_EXTENSION_REPO_PATH
               value: "/repos/all-chat-extension"
+            # --- Access control ---
+            - name: LEAD_DEVELOPER_DISCORD_ID
+              value: "198569499228766208"
+            # Comma-separated Discord UIDs granted ADMIN (code-write via GitHub PRs +
+            # reviews). Everyone else is SUPPORT (read-only, redacted). Maintainers only.
+            - name: SUPPORT_BOT_ADMIN_DISCORD_IDS
+              value: "198569499228766208"
+            - name: MODERATION_GUILD_ID
+              value: "1441528700259663884"
+            # --- Grafana (Loki + Prometheus, read-only) ---
+            - name: GRAFANA_URL
+              value: "https://grafana.caes.ar"
+            - name: GRAFANA_SERVICE_ACCOUNT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: allchat-secrets
+                  key: SUPPORT_BOT_GRAFANA_TOKEN
+            # --- Kubernetes (read-only) ---
+            - name: KUBE_NAMESPACE
+              value: "allchat"
+            # --- Database (bot memory) ---
+            - name: DATABASE_HOST
+              value: "allchat-cluster-rw.allchat.svc.cluster.local"
+            - name: DATABASE_PORT
+              value: "5432"
+            - name: DATABASE_NAME
+              value: "allchat"
+            - name: DATABASE_USER
+              value: "allchat_user"
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: allchat-secrets
+                  key: database-password
+            # --- Runtime ---
+            - name: PORT
+              value: "8094"
+            - name: GIN_MODE
+              value: "release"
+            - name: HOME
+              value: "/tmp" # kubectl cache dir on the writable tmpfs
+          ports:
+            - name: http
+              containerPort: 8094
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8094
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8094
+            initialDelaySeconds: 5
+            periodSeconds: 15
           volumeMounts:
             - name: all-chat-repo
               mountPath: /repos/all-chat
