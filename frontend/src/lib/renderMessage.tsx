@@ -95,7 +95,7 @@ export function renderMessageContent(message: ChatMessage): React.ReactNode {
         <Image
           key={emote.key}
           src={emote.url}
-          alt={emote.code}
+          alt=""
           title={`${emote.code} (${emote.provider})`}
           width={28}
           height={28}
