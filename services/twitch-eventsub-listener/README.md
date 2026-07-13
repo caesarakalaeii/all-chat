@@ -21,6 +21,12 @@ The Twitch EventSub Listener connects to Twitch's EventSub WebSocket API to rece
 - Dynamic channel tracking (syncs from database every 30s)
 - Publishes events to Redis Streams (`chat:raw`)
 - Automatic reconnection with session resumption
+- **Source heartbeat**: bumps `overlay_chat_sources.updated_at` for every channel it holds
+  a live `channel.chat.message` subscription for, each sync tick (leader-gated), so the
+  source-manager cleanup job never marks an actively-delivered Twitch source stale. This
+  honors the heartbeat contract the YouTube/Kick listeners already follow (migration 059,
+  ADR-0032); before it, IRC-in-enforce-mode + no EventSub heartbeat meant Twitch sources
+  on always-open overlays were deactivated after 24h and their chat silently dropped.
 - Health check endpoints
 
 ## Supported Events

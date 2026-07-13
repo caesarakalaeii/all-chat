@@ -16,7 +16,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { ChatMessage } from '../types/message'
 
 // Mock fetch to simulate the Twitch badge API response.
@@ -73,6 +73,24 @@ describe('resolveTwitchBadgeIcons', () => {
       json: () => Promise.resolve(MOCK_GLOBAL_BADGE_RESPONSE),
     }))
   })
+
+  afterEach(() => {
+    // Always restore real timers so a fake-timer test can't leak into others.
+    vi.useRealTimers()
+  })
+
+  // Simulates the browser fetch abort contract: the request never settles on its
+  // own, but rejects with an AbortError as soon as its AbortSignal is aborted.
+  // This is what makes fetchBadgeSets' timeout observable in tests.
+  function makeHangingFetch() {
+    return vi.fn((_url: string, options?: { signal?: AbortSignal }) => {
+      return new Promise((_resolve, reject) => {
+        options?.signal?.addEventListener('abort', () => {
+          reject(new DOMException('The operation was aborted.', 'AbortError'))
+        })
+      })
+    })
+  }
 
   it('does not overwrite AllChat allchat badge icon_url with Twitch API data', async () => {
     const { resolveTwitchBadgeIcons } = await import('../twitchBadges')
@@ -162,5 +180,64 @@ describe('resolveTwitchBadgeIcons', () => {
 
     const result = await resolveTwitchBadgeIcons(message)
     expect(result).toBe(message) // exact same reference — no copy made
+  })
+
+  it('does not wedge when the badge fetch hangs — it aborts after the timeout and resolves', async () => {
+    vi.useFakeTimers()
+    const hangingFetch = makeHangingFetch()
+    vi.stubGlobal('fetch', hangingFetch)
+
+    const { resolveTwitchBadgeIcons, BADGE_FETCH_TIMEOUT_MS } = await import('../twitchBadges')
+
+    const message = makeTwitchMessage([{ name: 'moderator', version: '1', icon_url: '' }])
+    const resultPromise = resolveTwitchBadgeIcons(message)
+
+    // Drive the timeout deterministically past the abort deadline.
+    await vi.advanceTimersByTimeAsync(BADGE_FETCH_TIMEOUT_MS + 1)
+
+    // The call must resolve (not hang forever) even though fetch never responded.
+    const result = await resultPromise
+    expect(result).toBeDefined()
+
+    // Resolution failed, so badges are returned unmodified (icon_url stays empty).
+    const modBadge = result.user.badges.find((b) => b.name === 'moderator')
+    expect(modBadge).toBeDefined()
+    expect(modBadge!.icon_url).toBe('')
+
+    // fetch must have been given an AbortSignal so the timeout can cancel it.
+    expect(hangingFetch).toHaveBeenCalled()
+    const [, options] = hangingFetch.mock.calls[0]
+    expect(options).toEqual(expect.objectContaining({ signal: expect.anything() }))
+  })
+
+  it('self-heals after a hang: the next message issues a fresh fetch and resolves badges', async () => {
+    vi.useFakeTimers()
+    const hangingFetch = makeHangingFetch()
+    vi.stubGlobal('fetch', hangingFetch)
+
+    const { resolveTwitchBadgeIcons, BADGE_FETCH_TIMEOUT_MS } = await import('../twitchBadges')
+
+    // First message hangs, then times out.
+    const firstMessage = makeTwitchMessage([{ name: 'moderator', version: '1', icon_url: '' }])
+    const firstPromise = resolveTwitchBadgeIcons(firstMessage)
+    await vi.advanceTimersByTimeAsync(BADGE_FETCH_TIMEOUT_MS + 1)
+    const firstResult = await firstPromise
+    expect(firstResult.user.badges.find((b) => b.name === 'moderator')!.icon_url).toBe('')
+
+    // A healthy fetch is now available. Because the timed-out request did not
+    // poison inflightRequests (or badgeCache), the next call must issue a NEW
+    // fetch and successfully resolve the badge icon.
+    const healthyFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(MOCK_GLOBAL_BADGE_RESPONSE),
+    })
+    vi.stubGlobal('fetch', healthyFetch)
+
+    const secondMessage = makeTwitchMessage([{ name: 'moderator', version: '1', icon_url: '' }])
+    const secondResult = await resolveTwitchBadgeIcons(secondMessage)
+
+    const modBadge = secondResult.user.badges.find((b) => b.name === 'moderator')
+    expect(modBadge!.icon_url).toBe('https://cdn.twitch.tv/badges/mod/1x.png')
+    expect(healthyFetch).toHaveBeenCalled()
   })
 })
