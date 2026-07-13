@@ -158,8 +158,16 @@ func main() {
 	tokenRepo := repository.NewTokenRepository(db, encryptor, log)
 
 	refreshInterval := getDuration("TOKEN_REFRESH_INTERVAL", 5*time.Minute)
-	expiryBuffer := getDuration("TOKEN_REFRESH_BUFFER", 10*time.Minute)
-	batchSize := getInt("TOKEN_REFRESH_BATCH_SIZE", 100)
+	// Refresh well before expiry: a small buffer (was 10m) left almost no slack, so
+	// a token skipped for even a couple of batches during a synchronized herd lapsed.
+	// 30m is safely below the shortest access-token lifetime (~1h for Google/YouTube)
+	// yet gives multi-batch slack for the ~4h Twitch tokens. Prioritisation of active
+	// chat-scoped streamers (see QueryGetExpiringUserTokens) is the primary anti-starvation fix.
+	expiryBuffer := getDuration("TOKEN_REFRESH_BUFFER", 30*time.Minute)
+	// Cap on tokens pulled per type per batch (wired into the queries' LIMIT). Raised
+	// from 100 so an hourly herd of expiring tokens fits in one pass instead of being
+	// truncated and starving whatever sorts last.
+	batchSize := getInt("TOKEN_REFRESH_BATCH_SIZE", 250)
 	retryAttempts := getInt("TOKEN_REFRESH_RETRY_ATTEMPTS", 3)
 
 	refreshManager := refresher.NewManager(

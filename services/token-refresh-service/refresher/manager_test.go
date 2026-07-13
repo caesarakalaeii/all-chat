@@ -92,13 +92,13 @@ type updatedTwitchLinkCall struct {
 	twitchLogin string
 }
 
-func (r *fakeRepo) GetExpiringUserTokens(_ context.Context, _ time.Duration) ([]*repository.ExpiringToken, error) {
+func (r *fakeRepo) GetExpiringUserTokens(_ context.Context, _ time.Duration, _ int) ([]*repository.ExpiringToken, error) {
 	return nil, nil
 }
-func (r *fakeRepo) GetExpiringViewerTokens(_ context.Context, _ time.Duration) ([]*repository.ExpiringToken, error) {
+func (r *fakeRepo) GetExpiringViewerTokens(_ context.Context, _ time.Duration, _ int) ([]*repository.ExpiringToken, error) {
 	return nil, nil
 }
-func (r *fakeRepo) GetExpiringYouTubeTokens(_ context.Context, _ time.Duration) ([]*repository.ExpiringToken, error) {
+func (r *fakeRepo) GetExpiringYouTubeTokens(_ context.Context, _ time.Duration, _ int) ([]*repository.ExpiringToken, error) {
 	return nil, nil
 }
 func (r *fakeRepo) UpdateUserTokens(_ context.Context, _ string, _ *oauth2.Token) error {
@@ -132,7 +132,7 @@ func (r *fakeRepo) MarkYouTubeTokenPermanentlyFailed(_ context.Context, userID, 
 	r.markedYT = append(r.markedYT, markedYTCall{userID: userID, channelID: channelID, suppressDuration: d})
 	return nil
 }
-func (r *fakeRepo) GetExpiringTwitchLinkTokens(_ context.Context, _ time.Duration) ([]*repository.ExpiringToken, error) {
+func (r *fakeRepo) GetExpiringTwitchLinkTokens(_ context.Context, _ time.Duration, _ int) ([]*repository.ExpiringToken, error) {
 	return nil, nil
 }
 func (r *fakeRepo) UpdateTwitchLinkTokens(_ context.Context, userID, twitchLogin string, _ *oauth2.Token) error {
