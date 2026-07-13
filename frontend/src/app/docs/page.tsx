@@ -105,6 +105,7 @@ function DevCallout({ children }: { children: ReactNode }) {
 const toc = [
   ['what-is-all-chat', 'What is All-Chat'],
   ['getting-started', 'Get your overlay live'],
+  ['24-7-irl', '24/7 & IRL streams'],
   ['themes', 'Pick a theme'],
   ['customize', 'Make it your own'],
   ['custom-css', 'Go further with CSS'],
@@ -184,6 +185,46 @@ export default function DocsPage() {
                   winds down when nothing is connected, so you never pay for idle listeners.
                 </li>
               </ol>
+            </section>
+
+            {/* 24/7 & IRL streams */}
+            <section id="24-7-irl">
+              <h2>24/7 &amp; IRL streams</h2>
+              <p>
+                Running an OBS instance around the clock — a common setup for IRL streamers who want
+                disconnect protection — needs one extra step so YouTube chat behaves. Add{' '}
+                <Code>?passive=true</Code> to your overlay&apos;s browser-source URL:
+              </p>
+              <Pre>{`https://allch.at/overlay/<overlay-id>?passive=true`}</Pre>
+              <p>
+                A <strong>passive</strong> overlay renders chat exactly like a normal one, but it does
+                not ask All-Chat to start capturing on its own. That matters because YouTube discovery
+                gives up after an hour of not finding a live stream (so it never hammers YouTube for an
+                offline channel). A normal 24/7 overlay would trip that timeout while you are offline
+                and sit parked by the time you go live — a passive overlay never starts that clock, so
+                nothing gets stuck.
+              </p>
+              <h3>When you go live</h3>
+              <ol className="list-decimal space-y-2 pl-6 text-text-sub">
+                <li>Leave your 24/7 OBS browser source on the passive URL.</li>
+                <li>
+                  Open your overlay&apos;s <strong>chat monitor</strong> (the monitor / view page).
+                </li>
+                <li>
+                  If chat is not already flowing, hit <strong>Rediscover</strong> on the monitor —
+                  capture starts within about a minute.
+                </li>
+                <li>
+                  Keep the chat monitor open while you stream; that keeps capture running for the
+                  session, and it winds down a few minutes after you close it.
+                </li>
+              </ol>
+              <p>
+                A plain browser-source refresh does <em>not</em> restart a parked YouTube channel — use
+                the monitor&apos;s <strong>Rediscover</strong> button. While a channel is parked, its
+                platform dot shows an <strong>indigo &ldquo;paused&rdquo;</strong> state (waiting for
+                you to trigger it), not a red error.
+              </p>
             </section>
 
             {/* Themes */}
