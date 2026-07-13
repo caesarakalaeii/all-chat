@@ -137,7 +137,7 @@ export interface PlatformStatus {
   platform: 'youtube' | 'twitch' | 'kick' | 'tiktok' | 'discord';
   channel_id: string;
   channel_name?: string;
-  status: 'connected' | 'reconnecting' | 'offline' | 'quota_exceeded' | 'error';
+  status: 'connected' | 'reconnecting' | 'offline' | 'quota_exceeded' | 'error' | 'paused';
   next_retry_at?: string; // ISO 8601 timestamp
   error_message?: string;
 }

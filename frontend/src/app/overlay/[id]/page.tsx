@@ -271,10 +271,19 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
     })
   }, [])
 
+  // Render-only "disconnect-protection" mode (?passive=true): a 24/7 OBS instance
+  // stays connected for rendering but does NOT assert overlay demand, so it never
+  // starts YouTube discovery (and the 1h give-up) while the streamer is offline.
+  // Discovery is triggered on demand from the chat monitor when they go live.
+  const [passive] = useState(
+    () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('passive') === 'true'
+  )
+
   const { config, sources, activeChannels, channelStatuses } = useOverlayStream(id, {
     onChat,
     onMessageUpdate,
     onDeletion,
+    passive,
   })
 
   // Interpret the public config into display state + sound/TTS hydration. Runs

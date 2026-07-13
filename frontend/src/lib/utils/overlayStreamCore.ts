@@ -184,7 +184,11 @@ export function platformStatusReducer(
       activeChannels = new Set(activeChannels)
       activeChannels.add(channelId)
     }
-  } else if (statusData.status === 'offline' || statusData.status === 'error') {
+  } else if (
+    statusData.status === 'offline' ||
+    statusData.status === 'error' ||
+    statusData.status === 'paused'
+  ) {
     if (activeChannels.has(channelId)) {
       activeChannels = new Set(activeChannels)
       activeChannels.delete(channelId)
