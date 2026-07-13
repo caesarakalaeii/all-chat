@@ -553,12 +553,15 @@ func (m *Manager) giveUpDiscovery(state *DiscoveryState) {
 
 	ctx := context.Background()
 
-	// Surface an error on the platform indicator.
+	// Surface a distinct "paused" state (not a generic error): discovery is
+	// intentionally parked until re-triggered, so the indicator must read as "action
+	// needed" rather than "broken". Point the streamer at the chat monitor's
+	// Rediscover — a plain overlay refresh does NOT clear the give-up marker.
 	m.statusPublisher.Publish(ctx, status.Message{
 		Platform:     "youtube",
 		ChannelID:    state.ChannelID,
-		Status:       "error",
-		ErrorMessage: "No live stream found after 1h — refresh your overlay to retry",
+		Status:       "paused",
+		ErrorMessage: "No live stream found after 1h — discovery paused; hit Rediscover in your chat monitor when you go live",
 	})
 
 	// Mark gave-up first, then drop the in-progress reservation, so there is no

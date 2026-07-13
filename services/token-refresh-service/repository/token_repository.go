@@ -47,8 +47,12 @@ const QueryGetExpiringUserTokens = `
 	  AND refresh_token IS NOT NULL
 	  AND refresh_token != ''
 	  AND is_banned = false
-	ORDER BY token_expires_at ASC
-	LIMIT 100
+	-- Prioritise active EventSub streamers (tokens carrying the live chat scope) so a
+	-- synchronized herd of dormant/expiring tokens can never starve a live channel's
+	-- token out of the LIMITed batch and let it lapse mid-stream.
+	ORDER BY (COALESCE(granted_scopes, '{}'::text[]) @> ARRAY['user:read:chat']::text[]) DESC,
+	         token_expires_at ASC
+	LIMIT $2
 `
 
 // QueryGetExpiringViewerTokens is exported for test assertions.
@@ -63,7 +67,7 @@ const QueryGetExpiringViewerTokens = `
 	  AND refresh_token IS NOT NULL
 	  AND refresh_token != ''
 	ORDER BY token_expires_at ASC
-	LIMIT 100
+	LIMIT $2
 `
 
 // QueryGetExpiringYouTubeTokens is exported for test assertions.
@@ -77,7 +81,7 @@ const QueryGetExpiringYouTubeTokens = `
 	  AND refresh_token IS NOT NULL
 	  AND refresh_token != ''
 	ORDER BY expiry ASC
-	LIMIT 100
+	LIMIT $2
 `
 
 // QueryGetExpiringTwitchLinkTokens selects expiring linked Twitch credentials
@@ -94,7 +98,7 @@ const QueryGetExpiringTwitchLinkTokens = `
 	  AND refresh_token IS NOT NULL
 	  AND refresh_token != ''
 	ORDER BY token_expires_at ASC
-	LIMIT 100
+	LIMIT $2
 `
 
 // ExpiringToken represents a token that needs to be refreshed
@@ -134,9 +138,9 @@ func NewTokenRepository(db *pgxpool.Pool, cipher *encryption.MultiKeyEncryptor, 
 // Also recovers already-expired tokens within the last 48 hours to handle transient
 // failures. Tokens older than 48 hours are excluded — they are considered permanently
 // failed and should have been suppressed by MarkUserTokenPermanentlyFailed.
-func (r *TokenRepository) GetExpiringUserTokens(ctx context.Context, expiresWithin time.Duration) ([]*ExpiringToken, error) {
+func (r *TokenRepository) GetExpiringUserTokens(ctx context.Context, expiresWithin time.Duration, limit int) ([]*ExpiringToken, error) {
 	expiryThreshold := time.Now().Add(expiresWithin)
-	rows, err := r.db.Query(ctx, QueryGetExpiringUserTokens, expiryThreshold)
+	rows, err := r.db.Query(ctx, QueryGetExpiringUserTokens, expiryThreshold, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query expiring user tokens: %w", err)
 	}
@@ -194,9 +198,9 @@ func (r *TokenRepository) GetExpiringUserTokens(ctx context.Context, expiresWith
 // GetExpiringViewerTokens returns viewer session tokens expiring within the specified duration.
 // Only recovers tokens that expired within the last 48 hours. Older expired tokens are
 // assumed to have been permanently failed and suppressed via MarkViewerTokenPermanentlyFailed.
-func (r *TokenRepository) GetExpiringViewerTokens(ctx context.Context, expiresWithin time.Duration) ([]*ExpiringToken, error) {
+func (r *TokenRepository) GetExpiringViewerTokens(ctx context.Context, expiresWithin time.Duration, limit int) ([]*ExpiringToken, error) {
 	expiryThreshold := time.Now().Add(expiresWithin)
-	rows, err := r.db.Query(ctx, QueryGetExpiringViewerTokens, expiryThreshold)
+	rows, err := r.db.Query(ctx, QueryGetExpiringViewerTokens, expiryThreshold, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query expiring viewer tokens: %w", err)
 	}
@@ -259,9 +263,9 @@ func (r *TokenRepository) GetExpiringViewerTokens(ctx context.Context, expiresWi
 // GetExpiringYouTubeTokens returns YouTube channel tokens expiring within the specified duration.
 // Only recovers tokens that expired within the last 48 hours. Older expired tokens are
 // assumed to have been permanently failed and suppressed via MarkYouTubeTokenPermanentlyFailed.
-func (r *TokenRepository) GetExpiringYouTubeTokens(ctx context.Context, expiresWithin time.Duration) ([]*ExpiringToken, error) {
+func (r *TokenRepository) GetExpiringYouTubeTokens(ctx context.Context, expiresWithin time.Duration, limit int) ([]*ExpiringToken, error) {
 	expiryThreshold := time.Now().Add(expiresWithin)
-	rows, err := r.db.Query(ctx, QueryGetExpiringYouTubeTokens, expiryThreshold)
+	rows, err := r.db.Query(ctx, QueryGetExpiringYouTubeTokens, expiryThreshold, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query expiring YouTube tokens: %w", err)
 	}
@@ -514,9 +518,9 @@ func (r *TokenRepository) MarkYouTubeTokenPermanentlyFailed(ctx context.Context,
 // twitch_oauth_tokens) expiring within the specified duration. These rows
 // carry the EventSub chat grant of accounts whose login provider is not
 // Twitch; letting them lapse silently demotes the channel to the IRC listener.
-func (r *TokenRepository) GetExpiringTwitchLinkTokens(ctx context.Context, expiresWithin time.Duration) ([]*ExpiringToken, error) {
+func (r *TokenRepository) GetExpiringTwitchLinkTokens(ctx context.Context, expiresWithin time.Duration, limit int) ([]*ExpiringToken, error) {
 	expiryThreshold := time.Now().Add(expiresWithin)
-	rows, err := r.db.Query(ctx, QueryGetExpiringTwitchLinkTokens, expiryThreshold)
+	rows, err := r.db.Query(ctx, QueryGetExpiringTwitchLinkTokens, expiryThreshold, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query expiring linked Twitch tokens: %w", err)
 	}

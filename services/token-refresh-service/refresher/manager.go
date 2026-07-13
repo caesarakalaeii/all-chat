@@ -37,10 +37,10 @@ import (
 // TokenRepo is the repository interface used by the Manager. Defining it here
 // keeps the refresher package testable without a real database.
 type TokenRepo interface {
-	GetExpiringUserTokens(ctx context.Context, expiresWithin time.Duration) ([]*repository.ExpiringToken, error)
-	GetExpiringViewerTokens(ctx context.Context, expiresWithin time.Duration) ([]*repository.ExpiringToken, error)
-	GetExpiringYouTubeTokens(ctx context.Context, expiresWithin time.Duration) ([]*repository.ExpiringToken, error)
-	GetExpiringTwitchLinkTokens(ctx context.Context, expiresWithin time.Duration) ([]*repository.ExpiringToken, error)
+	GetExpiringUserTokens(ctx context.Context, expiresWithin time.Duration, limit int) ([]*repository.ExpiringToken, error)
+	GetExpiringViewerTokens(ctx context.Context, expiresWithin time.Duration, limit int) ([]*repository.ExpiringToken, error)
+	GetExpiringYouTubeTokens(ctx context.Context, expiresWithin time.Duration, limit int) ([]*repository.ExpiringToken, error)
+	GetExpiringTwitchLinkTokens(ctx context.Context, expiresWithin time.Duration, limit int) ([]*repository.ExpiringToken, error)
 
 	UpdateUserTokens(ctx context.Context, userID string, token *oauth2Lib.Token) error
 	UpdateViewerTokens(ctx context.Context, sessionID string, token *oauth2Lib.Token) error
@@ -196,22 +196,22 @@ func (m *Manager) ProcessBatch(ctx context.Context) error {
 	m.logger.Info("Processing token refresh batch")
 
 	// Query expiring tokens from all sources
-	userTokens, err := m.repo.GetExpiringUserTokens(ctx, m.expiryBuffer)
+	userTokens, err := m.repo.GetExpiringUserTokens(ctx, m.expiryBuffer, m.batchSize)
 	if err != nil {
 		return fmt.Errorf("failed to get expiring user tokens: %w", err)
 	}
 
-	viewerTokens, err := m.repo.GetExpiringViewerTokens(ctx, m.expiryBuffer)
+	viewerTokens, err := m.repo.GetExpiringViewerTokens(ctx, m.expiryBuffer, m.batchSize)
 	if err != nil {
 		return fmt.Errorf("failed to get expiring viewer tokens: %w", err)
 	}
 
-	youtubeTokens, err := m.repo.GetExpiringYouTubeTokens(ctx, m.expiryBuffer)
+	youtubeTokens, err := m.repo.GetExpiringYouTubeTokens(ctx, m.expiryBuffer, m.batchSize)
 	if err != nil {
 		return fmt.Errorf("failed to get expiring YouTube tokens: %w", err)
 	}
 
-	twitchLinkTokens, err := m.repo.GetExpiringTwitchLinkTokens(ctx, m.expiryBuffer)
+	twitchLinkTokens, err := m.repo.GetExpiringTwitchLinkTokens(ctx, m.expiryBuffer, m.batchSize)
 	if err != nil {
 		return fmt.Errorf("failed to get expiring linked Twitch tokens: %w", err)
 	}

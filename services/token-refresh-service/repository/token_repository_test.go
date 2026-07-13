@@ -58,6 +58,37 @@ func TestGetExpiringYouTubeTokens_QueryHasBoundedRecoveryWindow(t *testing.T) {
 	assertBoundedRecoveryWindow(t, "GetExpiringYouTubeTokens", q)
 }
 
+// TestGetExpiringUserTokens_PrioritisesActiveChatScope guards the anti-starvation
+// fix: active EventSub streamers (tokens carrying user:read:chat) must sort ahead of
+// dormant tokens so a synchronized herd of expiring tokens cannot push a live
+// channel's token out of the LIMITed batch and let it lapse mid-stream.
+func TestGetExpiringUserTokens_PrioritisesActiveChatScope(t *testing.T) {
+	q := repository.QueryGetExpiringUserTokens
+	if !contains(q, "user:read:chat") {
+		t.Errorf("GetExpiringUserTokens: query no longer prioritises active chat-scoped streamers — expected an ORDER BY keyed on user:read:chat")
+	}
+}
+
+// TestExpiringQueries_LimitIsParameterised guards that the per-type per-batch cap is
+// wired to the configurable batch size ($N) rather than hardcoded to 100, which
+// previously truncated the hourly herd and starved whatever sorted last.
+func TestExpiringQueries_LimitIsParameterised(t *testing.T) {
+	queries := map[string]string{
+		"GetExpiringUserTokens":       repository.QueryGetExpiringUserTokens,
+		"GetExpiringViewerTokens":     repository.QueryGetExpiringViewerTokens,
+		"GetExpiringYouTubeTokens":    repository.QueryGetExpiringYouTubeTokens,
+		"GetExpiringTwitchLinkTokens": repository.QueryGetExpiringTwitchLinkTokens,
+	}
+	for name, q := range queries {
+		if contains(q, "LIMIT 100") {
+			t.Errorf("%s: query still hardcodes LIMIT 100 — wire it to the configurable batch size", name)
+		}
+		if !contains(q, "LIMIT $") {
+			t.Errorf("%s: query LIMIT is not parameterised ($N) — expected a bind-parameter limit", name)
+		}
+	}
+}
+
 // TestMarkUserTokenPermanentlyFailed_ExistsOnRepository verifies that the repository
 // exposes the MarkUserTokenPermanentlyFailed method. Compilation of this file is the
 // assertion — if the method does not exist the package will not compile.

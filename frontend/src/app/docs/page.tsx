@@ -105,10 +105,17 @@ function DevCallout({ children }: { children: ReactNode }) {
 const toc = [
   ['what-is-all-chat', 'What is All-Chat'],
   ['getting-started', 'Get your overlay live'],
+  ['24-7-irl', '24/7 & IRL streams'],
+  ['monitor', 'The chat monitor'],
+  ['moderation', 'Moderate your chat'],
+  ['engagement', 'Polls, predictions & points'],
+  ['events-credits', 'Events & credit roll'],
+  ['sharing', 'Share an overlay'],
   ['themes', 'Pick a theme'],
   ['customize', 'Make it your own'],
   ['custom-css', 'Go further with CSS'],
   ['fonts', 'Custom fonts'],
+  ['premium', 'Premium'],
 ]
 
 export default function DocsPage() {
@@ -123,7 +130,8 @@ export default function DocsPage() {
             </p>
             <h1 className="text-3xl font-bold text-text">Streamer guide</h1>
             <p className="text-sm text-text-dim">
-              Get your overlay into OBS, choose a look, and make it your own.
+              Set it up in OBS, run polls, predictions and moderation from the chat monitor, and make
+              it your own.
             </p>
             <p className="text-sm text-text-sub">
               Building a bot, alert box, or analytics tool?{' '}
@@ -184,6 +192,149 @@ export default function DocsPage() {
                   winds down when nothing is connected, so you never pay for idle listeners.
                 </li>
               </ol>
+            </section>
+
+            {/* 24/7 & IRL streams */}
+            <section id="24-7-irl">
+              <h2>24/7 &amp; IRL streams</h2>
+              <p>
+                Running an OBS instance around the clock — a common setup for IRL streamers who want
+                disconnect protection — needs one extra step so YouTube chat behaves. Add{' '}
+                <Code>?passive=true</Code> to your overlay&apos;s browser-source URL:
+              </p>
+              <Pre>{`https://allch.at/overlay/<overlay-id>?passive=true`}</Pre>
+              <p>
+                A <strong>passive</strong> overlay renders chat exactly like a normal one, but it does
+                not ask All-Chat to start capturing on its own. That matters because YouTube discovery
+                gives up after an hour of not finding a live stream (so it never hammers YouTube for an
+                offline channel). A normal 24/7 overlay would trip that timeout while you are offline
+                and sit parked by the time you go live — a passive overlay never starts that clock, so
+                nothing gets stuck.
+              </p>
+              <h3>When you go live</h3>
+              <ol className="list-decimal space-y-2 pl-6 text-text-sub">
+                <li>Leave your 24/7 OBS browser source on the passive URL.</li>
+                <li>
+                  Open your overlay&apos;s <strong>chat monitor</strong> (the monitor / view page).
+                </li>
+                <li>
+                  If chat is not already flowing, hit <strong>Rediscover</strong> on the monitor —
+                  capture starts within about a minute.
+                </li>
+                <li>
+                  Keep the chat monitor open while you stream; that keeps capture running for the
+                  session, and it winds down a few minutes after you close it.
+                </li>
+              </ol>
+              <p>
+                A plain browser-source refresh does <em>not</em> restart a parked YouTube channel — use
+                the monitor&apos;s <strong>Rediscover</strong> button. While a channel is parked, its
+                platform dot shows an <strong>indigo &ldquo;paused&rdquo;</strong> state (waiting for
+                you to trigger it), not a red error.
+              </p>
+            </section>
+
+            {/* Chat monitor */}
+            <section id="monitor">
+              <h2>The chat monitor</h2>
+              <p>
+                Open <strong>Monitor View</strong> from the overlay editor for a live control room,
+                separate from the OBS overlay. It shows every message in one panel with an activity
+                feed beside it, and it&apos;s where you send messages and moderate.
+              </p>
+              <ul>
+                <li>
+                  <strong>Send messages</strong> as yourself to Twitch, YouTube or Kick straight from
+                  the monitor (TikTok and Discord have no send API).
+                </li>
+                <li>
+                  <strong>Re-discover YouTube</strong> forces a fresh look for your live stream — use
+                  it if YouTube chat stops after a crash or restart, or to start capture for a{' '}
+                  <a href="#24-7-irl">passive 24/7 overlay</a> when you go live.
+                </li>
+                <li>
+                  <strong>Display</strong> settings toggle what you see (avatars, badges, pronouns,
+                  timestamps, platform icons, moderation controls). These are your personal monitor
+                  preferences and don&apos;t change the OBS overlay.
+                </li>
+              </ul>
+            </section>
+
+            {/* Moderation */}
+            <section id="moderation">
+              <h2>Moderate your chat</h2>
+              <p>
+                With <strong>Moderation controls</strong> on in the monitor, hover a message to{' '}
+                <strong>Delete</strong> it, or open a chatter to <strong>Timeout</strong>,{' '}
+                <strong>Ban</strong> or <strong>Unban</strong> them — applied on the source platform.
+                What&apos;s available depends on the platform (Twitch does delete, timeout and ban;
+                YouTube is ban-only; TikTok has no moderation API).
+              </p>
+              <p>
+                The first time, use <strong>Enable moderation &amp; chat sending</strong> to grant the
+                extra permissions (for Discord you re-invite the bot). Moderating from your overlay is
+                a <a href="#premium">Premium</a> feature.
+              </p>
+            </section>
+
+            {/* Engagement */}
+            <section id="engagement">
+              <h2>Polls, predictions &amp; points</h2>
+              <p>
+                All-Chat has its own <strong>polls</strong>, <strong>predictions</strong> and{' '}
+                <strong>viewer points</strong> that work across every connected platform, not just
+                Twitch.
+              </p>
+              <ul>
+                <li>
+                  Turn them on in the editor&apos;s <strong>Engagement</strong> section:{' '}
+                  <strong>Enable viewer points</strong>, set your <strong>Points name</strong>, and
+                  choose how points are earned (per bit, per sub, per gifted sub, and so on).
+                </li>
+                <li>
+                  Run rounds live from the monitor&apos;s <strong>Engagement</strong> panel:{' '}
+                  <strong>Start poll</strong> / <strong>Close poll</strong>, and{' '}
+                  <strong>Start prediction</strong> / <strong>Lock wagers</strong> / pay out or{' '}
+                  <strong>Cancel &amp; refund</strong>.
+                </li>
+                <li>
+                  Viewers join from chat (e.g. <Code>!vote 2</Code>, <Code>!predict 1 500</Code>) or on
+                  the <strong>Viewer participation page</strong>.
+                </li>
+                <li>
+                  Add the <strong>OBS poll widget</strong> and <strong>OBS prediction widget</strong>{' '}
+                  as their own browser sources so results show on stream — copy their URLs from the
+                  Engagement section.
+                </li>
+              </ul>
+            </section>
+
+            {/* Events & credit roll */}
+            <section id="events-credits">
+              <h2>Events &amp; credit roll</h2>
+              <p>
+                Your overlay shows <strong>events</strong> too — subs, resubs, gift subs, bits/cheers,
+                raids, Super Chats, memberships and follows. Use <strong>Event Settings</strong> in the
+                editor to choose exactly which events appear, per platform.
+              </p>
+              <p>
+                For the end of a stream, open <strong>Credits</strong> to set up a{' '}
+                <strong>Credit Roll</strong> — a scrolling thank-you of your top subscribers, gifters,
+                cheerers, raiders and new followers. It&apos;s its own browser source (
+                <strong>Copy Credits OBS URL</strong>).
+              </p>
+            </section>
+
+            {/* Share an overlay */}
+            <section id="sharing">
+              <h2>Share an overlay</h2>
+              <p>
+                <strong>Share Overlay</strong> lets another streamer pull your overlay&apos;s chat into
+                theirs — handy for collabs and raids. Send a request to their Twitch username; once
+                they accept, your overlay appears in their editor under <strong>Shared Overlays</strong>{' '}
+                to add as a source, and either of you can revoke it later. Sharing is a{' '}
+                <a href="#premium">Premium</a> feature.
+              </p>
             </section>
 
             {/* Themes */}
@@ -343,6 +494,35 @@ export default function DocsPage() {
                 Requesting a family that isn&apos;t on the list simply won&apos;t load — pick another
                 or leave the default.
               </p>
+            </section>
+
+            {/* Premium */}
+            <section id="premium">
+              <h2>Premium</h2>
+              <p>
+                All-Chat is free and open source. A Premium subscription — via Patreon, connected in{' '}
+                <strong>Settings → Premium</strong> — unlocks:
+              </p>
+              <ul>
+                <li>
+                  <strong>Moderate from your overlay</strong> — delete, timeout and ban from the chat
+                  monitor.
+                </li>
+                <li>
+                  <strong>ElevenLabs text-to-speech</strong> — premium TTS voices (basic browser TTS is
+                  free).
+                </li>
+                <li>
+                  <strong>YouTube stream selection</strong> — choose which stream to follow on
+                  multi-stream channels (the free default follows the first one found).
+                </li>
+                <li>
+                  <strong>Shared chat</strong> — share your overlay with other streamers.
+                </li>
+                <li>
+                  <strong>Viewer flairs</strong> — animated gradient name colors.
+                </li>
+              </ul>
             </section>
           </div>
 
