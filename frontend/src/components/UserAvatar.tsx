@@ -19,6 +19,8 @@
  */
 
 
+import { useState } from 'react'
+
 export interface UserAvatarProps {
   avatarUrl?: string
   frameUrl?: string
@@ -32,15 +34,24 @@ export function UserAvatar({ avatarUrl, frameUrl, flairUrl, size, displayName }:
   const flairSize = Math.round(size * 0.4)
   const initials = displayName ? displayName.charAt(0).toUpperCase() : '?'
 
+  // Fall back to initials when the avatar image can't be displayed (e.g. a
+  // dead/placeholder TikTok CDN URL). Tracking the failed URL — rather than a
+  // plain boolean — resets the fallback automatically when the component is
+  // reused for a different avatar.
+  const [failedUrl, setFailedUrl] = useState<string | null>(null)
+  const showImage = Boolean(avatarUrl) && failedUrl !== avatarUrl
+
   return (
     <div className="relative" style={{ width: size, height: size, overflow: 'visible' }}>
       {/* Base avatar */}
-      {avatarUrl ? (
+      {showImage ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={avatarUrl}
           alt={displayName ?? 'Avatar'}
           className="w-full h-full rounded-full object-cover"
+          referrerPolicy="no-referrer"
+          onError={() => setFailedUrl(avatarUrl ?? null)}
         />
       ) : (
         <div

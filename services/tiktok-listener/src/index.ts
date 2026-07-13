@@ -58,6 +58,7 @@ import { LeadershipCoordinator } from './coordination/leadership.js';
 
 // Import demand subscriber (Phase 5)
 import { DemandSubscriber, DemandSource } from './demand/subscriber.js';
+import { tiktokAvatarUrl } from './avatar.js';
 
 // Environment variables
 const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
@@ -181,7 +182,12 @@ interface TikTokUser {
   id?: string; // numeric user id (was `userId`)
   nickname?: string; // display name
   displayId?: string; // @handle (was `uniqueId`)
-  avatarThumb?: TikTokImageModel; // profile picture (was `profilePictureUrl`)
+  // Profile picture image models, smallest → largest (was `profilePictureUrl`).
+  // TikTok populates these inconsistently per message, so avatar selection
+  // falls through thumb → medium → large; see tiktokAvatarUrl in ./avatar.
+  avatarThumb?: TikTokImageModel;
+  avatarMedium?: TikTokImageModel;
+  avatarLarge?: TikTokImageModel;
 }
 
 // Per-message relationship flags relative to the broadcasting anchor.
@@ -232,11 +238,6 @@ interface TikTokSocialData {
 // Reads the TikTok @handle, falling back to the numeric id then a placeholder.
 function tiktokUserHandle(user: TikTokUser | undefined): string {
   return user?.displayId || user?.id || 'unknown';
-}
-
-// Reads the profile picture URL from the v3 avatar image model.
-function tiktokAvatarUrl(user: TikTokUser | undefined): string {
-  return user?.avatarThumb?.urlList?.[0] || '';
 }
 
 // Like aggregation window for tracking likes over 30-second periods
