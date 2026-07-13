@@ -65,6 +65,14 @@ export interface UseOverlayStreamOptions {
    * A late-hydrated token rebinds the socket once.
    */
   token?: string
+  /**
+   * Render-only ("disconnect-protection") mode: appends `&passive=true` so the
+   * gateway attaches the socket WITHOUT asserting overlay demand. A 24/7 OBS
+   * instance can stay connected without keeping YouTube discovery running (and
+   * getting parked after the 1h give-up); the streamer triggers discovery from
+   * their chat monitor when they go live. Chat still renders normally.
+   */
+  passive?: boolean
   /** Enriched, deduped regular chat message (no event, or a non-deletion event). */
   onChat?: (message: ChatMessage) => void
   /** Enriched TikTok like-aggregate update (no dedup — may repeat by aggregation_id). */
@@ -199,6 +207,9 @@ export function useOverlayStream(
     const params: string[] = []
     if (lastSeenTimestampRef.current > 0) {
       params.push(`since=${lastSeenTimestampRef.current}`)
+    }
+    if (options.passive) {
+      params.push('passive=true')
     }
     if (params.length > 0) {
       wsUrl += `?${params.join('&')}`
@@ -394,7 +405,7 @@ export function useOverlayStream(
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `sources` captured at bind time by design; reconnect bookkeeping lives in refs
-  }, [id, forceReconnect, options.token])
+  }, [id, forceReconnect, options.token, options.passive])
 
   // Recover instantly when the environment signals the network is usable again:
   // the OS reports connectivity (`online`) or the streamer refocuses a

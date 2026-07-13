@@ -187,6 +187,14 @@ export default function PlatformStatusIndicators({
             tooltipText = status.error_message
               ? `${platformLabel} - ${source.channelName} - ${status.error_message}`
               : `${platformLabel} - ${source.channelName} - Error`
+          } else if (status.status === 'paused') {
+            // Discovery gave up after the 1h cap and is parked awaiting a manual
+            // re-trigger (chat monitor → Rediscover). Distinct from a red error:
+            // nothing is broken, an action is needed.
+            statusClass = 'bg-indigo-500/20 opacity-100 border border-indigo-500/40'
+            tooltipText = status.error_message
+              ? `${platformLabel} - ${source.channelName} - ${status.error_message}`
+              : `${platformLabel} - ${source.channelName} - Discovery paused (use chat monitor to retry)`
           } else if (status.status === 'offline') {
             // Check if offline is due to auth error
             const isAuthError =
