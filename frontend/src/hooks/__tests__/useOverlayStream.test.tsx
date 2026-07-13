@@ -278,6 +278,45 @@ describe('useOverlayStream — message routing', () => {
     expect(result.current.channelStatuses.get('c1')?.status).toBe('connected')
   })
 
+  it('self-heals: reconnects to replay when a source recovers from a down state, but not on initial connect', async () => {
+    vi.useFakeTimers()
+    renderHook(() => useOverlayStream('o1', {}))
+    await act(async () => {
+      latest().simulateOpen()
+    })
+    expect(MockWebSocket.instances).toHaveLength(1)
+
+    // Initial 'connected' establishes the source — it must NOT trigger a reconnect
+    // (otherwise every fresh overlay load would immediately reconnect).
+    await act(async () => {
+      latest().simulateMessage({
+        type: 'platform_status',
+        data: { platform: 'twitch', channel_id: 'c1', status: 'connected' },
+      })
+      await vi.advanceTimersByTimeAsync(100)
+    })
+    expect(MockWebSocket.instances).toHaveLength(1)
+
+    // Source drops (transport stays alive; the silence watchdog cannot see this)...
+    await act(async () => {
+      latest().simulateMessage({
+        type: 'platform_status',
+        data: { platform: 'twitch', channel_id: 'c1', status: 'offline' },
+      })
+    })
+    // ...and comes back: the down->connected transition must force an immediate replay
+    // reconnect so the gap is backfilled without a manual page refresh.
+    await act(async () => {
+      latest().simulateMessage({
+        type: 'platform_status',
+        data: { platform: 'twitch', channel_id: 'c1', status: 'connected' },
+      })
+      await vi.advanceTimersByTimeAsync(50)
+    })
+    expect(MockWebSocket.instances.length).toBeGreaterThanOrEqual(2)
+    expect(latest().url).toContain('/ws/overlay/o1')
+  })
+
   it('always calls the latest callback after a re-render (no stale closure)', async () => {
     const first = vi.fn()
     const second = vi.fn()

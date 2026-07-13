@@ -273,6 +273,24 @@ a notification. Without this, every heartbeat re-published demand to every
 listener once per cycle per overlay, churning listeners ("source flapping").
 INSERT and DELETE always notify.
 
+**Heartbeat coverage (who keeps a source fresh).** The cleanup job's 24h stale rule
+is only safe if every actively-used source is heartbeated. Two independent writers
+guarantee that (see ADR-0032):
+
+- **API gateway (listener-agnostic).** Every 2-minute connection heartbeat, the
+  gateway bumps `updated_at` for the active sources of every *connected* overlay
+  (`api-gateway/websocket/manager.go` `bumpActiveSourcesUpdatedAt`). Because chat
+  delivery is demand-gated on a live overlay connection, any watched source is kept
+  fresh here regardless of platform.
+- **Per listener.** YouTube/Kick call `ActivateSource`; the Twitch **EventSub**
+  listener heartbeats its chat-active sources on each sync tick
+  (`twitch-eventsub-listener/channels/manager.go` `heartbeatActiveSources`). The
+  Twitch **IRC** listener no longer heartbeats (enforce mode, ADR-0015).
+
+Before ADR-0032, no writer kept EventSub Twitch sources fresh (IRC was disabled and
+EventSub never heartbeated), so a Twitch source on an always-open overlay was
+deactivated after 24h and its chat silently dropped until a manual page refresh.
+
 ---
 
 ## Testing

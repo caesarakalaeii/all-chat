@@ -26,10 +26,19 @@ import (
 
 	"github.com/caesar/all-chat/services/api-gateway/sessions"
 	"github.com/caesar/all-chat/shared/metrics"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
+
+// dbExecer is the subset of *pgxpool.Pool the manager needs for best-effort
+// idle-tracking writes (overlays.last_connected_at + the overlay_chat_sources
+// updated_at heartbeat). It is an interface so tests can inject a spy without a
+// live database; *pgxpool.Pool satisfies it.
+type dbExecer interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
 
 // OverlayConnectionEvent represents an overlay connection/disconnection event
 type OverlayConnectionEvent struct {
@@ -45,7 +54,7 @@ type Manager struct {
 	logger      *zap.Logger
 	metrics     *metrics.GatewayMetrics
 	redisClient *redis.Client
-	db          *pgxpool.Pool // For bumping overlays.last_connected_at on attach + heartbeat
+	db          dbExecer // For bumping overlays.last_connected_at + overlay_chat_sources.updated_at on attach + heartbeat
 
 	// Grace period tracking for disconnection events
 	gracePeriodTimers     map[string]*time.Timer
@@ -270,6 +279,38 @@ func (m *Manager) bumpLastConnectedAt(ctx context.Context, overlayIDs ...string)
 			zap.Error(err),
 		)
 		m.metrics.RecordSubscriptionEvent("api-gateway", "last_connected_bump_failed")
+	}
+}
+
+// bumpActiveSourcesUpdatedAt refreshes overlay_chat_sources.updated_at = NOW() for
+// every ACTIVE source of the given overlays. This is a listener-agnostic heartbeat.
+//
+// The source-manager cleanup job marks a source inactive once its updated_at is older
+// than the stale threshold (24h), on the assumption that each listener heartbeats its
+// own sources (see migration 059). YouTube/Kick listeners do; the Twitch EventSub
+// listener does not, and the IRC listener is in enforce mode (joins nothing) — so a
+// Twitch source on an always-open overlay would be deactivated after 24h and its chat
+// silently dropped by the message-processor (which routes only is_active sources) until
+// the streamer refreshed the page. Bumping updated_at here for any overlay with a live,
+// demand-bearing WebSocket keeps every connected overlay's sources fresh regardless of
+// platform, so a genuinely-watched overlay is never reaped.
+//
+// Safe against the chat_source_changes NOTIFY trigger: migration 059 scopes the UPDATE
+// trigger to listener-relevant columns, so an updated_at-only write does NOT notify and
+// cannot cause the demand-refresh storms / source flapping that motivated that migration.
+//
+// Best-effort: failures are logged, never returned — this must not break the heartbeat.
+func (m *Manager) bumpActiveSourcesUpdatedAt(ctx context.Context, overlayIDs ...string) {
+	if len(overlayIDs) == 0 || m.db == nil {
+		return
+	}
+	const query = `UPDATE overlay_chat_sources SET updated_at = NOW() WHERE overlay_id = ANY($1) AND is_active = true`
+	if _, err := m.db.Exec(ctx, query, overlayIDs); err != nil {
+		m.logger.Warn("Failed to heartbeat overlay_chat_sources.updated_at",
+			zap.Int("overlay_count", len(overlayIDs)),
+			zap.Error(err),
+		)
+		m.metrics.RecordSubscriptionEvent("api-gateway", "source_heartbeat_failed")
 	}
 }
 
@@ -639,6 +680,13 @@ func (m *Manager) refreshConnectionTTLs() {
 	// Single batched UPDATE so twitch-listener's idle-overlay filter stays
 	// fresh for streamers who keep OBS open all week without ever closing it.
 	m.bumpLastConnectedAt(ctx, overlayIDs...)
+
+	// Heartbeat the per-source updated_at too, so the source-manager cleanup job
+	// never reaps an actively-watched overlay's sources. Listener heartbeats alone
+	// are insufficient: the Twitch EventSub listener does not heartbeat and IRC is
+	// disabled, so without this a Twitch source on a 24/7 overlay is deactivated after
+	// 24h and its chat silently stops until the streamer refreshes.
+	m.bumpActiveSourcesUpdatedAt(ctx, overlayIDs...)
 }
 
 // Shutdown gracefully stops the WebSocket manager

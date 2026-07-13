@@ -422,6 +422,17 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0032: Source-Liveness Heartbeat Contract and Overlay Self-Heal
+
+**Status**: ✅ Accepted
+**Date**: 2026-07-13
+**Problem**: The source-manager cleanup job deactivates a source whose `updated_at` is >24h old, assuming every listener heartbeats it (migration 059). YouTube/Kick do; the Twitch IRC listener (now in enforce mode) no longer does and the EventSub listener never did — so a Twitch source on an always-open overlay got deactivated after 24h, the message-processor silently dropped its chat, and the client (transport kept alive by pongs + other sources) never recovered until a manual page refresh. Reproduced in production 2026-07-13 (caesarlp + another overlay the same hour)
+**Decision**: (1) The API gateway heartbeats `overlay_chat_sources.updated_at` for every connected overlay's active sources on its 2-min tick — listener-agnostic, so any watched source stays fresh regardless of platform; (2) the EventSub listener self-heartbeats its chat-active sources per sync tick (leader-gated), honoring the migration-059 contract; (3) cleanup stays `updated_at`-based (all heartbeat writes are `updated_at`-only, so the NOTIFY trigger still doesn't fire); (4) the overlay client treats a `platform_status` down→`connected` recovery as a trigger to reconnect with `?since=` and replay the gap (debounced), self-healing without a refresh
+**Impact**: The 24h Twitch-chat dropout cannot recur; abandoned overlays are still reaped (quota/load wind down) once the last connection leaves; no demand-refresh storms; overlays self-heal on source recovery. (ADR numbering shared with caesar-deployment, so this is 0032)
+**→ Read**: [0032-source-liveness-heartbeat-and-overlay-self-heal.md](./0032-source-liveness-heartbeat-and-overlay-self-heal.md)
+
+---
+
 ## How to Create a New ADR
 
 ### Step 1: Determine ADR Number
