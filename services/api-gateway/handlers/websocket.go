@@ -191,6 +191,19 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 	// poll/prediction updates. Enforced per-connection at broadcast time (#5).
 	engagementOnly := c.Query("engagementOnly") == "true"
 
+	// passive marks a render-only overlay (e.g. a 24/7 disconnect-protection OBS
+	// instance for IRL streams) that must display chat but must NOT assert demand or
+	// activate sources — otherwise an always-connected overlay keeps YouTube discovery
+	// running while the streamer is offline and gets parked after the 1h give-up. The
+	// streamer instead triggers discovery on demand from their chat monitor when going
+	// live. Unlike engagementOnly, a passive socket STILL receives chat frames.
+	passive := c.Query("passive") == "true"
+
+	// A socket attaches without the overlay:connected demand signal (and skips source
+	// auto-activation) when it is an anonymous participate tab OR an explicitly passive
+	// render-only overlay.
+	skipDemand := skipSourceActivation || passive
+
 	// Resolve JWT from Sec-WebSocket-Protocol subprotocol first, then fall
 	// back to ?token= query param (backward compat during client rollout).
 	// The subprotocol path keeps the token out of access logs (audit H5).
@@ -284,9 +297,10 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 	// must not drive source activation / YouTube quota (P2-3). NOT skipped for the
 	// streamer's OBS poll/prediction display widgets, which must activate so Twitch-native
 	// rounds are mirrored.
-	if skipSourceActivation {
-		h.logger.Debug("viewer participate WS connection; skipping source auto-activation",
+	if skipDemand {
+		h.logger.Debug("no-demand WS connection (participate tab or passive overlay); skipping source auto-activation",
 			zap.String("overlay_id", overlayID),
+			zap.Bool("passive", passive),
 		)
 	} else if activatedCount, err := h.repo.ActivateSourcesForOverlay(ctx, overlayID); err != nil {
 		h.logger.Error("Failed to activate sources for overlay",
@@ -315,10 +329,10 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 
 	// Add connection to manager.
 	// Use background context here too since connection lives beyond HTTP request.
-	// viewerParticipant/engagement-only sockets attach WITHOUT the overlay:connected
-	// demand signal so anonymous participate tabs can't sustain demand-based upstream
-	// capture with no owner in the loop (P2-3).
-	if skipSourceActivation {
+	// viewerParticipant/engagement-only tabs and passive render-only overlays attach
+	// WITHOUT the overlay:connected demand signal so they can't sustain demand-based
+	// upstream capture with no owner going live (P2-3, and the 24/7 IRL OBS case).
+	if skipDemand {
 		h.wsManager.AddConnectionNoDemand(context.Background(), wsConn)
 	} else {
 		h.wsManager.AddConnection(context.Background(), wsConn)
