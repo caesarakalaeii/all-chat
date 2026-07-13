@@ -39,6 +39,17 @@ The API Gateway serves as the single entry point for all HTTP requests to the Al
        └─── /api/v1/emotes/*    → emote-service:8083
 ```
 
+### Connection heartbeat & source liveness
+
+The WebSocket manager runs a 2-minute heartbeat per connected overlay that (a)
+refreshes the `overlay:connected:{id}` demand key TTL, (b) bumps
+`overlays.last_connected_at`, and (c) bumps `overlay_chat_sources.updated_at` for the
+overlay's active sources (`bumpActiveSourcesUpdatedAt`). (c) is a **listener-agnostic
+source heartbeat**: it stops the source-manager cleanup job from deactivating a source
+that is being actively watched, regardless of which listener owns it. This is the
+primary fix for the 24h Twitch-chat dropout — see ADR-0032. The write is `updated_at`
+-only, so it does not fire the `chat_source_changes` NOTIFY trigger (migration 059).
+
 ## Environment Variables
 
 ### Required

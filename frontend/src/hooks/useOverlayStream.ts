@@ -46,10 +46,12 @@ import {
   computeBackoffDelay,
   HEARTBEAT_INTERVAL_MS,
   isConnectionStale,
+  isSourceRecovery,
   LIVENESS_TIMEOUT_MS,
   makeSeenIdCache,
   parseNameGradientGuard,
   platformStatusReducer,
+  RECOVERY_REPLAY_COOLDOWN_MS,
   WATCHDOG_INTERVAL_MS,
   type PlatformStatusState,
 } from '@/lib/utils/overlayStreamCore'
@@ -128,6 +130,13 @@ export function useOverlayStream(
   // a ref (not the captured state) so a successful open resets it for the next
   // drop instead of escalating from wherever the last burst left off.
   const attemptsRef = useRef(0)
+
+  // Source-recovery self-heal: the last-seen platform_status per channel (tracked
+  // independently of render state, so we can spot a down->connected transition inside
+  // onmessage), and the timestamp of the last recovery-triggered replay so a burst of
+  // recoveries collapses into a single reconnect.
+  const lastStatusRef = useRef<Map<string, string>>(new Map())
+  const lastRecoveryReplayRef = useRef<number>(0)
 
   // Whether we've already warmed the browser emote cache for this mount. Gated
   // so the 30s config refresh doesn't re-trigger the preload burst.
@@ -366,9 +375,28 @@ export function useOverlayStream(
             return
           }
 
-          case 'status':
-            setPlatformState((prev) => platformStatusReducer(prev, classified.status, sources))
+          case 'status': {
+            const status = classified.status
+            const channelKey = status.channel_id || status.platform
+            const configured = sources.size === 0 || sources.has(channelKey)
+            const prevStatus = lastStatusRef.current.get(channelKey)
+            if (configured) lastStatusRef.current.set(channelKey, status.status)
+            setPlatformState((prev) => platformStatusReducer(prev, status, sources))
+
+            // Self-heal: a configured source we saw go down has come back. The transport
+            // never dropped (so the watchdog never fired), but we may have silently missed
+            // messages while it was down. Reconnect with ?since= so the gateway replays the
+            // gap — no manual page refresh needed. Debounced so a burst of recoveries (or a
+            // flapping source) collapses into a single replay.
+            if (configured && isSourceRecovery(prevStatus, status.status)) {
+              const now = Date.now()
+              if (now - lastRecoveryReplayRef.current >= RECOVERY_REPLAY_COOLDOWN_MS) {
+                lastRecoveryReplayRef.current = now
+                requestReconnect(true)
+              }
+            }
             return
+          }
 
           case 'ignore':
             return
