@@ -24,6 +24,7 @@ import {
   computeBackoffDelay,
   HEARTBEAT_INTERVAL_MS,
   isConnectionStale,
+  isSourceRecovery,
   LIVENESS_TIMEOUT_MS,
   makeSeenIdCache,
   parseNameGradientGuard,
@@ -277,5 +278,27 @@ describe('isConnectionStale / heartbeat constants', () => {
   it('honors an explicit timeout override', () => {
     expect(isConnectionStale(100, 100 + 5001, 5000)).toBe(true)
     expect(isConnectionStale(100, 100 + 4999, 5000)).toBe(false)
+  })
+})
+
+describe('isSourceRecovery', () => {
+  it('is NOT a recovery on the first-ever status (no prior recorded)', () => {
+    // The initial connect must not trigger a spurious replay reconnect.
+    expect(isSourceRecovery(undefined, 'connected')).toBe(false)
+  })
+
+  it('is a recovery when a source returns to connected from any down state', () => {
+    for (const down of ['offline', 'error', 'paused', 'reconnecting']) {
+      expect(isSourceRecovery(down, 'connected')).toBe(true)
+    }
+  })
+
+  it('is NOT a recovery while staying connected (steady-state heartbeats)', () => {
+    expect(isSourceRecovery('connected', 'connected')).toBe(false)
+  })
+
+  it('is NOT a recovery when a source goes down', () => {
+    expect(isSourceRecovery('connected', 'offline')).toBe(false)
+    expect(isSourceRecovery('connected', 'reconnecting')).toBe(false)
   })
 })

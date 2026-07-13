@@ -347,6 +347,48 @@ func (m *Manager) refreshClaims(ctx context.Context) {
 	}
 }
 
+// heartbeatActiveSources refreshes overlay_chat_sources.updated_at for every Twitch source this
+// pod currently delivers chat for (ChatActive). The source-manager cleanup job marks a source
+// inactive once its updated_at is older than 24h, on the assumption that the owning listener
+// heartbeats it (see migration 059) — the YouTube/Kick listeners do this via ActivateSource, but
+// the EventSub listener historically did not, and with IRC in enforce mode nothing else kept a
+// Twitch source fresh. The result was an always-open overlay's Twitch source being deactivated
+// after 24h, after which the message-processor (which routes only is_active sources) silently
+// dropped its chat until the streamer refreshed the page. Heartbeating here ties source liveness
+// to the existence of a live chat subscription.
+//
+// Leader-gated (only the leader holds real subscriptions and delivers chat) and called once per
+// sync tick (interval ≪ 24h). Snapshots channels under the read lock; the single batched write
+// happens outside it. updated_at-only writes do NOT fire the chat_source_changes NOTIFY trigger
+// (migration 059), so this cannot cause the demand-refresh storms that migration guarded against.
+func (m *Manager) heartbeatActiveSources(ctx context.Context) {
+	if m.db == nil || !m.leads() {
+		return
+	}
+
+	m.mu.RLock()
+	logins := make([]string, 0, len(m.channels))
+	for _, ch := range m.channels {
+		if ch.ChatActive && ch.BroadcasterName != "" {
+			// channel_id in overlay_chat_sources is the lowercased login (see publishChatOffline).
+			logins = append(logins, strings.ToLower(ch.BroadcasterName))
+		}
+	}
+	m.mu.RUnlock()
+
+	if len(logins) == 0 {
+		return
+	}
+
+	const q = `UPDATE overlay_chat_sources SET updated_at = NOW() WHERE platform = 'twitch' AND channel_id = ANY($1) AND is_active = true`
+	wctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if _, err := m.db.Exec(wctx, q, logins); err != nil {
+		m.logger.Warn("Failed to heartbeat active Twitch sources",
+			zap.Int("count", len(logins)), zap.Error(err))
+	}
+}
+
 // releaseClaim drops a channel's chat-ownership claim so IRC resumes it promptly instead of waiting
 // out the TTL. Called when a chat subscription is torn down (demand lost or channel removed). Only
 // the leader releases; a standby releasing would yank a channel the leader is still serving back to
@@ -405,6 +447,7 @@ func (m *Manager) Start(ctx context.Context) error {
 		m.logger.Error("Initial channel sync failed", zap.Error(err))
 	}
 	m.refreshClaims(ctx)
+	m.heartbeatActiveSources(ctx)
 
 	// Periodic sync
 	m.wg.Add(1)
@@ -425,11 +468,13 @@ func (m *Manager) Start(ctx context.Context) error {
 					m.logger.Error("Channel sync failed (demand-triggered)", zap.Error(err))
 				}
 				m.refreshClaims(ctx)
+				m.heartbeatActiveSources(ctx)
 			case <-ticker.C:
 				if err := m.SyncChannels(ctx); err != nil {
 					m.logger.Error("Channel sync failed", zap.Error(err))
 				}
 				m.refreshClaims(ctx)
+				m.heartbeatActiveSources(ctx)
 			}
 		}
 	}()

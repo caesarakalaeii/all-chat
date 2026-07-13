@@ -45,6 +45,13 @@ const inflightRequests: Record<string, Promise<Record<string, TwitchBadgeSet> | 
 
 const TWITCH_BADGE_BASE = '/api/twitch/badges'
 
+// Bound every badge-proxy request so a stalled connection (server accepts but
+// never responds) cannot leave a forever-pending entry in inflightRequests.
+// Without this, resolveTwitchBadgeIcons — awaited inline before each Twitch
+// message renders — would await that dead promise for every subsequent message
+// and silently stop rendering Twitch chat until a full page refresh.
+export const BADGE_FETCH_TIMEOUT_MS = 8000
+
 async function fetchBadgeSets(
   cacheKey: string,
   url: string
@@ -54,7 +61,9 @@ async function fetchBadgeSets(
   }
 
   if (!inflightRequests[cacheKey]) {
-    inflightRequests[cacheKey] = fetch(url)
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), BADGE_FETCH_TIMEOUT_MS)
+    inflightRequests[cacheKey] = fetch(url, { signal: controller.signal })
       .then(async (res) => {
         if (!res.ok) {
           throw new Error(`Request failed with status ${res.status}`)
@@ -67,6 +76,7 @@ async function fetchBadgeSets(
         return null
       })
       .finally(() => {
+        clearTimeout(timeoutId)
         delete inflightRequests[cacheKey]
       })
   }

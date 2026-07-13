@@ -152,6 +152,39 @@ export function parseNameGradientGuard(user: { name_gradient?: NameGradient | st
 }
 
 // ---------------------------------------------------------------------------
+// Source-recovery self-heal
+// ---------------------------------------------------------------------------
+//
+// The client transport can stay perfectly alive (heartbeat pongs + other sources'
+// frames keep the watchdog satisfied) while ONE source silently stops delivering —
+// e.g. its overlay_chat_sources row was deactivated, an upstream listener dropped it,
+// or demand briefly lapsed. The silence watchdog cannot see this. But when that source
+// comes back it re-publishes a `connected` platform_status; treating that
+// down->connected transition as a trigger to reconnect-with-`?since=` lets the overlay
+// replay the gap and resume on its own, instead of the streamer having to refresh.
+
+/**
+ * Minimum spacing between recovery-triggered replay reconnects, so a burst of sources
+ * recovering at once (or a single flapping source) collapses into one replay rather
+ * than a reconnect storm.
+ */
+export const RECOVERY_REPLAY_COOLDOWN_MS = 15000
+
+/** Platform statuses that mean the source is currently NOT delivering messages. */
+const DOWN_STATUSES: ReadonlySet<string> = new Set(['offline', 'error', 'paused', 'reconnecting'])
+
+/**
+ * True when a source transitions from a known-down state back to `connected`. This is
+ * the signal that the overlay may have silently missed messages while the source was
+ * down and should replay (`?since=`) to backfill. A first-ever `connected` (no prior
+ * status recorded) is deliberately NOT a recovery, so the initial connect does not fire
+ * a spurious replay reconnect.
+ */
+export function isSourceRecovery(prevStatus: string | undefined, nextStatus: string): boolean {
+  return prevStatus !== undefined && DOWN_STATUSES.has(prevStatus) && nextStatus === 'connected'
+}
+
+// ---------------------------------------------------------------------------
 // platform_status reducer
 // ---------------------------------------------------------------------------
 
