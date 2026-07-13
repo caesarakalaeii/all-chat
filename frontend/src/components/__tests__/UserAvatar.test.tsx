@@ -31,7 +31,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { render } from '@testing-library/react'
+import { render, fireEvent } from '@testing-library/react'
 import { UserAvatar } from '../UserAvatar'
 
 describe('UserAvatar', () => {
@@ -93,6 +93,30 @@ describe('UserAvatar', () => {
       <UserAvatar size={40} displayName="Alice" />
     )
     expect(getByText('A')).toBeDefined()
+  })
+
+  it('falls back to initials when the avatar image fails to load', () => {
+    const { container } = render(
+      <UserAvatar size={40} avatarUrl="https://example.com/broken.png" displayName="Alice" />
+    )
+    const img = container.querySelector('img')
+    expect(img).not.toBeNull()
+
+    // Simulate the browser failing to load the image (dead/placeholder URL).
+    fireEvent.error(img!)
+
+    // The <img> is replaced by the initial-letter fallback.
+    expect(container.querySelector('img')).toBeNull()
+    expect(container.textContent).toContain('A')
+  })
+
+  it('sets referrerPolicy=no-referrer so cross-origin CDN avatars can load', () => {
+    const { container } = render(
+      <UserAvatar size={40} avatarUrl="https://p16-sign.tiktokcdn.com/avatar.jpeg" displayName="Bob" />
+    )
+    const img = container.querySelector('img')
+    expect(img).not.toBeNull()
+    expect(img!.getAttribute('referrerpolicy')).toBe('no-referrer')
   })
 
   it('renders ? fallback when avatarUrl and displayName both absent', () => {
