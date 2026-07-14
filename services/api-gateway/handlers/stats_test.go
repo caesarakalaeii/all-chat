@@ -50,9 +50,11 @@ func TestGetActiveOverlays_Empty(t *testing.T) {
 	handler.GetActiveOverlays(c)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	var ids []string
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &ids))
-	assert.Empty(t, ids)
+	// Explicitly a JSON array, never null, so the frontend can iterate safely.
+	assert.Equal(t, "[]", w.Body.String())
+	var overlays []ActiveOverlay
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &overlays))
+	assert.Empty(t, overlays)
 }
 
 func TestGetActiveOverlays_ReturnsConnectedIDs(t *testing.T) {
@@ -73,8 +75,59 @@ func TestGetActiveOverlays_ReturnsConnectedIDs(t *testing.T) {
 	handler.GetActiveOverlays(c)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	var ids []string
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &ids))
-	assert.Len(t, ids, 2)
+	var overlays []ActiveOverlay
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &overlays))
+	assert.Len(t, overlays, 2)
+
+	ids := make([]string, len(overlays))
+	for i, o := range overlays {
+		ids[i] = o.OverlayID
+	}
 	assert.ElementsMatch(t, []string{"abc-123", "def-456"}, ids)
+
+	// No session hashes exist, so connected_since is omitted for every overlay.
+	for _, o := range overlays {
+		assert.Nil(t, o.ConnectedSince, "overlay %s should have no connected_since without a session", o.OverlayID)
+	}
+}
+
+func TestGetActiveOverlays_IncludesConnectedSince(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	client, mr := setupStatsTestRedis(t)
+	handler := NewStatsHandler(client)
+
+	// Overlay with a session hash carrying a start time.
+	startedAt := time.Now().UTC().Add(-90 * time.Minute).Truncate(time.Second)
+	mr.Set("overlay:connected:with-session", "1")
+	mr.SetTTL("overlay:connected:with-session", 10*time.Minute)
+	mr.HSet("session:active:with-session", "started_at", startedAt.Format(time.RFC3339))
+
+	// Overlay connected but without a session (e.g. post-disconnect linger).
+	mr.Set("overlay:connected:no-session", "1")
+	mr.SetTTL("overlay:connected:no-session", 5*time.Minute)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/overlays/active", nil)
+
+	handler.GetActiveOverlays(c)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var overlays []ActiveOverlay
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &overlays))
+	require.Len(t, overlays, 2)
+
+	byID := make(map[string]ActiveOverlay, len(overlays))
+	for _, o := range overlays {
+		byID[o.OverlayID] = o
+	}
+
+	withSession, ok := byID["with-session"]
+	require.True(t, ok)
+	require.NotNil(t, withSession.ConnectedSince)
+	assert.WithinDuration(t, startedAt, withSession.ConnectedSince.UTC(), time.Second)
+
+	noSession, ok := byID["no-session"]
+	require.True(t, ok)
+	assert.Nil(t, noSession.ConnectedSince)
 }

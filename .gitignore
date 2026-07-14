@@ -11,6 +11,8 @@
 
 # Test artifacts
 test/contract/schema/capture
+test/contract/schema/contract
+test/contract/dual-listener/dual-listener
 
 # Output of the go coverage tool
 *.out
@@ -39,6 +41,9 @@ services/*/twitch-listener
 services/*/youtube-listener
 services/*/message-processor
 services/*/main
+# Compiled command binaries (go build output in cmd/ subdirs)
+services/auth-service/cmd/key-rotator/key-rotator
+services/youtube-listener/cmd/token_backfill/token_backfill
 
 # Environment variables
 .env

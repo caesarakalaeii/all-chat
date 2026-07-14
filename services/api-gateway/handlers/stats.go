@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/caesar/all-chat/services/api-gateway/sessions"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 )
@@ -63,12 +64,28 @@ func (h *StatsHandler) GetPlatformStats(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
-// GetActiveOverlays returns the IDs of overlays with active WebSocket connections.
+// ActiveOverlay describes an overlay with a live WebSocket connection.
+type ActiveOverlay struct {
+	OverlayID string `json:"overlay_id"`
+	// ConnectedSince is when the current connection session began (RFC3339),
+	// used to show admins how long an overlay has been open. Nil when no session
+	// timestamp is available (e.g. the connection is in its post-disconnect
+	// linger window and the session has already ended).
+	ConnectedSince *time.Time `json:"connected_since,omitempty"`
+}
+
+// GetActiveOverlays returns the overlays with active WebSocket connections,
+// each annotated with when its connection began so admins can spot overlays
+// that are open but whose streamer is no longer live ("dead but open").
 // GET /api/v1/admin/overlays/active — requires admin auth.
 func (h *StatsHandler) GetActiveOverlays(c *gin.Context) {
 	ctx := c.Request.Context()
 
+	// SCAN guarantees full coverage but not uniqueness (a key can repeat across
+	// batches during rehashing), so de-duplicate to avoid duplicate rows and
+	// redundant lookups.
 	var activeIDs []string
+	seen := make(map[string]struct{})
 	var cursor uint64
 	for {
 		keys, next, err := h.redis.Scan(ctx, cursor, "overlay:connected:*", 100).Result()
@@ -79,9 +96,14 @@ func (h *StatsHandler) GetActiveOverlays(c *gin.Context) {
 		for _, key := range keys {
 			// key format: "overlay:connected:{id}"
 			id := key[len("overlay:connected:"):]
-			if id != "" {
-				activeIDs = append(activeIDs, id)
+			if id == "" {
+				continue
 			}
+			if _, dup := seen[id]; dup {
+				continue
+			}
+			seen[id] = struct{}{}
+			activeIDs = append(activeIDs, id)
 		}
 		cursor = next
 		if cursor == 0 {
@@ -89,8 +111,37 @@ func (h *StatsHandler) GetActiveOverlays(c *gin.Context) {
 		}
 	}
 
-	if activeIDs == nil {
-		activeIDs = []string{}
+	overlays := make([]ActiveOverlay, 0, len(activeIDs))
+	if len(activeIDs) == 0 {
+		c.JSON(http.StatusOK, overlays)
+		return
 	}
-	c.JSON(http.StatusOK, activeIDs)
+
+	// Fetch each overlay's session start time in one round trip. started_at
+	// lives in the session:active:{id} hash written on connect (kept alive by
+	// the connection heartbeat), so no DB access is needed here.
+	pipe := h.redis.Pipeline()
+	startedCmds := make([]*redis.StringCmd, len(activeIDs))
+	for i, id := range activeIDs {
+		startedCmds[i] = pipe.HGet(ctx, sessions.SessionKeyPrefix+id, "started_at")
+	}
+	// Exec reports redis.Nil when a session hash is simply missing (an expected
+	// state, handled per-command below); any other error is a real Redis failure
+	// and should surface as 500 rather than silently dropping every timestamp.
+	if _, err := pipe.Exec(ctx); err != nil && err != redis.Nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load overlay sessions"})
+		return
+	}
+
+	for i, id := range activeIDs {
+		overlay := ActiveOverlay{OverlayID: id}
+		if startedStr, err := startedCmds[i].Result(); err == nil && startedStr != "" {
+			if started, perr := time.Parse(time.RFC3339, startedStr); perr == nil {
+				overlay.ConnectedSince = &started
+			}
+		}
+		overlays = append(overlays, overlay)
+	}
+
+	c.JSON(http.StatusOK, overlays)
 }

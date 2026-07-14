@@ -643,6 +643,12 @@ func (m *Manager) refreshConnectionTTLs() {
 		return
 	}
 
+	// Keep each connected overlay's stream session hash alive so its started_at
+	// (surfaced to admins as "connected since") survives a long-lived connection
+	// instead of expiring after SessionTTL. Batched into a single round trip
+	// rather than one EXPIRE per overlay alongside the SetEx below.
+	m.sessionManager.RefreshTTLs(ctx, overlayIDs)
+
 	// Refresh TTL for each connected overlay
 	refreshed := 0
 	for _, overlayID := range overlayIDs {
