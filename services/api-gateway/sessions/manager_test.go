@@ -17,8 +17,13 @@
 package sessions
 
 import (
+	"context"
 	"testing"
 	"time"
+
+	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
 )
 
 func TestParseSessionTime(t *testing.T) {
@@ -127,4 +132,29 @@ func TestValidateStartedAt(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRefreshTTLs(t *testing.T) {
+	mr := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	sm := NewSessionManager(client, nil, zap.NewNop(), time.Minute)
+	ctx := context.Background()
+
+	// An existing session with a short TTL should be extended to SessionTTL.
+	mr.HSet(SessionKeyPrefix+"live", "started_at", time.Now().UTC().Format(time.RFC3339))
+	mr.SetTTL(SessionKeyPrefix+"live", time.Minute)
+
+	// A missing overlay must be a safe no-op (EXPIRE on a missing key returns
+	// false without error and must not create the key).
+	sm.RefreshTTLs(ctx, []string{"live", "missing"})
+
+	if ttl := mr.TTL(SessionKeyPrefix + "live"); ttl != SessionTTL {
+		t.Fatalf("expected TTL %v after refresh, got %v", SessionTTL, ttl)
+	}
+	if mr.Exists(SessionKeyPrefix + "missing") {
+		t.Fatalf("missing overlay key should not have been created")
+	}
+
+	// Empty input is a no-op and must not panic or error.
+	sm.RefreshTTLs(ctx, nil)
 }

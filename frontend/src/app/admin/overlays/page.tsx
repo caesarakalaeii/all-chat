@@ -26,6 +26,11 @@ import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PlatformBadge } from '@/components/ui/badge'
 import type { Platform } from '@/lib/platform-colors'
+import { formatConnectedFor } from '@/lib/utils'
+
+// Connections open longer than this are highlighted so admins can spot overlays
+// that are likely open but no longer live ("dead but open").
+const LONG_OPEN_MS = 12 * 60 * 60 * 1000
 
 interface Overlay {
   id: string
@@ -34,6 +39,13 @@ interface Overlay {
   created_at: string
   updated_at: string
   sources_count?: number
+}
+
+// Shape of GET /api/v1/admin/overlays/active: overlays with a live WebSocket
+// connection, each with when that connection began (null while unavailable).
+interface ActiveOverlay {
+  overlay_id: string
+  connected_since?: string | null
 }
 
 interface OverlaySource {
@@ -50,6 +62,8 @@ export default function OverlaysPage() {
   const [selectedOverlay, setSelectedOverlay] = useState<Overlay | null>(null)
   const [sources, setSources] = useState<OverlaySource[]>([])
   const [activeOverlayIds, setActiveOverlayIds] = useState<Set<string>>(new Set())
+  // overlay id -> connection start timestamp (RFC3339), for "connected for X".
+  const [connectedSince, setConnectedSince] = useState<Map<string, string>>(new Map())
   const [loading, setLoading] = useState(true)
   const [sourcesLoading, setSourcesLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -102,8 +116,15 @@ export default function OverlaysPage() {
           credentials: 'same-origin',
         })
         if (response.ok) {
-          const ids: string[] = await response.json()
-          setActiveOverlayIds(new Set(ids))
+          const active: ActiveOverlay[] = await response.json()
+          setActiveOverlayIds(new Set(active.map((o) => o.overlay_id)))
+          setConnectedSince(
+            new Map(
+              active
+                .filter((o) => o.connected_since)
+                .map((o) => [o.overlay_id, o.connected_since as string])
+            )
+          )
         }
       } catch (err) {
         console.error('Failed to load active overlays:', err)
@@ -157,6 +178,13 @@ export default function OverlaysPage() {
     }
   }, [selectedOverlay])
 
+  // Connection start (epoch ms) for sorting; unknown timestamps sort last.
+  const connectedStartMs = (id: string): number => {
+    const since = connectedSince.get(id)
+    const parsed = since ? Date.parse(since) : Number.NaN
+    return Number.isNaN(parsed) ? Number.POSITIVE_INFINITY : parsed
+  }
+
   // Filter overlays by search term and connected status
   const connectedCount = overlays.filter((o) => activeOverlayIds.has(o.id)).length
   const filteredOverlays = overlays.filter((o) => {
@@ -169,6 +197,19 @@ export default function OverlaysPage() {
       o.user_id.toLowerCase().includes(term)
     )
   })
+
+  // When narrowed to connected overlays, surface the longest-open first so the
+  // likely "dead but open" overlays rise to the top.
+  const orderedOverlays = showConnectedOnly
+    ? [...filteredOverlays].sort((a, b) => connectedStartMs(a.id) - connectedStartMs(b.id))
+    : filteredOverlays
+
+  // Connection status for the detail panel of the selected overlay.
+  const selectedConnected = selectedOverlay ? activeOverlayIds.has(selectedOverlay.id) : false
+  const selectedSince = selectedOverlay ? connectedSince.get(selectedOverlay.id) : undefined
+  const selectedConnectedFor = formatConnectedFor(selectedSince)
+  const selectedLongOpen =
+    selectedConnected && !!selectedSince && Date.now() - Date.parse(selectedSince) >= LONG_OPEN_MS
 
   if (error) {
     return (
@@ -230,7 +271,13 @@ export default function OverlaysPage() {
                 </div>
               </div>
               <ul className="max-h-[70vh] divide-y divide-border overflow-y-auto">
-                {filteredOverlays.map((overlay) => (
+                {orderedOverlays.map((overlay) => {
+                  const isConnected = activeOverlayIds.has(overlay.id)
+                  const since = connectedSince.get(overlay.id)
+                  const connectedFor = formatConnectedFor(since)
+                  const isLongOpen =
+                    isConnected && !!since && Date.now() - Date.parse(since) >= LONG_OPEN_MS
+                  return (
                   <li
                     key={overlay.id}
                     className={clsx(
@@ -242,8 +289,18 @@ export default function OverlaysPage() {
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
                         <div className="flex items-center">
-                          {activeOverlayIds.has(overlay.id) && (
-                            <span className="mr-1.5 inline-block h-2 w-2 shrink-0 rounded-full bg-kick" title="Connected" />
+                          {isConnected && (
+                            <span
+                              className={clsx(
+                                'mr-1.5 inline-block h-2 w-2 shrink-0 rounded-full',
+                                isLongOpen ? 'bg-amber-400' : 'bg-kick'
+                              )}
+                              title={
+                                since
+                                  ? `Connected since ${new Date(since).toLocaleString()}`
+                                  : 'Connected'
+                              }
+                            />
                           )}
                           <p className="text-sm font-medium text-text">{overlay.name}</p>
                           <span className="ml-2 inline-flex items-center rounded bg-badge-bg px-2 py-0.5 text-xs font-medium text-text-sub">
@@ -253,6 +310,19 @@ export default function OverlaysPage() {
                         <p className="mt-1 font-mono text-xs text-text-sub">ID: {overlay.id}</p>
                         <p className="mt-1 text-xs text-text-dim">
                           Created {new Date(overlay.created_at).toLocaleDateString()}
+                          {isConnected && (
+                            <>
+                              {' · '}
+                              <span
+                                className={clsx(
+                                  'font-medium',
+                                  isLongOpen ? 'text-amber-400' : 'text-kick'
+                                )}
+                              >
+                                {connectedFor ? `Connected ${connectedFor}` : 'Connected'}
+                              </span>
+                            </>
+                          )}
                         </p>
                       </div>
                       <div className="flex items-center space-x-2">
@@ -292,7 +362,8 @@ export default function OverlaysPage() {
                       </div>
                     </div>
                   </li>
-                ))}
+                  )
+                })}
               </ul>
             </Card>
           )}
@@ -324,6 +395,38 @@ export default function OverlaysPage() {
                       <dd className="mt-1 font-mono text-xs break-all text-text">
                         {selectedOverlay.user_id}
                       </dd>
+                    </div>
+                    <div>
+                      <dt className="text-sm font-medium text-text-sub">Connection</dt>
+                      <dd className="mt-1 text-sm">
+                        {selectedConnected ? (
+                          <span className="inline-flex items-center gap-1.5">
+                            <span
+                              className={clsx(
+                                'inline-block h-2 w-2 shrink-0 rounded-full',
+                                selectedLongOpen ? 'bg-amber-400' : 'bg-kick'
+                              )}
+                            />
+                            <span
+                              className={clsx(
+                                'font-medium',
+                                selectedLongOpen ? 'text-amber-400' : 'text-kick'
+                              )}
+                            >
+                              {selectedConnectedFor
+                                ? `Connected ${selectedConnectedFor}`
+                                : 'Connected'}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="text-text-dim">Not connected</span>
+                        )}
+                      </dd>
+                      {selectedConnected && selectedSince && (
+                        <dd className="mt-1 text-xs text-text-dim">
+                          Since {new Date(selectedSince).toLocaleString()}
+                        </dd>
+                      )}
                     </div>
                   </dl>
                 </div>

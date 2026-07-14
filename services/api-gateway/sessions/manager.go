@@ -226,6 +226,29 @@ func (sm *SessionManager) CancelGracePeriod(ctx context.Context, overlayID strin
 	return nil
 }
 
+// RefreshTTLs extends the active session Redis TTL for a batch of still-connected
+// overlays in a single round trip. The session hash is otherwise only given a TTL
+// on create and on grace-period transitions, so a continuously-connected overlay
+// (e.g. a 24/7 OBS tab) would lose its hash after SessionTTL even while still
+// connected — taking started_at (the "connected since" signal) with it. Called
+// from the connection heartbeat. A no-op for keys that do not exist (Expire
+// returns false without error).
+func (sm *SessionManager) RefreshTTLs(ctx context.Context, overlayIDs []string) {
+	if len(overlayIDs) == 0 {
+		return
+	}
+	pipe := sm.redis.Pipeline()
+	for _, overlayID := range overlayIDs {
+		pipe.Expire(ctx, SessionKeyPrefix+overlayID, SessionTTL)
+	}
+	if _, err := pipe.Exec(ctx); err != nil {
+		sm.logger.Warn("Failed to refresh session TTLs",
+			zap.Int("count", len(overlayIDs)),
+			zap.Error(err),
+		)
+	}
+}
+
 // EndSession transitions to COMPLETED and archives to database
 func (sm *SessionManager) EndSession(ctx context.Context, overlayID string) error {
 	key := SessionKeyPrefix + overlayID
