@@ -111,7 +111,7 @@ deployments/ansible/.vault_pass
 !*.vault.yml.template
 
 # Test scripts
-test_twitch_chat.py
+test/twitch-chat-test/test_twitch_chat.py
 
 # Debug and checkpoint files
 DEBUG_CHECKPOINT.md
