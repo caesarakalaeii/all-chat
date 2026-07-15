@@ -33,6 +33,7 @@ Visit: http://localhost:3000
 - ✅ API Gateway (WebSocket + HTTP)
 - ✅ Overlay Manager (CRUD operations)
 - ✅ Message Processor (message normalization)
+- ✅ Share Service (shareable overlay links, `:8090`)
 
 **Not Included (for faster startup):**
 - ❌ Auth Service (auth disabled)
@@ -220,7 +221,7 @@ For iterative frontend development with LLM agents:
 
 ### Overlay Manager (`:8082`)
 
-The overlay-manager mounts routes at the root path (no `/api/overlays` prefix). Most endpoints require a JWT (`middleware.JWTAuth`). For dev, the easier path is to call through the API gateway (`/api/v1/overlays/...` on port 8080) or hit the public read-only endpoints directly:
+The overlay-manager mounts routes at the root path (no `/api/overlays` prefix). Most endpoints require a JWT (`middleware.JWTAuthWithRevocation`). For dev, the easier path is to call through the API gateway (`/api/v1/overlays/...` on port 8080) or hit the public read-only endpoints directly:
 
 ```bash
 # Public overlay config (no auth)
