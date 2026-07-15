@@ -1,5 +1,7 @@
 # YouTube Listener Validation Guide
 
+> **Scope / history:** This guide validates the quota-tracking `youtube-listener` (the `/admin/detection/quota-budget` and circuit-breaker endpoints on `:8086`). **Production runs `youtube-listener-innertube` instead**, so the quota-budget/circuit-breaker endpoints and the `youtube-listener` Deployment do not exist in prod. Locally the container is named `allchat-youtube-listener` (a bare `docker logs youtube-listener` / `docker restart youtube-listener` will fail), and the `kubectl rollout undo deployment/youtube-listener` step in Section 10 targets a deployment that is not present in prod. Treat the `kubectl`/`docker` commands below accordingly.
+
 This guide helps validate all the changes made to fix YouTube stream detection issues.
 
 ## Prerequisites

@@ -13,7 +13,7 @@ All-Chat is a **cloud-native microservices platform** for aggregating and displa
 **Architecture**: Standard Go Layout with microservices communicating via Redis Streams (raw messages) → Message Processor (normalization + enrichment) → Redis Pub/Sub (overlay-specific) → API Gateway WebSocket (client delivery).
 
 **Platform Status**:
-- ✅ Twitch (IRC + EventSub) | ✅ YouTube (HTTP polling with quota tracking + InnerTube polling) | ✅ Kick (Pusher WebSocket) | ✅ TikTok (Unofficial library) | ✅ Discord (channel relay)
+- ✅ Twitch (EventSub primary; IRC listener deprecated per ADR-0026) | ✅ YouTube (HTTP polling with quota tracking + InnerTube polling) | ✅ Kick (Pusher WebSocket) | ✅ TikTok (Unofficial library) | ✅ Discord (channel relay)
 
 ---
 
@@ -117,12 +117,31 @@ Each service has a detailed README:
 - [payment-service](./services/payment-service/README.md) - Patreon premium entitlements; writes users.is_premium (streamer, ADR-0018) + viewers.is_premium (viewer split, ADR-0019)
 - [token-refresh-service](./services/token-refresh-service/README.md) - OAuth token refresh
 - [discord-bot](./services/discord-bot/README.md) - TypeScript Discord bot (community ops, not a listener)
+- [engagement-service](./services/engagement-service/README.md) - Cross-platform polls, predictions, and per-overlay viewer points economy (#523)
+- support-bot - Discord support/admin agent (`services/support-bot/`, no README yet)
 
 ### Development Guides
 
 - [GETTING_STARTED.md](./GETTING_STARTED.md) - Complete navigation guide for LLM agents
 - [CONTRIBUTING.md](./CONTRIBUTING.md) - Pull request process, code review guidelines
 - [Testing Guide](./docs/TESTING_COMPREHENSIVE.md) - Unit, integration, E2E tests
+
+---
+
+## Documentation Conventions
+
+Keep documentation from rotting. The repo root repeatedly accumulated stale, point-in-time docs; these rules exist to stop that recurring.
+
+**The repo root holds only living reference docs.** Root is for docs meant to stay current: `README.md`, `CLAUDE.md`, `CONTRIBUTING.md`, `GETTING_STARTED.md`, the `FRONTEND_*` setup guides, `RESIDUALS.md`, `SECURITY_AUDIT_REPORT.md`, and the platform validation guides. Do **not** add point-in-time documents to the root:
+
+- No `*-FIX-SUMMARY.md`, `*_IMPLEMENTATION.md`, `*-CHECKLIST.md`, `*_COMPLETE.md`, `*_STATUS.md`, or one-off audit/TODO trackers. Each describes a single past change, goes stale within weeks, and becomes clutter. (This exact pattern was cleaned out on 2026-07-15: COORDINATOR-FILTERING-FIX-SUMMARY, CREDIT_ROLL_IMPLEMENTATION, DEPLOYMENT-CHECKLIST, DOC_AUDIT, GOOGLE_OAUTH_TODO, YOUTUBE_DETECTION_FIX_SUMMARY, Roadmap.)
+- Point-in-time write-ups belong in the PR description / commit body, or in `docs/phase-reports/` if a lasting record is genuinely needed. If it will not be maintained, do not commit it to the root.
+
+**Update docs in the same change as the code.** When you change behavior, update the living docs it affects in the same PR: `README.md`, `CLAUDE.md`, `GETTING_STARTED.md`, the relevant `services/*/README.md`, and the ADR index. A doc that contradicts the code is worse than no doc.
+
+**Do not hardcode volatile counts.** Prefer "see `services/`" over "17 services" and "see `docs/adr/`" over "12 ADRs": exact counts drift every time something is added. Where a count is unavoidable, treat it as something to re-verify, not to trust.
+
+**When a root doc goes stale:** fix the facts in place if it is a living reference; move it to `docs/phase-reports/` or `git rm` it (recoverable via history) if it is a completed point-in-time artifact.
 
 ---
 
@@ -238,10 +257,10 @@ REDIS_PORT=6379
 ## Production Readiness
 
 **Services ready for production**:
-- ✅ API Gateway, Twitch Listener, YouTube Listener, Kick Listener, Message Processor
+- ✅ API Gateway, Twitch EventSub Listener, YouTube Listener, Kick Listener, Message Processor
 
 **Production considerations**:
-- Request YouTube API quota increase (1,000,000 units/day)
+- YouTube API quota already increased to 1,009,000 units/day (see Known Issues → Scalability)
 - Configure CORS for production domain
 - Set up monitoring (Prometheus + Grafana)
 - Enable TLS for all services

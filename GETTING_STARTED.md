@@ -11,7 +11,7 @@
 → **[docs/llm-guides/NAVIGATION.md](./docs/llm-guides/NAVIGATION.md)** (~400 lines)
 
 This guide includes:
-- Service-by-service navigation (all 17 services)
+- Service-by-service navigation (every service in `services/`)
 - Common tasks and where to find relevant code
 - Quick reference card links
 - Troubleshooting guides
@@ -61,8 +61,8 @@ All documentation has been reorganized into focused, LLM-optimized guides:
 
 ```
 docs/
-├── llm-guides/              # Task-oriented quick references (9 guides + NAVIGATION)
-├── adr/                     # Architecture Decision Records (12 ADRs)
+├── llm-guides/              # Task-oriented quick references (quick-reference guides + NAVIGATION)
+├── adr/                     # Architecture Decision Records
 ├── architecture/            # System architecture (6 docs, numbered 00-05)
 ├── troubleshooting/         # Diagnostic guides (decision tree + 5 guides)
 ├── operations/              # Deployment and runbooks

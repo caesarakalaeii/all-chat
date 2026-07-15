@@ -125,7 +125,7 @@ MESSAGE_COUNT=100 ./scripts/generate-test-messages.sh
 - `MESSAGE_COUNT` (default: 0 = infinite)
 - `TEST_OVERLAY_ID` (default: test overlay)
 - `MESSAGE_PROCESSOR_URL` (default: http://localhost:8087)
-- `API_KEY` (default: dev-frontend-key)
+- `MESSAGE_PROCESSOR_API_KEY` (default: dev-frontend-key)
 
 ---
 
