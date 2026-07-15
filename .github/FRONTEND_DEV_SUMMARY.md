@@ -15,8 +15,8 @@ This document summarizes the frontend development environment created for fast i
 - `scripts/package.json` - Dependencies for Node.js scripts
 
 ### Documentation
-- `FRONTEND_QUICK_START.md` - 30-second quick start guide
-- `FRONTEND_DEV_SETUP.md` - Complete frontend development guide
+- `docs/frontend/FRONTEND_QUICK_START.md` - 30-second quick start guide
+- `docs/frontend/FRONTEND_DEV_SETUP.md` - Complete frontend development guide
 
 ### Makefile Commands
 - `make frontend-dev` - Start minimal backend
@@ -252,9 +252,9 @@ docker-compose -f docker-compose.frontend.yml logs api-gateway | grep CORS
 
 ## 📚 Related Documentation
 
-- [FRONTEND_QUICK_START.md](../FRONTEND_QUICK_START.md) - 30-second quick start
-- [FRONTEND_DEV_SETUP.md](../FRONTEND_DEV_SETUP.md) - Complete development guide
-- [GETTING_STARTED.md](../GETTING_STARTED.md) - Full project onboarding
+- [FRONTEND_QUICK_START.md](../docs/frontend/FRONTEND_QUICK_START.md) - 30-second quick start
+- [FRONTEND_DEV_SETUP.md](../docs/frontend/FRONTEND_DEV_SETUP.md) - Complete development guide
+- [GETTING_STARTED.md](../docs/GETTING_STARTED.md) - Full project onboarding
 - [CLAUDE.md](../CLAUDE.md) - Main project documentation
 
 ## ✅ Success Criteria

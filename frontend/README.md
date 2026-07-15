@@ -399,7 +399,7 @@ npm run dev -- -p 3001
 
 - **[Main README](../README.md)** - Project overview and quick start
 - **[Developer Guide](../CLAUDE.md)** - Architecture and development principles
-- **[Getting Started](../GETTING_STARTED.md)** - Navigate the codebase
+- **[Getting Started](../docs/GETTING_STARTED.md)** - Navigate the codebase
 
 ## Support
 

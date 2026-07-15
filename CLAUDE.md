@@ -36,12 +36,11 @@ cd frontend && npm run dev  # Start frontend
 # - Frontend: http://localhost:3000
 ```
 
-**First Time Setup**: See [GETTING_STARTED.md](./GETTING_STARTED.md) for complete onboarding guide.
+**First Time Setup**: See [GETTING_STARTED.md](./docs/GETTING_STARTED.md) for complete onboarding guide.
 
-**Frontend Development**: See [FRONTEND_QUICK_START.md](./FRONTEND_QUICK_START.md) for minimal backend setup (30 seconds).
+**Frontend Development**: See [FRONTEND_QUICK_START.md](./docs/frontend/FRONTEND_QUICK_START.md) for minimal backend setup (30 seconds).
   - **All-in-one**: `make frontend-quick` (starts services, seeds data, verifies setup)
-  - **Full docs**: [FRONTEND_DEV_SETUP.md](./FRONTEND_DEV_SETUP.md)
-  - **File index**: [FRONTEND_FILES_INDEX.md](./FRONTEND_FILES_INDEX.md)
+  - **Full docs**: [FRONTEND_DEV_SETUP.md](./docs/frontend/FRONTEND_DEV_SETUP.md)
 
 ---
 
@@ -122,7 +121,7 @@ Each service has a detailed README:
 
 ### Development Guides
 
-- [GETTING_STARTED.md](./GETTING_STARTED.md) - Complete navigation guide for LLM agents
+- [GETTING_STARTED.md](./docs/GETTING_STARTED.md) - Complete navigation guide for LLM agents
 - [CONTRIBUTING.md](./CONTRIBUTING.md) - Pull request process, code review guidelines
 - [Testing Guide](./docs/TESTING_COMPREHENSIVE.md) - Unit, integration, E2E tests
 
@@ -132,12 +131,12 @@ Each service has a detailed README:
 
 Keep documentation from rotting. The repo root repeatedly accumulated stale, point-in-time docs; these rules exist to stop that recurring.
 
-**The repo root holds only living reference docs.** Root is for docs meant to stay current: `README.md`, `CLAUDE.md`, `CONTRIBUTING.md`, `GETTING_STARTED.md`, the `FRONTEND_*` setup guides, `RESIDUALS.md`, `SECURITY_AUDIT_REPORT.md`, and the platform validation guides. Do **not** add point-in-time documents to the root:
+**The repo root holds only three markdown docs:** `README.md`, `CLAUDE.md`, and `CONTRIBUTING.md`. Everything else lives under `docs/` (`docs/GETTING_STARTED.md`, `docs/frontend/`, `docs/security/`, `docs/adr/`, `docs/architecture/`, and so on). Do **not** add new markdown files to the repo root, and never add point-in-time documents anywhere:
 
-- No `*-FIX-SUMMARY.md`, `*_IMPLEMENTATION.md`, `*-CHECKLIST.md`, `*_COMPLETE.md`, `*_STATUS.md`, or one-off audit/TODO trackers. Each describes a single past change, goes stale within weeks, and becomes clutter. (This exact pattern was cleaned out on 2026-07-15: COORDINATOR-FILTERING-FIX-SUMMARY, CREDIT_ROLL_IMPLEMENTATION, DEPLOYMENT-CHECKLIST, DOC_AUDIT, GOOGLE_OAUTH_TODO, YOUTUBE_DETECTION_FIX_SUMMARY, Roadmap.)
+- No `*-FIX-SUMMARY.md`, `*_IMPLEMENTATION.md`, `*-CHECKLIST.md`, `*_COMPLETE.md`, `*_STATUS.md`, or one-off audit/TODO trackers. Each describes a single past change, goes stale within weeks, and becomes clutter. (On 2026-07-15 this pattern was cleaned out: seven such docs were deleted, COORDINATOR-FILTERING-FIX-SUMMARY, CREDIT_ROLL_IMPLEMENTATION, DEPLOYMENT-CHECKLIST, DOC_AUDIT, GOOGLE_OAUTH_TODO, YOUTUBE_DETECTION_FIX_SUMMARY and Roadmap; the remaining root guides were relocated into `docs/` subdirs.)
 - Point-in-time write-ups belong in the PR description / commit body, or in `docs/phase-reports/` if a lasting record is genuinely needed. If it will not be maintained, do not commit it to the root.
 
-**Update docs in the same change as the code.** When you change behavior, update the living docs it affects in the same PR: `README.md`, `CLAUDE.md`, `GETTING_STARTED.md`, the relevant `services/*/README.md`, and the ADR index. A doc that contradicts the code is worse than no doc.
+**Update docs in the same change as the code.** When you change behavior, update the living docs it affects in the same PR: `README.md`, `CLAUDE.md`, `docs/GETTING_STARTED.md`, the relevant `services/*/README.md`, and the ADR index. A doc that contradicts the code is worse than no doc.
 
 **Do not hardcode volatile counts.** Prefer "see `services/`" over "17 services" and "see `docs/adr/`" over "12 ADRs": exact counts drift every time something is added. Where a count is unavoidable, treat it as something to re-verify, not to trust.
 
@@ -240,7 +239,7 @@ REDIS_PORT=6379
 ### Security
 - Token encryption uses AES-GCM (`shared/encryption/`); a versioned multi-key rotation API is available in `shared/encryption/versioned.go`
 - CORS allows `*` in dev (configure for production)
-- Service-to-service signing is implemented in `shared/signing/` (HMAC-SHA256, constant-time compare, query+service-name signed, replay-protected) but NOT YET WIRED into any prod service; Kubernetes NetworkPolicies are the current service-to-service isolation control. See SECURITY_AUDIT_REPORT.md L2 + RESIDUALS.md
+- Service-to-service signing is implemented in `shared/signing/` (HMAC-SHA256, constant-time compare, query+service-name signed, replay-protected) but NOT YET WIRED into any prod service; Kubernetes NetworkPolicies are the current service-to-service isolation control. See docs/security/SECURITY_AUDIT_REPORT.md L2 + docs/security/RESIDUALS.md
 
 ### Testing
 - Integration tests incomplete for YouTube Listener
@@ -282,7 +281,7 @@ REDIS_PORT=6379
 
 ## Need More Help?
 
-1. **Start with**: [GETTING_STARTED.md](./GETTING_STARTED.md) - Complete navigation guide
+1. **Start with**: [GETTING_STARTED.md](./docs/GETTING_STARTED.md) - Complete navigation guide
 2. **Troubleshooting**: [Decision Tree](./docs/troubleshooting/decision-tree.md) - Triage common issues
 3. **Architecture**: [ADR Index](./docs/adr/README.md) - Understand design decisions
 4. **Service Details**: [services/*/README.md](./services/) - Service-specific documentation

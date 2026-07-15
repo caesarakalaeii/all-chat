@@ -5,7 +5,7 @@ cert-manager.
 
 ## What this fixes
 
-`SECURITY_AUDIT_REPORT.md` finding **M14** — the base manifests expose
+`../../../../docs/security/SECURITY_AUDIT_REPORT.md` finding **M14** — the base manifests expose
 `api-gateway` as a raw `LoadBalancer` on plain HTTP (port 8080) with no TLS
 resource, no Ingress, and no cert-manager integration.
 

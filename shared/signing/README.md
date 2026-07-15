@@ -2,7 +2,7 @@
 
 HMAC-SHA256 based request signing for secure inter-service communication in All-Chat.
 
-> **Status:** Implemented but **not yet wired into any prod service** (see `RESIDUALS.md` L2).
+> **Status:** Implemented but **not yet wired into any prod service** (see `../../docs/security/RESIDUALS.md` L2).
 > Kubernetes NetworkPolicies are the current service-to-service isolation control.
 > This library is hardened and tested; wiring requires shared-secret distribution +
 > a service-identity contract rollout.
