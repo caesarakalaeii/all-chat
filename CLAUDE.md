@@ -144,6 +144,14 @@ Keep documentation from rotting. The repo root repeatedly accumulated stale, poi
 
 ---
 
+## Shipping a Feature
+
+Shipping a new user-facing feature is not "done" until it has been announced in a **Patreon post**. Treat the announcement as part of the release: once the feature is merged and deployed, publish a Patreon update describing what changed and what it does for streamers.
+
+> A workflow to help draft and publish these posts is planned. Until it exists, write the post manually.
+
+---
+
 ## Tech Stack
 
 **Backend**: Go 1.25+, Gin (HTTP), PostgreSQL 16 (pgx/v5), Redis 7 (go-redis/v9), Zap (logging)
