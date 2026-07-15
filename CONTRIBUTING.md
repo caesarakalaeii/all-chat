@@ -64,23 +64,19 @@ func TestFeature(t *testing.T) {
 
 **Format**:
 ```
-<type>: <subject>
+<type>(<optional scope>): <subject>
 
 <body>
-
-Co-Authored-By: Claude <noreply@anthropic.com>
 ```
 
 **Types**: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`
 
 **Examples**:
 ```
-feat: Add Kick OAuth support to auth-service
+feat(auth): add Kick OAuth support to auth-service
 
 Implements Kick OAuth 2.0 authorization flow with token storage
 and refresh logic.
-
-Co-Authored-By: Claude <noreply@anthropic.com>
 ```
 
 ---

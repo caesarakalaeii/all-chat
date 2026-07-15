@@ -1,5 +1,7 @@
 # All-Chat Security Audit Report
 
+> **Historical status (as of 2026-07-15):** This is a point-in-time snapshot (audited 2026-06-23, re-checked 2026-07-15), not a live status tracker. Every finding below has since been remediated in code and this document is retained as a historical record. For the current residual-risk register, see [RESIDUALS.md](./RESIDUALS.md).
+
 **Date:** 2026-06-23
 **Method:** 8 parallel `reviewer` subagents (auth, crypto, config/infra, injection, gateway, listeners, deps, frontend) + manual `govulncheck` on 3 critical modules.
 **Scope:** `services/*` (20 svcs), `shared/*` (19 pkgs), `frontend/`, `deployments/k8s/`, Dockerfiles, docker-compose.

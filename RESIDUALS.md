@@ -3,7 +3,7 @@
 Tracks items from `SECURITY_AUDIT_REPORT.md` that are **not yet fully closed**.
 Status reflects the `security/audit-hardening` branch state as of the audit pass.
 
-Legend: ✅ done · 🔶 minimum done / partial · ⏳ deferred · 🟡 done in working tree (pending commit)
+Legend: ✅ done · 🔶 minimum done / partial · ⏳ deferred · 🟡 done in working tree (committed)
 
 ---
 
@@ -15,7 +15,7 @@ Legend: ✅ done · 🔶 minimum done / partial · ⏳ deferred · 🟡 done in 
 | **L2** | `shared/signing/` implemented but not wired into any prod service | ⏳ | Package is hardened (min secret length, future-timestamp replay rejection, query + service-name signed, constant-time compare) but `grep shared/signing services/ --glob '*.go'` = **0 prod imports** (tests only). Documented as deferral — wiring requires shared secret distribution + service-identity contract rollout across all inter-service calls. Current isolation = k8s NetworkPolicies (default-deny added in this pass). | Wire `Signer.VerifyMiddleware()` into one pilot internal endpoint; design key distribution (secretKeyRef per service pair); then roll out. CLAUDE.md updated to state "implemented-not-deployed". |
 | **ENG1** | auth-service `/internal/chat/announce` (used by engagement-service for opt-in round-start posts) is an arbitrary-message-**as-any-streamer** primitive: the acting streamer comes from an unauthenticated request body, gated only by the shared `SERVICE_JWT_SECRET`. A wider internal surface than `/chat/send` (which derives the streamer from the authenticated token). PR #524 review P3-10. | ⏳ | Not externally reachable — the `/internal` route is only registered when `SERVICE_JWT_SECRET` is set and is NetworkPolicy-restricted to in-cluster callers; consistent with the current internal trust model (services already trust the shared service JWT). The exposure is that any holder of the service secret can post to chat as any streamer with the send scope. | Keep the NetworkPolicy allow-list to `auth-service:8081/internal` tight; consider a dedicated engagement-only key/kid so a leaked engagement secret can't mint announces for unrelated services; once `shared/signing` (L2) rolls out, sign the announce with the engagement service identity. |
 
-## Completed in this hardening pass (working tree, pending commit)
+## Completed in this hardening pass (committed)
 
 These were listed as deferred in the initial commit message but the parallel
 residual pass landed them. Listed here for traceability.
@@ -23,8 +23,8 @@ residual pass landed them. Listed here for traceability.
 | ID | Finding | Status | Note |
 |----|---------|--------|------|
 | **H2** | Logout blacklist never checked | 🟡 | `JWTAuthWithRevocation(kc, rdb)` now used in all 5 services (api-gateway was done in initial commit; share/moderation/payment/overlay-manager wired in residual pass). |
-| **H5** | JWT in WS URL query → access logs | 🟡 | Gateway now reads token via `Sec-WebSocket-Protocol` (`extractWSAuthToken`) with `?n=` query fallback for rollout; logging middleware redacts token. Frontend WS clients updated. |
-| **H7** | Redis unauthenticated | 🟡 | k8s manifests committed (NetworkPolicy default-deny + Redis secret). Go clients across 16 services now read `REDIS_PASSWORD`; activation requires setting the secret in-cluster. |
+| **H5** | JWT in WS URL query → access logs | 🟡 | Gateway now reads token via `Sec-WebSocket-Protocol` (`extractWSAuthToken`) with `?token=` query fallback for rollout; logging middleware redacts token. Frontend WS clients updated. |
+| **H7** | Redis unauthenticated | 🟡 | k8s manifests committed (NetworkPolicy default-deny + Redis secret). Go clients across 18 services now read `REDIS_PASSWORD`; activation requires setting the secret in-cluster. |
 | **M1** | Refresh token in URL fragment (streamer login) | ✅ | Streamer OAuth redirect now uses short-lived `?code=` exchanged via Redis (mirrors viewer flow), not `#access_token=&refresh_token=`. **H3** further hardened: `/exchange` returns `user` (no tokens) + sets httpOnly cookies. |
 | **M17** | TTS token + spoken text in URL query | 🟡 | Frontend sends `Authorization: Bearer` + JSON body; backend `HandleTTS` reads header with `?tts_token=` query fallback for backward compat. |
 

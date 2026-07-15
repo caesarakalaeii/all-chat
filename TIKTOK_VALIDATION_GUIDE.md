@@ -23,6 +23,10 @@ docker logs <your-tiktok-container-name> | grep -i "backoff"
 ## 1. Verify Reduced Backoff Parameters
 
 ### Check Initialization
+> **Note:** `tiktok-listener` in the `docker` commands below is a placeholder (tiktok-listener is
+> not in docker-compose; substitute your actual container/binary name, or read the logs of whatever
+> you started in Prerequisites).
+
 ```bash
 # Should see faster backoff parameters in logs/behavior
 docker logs tiktok-listener -f
@@ -56,12 +60,10 @@ docker logs -f tiktok-listener | grep "status check"
 - Error results cached: **2 seconds** (retry quickly)
 
 ### Check Cache Stats
-```bash
-curl http://localhost:8089/stats | jq
-```
-
-**Expected Fields:**
-- `cache_stats`: Shows TTL distribution (live/offline/error)
+> **Note:** There is no `/stats` endpoint on tiktok-listener, and the cache TTL is not exposed
+> over HTTP. The dynamic cache TTL is only observable in the service's debug logs. Look for the
+> `Using cached live status (dynamic TTL)` log line, which includes a `ttl_ms` field
+> (5000 for live, 15000 for offline, 2000 for error results).
 
 ## 3. Verify State Inspection Endpoints
 

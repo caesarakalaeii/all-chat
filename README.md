@@ -1,8 +1,4 @@
 <p align="center">
-  <img src="landing-full.png" alt="All-Chat — One overlay, every platform" width="600" />
-</p>
-
-<p align="center">
   <strong>One overlay. Every platform.</strong>
 </p>
 
@@ -27,7 +23,7 @@ No bots. No IRC tokens. No complicated setup.
 - **5 Platforms, One Feed** — Twitch, YouTube, Kick, TikTok, and Discord messages in a single overlay
 - **No Setup Required** — Sign in, create an overlay, paste the URL into OBS. That's it.
 - **Every Emote Works** — 7TV, BTTV, FFZ, plus native Twitch and YouTube emotes all render correctly
-- **12 Themes + Full CSS** — Built-in themes from Win98 retro to cyberpunk neon, or write your own CSS
+- **16 Themes + Full CSS** — Built-in themes from Win98 retro to cyberpunk neon, or write your own CSS
 - **Real-Time Delivery** — Messages arrive via WebSocket — no 5-second delay
 - **Smart Polling** — Listeners only run when your overlay is actually visible (see [How it works](#demand-driven-listeners))
 - **Browser Extension** — Replace native site chat with All-Chat on Twitch, YouTube, and Kick
@@ -68,7 +64,7 @@ You can also open it from your overlay's settings page (or its preview page) via
 
 ### 3. Customize the look
 
-All-Chat ships with **12 ready-made themes** you can paste into your OBS Browser Source custom CSS:
+All-Chat ships with **16 ready-made themes** you can paste into your OBS Browser Source custom CSS:
 
 | Theme | Vibe |
 |-------|------|
@@ -84,6 +80,10 @@ All-Chat ships with **12 ready-made themes** you can paste into your OBS Browser
 | [Minimal](./docs/overlay-themes/minimal-theme.css) | Just the text |
 | [Minimal Icon](./docs/overlay-themes/minimal-icon-theme.css) | Text + platform icons |
 | [Noita Minimal](./docs/overlay-themes/noita-minimal-theme.css) | Inspired by Noita |
+| [Comic Speech](./docs/overlay-themes/comic-speech-theme.css) | Pop-art speech balloons with halftone and ink outlines |
+| [Neo Brutalist](./docs/overlay-themes/neo-brutalist-theme.css) | Bold cards with thick borders and hard offset shadows |
+| [Sticky Notes](./docs/overlay-themes/sticky-notes-theme.css) | Tilted paper notes with washi tape |
+| [Trading Card](./docs/overlay-themes/trading-card-theme.css) | Holographic collectible cards |
 
 Want to build your own? See the **[CSS Customization Guide](./docs/CSS_CUSTOMIZATION.md)** or the **[Theme Gallery & Creation Guide](./docs/overlay-themes/README.md)**.
 
@@ -187,6 +187,9 @@ Platform Listeners (Twitch IRC, YouTube API, Kick Pusher, TikTok WS, Discord Bot
 | `moderation-service` | Cross-platform chat moderation write-path: delete / timeout / ban (ADR-0017) |
 | `payment-service` | Patreon premium entitlements: grants `users.is_premium` (streamer, ADR-0018) and `viewers.is_premium` (viewer split, ADR-0019) from subscriptions |
 | `token-refresh-service` | OAuth token refresh on schedule |
+| `engagement-service` | Polls, predictions, and a per-overlay viewer points economy (#523) |
+| `discord-bot` | TypeScript Discord bot for community ops (not a chat listener) |
+| `support-bot` | Discord support/admin agent |
 
 ### Tech Stack
 

@@ -6,7 +6,7 @@
 
 ### CORS Configuration
 - [ ] **Update CORS middleware to use CORSFromEnv()**
-  - Location: `services/api-gateway/cmd/main.go:201`
+  - Location: `services/api-gateway/cmd/main.go:454`
   - Current: Uses basic CORS() function
   - Blocker: Waiting for shared module rebuild
   - Impact: Better environment-based CORS configuration
@@ -30,7 +30,7 @@
   - **Temporary Decision (2025-12-21)**: Using wildcard origins for rapid development, relying on JWT auth + rate limiting for security
 
 - [x] **Implement AES-GCM encryption for OAuth tokens** ✅ COMPLETE
-  - Location: `shared/encryption/encryption.go`, `shared/crypto/crypto.go`
+  - Location: `shared/encryption/encryption.go`, `shared/encryption/versioned.go`
   - Status: Implemented and in use by auth-service
   - Migration tool: `services/auth-service/cmd/token-encryption-backfill/main.go`
   - Migration doc: `docs/migrations/2025-02-auth-token-encryption.md`
@@ -46,7 +46,7 @@
   - Impact: Prevents abuse, protects resources
 
 - [ ] **Configure CORS for production**
-  - Location: `services/api-gateway/cmd/main.go:184`
+  - Location: `services/api-gateway/cmd/main.go:454`
   - Current: Allows `*` in development
   - Impact: Security hardening
   - Task: Update to `CORSFromEnv()` after shared module rebuild
@@ -71,7 +71,7 @@
   - Impact: Ensure reliability for YouTube platform
 
 - [ ] **Add comprehensive unit/integration tests**
-  - Status: Partial - 40+ test files exist across services
+  - Status: Partial - 260+ test files exist across services
   - Scope: All services (coverage varies by service)
   - Impact: Code quality, prevent regressions
 
@@ -82,7 +82,7 @@
   - Impact: Service-level monitoring and dashboards in place
 
 - [x] **Implement distributed tracing with OpenTelemetry** ✅ COMPLETE (2026-01-15)
-  - Location: `shared/tracing/tracing.go`, `services/api-gateway/cmd/main.go`
+  - Location: `shared/tracing/tracer.go`, `services/api-gateway/cmd/main.go`
   - Status: Implemented with OTEL_ENABLED environment variable
   - Features: Optional enablement via env var, integrated in API Gateway
   - Impact: Debugging, performance optimization
