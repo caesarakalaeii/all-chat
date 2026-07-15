@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/caesar/all-chat/services/api-gateway/sessions"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
@@ -119,6 +120,11 @@ func TestRefreshConnectionTTLs_HeartbeatsConnectedOverlaySources(t *testing.T) {
 		pools:            map[string]*Pool{"o1": NewPool("o1", zap.NewNop()), "o2": NewPool("o2", zap.NewNop())},
 		noDemandOverlays: map[string]bool{},
 		connectionTTL:    10 * time.Minute,
+		// refreshConnectionTTLs calls sessionManager.RefreshTTLs; wire a real one
+		// (backed by the test miniredis) so the heartbeat exercises the actual
+		// session-TTL refresh instead of dereferencing a nil manager. RefreshTTLs
+		// only touches redis, so a nil DB pool is fine here.
+		sessionManager: sessions.NewSessionManager(client, nil, zap.NewNop(), 0),
 	}
 
 	m.refreshConnectionTTLs()
@@ -149,6 +155,7 @@ func TestRefreshConnectionTTLs_SkipsDemandFreeOverlays(t *testing.T) {
 		pools:            map[string]*Pool{"live": NewPool("live", zap.NewNop()), "participant": NewPool("participant", zap.NewNop())},
 		noDemandOverlays: map[string]bool{"participant": true},
 		connectionTTL:    10 * time.Minute,
+		sessionManager:   sessions.NewSessionManager(client, nil, zap.NewNop(), 0),
 	}
 
 	m.refreshConnectionTTLs()

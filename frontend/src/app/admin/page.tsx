@@ -21,7 +21,7 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { Users, LayoutGrid, Radio, Eye, Ban } from 'lucide-react'
+import { Users, LayoutGrid, Radio, Eye, Ban, Activity } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -31,6 +31,11 @@ interface AdminStats {
   banned_users: number
   active_overlays: number
   total_sources: { [platform: string]: number }
+  // Active users = distinct non-banned users with an overlay connected within
+  // the window (overlays.last_connected_at). DAU / WAU / MAU.
+  active_users_24h: number
+  active_users_7d: number
+  active_users_30d: number
 }
 
 function StatCard({
@@ -111,6 +116,32 @@ export default function AdminDashboard() {
           icon={LayoutGrid}
         />
         <StatCard label="Total Sources" value={loading ? undefined : totalSources} icon={Radio} />
+      </div>
+
+      {/* Active users */}
+      <div className="mb-2 flex items-center gap-2">
+        <Activity className="size-5 text-text-sub" aria-hidden="true" />
+        <h2 className="text-lg font-semibold text-text">Active users</h2>
+      </div>
+      <p className="mb-4 text-sm text-text-sub">
+        Distinct users with at least one overlay connected in the window (excludes banned users).
+      </p>
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StatCard
+          label="Last 24 hours"
+          value={loading ? undefined : stats?.active_users_24h}
+          icon={Activity}
+        />
+        <StatCard
+          label="Last 7 days"
+          value={loading ? undefined : stats?.active_users_7d}
+          icon={Activity}
+        />
+        <StatCard
+          label="Last 30 days"
+          value={loading ? undefined : stats?.active_users_30d}
+          icon={Activity}
+        />
       </div>
 
       {/* Navigation cards */}

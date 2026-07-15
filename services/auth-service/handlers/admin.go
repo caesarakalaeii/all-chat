@@ -425,6 +425,15 @@ func (h *AdminHandler) GetDashboardStats(c *gin.Context) {
 		BannedUsers    int            `json:"banned_users"`
 		ActiveOverlays int            `json:"active_overlays"`
 		TotalSources   map[string]int `json:"total_sources"`
+		// Active users: distinct non-banned owners of an overlay whose WebSocket
+		// connection was seen within the window. overlays.last_connected_at is
+		// heartbeat-refreshed (~2min) while an overlay is live, so it is the
+		// truest signal of real product usage. Logins are not separately tracked
+		// (users.updated_at is polluted by the daily automated token refresh),
+		// which is why overlay connections define activity here.
+		ActiveUsers24h int `json:"active_users_24h"`
+		ActiveUsers7d  int `json:"active_users_7d"`
+		ActiveUsers30d int `json:"active_users_30d"`
 	}
 
 	var stats AdminStats
@@ -463,6 +472,23 @@ func (h *AdminHandler) GetDashboardStats(c *gin.Context) {
 				stats.TotalSources[platform] = count
 			}
 		}
+	}
+
+	// Active users (rolling windows): distinct owners of a recently-connected
+	// overlay, excluding banned users. Computed in one round trip via FILTER;
+	// the outer 30d bound keeps the scan to the window that feeds every bucket.
+	err = h.db.QueryRow(c.Request.Context(), `
+		SELECT
+			COUNT(DISTINCT o.user_id) FILTER (WHERE o.last_connected_at >= NOW() - INTERVAL '24 hours'),
+			COUNT(DISTINCT o.user_id) FILTER (WHERE o.last_connected_at >= NOW() - INTERVAL '7 days'),
+			COUNT(DISTINCT o.user_id) FILTER (WHERE o.last_connected_at >= NOW() - INTERVAL '30 days')
+		FROM overlays o
+		JOIN users u ON u.id = o.user_id
+		WHERE u.is_banned = false
+		  AND o.last_connected_at >= NOW() - INTERVAL '30 days'
+	`).Scan(&stats.ActiveUsers24h, &stats.ActiveUsers7d, &stats.ActiveUsers30d)
+	if err != nil {
+		h.logger.Error("Failed to count active users", zap.Error(err))
 	}
 
 	c.JSON(http.StatusOK, stats)
