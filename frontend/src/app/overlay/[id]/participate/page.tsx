@@ -297,12 +297,12 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
   )
 
   if (authed === null) {
-    return <main className="mx-auto max-w-md p-6 text-center text-text-sub">Loading…</main>
+    return <main id="main-content" tabIndex={-1} className="mx-auto max-w-md p-6 text-center text-text-sub">Loading…</main>
   }
 
   if (!authed) {
     return (
-      <main className="mx-auto max-w-md space-y-4 p-6 text-center">
+      <main id="main-content" tabIndex={-1} className="mx-auto max-w-md space-y-4 p-6 text-center">
         <h1 className="text-xl font-bold">Join the fun</h1>
         <p className="text-text-sub">Log in with your platform account to vote and wager.</p>
         <div className="flex flex-col gap-2">
@@ -336,7 +336,7 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
   const pointsName = engagement?.points_name ?? 'Points'
 
   return (
-    <main className="mx-auto max-w-md space-y-6 p-4">
+    <main id="main-content" tabIndex={-1} className="mx-auto max-w-md space-y-6 p-4">
       <header className="flex items-center justify-between">
         <h1 className="text-lg font-bold">Participate</h1>
         <span

@@ -123,7 +123,7 @@ export default function DocsPage() {
   return (
     <div className="min-h-screen bg-bg transition-colors duration-300">
       <AppNav />
-      <div className="mx-auto max-w-4xl px-4 py-12">
+      <main id="main-content" tabIndex={-1} className="mx-auto max-w-4xl px-4 py-12">
         <div className="rounded-xl border border-border bg-surface p-8 transition-colors duration-300 md:p-12">
           <div className="mb-8 space-y-2">
             <p className="text-xs font-semibold tracking-[0.2em] text-twitch uppercase">
@@ -131,8 +131,8 @@ export default function DocsPage() {
             </p>
             <h1 className="text-3xl font-bold text-text">Streamer guide</h1>
             <p className="text-sm text-text-dim">
-              Set it up in OBS, run polls, predictions and moderation from the chat monitor, and make
-              it your own.
+              Set it up in OBS, run polls, predictions and moderation from the chat monitor, and
+              make it your own.
             </p>
             <p className="text-sm text-text-sub">
               Building a bot, alert box, or analytics tool?{' '}
@@ -181,8 +181,8 @@ export default function DocsPage() {
                 </li>
                 <li>
                   In the dashboard, create an <strong>overlay</strong> and connect the platforms you
-                  stream on. Each connected platform becomes a <em>chat source</em> on that overlay —
-                  mix and match as many as you like.
+                  stream on. Each connected platform becomes a <em>chat source</em> on that overlay
+                  — mix and match as many as you like.
                 </li>
                 <li>
                   Copy the overlay&apos;s browser-source URL and add it to OBS as a{' '}
@@ -205,12 +205,12 @@ export default function DocsPage() {
               </p>
               <Pre>{`https://allch.at/overlay/<overlay-id>?passive=true`}</Pre>
               <p>
-                A <strong>passive</strong> overlay renders chat exactly like a normal one, but it does
-                not ask All-Chat to start capturing on its own. That matters because YouTube discovery
-                gives up after an hour of not finding a live stream (so it never hammers YouTube for an
-                offline channel). A normal 24/7 overlay would trip that timeout while you are offline
-                and sit parked by the time you go live — a passive overlay never starts that clock, so
-                nothing gets stuck.
+                A <strong>passive</strong> overlay renders chat exactly like a normal one, but it
+                does not ask All-Chat to start capturing on its own. That matters because YouTube
+                discovery gives up after an hour of not finding a live stream (so it never hammers
+                YouTube for an offline channel). A normal 24/7 overlay would trip that timeout while
+                you are offline and sit parked by the time you go live — a passive overlay never
+                starts that clock, so nothing gets stuck.
               </p>
               <h3>When you go live</h3>
               <ol className="list-decimal space-y-2 pl-6 text-text-sub">
@@ -228,10 +228,10 @@ export default function DocsPage() {
                 </li>
               </ol>
               <p>
-                A plain browser-source refresh does <em>not</em> restart a parked YouTube channel — use
-                the monitor&apos;s <strong>Rediscover</strong> button. While a channel is parked, its
-                platform dot shows an <strong>indigo &ldquo;paused&rdquo;</strong> state (waiting for
-                you to trigger it), not a red error.
+                A plain browser-source refresh does <em>not</em> restart a parked YouTube channel —
+                use the monitor&apos;s <strong>Rediscover</strong> button. While a channel is
+                parked, its platform dot shows an <strong>indigo &ldquo;paused&rdquo;</strong> state
+                (waiting for you to trigger it), not a red error.
               </p>
             </section>
 
@@ -245,12 +245,12 @@ export default function DocsPage() {
               </p>
               <ul>
                 <li>
-                  <strong>Send messages</strong> as yourself to Twitch, YouTube or Kick straight from
-                  the monitor (TikTok and Discord have no send API).
+                  <strong>Send messages</strong> as yourself to Twitch, YouTube or Kick straight
+                  from the monitor (TikTok and Discord have no send API).
                 </li>
                 <li>
-                  <strong>Re-discover YouTube</strong> forces a fresh look for your live stream — use
-                  it if YouTube chat stops after a crash or restart, or to start capture for a{' '}
+                  <strong>Re-discover YouTube</strong> forces a fresh look for your live stream —
+                  use it if YouTube chat stops after a crash or restart, or to start capture for a{' '}
                   <a href="#24-7-irl">passive 24/7 overlay</a> when you go live.
                 </li>
                 <li>
@@ -267,14 +267,14 @@ export default function DocsPage() {
               <p>
                 With <strong>Moderation controls</strong> on in the monitor, hover a message to{' '}
                 <strong>Delete</strong> it, or open a chatter to <strong>Timeout</strong>,{' '}
-                <strong>Ban</strong> or <strong>Unban</strong> them — applied on the source platform.
-                What&apos;s available depends on the platform (Twitch does delete, timeout and ban;
-                YouTube is ban-only; TikTok has no moderation API).
+                <strong>Ban</strong> or <strong>Unban</strong> them — applied on the source
+                platform. What&apos;s available depends on the platform (Twitch does delete, timeout
+                and ban; YouTube is ban-only; TikTok has no moderation API).
               </p>
               <p>
-                The first time, use <strong>Enable moderation &amp; chat sending</strong> to grant the
-                extra permissions (for Discord you re-invite the bot). Moderating from your overlay is
-                a <a href="#premium">Premium</a> feature.
+                The first time, use <strong>Enable moderation &amp; chat sending</strong> to grant
+                the extra permissions (for Discord you re-invite the bot). Moderating from your
+                overlay is a <a href="#premium">Premium</a> feature.
               </p>
             </section>
 
@@ -299,13 +299,13 @@ export default function DocsPage() {
                   <strong>Cancel &amp; refund</strong>.
                 </li>
                 <li>
-                  Viewers join from chat (e.g. <Code>!vote 2</Code>, <Code>!predict 1 500</Code>) or on
-                  the <strong>Viewer participation page</strong>.
+                  Viewers join from chat (e.g. <Code>!vote 2</Code>, <Code>!predict 1 500</Code>) or
+                  on the <strong>Viewer participation page</strong>.
                 </li>
                 <li>
-                  Add the <strong>OBS poll widget</strong> and <strong>OBS prediction widget</strong>{' '}
-                  as their own browser sources so results show on stream — copy their URLs from the
-                  Engagement section.
+                  Add the <strong>OBS poll widget</strong> and{' '}
+                  <strong>OBS prediction widget</strong> as their own browser sources so results
+                  show on stream — copy their URLs from the Engagement section.
                 </li>
               </ul>
             </section>
@@ -314,14 +314,15 @@ export default function DocsPage() {
             <section id="events-credits">
               <h2>Events &amp; credit roll</h2>
               <p>
-                Your overlay shows <strong>events</strong> too — subs, resubs, gift subs, bits/cheers,
-                raids, Super Chats, memberships and follows. Use <strong>Event Settings</strong> in the
-                editor to choose exactly which events appear, per platform.
+                Your overlay shows <strong>events</strong> too — subs, resubs, gift subs,
+                bits/cheers, raids, Super Chats, memberships and follows. Use{' '}
+                <strong>Event Settings</strong> in the editor to choose exactly which events appear,
+                per platform.
               </p>
               <p>
                 For the end of a stream, open <strong>Credits</strong> to set up a{' '}
-                <strong>Credit Roll</strong> — a scrolling thank-you of your top subscribers, gifters,
-                cheerers, raiders and new followers. It&apos;s its own browser source (
+                <strong>Credit Roll</strong> — a scrolling thank-you of your top subscribers,
+                gifters, cheerers, raiders and new followers. It&apos;s its own browser source (
                 <strong>Copy Credits OBS URL</strong>).
               </p>
             </section>
@@ -330,11 +331,11 @@ export default function DocsPage() {
             <section id="sharing">
               <h2>Share an overlay</h2>
               <p>
-                <strong>Share Overlay</strong> lets another streamer pull your overlay&apos;s chat into
-                theirs — handy for collabs and raids. Send a request to their Twitch username; once
-                they accept, your overlay appears in their editor under <strong>Shared Overlays</strong>{' '}
-                to add as a source, and either of you can revoke it later. Sharing is a{' '}
-                <a href="#premium">Premium</a> feature.
+                <strong>Share Overlay</strong> lets another streamer pull your overlay&apos;s chat
+                into theirs — handy for collabs and raids. Send a request to their Twitch username;
+                once they accept, your overlay appears in their editor under{' '}
+                <strong>Shared Overlays</strong> to add as a source, and either of you can revoke it
+                later. Sharing is a <a href="#premium">Premium</a> feature.
               </p>
             </section>
 
@@ -344,8 +345,7 @@ export default function DocsPage() {
               <p>
                 All-Chat ships with <strong>16 built-in themes</strong> — from Modern Dark and
                 Minimal to Trading Card, Comic Speech, Sticky Notes, Vaporwave, Cyberpunk and more.
-                Applying
-                one takes a click and needs <strong>no CSS at all</strong>.
+                Applying one takes a click and needs <strong>no CSS at all</strong>.
               </p>
               <ol className="list-decimal space-y-2 pl-6 text-text-sub">
                 <li>Open your overlay in the dashboard to edit it.</li>
@@ -356,8 +356,8 @@ export default function DocsPage() {
                 <li>Save. Your OBS browser source picks up the new look on its next refresh.</li>
               </ol>
               <p>
-                You can also preview every theme live on the{' '}
-                <Link href="/">home page</Link> before you sign in.
+                You can also preview every theme live on the <Link href="/">home page</Link> before
+                you sign in.
               </p>
             </section>
 
@@ -398,7 +398,10 @@ export default function DocsPage() {
                   It loads <em>after</em> the theme, so you can start from a built-in theme and
                   override just the parts you want.
                 </li>
-                <li>There&apos;s a live preview right next to the editor, so you see changes as you type.</li>
+                <li>
+                  There&apos;s a live preview right next to the editor, so you see changes as you
+                  type.
+                </li>
               </ul>
 
               <h3>Quick wins: style variables</h3>
@@ -410,16 +413,52 @@ export default function DocsPage() {
                 rows={[
                   { name: '--chat-font-size', default: '1rem', effect: 'Message text size.' },
                   { name: '--chat-font-family', default: 'inherit', effect: 'Message text font.' },
-                  { name: '--chat-message-color', default: '#ffffff', effect: 'Message text color.' },
-                  { name: '--chat-message-gap', default: '0.75rem', effect: 'Vertical space between messages.' },
-                  { name: '--chat-bubble-border-radius', default: '0.5rem', effect: 'Roundness of the message bubble.' },
-                  { name: '--chat-bubble-padding', default: '0.75rem', effect: 'Padding inside each message.' },
-                  { name: '--chat-avatar-size', default: '2.5rem', effect: 'Avatar width and height.' },
-                  { name: '--chat-username-font-size', default: '0.875rem', effect: 'Username size.' },
+                  {
+                    name: '--chat-message-color',
+                    default: '#ffffff',
+                    effect: 'Message text color.',
+                  },
+                  {
+                    name: '--chat-message-gap',
+                    default: '0.75rem',
+                    effect: 'Vertical space between messages.',
+                  },
+                  {
+                    name: '--chat-bubble-border-radius',
+                    default: '0.5rem',
+                    effect: 'Roundness of the message bubble.',
+                  },
+                  {
+                    name: '--chat-bubble-padding',
+                    default: '0.75rem',
+                    effect: 'Padding inside each message.',
+                  },
+                  {
+                    name: '--chat-avatar-size',
+                    default: '2.5rem',
+                    effect: 'Avatar width and height.',
+                  },
+                  {
+                    name: '--chat-username-font-size',
+                    default: '0.875rem',
+                    effect: 'Username size.',
+                  },
                   { name: '--chat-emote-scale', default: '1', effect: 'Emote size multiplier.' },
-                  { name: '--chat-show-avatars', default: 'block', effect: 'Set to none to hide avatars.' },
-                  { name: '--chat-show-badges', default: 'flex', effect: 'Set to none to hide badges.' },
-                  { name: '--chat-show-timestamps', default: 'block', effect: 'Set to none to hide timestamps.' },
+                  {
+                    name: '--chat-show-avatars',
+                    default: 'block',
+                    effect: 'Set to none to hide avatars.',
+                  },
+                  {
+                    name: '--chat-show-badges',
+                    default: 'flex',
+                    effect: 'Set to none to hide badges.',
+                  },
+                  {
+                    name: '--chat-show-timestamps',
+                    default: 'block',
+                    effect: 'Set to none to hide timestamps.',
+                  },
                 ]}
               />
               <Pre lang="css">{`:root {
@@ -435,13 +474,33 @@ export default function DocsPage() {
               </p>
               <HookTable
                 rows={[
-                  { selector: '.overlay-live-body', kind: 'class', targets: 'The whole message list container.' },
+                  {
+                    selector: '.overlay-live-body',
+                    kind: 'class',
+                    targets: 'The whole message list container.',
+                  },
                   { selector: '.chat-message', kind: 'class', targets: 'One chat message bubble.' },
                   { selector: '.chat-username', kind: 'class', targets: 'The author name.' },
-                  { selector: '.platform-badge', kind: 'class', targets: 'The platform tag/icon next to the name.' },
-                  { selector: '.event-message', kind: 'class', targets: 'A sub / raid / super chat / gift alert.' },
-                  { selector: '[data-platform="twitch"]', kind: 'attribute', targets: 'Messages from a platform (twitch, youtube, kick, tiktok, discord).' },
-                  { selector: '[data-username="…"]', kind: 'attribute', targets: 'Messages from a specific user.' },
+                  {
+                    selector: '.platform-badge',
+                    kind: 'class',
+                    targets: 'The platform tag/icon next to the name.',
+                  },
+                  {
+                    selector: '.event-message',
+                    kind: 'class',
+                    targets: 'A sub / raid / super chat / gift alert.',
+                  },
+                  {
+                    selector: '[data-platform="twitch"]',
+                    kind: 'attribute',
+                    targets: 'Messages from a platform (twitch, youtube, kick, tiktok, discord).',
+                  },
+                  {
+                    selector: '[data-username="…"]',
+                    kind: 'attribute',
+                    targets: 'Messages from a specific user.',
+                  },
                 ]}
               />
               <p>Example — give each platform its own accent stripe:</p>
@@ -480,8 +539,9 @@ export default function DocsPage() {
               <h2>Custom fonts</h2>
               <p>
                 You can pull in a Google Font with a normal <Code>@import</Code>, then use it
-                anywhere in your CSS. To protect your viewers&apos; privacy, fonts are served through
-                All-Chat rather than directly from Google, so only these families are available:
+                anywhere in your CSS. To protect your viewers&apos; privacy, fonts are served
+                through All-Chat rather than directly from Google, so only these families are
+                available:
               </p>
               <p className="text-sm text-text-sub">
                 Barlow, Barlow Condensed, Bebas Neue, Exo 2, Inter, Monoton, Montserrat, Nunito,
@@ -492,8 +552,8 @@ export default function DocsPage() {
 
 :root { --chat-font-family: 'Press Start 2P', monospace; }`}</Pre>
               <p>
-                Requesting a family that isn&apos;t on the list simply won&apos;t load — pick another
-                or leave the default.
+                Requesting a family that isn&apos;t on the list simply won&apos;t load — pick
+                another or leave the default.
               </p>
             </section>
 
@@ -506,12 +566,12 @@ export default function DocsPage() {
               </p>
               <ul>
                 <li>
-                  <strong>Moderate from your overlay</strong> — delete, timeout and ban from the chat
-                  monitor.
+                  <strong>Moderate from your overlay</strong> — delete, timeout and ban from the
+                  chat monitor.
                 </li>
                 <li>
-                  <strong>ElevenLabs text-to-speech</strong> — premium TTS voices (basic browser TTS is
-                  free).
+                  <strong>ElevenLabs text-to-speech</strong> — premium TTS voices (basic browser TTS
+                  is free).
                 </li>
                 <li>
                   <strong>YouTube stream selection</strong> — choose which stream to follow on
@@ -543,7 +603,7 @@ export default function DocsPage() {
             </div>
           </div>
         </div>
-      </div>
+      </main>
     </div>
   )
 }

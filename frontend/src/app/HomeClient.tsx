@@ -173,7 +173,7 @@ export default function HomeClient() {
   }
 
   return (
-    <main className="min-h-screen scroll-smooth">
+    <main id="main-content" tabIndex={-1} className="min-h-screen scroll-smooth">
       <HomeHeader />
 
       {/* ------------------------------------------------------------------ */}
