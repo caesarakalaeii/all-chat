@@ -48,10 +48,18 @@ const nextConfig = {
     ]
   },
 
-  // Security headers (M10). Per-route CSP + standard hardening. The overlay
-  // public route (/overlay/:id) gets frame-ancestors 'none' so it cannot be
-  // iframed by third parties; everything else allows 'self' framing (editor
-  // SplitView embeds /overlays/:id/preview/embed same-origin).
+  // Security headers (M10). Per-route CSP + standard hardening. Framing policy
+  // is tiered (frame-ancestors is the authoritative control; browsers ignore
+  // X-Frame-Options whenever frame-ancestors is present, CSP L2 §"Relation to
+  // X-Frame-Options"):
+  //   - app + editor SplitView embed  → frame-ancestors 'self' (same-origin)
+  //   - all /overlay/* by default     → frame-ancestors 'none' (locked; keeps
+  //     the interactive routes — /overlay/:id/participate (viewer login +
+  //     points) and /overlay/:id/view (authenticated monitor) — un-framable,
+  //     and any future overlay sub-route locked-by-default)
+  //   - display-only OBS widgets      → frame-ancestors * (embeddable anywhere:
+  //     OBS, Streamlabs, personal sites, third-party dashboards). These carry
+  //     no auth or viewer identity, so clickjacking risk is negligible.
   // TODO(prod): replace script-src 'unsafe-inline' with a per-request nonce
   // (Next.js unstable_inline + generateNonce) once CSP-nonce middleware is in
   // place; 'unsafe-inline' is required now for Next dev + inline RSC chunks.
@@ -86,7 +94,10 @@ const nextConfig = {
     const hardening = [
       { key: 'X-Content-Type-Options', value: 'nosniff' },
       { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-      { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), interest-cohort=()' },
+      {
+        key: 'Permissions-Policy',
+        value: 'camera=(), microphone=(), geolocation=(), interest-cohort=()',
+      },
       // HSTS is honored by browsers only over HTTPS; safe to emit in dev (ignored on http).
       { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
       // Legacy framing fallback. CSP frame-ancestors is the authoritative defense
@@ -97,29 +108,48 @@ const nextConfig = {
       { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
     ]
 
+    const csp = (frameAncestors) => [...cspBase, `frame-ancestors ${frameAncestors}`].join('; ')
+
+    // Display-only OBS browser-source widgets. Public, no auth, no viewer
+    // identity — safe to embed anywhere. Single-segment `:id` (no `*`) so these
+    // match ONLY the exact widget route and never the interactive sub-routes
+    // (participate/view), which stay locked by the /overlay/:id* rule above.
+    const embeddableWidgets = [
+      '/overlay/:id', // OBS chat overlay
+      '/overlay/:id/poll', // poll widget (aggregate only)
+      '/overlay/:id/prediction', // prediction widget (aggregate only)
+      '/overlay/:id/credits', // end-of-stream credit roll
+    ]
+
     return [
       {
         // Editor embed (same-origin iframe) + everything else. X-Frame-Options
         // SAMEORIGIN comes from the shared hardening array.
         source: '/:path*',
-        headers: [
-          ...hardening,
-          { key: 'Content-Security-Policy', value: [...cspBase, "frame-ancestors 'self'"].join('; ') },
-        ],
+        headers: [...hardening, { key: 'Content-Security-Policy', value: csp("'self'") }],
       },
       {
-        // Public overlay route: prevent third-party iframing. Listed AFTER the
-        // catch-all so its stricter headers override for /overlay/* paths
-        // (audit L6 — previously both routes set X-Frame-Options, emitting
-        // conflicting DENY + SAMEORIGIN). The explicit DENY below overrides
-        // the hardening default (SAMEORIGIN) within this entry.
+        // Lock every overlay route by default (participate/view + anything added
+        // later). Listed AFTER the catch-all so its stricter headers override
+        // for /overlay/* paths (audit L6 — previously both routes set
+        // X-Frame-Options, emitting conflicting DENY + SAMEORIGIN). The explicit
+        // DENY overrides the hardening default (SAMEORIGIN) within this entry.
         source: '/overlay/:id*',
         headers: [
           ...hardening,
-          { key: 'Content-Security-Policy', value: [...cspBase, "frame-ancestors 'none'"].join('; ') },
+          { key: 'Content-Security-Policy', value: csp("'none'") },
           { key: 'X-Frame-Options', value: 'DENY' },
         ],
       },
+      // Re-open the display-only widgets. Listed LAST so their headers override
+      // the /overlay/:id* lockdown per matching path. frame-ancestors * makes
+      // them embeddable; X-Frame-Options is reset to SAMEORIGIN (from the shared
+      // hardening) so the legacy header no longer hard-blocks — modern browsers
+      // ignore it anyway because frame-ancestors is present.
+      ...embeddableWidgets.map((source) => ({
+        source,
+        headers: [...hardening, { key: 'Content-Security-Policy', value: csp('*') }],
+      })),
     ]
   },
 
