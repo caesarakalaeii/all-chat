@@ -272,7 +272,7 @@ deployments/ansible/
 
 - [Complete README](README.md) - Detailed deployment guide
 - [Vault Guide](README_VAULT.md) - All about Ansible Vault
-- [Project Docs](../../GETTING_STARTED.md) - Architecture overview
+- [Project Docs](../../docs/GETTING_STARTED.md) - Architecture overview
 
 ---
 

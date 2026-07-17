@@ -480,7 +480,7 @@ docker-compose up
 - [Playwright Documentation](https://playwright.dev)
 - [Next.js Testing Guide](https://nextjs.org/docs/testing)
 - [All-Chat Backend README](../README.md)
-- [Main Project Documentation](../GETTING_STARTED.md)
+- [Main Project Documentation](../docs/GETTING_STARTED.md)
 
 ---
 

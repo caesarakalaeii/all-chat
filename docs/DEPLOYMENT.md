@@ -518,7 +518,7 @@ Increase resources for:
 ## Additional Resources
 
 - [CLAUDE.md](../CLAUDE.md) - Developer documentation
-- [GETTING_STARTED.md](../GETTING_STARTED.md) - Navigation guide
+- [GETTING_STARTED.md](./GETTING_STARTED.md) - Navigation guide
 - [API Documentation](./API.md) - API reference (TODO)
 - [Architecture Docs](./architecture/) - Detailed architecture
 - [Kubernetes Configs](../deployments/k8s/) - K8s manifests

@@ -10,17 +10,20 @@ import sys
 import os
 from pathlib import Path
 
-# Load credentials from .env file
+# Load credentials from the nearest .env file (searching up from this script,
+# so it finds the repo-root .env regardless of where this file lives).
 def load_env():
-    """Load environment variables from .env file."""
-    env_path = Path(__file__).parent / ".env"
-    if env_path.exists():
-        with open(env_path) as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    key, value = line.split("=", 1)
-                    os.environ[key] = value
+    """Load environment variables from the nearest .env file up the tree."""
+    for parent in Path(__file__).resolve().parents:
+        env_path = parent / ".env"
+        if env_path.exists():
+            with open(env_path) as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        key, value = line.split("=", 1)
+                        os.environ[key] = value
+            return
 
 load_env()
 

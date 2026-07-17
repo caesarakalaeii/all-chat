@@ -1,6 +1,6 @@
 name: Security Scans
 
-# S1 (SECURITY_AUDIT_REPORT.md): govulncheck per Go module + npm audit for
+# S1 (docs/security/SECURITY_AUDIT_REPORT.md): govulncheck per Go module + npm audit for
 # Node projects. Runs nightly and on PRs touching Go/Node code.
 # govulncheck gates on reachable vulnerabilities (exit code 3 = vulns found).
 # npm audit gates on high+ severity.
