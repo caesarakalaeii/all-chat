@@ -22,23 +22,18 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import React from 'react'
 import { render, screen, fireEvent, cleanup, waitFor, act } from '@testing-library/react'
 
-// Mock react-hot-toast BEFORE importing the component under test. The mock must
-// expose .success/.error on the default export so TTSGroup's `toast.success(...)` /
-// `toast.error(...)` calls resolve through the vi.fn stubs.
+// Mock @/lib/toast BEFORE importing the component under test. The mock exposes
+// toastManager.add so TTSGroup's `toastManager.add({ title, type })` calls
+// resolve through the vi.fn stub.
 //
 // vi.hoisted runs before vi.mock's factory, which itself runs before `import`
 // statements — this is the supported pattern for accessing shared mock fns.
 const toastMocks = vi.hoisted(() => ({
-  success: vi.fn(),
-  error: vi.fn(),
+  add: vi.fn(),
 }))
-vi.mock('react-hot-toast', () => {
-  const fn = vi.fn()
-  return {
-    default: Object.assign(fn, toastMocks),
-    __esModule: true,
-  }
-})
+vi.mock('@/lib/toast', () => ({
+  toastManager: { add: toastMocks.add },
+}))
 
 import { TTSGroup } from '../TTSGroup'
 import type { TTSGroupProps, ElevenLabsVoice } from '../TTSGroup'
@@ -56,15 +51,14 @@ async function waitForVoiceOption(name: string): Promise<HTMLSelectElement> {
       const opts = Array.from(select.options).map((o) => o.textContent ?? '')
       expect(opts).toContain(name)
     },
-    { timeout: 2000 },
+    { timeout: 2000 }
   )
   return select
 }
 
 afterEach(() => {
   cleanup()
-  toastMocks.success.mockClear()
-  toastMocks.error.mockClear()
+  toastMocks.add.mockClear()
 })
 
 interface MockSpeechSynthesis {
@@ -213,14 +207,19 @@ describe('TTSGroup', () => {
     const { onChange } = renderTTSGroup()
     const sliders = screen.getAllByRole('slider')
     const volumeSlider = sliders.find(
-      s => s.getAttribute('min') === '0' && s.getAttribute('max') === '1' && s.getAttribute('step') === '0.05',
+      (s) =>
+        s.getAttribute('min') === '0' &&
+        s.getAttribute('max') === '1' &&
+        s.getAttribute('step') === '0.05'
     )
     expect(volumeSlider).toBeDefined()
     fireEvent.change(volumeSlider!, { target: { value: '0.5' } })
     expect(onChange).toHaveBeenCalledWith({ tts_volume: 0.5 })
 
     onChange.mockClear()
-    const rateSlider = sliders.find(s => s.getAttribute('min') === '0.5' && s.getAttribute('max') === '2')
+    const rateSlider = sliders.find(
+      (s) => s.getAttribute('min') === '0.5' && s.getAttribute('max') === '2'
+    )
     expect(rateSlider).toBeDefined()
     fireEvent.change(rateSlider!, { target: { value: '1.5' } })
     expect(onChange).toHaveBeenCalledWith({ tts_rate: 1.5 })
@@ -232,7 +231,7 @@ describe('TTSGroup', () => {
     const select = screen.getByRole('combobox', { name: /Voice/i }) as HTMLSelectElement
     expect(select).toBeDefined()
     // Should have voice options (at least default + mocked voices)
-    const options = Array.from(select.options).map(o => o.value)
+    const options = Array.from(select.options).map((o) => o.value)
     expect(options).toContain('VoiceA')
     expect(options).toContain('VoiceB')
     fireEvent.change(select, { target: { value: 'VoiceB' } })
@@ -271,7 +270,9 @@ describe('TTSGroup', () => {
     const tiktokChip = screen.getByRole('button', { name: /tiktok/i })
     fireEvent.click(tiktokChip)
     expect(onChange).toHaveBeenCalled()
-    const lastCall = onChange.mock.calls[onChange.mock.calls.length - 1][0] as Partial<DisplaySettings>
+    const lastCall = onChange.mock.calls[
+      onChange.mock.calls.length - 1
+    ][0] as Partial<DisplaySettings>
     expect(lastCall.tts_enabled_platforms).not.toContain('tiktok')
   })
 
@@ -336,9 +337,7 @@ describe('TTSGroup', () => {
     const input = screen.getByLabelText(/ElevenLabs API key/i) as HTMLInputElement
     expect(input).toBeDefined()
     expect(input.type).toBe('password')
-    expect(
-      screen.getByText(/Your key is encrypted server-side and never returned\./)
-    ).toBeDefined()
+    expect(screen.getByText(/Your key is encrypted server-side and never returned\./)).toBeDefined()
     expect(screen.getByRole('button', { name: /^Save key$/ })).toBeDefined()
   })
 
@@ -423,9 +422,7 @@ describe('TTSGroup', () => {
       hasElevenLabsConfig: true,
       obsUrl: 'https://allch.at/overlay/abc?tts_token=xyz',
     })
-    expect(
-      screen.getByText(/Key saved and encrypted\. Click Test key to verify\./)
-    ).toBeDefined()
+    expect(screen.getByText(/Key saved and encrypted\. Click Test key to verify\./)).toBeDefined()
     expect(screen.getByRole('button', { name: /^Test key$/ })).toBeDefined()
     expect(screen.getByRole('button', { name: /^Remove key$/ })).toBeDefined()
     expect(screen.getByRole('button', { name: /^Copy OBS URL$/ })).toBeDefined()
@@ -438,7 +435,7 @@ describe('TTSGroup', () => {
       () =>
         new Promise<{ ok: boolean; errorCode?: number }>((r) => {
           resolveFn = r
-        }),
+        })
     )
     renderTTSGroup({
       displaySettings: baseSettings({ tts_provider: 'elevenlabs' }),
@@ -473,14 +470,12 @@ describe('TTSGroup', () => {
       fireEvent.click(screen.getByRole('button', { name: /^Test key$/ }))
     })
     await waitFor(() => {
-      expect(
-        screen.getByText(/8,432 \/ 10,000 characters this month \(84%\)/),
-      ).toBeDefined()
+      expect(screen.getByText(/8,432 \/ 10,000 characters this month \(84%\)/)).toBeDefined()
     })
   })
 
   // Test A8: 401 error shows "Invalid API key" toast
-  it('A8: onTestKey {ok:false, errorCode:401} fires toast.error("Invalid API key")', async () => {
+  it('A8: onTestKey {ok:false, errorCode:401} fires an "Invalid API key" error toast', async () => {
     const onTestKey = vi.fn().mockResolvedValue({ ok: false, errorCode: 401 })
     renderTTSGroup({
       displaySettings: baseSettings({ tts_provider: 'elevenlabs' }),
@@ -492,12 +487,12 @@ describe('TTSGroup', () => {
       fireEvent.click(screen.getByRole('button', { name: /^Test key$/ }))
     })
     await waitFor(() => {
-      expect(toastMocks.error).toHaveBeenCalledWith('Invalid API key')
+      expect(toastMocks.add).toHaveBeenCalledWith({ title: 'Invalid API key', type: 'error' })
     })
   })
 
   // Test A9: 429 -> rate-limited toast
-  it('A9: onTestKey {ok:false, errorCode:429} fires toast.error("Rate-limited — try again in a minute")', async () => {
+  it('A9: onTestKey {ok:false, errorCode:429} fires a "Rate-limited — try again in a minute" error toast', async () => {
     const onTestKey = vi.fn().mockResolvedValue({ ok: false, errorCode: 429 })
     renderTTSGroup({
       displaySettings: baseSettings({ tts_provider: 'elevenlabs' }),
@@ -509,12 +504,15 @@ describe('TTSGroup', () => {
       fireEvent.click(screen.getByRole('button', { name: /^Test key$/ }))
     })
     await waitFor(() => {
-      expect(toastMocks.error).toHaveBeenCalledWith('Rate-limited — try again in a minute')
+      expect(toastMocks.add).toHaveBeenCalledWith({
+        title: 'Rate-limited — try again in a minute',
+        type: 'error',
+      })
     })
   })
 
   // Test A10: 5xx -> service unavailable
-  it('A10: onTestKey {ok:false, errorCode:500} fires toast.error("ElevenLabs service unavailable")', async () => {
+  it('A10: onTestKey {ok:false, errorCode:500} fires an "ElevenLabs service unavailable" error toast', async () => {
     const onTestKey = vi.fn().mockResolvedValue({ ok: false, errorCode: 500 })
     renderTTSGroup({
       displaySettings: baseSettings({ tts_provider: 'elevenlabs' }),
@@ -526,7 +524,10 @@ describe('TTSGroup', () => {
       fireEvent.click(screen.getByRole('button', { name: /^Test key$/ }))
     })
     await waitFor(() => {
-      expect(toastMocks.error).toHaveBeenCalledWith('ElevenLabs service unavailable')
+      expect(toastMocks.add).toHaveBeenCalledWith({
+        title: 'ElevenLabs service unavailable',
+        type: 'error',
+      })
     })
   })
 
@@ -551,8 +552,11 @@ describe('TTSGroup', () => {
       fireEvent.click(screen.getByRole('button', { name: /^Test key$/ }))
     })
     await waitFor(() => {
-      expect(toastMocks.error).toHaveBeenCalledWith(
-        expect.stringContaining('voices_read'),
+      expect(toastMocks.add).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: expect.stringContaining('voices_read'),
+          type: 'error',
+        })
       )
     })
   })
@@ -565,8 +569,8 @@ describe('TTSGroup', () => {
       .fn<(apiKey: string) => Promise<ElevenLabsVoice[]>>()
       .mockRejectedValue(
         new Error(
-          'The API key you used is missing the permission voices_read to execute this operation.',
-        ),
+          'The API key you used is missing the permission voices_read to execute this operation.'
+        )
       )
     renderTTSGroup({
       displaySettings: baseSettings({ tts_provider: 'elevenlabs' }),
@@ -578,11 +582,14 @@ describe('TTSGroup', () => {
     fireEvent.change(input, { target: { value: 'sk-typed-but-scoped' } })
     await waitFor(
       () => {
-        expect(toastMocks.error).toHaveBeenCalledWith(
-          expect.stringContaining('voices_read'),
+        expect(toastMocks.add).toHaveBeenCalledWith(
+          expect.objectContaining({
+            title: expect.stringContaining('voices_read'),
+            type: 'error',
+          })
         )
       },
-      { timeout: 2000 },
+      { timeout: 2000 }
     )
   })
 
@@ -594,7 +601,9 @@ describe('TTSGroup', () => {
       hasElevenLabsConfig: true,
       obsUrl: 'https://allch.at/overlay/abc?tts_token=xyz',
     })
-    const input = screen.getByLabelText(/OBS URL — copy and paste into OBS browser source/i) as HTMLInputElement
+    const input = screen.getByLabelText(
+      /OBS URL — copy and paste into OBS browser source/i
+    ) as HTMLInputElement
     expect(input).toBeDefined()
     expect(input.readOnly).toBe(true)
     expect(input.value).toBe('https://allch.at/overlay/abc?tts_token=xyz')
@@ -613,10 +622,8 @@ describe('TTSGroup', () => {
       fireEvent.click(screen.getByRole('button', { name: /^Copy OBS URL$/ }))
     })
     await waitFor(() => {
-      expect(clipboardWriteMock).toHaveBeenCalledWith(
-        'https://allch.at/overlay/abc?tts_token=xyz',
-      )
-      expect(toastMocks.success).toHaveBeenCalledWith('OBS URL copied.')
+      expect(clipboardWriteMock).toHaveBeenCalledWith('https://allch.at/overlay/abc?tts_token=xyz')
+      expect(toastMocks.add).toHaveBeenCalledWith({ title: 'OBS URL copied.', type: 'success' })
     })
   })
 
@@ -671,10 +678,11 @@ describe('TTSGroup', () => {
     })
     await waitFor(() => {
       expect(onRotateToken).toHaveBeenCalled()
-      expect(clipboardWriteMock).toHaveBeenCalledWith(
-        'https://allch.at/overlay/abc?tts_token=NEW',
-      )
-      expect(toastMocks.success).toHaveBeenCalledWith('New OBS URL copied to clipboard.')
+      expect(clipboardWriteMock).toHaveBeenCalledWith('https://allch.at/overlay/abc?tts_token=NEW')
+      expect(toastMocks.add).toHaveBeenCalledWith({
+        title: 'New OBS URL copied to clipboard.',
+        type: 'success',
+      })
     })
   })
 
@@ -826,8 +834,7 @@ describe('TTSGroup', () => {
     const advancedHeader = screen.getByText(/ADVANCED \(ELEVENLABS\)/)
     const throttlingHeader = screen.getByText('THROTTLING')
     expect(
-      advancedHeader.compareDocumentPosition(throttlingHeader) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
+      advancedHeader.compareDocumentPosition(throttlingHeader) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy()
   })
 
@@ -927,7 +934,7 @@ describe('TTSGroup', () => {
     })
     expect(onSaveVoice).toHaveBeenCalledWith('v-other')
     await waitFor(() => {
-      expect(toastMocks.success).toHaveBeenCalledWith('Voice updated.')
+      expect(toastMocks.add).toHaveBeenCalledWith({ title: 'Voice updated.', type: 'success' })
     })
   })
 
@@ -953,7 +960,13 @@ describe('TTSGroup', () => {
       fireEvent.click(saveBtn)
     })
     await waitFor(() => {
-      expect(toastMocks.error).toHaveBeenCalledWith(expect.stringContaining('boom'))
+      expect(toastMocks.add).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Could not save voice',
+          description: expect.stringContaining('boom'),
+          type: 'error',
+        })
+      )
     })
   })
 

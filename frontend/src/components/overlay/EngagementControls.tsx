@@ -35,7 +35,7 @@
 import clsx from 'clsx'
 import { Plus, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import toast from 'react-hot-toast'
+import { toastManager } from '@/lib/toast'
 
 import { ApiError } from '@/lib/api/client'
 import { engagementApi } from '@/lib/api/engagement'
@@ -204,10 +204,17 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
       if (mutationEpochRef.current !== epoch) return // stale — a mutation landed meanwhile
       // On 404 only clear a round that was still running (it ended elsewhere, e.g.
       // auto-close); a finished one we're displaying stays until dismissed.
-      setPoll((prev) => nextPoll ?? (pollGone ? (prev && prev.state !== 'ACTIVE' ? prev : null) : prev))
-      setPrediction((prev) =>
-        nextPrediction ??
-        (predGone ? (prev && prev.state !== 'ACTIVE' && prev.state !== 'LOCKED' ? prev : null) : prev)
+      setPoll(
+        (prev) => nextPoll ?? (pollGone ? (prev && prev.state !== 'ACTIVE' ? prev : null) : prev)
+      )
+      setPrediction(
+        (prev) =>
+          nextPrediction ??
+          (predGone
+            ? prev && prev.state !== 'ACTIVE' && prev.state !== 'LOCKED'
+              ? prev
+              : null
+            : prev)
       )
     } catch {
       /* keep last render on transient errors */
@@ -235,7 +242,7 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
       try {
         await call()
       } catch (err) {
-        toast.error(errorMessage(err, failMsg))
+        toastManager.add({ title: errorMessage(err, failMsg), type: 'error' })
       } finally {
         mutationEpochRef.current += 1
         setBusy(false)
@@ -252,7 +259,7 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
   const startPoll = () => {
     const labels = options.map((o) => o.trim()).filter(Boolean)
     if (!question.trim() || labels.length < 2) {
-      toast.error('A poll needs a question and at least 2 options')
+      toastManager.add({ title: 'A poll needs a question and at least 2 options', type: 'error' })
       return
     }
     const duration = Number.parseInt(pollDuration, 10)
@@ -267,14 +274,14 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
       setQuestion('')
       setOptions(['', ''])
       setPollDuration('')
-      toast.success('Poll started')
+      toastManager.add({ title: 'Poll started', type: 'success' })
     }, 'Could not start the poll')
   }
 
   const closePoll = (pollId: string) =>
     void run(async () => {
       setPoll(await engagementApi.closePoll(overlayId, pollId))
-      toast.success('Poll closed')
+      toastManager.add({ title: 'Poll closed', type: 'success' })
     }, 'Could not close the poll')
 
   // --- Prediction actions ----------------------------------------------------
@@ -282,7 +289,10 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
   const startPrediction = () => {
     const labels = outcomes.map((o) => o.trim()).filter(Boolean)
     if (!title.trim() || labels.length < 2) {
-      toast.error('A prediction needs a title and at least 2 outcomes')
+      toastManager.add({
+        title: 'A prediction needs a title and at least 2 outcomes',
+        type: 'error',
+      })
       return
     }
     const lockSecs = Number.parseInt(autoLock, 10)
@@ -297,19 +307,19 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
       setTitle('')
       setOutcomes(['', ''])
       setAutoLock('')
-      toast.success('Prediction started')
+      toastManager.add({ title: 'Prediction started', type: 'success' })
     }, 'Could not start the prediction')
   }
 
   const lockPrediction = (pid: string) =>
     void run(async () => {
       setPrediction(await engagementApi.lockPrediction(overlayId, pid))
-      toast.success('Prediction locked — wagers are frozen')
+      toastManager.add({ title: 'Prediction locked — wagers are frozen', type: 'success' })
     }, 'Could not lock the prediction')
 
   const resolvePrediction = (pid: string) => {
     if (!winnerId) {
-      toast.error('Pick the winning outcome first')
+      toastManager.add({ title: 'Pick the winning outcome first', type: 'error' })
       return
     }
     void run(async () => {
@@ -320,12 +330,12 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
         // while LOCKED, so this is a lost race (auto-lock/refresh), not user error —
         // acknowledge it neutrally rather than scolding (L-U7).
         setPrediction(resolved)
-        toast('The prediction is no longer locked — refresh and try again')
+        toastManager.add({ title: 'The prediction is no longer locked — refresh and try again' })
         return
       }
       setPrediction(resolved)
       setWinnerId('')
-      toast.success('Prediction resolved — winners paid out')
+      toastManager.add({ title: 'Prediction resolved — winners paid out', type: 'success' })
     }, 'Could not resolve the prediction')
   }
 
@@ -338,9 +348,12 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
       // Cancel is an idempotent guarded update: a 200 on an already-finished
       // prediction returns it unchanged — don't claim a refund that didn't happen.
       if (result.state === 'CANCELED') {
-        toast.success('Prediction canceled — all wagers refunded')
+        toastManager.add({ title: 'Prediction canceled — all wagers refunded', type: 'success' })
       } else {
-        toast.error(`Nothing to cancel — the prediction is already ${result.state.toLowerCase()}`)
+        toastManager.add({
+          title: `Nothing to cancel — the prediction is already ${result.state.toLowerCase()}`,
+          type: 'error',
+        })
       }
     }, 'Could not cancel the prediction')
 
@@ -350,7 +363,10 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
     try {
       window.location.href = await engagementApi.getTwitchMirrorConsentUrl(overlayId)
     } catch {
-      toast.error('Could not start Twitch consent. Please try again.')
+      toastManager.add({
+        title: 'Could not start Twitch consent. Please try again.',
+        type: 'error',
+      })
     }
   }, [overlayId])
 
@@ -503,7 +519,12 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                   </a>{' '}
                   or from chat (<code>!vote 2</code> or just <code>2</code>)
                 </span>
-                <button type="button" onClick={startPoll} disabled={busy} className={primaryButtonClass}>
+                <button
+                  type="button"
+                  onClick={startPoll}
+                  disabled={busy}
+                  className={primaryButtonClass}
+                >
                   Start poll
                 </button>
               </div>
@@ -556,7 +577,9 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                           className="accent-twitch focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
                         />
                       ) : prediction.winning_outcome_id === o.id ? (
-                        <span title="Winning outcome" aria-label="Winning outcome">🏆</span>
+                        <span title="Winning outcome" aria-label="Winning outcome">
+                          🏆
+                        </span>
                       ) : undefined
                     }
                   />
@@ -585,7 +608,10 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                       type="button"
                       onClick={() => {
                         if (!winnerId) {
-                          toast.error('Pick the winning outcome first')
+                          toastManager.add({
+                            title: 'Pick the winning outcome first',
+                            type: 'error',
+                          })
                           return
                         }
                         // First click arms; second click (echoing "final?") commits — the
@@ -614,7 +640,7 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                         type="button"
                         onClick={() => cancelPrediction(prediction.id)}
                         disabled={busy}
-                        className="rounded-lg border border-destructive/50 px-3 py-1.5 text-xs font-semibold text-destructive transition-colors hover:bg-destructive/10 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                        className="border-destructive/50 text-destructive hover:bg-destructive/10 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         Really refund all wagers?
                       </button>

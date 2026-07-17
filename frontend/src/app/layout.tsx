@@ -37,7 +37,6 @@ import { JsonLd } from '@/components/JsonLd'
 import CookieBanner from '@/components/CookieBanner'
 import ImpersonationBanner from '@/components/ImpersonationBanner'
 import { ToastProvider } from '@/components/ui/toast'
-import { Toaster as HotToaster } from 'react-hot-toast'
 import { cn } from '@/lib/utils'
 import { DISCORD_INVITE_URL } from '@/lib/constants'
 
@@ -144,14 +143,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <ImpersonationBanner />
           {children}
           <CookieBanner />
-          <HotToaster
-            position="top-right"
-            toastOptions={{
-              duration: 4000,
-              error: { duration: 5000, style: { background: '#ef4444', color: '#fff' } },
-              success: { style: { background: '#10b981', color: '#fff' } },
-            }}
-          />
         </ToastProvider>
       </body>
     </html>

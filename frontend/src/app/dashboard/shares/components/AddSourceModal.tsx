@@ -30,7 +30,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogTitle } from '@/components/ui/dialog'
 import type { Overlay } from '@/lib/types/overlay'
 import { trackEvent } from '@/lib/analytics'
-import toast from 'react-hot-toast'
+import { toastManager } from '@/lib/toast'
 
 interface AddSourceModalProps {
   senderName: string
@@ -63,7 +63,7 @@ export function AddSourceModal({
         }
       } catch (err) {
         console.error('Failed to fetch overlays:', err)
-        toast.error('Failed to load overlays')
+        toastManager.add({ title: 'Failed to load overlays', type: 'error' })
       } finally {
         setLoadingOverlays(false)
       }
@@ -85,7 +85,7 @@ export function AddSourceModal({
       })
       trackEvent('source_added', { platform: 'shared_overlay' })
 
-      toast.success(`Added ${senderName}'s overlay!`)
+      toastManager.add({ title: `Added ${senderName}'s overlay!`, type: 'success' })
 
       if (onAdded) {
         onAdded()
@@ -94,7 +94,7 @@ export function AddSourceModal({
     } catch (err: any) {
       console.error('Failed to add shared overlay:', err)
       trackEvent('source_add_failed', { platform: 'shared_overlay' })
-      toast.error(err?.message || 'Failed to add shared overlay')
+      toastManager.add({ title: err?.message || 'Failed to add shared overlay', type: 'error' })
     } finally {
       setLoading(false)
     }

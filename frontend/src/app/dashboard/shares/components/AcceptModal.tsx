@@ -34,7 +34,7 @@ import { Dialog, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import type { ShareRequest } from '@/lib/types/share'
 import type { Overlay } from '@/lib/types/overlay'
 import { trackEvent } from '@/lib/analytics'
-import toast from 'react-hot-toast'
+import { toastManager } from '@/lib/toast'
 
 interface AcceptModalProps {
   request: ShareRequest
@@ -111,7 +111,10 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
       )
 
       trackEvent('share_accepted')
-      toast.success(`Share accepted from ${request.sender?.display_name || 'user'}!`)
+      toastManager.add({
+        title: `Share accepted from ${request.sender?.display_name || 'user'}!`,
+        type: 'success',
+      })
       onAccepted(response.sender_overlay_id)
       onClose()
     } catch (err: any) {
@@ -120,9 +123,13 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
       const errorMessage = err.response?.data?.error || err.message || 'Failed to accept share'
 
       if (errorMessage.toLowerCase().includes('circular share')) {
-        toast.error('Cannot accept: This would create a circular share dependency')
+        toastManager.add({
+          title: 'Cannot accept',
+          description: 'This would create a circular share dependency',
+          type: 'error',
+        })
       } else {
-        toast.error(errorMessage)
+        toastManager.add({ title: errorMessage, type: 'error' })
       }
     } finally {
       setLoading(false)
