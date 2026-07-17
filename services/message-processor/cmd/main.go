@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -766,6 +767,22 @@ func main() {
 
 	// Create and start stream consumer
 	streamConsumer := consumer.NewStreamConsumer(redisClient, log, processorMetrics, messageHandler, msgIDRegistry, deletionBuffer, hostname)
+	// Bounded per-batch concurrency (ADR-0033): enrichment is I/O-bound, so processing a
+	// batch in parallel keeps a slow upstream from stalling the whole stream. Default 16;
+	// override via MP_PROCESS_CONCURRENCY.
+	processConcurrency := consumer.DefaultProcessConcurrency
+	if concStr := getEnvOrDefault("MP_PROCESS_CONCURRENCY", ""); concStr != "" {
+		if parsed, err := strconv.Atoi(concStr); err == nil && parsed > 0 {
+			processConcurrency = parsed
+		} else {
+			log.Warn("Invalid MP_PROCESS_CONCURRENCY, using default",
+				zap.String("value", concStr),
+				zap.Int("default", consumer.DefaultProcessConcurrency),
+			)
+		}
+	}
+	streamConsumer.SetProcessConcurrency(processConcurrency)
+	log.Info("Message processing concurrency configured", zap.Int("concurrency", processConcurrency))
 	// Collapse the IRC↔EventSub Twitch handoff overlap (and Twitch webhook retries) by the native
 	// message id before enrichment, so viewers never see doubled chat (ADR-0015).
 	streamConsumer.SetNativeDeduplicator(deduplicator)

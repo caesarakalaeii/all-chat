@@ -91,6 +91,21 @@ func NewBadgeEnricher(redisClient *redis.Client, clientID, clientSecret string, 
 	}
 }
 
+// token returns the current app access token under a read lock. Access to accessToken
+// must be synchronized because messages are enriched concurrently (ADR-0033).
+func (e *BadgeEnricher) token() string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.accessToken
+}
+
+// setToken stores a new app access token under a write lock.
+func (e *BadgeEnricher) setToken(t string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.accessToken = t
+}
+
 // Enrich updates badge icon URLs for the message
 func (e *BadgeEnricher) Enrich(ctx context.Context, msg *models.UnifiedChatMessage) error {
 	// Only for Twitch
@@ -169,7 +184,7 @@ func (e *BadgeEnricher) Enrich(ctx context.Context, msg *models.UnifiedChatMessa
 	if len(msg.User.SourceBadges) > 0 {
 		sourceRoomID := e.extractSourceRoomID(msg)
 		var sourceBadges map[string]TwitchBadgeSet
-		
+
 		if sourceRoomID != "" {
 			sourceBadges, err = e.getChannelBadges(ctx, sourceRoomID)
 			if err != nil {
@@ -244,7 +259,7 @@ func (e *BadgeEnricher) getGlobalBadges(ctx context.Context) (map[string]TwitchB
 	}
 
 	// Ensure we have access token
-	if e.accessToken == "" {
+	if e.token() == "" {
 		if err := e.refreshAccessToken(ctx); err != nil {
 			return nil, err
 		}
@@ -257,7 +272,7 @@ func (e *BadgeEnricher) getGlobalBadges(ctx context.Context) (map[string]TwitchB
 		return nil, err
 	}
 
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", e.accessToken))
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", e.token()))
 	req.Header.Set("Client-Id", e.clientID)
 
 	resp, err := e.httpClient.Do(req)
@@ -322,7 +337,7 @@ func (e *BadgeEnricher) getChannelBadges(ctx context.Context, channelID string) 
 	}
 
 	// Ensure we have access token
-	if e.accessToken == "" {
+	if e.token() == "" {
 		if err := e.refreshAccessToken(ctx); err != nil {
 			return nil, err
 		}
@@ -335,7 +350,7 @@ func (e *BadgeEnricher) getChannelBadges(ctx context.Context, channelID string) 
 		return nil, err
 	}
 
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", e.accessToken))
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", e.token()))
 	req.Header.Set("Client-Id", e.clientID)
 
 	resp, err := e.httpClient.Do(req)
@@ -434,11 +449,10 @@ func (e *BadgeEnricher) extractSourceRoomID(msg *models.UnifiedChatMessage) stri
 	return ""
 }
 
-// refreshAccessToken gets a new app access token (same as avatar enricher)
+// refreshAccessToken gets a new app access token (same as avatar enricher). The HTTP
+// round-trip runs without holding e.mu; only the final store takes the write lock, so a
+// slow token refresh never serializes concurrent badge lookups.
 func (e *BadgeEnricher) refreshAccessToken(ctx context.Context) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
 	url := fmt.Sprintf("https://id.twitch.tv/oauth2/token?client_id=%s&client_secret=%s&grant_type=client_credentials",
 		e.clientID, e.clientSecret)
 
@@ -466,7 +480,7 @@ func (e *BadgeEnricher) refreshAccessToken(ctx context.Context) error {
 		return err
 	}
 
-	e.accessToken = tokenResp.AccessToken
+	e.setToken(tokenResp.AccessToken)
 	e.logger.Debug("Refreshed Twitch access token for badges",
 		zap.Int("expires_in", tokenResp.ExpiresIn),
 	)
