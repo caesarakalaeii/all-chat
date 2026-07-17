@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/caesar/all-chat/services/message-processor/models"
@@ -42,6 +43,14 @@ const (
 
 	// ReadBlockTime is how long to block waiting for messages
 	ReadBlockTime = 5 * time.Second
+
+	// DefaultProcessConcurrency is how many messages within a single read batch are
+	// enriched+published in parallel. Enrichment is I/O-bound (Redis round-trips plus
+	// HTTP/DB calls on cache misses), so processing strictly one-at-a-time caps a pod's
+	// throughput at 1/per-message-latency and lets any upstream latency spike stall the
+	// whole stream. Bounded concurrency gives headroom to ride out those spikes without
+	// unbounded lag. Overridable via MP_PROCESS_CONCURRENCY (see ADR-0033).
+	DefaultProcessConcurrency = 16
 )
 
 // MessageHandler is called for each consumed message
@@ -66,6 +75,7 @@ type StreamConsumer struct {
 	nativeDedup    NativeDeduplicator // nil disables native-id dedup
 	consumerName   string
 	engagementCh   chan *models.RawChatMessage // buffered hand-off to the engagement forwarder (issue #523)
+	concurrency    int                         // max messages processed in parallel per batch (ADR-0033)
 }
 
 // engagementForwardBufferSize bounds the hot-path→forwarder hand-off. Command-shaped
@@ -86,6 +96,7 @@ func NewStreamConsumer(client *redis.Client, logger *zap.Logger, m *metrics.Proc
 		deletionBuffer: deletionBuffer,
 		consumerName:   consumerName,
 		engagementCh:   make(chan *models.RawChatMessage, engagementForwardBufferSize),
+		concurrency:    DefaultProcessConcurrency,
 	}
 }
 
@@ -93,6 +104,16 @@ func NewStreamConsumer(client *redis.Client, logger *zap.Logger, m *metrics.Proc
 // handoff overlap. Safe to leave unset (dedup disabled).
 func (c *StreamConsumer) SetNativeDeduplicator(d NativeDeduplicator) {
 	c.nativeDedup = d
+}
+
+// SetProcessConcurrency overrides how many messages within a batch are processed in
+// parallel. Values < 1 are clamped to 1 (strictly sequential). Callers wire this from
+// MP_PROCESS_CONCURRENCY at startup.
+func (c *StreamConsumer) SetProcessConcurrency(n int) {
+	if n < 1 {
+		n = 1
+	}
+	c.concurrency = n
 }
 
 // Start begins consuming messages from the stream
@@ -214,25 +235,60 @@ func (c *StreamConsumer) readAndProcess(ctx context.Context) error {
 
 	// Process each stream (we only have one)
 	for _, stream := range streams {
-		for _, message := range stream.Messages {
-			// Calculate and record stream lag from Redis stream entry timestamp
-			if lag, ok := streamEntryLag(message.ID); ok {
-				c.metrics.SetStreamLag("message-processor", StreamKey, ConsumerGroup, lag)
-			}
+		c.processBatch(ctx, stream.Messages)
+	}
+
+	return nil
+}
+
+// processBatch enriches and publishes a batch of stream messages with bounded
+// concurrency (c.concurrency). Enrichment is I/O-bound, so processing the batch in
+// parallel means a slow upstream on one message no longer stalls the others — the
+// throughput fix for MessageProcessorStreamLag (ADR-0033).
+//
+// Ordering is intentionally not preserved within a batch: the consumer group already
+// fans messages out across pods with no cross-consumer ordering guarantee, and
+// message/deletion ordering is handled independently by the reorder-tolerant deletion
+// buffer. Each message is independently retried, DLQ-routed, and ACKed inside
+// processAndAck, so at-least-once semantics are unchanged. processBatch blocks until
+// every message in the batch has been processed and ACKed, which bounds the number of
+// in-flight messages to the batch size and provides natural backpressure before the
+// next XREADGROUP.
+func (c *StreamConsumer) processBatch(ctx context.Context, messages []redis.XMessage) {
+	concurrency := c.concurrency
+	if concurrency < 1 {
+		concurrency = 1
+	}
+
+	sem := make(chan struct{}, concurrency)
+	var wg sync.WaitGroup
+
+	for _, message := range messages {
+		// Record stream lag from the Redis entry timestamp at dispatch time (the age of
+		// the oldest message we are about to work on), before enrichment latency is added.
+		if lag, ok := streamEntryLag(message.ID); ok {
+			c.metrics.SetStreamLag("message-processor", StreamKey, ConsumerGroup, lag)
+		}
+
+		wg.Add(1)
+		sem <- struct{}{} // acquire a worker slot (blocks once `concurrency` are in flight)
+		go func(msg redis.XMessage) {
+			defer wg.Done()
+			defer func() { <-sem }() // release the slot
 
 			// MP-03: processAndAck handles retry, DLQ routing, and ACK ordering.
 			// Messages are ACKed regardless of processing outcome (after DLQ write on failure).
-			if err := c.processAndAck(ctx, message); err != nil {
+			if err := c.processAndAck(ctx, msg); err != nil {
 				c.logger.Error("Failed to process message (sent to DLQ)",
-					zap.String("stream_id", message.ID),
+					zap.String("stream_id", msg.ID),
 					zap.Error(err),
 				)
 				// Continue processing other messages
 			}
-		}
+		}(message)
 	}
 
-	return nil
+	wg.Wait()
 }
 
 // processMessage processes a single message

@@ -27,6 +27,7 @@ The Message Processor service consumes raw chat messages from Redis Streams, nor
 Redis Streams (chat:raw)
   ↓ XREADGROUP (consumer group: message-processors)
 Consumer (5-10 replicas)
+  ↓ per-batch bounded worker pool (MP_PROCESS_CONCURRENCY, default 16 — ADR-0033)
   ↓ route by platform
 Platform-Specific Normalizers
   ├─ Twitch Normalizer    (IRC tags → unified format)
@@ -84,6 +85,11 @@ MESSAGE_AGE_CUTOFF_SECONDS=60       # Ignore messages older than this (default: 
 # Consumer group settings
 CONSUMER_GROUP=message-processors   # Redis Streams consumer group name
 CONSUMER_ID=processor-1             # Unique ID for this instance (auto-generated if not set)
+
+# Enrichment concurrency (ADR-0033)
+MP_PROCESS_CONCURRENCY=16           # Messages enriched+published in parallel per read batch (default: 16).
+                                    # Enrichment is I/O-bound; parallelism keeps a slow upstream from
+                                    # stalling the whole stream. Set to 1 for strictly-sequential processing.
 
 # OpenTelemetry tracing
 OTEL_ENABLED=false                  # Enable distributed tracing
@@ -230,17 +236,23 @@ GET /metrics
 
 **Consumer Group**: `message-processors`
 **Stream**: `chat:raw`
-**Pattern**: XREADGROUP with acknowledgment (XACK)
+**Pattern**: XREADGROUP, then a per-batch bounded worker pool, with per-message acknowledgment (XACK)
 
 ```go
-// consumer/streams.go
+// consumer/stream_consumer.go
 streams, _ := client.XReadGroup(ctx, &redis.XReadGroupArgs{
     Group:    "message-processors",
     Consumer: consumerID,
     Streams:  []string{"chat:raw", ">"},
-    Count:    10,
-    Block:    2 * time.Second,
+    Count:    ReadCount, // 100
+    Block:    ReadBlockTime,
 }).Result()
+// processBatch enriches+publishes up to MP_PROCESS_CONCURRENCY messages in parallel,
+// then waits for the batch to drain before the next read (ADR-0033). Enrichment is
+// I/O-bound, so serial processing capped throughput at 1/per-message-latency and let a
+// single slow upstream stall the whole stream. Each message is still independently
+// retried, DLQ-routed, and XACKed — ordering is not guaranteed within a batch (it never
+// was across the consumer group; deletions are reorder-tolerant via the deletion buffer).
 ```
 
 ### 2. Route by Platform

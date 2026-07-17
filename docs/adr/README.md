@@ -433,6 +433,17 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0033: Bounded-Concurrency Enrichment in the Message Processor
+
+**Status**: ✅ Accepted
+**Date**: 2026-07-17
+**Problem**: The message-processor enriched `chat:raw` messages strictly one-at-a-time on the consume-loop goroutine, with every stage doing blocking I/O (Redis round-trips + emote-service/Twitch/Alejo HTTP + Postgres on cache misses). That capped per-pod throughput at `1/per-message-latency`, with no bulkhead — any upstream latency spike collapsed throughput below the arrival rate and messages backed up in the stream. Production incident 2026-07-17 (`MessageProcessorStreamLagWarning`, 30–60s): input only ~2–3 msg/s, pods idle at ~3% CPU, Redis healthy, but a ~5× emote-service upstream-error spike pushed per-message latency from ~30ms to ~0.5–1s and the serial pipeline could not keep pace
+**Decision**: Process each read batch through a semaphore-bounded worker pool (`processBatch`, default 16, `MP_PROCESS_CONCURRENCY`), waiting for the batch to drain before the next `XREADGROUP`; keep per-message retry/DLQ/ACK/dedup/deletion-buffer semantics unchanged; guard the `AvatarEnricher`/`BadgeEnricher` app-token behind mutex accessors (refresh HTTP outside the lock); negative-cache `PronounEnricher` API errors for a short TTL so a degraded pronouns API can't amplify the stall
+**Impact**: ~16× per-pod throughput headroom so upstream hiccups no longer produce unbounded lag; no head-of-line blocking within a batch; two latent Twitch app-token data races removed (verified with `-race`). Safe because the consumer group already fans out across pods with no ordering guarantee, message/deletion ordering is handled by the reorder-tolerant deletion buffer, and dedup uses atomic `SETNX`. (ADR numbering shared with caesar-deployment, so this is 0033)
+**→ Read**: [0033-message-processor-concurrent-enrichment.md](./0033-message-processor-concurrent-enrichment.md)
+
+---
+
 ## How to Create a New ADR
 
 ### Step 1: Determine ADR Number

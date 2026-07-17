@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/caesar/all-chat/services/message-processor/models"
@@ -53,14 +54,30 @@ type TwitchHelixUser struct {
 	} `json:"data"`
 }
 
+// Default Twitch endpoints. Kept as struct fields (defaulting to these) so tests can
+// point the enricher at an httptest server without reaching the real Twitch API.
+const (
+	defaultTwitchTokenURL      = "https://id.twitch.tv/oauth2/token"
+	defaultTwitchHelixUsersURL = "https://api.twitch.tv/helix/users"
+)
+
 // AvatarEnricher fetches and caches user avatars from Twitch Helix API
 // and caches TikTok avatar images (which have expiring CDN URLs).
+//
+// The app access token is shared mutable state; it is read on every Twitch lookup and
+// rewritten on refresh. Because messages are enriched concurrently (ADR-0033), all
+// access to accessToken goes through mu-guarded token()/setToken() accessors, and the
+// token HTTP refresh is performed WITHOUT holding the lock (so a slow refresh never
+// serializes unrelated lookups).
 type AvatarEnricher struct {
 	httpClient     *http.Client
 	redisClient    *redis.Client
 	clientID       string
 	clientSecret   string
+	mu             sync.RWMutex
 	accessToken    string
+	tokenURL       string
+	helixUsersURL  string
 	gatewayBaseURL string
 	logger         *zap.Logger
 }
@@ -76,9 +93,25 @@ func NewAvatarEnricher(redisClient *redis.Client, clientID, clientSecret, gatewa
 		redisClient:    redisClient,
 		clientID:       clientID,
 		clientSecret:   clientSecret,
+		tokenURL:       defaultTwitchTokenURL,
+		helixUsersURL:  defaultTwitchHelixUsersURL,
 		gatewayBaseURL: gatewayBaseURL,
 		logger:         logger,
 	}
+}
+
+// token returns the current app access token under a read lock.
+func (e *AvatarEnricher) token() string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.accessToken
+}
+
+// setToken stores a new app access token under a write lock.
+func (e *AvatarEnricher) setToken(t string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.accessToken = t
 }
 
 // Enrich adds avatar URL to the user info.
@@ -190,20 +223,20 @@ func (e *AvatarEnricher) fetchAndCacheImage(ctx context.Context, cacheKey, image
 // fetchAvatarFromTwitch fetches avatar URL from Twitch Helix API
 func (e *AvatarEnricher) fetchAvatarFromTwitch(ctx context.Context, userID string) (string, error) {
 	// Ensure we have an access token
-	if e.accessToken == "" {
+	if e.token() == "" {
 		if err := e.refreshAccessToken(ctx); err != nil {
 			return "", fmt.Errorf("failed to get access token: %w", err)
 		}
 	}
 
 	// Call Twitch Helix API
-	url := fmt.Sprintf("https://api.twitch.tv/helix/users?id=%s", userID)
+	url := fmt.Sprintf("%s?id=%s", e.helixUsersURL, userID)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return "", err
 	}
 
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", e.accessToken))
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", e.token()))
 	req.Header.Set("Client-Id", e.clientID)
 
 	resp, err := e.httpClient.Do(req)
@@ -236,10 +269,12 @@ func (e *AvatarEnricher) fetchAvatarFromTwitch(ctx context.Context, userID strin
 	return helixResp.Data[0].ProfileImageURL, nil
 }
 
-// refreshAccessToken gets a new app access token from Twitch
+// refreshAccessToken gets a new app access token from Twitch. The HTTP round-trip is
+// performed without holding e.mu; only the final store takes the write lock, so a slow
+// token refresh never blocks concurrent avatar lookups.
 func (e *AvatarEnricher) refreshAccessToken(ctx context.Context) error {
-	url := fmt.Sprintf("https://id.twitch.tv/oauth2/token?client_id=%s&client_secret=%s&grant_type=client_credentials",
-		e.clientID, e.clientSecret)
+	url := fmt.Sprintf("%s?client_id=%s&client_secret=%s&grant_type=client_credentials",
+		e.tokenURL, e.clientID, e.clientSecret)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, nil)
 	if err != nil {
@@ -266,7 +301,7 @@ func (e *AvatarEnricher) refreshAccessToken(ctx context.Context) error {
 		return err
 	}
 
-	e.accessToken = tokenResp.AccessToken
+	e.setToken(tokenResp.AccessToken)
 	e.logger.Info("Refreshed Twitch app access token",
 		zap.Int("expires_in", tokenResp.ExpiresIn),
 	)

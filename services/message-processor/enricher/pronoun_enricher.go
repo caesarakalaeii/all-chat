@@ -31,8 +31,15 @@ import (
 )
 
 const (
-	// PronounCacheTTL is how long to cache pronoun lookups (24 hours).
+	// PronounCacheTTL is how long to cache successful pronoun lookups (24 hours).
 	PronounCacheTTL = 24 * time.Hour
+
+	// PronounErrorCacheTTL is how long to negative-cache a lookup that failed because
+	// the Alejo API errored or timed out. It is deliberately short so pronouns self-heal
+	// soon after the upstream recovers, while still stopping every subsequent message from
+	// the same user re-issuing a slow (up to 3s) call against a degraded API — the
+	// amplifier behind MessageProcessorStreamLag.
+	PronounErrorCacheTTL = 5 * time.Minute
 
 	// PronounCacheKeyPrefix is the Redis key prefix for cached pronoun display text.
 	PronounCacheKeyPrefix = "pronoun:"
@@ -188,6 +195,10 @@ func (e *PronounEnricher) Enrich(ctx context.Context, msg *models.UnifiedChatMes
 
 	resp, doErr := e.httpClient.Do(req)
 	if doErr != nil {
+		// Negative-cache (short TTL) so a degraded/timing-out API is not re-hit on every
+		// subsequent message from this user; without it a pronouns-API hiccup collapses
+		// processing throughput (MessageProcessorStreamLag).
+		e.redisClient.Set(ctx, cacheKey, pronounEmptySentinel, PronounErrorCacheTTL)
 		e.logger.Warn("PronounEnricher: Alejo API request failed — skipping pronouns",
 			zap.String("login", twitchLogin),
 			zap.Error(doErr),
@@ -196,13 +207,16 @@ func (e *PronounEnricher) Enrich(ctx context.Context, msg *models.UnifiedChatMes
 	}
 	defer resp.Body.Close()
 
-	// 404 means user has no pronouns set → cache empty sentinel
+	// 404 means user has no pronouns set → cache empty sentinel for the full TTL
 	if resp.StatusCode == http.StatusNotFound {
 		e.redisClient.Set(ctx, cacheKey, pronounEmptySentinel, PronounCacheTTL)
 		return nil
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		// Upstream error (5xx / 429 / etc.): negative-cache briefly, same rationale as the
+		// transport-error path above.
+		e.redisClient.Set(ctx, cacheKey, pronounEmptySentinel, PronounErrorCacheTTL)
 		e.logger.Warn("PronounEnricher: unexpected Alejo API status",
 			zap.String("login", twitchLogin),
 			zap.Int("status", resp.StatusCode),
