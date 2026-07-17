@@ -24,6 +24,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { authApi } from '@/lib/api/auth'
 import { useAuthStore } from '@/lib/stores/auth-store'
+import { useOnboardingStore } from '@/lib/stores/onboarding-store'
 import { AppNav } from '@/components/AppNav'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -43,6 +44,29 @@ function SettingsContent() {
   const [guilds, setGuilds] = useState<DiscordGuild[]>([])
   const [guildsLoading, setGuildsLoading] = useState(true)
   const [disconnectTarget, setDisconnectTarget] = useState<DiscordGuild | null>(null)
+  const [restartingGuide, setRestartingGuide] = useState(false)
+  const initAuth = useAuthStore((state) => state.init)
+  const startOnboarding = useOnboardingStore((state) => state.start)
+
+  // Re-arm the first-run setup guide: clear the server flag, refresh
+  // /auth/me, then start explicitly (bypasses the zero-overlay auto-start
+  // guard so users with existing overlays can re-walk the steps too).
+  async function handleRestartGuide() {
+    setRestartingGuide(true)
+    try {
+      await authApi.updateOnboarding(false)
+      await initAuth()
+      startOnboarding('settings')
+      router.push('/dashboard')
+    } catch {
+      toastManager.add({
+        title: 'Could not restart the setup guide',
+        description: 'Please try again.',
+        type: 'error',
+      })
+      setRestartingGuide(false)
+    }
+  }
 
   async function fetchGuilds() {
     try {
@@ -130,6 +154,24 @@ function SettingsContent() {
               <span className="text-sm text-text-sub">Primary Platform</span>
               <p className="font-medium text-text capitalize">{user.auth_provider ?? 'Unknown'}</p>
             </div>
+          </div>
+        </Card>
+
+        {/* Setup guide section */}
+        <Card className="p-6">
+          <h2 className="mb-4 text-lg font-semibold text-text">Setup guide</h2>
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-sm text-text-sub">
+              Walk through overlay setup again: create an overlay, connect chat, pick a theme, and
+              get the OBS link.
+            </p>
+            <Button
+              variant="outline"
+              disabled={restartingGuide}
+              onClick={() => void handleRestartGuide()}
+            >
+              {restartingGuide ? 'Restarting…' : 'Restart'}
+            </Button>
           </div>
         </Card>
 

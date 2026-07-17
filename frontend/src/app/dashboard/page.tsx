@@ -33,6 +33,10 @@ import { PlatformBadge } from '@/components/ui/badge'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { MaintenanceBanner } from '@/components/MaintenanceBanner'
 import { EventSubMigrationBanner } from '@/components/EventSubMigrationBanner'
+import { OnboardingChecklist } from '@/components/onboarding/OnboardingChecklist'
+import { CreateOverlayDialog } from '@/components/onboarding/CreateOverlayDialog'
+import { useOnboardingStore } from '@/lib/stores/onboarding-store'
+import { useAuthStore } from '@/lib/stores/auth-store'
 import type { ChatSource } from '@/lib/types/overlay'
 
 // Extended overlay type that includes sources when available
@@ -155,10 +159,37 @@ function DashboardContent() {
   const router = useRouter()
   const { overlays, loading, fetchOverlays, deleteOverlay } = useOverlayStore()
   const [sourcesByOverlay, setSourcesByOverlay] = useState<Record<string, ChatSource[]>>({})
+  const user = useAuthStore((s) => s.user)
+  const onboardingStatus = useOnboardingStore((s) => s.status)
+  const startOnboarding = useOnboardingStore((s) => s.start)
+  const activeOverlayId = useOnboardingStore((s) => s.activeOverlayId)
+  const setActiveOverlay = useOnboardingStore((s) => s.setActiveOverlay)
+  const [onboardingCreateOpen, setOnboardingCreateOpen] = useState(false)
+  const [overlaysFetched, setOverlaysFetched] = useState(false)
 
   useEffect(() => {
-    fetchOverlays()
+    fetchOverlays().then(() => setOverlaysFetched(true))
   }, [fetchOverlays])
+
+  // First-run setup guide auto-start: only for a signed-in, non-impersonated
+  // user whose server flag is explicitly null AND who has no overlays yet
+  // (the zero-overlay guard protects users created between backend and
+  // frontend deploys). Gated on overlaysFetched, NOT the store's loading
+  // flag — that starts false before the first fetch, which would race the
+  // guard into always seeing zero overlays. Settings restart bypasses this
+  // via start('settings').
+  useEffect(() => {
+    if (!overlaysFetched || !user || user.impersonating) return
+    if (user.onboarding_completed_at !== null) return
+    if (overlays.length > 0) return
+    startOnboarding('auto')
+  }, [overlaysFetched, user, overlays.length, startOnboarding])
+
+  // Steps 2-4 need an overlay to point at; on the dashboard bind them to the
+  // first overlay when the editor hasn't set one.
+  useEffect(() => {
+    if (!activeOverlayId && overlays.length > 0) setActiveOverlay(overlays[0].id)
+  }, [activeOverlayId, overlays, setActiveOverlay])
 
   // Fetch sources for all overlays after the list loads
   useEffect(() => {
@@ -231,7 +262,15 @@ function DashboardContent() {
         {loading ? (
           <OverlayGridSkeleton />
         ) : overlaysWithSources.length === 0 ? (
-          <DashboardEmptyState onCreateClick={() => router.push('/overlays/new')} />
+          <DashboardEmptyState
+            onCreateClick={() =>
+              // During onboarding the empty-state CTA IS step 1 — one path,
+              // not two competing ones.
+              onboardingStatus === 'active'
+                ? setOnboardingCreateOpen(true)
+                : router.push('/overlays/new')
+            }
+          />
         ) : (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
             {overlaysWithSources.map((overlay) => (
@@ -315,6 +354,9 @@ function DashboardContent() {
           </div>
         )}
       </main>
+
+      <OnboardingChecklist surface="dashboard" overlayCount={overlays.length} />
+      <CreateOverlayDialog open={onboardingCreateOpen} onOpenChange={setOnboardingCreateOpen} />
     </div>
   )
 }
