@@ -18,7 +18,6 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -104,7 +103,7 @@ function SettingsContent() {
   return (
     <div className="min-h-screen bg-bg">
       <AppNav />
-      <main className="mx-auto max-w-2xl space-y-6 px-4 py-12">
+      <main id="main-content" tabIndex={-1} className="mx-auto max-w-2xl space-y-6 px-4 py-12">
         <h1 className="text-2xl font-bold text-text">Settings</h1>
 
         {/* Profile section */}
@@ -214,10 +213,7 @@ function SettingsContent() {
                   >
                     <Dialog.Trigger
                       render={
-                        <Button
-                          variant="destructive"
-                          onClick={() => setDisconnectTarget(guild)}
-                        >
+                        <Button variant="destructive" onClick={() => setDisconnectTarget(guild)}>
                           Disconnect
                         </Button>
                       }

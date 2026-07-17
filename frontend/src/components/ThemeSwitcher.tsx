@@ -40,9 +40,10 @@ import ThemePreview from '@/components/theme-marketplace/ThemePreview'
 import { getBundledTheme, getBundledThemes } from '@/lib/theme-marketplace/bundled-themes'
 import { SAMPLE_PREVIEW_MESSAGES } from '@/lib/theme-marketplace/constants'
 import type { Theme } from '@/lib/theme-marketplace/types'
-import { Palette } from 'lucide-react'
+import { Palette, Pause, Play } from 'lucide-react'
 import { trackEvent } from '@/lib/analytics'
 import { DISCORD_INVITE_URL } from '@/lib/constants'
+import { useReducedMotion } from '@/hooks/useReducedMotion'
 
 /**
  * The curated showcase — four visually distinct looks that read well at a glance:
@@ -84,18 +85,22 @@ interface ThemeSwitcherProps {
 export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
   const [active, setActive] = useState(0)
   const [paused, setPaused] = useState(false)
+  // Explicit pause via the visible control (WCAG 2.2.2 Pause, Stop, Hide) —
+  // unlike hover/focus pause, this persists until the visitor resumes.
+  const [userPaused, setUserPaused] = useState(false)
   const [frameH, setFrameH] = useState<number>()
   const slideRef = useRef<HTMLDivElement>(null)
+  const reducedMotion = useReducedMotion()
 
-  // Auto-advance, paused while the visitor is hovering/focusing the widget and
-  // disabled entirely under prefers-reduced-motion.
+  // Auto-advance, paused while the visitor is hovering/focusing the widget or
+  // has hit the pause control, and disabled entirely under
+  // prefers-reduced-motion (live, not just at mount).
   useEffect(() => {
-    if (paused) return
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+    if (paused || userPaused || reducedMotion) return
     if (RESOLVED.length < 2) return
     const id = setInterval(() => setActive((a) => (a + 1) % RESOLVED.length), ROTATE_MS)
     return () => clearInterval(id)
-  }, [paused])
+  }, [paused, userPaused, reducedMotion])
 
   // Drive the frame height from the active slide's real content so every theme
   // shows at its true size — no scrollbar and no dead padding. A ResizeObserver
@@ -169,6 +174,23 @@ export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
             role="group"
             aria-label="Choose a theme"
           >
+            {/* Under reduced motion the rotation is off entirely, so the
+                pause control would be inert — hide it. */}
+            {RESOLVED.length > 1 && !reducedMotion && (
+              <button
+                type="button"
+                onClick={() => setUserPaused((p) => !p)}
+                aria-label={userPaused ? 'Resume theme rotation' : 'Pause theme rotation'}
+                aria-pressed={userPaused}
+                className="flex h-6 w-6 items-center justify-center rounded-full text-text-sub hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:ring-offset-2 focus-visible:ring-offset-surface focus-visible:outline-none"
+              >
+                {userPaused ? (
+                  <Play className="h-3.5 w-3.5" aria-hidden="true" />
+                ) : (
+                  <Pause className="h-3.5 w-3.5" aria-hidden="true" />
+                )}
+              </button>
+            )}
             {RESOLVED.map((t, i) => {
               const isActive = i === active
               return (

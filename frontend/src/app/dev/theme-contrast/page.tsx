@@ -41,7 +41,7 @@ export default function ThemeContrastHarness() {
   const themes = getBundledThemes()
 
   return (
-    <main className="mx-auto max-w-2xl space-y-8 p-6">
+    <main id="main-content" tabIndex={-1} className="mx-auto max-w-2xl space-y-8 p-6">
       <header>
         <h1 className="text-xl font-bold text-text">Theme contrast harness</h1>
         <p className="text-sm text-text-sub">

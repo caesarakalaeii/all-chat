@@ -28,7 +28,7 @@ function AdminLayoutContent({ children }: { children: ReactNode }) {
       <AdminSidebar />
       {/* Offset for the fixed desktop sidebar; full width below the lg breakpoint. */}
       <div className="lg:pl-60">
-        <main>{children}</main>
+        <main id="main-content" tabIndex={-1}>{children}</main>
       </div>
     </div>
   )
