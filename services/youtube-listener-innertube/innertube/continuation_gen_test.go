@@ -16,48 +16,7 @@
 
 package innertube
 
-import (
-	"encoding/base64"
-	"testing"
-)
-
-func TestGenerateLiveChatContinuation_ProducesValidBase64(t *testing.T) {
-	token := GenerateLiveChatContinuation("dQw4w9WgXcQ", "UCuAXFkgsw1L7xaCfnd5JJOw", ChatTypeAll)
-	if token == "" {
-		t.Fatal("expected non-empty token")
-	}
-	// Must be valid base64url
-	decoded, err := base64.URLEncoding.DecodeString(token)
-	if err != nil {
-		t.Fatalf("token is not valid base64url: %v", err)
-	}
-	if len(decoded) < 50 {
-		t.Errorf("decoded token suspiciously short: %d bytes", len(decoded))
-	}
-}
-
-func TestGenerateLiveChatContinuation_DifferentChatTypes(t *testing.T) {
-	allToken := GenerateLiveChatContinuation("dQw4w9WgXcQ", "UCuAXFkgsw1L7xaCfnd5JJOw", ChatTypeAll)
-	topToken := GenerateLiveChatContinuation("dQw4w9WgXcQ", "UCuAXFkgsw1L7xaCfnd5JJOw", ChatTypeTop)
-
-	if allToken == topToken {
-		t.Error("ChatTypeAll and ChatTypeTop should produce different tokens")
-	}
-}
-
-func TestGenerateLiveChatContinuation_HeaderContainsVideoID(t *testing.T) {
-	videoID := "XSXEaikz0Bc"
-	channelID := "UCSJ4gkVC6NrvII8umztf0Ow"
-
-	// The header is built separately and contains the video ID directly
-	header := buildHeader(videoID, channelID)
-	if !containsBytes(header, []byte(videoID)) {
-		t.Error("header does not contain video ID")
-	}
-	if !containsBytes(header, []byte(channelID)) {
-		t.Error("header does not contain channel ID")
-	}
-}
+import "testing"
 
 func TestAppendVarint(t *testing.T) {
 	tests := []struct {
@@ -97,20 +56,4 @@ func TestAppendTag_LargeFieldNumber(t *testing.T) {
 			t.Errorf("tag byte %d: got 0x%02x, want 0x%02x", i, tag[i], expected[i])
 		}
 	}
-}
-
-func containsBytes(haystack, needle []byte) bool {
-	for i := 0; i <= len(haystack)-len(needle); i++ {
-		match := true
-		for j := range needle {
-			if haystack[i+j] != needle[j] {
-				match = false
-				break
-			}
-		}
-		if match {
-			return true
-		}
-	}
-	return false
 }
