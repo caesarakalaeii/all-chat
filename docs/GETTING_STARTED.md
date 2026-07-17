@@ -8,7 +8,7 @@
 
 **For LLM agents and developers**, see the comprehensive navigation guide:
 
-→ **[docs/llm-guides/NAVIGATION.md](./docs/llm-guides/NAVIGATION.md)** (~400 lines)
+→ **[docs/llm-guides/NAVIGATION.md](./llm-guides/NAVIGATION.md)** (~400 lines)
 
 This guide includes:
 - Service-by-service navigation (every service in `services/`)
@@ -22,17 +22,17 @@ This guide includes:
 
 ## Essential Starting Points
 
-1. **[CLAUDE.md](./CLAUDE.md)** - Project overview, architecture, tech stack
-2. **[docs/llm-guides/NAVIGATION.md](./docs/llm-guides/NAVIGATION.md)** - Detailed service navigation
-3. **[docs/architecture/00-OVERVIEW.md](./docs/architecture/00-OVERVIEW.md)** - System architecture
+1. **[CLAUDE.md](../CLAUDE.md)** - Project overview, architecture, tech stack
+2. **[docs/llm-guides/NAVIGATION.md](./llm-guides/NAVIGATION.md)** - Detailed service navigation
+3. **[docs/architecture/00-OVERVIEW.md](./architecture/00-OVERVIEW.md)** - System architecture
 
 **For specific tasks**, see quick reference guides:
-- [QUICK-REF-ADD-PLATFORM.md](./docs/llm-guides/QUICK-REF-ADD-PLATFORM.md) - Add new platform support
-- [QUICK-REF-DEBUG-QUOTA.md](./docs/llm-guides/QUICK-REF-DEBUG-QUOTA.md) - YouTube quota debugging
-- [More quick refs...](./docs/llm-guides/)
+- [QUICK-REF-ADD-PLATFORM.md](./llm-guides/QUICK-REF-ADD-PLATFORM.md) - Add new platform support
+- [QUICK-REF-DEBUG-QUOTA.md](./llm-guides/QUICK-REF-DEBUG-QUOTA.md) - YouTube quota debugging
+- [More quick refs...](./llm-guides/)
 
 **For troubleshooting**, start with:
-- [Troubleshooting Decision Tree](./docs/troubleshooting/decision-tree.md) - High-level triage
+- [Troubleshooting Decision Tree](./troubleshooting/decision-tree.md) - High-level triage
 
 ---
 
@@ -75,10 +75,10 @@ docs/
 
 ## Need Help?
 
-1. **First time?** → Read [CLAUDE.md](./CLAUDE.md)
-2. **Specific task?** → Check [quick reference cards](./docs/llm-guides/)
-3. **Architecture questions?** → Read [architecture docs](./docs/architecture/)
-4. **Troubleshooting?** → Use [decision tree](./docs/troubleshooting/decision-tree.md)
-5. **Why was X chosen?** → Check [ADRs](./docs/adr/)
+1. **First time?** → Read [CLAUDE.md](../CLAUDE.md)
+2. **Specific task?** → Check [quick reference cards](./llm-guides/)
+3. **Architecture questions?** → Read [architecture docs](./architecture/)
+4. **Troubleshooting?** → Use [decision tree](./troubleshooting/decision-tree.md)
+5. **Why was X chosen?** → Check [ADRs](./adr/)
 
-**Complete navigation**: [docs/llm-guides/NAVIGATION.md](./docs/llm-guides/NAVIGATION.md)
+**Complete navigation**: [docs/llm-guides/NAVIGATION.md](./llm-guides/NAVIGATION.md)

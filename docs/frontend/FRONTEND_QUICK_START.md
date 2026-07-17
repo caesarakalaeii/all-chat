@@ -205,7 +205,7 @@ docker-compose -f docker-compose.frontend.yml down --rmi all -v
 
 For complete details, see:
 - [FRONTEND_DEV_SETUP.md](./FRONTEND_DEV_SETUP.md) - Complete guide
-- [GETTING_STARTED.md](./GETTING_STARTED.md) - Full project onboarding
+- [GETTING_STARTED.md](../GETTING_STARTED.md) - Full project onboarding
 
 ## ❓ Troubleshooting
 
