@@ -31,9 +31,28 @@ import { Suspense } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 
+// Map the backend `platform` query param to a display name. Falls back to a
+// platform-neutral label so the page never misnames the provider that failed
+// (it used to hardcode "Twitch" for every platform).
+const PLATFORM_LABELS: Record<string, string> = {
+  twitch: 'Twitch',
+  youtube: 'YouTube',
+  kick: 'Kick',
+  tiktok: 'TikTok',
+  discord: 'Discord',
+}
+
 function AuthErrorContent() {
   const searchParams = useSearchParams()
   const error = searchParams.get('error') || 'Authentication failed'
+  const platform = searchParams.get('platform') ?? ''
+  // Read the label defensively: indexing a plain object with an attacker-supplied
+  // query value (e.g. ?platform=toString) can resolve to an inherited Object
+  // prototype member, so require the resolved value to actually be one of our
+  // string labels before using it — otherwise fall back to a neutral label.
+  const platformLabel = PLATFORM_LABELS[platform]
+  const accountLabel =
+    typeof platformLabel === 'string' ? `${platformLabel} account` : 'streaming account'
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-bg">
@@ -42,7 +61,7 @@ function AuthErrorContent() {
         <h1 className="mb-4 text-3xl font-bold text-text">Authentication Failed</h1>
         <p className="mb-6 text-lg text-youtube">{error}</p>
         <p className="mb-8 text-text-sub">
-          There was an error authenticating with your Twitch account. Please try again or contact
+          There was an error authenticating with your {accountLabel}. Please try again or contact
           support if the problem persists.
         </p>
         <div className="space-y-4">

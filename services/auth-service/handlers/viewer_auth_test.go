@@ -19,6 +19,7 @@ package handlers
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
@@ -173,5 +174,82 @@ func TestViewerCallbackTombstone_NoTombstoneFallsThrough(t *testing.T) {
 	}
 	if w.Code != http.StatusOK {
 		t.Fatalf("want no redirect (200 default), got %d", w.Code)
+	}
+}
+
+// TestOAuthErrorMessage verifies the callback maps a provider error to a SAFE,
+// bounded user-facing message (never reflecting raw provider text to the page)
+// while returning the raw value for logging, and yields "" when there is no error.
+func TestOAuthErrorMessage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	tests := []struct {
+		name        string
+		query       string
+		wantRaw     string
+		wantUserMsg string
+	}{
+		{"no error", "code=abc&state=xyz", "", ""},
+		{"known code (kick)", "error=invalid+redirect+uri&state=xyz", "invalid redirect uri", safeOAuthErrorMessages["invalid redirect uri"]},
+		{"known code with description", "error=access_denied&error_description=user+said+no", "access_denied: user said no", safeOAuthErrorMessages["access_denied"]},
+		{"unknown code falls back to generic", "error=weird_provider_thing", "weird_provider_thing", genericOAuthErrorMessage},
+		{"attacker text does not reach the page", "error=Sign+in+at+evil.example", "Sign in at evil.example", genericOAuthErrorMessage},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Request = httptest.NewRequest(http.MethodGet, "/callback?"+tt.query, nil)
+			raw, userMsg := oauthErrorMessage(c)
+			if raw != tt.wantRaw {
+				t.Errorf("raw = %q, want %q", raw, tt.wantRaw)
+			}
+			if userMsg != tt.wantUserMsg {
+				t.Errorf("userMsg = %q, want %q", userMsg, tt.wantUserMsg)
+			}
+		})
+	}
+}
+
+// TestRedirectToFrontendWithError_IncludesPlatform verifies the error redirect
+// query-escapes the message and appends the failing platform (set via
+// auth_platform) so the auth-error page names the correct provider instead of
+// hardcoding "Twitch".
+func TestRedirectToFrontendWithError_IncludesPlatform(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	h := &ViewerAuthHandler{logger: zap.NewNop(), frontendURL: "https://app.test"}
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/callback", nil)
+	c.Set("auth_platform", "kick")
+
+	h.redirectToFrontendWithError(c, "invalid redirect uri")
+
+	if w.Code != http.StatusFound {
+		t.Fatalf("want 302, got %d", w.Code)
+	}
+	loc := w.Header().Get("Location")
+	if !strings.Contains(loc, "platform=kick") {
+		t.Errorf("redirect Location %q missing platform=kick", loc)
+	}
+	if !strings.Contains(loc, "error=invalid+redirect+uri") {
+		t.Errorf("redirect Location %q missing escaped error message", loc)
+	}
+}
+
+// TestRedirectToFrontendWithError_NoPlatform verifies the redirect omits the
+// platform param when none was set (so the page falls back to a neutral label).
+func TestRedirectToFrontendWithError_NoPlatform(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	h := &ViewerAuthHandler{logger: zap.NewNop(), frontendURL: "https://app.test"}
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/callback", nil)
+
+	h.redirectToFrontendWithError(c, "boom")
+
+	if loc := w.Header().Get("Location"); strings.Contains(loc, "platform=") {
+		t.Errorf("redirect Location %q should not contain platform param", loc)
 	}
 }
