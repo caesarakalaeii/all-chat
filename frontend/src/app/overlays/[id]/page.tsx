@@ -2767,114 +2767,89 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           </Card>
 
           {/* Premium required dialog */}
-          {showPremiumRequired && (
-            <div
-              className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-              onClick={() => setShowPremiumRequired(false)}
-            >
-              <div
-                className="mx-4 w-full max-w-sm rounded-xl border border-border bg-surface p-6 shadow-xl"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="mb-3 flex items-start justify-between">
-                  <h2 className="text-lg font-semibold text-text">Premium Feature</h2>
-                  <button
-                    onClick={() => setShowPremiumRequired(false)}
-                    className="text-text-sub hover:text-text"
-                  >
-                    <X className="size-4" />
-                  </button>
-                </div>
-                <p className="mb-4 text-sm text-text-sub">
-                  Sharing your overlay is a premium feature.{' '}
-                  <PremiumUpsellLink>Upgrade your account</PremiumUpsellLink> to share your chat
-                  with other streamers.
-                </p>
-                <p className="mb-5 text-sm text-text-sub">
-                  Questions? Join our{' '}
-                  <a
-                    href={DISCORD_INVITE_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-medium text-twitch hover:underline"
-                  >
-                    Discord community
-                  </a>
-                  .
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    className="flex-1"
-                    onClick={() => setShowPremiumRequired(false)}
-                  >
-                    Close
-                  </Button>
-                  <Link href="/upgrade" className="flex-1">
-                    <Button className="w-full">Upgrade</Button>
-                  </Link>
-                </div>
+          <Dialog.Root open={showPremiumRequired} onOpenChange={setShowPremiumRequired}>
+            <Dialog.Content size="sm">
+              <Dialog.Title>Premium Feature</Dialog.Title>
+              <Dialog.Description>
+                Sharing your overlay is a premium feature.{' '}
+                <PremiumUpsellLink>Upgrade your account</PremiumUpsellLink> to share your chat with
+                other streamers.
+              </Dialog.Description>
+              <p className="mt-3 text-sm text-text-sub">
+                Questions? Join our{' '}
+                <a
+                  href={DISCORD_INVITE_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-twitch hover:underline"
+                >
+                  Discord community
+                </a>
+                .
+              </p>
+              <div className="mt-5 flex gap-2">
+                <Dialog.Close
+                  render={
+                    <Button type="button" variant="outline" className="flex-1">
+                      Close
+                    </Button>
+                  }
+                />
+                <Link href="/upgrade" className="flex-1">
+                  <Button className="w-full">Upgrade</Button>
+                </Link>
               </div>
-            </div>
-          )}
+            </Dialog.Content>
+          </Dialog.Root>
 
           {/* Share overlay modal */}
-          {showShareModal && (
-            <div
-              className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-              onClick={() => setShowShareModal(false)}
-            >
-              <div
-                className="mx-4 w-full max-w-sm rounded-xl border border-border bg-surface p-6 shadow-xl"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="mb-3 flex items-start justify-between">
-                  <h2 className="text-lg font-semibold text-text">Share Overlay</h2>
-                  <button
-                    onClick={() => setShowShareModal(false)}
-                    className="text-text-sub hover:text-text"
-                  >
-                    <X className="size-4" />
-                  </button>
-                </div>
-                <p className="mb-4 text-sm text-text-sub">
-                  Enter the Twitch username of the person you want to share{' '}
-                  <strong>{overlay?.name}</strong> with. They&apos;ll receive a request they can
-                  accept or decline.
-                </p>
-                <div className="mb-4">
-                  <label className="mb-1 block text-xs text-text-sub">Twitch username</label>
-                  <input
-                    ref={shareInputRef}
-                    type="text"
-                    value={shareRecipient}
-                    onChange={(e) => setShareRecipient(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSendShareRequest()}
-                    placeholder="e.g. somestreamer"
-                    className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text placeholder:text-text-sub focus-visible:ring-2 focus-visible:ring-twitch/50 focus-visible:outline-none"
-                    disabled={shareLoading}
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    className="flex-1"
-                    onClick={() => setShowShareModal(false)}
-                    disabled={shareLoading}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    className="flex-1"
-                    onClick={handleSendShareRequest}
-                    disabled={shareLoading || !shareRecipient.trim()}
-                  >
-                    {shareLoading ? 'Sending...' : 'Send Request'}
-                  </Button>
-                </div>
+          <Dialog.Root open={showShareModal} onOpenChange={setShowShareModal}>
+            <Dialog.Content size="sm">
+              <Dialog.Title>Share Overlay</Dialog.Title>
+              <Dialog.Description>
+                Enter the Twitch username of the person you want to share{' '}
+                <strong>{overlay?.name}</strong> with. They&apos;ll receive a request they can
+                accept or decline.
+              </Dialog.Description>
+              <div className="mt-4 mb-4">
+                <label htmlFor="share-recipient" className="mb-1 block text-xs text-text-sub">
+                  Twitch username
+                </label>
+                <input
+                  id="share-recipient"
+                  ref={shareInputRef}
+                  type="text"
+                  value={shareRecipient}
+                  onChange={(e) => setShareRecipient(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSendShareRequest()}
+                  placeholder="e.g. somestreamer"
+                  className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text placeholder:text-text-sub focus-visible:ring-2 focus-visible:ring-twitch/50 focus-visible:outline-none"
+                  disabled={shareLoading}
+                />
               </div>
-            </div>
-          )}
+              <div className="flex gap-2">
+                <Dialog.Close
+                  render={
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="flex-1"
+                      disabled={shareLoading}
+                    >
+                      Cancel
+                    </Button>
+                  }
+                />
+                <Button
+                  className="flex-1"
+                  onClick={handleSendShareRequest}
+                  disabled={shareLoading || !shareRecipient.trim()}
+                >
+                  {shareLoading ? 'Sending...' : 'Send Request'}
+                </Button>
+              </div>
+            </Dialog.Content>
+          </Dialog.Root>
 
           {/* 5-section collapsible editor panel */}
           {/* sticky footer uses position:sticky bottom-0 — works because split-view-config has overflow-y-auto */}

@@ -37,6 +37,7 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { InfinityLogo } from '@/components/InfinityLogo'
+import { Dialog } from '@/components/ui/dialog'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { cn } from '@/lib/utils'
 
@@ -64,13 +65,7 @@ function isActive(pathname: string | null, href: string, exact?: boolean): boole
 }
 
 /** Shared list of navigation links, used by both the desktop rail and the mobile drawer. */
-function NavLinks({
-  pathname,
-  onNavigate,
-}: {
-  pathname: string | null
-  onNavigate?: () => void
-}) {
+function NavLinks({ pathname, onNavigate }: { pathname: string | null; onNavigate?: () => void }) {
   return (
     <nav className="flex flex-col gap-0.5">
       {ADMIN_LINKS.map((link) => {
@@ -155,20 +150,16 @@ export function AdminSidebar() {
     setOpen(false)
   }, [pathname])
 
-  // Close on Escape and lock body scroll while the drawer is open.
+  // Close the drawer when the viewport grows to the desktop breakpoint, so the
+  // dialog's focus trap and scroll lock don't linger invisibly behind the rail.
   useEffect(() => {
-    if (!open) return
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false)
+    const mq = window.matchMedia('(min-width: 1024px)')
+    function onChange(e: MediaQueryListEvent) {
+      if (e.matches) setOpen(false)
     }
-    document.addEventListener('keydown', onKey)
-    const prevOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.removeEventListener('keydown', onKey)
-      document.body.style.overflow = prevOverflow
-    }
-  }, [open])
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
 
   return (
     <>
@@ -197,34 +188,28 @@ export function AdminSidebar() {
         <SidebarBrand />
       </header>
 
-      {/* Mobile drawer */}
-      {open && (
-        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="Admin menu">
-          <button
-            type="button"
-            aria-label="Close admin menu"
-            onClick={() => setOpen(false)}
-            className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
-          />
-          <div className="absolute inset-y-0 left-0 flex w-72 max-w-[85%] flex-col border-r border-border bg-bg px-4 py-5 shadow-xl">
-            <div className="flex items-center justify-between">
-              <SidebarBrand />
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                aria-label="Close admin menu"
-                className="rounded-lg p-2 text-text-sub transition-colors hover:bg-surface-2 hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
-              >
-                <X className="size-5" aria-hidden="true" />
-              </button>
-            </div>
-            <div className="mt-8 flex-1 overflow-y-auto">
-              <NavLinks pathname={pathname} onNavigate={() => setOpen(false)} />
-            </div>
-            <SidebarFooter onNavigate={() => setOpen(false)} />
+      {/* Mobile drawer (left slide-in panel on the dialog primitive) */}
+      <Dialog.Root open={open} onOpenChange={setOpen}>
+        <Dialog.Content
+          showCloseButton={false}
+          aria-label="Admin menu"
+          className="top-0 left-0 flex h-full w-72 max-w-[85%] translate-x-0 translate-y-0 flex-col rounded-none border-0 border-r border-border bg-bg p-0 px-4 py-5 lg:hidden"
+        >
+          <div className="flex items-center justify-between">
+            <SidebarBrand />
+            <Dialog.Close
+              aria-label="Close admin menu"
+              className="rounded-lg p-2 text-text-sub transition-colors hover:bg-surface-2 hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+            >
+              <X className="size-5" aria-hidden="true" />
+            </Dialog.Close>
           </div>
-        </div>
-      )}
+          <div className="mt-8 flex-1 overflow-y-auto">
+            <NavLinks pathname={pathname} onNavigate={() => setOpen(false)} />
+          </div>
+          <SidebarFooter onNavigate={() => setOpen(false)} />
+        </Dialog.Content>
+      </Dialog.Root>
     </>
   )
 }

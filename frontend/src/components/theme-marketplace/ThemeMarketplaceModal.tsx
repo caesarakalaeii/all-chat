@@ -25,6 +25,7 @@
 'use client'
 
 import { useEffect } from 'react'
+import { Dialog, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import ThemeCard from './ThemeCard'
 import ThemeFilters from './ThemeFilters'
 import { useThemeMarketplace } from '@/hooks/useThemeMarketplace'
@@ -119,33 +120,9 @@ export default function ThemeMarketplaceModal({
     refreshThemes,
   } = themeType === 'creditroll' ? creditRollThemes : overlayThemes
 
-  // Handle ESC key to close modal
-  useEffect(() => {
-    if (!isOpen) return
-
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose()
-      }
-    }
-
-    document.addEventListener('keydown', handleEscape)
-    return () => document.removeEventListener('keydown', handleEscape)
-  }, [isOpen, onClose])
-
-  // Prevent body scroll when modal is open
-  useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-    }
-    return () => {
-      document.body.style.overflow = ''
-    }
-  }, [isOpen])
-
-  if (!isOpen) return null
+  // Escape handling, focus trap/restore, body scroll-lock, backdrop
+  // dismissal, and the dialog ARIA wiring all come from the ui/dialog
+  // primitive (Base UI) — the previous hand-rolled effects are gone.
 
   const handleApply = (theme: Theme) => {
     trackEvent('theme_applied', { source: 'marketplace' })
@@ -154,24 +131,22 @@ export default function ThemeMarketplaceModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-[8px]"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose()
-      }}
-    >
-      <div className="flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-2xl">
+    <Dialog.Root open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <Dialog.Content
+        showCloseButton={false}
+        className="flex max-h-[90vh] max-w-6xl flex-col overflow-hidden p-0 shadow-2xl"
+      >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border p-6">
           <div>
-            <h2 id="theme-marketplace-title" className="text-2xl font-bold text-text">
+            <DialogTitle className="text-2xl font-bold">
               {themeType === 'creditroll' ? 'Credit Roll' : ''} Theme Marketplace
-            </h2>
-            <p className="mt-1 text-sm text-text-sub">
+            </DialogTitle>
+            <DialogDescription className="mt-1">
               {themeType === 'creditroll'
                 ? 'Browse and apply custom CSS themes for your credit roll'
                 : 'Browse and apply custom CSS themes for your overlay'}
-            </p>
+            </DialogDescription>
           </div>
           <div className="flex items-center gap-2">
             {/* Admin Force Refresh Button */}
@@ -197,12 +172,17 @@ export default function ThemeMarketplaceModal({
             )}
 
             {/* Close Button */}
-            <button
-              onClick={onClose}
-              className="rounded-lg p-2 text-text-dim transition-colors hover:bg-surface-2 hover:text-text"
+            <Dialog.Close
+              className="rounded-lg p-2 text-text-dim transition-colors hover:bg-surface-2 hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
               aria-label="Close theme marketplace"
             >
-              <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg
+                className="h-6 w-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -210,7 +190,7 @@ export default function ThemeMarketplaceModal({
                   d="M6 18L18 6M6 6l12 12"
                 />
               </svg>
-            </button>
+            </Dialog.Close>
           </div>
         </div>
 
@@ -310,7 +290,7 @@ export default function ThemeMarketplaceModal({
             </>
           )}
         </div>
-      </div>
-    </div>
+      </Dialog.Content>
+    </Dialog.Root>
   )
 }

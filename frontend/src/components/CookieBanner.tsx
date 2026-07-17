@@ -18,7 +18,6 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 /**
  * GDPR-Compliant Cookie Banner
  *
@@ -69,7 +68,11 @@ export default function CookieBanner() {
 
   return (
     <div className="pointer-events-none fixed inset-0 z-50 flex items-end justify-center p-4">
-      <div className="animate-slide-up pointer-events-auto w-full max-w-4xl rounded-xl border border-border bg-surface shadow-2xl">
+      <div
+        role="region"
+        aria-label="Cookie consent"
+        className="animate-slide-up pointer-events-auto w-full max-w-4xl rounded-xl border border-border bg-surface shadow-2xl"
+      >
         {/* Main Banner */}
         <div className="p-6">
           <div className="flex items-start gap-4">
@@ -140,14 +143,14 @@ export default function CookieBanner() {
                   <div className="mt-3 border-t border-border pt-2">
                     <p className="text-xs text-text-dim">
                       <strong className="text-text">Fonts:</strong> All fonts (including ones
-                      originally distributed by Google Fonts) are self-hosted on our
-                      infrastructure &ndash; your IP address is never sent to Google.
+                      originally distributed by Google Fonts) are self-hosted on our infrastructure
+                      &ndash; your IP address is never sent to Google.
                     </p>
                     <p className="mt-2 text-xs text-text-dim">
-                      <strong className="text-text">Third-party resources:</strong> Dashboard
-                      pages may load fallback avatars from <strong>UI Avatars</strong> and themes
-                      from the <strong>GitHub API</strong>. These requests transmit your IP
-                      address to the respective providers. See our{' '}
+                      <strong className="text-text">Third-party resources:</strong> Dashboard pages
+                      may load fallback avatars from <strong>UI Avatars</strong> and themes from the{' '}
+                      <strong>GitHub API</strong>. These requests transmit your IP address to the
+                      respective providers. See our{' '}
                       <a
                         href="/legal/privacy"
                         target="_blank"
@@ -163,8 +166,8 @@ export default function CookieBanner() {
               </details>
 
               <p className="mb-4 text-sm text-text-sub">
-                By using All-Chat, you agree to this essential data storage. For more details, please
-                read our{' '}
+                By using All-Chat, you agree to this essential data storage. For more details,
+                please read our{' '}
                 <a
                   href="/legal/privacy"
                   target="_blank"

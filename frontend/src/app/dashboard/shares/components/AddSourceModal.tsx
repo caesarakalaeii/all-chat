@@ -27,6 +27,7 @@
 import { useState, useEffect } from 'react'
 import { overlaysApi } from '@/lib/api/overlays'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogTitle } from '@/components/ui/dialog'
 import type { Overlay } from '@/lib/types/overlay'
 import { trackEvent } from '@/lib/analytics'
 import toast from 'react-hot-toast'
@@ -100,12 +101,12 @@ export function AddSourceModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-      <div className="relative w-full max-w-sm rounded-xl border border-border bg-surface p-6 shadow-2xl">
+    <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
+      <Dialog.Content size="sm">
         {/* Title */}
-        <h2 className="mb-4 text-xl font-semibold text-text">
+        <DialogTitle className="mb-4 pr-8 text-xl">
           Add {senderName}&apos;s overlay to one of yours?
-        </h2>
+        </DialogTitle>
 
         {loadingOverlays ? (
           <div className="py-8 text-center text-text-sub">Loading overlays...</div>
@@ -152,7 +153,7 @@ export function AddSourceModal({
             </div>
           </>
         )}
-      </div>
-    </div>
+      </Dialog.Content>
+    </Dialog.Root>
   )
 }
