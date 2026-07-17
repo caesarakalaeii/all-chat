@@ -19,14 +19,10 @@
 /**
  * Admin Viewer Management Page
  *
- * Allows admins to view all viewer sessions and ban/unban users.
- *
- * Features:
- * - List all viewer sessions
- * - View message counts and rate limits
- * - Ban viewers with reason
- * - Unban viewers
- * - See ban status and reasons
+ * Find a viewer (server-side search + filters + pagination), inspect their
+ * cross-streamer activity, and ban/unban or grant/revoke premium. Search,
+ * filters, and the total count are resolved server-side (ADR-0034) so they are
+ * correct across the whole dataset, not just the loaded page.
  *
  * Route: /admin/viewers
  */
@@ -34,6 +30,7 @@
 'use client'
 
 import { useEffect, useId, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import clsx from 'clsx'
 import { useAuthStore } from '@/lib/stores/auth-store'
@@ -45,6 +42,9 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog } from '@/components/ui/dialog'
 import { toastManager } from '@/lib/toast'
 import { PremiumDurationChooser } from '@/components/admin/PremiumDurationChooser'
+import { UserAvatar } from '@/components/UserAvatar'
+import { PlatformBadge } from '@/components/ui/badge'
+import { ChannelLink } from '@/components/ChannelLink'
 
 interface ViewerSession {
   id: string
@@ -52,24 +52,66 @@ interface ViewerSession {
   platform_user_id: string
   username: string
   display_name: string
+  avatar_url?: string | null
   last_message_at: string | null
   message_count_1min: number
   message_count_1hour: number
   is_premium: boolean
   premium_expires_at?: string | null
   viewer_id: string | null
+  // Linked streamer account (viewer who is also a streamer), when present.
+  user_id?: string | null
   is_banned: boolean
   banned_at: string | null
   banned_reason: string | null
   created_at: string
 }
 
+interface ViewerListResponse {
+  viewers: ViewerSession[]
+  total: number
+  limit: number
+  offset: number
+}
+
+interface ViewerActivityStreamer {
+  streamer_user_id: string
+  streamer_username: string
+  overlay_id?: string | null
+  channel_name: string
+  platform: string
+  message_count: number
+  last_sent_at: string
+}
+
+interface ViewerActivity {
+  total_messages: number
+  last_sent_at: string | null
+  streamers: ViewerActivityStreamer[]
+}
+
+const PAGE_SIZE = 50
+
 export default function AdminViewersPage() {
   const router = useRouter()
   const { user } = useAuthStore()
 
   const [viewers, setViewers] = useState<ViewerSession[]>([])
+  const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
+  // Bumped by mutations (ban/premium) to force a refetch without threading an
+  // external fetch function through the effect.
+  const [refreshKey, setRefreshKey] = useState(0)
+
+  // Discovery controls (server-side). `searchInput` is the immediate field
+  // value; `search` is the debounced value actually sent to the API.
+  const [searchInput, setSearchInput] = useState('')
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'banned' | 'active'>('all')
+  const [premiumFilter, setPremiumFilter] = useState<'all' | 'premium' | 'free'>('all')
+  const [platformFilter, setPlatformFilter] = useState('all')
+  const [offset, setOffset] = useState(0)
+
   const [banningId, setBanningId] = useState<string | null>(null)
   const [banReason, setBanReason] = useState('')
   const [showBanModal, setShowBanModal] = useState(false)
@@ -81,29 +123,84 @@ export default function AdminViewersPage() {
   // means the custom day count is empty/out of range and the grant is blocked.
   const [grantDurationSeconds, setGrantDurationSeconds] = useState<number | null>(null)
   const [grantDurationValid, setGrantDurationValid] = useState(true)
+  // Activity (streamer context) dialog.
+  const [activityViewer, setActivityViewer] = useState<ViewerSession | null>(null)
+  const [activity, setActivity] = useState<ViewerActivity | null>(null)
+  const [activityLoading, setActivityLoading] = useState(false)
   const banReasonId = useId()
+  const searchId = useId()
+  const statusId = useId()
+  const premiumId = useId()
+  const platformId = useId()
 
   useEffect(() => {
     if (!user?.is_admin) {
       router.push('/dashboard')
-      return
     }
-
-    fetchViewers()
   }, [user, router])
 
-  const fetchViewers = async () => {
+  // Debounce the search box so we don't hit the API on every keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setSearch(searchInput)
+      setOffset(0)
+    }, 300)
+    return () => clearTimeout(t)
+  }, [searchInput])
+
+  // Fetch is defined inline in the effect (state is set only after the await, so
+  // it never runs synchronously in the effect body) and re-runs whenever the
+  // filters, page, or refreshKey change. Initial loading=true shows the skeleton
+  // on first load; refetches swap the list in place.
+  useEffect(() => {
+    if (!user?.is_admin) return
+    let cancelled = false
+
+    async function run() {
+      try {
+        const params = new URLSearchParams()
+        params.set('limit', String(PAGE_SIZE))
+        params.set('offset', String(offset))
+        if (search.trim()) params.set('q', search.trim())
+        if (statusFilter !== 'all') params.set('is_banned', String(statusFilter === 'banned'))
+        if (premiumFilter !== 'all') params.set('is_premium', String(premiumFilter === 'premium'))
+        if (platformFilter !== 'all') params.set('platform', platformFilter)
+
+        const response = await apiClient.get<ViewerListResponse>(
+          `/api/v1/admin/viewers?${params.toString()}`
+        )
+        if (cancelled) return
+        setViewers(response.viewers ?? [])
+        setTotal(response.total ?? 0)
+      } catch (error) {
+        if (cancelled) return
+        console.error('Failed to fetch viewers:', error)
+        toastManager.add({ title: 'Failed to load viewers', type: 'error' })
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    run()
+    return () => {
+      cancelled = true
+    }
+  }, [user, offset, search, statusFilter, premiumFilter, platformFilter, refreshKey])
+
+  const refetchViewers = () => setRefreshKey((k) => k + 1)
+
+  const openActivity = async (viewer: ViewerSession) => {
+    setActivityViewer(viewer)
+    setActivity(null)
+    setActivityLoading(true)
     try {
-      setLoading(true)
-      const response = await apiClient.get<{ viewers: ViewerSession[] }>(
-        '/api/v1/admin/viewers?limit=100'
-      )
-      setViewers(response.viewers)
+      const data = await apiClient.get<ViewerActivity>(`/api/v1/admin/viewers/${viewer.id}/activity`)
+      setActivity(data)
     } catch (error) {
-      console.error('Failed to fetch viewers:', error)
-      toastManager.add({ title: 'Failed to load viewers', type: 'error' })
+      console.error('Failed to fetch viewer activity:', error)
+      toastManager.add({ title: 'Failed to load activity', type: 'error' })
     } finally {
-      setLoading(false)
+      setActivityLoading(false)
     }
   }
 
@@ -125,7 +222,7 @@ export default function AdminViewersPage() {
       setShowBanModal(false)
       setSelectedViewer(null)
       setBanReason('')
-      fetchViewers()
+      refetchViewers()
     } catch (error) {
       console.error('Failed to ban viewer:', error)
       toastManager.add({ title: 'Failed to ban viewer', type: 'error' })
@@ -140,7 +237,7 @@ export default function AdminViewersPage() {
       await apiClient.post(`/api/v1/admin/viewers/${viewerId}/unban`, {})
       toastManager.add({ title: `${username} unbanned successfully`, type: 'success' })
       setUnbanDialogViewer(null)
-      fetchViewers()
+      refetchViewers()
     } catch (error) {
       console.error('Failed to unban viewer:', error)
       toastManager.add({ title: 'Failed to unban viewer', type: 'error' })
@@ -165,7 +262,7 @@ export default function AdminViewersPage() {
         type: 'success',
       })
       setPremiumDialogViewer(null)
-      fetchViewers()
+      refetchViewers()
     } catch (error) {
       console.error('Failed to update viewer premium:', error)
       toastManager.add({ title: 'Failed to update premium status', type: 'error' })
@@ -174,16 +271,21 @@ export default function AdminViewersPage() {
     }
   }
 
-  const bannedCount = viewers.filter((v) => v.is_banned).length
-  const activeCount = viewers.filter((v) => !v.is_banned).length
-  const premiumCount = viewers.filter((v) => v.is_premium).length
+  const pageStart = total === 0 ? 0 : offset + 1
+  const pageEnd = Math.min(offset + viewers.length, total)
+  const hasPrev = offset > 0
+  const hasNext = offset + PAGE_SIZE < total
 
   // Interactive controls shared between the desktop table and the mobile card list.
   // These render only triggers; the dialogs themselves are hosted once at page level
   // (below) so they aren't duplicated across the table/card breakpoints.
   function renderPremiumControl(viewer: ViewerSession) {
     if (!viewer.viewer_id) {
-      return <span className="text-xs text-text-dim">—</span>
+      return (
+        <span className="text-xs text-text-dim" title="Session-only viewer (no linked account)">
+          —
+        </span>
+      )
     }
     return (
       <button
@@ -206,30 +308,58 @@ export default function AdminViewersPage() {
     )
   }
 
-  function renderActionControl(viewer: ViewerSession) {
-    if (viewer.is_banned) {
-      return (
-        <Button
-          variant="outline"
-          size="sm"
-          aria-label={`${banningId === viewer.id ? 'Unbanning' : 'Unban'} ${viewer.username}`}
-          disabled={banningId === viewer.id}
-          onClick={() => setUnbanDialogViewer(viewer)}
-        >
-          {banningId === viewer.id ? 'Unbanning...' : 'Unban'}
-        </Button>
-      )
-    }
+  function renderActionControls(viewer: ViewerSession) {
     return (
-      <Button
-        variant="destructive"
-        size="sm"
-        aria-label={`Ban ${viewer.username}`}
-        disabled={banningId === viewer.id}
-        onClick={() => handleBanClick(viewer)}
-      >
-        Ban
-      </Button>
+      <div className="flex items-center gap-2">
+        <Button variant="outline" size="sm" onClick={() => openActivity(viewer)}>
+          Activity
+        </Button>
+        {viewer.is_banned ? (
+          <Button
+            variant="outline"
+            size="sm"
+            aria-label={`${banningId === viewer.id ? 'Unbanning' : 'Unban'} ${viewer.username}`}
+            disabled={banningId === viewer.id}
+            onClick={() => setUnbanDialogViewer(viewer)}
+          >
+            {banningId === viewer.id ? 'Unbanning...' : 'Unban'}
+          </Button>
+        ) : (
+          <Button
+            variant="destructive"
+            size="sm"
+            aria-label={`Ban ${viewer.username}`}
+            disabled={banningId === viewer.id}
+            onClick={() => handleBanClick(viewer)}
+          >
+            Ban
+          </Button>
+        )}
+      </div>
+    )
+  }
+
+  function renderIdentity(viewer: ViewerSession) {
+    return (
+      <div className="flex min-w-0 items-center gap-3">
+        <UserAvatar
+          avatarUrl={viewer.avatar_url ?? undefined}
+          displayName={viewer.display_name || viewer.username}
+          size={32}
+        />
+        <div className="min-w-0">
+          <ChannelLink
+            platform={viewer.platform}
+            channelId={viewer.username}
+            channelName={viewer.display_name || viewer.username}
+            className="truncate text-sm font-medium text-text"
+          />
+          <div className="truncate text-xs text-text-sub">@{viewer.username}</div>
+          <div className="truncate font-mono text-[0.65rem] text-text-dim">
+            {viewer.platform_user_id}
+          </div>
+        </div>
+      </div>
     )
   }
 
@@ -238,84 +368,137 @@ export default function AdminViewersPage() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-text">Viewer Management</h1>
-          <p className="mt-1 text-sm text-text-sub">Manage viewer sessions and bans</p>
+          <p className="mt-1 text-sm text-text-sub">
+            Search viewer sessions, inspect activity, and manage bans and premium
+          </p>
         </div>
-        <span className="text-sm text-text-sub">{viewers.length} total</span>
+        <span className="text-sm text-text-sub">{total.toLocaleString()} matching</span>
       </div>
 
-      {/* Stats */}
-      <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <Card className="p-4">
-          <div className="text-xs text-text-sub">Total Viewers</div>
-          <div className="text-2xl font-bold text-text">{viewers.length}</div>
-        </Card>
-        <Card className="p-4">
-          <div className="text-xs text-text-sub">Premium</div>
-          <div className="text-2xl font-bold text-amber-400">{premiumCount}</div>
-        </Card>
-        <Card className="p-4">
-          <div className="text-xs text-text-sub">Banned</div>
-          <div className="text-destructive text-2xl font-bold">{bannedCount}</div>
-        </Card>
-        <Card className="p-4">
-          <div className="text-xs text-text-sub">Active</div>
-          <div className="text-2xl font-bold text-kick">{activeCount}</div>
-        </Card>
-      </div>
+      {/* Search + filters (server-side) */}
+      <Card className="mb-6 p-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="lg:col-span-2">
+            <label htmlFor={searchId} className="mb-2 block text-sm font-medium text-text-sub">
+              Search
+            </label>
+            <input
+              id={searchId}
+              type="text"
+              placeholder="Username, display name, or platform user ID..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              className="focus-visible:ring-ring block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none sm:text-sm"
+            />
+          </div>
+          <div>
+            <label htmlFor={platformId} className="mb-2 block text-sm font-medium text-text-sub">
+              Platform
+            </label>
+            <select
+              id={platformId}
+              value={platformFilter}
+              onChange={(e) => {
+                setPlatformFilter(e.target.value)
+                setOffset(0)
+              }}
+              className="focus-visible:ring-ring block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text focus-visible:ring-2 focus-visible:outline-none sm:text-sm"
+            >
+              <option value="all">All platforms</option>
+              <option value="twitch">Twitch</option>
+              <option value="youtube">YouTube</option>
+              <option value="kick">Kick</option>
+              <option value="tiktok">TikTok</option>
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor={statusId} className="mb-2 block text-sm font-medium text-text-sub">
+                Status
+              </label>
+              <select
+                id={statusId}
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value as typeof statusFilter)
+                  setOffset(0)
+                }}
+                className="focus-visible:ring-ring block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text focus-visible:ring-2 focus-visible:outline-none sm:text-sm"
+              >
+                <option value="all">Any</option>
+                <option value="active">Active</option>
+                <option value="banned">Banned</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor={premiumId} className="mb-2 block text-sm font-medium text-text-sub">
+                Premium
+              </label>
+              <select
+                id={premiumId}
+                value={premiumFilter}
+                onChange={(e) => {
+                  setPremiumFilter(e.target.value as typeof premiumFilter)
+                  setOffset(0)
+                }}
+                className="focus-visible:ring-ring block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text focus-visible:ring-2 focus-visible:outline-none sm:text-sm"
+              >
+                <option value="all">Any</option>
+                <option value="premium">Premium</option>
+                <option value="free">Free</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </Card>
 
-      {/* Viewers Table */}
+      {/* Viewers Table (desktop) */}
       {loading ? (
         <Card className="space-y-3 p-6">
           {Array.from({ length: 8 }).map((_, i) => (
             <Skeleton key={i} className="h-10 w-full rounded-lg" />
           ))}
         </Card>
+      ) : viewers.length === 0 ? (
+        <Card className="p-8 text-center text-sm text-text-dim">
+          No viewer sessions match your search or filters.
+        </Card>
       ) : (
-        <Card className="hidden overflow-hidden md:block">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <caption className="sr-only">Viewers</caption>
-              <thead className="border-b border-border bg-surface-2">
-                <tr>
-                  <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
-                    Username
-                  </th>
-                  <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
-                    Platform
-                  </th>
-                  <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
-                    Last Message
-                  </th>
-                  <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
-                    Msg Count (1m/1h)
-                  </th>
-                  <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
-                    Premium
-                  </th>
-                  <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
-                    Status
-                  </th>
-                  <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {viewers.length === 0 ? (
+        <>
+          <Card className="hidden overflow-hidden md:block">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <caption className="sr-only">Viewers</caption>
+                <thead className="border-b border-border bg-surface-2">
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-text-dim">
-                      No viewer sessions found
-                    </td>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
+                      Viewer
+                    </th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
+                      Platform
+                    </th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
+                      Last Message
+                    </th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
+                      Premium
+                    </th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
+                      Status
+                    </th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
+                      Actions
+                    </th>
                   </tr>
-                ) : (
-                  viewers.map((viewer) => (
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {viewers.map((viewer) => (
                     <tr key={viewer.id} className="transition-colors hover:bg-surface-2">
                       <th scope="row" className="px-4 py-3 text-left font-normal">
-                        <div className="text-sm font-medium text-text">{viewer.username}</div>
-                        <div className="text-xs text-text-sub">{viewer.display_name}</div>
+                        {renderIdentity(viewer)}
                       </th>
                       <td className="px-4 py-3">
-                        <span className="text-sm text-text-sub capitalize">{viewer.platform}</span>
+                        <PlatformBadge platform={viewer.platform} size="sm" />
                       </td>
                       <td className="px-4 py-3 text-sm text-text-sub">
                         {viewer.last_message_at
@@ -323,9 +506,6 @@ export default function AdminViewersPage() {
                               addSuffix: true,
                             })
                           : 'Never'}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-text-sub">
-                        {viewer.message_count_1min}/{viewer.message_count_1hour}
                       </td>
                       <td className="px-4 py-3">{renderPremiumControl(viewer)}</td>
                       <td className="px-4 py-3">
@@ -346,29 +526,20 @@ export default function AdminViewersPage() {
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3">{renderActionControl(viewer)}</td>
+                      <td className="px-4 py-3">{renderActionControls(viewer)}</td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
 
-      {/* Mobile card list */}
-      {!loading && (
-        <div className="space-y-3 md:hidden">
-          {viewers.length === 0 ? (
-            <Card className="p-6 text-center text-text-dim">No viewer sessions found</Card>
-          ) : (
-            viewers.map((viewer) => (
+          {/* Mobile card list */}
+          <div className="space-y-3 md:hidden">
+            {viewers.map((viewer) => (
               <Card key={viewer.id} className="p-4">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium text-text">{viewer.username}</div>
-                    <div className="truncate text-xs text-text-sub">{viewer.display_name}</div>
-                  </div>
+                  {renderIdentity(viewer)}
                   {viewer.is_banned ? (
                     <span className="bg-destructive/10 text-destructive inline-flex shrink-0 items-center rounded px-2 py-0.5 text-xs font-medium">
                       BANNED
@@ -380,14 +551,11 @@ export default function AdminViewersPage() {
                   )}
                 </div>
                 <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-sub">
-                  <span className="capitalize">{viewer.platform}</span>
+                  <PlatformBadge platform={viewer.platform} size="sm" />
                   <span>
                     {viewer.last_message_at
                       ? formatDistanceToNow(new Date(viewer.last_message_at), { addSuffix: true })
                       : 'Never'}
-                  </span>
-                  <span>
-                    {viewer.message_count_1min}/{viewer.message_count_1hour} msgs
                   </span>
                 </div>
                 {viewer.is_banned && viewer.banned_reason && (
@@ -395,13 +563,129 @@ export default function AdminViewersPage() {
                 )}
                 <div className="mt-3 flex items-center justify-between gap-3">
                   {renderPremiumControl(viewer)}
-                  {renderActionControl(viewer)}
+                  {renderActionControls(viewer)}
                 </div>
               </Card>
-            ))
-          )}
-        </div>
+            ))}
+          </div>
+
+          {/* Pagination */}
+          <div className="mt-4 flex items-center justify-between text-sm text-text-sub">
+            <span>
+              Showing {pageStart.toLocaleString()}–{pageEnd.toLocaleString()} of{' '}
+              {total.toLocaleString()}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!hasPrev}
+                onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
+              >
+                Previous
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!hasNext}
+                onClick={() => setOffset(offset + PAGE_SIZE)}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        </>
       )}
+
+      {/* Activity dialog — streamer context for a viewer */}
+      <Dialog.Root
+        open={!!activityViewer}
+        onOpenChange={(open) => {
+          if (!open) {
+            setActivityViewer(null)
+            setActivity(null)
+          }
+        }}
+      >
+        {activityViewer && (
+          <Dialog.Content>
+            <Dialog.Title>Activity for &ldquo;{activityViewer.username}&rdquo;</Dialog.Title>
+            <Dialog.Description>
+              Messages this viewer has sent through All-Chat, and whose chats they appear in.
+            </Dialog.Description>
+            {activityLoading ? (
+              <div className="mt-4 space-y-2">
+                <Skeleton className="h-10 w-full rounded-lg" />
+                <Skeleton className="h-10 w-full rounded-lg" />
+              </div>
+            ) : activity ? (
+              <div className="mt-4">
+                <div className="mb-4 flex gap-6 text-sm">
+                  <div>
+                    <div className="text-xs text-text-sub">Total messages</div>
+                    <div className="text-lg font-semibold text-text">
+                      {activity.total_messages.toLocaleString()}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-text-sub">Last message</div>
+                    <div className="text-lg font-semibold text-text">
+                      {activity.last_sent_at
+                        ? formatDistanceToNow(new Date(activity.last_sent_at), { addSuffix: true })
+                        : 'Never'}
+                    </div>
+                  </div>
+                </div>
+                {activity.streamers.length > 0 ? (
+                  <ul className="max-h-72 space-y-2 overflow-y-auto">
+                    {activity.streamers.map((s, i) => (
+                      <li
+                        key={`${s.streamer_user_id}-${s.overlay_id ?? i}`}
+                        className="rounded-lg border border-border p-3"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <Link
+                              href={`/admin/users?user=${s.streamer_user_id}`}
+                              className="text-sm font-medium text-primary hover:underline"
+                            >
+                              {s.streamer_username ? `@${s.streamer_username}` : 'View streamer'}
+                            </Link>
+                            <div className="mt-0.5 flex items-center gap-2 text-xs text-text-sub">
+                              <PlatformBadge platform={s.platform} size="sm" />
+                              <span className="truncate">{s.channel_name}</span>
+                            </div>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <div className="text-sm font-semibold text-text">
+                              {s.message_count.toLocaleString()}
+                            </div>
+                            {s.overlay_id && (
+                              <Link
+                                href={`/admin/overlays?overlay=${s.overlay_id}`}
+                                className="text-xs text-text-sub hover:underline"
+                              >
+                                overlay
+                              </Link>
+                            )}
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-text-dim italic">
+                    No message activity recorded for this viewer.
+                  </p>
+                )}
+              </div>
+            ) : null}
+            <div className="mt-6 flex justify-end">
+              <Dialog.Close render={<Button variant="outline">Close</Button>} />
+            </div>
+          </Dialog.Content>
+        )}
+      </Dialog.Root>
 
       {/* Premium toggle confirmation — single instance shared by table + cards */}
       <Dialog.Root
