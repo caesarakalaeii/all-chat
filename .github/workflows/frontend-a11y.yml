@@ -5,19 +5,48 @@ name: Frontend A11y Gate
 # debt): this workflow contains ONLY a11y checks so it stays green
 # independently of that debt and can gate PRs immediately.
 #
+# These three jobs are REQUIRED status checks on main. A workflow gated by a
+# top-level `paths:` filter is skipped ENTIRELY on backend-only PRs, so its
+# required contexts are never reported and the PR stays permanently "Expected"
+# (blocked) — see ADR-0033 / PR #577. Instead we trigger on every PR and gate
+# each job with a paths-filter: when nothing frontend-relevant changed the jobs
+# are SKIPPED (present-but-skipped, which branch protection treats as passing),
+# and when frontend (or this workflow) changes the real a11y suite runs. This is
+# the intra-workflow "skip shim" — it avoids the mixed-PR double-run/race a
+# separate paths-ignore shim would introduce.
+#
 # Ratchets (may only shrink, never grow):
 #   - frontend/eslint.a11y.suppressions.json  (jsx-a11y strict baseline)
 #   - frontend/tests/e2e/a11y-baseline.json   (axe smoke baseline)
 
 on:
   pull_request:
-    paths:
-      - 'frontend/**'
-      - '.github/workflows/frontend-a11y.yml'
 
 jobs:
+  # Detect whether anything frontend-relevant (or this workflow) changed. When it
+  # did not, the a11y jobs below are skipped, satisfying their required contexts
+  # without running the full suite on backend-only PRs.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            frontend:
+              - 'frontend/**'
+              - '.github/workflows/frontend-a11y.yml'
+
   a11y-static:
     name: A11y lint + token contrast
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -45,6 +74,8 @@ jobs:
 
   a11y-storybook:
     name: Storybook axe (components + pages)
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -69,6 +100,8 @@ jobs:
 
   a11y-smoke:
     name: Axe page smoke (Playwright)
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
