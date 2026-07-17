@@ -145,6 +145,10 @@ Every hour (configurable), the bot fetches the current quota status from the You
 - Polling speed multiplier
 - Top 5 quota-consuming channels
 
+### Single Message per Kind (Rollout Cleanup)
+
+The bot keeps only one status message (and one alert message) visible in the channel instead of posting a new one on every deploy. During a process lifetime it edits its existing messages in place. On startup — after a rollout or restart, which clears the in-memory message IDs — it scans recent channel history for its own quota messages, reuses the most recent one (editing it in place, so no new notification is sent), and deletes the older stale duplicates. Only the bot's own messages are touched, so no extra Discord permissions are required.
+
 ## Discord Embed Examples
 
 ### Quota Status Embed (Healthy)
