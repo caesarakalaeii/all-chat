@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/emote-service/cache"
+	"github.com/caesar/all-chat/services/emote-service/clients"
 	"github.com/caesar/all-chat/services/emote-service/models"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
@@ -163,10 +164,20 @@ func (h *EmoteHandler) GetChannelEmotes(c *gin.Context) {
 	allEmotes := make([]models.Emote, 0)
 	for res := range results {
 		if res.err != nil {
-			h.logger.Warn("Failed to fetch emotes from provider",
-				zap.String("provider", res.provider),
-				zap.String("channel", channel),
-				zap.Error(res.err))
+			// A "not found" is the normal case (channel has no emotes on this provider),
+			// not a failure — log it at Debug so it doesn't drown the logs or read as an
+			// incident. Only genuine failures (5xx/timeout/network) log at Warn.
+			if errors.Is(res.err, clients.ErrNotFound) {
+				h.logger.Debug("Provider has no emotes for channel",
+					zap.String("provider", res.provider),
+					zap.String("channel", channel),
+					zap.Error(res.err))
+			} else {
+				h.logger.Warn("Failed to fetch emotes from provider",
+					zap.String("provider", res.provider),
+					zap.String("channel", channel),
+					zap.Error(res.err))
+			}
 			continue
 		}
 		allEmotes = append(allEmotes, res.emotes...)
@@ -234,6 +245,24 @@ func (h *EmoteHandler) GetProviderEmotes(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
+// recordAPIResult increments the provider API-call counter, distinguishing a benign
+// "not_found" miss (the channel simply has no emotes on this provider — the norm for
+// BTTV/FFZ and unset 7TV channels) from a real "error" (5xx/timeout/network). Conflating
+// the two inflated the error rate and made a healthy service look like it was failing.
+func (h *EmoteHandler) recordAPIResult(provider string, err error) {
+	if h.apiCalls == nil {
+		return
+	}
+	result := "success"
+	if err != nil {
+		result = "error"
+		if errors.Is(err, clients.ErrNotFound) {
+			result = "not_found"
+		}
+	}
+	h.apiCalls.WithLabelValues("emote-service", provider, result).Inc()
+}
+
 // fetchWithCache attempts to fetch from cache first, then from API if cache miss
 func (h *EmoteHandler) fetchWithCache(ctx context.Context, client EmoteClient, provider, channel string) ([]models.Emote, error) {
 	// Try cache first
@@ -260,15 +289,10 @@ func (h *EmoteHandler) fetchWithCache(ctx context.Context, client EmoteClient, p
 
 	emotes, err = client.FetchEmotes(ctx, channel)
 	if err != nil {
-		if h.apiCalls != nil {
-			h.apiCalls.WithLabelValues("emote-service", provider, "error").Inc()
-		}
+		h.recordAPIResult(provider, err)
 		return nil, err
 	}
-
-	if h.apiCalls != nil {
-		h.apiCalls.WithLabelValues("emote-service", provider, "success").Inc()
-	}
+	h.recordAPIResult(provider, nil)
 
 	// Store in cache (best effort - don't fail if cache set fails)
 	if err := h.cache.Set(ctx, provider, channel, emotes); err != nil {
@@ -302,7 +326,20 @@ func (h *EmoteHandler) fetchWithCacheAndUser(ctx context.Context, client EmoteCl
 	useCombinedPath := supportsCombined && (userID != "" || isNonTwitchPlatform || seventvSetID != "")
 
 	if !useCombinedPath {
-		return h.fetchWithCache(ctx, client, provider, channel)
+		// BTTV/FFZ/Twitch are keyed by Twitch identity. On a non-Twitch platform the
+		// `channel` is a platform id (e.g. a YouTube channel id) those providers can't
+		// resolve, so use the linked twitch_channel hint — or skip entirely when there is
+		// no linked Twitch account, since a lookup with a platform id is a guaranteed 404
+		// and a wasted upstream call. Mirrors how the 7TV combined path already uses
+		// twitchChannel for non-Twitch platforms (ADR-0033 follow-up).
+		lookupChannel := channel
+		if isNonTwitchPlatform {
+			if twitchChannel == "" {
+				return nil, nil
+			}
+			lookupChannel = twitchChannel
+		}
+		return h.fetchWithCache(ctx, client, provider, lookupChannel)
 	}
 
 	// Build cache key that includes all parameters that vary the response
@@ -335,15 +372,10 @@ func (h *EmoteHandler) fetchWithCacheAndUser(ctx context.Context, client EmoteCl
 
 	emotes, err = combinedClient.FetchCombinedEmotes(ctx, channel, platform, userID, twitchChannel, seventvSetID)
 	if err != nil {
-		if h.apiCalls != nil {
-			h.apiCalls.WithLabelValues("emote-service", provider, "error").Inc()
-		}
+		h.recordAPIResult(provider, err)
 		return nil, err
 	}
-
-	if h.apiCalls != nil {
-		h.apiCalls.WithLabelValues("emote-service", provider, "success").Inc()
-	}
+	h.recordAPIResult(provider, nil)
 
 	// Store in cache (best effort - don't fail if cache set fails)
 	if err := h.cache.Set(ctx, provider, cacheKey, emotes); err != nil {

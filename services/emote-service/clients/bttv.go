@@ -86,6 +86,10 @@ func (c *BTTVClient) FetchEmotes(ctx context.Context, channel string) ([]models.
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusNotFound {
+		// Channel has no BTTV emotes — the normal case for most channels, not a failure.
+		return nil, fmt.Errorf("bttv: no emotes for channel %q: %w", channel, ErrNotFound)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to fetch emotes: status code %d", resp.StatusCode)
 	}

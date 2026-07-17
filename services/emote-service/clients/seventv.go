@@ -122,12 +122,12 @@ func (c *SevenTVClient) FetchEmotes(ctx context.Context, channel string) ([]mode
 
 	// Merge emotes, avoiding duplicates (channel emotes take precedence)
 	emoteMap := make(map[string]models.Emote)
-	
+
 	// Add global emotes first
 	for _, emote := range globalEmotes {
 		emoteMap[emote.Code] = emote
 	}
-	
+
 	// Add channel emotes (overwrites globals if same code exists)
 	for _, emote := range channelEmotes {
 		emoteMap[emote.Code] = emote
@@ -181,6 +181,10 @@ func (c *SevenTVClient) fetchChannelEmotes(ctx context.Context, channel string) 
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusNotFound {
+		// No 7TV set for this channel — a benign miss, not a failure.
+		return nil, fmt.Errorf("7tv: no emote set for channel: %w", ErrNotFound)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to fetch emotes: status code %d", resp.StatusCode)
 	}
@@ -336,7 +340,7 @@ func (c *SevenTVClient) fetchPlatformConnectionEmotes(ctx context.Context, platf
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return nil, fmt.Errorf("7TV %s connection not found for %s", platform, channel)
+		return nil, fmt.Errorf("7TV %s connection not found for %s: %w", platform, channel, ErrNotFound)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("7TV %s connection returned status %d", platform, resp.StatusCode)
