@@ -116,6 +116,7 @@ The dominant residual risk is **infra/config hardening** (zero k8s `securityCont
 - **Loc:** `frontend/next.config.js` (no `headers()`); `nginx.conf`; no `middleware.ts`
 - **Evidence:** Overlay `/overlay/[id]` public URL, no `frame-ancestors` → iframable. Missing CSP/HSTS/X-Content-Type-Options/Referrer-Policy.
 - **Fix:** Add `headers()` block: strict CSP per route (`default-src 'self'`; overlay `frame-ancestors 'none'`); standard hardening headers.
+- **Status:** ✅ DONE (`frontend/next.config.js` `headers()`). Framing policy is tiered: app + editor SplitView embed → `frame-ancestors 'self'`; all `/overlay/*` locked-by-default → `frame-ancestors 'none'` (keeps the interactive routes `/overlay/:id/participate` (viewer login + points) and `/overlay/:id/view` (authenticated monitor) un-framable, plus any future sub-route). Display-only OBS widgets — `/overlay/:id` (chat), `/poll`, `/prediction`, `/credits` — are re-opened to `frame-ancestors *` so streamers can embed them anywhere (OBS, Streamlabs, personal sites, dashboards); these carry no auth or viewer identity, so clickjacking risk is negligible. `frame-ancestors` is authoritative (browsers ignore the residual `X-Frame-Options: SAMEORIGIN` on widget routes per CSP L2). Contract pinned by `frontend/src/app/__tests__/security-headers.test.ts`.
 
 ### M11 — Frontend: embed postMessage listener skips origin check
 - **Loc:** `frontend/src/app/overlays/[id]/preview/embed/page.tsx:284-388`
