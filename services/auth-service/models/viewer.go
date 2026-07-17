@@ -41,6 +41,7 @@ type ViewerSession struct {
 	IsPremium           bool       `json:"is_premium"`             // Whether viewer has premium access
 	PremiumExpiresAt    *time.Time `json:"premium_expires_at"`     // ADR-0027: time-limited admin premium deadline (NULL = permanent)
 	ViewerID            *uuid.UUID `json:"viewer_id"`              // Linked viewer identity ID
+	UserID              *string    `json:"user_id"`                // Linked streamer account (viewer_sessions.user_id, migration 040); NULL when the viewer has no streamer account
 	IsBanned            bool       `json:"is_banned"`              // Whether viewer is banned
 	BannedAt            *time.Time `json:"banned_at"`              // When viewer was banned
 	BannedReason        *string    `json:"banned_reason"`          // Reason for ban

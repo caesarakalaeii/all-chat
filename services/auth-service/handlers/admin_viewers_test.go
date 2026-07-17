@@ -97,6 +97,31 @@ func TestHandleSetViewerPremium_InvalidBody(t *testing.T) {
 	}
 }
 
+// TestHandleGetViewerActivity_InvalidSessionID: a non-UUID session id is rejected
+// with 400 before any DB access, so a nil repo proves the short-circuit.
+func TestHandleGetViewerActivity_InvalidSessionID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	logger := zap.NewNop()
+	handler := &AdminViewerHandler{log: logger, viewerRepo: nil}
+	r.GET("/admin/viewers/:session_id/activity", handler.HandleGetViewerActivity)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/viewers/not-a-uuid/activity", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+	var resp map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if resp["error"] != "invalid session ID" {
+		t.Errorf("unexpected error: %s", resp["error"])
+	}
+}
+
 // TestHandleSetViewerPremium_RejectsBadDuration: a non-positive or over-cap
 // duration_seconds is rejected with 400 before any DB access (ADR-0027). A nil repo
 // proves the validation short-circuits before the repo is touched.
