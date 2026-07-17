@@ -100,7 +100,7 @@ func (r *UserRepository) GetByTwitchID(ctx context.Context, twitchID string) (*m
 	query := `
 SELECT id, twitch_id, google_id, kick_id, auth_provider, username, display_name, profile_image_url,
            is_admin, is_premium, is_beta_tester, is_banned, banned_at, banned_reason, banned_by,
-           access_token, refresh_token, token_expires_at, created_at, updated_at
+           access_token, refresh_token, token_expires_at, created_at, updated_at, onboarding_completed_at
 FROM users
 WHERE twitch_id = $1
 `
@@ -121,7 +121,7 @@ func (r *UserRepository) GetByGoogleID(ctx context.Context, googleID string) (*m
 	query := `
 SELECT id, twitch_id, google_id, kick_id, auth_provider, username, display_name, profile_image_url,
            is_admin, is_premium, is_beta_tester, is_banned, banned_at, banned_reason, banned_by,
-           access_token, refresh_token, token_expires_at, created_at, updated_at
+           access_token, refresh_token, token_expires_at, created_at, updated_at, onboarding_completed_at
 FROM users
 WHERE google_id = $1
 `
@@ -149,7 +149,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id string) (*models.User, 
 	query := `
 SELECT id, twitch_id, google_id, kick_id, auth_provider, username, display_name, profile_image_url,
            is_admin, is_premium, is_beta_tester, is_banned, banned_at, banned_reason, banned_by,
-           access_token, refresh_token, token_expires_at, created_at, updated_at
+           access_token, refresh_token, token_expires_at, created_at, updated_at, onboarding_completed_at
 FROM users
 WHERE id = $1
 `
@@ -170,7 +170,7 @@ func (r *UserRepository) GetByUsername(ctx context.Context, username string) (*m
 	query := `
 SELECT id, twitch_id, google_id, kick_id, auth_provider, username, display_name, profile_image_url,
            is_admin, is_premium, is_beta_tester, is_banned, banned_at, banned_reason, banned_by,
-           access_token, refresh_token, token_expires_at, created_at, updated_at
+           access_token, refresh_token, token_expires_at, created_at, updated_at, onboarding_completed_at
 FROM users
 WHERE LOWER(username) = LOWER($1)
 `
@@ -310,7 +310,7 @@ func (r *UserRepository) GetByKickID(ctx context.Context, kickID string) (*model
 	query := `
 SELECT id, twitch_id, google_id, kick_id, auth_provider, username, display_name, profile_image_url,
            is_admin, is_premium, is_beta_tester, is_banned, banned_at, banned_reason, banned_by,
-           access_token, refresh_token, token_expires_at, created_at, updated_at
+           access_token, refresh_token, token_expires_at, created_at, updated_at, onboarding_completed_at
 FROM users
 WHERE kick_id = $1
 `
@@ -559,6 +559,27 @@ func (r *UserRepository) GetPlatformGrantedScopes(ctx context.Context, userID, p
 	return out, nil
 }
 
+// SetOnboardingCompleted marks the first-run setup guide as finished/dismissed
+// (completed=true → NOW()) or re-arms it (completed=false → NULL, used by the
+// "restart onboarding" action in Settings). Returns the new column value.
+func (r *UserRepository) SetOnboardingCompleted(ctx context.Context, userID string, completed bool) (*time.Time, error) {
+	var completedAt *time.Time
+	err := r.db.QueryRow(ctx, `
+		UPDATE users
+		SET onboarding_completed_at = CASE WHEN $2 THEN NOW() ELSE NULL END,
+		    updated_at = NOW()
+		WHERE id = $1
+		RETURNING onboarding_completed_at
+	`, userID, completed).Scan(&completedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("failed to set onboarding completion: %w", err)
+	}
+	return completedAt, nil
+}
+
 func (r *UserRepository) scanUser(row pgx.Row) (*models.User, error) {
 	user := &models.User{}
 	var encryptedAccessToken, encryptedRefreshToken string
@@ -570,7 +591,7 @@ func (r *UserRepository) scanUser(row pgx.Row) (*models.User, error) {
 		&user.ID, &user.TwitchID, &user.GoogleID, &user.KickID, &user.AuthProvider, &user.Username, &user.DisplayName,
 		&profileImageURL, &user.IsAdmin, &user.IsPremium, &user.IsBetaTester, &user.IsBanned, &user.BannedAt, &user.BannedReason, &user.BannedBy,
 		&encryptedAccessToken, &encryptedRefreshToken,
-		&user.TokenExpiresAt, &user.CreatedAt, &user.UpdatedAt,
+		&user.TokenExpiresAt, &user.CreatedAt, &user.UpdatedAt, &user.OnboardingCompletedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -680,7 +701,7 @@ SELECT u.id, u.twitch_id, u.google_id, u.kick_id, u.auth_provider, u.username, u
        COALESCE(u.banned_at, bpi.banned_at) AS banned_at,
        COALESCE(u.banned_reason, bpi.reason) AS banned_reason,
        COALESCE(u.banned_by, bpi.banned_by) AS banned_by,
-       u.access_token, u.refresh_token, u.token_expires_at, u.created_at, u.updated_at
+       u.access_token, u.refresh_token, u.token_expires_at, u.created_at, u.updated_at, u.onboarding_completed_at
 FROM users u
 LEFT JOIN LATERAL (
   SELECT bpi.platform_id, bpi.banned_at, bpi.reason, bpi.banned_by

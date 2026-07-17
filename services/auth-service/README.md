@@ -217,6 +217,21 @@ Authorization: Bearer <jwt-token>
 → Returns: { "success": true }
 ```
 
+### User Profile
+
+```bash
+# Current user (includes onboarding_completed_at; null = first-run setup guide is shown)
+GET /api/v1/auth/me
+Authorization: Bearer <jwt-token>
+
+# Finish/dismiss the first-run setup guide (true) or re-arm it from Settings (false).
+# Rejected with 403 during admin impersonation.
+PATCH /api/v1/auth/me/onboarding
+Authorization: Bearer <jwt-token>
+Body: { "completed": true }
+→ Returns: { "onboarding_completed_at": "2026-07-17T12:00:00Z" }
+```
+
 ### Health Checks
 
 ```bash
