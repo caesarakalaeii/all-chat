@@ -12,7 +12,7 @@ user? an overlay? a source? a viewer session? — open that page, and then page 
 (or filter it) to find the row. For a support request that arrives as "here's a username" or
 "here's an overlay id," that is several manual hops before any work starts.
 
-ADR-0033 made every admin entity URL-addressable and cross-navigable. What was still missing was a
+ADR-0036 made every admin entity URL-addressable and cross-navigable. What was still missing was a
 **single entry point** that takes a free-text query and lands the admin on the right entity in the
 right view, regardless of which kind of entity it is.
 
@@ -20,7 +20,7 @@ right view, regardless of which kind of entity it is.
 
 - One search box that finds anything across the admin domain, so the admin never has to guess the
   entity type first.
-- Results must land in the existing URL-addressable views (ADR-0033), not a bespoke result page —
+- Results must land in the existing URL-addressable views (ADR-0036), not a bespoke result page —
   reuse, don't fork.
 - Ship it without blocking on new backend surface if the existing admin endpoints already return the
   data.
@@ -29,7 +29,7 @@ right view, regardless of which kind of entity it is.
 ## Considered Options
 
 1. **Client-side federation over the existing admin list endpoints, returning typed results that
-   deep-link into the ADR-0033 views.**
+   deep-link into the ADR-0036 views.**
    - ✅ No new backend endpoint; reuses already-admin-accessible list APIs; typed results
      (user/overlay/source/viewer) link straight into the URL-addressable views; simple to ship.
    - ❌ Loads full lists client-side to match against — fine at current admin scale, but not free as
@@ -53,7 +53,7 @@ documented escape hatch.
   - **overlays** — by `name` or `id`;
   - **sources** — by channel name / handle or `id`;
   - **viewers** — by `username` or `platform_user_id`.
-- **Typed results deep-link into the URL-addressable views** from ADR-0033. Picking a user result
+- **Typed results deep-link into the URL-addressable views** from ADR-0036. Picking a user result
   navigates to `/admin/users?user=<id>`, an overlay to `/admin/overlays?overlay=<id>`, and so on, so
   search reuses and reinforces the addressable pattern rather than introducing a new result surface.
 - **Initial implementation federates over the already-admin-accessible list endpoints on the
@@ -67,7 +67,7 @@ documented escape hatch.
 
 ### Positive
 - One entry point to find any admin entity by name or id; no more guessing which page holds it.
-- Search results reuse and reinforce the ADR-0033 URL-addressable views — one navigation model.
+- Search results reuse and reinforce the ADR-0036 URL-addressable views — one navigation model.
 - Ships without new backend surface, because it rides the existing admin list endpoints.
 
 ### Negative
@@ -81,13 +81,13 @@ documented escape hatch.
 
 - **Frontend**: a global admin search component (in `frontend/src/components/admin/` and surfaced from
   `frontend/src/app/admin/layout.tsx`) that federates over the existing admin user/overlay/source/
-  viewer list endpoints, produces typed results, and links each result into its ADR-0033 view.
+  viewer list endpoints, produces typed results, and links each result into its ADR-0036 view.
 - **Backend**: none in the initial cut (reuses existing admin list endpoints). Future optimization:
   `/api/v1/admin/search` behind the same admin authz.
 
 ## Related Decisions
 
-- [ADR-0033](./0033-admin-url-addressable-selection.md) — the URL-addressable views search results
+- [ADR-0036](./0036-admin-url-addressable-selection.md) — the URL-addressable views search results
   deep-link into; global search depends on and reinforces this pattern.
 - [ADR-0034](./0034-admin-viewer-identity-model.md) — defines the viewer entity (raw `viewer_sessions`)
   that the viewer branch of search resolves.

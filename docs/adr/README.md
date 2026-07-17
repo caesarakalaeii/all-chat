@@ -433,14 +433,14 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
-### ADR-0033: Admin Master-Detail with URL-Addressable Selection
+### ADR-0033: Bounded-Concurrency Enrichment in the Message Processor
 
 **Status**: ✅ Accepted
 **Date**: 2026-07-17
-**Problem**: Admin pages kept selection and filters in opaque React state, so entities could not be linked to each other or shared by URL (the #1 complaint: "overlays are not linked to their users"); only the Overlays page read `?overlay=<id>`, and it was never standardized
-**Decision**: Standardize every admin list+detail page on URL query params for selection *and* filters (`?user=`, `?overlay=`, `?filter=`, `?connected=`, `?platform=`, `?q=`), with a scrollable-list + sticky-panel master-detail layout; no new dynamic `[id]` routes (query params avoid a routing migration)
-**Impact**: Admin views become deep-linkable and cross-navigable (source → user, overlay → owner, user → their sources) and URLs are shareable for support, at the cost of a small per-page mount-time param read; nested routes noted as the future step. (ADR numbering shared with caesar-deployment, so this is 0033)
-**→ Read**: [0033-admin-url-addressable-selection.md](./0033-admin-url-addressable-selection.md)
+**Problem**: The message-processor enriched `chat:raw` messages strictly one-at-a-time on the consume-loop goroutine, with every stage doing blocking I/O (Redis round-trips + emote-service/Twitch/Alejo HTTP + Postgres on cache misses). That capped per-pod throughput at `1/per-message-latency`, with no bulkhead — any upstream latency spike collapsed throughput below the arrival rate and messages backed up in the stream. Production incident 2026-07-17 (`MessageProcessorStreamLagWarning`, 30–60s): input only ~2–3 msg/s, pods idle at ~3% CPU, Redis healthy, but a ~5× emote-service upstream-error spike pushed per-message latency from ~30ms to ~0.5–1s and the serial pipeline could not keep pace
+**Decision**: Process each read batch through a semaphore-bounded worker pool (`processBatch`, default 16, `MP_PROCESS_CONCURRENCY`), waiting for the batch to drain before the next `XREADGROUP`; keep per-message retry/DLQ/ACK/dedup/deletion-buffer semantics unchanged; guard the `AvatarEnricher`/`BadgeEnricher` app-token behind mutex accessors (refresh HTTP outside the lock); negative-cache `PronounEnricher` API errors for a short TTL so a degraded pronouns API can't amplify the stall
+**Impact**: ~16× per-pod throughput headroom so upstream hiccups no longer produce unbounded lag; no head-of-line blocking within a batch; two latent Twitch app-token data races removed (verified with `-race`). Safe because the consumer group already fans out across pods with no ordering guarantee, message/deletion ordering is handled by the reorder-tolerant deletion buffer, and dedup uses atomic `SETNX`. (ADR numbering shared with caesar-deployment, so this is 0033)
+**→ Read**: [0033-message-processor-concurrent-enrichment.md](./0033-message-processor-concurrent-enrichment.md)
 
 ---
 
@@ -460,9 +460,20 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 **Status**: ✅ Accepted
 **Date**: 2026-07-17
 **Problem**: There was no way to jump to an admin entity by name or id — an admin had to guess whether an id was a user/overlay/source/viewer and page through the right list
-**Decision**: Add a global admin search resolving a free-text query across users (username/display_name/id), overlays (name/id), sources (channel name/handle/id), and viewers (username/platform_user_id), returning typed results that deep-link into the ADR-0033 URL-addressable views; initial implementation federates over the existing admin list endpoints client-side, with a server-side `/api/v1/admin/search` endpoint noted as the future optimization
+**Decision**: Add a global admin search resolving a free-text query across users (username/display_name/id), overlays (name/id), sources (channel name/handle/id), and viewers (username/platform_user_id), returning typed results that deep-link into the ADR-0036 URL-addressable views; initial implementation federates over the existing admin list endpoints client-side, with a server-side `/api/v1/admin/search` endpoint noted as the future optimization
 **Impact**: One entry point to find anything; reuses and reinforces the URL-addressable pattern; client federation loads full lists (fine at current admin scale) with a server endpoint as the documented escape hatch. (ADR numbering shared with caesar-deployment, so this is 0035)
 **→ Read**: [0035-admin-global-entity-search.md](./0035-admin-global-entity-search.md)
+
+---
+
+### ADR-0036: Admin Master-Detail with URL-Addressable Selection
+
+**Status**: ✅ Accepted
+**Date**: 2026-07-17
+**Problem**: Admin pages kept selection and filters in opaque React state, so entities could not be linked to each other or shared by URL (the #1 complaint: "overlays are not linked to their users"); only the Overlays page read `?overlay=<id>`, and it was never standardized
+**Decision**: Standardize every admin list+detail page on URL query params for selection *and* filters (`?user=`, `?overlay=`, `?filter=`, `?connected=`, `?platform=`, `?q=`), with a scrollable-list + sticky-panel master-detail layout; no new dynamic `[id]` routes (query params avoid a routing migration)
+**Impact**: Admin views become deep-linkable and cross-navigable (source → user, overlay → owner, user → their sources) and URLs are shareable for support, at the cost of a small per-page mount-time param read; nested routes noted as the future step. (ADR numbering shared with caesar-deployment, so this is 0036)
+**→ Read**: [0036-admin-url-addressable-selection.md](./0036-admin-url-addressable-selection.md)
 
 ---
 

@@ -6,7 +6,7 @@ the platform. All pages are gated behind `ProtectedRoute requireAdmin` (see
 gateway's CookieToBearer middleware turns the httpOnly access cookie into a
 Bearer token; there is no JS-readable token).
 
-## Navigation model (ADR-0033)
+## Navigation model (ADR-0036)
 
 Admin pages are **URL-addressable**: selection and filters live in query
 parameters, not opaque React state, so every view is deep-linkable and entities
@@ -87,7 +87,7 @@ stored channel identifier into a link to the real platform page:
 
 ## Related ADRs
 
-- ADR-0033 — admin URL-addressable selection
+- ADR-0036 — admin URL-addressable selection
 - ADR-0034 — admin viewer identity model
 - ADR-0035 — admin global entity search
 - ADR-0008 — premium feature gates · ADR-0020 — beta-tester role · ADR-0027 — time-limited premium overrides

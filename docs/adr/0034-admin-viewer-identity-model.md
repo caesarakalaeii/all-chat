@@ -63,7 +63,7 @@ as if they were engagement numbers — they are not, they are throttle bookkeepi
   platform_user_id)` unit that ban and premium act on, so what an admin sees is what an admin acts on.
 - **Surface the linked streamer `user_id` when present.** If `viewer_sessions.user_id` is set
   (migration 040), the view shows that this viewer is also a streamer and links to the streamer's admin
-  record (via the URL-addressable pattern of ADR-0033).
+  record (via the URL-addressable pattern of ADR-0036).
 - **Add a READ-ONLY per-session activity aggregate over `viewer_message_history`.** Grouped by
   `viewer_session_id` (using the existing index, so it is cheap), joined to `overlays` /
   `users.username` via `streamer_user_id`, to answer *"whose chats does this viewer participate in,
@@ -99,12 +99,12 @@ as if they were engagement numbers — they are not, they are throttle bookkeepi
 - **Backend**: admin viewer list/detail endpoints add a read-only per-`viewer_session_id` aggregate
   over `viewer_message_history` joined to `users.username`, plus the linked-streamer `user_id`.
 - **Frontend**: `frontend/src/app/admin/viewers/page.tsx` renders the master-detail viewer view
-  (ADR-0033), showing linked-streamer context and the activity aggregate, and drops the
+  (ADR-0036), showing linked-streamer context and the activity aggregate, and drops the
   `message_count_1min`/`1hour` presentation.
 
 ## Related Decisions
 
-- [ADR-0033](./0033-admin-url-addressable-selection.md) — the URL-addressable master-detail pattern
+- [ADR-0036](./0036-admin-url-addressable-selection.md) — the URL-addressable master-detail pattern
   this view links into (viewer → streamer account, viewer → overlays).
 - [ADR-0019](./0019-split-streamer-viewer-premium.md) — viewer premium keys on the linked `viewer_id`;
   this view acts on the same session unit.

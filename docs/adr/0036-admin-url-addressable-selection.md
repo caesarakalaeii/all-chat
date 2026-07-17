@@ -1,4 +1,4 @@
-# ADR-0033: Admin Master-Detail with URL-Addressable Selection
+# ADR-0036: Admin Master-Detail with URL-Addressable Selection
 
 **Date**: 2026-07-17
 **Status**: Accepted

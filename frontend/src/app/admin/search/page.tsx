@@ -22,7 +22,7 @@
  * Global admin entity search (ADR-0035).
  *
  * Resolves a free-text query across users, overlays, sources, and viewers and
- * deep-links each hit into the URL-addressable admin views (ADR-0033). Users,
+ * deep-links each hit into the URL-addressable admin views (ADR-0036). Users,
  * overlays, and sources are federated on the client over the existing admin
  * list endpoints; viewers use the server-side ?q= search.
  */
