@@ -33,6 +33,7 @@ type RawChatMessage struct {
 	Text        string            `json:"text"`
 	Timestamp   time.Time         `json:"timestamp"`
 	Tags        map[string]string `json:"tags"`
+	Attachments []Attachment      `json:"attachments,omitempty"`
 	RawMessage  json.RawMessage   `json:"raw_message,omitempty"`
 
 	// Event support (backwards compatible - omitted for chat messages)
@@ -85,10 +86,11 @@ type Badge struct {
 	IconURL string `json:"icon_url"` // URL to badge image
 }
 
-// MessageInfo contains the message content and emotes
+// MessageInfo contains the message content, emotes, and media attachments
 type MessageInfo struct {
-	Text   string  `json:"text"`
-	Emotes []Emote `json:"emotes"`
+	Text        string       `json:"text"`
+	Emotes      []Emote      `json:"emotes"`
+	Attachments []Attachment `json:"attachments,omitempty"`
 }
 
 // Emote represents an emote in the message
@@ -97,6 +99,22 @@ type Emote struct {
 	Provider  string  `json:"provider"`
 	URL       string  `json:"url"`
 	Positions [][]int `json:"positions"` // [[start, end], [start, end]]
+}
+
+// Attachment is a renderable image/GIF/video shared in a chat message (Discord
+// uploads and Tenor/Giphy link previews today). Type is "image" or "video";
+// GIFs are images that animate natively. ThumbURL is an optional poster frame
+// for videos. Spoiler marks media the sender flagged as a spoiler so the overlay
+// can blur it.
+type Attachment struct {
+	Type        string `json:"type"`
+	URL         string `json:"url"`
+	ContentType string `json:"content_type,omitempty"`
+	Width       int    `json:"width,omitempty"`
+	Height      int    `json:"height,omitempty"`
+	ThumbURL    string `json:"thumb_url,omitempty"`
+	Spoiler     bool   `json:"spoiler,omitempty"`
+	Filename    string `json:"filename,omitempty"`
 }
 
 // EventInfo contains information about platform events (subscriptions, donations, etc.)

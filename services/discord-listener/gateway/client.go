@@ -498,7 +498,11 @@ func (c *GatewayClient) HandleMessageCreate(ctx context.Context, msg MessageCrea
 	c.mu.Unlock()
 
 	if !firstSeen {
-		if msg.Content == "" {
+		// An image/GIF-only message legitimately has empty content, so only treat
+		// empty content as an intent problem when there is no attachment or embed
+		// either — otherwise a media-only first message is misread as a disabled
+		// MESSAGE_CONTENT intent and suppresses every later message.
+		if msg.Content == "" && len(msg.Attachments) == 0 && len(msg.Embeds) == 0 {
 			// Empty content on first MESSAGE_CREATE means MESSAGE_CONTENT privileged intent
 			// is not enabled in the Discord Developer Portal. Log once and drop the message
 			// but keep the service running — halting here causes a reconnect loop that silently
@@ -559,6 +563,13 @@ func (c *GatewayClient) HandleMessageCreate(ctx context.Context, msg MessageCrea
 		"text":         text,
 		"tags":         tags,
 		"timestamp":    ts,
+	}
+
+	// Forward renderable image/GIF/video media (uploaded attachments + Tenor/Giphy
+	// link previews). Omitted entirely when the message carries no media so the
+	// wire format is unchanged for plain text messages.
+	if attachments := buildRawAttachments(msg); len(attachments) > 0 {
+		rawMsg["attachments"] = attachments
 	}
 
 	// Record message received (passed all filters, about to publish)

@@ -38,6 +38,7 @@ Both ratchet files may only ever shrink: `frontend/eslint.a11y.suppressions.json
 - **3.3.8 Accessible Authentication passes by design**: login is OAuth-only (Twitch/YouTube/Kick) — no passwords, no CAPTCHA, no cognitive tests. If a password or CAPTCHA flow is ever added, it must be re-assessed.
 - **The Monaco custom-CSS editor captures Tab** (code editors legitimately do): the visible hint next to it documents the exit (Ctrl+M toggles tab capture; Escape then Tab leaves). If that ever proves insufficient for screen-reader users, the fallback is a plain-textarea toggle.
 - **`--color-text-dim` and `--color-text-sub`** were raised (0.575/0.60 oklch lightness) so tertiary/secondary text clears 4.5:1 on every surface tier; the token test locks this. Don't lower them.
+- **Chat media attachments use "hide", not "pause", for animated GIFs on the monitor** (`MessageAttachments`, `variant="compact"`): a raster GIF in an `<img>` cannot be paused without canvas readback of cross-origin CDN media, so 2.2.2 is met with a hide/show toggle (defaulting to hidden under reduced motion). Videos take the native-controls path instead. The broadcast overlay (`/overlay/[id]`) is out of scope, so GIFs animate freely there.
 
 ## Manual test scripts (run per significant UI change)
 

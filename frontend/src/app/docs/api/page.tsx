@@ -212,7 +212,7 @@ ws.run_forever()`}</Pre>
                   { name: 'channel_id', type: 'string', desc: 'Platform channel identifier.' },
                   { name: 'channel_name', type: 'string', desc: 'Human-readable channel name.' },
                   { name: 'user', type: 'object', desc: 'Author info (see below).' },
-                  { name: 'message', type: 'object', desc: '{ text, emotes[] } (see below).' },
+                  { name: 'message', type: 'object', desc: '{ text, emotes[], attachments[]? } (see below).' },
                   { name: 'timestamp', type: 'string', desc: 'RFC 3339 message time (UTC).' },
                   { name: 'metadata', type: 'object', desc: 'Free-form, platform-specific extras.' },
                   { name: 'event', type: 'object?', desc: 'Present only when the message is a platform event (see Events). Absent for normal chat.' },
@@ -235,17 +235,33 @@ ws.run_forever()`}</Pre>
                 ]}
               />
 
-              <h3>message and emotes</h3>
+              <h3>message, emotes, and attachments</h3>
               <p>
-                <Code>message</Code> is <Code>{`{ "text": string, "emotes": Emote[] }`}</Code>. Each{' '}
+                <Code>message</Code> is{' '}
+                <Code>{`{ "text": string, "emotes": Emote[], "attachments"?: Attachment[] }`}</Code>. Each{' '}
                 <Code>Emote</Code>:
               </p>
               <FieldTable
                 rows={[
                   { name: 'code', type: 'string', desc: 'Emote text token, e.g. "Kappa".' },
-                  { name: 'provider', type: 'string', desc: '"twitch" | "7tv" | "bttv" | "ffz" | platform.' },
+                  { name: 'provider', type: 'string', desc: '"twitch" | "7tv" | "bttv" | "ffz" | "discord" | platform.' },
                   { name: 'url', type: 'string', desc: 'CDN image URL.' },
                   { name: 'positions', type: 'int[][]', desc: 'Array of [start, end] index pairs into text where the emote occurs.' },
+                ]}
+              />
+              <p>
+                <Code>attachments</Code> is present only when a message carries media (Discord image/GIF/video
+                uploads and Tenor/Giphy link previews today). Each <Code>Attachment</Code>:
+              </p>
+              <FieldTable
+                rows={[
+                  { name: 'type', type: 'string', desc: '"image" or "video". GIFs are images that animate.' },
+                  { name: 'url', type: 'string', desc: 'Media URL.' },
+                  { name: 'content_type', type: 'string?', desc: 'MIME type, e.g. "image/gif", "video/mp4".' },
+                  { name: 'width / height', type: 'int?', desc: 'Intrinsic pixel dimensions when known.' },
+                  { name: 'thumb_url', type: 'string?', desc: 'Poster frame for videos when available.' },
+                  { name: 'spoiler', type: 'bool?', desc: 'True when the sender marked the media a spoiler.' },
+                  { name: 'filename', type: 'string?', desc: 'Original filename (used for alt text).' },
                 ]}
               />
               <p>

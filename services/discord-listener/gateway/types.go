@@ -110,14 +110,49 @@ type InvalidSessionData struct {
 
 // MessageCreateData is the payload for the MESSAGE_CREATE dispatch event
 type MessageCreateData struct {
-	ID        string         `json:"id"`
-	ChannelID string         `json:"channel_id"`
-	GuildID   string         `json:"guild_id"`
-	Content   string         `json:"content"`
-	Timestamp string         `json:"timestamp"`
-	Author    DiscordUser    `json:"author"`
-	Member    *DiscordMember `json:"member"`
-	Mentions  []DiscordUser  `json:"mentions"`
+	ID          string              `json:"id"`
+	ChannelID   string              `json:"channel_id"`
+	GuildID     string              `json:"guild_id"`
+	Content     string              `json:"content"`
+	Timestamp   string              `json:"timestamp"`
+	Author      DiscordUser         `json:"author"`
+	Member      *DiscordMember      `json:"member"`
+	Mentions    []DiscordUser       `json:"mentions"`
+	Attachments []DiscordAttachment `json:"attachments"`
+	Embeds      []DiscordEmbed      `json:"embeds"`
+}
+
+// DiscordAttachment is an uploaded file attached to a message (image, GIF, video, ...).
+// content_type is the server-detected MIME type; url/proxy_url point at the CDN.
+type DiscordAttachment struct {
+	ID          string `json:"id"`
+	Filename    string `json:"filename"`
+	ContentType string `json:"content_type"`
+	Size        int    `json:"size"`
+	URL         string `json:"url"`
+	ProxyURL    string `json:"proxy_url"`
+	Width       int    `json:"width"`
+	Height      int    `json:"height"`
+}
+
+// DiscordEmbed is a rich embed or auto-generated link preview. Tenor/Giphy links
+// arrive as embeds of type "gifv" (an mp4 that loops); pasted image links arrive
+// as type "image". Only media-bearing embeds are surfaced downstream.
+type DiscordEmbed struct {
+	Type      string             `json:"type"` // "image", "gifv", "video", "link", "rich", ...
+	URL       string             `json:"url"`
+	Thumbnail *DiscordEmbedMedia `json:"thumbnail"`
+	Image     *DiscordEmbedMedia `json:"image"`
+	Video     *DiscordEmbedMedia `json:"video"`
+}
+
+// DiscordEmbedMedia is the image/thumbnail/video object nested inside an embed.
+// proxy_url is Discord's own re-hosted copy (always on *.discordapp.net).
+type DiscordEmbedMedia struct {
+	URL      string `json:"url"`
+	ProxyURL string `json:"proxy_url"`
+	Width    int    `json:"width"`
+	Height   int    `json:"height"`
 }
 
 // DiscordUser represents the author of a Discord message

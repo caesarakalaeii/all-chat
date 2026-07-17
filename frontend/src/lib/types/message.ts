@@ -124,13 +124,31 @@ export interface Badge {
 export interface MessageInfo {
   text: string;
   emotes: Emote[];
+  attachments?: Attachment[];
 }
 
 export interface Emote {
   code: string;
-  provider: 'twitch' | '7tv' | 'bttv' | 'ffz' | 'youtube';
+  provider: 'twitch' | '7tv' | 'bttv' | 'ffz' | 'youtube' | 'discord';
   url: string;
   positions: number[][];
+}
+
+/**
+ * A renderable image/GIF/video shared in a chat message (Discord uploads and
+ * Tenor/Giphy link previews today). `type` is 'image' or 'video'; GIFs arrive as
+ * images that animate natively. `thumb_url` is an optional poster frame for
+ * videos; `spoiler` marks media the sender flagged so the overlay can blur it.
+ */
+export interface Attachment {
+  type: 'image' | 'video';
+  url: string;
+  content_type?: string;
+  width?: number;
+  height?: number;
+  thumb_url?: string;
+  spoiler?: boolean;
+  filename?: string;
 }
 
 export interface PlatformStatus {

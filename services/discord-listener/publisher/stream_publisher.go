@@ -51,10 +51,26 @@ type RawMessage struct {
 	Username    string                 `json:"username,omitempty"`
 	Text        string                 `json:"text,omitempty"`
 	Tags        map[string]string      `json:"tags,omitempty"`
+	Attachments []Attachment           `json:"attachments,omitempty"`
 	RawMessage  json.RawMessage        `json:"raw_message,omitempty"`
 	EventType   string                 `json:"event_type,omitempty"`
 	EventData   map[string]interface{} `json:"event_data,omitempty"`
 	Timestamp   time.Time              `json:"timestamp"`
+}
+
+// Attachment is a renderable image/GIF/video item carried alongside a chat
+// message. Its JSON tags mirror gateway.RawAttachment (producer side) and the
+// message-processor's models.Attachment (consumer side) so the payload survives
+// serialization end to end.
+type Attachment struct {
+	Type        string `json:"type"`
+	URL         string `json:"url"`
+	ContentType string `json:"content_type,omitempty"`
+	Width       int    `json:"width,omitempty"`
+	Height      int    `json:"height,omitempty"`
+	ThumbURL    string `json:"thumb_url,omitempty"`
+	Spoiler     bool   `json:"spoiler,omitempty"`
+	Filename    string `json:"filename,omitempty"`
 }
 
 // Publisher is the interface that wraps the Publish method.
