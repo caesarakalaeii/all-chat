@@ -18,7 +18,6 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 import React, { useState } from 'react'
 import { Collapsible } from '@base-ui/react/collapsible'
 import { ChevronDown } from 'lucide-react'
@@ -41,6 +40,14 @@ export interface CollapsibleSectionProps {
   children: React.ReactNode
   storageKey?: string
   defaultOpen?: boolean
+  /**
+   * Controlled override used by the onboarding setup guide to spotlight a
+   * section: true forces open, false forces closed; undefined (default)
+   * keeps the normal user-toggled behavior. The forced state is NEVER
+   * written to localStorage, so the user's own open/closed preferences
+   * survive onboarding untouched.
+   */
+  forceOpen?: boolean
 }
 
 export function CollapsibleSection({
@@ -49,6 +56,7 @@ export function CollapsibleSection({
   children,
   storageKey = STORAGE_KEY,
   defaultOpen = false,
+  forceOpen,
 }: CollapsibleSectionProps): React.ReactElement {
   const [open, setOpen] = useState<boolean>(() => {
     const stored = readStoredSections(storageKey)
@@ -56,6 +64,7 @@ export function CollapsibleSection({
   })
 
   function handleOpenChange(nextOpen: boolean): void {
+    if (forceOpen !== undefined) return
     setOpen(nextOpen)
     try {
       const stored = readStoredSections(storageKey)
@@ -67,17 +76,17 @@ export function CollapsibleSection({
   }
 
   return (
-    <Collapsible.Root open={open} onOpenChange={handleOpenChange}>
-      <Collapsible.Trigger className="flex w-full items-center justify-between py-2 text-sm font-medium text-text hover:text-text-sub transition-colors">
+    <Collapsible.Root open={forceOpen ?? open} onOpenChange={handleOpenChange}>
+      <Collapsible.Trigger className="flex w-full items-center justify-between py-2 text-sm font-medium text-text transition-colors hover:text-text-sub">
         <span>{title}</span>
         <ChevronDown
           className="h-4 w-4 text-text-dim transition-transform duration-200 data-[open]:rotate-180"
-          data-open={open ? '' : undefined}
+          data-open={(forceOpen ?? open) ? '' : undefined}
         />
       </Collapsible.Trigger>
       <Collapsible.Panel
         keepMounted
-        className="overflow-hidden max-h-0 data-[open]:max-h-[2000px] transition-all duration-200"
+        className="max-h-0 overflow-hidden transition-all duration-200 data-[open]:max-h-[2000px]"
       >
         <div className="pb-3">{children}</div>
       </Collapsible.Panel>

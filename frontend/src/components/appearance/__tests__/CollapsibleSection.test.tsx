@@ -21,16 +21,24 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import React from 'react'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 
-afterEach(() => { cleanup() })
+afterEach(() => {
+  cleanup()
+})
 
 // Mock localStorage before any imports that might reference it
 const localStorageMock = (() => {
   let store: Record<string, string> = {}
   return {
     getItem: vi.fn((key: string) => store[key] ?? null),
-    setItem: vi.fn((key: string, value: string) => { store[key] = value }),
-    removeItem: vi.fn((key: string) => { delete store[key] }),
-    clear: vi.fn(() => { store = {} }),
+    setItem: vi.fn((key: string, value: string) => {
+      store[key] = value
+    }),
+    removeItem: vi.fn((key: string) => {
+      delete store[key]
+    }),
+    clear: vi.fn(() => {
+      store = {}
+    }),
   }
 })()
 
@@ -169,5 +177,45 @@ describe('CollapsibleSection', () => {
     const lastCall = calls[calls.length - 1] as [string, string]
     const stored = JSON.parse(lastCall[1]) as Record<string, boolean>
     expect(stored['themes']).toBe(true)
+  })
+})
+
+describe('CollapsibleSection forceOpen (onboarding spotlight)', () => {
+  beforeEach(() => {
+    localStorageMock.clear()
+    vi.clearAllMocks()
+  })
+
+  it('forceOpen=true opens regardless of stored preference', () => {
+    localStorageMock.setItem('appearance-panel-sections-v1', JSON.stringify({ sources: false }))
+    localStorageMock.setItem.mockClear()
+    render(
+      <CollapsibleSection id="sources" title="Sources" forceOpen>
+        <span>child content</span>
+      </CollapsibleSection>
+    )
+    expect(screen.getByRole('button').getAttribute('aria-expanded')).toBe('true')
+  })
+
+  it('forceOpen=false closes even when the stored preference is open', () => {
+    localStorageMock.setItem('appearance-panel-sections-v1', JSON.stringify({ sources: true }))
+    localStorageMock.setItem.mockClear()
+    render(
+      <CollapsibleSection id="sources" title="Sources" forceOpen={false}>
+        <span>child content</span>
+      </CollapsibleSection>
+    )
+    expect(screen.getByRole('button').getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('toggling while forced never writes the forced state to localStorage', () => {
+    render(
+      <CollapsibleSection id="sources" title="Sources" forceOpen>
+        <span>child content</span>
+      </CollapsibleSection>
+    )
+    fireEvent.click(screen.getByRole('button'))
+    expect(localStorageMock.setItem).not.toHaveBeenCalled()
+    expect(screen.getByRole('button').getAttribute('aria-expanded')).toBe('true')
   })
 })
