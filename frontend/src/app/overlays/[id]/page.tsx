@@ -52,9 +52,18 @@ import { getGuilds, getGuildChannels, updateSourceConfig } from '@/lib/api/disco
 import type { DiscordGuild, ChannelCategory } from '@/lib/api/discord'
 import { ApiError } from '@/lib/api/client'
 import { DISCORD_INVITE_URL } from '@/lib/constants'
+import { OnboardingChecklist } from '@/components/onboarding/OnboardingChecklist'
+import { ObsHelpContent } from '@/components/onboarding/ObsHelpContent'
+import { deriveSteps, useOnboardingStore } from '@/lib/stores/onboarding-store'
 import { engagementApi } from '@/lib/api/engagement'
 import type { EarnConfig } from '@/lib/types/engagement'
-import type { Overlay, ChatSource, DiscordSourceConfig, FilterSettings, DisplaySettings } from '@/lib/types/overlay'
+import type {
+  Overlay,
+  ChatSource,
+  DiscordSourceConfig,
+  FilterSettings,
+  DisplaySettings,
+} from '@/lib/types/overlay'
 import type { ChatMessage } from '@/lib/types/message'
 import type { AcceptedShare } from '@/lib/types/share'
 import type { VisualSettings } from '@/lib/types/visual-settings'
@@ -93,7 +102,10 @@ const MonacoCSSEditor = dynamic(() => import('@/components/MonacoCSSEditor'), {
 
 // Dynamically import ThemeContent for inline Theme section (SSR unsafe — uses hooks)
 const ThemeContent = dynamic(
-  () => import('@/components/theme-marketplace/ThemeContent').then((m) => ({ default: m.ThemeContent })),
+  () =>
+    import('@/components/theme-marketplace/ThemeContent').then((m) => ({
+      default: m.ThemeContent,
+    })),
   { ssr: false }
 )
 
@@ -426,12 +438,36 @@ function SourceCard({
 // ---- StreamSelectionPanel ---------------------------------------------------
 
 const STREAM_STRATEGIES = [
-  { value: 'first_found', label: 'First found', description: 'Picks the first live stream (default)' },
-  { value: 'most_viewers', label: 'Most viewers', description: 'Picks the stream with the highest viewer count' },
-  { value: 'fewest_viewers', label: 'Fewest viewers', description: 'Picks the stream with the lowest viewer count' },
-  { value: 'title_match', label: 'Title match', description: 'Picks the first stream whose title contains a keyword' },
-  { value: 'title_match_all', label: 'Title match (all)', description: 'Monitors all streams whose title contains a keyword' },
-  { value: 'all', label: 'All streams', description: 'Monitors all concurrent live streams simultaneously' },
+  {
+    value: 'first_found',
+    label: 'First found',
+    description: 'Picks the first live stream (default)',
+  },
+  {
+    value: 'most_viewers',
+    label: 'Most viewers',
+    description: 'Picks the stream with the highest viewer count',
+  },
+  {
+    value: 'fewest_viewers',
+    label: 'Fewest viewers',
+    description: 'Picks the stream with the lowest viewer count',
+  },
+  {
+    value: 'title_match',
+    label: 'Title match',
+    description: 'Picks the first stream whose title contains a keyword',
+  },
+  {
+    value: 'title_match_all',
+    label: 'Title match (all)',
+    description: 'Monitors all streams whose title contains a keyword',
+  },
+  {
+    value: 'all',
+    label: 'All streams',
+    description: 'Monitors all concurrent live streams simultaneously',
+  },
 ] as const
 
 function StreamSelectionPanel({
@@ -519,9 +555,7 @@ function StreamSelectionPanel({
 
         {(strategy === 'title_match' || strategy === 'title_match_all') && (
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-sub">
-              Title keyword
-            </label>
+            <label className="mb-1 block text-xs font-medium text-text-sub">Title keyword</label>
             <Input
               value={matchTerm}
               onChange={(e) => setMatchTerm(e.target.value)}
@@ -541,7 +575,12 @@ function StreamSelectionPanel({
           size="sm"
           variant="outline"
           className="w-full"
-          disabled={!hasChanges || saving || locked || ((strategy === 'title_match' || strategy === 'title_match_all') && !matchTerm.trim())}
+          disabled={
+            !hasChanges ||
+            saving ||
+            locked ||
+            ((strategy === 'title_match' || strategy === 'title_match_all') && !matchTerm.trim())
+          }
           onClick={handleSave}
         >
           {saving ? 'Saving…' : 'Save'}
@@ -564,9 +603,7 @@ function RelayPanel({
 }) {
   const discordConfig = source.config as DiscordSourceConfig
   const [relayEnabled, setRelayEnabled] = useState(discordConfig.relay_enabled ?? false)
-  const [relayChannelId, setRelayChannelId] = useState<string>(
-    discordConfig.relay_channel_id ?? ''
-  )
+  const [relayChannelId, setRelayChannelId] = useState<string>(discordConfig.relay_channel_id ?? '')
   const [channels, setChannels] = useState<ChannelCategory[]>([])
   const [channelsLoading, setChannelsLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -602,7 +639,7 @@ function RelayPanel({
   const isSaveDisabled = saving || (relayEnabled && !relayChannelId)
 
   return (
-    <div className="ml-4 mt-1 rounded-lg border border-border bg-surface-2 p-4 space-y-3">
+    <div className="mt-1 ml-4 space-y-3 rounded-lg border border-border bg-surface-2 p-4">
       {/* Loop filter info — static */}
       <p className="text-xs text-text-sub">
         Loop filter: active — Discord messages are never relayed back to Discord.
@@ -614,7 +651,7 @@ function RelayPanel({
           type="checkbox"
           checked={relayEnabled}
           onChange={(e) => setRelayEnabled(e.target.checked)}
-          className="accent-discord size-4"
+          className="size-4 accent-discord"
         />
         Enable relay
       </label>
@@ -695,7 +732,12 @@ const EARN_NUMBER_FIELDS: ReadonlyArray<{
   { key: 'gift_per_sub', label: 'Per gifted sub', hint: 'awarded to the gifter' },
   // chat_per_minute has no producer in v1 (nothing publishes engagement:chat), so it
   // never accrues — flag it disabled so streamers don't configure a dead dimension (M6).
-  { key: 'chat_per_minute', label: 'Chatting, per minute', hint: 'active chatters', comingSoon: true },
+  {
+    key: 'chat_per_minute',
+    label: 'Chatting, per minute',
+    hint: 'active chatters',
+    comingSoon: true,
+  },
   // watch_per_minute rewards participation-PAGE focus time (heartbeat), not stream-watch time (M6).
   {
     key: 'watch_per_minute',
@@ -813,7 +855,10 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
     try {
       window.location.href = await engagementApi.getTwitchMirrorConsentUrl(overlayId)
     } catch {
-      toastManager.add({ title: 'Could not start Twitch consent. Please try again.', type: 'error' })
+      toastManager.add({
+        title: 'Could not start Twitch consent. Please try again.',
+        type: 'error',
+      })
     }
   }
 
@@ -835,15 +880,15 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
           type="checkbox"
           checked={config.enabled}
           onChange={(e) => setConfig({ ...config, enabled: e.target.checked })}
-          className="accent-twitch size-4"
+          className="size-4 accent-twitch"
         />
         Enable viewer points
       </label>
       <p className="text-xs text-text-sub">
         Viewers earn {config.points_name.trim() || 'Points'} by supporting the stream (subs, bits,
-        donations, gifts) and by keeping the participation page open, and wager them on
-        predictions. Run polls and predictions from the Monitor View; viewers join straight from
-        chat (<code>!vote 2</code> or just <code>2</code>, <code>!predict 1 500</code>) or the
+        donations, gifts) and by keeping the participation page open, and wager them on predictions.
+        Run polls and predictions from the Monitor View; viewers join straight from chat (
+        <code>!vote 2</code> or just <code>2</code>, <code>!predict 1 500</code>) or the
         participation page — no install required.
       </p>
 
@@ -853,7 +898,7 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
             type="checkbox"
             checked={config.announce_on_start}
             onChange={(e) => setConfig({ ...config, announce_on_start: e.target.checked })}
-            className="accent-twitch size-4"
+            className="size-4 accent-twitch"
           />
           Announce new rounds in chat
         </label>
@@ -890,7 +935,10 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
               value={numbers[f.key]}
               disabled={f.comingSoon}
               onChange={(e) => setNumbers({ ...numbers, [f.key]: e.target.value })}
-              className={cn('w-full rounded-md border border-border bg-bg px-2 py-1 text-xs text-text', f.comingSoon && 'opacity-50')}
+              className={cn(
+                'w-full rounded-md border border-border bg-bg px-2 py-1 text-xs text-text',
+                f.comingSoon && 'opacity-50'
+              )}
             />
             <p className="mt-0.5 text-[11px] text-text-sub">
               {f.hint}
@@ -1174,7 +1222,9 @@ function AddSourceForm({
           <button
             onClick={handleDiscordButtonClick}
             className="flex items-center gap-2.5 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
-            style={{ backgroundColor: '#5865F2', '--tw-ring-color': '#5865F2' } as React.CSSProperties}
+            style={
+              { backgroundColor: '#5865F2', '--tw-ring-color': '#5865F2' } as React.CSSProperties
+            }
           >
             {/* Discord logo mark */}
             <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
@@ -1340,7 +1390,9 @@ function AddSourceForm({
                 }
               } catch (err) {
                 if (adminPlatform === 'youtube') {
-                  setYoutubeResolveError(err instanceof Error ? err.message : 'Failed to resolve YouTube channel')
+                  setYoutubeResolveError(
+                    err instanceof Error ? err.message : 'Failed to resolve YouTube channel'
+                  )
                   setYoutubeResolved(null)
                 }
               } finally {
@@ -1370,7 +1422,11 @@ function AddSourceForm({
                   setYoutubeResolved(null)
                   setYoutubeResolveError(null)
                 }}
-                placeholder={adminPlatform === 'youtube' ? '@handle, channel URL, or UC…' : 'Channel ID or username'}
+                placeholder={
+                  adminPlatform === 'youtube'
+                    ? '@handle, channel URL, or UC…'
+                    : 'Channel ID or username'
+                }
                 className="flex-1 text-xs"
               />
             </div>
@@ -1378,13 +1434,21 @@ function AddSourceForm({
               <div className="flex items-center gap-2 rounded-lg bg-surface px-2 py-1.5 text-xs text-text-sub">
                 {youtubeResolved.thumbnail && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={youtubeResolved.thumbnail} alt="" className="h-6 w-6 rounded-full object-cover" />
+                  <img
+                    src={youtubeResolved.thumbnail}
+                    alt=""
+                    className="h-6 w-6 rounded-full object-cover"
+                  />
                 )}
-                <span className="font-medium text-text">{youtubeResolved.title ?? youtubeResolved.channel_id}</span>
+                <span className="font-medium text-text">
+                  {youtubeResolved.title ?? youtubeResolved.channel_id}
+                </span>
                 {youtubeResolved.custom_url && (
                   <span className="text-text-sub">{youtubeResolved.custom_url}</span>
                 )}
-                <span className="ml-auto font-mono text-[10px] text-text-sub">{youtubeResolved.channel_id}</span>
+                <span className="ml-auto font-mono text-[10px] text-text-sub">
+                  {youtubeResolved.channel_id}
+                </span>
               </div>
             )}
             {adminPlatform === 'youtube' && youtubeResolveError && (
@@ -1425,6 +1489,21 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
   const [revokeTarget, setRevokeTarget] = useState<ChatSource | null>(null)
 
+  // --- First-run setup guide (onboarding) ---
+  const onboardingActive = useOnboardingStore((s) => s.status === 'active')
+  const setActiveOverlay = useOnboardingStore((s) => s.setActiveOverlay)
+  const obsCopiedStep = useOnboardingStore((s) => s.sessionSteps.obsCopied)
+  // Explicit spotlight from a checklist "Show me" click; while unset the
+  // active step's own section is spotlighted.
+  const [spotlightOverride, setSpotlightOverride] = useState<
+    'sources' | 'theme' | 'appearance' | null
+  >(null)
+  const spotlightRefs = {
+    sources: useRef<HTMLDivElement>(null),
+    theme: useRef<HTMLDivElement>(null),
+    appearance: useRef<HTMLDivElement>(null),
+  }
+
   // --- Customization state ---
   const [maxMessages, setMaxMessages] = useState(50)
   const [messageDuration, setMessageDuration] = useState(15)
@@ -1441,10 +1520,10 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   // Descriptor for the currently-saved set, populated by an auto-resolve on
   // config load so the editor shows the human name + emote count instead of
   // an opaque ULID. Cleared whenever the saved ID changes to "".
-  const [seventvSavedDescriptor, setSeventvSavedDescriptor] = useState<
-    | { name?: string; emoteCount?: number }
-    | null
-  >(null)
+  const [seventvSavedDescriptor, setSeventvSavedDescriptor] = useState<{
+    name?: string
+    emoteCount?: number
+  } | null>(null)
   const [seventvResolveState, setSeventvResolveState] = useState<
     | { status: 'idle' }
     | { status: 'resolving' }
@@ -1471,9 +1550,60 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   const [useCustomCss, setUseCustomCss] = useState(false)
   const [themeId, setThemeId] = useState('')
 
+  // Setup-guide wiring: bind steps 2-4 to this overlay, and while the guide
+  // is active spotlight exactly one of the three step sections (forced open,
+  // the other two forced closed — progressive disclosure for first-run
+  // users; the user's own section preferences are untouched, see
+  // CollapsibleSection.forceOpen).
+  useEffect(() => {
+    setActiveOverlay(id)
+  }, [id, setActiveOverlay])
+
+  // Re-arm the guide after HARD navigations: connecting Twitch/YouTube/Kick
+  // is a full-window OAuth redirect back to this page, which resets the
+  // in-memory store. A flag-null, non-impersonated user in the editor is
+  // mid-onboarding by construction (no zero-overlay guard here — they're
+  // editing an overlay), so the guide continues where the derived steps say.
+  const startOnboarding = useOnboardingStore((s) => s.start)
+  useEffect(() => {
+    if (!user || user.impersonating) return
+    if (user.onboarding_completed_at !== null) return
+    startOnboarding('auto')
+  }, [user, startOnboarding])
+
+  const onboardingActiveStep = onboardingActive
+    ? deriveSteps({
+        overlayCount: 1,
+        sourceCount: sources.length,
+        themeId: themeId || null,
+        obsCopied: obsCopiedStep,
+      }).find((s) => s.active)?.id
+    : undefined
+  const spotlight: 'sources' | 'theme' | 'appearance' | null = !onboardingActive
+    ? null
+    : (spotlightOverride ??
+      (onboardingActiveStep === 'connect_source'
+        ? 'sources'
+        : onboardingActiveStep === 'choose_theme'
+          ? 'theme'
+          : null))
+
+  const sectionForce = (section: 'sources' | 'theme' | 'appearance'): boolean | undefined =>
+    onboardingActive ? spotlight === section : undefined
+
+  function handleSpotlightSection(section: 'sources' | 'theme' | 'appearance') {
+    setSpotlightOverride(section)
+    // Let the forced-open render land before scrolling to the section.
+    requestAnimationFrame(() => {
+      spotlightRefs[section].current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }
+
   // --- Visual appearance settings state ---
   const [visualSettings, setVisualSettings] = useState<Partial<VisualSettings>>({})
-  const [iframeVisibilityDefaults, setIframeVisibilityDefaults] = useState<Partial<VisualSettings>>({})
+  const [iframeVisibilityDefaults, setIframeVisibilityDefaults] = useState<Partial<VisualSettings>>(
+    {}
+  )
   const [parsedThemeSettings, setParsedThemeSettings] = useState<Partial<VisualSettings>>({})
   const [showThemeConfirm, setShowThemeConfirm] = useState(false)
   const [pendingTheme, setPendingTheme] = useState<Theme | null>(null)
@@ -1516,7 +1646,9 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
 
   // --- Discord relay state ---
   const [relayExpandedSourceId, setRelayExpandedSourceId] = useState<string | null>(null)
-  const [streamSelectExpandedSourceId, setStreamSelectExpandedSourceId] = useState<string | null>(null)
+  const [streamSelectExpandedSourceId, setStreamSelectExpandedSourceId] = useState<string | null>(
+    null
+  )
 
   // --- Share overlay state ---
   const [showShareModal, setShowShareModal] = useState(false)
@@ -1585,10 +1717,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   // --- sendCssToIframe: post CSS generated from visualSettings to the iframe ---
   const sendCssToIframe = useCallback((settings: Partial<VisualSettings>) => {
     const css = visualSettingsToCss(settings)
-    iframeRef.current?.contentWindow?.postMessage(
-      { type: 'VISUAL_CSS_UPDATE', css },
-      '*'
-    )
+    iframeRef.current?.contentWindow?.postMessage({ type: 'VISUAL_CSS_UPDATE', css }, '*')
     // Send non-CSS visual settings (platform badge position/style, indicators toggle)
     iframeRef.current?.contentWindow?.postMessage(
       {
@@ -1605,58 +1734,76 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   }, [])
 
   // --- handleVisualSettingsChange: merge patch, update state, send CSS ---
-  const handleVisualSettingsChange = useCallback((patch: Partial<VisualSettings>) => {
-    setVisualSettings((prev) => {
-      const next = { ...prev, ...patch }
-      sendCssToIframe(next)
-      return next
-    })
-  }, [sendCssToIframe])
+  const handleVisualSettingsChange = useCallback(
+    (patch: Partial<VisualSettings>) => {
+      setVisualSettings((prev) => {
+        const next = { ...prev, ...patch }
+        sendCssToIframe(next)
+        return next
+      })
+    },
+    [sendCssToIframe]
+  )
 
   // --- handleFilterSettingsChange: merge patch, update state, send to iframe immediately (D-07 WYSIWYG) ---
-  const handleFilterSettingsChange = useCallback((patch: Partial<FilterSettings>) => {
-    setFilterSettings((prev) => {
-      const next = { ...prev, ...patch }
-      sendFilterSettingsToIframe(next)
-      return next
-    })
-  }, [sendFilterSettingsToIframe])
+  const handleFilterSettingsChange = useCallback(
+    (patch: Partial<FilterSettings>) => {
+      setFilterSettings((prev) => {
+        const next = { ...prev, ...patch }
+        sendFilterSettingsToIframe(next)
+        return next
+      })
+    },
+    [sendFilterSettingsToIframe]
+  )
 
   // --- handleSoundSettingsChange: merge patch, update state, send to iframe (Phase 12) ---
-  const handleSoundSettingsChange = useCallback((patch: Partial<DisplaySettings>) => {
-    setSoundSettings((prev) => {
-      const next = { ...prev, ...patch }
-      sendSoundSettingsToIframe(next)
-      return next
-    })
-  }, [sendSoundSettingsToIframe])
+  const handleSoundSettingsChange = useCallback(
+    (patch: Partial<DisplaySettings>) => {
+      setSoundSettings((prev) => {
+        const next = { ...prev, ...patch }
+        sendSoundSettingsToIframe(next)
+        return next
+      })
+    },
+    [sendSoundSettingsToIframe]
+  )
 
   // --- handleTTSSettingsChange: merge patch, update state, send to embed iframe (Phase 13 D-22) ---
-  const handleTTSSettingsChange = useCallback((patch: Partial<DisplaySettings>) => {
-    setTtsSettings((prev) => {
-      const next = { ...prev, ...patch }
-      sendTtsSettingsToIframe(next)
-      return next
-    })
-  }, [sendTtsSettingsToIframe])
+  const handleTTSSettingsChange = useCallback(
+    (patch: Partial<DisplaySettings>) => {
+      setTtsSettings((prev) => {
+        const next = { ...prev, ...patch }
+        sendTtsSettingsToIframe(next)
+        return next
+      })
+    },
+    [sendTtsSettingsToIframe]
+  )
 
   // Phase 13 Plan 03 — ElevenLabs flow handlers (wired via AppearancePanel -> TTSGroup props)
-  const handleSaveTTSKey = useCallback(async (apiKey: string, voiceId: string): Promise<void> => {
-    await overlaysApi.saveTTSKey(id, apiKey, voiceId)
-    // Refresh metadata so the OBS URL + Test button render.
-    const meta = await overlaysApi.getTTSConfig(id)
-    setHasElevenLabsConfig(meta.has_elevenlabs_config)
-    setObsUrl(meta.obs_url)
-    setElevenLabsVoiceId(meta.voice_id)
-  }, [id])
+  const handleSaveTTSKey = useCallback(
+    async (apiKey: string, voiceId: string): Promise<void> => {
+      await overlaysApi.saveTTSKey(id, apiKey, voiceId)
+      // Refresh metadata so the OBS URL + Test button render.
+      const meta = await overlaysApi.getTTSConfig(id)
+      setHasElevenLabsConfig(meta.has_elevenlabs_config)
+      setObsUrl(meta.obs_url)
+      setElevenLabsVoiceId(meta.voice_id)
+    },
+    [id]
+  )
 
   // Issue #276 — voice-only update path. Persists to PATCH /tts-config/voice
   // and refreshes local state so the picker no longer shows the "Save voice"
   // button (pickedVoiceId === savedVoiceId).
-  const handleSaveTTSVoice = useCallback(async (voiceId: string): Promise<void> => {
-    await overlaysApi.saveTTSVoice(id, voiceId)
-    setElevenLabsVoiceId(voiceId)
-  }, [id])
+  const handleSaveTTSVoice = useCallback(
+    async (voiceId: string): Promise<void> => {
+      await overlaysApi.saveTTSVoice(id, voiceId)
+      setElevenLabsVoiceId(voiceId)
+    },
+    [id]
+  )
 
   const handleRemoveTTSKey = useCallback(async (): Promise<void> => {
     await overlaysApi.removeTTSKey(id)
@@ -1697,15 +1844,12 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     async (apiKey: string): Promise<ElevenLabsVoice[]> => {
       return overlaysApi.previewTTSVoices(id, apiKey)
     },
-    [id],
+    [id]
   )
 
   // --- sendCustomCssToIframe: post the full theme CSS to the embed preview ---
   const sendCustomCssToIframe = useCallback((css: string) => {
-    iframeRef.current?.contentWindow?.postMessage(
-      { type: 'CUSTOM_CSS_UPDATE', css },
-      '*'
-    )
+    iframeRef.current?.contentWindow?.postMessage({ type: 'CUSTOM_CSS_UPDATE', css }, '*')
   }, [])
 
   // --- applyThemeImmediately: reference the theme by id + apply its parsed
@@ -1763,33 +1907,41 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     }
     window.addEventListener('message', handleEmbedReady)
     return () => window.removeEventListener('message', handleEmbedReady)
-  }, [sendCssToIframe, sendFilterSettingsToIframe, sendSoundSettingsToIframe, sendTtsSettingsToIframe])
+  }, [
+    sendCssToIframe,
+    sendFilterSettingsToIframe,
+    sendSoundSettingsToIframe,
+    sendTtsSettingsToIframe,
+  ])
 
   // --- handleIframeReady: store iframe ref, send initial CSS, and query visibility defaults ---
-  const handleIframeReady = useCallback((iframe: HTMLIFrameElement) => {
-    iframeRef.current = iframe
-    sendCssToIframe(visualSettingsRef.current)
-    const doc = iframe.contentDocument ?? iframe.contentWindow?.document
-    if (doc) {
-      const style = getComputedStyle(doc.documentElement)
-      const visFields: Array<[keyof VisualSettings, string]> = [
-        ['showAvatars', '--chat-show-avatars'],
-        ['showBadges', '--chat-show-badges'],
-        ['showTimestamps', '--chat-show-timestamps'],
-        ['showPlatformBadge', '--chat-show-platform-badge'],
-        ['showEmotes', '--chat-show-emotes'],
-        ['showUsername', '--chat-show-username'],
-      ]
-      const defaults: Partial<VisualSettings> = {}
-      for (const [field, cssVar] of visFields) {
-        const v = style.getPropertyValue(cssVar).trim()
-        if (v) {
-          ;(defaults as Record<string, string>)[field] = v
+  const handleIframeReady = useCallback(
+    (iframe: HTMLIFrameElement) => {
+      iframeRef.current = iframe
+      sendCssToIframe(visualSettingsRef.current)
+      const doc = iframe.contentDocument ?? iframe.contentWindow?.document
+      if (doc) {
+        const style = getComputedStyle(doc.documentElement)
+        const visFields: Array<[keyof VisualSettings, string]> = [
+          ['showAvatars', '--chat-show-avatars'],
+          ['showBadges', '--chat-show-badges'],
+          ['showTimestamps', '--chat-show-timestamps'],
+          ['showPlatformBadge', '--chat-show-platform-badge'],
+          ['showEmotes', '--chat-show-emotes'],
+          ['showUsername', '--chat-show-username'],
+        ]
+        const defaults: Partial<VisualSettings> = {}
+        for (const [field, cssVar] of visFields) {
+          const v = style.getPropertyValue(cssVar).trim()
+          if (v) {
+            ;(defaults as Record<string, string>)[field] = v
+          }
         }
+        setIframeVisibilityDefaults(defaults)
       }
-      setIframeVisibilityDefaults(defaults)
-    }
-  }, [sendCssToIframe])
+    },
+    [sendCssToIframe]
+  )
 
   // Load overlay, sources, accepted shares and config
   // Note: `router` is intentionally excluded from deps — it is only used for
@@ -1889,9 +2041,14 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           // Migrate platform badge settings from display_settings to visual_settings
           const platformBadgeDefaults: Partial<VisualSettings> = {}
           if (typeof display.show_platform_badge === 'boolean') {
-            platformBadgeDefaults.showPlatformBadge = display.show_platform_badge ? 'inline' : 'none'
+            platformBadgeDefaults.showPlatformBadge = display.show_platform_badge
+              ? 'inline'
+              : 'none'
           }
-          if (display.platform_badge_position === 'before' || display.platform_badge_position === 'after') {
+          if (
+            display.platform_badge_position === 'before' ||
+            display.platform_badge_position === 'after'
+          ) {
             platformBadgeDefaults.platformBadgePosition = display.platform_badge_position
           }
           if (display.platform_badge_style === 'text' || display.platform_badge_style === 'icon') {
@@ -1920,11 +2077,16 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           if (config.display_settings) {
             const d = config.display_settings
             const loaded: Partial<DisplaySettings> = {}
-            if (typeof d.notification_sound_enabled === 'boolean') loaded.notification_sound_enabled = d.notification_sound_enabled
-            if (typeof d.notification_sound_preset === 'string') loaded.notification_sound_preset = d.notification_sound_preset
-            if (typeof d.notification_sound_volume === 'number') loaded.notification_sound_volume = d.notification_sound_volume
-            if (typeof d.notification_sound_cooldown === 'number') loaded.notification_sound_cooldown = d.notification_sound_cooldown
-            if (typeof d.notification_sound_url === 'string') loaded.notification_sound_url = d.notification_sound_url
+            if (typeof d.notification_sound_enabled === 'boolean')
+              loaded.notification_sound_enabled = d.notification_sound_enabled
+            if (typeof d.notification_sound_preset === 'string')
+              loaded.notification_sound_preset = d.notification_sound_preset
+            if (typeof d.notification_sound_volume === 'number')
+              loaded.notification_sound_volume = d.notification_sound_volume
+            if (typeof d.notification_sound_cooldown === 'number')
+              loaded.notification_sound_cooldown = d.notification_sound_cooldown
+            if (typeof d.notification_sound_url === 'string')
+              loaded.notification_sound_url = d.notification_sound_url
             setSoundSettings(loaded)
           }
 
@@ -1933,29 +2095,43 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
             const d = config.display_settings
             const tts: Partial<DisplaySettings> = {}
             if (typeof d.tts_enabled === 'boolean') tts.tts_enabled = d.tts_enabled
-            if (d.tts_provider === 'browser' || d.tts_provider === 'elevenlabs') tts.tts_provider = d.tts_provider
+            if (d.tts_provider === 'browser' || d.tts_provider === 'elevenlabs')
+              tts.tts_provider = d.tts_provider
             if (typeof d.tts_volume === 'number') tts.tts_volume = d.tts_volume
             if (typeof d.tts_voice_uri === 'string') tts.tts_voice_uri = d.tts_voice_uri
             if (typeof d.tts_rate === 'number') tts.tts_rate = d.tts_rate
             if (typeof d.tts_pitch === 'number') tts.tts_pitch = d.tts_pitch
-            if (d.tts_filter_mode === 'all' || d.tts_filter_mode === 'sample' || d.tts_filter_mode === 'priority_only') {
+            if (
+              d.tts_filter_mode === 'all' ||
+              d.tts_filter_mode === 'sample' ||
+              d.tts_filter_mode === 'priority_only'
+            ) {
               tts.tts_filter_mode = d.tts_filter_mode
             }
             if (typeof d.tts_sample_rate === 'number') tts.tts_sample_rate = d.tts_sample_rate
             if (typeof d.tts_max_queue === 'number') tts.tts_max_queue = d.tts_max_queue
-            if (typeof d.tts_messages_per_minute === 'number') tts.tts_messages_per_minute = d.tts_messages_per_minute
-            if (typeof d.tts_user_cooldown_seconds === 'number') tts.tts_user_cooldown_seconds = d.tts_user_cooldown_seconds
-            if (typeof d.tts_staleness_seconds === 'number') tts.tts_staleness_seconds = d.tts_staleness_seconds
-            if (typeof d.tts_priority_events === 'boolean') tts.tts_priority_events = d.tts_priority_events
-            if (typeof d.tts_priority_bits_min === 'number') tts.tts_priority_bits_min = d.tts_priority_bits_min
-            if (typeof d.tts_read_username === 'boolean') tts.tts_read_username = d.tts_read_username
-            if (typeof d.tts_read_platform === 'boolean') tts.tts_read_platform = d.tts_read_platform
-            if (typeof d.tts_max_message_chars === 'number') tts.tts_max_message_chars = d.tts_max_message_chars
-            if (typeof d.tts_skip_emote_only === 'boolean') tts.tts_skip_emote_only = d.tts_skip_emote_only
+            if (typeof d.tts_messages_per_minute === 'number')
+              tts.tts_messages_per_minute = d.tts_messages_per_minute
+            if (typeof d.tts_user_cooldown_seconds === 'number')
+              tts.tts_user_cooldown_seconds = d.tts_user_cooldown_seconds
+            if (typeof d.tts_staleness_seconds === 'number')
+              tts.tts_staleness_seconds = d.tts_staleness_seconds
+            if (typeof d.tts_priority_events === 'boolean')
+              tts.tts_priority_events = d.tts_priority_events
+            if (typeof d.tts_priority_bits_min === 'number')
+              tts.tts_priority_bits_min = d.tts_priority_bits_min
+            if (typeof d.tts_read_username === 'boolean')
+              tts.tts_read_username = d.tts_read_username
+            if (typeof d.tts_read_platform === 'boolean')
+              tts.tts_read_platform = d.tts_read_platform
+            if (typeof d.tts_max_message_chars === 'number')
+              tts.tts_max_message_chars = d.tts_max_message_chars
+            if (typeof d.tts_skip_emote_only === 'boolean')
+              tts.tts_skip_emote_only = d.tts_skip_emote_only
             if (typeof d.tts_skip_links === 'boolean') tts.tts_skip_links = d.tts_skip_links
             if (Array.isArray(d.tts_enabled_platforms)) {
               tts.tts_enabled_platforms = d.tts_enabled_platforms.filter(
-                (p: unknown): p is string => typeof p === 'string',
+                (p: unknown): p is string => typeof p === 'string'
               )
             }
             setTtsSettings(tts)
@@ -2339,7 +2515,9 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           notification_sound_preset: soundSettings.notification_sound_preset ?? 'chime',
           notification_sound_volume: soundSettings.notification_sound_volume ?? 0.5,
           notification_sound_cooldown: soundSettings.notification_sound_cooldown ?? 500,
-          ...(soundSettings.notification_sound_url ? { notification_sound_url: soundSettings.notification_sound_url } : {}),
+          ...(soundSettings.notification_sound_url
+            ? { notification_sound_url: soundSettings.notification_sound_url }
+            : {}),
           // Phase 13: persist all 20 tts_* fields (ElevenLabs key/voice live in overlay_tts_configs, NOT here)
           ...ttsSettings,
         },
@@ -2452,6 +2630,14 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
       <SplitView overlayId={id} onIframeReady={handleIframeReady}>
         {/* Config panel content */}
         <div className="max-w-none space-y-6 p-6">
+          <OnboardingChecklist
+            surface="editor"
+            variant="inline"
+            overlayCount={1}
+            sourceCount={sources.length}
+            themeId={themeId || null}
+            onSpotlightSection={handleSpotlightSection}
+          />
           {/* 1. Header */}
           <div className="flex items-start justify-between">
             <div>
@@ -2510,6 +2696,24 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
             <Clipboard className="size-4" />
             {copiedObs ? 'Copied!' : 'Copy OBS URL'}
           </Button>
+          <Dialog.Root>
+            <Dialog.Trigger
+              render={
+                <button
+                  type="button"
+                  className="mx-auto block text-xs text-text-sub underline-offset-2 hover:text-text hover:underline"
+                >
+                  How do I add this to OBS?
+                </button>
+              }
+            />
+            <Dialog.Content size="sm">
+              <Dialog.Title>Add the overlay to OBS</Dialog.Title>
+              <div className="mt-3">
+                <ObsHelpContent />
+              </div>
+            </Dialog.Content>
+          </Dialog.Root>
 
           {/* 2b. Share overlay */}
           <Button
@@ -2677,169 +2881,187 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           <div className="relative">
             <div className="divide-y divide-border">
               {/* Theme section — first and open by default */}
-              <CollapsibleSection
-                id="theme"
-                title="Theme"
-                storageKey="editor-panel-sections-v1"
-                defaultOpen={true}
-              >
-                <ThemeContent onApply={handleThemeApply} isAdmin={user?.is_admin === true} />
-                <button
-                  type="button"
-                  className="mt-3 text-xs text-text-sub underline-offset-2 hover:text-text hover:underline"
-                  onClick={handleResetToTheme}
+              <div ref={spotlightRefs.theme}>
+                <CollapsibleSection
+                  id="theme"
+                  title="Theme"
+                  storageKey="editor-panel-sections-v1"
+                  defaultOpen={true}
+                  forceOpen={sectionForce('theme')}
                 >
-                  Reset to theme defaults
-                </button>
-              </CollapsibleSection>
+                  <ThemeContent onApply={handleThemeApply} isAdmin={user?.is_admin === true} />
+                  <button
+                    type="button"
+                    className="mt-3 text-xs text-text-sub underline-offset-2 hover:text-text hover:underline"
+                    onClick={handleResetToTheme}
+                  >
+                    Reset to theme defaults
+                  </button>
+                </CollapsibleSection>
+              </div>
 
               {/* Appearance section */}
-              <CollapsibleSection
-                id="appearance"
-                title="Appearance"
-                storageKey="editor-panel-sections-v1"
-                defaultOpen={false}
-              >
-                <AppearancePanel
-                  visualSettings={visualSettings}
-                  onChange={handleVisualSettingsChange}
-                  visibilityDefaults={iframeVisibilityDefaults}
-                  filterSettings={filterSettings}
-                  onFilterChange={handleFilterSettingsChange}
-                  displaySettings={{ ...soundSettings, ...ttsSettings }}
-                  onSoundChange={handleSoundSettingsChange}
-                  isPremium={user?.is_premium ?? false}
-                  onTTSChange={handleTTSSettingsChange}
-                  overlayId={id}
-                  hasElevenLabsConfig={hasElevenLabsConfig}
-                  obsUrl={obsUrl}
-                  onTTSPreview={() => {
-                    // Browser Web Speech API preview — fires the fixed sample phrase through the
-                    // current rate/pitch/volume/voice_uri. Click again mid-speech cancels.
-                    if (typeof window === 'undefined' || typeof window.speechSynthesis === 'undefined') return
-                    const synth = window.speechSynthesis
-                    if (synth.speaking) {
-                      synth.cancel()
-                      return
-                    }
-                    const u = new SpeechSynthesisUtterance(
-                      'Hello, this is how your chat will sound.',
-                    )
-                    u.volume = ttsSettings.tts_volume ?? 0.8
-                    u.rate = ttsSettings.tts_rate ?? 1.0
-                    u.pitch = ttsSettings.tts_pitch ?? 1.0
-                    const savedUri = ttsSettings.tts_voice_uri
-                    if (savedUri) {
-                      const match = synth.getVoices().find((v) => v.voiceURI === savedUri)
-                      if (match) u.voice = match
-                    }
-                    synth.speak(u)
-                  }}
-                  onTTSPreviewStop={() => {
-                    if (typeof window !== 'undefined' && window.speechSynthesis) {
-                      window.speechSynthesis.cancel()
-                    }
-                  }}
-                  onSaveTTSKey={handleSaveTTSKey}
-                  onSaveTTSVoice={handleSaveTTSVoice}
-                  savedTTSVoiceId={elevenLabsVoiceId}
-                  onTestTTSKey={handleTestTTSKey}
-                  onRotateTTSToken={handleRotateTTSToken}
-                  onRemoveTTSKey={handleRemoveTTSKey}
-                  onFetchTTSVoices={handleFetchTTSVoices}
-                  onPreviewTTSVoices={handlePreviewTTSVoices}
-                />
-              </CollapsibleSection>
+              <div ref={spotlightRefs.appearance}>
+                <CollapsibleSection
+                  id="appearance"
+                  title="Appearance"
+                  storageKey="editor-panel-sections-v1"
+                  defaultOpen={false}
+                  forceOpen={sectionForce('appearance')}
+                >
+                  <AppearancePanel
+                    visualSettings={visualSettings}
+                    onChange={handleVisualSettingsChange}
+                    visibilityDefaults={iframeVisibilityDefaults}
+                    filterSettings={filterSettings}
+                    onFilterChange={handleFilterSettingsChange}
+                    displaySettings={{ ...soundSettings, ...ttsSettings }}
+                    onSoundChange={handleSoundSettingsChange}
+                    isPremium={user?.is_premium ?? false}
+                    onTTSChange={handleTTSSettingsChange}
+                    overlayId={id}
+                    hasElevenLabsConfig={hasElevenLabsConfig}
+                    obsUrl={obsUrl}
+                    onTTSPreview={() => {
+                      // Browser Web Speech API preview — fires the fixed sample phrase through the
+                      // current rate/pitch/volume/voice_uri. Click again mid-speech cancels.
+                      if (
+                        typeof window === 'undefined' ||
+                        typeof window.speechSynthesis === 'undefined'
+                      )
+                        return
+                      const synth = window.speechSynthesis
+                      if (synth.speaking) {
+                        synth.cancel()
+                        return
+                      }
+                      const u = new SpeechSynthesisUtterance(
+                        'Hello, this is how your chat will sound.'
+                      )
+                      u.volume = ttsSettings.tts_volume ?? 0.8
+                      u.rate = ttsSettings.tts_rate ?? 1.0
+                      u.pitch = ttsSettings.tts_pitch ?? 1.0
+                      const savedUri = ttsSettings.tts_voice_uri
+                      if (savedUri) {
+                        const match = synth.getVoices().find((v) => v.voiceURI === savedUri)
+                        if (match) u.voice = match
+                      }
+                      synth.speak(u)
+                    }}
+                    onTTSPreviewStop={() => {
+                      if (typeof window !== 'undefined' && window.speechSynthesis) {
+                        window.speechSynthesis.cancel()
+                      }
+                    }}
+                    onSaveTTSKey={handleSaveTTSKey}
+                    onSaveTTSVoice={handleSaveTTSVoice}
+                    savedTTSVoiceId={elevenLabsVoiceId}
+                    onTestTTSKey={handleTestTTSKey}
+                    onRotateTTSToken={handleRotateTTSToken}
+                    onRemoveTTSKey={handleRemoveTTSKey}
+                    onFetchTTSVoices={handleFetchTTSVoices}
+                    onPreviewTTSVoices={handlePreviewTTSVoices}
+                  />
+                </CollapsibleSection>
+              </div>
 
               {/* Sources section — open by default */}
-              <CollapsibleSection
-                id="sources"
-                title="Sources"
-                storageKey="editor-panel-sections-v1"
-                defaultOpen={true}
-              >
-                {isLoading ? (
-                  <SourceListSkeleton />
-                ) : (
-                  <div className="mb-4 space-y-3">
-                    {sources.map((source) => (
-                      <div key={source.id}>
-                        <SourceCard
-                          source={source}
-                          onRemove={handleRemoveSource}
-                          onRevoke={setRevokeTarget}
-                          onConfigureRelay={(s) =>
-                            setRelayExpandedSourceId((prev) => (prev === s.id ? null : s.id))
-                          }
-                          onConfigureStreamSelect={(s) =>
-                            setStreamSelectExpandedSourceId((prev) => (prev === s.id ? null : s.id))
-                          }
-                          isOwnChannel={
-                            // Prefer the server-computed flag (covers linked/non-Twitch-login
-                            // owners per ADR-0016); fall back to the username heuristic only if
-                            // the field is absent (older API responses).
-                            source.is_own_channel ??
-                            (user?.auth_provider === 'twitch' &&
-                              !!user?.username &&
-                              user.username.toLowerCase() === source.channel_id.toLowerCase())
-                          }
-                          onReconnectChat={handleReconnectTwitchChat}
-                        />
-                        {source.id === relayExpandedSourceId && source.platform === 'discord' && (
-                          <RelayPanel
+              <div ref={spotlightRefs.sources}>
+                <CollapsibleSection
+                  id="sources"
+                  title="Sources"
+                  storageKey="editor-panel-sections-v1"
+                  defaultOpen={true}
+                  forceOpen={sectionForce('sources')}
+                >
+                  {isLoading ? (
+                    <SourceListSkeleton />
+                  ) : (
+                    <div className="mb-4 space-y-3">
+                      {sources.map((source) => (
+                        <div key={source.id}>
+                          <SourceCard
                             source={source}
-                            overlayId={id}
-                            onSaved={handleRelayConfigSaved}
+                            onRemove={handleRemoveSource}
+                            onRevoke={setRevokeTarget}
+                            onConfigureRelay={(s) =>
+                              setRelayExpandedSourceId((prev) => (prev === s.id ? null : s.id))
+                            }
+                            onConfigureStreamSelect={(s) =>
+                              setStreamSelectExpandedSourceId((prev) =>
+                                prev === s.id ? null : s.id
+                              )
+                            }
+                            isOwnChannel={
+                              // Prefer the server-computed flag (covers linked/non-Twitch-login
+                              // owners per ADR-0016); fall back to the username heuristic only if
+                              // the field is absent (older API responses).
+                              source.is_own_channel ??
+                              (user?.auth_provider === 'twitch' &&
+                                !!user?.username &&
+                                user.username.toLowerCase() === source.channel_id.toLowerCase())
+                            }
+                            onReconnectChat={handleReconnectTwitchChat}
                           />
-                        )}
-                        {source.id === streamSelectExpandedSourceId && source.platform === 'youtube' && (
-                          <StreamSelectionPanel
-                            source={source}
-                            overlayId={id}
-                            isPremium={user?.is_premium ?? false}
-                            onSaved={async () => {
-                              const updated = await overlaysApi.getSources(id)
-                              setSources(updated)
-                            }}
-                          />
-                        )}
-                      </div>
-                    ))}
-                    {sources.length === 0 && (
-                      <p className="py-2 text-sm text-text-sub">
-                        No sources added yet. Add a platform below.
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {/* Accepted shared overlays — add as source */}
-                {acceptedShares.length > 0 && (
-                  <div className="mb-4 border-t border-border pt-4">
-                    <h3 className="mb-3 text-sm font-medium text-text">Shared Overlays</h3>
-                    <div className="space-y-2">
-                      {acceptedShares.map((share) => (
-                        <button
-                          key={share.share_id}
-                          onClick={() => handleAddSharedOverlay(share)}
-                          className="flex w-full items-center justify-between rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text transition-colors hover:bg-surface-2"
-                        >
-                          <span>{share.sender_display_name}&apos;s overlay</span>
-                          <span className="text-xs text-twitch">+ Add</span>
-                        </button>
+                          {source.id === relayExpandedSourceId && source.platform === 'discord' && (
+                            <RelayPanel
+                              source={source}
+                              overlayId={id}
+                              onSaved={handleRelayConfigSaved}
+                            />
+                          )}
+                          {source.id === streamSelectExpandedSourceId &&
+                            source.platform === 'youtube' && (
+                              <StreamSelectionPanel
+                                source={source}
+                                overlayId={id}
+                                isPremium={user?.is_premium ?? false}
+                                onSaved={async () => {
+                                  const updated = await overlaysApi.getSources(id)
+                                  setSources(updated)
+                                }}
+                              />
+                            )}
+                        </div>
                       ))}
+                      {sources.length === 0 && (
+                        <p className="py-2 text-sm text-text-sub">
+                          No sources added yet. Add a platform below.
+                        </p>
+                      )}
                     </div>
-                  </div>
-                )}
+                  )}
 
-                <AddSourceForm
-                  overlayId={id}
-                  onAddTikTok={handleAddTikTokSource}
-                  onAddManual={handleAddManual}
-                  onSourceAdded={() => overlaysApi.getSources(id).then(setSources).catch(console.error)}
-                  isAdmin={user?.is_admin === true}
-                />
-              </CollapsibleSection>
+                  {/* Accepted shared overlays — add as source */}
+                  {acceptedShares.length > 0 && (
+                    <div className="mb-4 border-t border-border pt-4">
+                      <h3 className="mb-3 text-sm font-medium text-text">Shared Overlays</h3>
+                      <div className="space-y-2">
+                        {acceptedShares.map((share) => (
+                          <button
+                            key={share.share_id}
+                            onClick={() => handleAddSharedOverlay(share)}
+                            className="flex w-full items-center justify-between rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text transition-colors hover:bg-surface-2"
+                          >
+                            <span>{share.sender_display_name}&apos;s overlay</span>
+                            <span className="text-xs text-twitch">+ Add</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <AddSourceForm
+                    overlayId={id}
+                    onAddTikTok={handleAddTikTokSource}
+                    onAddManual={handleAddManual}
+                    onSourceAdded={() =>
+                      overlaysApi.getSources(id).then(setSources).catch(console.error)
+                    }
+                    isAdmin={user?.is_admin === true}
+                  />
+                </CollapsibleSection>
+              </div>
 
               {/* Behavior section */}
               <CollapsibleSection
@@ -2950,9 +3172,9 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                   <div>
                     <p className="mb-1 text-xs text-text-sub">7TV Emote Set</p>
                     <p className="mb-2 text-[11px] text-text-sub/70">
-                      Optional. Paste a 7TV emote-set ID, an emote-set URL, or your
-                      7TV profile URL to attach those emotes to this overlay
-                      regardless of which platforms you stream on.
+                      Optional. Paste a 7TV emote-set ID, an emote-set URL, or your 7TV profile URL
+                      to attach those emotes to this overlay regardless of which platforms you
+                      stream on.
                     </p>
                     {/* Saved-state pill: shows what's actually attached right now,
                         with a one-click Remove. Hidden while nothing is saved. */}
@@ -2962,7 +3184,9 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           <span className="text-text-sub">Currently active: </span>
                           {seventvSavedDescriptor?.name ? (
                             <>
-                              <span className="font-medium">&quot;{seventvSavedDescriptor.name}&quot;</span>
+                              <span className="font-medium">
+                                &quot;{seventvSavedDescriptor.name}&quot;
+                              </span>
                               {typeof seventvSavedDescriptor.emoteCount === 'number'
                                 ? ` (${seventvSavedDescriptor.emoteCount} emotes)`
                                 : ''}
@@ -3038,7 +3262,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           try {
                             const result = await overlaysApi.resolveSevenTV(
                               id,
-                              seventvOverrideInput.trim(),
+                              seventvOverrideInput.trim()
                             )
                             setSeventvResolveState({
                               status: 'resolved',
@@ -3066,11 +3290,9 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                             : ''}
                           {' — click Save Configuration to apply.'}
                         </p>
-                    )}
+                      )}
                     {seventvResolveState.status === 'error' && (
-                      <p className="mt-1 text-[11px] text-red-500">
-                        {seventvResolveState.message}
-                      </p>
+                      <p className="mt-1 text-[11px] text-red-500">{seventvResolveState.message}</p>
                     )}
                   </div>
                 </div>
@@ -3253,13 +3475,13 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                 <div className="space-y-3">
                   <p className="text-xs text-text-sub">
                     Reset your overlay ID to revoke any leaked OBS URLs. A new overlay with the same
-                    configuration will be created and you will be redirected to it. The old overlay and
-                    its URL will be permanently deleted.
+                    configuration will be created and you will be redirected to it. The old overlay
+                    and its URL will be permanently deleted.
                   </p>
                   <Button
                     type="button"
                     variant="outline"
-                    className="w-full border-destructive/50 text-destructive hover:bg-destructive/10"
+                    className="border-destructive/50 text-destructive hover:bg-destructive/10 w-full"
                     onClick={() => setShowResetConfirm(true)}
                     disabled={isResetting}
                   >
@@ -3343,8 +3565,8 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
         <Dialog.Content size="sm" showCloseButton={false}>
           <Dialog.Title>Reset Overlay ID?</Dialog.Title>
           <Dialog.Description>
-            This will create a new overlay with a fresh ID and permanently delete this one.
-            Any existing OBS URLs will stop working — update your browser source after the reset.
+            This will create a new overlay with a fresh ID and permanently delete this one. Any
+            existing OBS URLs will stop working — update your browser source after the reset.
           </Dialog.Description>
           <div className="mt-4 flex justify-end gap-2">
             <Dialog.Close
