@@ -84,7 +84,7 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
           </p>
           <button
             onClick={() => router.push('/dashboard')}
-            className="rounded-lg bg-twitch px-6 py-2 font-semibold text-white transition hover:opacity-90"
+            className="rounded-lg bg-twitch px-6 py-2 font-semibold text-bg transition hover:opacity-90"
           >
             Go to Dashboard
           </button>

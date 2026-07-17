@@ -25,8 +25,8 @@
  * so both render the returning user's provider colour identically.
  */
 export const DASHBOARD_BUTTON_STYLES: Record<string, { bg: string; ring: string; text: string }> = {
-  twitch: { bg: 'bg-twitch', ring: 'focus-visible:ring-twitch', text: 'text-white' },
-  youtube: { bg: 'bg-youtube', ring: 'focus-visible:ring-youtube', text: 'text-white' },
+  twitch: { bg: 'bg-twitch', ring: 'focus-visible:ring-twitch', text: 'text-bg' },
+  youtube: { bg: 'bg-youtube', ring: 'focus-visible:ring-youtube', text: 'text-bg' },
   kick: { bg: 'bg-kick', ring: 'focus-visible:ring-kick', text: 'text-bg' },
 }
 

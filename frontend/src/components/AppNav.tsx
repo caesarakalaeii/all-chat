@@ -18,7 +18,6 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/stores/auth-store'
@@ -63,19 +62,24 @@ export function AppNav() {
   }
 
   return (
-    <nav className="sticky top-0 z-50 flex h-[60px] items-center border-b border-border bg-nav-bg px-8 backdrop-blur-[20px]">
+    <nav className="sticky top-0 z-50 flex h-[60px] items-center border-b border-border bg-nav-bg px-3 backdrop-blur-[20px] sm:px-8">
       <Link
         href="/dashboard"
-        className="mr-10 flex items-center gap-2.5 rounded-sm focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+        className="mr-4 flex shrink-0 items-center gap-2.5 rounded-sm focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none sm:mr-10"
       >
         <InfinityLogo size={28} />
         <span className="text-base font-extrabold tracking-tight text-text">all-chat</span>
       </Link>
-      <div className="flex h-full gap-0.5">
+      {/* Scrolls within itself on narrow viewports so the PAGE never scrolls
+          horizontally (WCAG 1.4.10 reflow at 320px). */}
+      <div className="flex h-full gap-0.5 overflow-x-auto">
         <Link href="/dashboard" className={isActive('/dashboard') ? activeClass : inactiveClass}>
           Dashboard
         </Link>
-        <Link href="/settings/viewer" className={isActive('/settings/viewer') ? activeClass : inactiveClass}>
+        <Link
+          href="/settings/viewer"
+          className={isActive('/settings/viewer') ? activeClass : inactiveClass}
+        >
           Flairs
         </Link>
         {user?.is_admin && (
@@ -83,10 +87,7 @@ export function AppNav() {
             Admin
           </Link>
         )}
-        <Link
-          href="/settings"
-          className={pathname === '/settings' ? activeClass : inactiveClass}
-        >
+        <Link href="/settings" className={pathname === '/settings' ? activeClass : inactiveClass}>
           Settings
         </Link>
         <Link href="/docs" className={isActive('/docs') ? activeClass : inactiveClass}>
@@ -96,7 +97,7 @@ export function AppNav() {
       {isLoggedIn && (
         <button
           onClick={handleLogout}
-          className="ml-auto text-sm text-text-sub hover:text-text transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-twitch rounded-sm px-3 py-1.5"
+          className="ml-auto rounded-sm px-3 py-1.5 text-sm text-text-sub transition-colors hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
         >
           Log out
         </button>

@@ -143,8 +143,7 @@ export function ChatSendBar({ sources, onEnable, onReauth }: ChatSendBarProps) {
     onEnable(platform)
   }
 
-  const targetPlatform: SendPlatform =
-    selection.kind === 'all' ? 'all' : selection.platform
+  const targetPlatform: SendPlatform = selection.kind === 'all' ? 'all' : selection.platform
 
   const handleError = (err: unknown) => {
     if (!(err instanceof ApiError)) {
@@ -177,9 +176,7 @@ export function ChatSendBar({ sources, onEnable, onReauth }: ChatSendBarProps) {
       const retry = body.retry_after_seconds
       setFeedback({
         kind: 'error',
-        text: retry
-          ? `Rate limited — try again in ${retry}s.`
-          : 'Rate limited — please slow down.',
+        text: retry ? `Rate limited — try again in ${retry}s.` : 'Rate limited — please slow down.',
       })
       return
     }
@@ -251,7 +248,8 @@ export function ChatSendBar({ sources, onEnable, onReauth }: ChatSendBarProps) {
           {platformSources.map((s) => {
             const platform = s.platform as SingleSendPlatform
             const enabled = s.can_send === true
-            const active = enabled && selection.kind === 'platform' && selection.platform === platform
+            const active =
+              enabled && selection.kind === 'platform' && selection.platform === platform
             return (
               <button
                 key={platform}
@@ -320,16 +318,14 @@ export function ChatSendBar({ sources, onEnable, onReauth }: ChatSendBarProps) {
             onChange={(e) => setText(e.target.value)}
             maxLength={MAX_MESSAGE_LENGTH}
             disabled={sending}
-            placeholder={
-              selection.kind === 'all' ? 'Message all platforms…' : 'Send a message…'
-            }
+            placeholder={selection.kind === 'all' ? 'Message all platforms…' : 'Send a message…'}
             autoComplete="off"
             className="min-w-0 flex-1 rounded-lg border border-border bg-bg px-3 py-1.5 text-sm text-text placeholder:text-text-dim focus-visible:border-border-md focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none disabled:opacity-60"
           />
           <button
             type="submit"
             disabled={!canSubmit}
-            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-twitch px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-twitch px-3 py-1.5 text-xs font-semibold text-bg transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Send className="h-3.5 w-3.5" />
             Send

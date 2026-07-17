@@ -207,7 +207,7 @@ export function OnboardingChecklist({
     >
       <header className="flex items-center justify-between gap-2 border-b border-border p-3">
         <div className="min-w-0">
-          <h2 className="text-sm font-semibold text-text">Setup guide</h2>
+          <p className="text-sm font-semibold text-text">Setup guide</p>
           <p className="text-xs text-text-sub" aria-live="polite">
             {coreDone ? 'All steps done!' : `${doneCount} of ${steps.length} steps done`}
           </p>
@@ -271,14 +271,14 @@ export function OnboardingChecklist({
 
           {activeStep?.id === 'copy_obs' && !coreDone && (
             <div className="rounded-lg border border-border bg-surface-2 p-3">
-              <h3 className="mb-1.5 text-xs font-semibold text-text">In OBS:</h3>
+              <p className="mb-1.5 text-xs font-semibold text-text">In OBS:</p>
               <ObsHelpContent />
             </div>
           )}
 
           {showExtras && (
             <div className="rounded-lg border border-border bg-surface-2 p-3">
-              <h3 className="text-sm font-semibold text-text">Optional: go further</h3>
+              <p className="text-sm font-semibold text-text">Optional: go further</p>
               {/* Feature names/claims mirror app/upgrade/page.tsx — keep in sync. */}
               <ul className="mt-2 space-y-2 text-sm">
                 <li>
@@ -368,7 +368,7 @@ export function OnboardingChecklist({
 
           {showFinale && (
             <div className="rounded-lg border border-border bg-surface-2 p-3">
-              <h3 className="text-sm font-semibold text-text">You&apos;re live! 🎉</h3>
+              <p className="text-sm font-semibold text-text">You&apos;re live! 🎉</p>
               <p className="mt-1 text-sm text-text-sub">
                 Questions, feedback, or theme requests? Our community is happy to help.
               </p>

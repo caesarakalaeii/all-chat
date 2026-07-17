@@ -18,7 +18,6 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/stores/auth-store'
 
@@ -45,9 +44,18 @@ export default function ImpersonationBanner() {
   }
 
   return (
-    <div className="flex items-center justify-between bg-orange-600 px-4 py-2 text-white shadow-md">
+    <div
+      role="status"
+      className="flex items-center justify-between bg-orange-600 px-4 py-2 text-white shadow-md"
+    >
       <div className="flex items-center gap-3">
-        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg
+          aria-hidden="true"
+          className="h-5 w-5"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
           <path
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -61,8 +69,9 @@ export default function ImpersonationBanner() {
         </div>
       </div>
       <button
+        type="button"
         onClick={handleExitImpersonation}
-        className="rounded bg-white px-4 py-1 font-medium text-orange-600 transition-colors hover:bg-orange-50"
+        className="rounded bg-white px-4 py-1 font-medium text-orange-600 transition-colors hover:bg-orange-50 focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-orange-600 focus-visible:outline-none"
       >
         Exit & Return to Admin
       </button>

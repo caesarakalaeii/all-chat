@@ -452,6 +452,7 @@ export default function UsersPage() {
                     <button
                       type="button"
                       onClick={() => setSelectedUser(user)}
+                      aria-current={selectedUser?.id === user.id ? 'true' : undefined}
                       className={clsx(
                         'w-full cursor-pointer px-4 py-4 text-left transition-colors hover:bg-surface-2',
                         selectedUser?.id === user.id && 'bg-surface-2'
@@ -601,6 +602,7 @@ export default function UsersPage() {
                           onClick={() => setImpersonateDialogUser(selectedUser)}
                         >
                           <svg
+                            aria-hidden="true"
                             className="h-4 w-4"
                             fill="none"
                             stroke="currentColor"
@@ -672,6 +674,7 @@ export default function UsersPage() {
                             <Button
                               variant="outline"
                               className="w-full"
+                              aria-label={`Revoke Premium for ${selectedUser.username}`}
                               onClick={() => setPremiumDialogUser(selectedUser)}
                             >
                               Revoke Premium
@@ -721,6 +724,7 @@ export default function UsersPage() {
                           <Button
                             variant="outline"
                             className="w-full border-amber-500/40 text-amber-400 hover:border-amber-500/60 hover:bg-amber-500/10"
+                            aria-label={`Grant Premium to ${selectedUser.username}`}
                             onClick={() => {
                               // Reset the duration selection to the default (Permanent)
                               // each time the grant dialog opens.
@@ -799,6 +803,7 @@ export default function UsersPage() {
                             <Button
                               variant="outline"
                               className="w-full"
+                              aria-label={`Revoke Beta Tester for ${selectedUser.username}`}
                               onClick={() => setBetaDialogUser(selectedUser)}
                             >
                               Revoke Beta Tester
@@ -849,6 +854,7 @@ export default function UsersPage() {
                           <Button
                             variant="outline"
                             className="w-full border-violet-500/40 text-violet-400 hover:border-violet-500/60 hover:bg-violet-500/10"
+                            aria-label={`Grant Beta Tester to ${selectedUser.username}`}
                             onClick={() => setBetaDialogUser(selectedUser)}
                           >
                             Grant Beta Tester
@@ -911,6 +917,7 @@ export default function UsersPage() {
                             <Button
                               variant="outline"
                               className="w-full"
+                              aria-label={`Unban User ${selectedUser.username}`}
                               onClick={() => setUnbanDialogUser(selectedUser)}
                             >
                               Unban User
@@ -940,6 +947,7 @@ export default function UsersPage() {
                     <Button
                       variant="destructive"
                       className="w-full"
+                      aria-label={`Ban User ${selectedUser.username}`}
                       onClick={() => {
                         setUserToBan(selectedUser)
                         setBanReason('')
@@ -972,6 +980,7 @@ export default function UsersPage() {
                                 </div>
                               </div>
                               <svg
+                                aria-hidden="true"
                                 className="h-4 w-4 text-text-dim"
                                 fill="none"
                                 stroke="currentColor"
@@ -998,6 +1007,7 @@ export default function UsersPage() {
           ) : (
             <Card className="p-6 text-center">
               <svg
+                aria-hidden="true"
                 className="mx-auto h-12 w-12 text-text-dim"
                 fill="none"
                 stroke="currentColor"
