@@ -167,7 +167,6 @@ export default function AdminSearchPage() {
 
       <input
         type="search"
-        autoFocus
         placeholder="Search users, overlays, sources, viewers..."
         value={query}
         onChange={(e) => setQuery(e.target.value)}
