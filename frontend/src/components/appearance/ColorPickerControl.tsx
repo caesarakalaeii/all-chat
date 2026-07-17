@@ -18,9 +18,17 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+/**
+ * Color control for the appearance panels. The swatch opens a ui/popover
+ * (focus management, Escape, outside-press handled by the primitive — this
+ * replaces the old hand-rolled fixed-position flyout with its own mousedown
+ * listener) containing the visual picker plus a hex text input, so the color
+ * is settable without dragging (WCAG 2.5.7) and by exact value.
+ */
 
-import React, { useEffect, useRef, useState } from 'react'
-import { HexColorPicker } from 'react-colorful'
+import React from 'react'
+import { HexColorPicker, HexColorInput } from 'react-colorful'
+import { Popover } from '@/components/ui/popover'
 
 export interface ColorPickerControlProps {
   label: string
@@ -39,59 +47,32 @@ export function ColorPickerControl({
   opacity,
   onOpacityChange,
 }: ColorPickerControlProps): React.ReactElement {
-  const [open, setOpen] = useState(false)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const buttonRef = useRef<HTMLButtonElement>(null)
-  const [popoverPos, setPopoverPos] = useState({ top: 0, left: 0 })
-
-  useEffect(() => {
-    if (!open) return
-    const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [open])
-
-  useEffect(() => {
-    if (!open || !buttonRef.current) return
-    const rect = buttonRef.current.getBoundingClientRect()
-    setPopoverPos({ top: rect.bottom + 4, left: rect.left })
-  }, [open])
-
   const opacityValue =
-    showOpacity && opacity !== undefined
-      ? Math.round(parseFloat(opacity) * 100)
-      : 100
+    showOpacity && opacity !== undefined ? Math.round(parseFloat(opacity) * 100) : 100
 
   return (
-    <div className="flex items-center gap-2" ref={containerRef}>
+    <div className="flex items-center gap-2">
       <span className="w-28 shrink-0 text-sm text-text-sub">{label}</span>
 
-      <div className="relative">
-        {/* Color swatch button */}
-        <button
-          ref={buttonRef}
-          type="button"
+      <Popover.Root>
+        <Popover.Trigger
           data-testid="color-swatch"
-          className="h-7 w-10 rounded border border-border"
+          className="h-7 w-10 rounded border border-border focus-visible:ring-2 focus-visible:ring-twitch focus-visible:ring-offset-2 focus-visible:ring-offset-surface focus-visible:outline-none"
           style={{ backgroundColor: value }}
-          onClick={() => setOpen((prev) => !prev)}
           aria-label={`Pick color for ${label}`}
         />
-
-        {/* Popover with color picker */}
-        {open && (
-          <div
-            className="fixed z-[200] rounded border border-border bg-surface p-2 shadow-lg"
-            style={{ top: popoverPos.top, left: popoverPos.left }}
-          >
-            <HexColorPicker color={value} onChange={onChange} />
-          </div>
-        )}
-      </div>
+        <Popover.Content className="space-y-2">
+          <Popover.Title className="sr-only">{`Color for ${label}`}</Popover.Title>
+          <HexColorPicker color={value} onChange={onChange} />
+          <HexColorInput
+            color={value}
+            onChange={onChange}
+            prefixed
+            aria-label={`Hex value for ${label}`}
+            className="w-full rounded border border-border bg-bg px-2 py-1.5 font-mono text-sm text-text focus-visible:ring-1 focus-visible:ring-border focus-visible:outline-none"
+          />
+        </Popover.Content>
+      </Popover.Root>
 
       {/* Opacity slider — only when showOpacity is true and callbacks are provided */}
       {showOpacity && opacity !== undefined && onOpacityChange && (
