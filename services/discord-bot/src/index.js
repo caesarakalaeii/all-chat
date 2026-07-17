@@ -49,6 +49,12 @@ redisClient.on('error', (err) => console.error('Redis Client Error:', err));
 let statusMessageId = null;
 let alertMessageId = null;
 
+// Embed titles used to identify this bot's own quota messages when reclaiming
+// the channel after a rollout, so only a single message of each kind stays
+// visible (see reclaimMessage).
+const QUOTA_STATUS_TITLE = '📊 YouTube API Quota Status';
+const QUOTA_ALERT_TITLE_MARKER = 'Quota Alert:';
+
 /**
  * Creates a Discord embed for quota status
  */
@@ -74,7 +80,7 @@ function createQuotaEmbed(data) {
   const resetsAtFormatted = `<t:${Math.floor(resetsAt.getTime() / 1000)}:R>`;
 
   const embed = new EmbedBuilder()
-    .setTitle('📊 YouTube API Quota Status')
+    .setTitle(QUOTA_STATUS_TITLE)
     .setColor(color)
     .setDescription(`**Current State:** ${getStateEmoji(state)} ${state}`)
     .addFields(
@@ -366,6 +372,51 @@ async function handleQuotaAlert(message) {
 }
 
 /**
+ * Reclaims this bot's existing quota messages after a rollout.
+ *
+ * A rollout restarts the process, which clears the in-memory message IDs. Without
+ * this, the bot would post a fresh message on every deploy and orphan the previous
+ * one, piling up stale duplicates in the channel. This scans recent channel history
+ * for the bot's own messages matching `matchesEmbed`, keeps the most recent one
+ * (returned so postQuota* can edit it in place instead of sending a new one), and
+ * deletes the rest so only a single message of that kind stays visible.
+ *
+ * @param {import('discord.js').TextBasedChannel} channel
+ * @param {(embed: import('discord.js').Embed) => boolean} matchesEmbed
+ * @param {string} label - human-readable name for logging
+ * @returns {Promise<string|null>} id of the surviving message, or null if none exists
+ */
+async function reclaimMessage(channel, matchesEmbed, label) {
+  try {
+    // Own-message embeds are readable without the MessageContent intent, and a
+    // bot may always delete its own messages, so no extra Discord perms needed.
+    const recent = await channel.messages.fetch({ limit: 100 });
+    const mine = [...recent.values()]
+      .filter((msg) => msg.author.id === discordClient.user.id && msg.embeds.some(matchesEmbed))
+      .sort((a, b) => b.createdTimestamp - a.createdTimestamp);
+
+    if (mine.length === 0) {
+      return null;
+    }
+
+    const [survivor, ...stale] = mine;
+    for (const msg of stale) {
+      try {
+        await msg.delete();
+        console.log(`🗑️  Removed stale ${label} message (ID: ${msg.id})`);
+      } catch (error) {
+        console.error(`Failed to remove stale ${label} message ${msg.id}:`, error.message);
+      }
+    }
+    console.log(`♻️  Reusing existing ${label} message (ID: ${survivor.id}); removed ${stale.length} stale`);
+    return survivor.id;
+  } catch (error) {
+    console.error(`Failed to reclaim ${label} messages:`, error.message);
+    return null;
+  }
+}
+
+/**
  * Start the bot
  */
 async function start() {
@@ -383,7 +434,29 @@ async function start() {
     discordClient.once('ready', async () => {
       console.log(`✅ Discord bot ready as ${discordClient.user.tag}`);
 
-      // Post initial status
+      // This rollout cleared the in-memory message IDs, so reclaim the messages
+      // this bot posted before the restart: keep the most recent status and alert
+      // message and delete the rest, so only one of each stays visible instead of
+      // a new duplicate accumulating on every deploy.
+      try {
+        const channel = await discordClient.channels.fetch(DISCORD_CHANNEL_ID);
+        if (channel) {
+          statusMessageId = await reclaimMessage(
+            channel,
+            (embed) => embed.title === QUOTA_STATUS_TITLE,
+            'quota status'
+          );
+          alertMessageId = await reclaimMessage(
+            channel,
+            (embed) => (embed.title || '').includes(QUOTA_ALERT_TITLE_MARKER),
+            'quota alert'
+          );
+        }
+      } catch (error) {
+        console.error('Failed to reclaim existing quota messages on startup:', error.message);
+      }
+
+      // Post initial status (edits the reclaimed message in place when present)
       console.log('Posting initial quota status...');
       await postQuotaStatus();
 
