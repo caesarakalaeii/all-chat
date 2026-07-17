@@ -105,9 +105,11 @@ export default function OverlaysPage() {
         setOverlays(data)
         setLoading(false)
 
-        // Deep-link: auto-select an overlay passed via ?overlay=<id>
-        // (e.g. from the Sources page "View" action).
-        const targetId = new URLSearchParams(window.location.search).get('overlay')
+        // Deep-links (read post-await, client-only). ?overlay=<id> auto-selects
+        // an overlay (from the Sources owner/View links); ?connected=true opens
+        // the connected-only view (from the dashboard "Active Overlays" card).
+        const params = new URLSearchParams(window.location.search)
+        const targetId = params.get('overlay')
         if (targetId) {
           const match = (data as Overlay[]).find((o) => o.id === targetId)
           if (match) {
@@ -115,6 +117,9 @@ export default function OverlaysPage() {
             // Surface the target in the (potentially long) list.
             setSearchTerm(match.name)
           }
+        }
+        if (params.get('connected') === 'true') {
+          setShowConnectedOnly(true)
         }
       } catch (err) {
         console.error('Failed to load overlays:', err)

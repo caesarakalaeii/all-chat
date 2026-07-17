@@ -44,13 +44,15 @@ function StatCard({
   label,
   value,
   icon: Icon,
+  href,
 }: {
   label: string
   value: number | undefined
   icon: LucideIcon
+  href?: string
 }) {
-  return (
-    <Card className="p-6">
+  const body = (
+    <Card className={href ? 'p-6 transition-colors hover:bg-surface-2' : 'p-6'}>
       <div className="mb-2 flex items-center gap-3">
         <Icon className="size-5 text-text-sub" aria-hidden="true" />
         <span className="text-sm text-text-sub">{label}</span>
@@ -61,6 +63,13 @@ function StatCard({
         <p className="text-3xl font-bold text-text">{value.toLocaleString()}</p>
       )}
     </Card>
+  )
+  return href ? (
+    <Link href={href} className="block">
+      {body}
+    </Link>
+  ) : (
+    body
   )
 }
 
@@ -106,18 +115,26 @@ export default function AdminDashboard() {
           label="Total Users"
           value={loading ? undefined : stats?.total_users}
           icon={Users}
+          href="/admin/users"
         />
         <StatCard
           label="Banned Users"
           value={loading ? undefined : stats?.banned_users}
           icon={Ban}
+          href="/admin/users?filter=banned"
         />
         <StatCard
           label="Active Overlays"
           value={loading ? undefined : stats?.active_overlays}
           icon={LayoutGrid}
+          href="/admin/overlays?connected=true"
         />
-        <StatCard label="Total Sources" value={loading ? undefined : totalSources} icon={Radio} />
+        <StatCard
+          label="Total Sources"
+          value={loading ? undefined : totalSources}
+          icon={Radio}
+          href="/admin/sources"
+        />
       </div>
 
       {/* Active users */}

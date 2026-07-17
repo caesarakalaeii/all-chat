@@ -102,17 +102,22 @@ export default function UsersPage() {
         setUsers(data)
         setLoading(false)
 
-        // Deep-link: auto-select a user passed via ?user=<id> (e.g. from the
-        // Overlays/Sources pages' owner links). Mirrors the Overlays ?overlay=
-        // pattern. Read post-await so it is client-only and not a synchronous
-        // setState in the effect body.
-        const targetId = new URLSearchParams(window.location.search).get('user')
+        // Deep-links (read post-await so they're client-only, not a synchronous
+        // setState in the effect body). ?user=<id> auto-selects a user (from the
+        // Overlays/Sources owner links); ?filter=<tab> pre-selects a filter tab
+        // (from the dashboard stat cards).
+        const params = new URLSearchParams(window.location.search)
+        const targetId = params.get('user')
         if (targetId) {
           const match = (data as User[]).find((u) => u.id === targetId)
           if (match) {
             setSelectedUser(match)
             setSearchTerm(match.username)
           }
+        }
+        const f = params.get('filter')
+        if (f === 'active' || f === 'banned' || f === 'premium' || f === 'beta') {
+          setFilter(f)
         }
       } catch (err) {
         console.error('Failed to load users:', err)
@@ -474,7 +479,7 @@ export default function UsersPage() {
                   </button>
                 </div>
               </div>
-              <ul className="divide-y divide-border">
+              <ul className="max-h-[70vh] divide-y divide-border overflow-y-auto">
                 {displayUsers.map((user) => (
                   <li key={user.id}>
                     <button
@@ -566,7 +571,7 @@ export default function UsersPage() {
         </div>
 
         {/* User Details Panel */}
-        <div className="lg:col-span-1">
+        <div className="lg:sticky lg:top-8 lg:col-span-1 lg:self-start">
           {selectedUser ? (
             <Card className="overflow-hidden">
               <div className="flex items-center gap-3 border-b border-border px-4 py-5">

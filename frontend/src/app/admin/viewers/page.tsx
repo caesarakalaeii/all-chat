@@ -104,9 +104,16 @@ export default function AdminViewersPage() {
   const [refreshKey, setRefreshKey] = useState(0)
 
   // Discovery controls (server-side). `searchInput` is the immediate field
-  // value; `search` is the debounced value actually sent to the API.
-  const [searchInput, setSearchInput] = useState('')
-  const [search, setSearch] = useState('')
+  // value; `search` is the debounced value actually sent to the API. Both are
+  // seeded from ?q= (e.g. arriving from global search) via a lazy initializer
+  // so there's no synchronous setState in an effect.
+  const [initialQuery] = useState(() =>
+    typeof window === 'undefined'
+      ? ''
+      : (new URLSearchParams(window.location.search).get('q') ?? '')
+  )
+  const [searchInput, setSearchInput] = useState(initialQuery)
+  const [search, setSearch] = useState(initialQuery)
   const [statusFilter, setStatusFilter] = useState<'all' | 'banned' | 'active'>('all')
   const [premiumFilter, setPremiumFilter] = useState<'all' | 'premium' | 'free'>('all')
   const [platformFilter, setPlatformFilter] = useState('all')

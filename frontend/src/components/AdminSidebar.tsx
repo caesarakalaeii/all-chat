@@ -23,6 +23,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard,
+  Search,
   Users,
   LayoutGrid,
   Radio,
@@ -54,6 +55,7 @@ export interface AdminLink {
 // the dashboard home grid so the two can never drift apart.
 export const ADMIN_LINKS: AdminLink[] = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard, exact: true },
+  { href: '/admin/search', label: 'Search', icon: Search, description: 'Find any user, overlay, source, or viewer' },
   { href: '/admin/users', label: 'Users', icon: Users, description: 'View and manage users' },
   {
     href: '/admin/overlays',
