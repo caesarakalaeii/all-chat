@@ -42,6 +42,7 @@ import { SAMPLE_PREVIEW_MESSAGES } from '@/lib/theme-marketplace/constants'
 import type { Theme } from '@/lib/theme-marketplace/types'
 import { Palette } from 'lucide-react'
 import { trackEvent } from '@/lib/analytics'
+import { DISCORD_INVITE_URL } from '@/lib/constants'
 
 /**
  * The curated showcase — four visually distinct looks that read well at a glance:
@@ -218,7 +219,7 @@ export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
       <p className="mt-1.5 text-center text-sm text-text-sub">
         Coming from another tool?{' '}
         <a
-          href="https://discord.gg/xCGBSuz39P"
+          href={DISCORD_INVITE_URL}
           target="_blank"
           rel="noopener noreferrer"
           onClick={() => trackEvent('outbound_click', { dest: 'discord_theme_help' })}

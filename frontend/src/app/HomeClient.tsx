@@ -46,6 +46,7 @@ import { PlatformBadge } from '@/components/ui/badge'
 import { SpotlightCard } from '@/components/SpotlightCard'
 import { PLATFORM_COLORS } from '@/lib/platform-colors'
 import { toastManager } from '@/lib/toast'
+import { DISCORD_INVITE_URL } from '@/lib/constants'
 import { LayoutGrid, Zap, Palette, Puzzle, Code2, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { trackEvent } from '@/lib/analytics'
@@ -565,7 +566,7 @@ export default function HomeClient() {
           </a>
           <span aria-hidden="true">&bull;</span>
           <a
-            href="https://discord.gg/xCGBSuz39P"
+            href={DISCORD_INVITE_URL}
             target="_blank"
             rel="noopener noreferrer"
             onClick={() => trackEvent('outbound_click', { dest: 'discord' })}

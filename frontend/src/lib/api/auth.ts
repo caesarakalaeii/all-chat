@@ -78,4 +78,12 @@ export const authApi = {
   async deleteAccount(): Promise<void> {
     await apiClient.delete('/api/v1/auth/me')
   },
+
+  /**
+   * Set (true = finished/dismissed) or clear (false = restart from Settings)
+   * the first-run setup guide state. Rejected with 403 while impersonating.
+   */
+  async updateOnboarding(completed: boolean): Promise<{ onboarding_completed_at: string | null }> {
+    return apiClient.patch('/api/v1/auth/me/onboarding', { completed })
+  },
 }
