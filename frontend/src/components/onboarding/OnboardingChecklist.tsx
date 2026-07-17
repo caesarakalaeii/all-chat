@@ -278,45 +278,87 @@ export function OnboardingChecklist({
 
           {showExtras && (
             <div className="rounded-lg border border-border bg-surface-2 p-3">
-              <h3 className="text-sm font-semibold text-text">Optional: make it yours</h3>
-              <p className="mt-1 text-sm text-text-sub">
-                Have chat read aloud with text-to-speech (free with your browser&apos;s voices), or
-                see what{' '}
+              <h3 className="text-sm font-semibold text-text">Optional: go further</h3>
+              {/* Feature names/claims mirror app/upgrade/page.tsx — keep in sync. */}
+              <ul className="mt-2 space-y-2 text-sm">
+                <li>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium text-text">Text-to-speech</span>
+                    {surface === 'editor' && onSpotlightSection ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          trackEvent('cta_click', { cta: 'tts', location: 'onboarding-extras' })
+                          onSpotlightSection('appearance')
+                        }}
+                      >
+                        Show me
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={!activeOverlayId}
+                        onClick={() => {
+                          trackEvent('cta_click', { cta: 'tts', location: 'onboarding-extras' })
+                          if (activeOverlayId) router.push(`/overlays/${activeOverlayId}`)
+                        }}
+                      >
+                        Show me
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-xs text-text-sub">
+                    Read chat aloud. Browser voices are free; ElevenLabs voices are Premium.
+                  </p>
+                </li>
+                <li>
+                  <span className="font-medium text-text">Moderate from your overlay</span>
+                  <p className="text-xs text-text-sub">
+                    Delete, timeout, and ban straight from the Monitor View button at the top of the
+                    editor. (Premium)
+                  </p>
+                </li>
+                <li>
+                  <span className="font-medium text-text">Shared chat</span>
+                  <p className="text-xs text-text-sub">
+                    Combine several channels into one conversation via the Share Overlay button.
+                    (Premium)
+                  </p>
+                </li>
+                <li>
+                  <span className="font-medium text-text">YouTube stream selection</span>
+                  <p className="text-xs text-text-sub">
+                    Pick exactly which broadcast an overlay listens to, per YouTube source in
+                    Sources. (Premium)
+                  </p>
+                </li>
+                <li>
+                  <span className="font-medium text-text">Viewer flairs</span>
+                  <p className="text-xs text-text-sub">
+                    Premium cosmetics for chatters, like animated name gradients, under Flairs in
+                    the navigation.
+                  </p>
+                </li>
+              </ul>
+              <p className="mt-2 text-xs text-text-sub">
                 <a
                   href={PATREON_JOIN_URL}
                   target="_blank"
                   rel="noopener noreferrer"
+                  onClick={() =>
+                    trackEvent('cta_click', { cta: 'premium', location: 'onboarding-extras' })
+                  }
                   className="font-medium text-text underline decoration-dotted underline-offset-2 hover:text-twitch"
                 >
-                  Premium
-                </a>{' '}
-                adds.
+                  See everything Premium includes
+                </a>
               </p>
               <div className="mt-2 flex gap-2">
-                {surface === 'editor' && onSpotlightSection ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      onSpotlightSection('appearance')
-                      markExtrasDone(false)
-                    }}
-                  >
-                    Set up TTS
-                  </Button>
-                ) : (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={!activeOverlayId}
-                    onClick={() => {
-                      markExtrasDone(false)
-                      if (activeOverlayId) router.push(`/overlays/${activeOverlayId}`)
-                    }}
-                  >
-                    Set up TTS
-                  </Button>
-                )}
+                <Button size="sm" variant="outline" onClick={() => markExtrasDone(false)}>
+                  Done
+                </Button>
                 <Button size="sm" variant="ghost" onClick={() => markExtrasDone(true)}>
                   Skip
                 </Button>
