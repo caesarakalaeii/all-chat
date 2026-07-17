@@ -101,6 +101,7 @@ func setupTestDB(t *testing.T) (*pgxpool.Pool, func()) {
 			granted_scopes TEXT[] NOT NULL DEFAULT '{}',
 			created_at TIMESTAMP DEFAULT NOW(),
 			updated_at TIMESTAMP DEFAULT NOW(),
+			onboarding_completed_at TIMESTAMP NULL,
 			CONSTRAINT check_auth_ids CHECK (
 				(auth_provider = 'twitch' AND twitch_id IS NOT NULL) OR
 				(auth_provider = 'youtube' AND google_id IS NOT NULL) OR
@@ -670,5 +671,76 @@ func TestUserRepository_UpdateTokens(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestUserRepository_SetOnboardingCompleted covers the full lifecycle of
+// users.onboarding_completed_at: fresh users read NULL through scanUser,
+// completing sets a timestamp, restarting (Settings) clears it back to NULL.
+func TestUserRepository_SetOnboardingCompleted(t *testing.T) {
+	pool, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := newTestUserRepository(t, pool)
+	ctx := context.Background()
+
+	twitchID := "555000111"
+	testUser := &models.User{
+		TwitchID:       &twitchID,
+		AuthProvider:   "twitch",
+		Username:       "onboarding_user",
+		DisplayName:    "Onboarding User",
+		AccessToken:    "access",
+		RefreshToken:   "refresh",
+		TokenExpiresAt: time.Now().Add(24 * time.Hour),
+	}
+	if err := repo.Create(ctx, testUser); err != nil {
+		t.Fatalf("Failed to create test user: %v", err)
+	}
+
+	// Fresh user: scanUser must surface an explicit NULL.
+	got, err := repo.GetByID(ctx, testUser.ID)
+	if err != nil {
+		t.Fatalf("GetByID() failed: %v", err)
+	}
+	if got.OnboardingCompletedAt != nil {
+		t.Errorf("fresh user OnboardingCompletedAt = %v, want nil", got.OnboardingCompletedAt)
+	}
+
+	// Complete onboarding.
+	completedAt, err := repo.SetOnboardingCompleted(ctx, testUser.ID, true)
+	if err != nil {
+		t.Fatalf("SetOnboardingCompleted(true) failed: %v", err)
+	}
+	if completedAt == nil {
+		t.Fatal("SetOnboardingCompleted(true) returned nil timestamp")
+	}
+	got, err = repo.GetByID(ctx, testUser.ID)
+	if err != nil {
+		t.Fatalf("GetByID() after complete failed: %v", err)
+	}
+	if got.OnboardingCompletedAt == nil {
+		t.Error("OnboardingCompletedAt still nil after completing")
+	}
+
+	// Restart from Settings: clears back to NULL.
+	completedAt, err = repo.SetOnboardingCompleted(ctx, testUser.ID, false)
+	if err != nil {
+		t.Fatalf("SetOnboardingCompleted(false) failed: %v", err)
+	}
+	if completedAt != nil {
+		t.Errorf("SetOnboardingCompleted(false) returned %v, want nil", completedAt)
+	}
+	got, err = repo.GetByID(ctx, testUser.ID)
+	if err != nil {
+		t.Fatalf("GetByID() after restart failed: %v", err)
+	}
+	if got.OnboardingCompletedAt != nil {
+		t.Errorf("OnboardingCompletedAt = %v after restart, want nil", got.OnboardingCompletedAt)
+	}
+
+	// Unknown user surfaces ErrUserNotFound.
+	if _, err := repo.SetOnboardingCompleted(ctx, "550e8400-e29b-41d4-a716-446655440000", true); err != ErrUserNotFound {
+		t.Errorf("SetOnboardingCompleted(unknown) error = %v, want ErrUserNotFound", err)
 	}
 }
