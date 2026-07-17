@@ -23,13 +23,14 @@ import Link from 'next/link'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PlatformBadge } from '@/components/ui/badge'
-import type { Platform } from '@/lib/platform-colors'
 
 interface Source {
   id: string
   overlay_id: string
   overlay_name: string
-  platform: 'twitch' | 'youtube' | 'kick' | 'tiktok'
+  // Stored platforms outgrow the chromatic set (discord, shared_overlay); the
+  // badge neutral-styles anything it doesn't recognize, so no cast is needed.
+  platform: 'twitch' | 'youtube' | 'kick' | 'tiktok' | 'discord' | 'shared_overlay'
   channel_id: string
   channel_name: string
   is_active: boolean
@@ -39,7 +40,6 @@ interface Source {
 
 export default function SourcesPage() {
   const [sources, setSources] = useState<Source[]>([])
-  const [filteredSources, setFilteredSources] = useState<Source[]>([])
   const [platformFilter, setPlatformFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [searchTerm, setSearchTerm] = useState('')
@@ -66,7 +66,6 @@ export default function SourcesPage() {
 
         const data = await response.json()
         setSources(data)
-        setFilteredSources(data)
         setLoading(false)
       } catch (err) {
         console.error('Failed to load sources:', err)
@@ -78,35 +77,21 @@ export default function SourcesPage() {
     fetchSources()
   }, [])
 
-  // Filter sources based on platform, status, and search
-  useEffect(() => {
-    let filtered = [...sources]
-
-    // Platform filter
-    if (platformFilter !== 'all') {
-      filtered = filtered.filter((s) => s.platform === platformFilter)
-    }
-
-    // Status filter
-    if (statusFilter === 'active') {
-      filtered = filtered.filter((s) => s.is_active)
-    } else if (statusFilter === 'inactive') {
-      filtered = filtered.filter((s) => !s.is_active)
-    }
-
-    // Search filter
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase()
-      filtered = filtered.filter(
-        (s) =>
-          s.channel_name.toLowerCase().includes(term) ||
-          s.channel_id.toLowerCase().includes(term) ||
-          s.overlay_name.toLowerCase().includes(term)
+  // Derived during render (no state-in-effect): filter by platform, status, search.
+  const searchLower = searchTerm.trim().toLowerCase()
+  const filteredSources = sources.filter((s) => {
+    if (platformFilter !== 'all' && s.platform !== platformFilter) return false
+    if (statusFilter === 'active' && !s.is_active) return false
+    if (statusFilter === 'inactive' && s.is_active) return false
+    if (searchLower) {
+      return (
+        s.channel_name.toLowerCase().includes(searchLower) ||
+        s.channel_id.toLowerCase().includes(searchLower) ||
+        s.overlay_name.toLowerCase().includes(searchLower)
       )
     }
-
-    setFilteredSources(filtered)
-  }, [platformFilter, statusFilter, searchTerm, sources])
+    return true
+  })
 
   const platformCounts = {
     twitch: sources.filter((s) => s.platform === 'twitch').length,
@@ -320,7 +305,7 @@ export default function SourcesPage() {
                   {filteredSources.map((source) => (
                     <tr key={source.id} className="transition-colors hover:bg-surface-2">
                       <td className="px-4 py-3">
-                        <PlatformBadge platform={source.platform as Platform} size="sm" />
+                        <PlatformBadge platform={source.platform} size="sm" />
                       </td>
                       <td className="px-4 py-3">
                         <div className="text-sm font-medium text-text">{source.channel_name}</div>
@@ -380,7 +365,7 @@ export default function SourcesPage() {
                       {source.channel_id}
                     </div>
                   </div>
-                  <PlatformBadge platform={source.platform as Platform} size="sm" />
+                  <PlatformBadge platform={source.platform} size="sm" />
                 </div>
                 <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-sub">
                   <Link

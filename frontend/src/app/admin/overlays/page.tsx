@@ -24,7 +24,6 @@ import clsx from 'clsx'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PlatformBadge } from '@/components/ui/badge'
-import type { Platform } from '@/lib/platform-colors'
 import { formatConnectedFor } from '@/lib/utils'
 
 // Connections open longer than this are highlighted so admins can spot overlays
@@ -49,9 +48,12 @@ interface ActiveOverlay {
 
 interface OverlaySource {
   id: string
-  platform: 'twitch' | 'youtube' | 'kick' | 'tiktok'
+  // Matches the Sources page union; the badge neutral-styles anything it does
+  // not recognize (discord, shared_overlay), so no cast is needed.
+  platform: 'twitch' | 'youtube' | 'kick' | 'tiktok' | 'discord' | 'shared_overlay'
   channel_id: string
   channel_name: string
+  channel_handle?: string | null
   is_active: boolean
   created_at: string
 }
@@ -68,7 +70,15 @@ export default function OverlaysPage() {
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [showConnectedOnly, setShowConnectedOnly] = useState(false)
+  // Ticking clock so the "connected for" / long-open highlighting stays fresh
+  // without calling Date.now() during render (react-hooks/purity).
+  const [now, setNow] = useState(() => Date.now())
   const detailRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60_000)
+    return () => clearInterval(t)
+  }, [])
 
   // Fetch all overlays
   useEffect(() => {
@@ -208,7 +218,7 @@ export default function OverlaysPage() {
   const selectedSince = selectedOverlay ? connectedSince.get(selectedOverlay.id) : undefined
   const selectedConnectedFor = formatConnectedFor(selectedSince)
   const selectedLongOpen =
-    selectedConnected && !!selectedSince && Date.now() - Date.parse(selectedSince) >= LONG_OPEN_MS
+    selectedConnected && !!selectedSince && now - Date.parse(selectedSince) >= LONG_OPEN_MS
 
   if (error) {
     return (
@@ -280,7 +290,7 @@ export default function OverlaysPage() {
                   const since = connectedSince.get(overlay.id)
                   const connectedFor = formatConnectedFor(since)
                   const isLongOpen =
-                    isConnected && !!since && Date.now() - Date.parse(since) >= LONG_OPEN_MS
+                    isConnected && !!since && now - Date.parse(since) >= LONG_OPEN_MS
                   return (
                     <li
                       key={overlay.id}
@@ -466,7 +476,7 @@ export default function OverlaysPage() {
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
                               <div className="flex items-center space-x-2">
-                                <PlatformBadge platform={source.platform as Platform} size="sm" />
+                                <PlatformBadge platform={source.platform} size="sm" />
                                 {source.is_active ? (
                                   <span className="inline-flex items-center rounded bg-kick/10 px-2 py-0.5 text-xs font-medium text-kick">
                                     Active
