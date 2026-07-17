@@ -96,7 +96,10 @@ export default function ThemeCard({
         {/* Tags */}
         <div className="mb-4 flex flex-wrap gap-1.5">
           {theme.tags.map((tag) => (
-            <span key={tag} className={clsx('rounded border px-1.5 py-0.5 text-xs', getTagColor(tag))}>
+            <span
+              key={tag}
+              className={clsx('rounded border px-1.5 py-0.5 text-xs', getTagColor(tag))}
+            >
               {tag}
             </span>
           ))}
@@ -105,7 +108,7 @@ export default function ThemeCard({
         {/* Apply Button */}
         <button
           onClick={() => onApply(theme)}
-          className="mt-auto flex w-full items-center justify-center gap-2 rounded-lg bg-twitch px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-twitch/90"
+          className="mt-auto flex w-full items-center justify-center gap-2 rounded-lg bg-twitch px-4 py-2 text-sm font-semibold text-bg transition-colors hover:bg-twitch/90"
         >
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />

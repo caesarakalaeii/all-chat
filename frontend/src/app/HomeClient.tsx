@@ -238,7 +238,7 @@ export default function HomeClient() {
               {/* Twitch */}
               <button
                 onClick={handleTwitchLogin}
-                className="flex items-center gap-2.5 rounded-lg bg-twitch px-6 py-3 font-semibold text-white transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
+                className="flex items-center gap-2.5 rounded-lg bg-twitch px-6 py-3 font-semibold text-bg transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
                 aria-label="Sign in with Twitch"
               >
                 <svg
@@ -248,17 +248,18 @@ export default function HomeClient() {
                   aria-hidden="true"
                 >
                   <path
-                    fill="#FFFFFF"
+                    fill="currentColor"
                     d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z"
                   />
                 </svg>
                 Sign in with Twitch
               </button>
 
-              {/* YouTube — exact brand red #FF0000, white text + icon per YouTube guidelines */}
+              {/* YouTube — exact brand red #FF0000; dark label for WCAG AA (white on
+                  #FF0000 is ~4.0:1), official white-on-red icon kept (logo exemption) */}
               <button
                 onClick={handleYouTubeLogin}
-                className="flex items-center gap-2.5 rounded-lg px-6 py-3 font-semibold text-white transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
+                className="flex items-center gap-2.5 rounded-lg px-6 py-3 font-semibold text-bg transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
                 style={
                   {
                     backgroundColor: '#FF0000',
@@ -524,7 +525,7 @@ export default function HomeClient() {
                 <Link
                   href="/docs/api"
                   onClick={() => trackEvent('cta_click', { cta: 'api-docs', location: 'promo' })}
-                  className="inline-flex items-center gap-2 rounded-lg bg-linear-to-r from-twitch to-tiktok px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
+                  className="inline-flex items-center gap-2 rounded-lg bg-linear-to-r from-twitch to-tiktok px-5 py-2.5 text-sm font-semibold text-bg transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
                 >
                   <Code2 className="h-4 w-4" aria-hidden="true" />
                   Read the API docs

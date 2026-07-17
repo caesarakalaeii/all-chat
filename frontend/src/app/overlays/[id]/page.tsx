@@ -1184,11 +1184,11 @@ function AddSourceForm({
       <div className="grid grid-cols-1 gap-2">
         <button
           onClick={() => startOAuth(`/api/v1/auth/twitch/add-source/${overlayId}`)}
-          className="flex items-center gap-2.5 rounded-lg bg-twitch px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
+          className="flex items-center gap-2.5 rounded-lg bg-twitch px-4 py-2.5 text-sm font-semibold text-bg transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
         >
           <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
             <path
-              fill="#FFFFFF"
+              fill="currentColor"
               d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z"
             />
           </svg>
@@ -1197,7 +1197,7 @@ function AddSourceForm({
 
         <button
           onClick={() => startOAuth(`/api/v1/auth/youtube/add-source/${overlayId}`)}
-          className="flex items-center gap-2.5 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
+          className="flex items-center gap-2.5 rounded-lg px-4 py-2.5 text-sm font-semibold text-bg transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
           style={
             { backgroundColor: '#FF0000', '--tw-ring-color': '#FF0000' } as React.CSSProperties
           }
@@ -2883,6 +2883,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                 <CollapsibleSection
                   id="theme"
                   title="Theme"
+                  headingLevel={2}
                   storageKey="editor-panel-sections-v1"
                   defaultOpen={true}
                   forceOpen={sectionForce('theme')}
@@ -2903,6 +2904,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                 <CollapsibleSection
                   id="appearance"
                   title="Appearance"
+                  headingLevel={2}
                   storageKey="editor-panel-sections-v1"
                   defaultOpen={false}
                   forceOpen={sectionForce('appearance')}
@@ -2968,6 +2970,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                 <CollapsibleSection
                   id="sources"
                   title="Sources"
+                  headingLevel={2}
                   storageKey="editor-panel-sections-v1"
                   defaultOpen={true}
                   forceOpen={sectionForce('sources')}
@@ -3065,6 +3068,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
               <CollapsibleSection
                 id="behavior"
                 title="Behavior"
+                headingLevel={2}
                 storageKey="editor-panel-sections-v1"
                 defaultOpen={false}
               >
@@ -3300,6 +3304,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
               <CollapsibleSection
                 id="engagement"
                 title="Engagement"
+                headingLevel={2}
                 storageKey="editor-panel-sections-v1"
                 defaultOpen={false}
               >
@@ -3310,6 +3315,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
               <CollapsibleSection
                 id="expert"
                 title="Expert"
+                headingLevel={2}
                 storageKey="editor-panel-sections-v1"
                 defaultOpen={false}
               >
@@ -3503,6 +3509,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
               <CollapsibleSection
                 id="danger-zone"
                 title="Danger Zone"
+                headingLevel={2}
                 storageKey="editor-panel-sections-v1"
                 defaultOpen={false}
               >
@@ -3534,16 +3541,19 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
               >
                 {isSavingConfig ? 'Saving...' : 'Save Configuration'}
               </Button>
-              {configAlert && (
-                <p
-                  className={cn(
-                    'mt-2 text-center text-sm',
-                    configAlert.type === 'success' ? 'text-green-400' : 'text-destructive'
-                  )}
-                >
-                  {configAlert.message}
-                </p>
-              )}
+              {/* Always-mounted live region so save success/failure announces
+                  to screen readers (WCAG 4.1.3) — conditionally mounting the
+                  role="status" element would not announce reliably. */}
+              <p
+                role="status"
+                className={cn(
+                  'text-center text-sm',
+                  configAlert && 'mt-2',
+                  configAlert?.type === 'success' ? 'text-green-400' : 'text-destructive'
+                )}
+              >
+                {configAlert?.message}
+              </p>
             </div>
           </div>
         </div>

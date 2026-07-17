@@ -136,7 +136,7 @@ export default function DocsPage() {
             </p>
             <p className="text-sm text-text-sub">
               Building a bot, alert box, or analytics tool?{' '}
-              <Link href="/docs/api" className="text-twitch hover:underline">
+              <Link href="/docs/api" className="text-twitch underline underline-offset-2">
                 See the Developer API →
               </Link>
             </p>

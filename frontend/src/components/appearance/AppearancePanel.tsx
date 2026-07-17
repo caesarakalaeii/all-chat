@@ -18,7 +18,6 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 import React from 'react'
 import type { VisualSettings } from '@/lib/types/visual-settings'
 import type { FilterSettings, DisplaySettings } from '@/lib/types/overlay'
@@ -91,38 +90,38 @@ export function AppearancePanel({
 }: AppearancePanelProps): React.ReactElement {
   return (
     <div className="flex flex-col gap-0">
-      <CollapsibleSection id="typography" title="Typography">
+      <CollapsibleSection id="typography" title="Typography" headingLevel={3}>
         <TypographyGroup visualSettings={visualSettings} onChange={onChange} />
       </CollapsibleSection>
-      <CollapsibleSection id="colors" title="Colors">
+      <CollapsibleSection id="colors" title="Colors" headingLevel={3}>
         <ColorsGroup visualSettings={visualSettings} onChange={onChange} />
       </CollapsibleSection>
-      <CollapsibleSection id="background" title="Background & Bubbles">
+      <CollapsibleSection id="background" title="Background & Bubbles" headingLevel={3}>
         <BackgroundGroup visualSettings={visualSettings} onChange={onChange} />
       </CollapsibleSection>
-      <CollapsibleSection id="visibility" title="Visibility">
+      <CollapsibleSection id="visibility" title="Visibility" headingLevel={3}>
         <VisibilityGroup
           visualSettings={visualSettings}
           onChange={onChange}
           visibilityDefaults={visibilityDefaults}
         />
       </CollapsibleSection>
-      <CollapsibleSection id="sizing" title="Sizing">
+      <CollapsibleSection id="sizing" title="Sizing" headingLevel={3}>
         <SizingGroup visualSettings={visualSettings} onChange={onChange} />
       </CollapsibleSection>
-      <CollapsibleSection id="platform-colors" title="Platform Colors">
+      <CollapsibleSection id="platform-colors" title="Platform Colors" headingLevel={3}>
         <PlatformColorsGroup visualSettings={visualSettings} onChange={onChange} />
       </CollapsibleSection>
-      <CollapsibleSection id="events" title="Events">
+      <CollapsibleSection id="events" title="Events" headingLevel={3}>
         <EventsGroup visualSettings={visualSettings} onChange={onChange} />
       </CollapsibleSection>
       {filterSettings && onFilterChange && (
-        <CollapsibleSection id="filters" title="Filters">
+        <CollapsibleSection id="filters" title="Filters" headingLevel={3}>
           <FilterGroup filterSettings={filterSettings} onChange={onFilterChange} />
         </CollapsibleSection>
       )}
       {displaySettings && onSoundChange && (
-        <CollapsibleSection id="sounds" title="Notification Sounds">
+        <CollapsibleSection id="sounds" title="Notification Sounds" headingLevel={3}>
           <SoundGroup
             displaySettings={displaySettings}
             onChange={onSoundChange}
@@ -131,7 +130,7 @@ export function AppearancePanel({
         </CollapsibleSection>
       )}
       {displaySettings && onTTSChange && overlayId && (
-        <CollapsibleSection id="tts" title="Text-to-Speech">
+        <CollapsibleSection id="tts" title="Text-to-Speech" headingLevel={3}>
           <TTSGroup
             displaySettings={displaySettings}
             onChange={onTTSChange}

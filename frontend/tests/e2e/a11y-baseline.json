@@ -1,10 +1,10 @@
 {
-  "__doc": "Known pre-existing axe violation rule IDs per page, recorded when the a11y gate was introduced (2026-07-17, union of repeated runs). NEW rule IDs fail CI immediately. Entries may only ever be REMOVED (in the PR that fixes them — the spec logs prunable entries). Never add to this file. Fix mapping: target-size → Batch 9 sweep (WCAG 2.5.8); link-in-text-block → Batch 7 landing/docs/upgrade pass (1.4.1); color-contrast (badge text on platform colors, muted text) → Batches 5/7; aria-required-attr in the editor → Batch 2 primitives.",
-  "landing": ["color-contrast", "target-size"],
-  "docs": ["color-contrast", "link-in-text-block"],
-  "upgrade": ["color-contrast", "link-in-text-block"],
-  "dashboard-populated": ["color-contrast"],
-  "dashboard-empty": ["color-contrast"],
-  "settings": ["color-contrast"],
+  "__doc": "Known pre-existing axe violation rule IDs per page. NEW rule IDs fail CI immediately. Entries may only ever be REMOVED (in the PR that fixes them — the spec logs prunable entries). Never add to this file. As of 2026-07-17 the baseline is EMPTY: the original inventory (target-size, link-in-text-block, color-contrast, aria-required-attr) was fully remediated across the a11y initiative batches.",
+  "landing": [],
+  "docs": [],
+  "upgrade": [],
+  "dashboard-populated": [],
+  "dashboard-empty": [],
+  "settings": [],
   "overlay-editor": []
 }

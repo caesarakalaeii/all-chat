@@ -124,6 +124,7 @@ Each service has a detailed README:
 - [GETTING_STARTED.md](./docs/GETTING_STARTED.md) - Complete navigation guide for LLM agents
 - [CONTRIBUTING.md](./CONTRIBUTING.md) - Pull request process, code review guidelines
 - [Testing Guide](./docs/TESTING_COMPREHENSIVE.md) - Unit, integration, E2E tests
+- [Accessibility](./docs/ACCESSIBILITY.md) - WCAG 2.2 AA scope, CI gates (shrink-only ratchets), contracts for new UI code
 
 ---
 

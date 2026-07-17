@@ -172,7 +172,9 @@ export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
         {/* Caption + dots */}
         <div className="flex items-center justify-between gap-4 border-t border-border p-4 text-left">
           <div className="min-w-0">
-            <h3 className="truncate text-base font-semibold text-text">{current.theme.name}</h3>
+            {/* h2: the switcher sits directly under the page h1, so h3 would
+                skip a level in the landing's heading outline. */}
+            <h2 className="truncate text-base font-semibold text-text">{current.theme.name}</h2>
             <p className="truncate text-sm text-text-sub">{current.theme.description}</p>
           </div>
           <div
@@ -200,17 +202,25 @@ export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
             {RESOLVED.map((t, i) => {
               const isActive = i === active
               return (
+                // The button itself is 24x24 (WCAG 2.5.8 target size — axe
+                // measures the element box, so padding on a 10px dot wouldn't
+                // count); the visual dot is the inner span, unchanged.
                 <button
                   key={t.id}
                   type="button"
                   onClick={() => select(i)}
                   aria-label={`Show ${t.label}`}
                   aria-current={isActive}
-                  className={clsx(
-                    'h-2.5 rounded-full transition-all focus-visible:ring-2 focus-visible:ring-twitch focus-visible:ring-offset-2 focus-visible:ring-offset-surface focus-visible:outline-none',
-                    isActive ? 'w-6 bg-twitch' : 'w-2.5 bg-border-md hover:bg-text-sub'
-                  )}
-                />
+                  className="group flex h-6 w-6 items-center justify-center rounded-full focus-visible:ring-2 focus-visible:ring-twitch focus-visible:ring-offset-2 focus-visible:ring-offset-surface focus-visible:outline-none"
+                >
+                  <span
+                    aria-hidden="true"
+                    className={clsx(
+                      'h-2.5 rounded-full transition-all',
+                      isActive ? 'w-6 bg-twitch' : 'w-2.5 bg-border-md group-hover:bg-text-sub'
+                    )}
+                  />
+                </button>
               )
             })}
           </div>

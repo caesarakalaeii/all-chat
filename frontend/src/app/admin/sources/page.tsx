@@ -139,7 +139,12 @@ export default function SourcesPage() {
         <Card className="p-4">
           <div className="flex items-center gap-3">
             <div className="flex-shrink-0 rounded-lg bg-twitch/20 p-2">
-              <svg className="h-5 w-5 text-twitch" fill="currentColor" viewBox="0 0 20 20">
+              <svg
+                aria-hidden="true"
+                className="h-5 w-5 text-twitch"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
                 <path d="M2 10a8 8 0 018-8v8h8a8 8 0 11-16 0z" />
                 <path d="M12 2.252A8.014 8.014 0 0117.748 8H12V2.252z" />
               </svg>
@@ -154,7 +159,12 @@ export default function SourcesPage() {
         <Card className="p-4">
           <div className="flex items-center gap-3">
             <div className="flex-shrink-0 rounded-lg bg-youtube/20 p-2">
-              <svg className="h-5 w-5 text-youtube" fill="currentColor" viewBox="0 0 20 20">
+              <svg
+                aria-hidden="true"
+                className="h-5 w-5 text-youtube"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
                 <path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z" />
               </svg>
             </div>
@@ -168,7 +178,12 @@ export default function SourcesPage() {
         <Card className="p-4">
           <div className="flex items-center gap-3">
             <div className="flex-shrink-0 rounded-lg bg-kick/20 p-2">
-              <svg className="h-5 w-5 text-kick" fill="currentColor" viewBox="0 0 20 20">
+              <svg
+                aria-hidden="true"
+                className="h-5 w-5 text-kick"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
                 <path
                   fillRule="evenodd"
                   d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z"
@@ -186,7 +201,12 @@ export default function SourcesPage() {
         <Card className="p-4">
           <div className="flex items-center gap-3">
             <div className="flex-shrink-0 rounded-lg bg-tiktok/20 p-2">
-              <svg className="h-5 w-5 text-tiktok" fill="currentColor" viewBox="0 0 20 20">
+              <svg
+                aria-hidden="true"
+                className="h-5 w-5 text-tiktok"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
                 <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
               </svg>
             </div>
@@ -273,14 +293,27 @@ export default function SourcesPage() {
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
+                <caption className="sr-only">Chat sources</caption>
                 <thead className="border-b border-border bg-surface-2">
                   <tr>
-                    <th className="px-4 py-3 text-left font-medium text-text-sub">Platform</th>
-                    <th className="px-4 py-3 text-left font-medium text-text-sub">Channel</th>
-                    <th className="px-4 py-3 text-left font-medium text-text-sub">Overlay</th>
-                    <th className="px-4 py-3 text-left font-medium text-text-sub">Status</th>
-                    <th className="px-4 py-3 text-left font-medium text-text-sub">Created</th>
-                    <th className="px-4 py-3 text-left font-medium text-text-sub">Actions</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
+                      Platform
+                    </th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
+                      Channel
+                    </th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
+                      Overlay
+                    </th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
+                      Status
+                    </th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
+                      Created
+                    </th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -318,6 +351,7 @@ export default function SourcesPage() {
                       <td className="px-4 py-3 text-sm">
                         <Link
                           href={`/admin/overlays?overlay=${source.overlay_id}`}
+                          aria-label={`View overlay ${source.overlay_name} for channel ${source.channel_name}`}
                           className="font-medium text-text-sub transition-colors hover:text-text"
                         >
                           View

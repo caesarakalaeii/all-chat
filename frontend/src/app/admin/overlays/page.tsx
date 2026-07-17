@@ -256,6 +256,8 @@ export default function OverlaysPage() {
                     className="focus-visible:ring-ring flex-1 rounded-lg border border-border bg-surface-2 px-4 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none"
                   />
                   <button
+                    type="button"
+                    aria-pressed={showConnectedOnly}
                     onClick={() => setShowConnectedOnly(!showConnectedOnly)}
                     className={clsx(
                       'flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
@@ -264,7 +266,10 @@ export default function OverlaysPage() {
                         : 'border-border bg-surface-2 text-text-sub hover:text-text'
                     )}
                   >
-                    <span className="inline-block h-2 w-2 rounded-full bg-kick" />
+                    <span
+                      aria-hidden="true"
+                      className="inline-block h-2 w-2 rounded-full bg-kick"
+                    />
                     Connected ({connectedCount})
                   </button>
                 </div>
@@ -291,6 +296,7 @@ export default function OverlaysPage() {
                         <button
                           type="button"
                           onClick={() => setSelectedOverlay(overlay)}
+                          aria-current={selectedOverlay?.id === overlay.id ? 'true' : undefined}
                           className="min-w-0 flex-1 cursor-pointer text-left after:absolute after:inset-0"
                         >
                           <div className="flex items-center">
@@ -494,6 +500,7 @@ export default function OverlaysPage() {
           ) : (
             <Card className="p-6 text-center">
               <svg
+                aria-hidden="true"
                 className="mx-auto h-12 w-12 text-text-dim"
                 fill="none"
                 stroke="currentColor"

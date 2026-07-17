@@ -192,7 +192,7 @@ export default function CookieBanner() {
               <div className="flex flex-wrap gap-3">
                 <button
                   onClick={acknowledgeBanner}
-                  className="rounded-lg bg-twitch px-6 py-2.5 font-medium text-white transition-colors hover:bg-twitch/80 focus-visible:ring-3 focus-visible:ring-twitch/50 focus-visible:outline-none"
+                  className="rounded-lg bg-twitch px-6 py-2.5 font-medium text-bg transition-colors hover:bg-twitch/80 focus-visible:ring-3 focus-visible:ring-twitch/50 focus-visible:outline-none"
                 >
                   I Understand
                 </button>

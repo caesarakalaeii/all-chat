@@ -187,6 +187,7 @@ export default function AdminViewersPage() {
     }
     return (
       <button
+        aria-label={`${viewer.is_premium ? 'Premium' : 'Free'}: change premium status for ${viewer.username}`}
         className={clsx(
           'inline-flex items-center rounded px-2 py-0.5 text-xs font-medium transition-colors',
           viewer.is_premium
@@ -211,6 +212,7 @@ export default function AdminViewersPage() {
         <Button
           variant="outline"
           size="sm"
+          aria-label={`${banningId === viewer.id ? 'Unbanning' : 'Unban'} ${viewer.username}`}
           disabled={banningId === viewer.id}
           onClick={() => setUnbanDialogViewer(viewer)}
         >
@@ -222,6 +224,7 @@ export default function AdminViewersPage() {
       <Button
         variant="destructive"
         size="sm"
+        aria-label={`Ban ${viewer.username}`}
         disabled={banningId === viewer.id}
         onClick={() => handleBanClick(viewer)}
       >
@@ -271,17 +274,30 @@ export default function AdminViewersPage() {
         <Card className="hidden overflow-hidden md:block">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
+              <caption className="sr-only">Viewers</caption>
               <thead className="border-b border-border bg-surface-2">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium text-text-sub">Username</th>
-                  <th className="px-4 py-3 text-left font-medium text-text-sub">Platform</th>
-                  <th className="px-4 py-3 text-left font-medium text-text-sub">Last Message</th>
-                  <th className="px-4 py-3 text-left font-medium text-text-sub">
+                  <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
+                    Username
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
+                    Platform
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
+                    Last Message
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
                     Msg Count (1m/1h)
                   </th>
-                  <th className="px-4 py-3 text-left font-medium text-text-sub">Premium</th>
-                  <th className="px-4 py-3 text-left font-medium text-text-sub">Status</th>
-                  <th className="px-4 py-3 text-left font-medium text-text-sub">Actions</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
+                    Premium
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
+                    Status
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -294,10 +310,10 @@ export default function AdminViewersPage() {
                 ) : (
                   viewers.map((viewer) => (
                     <tr key={viewer.id} className="transition-colors hover:bg-surface-2">
-                      <td className="px-4 py-3">
+                      <th scope="row" className="px-4 py-3 text-left font-normal">
                         <div className="text-sm font-medium text-text">{viewer.username}</div>
                         <div className="text-xs text-text-sub">{viewer.display_name}</div>
-                      </td>
+                      </th>
                       <td className="px-4 py-3">
                         <span className="text-sm text-text-sub capitalize">{viewer.platform}</span>
                       </td>

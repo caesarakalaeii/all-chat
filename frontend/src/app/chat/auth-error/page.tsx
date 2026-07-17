@@ -48,7 +48,7 @@ function AuthErrorContent() {
         <div className="space-y-4">
           <Link
             href="/"
-            className="block rounded-lg bg-twitch px-6 py-3 font-semibold text-white transition-colors hover:bg-twitch/80"
+            className="block rounded-lg bg-twitch px-6 py-3 font-semibold text-bg transition-colors hover:bg-twitch/80"
           >
             Return to Home
           </Link>

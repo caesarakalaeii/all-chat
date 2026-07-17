@@ -43,7 +43,7 @@ export default function MonacoCSSEditor({
   placeholder = '/* Enter your custom CSS here */',
   readOnly = false,
 }: MonacoCSSEditorProps) {
-  const editorRef = useRef<any>(null)
+  const editorRef = useRef<Parameters<OnMount>[0] | null>(null)
 
   const handleEditorDidMount: OnMount = (editor, monaco) => {
     editorRef.current = editor
@@ -82,32 +82,40 @@ export default function MonacoCSSEditor({
   }, [value])
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border">
-      <Editor
-        height={height}
-        defaultLanguage="css"
-        value={value}
-        onChange={handleEditorChange}
-        onMount={handleEditorDidMount}
-        theme="vs-dark"
-        options={{
-          readOnly,
-          minimap: { enabled: false },
-          fontSize: 13,
-          lineNumbers: 'on',
-          renderLineHighlight: 'all',
-          scrollBeyondLastLine: false,
-          automaticLayout: true,
-          tabSize: 2,
-          wordWrap: 'on',
-          wrappingIndent: 'indent',
-        }}
-        loading={
-          <div className="flex h-full items-center justify-center bg-bg">
-            <div className="text-sm text-text-dim">Loading editor...</div>
-          </div>
-        }
-      />
+    // role="group" + aria-label mark the editor region for assistive tech;
+    // the hint below documents Monaco's built-in keyboard-trap escape
+    // (WCAG 2.1.2): Ctrl+M toggles tab-focus mode, Escape releases focus.
+    <div role="group" aria-label="Custom CSS editor">
+      <p className="mb-1 text-xs text-text-dim">
+        Press Ctrl+M to toggle Tab capturing; Escape then Tab leaves the editor.
+      </p>
+      <div className="overflow-hidden rounded-lg border border-border">
+        <Editor
+          height={height}
+          defaultLanguage="css"
+          value={value}
+          onChange={handleEditorChange}
+          onMount={handleEditorDidMount}
+          theme="vs-dark"
+          options={{
+            readOnly,
+            minimap: { enabled: false },
+            fontSize: 13,
+            lineNumbers: 'on',
+            renderLineHighlight: 'all',
+            scrollBeyondLastLine: false,
+            automaticLayout: true,
+            tabSize: 2,
+            wordWrap: 'on',
+            wrappingIndent: 'indent',
+          }}
+          loading={
+            <div className="flex h-full items-center justify-center bg-bg">
+              <div className="text-sm text-text-dim">Loading editor...</div>
+            </div>
+          }
+        />
+      </div>
     </div>
   )
 }

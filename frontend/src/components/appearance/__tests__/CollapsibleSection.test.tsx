@@ -180,6 +180,58 @@ describe('CollapsibleSection', () => {
   })
 })
 
+describe('CollapsibleSection headingLevel (heading navigation)', () => {
+  beforeEach(() => {
+    localStorageMock.clear()
+    vi.clearAllMocks()
+  })
+
+  it('headingLevel={3} wraps the trigger in an h3 so it is reachable via heading navigation', () => {
+    render(
+      <CollapsibleSection id="typography" title="Typography" headingLevel={3}>
+        <span>child content</span>
+      </CollapsibleSection>
+    )
+    const heading = screen.getByRole('heading', { level: 3 })
+    const trigger = screen.getByRole('button')
+    expect(heading.contains(trigger)).toBe(true)
+  })
+
+  it('headingLevel={2} renders an h2 wrapper', () => {
+    render(
+      <CollapsibleSection id="sources" title="Sources" headingLevel={2}>
+        <span>child content</span>
+      </CollapsibleSection>
+    )
+    expect(screen.getByRole('heading', { level: 2 })).toBeDefined()
+  })
+
+  it('without headingLevel there is no heading wrapper (markup unchanged)', () => {
+    render(
+      <CollapsibleSection id="colors" title="Colors">
+        <span>child content</span>
+      </CollapsibleSection>
+    )
+    expect(screen.queryByRole('heading')).toBeNull()
+    expect(screen.getByRole('button')).toBeDefined()
+  })
+
+  it('trigger still toggles and persists when wrapped in a heading', () => {
+    render(
+      <CollapsibleSection id="behavior" title="Behavior" headingLevel={2}>
+        <span>child content</span>
+      </CollapsibleSection>
+    )
+    const trigger = screen.getByRole('button')
+    fireEvent.click(trigger)
+    expect(trigger.getAttribute('aria-expanded')).toBe('true')
+    expect(localStorageMock.setItem).toHaveBeenCalledWith(
+      'appearance-panel-sections-v1',
+      expect.any(String)
+    )
+  })
+})
+
 describe('CollapsibleSection forceOpen (onboarding spotlight)', () => {
   beforeEach(() => {
     localStorageMock.clear()

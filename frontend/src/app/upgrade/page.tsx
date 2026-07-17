@@ -136,7 +136,7 @@ export default function UpgradePage() {
                   href={PATREON_JOIN_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="font-medium text-twitch hover:underline"
+                  className="font-medium text-twitch underline underline-offset-2"
                 >
                   Patreon
                 </a>{' '}
@@ -147,7 +147,10 @@ export default function UpgradePage() {
               <Check className="mt-0.5 h-4 w-4 shrink-0 text-twitch" />
               <span>
                 Connect your Patreon account on the{' '}
-                <Link href="/settings/premium" className="font-medium text-twitch hover:underline">
+                <Link
+                  href="/settings/premium"
+                  className="font-medium text-twitch underline underline-offset-2"
+                >
                   Premium settings
                 </Link>{' '}
                 page.
@@ -162,7 +165,10 @@ export default function UpgradePage() {
 
         <p className="text-center text-xs text-text-dim">
           Just want viewer cosmetics?{' '}
-          <Link href="/settings/viewer/premium" className="text-text-sub hover:underline">
+          <Link
+            href="/settings/viewer/premium"
+            className="text-text-sub underline underline-offset-2"
+          >
             See viewer premium
           </Link>
           .

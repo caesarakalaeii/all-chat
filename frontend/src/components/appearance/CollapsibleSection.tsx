@@ -48,6 +48,13 @@ export interface CollapsibleSectionProps {
    * survive onboarding untouched.
    */
   forceOpen?: boolean
+  /**
+   * When set, wraps the trigger in an <h2>/<h3>/<h4> so screen-reader users
+   * can jump between sections via heading navigation (WCAG 1.3.1 / 2.4.6).
+   * The heading carries no styling of its own — the trigger keeps its
+   * existing classes. Undefined (default) keeps the bare trigger markup.
+   */
+  headingLevel?: 2 | 3 | 4
 }
 
 export function CollapsibleSection({
@@ -57,6 +64,7 @@ export function CollapsibleSection({
   storageKey = STORAGE_KEY,
   defaultOpen = false,
   forceOpen,
+  headingLevel,
 }: CollapsibleSectionProps): React.ReactElement {
   const [open, setOpen] = useState<boolean>(() => {
     const stored = readStoredSections(storageKey)
@@ -75,15 +83,24 @@ export function CollapsibleSection({
     }
   }
 
+  const trigger = (
+    <Collapsible.Trigger className="flex w-full items-center justify-between py-2 text-sm font-medium text-text transition-colors hover:text-text-sub">
+      <span>{title}</span>
+      <ChevronDown
+        aria-hidden="true"
+        className="h-4 w-4 text-text-dim transition-transform duration-200 data-[open]:rotate-180"
+        data-open={(forceOpen ?? open) ? '' : undefined}
+      />
+    </Collapsible.Trigger>
+  )
+
+  // Tailwind preflight zeroes heading margins and inherits font styles, so
+  // the heading wrapper adds structure without visual change.
+  const HeadingTag = headingLevel !== undefined ? (`h${headingLevel}` as const) : null
+
   return (
     <Collapsible.Root open={forceOpen ?? open} onOpenChange={handleOpenChange}>
-      <Collapsible.Trigger className="flex w-full items-center justify-between py-2 text-sm font-medium text-text transition-colors hover:text-text-sub">
-        <span>{title}</span>
-        <ChevronDown
-          className="h-4 w-4 text-text-dim transition-transform duration-200 data-[open]:rotate-180"
-          data-open={(forceOpen ?? open) ? '' : undefined}
-        />
-      </Collapsible.Trigger>
+      {HeadingTag !== null ? <HeadingTag>{trigger}</HeadingTag> : trigger}
       <Collapsible.Panel
         keepMounted
         className="max-h-0 overflow-hidden transition-all duration-200 data-[open]:max-h-[2000px]"

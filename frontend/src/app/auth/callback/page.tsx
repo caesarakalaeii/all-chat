@@ -161,7 +161,7 @@ function AuthCallbackContent() {
           <p className="mb-4 text-lg text-youtube">{error}</p>
           <Link
             href="/"
-            className="inline-block rounded-lg bg-twitch px-6 py-2 font-semibold text-white transition-opacity hover:opacity-90"
+            className="inline-block rounded-lg bg-twitch px-6 py-2 font-semibold text-bg transition-opacity hover:opacity-90"
           >
             Return to Home
           </Link>

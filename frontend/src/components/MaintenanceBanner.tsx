@@ -18,7 +18,6 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 import { useEffect, useState } from 'react'
 import { Wrench, X } from 'lucide-react'
 import { maintenanceApi } from '@/lib/api/maintenance'
@@ -61,15 +60,16 @@ export function MaintenanceBanner() {
         return (
           <div
             key={mw.id}
+            role="status"
             className={cn(
               'flex items-center gap-3 rounded-lg px-4 py-3 text-sm',
               active
-                ? 'bg-amber-500/10 text-amber-300 border border-amber-500/20'
-                : 'bg-blue-500/10 text-blue-300 border border-blue-500/20'
+                ? 'border border-amber-500/20 bg-amber-500/10 text-amber-300'
+                : 'border border-blue-500/20 bg-blue-500/10 text-blue-300'
             )}
           >
             <Wrench className="size-4 shrink-0" aria-hidden="true" />
-            <span className="flex-1 min-w-0">
+            <span className="min-w-0 flex-1">
               {active ? (
                 <>
                   <strong>Maintenance in progress:</strong> {mw.title} — Expected completion:{' '}
@@ -82,14 +82,17 @@ export function MaintenanceBanner() {
                   {DATE_FORMAT.format(new Date(mw.ends_at))}
                 </>
               )}
-              {mw.description && <span className="ml-1 text-xs opacity-75">({mw.description})</span>}
+              {mw.description && (
+                <span className="ml-1 text-xs opacity-75">({mw.description})</span>
+              )}
             </span>
             <button
+              type="button"
               onClick={() => setDismissed((prev) => new Set(prev).add(mw.id))}
-              aria-label="Dismiss maintenance banner"
-              className="shrink-0 rounded p-0.5 opacity-60 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current"
+              aria-label={`Dismiss maintenance banner: ${mw.title}`}
+              className="shrink-0 rounded p-0.5 opacity-60 transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:ring-current focus-visible:outline-none"
             >
-              <X className="size-3.5" />
+              <X className="size-3.5" aria-hidden="true" />
             </button>
           </div>
         )

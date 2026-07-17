@@ -18,7 +18,6 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 import { Button as ButtonPrimitive } from '@base-ui/react/button'
 import { cva, type VariantProps } from 'class-variance-authority'
 
@@ -40,7 +39,9 @@ const buttonVariants = cva(
           'bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20',
         link: 'text-primary underline-offset-4 hover:underline',
         gradient:
-          'bg-[linear-gradient(90deg,#9146FF,#69C9D0)] text-white font-semibold border-transparent',
+          // Token endpoints (twitch #a37bff → tiktok #69c9d0) so the dark label
+          // clears WCAG AA on both ends; the old #9146FF end failed with any text.
+          'bg-linear-to-r from-twitch to-tiktok text-bg font-semibold border-transparent',
       },
       size: {
         default:
