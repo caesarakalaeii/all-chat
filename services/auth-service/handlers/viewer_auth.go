@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -264,8 +265,18 @@ func (h *ViewerAuthHandler) HandleTwitchLogin(c *gin.Context) {
 
 // HandleTwitchCallback handles the OAuth callback for Twitch viewers
 func (h *ViewerAuthHandler) HandleTwitchCallback(c *gin.Context) {
+	c.Set("auth_platform", "twitch")
 	code := c.Query("code")
 	state := c.Query("state")
+
+	if raw, userMsg := oauthErrorMessage(c); userMsg != "" {
+		h.logger.Warn("OAuth provider returned an error on viewer callback",
+			zap.String("platform", "twitch"),
+			zap.String("error", raw),
+		)
+		h.redirectToFrontendWithError(c, userMsg)
+		return
+	}
 
 	if code == "" || state == "" {
 		h.redirectToFrontendWithError(c, "Missing code or state parameter")
@@ -602,9 +613,63 @@ func (h *ViewerAuthHandler) generateViewerJWT(session *models.ViewerSession, vie
 	return sharedAuth.GenerateViewerJWTWithKid(h.userKeyChain.LatestKid(), claims, string(h.userKeyChain.LatestSecret()))
 }
 
-// redirectToFrontendWithError redirects to frontend with error message
+// safeOAuthErrorMessages maps recognized provider error codes/messages to safe,
+// user-facing text. The auth-error page shows ONLY these curated strings (or the
+// generic fallback), never the raw provider ?error= value verbatim: that value is
+// attacker-influenceable (anyone can craft a callback URL) and rendering it on our
+// own domain would be a content-spoofing / phishing surface. The raw value is still
+// logged by each callback so operators can diagnose (e.g. Kick's "invalid redirect
+// uri" when a callback URL is unregistered).
+var safeOAuthErrorMessages = map[string]string{
+	"access_denied":           "You declined the authorization request.",
+	"invalid_scope":           "The requested permissions were not granted.",
+	"invalid_request":         "The authorization request was invalid. Please try again.",
+	"server_error":            "The provider reported a server error. Please try again.",
+	"temporarily_unavailable": "The provider is temporarily unavailable. Please try again.",
+	"invalid redirect uri":    "This app is not configured correctly with the provider. Please contact support.",
+	"redirect_uri_mismatch":   "This app is not configured correctly with the provider. Please contact support.",
+}
+
+// genericOAuthErrorMessage is shown for any provider error code we don't have a
+// curated message for — bounding page output to a safe, fixed set of strings.
+const genericOAuthErrorMessage = "The provider reported an error during sign-in. Please try again or contact support."
+
+// oauthErrorMessage inspects the OAuth callback for a provider error redirect
+// (?error=...&error_description=...). It returns the raw provider value (for
+// logging only) and a SAFE, bounded user-facing message (for display). userMsg is
+// "" only when the provider reported no error.
+//
+// Providers redirect back to our callback with an error and no code — e.g. Kick
+// sends ?error=invalid+redirect+uri when the callback URL is not registered — which
+// beats the misleading generic "Missing code or state parameter" the callbacks used
+// to report for every no-code redirect. See safeOAuthErrorMessages for why the raw
+// value is not surfaced directly.
+func oauthErrorMessage(c *gin.Context) (raw, userMsg string) {
+	code := c.Query("error")
+	if code == "" {
+		return "", ""
+	}
+	raw = code
+	if desc := c.Query("error_description"); desc != "" {
+		raw = code + ": " + desc
+	}
+	if msg, ok := safeOAuthErrorMessages[strings.ToLower(strings.TrimSpace(code))]; ok {
+		return raw, msg
+	}
+	return raw, genericOAuthErrorMessage
+}
+
+// redirectToFrontendWithError redirects to the frontend auth-error page with the
+// error message and, when set on the context via "auth_platform", the platform
+// that failed so the page can name the correct provider instead of hardcoding
+// "Twitch". Both values are query-escaped.
 func (h *ViewerAuthHandler) redirectToFrontendWithError(c *gin.Context, errorMsg string) {
-	redirectURL := fmt.Sprintf("%s/chat/auth-error?error=%s", h.frontendURL, errorMsg)
+	redirectURL := fmt.Sprintf("%s/chat/auth-error?error=%s", h.frontendURL, url.QueryEscape(errorMsg))
+	if p, ok := c.Get("auth_platform"); ok {
+		if platform, ok := p.(string); ok && platform != "" {
+			redirectURL += "&platform=" + url.QueryEscape(platform)
+		}
+	}
 	c.Redirect(http.StatusFound, redirectURL)
 }
 
@@ -676,8 +741,18 @@ func (h *ViewerAuthHandler) HandleYouTubeLogin(c *gin.Context) {
 
 // HandleYouTubeCallback handles the OAuth callback for YouTube viewers
 func (h *ViewerAuthHandler) HandleYouTubeCallback(c *gin.Context) {
+	c.Set("auth_platform", "youtube")
 	code := c.Query("code")
 	state := c.Query("state")
+
+	if raw, userMsg := oauthErrorMessage(c); userMsg != "" {
+		h.logger.Warn("OAuth provider returned an error on viewer callback",
+			zap.String("platform", "youtube"),
+			zap.String("error", raw),
+		)
+		h.redirectToFrontendWithError(c, userMsg)
+		return
+	}
 
 	if code == "" || state == "" {
 		h.redirectToFrontendWithError(c, "Missing code or state parameter")
@@ -903,8 +978,18 @@ func (h *ViewerAuthHandler) HandleKickLogin(c *gin.Context) {
 
 // HandleKickCallback handles the OAuth callback for Kick viewers
 func (h *ViewerAuthHandler) HandleKickCallback(c *gin.Context) {
+	c.Set("auth_platform", "kick")
 	code := c.Query("code")
 	state := c.Query("state")
+
+	if raw, userMsg := oauthErrorMessage(c); userMsg != "" {
+		h.logger.Warn("OAuth provider returned an error on viewer callback",
+			zap.String("platform", "kick"),
+			zap.String("error", raw),
+		)
+		h.redirectToFrontendWithError(c, userMsg)
+		return
+	}
 
 	if code == "" || state == "" {
 		h.redirectToFrontendWithError(c, "Missing code or state parameter")

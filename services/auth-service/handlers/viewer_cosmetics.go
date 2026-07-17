@@ -77,31 +77,7 @@ func (h *ViewerCosmeticsHandler) HandleGetCosmetics(c *gin.Context) {
 		return
 	}
 
-	if cosmetics == nil {
-		c.JSON(http.StatusOK, gin.H{
-			"name_color":      nil,
-			"name_gradient":   nil,
-			"avatar_frame_id": nil,
-			"avatar_flair_id": nil,
-		})
-		return
-	}
-
-	// Parse name_gradient from raw JSON for the response
-	var gradientResponse interface{}
-	if len(cosmetics.NameGradient) > 0 && string(cosmetics.NameGradient) != "null" {
-		var g interface{}
-		if json.Unmarshal(cosmetics.NameGradient, &g) == nil {
-			gradientResponse = g
-		}
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"name_color":      cosmetics.NameColor,
-		"name_gradient":   gradientResponse,
-		"avatar_frame_id": cosmetics.AvatarFrameID,
-		"avatar_flair_id": cosmetics.AvatarFlairID,
-	})
+	c.JSON(http.StatusOK, cosmeticsResponse(cosmetics))
 }
 
 // HandlePatchCosmetics handles PATCH /viewer/cosmetics.
@@ -113,7 +89,7 @@ func (h *ViewerCosmeticsHandler) HandleGetCosmetics(c *gin.Context) {
 // Request body: {"name_color": "#rrggbb"} or {"name_gradient": {...}} (mutually exclusive)
 // Response:     {"name_color": ..., "name_gradient": ...}
 func (h *ViewerCosmeticsHandler) HandlePatchCosmetics(c *gin.Context) {
-	handlePatchCosmeticsLogic(c, h.identityRepo)
+	handlePatchCosmeticsLogic(c, h.identityRepo, h.logger)
 
 	// Invalidate Redis identity cache on success.
 	// The cache is keyed per platform (viewer:identity:{platform}:{platform_user_id}), so
@@ -151,10 +127,34 @@ func (h *ViewerCosmeticsHandler) HandlePatchCosmetics(c *gin.Context) {
 // cosmeticsUpsertRepo is the minimal interface for the cosmetics handler's DB access.
 // This enables unit testing with mock implementations.
 type cosmeticsUpsertRepo interface {
-	UpsertViewerCosmetics(ctx context.Context, viewerID uuid.UUID, nameColor *string, nameGradient []byte, avatarFrameID *uuid.UUID, avatarFlairID *uuid.UUID) error
-	// UpsertAvatarCosmetics updates only avatar_frame_id and avatar_flair_id, leaving
-	// name_color and name_gradient untouched. Used for avatar-only PATCH requests.
-	UpsertAvatarCosmetics(ctx context.Context, viewerID uuid.UUID, avatarFrameID *uuid.UUID, avatarFlairID *uuid.UUID) error
+	// UpsertViewerCosmetics applies a per-column partial update and returns the full
+	// persisted row (so the response reflects stored state without a separate read).
+	UpsertViewerCosmetics(ctx context.Context, viewerID uuid.UUID, update repository.CosmeticsUpdate) (*repository.ViewerCosmetics, error)
+	// GetFullCosmetics reads the current persisted cosmetics — used only for the
+	// no-op case (an empty PATCH that writes nothing).
+	GetFullCosmetics(ctx context.Context, viewerID uuid.UUID) (*repository.ViewerCosmetics, error)
+}
+
+// cosmeticsResponse builds the JSON body describing a viewer's persisted cosmetics.
+// Shared by GET and PATCH so both report identical, accurate state. name_gradient is
+// parsed from its raw JSON; a nil row yields all-null fields.
+func cosmeticsResponse(c *repository.ViewerCosmetics) gin.H {
+	if c == nil {
+		return gin.H{"name_color": nil, "name_gradient": nil, "avatar_frame_id": nil, "avatar_flair_id": nil}
+	}
+	var gradient interface{}
+	if len(c.NameGradient) > 0 && string(c.NameGradient) != "null" {
+		var g interface{}
+		if json.Unmarshal(c.NameGradient, &g) == nil {
+			gradient = g
+		}
+	}
+	return gin.H{
+		"name_color":      c.NameColor,
+		"name_gradient":   gradient,
+		"avatar_frame_id": c.AvatarFrameID,
+		"avatar_flair_id": c.AvatarFlairID,
+	}
 }
 
 // linkedPlatformsGetter abstracts the GetLinkedPlatforms DB call for testability.
@@ -195,9 +195,25 @@ type patchCosmeticsRequest struct {
 	avatarFlairIDPresent bool
 }
 
+// normalizeClearUUID maps a pointer to the zero UUID to a nil pointer.
+//
+// A nil *uuid.UUID is encoded by pgx as SQL NULL, which clears the column and
+// satisfies the avatar_frame_id / avatar_flair_id foreign keys. A non-nil
+// pointer to uuid.Nil is instead encoded as the literal '00000000-...-000000000000'
+// value, which has no matching cosmetic_frames / cosmetic_flairs row and therefore
+// violates the foreign key (SQLSTATE 23503) — surfacing as a 500. The zero UUID is
+// never a real catalog id (PKs default to gen_random_uuid), so treating it as
+// "clear the selection" is always correct.
+func normalizeClearUUID(id *uuid.UUID) *uuid.UUID {
+	if id != nil && *id == uuid.Nil {
+		return nil
+	}
+	return id
+}
+
 // handlePatchCosmeticsLogic contains the core business logic for PATCH cosmetics.
 // Extracted to allow unit testing with a mock repository.
-func handlePatchCosmeticsLogic(c *gin.Context, repo cosmeticsUpsertRepo) {
+func handlePatchCosmeticsLogic(c *gin.Context, repo cosmeticsUpsertRepo, logger *zap.Logger) {
 	// Step 1: Extract viewer_id from JWT claims (set by middleware)
 	viewerIDVal, exists := c.Get("viewer_id")
 	if !exists {
@@ -367,48 +383,69 @@ func handlePatchCosmeticsLogic(c *gin.Context, repo cosmeticsUpsertRepo) {
 			return
 		}
 		// Downgrade enforcement: always clear frame/flair for non-premium viewers,
-		// regardless of whether they sent these fields. Pass &uuid.Nil as the
-		// "clear" sentinel so the UPSERT writes NULL to the DB.
-		nilUUID := uuid.Nil
-		avatarFrameID = &nilUUID
-		avatarFlairID = &nilUUID
+		// regardless of whether they sent these fields. Leave both as nil pointers
+		// so the UPSERT writes SQL NULL. A pointer to uuid.Nil would be encoded as
+		// the literal zero UUID and violate the avatar FK constraints (see
+		// normalizeClearUUID) — that bug 500'd every non-premium cosmetics save.
+		avatarFrameID = nil
+		avatarFlairID = nil
 	} else {
-		// Premium viewer: pass through whatever was sent.
-		// nil pointer = field absent in request body = UPSERT overwrites with NULL (v1.4 behavior).
-		// &uuid.Nil = explicit clear sent as JSON null.
-		// &<real UUID> = set to that frame/flair.
-		avatarFrameID = req.AvatarFrameID
-		avatarFlairID = req.AvatarFlairID
+		// Premium viewer: pass through whatever was sent, but map a zero-UUID
+		// selection to nil (clear) so it writes SQL NULL instead of tripping the
+		// avatar FK. nil pointer = field absent/null = UPSERT overwrites with NULL.
+		avatarFrameID = normalizeClearUUID(req.AvatarFrameID)
+		avatarFlairID = normalizeClearUUID(req.AvatarFlairID)
 	}
 
-	// Step 6: Upsert cosmetics in DB.
-	// When the request explicitly includes name_color or name_gradient fields (even as null),
-	// use the full upsert that can overwrite all four columns.
-	// When only avatar fields are present (name_color and name_gradient both absent from the
-	// JSON body), use a targeted UPDATE that leaves name_color and name_gradient untouched.
-	// This prevents avatar-only saves from NULLing out a previously saved name color.
-	nameFieldsProvided := req.nameColorPresent || req.nameGradientPresent
-	if nameFieldsProvided {
-		if err := repo.UpsertViewerCosmetics(c.Request.Context(), viewerID, req.NameColor, nameGradientBytes, avatarFrameID, avatarFlairID); err != nil {
+	// Step 6: Persist only the column groups the request actually addressed (PATCH is
+	// a partial update) and report the persisted result. Writing untouched columns
+	// would clobber cosmetics the request never referenced:
+	//   - setName:  a name_color or name_gradient field was present (the two move
+	//     together — mutual exclusion is enforced above).
+	//   - setFrame / setFlair: that avatar field was present, OR the viewer is
+	//     non-premium — non-premium saves always re-clear the avatar (downgrade
+	//     enforcement), with avatarFrameID/avatarFlairID already forced to nil above.
+	ctx := c.Request.Context()
+	setName := req.nameColorPresent || req.nameGradientPresent
+	setFrame := req.avatarFrameIDPresent || !hasAccess
+	setFlair := req.avatarFlairIDPresent || !hasAccess
+
+	// No-op PATCH (nothing addressed): report current state without a pointless write.
+	if !setName && !setFrame && !setFlair {
+		full, err := repo.GetFullCosmetics(ctx, viewerID)
+		if err != nil {
+			if logger != nil {
+				logger.Error("Failed to read viewer cosmetics", zap.String("viewer_id", viewerID.String()), zap.Error(err))
+			}
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update cosmetics"})
 			return
 		}
-	} else {
-		if err := repo.UpsertAvatarCosmetics(c.Request.Context(), viewerID, avatarFrameID, avatarFlairID); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update cosmetics"})
-			return
-		}
+		c.JSON(http.StatusOK, cosmeticsResponse(full))
+		return
 	}
 
-	// Step 7: Return updated values
-	var gradientResponse interface{}
-	if req.NameGradient != nil {
-		gradientResponse = req.NameGradient
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"name_color":     req.NameColor,
-		"name_gradient":  gradientResponse,
-		"avatar_frame_id": req.AvatarFrameID,
-		"avatar_flair_id": req.AvatarFlairID,
+	persisted, err := repo.UpsertViewerCosmetics(ctx, viewerID, repository.CosmeticsUpdate{
+		SetName:       setName,
+		NameColor:     req.NameColor,
+		NameGradient:  nameGradientBytes,
+		SetFrame:      setFrame,
+		AvatarFrameID: avatarFrameID,
+		SetFlair:      setFlair,
+		AvatarFlairID: avatarFlairID,
 	})
+	if err != nil {
+		if logger != nil {
+			logger.Error("Failed to upsert viewer cosmetics",
+				zap.String("viewer_id", viewerID.String()),
+				zap.Error(err),
+			)
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update cosmetics"})
+		return
+	}
+
+	// Step 7: Report the actual persisted state returned by the upsert, so the
+	// response never diverges from what was stored (untouched columns, or a zero-UUID
+	// normalized to NULL).
+	c.JSON(http.StatusOK, cosmeticsResponse(persisted))
 }

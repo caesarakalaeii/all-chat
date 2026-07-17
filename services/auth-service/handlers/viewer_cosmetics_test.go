@@ -34,53 +34,73 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
+	"go.uber.org/zap/zaptest/observer"
 )
 
-// mockCosmeticsUpsertRepo implements cosmeticsUpsertRepo for testing.
+// mockCosmeticsUpsertRepo implements cosmeticsUpsertRepo for testing. It records
+// each partial-update call AND maintains an in-memory `stored` row that applies the
+// same per-column semantics as the real UPSERT — so the handler's response (built
+// from the returned row) reflects exactly what a column-selective write persists.
 type mockCosmeticsUpsertRepo struct {
 	upsertCalls []struct {
-		viewerID      uuid.UUID
-		nameColor     *string
-		nameGradient  []byte
-		avatarFrameID *uuid.UUID
-		avatarFlairID *uuid.UUID
-	}
-	avatarUpsertCalls []struct {
-		viewerID      uuid.UUID
-		avatarFrameID *uuid.UUID
-		avatarFlairID *uuid.UUID
+		viewerID uuid.UUID
+		update   repository.CosmeticsUpdate
 	}
 	upsertErr error
+	getErr    error
+	stored    *repository.ViewerCosmetics // simulates the persisted row (nil = no row)
 }
 
-func (m *mockCosmeticsUpsertRepo) UpsertViewerCosmetics(ctx context.Context, viewerID uuid.UUID, nameColor *string, nameGradient []byte, avatarFrameID *uuid.UUID, avatarFlairID *uuid.UUID) error {
+func (m *mockCosmeticsUpsertRepo) UpsertViewerCosmetics(ctx context.Context, viewerID uuid.UUID, u repository.CosmeticsUpdate) (*repository.ViewerCosmetics, error) {
 	m.upsertCalls = append(m.upsertCalls, struct {
-		viewerID      uuid.UUID
-		nameColor     *string
-		nameGradient  []byte
-		avatarFrameID *uuid.UUID
-		avatarFlairID *uuid.UUID
-	}{viewerID, nameColor, nameGradient, avatarFrameID, avatarFlairID})
-	return m.upsertErr
+		viewerID uuid.UUID
+		update   repository.CosmeticsUpdate
+	}{viewerID, u})
+	if m.upsertErr != nil {
+		return nil, m.upsertErr
+	}
+	if m.stored == nil {
+		m.stored = &repository.ViewerCosmetics{}
+	}
+	// Apply only the addressed column groups (mirrors the SQL CASE-per-flag).
+	if u.SetName {
+		m.stored.NameColor = u.NameColor
+		m.stored.NameGradient = u.NameGradient
+	}
+	if u.SetFrame {
+		m.stored.AvatarFrameID = u.AvatarFrameID
+	}
+	if u.SetFlair {
+		m.stored.AvatarFlairID = u.AvatarFlairID
+	}
+	cp := *m.stored // return a copy, as RETURNING yields a snapshot
+	return &cp, nil
 }
 
-func (m *mockCosmeticsUpsertRepo) UpsertAvatarCosmetics(ctx context.Context, viewerID uuid.UUID, avatarFrameID *uuid.UUID, avatarFlairID *uuid.UUID) error {
-	m.avatarUpsertCalls = append(m.avatarUpsertCalls, struct {
-		viewerID      uuid.UUID
-		avatarFrameID *uuid.UUID
-		avatarFlairID *uuid.UUID
-	}{viewerID, avatarFrameID, avatarFlairID})
-	return m.upsertErr
+func (m *mockCosmeticsUpsertRepo) GetFullCosmetics(ctx context.Context, viewerID uuid.UUID) (*repository.ViewerCosmetics, error) {
+	return m.stored, m.getErr
+}
+
+// lastUpdate returns the CosmeticsUpdate from the single recorded upsert call,
+// failing the test if the number of calls is not exactly one.
+func (m *mockCosmeticsUpsertRepo) lastUpdate(t *testing.T) repository.CosmeticsUpdate {
+	t.Helper()
+	if len(m.upsertCalls) != 1 {
+		t.Fatalf("expected exactly 1 upsert call, got %d", len(m.upsertCalls))
+	}
+	return m.upsertCalls[0].update
 }
 
 // testCosmeticsHandler wraps handlePatchCosmeticsLogic with a mock repo for unit testing.
 type testCosmeticsHandler struct {
-	repo cosmeticsUpsertRepo
+	repo   cosmeticsUpsertRepo
+	logger *zap.Logger
 }
 
 func (h *testCosmeticsHandler) Handle(c *gin.Context) {
-	handlePatchCosmeticsLogic(c, h.repo)
+	handlePatchCosmeticsLogic(c, h.repo, h.logger)
 }
 
 // setupCosmeticsTest creates a gin router that simulates the JWT middleware setting claims.
@@ -92,11 +112,10 @@ func setupCosmeticsTest(t *testing.T, viewerIDStr, platform, platformUserID stri
 // setupCosmeticsTestWithPremium creates a gin router with configurable is_premium flag.
 func setupCosmeticsTestWithPremium(t *testing.T, viewerIDStr, platform, platformUserID string, isPremium bool) (*gin.Engine, *mockCosmeticsUpsertRepo) {
 	t.Helper()
-	_ = zaptest.NewLogger(t) // ensure logger is available
 	gin.SetMode(gin.TestMode)
 
 	mock := &mockCosmeticsUpsertRepo{}
-	h := &testCosmeticsHandler{repo: mock}
+	h := &testCosmeticsHandler{repo: mock, logger: zaptest.NewLogger(t)}
 
 	router := gin.New()
 	router.PATCH("/viewer/cosmetics", func(c *gin.Context) {
@@ -115,37 +134,42 @@ func setupCosmeticsTestWithPremium(t *testing.T, viewerIDStr, platform, platform
 	return router, mock
 }
 
-func TestPatchCosmetics_ValidColor(t *testing.T) {
-	viewerID := uuid.New()
-	router, mock := setupCosmeticsTest(t, viewerID.String(), "twitch", "12345")
-
-	body := `{"name_color":"#ff6600"}`
+func doPatch(t *testing.T, router *gin.Engine, body string) *httptest.ResponseRecorder {
+	t.Helper()
 	req := httptest.NewRequest(http.MethodPatch, "/viewer/cosmetics", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
+	return w
+}
 
-	if w.Code != http.StatusOK {
-		t.Errorf("expected 200, got %d body=%s", w.Code, w.Body.String())
-	}
-
+func parseBody(t *testing.T, w *httptest.ResponseRecorder) map[string]interface{} {
+	t.Helper()
 	var resp map[string]interface{}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("failed to parse response: %v", err)
 	}
-	if resp["name_color"] != "#ff6600" {
+	return resp
+}
+
+func TestPatchCosmetics_ValidColor(t *testing.T) {
+	viewerID := uuid.New()
+	router, mock := setupCosmeticsTest(t, viewerID.String(), "twitch", "12345")
+
+	w := doPatch(t, router, `{"name_color":"#ff6600"}`)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	if resp := parseBody(t, w); resp["name_color"] != "#ff6600" {
 		t.Errorf("name_color = %v, want #ff6600", resp["name_color"])
 	}
 
-	// Verify DB was called with correct args
-	if len(mock.upsertCalls) != 1 {
-		t.Fatalf("expected 1 upsert call, got %d", len(mock.upsertCalls))
-	}
 	if mock.upsertCalls[0].viewerID != viewerID {
 		t.Errorf("upsert called with wrong viewerID")
 	}
-	if mock.upsertCalls[0].nameColor == nil || *mock.upsertCalls[0].nameColor != "#ff6600" {
-		t.Errorf("upsert called with wrong nameColor")
+	u := mock.lastUpdate(t)
+	if !u.SetName || u.NameColor == nil || *u.NameColor != "#ff6600" {
+		t.Errorf("expected SetName with nameColor #ff6600, got %+v", u)
 	}
 }
 
@@ -153,45 +177,22 @@ func TestPatchCosmetics_NullColor(t *testing.T) {
 	viewerID := uuid.New()
 	router, mock := setupCosmeticsTest(t, viewerID.String(), "twitch", "12345")
 
-	body := `{"name_color":null}`
-	req := httptest.NewRequest(http.MethodPatch, "/viewer/cosmetics", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
+	w := doPatch(t, router, `{"name_color":null}`)
 	if w.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d body=%s", w.Code, w.Body.String())
 	}
-
-	var resp map[string]interface{}
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("failed to parse response: %v", err)
+	if resp := parseBody(t, w); resp["name_color"] != nil {
+		t.Errorf("expected name_color null, got %v", resp["name_color"])
 	}
-	// name_color should be null
-	if val, exists := resp["name_color"]; exists && val != nil {
-		t.Errorf("expected name_color to be null, got %v", val)
-	}
-
-	// Verify DB was called with nil nameColor
-	if len(mock.upsertCalls) != 1 {
-		t.Fatalf("expected 1 upsert call, got %d", len(mock.upsertCalls))
-	}
-	if mock.upsertCalls[0].nameColor != nil {
-		t.Errorf("expected nil nameColor for null input, got %v", *mock.upsertCalls[0].nameColor)
+	if u := mock.lastUpdate(t); !u.SetName || u.NameColor != nil {
+		t.Errorf("expected SetName with nil nameColor, got %+v", u)
 	}
 }
 
 func TestPatchCosmetics_InvalidHex(t *testing.T) {
 	viewerID := uuid.New()
 	router, _ := setupCosmeticsTest(t, viewerID.String(), "twitch", "12345")
-
-	body := `{"name_color":"notahex"}`
-	req := httptest.NewRequest(http.MethodPatch, "/viewer/cosmetics", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusBadRequest {
+	if w := doPatch(t, router, `{"name_color":"notahex"}`); w.Code != http.StatusBadRequest {
 		t.Errorf("expected 400 for invalid hex, got %d body=%s", w.Code, w.Body.String())
 	}
 }
@@ -199,29 +200,14 @@ func TestPatchCosmetics_InvalidHex(t *testing.T) {
 func TestPatchCosmetics_MissingViewerID(t *testing.T) {
 	// Empty viewer_id simulates a pre-Phase-28 token (old token without viewer_id claim)
 	router, _ := setupCosmeticsTest(t, "", "twitch", "12345")
-
-	body := `{"name_color":"#ff6600"}`
-	req := httptest.NewRequest(http.MethodPatch, "/viewer/cosmetics", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusUnauthorized {
+	if w := doPatch(t, router, `{"name_color":"#ff6600"}`); w.Code != http.StatusUnauthorized {
 		t.Errorf("expected 401 for missing viewer_id, got %d body=%s", w.Code, w.Body.String())
 	}
 }
 
 func TestPatchCosmetics_InvalidViewerIDFormat(t *testing.T) {
-	// Non-UUID viewer_id value
 	router, _ := setupCosmeticsTest(t, "not-a-uuid", "twitch", "12345")
-
-	body := `{"name_color":"#ff6600"}`
-	req := httptest.NewRequest(http.MethodPatch, "/viewer/cosmetics", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusUnauthorized {
+	if w := doPatch(t, router, `{"name_color":"#ff6600"}`); w.Code != http.StatusUnauthorized {
 		t.Errorf("expected 401 for invalid viewer_id format, got %d body=%s", w.Code, w.Body.String())
 	}
 }
@@ -229,243 +215,304 @@ func TestPatchCosmetics_InvalidViewerIDFormat(t *testing.T) {
 // Phase 29: gradient tests
 
 func TestPatchCosmetics_GradientAccepted(t *testing.T) {
-	// Premium viewer with a valid gradient should get 200.
 	viewerID := uuid.New()
 	router, mock := setupCosmeticsTestWithPremium(t, viewerID.String(), "twitch", "12345", true)
 
-	body := `{"name_gradient":{"type":"linear","colors":["#ff0000","#0000ff"],"angle":90}}`
-	req := httptest.NewRequest(http.MethodPatch, "/viewer/cosmetics", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
+	w := doPatch(t, router, `{"name_gradient":{"type":"linear","colors":["#ff0000","#0000ff"],"angle":90}}`)
 	if w.Code != http.StatusOK {
 		t.Errorf("expected 200 for premium gradient, got %d body=%s", w.Code, w.Body.String())
 	}
-
-	if len(mock.upsertCalls) != 1 {
-		t.Fatalf("expected 1 upsert call, got %d", len(mock.upsertCalls))
+	u := mock.lastUpdate(t)
+	// A gradient-only PATCH addresses only the name group; avatar columns are untouched.
+	if !u.SetName || u.SetFrame || u.SetFlair {
+		t.Errorf("expected SetName only, got %+v", u)
 	}
-	if mock.upsertCalls[0].nameColor != nil {
+	if u.NameColor != nil {
 		t.Errorf("name_color should be nil when gradient is set (mutual exclusion)")
 	}
-	if mock.upsertCalls[0].nameGradient == nil {
+	if u.NameGradient == nil {
 		t.Errorf("expected nameGradient bytes to be set")
 	}
 }
 
 func TestPatchCosmetics_GradientRejectedNonPremium(t *testing.T) {
-	// Non-premium viewer attempting to set gradient should get 403.
 	viewerID := uuid.New()
 	router, _ := setupCosmeticsTestWithPremium(t, viewerID.String(), "twitch", "12345", false)
-
-	body := `{"name_gradient":{"type":"linear","colors":["#ff0000","#0000ff"],"angle":90}}`
-	req := httptest.NewRequest(http.MethodPatch, "/viewer/cosmetics", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
+	w := doPatch(t, router, `{"name_gradient":{"type":"linear","colors":["#ff0000","#0000ff"],"angle":90}}`)
 	if w.Code != http.StatusForbidden {
 		t.Errorf("expected 403 for non-premium gradient attempt, got %d body=%s", w.Code, w.Body.String())
 	}
 }
 
 func TestPatchCosmetics_GradientValidation(t *testing.T) {
-	// Invalid gradient (1 color, angle 400) should return 400.
 	viewerID := uuid.New()
 	router, _ := setupCosmeticsTestWithPremium(t, viewerID.String(), "twitch", "12345", true)
-
-	// Only 1 color — invalid
-	body := `{"name_gradient":{"type":"linear","colors":["#ff0000"],"angle":400}}`
-	req := httptest.NewRequest(http.MethodPatch, "/viewer/cosmetics", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
+	w := doPatch(t, router, `{"name_gradient":{"type":"linear","colors":["#ff0000"],"angle":400}}`)
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected 400 for invalid gradient (1 color), got %d body=%s", w.Code, w.Body.String())
 	}
 }
 
 func TestPatchCosmetics_GradientValidation_BadAngle(t *testing.T) {
-	// Valid colors but angle out of range should return 400.
 	viewerID := uuid.New()
 	router, _ := setupCosmeticsTestWithPremium(t, viewerID.String(), "twitch", "12345", true)
-
-	body := `{"name_gradient":{"type":"linear","colors":["#ff0000","#00ff00"],"angle":400}}`
-	req := httptest.NewRequest(http.MethodPatch, "/viewer/cosmetics", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
+	w := doPatch(t, router, `{"name_gradient":{"type":"linear","colors":["#ff0000","#00ff00"],"angle":400}}`)
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected 400 for angle 400, got %d body=%s", w.Code, w.Body.String())
 	}
 }
 
 func TestPatchCosmetics_MutualExclusion(t *testing.T) {
-	// Gradient PATCH should nullify name_color in the DB call.
 	viewerID := uuid.New()
 	router, mock := setupCosmeticsTestWithPremium(t, viewerID.String(), "twitch", "12345", true)
 
-	// Send gradient only — name_color should be nil in upsert call
-	body := `{"name_gradient":{"type":"linear","colors":["#aabbcc","#112233"],"angle":45}}`
-	req := httptest.NewRequest(http.MethodPatch, "/viewer/cosmetics", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
+	w := doPatch(t, router, `{"name_gradient":{"type":"linear","colors":["#aabbcc","#112233"],"angle":45}}`)
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
 	}
-
-	if len(mock.upsertCalls) != 1 {
-		t.Fatalf("expected 1 upsert call, got %d", len(mock.upsertCalls))
+	if u := mock.lastUpdate(t); u.NameColor != nil {
+		t.Errorf("mutual exclusion: name_color should be nil when gradient is set, got %v", *u.NameColor)
 	}
-	if mock.upsertCalls[0].nameColor != nil {
-		t.Errorf("mutual exclusion: name_color should be nil when gradient is set, got %v", *mock.upsertCalls[0].nameColor)
-	}
-
-	// Response should have null name_color
-	var resp map[string]interface{}
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("failed to parse response: %v", err)
-	}
-	if val, exists := resp["name_color"]; exists && val != nil {
-		t.Errorf("response name_color should be null when gradient is set, got %v", val)
+	if resp := parseBody(t, w); resp["name_color"] != nil {
+		t.Errorf("response name_color should be null when gradient is set, got %v", resp["name_color"])
 	}
 }
 
 // Phase 30: avatar frame / flair tests
 
 func TestPatchCosmetics_AvatarFrameID_PremiumAccepted(t *testing.T) {
-	// Premium viewer with a valid avatar_frame_id should get 200.
-	// Since name_color and name_gradient are absent from the body, the handler
-	// routes to UpsertAvatarCosmetics to avoid NULLing out saved name color.
 	viewerID := uuid.New()
 	router, mock := setupCosmeticsTestWithPremium(t, viewerID.String(), "twitch", "12345", true)
 
 	frameID := uuid.New()
-	body := `{"avatar_frame_id":"` + frameID.String() + `"}`
-	req := httptest.NewRequest(http.MethodPatch, "/viewer/cosmetics", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
+	w := doPatch(t, router, `{"avatar_frame_id":"`+frameID.String()+`"}`)
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200 for premium avatar_frame_id, got %d body=%s", w.Code, w.Body.String())
 	}
-	// Avatar-only PATCH routes to UpsertAvatarCosmetics, not UpsertViewerCosmetics.
-	if len(mock.upsertCalls) != 0 {
-		t.Fatalf("expected 0 full upsert calls for avatar-only PATCH, got %d", len(mock.upsertCalls))
+	u := mock.lastUpdate(t)
+	// Frame-only PATCH addresses only the frame; name and flair stay untouched.
+	if u.SetName || u.SetFlair || !u.SetFrame {
+		t.Errorf("expected SetFrame only, got %+v", u)
 	}
-	if len(mock.avatarUpsertCalls) != 1 {
-		t.Fatalf("expected 1 avatar upsert call, got %d", len(mock.avatarUpsertCalls))
-	}
-	if mock.avatarUpsertCalls[0].avatarFrameID == nil {
-		t.Error("expected avatarFrameID to be non-nil in avatar upsert call")
-	} else if *mock.avatarUpsertCalls[0].avatarFrameID != frameID {
-		t.Errorf("expected avatarFrameID=%v, got %v", frameID, *mock.avatarUpsertCalls[0].avatarFrameID)
+	if u.AvatarFrameID == nil || *u.AvatarFrameID != frameID {
+		t.Errorf("expected avatarFrameID=%v, got %v", frameID, u.AvatarFrameID)
 	}
 }
 
 func TestPatchCosmetics_AvatarFrameID_NonPremiumRejected(t *testing.T) {
-	// Non-premium viewer attempting to set avatar_frame_id should get 403.
 	viewerID := uuid.New()
 	router, _ := setupCosmeticsTestWithPremium(t, viewerID.String(), "twitch", "12345", false)
-
 	frameID := uuid.New()
-	body := `{"avatar_frame_id":"` + frameID.String() + `"}`
-	req := httptest.NewRequest(http.MethodPatch, "/viewer/cosmetics", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusForbidden {
+	if w := doPatch(t, router, `{"avatar_frame_id":"`+frameID.String()+`"}`); w.Code != http.StatusForbidden {
 		t.Errorf("expected 403 for non-premium avatar_frame_id, got %d body=%s", w.Code, w.Body.String())
 	}
 }
 
 func TestPatchCosmetics_AvatarFlairID_NonPremiumRejected(t *testing.T) {
-	// Non-premium viewer attempting to set avatar_flair_id should get 403.
 	viewerID := uuid.New()
 	router, _ := setupCosmeticsTestWithPremium(t, viewerID.String(), "twitch", "12345", false)
-
 	flairID := uuid.New()
-	body := `{"avatar_flair_id":"` + flairID.String() + `"}`
-	req := httptest.NewRequest(http.MethodPatch, "/viewer/cosmetics", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusForbidden {
+	if w := doPatch(t, router, `{"avatar_flair_id":"`+flairID.String()+`"}`); w.Code != http.StatusForbidden {
 		t.Errorf("expected 403 for non-premium avatar_flair_id, got %d body=%s", w.Code, w.Body.String())
 	}
 }
 
 func TestPatchCosmetics_NonPremium_DowngradeClears(t *testing.T) {
-	// Non-premium viewer sending only name_color: DB call should pass nil, nil for frame/flair
-	// AND the frame/flair clear UPDATE should fire (avatarFrameID = &uuid.Nil in upsert).
+	// Non-premium viewer sending only name_color: the avatar columns must be cleared
+	// with NIL POINTERS (→ SQL NULL), NOT &uuid.Nil. A pointer to the zero UUID is
+	// encoded as the literal '00000000-...' value, which violates the avatar FKs and
+	// 500s the request against a real database (prod bug reported 2026-07-17).
 	viewerID := uuid.New()
 	router, mock := setupCosmeticsTestWithPremium(t, viewerID.String(), "twitch", "12345", false)
 
-	body := `{"name_color":"#00ff00"}`
-	req := httptest.NewRequest(http.MethodPatch, "/viewer/cosmetics", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
+	w := doPatch(t, router, `{"name_color":"#00ff00"}`)
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
 	}
-	if len(mock.upsertCalls) != 1 {
-		t.Fatalf("expected 1 upsert call, got %d", len(mock.upsertCalls))
+	u := mock.lastUpdate(t)
+	// Downgrade enforcement: non-premium forces both avatar columns cleared to nil.
+	if !u.SetFrame || u.AvatarFrameID != nil {
+		t.Errorf("expected SetFrame with nil avatarFrameID (→ SQL NULL), got %+v", u)
 	}
-	// Downgrade enforcement: avatarFrameID should be &uuid.Nil (clear sentinel)
-	if mock.upsertCalls[0].avatarFrameID == nil {
-		t.Error("expected avatarFrameID=&uuid.Nil for downgrade clear, got nil pointer")
-	} else if *mock.upsertCalls[0].avatarFrameID != uuid.Nil {
-		t.Errorf("expected avatarFrameID=uuid.Nil, got %v", *mock.upsertCalls[0].avatarFrameID)
+	if !u.SetFlair || u.AvatarFlairID != nil {
+		t.Errorf("expected SetFlair with nil avatarFlairID (→ SQL NULL), got %+v", u)
 	}
-	if mock.upsertCalls[0].avatarFlairID == nil {
-		t.Error("expected avatarFlairID=&uuid.Nil for downgrade clear, got nil pointer")
-	} else if *mock.upsertCalls[0].avatarFlairID != uuid.Nil {
-		t.Errorf("expected avatarFlairID=uuid.Nil, got %v", *mock.upsertCalls[0].avatarFlairID)
+}
+
+func TestPatchCosmetics_NonPremium_AvatarOnlyClearsWithNil(t *testing.T) {
+	// The frontend avatar card sends {"avatar_frame_id":null,"avatar_flair_id":null}
+	// for "None". For a non-premium viewer this must pass nil pointers (→ SQL NULL),
+	// not &uuid.Nil. This is the exact avatar-save path that 500'd in prod.
+	viewerID := uuid.New()
+	router, mock := setupCosmeticsTestWithPremium(t, viewerID.String(), "twitch", "12345", false)
+
+	w := doPatch(t, router, `{"avatar_frame_id":null,"avatar_flair_id":null}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	u := mock.lastUpdate(t)
+	if !u.SetFrame || u.AvatarFrameID != nil || !u.SetFlair || u.AvatarFlairID != nil {
+		t.Errorf("expected both avatar columns cleared to nil, got %+v", u)
+	}
+}
+
+func TestPatchCosmetics_Premium_ZeroUUIDNormalizedToNil(t *testing.T) {
+	// Defensive: even a premium viewer sending the literal zero UUID must have it
+	// normalized to nil (→ SQL NULL) so it clears the slot rather than tripping the FK.
+	viewerID := uuid.New()
+	router, mock := setupCosmeticsTestWithPremium(t, viewerID.String(), "twitch", "12345", true)
+
+	w := doPatch(t, router, `{"avatar_frame_id":"00000000-0000-0000-0000-000000000000","avatar_flair_id":"00000000-0000-0000-0000-000000000000"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	if u := mock.lastUpdate(t); u.AvatarFrameID != nil || u.AvatarFlairID != nil {
+		t.Errorf("expected zero-UUID avatar ids normalized to nil, got %+v", u)
+	}
+}
+
+func TestPatchCosmetics_UpsertError_Returns500AndLogs(t *testing.T) {
+	// When the repository upsert fails, the handler must return 500 AND log the
+	// underlying error (previously it swallowed the error, leaving only the
+	// middleware access log — impossible to diagnose in prod).
+	viewerID := uuid.New()
+	gin.SetMode(gin.TestMode)
+
+	core, logs := observer.New(zap.ErrorLevel)
+	mock := &mockCosmeticsUpsertRepo{upsertErr: fmt.Errorf("boom: FK violation")}
+	h := &testCosmeticsHandler{repo: mock, logger: zap.New(core)}
+
+	router := gin.New()
+	router.PATCH("/viewer/cosmetics", func(c *gin.Context) {
+		c.Set("viewer_id", viewerID.String())
+		c.Set("is_premium", false)
+		c.Next()
+	}, h.Handle)
+
+	if w := doPatch(t, router, `{"name_color":"#00ff00"}`); w.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d body=%s", w.Code, w.Body.String())
+	}
+	if logs.Len() == 0 {
+		t.Error("expected the upsert failure to be logged, got no error logs")
+	}
+}
+
+func TestPatchCosmetics_Premium_NameOnly_PreservesAvatar(t *testing.T) {
+	// Regression ([0]): a name-color/gradient-only PATCH must NOT clear a premium
+	// viewer's saved avatar frame/flair. It addresses only the name group, so the
+	// avatar columns are left untouched and reported unchanged.
+	viewerID := uuid.New()
+	router, mock := setupCosmeticsTestWithPremium(t, viewerID.String(), "twitch", "12345", true)
+
+	savedFrame := uuid.New()
+	mock.stored = &repository.ViewerCosmetics{AvatarFrameID: &savedFrame}
+
+	w := doPatch(t, router, `{"name_color":"#00ff00","name_gradient":null}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	if u := mock.lastUpdate(t); !u.SetName || u.SetFrame || u.SetFlair {
+		t.Errorf("name-only PATCH must address only the name group, got %+v", u)
+	}
+	resp := parseBody(t, w)
+	if resp["avatar_frame_id"] != savedFrame.String() {
+		t.Errorf("expected preserved avatar_frame_id=%s, got %v", savedFrame, resp["avatar_frame_id"])
+	}
+	if resp["name_color"] != "#00ff00" {
+		t.Errorf("expected name_color=#00ff00, got %v", resp["name_color"])
+	}
+}
+
+func TestPatchCosmetics_Premium_FlairOnly_PreservesFrame(t *testing.T) {
+	// Regression (re-review): a PATCH touching only one avatar column must not clear
+	// the sibling column. Here a flair-only change must preserve the saved frame.
+	viewerID := uuid.New()
+	router, mock := setupCosmeticsTestWithPremium(t, viewerID.String(), "twitch", "12345", true)
+
+	savedFrame := uuid.New()
+	mock.stored = &repository.ViewerCosmetics{AvatarFrameID: &savedFrame}
+
+	newFlair := uuid.New()
+	w := doPatch(t, router, `{"avatar_flair_id":"`+newFlair.String()+`"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	if u := mock.lastUpdate(t); u.SetFrame || !u.SetFlair {
+		t.Errorf("flair-only PATCH must set flair and leave frame untouched, got %+v", u)
+	}
+	resp := parseBody(t, w)
+	if resp["avatar_frame_id"] != savedFrame.String() {
+		t.Errorf("expected preserved avatar_frame_id=%s, got %v", savedFrame, resp["avatar_frame_id"])
+	}
+	if resp["avatar_flair_id"] != newFlair.String() {
+		t.Errorf("expected avatar_flair_id=%s, got %v", newFlair, resp["avatar_flair_id"])
+	}
+}
+
+func TestPatchCosmetics_AvatarOnly_ResponseReflectsPreservedName(t *testing.T) {
+	// Regression ([4]): an avatar-only PATCH preserves the stored name color, and the
+	// response must report that preserved value — not echo null from the (absent)
+	// request name field.
+	viewerID := uuid.New()
+	router, mock := setupCosmeticsTestWithPremium(t, viewerID.String(), "twitch", "12345", true)
+
+	savedColor := "#ff0000"
+	mock.stored = &repository.ViewerCosmetics{NameColor: &savedColor}
+
+	frameID := uuid.New()
+	w := doPatch(t, router, `{"avatar_frame_id":"`+frameID.String()+`"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	resp := parseBody(t, w)
+	if resp["name_color"] != savedColor {
+		t.Errorf("avatar-only PATCH must report preserved name_color=%s, got %v", savedColor, resp["name_color"])
+	}
+	if resp["avatar_frame_id"] != frameID.String() {
+		t.Errorf("expected avatar_frame_id=%s, got %v", frameID, resp["avatar_frame_id"])
+	}
+}
+
+func TestPatchCosmetics_Premium_ZeroUUID_ResponseShowsNull(t *testing.T) {
+	// Regression ([7]): a zero-UUID avatar selection is normalized to NULL before the
+	// write, so the response must report null — not echo the zero UUID.
+	viewerID := uuid.New()
+	router, _ := setupCosmeticsTestWithPremium(t, viewerID.String(), "twitch", "12345", true)
+
+	w := doPatch(t, router, `{"avatar_frame_id":"00000000-0000-0000-0000-000000000000","avatar_flair_id":"00000000-0000-0000-0000-000000000000"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	resp := parseBody(t, w)
+	if resp["avatar_frame_id"] != nil {
+		t.Errorf("expected avatar_frame_id null (zero-UUID normalized), got %v", resp["avatar_frame_id"])
+	}
+	if resp["avatar_flair_id"] != nil {
+		t.Errorf("expected avatar_flair_id null (zero-UUID normalized), got %v", resp["avatar_flair_id"])
 	}
 }
 
 func TestPatchCosmetics_AvatarOnly_DoesNotClearNameColor(t *testing.T) {
 	// Regression test: saving avatar cosmetics (no name_color/name_gradient in body)
-	// must NOT call UpsertViewerCosmetics (which would NULL out the stored name color).
-	// It must call UpsertAvatarCosmetics instead, leaving name cosmetics untouched.
+	// must not address the name group (which would NULL a stored name color).
 	viewerID := uuid.New()
 	router, mock := setupCosmeticsTestWithPremium(t, viewerID.String(), "twitch", "12345", true)
 
 	frameID := uuid.New()
 	flairID := uuid.New()
-	body := `{"avatar_frame_id":"` + frameID.String() + `","avatar_flair_id":"` + flairID.String() + `"}`
-	req := httptest.NewRequest(http.MethodPatch, "/viewer/cosmetics", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
+	w := doPatch(t, router, `{"avatar_frame_id":"`+frameID.String()+`","avatar_flair_id":"`+flairID.String()+`"}`)
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
 	}
-	// Full upsert must NOT be called — it would clear name_color.
-	if len(mock.upsertCalls) != 0 {
-		t.Fatalf("avatar-only PATCH must not call UpsertViewerCosmetics, got %d call(s)", len(mock.upsertCalls))
+	u := mock.lastUpdate(t)
+	if u.SetName {
+		t.Errorf("avatar-only PATCH must not address the name group, got %+v", u)
 	}
-	// Avatar-targeted upsert must be called.
-	if len(mock.avatarUpsertCalls) != 1 {
-		t.Fatalf("expected 1 UpsertAvatarCosmetics call, got %d", len(mock.avatarUpsertCalls))
+	if u.AvatarFrameID == nil || *u.AvatarFrameID != frameID {
+		t.Errorf("expected avatarFrameID=%v, got %v", frameID, u.AvatarFrameID)
 	}
-	c := mock.avatarUpsertCalls[0]
-	if c.avatarFrameID == nil || *c.avatarFrameID != frameID {
-		t.Errorf("expected avatarFrameID=%v, got %v", frameID, c.avatarFrameID)
-	}
-	if c.avatarFlairID == nil || *c.avatarFlairID != flairID {
-		t.Errorf("expected avatarFlairID=%v, got %v", flairID, c.avatarFlairID)
+	if u.AvatarFlairID == nil || *u.AvatarFlairID != flairID {
+		t.Errorf("expected avatarFlairID=%v, got %v", flairID, u.AvatarFlairID)
 	}
 }
 
@@ -498,7 +545,6 @@ func TestPatchCosmetics_CacheInvalidation_AllLinkedPlatforms(t *testing.T) {
 	kickUserID := "kick-user-789"
 
 	// Seed Redis with identity cache entries for all three platforms.
-	// These simulate cached entries that were created when each platform first saw a message.
 	gradientJSON := `{"type":"linear","colors":["#ff0000","#0000ff"],"angle":90}`
 	cachedWithGradient := fmt.Sprintf(`{"viewer_id":"%s","name_color":null,"name_gradient":%s}`, viewerID, gradientJSON)
 	nullSentinel := "null"
@@ -506,7 +552,6 @@ func TestPatchCosmetics_CacheInvalidation_AllLinkedPlatforms(t *testing.T) {
 	redisClient.Set(context.Background(), fmt.Sprintf("viewer:identity:youtube:%s", youtubeUserID), nullSentinel, 0)
 	redisClient.Set(context.Background(), fmt.Sprintf("viewer:identity:kick:%s", kickUserID), nullSentinel, 0)
 
-	// Build handler with mock linked platforms getter that returns all three platforms.
 	mockRepo := &mockCosmeticsUpsertRepo{}
 	mockLinked := &mockLinkedPlatformsGetter{
 		platforms: []repository.LinkedPlatform{
@@ -533,12 +578,9 @@ func TestPatchCosmetics_CacheInvalidation_AllLinkedPlatforms(t *testing.T) {
 		c.Set("platform_user_id", twitchUserID)
 		c.Next()
 	}, func(c *gin.Context) {
-		handlePatchCosmeticsLogic(c, mockRepo)
+		handlePatchCosmeticsLogic(c, mockRepo, logger)
 	}, func(c *gin.Context) {
 		// Simulate the cache invalidation portion of HandlePatchCosmetics.
-		// We call it as a separate step here since we can't use h.HandlePatchCosmetics
-		// (which calls handlePatchCosmeticsLogic internally — we used the separate approach
-		// to avoid double-calling). Instead we test the invalidation step directly.
 		if c.Writer.Status() == http.StatusOK {
 			vidVal, _ := c.Get("viewer_id")
 			vidStr := vidVal.(string)
@@ -551,17 +593,10 @@ func TestPatchCosmetics_CacheInvalidation_AllLinkedPlatforms(t *testing.T) {
 		}
 	})
 
-	body := `{"name_color":"#aabbcc"}`
-	req := httptest.NewRequest(http.MethodPatch, "/viewer/cosmetics", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
+	if w := doPatch(t, router, `{"name_color":"#aabbcc"}`); w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
 	}
 
-	// All three cache keys must be gone.
 	for _, tc := range []struct {
 		platform string
 		userID   string
@@ -571,32 +606,23 @@ func TestPatchCosmetics_CacheInvalidation_AllLinkedPlatforms(t *testing.T) {
 		{"kick", kickUserID},
 	} {
 		key := fmt.Sprintf("viewer:identity:%s:%s", tc.platform, tc.userID)
-		exists := mr.Exists(key)
-		if exists {
+		if mr.Exists(key) {
 			t.Errorf("cache key %q should have been deleted but still exists", key)
 		}
 	}
 }
 
 func TestPatchCosmetics_AvatarFrameID_ResponseIncludes(t *testing.T) {
-	// Response JSON must include avatar_frame_id field.
+	// Response JSON must include avatar_frame_id and avatar_flair_id fields.
 	viewerID := uuid.New()
 	router, _ := setupCosmeticsTestWithPremium(t, viewerID.String(), "twitch", "12345", true)
 
 	frameID := uuid.New()
-	body := `{"avatar_frame_id":"` + frameID.String() + `"}`
-	req := httptest.NewRequest(http.MethodPatch, "/viewer/cosmetics", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
+	w := doPatch(t, router, `{"avatar_frame_id":"`+frameID.String()+`"}`)
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
 	}
-	var resp map[string]interface{}
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("failed to parse response: %v", err)
-	}
+	resp := parseBody(t, w)
 	if _, exists := resp["avatar_frame_id"]; !exists {
 		t.Error("response missing avatar_frame_id field")
 	}
