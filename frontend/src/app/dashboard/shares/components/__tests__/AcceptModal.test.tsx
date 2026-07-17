@@ -22,9 +22,11 @@
  * Tests for the share request acceptance modal with form validation.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
-import { AcceptModal } from './AcceptModal'
+// @vitest-environment jsdom
+import '@testing-library/jest-dom/vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react'
+import { AcceptModal } from '../AcceptModal'
 import { sharesApi } from '@/lib/api/shares'
 import { overlaysApi } from '@/lib/api/overlays'
 import type { ShareRequest } from '@/lib/types/share'
@@ -39,6 +41,10 @@ vi.mock('react-hot-toast', () => ({
     error: vi.fn(),
   },
 }))
+
+// The dialog renders into document.body via a portal; unmount between tests
+// so stale portals do not leak into the next test's queries.
+afterEach(() => cleanup())
 
 const mockRequest: ShareRequest = {
   id: 'share-123',
@@ -93,6 +99,9 @@ describe('AcceptModal', () => {
   // Test 1: Modal displays sender name and platform badges
   it('renders sender name and platform badges', async () => {
     render(<AcceptModal request={mockRequest} onClose={mockOnClose} onAccepted={mockOnAccepted} />)
+
+    // Rendered via portal into document.body as an accessible dialog
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
 
     // Check sender name in title
     expect(screen.getByText(/Streamer 123 wants to share with you/i)).toBeInTheDocument()

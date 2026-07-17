@@ -44,14 +44,8 @@
     }
   },
   "src/app/overlays/[id]/page.tsx": {
-    "jsx-a11y/click-events-have-key-events": {
-      "count": 4
-    },
     "jsx-a11y/label-has-associated-control": {
-      "count": 11
-    },
-    "jsx-a11y/no-static-element-interactions": {
-      "count": 4
+      "count": 10
     }
   },
   "src/app/settings/viewer/page.tsx": {
@@ -85,31 +79,12 @@
       "count": 1
     }
   },
-  "src/components/admin/BanModal.tsx": {
-    "jsx-a11y/click-events-have-key-events": {
-      "count": 2
-    },
-    "jsx-a11y/label-has-associated-control": {
-      "count": 1
-    },
-    "jsx-a11y/no-static-element-interactions": {
-      "count": 2
-    }
-  },
   "src/components/appearance/TypographyGroup.tsx": {
     "jsx-a11y/label-has-associated-control": {
       "count": 7
     },
     "no-restricted-syntax": {
       "count": 4
-    }
-  },
-  "src/components/theme-marketplace/ThemeMarketplaceModal.tsx": {
-    "jsx-a11y/click-events-have-key-events": {
-      "count": 1
-    },
-    "jsx-a11y/no-static-element-interactions": {
-      "count": 1
     }
   }
 }

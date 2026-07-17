@@ -25,6 +25,7 @@ import { ToggleSwitch } from './ToggleSwitch'
 import { SliderControl } from './SliderControl'
 import { PremiumBadge } from '@/components/PremiumBadge'
 import { PremiumUpsellLink } from '@/components/PremiumUpsellLink'
+import { AlertDialog } from '@/components/ui/alert-dialog'
 import { useBrowserVoices } from '@/lib/hooks/useBrowserVoices'
 import type { DisplaySettings } from '@/lib/types/overlay'
 
@@ -101,7 +102,7 @@ function SubSectionHeader({ label, first }: SubHeaderProps): React.ReactElement 
   const border = first ? '' : 'border-t border-border pt-4 mt-4'
   return (
     <div className={`flex items-center gap-2 ${border}`}>
-      <span className="text-xs font-semibold uppercase tracking-wide text-text-dim">{label}</span>
+      <span className="text-xs font-semibold tracking-wide text-text-dim uppercase">{label}</span>
     </div>
   )
 }
@@ -164,7 +165,7 @@ function PlatformChipRow({ platforms, onToggle }: PlatformChipRowProps): React.R
             className={
               active
                 ? 'rounded-full border border-twitch bg-twitch/15 px-3 py-1 text-xs text-text'
-                : 'rounded-full border border-border bg-surface-alt px-3 py-1 text-xs text-text-sub'
+                : 'bg-surface-alt rounded-full border border-border px-3 py-1 text-xs text-text-sub'
             }
             aria-pressed={active}
           >
@@ -220,7 +221,7 @@ function ApiKeyInput({
         removeTimerRef.current = null
       }
     },
-    [],
+    []
   )
 
   async function handleSave(): Promise<void> {
@@ -241,9 +242,7 @@ function ApiKeyInput({
       toast.success('API key saved.')
     } catch (e) {
       setError('Could not save. Try again.')
-      toast.error(
-        `Could not save key: ${e instanceof Error ? e.message : 'network error'}`,
-      )
+      toast.error(`Could not save key: ${e instanceof Error ? e.message : 'network error'}`)
     } finally {
       setSaving(false)
     }
@@ -254,10 +253,7 @@ function ApiKeyInput({
     try {
       const r = await onTest()
       if (r.ok) {
-        if (
-          typeof r.charactersRemaining === 'number' &&
-          typeof r.charactersLimit === 'number'
-        ) {
+        if (typeof r.charactersRemaining === 'number' && typeof r.charactersLimit === 'number') {
           setQuota({ remaining: r.charactersRemaining, limit: r.charactersLimit })
         }
       } else {
@@ -342,7 +338,7 @@ function ApiKeyInput({
               spellCheck={false}
               aria-label="ElevenLabs API key"
               disabled={disabled || saving}
-              className="flex-1 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text font-mono placeholder:text-text-dim disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex-1 rounded-lg border border-border bg-surface px-3 py-1.5 font-mono text-sm text-text placeholder:text-text-dim disabled:cursor-not-allowed disabled:opacity-50"
             />
             <button
               type="button"
@@ -350,7 +346,7 @@ function ApiKeyInput({
                 void handleSave()
               }}
               disabled={disabled || saving}
-              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-50"
+              className="hover:bg-surface-alt rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text disabled:cursor-not-allowed disabled:opacity-50"
             >
               {saving ? 'Saving…' : 'Save key'}
             </button>
@@ -374,15 +370,15 @@ function ApiKeyInput({
               void handleTest()
             }}
             disabled={disabled || testing}
-            className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-50"
+            className="hover:bg-surface-alt rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text disabled:cursor-not-allowed disabled:opacity-50"
           >
             {testing ? 'Testing…' : 'Test key'}
           </button>
 
           {quota ? (
             <p className="text-xs text-text-dim">
-              {quota.remaining.toLocaleString()} / {quota.limit.toLocaleString()}
-              {' '}characters this month ({quotaPct}%)
+              {quota.remaining.toLocaleString()} / {quota.limit.toLocaleString()} characters this
+              month ({quotaPct}%)
             </p>
           ) : (
             <p className="text-xs text-text-dim">Click Test key to see your remaining quota.</p>
@@ -394,7 +390,7 @@ function ApiKeyInput({
               void handleRemoveClick()
             }}
             disabled={disabled || removing}
-            className={`rounded-lg border px-3 py-1.5 text-sm hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-50 ${
+            className={`hover:bg-surface-alt rounded-lg border px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-50 ${
               removeArmed
                 ? 'border-red-500 bg-red-500/10 text-red-400'
                 : 'border-border bg-surface text-text-sub'
@@ -439,7 +435,7 @@ function ObsUrlPanel({ obsUrl, onCopy, onRegenerate }: ObsUrlPanelProps): React.
         value={obsUrl}
         onFocus={(e) => e.target.select()}
         aria-label="OBS URL — copy and paste into OBS browser source"
-        className="w-full select-all rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text"
+        className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text select-all"
       />
       <div className="flex gap-2">
         <button
@@ -447,54 +443,41 @@ function ObsUrlPanel({ obsUrl, onCopy, onRegenerate }: ObsUrlPanelProps): React.
           onClick={() => {
             void onCopy()
           }}
-          className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text hover:bg-surface-alt"
+          className="hover:bg-surface-alt rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text"
         >
           Copy OBS URL
         </button>
         <button
           type="button"
           onClick={() => setConfirmOpen(true)}
-          className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text hover:bg-surface-alt"
+          className="hover:bg-surface-alt rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text"
         >
           Regenerate URL
         </button>
       </div>
-      {confirmOpen && (
-        <div
-          role="alertdialog"
-          aria-labelledby="tts-regen-title"
-          aria-describedby="tts-regen-body"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
-        >
-          <div className="max-w-md rounded-lg border border-border bg-surface p-6">
-            <h3 id="tts-regen-title" className="mb-2 text-sm font-medium text-text">
-              Regenerate OBS URL?
-            </h3>
-            <p id="tts-regen-body" className="mb-4 text-xs text-text-sub">
-              This invalidates the current OBS URL. You&apos;ll need to paste the new URL into OBS.
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setConfirmOpen(false)}
-                className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text-sub hover:bg-surface-alt"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  void handleConfirm()
-                }}
-                disabled={rotating}
-                className="rounded-lg border border-red-500 bg-red-500/10 px-3 py-1.5 text-sm text-red-400 hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {rotating ? 'Regenerating…' : 'Regenerate URL'}
-              </button>
-            </div>
+      <AlertDialog.Root open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialog.Content size="sm">
+          <AlertDialog.Title className="text-sm font-medium">Regenerate OBS URL?</AlertDialog.Title>
+          <AlertDialog.Description className="text-xs">
+            This invalidates the current OBS URL. You&apos;ll need to paste the new URL into OBS.
+          </AlertDialog.Description>
+          <div className="mt-4 flex justify-end gap-2">
+            <AlertDialog.Close className="hover:bg-surface-alt rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text-sub focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none">
+              Cancel
+            </AlertDialog.Close>
+            <button
+              type="button"
+              onClick={() => {
+                void handleConfirm()
+              }}
+              disabled={rotating}
+              className="rounded-lg border border-red-500 bg-red-500/10 px-3 py-1.5 text-sm text-red-400 hover:bg-red-500/20 focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {rotating ? 'Regenerating…' : 'Regenerate URL'}
+            </button>
           </div>
-        </div>
-      )}
+        </AlertDialog.Content>
+      </AlertDialog.Root>
     </div>
   )
 }
@@ -540,7 +523,10 @@ function ElevenLabsVoicePicker({
     let cancelled = false
     let timer: ReturnType<typeof setTimeout> | null = null
 
-    async function run(loader: () => Promise<ElevenLabsVoice[]>, fingerprint: string): Promise<void> {
+    async function run(
+      loader: () => Promise<ElevenLabsVoice[]>,
+      fingerprint: string
+    ): Promise<void> {
       if (lastKeyRef.current === fingerprint) return
       lastKeyRef.current = fingerprint
       setLoading(true)
@@ -686,106 +672,106 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
   // instead of at the very bottom of the panel after Throttling/Content/
   // Priority. See bug report: "place it directly under the selector so it's
   // immediately visible, not after scrolling a bunch".
-  const advancedBlock = provider === 'elevenlabs' ? (
-    <>
-      <SubSectionHeader label="ADVANCED (ELEVENLABS)" />
-      <div className={`space-y-3 ${!isPremium ? 'relative' : ''}`}>
-        {!isPremium && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-surface/80">
-            <div className="flex flex-col items-center gap-2 text-center">
-              <PremiumBadge />
-              <span className="text-xs text-text-dim">
-                <PremiumUpsellLink /> to use ElevenLabs voices.
-              </span>
+  const advancedBlock =
+    provider === 'elevenlabs' ? (
+      <>
+        <SubSectionHeader label="ADVANCED (ELEVENLABS)" />
+        <div className={`space-y-3 ${!isPremium ? 'relative' : ''}`}>
+          {!isPremium && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-surface/80">
+              <div className="flex flex-col items-center gap-2 text-center">
+                <PremiumBadge />
+                <span className="text-xs text-text-dim">
+                  <PremiumUpsellLink /> to use ElevenLabs voices.
+                </span>
+              </div>
             </div>
-          </div>
-        )}
-        <ApiKeyInput
-          hasSavedKey={props.hasElevenLabsConfig}
-          isPremium={isPremium}
-          disabled={!isPremium}
-          voiceId={pickedVoiceId}
-          apiKey={advancedApiKey}
-          onApiKeyChange={setAdvancedApiKey}
-          onSave={props.onSaveKey ?? (async (): Promise<void> => {})}
-          onRemove={props.onRemoveKey ?? (async (): Promise<void> => {})}
-          onTest={
-            props.onTestKey ??
-            (async (): Promise<TestKeyResult> => ({ ok: false, errorCode: 0 }))
-          }
-        />
-        <ElevenLabsVoicePicker
-          selected={pickedVoiceId}
-          onChange={setPickedVoiceId}
-          onFetchVoices={props.onFetchVoices}
-          onPreviewVoices={props.onPreviewVoices}
-          hasSavedKey={props.hasElevenLabsConfig}
-          typedApiKey={advancedApiKey}
-          disabled={!isPremium}
-        />
-        {/* Save voice (Issue #276) — visible only when the user has changed
+          )}
+          <ApiKeyInput
+            hasSavedKey={props.hasElevenLabsConfig}
+            isPremium={isPremium}
+            disabled={!isPremium}
+            voiceId={pickedVoiceId}
+            apiKey={advancedApiKey}
+            onApiKeyChange={setAdvancedApiKey}
+            onSave={props.onSaveKey ?? (async (): Promise<void> => {})}
+            onRemove={props.onRemoveKey ?? (async (): Promise<void> => {})}
+            onTest={
+              props.onTestKey ?? (async (): Promise<TestKeyResult> => ({ ok: false, errorCode: 0 }))
+            }
+          />
+          <ElevenLabsVoicePicker
+            selected={pickedVoiceId}
+            onChange={setPickedVoiceId}
+            onFetchVoices={props.onFetchVoices}
+            onPreviewVoices={props.onPreviewVoices}
+            hasSavedKey={props.hasElevenLabsConfig}
+            typedApiKey={advancedApiKey}
+            disabled={!isPremium}
+          />
+          {/* Save voice (Issue #276) — visible only when the user has changed
             the picker after a key is already saved. The pre-save flow uses the
             "Save key" button inside ApiKeyInput, which carries voice_id. */}
-        {props.hasElevenLabsConfig &&
-          props.onSaveVoice &&
-          pickedVoiceId !== '' &&
-          pickedVoiceId !== (props.savedVoiceId ?? '') && (
-            <button
-              type="button"
-              disabled={!isPremium || savingVoice}
-              onClick={() => {
-                if (!props.onSaveVoice) return
-                setSavingVoice(true)
-                void (async (): Promise<void> => {
-                  try {
-                    await props.onSaveVoice!(pickedVoiceId)
-                    toast.success('Voice updated.')
-                  } catch (e) {
-                    toast.error(
-                      `Could not save voice: ${e instanceof Error ? e.message : 'network error'}`,
-                    )
-                  } finally {
-                    setSavingVoice(false)
-                  }
-                })()
-              }}
-              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {savingVoice ? 'Saving voice…' : 'Save voice'}
-            </button>
-          )}
-        {props.hasElevenLabsConfig && props.obsUrl && (
-          <ObsUrlPanel
-            obsUrl={props.obsUrl}
-            onCopy={async (): Promise<void> => {
-              if (!props.obsUrl) return
-              try {
-                await navigator.clipboard.writeText(props.obsUrl)
-                toast.success('OBS URL copied.')
-              } catch {
-                toast.error('Could not copy URL.')
-              }
-            }}
-            onRegenerate={async (): Promise<void> => {
-              if (!props.onRotateToken) return
-              try {
-                const result = await props.onRotateToken()
+          {props.hasElevenLabsConfig &&
+            props.onSaveVoice &&
+            pickedVoiceId !== '' &&
+            pickedVoiceId !== (props.savedVoiceId ?? '') && (
+              <button
+                type="button"
+                disabled={!isPremium || savingVoice}
+                onClick={() => {
+                  if (!props.onSaveVoice) return
+                  setSavingVoice(true)
+                  void (async (): Promise<void> => {
+                    try {
+                      await props.onSaveVoice!(pickedVoiceId)
+                      toast.success('Voice updated.')
+                    } catch (e) {
+                      toast.error(
+                        `Could not save voice: ${e instanceof Error ? e.message : 'network error'}`
+                      )
+                    } finally {
+                      setSavingVoice(false)
+                    }
+                  })()
+                }}
+                className="hover:bg-surface-alt rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {savingVoice ? 'Saving voice…' : 'Save voice'}
+              </button>
+            )}
+          {props.hasElevenLabsConfig && props.obsUrl && (
+            <ObsUrlPanel
+              obsUrl={props.obsUrl}
+              onCopy={async (): Promise<void> => {
+                if (!props.obsUrl) return
                 try {
-                  await navigator.clipboard.writeText(result.obsUrl)
+                  await navigator.clipboard.writeText(props.obsUrl)
+                  toast.success('OBS URL copied.')
                 } catch {
-                  // Clipboard permission missing — toast still surfaces success,
-                  // but on failure we fall through to the catch below.
+                  toast.error('Could not copy URL.')
                 }
-                toast.success('New OBS URL copied to clipboard.')
-              } catch {
-                toast.error('Could not regenerate URL. Try again.')
-              }
-            }}
-          />
-        )}
-      </div>
-    </>
-  ) : null
+              }}
+              onRegenerate={async (): Promise<void> => {
+                if (!props.onRotateToken) return
+                try {
+                  const result = await props.onRotateToken()
+                  try {
+                    await navigator.clipboard.writeText(result.obsUrl)
+                  } catch {
+                    // Clipboard permission missing — toast still surfaces success,
+                    // but on failure we fall through to the catch below.
+                  }
+                  toast.success('New OBS URL copied to clipboard.')
+                } catch {
+                  toast.error('Could not regenerate URL. Try again.')
+                }
+              }}
+            />
+          )}
+        </div>
+      </>
+    ) : null
 
   return (
     <div className="space-y-4">
@@ -900,7 +886,7 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
             <button
               type="button"
               onClick={onPreview}
-              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text hover:bg-surface-alt"
+              className="hover:bg-surface-alt rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text"
             >
               Test voice
             </button>
@@ -939,9 +925,7 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
                 step={0.05}
                 onChange={(v) => onChange({ tts_sample_rate: v })}
               />
-              <p className="text-xs text-text-dim">
-                Chance a non-priority message is spoken.
-              </p>
+              <p className="text-xs text-text-dim">Chance a non-priority message is spoken.</p>
             </div>
           )}
 
