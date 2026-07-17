@@ -18,8 +18,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
-import React from 'react'
+import React, { useId } from 'react'
 import { Select } from '@base-ui/react/select'
 import type { VisualSettings } from '@/lib/types/visual-settings'
 import { FontFamilyCombobox } from './FontFamilyCombobox'
@@ -46,7 +45,11 @@ export interface TypographyGroupProps {
   onChange: (patch: Partial<VisualSettings>) => void
 }
 
-export function TypographyGroup({ visualSettings, onChange }: TypographyGroupProps): React.ReactElement {
+export function TypographyGroup({
+  visualSettings,
+  onChange,
+}: TypographyGroupProps): React.ReactElement {
+  const fieldId = useId()
   const lineHeight = parseFloat(visualSettings.lineHeight ?? '1.5')
   const letterSpacing = parseFloat(visualSettings.letterSpacing?.replace('px', '') ?? '0')
 
@@ -54,43 +57,56 @@ export function TypographyGroup({ visualSettings, onChange }: TypographyGroupPro
     <div className="space-y-3">
       {/* Body Font Family */}
       <div className="flex flex-col gap-1">
-        <label className="text-sm text-text-sub">Body Font</label>
+        <span className="text-sm text-text-sub">Body Font</span>
         <FontFamilyCombobox
           value={visualSettings.fontFamily ?? null}
           onChange={(value) => onChange({ fontFamily: value ?? undefined })}
+          aria-label="Body Font"
         />
       </div>
 
       {/* Username Font Family */}
       <div className="flex flex-col gap-1">
-        <label className="text-sm text-text-sub">Username Font</label>
+        <span className="text-sm text-text-sub">Username Font</span>
         <FontFamilyCombobox
           value={visualSettings.usernameFontFamily ?? null}
           onChange={(value) => onChange({ usernameFontFamily: value ?? undefined })}
+          aria-label="Username Font"
         />
       </div>
 
       {/* Timestamp Font Family */}
       <div className="flex flex-col gap-1">
-        <label className="text-sm text-text-sub">Timestamp Font</label>
+        <span className="text-sm text-text-sub">Timestamp Font</span>
         <FontFamilyCombobox
           value={visualSettings.timestampFontFamily ?? null}
           onChange={(value) => onChange({ timestampFontFamily: value ?? undefined })}
+          aria-label="Timestamp Font"
         />
       </div>
 
       {/* Font Weight */}
       <div className="flex flex-col gap-1">
-        <label className="text-sm text-text-sub">Font Weight</label>
+        <label htmlFor={`${fieldId}-font-weight`} className="text-sm text-text-sub">
+          Font Weight
+        </label>
         <Select.Root
           value={visualSettings.fontWeight ?? null}
           onValueChange={(value) => onChange({ fontWeight: value ?? undefined })}
         >
-          <Select.Trigger className="flex w-full items-center justify-between rounded border border-border bg-bg px-2 py-1.5 text-sm text-text focus:outline-none focus:ring-1 focus:ring-border">
+          <Select.Trigger
+            id={`${fieldId}-font-weight`}
+            className="flex w-full items-center justify-between rounded border border-border bg-bg px-2 py-1.5 text-sm text-text focus-visible:ring-1 focus-visible:ring-border focus-visible:outline-none"
+          >
             <Select.Value placeholder="Select weight…" />
             <Select.Icon className="text-text-dim">
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
               </svg>
             </Select.Icon>
           </Select.Trigger>
@@ -102,7 +118,7 @@ export function TypographyGroup({ visualSettings, onChange }: TypographyGroupPro
                     <Select.Item
                       key={opt.value}
                       value={opt.value}
-                      className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-text hover:bg-subtle data-[highlighted]:bg-subtle"
+                      className="hover:bg-subtle data-[highlighted]:bg-subtle flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-text"
                     >
                       <Select.ItemIndicator className="w-4">
                         <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
@@ -121,40 +137,61 @@ export function TypographyGroup({ visualSettings, onChange }: TypographyGroupPro
 
       {/* Body Font Size */}
       <div className="flex items-center gap-2">
-        <label className="w-28 shrink-0 text-sm text-text-sub">Body Size</label>
+        <label htmlFor={`${fieldId}-body-size`} className="w-28 shrink-0 text-sm text-text-sub">
+          Body Size
+        </label>
         <input
+          id={`${fieldId}-body-size`}
           type="number"
           min={10}
           max={32}
           value={visualSettings.fontSize?.replace('px', '') ?? ''}
           onChange={(e) => onChange({ fontSize: `${e.target.value}px` })}
-          className="w-16 rounded border border-border bg-bg px-2 py-1 text-sm text-text focus:outline-none focus:ring-1 focus:ring-border"
+          aria-describedby={`${fieldId}-body-size-unit`}
+          className="w-16 rounded border border-border bg-bg px-2 py-1 text-sm text-text focus-visible:ring-1 focus-visible:ring-border focus-visible:outline-none"
         />
-        <span className="text-sm text-text-dim">px</span>
+        <span id={`${fieldId}-body-size-unit`} className="text-sm text-text-dim">
+          px
+        </span>
       </div>
 
       {/* Username Font Size */}
       <div className="flex items-center gap-2">
-        <label className="w-28 shrink-0 text-sm text-text-sub">Username Size</label>
+        <label htmlFor={`${fieldId}-username-size`} className="w-28 shrink-0 text-sm text-text-sub">
+          Username Size
+        </label>
         <input
+          id={`${fieldId}-username-size`}
           type="number"
           value={visualSettings.usernameFontSize?.replace('px', '') ?? ''}
           onChange={(e) => onChange({ usernameFontSize: `${e.target.value}px` })}
-          className="w-16 rounded border border-border bg-bg px-2 py-1 text-sm text-text focus:outline-none focus:ring-1 focus:ring-border"
+          aria-describedby={`${fieldId}-username-size-unit`}
+          className="w-16 rounded border border-border bg-bg px-2 py-1 text-sm text-text focus-visible:ring-1 focus-visible:ring-border focus-visible:outline-none"
         />
-        <span className="text-sm text-text-dim">px</span>
+        <span id={`${fieldId}-username-size-unit`} className="text-sm text-text-dim">
+          px
+        </span>
       </div>
 
       {/* Timestamp Font Size */}
       <div className="flex items-center gap-2">
-        <label className="w-28 shrink-0 text-sm text-text-sub">Timestamp Size</label>
+        <label
+          htmlFor={`${fieldId}-timestamp-size`}
+          className="w-28 shrink-0 text-sm text-text-sub"
+        >
+          Timestamp Size
+        </label>
         <input
+          id={`${fieldId}-timestamp-size`}
           type="number"
           value={visualSettings.timestampFontSize?.replace('px', '') ?? ''}
           onChange={(e) => onChange({ timestampFontSize: `${e.target.value}px` })}
-          className="w-16 rounded border border-border bg-bg px-2 py-1 text-sm text-text focus:outline-none focus:ring-1 focus:ring-border"
+          aria-describedby={`${fieldId}-timestamp-size-unit`}
+          className="w-16 rounded border border-border bg-bg px-2 py-1 text-sm text-text focus-visible:ring-1 focus-visible:ring-border focus-visible:outline-none"
         />
-        <span className="text-sm text-text-dim">px</span>
+        <span id={`${fieldId}-timestamp-size-unit`} className="text-sm text-text-dim">
+          px
+        </span>
       </div>
 
       {/* Line Height */}

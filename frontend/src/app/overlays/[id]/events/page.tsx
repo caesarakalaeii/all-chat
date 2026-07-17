@@ -19,7 +19,7 @@
 // Event Settings Page - Configure overlay event display preferences
 'use client'
 
-import { use, useEffect, useState } from 'react'
+import { use, useEffect, useId, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { AppNav } from '@/components/AppNav'
@@ -95,17 +95,22 @@ function EventToggle({
   value: boolean
   onChange: (value: boolean) => void
 }) {
+  const descriptionId = useId()
   return (
     <div className="flex items-center justify-between border-b border-border py-3.5 last:border-0">
       <div className="flex-1 pr-4">
         <p className="text-sm font-medium text-text">{label}</p>
-        <p className="mt-0.5 text-xs text-text-sub">{description}</p>
+        <p id={descriptionId} className="mt-0.5 text-xs text-text-sub">
+          {description}
+        </p>
       </div>
       <label className="relative inline-flex shrink-0 cursor-pointer items-center">
+        <span className="sr-only">{label}</span>
         <input
           type="checkbox"
           checked={value}
           onChange={(e) => onChange(e.target.checked)}
+          aria-describedby={descriptionId}
           className="peer sr-only"
         />
         <div className="peer h-5 w-10 rounded-full border border-border bg-surface-2 peer-checked:bg-twitch peer-focus-visible:ring-2 peer-focus-visible:ring-twitch after:absolute after:top-[3px] after:left-[3px] after:h-3.5 after:w-3.5 after:rounded-full after:bg-white after:transition-transform after:content-[''] peer-checked:after:translate-x-5" />

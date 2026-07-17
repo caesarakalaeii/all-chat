@@ -18,8 +18,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import Link from 'next/link'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -46,6 +45,9 @@ export default function SourcesPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const searchId = useId()
+  const platformFilterId = useId()
+  const statusFilterId = useId()
 
   // Fetch all sources
   useEffect(() => {
@@ -200,8 +202,11 @@ export default function SourcesPage() {
       <Card className="mb-6 p-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div>
-            <label className="mb-2 block text-sm font-medium text-text-sub">Search</label>
+            <label htmlFor={searchId} className="mb-2 block text-sm font-medium text-text-sub">
+              Search
+            </label>
             <input
+              id={searchId}
               type="text"
               placeholder="Search by channel name or ID..."
               value={searchTerm}
@@ -210,8 +215,14 @@ export default function SourcesPage() {
             />
           </div>
           <div>
-            <label className="mb-2 block text-sm font-medium text-text-sub">Platform</label>
+            <label
+              htmlFor={platformFilterId}
+              className="mb-2 block text-sm font-medium text-text-sub"
+            >
+              Platform
+            </label>
             <select
+              id={platformFilterId}
               value={platformFilter}
               onChange={(e) => setPlatformFilter(e.target.value)}
               className="focus-visible:ring-ring block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text focus-visible:ring-2 focus-visible:outline-none sm:text-sm"
@@ -224,8 +235,14 @@ export default function SourcesPage() {
             </select>
           </div>
           <div>
-            <label className="mb-2 block text-sm font-medium text-text-sub">Status</label>
+            <label
+              htmlFor={statusFilterId}
+              className="mb-2 block text-sm font-medium text-text-sub"
+            >
+              Status
+            </label>
             <select
+              id={statusFilterId}
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
               className="focus-visible:ring-ring block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text focus-visible:ring-2 focus-visible:outline-none sm:text-sm"
@@ -249,68 +266,68 @@ export default function SourcesPage() {
         <>
           {/* Desktop table */}
           <Card className="hidden overflow-hidden md:block">
-          <div className="border-b border-border px-4 py-5">
-            <h3 className="text-base font-medium text-text">
-              All Sources ({filteredSources.length})
-            </h3>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="border-b border-border bg-surface-2">
-                <tr>
-                  <th className="px-4 py-3 text-left font-medium text-text-sub">Platform</th>
-                  <th className="px-4 py-3 text-left font-medium text-text-sub">Channel</th>
-                  <th className="px-4 py-3 text-left font-medium text-text-sub">Overlay</th>
-                  <th className="px-4 py-3 text-left font-medium text-text-sub">Status</th>
-                  <th className="px-4 py-3 text-left font-medium text-text-sub">Created</th>
-                  <th className="px-4 py-3 text-left font-medium text-text-sub">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {filteredSources.map((source) => (
-                  <tr key={source.id} className="transition-colors hover:bg-surface-2">
-                    <td className="px-4 py-3">
-                      <PlatformBadge platform={source.platform as Platform} size="sm" />
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="text-sm font-medium text-text">{source.channel_name}</div>
-                      <div className="font-mono text-xs text-text-sub">{source.channel_id}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <Link
-                        href={`/admin/overlays?overlay=${source.overlay_id}`}
-                        className="text-sm text-text-sub transition-colors hover:text-text"
-                      >
-                        {source.overlay_name}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3">
-                      {source.is_active ? (
-                        <span className="inline-flex items-center rounded-full bg-kick/10 px-2 py-0.5 text-xs font-medium text-kick">
-                          Active
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center rounded-full bg-badge-bg px-2 py-0.5 text-xs font-medium text-text-dim">
-                          Inactive
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-text-sub">
-                      {new Date(source.created_at).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-3 text-sm">
-                      <Link
-                        href={`/admin/overlays?overlay=${source.overlay_id}`}
-                        className="font-medium text-text-sub transition-colors hover:text-text"
-                      >
-                        View
-                      </Link>
-                    </td>
+            <div className="border-b border-border px-4 py-5">
+              <h3 className="text-base font-medium text-text">
+                All Sources ({filteredSources.length})
+              </h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="border-b border-border bg-surface-2">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-medium text-text-sub">Platform</th>
+                    <th className="px-4 py-3 text-left font-medium text-text-sub">Channel</th>
+                    <th className="px-4 py-3 text-left font-medium text-text-sub">Overlay</th>
+                    <th className="px-4 py-3 text-left font-medium text-text-sub">Status</th>
+                    <th className="px-4 py-3 text-left font-medium text-text-sub">Created</th>
+                    <th className="px-4 py-3 text-left font-medium text-text-sub">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {filteredSources.map((source) => (
+                    <tr key={source.id} className="transition-colors hover:bg-surface-2">
+                      <td className="px-4 py-3">
+                        <PlatformBadge platform={source.platform as Platform} size="sm" />
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="text-sm font-medium text-text">{source.channel_name}</div>
+                        <div className="font-mono text-xs text-text-sub">{source.channel_id}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Link
+                          href={`/admin/overlays?overlay=${source.overlay_id}`}
+                          className="text-sm text-text-sub transition-colors hover:text-text"
+                        >
+                          {source.overlay_name}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3">
+                        {source.is_active ? (
+                          <span className="inline-flex items-center rounded-full bg-kick/10 px-2 py-0.5 text-xs font-medium text-kick">
+                            Active
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center rounded-full bg-badge-bg px-2 py-0.5 text-xs font-medium text-text-dim">
+                            Inactive
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-text-sub">
+                        {new Date(source.created_at).toLocaleDateString()}
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        <Link
+                          href={`/admin/overlays?overlay=${source.overlay_id}`}
+                          className="font-medium text-text-sub transition-colors hover:text-text"
+                        >
+                          View
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </Card>
 
           {/* Mobile card list */}

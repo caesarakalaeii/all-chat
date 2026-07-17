@@ -39,7 +39,7 @@
 
 'use client'
 
-import { use, useCallback, useEffect, useRef, useState } from 'react'
+import { use, useCallback, useEffect, useId, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { ChevronLeft, ChevronRight, X, Clipboard, Share2, Puzzle } from 'lucide-react'
@@ -485,6 +485,9 @@ function StreamSelectionPanel({
   const [strategy, setStrategy] = useState(ytConfig.stream_select ?? 'first_found')
   const [matchTerm, setMatchTerm] = useState(ytConfig.stream_match ?? '')
   const [saving, setSaving] = useState(false)
+  const strategySelectId = useId()
+  const strategyHintId = useId()
+  const matchInputId = useId()
 
   const hasChanges =
     strategy !== (ytConfig.stream_select ?? 'first_found') ||
@@ -519,13 +522,18 @@ function StreamSelectionPanel({
     <Card className="mt-1 rounded-t-none border-t-0 bg-surface-2/50 p-4">
       <div className="space-y-3">
         <div>
-          <label className="mb-1 block text-xs font-medium text-text-sub">
+          <label
+            htmlFor={strategySelectId}
+            className="mb-1 block text-xs font-medium text-text-sub"
+          >
             Stream selection strategy
           </label>
-          <p className="mb-2 text-xs text-text-sub/70">
+          <p id={strategyHintId} className="mb-2 text-xs text-text-sub/70">
             When this channel has multiple concurrent live streams, choose which one to monitor.
           </p>
           <select
+            id={strategySelectId}
+            aria-describedby={strategyHintId}
             value={strategy}
             onChange={(e) => setStrategy(e.target.value as typeof strategy)}
             className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-xs text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
@@ -555,8 +563,11 @@ function StreamSelectionPanel({
 
         {(strategy === 'title_match' || strategy === 'title_match_all') && (
           <div>
-            <label className="mb-1 block text-xs font-medium text-text-sub">Title keyword</label>
+            <label htmlFor={matchInputId} className="mb-1 block text-xs font-medium text-text-sub">
+              Title keyword
+            </label>
             <Input
+              id={matchInputId}
               value={matchTerm}
               onChange={(e) => setMatchTerm(e.target.value)}
               placeholder="e.g. synthwave, lofi, jazz"
@@ -607,6 +618,7 @@ function RelayPanel({
   const [channels, setChannels] = useState<ChannelCategory[]>([])
   const [channelsLoading, setChannelsLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const relayChannelSelectId = useId()
 
   useEffect(() => {
     setChannelsLoading(true)
@@ -659,11 +671,14 @@ function RelayPanel({
       {/* Outbound channel picker — visible only when relay enabled */}
       {relayEnabled && (
         <div>
-          <label className="mb-1 block text-xs text-text-sub">Outbound channel</label>
+          <label htmlFor={relayChannelSelectId} className="mb-1 block text-xs text-text-sub">
+            Outbound channel
+          </label>
           {channelsLoading ? (
             <Skeleton className="h-9 w-full rounded-lg" />
           ) : (
             <select
+              id={relayChannelSelectId}
               value={relayChannelId}
               onChange={(e) => setRelayChannelId(e.target.value)}
               className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
@@ -1040,6 +1055,7 @@ function AddSourceForm({
   const [guildChannels, setGuildChannels] = useState<ChannelCategory[]>([])
   const [channelsLoading, setChannelsLoading] = useState(false)
   const [isAddingDiscord, setIsAddingDiscord] = useState(false)
+  const discordChannelSelectId = useId()
 
   useEffect(() => {
     getGuilds()
@@ -1294,8 +1310,14 @@ function AddSourceForm({
                 <Skeleton className="h-9 w-full rounded-lg" />
               ) : (
                 <div>
-                  <label className="mb-1 block text-xs text-text-sub">Channel</label>
+                  <label
+                    htmlFor={discordChannelSelectId}
+                    className="mb-1 block text-xs text-text-sub"
+                  >
+                    Channel
+                  </label>
                   <select
+                    id={discordChannelSelectId}
                     value={selectedChannelId}
                     onChange={(e) => {
                       setSelectedChannelId(e.target.value)
@@ -1481,6 +1503,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   const router = useRouter()
   const searchParams = useSearchParams()
   const { user } = useAuthStore()
+  const mockFieldId = useId()
 
   // --- Overlay / sources state ---
   const [overlay, setOverlay] = useState<Overlay | null>(null)
@@ -3342,8 +3365,14 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                 <div className="mt-6 space-y-3">
                   <p className="text-xs font-medium text-text">Mock Messages</p>
                   <div>
-                    <label className="mb-1 block text-xs text-text-sub">Platform</label>
+                    <label
+                      htmlFor={`${mockFieldId}-platform`}
+                      className="mb-1 block text-xs text-text-sub"
+                    >
+                      Platform
+                    </label>
                     <select
+                      id={`${mockFieldId}-platform`}
                       value={mockForm.platform}
                       onChange={(e) =>
                         handleMockInputChange(
@@ -3361,8 +3390,14 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="mb-1 block text-xs text-text-sub">Display Name</label>
+                      <label
+                        htmlFor={`${mockFieldId}-display-name`}
+                        className="mb-1 block text-xs text-text-sub"
+                      >
+                        Display Name
+                      </label>
                       <input
+                        id={`${mockFieldId}-display-name`}
                         type="text"
                         value={mockForm.displayName}
                         onChange={(e) => handleMockInputChange('displayName', e.target.value)}
@@ -3370,8 +3405,14 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs text-text-sub">Username</label>
+                      <label
+                        htmlFor={`${mockFieldId}-username`}
+                        className="mb-1 block text-xs text-text-sub"
+                      >
+                        Username
+                      </label>
                       <input
+                        id={`${mockFieldId}-username`}
                         type="text"
                         value={mockForm.username}
                         onChange={(e) => handleMockInputChange('username', e.target.value)}
@@ -3381,8 +3422,14 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="mb-1 block text-xs text-text-sub">Avatar URL</label>
+                      <label
+                        htmlFor={`${mockFieldId}-avatar-url`}
+                        className="mb-1 block text-xs text-text-sub"
+                      >
+                        Avatar URL
+                      </label>
                       <input
+                        id={`${mockFieldId}-avatar-url`}
                         type="text"
                         value={mockForm.avatarUrl}
                         onChange={(e) => handleMockInputChange('avatarUrl', e.target.value)}
@@ -3391,8 +3438,14 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs text-text-sub">Name Color</label>
+                      <label
+                        htmlFor={`${mockFieldId}-color`}
+                        className="mb-1 block text-xs text-text-sub"
+                      >
+                        Name Color
+                      </label>
                       <input
+                        id={`${mockFieldId}-color`}
                         type="color"
                         value={mockForm.color}
                         onChange={(e) => handleMockInputChange('color', e.target.value)}
@@ -3401,8 +3454,14 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                     </div>
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs text-text-sub">Message</label>
+                    <label
+                      htmlFor={`${mockFieldId}-message`}
+                      className="mb-1 block text-xs text-text-sub"
+                    >
+                      Message
+                    </label>
                     <textarea
+                      id={`${mockFieldId}-message`}
                       value={mockForm.message}
                       onChange={(e) => handleMockInputChange('message', e.target.value)}
                       className="h-16 w-full resize-none rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
