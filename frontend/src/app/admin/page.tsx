@@ -25,6 +25,8 @@ import { Users, LayoutGrid, Radio, Eye, Ban, Activity } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { PlatformBadge } from '@/components/ui/badge'
+import { ADMIN_LINKS } from '@/components/AdminSidebar'
 
 interface AdminStats {
   total_users: number
@@ -144,56 +146,49 @@ export default function AdminDashboard() {
         />
       </div>
 
-      {/* Navigation cards */}
+      {/* Sources by platform (the payload already carries the breakdown). */}
+      {stats?.total_sources && Object.keys(stats.total_sources).length > 0 && (
+        <>
+          <h2 className="mb-4 text-lg font-semibold text-text">Sources by platform</h2>
+          <div className="mb-8 flex flex-wrap gap-2">
+            {Object.entries(stats.total_sources)
+              .sort((a, b) => b[1] - a[1])
+              .map(([platform, count]) => (
+                <Link
+                  key={platform}
+                  href={`/admin/sources?platform=${platform}`}
+                  className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-1.5 transition-colors hover:bg-surface-2"
+                >
+                  <PlatformBadge platform={platform} size="sm" />
+                  <span className="text-sm font-semibold text-text">{count.toLocaleString()}</span>
+                </Link>
+              ))}
+          </div>
+        </>
+      )}
+
+      {/* Navigation cards — generated from the same source as the sidebar rail so
+          the two can't drift. The Dashboard entry (exact) is the current page. */}
       <h2 className="mb-4 text-lg font-semibold text-text">Manage</h2>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Link href="/admin/users">
-          <Card className="cursor-pointer p-5 transition-colors hover:bg-surface-2">
-            <div className="flex items-center gap-3">
-              <Users className="size-6 text-text-sub" aria-hidden="true" />
-              <div>
-                <p className="text-sm font-medium text-text">Users</p>
-                <p className="text-xs text-text-sub">View and manage users</p>
-              </div>
-            </div>
-          </Card>
-        </Link>
-
-        <Link href="/admin/overlays">
-          <Card className="cursor-pointer p-5 transition-colors hover:bg-surface-2">
-            <div className="flex items-center gap-3">
-              <LayoutGrid className="size-6 text-text-sub" aria-hidden="true" />
-              <div>
-                <p className="text-sm font-medium text-text">Overlays</p>
-                <p className="text-xs text-text-sub">Manage overlays</p>
-              </div>
-            </div>
-          </Card>
-        </Link>
-
-        <Link href="/admin/sources">
-          <Card className="cursor-pointer p-5 transition-colors hover:bg-surface-2">
-            <div className="flex items-center gap-3">
-              <Radio className="size-6 text-text-sub" aria-hidden="true" />
-              <div>
-                <p className="text-sm font-medium text-text">Sources</p>
-                <p className="text-xs text-text-sub">View all sources</p>
-              </div>
-            </div>
-          </Card>
-        </Link>
-
-        <Link href="/admin/viewers">
-          <Card className="cursor-pointer p-5 transition-colors hover:bg-surface-2">
-            <div className="flex items-center gap-3">
-              <Eye className="size-6 text-text-sub" aria-hidden="true" />
-              <div>
-                <p className="text-sm font-medium text-text">Viewers</p>
-                <p className="text-xs text-text-sub">View all viewers</p>
-              </div>
-            </div>
-          </Card>
-        </Link>
+        {ADMIN_LINKS.filter((link) => !link.exact).map((link) => {
+          const Icon = link.icon
+          return (
+            <Link key={link.href} href={link.href}>
+              <Card className="cursor-pointer p-5 transition-colors hover:bg-surface-2">
+                <div className="flex items-center gap-3">
+                  <Icon className="size-6 text-text-sub" aria-hidden="true" />
+                  <div>
+                    <p className="text-sm font-medium text-text">{link.label}</p>
+                    {link.description && (
+                      <p className="text-xs text-text-sub">{link.description}</p>
+                    )}
+                  </div>
+                </div>
+              </Card>
+            </Link>
+          )
+        })}
       </div>
     </div>
   )

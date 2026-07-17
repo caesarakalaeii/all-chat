@@ -41,22 +41,41 @@ import { Dialog } from '@/components/ui/dialog'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { cn } from '@/lib/utils'
 
-interface AdminLink {
+export interface AdminLink {
   href: string
   label: string
   icon: LucideIcon
   exact?: boolean
+  // Shown on the dashboard home nav grid (not the rail).
+  description?: string
 }
 
-const ADMIN_LINKS: AdminLink[] = [
+// Single source of truth for admin navigation, shared by the sidebar rail and
+// the dashboard home grid so the two can never drift apart.
+export const ADMIN_LINKS: AdminLink[] = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard, exact: true },
-  { href: '/admin/users', label: 'Users', icon: Users },
-  { href: '/admin/overlays', label: 'Overlays', icon: LayoutGrid },
-  { href: '/admin/sources', label: 'Sources', icon: Radio },
-  { href: '/admin/viewers', label: 'Viewers', icon: Eye },
-  { href: '/admin/cosmetics', label: 'Cosmetics', icon: Sparkles },
-  { href: '/admin/features', label: 'Features', icon: Flag },
-  { href: '/admin/maintenance', label: 'Maintenance', icon: Wrench },
+  { href: '/admin/users', label: 'Users', icon: Users, description: 'View and manage users' },
+  {
+    href: '/admin/overlays',
+    label: 'Overlays',
+    icon: LayoutGrid,
+    description: 'Overlays and their owners',
+  },
+  { href: '/admin/sources', label: 'Sources', icon: Radio, description: 'Every chat source' },
+  { href: '/admin/viewers', label: 'Viewers', icon: Eye, description: 'Viewer sessions and bans' },
+  {
+    href: '/admin/cosmetics',
+    label: 'Cosmetics',
+    icon: Sparkles,
+    description: 'Avatar frames and flairs',
+  },
+  { href: '/admin/features', label: 'Features', icon: Flag, description: 'Premium feature gates' },
+  {
+    href: '/admin/maintenance',
+    label: 'Maintenance',
+    icon: Wrench,
+    description: 'Maintenance mode and ops',
+  },
 ]
 
 function isActive(pathname: string | null, href: string, exact?: boolean): boolean {
@@ -145,10 +164,14 @@ export function AdminSidebar() {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
 
-  // Close the mobile drawer whenever the route changes.
-  useEffect(() => {
+  // Close the mobile drawer whenever the route changes. Done during render via
+  // React's "previous value" pattern rather than an effect, which avoids a
+  // synchronous setState in an effect body (react-hooks/set-state-in-effect).
+  const [lastPathname, setLastPathname] = useState(pathname)
+  if (pathname !== lastPathname) {
+    setLastPathname(pathname)
     setOpen(false)
-  }, [pathname])
+  }
 
   // Close the drawer when the viewport grows to the desktop breakpoint, so the
   // dialog's focus trap and scroll lock don't linger invisibly behind the rail.

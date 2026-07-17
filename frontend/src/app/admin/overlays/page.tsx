@@ -24,6 +24,7 @@ import clsx from 'clsx'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PlatformBadge } from '@/components/ui/badge'
+import { ChannelLink } from '@/components/ChannelLink'
 import { formatConnectedFor } from '@/lib/utils'
 
 // Connections open longer than this are highlighted so admins can spot overlays
@@ -34,6 +35,8 @@ interface Overlay {
   id: string
   name: string
   user_id: string
+  owner_username?: string
+  owner_display_name?: string
   created_at: string
   updated_at: string
   sources_count?: number
@@ -70,6 +73,9 @@ export default function OverlaysPage() {
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [showConnectedOnly, setShowConnectedOnly] = useState(false)
+  // True when the live-connection endpoint can't be read, so the UI can say
+  // "status unknown" instead of implying every overlay is disconnected.
+  const [connectionStatusUnavailable, setConnectionStatusUnavailable] = useState(false)
   // Ticking clock so the "connected for" / long-open highlighting stays fresh
   // without calling Date.now() during render (react-hooks/purity).
   const [now, setNow] = useState(() => Date.now())
@@ -134,9 +140,14 @@ export default function OverlaysPage() {
                 .map((o) => [o.overlay_id, o.connected_since as string])
             )
           )
+          setConnectionStatusUnavailable(false)
+        } else {
+          // A failed status read must not masquerade as "everything idle".
+          setConnectionStatusUnavailable(true)
         }
       } catch (err) {
         console.error('Failed to load active overlays:', err)
+        setConnectionStatusUnavailable(true)
       }
     }
 
@@ -203,7 +214,8 @@ export default function OverlaysPage() {
     return (
       o.name.toLowerCase().includes(term) ||
       o.id.toLowerCase().includes(term) ||
-      o.user_id.toLowerCase().includes(term)
+      o.user_id.toLowerCase().includes(term) ||
+      (o.owner_username?.toLowerCase().includes(term) ?? false)
     )
   })
 
@@ -239,6 +251,13 @@ export default function OverlaysPage() {
         </p>
       </div>
 
+      {connectionStatusUnavailable && (
+        <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-400">
+          Live connection status is currently unavailable, so overlays may show as &ldquo;not
+          connected&rdquo; even if they are live.
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Overlays List */}
         <div className="lg:col-span-2">
@@ -260,7 +279,7 @@ export default function OverlaysPage() {
                 <div className="mt-4 flex items-center gap-3">
                   <input
                     type="text"
-                    placeholder="Search by overlay name, ID, or user ID..."
+                    placeholder="Search by overlay name, ID, or owner..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="focus-visible:ring-ring flex-1 rounded-lg border border-border bg-surface-2 px-4 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none"
@@ -350,6 +369,7 @@ export default function OverlaysPage() {
                           <Link
                             href={`/overlay/${overlay.id}`}
                             target="_blank"
+                            rel="noopener noreferrer"
                             aria-label={`Open overlay ${overlay.name} in a new tab`}
                             className="relative text-sm text-text-sub transition-colors hover:text-text"
                             onClick={(e) => e.stopPropagation()}
@@ -388,6 +408,13 @@ export default function OverlaysPage() {
                     </li>
                   )
                 })}
+                {orderedOverlays.length === 0 && (
+                  <li className="px-4 py-10 text-center text-sm text-text-dim">
+                    {overlays.length === 0
+                      ? 'No overlays found.'
+                      : 'No overlays match your search or filter.'}
+                  </li>
+                )}
               </ul>
             </Card>
           )}
@@ -415,8 +442,25 @@ export default function OverlaysPage() {
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-sm font-medium text-text-sub">User ID</dt>
-                      <dd className="mt-1 font-mono text-xs break-all text-text">
+                      <dt className="text-sm font-medium text-text-sub">Owner</dt>
+                      <dd className="mt-1 text-sm">
+                        {selectedOverlay.user_id ? (
+                          <Link
+                            href={`/admin/users?user=${selectedOverlay.user_id}`}
+                            className="text-primary hover:underline"
+                          >
+                            {selectedOverlay.owner_username
+                              ? `@${selectedOverlay.owner_username}`
+                              : 'View user'}
+                            {selectedOverlay.owner_display_name
+                              ? ` (${selectedOverlay.owner_display_name})`
+                              : ''}
+                          </Link>
+                        ) : (
+                          <span className="text-text-dim">Unknown</span>
+                        )}
+                      </dd>
+                      <dd className="mt-1 font-mono text-xs break-all text-text-dim">
                         {selectedOverlay.user_id}
                       </dd>
                     </div>
@@ -487,8 +531,14 @@ export default function OverlaysPage() {
                                   </span>
                                 )}
                               </div>
-                              <p className="mt-1 text-sm font-medium text-text">
-                                {source.channel_name}
+                              <p className="mt-1">
+                                <ChannelLink
+                                  platform={source.platform}
+                                  channelId={source.channel_id}
+                                  channelName={source.channel_name}
+                                  channelHandle={source.channel_handle}
+                                  className="text-sm font-medium text-text"
+                                />
                               </p>
                               <p className="mt-1 font-mono text-xs text-text-sub">
                                 {source.channel_id}
