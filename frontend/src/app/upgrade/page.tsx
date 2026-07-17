@@ -36,6 +36,9 @@ interface PremiumFeature {
   description: string
 }
 
+// Keep in sync with the onboarding extras tour in
+// components/onboarding/OnboardingChecklist.tsx — its copy mirrors this list
+// (see CLAUDE.md "Shipping a Feature").
 const features: PremiumFeature[] = [
   {
     icon: ShieldCheck,

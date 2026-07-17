@@ -146,7 +146,11 @@ Keep documentation from rotting. The repo root repeatedly accumulated stale, poi
 
 ## Shipping a Feature
 
-Shipping a new user-facing feature is not "done" until it has been announced in a **Patreon post**. Treat the announcement as part of the release: once the feature is merged and deployed, publish a Patreon update describing what changed and what it does for streamers.
+Shipping a new user-facing feature is not "done" until all three of these release steps are covered:
+
+1. **Premium toggle.** New features ship behind a premium feature gate (ADR-0008: the `feature_gates` table, enforced via `shared/middleware` RequirePremium/RequireEarlyAccess, managed through the admin feature-gates API). This lets premium/beta access be flipped without a deploy.
+2. **Onboarding extras tour.** Because features are premium-toggled, every new feature must be added to the optional tour in the first-run setup guide: the "Optional: go further" list in `frontend/src/components/onboarding/OnboardingChecklist.tsx` AND the premium features list in `frontend/src/app/upgrade/page.tsx`. The tour copy mirrors `/upgrade` and the two must stay in sync (there is a keep-in-sync comment at both sites).
+3. **Patreon post.** Treat the announcement as part of the release: once the feature is merged and deployed, publish a Patreon update describing what changed and what it does for streamers.
 
 > A workflow to help draft and publish these posts is planned. Until it exists, write the post manually.
 
