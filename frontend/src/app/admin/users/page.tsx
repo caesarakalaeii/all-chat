@@ -29,6 +29,7 @@ import { Dialog } from '@/components/ui/dialog'
 import { toastManager } from '@/lib/toast'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { PremiumDurationChooser } from '@/components/admin/PremiumDurationChooser'
+import { UserAvatar } from '@/components/UserAvatar'
 
 interface User {
   id: string
@@ -65,7 +66,7 @@ export default function UsersPage() {
   const [error, setError] = useState<string | null>(null)
   const [impersonating, setImpersonating] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
-  const [filter, setFilter] = useState<'all' | 'active' | 'banned' | 'premium'>('all')
+  const [filter, setFilter] = useState<'all' | 'active' | 'banned' | 'premium' | 'beta'>('all')
   const [showBanModal, setShowBanModal] = useState(false)
   const [userToBan, setUserToBan] = useState<User | null>(null)
   const [banReason, setBanReason] = useState('')
@@ -100,6 +101,24 @@ export default function UsersPage() {
         const data = await response.json()
         setUsers(data)
         setLoading(false)
+
+        // Deep-links (read post-await so they're client-only, not a synchronous
+        // setState in the effect body). ?user=<id> auto-selects a user (from the
+        // Overlays/Sources owner links); ?filter=<tab> pre-selects a filter tab
+        // (from the dashboard stat cards).
+        const params = new URLSearchParams(window.location.search)
+        const targetId = params.get('user')
+        if (targetId) {
+          const match = (data as User[]).find((u) => u.id === targetId)
+          if (match) {
+            setSelectedUser(match)
+            setSearchTerm(match.username)
+          }
+        }
+        const f = params.get('filter')
+        if (f === 'active' || f === 'banned' || f === 'premium' || f === 'beta') {
+          setFilter(f)
+        }
       } catch (err) {
         console.error('Failed to load users:', err)
         setError('Failed to load users')
@@ -336,13 +355,15 @@ export default function UsersPage() {
     if (filter === 'banned' && !u.is_banned) return false
     if (filter === 'active' && u.is_banned) return false
     if (filter === 'premium' && !u.is_premium) return false
+    if (filter === 'beta' && !u.is_beta_tester) return false
 
-    // Search filter
+    // Search filter (id lets an owner deep-link land even before it's typed)
     if (searchTerm) {
       const term = searchTerm.toLowerCase()
       return (
         u.username.toLowerCase().includes(term) ||
         u.display_name.toLowerCase().includes(term) ||
+        u.id.toLowerCase().includes(term) ||
         u.twitch_id?.toLowerCase().includes(term) ||
         u.youtube_id?.toLowerCase().includes(term) ||
         u.kick_id?.toLowerCase().includes(term)
@@ -365,6 +386,7 @@ export default function UsersPage() {
   const bannedCount = users.filter((u) => u.is_banned).length
   const activeCount = users.filter((u) => !u.is_banned).length
   const premiumCount = users.filter((u) => u.is_premium).length
+  const betaCount = users.filter((u) => u.is_beta_tester).length
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
@@ -444,9 +466,20 @@ export default function UsersPage() {
                   >
                     Premium ({premiumCount})
                   </button>
+                  <button
+                    onClick={() => setFilter('beta')}
+                    className={clsx(
+                      'border-b-2 px-1 pb-2 text-sm font-medium transition-colors',
+                      filter === 'beta'
+                        ? 'border-violet-400 text-violet-400'
+                        : 'border-transparent text-text-sub hover:border-border hover:text-text'
+                    )}
+                  >
+                    Beta ({betaCount})
+                  </button>
                 </div>
               </div>
-              <ul className="divide-y divide-border">
+              <ul className="max-h-[70vh] divide-y divide-border overflow-y-auto">
                 {displayUsers.map((user) => (
                   <li key={user.id}>
                     <button
@@ -458,10 +491,16 @@ export default function UsersPage() {
                         selectedUser?.id === user.id && 'bg-surface-2'
                       )}
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center">
-                            <p className="text-sm font-medium text-text">{user.display_name}</p>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex min-w-0 flex-1 items-center gap-3">
+                          <UserAvatar
+                            avatarUrl={user.profile_image_url}
+                            displayName={user.display_name}
+                            size={36}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center">
+                              <p className="text-sm font-medium text-text">{user.display_name}</p>
                             <div className="ml-2 flex space-x-1">
                               {user.is_beta_tester && (
                                 <span className="inline-flex items-center rounded border border-violet-500/20 bg-violet-500/10 px-2 py-0.5 text-xs font-medium text-violet-400">
@@ -495,10 +534,11 @@ export default function UsersPage() {
                               )}
                             </div>
                           </div>
-                          <p className="text-sm text-text-sub">@{user.username}</p>
-                          <p className="mt-1 text-xs text-text-dim">
-                            Joined {new Date(user.created_at).toLocaleDateString()}
-                          </p>
+                            <p className="text-sm text-text-sub">@{user.username}</p>
+                            <p className="mt-1 text-xs text-text-dim">
+                              Joined {new Date(user.created_at).toLocaleDateString()}
+                            </p>
+                          </div>
                         </div>
                         <div>
                           <svg
@@ -520,17 +560,32 @@ export default function UsersPage() {
                     </button>
                   </li>
                 ))}
+                {displayUsers.length === 0 && (
+                  <li className="px-4 py-10 text-center text-sm text-text-dim">
+                    No users match your search or filter.
+                  </li>
+                )}
               </ul>
             </Card>
           )}
         </div>
 
         {/* User Details Panel */}
-        <div className="lg:col-span-1">
+        <div className="lg:sticky lg:top-8 lg:col-span-1 lg:self-start">
           {selectedUser ? (
             <Card className="overflow-hidden">
-              <div className="border-b border-border px-4 py-5">
-                <h3 className="text-base font-medium text-text">User Details</h3>
+              <div className="flex items-center gap-3 border-b border-border px-4 py-5">
+                <UserAvatar
+                  avatarUrl={selectedUser.profile_image_url}
+                  displayName={selectedUser.display_name}
+                  size={44}
+                />
+                <div className="min-w-0">
+                  <h3 className="truncate text-base font-medium text-text">
+                    {selectedUser.display_name}
+                  </h3>
+                  <p className="truncate text-sm text-text-sub">@{selectedUser.username}</p>
+                </div>
               </div>
               <div className="px-4 py-5">
                 <dl className="space-y-4">
@@ -966,34 +1021,41 @@ export default function UsersPage() {
                   {userOverlays.length > 0 ? (
                     <ul className="space-y-2">
                       {userOverlays.map((overlay) => (
-                        <li key={overlay.id}>
+                        <li
+                          key={overlay.id}
+                          className="flex items-center gap-2 rounded-lg border border-border bg-surface-2 px-3 py-2 transition-colors hover:bg-surface-2/80"
+                        >
+                          {/* Primary: admin detail (owner-linked, in-app). */}
+                          <Link href={`/admin/overlays?overlay=${overlay.id}`} className="min-w-0 flex-1">
+                            <div className="truncate text-sm font-medium text-text">
+                              {overlay.name}
+                            </div>
+                            <div className="text-xs text-text-sub">
+                              {overlay.sources_count} sources
+                            </div>
+                          </Link>
+                          {/* Secondary: open the live overlay in a new tab. */}
                           <Link
                             href={`/overlay/${overlay.id}`}
                             target="_blank"
-                            className="block rounded-lg border border-border bg-surface-2 px-3 py-2 transition-colors hover:bg-surface-2/80"
+                            rel="noopener noreferrer"
+                            aria-label={`Open the live ${overlay.name} overlay (opens in a new tab)`}
+                            className="shrink-0 text-text-dim transition-colors hover:text-text"
                           >
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <div className="text-sm font-medium text-text">{overlay.name}</div>
-                                <div className="text-xs text-text-sub">
-                                  {overlay.sources_count} sources
-                                </div>
-                              </div>
-                              <svg
-                                aria-hidden="true"
-                                className="h-4 w-4 text-text-dim"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth="2"
-                                  d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-                                />
-                              </svg>
-                            </div>
+                            <svg
+                              aria-hidden="true"
+                              className="h-4 w-4"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="2"
+                                d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                              />
+                            </svg>
                           </Link>
                         </li>
                       ))}
@@ -1001,6 +1063,12 @@ export default function UsersPage() {
                   ) : (
                     <p className="text-sm text-text-dim italic">No overlays yet</p>
                   )}
+                  <Link
+                    href={`/admin/sources?user=${selectedUser.id}`}
+                    className="mt-3 inline-block text-xs font-medium text-primary hover:underline"
+                  >
+                    View this user&rsquo;s sources
+                  </Link>
                 </div>
               </div>
             </Card>
