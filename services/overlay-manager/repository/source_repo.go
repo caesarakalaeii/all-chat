@@ -18,6 +18,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 
@@ -313,11 +314,15 @@ func (r *SourceRepository) GetAllSources(ctx context.Context) ([]*models.ChatSou
 	return sources, nil
 }
 
-// SourceWithOverlay is a chat source joined with metadata from its owning overlay.
+// SourceWithOverlay is a chat source joined with metadata from its owning overlay,
+// including the overlay owner's identity (LEFT-joined from users; empty strings when the
+// owner row is absent).
 type SourceWithOverlay struct {
 	models.ChatSource
-	OverlayName string
-	UserID      string
+	OverlayName      string
+	UserID           string
+	OwnerUsername    string
+	OwnerDisplayName string
 }
 
 // GetAllSourcesWithOverlay returns every source joined with its overlay's name and
@@ -328,9 +333,11 @@ func (r *SourceRepository) GetAllSourcesWithOverlay(ctx context.Context) ([]*Sou
 	query := `
 		SELECT s.id, s.overlay_id, s.platform, s.channel_id, s.channel_name, s.channel_handle,
 		       s.is_active, s.created_at, s.updated_at,
-		       o.name, o.user_id
+		       o.name, o.user_id,
+		       u.username, u.display_name
 		FROM overlay_chat_sources s
 		JOIN overlays o ON o.id = s.overlay_id
+		LEFT JOIN users u ON u.id = o.user_id
 		ORDER BY s.created_at DESC
 	`
 
@@ -343,9 +350,12 @@ func (r *SourceRepository) GetAllSourcesWithOverlay(ctx context.Context) ([]*Sou
 	var sources []*SourceWithOverlay
 	for rows.Next() {
 		var sw SourceWithOverlay
-		if err := rows.Scan(&sw.ID, &sw.OverlayID, &sw.Platform, &sw.ChannelID, &sw.ChannelName, &sw.ChannelHandle, &sw.IsActive, &sw.CreatedAt, &sw.UpdatedAt, &sw.OverlayName, &sw.UserID); err != nil {
+		var username, displayName sql.NullString
+		if err := rows.Scan(&sw.ID, &sw.OverlayID, &sw.Platform, &sw.ChannelID, &sw.ChannelName, &sw.ChannelHandle, &sw.IsActive, &sw.CreatedAt, &sw.UpdatedAt, &sw.OverlayName, &sw.UserID, &username, &displayName); err != nil {
 			return nil, fmt.Errorf("failed to scan source: %w", err)
 		}
+		sw.OwnerUsername = username.String
+		sw.OwnerDisplayName = displayName.String
 		sources = append(sources, &sw)
 	}
 

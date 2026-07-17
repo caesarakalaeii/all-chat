@@ -18,6 +18,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 
@@ -276,10 +277,13 @@ func (r *OverlayRepository) GetAllOverlays(ctx context.Context) ([]*models.Overl
 	return overlays, nil
 }
 
-// OverlayWithSourceCount is an overlay paired with its number of chat sources.
+// OverlayWithSourceCount is an overlay paired with its number of chat sources and its
+// owner's identity (LEFT-joined from users; empty strings when the owner row is absent).
 type OverlayWithSourceCount struct {
 	models.Overlay
-	SourcesCount int
+	SourcesCount     int
+	OwnerUsername    string
+	OwnerDisplayName string
 }
 
 // GetAllOverlaysWithSourceCount returns every overlay together with its source
@@ -287,10 +291,12 @@ type OverlayWithSourceCount struct {
 // ListByOverlayID per overlay just to count rows.
 func (r *OverlayRepository) GetAllOverlaysWithSourceCount(ctx context.Context) ([]*OverlayWithSourceCount, error) {
 	query := `
-		SELECT o.id, o.user_id, o.name, o.created_at, o.updated_at, COUNT(s.id) AS sources_count
+		SELECT o.id, o.user_id, o.name, o.created_at, o.updated_at, COUNT(s.id) AS sources_count,
+		       u.username, u.display_name
 		FROM overlays o
 		LEFT JOIN overlay_chat_sources s ON s.overlay_id = o.id
-		GROUP BY o.id
+		LEFT JOIN users u ON u.id = o.user_id
+		GROUP BY o.id, u.id, u.username, u.display_name
 		ORDER BY o.created_at DESC
 	`
 
@@ -303,9 +309,12 @@ func (r *OverlayRepository) GetAllOverlaysWithSourceCount(ctx context.Context) (
 	var overlays []*OverlayWithSourceCount
 	for rows.Next() {
 		var o OverlayWithSourceCount
-		if err := rows.Scan(&o.ID, &o.UserID, &o.Name, &o.CreatedAt, &o.UpdatedAt, &o.SourcesCount); err != nil {
+		var username, displayName sql.NullString
+		if err := rows.Scan(&o.ID, &o.UserID, &o.Name, &o.CreatedAt, &o.UpdatedAt, &o.SourcesCount, &username, &displayName); err != nil {
 			return nil, fmt.Errorf("failed to scan overlay: %w", err)
 		}
+		o.OwnerUsername = username.String
+		o.OwnerDisplayName = displayName.String
 		overlays = append(overlays, &o)
 	}
 
@@ -320,11 +329,13 @@ func (r *OverlayRepository) GetAllOverlaysWithSourceCount(ctx context.Context) (
 // counts in one aggregated query, replacing a per-overlay ListByOverlayID loop.
 func (r *OverlayRepository) ListByUserIDWithSourceCount(ctx context.Context, userID string) ([]*OverlayWithSourceCount, error) {
 	query := `
-		SELECT o.id, o.user_id, o.name, o.created_at, o.updated_at, COUNT(s.id) AS sources_count
+		SELECT o.id, o.user_id, o.name, o.created_at, o.updated_at, COUNT(s.id) AS sources_count,
+		       u.username, u.display_name
 		FROM overlays o
 		LEFT JOIN overlay_chat_sources s ON s.overlay_id = o.id
+		LEFT JOIN users u ON u.id = o.user_id
 		WHERE o.user_id = $1
-		GROUP BY o.id
+		GROUP BY o.id, u.id, u.username, u.display_name
 		ORDER BY o.created_at DESC
 	`
 
@@ -337,9 +348,12 @@ func (r *OverlayRepository) ListByUserIDWithSourceCount(ctx context.Context, use
 	overlays := []*OverlayWithSourceCount{}
 	for rows.Next() {
 		var o OverlayWithSourceCount
-		if err := rows.Scan(&o.ID, &o.UserID, &o.Name, &o.CreatedAt, &o.UpdatedAt, &o.SourcesCount); err != nil {
+		var username, displayName sql.NullString
+		if err := rows.Scan(&o.ID, &o.UserID, &o.Name, &o.CreatedAt, &o.UpdatedAt, &o.SourcesCount, &username, &displayName); err != nil {
 			return nil, fmt.Errorf("failed to scan overlay: %w", err)
 		}
+		o.OwnerUsername = username.String
+		o.OwnerDisplayName = displayName.String
 		overlays = append(overlays, &o)
 	}
 

@@ -458,6 +458,7 @@ func main() {
 
 		// Viewer management
 		admin.GET("/viewers", adminViewerHandler.HandleListViewers)
+		admin.GET("/viewers/:session_id/activity", adminViewerHandler.HandleGetViewerActivity)
 		admin.POST("/viewers/:session_id/ban", adminViewerHandler.HandleBanViewer)
 		admin.POST("/viewers/:session_id/unban", adminViewerHandler.HandleUnbanViewer)
 		admin.POST("/viewers/:session_id/premium", adminViewerHandler.HandleSetViewerPremium)

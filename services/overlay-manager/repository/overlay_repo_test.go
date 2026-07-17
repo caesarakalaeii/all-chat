@@ -81,6 +81,14 @@ func setupTestDatabase(t *testing.T) (*OverlayRepository, func()) {
 			updated_at TIMESTAMP DEFAULT NOW(),
 			UNIQUE(overlay_id, platform, channel_id)
 		);
+
+		-- Minimal users table (owned by auth-service; shared DB in prod). Required so the
+		-- LEFT JOIN that surfaces the overlay owner in the admin queries resolves.
+		CREATE TABLE IF NOT EXISTS users (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			username VARCHAR(50) NOT NULL,
+			display_name VARCHAR(100)
+		);
 	`)
 	require.NoError(t, err)
 
@@ -410,6 +418,86 @@ func TestOverlayRepository_Delete(t *testing.T) {
 			}
 		})
 	}
+}
+
+// seedUser inserts a users row with the given username/display_name and returns its ID.
+func seedUser(t *testing.T, repo *OverlayRepository, username, displayName string) string {
+	t.Helper()
+	ctx := context.Background()
+	id := uuid.New().String()
+	_, err := repo.pool.Exec(ctx,
+		`INSERT INTO users (id, username, display_name) VALUES ($1, $2, $3)`,
+		id, username, displayName,
+	)
+	require.NoError(t, err)
+	return id
+}
+
+// TestGetAllOverlaysWithSourceCount_Owner verifies the admin listing joins the owner's
+// username/display_name from the users table, counts sources, and — via the LEFT JOIN —
+// still returns overlays whose owner has no matching users row (orphaned) with empty owner
+// fields rather than dropping them.
+func TestGetAllOverlaysWithSourceCount_Owner(t *testing.T) {
+	repo, cleanup := setupTestDatabase(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Owned overlay: seed a user, an overlay owned by them, and one source.
+	ownerID := seedUser(t, repo, "caesarlp", "CaesarLP")
+	owned := &models.Overlay{UserID: ownerID, Name: "Owned Overlay", IsActive: true}
+	require.NoError(t, repo.Create(ctx, owned))
+	_, err := repo.pool.Exec(ctx,
+		`INSERT INTO overlay_chat_sources (overlay_id, platform, channel_id, channel_name)
+		 VALUES ($1, 'twitch', 'caesarlp', 'CaesarLP')`, owned.ID)
+	require.NoError(t, err)
+
+	// Orphaned overlay: user_id points at a non-existent users row.
+	orphan := &models.Overlay{UserID: uuid.New().String(), Name: "Orphan Overlay", IsActive: true}
+	require.NoError(t, repo.Create(ctx, orphan))
+
+	results, err := repo.GetAllOverlaysWithSourceCount(ctx)
+	require.NoError(t, err)
+
+	byID := map[string]*OverlayWithSourceCount{}
+	for _, r := range results {
+		byID[r.ID] = r
+	}
+
+	require.Contains(t, byID, owned.ID)
+	assert.Equal(t, "caesarlp", byID[owned.ID].OwnerUsername)
+	assert.Equal(t, "CaesarLP", byID[owned.ID].OwnerDisplayName)
+	assert.Equal(t, 1, byID[owned.ID].SourcesCount)
+
+	require.Contains(t, byID, orphan.ID, "orphaned overlay must still appear (LEFT JOIN)")
+	assert.Equal(t, "", byID[orphan.ID].OwnerUsername, "missing owner => empty username")
+	assert.Equal(t, "", byID[orphan.ID].OwnerDisplayName, "missing owner => empty display name")
+	assert.Equal(t, 0, byID[orphan.ID].SourcesCount)
+}
+
+// TestListByUserIDWithSourceCount_Owner verifies the per-user admin listing applies the same
+// owner join.
+func TestListByUserIDWithSourceCount_Owner(t *testing.T) {
+	repo, cleanup := setupTestDatabase(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	ownerID := seedUser(t, repo, "streamer1", "Streamer One")
+	overlay := &models.Overlay{UserID: ownerID, Name: "My Overlay", IsActive: true}
+	require.NoError(t, repo.Create(ctx, overlay))
+	_, err := repo.pool.Exec(ctx,
+		`INSERT INTO overlay_chat_sources (overlay_id, platform, channel_id, channel_name)
+		 VALUES ($1, 'youtube', 'chan-1', 'Chan One')`, overlay.ID)
+	require.NoError(t, err)
+
+	results, err := repo.ListByUserIDWithSourceCount(ctx, ownerID)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+
+	assert.Equal(t, "streamer1", results[0].OwnerUsername)
+	assert.Equal(t, "Streamer One", results[0].OwnerDisplayName)
+	assert.Equal(t, 1, results[0].SourcesCount)
 }
 
 func TestOverlayRepository_GetByIDAndUserID(t *testing.T) {

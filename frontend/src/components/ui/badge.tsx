@@ -45,24 +45,32 @@ function Badge({
   return <span data-slot="badge" className={cn(badgeVariants({ size, className }))} {...props} />
 }
 
-// Platform-coded badge with glow dot
+// Platform-coded badge with glow dot.
+//
+// `platform` is typed as `string` (not `Platform`) on purpose: admin surfaces
+// render sources whose platform can be `discord` or `shared_overlay`, and the
+// set of stored platforms can outgrow the chromatic color map. Any platform
+// without a PLATFORM_COLORS entry (and thus without a `--color-*` / glow CSS
+// var) falls back to neutral `system` styling instead of dereferencing
+// undefined and crashing the page.
 function PlatformBadge({
   platform,
   size,
   className,
 }: {
-  platform: Platform
+  platform: string
   size?: 'default' | 'sm'
   className?: string
 }) {
-  const isSystem = platform === 'system'
+  const resolved: Platform = platform in PLATFORM_COLORS ? (platform as Platform) : 'system'
+  const isSystem = resolved === 'system'
   const glowStyle = isSystem
     ? { backgroundColor: 'var(--color-text-dim)', boxShadow: 'none' }
     : {
-        backgroundColor: `var(--color-${platform})`,
-        boxShadow: `var(--shadow-glow-${platform})`,
+        backgroundColor: `var(--color-${resolved})`,
+        boxShadow: `var(--shadow-glow-${resolved})`,
       }
-  const textClass = PLATFORM_COLORS[platform].text
+  const textClass = PLATFORM_COLORS[resolved].text
 
   return (
     <span
@@ -75,7 +83,7 @@ function PlatformBadge({
         style={glowStyle}
         aria-hidden="true"
       />
-      {platform.toUpperCase()}
+      {platform.replace(/_/g, ' ').toUpperCase()}
     </span>
   )
 }

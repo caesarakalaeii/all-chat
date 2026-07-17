@@ -95,6 +95,7 @@ func setupSourceTestDatabase(t *testing.T) (*SourceRepository, func()) {
 		CREATE TABLE IF NOT EXISTS users (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			username VARCHAR(50) NOT NULL,
+			display_name VARCHAR(100),
 			auth_provider VARCHAR(20) NOT NULL DEFAULT 'twitch',
 			granted_scopes TEXT[] NOT NULL DEFAULT '{}',
 			token_expires_at TIMESTAMP NOT NULL DEFAULT NOW()
@@ -437,6 +438,68 @@ func TestListByOverlayIDForUser_IsOwnChannel(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, sources[0].IsOwnChannel,
 		"linked twitch_oauth_tokens owner must own the channel even with an expired token (re-consent is the point)")
+}
+
+// TestGetAllSourcesWithOverlay_Owner verifies that the admin source listing surfaces the
+// owning overlay's owner (username/display_name, LEFT-joined from users) and the source's
+// channel_handle. An orphaned owner (overlay.user_id with no users row) must yield empty
+// owner fields rather than dropping the source.
+func TestGetAllSourcesWithOverlay_Owner(t *testing.T) {
+	repo, cleanup := setupSourceTestDatabase(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	// Owner-backed overlay.
+	ownerID := uuid.New().String()
+	_, err := repo.pool.Exec(ctx,
+		`INSERT INTO users (id, username, display_name, auth_provider) VALUES ($1, 'caesarlp', 'CaesarLP', 'twitch')`,
+		ownerID)
+	require.NoError(t, err)
+
+	ownedOverlay := uuid.New().String()
+	_, err = repo.pool.Exec(ctx,
+		`INSERT INTO overlays (id, user_id, name) VALUES ($1, $2, $3)`,
+		ownedOverlay, ownerID, "Owned Overlay")
+	require.NoError(t, err)
+
+	handle := "@caesarlp"
+	require.NoError(t, repo.Create(ctx, &models.ChatSource{
+		OverlayID:     ownedOverlay,
+		Platform:      "youtube",
+		ChannelID:     "UC123",
+		ChannelName:   "CaesarLP",
+		ChannelHandle: &handle,
+		IsActive:      true,
+	}))
+
+	// Orphaned overlay: user_id has no matching users row.
+	orphanOverlay := createTestOverlay(t, repo)
+	require.NoError(t, repo.Create(ctx, &models.ChatSource{
+		OverlayID:   orphanOverlay,
+		Platform:    "twitch",
+		ChannelID:   "orphan-chan",
+		ChannelName: "Orphan",
+		IsActive:    true,
+	}))
+
+	sources, err := repo.GetAllSourcesWithOverlay(ctx)
+	require.NoError(t, err)
+
+	byOverlay := map[string]*SourceWithOverlay{}
+	for _, s := range sources {
+		byOverlay[s.OverlayID] = s
+	}
+
+	require.Contains(t, byOverlay, ownedOverlay)
+	assert.Equal(t, "caesarlp", byOverlay[ownedOverlay].OwnerUsername)
+	assert.Equal(t, "CaesarLP", byOverlay[ownedOverlay].OwnerDisplayName)
+	assert.Equal(t, "Owned Overlay", byOverlay[ownedOverlay].OverlayName)
+	require.NotNil(t, byOverlay[ownedOverlay].ChannelHandle, "channel_handle must pass through")
+	assert.Equal(t, "@caesarlp", *byOverlay[ownedOverlay].ChannelHandle)
+
+	require.Contains(t, byOverlay, orphanOverlay, "orphaned source must still appear")
+	assert.Equal(t, "", byOverlay[orphanOverlay].OwnerUsername, "missing owner => empty username")
+	assert.Equal(t, "", byOverlay[orphanOverlay].OwnerDisplayName, "missing owner => empty display name")
 }
 
 // TestListByOverlayID_DefaultsIsOwnChannelFalse ensures the back-compat method that omits a

@@ -53,23 +53,27 @@ func (h *AdminHandler) ListOverlays(c *gin.Context) {
 	}
 
 	type OverlayResponse struct {
-		ID           string `json:"id"`
-		Name         string `json:"name"`
-		UserID       string `json:"user_id"`
-		CreatedAt    string `json:"created_at"`
-		UpdatedAt    string `json:"updated_at"`
-		SourcesCount int    `json:"sources_count"`
+		ID               string `json:"id"`
+		Name             string `json:"name"`
+		UserID           string `json:"user_id"`
+		OwnerUsername    string `json:"owner_username"`
+		OwnerDisplayName string `json:"owner_display_name"`
+		CreatedAt        string `json:"created_at"`
+		UpdatedAt        string `json:"updated_at"`
+		SourcesCount     int    `json:"sources_count"`
 	}
 
 	response := make([]OverlayResponse, len(overlays))
 	for i, overlay := range overlays {
 		response[i] = OverlayResponse{
-			ID:           overlay.ID,
-			Name:         overlay.Name,
-			UserID:       overlay.UserID,
-			CreatedAt:    overlay.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-			UpdatedAt:    overlay.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
-			SourcesCount: overlay.SourcesCount,
+			ID:               overlay.ID,
+			Name:             overlay.Name,
+			UserID:           overlay.UserID,
+			OwnerUsername:    overlay.OwnerUsername,
+			OwnerDisplayName: overlay.OwnerDisplayName,
+			CreatedAt:        overlay.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			UpdatedAt:        overlay.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			SourcesCount:     overlay.SourcesCount,
 		}
 	}
 
@@ -91,29 +95,35 @@ func (h *AdminHandler) ListAllSources(c *gin.Context) {
 
 	// Include overlay information for each source
 	type SourceResponse struct {
-		ID          string `json:"id"`
-		OverlayID   string `json:"overlay_id"`
-		OverlayName string `json:"overlay_name"`
-		Platform    string `json:"platform"`
-		ChannelID   string `json:"channel_id"`
-		ChannelName string `json:"channel_name"`
-		IsActive    bool   `json:"is_active"`
-		CreatedAt   string `json:"created_at"`
-		UserID      string `json:"user_id"`
+		ID               string  `json:"id"`
+		OverlayID        string  `json:"overlay_id"`
+		OverlayName      string  `json:"overlay_name"`
+		Platform         string  `json:"platform"`
+		ChannelID        string  `json:"channel_id"`
+		ChannelName      string  `json:"channel_name"`
+		ChannelHandle    *string `json:"channel_handle,omitempty"`
+		IsActive         bool    `json:"is_active"`
+		CreatedAt        string  `json:"created_at"`
+		UserID           string  `json:"user_id"`
+		OwnerUsername    string  `json:"owner_username"`
+		OwnerDisplayName string  `json:"owner_display_name"`
 	}
 
 	response := make([]SourceResponse, 0, len(sources))
 	for _, source := range sources {
 		response = append(response, SourceResponse{
-			ID:          source.ID,
-			OverlayID:   source.OverlayID,
-			OverlayName: source.OverlayName,
-			Platform:    source.Platform,
-			ChannelID:   source.ChannelID,
-			ChannelName: source.ChannelName,
-			IsActive:    source.IsActive,
-			CreatedAt:   source.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-			UserID:      source.UserID,
+			ID:               source.ID,
+			OverlayID:        source.OverlayID,
+			OverlayName:      source.OverlayName,
+			Platform:         source.Platform,
+			ChannelID:        source.ChannelID,
+			ChannelName:      source.ChannelName,
+			ChannelHandle:    source.ChannelHandle,
+			IsActive:         source.IsActive,
+			CreatedAt:        source.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			UserID:           source.UserID,
+			OwnerUsername:    source.OwnerUsername,
+			OwnerDisplayName: source.OwnerDisplayName,
 		})
 	}
 
@@ -136,23 +146,27 @@ func (h *AdminHandler) GetUserOverlays(c *gin.Context) {
 	}
 
 	type OverlayResponse struct {
-		ID           string `json:"id"`
-		Name         string `json:"name"`
-		UserID       string `json:"user_id"`
-		CreatedAt    string `json:"created_at"`
-		UpdatedAt    string `json:"updated_at"`
-		SourcesCount int    `json:"sources_count"`
+		ID               string `json:"id"`
+		Name             string `json:"name"`
+		UserID           string `json:"user_id"`
+		OwnerUsername    string `json:"owner_username"`
+		OwnerDisplayName string `json:"owner_display_name"`
+		CreatedAt        string `json:"created_at"`
+		UpdatedAt        string `json:"updated_at"`
+		SourcesCount     int    `json:"sources_count"`
 	}
 
 	response := make([]OverlayResponse, len(overlays))
 	for i, overlay := range overlays {
 		response[i] = OverlayResponse{
-			ID:           overlay.ID,
-			Name:         overlay.Name,
-			UserID:       overlay.UserID,
-			CreatedAt:    overlay.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-			UpdatedAt:    overlay.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
-			SourcesCount: overlay.SourcesCount,
+			ID:               overlay.ID,
+			Name:             overlay.Name,
+			UserID:           overlay.UserID,
+			OwnerUsername:    overlay.OwnerUsername,
+			OwnerDisplayName: overlay.OwnerDisplayName,
+			CreatedAt:        overlay.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			UpdatedAt:        overlay.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			SourcesCount:     overlay.SourcesCount,
 		}
 	}
 

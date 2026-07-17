@@ -46,7 +46,10 @@ type BanRequest struct {
 	Reason string `json:"reason"`
 }
 
-// HandleListViewers lists all viewer sessions with pagination
+// HandleListViewers lists viewer sessions with pagination, search and filters.
+// Query params: limit/offset (pagination), q (case-insensitive search over
+// username/display_name/platform_user_id), is_banned and is_premium (bool,
+// applied only when present), platform (exact match).
 func (h *AdminViewerHandler) HandleListViewers(c *gin.Context) {
 	// Parse pagination parameters
 	limit := 50
@@ -64,8 +67,25 @@ func (h *AdminViewerHandler) HandleListViewers(c *gin.Context) {
 		}
 	}
 
+	// Build the filter. Bool filters apply only when the param is present so the
+	// UI can distinguish "any" from "explicitly false".
+	filter := repository.ViewerListFilter{
+		Query:    c.Query("q"),
+		Platform: c.Query("platform"),
+	}
+	if v := c.Query("is_banned"); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			filter.IsBanned = &b
+		}
+	}
+	if v := c.Query("is_premium"); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			filter.IsPremium = &b
+		}
+	}
+
 	ctx := c.Request.Context()
-	sessions, err := h.viewerRepo.ListAll(ctx, limit, offset)
+	sessions, total, err := h.viewerRepo.ListAll(ctx, filter, limit, offset)
 	if err != nil {
 		h.log.Error("Failed to list viewers", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list viewers"})
@@ -80,9 +100,31 @@ func (h *AdminViewerHandler) HandleListViewers(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"viewers": sessions,
+		"total":   total,
 		"limit":   limit,
 		"offset":  offset,
 	})
+}
+
+// HandleGetViewerActivity returns a viewer session's message-sending history
+// summary (totals + per-streamer breakdown) for the admin Viewers page.
+func (h *AdminViewerHandler) HandleGetViewerActivity(c *gin.Context) {
+	sessionIDStr := c.Param("session_id")
+	sessionID, err := uuid.Parse(sessionIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid session ID"})
+		return
+	}
+
+	ctx := c.Request.Context()
+	activity, err := h.viewerRepo.GetViewerActivity(ctx, sessionID)
+	if err != nil {
+		h.log.Error("Failed to get viewer activity", zap.Error(err), zap.String("session_id", sessionIDStr))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get viewer activity"})
+		return
+	}
+
+	c.JSON(http.StatusOK, activity)
 }
 
 // HandleBanViewer bans a viewer from sending messages

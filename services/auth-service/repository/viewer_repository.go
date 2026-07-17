@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/caesar/all-chat/services/auth-service/models"
@@ -316,9 +317,56 @@ func (r *ViewerRepository) DecryptRefreshToken(token string) (string, error) {
 	return r.cipher.Decrypt(token)
 }
 
-// ListAll returns all viewer sessions with pagination
-func (r *ViewerRepository) ListAll(ctx context.Context, limit, offset int) ([]models.ViewerSession, error) {
-	query := `
+// ViewerListFilter narrows the viewer session listing for the admin Viewers page.
+// A zero value applies no filtering (returns everything, paginated). Query is a
+// case-insensitive substring match on username / display_name / platform_user_id;
+// IsBanned and IsPremium are equality filters applied only when non-nil; Platform
+// is an equality filter applied only when non-empty.
+type ViewerListFilter struct {
+	Query     string
+	IsBanned  *bool
+	IsPremium *bool
+	Platform  string
+}
+
+// ListAll returns viewer sessions matching filter, paginated by limit/offset, plus
+// the total number of rows matching the filter (ignoring limit/offset) so the admin
+// UI can render pagination. The total is computed with COUNT(*) OVER(), which is
+// evaluated over the full filtered set before LIMIT/OFFSET are applied.
+func (r *ViewerRepository) ListAll(ctx context.Context, filter ViewerListFilter, limit, offset int) ([]models.ViewerSession, int, error) {
+	conditions := make([]string, 0, 4)
+	args := make([]interface{}, 0, 6)
+	argIdx := 1
+
+	if filter.Query != "" {
+		conditions = append(conditions, fmt.Sprintf(
+			"(vs.username ILIKE $%d OR vs.display_name ILIKE $%d OR vs.platform_user_id ILIKE $%d)",
+			argIdx, argIdx, argIdx))
+		args = append(args, "%"+filter.Query+"%")
+		argIdx++
+	}
+	if filter.IsBanned != nil {
+		conditions = append(conditions, fmt.Sprintf("vs.is_banned = $%d", argIdx))
+		args = append(args, *filter.IsBanned)
+		argIdx++
+	}
+	if filter.IsPremium != nil {
+		conditions = append(conditions, fmt.Sprintf("COALESCE(v.is_premium, false) = $%d", argIdx))
+		args = append(args, *filter.IsPremium)
+		argIdx++
+	}
+	if filter.Platform != "" {
+		conditions = append(conditions, fmt.Sprintf("vs.platform = $%d", argIdx))
+		args = append(args, filter.Platform)
+		argIdx++
+	}
+
+	whereClause := ""
+	if len(conditions) > 0 {
+		whereClause = "WHERE " + strings.Join(conditions, " AND ")
+	}
+
+	query := fmt.Sprintf(`
 		SELECT vs.id, vs.platform, vs.platform_user_id, vs.username, vs.display_name, vs.avatar_url,
 		       vs.access_token, vs.refresh_token, vs.token_expires_at,
 		       vs.last_message_at, vs.message_count_1min, vs.message_count_1hour,
@@ -326,23 +374,29 @@ func (r *ViewerRepository) ListAll(ctx context.Context, limit, offset int) ([]mo
 		       COALESCE(v.is_premium, false) AS is_premium,
 		       v.premium_admin_override_expires_at,
 		       vs.viewer_id,
+		       vs.user_id,
 		       vs.is_banned, vs.banned_at, vs.banned_reason,
-		       vs.created_at, vs.updated_at
+		       vs.created_at, vs.updated_at,
+		       COUNT(*) OVER() AS total_count
 		FROM viewer_sessions vs
 		LEFT JOIN viewers v ON vs.viewer_id = v.id
+		%s
 		ORDER BY vs.created_at DESC
-		LIMIT $1 OFFSET $2
-	`
+		LIMIT $%d OFFSET $%d
+	`, whereClause, argIdx, argIdx+1)
+	args = append(args, limit, offset)
 
-	rows, err := r.db.Query(ctx, query, limit, offset)
+	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list viewer sessions: %w", err)
+		return nil, 0, fmt.Errorf("failed to list viewer sessions: %w", err)
 	}
 	defer rows.Close()
 
 	sessions := make([]models.ViewerSession, 0)
+	total := 0
 	for rows.Next() {
 		var session models.ViewerSession
+		var rowTotal int
 		err := rows.Scan(
 			&session.ID,
 			&session.Platform,
@@ -361,19 +415,104 @@ func (r *ViewerRepository) ListAll(ctx context.Context, limit, offset int) ([]mo
 			&session.IsPremium,
 			&session.PremiumExpiresAt,
 			&session.ViewerID,
+			&session.UserID,
 			&session.IsBanned,
 			&session.BannedAt,
 			&session.BannedReason,
 			&session.CreatedAt,
 			&session.UpdatedAt,
+			&rowTotal,
 		)
 		if err != nil {
-			return nil, fmt.Errorf("failed to scan viewer session: %w", err)
+			return nil, 0, fmt.Errorf("failed to scan viewer session: %w", err)
 		}
+		total = rowTotal
 		sessions = append(sessions, session)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("failed to iterate viewer sessions: %w", err)
+	}
 
-	return sessions, nil
+	return sessions, total, nil
+}
+
+// ViewerActivityStreamer is one streamer/overlay/channel a viewer has sent
+// messages to, with per-group counts (part of ViewerActivity).
+type ViewerActivityStreamer struct {
+	StreamerUserID   string    `json:"streamer_user_id"`
+	StreamerUsername string    `json:"streamer_username"`
+	OverlayID        *string   `json:"overlay_id"`
+	ChannelName      string    `json:"channel_name"`
+	Platform         string    `json:"platform"`
+	MessageCount     int       `json:"message_count"`
+	LastSentAt       time.Time `json:"last_sent_at"`
+}
+
+// ViewerActivity summarizes a viewer session's message-sending history for the
+// admin Viewers page: overall totals plus a breakdown by streamer/channel.
+type ViewerActivity struct {
+	TotalMessages int                      `json:"total_messages"`
+	LastSentAt    *time.Time               `json:"last_sent_at"`
+	Streamers     []ViewerActivityStreamer `json:"streamers"`
+}
+
+// GetViewerActivity aggregates a viewer session's message history. TotalMessages
+// and LastSentAt are the overall count / most-recent timestamp; Streamers is the
+// per-(streamer, overlay, channel, platform) breakdown resolving the streamer's
+// username, ordered by most-recent activity and capped at 10. All reads are
+// scoped by viewer_session_id (indexed), so this is cheap.
+func (r *ViewerRepository) GetViewerActivity(ctx context.Context, viewerSessionID uuid.UUID) (*ViewerActivity, error) {
+	activity := &ViewerActivity{Streamers: make([]ViewerActivityStreamer, 0)}
+
+	err := r.db.QueryRow(ctx, `
+		SELECT COUNT(*), MAX(sent_at)
+		FROM viewer_message_history
+		WHERE viewer_session_id = $1
+	`, viewerSessionID).Scan(&activity.TotalMessages, &activity.LastSentAt)
+	if err != nil {
+		return nil, fmt.Errorf("failed to aggregate viewer activity: %w", err)
+	}
+
+	rows, err := r.db.Query(ctx, `
+		SELECT h.streamer_user_id,
+		       COALESCE(u.username, '') AS streamer_username,
+		       h.overlay_id,
+		       h.channel_name,
+		       h.platform,
+		       COUNT(*) AS message_count,
+		       MAX(h.sent_at) AS last_sent_at
+		FROM viewer_message_history h
+		LEFT JOIN users u ON u.id = h.streamer_user_id
+		WHERE h.viewer_session_id = $1
+		GROUP BY h.streamer_user_id, u.username, h.overlay_id, h.channel_name, h.platform
+		ORDER BY MAX(h.sent_at) DESC
+		LIMIT 10
+	`, viewerSessionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list viewer activity streamers: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var s ViewerActivityStreamer
+		if err := rows.Scan(
+			&s.StreamerUserID,
+			&s.StreamerUsername,
+			&s.OverlayID,
+			&s.ChannelName,
+			&s.Platform,
+			&s.MessageCount,
+			&s.LastSentAt,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan viewer activity streamer: %w", err)
+		}
+		activity.Streamers = append(activity.Streamers, s)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate viewer activity streamers: %w", err)
+	}
+
+	return activity, nil
 }
 
 // BanViewer bans a viewer from sending messages

@@ -444,6 +444,39 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0034: Admin Viewer Identity Model
+
+**Status**: ✅ Accepted
+**Date**: 2026-07-17
+**Problem**: The admin viewer view was "basically useless" — it listed raw `viewer_sessions` (one per `(platform, platform_user_id)`) with no streamer/usage context and surfaced rate-limit counters as if they were engagement; `viewer_message_history` was write-only (DSGVO export only)
+**Decision**: Operate on raw `viewer_sessions` (the unit ban/premium act on), surface the linked streamer `user_id` (migration 040), and add a READ-ONLY per-session activity aggregate over `viewer_message_history` (existing index, joined to `users.username`); stop presenting `message_count_1min/1hour`; do NOT introduce a durable cross-session identity table (dedup deferred)
+**Impact**: Viewer view gains streamer/overlay context and real usage counts cheaply; `viewer_message_history` becomes an admin read surface (no new PII); a future durable-identity model can layer on top. (ADR numbering shared with caesar-deployment, so this is 0034)
+**→ Read**: [0034-admin-viewer-identity-model.md](./0034-admin-viewer-identity-model.md)
+
+---
+
+### ADR-0035: Admin Global Entity Search
+
+**Status**: ✅ Accepted
+**Date**: 2026-07-17
+**Problem**: There was no way to jump to an admin entity by name or id — an admin had to guess whether an id was a user/overlay/source/viewer and page through the right list
+**Decision**: Add a global admin search resolving a free-text query across users (username/display_name/id), overlays (name/id), sources (channel name/handle/id), and viewers (username/platform_user_id), returning typed results that deep-link into the ADR-0036 URL-addressable views; initial implementation federates over the existing admin list endpoints client-side, with a server-side `/api/v1/admin/search` endpoint noted as the future optimization
+**Impact**: One entry point to find anything; reuses and reinforces the URL-addressable pattern; client federation loads full lists (fine at current admin scale) with a server endpoint as the documented escape hatch. (ADR numbering shared with caesar-deployment, so this is 0035)
+**→ Read**: [0035-admin-global-entity-search.md](./0035-admin-global-entity-search.md)
+
+---
+
+### ADR-0036: Admin Master-Detail with URL-Addressable Selection
+
+**Status**: ✅ Accepted
+**Date**: 2026-07-17
+**Problem**: Admin pages kept selection and filters in opaque React state, so entities could not be linked to each other or shared by URL (the #1 complaint: "overlays are not linked to their users"); only the Overlays page read `?overlay=<id>`, and it was never standardized
+**Decision**: Standardize every admin list+detail page on URL query params for selection *and* filters (`?user=`, `?overlay=`, `?filter=`, `?connected=`, `?platform=`, `?q=`), with a scrollable-list + sticky-panel master-detail layout; no new dynamic `[id]` routes (query params avoid a routing migration)
+**Impact**: Admin views become deep-linkable and cross-navigable (source → user, overlay → owner, user → their sources) and URLs are shareable for support, at the cost of a small per-page mount-time param read; nested routes noted as the future step. (ADR numbering shared with caesar-deployment, so this is 0036)
+**→ Read**: [0036-admin-url-addressable-selection.md](./0036-admin-url-addressable-selection.md)
+
+---
+
 ## How to Create a New ADR
 
 ### Step 1: Determine ADR Number
@@ -567,11 +600,11 @@ Create a new ADR if:
 
 **Total ADRs**: 19
 **Status**: All accepted (✅)
-**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation, overlay observability view, demand linger, EventSub chat-ownership partition, linked Twitch credentials, chat moderation write-path, premium entitlements via Patreon, streamer/viewer premium split)
+**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation, overlay observability view, demand linger, EventSub chat-ownership partition, linked Twitch credentials, chat moderation write-path, premium entitlements via Patreon, streamer/viewer premium split, engagement economy, source-liveness heartbeat, admin URL-addressable views + viewer identity model + global search)
 
 **Most Referenced**:
 1. ADR-0002 (Redis patterns) - Referenced by all listeners, message processor
 2. ADR-0001 (Go layout) - Referenced by all services
 3. ADR-0006 (Quota tracking) - Referenced by YouTube listener, overlay manager
 
-**Last Updated**: 2026-06-20
+**Last Updated**: 2026-07-17

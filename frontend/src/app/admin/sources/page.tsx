@@ -23,26 +23,41 @@ import Link from 'next/link'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PlatformBadge } from '@/components/ui/badge'
-import type { Platform } from '@/lib/platform-colors'
+import { ChannelLink } from '@/components/ChannelLink'
 
 interface Source {
   id: string
   overlay_id: string
   overlay_name: string
-  platform: 'twitch' | 'youtube' | 'kick' | 'tiktok'
+  // Stored platforms outgrow the chromatic set (discord, shared_overlay); the
+  // badge neutral-styles anything it doesn't recognize, so no cast is needed.
+  platform: 'twitch' | 'youtube' | 'kick' | 'tiktok' | 'discord' | 'shared_overlay'
   channel_id: string
   channel_name: string
+  channel_handle?: string | null
   is_active: boolean
   created_at: string
   user_id: string
+  owner_username?: string
+  owner_display_name?: string
+}
+
+// Short, stable label for a source's owner: the resolved username, else a
+// truncated user id (orphaned/unjoined rows), else a dash.
+function ownerLabel(source: Source): string {
+  if (source.owner_username) return `@${source.owner_username}`
+  if (source.user_id) return source.user_id.slice(0, 8)
+  return '—'
 }
 
 export default function SourcesPage() {
   const [sources, setSources] = useState<Source[]>([])
-  const [filteredSources, setFilteredSources] = useState<Source[]>([])
   const [platformFilter, setPlatformFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [searchTerm, setSearchTerm] = useState('')
+  // Optional owner scope from ?user=<id> (set when arriving from the Users page
+  // "View this user's sources" link). Narrows the list to one owner.
+  const [userFilter, setUserFilter] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const searchId = useId()
@@ -66,7 +81,14 @@ export default function SourcesPage() {
 
         const data = await response.json()
         setSources(data)
-        setFilteredSources(data)
+        // Scope from URL (client-only; read post-await): ?user=<id> owner scope
+        // and ?platform=<p> (e.g. from the dashboard's per-platform breakdown).
+        const params = new URLSearchParams(window.location.search)
+        setUserFilter(params.get('user'))
+        const p = params.get('platform')
+        if (p && ['twitch', 'youtube', 'kick', 'tiktok', 'discord', 'shared_overlay'].includes(p)) {
+          setPlatformFilter(p)
+        }
         setLoading(false)
       } catch (err) {
         console.error('Failed to load sources:', err)
@@ -78,35 +100,29 @@ export default function SourcesPage() {
     fetchSources()
   }, [])
 
-  // Filter sources based on platform, status, and search
-  useEffect(() => {
-    let filtered = [...sources]
-
-    // Platform filter
-    if (platformFilter !== 'all') {
-      filtered = filtered.filter((s) => s.platform === platformFilter)
-    }
-
-    // Status filter
-    if (statusFilter === 'active') {
-      filtered = filtered.filter((s) => s.is_active)
-    } else if (statusFilter === 'inactive') {
-      filtered = filtered.filter((s) => !s.is_active)
-    }
-
-    // Search filter
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase()
-      filtered = filtered.filter(
-        (s) =>
-          s.channel_name.toLowerCase().includes(term) ||
-          s.channel_id.toLowerCase().includes(term) ||
-          s.overlay_name.toLowerCase().includes(term)
+  // Derived during render (no state-in-effect): filter by owner scope, platform,
+  // status, and search (channel name/id, overlay name, owner username).
+  const searchLower = searchTerm.trim().toLowerCase()
+  const filteredSources = sources.filter((s) => {
+    if (userFilter && s.user_id !== userFilter) return false
+    if (platformFilter !== 'all' && s.platform !== platformFilter) return false
+    if (statusFilter === 'active' && !s.is_active) return false
+    if (statusFilter === 'inactive' && s.is_active) return false
+    if (searchLower) {
+      return (
+        s.channel_name.toLowerCase().includes(searchLower) ||
+        s.channel_id.toLowerCase().includes(searchLower) ||
+        s.overlay_name.toLowerCase().includes(searchLower) ||
+        (s.owner_username?.toLowerCase().includes(searchLower) ?? false)
       )
     }
+    return true
+  })
 
-    setFilteredSources(filtered)
-  }, [platformFilter, statusFilter, searchTerm, sources])
+  // Label the active owner scope with a resolved username when we have one.
+  const userFilterLabel = userFilter
+    ? (sources.find((s) => s.user_id === userFilter)?.owner_username ?? userFilter.slice(0, 8))
+    : null
 
   const platformCounts = {
     twitch: sources.filter((s) => s.platform === 'twitch').length,
@@ -133,6 +149,28 @@ export default function SourcesPage() {
           View and manage all chat sources across overlays
         </p>
       </div>
+
+      {/* Owner scope (from ?user=) */}
+      {userFilter && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm">
+          <span className="text-text-sub">
+            Showing sources owned by{' '}
+            <Link
+              href={`/admin/users?user=${userFilter}`}
+              className="font-medium text-text hover:underline"
+            >
+              {userFilterLabel}
+            </Link>
+          </span>
+          <button
+            type="button"
+            onClick={() => setUserFilter(null)}
+            className="ml-auto text-text-sub transition-colors hover:text-text"
+          >
+            Clear
+          </button>
+        </div>
+      )}
 
       {/* Stats Cards */}
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -228,7 +266,7 @@ export default function SourcesPage() {
             <input
               id={searchId}
               type="text"
-              placeholder="Search by channel name or ID..."
+              placeholder="Search by channel, overlay, or owner..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="focus-visible:ring-ring block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none sm:text-sm"
@@ -282,6 +320,10 @@ export default function SourcesPage() {
             <Skeleton key={i} className="h-10 w-full rounded-lg" />
           ))}
         </Card>
+      ) : filteredSources.length === 0 ? (
+        <Card className="p-8 text-center text-sm text-text-dim">
+          {sources.length === 0 ? 'No sources found.' : 'No sources match your filters.'}
+        </Card>
       ) : (
         <>
           {/* Desktop table */}
@@ -306,13 +348,13 @@ export default function SourcesPage() {
                       Overlay
                     </th>
                     <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
+                      Owner
+                    </th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
                       Status
                     </th>
                     <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
                       Created
-                    </th>
-                    <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
-                      Actions
                     </th>
                   </tr>
                 </thead>
@@ -320,10 +362,16 @@ export default function SourcesPage() {
                   {filteredSources.map((source) => (
                     <tr key={source.id} className="transition-colors hover:bg-surface-2">
                       <td className="px-4 py-3">
-                        <PlatformBadge platform={source.platform as Platform} size="sm" />
+                        <PlatformBadge platform={source.platform} size="sm" />
                       </td>
                       <td className="px-4 py-3">
-                        <div className="text-sm font-medium text-text">{source.channel_name}</div>
+                        <ChannelLink
+                          platform={source.platform}
+                          channelId={source.channel_id}
+                          channelName={source.channel_name}
+                          channelHandle={source.channel_handle}
+                          className="text-sm font-medium text-text"
+                        />
                         <div className="font-mono text-xs text-text-sub">{source.channel_id}</div>
                       </td>
                       <td className="px-4 py-3">
@@ -333,6 +381,18 @@ export default function SourcesPage() {
                         >
                           {source.overlay_name}
                         </Link>
+                      </td>
+                      <td className="px-4 py-3">
+                        {source.user_id ? (
+                          <Link
+                            href={`/admin/users?user=${source.user_id}`}
+                            className="text-sm text-text-sub transition-colors hover:text-text"
+                          >
+                            {ownerLabel(source)}
+                          </Link>
+                        ) : (
+                          <span className="text-sm text-text-dim">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         {source.is_active ? (
@@ -347,15 +407,6 @@ export default function SourcesPage() {
                       </td>
                       <td className="px-4 py-3 text-sm text-text-sub">
                         {new Date(source.created_at).toLocaleDateString()}
-                      </td>
-                      <td className="px-4 py-3 text-sm">
-                        <Link
-                          href={`/admin/overlays?overlay=${source.overlay_id}`}
-                          aria-label={`View overlay ${source.overlay_name} for channel ${source.channel_name}`}
-                          className="font-medium text-text-sub transition-colors hover:text-text"
-                        >
-                          View
-                        </Link>
                       </td>
                     </tr>
                   ))}
@@ -373,14 +424,18 @@ export default function SourcesPage() {
               <Card key={source.id} className="p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="truncate text-sm font-medium text-text">
-                      {source.channel_name}
-                    </div>
+                    <ChannelLink
+                      platform={source.platform}
+                      channelId={source.channel_id}
+                      channelName={source.channel_name}
+                      channelHandle={source.channel_handle}
+                      className="truncate text-sm font-medium text-text"
+                    />
                     <div className="truncate font-mono text-xs text-text-sub">
                       {source.channel_id}
                     </div>
                   </div>
-                  <PlatformBadge platform={source.platform as Platform} size="sm" />
+                  <PlatformBadge platform={source.platform} size="sm" />
                 </div>
                 <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-sub">
                   <Link
@@ -389,6 +444,14 @@ export default function SourcesPage() {
                   >
                     {source.overlay_name}
                   </Link>
+                  {source.user_id && (
+                    <Link
+                      href={`/admin/users?user=${source.user_id}`}
+                      className="truncate transition-colors hover:text-text"
+                    >
+                      {ownerLabel(source)}
+                    </Link>
+                  )}
                   <span>{new Date(source.created_at).toLocaleDateString()}</span>
                   {source.is_active ? (
                     <span className="inline-flex items-center rounded-full bg-kick/10 px-2 py-0.5 font-medium text-kick">

@@ -1,204 +1,93 @@
 # All-Chat Admin Dashboard
 
-The admin dashboard provides a comprehensive interface for managing users, overlays, and chat sources across the All-Chat platform.
+Operator console for managing users, overlays, chat sources, and viewers across
+the platform. All pages are gated behind `ProtectedRoute requireAdmin` (see
+`layout.tsx`) and talk to real backend admin APIs over the session cookie (the
+gateway's CookieToBearer middleware turns the httpOnly access cookie into a
+Bearer token; there is no JS-readable token).
 
-## Features
+## Navigation model (ADR-0036)
 
-### 1. Dashboard Home (`/admin`)
+Admin pages are **URL-addressable**: selection and filters live in query
+parameters, not opaque React state, so every view is deep-linkable and entities
+cross-link to one another. Layout is master-detail (a scrollable list plus a
+sticky detail panel).
 
-- Quick access cards for Users, Overlays, and Sources
-- Navigation to all admin sections
-- Quick stats overview
+Recognised parameters:
 
-### 2. Users Management (`/admin/users`)
+- `/admin/users?user=<id>` — auto-select a user; `?filter=active|banned|premium|beta` — preselect a tab
+- `/admin/overlays?overlay=<id>` — auto-select an overlay; `?connected=true` — connected-only view
+- `/admin/sources?user=<id>` — scope to one owner; `?platform=<p>` — preselect a platform
+- `/admin/viewers?q=<text>` — pre-fill the viewer search
+- `/admin/search?q=<text>` — global search
 
-- **User List**: View all registered users with their platform connections
-- **Platform Badges**: Visual indicators for connected platforms (Twitch, YouTube, Kick, TikTok)
-- **User Details Panel**:
-  - User ID, username, email
-  - Connected platform IDs
-  - List of user's overlays
-- **Selection**: Click on any user to view their details
+The sidebar (`components/AdminSidebar.tsx`) is the single source of truth for the
+nav link list (`ADMIN_LINKS`); the dashboard home grid is generated from it so
+the two can never drift.
 
-### 3. Overlays Management (`/admin/overlays`)
+## Pages
 
-- **Overlay List**: View all overlays across all users
-- **Source Count**: See how many sources are connected to each overlay
-- **Overlay Details Panel**:
-  - Overlay name and ID
-  - User ID
-  - Creation date
-- **Connected Sources Panel**:
-  - Platform (Twitch, YouTube, Kick, TikTok)
-  - Channel name and ID
-  - Active/Inactive status
-  - Creation date
-- **Quick Actions**: Open overlay in new tab
+### Dashboard home (`/admin`)
+Platform stats (users, banned, active overlays, sources) as clickable cards that
+deep-link into filtered lists, DAU/WAU/MAU active-user counts, a per-platform
+source breakdown, and the nav grid.
 
-### 4. Sources Management (`/admin/sources`)
+### Search (`/admin/search`, ADR-0035)
+One box that resolves a query across users, overlays, sources, and viewers and
+deep-links each hit into the addressable views. Users/overlays/sources are
+federated on the client over the admin list endpoints; viewers use the
+server-side `?q=` search.
 
-- **Platform Statistics**: Cards showing count per platform
-- **Advanced Filtering**:
-  - Search by channel name or ID
-  - Filter by platform (Twitch, YouTube, Kick, TikTok)
-  - Filter by status (Active/Inactive)
-- **Sources Table**: Comprehensive table with all sources
-- **Quick Links**: Navigate to overlay details
+### Users (`/admin/users`)
+List with avatar, platform badges, and status; search by username/display
+name/id/platform id; filter tabs (all/active/banned/premium/beta). Detail panel:
+impersonate, grant/revoke premium (optionally time-limited, ADR-0027),
+grant/revoke beta-tester (ADR-0020), ban/unban, and the user's overlays (linked
+to the admin overlay detail, with a secondary link to the live overlay) plus a
+"view this user's sources" link.
 
-## Navigation
+### Overlays (`/admin/overlays`)
+List with live-connection status (and a "status unavailable" notice when the
+connection endpoint can't be read). Detail panel resolves the **owner** to a
+linked `@username` (not a bare UUID) and lists connected sources with channel
+links.
 
-The admin dashboard uses a consistent navigation bar with:
+### Sources (`/admin/sources`)
+Every source across all overlays, filterable by platform/status and searchable
+by channel/overlay/owner. Each channel resolves to its public platform page via
+`ChannelLink`; each row links to its overlay and to its owning user.
 
-- **All-Chat Admin** brand/logo (links to dashboard home)
-- **Users** - User management
-- **Overlays** - Overlay and source management
-- **Sources** - System-wide source overview
-- **Back to App** - Return to main application
+### Viewers (`/admin/viewers`, ADR-0034)
+Server-side search, platform/status/premium filters, and pagination with a
+correct full-dataset total. Each row shows the avatar, platform badge, platform
+user id, and a link to the viewer's platform profile. An **Activity** dialog
+surfaces cross-streamer context (total messages, last seen, and the
+streamers/overlays the viewer chats in) from the per-session aggregate over
+`viewer_message_history`. Ban/unban and grant/revoke premium are inline.
 
-## Data Structure
+### Cosmetics / Features / Maintenance
+`/admin/cosmetics` manages the avatar-frame and flair catalog; `/admin/features`
+manages premium feature gates (ADR-0008); `/admin/maintenance` toggles
+maintenance mode.
 
-### User
+## Channel resolution
 
-```typescript
-{
-  id: string;
-  username: string;
-  email: string;
-  created_at: string;
-  twitch_id?: string;
-  youtube_id?: string;
-  kick_id?: string;
-  tiktok_id?: string;
-}
-```
+`lib/platform-channel-url.ts` + `components/ChannelLink.tsx` turn a source's
+stored channel identifier into a link to the real platform page:
 
-### Overlay
+- twitch -> `twitch.tv/{login}`, kick -> `kick.com/{slug}`, tiktok -> `tiktok.com/@{username}`
+- youtube -> only when a real `@handle` or canonical `UC…` channel id is present (the account-linked `youtube_id` is a Google account id, not a channel id, and is deliberately never linked)
+- discord (snowflake) / shared_overlay (overlay UUID) -> plain text
 
-```typescript
-{
-  id: string;
-  name: string;
-  user_id: string;
-  created_at: string;
-  updated_at: string;
-  sources_count?: number;
-}
-```
+## Backend endpoints
 
-### Source
+- overlay-manager: `GET /api/v1/admin/overlays`, `/admin/overlays/active`, `/admin/overlays/:id/sources`, `/admin/sources`, `/admin/user-overlays/:id` — overlay/source responses include `owner_username`/`owner_display_name` (joined from `users`) and `channel_handle`.
+- auth-service: `GET /api/v1/admin/users`, `/admin/viewers` (with `q`/`is_banned`/`is_premium`/`platform`/`limit`/`offset` and a `total`), `/admin/viewers/:session_id/activity`, plus ban/unban/premium/beta mutations and impersonation.
+- share-service: admin feature gates.
 
-```typescript
-{
-  id: string
-  overlay_id: string
-  overlay_name: string
-  platform: 'twitch' | 'youtube' | 'kick' | 'tiktok'
-  channel_id: string
-  channel_name: string
-  is_active: boolean
-  created_at: string
-  user_id: string
-}
-```
+## Related ADRs
 
-## API Integration
-
-Currently using mock data for demonstration. To connect to real APIs:
-
-### Users API
-
-```typescript
-// Fetch all users
-GET / api / v1 / admin / users
-Authorization: Bearer<token>
-
-// Fetch user overlays
-GET / api / v1 / overlays ? (user_id = <user_id>Authorization) : Bearer<token>
-```
-
-### Overlays API
-
-```typescript
-// Fetch all overlays (admin)
-GET /api/v1/admin/overlays
-Authorization: Bearer <token>
-
-// Fetch overlay sources
-GET /api/v1/overlays/:id/sources
-Authorization: Bearer <token>
-```
-
-### Sources API
-
-```typescript
-// Fetch all sources (admin)
-GET / api / v1 / admin / sources
-Authorization: Bearer<token>
-```
-
-## Styling
-
-The admin dashboard uses Tailwind CSS with:
-
-- **Color Scheme**: Clean white backgrounds with gray accents
-- **Platform Colors**:
-  - Twitch: Purple (`bg-purple-100 text-purple-800`)
-  - YouTube: Red (`bg-red-100 text-red-800`)
-  - Kick: Green (`bg-green-100 text-green-800`)
-  - TikTok: Pink (`bg-pink-100 text-pink-800`)
-- **Status Colors**:
-  - Active: Green
-  - Inactive: Gray
-- **Interactive Elements**: Hover effects on cards and rows
-
-## Future Enhancements
-
-1. **Backend Integration**:
-   - Create admin-specific API endpoints
-   - Implement user management actions (edit, delete, suspend)
-   - Add overlay management actions (edit, delete)
-   - Implement source management actions (activate, deactivate, delete)
-
-2. **Real-time Updates**:
-   - WebSocket integration for live source status
-   - Real-time user activity monitoring
-   - Live message count per source
-
-3. **Analytics**:
-   - User growth charts
-   - Message volume per platform
-   - Popular channels/overlays
-   - System health metrics
-
-4. **Authentication**:
-   - Admin role verification
-   - Permission-based access control
-   - Audit logs for admin actions
-
-5. **Advanced Features**:
-   - Bulk operations
-   - CSV export
-   - Advanced search and filters
-   - User impersonation (for support)
-
-## Development
-
-To run the admin dashboard locally:
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Visit `http://localhost:3000/admin` to access the admin dashboard.
-
-## Production Build
-
-The admin pages are included in the main frontend build:
-
-```bash
-npm run build
-```
-
-The admin routes are pre-rendered as static content for optimal performance.
+- ADR-0036 — admin URL-addressable selection
+- ADR-0034 — admin viewer identity model
+- ADR-0035 — admin global entity search
+- ADR-0008 — premium feature gates · ADR-0020 — beta-tester role · ADR-0027 — time-limited premium overrides
