@@ -41,6 +41,15 @@ export type AnalyticsEvent =
   | 'source_add_failed'
   | 'moderation_enabled'
   | 'obs_url_copied'
+  // First-run setup guide (onboarding) funnel. `step` payloads use the
+  // OnboardingStepId enum values, never IDs or user data.
+  | 'onboarding_started'
+  | 'onboarding_step_viewed'
+  | 'onboarding_step_completed'
+  | 'onboarding_step_skipped'
+  | 'onboarding_dismissed'
+  | 'onboarding_finished'
+  | 'onboarding_discord_clicked'
   // Feature adoption
   | 'theme_previewed'
   | 'theme_applied'

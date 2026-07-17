@@ -41,6 +41,8 @@ export interface User {
   impersonated_by?: string
   created_at: string
   updated_at: string
+  // null = user has not finished/dismissed the first-run setup guide.
+  onboarding_completed_at?: string | null
 }
 
 export interface LoginResponse {

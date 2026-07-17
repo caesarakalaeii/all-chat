@@ -28,6 +28,7 @@
 'use client'
 
 import { Dialog } from '@/components/ui/dialog'
+import { DISCORD_INVITE_URL } from '@/lib/constants'
 
 interface BetaWarningProps {
   platform: 'youtube' | 'tiktok'
@@ -88,7 +89,7 @@ export function BetaWarning({ platform, onCancel, onContinue }: BetaWarningProps
         </p>
 
         <a
-          href="https://discord.gg/xCGBSuz39P"
+          href={DISCORD_INVITE_URL}
           target="_blank"
           rel="noopener noreferrer"
           className="mt-2 inline-flex items-center gap-2 text-sm text-blue-400 underline underline-offset-4 hover:text-blue-300"

@@ -24,3 +24,11 @@
  * of truth for every "Subscribe on Patreon" link in the app.
  */
 export const PATREON_JOIN_URL = 'https://www.patreon.com/16269405/join'
+
+/**
+ * Canonical Discord community invite.
+ *
+ * Single source of truth for every "Join our Discord" link (landing footer,
+ * docs, upsell modals, onboarding setup guide, JSON-LD sameAs).
+ */
+export const DISCORD_INVITE_URL = 'https://discord.gg/xCGBSuz39P'

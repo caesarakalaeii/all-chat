@@ -39,6 +39,7 @@ import ImpersonationBanner from '@/components/ImpersonationBanner'
 import { ToastProvider } from '@/components/ui/toast'
 import { Toaster as HotToaster } from 'react-hot-toast'
 import { cn } from '@/lib/utils'
+import { DISCORD_INVITE_URL } from '@/lib/constants'
 
 const barlow = Barlow({
   subsets: ['latin'],
@@ -113,7 +114,7 @@ const organizationLd = {
   name: 'All-Chat',
   url: 'https://allch.at',
   logo: 'https://allch.at/icon.svg',
-  sameAs: ['https://github.com/caesarakalaeii/all-chat', 'https://discord.gg/xCGBSuz39P'],
+  sameAs: ['https://github.com/caesarakalaeii/all-chat', DISCORD_INVITE_URL],
 }
 
 const webSiteLd = {

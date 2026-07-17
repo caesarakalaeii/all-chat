@@ -20,6 +20,7 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { AppNav } from '@/components/AppNav'
 import { Code, Pre } from '@/components/docs/prose'
+import { DISCORD_INVITE_URL } from '@/lib/constants'
 
 export const metadata = {
   title: 'Documentation',
@@ -463,7 +464,7 @@ export default function DocsPage() {
                 </a>
                 . Already have a theme from another tool, or want help writing one? Ask in our{' '}
                 <a
-                  href="https://discord.gg/xCGBSuz39P"
+                  href={DISCORD_INVITE_URL}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-twitch hover:underline"
