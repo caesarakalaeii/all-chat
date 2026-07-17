@@ -22,6 +22,7 @@ import clsx from 'clsx'
 import { AllChatBadge } from '@/components/AllChatBadge'
 import { PremiumBadge } from '@/components/PremiumBadge'
 import { UserAvatar } from '@/components/UserAvatar'
+import { MessageAttachments } from '@/components/overlay/MessageAttachments'
 import { PlatformGlyph, PlatformGlyphs } from '@/components/overlay/PlatformGlyph'
 import {
   ModerationControls,
@@ -175,6 +176,7 @@ export function ChatRow({
             onUnban={moderation.onUnban}
           />
         )}
+        {!item.event && <MessageAttachments message={item} variant="compact" />}
       </div>
     </div>
   )

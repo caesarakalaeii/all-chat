@@ -67,6 +67,11 @@ const nextConfig = {
       "script-src 'self' 'unsafe-inline' https://embed.twitch.tv https://analytics.allch.at",
       "style-src 'self' 'unsafe-inline'",
       "connect-src 'self' wss: ws: https:",
+      // media-src governs <video>/<audio> sources. Chat message video attachments
+      // (Discord uploads, Tenor/Giphy link previews) are served from third-party
+      // https hosts; without this they fall back to default-src 'self' and are
+      // blocked. img-src already permits https: for image/GIF attachments.
+      "media-src 'self' https: data: blob:",
       "font-src 'self' data:",
       // frame-src governs which iframes a page may embed. It MUST list 'self' (the
       // editor's same-origin /overlays/:id/preview/embed iframe) plus the Twitch

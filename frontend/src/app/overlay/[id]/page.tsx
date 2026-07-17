@@ -93,6 +93,7 @@ import { UserAvatar } from '@/components/UserAvatar'
 import { AllChatBadge } from '@/components/AllChatBadge'
 import { PremiumBadge } from '@/components/PremiumBadge'
 import { EventContent } from '@/components/overlay/EventContent'
+import { MessageAttachments } from '@/components/overlay/MessageAttachments'
 import '@/styles/events.css'
 
 // Default display duration (seconds) for an event based on its tier. Pure
@@ -884,6 +885,8 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                   >
                     {message.event ? renderEventContent(message) : renderMessageContent(message)}
                   </div>
+
+                  {!message.event && <MessageAttachments message={message} />}
 
                   {/* Timestamp */}
                   {showTimestamps && (
