@@ -18,9 +18,24 @@ package normalizer
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/caesar/all-chat/services/message-processor/models"
+)
+
+// discordEmojiRe matches Discord custom-emoji tokens in message text:
+// <:name:id> (static) and <a:name:id> (animated). Names are 2-32 chars of
+// [A-Za-z0-9_]; ids are snowflake digits.
+var discordEmojiRe = regexp.MustCompile(`<(a?):([A-Za-z0-9_]{2,32}):(\d+)>`)
+
+const (
+	// maxDiscordAttachments bounds media items per message downstream (defence in
+	// depth; the discord-listener already caps producer-side).
+	maxDiscordAttachments = 4
+	// maxDiscordEmotes bounds inline custom emoji per message so an emoji-spam
+	// message cannot bloat the payload.
+	maxDiscordEmotes = 20
 )
 
 // DiscordNormalizer normalizes Discord chat messages to unified format
@@ -64,14 +79,75 @@ func (n *DiscordNormalizer) Normalize(raw *models.RawChatMessage, overlayID stri
 			AvatarURL:   raw.Tags["avatar_url"],
 		},
 		Message: models.MessageInfo{
-			Text:   raw.Text,
-			Emotes: []models.Emote{},
+			Text:        raw.Text,
+			Emotes:      parseDiscordEmotes(raw.Text),
+			Attachments: normalizeAttachments(raw.Attachments),
 		},
 		Timestamp: raw.Timestamp,
 		Metadata:  map[string]interface{}{},
 	}
 
 	return unified, nil
+}
+
+// parseDiscordEmotes extracts inline custom-emoji tokens (<:name:id> / <a:name:id>)
+// from the message text and returns them as emotes pointing at the Discord CDN.
+// Positions are byte offsets with an inclusive end index, matching the convention
+// used by the shared emote enricher and consumed by the frontend renderer.
+// Animated emoji resolve to a .gif URL (which animates natively); static ones to .png.
+func parseDiscordEmotes(text string) []models.Emote {
+	matches := discordEmojiRe.FindAllStringSubmatchIndex(text, -1)
+	if len(matches) == 0 {
+		return []models.Emote{}
+	}
+
+	emotes := make([]models.Emote, 0, len(matches))
+	for _, m := range matches {
+		if len(emotes) >= maxDiscordEmotes {
+			break
+		}
+		// m indices: [fullStart, fullEnd, g1Start, g1End, g2Start, g2End, g3Start, g3End]
+		fullStart, fullEnd := m[0], m[1]
+		animated := m[3] > m[2] // the "a" group matched non-empty
+		name := text[m[4]:m[5]]
+		id := text[m[6]:m[7]]
+
+		ext := "png"
+		if animated {
+			ext = "gif"
+		}
+		url := fmt.Sprintf("https://cdn.discordapp.com/emojis/%s.%s?size=48&quality=lossless", id, ext)
+
+		emotes = append(emotes, models.Emote{
+			Code:      name,
+			Provider:  "discord",
+			URL:       url,
+			Positions: [][]int{{fullStart, fullEnd - 1}},
+		})
+	}
+	return emotes
+}
+
+// normalizeAttachments passes forwarded media through to the unified message,
+// dropping entries without a usable URL and capping the count as defence in depth.
+func normalizeAttachments(atts []models.Attachment) []models.Attachment {
+	if len(atts) == 0 {
+		return nil
+	}
+	out := make([]models.Attachment, 0, len(atts))
+	for _, a := range atts {
+		if a.URL == "" || (a.Type != "image" && a.Type != "video") {
+			continue
+		}
+		out = append(out, a)
+		if len(out) >= maxDiscordAttachments {
+			break
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // extractDiscordBadges parses a comma-separated badge tag string into a Badge slice.

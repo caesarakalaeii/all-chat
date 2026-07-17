@@ -49,6 +49,7 @@ import { chatBubbleStyle, overlayContainerStyle } from '@/lib/utils/visual-inlin
 import { AllChatBadge } from '@/components/AllChatBadge'
 import { PremiumBadge } from '@/components/PremiumBadge'
 import { EventContent } from '@/components/overlay/EventContent'
+import { MessageAttachments } from '@/components/overlay/MessageAttachments'
 import { shouldFilterMessage } from '@/lib/utils/filterMessage'
 import type { FilterSettings } from '@/lib/types/overlay'
 import { createSoundPlayer } from '@/lib/utils/soundPlayer'
@@ -906,6 +907,8 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                             ? renderEventContent(message)
                             : renderMessageContent(message)}
                         </div>
+
+                        {!message.event && <MessageAttachments message={message} />}
 
                         {/* Timestamp */}
                         <div className="mt-1 text-xs text-slate-500">

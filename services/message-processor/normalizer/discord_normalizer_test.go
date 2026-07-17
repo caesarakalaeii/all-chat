@@ -17,6 +17,7 @@
 package normalizer
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -215,6 +216,177 @@ func TestDiscordNormalizer_NoBadges(t *testing.T) {
 	}
 	if len(unified.User.Badges) != 0 {
 		t.Errorf("Badges: expected 0 badges, got %d", len(unified.User.Badges))
+	}
+}
+
+func TestParseDiscordEmotes_StaticAndAnimated(t *testing.T) {
+	emotes := parseDiscordEmotes("hi <:pepe:123> and <a:blob:456> !")
+	if len(emotes) != 2 {
+		t.Fatalf("expected 2 emotes, got %d", len(emotes))
+	}
+
+	if emotes[0].Code != "pepe" || emotes[0].Provider != "discord" {
+		t.Errorf("emote[0]: want {pepe discord}, got {%s %s}", emotes[0].Code, emotes[0].Provider)
+	}
+	wantStatic := "https://cdn.discordapp.com/emojis/123.png?size=48&quality=lossless"
+	if emotes[0].URL != wantStatic {
+		t.Errorf("emote[0].URL: want %s, got %s", wantStatic, emotes[0].URL)
+	}
+
+	if emotes[1].Code != "blob" {
+		t.Errorf("emote[1].Code: want blob, got %s", emotes[1].Code)
+	}
+	wantAnimated := "https://cdn.discordapp.com/emojis/456.gif?size=48&quality=lossless"
+	if emotes[1].URL != wantAnimated {
+		t.Errorf("emote[1].URL (animated must be .gif): want %s, got %s", wantAnimated, emotes[1].URL)
+	}
+}
+
+func TestParseDiscordEmotes_Positions(t *testing.T) {
+	text := "hi <:pepe:123> yo"
+	emotes := parseDiscordEmotes(text)
+	if len(emotes) != 1 {
+		t.Fatalf("expected 1 emote, got %d", len(emotes))
+	}
+	pos := emotes[0].Positions
+	if len(pos) != 1 || len(pos[0]) != 2 {
+		t.Fatalf("unexpected positions shape: %v", pos)
+	}
+	start, end := pos[0][0], pos[0][1]
+	// Byte offsets with inclusive end, matching the frontend renderer's
+	// text.slice(start, end+1) contract.
+	if start != 3 || end != 13 {
+		t.Errorf("positions: want [3 13], got [%d %d]", start, end)
+	}
+	if got := text[start : end+1]; got != "<:pepe:123>" {
+		t.Errorf("sliced token: want <:pepe:123>, got %q", got)
+	}
+}
+
+func TestParseDiscordEmotes_None(t *testing.T) {
+	emotes := parseDiscordEmotes("just plain text, no emoji")
+	if emotes == nil {
+		t.Fatal("expected non-nil empty slice, got nil")
+	}
+	if len(emotes) != 0 {
+		t.Errorf("expected 0 emotes, got %d", len(emotes))
+	}
+}
+
+func TestParseDiscordEmotes_IgnoresMalformed(t *testing.T) {
+	// A colon-wrapped word is a plain-text emoji shortcode, not a custom emoji token.
+	emotes := parseDiscordEmotes("nice :thumbsup: <notanemoji>")
+	if len(emotes) != 0 {
+		t.Errorf("expected 0 emotes for non-token text, got %d", len(emotes))
+	}
+}
+
+func TestParseDiscordEmotes_Cap(t *testing.T) {
+	var sb strings.Builder
+	for i := 0; i < maxDiscordEmotes+5; i++ {
+		sb.WriteString("<:ee:1> ")
+	}
+	emotes := parseDiscordEmotes(sb.String())
+	if len(emotes) != maxDiscordEmotes {
+		t.Errorf("expected cap of %d, got %d", maxDiscordEmotes, len(emotes))
+	}
+}
+
+func TestNormalizeAttachments_FiltersInvalidAndCaps(t *testing.T) {
+	in := []models.Attachment{
+		{Type: "image", URL: "https://x/1.png"},
+		{Type: "image", URL: ""},          // dropped: no url
+		{Type: "audio", URL: "https://x/a.mp3"}, // dropped: unknown type
+		{Type: "video", URL: "https://x/2.mp4"},
+		{Type: "image", URL: "https://x/3.png"},
+		{Type: "image", URL: "https://x/4.png"},
+		{Type: "image", URL: "https://x/5.png"}, // beyond cap
+	}
+	out := normalizeAttachments(in)
+	if len(out) != maxDiscordAttachments {
+		t.Fatalf("expected cap of %d, got %d", maxDiscordAttachments, len(out))
+	}
+	if out[0].URL != "https://x/1.png" || out[1].URL != "https://x/2.mp4" {
+		t.Errorf("unexpected order/filtering: %+v", out)
+	}
+}
+
+func TestNormalizeAttachments_EmptyReturnsNil(t *testing.T) {
+	if normalizeAttachments(nil) != nil {
+		t.Error("nil input should return nil")
+	}
+	if normalizeAttachments([]models.Attachment{{Type: "audio", URL: "https://x/a.mp3"}}) != nil {
+		t.Error("all-filtered input should return nil")
+	}
+}
+
+func TestDiscordNormalizer_WithAttachmentsAndEmotes(t *testing.T) {
+	n := NewDiscordNormalizer()
+	raw := makeDiscordRaw()
+	raw.Text = "look <:kek:99>"
+	raw.Attachments = []models.Attachment{
+		{Type: "image", URL: "https://media.discordapp.net/cat.gif", ContentType: "image/gif", Spoiler: true, Filename: "cat.gif"},
+	}
+
+	unified, err := n.Normalize(raw, "overlay-1")
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if len(unified.Message.Emotes) != 1 {
+		t.Fatalf("expected 1 inline emote, got %d", len(unified.Message.Emotes))
+	}
+	if unified.Message.Emotes[0].Code != "kek" {
+		t.Errorf("emote code: want kek, got %s", unified.Message.Emotes[0].Code)
+	}
+	if len(unified.Message.Attachments) != 1 {
+		t.Fatalf("expected 1 attachment, got %d", len(unified.Message.Attachments))
+	}
+	att := unified.Message.Attachments[0]
+	if att.Type != "image" || att.URL != "https://media.discordapp.net/cat.gif" || !att.Spoiler {
+		t.Errorf("unexpected attachment: %+v", att)
+	}
+}
+
+// TestDiscordNormalizer_ParsesWireJSON feeds the exact JSON the discord-listener
+// publishes to chat:raw through the real deserialization path (ParseRawMessage ->
+// Normalize), verifying the cross-service attachment contract on the consumer side.
+func TestDiscordNormalizer_ParsesWireJSON(t *testing.T) {
+	wire := []byte(`{
+		"message_id":"m1","platform":"discord","overlay_id":"","channel_id":"c1",
+		"channel_name":"general","user_id":"u1","username":"bob","text":"gg <:pog:42>",
+		"tags":{"member_nick":"Bob"},
+		"attachments":[
+			{"type":"image","url":"https://media.discordapp.net/cat.gif","content_type":"image/gif","width":200,"height":150,"spoiler":true,"filename":"cat.gif"},
+			{"type":"video","url":"https://media.discordapp.net/ext/foo.mp4","thumb_url":"https://media.discordapp.net/ext/foo.png"}
+		],
+		"timestamp":"2024-01-01T00:00:00Z"
+	}`)
+
+	raw, err := models.ParseRawMessage(wire)
+	if err != nil {
+		t.Fatalf("ParseRawMessage failed: %v", err)
+	}
+
+	unified, err := NewDiscordNormalizer().Normalize(raw, "overlay-1")
+	if err != nil {
+		t.Fatalf("Normalize failed: %v", err)
+	}
+
+	if len(unified.Message.Attachments) != 2 {
+		t.Fatalf("expected 2 attachments from wire JSON, got %d", len(unified.Message.Attachments))
+	}
+	if unified.Message.Attachments[0].Type != "image" ||
+		unified.Message.Attachments[0].URL != "https://media.discordapp.net/cat.gif" ||
+		!unified.Message.Attachments[0].Spoiler {
+		t.Errorf("attachment[0] mismatch: %+v", unified.Message.Attachments[0])
+	}
+	if unified.Message.Attachments[1].Type != "video" ||
+		unified.Message.Attachments[1].ThumbURL != "https://media.discordapp.net/ext/foo.png" {
+		t.Errorf("attachment[1] mismatch: %+v", unified.Message.Attachments[1])
+	}
+	if len(unified.Message.Emotes) != 1 || unified.Message.Emotes[0].Code != "pog" {
+		t.Errorf("expected inline discord emote 'pog', got %+v", unified.Message.Emotes)
 	}
 }
 
