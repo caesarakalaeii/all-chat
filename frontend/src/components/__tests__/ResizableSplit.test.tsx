@@ -50,7 +50,7 @@ beforeEach(() => {
       matches: true, // desktop
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
-    }),
+    })
   )
 })
 
@@ -62,36 +62,66 @@ afterEach(() => {
 describe('ResizableSplit', () => {
   it('moves the divider with the arrow keys and persists the ratio', () => {
     const { container } = render(
-      <ResizableSplit storageKey="k" left={<div>L</div>} right={<div>R</div>} initial={45} />,
+      <ResizableSplit storageKey="k" left={<div>L</div>} right={<div>R</div>} initial={45} />
     )
     const leftPanel = container.firstChild?.firstChild as HTMLElement
     expect(leftPanel.style.width).toBe('45%')
 
-    fireEvent.keyDown(screen.getByRole('separator'), { key: 'ArrowRight' })
+    fireEvent.keyDown(screen.getByRole('slider'), { key: 'ArrowRight' })
     expect(leftPanel.style.width).toBe('50%')
     expect(localStorage.getItem('k')).toBe('50')
 
-    fireEvent.keyDown(screen.getByRole('separator'), { key: 'ArrowLeft' })
+    fireEvent.keyDown(screen.getByRole('slider'), { key: 'ArrowLeft' })
     expect(leftPanel.style.width).toBe('45%')
     expect(localStorage.getItem('k')).toBe('45')
   })
 
-  it('clamps within min/max', () => {
+  it('steps the split by 10% per click of the step buttons and persists', () => {
     const { container } = render(
-      <ResizableSplit storageKey="k" left={<div>L</div>} right={<div>R</div>} initial={28} min={25} max={30} />,
+      <ResizableSplit storageKey="k" left={<div>L</div>} right={<div>R</div>} initial={45} />
     )
     const leftPanel = container.firstChild?.firstChild as HTMLElement
-    const separator = screen.getByRole('separator')
-    fireEvent.keyDown(separator, { key: 'ArrowLeft' }) // 28 - 5 -> clamp 25
+
+    fireEvent.click(screen.getByRole('button', { name: 'Grow left panel' }))
+    expect(leftPanel.style.width).toBe('55%')
+    expect(localStorage.getItem('k')).toBe('55')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Shrink left panel' }))
+    expect(leftPanel.style.width).toBe('45%')
+    expect(localStorage.getItem('k')).toBe('45')
+  })
+
+  it('exposes the split percentage as slider value semantics', () => {
+    render(<ResizableSplit storageKey="k" left={<div>L</div>} right={<div>R</div>} initial={45} />)
+    const slider = screen.getByRole('slider')
+    expect(slider.getAttribute('aria-valuenow')).toBe('45')
+    expect(slider.getAttribute('aria-valuemin')).toBe('25')
+    expect(slider.getAttribute('aria-valuemax')).toBe('70')
+  })
+
+  it('clamps within min/max', () => {
+    const { container } = render(
+      <ResizableSplit
+        storageKey="k"
+        left={<div>L</div>}
+        right={<div>R</div>}
+        initial={28}
+        min={25}
+        max={30}
+      />
+    )
+    const leftPanel = container.firstChild?.firstChild as HTMLElement
+    const slider = screen.getByRole('slider')
+    fireEvent.keyDown(slider, { key: 'ArrowLeft' }) // 28 - 5 -> clamp 25
     expect(leftPanel.style.width).toBe('25%')
-    fireEvent.keyDown(separator, { key: 'ArrowRight' }) // 25 + 5 -> clamp 30
+    fireEvent.keyDown(slider, { key: 'ArrowRight' }) // 25 + 5 -> clamp 30
     expect(leftPanel.style.width).toBe('30%')
   })
 
   it('restores the persisted ratio after hydration', async () => {
     localStorage.setItem('k', '62')
     const { container } = render(
-      <ResizableSplit storageKey="k" left={<div>L</div>} right={<div>R</div>} initial={45} />,
+      <ResizableSplit storageKey="k" left={<div>L</div>} right={<div>R</div>} initial={45} />
     )
     const leftPanel = container.firstChild?.firstChild as HTMLElement
     await waitFor(() => expect(leftPanel.style.width).toBe('62%'))
@@ -105,31 +135,31 @@ describe('ResizableSplit', () => {
         right={<div>R</div>}
         initial={45}
         orientation="vertical"
-      />,
+      />
     )
     const firstPanel = container.firstChild?.firstChild as HTMLElement
     expect(firstPanel.style.height).toBe('45%')
     expect(firstPanel.style.width).toBe('')
 
-    const separator = screen.getByRole('separator')
-    expect(separator.getAttribute('aria-orientation')).toBe('horizontal')
+    const slider = screen.getByRole('slider')
+    expect(slider.getAttribute('aria-orientation')).toBe('vertical')
 
-    fireEvent.keyDown(separator, { key: 'ArrowDown' })
+    fireEvent.keyDown(slider, { key: 'ArrowDown' })
     expect(firstPanel.style.height).toBe('50%')
-    fireEvent.keyDown(separator, { key: 'ArrowUp' })
+    fireEvent.keyDown(slider, { key: 'ArrowUp' })
     expect(firstPanel.style.height).toBe('45%')
   })
 
   it('renders the right panel first when reversed', () => {
     const { container } = render(
-      <ResizableSplit storageKey="k" left={<div>L</div>} right={<div>R</div>} reversed />,
+      <ResizableSplit storageKey="k" left={<div>L</div>} right={<div>R</div>} reversed />
     )
     const firstPanel = container.firstChild?.firstChild as HTMLElement
     expect(firstPanel.textContent).toBe('R')
   })
 
-  it('keeps aria-orientation vertical for the default horizontal layout', () => {
+  it('exposes a horizontal slider for the default horizontal layout', () => {
     render(<ResizableSplit storageKey="k" left={<div>L</div>} right={<div>R</div>} />)
-    expect(screen.getByRole('separator').getAttribute('aria-orientation')).toBe('vertical')
+    expect(screen.getByRole('slider').getAttribute('aria-orientation')).toBe('horizontal')
   })
 })

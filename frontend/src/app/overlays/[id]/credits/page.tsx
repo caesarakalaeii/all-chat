@@ -33,7 +33,7 @@
 
 'use client'
 
-import { use, useEffect, useState } from 'react'
+import { use, useEffect, useId, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import clsx from 'clsx'
 import dynamic from 'next/dynamic'
@@ -63,6 +63,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
   const { id } = use(params)
   const router = useRouter()
   const { user } = useAuthStore()
+  const fieldId = useId()
 
   const [overlay, setOverlay] = useState<Overlay | null>(null)
   const [config, setConfig] = useState<Partial<CreditRollConfig>>({
@@ -366,10 +367,14 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
               <h3 className="mb-4 text-lg font-semibold text-text">Leaderboard Settings</h3>
               <div className="space-y-4">
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-text">
+                  <label
+                    htmlFor={`${fieldId}-top-n`}
+                    className="mb-2 block text-sm font-medium text-text"
+                  >
                     Top N Users per Category
                   </label>
                   <input
+                    id={`${fieldId}-top-n`}
                     type="number"
                     min="1"
                     max="50"
@@ -377,15 +382,22 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                     onChange={(e) =>
                       setConfig({ ...config, leaderboard_top_n: parseInt(e.target.value) })
                     }
-                    className="w-full rounded-lg border border-border bg-bg px-4 py-2 text-text focus-visible:border-twitch focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-twitch/50"
+                    aria-describedby={`${fieldId}-top-n-hint`}
+                    className="w-full rounded-lg border border-border bg-bg px-4 py-2 text-text focus-visible:border-twitch focus-visible:ring-3 focus-visible:ring-twitch/50 focus-visible:outline-none"
                   />
-                  <p className="mt-1 text-xs text-text-dim">
+                  <p id={`${fieldId}-top-n-hint`} className="mt-1 text-xs text-text-dim">
                     Show top 1-50 users in each leaderboard category
                   </p>
                 </div>
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-text">Sort By</label>
+                  <label
+                    htmlFor={`${fieldId}-sort-by`}
+                    className="mb-2 block text-sm font-medium text-text"
+                  >
+                    Sort By
+                  </label>
                   <select
+                    id={`${fieldId}-sort-by`}
                     value={config.leaderboard_sort_by || 'value'}
                     onChange={(e) =>
                       setConfig({
@@ -393,7 +405,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                         leaderboard_sort_by: e.target.value as 'value' | 'count',
                       })
                     }
-                    className="w-full rounded-lg border border-border bg-bg px-4 py-2 text-text focus-visible:border-twitch focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-twitch/50"
+                    className="w-full rounded-lg border border-border bg-bg px-4 py-2 text-text focus-visible:border-twitch focus-visible:ring-3 focus-visible:ring-twitch/50 focus-visible:outline-none"
                   >
                     <option value="value">Total Value (monetary amount)</option>
                     <option value="count">Count (number of events)</option>
@@ -407,8 +419,14 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
               <h3 className="mb-4 text-lg font-semibold text-text">Display Settings</h3>
               <div className="space-y-4">
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-text">Theme</label>
+                  <label
+                    htmlFor={`${fieldId}-theme`}
+                    className="mb-2 block text-sm font-medium text-text"
+                  >
+                    Theme
+                  </label>
                   <select
+                    id={`${fieldId}-theme`}
                     value={config.theme || 'cinematic'}
                     onChange={(e) =>
                       setConfig({
@@ -416,7 +434,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                         theme: e.target.value as 'classic' | 'cinematic' | 'modern',
                       })
                     }
-                    className="w-full rounded-lg border border-border bg-bg px-4 py-2 text-text focus-visible:border-twitch focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-twitch/50"
+                    className="w-full rounded-lg border border-border bg-bg px-4 py-2 text-text focus-visible:border-twitch focus-visible:ring-3 focus-visible:ring-twitch/50 focus-visible:outline-none"
                   >
                     <option value="classic">Classic</option>
                     <option value="cinematic">Cinematic</option>
@@ -424,10 +442,14 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                   </select>
                 </div>
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-text">
+                  <label
+                    htmlFor={`${fieldId}-scroll-speed`}
+                    className="mb-2 block text-sm font-medium text-text"
+                  >
                     Scroll Speed (1-100)
                   </label>
                   <input
+                    id={`${fieldId}-scroll-speed`}
                     type="range"
                     min="1"
                     max="100"
@@ -437,15 +459,17 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                     }
                     className="w-full accent-twitch"
                   />
-                  <p className="mt-1 text-xs text-text-dim">
-                    Current: {config.scroll_speed || 50}
-                  </p>
+                  <p className="mt-1 text-xs text-text-dim">Current: {config.scroll_speed || 50}</p>
                 </div>
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-text">
+                  <label
+                    htmlFor={`${fieldId}-duration`}
+                    className="mb-2 block text-sm font-medium text-text"
+                  >
                     Display Duration (seconds)
                   </label>
                   <input
+                    id={`${fieldId}-duration`}
                     type="number"
                     min="10"
                     max="300"
@@ -453,17 +477,22 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                     onChange={(e) =>
                       setConfig({ ...config, display_duration_seconds: parseInt(e.target.value) })
                     }
-                    className="w-full rounded-lg border border-border bg-bg px-4 py-2 text-text focus-visible:border-twitch focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-twitch/50"
+                    aria-describedby={`${fieldId}-duration-hint`}
+                    className="w-full rounded-lg border border-border bg-bg px-4 py-2 text-text focus-visible:border-twitch focus-visible:ring-3 focus-visible:ring-twitch/50 focus-visible:outline-none"
                   />
-                  <p className="mt-1 text-xs text-text-dim">
+                  <p id={`${fieldId}-duration-hint`} className="mt-1 text-xs text-text-dim">
                     How long to show the credit roll (10-300 seconds)
                   </p>
                 </div>
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-text">
+                  <label
+                    htmlFor={`${fieldId}-opacity`}
+                    className="mb-2 block text-sm font-medium text-text"
+                  >
                     Background Opacity (0-1)
                   </label>
                   <input
+                    id={`${fieldId}-opacity`}
                     type="range"
                     min="0"
                     max="1"
@@ -507,10 +536,14 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
               {config.clips_enabled && (
                 <div className="space-y-4">
                   <div>
-                    <label className="mb-2 block text-sm font-medium text-text">
+                    <label
+                      htmlFor={`${fieldId}-clips-max`}
+                      className="mb-2 block text-sm font-medium text-text"
+                    >
                       Maximum Clips
                     </label>
                     <input
+                      id={`${fieldId}-clips-max`}
                       type="number"
                       min="1"
                       max="20"
@@ -518,14 +551,18 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                       onChange={(e) =>
                         setConfig({ ...config, clips_max_count: parseInt(e.target.value) })
                       }
-                      className="w-full rounded-lg border border-border bg-bg px-4 py-2 text-text focus-visible:border-twitch focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-twitch/50"
+                      className="w-full rounded-lg border border-border bg-bg px-4 py-2 text-text focus-visible:border-twitch focus-visible:ring-3 focus-visible:ring-twitch/50 focus-visible:outline-none"
                     />
                   </div>
                   <div>
-                    <label className="mb-2 block text-sm font-medium text-text">
+                    <label
+                      htmlFor={`${fieldId}-clips-fallback`}
+                      className="mb-2 block text-sm font-medium text-text"
+                    >
                       Fallback Days
                     </label>
                     <input
+                      id={`${fieldId}-clips-fallback`}
                       type="number"
                       min="1"
                       max="30"
@@ -533,9 +570,10 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                       onChange={(e) =>
                         setConfig({ ...config, clips_fallback_days: parseInt(e.target.value) })
                       }
-                      className="w-full rounded-lg border border-border bg-bg px-4 py-2 text-text focus-visible:border-twitch focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-twitch/50"
+                      aria-describedby={`${fieldId}-clips-fallback-hint`}
+                      className="w-full rounded-lg border border-border bg-bg px-4 py-2 text-text focus-visible:border-twitch focus-visible:ring-3 focus-visible:ring-twitch/50 focus-visible:outline-none"
                     />
-                    <p className="mt-1 text-xs text-text-dim">
+                    <p id={`${fieldId}-clips-fallback-hint`} className="mt-1 text-xs text-text-dim">
                       If no clips from this stream, show clips from last N days
                     </p>
                   </div>
@@ -547,12 +585,12 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                         onChange={(e) => setConfig({ ...config, clips_muted: e.target.checked })}
                         className="h-5 w-5 rounded border-border bg-surface-2 text-twitch accent-twitch focus-visible:ring-twitch"
                       />
-                      <div className="flex-1">
-                        <span className="font-medium text-text">Mute Clips Audio</span>
-                        <p className="mt-1 text-xs text-text-dim">
+                      <span className="flex-1 font-medium text-text">
+                        Mute Clips Audio
+                        <span className="mt-1 block text-xs font-normal text-text-dim">
                           Required for browser autoplay. Unmuting may require viewer interaction.
-                        </p>
-                      </div>
+                        </span>
+                      </span>
                     </label>
                   </div>
                 </div>
@@ -624,12 +662,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
 
         {/* Action Buttons */}
         <div className="flex gap-4">
-          <Button
-            className="flex-1"
-            variant="gradient"
-            onClick={handleSave}
-            disabled={saving}
-          >
+          <Button className="flex-1" variant="gradient" onClick={handleSave} disabled={saving}>
             {saving ? 'Saving...' : 'Save Settings'}
           </Button>
           <Button variant="outline" onClick={() => router.push(`/overlays/${id}`)}>

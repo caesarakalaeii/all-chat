@@ -18,7 +18,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import clsx from 'clsx'
@@ -80,6 +80,7 @@ export default function UsersPage() {
   const [grantDurationValid, setGrantDurationValid] = useState(true)
   const [betaDialogUser, setBetaDialogUser] = useState<User | null>(null)
   const [betaLoading, setBetaLoading] = useState(false)
+  const banReasonId = useId()
 
   // Fetch all users from the database
   useEffect(() => {
@@ -447,72 +448,75 @@ export default function UsersPage() {
               </div>
               <ul className="divide-y divide-border">
                 {displayUsers.map((user) => (
-                  <li
-                    key={user.id}
-                    className={clsx(
-                      'cursor-pointer px-4 py-4 transition-colors hover:bg-surface-2',
-                      selectedUser?.id === user.id && 'bg-surface-2'
-                    )}
-                    onClick={() => setSelectedUser(user)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center">
-                          <p className="text-sm font-medium text-text">{user.display_name}</p>
-                          <div className="ml-2 flex space-x-1">
-                            {user.is_beta_tester && (
-                              <span className="inline-flex items-center rounded border border-violet-500/20 bg-violet-500/10 px-2 py-0.5 text-xs font-medium text-violet-400">
-                                BETA
-                              </span>
-                            )}
-                            {user.is_premium && !user.is_beta_tester && (
-                              <span className="inline-flex items-center rounded border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400">
-                                PREMIUM
-                              </span>
-                            )}
-                            {user.is_banned && (
-                              <span className="bg-destructive/10 text-destructive border-destructive/20 inline-flex items-center rounded border px-2 py-0.5 text-xs font-medium">
-                                BANNED
-                              </span>
-                            )}
-                            {user.twitch_id && (
-                              <span className="inline-flex items-center rounded bg-badge-bg px-2 py-0.5 text-xs font-medium text-twitch">
-                                Twitch
-                              </span>
-                            )}
-                            {user.youtube_id && (
-                              <span className="inline-flex items-center rounded bg-badge-bg px-2 py-0.5 text-xs font-medium text-youtube">
-                                YouTube
-                              </span>
-                            )}
-                            {user.kick_id && (
-                              <span className="inline-flex items-center rounded bg-badge-bg px-2 py-0.5 text-xs font-medium text-kick">
-                                Kick
-                              </span>
-                            )}
+                  <li key={user.id}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedUser(user)}
+                      className={clsx(
+                        'w-full cursor-pointer px-4 py-4 text-left transition-colors hover:bg-surface-2',
+                        selectedUser?.id === user.id && 'bg-surface-2'
+                      )}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center">
+                            <p className="text-sm font-medium text-text">{user.display_name}</p>
+                            <div className="ml-2 flex space-x-1">
+                              {user.is_beta_tester && (
+                                <span className="inline-flex items-center rounded border border-violet-500/20 bg-violet-500/10 px-2 py-0.5 text-xs font-medium text-violet-400">
+                                  BETA
+                                </span>
+                              )}
+                              {user.is_premium && !user.is_beta_tester && (
+                                <span className="inline-flex items-center rounded border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400">
+                                  PREMIUM
+                                </span>
+                              )}
+                              {user.is_banned && (
+                                <span className="bg-destructive/10 text-destructive border-destructive/20 inline-flex items-center rounded border px-2 py-0.5 text-xs font-medium">
+                                  BANNED
+                                </span>
+                              )}
+                              {user.twitch_id && (
+                                <span className="inline-flex items-center rounded bg-badge-bg px-2 py-0.5 text-xs font-medium text-twitch">
+                                  Twitch
+                                </span>
+                              )}
+                              {user.youtube_id && (
+                                <span className="inline-flex items-center rounded bg-badge-bg px-2 py-0.5 text-xs font-medium text-youtube">
+                                  YouTube
+                                </span>
+                              )}
+                              {user.kick_id && (
+                                <span className="inline-flex items-center rounded bg-badge-bg px-2 py-0.5 text-xs font-medium text-kick">
+                                  Kick
+                                </span>
+                              )}
+                            </div>
                           </div>
+                          <p className="text-sm text-text-sub">@{user.username}</p>
+                          <p className="mt-1 text-xs text-text-dim">
+                            Joined {new Date(user.created_at).toLocaleDateString()}
+                          </p>
                         </div>
-                        <p className="text-sm text-text-sub">@{user.username}</p>
-                        <p className="mt-1 text-xs text-text-dim">
-                          Joined {new Date(user.created_at).toLocaleDateString()}
-                        </p>
+                        <div>
+                          <svg
+                            aria-hidden="true"
+                            className="h-5 w-5 text-text-dim"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M9 5l7 7-7 7"
+                            />
+                          </svg>
+                        </div>
                       </div>
-                      <div>
-                        <svg
-                          className="h-5 w-5 text-text-dim"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="2"
-                            d="M9 5l7 7-7 7"
-                          />
-                        </svg>
-                      </div>
-                    </div>
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -1029,8 +1033,11 @@ export default function UsersPage() {
             This will prevent the user from accessing the platform.
           </Dialog.Description>
           <div className="mt-4">
-            <label className="mb-2 block text-sm font-medium text-text-sub">Reason for ban *</label>
+            <label htmlFor={banReasonId} className="mb-2 block text-sm font-medium text-text-sub">
+              Reason for ban *
+            </label>
             <textarea
+              id={banReasonId}
               value={banReason}
               onChange={(e) => setBanReason(e.target.value)}
               className="focus-visible:ring-ring w-full resize-none rounded-lg border border-border bg-surface-2 px-3 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none"
