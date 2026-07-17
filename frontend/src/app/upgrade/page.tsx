@@ -72,7 +72,7 @@ export default function UpgradePage() {
   return (
     <div className="min-h-screen bg-bg">
       <AppNav />
-      <main className="mx-auto max-w-3xl space-y-10 px-4 py-12">
+      <main id="main-content" tabIndex={-1} className="mx-auto max-w-3xl space-y-10 px-4 py-12">
         {/* Hero */}
         <header className="space-y-4 text-center">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-3 py-1 text-xs font-medium text-text-sub">

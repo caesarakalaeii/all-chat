@@ -114,7 +114,7 @@ function ViewerPremiumContent() {
   return (
     <div className="min-h-screen bg-bg">
       <AppNav />
-      <main className="mx-auto max-w-2xl space-y-6 px-4 py-12">
+      <main id="main-content" tabIndex={-1} className="mx-auto max-w-2xl space-y-6 px-4 py-12">
         <div className="space-y-1">
           <Link
             href="/settings/viewer"
@@ -215,7 +215,7 @@ function ViewerPremiumUnauthenticated() {
   return (
     <div className="min-h-screen bg-bg">
       <AppNav />
-      <main className="mx-auto max-w-2xl space-y-6 px-4 py-12">
+      <main id="main-content" tabIndex={-1} className="mx-auto max-w-2xl space-y-6 px-4 py-12">
         <h1 className="text-2xl font-bold text-text">Viewer Premium</h1>
         <Card className="p-6">
           <h2 className="mb-2 text-lg font-semibold text-text">Sign in to manage viewer premium</h2>

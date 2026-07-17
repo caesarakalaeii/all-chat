@@ -18,7 +18,6 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 import { useEffect, useState } from 'react'
 import { overlaysApi } from '@/lib/api/overlays'
 import { useRouter } from 'next/navigation'
@@ -216,7 +215,7 @@ function DashboardContent() {
   return (
     <div className="min-h-screen bg-bg">
       <AppNav />
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      <main id="main-content" tabIndex={-1} className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="mb-4 space-y-4">
           <MaintenanceBanner />
           <EventSubMigrationBanner sourcesByOverlay={sourcesByOverlay} />

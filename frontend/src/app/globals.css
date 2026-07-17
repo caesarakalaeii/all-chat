@@ -123,6 +123,9 @@
     color: var(--color-text);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /* Keep keyboard-focused / anchor-jumped elements clear of the sticky
+       navs (AppNav h-60px, HomeHeader) — WCAG 2.4.11 Focus Not Obscured. */
+    scroll-padding-top: 5rem;
   }
   body {
     background-color: var(--color-bg);
@@ -197,6 +200,26 @@
   }
   to {
     opacity: 1;
+  }
+}
+
+/* ============================================================
+   REDUCED MOTION — global gate (WCAG 2.3.3 / supports 2.2.2)
+   Document scope, after the layered styles, so it wins everywhere in the app
+   chrome: decorative animation (logo ring-spin, fade-ins, slide-up, spinners)
+   collapses to its end state and transitions become instant. JS-driven motion
+   is gated separately via hooks/useReducedMotion. Overlay marketplace THEMES
+   (broadcast art rendered in OBS) ship their own reduced-motion blocks and
+   are not app chrome.
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 

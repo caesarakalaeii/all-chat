@@ -67,7 +67,7 @@ function NewOverlayContent() {
   return (
     <div className="min-h-screen bg-bg">
       <AppNav />
-      <main className="mx-auto max-w-lg px-4 py-12">
+      <main id="main-content" tabIndex={-1} className="mx-auto max-w-lg px-4 py-12">
         <Card className="p-8">
           <h1 className="mb-2 text-2xl font-bold text-text">Create Overlay</h1>
           <p className="mb-8 text-sm text-text-sub">

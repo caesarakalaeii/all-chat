@@ -115,7 +115,7 @@ function UnauthenticatedState() {
   return (
     <div className="min-h-screen bg-bg">
       <AppNav />
-      <main className="max-w-2xl mx-auto px-4 py-12 space-y-6">
+      <main id="main-content" tabIndex={-1} className="max-w-2xl mx-auto px-4 py-12 space-y-6">
         <h1 className="text-2xl font-bold text-text">Viewer Identity</h1>
         <p className="text-text-sub text-sm">
           Customize how your name appears across all overlays
@@ -867,7 +867,7 @@ function ViewerSettingsContent({ claims }: { claims: ViewerJWTClaims }) {
   return (
     <div className="min-h-screen bg-bg">
       <AppNav />
-      <main className="max-w-2xl mx-auto px-4 py-12 space-y-6">
+      <main id="main-content" tabIndex={-1} className="max-w-2xl mx-auto px-4 py-12 space-y-6">
         {/* Header */}
         <div>
           <h1 className="text-2xl font-bold text-text">Viewer Identity</h1>

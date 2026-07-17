@@ -645,7 +645,7 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
   )
 
   return (
-    <main className="min-h-screen bg-transparent">
+    <main id="main-content" tabIndex={-1} className="min-h-screen bg-transparent">
       {useCustomCss && scopedPreviewCss && (
         <style
           key={scopedPreviewCss}
