@@ -30,6 +30,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Dialog } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
+import { VisuallyHidden } from '@/components/ui/visually-hidden'
 import { toastManager } from '@/lib/toast'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { getGuilds, disconnectGuild, startDiscordOAuth } from '@/lib/api/discord'
@@ -221,7 +222,10 @@ function SettingsContent() {
           <h2 className="mb-4 text-lg font-semibold text-text">Discord</h2>
 
           {guildsLoading ? (
-            <Skeleton className="h-10 w-full" />
+            <div role="status">
+              <VisuallyHidden>Loading Discord servers</VisuallyHidden>
+              <Skeleton className="h-10 w-full" />
+            </div>
           ) : guilds.length === 0 ? (
             <div className="flex items-center justify-between">
               <p className="text-sm text-text-sub">No Discord server connected.</p>

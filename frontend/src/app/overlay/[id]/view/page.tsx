@@ -36,7 +36,7 @@ import clsx from 'clsx'
 import { BarChart3, ExternalLink, Info, RotateCw, SlidersHorizontal } from 'lucide-react'
 import Link from 'next/link'
 import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import toast from 'react-hot-toast'
+import { toastManager } from '@/lib/toast'
 
 import { MaintenanceInfoButton } from '@/components/MaintenanceInfoButton'
 import PlatformStatusIndicators from '@/components/PlatformStatusIndicators'
@@ -233,7 +233,10 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         }
         if (url) window.location.href = url
       } catch {
-        toast.error('Could not start moderation setup. Please try again.')
+        toastManager.add({
+          title: 'Could not start moderation setup. Please try again.',
+          type: 'error',
+        })
       }
     },
     [id]
@@ -262,7 +265,7 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         }
         if (url) window.location.href = url
       } catch {
-        toast.error('Could not start re-login. Please try again.')
+        toastManager.add({ title: 'Could not start re-login. Please try again.', type: 'error' })
       }
     },
     [id]
@@ -329,12 +332,14 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
     setRediscovering(true)
     try {
       await moderationApi.forceYouTubeRediscover(id)
-      toast.success('Re-discovering YouTube stream…')
+      toastManager.add({ title: 'Re-discovering YouTube stream…', type: 'success' })
     } catch (err) {
       const status = err instanceof ApiError ? err.status : 0
-      if (status === 429) toast.error('Please wait a moment before retrying')
-      else if (status === 403) toast.error('Not authorized for this overlay')
-      else toast.error('Could not trigger re-discovery')
+      if (status === 429)
+        toastManager.add({ title: 'Please wait a moment before retrying', type: 'error' })
+      else if (status === 403)
+        toastManager.add({ title: 'Not authorized for this overlay', type: 'error' })
+      else toastManager.add({ title: 'Could not trigger re-discovery', type: 'error' })
     } finally {
       setRediscovering(false)
     }
@@ -363,7 +368,7 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
 
       try {
         await call()
-        toast.success(successMsg)
+        toastManager.add({ title: successMsg, type: 'success' })
       } catch {
         // Roll back: drop the optimistic entry + clear the dedup signature, and
         // un-mark exactly the items we struck through.
@@ -373,7 +378,7 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         setItems((prev) =>
           prev.map((it) => (touchedSet.has(it.id) ? { ...it, _moderated: undefined } : it))
         )
-        toast.error('Moderation action failed')
+        toastManager.add({ title: 'Moderation action failed', type: 'error' })
       }
     },
     []
@@ -434,8 +439,8 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
       const name = item.user?.display_name || item.user?.username || 'user'
       moderationApi
         .unbanUser(id, buildUnbanRequest(item))
-        .then(() => toast.success(`Unbanned ${name}`))
-        .catch(() => toast.error('Unban failed'))
+        .then(() => toastManager.add({ title: `Unbanned ${name}`, type: 'success' }))
+        .catch(() => toastManager.add({ title: 'Unban failed', type: 'error' }))
     },
     [id]
   )

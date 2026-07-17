@@ -34,6 +34,7 @@ import { SAMPLE_PREVIEW_MESSAGES } from '@/lib/theme-marketplace/constants'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { clearCache } from '@/lib/theme-marketplace/cache'
 import { trackEvent } from '@/lib/analytics'
+import { VisuallyHidden } from '@/components/ui/visually-hidden'
 import type { Theme } from '@/lib/theme-marketplace/types'
 
 interface ThemeMarketplaceModalProps {
@@ -208,20 +209,29 @@ export default function ThemeMarketplaceModal({
         </div>
 
         {/* Content */}
-        <div className="@container custom-scrollbar flex-1 overflow-y-auto p-6">
+        <div className="custom-scrollbar @container flex-1 overflow-y-auto p-6">
           {/* Loading State */}
           {loading && (
-            <div className="flex items-center justify-center py-12">
+            <div role="status" className="flex items-center justify-center py-12">
               <div className="text-center">
-                <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-b-2 border-twitch" />
-                <p className="text-text-sub">Loading themes...</p>
+                <div
+                  className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-b-2 border-twitch"
+                  aria-hidden="true"
+                />
+                <VisuallyHidden>Loading themes</VisuallyHidden>
+                <p className="text-text-sub" aria-hidden="true">
+                  Loading themes...
+                </p>
               </div>
             </div>
           )}
 
           {/* Error State */}
           {error && !loading && (
-            <div className="mb-4 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4">
+            <div
+              role="alert"
+              className="mb-4 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4"
+            >
               <div className="flex items-start gap-3">
                 <svg
                   className="h-6 w-6 flex-shrink-0 text-yellow-500"
@@ -269,7 +279,7 @@ export default function ThemeMarketplaceModal({
           {!loading && themes.length > 0 && (
             <>
               {/* Count */}
-              <div className="mb-4 text-sm text-text-sub">
+              <div aria-live="polite" className="mb-4 text-sm text-text-sub">
                 Showing {filteredCount} of {totalCount} themes
               </div>
 

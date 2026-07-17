@@ -28,6 +28,7 @@ import { AppNav } from '@/components/AppNav'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { VisuallyHidden } from '@/components/ui/visually-hidden'
 import { Dialog } from '@/components/ui/dialog'
 import { PlatformBadge } from '@/components/ui/badge'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
@@ -82,7 +83,8 @@ function getTopBorderStyle(sources: Array<{ platform: string }>): React.CSSPrope
 
 function OverlayGridSkeleton() {
   return (
-    <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+    <div role="status" className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <VisuallyHidden>Loading overlays</VisuallyHidden>
       {Array.from({ length: 3 }).map((_, i) => (
         <div key={i} className="overflow-hidden rounded-xl border border-border bg-surface">
           <div className="h-[3px] w-full bg-surface-2" />
