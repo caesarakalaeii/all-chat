@@ -665,16 +665,23 @@ func (d *Discovery) GetInitialContinuation(ctx context.Context, videoID, channel
 		}
 	}
 
-	// Verify the stream is live by checking for liveChatRenderer presence.
-	// We don't use the extracted token — we generate our own.
-	if extractContinuationFromNextAPI(nextData) == "" {
+	// Use YouTube's OWN continuation token from the /next response. A hand-rolled
+	// token (the previous approach) is accepted by get_live_chat with HTTP 200 but
+	// answered with ZERO actions — the listener goes blind while the stream is
+	// clearly active. Verified 2026-07-17 against several live streams: the native
+	// token captured the full chat (e.g. 55 msgs/25s) where the generated token
+	// captured 0, which matched the "150 zero-action polls" refresh loop seen in
+	// production and the "a lot of YouTube messages missing" user reports.
+	//
+	// YouTube's /next token defaults to "Top chat" (chattype=4), which silently
+	// omits messages YouTube deems low-priority. forceChatTypeAll rewrites it to
+	// "Live chat" (chattype=1, all messages); the subMenuItem "Live chat" token is
+	// NOT usable directly (get_live_chat rejects it with HTTP 400).
+	nativeToken := extractContinuationFromNextAPI(nextData)
+	if nativeToken == "" {
 		return "", "", fmt.Errorf("no live chat continuation found in next API for video %s (stream may have ended)", videoID)
 	}
-
-	// Generate continuation token from scratch with chattype=1 (all messages).
-	// This avoids depending on YouTube's subMenuItem tokens which are rejected
-	// with HTTP 400 and the main continuations array which defaults to Top Chat.
-	token := GenerateLiveChatContinuation(videoID, channelID, ChatTypeAll)
+	token := forceChatTypeAll(nativeToken)
 
 	d.logger.Info("initial continuation token ready",
 		zap.String("video_id", videoID),
@@ -775,8 +782,8 @@ func searchLiveChatRenderer(data interface{}) string {
 }
 
 // extractContinuationFromLiveChatRenderer extracts a continuation token from
-// a liveChatRenderer object. Used only for liveness verification — the actual
-// polling token is generated from scratch via GenerateLiveChatContinuation.
+// a liveChatRenderer object. This is the token GetInitialContinuation feeds to
+// forceChatTypeAll and then polls — YouTube's own token, not a hand-rolled one.
 func extractContinuationFromLiveChatRenderer(renderer interface{}) string {
 	m, ok := renderer.(map[string]interface{})
 	if !ok {

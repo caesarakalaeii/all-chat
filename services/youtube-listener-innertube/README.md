@@ -43,6 +43,25 @@ Overlay WebSocket
 - **Publisher**: Redis Streams XADD with exact field mapping from official youtube-listener
 - **Health Handlers**: Liveness and readiness probes for Kubernetes
 
+### Continuation token strategy (important)
+
+`GetInitialContinuation` (`innertube/discovery.go`) obtains the polling token by
+calling YouTube's `/next` endpoint and using **YouTube's own continuation token**
+from the response, then rewriting its chat-type to "Live chat" (all messages) via
+`forceChatTypeAll` (`innertube/continuation_rewrite.go`). Subsequent polls follow
+YouTube's returned continuation (`Client.ExtractContinuation`).
+
+Do **not** hand-roll the continuation token from scratch. A previous approach
+(`GenerateLiveChatContinuation`, removed 2026-07-17) built the protobuf token
+locally with a `time.Now()` position anchor; `get_live_chat` accepted it with
+HTTP 200 but answered with **zero actions**, so the listener silently captured
+almost no messages on active streams (surfacing as endless "150 zero-action
+polls" continuation refreshes and "a lot of YouTube messages missing" reports).
+YouTube's `/next` token carries a valid live-position anchor and works; it just
+defaults to "Top chat" (chattype=4), which `forceChatTypeAll` flips to
+chattype=1. The viewSelector "Live chat" sub-menu token is **not** usable
+directly — `get_live_chat` rejects it with HTTP 400.
+
 ## Environment Variables
 
 | Variable | Required | Default | Description |
