@@ -220,4 +220,37 @@ test.describe('first-run setup guide', () => {
     await expect(page.getByRole('region', { name: 'Setup guide' })).toBeVisible()
     await expect.poll(() => patchBody).toEqual({ completed: false })
   })
+
+  test('extras step tours every premium feature after the core steps', async ({
+    page,
+  }, testInfo) => {
+    // All core steps satisfied: overlay + source + theme from the API mocks,
+    // OBS-copied from the per-user localStorage mirror.
+    await mockApi(page, { overlays: [], sources: [SOURCE], themeId: 'minimal-theme' })
+    await page.addInitScript(
+      ([userId]) => {
+        localStorage.setItem(`onboarding-v1:${userId}`, JSON.stringify({ obsCopied: true }))
+      },
+      [FRESH_USER.id]
+    )
+    await page.goto(`/overlays/${OVERLAY.id}`)
+    const guide = page.getByRole('region', { name: 'Setup guide' })
+    await expect(guide).toBeVisible({ timeout: 20_000 })
+    await expect(guide.getByText('All steps done!')).toBeVisible()
+    // The optional tour names every premium feature (copy mirrors /upgrade).
+    await expect(guide.getByText('Optional: go further')).toBeVisible()
+    for (const feature of [
+      'Text-to-speech',
+      'Moderate from your overlay',
+      'Shared chat',
+      'YouTube stream selection',
+      'Viewer flairs',
+    ]) {
+      await expect(guide.getByText(feature)).toBeVisible()
+    }
+    await expectNoNewA11yViolations(page, 'overlay-editor', testInfo)
+    // Done advances to the finale with the Discord invite.
+    await guide.getByRole('button', { name: 'Done' }).click()
+    await expect(guide.getByRole('link', { name: 'Join the Discord' })).toBeVisible()
+  })
 })
