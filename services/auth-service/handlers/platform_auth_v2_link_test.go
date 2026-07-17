@@ -200,7 +200,8 @@ func setupLinkTestDB(t *testing.T) (*pgxpool.Pool, func()) {
 			token_expires_at TIMESTAMP NOT NULL,
 			granted_scopes TEXT[] NOT NULL DEFAULT '{}',
 			created_at TIMESTAMP DEFAULT NOW(),
-			updated_at TIMESTAMP DEFAULT NOW()
+			updated_at TIMESTAMP DEFAULT NOW(),
+			onboarding_completed_at TIMESTAMP NULL
 		);
 		CREATE TABLE IF NOT EXISTS kick_oauth_tokens (
 			id SERIAL PRIMARY KEY,

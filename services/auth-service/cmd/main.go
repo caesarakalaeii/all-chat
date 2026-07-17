@@ -380,6 +380,7 @@ func main() {
 	{
 		protected.GET("/me", legacyAuthHandler.HandleGetMe)
 		protected.GET("/me/data-export", legacyAuthHandler.HandleDataExport)
+		protected.PATCH("/me/onboarding", legacyAuthHandler.HandleUpdateOnboarding)
 		protected.POST("/logout", legacyAuthHandler.HandleLogout)
 		protected.POST("/stop-impersonation", legacyAuthHandler.HandleStopImpersonation)
 		protected.DELETE("/me", legacyAuthHandler.HandleDeleteAccount)

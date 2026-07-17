@@ -64,6 +64,18 @@ func TestMigrationsSurviveRerun(t *testing.T) {
 		t.Fatalf("failed to insert canary user: %v", err)
 	}
 
+	// Give the canary an overlay. The 077 onboarding backfill marks
+	// overlay-owning users as onboarded, but ONLY in the run that first adds
+	// the column — a re-run (= every pod restart) must not re-fire it and
+	// silently "complete" onboarding for users who restarted it from Settings.
+	_, err = pool.Exec(ctx, `
+		INSERT INTO overlays (user_id, name)
+		SELECT id, 'canary overlay' FROM users WHERE username = 'rerun_canary'
+	`)
+	if err != nil {
+		t.Fatalf("failed to insert canary overlay: %v", err)
+	}
+
 	// Second pass = pod restart.
 	runMigrations(t, pool, migrations)
 
@@ -88,6 +100,20 @@ func TestMigrationsSurviveRerun(t *testing.T) {
 	}
 	if !hasChat {
 		t.Errorf("re-running migrations destroyed granted_scopes: %v", scopes)
+	}
+
+	// 077 backfill must not re-fire: the canary owns an overlay but was
+	// created AFTER the column-add run, so its onboarding state must still be
+	// NULL after the re-run.
+	var onboardingCompleted *time.Time
+	err = pool.QueryRow(ctx, `
+		SELECT onboarding_completed_at FROM users WHERE username = 'rerun_canary'
+	`).Scan(&onboardingCompleted)
+	if err != nil {
+		t.Fatalf("failed to read canary onboarding state: %v", err)
+	}
+	if onboardingCompleted != nil {
+		t.Errorf("re-running migrations re-fired the 077 onboarding backfill (onboarding_completed_at = %v); a deploy would silently complete onboarding for users who restarted it", onboardingCompleted)
 	}
 }
 

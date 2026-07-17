@@ -42,6 +42,9 @@ type User struct {
 	GrantedScopes    []string   `json:"-"` // OAuth scopes granted at consent (TEXT[] in DB); gates EventSub chat reading
 	CreatedAt        time.Time  `json:"created_at"`
 	UpdatedAt        time.Time  `json:"updated_at"`
+	// NULL = first-run setup guide is shown; deliberately no omitempty so the
+	// frontend receives an explicit null for users who have not onboarded.
+	OnboardingCompletedAt *time.Time `json:"onboarding_completed_at"`
 }
 
 // TwitchUserInfo represents Twitch user data from OAuth
