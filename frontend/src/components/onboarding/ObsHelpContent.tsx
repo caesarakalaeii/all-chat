@@ -31,8 +31,9 @@ export function ObsHelpContent() {
       </li>
       <li>Paste the copied overlay link into the URL field.</li>
       <li>
-        Set the size to your canvas (e.g. 1920×1080) and click OK — chat appears as soon as the
-        overlay connects.
+        Size the source to the area chat should fill (a tall, narrow box like 450×800 works well,
+        not your full canvas), then drag it into place. Chat appears as soon as the overlay
+        connects.
       </li>
     </ol>
   )
