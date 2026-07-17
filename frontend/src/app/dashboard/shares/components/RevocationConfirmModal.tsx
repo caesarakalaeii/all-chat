@@ -18,11 +18,11 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 import { useState } from 'react'
 import toast from 'react-hot-toast'
 import { sharesApi } from '@/lib/api/shares'
 import { Button } from '@/components/ui/button'
+import { AlertDialog } from '@/components/ui/alert-dialog'
 
 interface RevocationConfirmModalProps {
   partnerName: string
@@ -54,10 +54,15 @@ export function RevocationConfirmModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-      <div className="relative w-full max-w-md rounded-xl border border-border bg-surface p-6 shadow-2xl">
-        <h2 className="mb-4 text-xl font-semibold text-text">Revoke share with {partnerName}?</h2>
-        <p className="mb-6 text-text-sub">This will stop message delivery immediately.</p>
+    <AlertDialog.Root open onOpenChange={(open) => !open && onClose()}>
+      <AlertDialog.Content>
+        <AlertDialog.Title className="mb-4 text-xl">
+          Revoke share with {partnerName}?
+        </AlertDialog.Title>
+        <AlertDialog.Description className="mb-6 text-base">
+          This will stop message delivery immediately.
+        </AlertDialog.Description>
+        {/* Cancel first in DOM order: least-destructive action receives initial focus */}
         <div className="flex gap-3">
           <Button variant="outline" className="flex-1" onClick={onClose} disabled={loading}>
             Cancel
@@ -71,7 +76,7 @@ export function RevocationConfirmModal({
             {loading ? 'Revoking...' : 'Revoke'}
           </Button>
         </div>
-      </div>
-    </div>
+      </AlertDialog.Content>
+    </AlertDialog.Root>
   )
 }

@@ -22,9 +22,11 @@
  * Tests for the add-source prompt modal shown after accepting a share.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
-import { AddSourceModal } from './AddSourceModal'
+// @vitest-environment jsdom
+import '@testing-library/jest-dom/vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react'
+import { AddSourceModal } from '../AddSourceModal'
 import { overlaysApi } from '@/lib/api/overlays'
 import type { Overlay } from '@/lib/types/overlay'
 
@@ -36,6 +38,10 @@ vi.mock('react-hot-toast', () => ({
     error: vi.fn(),
   },
 }))
+
+// The dialog renders into document.body via a portal; unmount between tests
+// so stale portals do not leak into the next test's queries.
+afterEach(() => cleanup())
 
 const mockOverlays: Overlay[] = [
   {
@@ -77,6 +83,9 @@ describe('AddSourceModal', () => {
         onAdded={mockOnAdded}
       />
     )
+
+    // Rendered via portal into document.body as an accessible dialog
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
 
     expect(screen.getByText(/Add Streamer 123's overlay to one of yours/i)).toBeInTheDocument()
 

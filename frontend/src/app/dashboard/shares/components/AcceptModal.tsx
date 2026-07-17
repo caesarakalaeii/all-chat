@@ -30,6 +30,7 @@ import { sharesApi } from '@/lib/api/shares'
 import { overlaysApi } from '@/lib/api/overlays'
 import { PlatformBadge } from './PlatformBadge'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import type { ShareRequest } from '@/lib/types/share'
 import type { Overlay } from '@/lib/types/overlay'
 import { trackEvent } from '@/lib/analytics'
@@ -128,28 +129,28 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
     }
   }
 
-  // Show error modal if no overlays
+  // Show error dialog if no overlays
   if (error && overlays.length === 0) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-        <div className="relative w-full max-w-md rounded-xl border border-border bg-surface p-6 shadow-2xl">
-          <h2 className="mb-4 text-xl font-semibold text-text">Cannot Accept Share</h2>
-          <p className="mb-6 text-text-sub">{error}</p>
+      <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
+        <Dialog.Content>
+          <DialogTitle className="mb-4 pr-8 text-xl">Cannot Accept Share</DialogTitle>
+          <DialogDescription className="mb-6 text-base">{error}</DialogDescription>
           <Button variant="outline" className="w-full" onClick={onClose}>
             Close
           </Button>
-        </div>
-      </div>
+        </Dialog.Content>
+      </Dialog.Root>
     )
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-      <div className="relative w-full max-w-md rounded-xl border border-border bg-surface p-6 shadow-2xl">
+    <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
+      <Dialog.Content>
         {/* Title */}
-        <h2 className="mb-4 text-xl font-semibold text-text">
+        <DialogTitle className="mb-4 pr-8 text-xl">
           {request.sender?.display_name || 'User'} wants to share with you
-        </h2>
+        </DialogTitle>
 
         {/* Platform badges */}
         {request.overlay_sources && request.overlay_sources.length > 0 && (
@@ -296,7 +297,7 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
             </div>
           </>
         )}
-      </div>
-    </div>
+      </Dialog.Content>
+    </Dialog.Root>
   )
 }
