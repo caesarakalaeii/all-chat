@@ -41,7 +41,7 @@
 import Image from 'next/image'
 import { use, useEffect, useState, useRef, useCallback } from 'react'
 import clsx from 'clsx'
-import toast from 'react-hot-toast'
+import { toastManager } from '@/lib/toast'
 import type { ChatMessage, EventTier, DeletionMetadata } from '@/lib/types/message'
 import { renderMessageContent } from '@/lib/renderMessage'
 import PlatformStatusIndicators from '@/components/PlatformStatusIndicators'
@@ -207,7 +207,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   const handleTTSFallback = useCallback(() => {
     if (ttsFallbackToastShownRef.current) return
     ttsFallbackToastShownRef.current = true
-    toast('ElevenLabs unavailable — using browser voice.')
+    toastManager.add({ title: 'ElevenLabs unavailable — using browser voice.' })
   }, [])
 
   // Phase 13: Destroy TTS player on unmount
@@ -276,7 +276,9 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   // starts YouTube discovery (and the 1h give-up) while the streamer is offline.
   // Discovery is triggered on demand from the chat monitor when they go live.
   const [passive] = useState(
-    () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('passive') === 'true'
+    () =>
+      typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('passive') === 'true'
   )
 
   const { config, sources, activeChannels, channelStatuses } = useOverlayStream(id, {

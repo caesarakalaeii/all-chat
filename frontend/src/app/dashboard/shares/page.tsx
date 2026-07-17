@@ -18,14 +18,13 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 import { useEffect, useState } from 'react'
 import clsx from 'clsx'
 import { sharesApi } from '@/lib/api/shares'
 import { ShareRequest } from '@/lib/types/share'
 import { ShareRequestCard } from './components/ShareRequestCard'
 import { AddSourceModal } from './components/AddSourceModal'
-import toast from 'react-hot-toast'
+import { toastManager } from '@/lib/toast'
 
 export default function ShareRequestsPage() {
   const [requests, setRequests] = useState<ShareRequest[]>([])
@@ -46,7 +45,7 @@ export default function ShareRequestsPage() {
       setRequests(data)
     } catch (error) {
       console.error('Failed to fetch share requests:', error)
-      toast.error('Failed to load share requests')
+      toastManager.add({ title: 'Failed to load share requests', type: 'error' })
     } finally {
       setLoading(false)
     }
@@ -77,7 +76,7 @@ export default function ShareRequestsPage() {
         }
       } catch (error) {
         console.error('Failed to mark acceptance seen:', error)
-        toast.error('Failed to update notification status')
+        toastManager.add({ title: 'Failed to update notification status', type: 'error' })
       }
     }
   }
@@ -93,7 +92,7 @@ export default function ShareRequestsPage() {
         }
       } catch (error) {
         console.error('Failed to mark acceptance seen:', error)
-        toast.error('Failed to update notification status')
+        toastManager.add({ title: 'Failed to update notification status', type: 'error' })
       }
     }
   }
@@ -153,7 +152,11 @@ export default function ShareRequestsPage() {
       </div>
 
       {/* Loading state */}
-      {loading && <div className="py-8 text-center text-text-sub">Loading requests...</div>}
+      {loading && (
+        <div role="status" className="py-8 text-center text-text-sub">
+          Loading requests...
+        </div>
+      )}
 
       {/* Empty state */}
       {!loading && sortedRequests.length === 0 && (

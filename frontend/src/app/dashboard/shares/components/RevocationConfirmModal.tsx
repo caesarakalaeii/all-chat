@@ -19,7 +19,7 @@
  */
 
 import { useState } from 'react'
-import toast from 'react-hot-toast'
+import { toastManager } from '@/lib/toast'
 import { sharesApi } from '@/lib/api/shares'
 import { Button } from '@/components/ui/button'
 import { AlertDialog } from '@/components/ui/alert-dialog'
@@ -43,11 +43,11 @@ export function RevocationConfirmModal({
     setLoading(true)
     try {
       await sharesApi.revokeShare(shareId)
-      toast.success('Share revoked')
+      toastManager.add({ title: 'Share revoked', type: 'success' })
       onRevoked()
       onClose()
     } catch (err) {
-      toast.error('Failed to revoke share')
+      toastManager.add({ title: 'Failed to revoke share', type: 'error' })
     } finally {
       setLoading(false)
     }

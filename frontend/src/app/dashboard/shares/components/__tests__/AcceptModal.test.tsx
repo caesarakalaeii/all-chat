@@ -35,10 +35,9 @@ import type { Overlay } from '@/lib/types/overlay'
 // Mock APIs
 vi.mock('@/lib/api/shares')
 vi.mock('@/lib/api/overlays')
-vi.mock('react-hot-toast', () => ({
-  default: {
-    success: vi.fn(),
-    error: vi.fn(),
+vi.mock('@/lib/toast', () => ({
+  toastManager: {
+    add: vi.fn(),
   },
 }))
 

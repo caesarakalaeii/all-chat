@@ -34,7 +34,7 @@
 import Image from 'next/image'
 import { use, useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import clsx from 'clsx'
-import toast from 'react-hot-toast'
+import { toastManager } from '@/lib/toast'
 import { WebSocketClient } from '@/lib/api/websocket'
 import { overlaysApi } from '@/lib/api/overlays'
 import type { ChatMessage, NameGradient } from '@/lib/types/message'
@@ -268,7 +268,7 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
   const handleTTSFallback = useCallback(() => {
     if (ttsFallbackToastShownRef.current) return
     ttsFallbackToastShownRef.current = true
-    toast('ElevenLabs unavailable — using browser voice.')
+    toastManager.add({ title: 'ElevenLabs unavailable — using browser voice.' })
   }, [])
 
   const wsClientRef = useRef<WebSocketClient | null>(null)

@@ -19,7 +19,7 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react'
-import toast from 'react-hot-toast'
+import { toastManager } from '@/lib/toast'
 import { trackEvent } from '@/lib/analytics'
 import { ToggleSwitch } from './ToggleSwitch'
 import { SliderControl } from './SliderControl'
@@ -239,10 +239,14 @@ function ApiKeyInput({
       await onSave(apiKey, voiceId)
       // T-13-07 mitigation: clear key from state immediately after POST resolves.
       onApiKeyChange('')
-      toast.success('API key saved.')
+      toastManager.add({ title: 'API key saved.', type: 'success' })
     } catch (e) {
       setError('Could not save. Try again.')
-      toast.error(`Could not save key: ${e instanceof Error ? e.message : 'network error'}`)
+      toastManager.add({
+        title: 'Could not save key',
+        description: e instanceof Error ? e.message : 'network error',
+        type: 'error',
+      })
     } finally {
       setSaving(false)
     }
@@ -261,23 +265,26 @@ function ApiKeyInput({
         // truly invalid, etc.) with a structured `error` field. Prefer that
         // specific copy when available; fall back to generic per-code toasts.
         if (r.errorCode === 422 && r.errorMessage) {
-          toast.error(r.errorMessage)
+          toastManager.add({ title: r.errorMessage, type: 'error' })
         } else {
           switch (r.errorCode) {
             case 401:
-              toast.error('Invalid API key')
+              toastManager.add({ title: 'Invalid API key', type: 'error' })
               break
             case 422:
-              toast.error('Invalid API key')
+              toastManager.add({ title: 'Invalid API key', type: 'error' })
               break
             case 429:
-              toast.error('Rate-limited — try again in a minute')
+              toastManager.add({ title: 'Rate-limited — try again in a minute', type: 'error' })
               break
             case 0:
-              toast.error('Could not reach ElevenLabs. Check your connection.')
+              toastManager.add({
+                title: 'Could not reach ElevenLabs. Check your connection.',
+                type: 'error',
+              })
               break
             default:
-              toast.error('ElevenLabs service unavailable')
+              toastManager.add({ title: 'ElevenLabs service unavailable', type: 'error' })
           }
         }
       }
@@ -303,10 +310,10 @@ function ApiKeyInput({
     setRemoving(true)
     try {
       await onRemove()
-      toast.success('API key removed.')
+      toastManager.add({ title: 'API key removed.', type: 'success' })
       setQuota(null)
     } catch {
-      toast.error('Could not remove key. Try again.')
+      toastManager.add({ title: 'Could not remove key. Try again.', type: 'error' })
     } finally {
       setRemoving(false)
       setRemoveArmed(false)
@@ -545,7 +552,7 @@ function ElevenLabsVoicePicker({
             e instanceof Error && e.message && e.message !== 'Unknown error'
               ? e.message
               : 'Could not load voices.'
-          toast.error(msg)
+          toastManager.add({ title: msg, type: 'error' })
         }
       } finally {
         if (!cancelled) setLoading(false)
@@ -725,11 +732,13 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
                   void (async (): Promise<void> => {
                     try {
                       await props.onSaveVoice!(pickedVoiceId)
-                      toast.success('Voice updated.')
+                      toastManager.add({ title: 'Voice updated.', type: 'success' })
                     } catch (e) {
-                      toast.error(
-                        `Could not save voice: ${e instanceof Error ? e.message : 'network error'}`
-                      )
+                      toastManager.add({
+                        title: 'Could not save voice',
+                        description: e instanceof Error ? e.message : 'network error',
+                        type: 'error',
+                      })
                     } finally {
                       setSavingVoice(false)
                     }
@@ -747,9 +756,9 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
                 if (!props.obsUrl) return
                 try {
                   await navigator.clipboard.writeText(props.obsUrl)
-                  toast.success('OBS URL copied.')
+                  toastManager.add({ title: 'OBS URL copied.', type: 'success' })
                 } catch {
-                  toast.error('Could not copy URL.')
+                  toastManager.add({ title: 'Could not copy URL.', type: 'error' })
                 }
               }}
               onRegenerate={async (): Promise<void> => {
@@ -762,9 +771,9 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
                     // Clipboard permission missing — toast still surfaces success,
                     // but on failure we fall through to the catch below.
                   }
-                  toast.success('New OBS URL copied to clipboard.')
+                  toastManager.add({ title: 'New OBS URL copied to clipboard.', type: 'success' })
                 } catch {
-                  toast.error('Could not regenerate URL. Try again.')
+                  toastManager.add({ title: 'Could not regenerate URL. Try again.', type: 'error' })
                 }
               }}
             />
