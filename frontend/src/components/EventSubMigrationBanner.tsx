@@ -121,14 +121,14 @@ export function EventSubMigrationBanner({
             : `${count} of your Twitch channels use the legacy connection`}
         </p>
         <p className="mt-0.5 text-text-sub">
-          The old IRC chat connection is being retired and can drop messages when many streams
-          are live. Reconnect to move to the new connection and keep your chat reliable.
+          The old IRC chat connection is being retired and can drop messages when many streams are
+          live. Reconnect to move to the new connection and keep your chat reliable.
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <button
           onClick={handleUpgrade}
-          className="rounded-md bg-twitch px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+          className="rounded-md bg-twitch px-3 py-1.5 text-xs font-semibold text-bg transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
         >
           Reconnect now
         </button>

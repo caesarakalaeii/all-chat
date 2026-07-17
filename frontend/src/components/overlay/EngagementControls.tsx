@@ -49,7 +49,7 @@ const MAX_PREDICTION_OUTCOMES = 10
 const inputClass =
   'w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-xs text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none'
 const primaryButtonClass =
-  'rounded-lg bg-twitch px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-twitch/90 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50'
+  'rounded-lg bg-twitch px-3 py-1.5 text-xs font-semibold text-bg transition-colors hover:bg-twitch/90 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50'
 const secondaryButtonClass =
   'rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-sub transition-colors hover:border-border-md hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50'
 

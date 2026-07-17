@@ -63,8 +63,12 @@ export async function expectNoNewA11yViolations(
     document.head.appendChild(style)
   })
   // Let async-hydrating widgets (comboboxes, editors, fetch-gated sections)
-  // reach their final DOM so the scan sees the same page every run.
-  await page.waitForLoadState('networkidle')
+  // reach their final DOM so the scan sees the same page every run. Bounded
+  // and best-effort: unmocked EXTERNAL requests (theme-marketplace GitHub
+  // sync, webfonts) can keep the network busy indefinitely, which used to
+  // hang this wait into the test timeout. The content anchor was already
+  // asserted and animations are frozen, so scanning after the bound is safe.
+  await page.waitForLoadState('networkidle', { timeout: 8_000 }).catch(() => {})
 
   let builder = new AxeBuilder({ page }).withTags(WCAG_TAGS)
   for (const selector of THEMED_CHAT_SELECTORS) {

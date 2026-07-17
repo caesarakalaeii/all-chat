@@ -96,7 +96,7 @@ export default function ThemeFilters({
                 className={clsx(
                   'rounded-full border px-3 py-1 text-sm font-medium transition-colors',
                   isSelected
-                    ? 'border-twitch bg-twitch text-white'
+                    ? 'border-twitch bg-twitch text-bg'
                     : 'border-border bg-surface-2 text-text-sub hover:bg-surface-2/80'
                 )}
               >

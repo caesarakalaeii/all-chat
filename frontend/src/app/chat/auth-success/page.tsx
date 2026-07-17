@@ -183,7 +183,7 @@ function AuthSuccessContent() {
           <p className="mb-4 text-lg text-youtube">{error}</p>
           <Link
             href="/"
-            className="inline-block rounded-lg bg-twitch px-6 py-2 font-semibold text-white transition-colors hover:bg-twitch/80"
+            className="inline-block rounded-lg bg-twitch px-6 py-2 font-semibold text-bg transition-colors hover:bg-twitch/80"
           >
             Return to Home
           </Link>

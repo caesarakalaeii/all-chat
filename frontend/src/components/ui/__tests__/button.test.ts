@@ -19,16 +19,18 @@
 import { describe, it, expect } from 'vitest'
 
 describe('button component gradient variant', () => {
-  it('buttonVariants gradient variant includes linear-gradient', async () => {
+  it('buttonVariants gradient variant uses the token gradient (twitch → tiktok)', async () => {
     const { buttonVariants } = await import('../button')
     const result = buttonVariants({ variant: 'gradient' })
-    expect(result).toContain('bg-[linear-gradient(90deg,#9146FF,#69C9D0)]')
+    expect(result).toContain('bg-linear-to-r')
+    expect(result).toContain('from-twitch')
+    expect(result).toContain('to-tiktok')
   })
 
-  it('buttonVariants gradient variant includes text-white and font-semibold', async () => {
+  it('buttonVariants gradient variant includes dark text (WCAG AA) and font-semibold', async () => {
     const { buttonVariants } = await import('../button')
     const result = buttonVariants({ variant: 'gradient' })
-    expect(result).toContain('text-white')
+    expect(result).toContain('text-bg')
     expect(result).toContain('font-semibold')
   })
 

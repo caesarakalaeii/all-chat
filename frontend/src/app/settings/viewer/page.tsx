@@ -24,6 +24,7 @@ import { AppNav } from '@/components/AppNav'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { buildGradientCSS } from '@/lib/utils/gradient'
+import { cn } from '@/lib/utils'
 import { safeExternalRedirect } from '@/lib/auth/redirect-allowlist'
 import type { NameGradient } from '@/lib/types/message'
 import { UserAvatar } from '@/components/UserAvatar'
@@ -65,7 +66,10 @@ function PlatformBadge({ platform }: { platform: string }) {
   if (!found) return null
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium text-white ${found.color}`}
+      className={cn(
+        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium text-bg',
+        found.color
+      )}
     >
       {found.label}
     </span>
@@ -129,7 +133,7 @@ function UnauthenticatedState() {
           <div className="flex flex-col gap-3 sm:flex-row">
             <button
               onClick={() => viewerLogin('twitch')}
-              className="flex items-center gap-2.5 rounded-lg bg-twitch px-6 py-3 font-semibold text-white transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
+              className="flex items-center gap-2.5 rounded-lg bg-twitch px-6 py-3 font-semibold text-bg transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
             >
               <svg
                 className="h-5 w-5 shrink-0"
@@ -138,7 +142,7 @@ function UnauthenticatedState() {
                 aria-hidden="true"
               >
                 <path
-                  fill="#FFFFFF"
+                  fill="currentColor"
                   d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z"
                 />
               </svg>
@@ -146,7 +150,7 @@ function UnauthenticatedState() {
             </button>
             <button
               onClick={() => viewerLogin('youtube')}
-              className="flex items-center gap-2.5 rounded-lg px-6 py-3 font-semibold text-white transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
+              className="flex items-center gap-2.5 rounded-lg px-6 py-3 font-semibold text-bg transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
               style={{ backgroundColor: '#FF0000', ['--tw-ring-color' as string]: '#FF0000' }}
             >
               <svg
