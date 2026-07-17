@@ -51,6 +51,7 @@ import { sharesApi } from '@/lib/api/shares'
 import { getGuilds, getGuildChannels, updateSourceConfig } from '@/lib/api/discord'
 import type { DiscordGuild, ChannelCategory } from '@/lib/api/discord'
 import { ApiError } from '@/lib/api/client'
+import { DISCORD_INVITE_URL } from '@/lib/constants'
 import { engagementApi } from '@/lib/api/engagement'
 import type { EarnConfig } from '@/lib/types/engagement'
 import type { Overlay, ChatSource, DiscordSourceConfig, FilterSettings, DisplaySettings } from '@/lib/types/overlay'
@@ -2588,7 +2589,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                 <p className="mb-5 text-sm text-text-sub">
                   Questions? Join our{' '}
                   <a
-                    href="https://discord.gg/xCGBSuz39P"
+                    href={DISCORD_INVITE_URL}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="font-medium text-twitch hover:underline"
