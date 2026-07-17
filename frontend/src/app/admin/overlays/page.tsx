@@ -18,7 +18,6 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import clsx from 'clsx'
@@ -278,62 +277,85 @@ export default function OverlaysPage() {
                   const isLongOpen =
                     isConnected && !!since && Date.now() - Date.parse(since) >= LONG_OPEN_MS
                   return (
-                  <li
-                    key={overlay.id}
-                    className={clsx(
-                      'cursor-pointer px-4 py-4 transition-colors hover:bg-surface-2',
-                      selectedOverlay?.id === overlay.id && 'bg-surface-2'
-                    )}
-                    onClick={() => setSelectedOverlay(overlay)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center">
-                          {isConnected && (
-                            <span
-                              className={clsx(
-                                'mr-1.5 inline-block h-2 w-2 shrink-0 rounded-full',
-                                isLongOpen ? 'bg-amber-400' : 'bg-kick'
-                              )}
-                              title={
-                                since
-                                  ? `Connected since ${new Date(since).toLocaleString()}`
-                                  : 'Connected'
-                              }
-                            />
-                          )}
-                          <p className="text-sm font-medium text-text">{overlay.name}</p>
-                          <span className="ml-2 inline-flex items-center rounded bg-badge-bg px-2 py-0.5 text-xs font-medium text-text-sub">
-                            {overlay.sources_count || 0} sources
-                          </span>
-                        </div>
-                        <p className="mt-1 font-mono text-xs text-text-sub">ID: {overlay.id}</p>
-                        <p className="mt-1 text-xs text-text-dim">
-                          Created {new Date(overlay.created_at).toLocaleDateString()}
-                          {isConnected && (
-                            <>
-                              {' · '}
+                    <li
+                      key={overlay.id}
+                      className={clsx(
+                        'relative px-4 py-4 transition-colors hover:bg-surface-2',
+                        selectedOverlay?.id === overlay.id && 'bg-surface-2'
+                      )}
+                    >
+                      <div className="flex items-center justify-between">
+                        {/* Stretched button: after:inset-0 makes the whole row select the
+                          overlay; the external-link <Link> below is positioned (relative)
+                          so it stays clickable above the stretched hit area. */}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedOverlay(overlay)}
+                          className="min-w-0 flex-1 cursor-pointer text-left after:absolute after:inset-0"
+                        >
+                          <div className="flex items-center">
+                            {isConnected && (
                               <span
                                 className={clsx(
-                                  'font-medium',
-                                  isLongOpen ? 'text-amber-400' : 'text-kick'
+                                  'mr-1.5 inline-block h-2 w-2 shrink-0 rounded-full',
+                                  isLongOpen ? 'bg-amber-400' : 'bg-kick'
                                 )}
-                              >
-                                {connectedFor ? `Connected ${connectedFor}` : 'Connected'}
-                              </span>
-                            </>
-                          )}
-                        </p>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Link
-                          href={`/overlay/${overlay.id}`}
-                          target="_blank"
-                          className="text-sm text-text-sub transition-colors hover:text-text"
-                          onClick={(e) => e.stopPropagation()}
-                        >
+                                title={
+                                  since
+                                    ? `Connected since ${new Date(since).toLocaleString()}`
+                                    : 'Connected'
+                                }
+                              />
+                            )}
+                            <p className="text-sm font-medium text-text">{overlay.name}</p>
+                            <span className="ml-2 inline-flex items-center rounded bg-badge-bg px-2 py-0.5 text-xs font-medium text-text-sub">
+                              {overlay.sources_count || 0} sources
+                            </span>
+                          </div>
+                          <p className="mt-1 font-mono text-xs text-text-sub">ID: {overlay.id}</p>
+                          <p className="mt-1 text-xs text-text-dim">
+                            Created {new Date(overlay.created_at).toLocaleDateString()}
+                            {isConnected && (
+                              <>
+                                {' · '}
+                                <span
+                                  className={clsx(
+                                    'font-medium',
+                                    isLongOpen ? 'text-amber-400' : 'text-kick'
+                                  )}
+                                >
+                                  {connectedFor ? `Connected ${connectedFor}` : 'Connected'}
+                                </span>
+                              </>
+                            )}
+                          </p>
+                        </button>
+                        <div className="flex items-center space-x-2">
+                          <Link
+                            href={`/overlay/${overlay.id}`}
+                            target="_blank"
+                            aria-label={`Open overlay ${overlay.name} in a new tab`}
+                            className="relative text-sm text-text-sub transition-colors hover:text-text"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <svg
+                              aria-hidden="true"
+                              className="h-5 w-5"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="2"
+                                d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                              />
+                            </svg>
+                          </Link>
                           <svg
-                            className="h-5 w-5"
+                            aria-hidden="true"
+                            className="h-5 w-5 text-text-dim"
                             fill="none"
                             stroke="currentColor"
                             viewBox="0 0 24 24"
@@ -342,26 +364,12 @@ export default function OverlaysPage() {
                               strokeLinecap="round"
                               strokeLinejoin="round"
                               strokeWidth="2"
-                              d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                              d="M9 5l7 7-7 7"
                             />
                           </svg>
-                        </Link>
-                        <svg
-                          className="h-5 w-5 text-text-dim"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="2"
-                            d="M9 5l7 7-7 7"
-                          />
-                        </svg>
+                        </div>
                       </div>
-                    </div>
-                  </li>
+                    </li>
                   )
                 })}
               </ul>

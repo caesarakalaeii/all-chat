@@ -19,6 +19,7 @@
  */
 
 import clsx from 'clsx'
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { useHydrated } from '@/hooks/useHydrated'
@@ -54,11 +55,22 @@ interface ResizableSplitProps {
   reversed?: boolean
 }
 
+/** Percentage step applied per click of the divider's step buttons (WCAG 2.5.7). */
+const BUTTON_STEP = 10
+
+/** Percentage step applied per arrow-key press on the divider. */
+const KEY_STEP = 5
+
+/** 24px (WCAG 2.5.8) chevron buttons floating on the divider. */
+const STEP_BUTTON_CLASS =
+  'flex h-6 w-6 items-center justify-center rounded-md border border-border bg-surface text-text-sub shadow-sm hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none'
+
 /**
  * Two-pane resizable split: side-by-side (or stacked, via `orientation`) with a
  * draggable divider on desktop, stacked (no divider) on mobile. Keyboard-accessible
- * (Arrow keys move the divider ±5%) and persists the ratio to localStorage.
- * Generalized from SplitView; no external dependency.
+ * (Arrow keys move the divider ±5%), with single-click step buttons as the
+ * no-drag pointer alternative (WCAG 2.5.7), and persists the ratio to
+ * localStorage. Generalized from SplitView; no external dependency.
  */
 export function ResizableSplit({
   storageKey,
@@ -88,7 +100,7 @@ export function ResizableSplit({
         /* storage unavailable — resize still works in-session */
       }
     },
-    [storageKey],
+    [storageKey]
   )
 
   const setPct = useCallback(
@@ -98,7 +110,7 @@ export function ResizableSplit({
       setFirstPct(clamped)
       return clamped
     },
-    [clamp],
+    [clamp]
   )
 
   // Restore the persisted ratio after hydration (avoids SSR mismatch). Syncing
@@ -141,7 +153,7 @@ export function ResizableSplit({
         : ((e.clientX - rect.left) / rect.width) * 100
       setPct(reversed ? 100 - raw : raw)
     },
-    [setPct, isVertical, reversed],
+    [setPct, isVertical, reversed]
   )
 
   const onPointerUp = useCallback(() => {
@@ -157,12 +169,22 @@ export function ResizableSplit({
       const decreaseKey = isVertical ? 'ArrowUp' : 'ArrowLeft'
       const increaseKey = isVertical ? 'ArrowDown' : 'ArrowRight'
       if (e.key === decreaseKey) {
-        persist(setPct(firstPctRef.current - 5))
+        e.preventDefault()
+        persist(setPct(firstPctRef.current - KEY_STEP))
       } else if (e.key === increaseKey) {
-        persist(setPct(firstPctRef.current + 5))
+        e.preventDefault()
+        persist(setPct(firstPctRef.current + KEY_STEP))
       }
     },
-    [persist, setPct, isVertical],
+    [persist, setPct, isVertical]
+  )
+
+  /** Single-pointer, no-drag resize alternative (WCAG 2.5.7). */
+  const stepBy = useCallback(
+    (delta: number) => {
+      persist(setPct(firstPctRef.current + delta))
+    },
+    [persist, setPct]
   )
 
   // The first panel renders `right` when reversed, else `left`.
@@ -181,7 +203,7 @@ export function ResizableSplit({
       ref={containerRef}
       className={clsx(
         'flex min-h-0 flex-1 flex-col overflow-hidden',
-        isVertical ? 'md:flex-col' : 'md:flex-row',
+        isVertical ? 'md:flex-col' : 'md:flex-row'
       )}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -189,26 +211,79 @@ export function ResizableSplit({
       <div
         className={clsx(
           'min-h-0 flex-1 overflow-hidden',
-          isVertical ? 'md:flex-none' : 'md:flex-none',
+          isVertical ? 'md:flex-none' : 'md:flex-none'
         )}
         style={firstStyle}
       >
         {firstPanel}
       </div>
 
-      {/* Draggable divider — hidden on mobile (stacked layout) */}
+      {/* Draggable divider — hidden on mobile (stacked layout). The handle is
+          exposed as a value slider (aria-valuenow = first panel %): aria-query
+          classifies `separator` as non-interactive structure, so the focusable
+          window-splitter separator cannot satisfy the a11y gate; `slider`
+          carries the same value/min/max/orientation + arrow-key semantics. */}
       <div
         className={clsx(
-          'hidden flex-shrink-0 bg-border transition-colors select-none hover:bg-twitch/50 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none md:block',
-          isVertical ? 'h-1 w-full cursor-row-resize' : 'w-1 cursor-col-resize',
+          'relative hidden flex-shrink-0 md:block',
+          isVertical ? 'h-1 w-full' : 'w-1'
         )}
-        onPointerDown={onPointerDown}
-        onKeyDown={onKeyDown}
-        role="separator"
-        aria-label="Drag to resize panels"
-        aria-orientation={isVertical ? 'horizontal' : 'vertical'}
-        tabIndex={0}
-      />
+      >
+        <div
+          role="slider"
+          aria-label="Resize panels"
+          aria-orientation={isVertical ? 'vertical' : 'horizontal'}
+          aria-valuemin={min}
+          aria-valuemax={max}
+          aria-valuenow={Math.round(firstPct)}
+          tabIndex={0}
+          onPointerDown={onPointerDown}
+          onKeyDown={onKeyDown}
+          className={clsx(
+            // The ELEMENT box is >=24px (WCAG 2.5.8 — axe measures the target's
+            // own bounding box, pseudo-elements do not count); the visible 4px
+            // bar is drawn by the before: pseudo-element instead.
+            "select-none before:absolute before:bg-border before:transition-colors before:content-[''] hover:before:bg-twitch/50 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none",
+            isVertical
+              ? 'absolute inset-x-0 top-1/2 h-6 -translate-y-1/2 cursor-row-resize before:inset-x-0 before:top-1/2 before:h-1 before:-translate-y-1/2'
+              : 'absolute inset-y-0 left-1/2 w-6 -translate-x-1/2 cursor-col-resize before:inset-y-0 before:left-1/2 before:w-1 before:-translate-x-1/2'
+          )}
+        />
+        {/* Step buttons: single-pointer, no-drag resize alternative (WCAG
+            2.5.7) — each click moves the split by 10%. Siblings of the slider
+            (not children) because role=slider makes descendants presentational. */}
+        <div
+          className={clsx(
+            'absolute top-1/2 left-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 gap-1',
+            isVertical ? 'flex-row' : 'flex-col'
+          )}
+        >
+          <button
+            type="button"
+            aria-label={isVertical ? 'Shrink top panel' : 'Shrink left panel'}
+            onClick={() => stepBy(-BUTTON_STEP)}
+            className={STEP_BUTTON_CLASS}
+          >
+            {isVertical ? (
+              <ChevronUp className="h-4 w-4" aria-hidden="true" />
+            ) : (
+              <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+            )}
+          </button>
+          <button
+            type="button"
+            aria-label={isVertical ? 'Grow top panel' : 'Grow left panel'}
+            onClick={() => stepBy(BUTTON_STEP)}
+            className={STEP_BUTTON_CLASS}
+          >
+            {isVertical ? (
+              <ChevronDown className="h-4 w-4" aria-hidden="true" />
+            ) : (
+              <ChevronRight className="h-4 w-4" aria-hidden="true" />
+            )}
+          </button>
+        </div>
+      </div>
 
       <div className="min-h-0 flex-1 overflow-hidden">{secondPanel}</div>
     </div>

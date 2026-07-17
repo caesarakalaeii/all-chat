@@ -24,7 +24,7 @@
 
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useId } from 'react'
 import clsx from 'clsx'
 import { sharesApi } from '@/lib/api/shares'
 import { overlaysApi } from '@/lib/api/overlays'
@@ -50,6 +50,9 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
     'this_stream'
   )
   const [customHours, setCustomHours] = useState<string>('24')
+  const baseId = useId()
+  const hoursHintId = `${baseId}-hours-hint`
+  const hoursErrorId = `${baseId}-hours-error`
 
   const isKickUser = senderPlatform === 'kick'
   const [loading, setLoading] = useState(false)
@@ -195,10 +198,10 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
             </div>
 
             {/* Expiry options */}
-            <div className="mb-6">
-              <label className="mb-2 block text-sm font-medium text-text-sub">
+            <fieldset className="mb-6">
+              <legend className="mb-2 block text-sm font-medium text-text-sub">
                 When should the share expire?
-              </label>
+              </legend>
               <div className="space-y-2">
                 {/* This stream */}
                 <label
@@ -216,17 +219,17 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
                     disabled={isKickUser}
                     className="mt-1 mr-2 accent-blue-500"
                   />
-                  <div>
-                    <div className="text-sm font-medium text-text">
-                      This stream
-                      {isKickUser && (
-                        <span className="ml-1 text-xs text-text-dim">
-                          (not available for Kick — stream detection not yet supported)
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-xs text-text-dim">Expires when your stream ends</div>
-                  </div>
+                  <span className="text-sm font-medium text-text">
+                    This stream
+                    {isKickUser && (
+                      <span className="ml-1 text-xs text-text-dim">
+                        (not available for Kick — stream detection not yet supported)
+                      </span>
+                    )}
+                    <span className="block text-xs font-normal text-text-dim">
+                      Expires when your stream ends
+                    </span>
+                  </span>
                 </label>
 
                 {/* Custom duration */}
@@ -251,6 +254,11 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
                             value={customHours}
                             onChange={(e) => setCustomHours(e.target.value)}
                             placeholder="hours"
+                            aria-label="Custom duration in hours"
+                            aria-invalid={!isValidCustomHours()}
+                            aria-describedby={
+                              isValidCustomHours() ? hoursHintId : `${hoursHintId} ${hoursErrorId}`
+                            }
                             className={clsx(
                               'w-24 rounded-lg border bg-surface-2 px-2 py-1 text-sm text-text transition-all duration-200 focus-visible:ring-2 focus-visible:ring-blue-500/20 focus-visible:outline-none',
                               !isValidCustomHours()
@@ -258,10 +266,12 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
                                 : 'border-border focus-visible:border-blue-500'
                             )}
                           />
-                          <span className="text-sm text-text-sub">hours (1-168)</span>
+                          <span id={hoursHintId} className="text-sm text-text-sub">
+                            hours (1-168)
+                          </span>
                         </div>
                         {!isValidCustomHours() && (
-                          <p className="mt-1 text-xs text-red-400">
+                          <p id={hoursErrorId} className="mt-1 text-xs text-red-400">
                             Must be between 1 and 168 hours
                           </p>
                         )}
@@ -280,13 +290,13 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
                     onChange={(e) => setExpiryOption(e.target.value as any)}
                     className="mt-1 mr-2 accent-blue-500"
                   />
-                  <div>
-                    <div className="text-sm font-medium text-text">Unlimited</div>
-                    <div className="text-xs text-text-dim">Never expires</div>
-                  </div>
+                  <span className="text-sm font-medium text-text">
+                    Unlimited
+                    <span className="block text-xs font-normal text-text-dim">Never expires</span>
+                  </span>
                 </label>
               </div>
-            </div>
+            </fieldset>
 
             {/* Action buttons */}
             <div className="flex gap-3">

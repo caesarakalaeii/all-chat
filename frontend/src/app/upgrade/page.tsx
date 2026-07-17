@@ -95,11 +95,14 @@ export default function UpgradePage() {
               variant="gradient"
               size="lg"
               render={
-                <a href={PATREON_JOIN_URL} target="_blank" rel="noopener noreferrer" />
+                // The label lives on the anchor itself so the link has
+                // screen-reader-accessible content (jsx-a11y/anchor-has-content);
+                // Base UI renders the anchor with the Button's styling.
+                <a href={PATREON_JOIN_URL} target="_blank" rel="noopener noreferrer">
+                  Subscribe on Patreon
+                </a>
               }
-            >
-              Subscribe on Patreon
-            </Button>
+            />
             <Button variant="outline" size="lg" render={<Link href="/settings/premium" />}>
               Already a patron? Connect Patreon
             </Button>

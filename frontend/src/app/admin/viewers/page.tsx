@@ -33,7 +33,7 @@
 
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import clsx from 'clsx'
 import { useAuthStore } from '@/lib/stores/auth-store'
@@ -81,6 +81,7 @@ export default function AdminViewersPage() {
   // means the custom day count is empty/out of range and the grant is blocked.
   const [grantDurationSeconds, setGrantDurationSeconds] = useState<number | null>(null)
   const [grantDurationValid, setGrantDurationValid] = useState(true)
+  const banReasonId = useId()
 
   useEffect(() => {
     if (!user?.is_admin) {
@@ -424,7 +425,9 @@ export default function AdminViewersPage() {
               <Dialog.Close render={<Button variant="outline">Cancel</Button>} />
               <Button
                 variant="default"
-                disabled={premiumLoading || (!premiumDialogViewer.is_premium && !grantDurationValid)}
+                disabled={
+                  premiumLoading || (!premiumDialogViewer.is_premium && !grantDurationValid)
+                }
                 onClick={() => handleTogglePremium(premiumDialogViewer, grantDurationSeconds)}
               >
                 {premiumLoading
@@ -482,10 +485,11 @@ export default function AdminViewersPage() {
             This will prevent {selectedViewer?.username} from sending messages.
           </Dialog.Description>
           <div className="mt-4">
-            <label className="mb-2 block text-sm font-medium text-text-sub">
+            <label htmlFor={banReasonId} className="mb-2 block text-sm font-medium text-text-sub">
               Reason (optional)
             </label>
             <textarea
+              id={banReasonId}
               value={banReason}
               onChange={(e) => setBanReason(e.target.value)}
               placeholder="Enter reason for ban..."

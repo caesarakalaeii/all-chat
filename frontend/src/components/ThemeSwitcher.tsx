@@ -126,7 +126,13 @@ export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
   }
 
   return (
+    // The wrapper is a purely presentational layout container: the hover/focus
+    // listeners only pause the auto-rotation (WCAG 2.2.2) and are not an
+    // interaction affordance, so role="presentation" is the honest signal (the
+    // carousel semantics live on the role="group" element below). Descendant
+    // semantics are unaffected.
     <div
+      role="presentation"
       className={clsx('relative mx-auto w-full max-w-2xl', className)}
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
