@@ -29,12 +29,15 @@
   --color-discord: #5865f2;
 
   /* Neutral scale — oklch with constant chroma ~0.007, hue 270 */
-  --color-neutral-950: oklch(0.09 0.007 270); /* #07070a — bg */
-  --color-neutral-900: oklch(0.11 0.009 270); /* #0d0d12 — surface */
+  --color-neutral-950: oklch(0.09 0.007 270); /* #020204 — bg */
+  --color-neutral-900: oklch(0.11 0.009 270); /* #040407 — surface */
   --color-neutral-800: oklch(0.14 0.008 270); /* surface-2 */
   --color-neutral-700: oklch(0.22 0.007 270); /* elevated border */
   --color-neutral-600: oklch(0.35 0.007 270); /* muted text */
-  --color-neutral-400: oklch(0.58 0.007 270); /* secondary text */
+  /* Raised 0.58 → 0.60 (WCAG initiative): secondary text now ≥5.0:1 on every
+     surface tier, keeping a visible tier above --color-text-dim (~4.7:1).
+     Locked by src/app/__tests__/token-contrast.test.ts. */
+  --color-neutral-400: oklch(0.6 0.007 270); /* secondary text */
   --color-neutral-200: oklch(0.78 0.005 270); /* tertiary text */
   --color-neutral-100: oklch(0.91 0.003 270); /* primary text */
 
@@ -49,9 +52,11 @@
   --color-text: var(--color-neutral-100);
   --color-text-sub: var(--color-neutral-400);
   /* Tertiary text. Decoupled from neutral-600 (oklch 0.35 ≈ 1.8:1 on bg — failed
-     WCAG) and raised to ~4.4:1 so footnotes/captions/timestamps stay legible while
-     remaining a tier below --color-text-sub (~4.8:1). */
-  --color-text-dim: oklch(0.56 0.008 270);
+     WCAG) and raised 0.56 → 0.575 (WCAG initiative) so footnotes/captions/
+     timestamps clear 4.5:1 on bg, surface, AND surface-2 (it is used as small
+     text and placeholders on all three), while remaining a tier below
+     --color-text-sub. Locked by src/app/__tests__/token-contrast.test.ts. */
+  --color-text-dim: oklch(0.575 0.008 270);
 
   /* --------------------------------------------------
      TIER 3: COMPONENT TOKENS (specific-use)
