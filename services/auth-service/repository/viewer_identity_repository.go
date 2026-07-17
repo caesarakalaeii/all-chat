@@ -150,59 +150,59 @@ func (r *ViewerIdentityRepository) GetFullCosmetics(ctx context.Context, viewerI
 	return &c, nil
 }
 
-// UpsertViewerCosmetics sets name_color, name_gradient, avatar_frame_id, and avatar_flair_id for a viewer.
-// Pass nil for nameColor to clear it; pass nil for nameGradient to clear it.
-// Pass nil for avatarFrameID or avatarFlairID to clear the respective selection.
-// Gradient and color are stored independently — the caller is responsible for
-// enforcing mutual exclusion before calling this method.
-func (r *ViewerIdentityRepository) UpsertViewerCosmetics(
-	ctx context.Context,
-	viewerID uuid.UUID,
-	nameColor *string,
-	nameGradient []byte,
-	avatarFrameID *uuid.UUID, // nil = clear selection
-	avatarFlairID *uuid.UUID, // nil = clear selection
-) error {
-	_, err := r.db.Exec(ctx,
+// CosmeticsUpdate describes a partial update to a viewer's cosmetics. Each Set*
+// flag selects whether that column group is written; groups whose flag is false are
+// left exactly as they were (or NULL on first insert). name_color and name_gradient
+// move together under SetName because they are mutually exclusive (setting one
+// clears the other); avatar_frame_id and avatar_flair_id are independent and have
+// their own flags, so changing one never disturbs the other.
+//
+// To CLEAR a set column, pass a nil pointer (→ SQL NULL) with the Set flag true.
+// Never pass a pointer to uuid.Nil for an avatar column: it would be encoded as the
+// literal '00000000-...' value and violate the avatar foreign keys.
+type CosmeticsUpdate struct {
+	SetName      bool
+	NameColor    *string
+	NameGradient []byte
+
+	SetFrame      bool
+	AvatarFrameID *uuid.UUID
+
+	SetFlair      bool
+	AvatarFlairID *uuid.UUID
+}
+
+// UpsertViewerCosmetics applies a partial cosmetics update and returns the full
+// persisted row. It is a true per-column PATCH: only the column groups whose Set*
+// flag is true are written, so e.g. changing a name color never clears a saved
+// avatar frame, and setting a flair never clears the frame. The RETURNING clause
+// yields the authoritative post-write state in the same round-trip, so callers
+// never need a separate (racy, fallible) read-back to report what was stored.
+// Callers MUST pass a nil value for any group whose Set flag is false (the handler
+// does: absent request fields decode to nil). This keeps the INSERT branch's VALUES
+// unwrapped so the JSONB/UUID columns get their parameters directly (wrapping a param
+// in CASE would lose the column's type context and break inference); the per-group
+// gating that preserves an existing row's untouched columns lives in the typed
+// ON CONFLICT branch, where both CASE arms are already column-typed.
+func (r *ViewerIdentityRepository) UpsertViewerCosmetics(ctx context.Context, viewerID uuid.UUID, u CosmeticsUpdate) (*ViewerCosmetics, error) {
+	var c ViewerCosmetics
+	err := r.db.QueryRow(ctx,
 		`INSERT INTO viewer_cosmetics (viewer_id, name_color, name_gradient, avatar_frame_id, avatar_flair_id, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, NOW())
 		 ON CONFLICT (viewer_id) DO UPDATE SET
-		     name_color = EXCLUDED.name_color,
-		     name_gradient = EXCLUDED.name_gradient,
-		     avatar_frame_id = EXCLUDED.avatar_frame_id,
-		     avatar_flair_id = EXCLUDED.avatar_flair_id,
-		     updated_at = NOW()`,
-		viewerID, nameColor, nameGradient, avatarFrameID, avatarFlairID,
-	)
+		     name_color      = CASE WHEN $6 THEN EXCLUDED.name_color      ELSE viewer_cosmetics.name_color      END,
+		     name_gradient   = CASE WHEN $6 THEN EXCLUDED.name_gradient   ELSE viewer_cosmetics.name_gradient   END,
+		     avatar_frame_id = CASE WHEN $7 THEN EXCLUDED.avatar_frame_id ELSE viewer_cosmetics.avatar_frame_id END,
+		     avatar_flair_id = CASE WHEN $8 THEN EXCLUDED.avatar_flair_id ELSE viewer_cosmetics.avatar_flair_id END,
+		     updated_at = NOW()
+		 RETURNING name_color, name_gradient, avatar_frame_id, avatar_flair_id`,
+		viewerID, u.NameColor, u.NameGradient, u.AvatarFrameID, u.AvatarFlairID,
+		u.SetName, u.SetFrame, u.SetFlair,
+	).Scan(&c.NameColor, &c.NameGradient, &c.AvatarFrameID, &c.AvatarFlairID)
 	if err != nil {
-		return fmt.Errorf("failed to upsert viewer cosmetics: %w", err)
+		return nil, fmt.Errorf("failed to upsert viewer cosmetics: %w", err)
 	}
-	return nil
-}
-
-// UpsertAvatarCosmetics updates only the avatar_frame_id and avatar_flair_id columns,
-// leaving name_color and name_gradient untouched. This prevents avatar-only PATCH
-// requests from accidentally NULLing out a previously saved name color/gradient.
-// Pass nil for avatarFrameID or avatarFlairID to clear the respective selection.
-func (r *ViewerIdentityRepository) UpsertAvatarCosmetics(
-	ctx context.Context,
-	viewerID uuid.UUID,
-	avatarFrameID *uuid.UUID, // nil = clear selection
-	avatarFlairID *uuid.UUID, // nil = clear selection
-) error {
-	_, err := r.db.Exec(ctx,
-		`INSERT INTO viewer_cosmetics (viewer_id, avatar_frame_id, avatar_flair_id, updated_at)
-		 VALUES ($1, $2, $3, NOW())
-		 ON CONFLICT (viewer_id) DO UPDATE SET
-		     avatar_frame_id = EXCLUDED.avatar_frame_id,
-		     avatar_flair_id = EXCLUDED.avatar_flair_id,
-		     updated_at = NOW()`,
-		viewerID, avatarFrameID, avatarFlairID,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to upsert avatar cosmetics: %w", err)
-	}
-	return nil
+	return &c, nil
 }
 
 // LinkViewerToUser links a viewer session to a streamer user account and recomputes

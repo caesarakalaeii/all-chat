@@ -23,10 +23,12 @@ import (
 	"testing"
 
 	"github.com/caesar/all-chat/services/auth-service/repository"
+	"github.com/caesar/all-chat/shared/premium"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 // newTestDB returns a pgxpool connected to the local test database.
@@ -60,7 +62,7 @@ func cleanupViewer(t *testing.T, pool *pgxpool.Pool, platform, platformUserID st
 
 func TestGetOrCreateViewerByPlatform_NewViewer(t *testing.T) {
 	pool := newTestDB(t)
-	repo := repository.NewViewerIdentityRepository(pool)
+	repo := repository.NewViewerIdentityRepository(pool, premium.NewRecomputer(pool, zap.NewNop()))
 	ctx := context.Background()
 
 	platform := "twitch"
@@ -74,7 +76,7 @@ func TestGetOrCreateViewerByPlatform_NewViewer(t *testing.T) {
 
 func TestGetOrCreateViewerByPlatform_Existing(t *testing.T) {
 	pool := newTestDB(t)
-	repo := repository.NewViewerIdentityRepository(pool)
+	repo := repository.NewViewerIdentityRepository(pool, premium.NewRecomputer(pool, zap.NewNop()))
 	ctx := context.Background()
 
 	platform := "twitch"
@@ -92,7 +94,7 @@ func TestGetOrCreateViewerByPlatform_Existing(t *testing.T) {
 
 func TestGetViewerCosmetics_NotFound(t *testing.T) {
 	pool := newTestDB(t)
-	repo := repository.NewViewerIdentityRepository(pool)
+	repo := repository.NewViewerIdentityRepository(pool, premium.NewRecomputer(pool, zap.NewNop()))
 	ctx := context.Background()
 
 	// Use a random UUID that has no cosmetics row
@@ -105,7 +107,7 @@ func TestGetViewerCosmetics_NotFound(t *testing.T) {
 
 func TestUpsertViewerCosmetics(t *testing.T) {
 	pool := newTestDB(t)
-	repo := repository.NewViewerIdentityRepository(pool)
+	repo := repository.NewViewerIdentityRepository(pool, premium.NewRecomputer(pool, zap.NewNop()))
 	ctx := context.Background()
 
 	platform := "twitch"
@@ -116,11 +118,84 @@ func TestUpsertViewerCosmetics(t *testing.T) {
 	require.NoError(t, err)
 
 	expectedColor := "#ff6600"
-	err = repo.UpsertViewerCosmetics(ctx, viewerID, &expectedColor, nil, nil, nil)
+	_, err = repo.UpsertViewerCosmetics(ctx, viewerID, repository.CosmeticsUpdate{SetName: true, NameColor: &expectedColor})
 	require.NoError(t, err)
 
 	color, err := repo.GetViewerCosmetics(ctx, viewerID)
 	require.NoError(t, err)
 	require.NotNil(t, color)
 	assert.Equal(t, expectedColor, *color)
+}
+
+// TestUpsertViewerCosmetics_ZeroUUIDViolatesAvatarFK is the DB-layer regression
+// guard for the prod bug (reported 2026-07-17) where the cosmetics handler passed
+// a pointer to uuid.Nil as a "clear" sentinel. pgx encodes a non-nil pointer as
+// the literal '00000000-...' value, which has no cosmetic_frames / cosmetic_flairs
+// row and violates the avatar FK constraints (SQLSTATE 23503) — 500'ing every
+// non-premium save. Passing nil (→ SQL NULL) must succeed. This asserts both.
+func TestUpsertViewerCosmetics_ZeroUUIDViolatesAvatarFK(t *testing.T) {
+	pool := newTestDB(t)
+	repo := repository.NewViewerIdentityRepository(pool, premium.NewRecomputer(pool, zap.NewNop()))
+	ctx := context.Background()
+
+	platform := "twitch"
+	platformUserID := "user_cosmetics_fk_test"
+	defer cleanupViewer(t, pool, platform, platformUserID)
+
+	viewerID, err := repo.GetOrCreateViewerByPlatform(ctx, platform, platformUserID)
+	require.NoError(t, err)
+
+	color := "#00ff00"
+
+	// nil avatar pointers → SQL NULL → satisfies the FK → succeeds (the fix).
+	_, err = repo.UpsertViewerCosmetics(ctx, viewerID, repository.CosmeticsUpdate{
+		SetName: true, NameColor: &color,
+		SetFrame: true, AvatarFrameID: nil,
+		SetFlair: true, AvatarFlairID: nil,
+	})
+	require.NoError(t, err, "nil avatar pointers should write SQL NULL and satisfy the FK")
+
+	// A pointer to the zero UUID → literal '00000000-...' → FK violation (the bug).
+	zero := uuid.Nil
+	_, err = repo.UpsertViewerCosmetics(ctx, viewerID, repository.CosmeticsUpdate{
+		SetFrame: true, AvatarFrameID: &zero,
+		SetFlair: true, AvatarFlairID: &zero,
+	})
+	require.Error(t, err, "zero-UUID avatar ids must violate the avatar FK constraint")
+}
+
+// TestUpsertViewerCosmetics_PartialUpdatePreservesUntouchedColumns verifies the
+// per-column PATCH semantics against a real database: a name-only update must not
+// disturb a saved avatar frame (the ON CONFLICT CASE gating), and the RETURNING
+// clause must report the full merged row.
+func TestUpsertViewerCosmetics_PartialUpdatePreservesUntouchedColumns(t *testing.T) {
+	pool := newTestDB(t)
+	repo := repository.NewViewerIdentityRepository(pool, premium.NewRecomputer(pool, zap.NewNop()))
+	ctx := context.Background()
+
+	platform := "twitch"
+	platformUserID := "user_cosmetics_partial_test"
+	defer cleanupViewer(t, pool, platform, platformUserID)
+
+	viewerID, err := repo.GetOrCreateViewerByPlatform(ctx, platform, platformUserID)
+	require.NoError(t, err)
+
+	// Seed a catalog frame so a valid avatar_frame_id can be set.
+	var frameID uuid.UUID
+	err = pool.QueryRow(ctx, `INSERT INTO cosmetic_frames (name, image_url) VALUES ('itest', 'itest') RETURNING id`).Scan(&frameID)
+	require.NoError(t, err)
+	defer pool.Exec(ctx, `DELETE FROM cosmetic_frames WHERE id = $1`, frameID)
+
+	// Set the avatar frame.
+	_, err = repo.UpsertViewerCosmetics(ctx, viewerID, repository.CosmeticsUpdate{SetFrame: true, AvatarFrameID: &frameID})
+	require.NoError(t, err)
+
+	// A name-only update must preserve the frame and return the merged row.
+	color := "#123456"
+	res, err := repo.UpsertViewerCosmetics(ctx, viewerID, repository.CosmeticsUpdate{SetName: true, NameColor: &color})
+	require.NoError(t, err)
+	require.NotNil(t, res.NameColor)
+	assert.Equal(t, color, *res.NameColor)
+	require.NotNil(t, res.AvatarFrameID, "name-only update must preserve the saved avatar frame")
+	assert.Equal(t, frameID, *res.AvatarFrameID)
 }
