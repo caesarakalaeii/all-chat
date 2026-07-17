@@ -18,8 +18,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
-import React from 'react'
+import React, { useId } from 'react'
 
 export interface SliderControlProps {
   label: string
@@ -31,11 +30,25 @@ export interface SliderControlProps {
   onChange: (v: number) => void
 }
 
-export function SliderControl({ label, value, min, max, step, unit, onChange }: SliderControlProps): React.ReactElement {
+export function SliderControl({
+  label,
+  value,
+  min,
+  max,
+  step,
+  unit,
+  onChange,
+}: SliderControlProps): React.ReactElement {
+  // Explicit label/control association so the range input has an accessible
+  // name; the native range element keeps 2.1.1/2.5.7 handled by the browser.
+  const id = useId()
   return (
     <div className="flex items-center gap-2">
-      <span className="w-28 shrink-0 text-sm text-text-sub">{label}</span>
+      <label htmlFor={id} className="w-28 shrink-0 text-sm text-text-sub">
+        {label}
+      </label>
       <input
+        id={id}
         type="range"
         min={min}
         max={max}
@@ -44,8 +57,12 @@ export function SliderControl({ label, value, min, max, step, unit, onChange }: 
         onChange={(e) => onChange(parseFloat(e.target.value))}
         className="flex-1 accent-current"
       />
-      <span className="w-12 shrink-0 text-right text-sm text-text-dim tabular-nums">
-        {value}{unit ?? ''}
+      <span
+        aria-hidden="true"
+        className="w-12 shrink-0 text-right text-sm text-text-dim tabular-nums"
+      >
+        {value}
+        {unit ?? ''}
       </span>
     </div>
   )

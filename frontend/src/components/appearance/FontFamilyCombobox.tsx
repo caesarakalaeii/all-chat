@@ -18,7 +18,6 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 import React, { useState } from 'react'
 import { Combobox } from '@base-ui/react/combobox'
 import { Check } from 'lucide-react'
@@ -59,12 +58,15 @@ export interface FontFamilyComboboxProps {
   value: string | null
   onChange: (value: string | null) => void
   placeholder?: string
+  /** Accessible name for the text input — the placeholder is only a hint. */
+  'aria-label'?: string
 }
 
 export function FontFamilyCombobox({
   value,
   onChange,
   placeholder = 'Select font…',
+  'aria-label': ariaLabel = 'Font family',
 }: FontFamilyComboboxProps): React.ReactElement {
   const [inputValue, setInputValue] = useState<string>('')
 
@@ -87,8 +89,9 @@ export function FontFamilyCombobox({
     >
       <div className="relative">
         <Combobox.Input
-          className="w-full rounded border border-border bg-bg px-2 py-1.5 text-sm text-text placeholder:text-text-dim focus:outline-none focus:ring-1 focus:ring-border"
+          className="w-full rounded border border-border bg-bg px-2 py-1.5 text-sm text-text placeholder:text-text-dim focus-visible:ring-1 focus-visible:ring-border focus-visible:outline-none"
           placeholder={placeholder}
+          aria-label={ariaLabel}
         />
         <Combobox.Trigger
           className="absolute inset-y-0 right-0 flex items-center px-2 text-text-dim"
@@ -100,53 +103,53 @@ export function FontFamilyCombobox({
         </Combobox.Trigger>
       </div>
       <Combobox.Portal>
-      <Combobox.Positioner className="z-[200]">
-        <Combobox.Popup className="max-h-60 overflow-y-auto rounded border border-border bg-surface py-1 shadow-lg">
-          {!hasResults && (
-            <Combobox.Empty className="px-3 py-2 text-sm text-text-dim">
-              No fonts found
-            </Combobox.Empty>
-          )}
-          {filteredSystem.length > 0 && (
-            <Combobox.Group>
-              <Combobox.GroupLabel className="px-3 py-1 text-xs font-semibold text-text-dim uppercase tracking-wide">
-                System Fonts
-              </Combobox.GroupLabel>
-              {filteredSystem.map((font) => (
-                <Combobox.Item
-                  key={font.value}
-                  value={font.value}
-                  className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-text hover:bg-subtle data-[highlighted]:bg-subtle"
-                >
-                  <Combobox.ItemIndicator className="w-4">
-                    <Check className="h-3 w-3" />
-                  </Combobox.ItemIndicator>
-                  <span style={{ fontFamily: font.value }}>{font.label}</span>
-                </Combobox.Item>
-              ))}
-            </Combobox.Group>
-          )}
-          {filteredGoogle.length > 0 && (
-            <Combobox.Group>
-              <Combobox.GroupLabel className="px-3 py-1 text-xs font-semibold text-text-dim uppercase tracking-wide">
-                Google Fonts
-              </Combobox.GroupLabel>
-              {filteredGoogle.map((font) => (
-                <Combobox.Item
-                  key={font.value}
-                  value={font.value}
-                  className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-text hover:bg-subtle data-[highlighted]:bg-subtle"
-                >
-                  <Combobox.ItemIndicator className="w-4">
-                    <Check className="h-3 w-3" />
-                  </Combobox.ItemIndicator>
-                  <span style={{ fontFamily: font.value }}>{font.label}</span>
-                </Combobox.Item>
-              ))}
-            </Combobox.Group>
-          )}
-        </Combobox.Popup>
-      </Combobox.Positioner>
+        <Combobox.Positioner className="z-[200]">
+          <Combobox.Popup className="max-h-60 overflow-y-auto rounded border border-border bg-surface py-1 shadow-lg">
+            {!hasResults && (
+              <Combobox.Empty className="px-3 py-2 text-sm text-text-dim">
+                No fonts found
+              </Combobox.Empty>
+            )}
+            {filteredSystem.length > 0 && (
+              <Combobox.Group>
+                <Combobox.GroupLabel className="px-3 py-1 text-xs font-semibold tracking-wide text-text-dim uppercase">
+                  System Fonts
+                </Combobox.GroupLabel>
+                {filteredSystem.map((font) => (
+                  <Combobox.Item
+                    key={font.value}
+                    value={font.value}
+                    className="hover:bg-subtle data-[highlighted]:bg-subtle flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-text"
+                  >
+                    <Combobox.ItemIndicator className="w-4">
+                      <Check className="h-3 w-3" />
+                    </Combobox.ItemIndicator>
+                    <span style={{ fontFamily: font.value }}>{font.label}</span>
+                  </Combobox.Item>
+                ))}
+              </Combobox.Group>
+            )}
+            {filteredGoogle.length > 0 && (
+              <Combobox.Group>
+                <Combobox.GroupLabel className="px-3 py-1 text-xs font-semibold tracking-wide text-text-dim uppercase">
+                  Google Fonts
+                </Combobox.GroupLabel>
+                {filteredGoogle.map((font) => (
+                  <Combobox.Item
+                    key={font.value}
+                    value={font.value}
+                    className="hover:bg-subtle data-[highlighted]:bg-subtle flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-text"
+                  >
+                    <Combobox.ItemIndicator className="w-4">
+                      <Check className="h-3 w-3" />
+                    </Combobox.ItemIndicator>
+                    <span style={{ fontFamily: font.value }}>{font.label}</span>
+                  </Combobox.Item>
+                ))}
+              </Combobox.Group>
+            )}
+          </Combobox.Popup>
+        </Combobox.Positioner>
       </Combobox.Portal>
     </Combobox.Root>
   )
