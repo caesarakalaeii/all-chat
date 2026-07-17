@@ -430,8 +430,10 @@ async function start() {
     await redisSubscriber.subscribe('quota:alerts', handleQuotaAlert);
     console.log('✅ Subscribed to quota:alerts channel');
 
-    // Set up Discord ready event listener BEFORE login to avoid race condition
-    discordClient.once('ready', async () => {
+    // Set up Discord ready event listener BEFORE login to avoid race condition.
+    // 'clientReady' is the v14.26+ name for the old 'ready' event (which is
+    // deprecated and removed in v15).
+    discordClient.once('clientReady', async () => {
       console.log(`✅ Discord bot ready as ${discordClient.user.tag}`);
 
       // This rollout cleared the in-memory message IDs, so reclaim the messages

@@ -22,7 +22,7 @@
     "@opentelemetry/exporter-trace-otlp-grpc": "^0.220.0",
     "@opentelemetry/sdk-node": "^0.220.0",
     "axios": "^1.6.7",
-    "discord.js": "^14.14.1",
+    "discord.js": "^14.27.0",
     "redis": "^4.6.13"
   },
   "overrides": {
