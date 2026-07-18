@@ -214,6 +214,38 @@ func TestParser_ParsePrivateMessage(t *testing.T) {
 			},
 		},
 		{
+			name: "chat gif tag is forwarded (ADR-0037)",
+			msg: twitch.PrivateMessage{
+				Channel: "#streamer",
+				User: twitch.User{
+					ID:   "42",
+					Name: "viewer",
+				},
+				Message: "[Y A Y Yes GIF by Djemilah Birnie]",
+				Time:    time.Now(),
+				Tags: map[string]string{
+					"gifs": "0-33|joSNxeswxuc74Juo8X|https://media4.giphy.com/media/joSNxeswxuc74Juo8X/giphy.gif",
+				},
+			},
+			wantErr: false,
+			check: func(t *testing.T, msg *models.RawChatMessage) {
+				assert.Equal(t, "0-33|joSNxeswxuc74Juo8X|https://media4.giphy.com/media/joSNxeswxuc74Juo8X/giphy.gif", msg.Tags["gifs"])
+			},
+		},
+		{
+			name: "no gif tag leaves gifs unset",
+			msg: twitch.PrivateMessage{
+				Channel: "#streamer",
+				User:    twitch.User{ID: "42", Name: "viewer"},
+				Message: "hello",
+				Time:    time.Now(),
+			},
+			wantErr: false,
+			check: func(t *testing.T, msg *models.RawChatMessage) {
+				assert.Equal(t, "", msg.Tags["gifs"])
+			},
+		},
+		{
 			name: "shared chat - partial tags (only source-room-id)",
 			msg: twitch.PrivateMessage{
 				Channel: "#hostchannel",

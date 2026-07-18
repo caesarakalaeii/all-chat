@@ -136,9 +136,10 @@ export interface Emote {
 
 /**
  * A renderable image/GIF/video shared in a chat message (Discord uploads and
- * Tenor/Giphy link previews today). `type` is 'image' or 'video'; GIFs arrive as
- * images that animate natively. `thumb_url` is an optional poster frame for
- * videos; `spoiler` marks media the sender flagged so the overlay can blur it.
+ * Tenor/Giphy link previews, and Twitch chat GIFs — see ADR-0037). `type` is
+ * 'image' or 'video'; GIFs arrive as images that animate natively. `thumb_url` is
+ * an optional poster frame for videos; `spoiler` marks media the sender flagged so
+ * the overlay can blur it. `filename` doubles as the render alt text.
  */
 export interface Attachment {
   type: 'image' | 'video';

@@ -1055,6 +1055,10 @@ func buildChatTags(e *eventsub.ChatMessageEvent) map[string]string {
 		tags["emotes"] = em
 	}
 
+	if gf := buildGifsTag(e.Message.Fragments); gf != "" {
+		tags["gifs"] = gf
+	}
+
 	// Shared-chat parity (mirrors the IRC parser's source-* tags). Note: the normalizer
 	// reads source-id as the source user id, but Twitch's IRC source-id tag is actually the
 	// source message id; we set the same value the IRC path would, so behaviour matches.
@@ -1146,4 +1150,23 @@ func buildEmotesTag(frags []eventsub.ChatMessageFragment) string {
 		groups = append(groups, id+":"+strings.Join(ps, ","))
 	}
 	return strings.Join(groups, "/")
+}
+
+// buildGifsTag renders the IRC "gifs" tag ("start-end|gif_id|url,start-end|gif_id|url")
+// from the ordered message fragments, matching Twitch's documented IRC format so the
+// message-processor normalizes EventSub- and IRC-sourced chat GIFs identically
+// (ADR-0037). Positions are inclusive byte offsets into Message.Text — the same span the
+// fragment's alt caption occupies — consistent with buildEmotesTag. Without this,
+// EventSub chat GIFs would arrive as bare "[alt caption]" text with no image.
+func buildGifsTag(frags []eventsub.ChatMessageFragment) string {
+	parts := make([]string, 0)
+	offset := 0
+	for _, f := range frags {
+		n := len(f.Text) // byte length — positions are byte offsets into the text
+		if f.Type == "gif" && f.Gif != nil && f.Gif.URL != "" && n > 0 {
+			parts = append(parts, fmt.Sprintf("%d-%d|%s|%s", offset, offset+n-1, f.Gif.GifID, f.Gif.URL))
+		}
+		offset += n
+	}
+	return strings.Join(parts, ",")
 }
