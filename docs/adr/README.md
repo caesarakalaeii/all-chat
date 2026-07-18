@@ -488,6 +488,17 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0039: Database Connection Budget (bounded pools per service)
+
+**Status**: ✅ Accepted
+**Date**: 2026-07-18
+**Problem**: The shared DB helper hardcoded `MinConns=5`/`MaxConns=20` per pool; across ~40 service instances that held ~197 permanently-idle connections against the cluster's `max_connections=200`, leaving zero headroom — any mass pod start (node failure, deploy) crashlooped new pods with `SQLSTATE 53300`. Connections were also anonymous (`application_name` empty), so the leak was undiagnosable from the DB
+**Decision**: Treat connections as a budget — `Σ(instances × MaxConns)` must stay under `max_connections`. Shrink shared defaults to `MinConns=1`/`MaxConns=10`, make both env-tunable (`DATABASE_MAX_CONNS`/`DATABASE_MIN_CONNS`), set `application_name` (from `DATABASE_APP_NAME`→`OTEL_SERVICE_NAME`→`HOSTNAME`), and raise `allchat-cluster` `max_connections` 200→300 (memory-safe: 815Mi/2Gi at 200 conns, `work_mem` 2MB)
+**Impact**: Steady-state DB connections drop ~197→~40 and headroom goes from 0 to ~260; mass restarts stop crashlooping; per-pod attribution restored. PgBouncer (CNPG `Pooler`, transaction mode) noted as the next step if instance count outgrows the additive budget. (ADR numbering shared with caesar-deployment, so this is 0039)
+**→ Read**: [0039-database-connection-budget.md](./0039-database-connection-budget.md)
+
+---
+
 ## How to Create a New ADR
 
 ### Step 1: Determine ADR Number
