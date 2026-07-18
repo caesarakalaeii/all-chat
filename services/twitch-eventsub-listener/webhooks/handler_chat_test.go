@@ -87,6 +87,90 @@ func TestBuildEmotesTag(t *testing.T) {
 	}
 }
 
+func TestBuildGifsTag(t *testing.T) {
+	const gifURL = "https://media4.giphy.com/media/joSNxeswxuc74Juo8X/giphy.gif?cid=abc&ep=v1_gifs_trending&rid=giphy.gif&ct=g"
+
+	tests := []struct {
+		name  string
+		frags []eventsub.ChatMessageFragment
+		want  string
+	}{
+		{
+			name:  "no gif fragments returns empty",
+			frags: []eventsub.ChatMessageFragment{{Type: "text", Text: "hello world"}},
+			want:  "",
+		},
+		{
+			name: "standalone gif spans the whole caption",
+			frags: []eventsub.ChatMessageFragment{
+				// "[Y A Y Yes GIF by Djemilah Birnie]" is 34 bytes → offsets 0-33.
+				{Type: "gif", Text: "[Y A Y Yes GIF by Djemilah Birnie]", Gif: &eventsub.ChatGif{GifID: "joSNxeswxuc74Juo8X", URL: gifURL}},
+			},
+			want: "0-33|joSNxeswxuc74Juo8X|" + gifURL,
+		},
+		{
+			name: "gif offset accounts for leading text",
+			frags: []eventsub.ChatMessageFragment{
+				{Type: "text", Text: "look "}, // 5 bytes, offsets 0-4
+				{Type: "gif", Text: "[cat]", Gif: &eventsub.ChatGif{GifID: "abc", URL: gifURL}},
+			},
+			want: "5-9|abc|" + gifURL,
+		},
+		{
+			name: "multiple gifs are comma separated in order",
+			frags: []eventsub.ChatMessageFragment{
+				{Type: "gif", Text: "[a]", Gif: &eventsub.ChatGif{GifID: "id1", URL: "https://x/1.gif"}}, // 0-2
+				{Type: "text", Text: " "},                                                                 // 3
+				{Type: "gif", Text: "[bb]", Gif: &eventsub.ChatGif{GifID: "id2", URL: "https://x/2.gif"}}, // 4-7
+			},
+			want: "0-2|id1|https://x/1.gif,4-7|id2|https://x/2.gif",
+		},
+		{
+			name: "gif fragment without url is ignored",
+			frags: []eventsub.ChatMessageFragment{
+				{Type: "gif", Text: "[x]", Gif: &eventsub.ChatGif{GifID: "id"}},
+			},
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := buildGifsTag(tt.frags); got != tt.want {
+				t.Fatalf("buildGifsTag() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBuildChatTags_Gifs(t *testing.T) {
+	const gifURL = "https://media4.giphy.com/media/joSNxeswxuc74Juo8X/giphy.gif"
+	event := &eventsub.ChatMessageEvent{
+		MessageID:        "m1",
+		ChatterUserLogin: "viewer",
+		Message: eventsub.ChatMessageBody{
+			Text: "[Y A Y Yes GIF by Djemilah Birnie]",
+			Fragments: []eventsub.ChatMessageFragment{
+				{Type: "gif", Text: "[Y A Y Yes GIF by Djemilah Birnie]", Gif: &eventsub.ChatGif{GifID: "joSNxeswxuc74Juo8X", URL: gifURL}},
+			},
+		},
+	}
+
+	if got, want := buildChatTags(event)["gifs"], "0-33|joSNxeswxuc74Juo8X|"+gifURL; got != want {
+		t.Fatalf("buildChatTags()[gifs] = %q, want %q", got, want)
+	}
+
+	// A plain message must not carry a gifs tag.
+	plain := buildChatTags(&eventsub.ChatMessageEvent{
+		MessageID:        "m2",
+		ChatterUserLogin: "viewer",
+		Message:          eventsub.ChatMessageBody{Text: "hello", Fragments: []eventsub.ChatMessageFragment{{Type: "text", Text: "hello"}}},
+	})
+	if _, present := plain["gifs"]; present {
+		t.Fatalf("buildChatTags() set a gifs tag for a plain message: %q", plain["gifs"])
+	}
+}
+
 func TestBuildChatTags_BadgesColorAndCheer(t *testing.T) {
 	event := &eventsub.ChatMessageEvent{
 		BroadcasterUserID: "12345",

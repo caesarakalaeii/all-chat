@@ -413,11 +413,19 @@ err := redis.Publish(ctx, channel, messageJSON).Err()
 ```
 
 `message` may also carry an optional `attachments` array of media shared in the
-message (Discord image/GIF/video uploads and Tenor/Giphy link previews today).
-Each attachment is `{ type: "image" | "video", url, content_type?, width?,
-height?, thumb_url?, spoiler?, filename? }`. GIFs arrive as `type: "image"` and
-animate natively. Discord custom emoji (`<:name:id>` / `<a:name:id>`) are parsed
-by the Discord normalizer into the `emotes` array with `provider: "discord"`.
+message (Discord image/GIF/video uploads and Tenor/Giphy link previews, plus
+Twitch chat GIFs). Each attachment is `{ type: "image" | "video", url,
+content_type?, width?, height?, thumb_url?, spoiler?, filename? }`. GIFs arrive as
+`type: "image"` and animate natively. Discord custom emoji (`<:name:id>` /
+`<a:name:id>`) are parsed by the Discord normalizer into the `emotes` array with
+`provider: "discord"`.
+
+Twitch chat GIFs (ADR-0037) ride the same `attachments` array: the Twitch
+normalizer parses the `gifs` tag (`start-end|gif_id|url`, populated from the
+EventSub `gif` fragment or the native IRC tag) into `type: "image"` attachments
+with `content_type: "image/gif"`, lifts the bracketed alt caption into `filename`,
+and strips that caption from the visible `text` (re-anchoring first-party emote
+offsets) so the overlay shows just the GIF.
 
 ---
 

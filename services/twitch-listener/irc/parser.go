@@ -121,6 +121,14 @@ func (p *Parser) ParsePrivateMessage(msg twitch.PrivateMessage) (*models.RawChat
 		tags["source-badge-info"] = msg.Tags["source-badge-info"]
 	}
 
+	// Chat GIFs (ADR-0037): forward Twitch's native "gifs" tag ("start-end|gif_id|url,...") so the
+	// message-processor renders IRC-sourced chat GIFs identically to EventSub-sourced ones. Unlike
+	// the standard tags above, gempir does not surface this on a typed field, so it is copied
+	// verbatim from the raw tag map.
+	if msg.Tags["gifs"] != "" {
+		tags["gifs"] = msg.Tags["gifs"]
+	}
+
 	// Message metadata
 	tags["id"] = msg.ID
 	if msg.RoomID != "" {

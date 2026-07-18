@@ -477,6 +477,17 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0037: Twitch Chat GIFs as Media Attachments
+
+**Status**: ✅ Accepted
+**Date**: 2026-07-18
+**Problem**: Twitch shipped native (Giphy-backed) chat GIFs delivered as a text-replacement token — a bracketed alt caption in the body plus a `gif` EventSub fragment / `gifs` IRC tag naming the GIF that replaces it — and our pipeline ignored it, surfacing bare `[…]` caption text with no image
+**Decision**: Reuse the PR #576 media path: both transports converge on the `gifs` tag (eventsub-listener synthesizes it from `gif` fragments like it does `emotes`; the IRC parser already forwards native tags), and the message-processor parses it into `image/gif` `attachments`, strips the caption span from the visible text, and re-anchors first-party emote offsets. Frontend unchanged (`MessageAttachments` is platform-agnostic; GIFs are images, so no CSP change)
+**Impact**: Twitch chat GIFs render on all three surfaces with zero frontend change, inheriting #576's a11y (WCAG 2.2.2 hide/show on the monitor) and CSP; one parser serves EventSub + IRC; base feature, not premium-gated (parity with Twitch native chat). (ADR numbering shared with caesar-deployment, so this is 0037)
+**→ Read**: [0037-twitch-chat-gifs.md](./0037-twitch-chat-gifs.md)
+
+---
+
 ## How to Create a New ADR
 
 ### Step 1: Determine ADR Number

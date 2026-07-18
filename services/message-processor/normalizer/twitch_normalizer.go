@@ -18,12 +18,17 @@ package normalizer
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/caesar/all-chat/services/message-processor/classifier"
 	"github.com/caesar/all-chat/services/message-processor/models"
 )
+
+// maxTwitchGifs bounds chat GIFs surfaced per message (defence in depth; a single
+// message realistically carries one). Matches the Discord attachment cap.
+const maxTwitchGifs = 4
 
 // TwitchNormalizer normalizes Twitch raw messages to unified format
 type TwitchNormalizer struct{}
@@ -46,8 +51,17 @@ func (n *TwitchNormalizer) Normalize(raw *models.RawChatMessage, overlayID strin
 	// Extract user info from tags
 	userInfo := n.extractUserInfo(raw)
 
-	// Extract Twitch native emotes from tags
+	// Extract Twitch native emotes from tags (positions/codes against the original text)
 	emotes := n.extractTwitchEmotes(raw)
+
+	// Extract chat GIFs from the "gifs" tag (ADR-0037). Twitch replaces the bracketed alt
+	// caption with the GIF, so strip that span from the visible text and re-anchor any
+	// first-party emote offsets to the stripped text. When nothing is stripped, extractTwitchGifs
+	// returns raw.Text unchanged, so `text` is always the correct body.
+	attachments, text, removed := extractTwitchGifs(raw.Text, raw.Tags["gifs"])
+	if len(removed) > 0 {
+		emotes = remapEmotePositions(emotes, removed)
+	}
 
 	// Create unified message
 	unified := &models.UnifiedChatMessage{
@@ -58,8 +72,9 @@ func (n *TwitchNormalizer) Normalize(raw *models.RawChatMessage, overlayID strin
 		ChannelName: raw.ChannelID, // Twitch uses channel name as ID
 		User:        userInfo,
 		Message: models.MessageInfo{
-			Text:   raw.Text,
-			Emotes: emotes,
+			Text:        text,
+			Emotes:      emotes,
+			Attachments: attachments,
 		},
 		Timestamp: raw.Timestamp,
 		Metadata:  n.extractMetadata(raw),
@@ -191,6 +206,161 @@ func (n *TwitchNormalizer) extractTwitchEmotes(raw *models.RawChatMessage) []mod
 	}
 
 	return emotes
+}
+
+// extractTwitchGifs parses the Twitch "gifs" tag into renderable media attachments and
+// returns the message text with each GIF's alt caption removed (ADR-0037). The tag format
+// is a comma-separated list of "start-end|gif_id|url", where start-end are inclusive,
+// zero-based byte offsets into the original text marking the "[alt caption]" the GIF stands
+// in for. Twitch hides that caption and shows the GIF; we mirror that by lifting the caption
+// into each attachment's Filename (used as the render alt / hidden-state label) and stripping
+// it from the visible text. removed lists the stripped spans so first-party emote offsets can
+// be re-anchored (see remapEmotePositions). A GIF whose URL is present but whose span is
+// malformed still yields an attachment (so the image renders); it just isn't stripped.
+func extractTwitchGifs(text, gifsTag string) (attachments []models.Attachment, strippedText string, removed [][]int) {
+	if gifsTag == "" {
+		return nil, text, nil
+	}
+
+	type span struct{ start, end int }
+	attachments = make([]models.Attachment, 0)
+	valid := make([]span, 0) // strippable spans, in tag order
+
+	for _, e := range strings.Split(gifsTag, ",") {
+		// format: start-end|gif_id|url — SplitN(…, 3) keeps any "|" inside the URL intact.
+		// The URL is the last, unescaped field: this mirrors Twitch's own IRC gifs-tag format,
+		// which likewise comma-separates entries and puts the URL last, so Twitch guarantees the
+		// URL carries no literal comma (query separators are "&"; commas would be percent-encoded).
+		fields := strings.SplitN(e, "|", 3)
+		if len(fields) != 3 {
+			continue
+		}
+		url := fields[2]
+		// The URL comes from Twitch's GIF picker over an authenticated channel (HMAC-verified
+		// EventSub webhook or TLS IRC), but require https defensively so a malformed/garbage entry
+		// never becomes a live <img> on the broadcast overlay.
+		if !strings.HasPrefix(url, "https://") {
+			continue
+		}
+
+		// Locate the alt caption the GIF stands in for. A malformed/out-of-range span still yields
+		// an attachment (the image renders; the frontend falls back to a generic alt) — it just
+		// can't be stripped from the text.
+		alt := ""
+		if startEnd := strings.SplitN(fields[0], "-", 2); len(startEnd) == 2 {
+			start, err1 := strconv.Atoi(startEnd[0])
+			end, err2 := strconv.Atoi(startEnd[1])
+			if err1 == nil && err2 == nil && start >= 0 && end >= start && end < len(text) {
+				valid = append(valid, span{start, end})
+				alt = trimOneBracketPair(text[start : end+1])
+			}
+		}
+
+		attachments = append(attachments, models.Attachment{
+			Type:        "image",
+			URL:         url,
+			ContentType: "image/gif",
+			Filename:    alt,
+		})
+		if len(attachments) >= maxTwitchGifs {
+			break
+		}
+	}
+
+	if len(attachments) == 0 {
+		return nil, text, nil
+	}
+
+	// Reduce the strippable spans to a sorted, disjoint set so stripSpans and remapEmotePositions
+	// agree on exactly which bytes were removed. (Twitch's fragment spans are already disjoint; this
+	// guards against a degenerate overlapping tag desyncing the emote-offset shift.)
+	sort.Slice(valid, func(i, j int) bool { return valid[i].start < valid[j].start })
+	lastEnd := -1
+	for _, s := range valid {
+		if s.start <= lastEnd {
+			continue // overlaps a span already slated for removal — skip to stay disjoint
+		}
+		removed = append(removed, []int{s.start, s.end})
+		lastEnd = s.end
+	}
+
+	return attachments, stripSpans(text, removed), removed
+}
+
+// trimOneBracketPair removes exactly one leading "[" and one trailing "]" — the single pair
+// Twitch wraps a GIF's alt caption in — without disturbing brackets that are part of the caption
+// itself (e.g. "[[Meta] GIF]" → "[Meta] GIF").
+func trimOneBracketPair(s string) string {
+	s = strings.TrimPrefix(s, "[")
+	s = strings.TrimSuffix(s, "]")
+	return s
+}
+
+// stripSpans removes the given inclusive byte ranges (sorted by start, disjoint) from text.
+// Offsets in the returned string are exact — no trimming — so callers can re-anchor other
+// positions against it via remapEmotePositions.
+func stripSpans(text string, spans [][]int) string {
+	if len(spans) == 0 {
+		return text
+	}
+	var b strings.Builder
+	cursor := 0
+	for _, s := range spans {
+		start, end := s[0], s[1]
+		if start < cursor || start > len(text) {
+			continue // overlap or out of range — skip defensively
+		}
+		b.WriteString(text[cursor:start])
+		cursor = end + 1
+	}
+	if cursor < len(text) {
+		b.WriteString(text[cursor:])
+	}
+	return b.String()
+}
+
+// remapEmotePositions re-anchors inclusive emote byte positions from the original text to
+// the text with removed spans (inclusive, sorted, disjoint) deleted. An emote occurrence that
+// overlaps a removed span is dropped; an emote left with no occurrences is omitted entirely.
+func remapEmotePositions(emotes []models.Emote, removed [][]int) []models.Emote {
+	if len(removed) == 0 {
+		return emotes
+	}
+	out := make([]models.Emote, 0, len(emotes))
+	for _, em := range emotes {
+		newPos := make([][]int, 0, len(em.Positions))
+		for _, p := range em.Positions {
+			if len(p) != 2 {
+				continue
+			}
+			shift, overlaps := removedShift(p[0], p[1], removed)
+			if overlaps {
+				continue
+			}
+			newPos = append(newPos, []int{p[0] - shift, p[1] - shift})
+		}
+		if len(newPos) > 0 {
+			em.Positions = newPos
+			out = append(out, em)
+		}
+	}
+	return out
+}
+
+// removedShift returns how many bytes are removed entirely before start, and whether
+// [start,end] overlaps any removed span. Spans are disjoint fragment ranges, so an emote
+// never straddles one.
+func removedShift(start, end int, removed [][]int) (shift int, overlaps bool) {
+	for _, r := range removed {
+		rs, re := r[0], r[1]
+		if start <= re && end >= rs {
+			return 0, true
+		}
+		if re < start {
+			shift += re - rs + 1
+		}
+	}
+	return shift, false
 }
 
 // extractMetadata extracts additional metadata from tags
