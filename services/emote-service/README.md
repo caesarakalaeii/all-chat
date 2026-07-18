@@ -173,19 +173,19 @@ The emote service enables users on **YouTube, Kick, and TikTok** to use Twitch's
 1. **Preloading**: On startup, the service fetches all Twitch global emotes and caches them for 30 days.
 2. **Platform Detection**: When the message processor requests emotes with `?platform=youtube` (or kick/tiktok), the service automatically includes Twitch global emotes.
 3. **No Duplication**: For Twitch channels, global emotes are included only once (not fetched twice).
-4. **Channel Emotes Excluded**: Only Twitch **global** emotes are included (not channel-specific or subscription emotes, as those require paid subscriptions).
+4. **Global Twitch emotes for everyone**: The Twitch **global** set is always included for non-Twitch platforms (channel/subscription emotes still require the viewer's own Twitch entitlements).
+5. **Twitch-keyed providers via the linked account**: BTTV, FFZ, and Twitch channel emotes are keyed by *Twitch* identity, so a platform channel id (e.g. a YouTube channel id) can't resolve them. For a non-Twitch platform the service uses the overlay's linked `twitch_channel` hint to fetch those providers, and **skips them entirely when there is no linked Twitch account** — a lookup with a platform id is a guaranteed 404 and a wasted upstream call. (7TV, being multi-platform, is resolved via its own platform connections.)
 
 ### Example Flow
 
 ```
-YouTube Viewer: "That was amazing Kappa PogChamp"
+YouTube Viewer (overlay linked to twitch.tv/BLVTumi): "amazing Kappa PogChamp"
                         ↓
-Message Processor: GET /emotes/channel/youtubechannel?platform=youtube
+Message Processor: GET /emotes/channel/UC...ytChannelId?platform=youtube&twitch_channel=BLVTumi
                         ↓
 Emote Service Returns:
-  - 7TV emotes (for youtubechannel)
-  - BTTV emotes (for youtubechannel)
-  - FFZ emotes (for youtubechannel)
+  - 7TV emotes           (resolved via the YouTube platform connection / linked Twitch)
+  - BTTV + FFZ emotes    (resolved via the linked twitch_channel BLVTumi; skipped if unlinked)
   - Twitch global emotes (Kappa, PogChamp, etc.)
                         ↓
 Message displayed with all emote images rendered
@@ -197,6 +197,21 @@ Message displayed with all emote images rendered
 - **No API Overhead**: Twitch global emotes cached for 30 days (only ~300 emotes)
 - **Automatic Updates**: Cache refreshes when emotes expire or service restarts
 - **Fair Usage**: Only free global emotes are included (respects Twitch's paid subscription model)
+
+## Observability
+
+**`emote_api_calls_total{service, provider, result}`** counts upstream provider calls. The
+`result` label distinguishes three outcomes — do **not** read `not_found` as a failure:
+
+- `success` — emotes returned.
+- `not_found` — the provider has no emotes for this channel (HTTP 404). This is the **normal**
+  case for most channels on BTTV/FFZ and for channels without a 7TV set, so a high `not_found`
+  rate is expected and benign. It scales with lookup volume (unique channels/users), not with
+  provider health.
+- `error` — a real failure (5xx, timeout, network). This is the only label worth alerting on.
+
+(Before this split, 404s were counted as `error`, which made a healthy service look like it was
+failing during a busy multistream — see the 2026-07-17 message-processor lag investigation.)
 
 ## Development
 

@@ -103,7 +103,7 @@ func TestBTTVClient_FetchEmotes(t *testing.T) {
 			mockResponse:   `{"message": "user not found"}`,
 			wantEmoteCount: 0,
 			wantErr:        true,
-			errContains:    "failed to fetch emotes",
+			errContains:    "not found",
 		},
 		{
 			name:           "server error",

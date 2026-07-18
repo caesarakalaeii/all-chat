@@ -173,7 +173,7 @@ func TestSevenTVClient_FetchEmotes(t *testing.T) {
 			mockTwitchID:      "9999",
 			channelStatusCode: http.StatusNotFound,
 			wantErr:           true,
-			errContains:       "status code 404",
+			errContains:       "not found",
 			twitchCalled:      true,
 		},
 		{

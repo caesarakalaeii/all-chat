@@ -47,8 +47,8 @@ type FFZResponse struct {
 	} `json:"room"`
 	Sets map[string]struct {
 		Emoticons []struct {
-			ID   int    `json:"id"`
-			Name string `json:"name"`
+			ID   int               `json:"id"`
+			Name string            `json:"name"`
 			URLs map[string]string `json:"urls"`
 		} `json:"emoticons"`
 	} `json:"sets"`
@@ -86,6 +86,10 @@ func (c *FFZClient) FetchEmotes(ctx context.Context, channel string) ([]models.E
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusNotFound {
+		// Channel has no FFZ room — the normal case for most channels, not a failure.
+		return nil, fmt.Errorf("ffz: no emotes for channel %q: %w", channel, ErrNotFound)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to fetch emotes: status code %d", resp.StatusCode)
 	}
