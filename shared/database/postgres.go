@@ -19,25 +19,62 @@ package database
 import (
 	"context"
 	"fmt"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// NewPostgresPoolWithTracing creates a PostgreSQL pool with optional OpenTelemetry tracing
-func NewPostgresPoolWithTracing(connString string, tracingEnabled bool) (*pgxpool.Pool, error) {
+// Connection-pool defaults. Every service instance holds its own pool, so the
+// cluster-wide connection budget is (number of instances x MaxConns) and must
+// stay under the database's max_connections. These defaults are deliberately
+// small: a previous MinConns=5 across ~40 instances held ~200 permanently-idle
+// connections and pinned Postgres at its 200-connection ceiling, crashlooping
+// newly-starting pods with "remaining connection slots are reserved..."
+// (SQLSTATE 53300) on any mass restart. Raise per service with
+// DATABASE_MAX_CONNS / DATABASE_MIN_CONNS when a workload genuinely needs more.
+// See ADR-0039.
+const (
+	defaultMaxConns = 10
+	defaultMinConns = 1
+)
+
+// buildPoolConfig parses the connection string and applies the shared pool
+// tuning. It is separated from pool creation so it can be unit-tested without a
+// live database.
+func buildPoolConfig(connString string) (*pgxpool.Config, error) {
 	config, err := pgxpool.ParseConfig(connString)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse connection string: %w", err)
 	}
 
-	// Connection pool configuration
-	config.MaxConns = 20                       // Max connections per service instance
-	config.MinConns = 5                        // Keep warm connections
+	// Connection pool configuration (see the connection-budget note above).
+	config.MaxConns = int32(envInt("DATABASE_MAX_CONNS", defaultMaxConns))
+	config.MinConns = int32(envInt("DATABASE_MIN_CONNS", defaultMinConns))
 	config.MaxConnLifetime = 1 * time.Hour     // Recycle connections after 1 hour
-	config.MaxConnIdleTime = 10 * time.Minute  // Close idle connections
-	config.HealthCheckPeriod = 1 * time.Minute // Verify connections health
+	config.MaxConnIdleTime = 10 * time.Minute  // Close idle connections down to MinConns
+	config.HealthCheckPeriod = 1 * time.Minute // Verify connection health
+
+	// Tag connections so pg_stat_activity can attribute them to a service
+	// (they were previously anonymous, making pool leaks impossible to trace).
+	if name := applicationName(); name != "" {
+		if config.ConnConfig.RuntimeParams == nil {
+			config.ConnConfig.RuntimeParams = map[string]string{}
+		}
+		config.ConnConfig.RuntimeParams["application_name"] = name
+	}
+
+	return config, nil
+}
+
+// NewPostgresPoolWithTracing creates a PostgreSQL pool with optional OpenTelemetry tracing
+func NewPostgresPoolWithTracing(connString string, tracingEnabled bool) (*pgxpool.Pool, error) {
+	config, err := buildPoolConfig(connString)
+	if err != nil {
+		return nil, err
+	}
 
 	// Add OpenTelemetry tracer if enabled
 	if tracingEnabled {
@@ -72,4 +109,30 @@ func HealthCheck(pool *pgxpool.Pool) error {
 	defer cancel()
 
 	return pool.Ping(ctx)
+}
+
+// envInt returns the integer value of the named environment variable, or def
+// when it is unset, empty, non-numeric, or not positive.
+func envInt(key string, def int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n <= 0 {
+		return def
+	}
+	return n
+}
+
+// applicationName resolves a label for the connection's application_name,
+// preferring an explicit override, then the OTel service name, then the pod
+// hostname (always set in Kubernetes, giving per-service attribution for free).
+func applicationName() string {
+	for _, key := range []string{"DATABASE_APP_NAME", "OTEL_SERVICE_NAME", "HOSTNAME"} {
+		if v := os.Getenv(key); v != "" {
+			return v
+		}
+	}
+	return ""
 }
