@@ -102,10 +102,11 @@ type Emote struct {
 }
 
 // Attachment is a renderable image/GIF/video shared in a chat message (Discord
-// uploads and Tenor/Giphy link previews today). Type is "image" or "video";
-// GIFs are images that animate natively. ThumbURL is an optional poster frame
-// for videos. Spoiler marks media the sender flagged as a spoiler so the overlay
-// can blur it.
+// uploads and Tenor/Giphy link previews, and Twitch chat GIFs — see ADR-0037).
+// Type is "image" or "video"; GIFs are images that animate natively. ThumbURL is
+// an optional poster frame for videos. Spoiler marks media the sender flagged as a
+// spoiler so the overlay can blur it. Filename doubles as the render alt text (for
+// Twitch GIFs it holds the GIF's alt caption).
 type Attachment struct {
 	Type        string `json:"type"`
 	URL         string `json:"url"`

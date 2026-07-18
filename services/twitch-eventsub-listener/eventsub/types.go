@@ -218,13 +218,24 @@ type ChatMessageBody struct {
 }
 
 // ChatMessageFragment is one piece of a chat message. Type is one of
-// "text", "cheermote", "emote", "mention".
+// "text", "cheermote", "emote", "mention", "gif".
 type ChatMessageFragment struct {
 	Type      string         `json:"type"`
 	Text      string         `json:"text"`
 	Cheermote *ChatCheermote `json:"cheermote,omitempty"`
 	Emote     *ChatEmote     `json:"emote,omitempty"`
 	Mention   *ChatMention   `json:"mention,omitempty"`
+	Gif       *ChatGif       `json:"gif,omitempty"`
+}
+
+// ChatGif describes a chat GIF fragment (Twitch's Giphy-backed chat GIFs). The
+// fragment's Text is the human-readable alt caption in square brackets (e.g.
+// "[Y A Y Yes GIF by Djemilah Birnie]"); URL points at the animated GIF. Twitch
+// renders the GIF in place of the alt caption, mirroring how emotes replace their
+// text — see docs/adr/0037-twitch-chat-gifs.md.
+type ChatGif struct {
+	GifID string `json:"gif_id"`
+	URL   string `json:"url"`
 }
 
 // ChatEmote describes a first-party Twitch emote in a message fragment.
