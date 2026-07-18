@@ -112,7 +112,7 @@ func (c *TwitchClient) GetUserID(ctx context.Context, login string) (string, err
 	}
 
 	if len(body.Data) == 0 || body.Data[0].ID == "" {
-		return "", fmt.Errorf("twitch user %q not found", login)
+		return "", fmt.Errorf("twitch user %q not found: %w", login, ErrNotFound)
 	}
 
 	id := body.Data[0].ID

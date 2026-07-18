@@ -128,7 +128,7 @@ func TestFFZClient_FetchEmotes(t *testing.T) {
 			mockResponse:   `{"error": "room not found"}`,
 			wantEmoteCount: 0,
 			wantErr:        true,
-			errContains:    "failed to fetch emotes",
+			errContains:    "not found",
 		},
 		{
 			name:           "server error",

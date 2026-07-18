@@ -22,6 +22,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"github.com/caesar/all-chat/services/emote-service/cache"
@@ -47,8 +48,10 @@ func (m *mockEmoteClient) Provider() string {
 	return m.provider
 }
 
-// mockEmoteCache for testing
+// mockEmoteCache for testing. The handler fans provider fetches out across goroutines,
+// so this shared cache must be safe for concurrent Get/Set.
 type mockEmoteCache struct {
+	mu   sync.Mutex
 	data map[string][]models.Emote
 }
 
@@ -60,6 +63,8 @@ func newMockEmoteCache() *mockEmoteCache {
 
 func (m *mockEmoteCache) Get(ctx context.Context, provider, channel string) ([]models.Emote, error) {
 	key := provider + ":" + channel
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	emotes, ok := m.data[key]
 	if !ok {
 		return nil, cache.ErrCacheMiss
@@ -69,6 +74,8 @@ func (m *mockEmoteCache) Get(ctx context.Context, provider, channel string) ([]m
 
 func (m *mockEmoteCache) Set(ctx context.Context, provider, channel string, emotes []models.Emote) error {
 	key := provider + ":" + channel
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.data[key] = emotes
 	return nil
 }
@@ -346,19 +353,21 @@ func TestEmoteHandler_GetChannelEmotes_WithTwitchGlobalForNonTwitchPlatform(t *t
 	gin.SetMode(gin.TestMode)
 
 	tests := []struct {
-		name           string
-		channel        string
-		platform       string
-		setupClients   func() map[string]EmoteClient
-		setupCache     func() EmoteCache
-		wantStatusCode int
-		wantEmoteCount int
+		name            string
+		channel         string
+		platform        string
+		twitchChannel   string
+		setupClients    func() map[string]EmoteClient
+		setupCache      func() EmoteCache
+		wantStatusCode  int
+		wantEmoteCount  int
 		hasTwitchGlobal bool
 	}{
 		{
-			name:     "YouTube channel includes Twitch global emotes",
-			channel:  "somechannel",
-			platform: "youtube",
+			name:          "YouTube channel with linked Twitch includes Twitch global + provider emotes",
+			channel:       "somechannel",
+			platform:      "youtube",
+			twitchChannel: "linkedtwitch",
 			setupClients: func() map[string]EmoteClient {
 				return map[string]EmoteClient{
 					"twitch": &mockEmoteClient{
@@ -376,15 +385,16 @@ func TestEmoteHandler_GetChannelEmotes_WithTwitchGlobalForNonTwitchPlatform(t *t
 					},
 				}
 			},
-			setupCache:     func() EmoteCache { return newMockEmoteCache() },
-			wantStatusCode: http.StatusOK,
-			wantEmoteCount: 5, // 2 Twitch global + 2 regular Twitch (from mock) + 1 7TV = 5 total
+			setupCache:      func() EmoteCache { return newMockEmoteCache() },
+			wantStatusCode:  http.StatusOK,
+			wantEmoteCount:  5, // 2 Twitch global + 2 regular Twitch (from mock) + 1 7TV = 5 total
 			hasTwitchGlobal: true,
 		},
 		{
-			name:     "Kick channel includes Twitch global emotes",
-			channel:  "kickstreamer",
-			platform: "kick",
+			name:          "Kick channel with linked Twitch includes Twitch global + provider emotes",
+			channel:       "kickstreamer",
+			platform:      "kick",
+			twitchChannel: "linkedtwitch",
 			setupClients: func() map[string]EmoteClient {
 				return map[string]EmoteClient{
 					"twitch": &mockEmoteClient{
@@ -401,9 +411,41 @@ func TestEmoteHandler_GetChannelEmotes_WithTwitchGlobalForNonTwitchPlatform(t *t
 					},
 				}
 			},
-			setupCache:     func() EmoteCache { return newMockEmoteCache() },
-			wantStatusCode: http.StatusOK,
-			wantEmoteCount: 3, // 1 Twitch global + 1 regular Twitch + 1 BTTV = 3 total
+			setupCache:      func() EmoteCache { return newMockEmoteCache() },
+			wantStatusCode:  http.StatusOK,
+			wantEmoteCount:  3, // 1 Twitch global + 1 regular Twitch (via linked channel) + 1 BTTV = 3 total
+			hasTwitchGlobal: true,
+		},
+		{
+			// ADR-0033 follow-up: with no linked twitch_channel, BTTV/FFZ/Twitch cannot
+			// resolve a non-Twitch (YouTube) channel id, so those Twitch-keyed providers
+			// are skipped entirely (no guaranteed-404 upstream calls). Only the Twitch
+			// GLOBAL emotes are added for the platform.
+			name:     "Non-Twitch channel without linked Twitch skips Twitch-keyed providers",
+			channel:  "someYtChannel",
+			platform: "youtube",
+			setupClients: func() map[string]EmoteClient {
+				return map[string]EmoteClient{
+					"twitch": &mockEmoteClient{
+						emotes: []models.Emote{
+							{Code: "Kappa", URL: "https://static-cdn.jtvnw.net/emoticons/v2/25/default/dark/2.0", Provider: "twitch", Channel: "global"},
+							{Code: "PogChamp", URL: "https://static-cdn.jtvnw.net/emoticons/v2/305954156/default/dark/2.0", Provider: "twitch", Channel: "global"},
+						},
+						provider: "twitch",
+					},
+					"bttv": &mockEmoteClient{
+						emotes:   []models.Emote{{Code: "xqcL", URL: "https://bttv.net/1", Provider: "bttv", Channel: "someYtChannel"}},
+						provider: "bttv",
+					},
+					"ffz": &mockEmoteClient{
+						emotes:   []models.Emote{{Code: "ZULUL", URL: "https://ffz.net/1", Provider: "ffz", Channel: "someYtChannel"}},
+						provider: "ffz",
+					},
+				}
+			},
+			setupCache:      func() EmoteCache { return newMockEmoteCache() },
+			wantStatusCode:  http.StatusOK,
+			wantEmoteCount:  2, // only the 2 Twitch GLOBAL emotes; bttv/ffz/twitch-channel skipped
 			hasTwitchGlobal: true,
 		},
 		{
@@ -426,9 +468,9 @@ func TestEmoteHandler_GetChannelEmotes_WithTwitchGlobalForNonTwitchPlatform(t *t
 					},
 				}
 			},
-			setupCache:     func() EmoteCache { return newMockEmoteCache() },
-			wantStatusCode: http.StatusOK,
-			wantEmoteCount: 2, // 1 Twitch + 1 7TV (no duplicate fetch of global)
+			setupCache:      func() EmoteCache { return newMockEmoteCache() },
+			wantStatusCode:  http.StatusOK,
+			wantEmoteCount:  2, // 1 Twitch + 1 7TV (no duplicate fetch of global)
 			hasTwitchGlobal: false,
 		},
 		{
@@ -445,9 +487,9 @@ func TestEmoteHandler_GetChannelEmotes_WithTwitchGlobalForNonTwitchPlatform(t *t
 					},
 				}
 			},
-			setupCache:     func() EmoteCache { return newMockEmoteCache() },
-			wantStatusCode: http.StatusOK,
-			wantEmoteCount: 1, // Just regular Twitch emotes
+			setupCache:      func() EmoteCache { return newMockEmoteCache() },
+			wantStatusCode:  http.StatusOK,
+			wantEmoteCount:  1, // Just regular Twitch emotes
 			hasTwitchGlobal: false,
 		},
 	}
@@ -463,6 +505,13 @@ func TestEmoteHandler_GetChannelEmotes_WithTwitchGlobalForNonTwitchPlatform(t *t
 			url := "/emotes/channel/" + tt.channel
 			if tt.platform != "" {
 				url += "?platform=" + tt.platform
+			}
+			if tt.twitchChannel != "" {
+				sep := "?"
+				if tt.platform != "" {
+					sep = "&"
+				}
+				url += sep + "twitch_channel=" + tt.twitchChannel
 			}
 			req, _ := http.NewRequest("GET", url, nil)
 			w := httptest.NewRecorder()
