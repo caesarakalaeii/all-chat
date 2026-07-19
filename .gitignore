@@ -77,6 +77,10 @@ docs/overlay-themes/custom-fonts/
 # Exception: OG image font (required for build-time rendering)
 !frontend/public/fonts/Barlow-Bold.ttf
 
+# Vendored Monaco Editor assets (16 MB, regenerated from node_modules at build
+# time by frontend/scripts/copy-monaco.mjs — see ADR-0040)
+frontend/public/monaco/
+
 # Node modules (for frontend)
 node_modules/
 /web/node_modules/
