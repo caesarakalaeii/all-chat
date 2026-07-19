@@ -118,4 +118,18 @@ describe('next.config framing policy', () => {
     expect(ruleFor(all, '/overlay/:id/participate')).toBeUndefined()
     expect(ruleFor(all, '/overlay/:id/view')).toBeUndefined()
   })
+
+  it('allows Monaco editor blob workers so the CSS editor language services load (ADR-0040)', async () => {
+    const all = await rules()
+    // The overlay editor's self-hosted Monaco (/monaco/vs) runs its CSS
+    // language services in same-origin blob: workers. Without an explicit
+    // worker-src these fall back to script-src (no blob:) and are blocked, so
+    // the editor loads but validation/autocomplete silently die. This must
+    // hold on the app routes AND survive the last-wins full-CSP replacement on
+    // the embeddable widget routes.
+    expect(csp(ruleFor(all, '/:path*'))).toContain("worker-src 'self' blob:")
+    for (const source of WIDGET_SOURCES) {
+      expect(csp(ruleFor(all, source)), source).toContain("worker-src 'self' blob:")
+    }
+  })
 })

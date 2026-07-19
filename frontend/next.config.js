@@ -73,6 +73,16 @@ const nextConfig = {
       // (components/Analytics.tsx); without it the tracker script is CSP-blocked
       // and no page views or custom events are recorded.
       "script-src 'self' 'unsafe-inline' https://embed.twitch.tv https://analytics.allch.at",
+      // worker-src governs Web Worker/SharedWorker creation. The overlay
+      // editor's self-hosted Monaco (/monaco/vs, ADR-0040) runs its CSS
+      // language services — validation, autocomplete — in workers that Monaco
+      // instantiates from same-origin blob: URLs. Without an explicit
+      // worker-src these fall back to script-src (no blob:) and are blocked,
+      // so the editor loads but its language features silently die. 'self'
+      // covers direct same-origin workers; blob: covers Monaco's blob workers
+      // (blobs are built by same-origin script, so this is far narrower than a
+      // third-party script-src host).
+      "worker-src 'self' blob:",
       "style-src 'self' 'unsafe-inline'",
       "connect-src 'self' wss: ws: https:",
       // media-src governs <video>/<audio> sources. Chat message video attachments

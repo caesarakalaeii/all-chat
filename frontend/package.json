@@ -3,8 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "npm run copy:monaco",
     "dev": "next dev -p 3000",
     "generate:themes": "node scripts/generate-bundled-themes.mjs",
+    "copy:monaco": "node scripts/copy-monaco.mjs",
+    "prebuild": "npm run copy:monaco",
     "build": "next build",
     "start": "next start -p 3000",
     "lint": "next lint",

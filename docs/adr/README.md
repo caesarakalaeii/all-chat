@@ -499,6 +499,17 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0040: Self-host the Monaco CSS editor (no third-party CDN)
+
+**Status**: ✅ Accepted
+**Date**: 2026-07-19
+**Problem**: The overlay editor's Custom CSS field uses `@monaco-editor/react`, whose loader fetches the Monaco engine from `cdn.jsdelivr.net` by default. The app CSP `script-src` enumerates allowed hosts and excludes jsdelivr, so the loader script was blocked and the editor hung forever on "Loading editor…" (reproduced in prod via Playwright: CSP violation → `Monaco initialization: error`)
+**Decision**: Self-host instead of punching a CSP hole to a CDN. A build-time script (`scripts/copy-monaco.mjs`, wired via `prebuild`/`predev`) vendors `monaco-editor/min/vs` → `public/monaco/vs` (gitignored, 16 MB; `monaco-editor` stays a lockfile-pinned peer dep to avoid npm-version lockfile churn), and `src/lib/monaco.ts` points the loader at same-origin `/monaco/vs`. Add `worker-src 'self' blob:` to the CSP — Monaco runs its CSS language services in same-origin `blob:` workers regardless of engine host; without it the editor loads but validation/autocomplete silently die. No `script-src` change; no third-party CDN in the runtime path
+**Impact**: The CSS editor loads and its CSS language features work under the exact production CSP (verified end-to-end with Playwright); the editor works offline / during a jsdelivr outage and the script-execution surface stays first-party. The only CSP broadening is `worker-src 'self' blob:` (already trusted in `media-src`). (ADR numbering shared with caesar-deployment, so this is 0040)
+**→ Read**: [0040-self-host-monaco-editor.md](./0040-self-host-monaco-editor.md)
+
+---
+
 ## How to Create a New ADR
 
 ### Step 1: Determine ADR Number
