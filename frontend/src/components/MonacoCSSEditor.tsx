@@ -25,6 +25,11 @@
 
 'use client'
 
+// Side-effect import: points the Monaco loader at our self-hosted /monaco/vs
+// (see src/lib/monaco.ts + ADR-0040). MUST run before <Editor> mounts, so it
+// stays the first import; otherwise the loader falls back to cdn.jsdelivr.net,
+// which the app CSP blocks — leaving the editor stuck on "Loading editor...".
+import '@/lib/monaco'
 import { Editor, OnMount } from '@monaco-editor/react'
 import { useRef, useEffect } from 'react'
 
