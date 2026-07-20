@@ -23,16 +23,21 @@ import (
 	"github.com/caesar/all-chat/services/api-gateway/sessions"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
 )
 
 // StatsHandler serves public platform statistics.
 type StatsHandler struct {
-	redis *redis.Client
+	redis  *redis.Client
+	logger *zap.Logger
 }
 
 // NewStatsHandler creates a StatsHandler.
-func NewStatsHandler(redis *redis.Client) *StatsHandler {
-	return &StatsHandler{redis: redis}
+func NewStatsHandler(redis *redis.Client, logger *zap.Logger) *StatsHandler {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	return &StatsHandler{redis: redis, logger: logger}
 }
 
 // GetPlatformStats returns message counts per platform for the last 7 days.
@@ -125,12 +130,19 @@ func (h *StatsHandler) GetActiveOverlays(c *gin.Context) {
 	for i, id := range activeIDs {
 		startedCmds[i] = pipe.HGet(ctx, sessions.SessionKeyPrefix+id, "started_at")
 	}
-	// Exec reports redis.Nil when a session hash is simply missing (an expected
-	// state, handled per-command below); any other error is a real Redis failure
-	// and should surface as 500 rather than silently dropping every timestamp.
+	// started_at is an OPTIONAL enrichment ("connected for X"); the overlay:connected
+	// SCAN above is the authoritative "which overlays are live" answer. A failure here
+	// must NOT discard that answer — returning 500 made the admin UI (which silently
+	// ignores a non-OK response) render every overlay as "not connected" even while
+	// live, whenever this pipeline hit a transient blip or a single stray/mistyped
+	// session key. Degrade instead: log and return connection status without durations.
+	// redis.Nil merely means some session hashes are missing (expected, handled
+	// per-command below); on any other error each command carries that error, so its
+	// Result() call below fails and connected_since is simply omitted.
 	if _, err := pipe.Exec(ctx); err != nil && err != redis.Nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load overlay sessions"})
-		return
+		h.logger.Warn("failed to load overlay session start times; returning connection status without durations",
+			zap.Error(err),
+		)
 	}
 
 	for i, id := range activeIDs {
