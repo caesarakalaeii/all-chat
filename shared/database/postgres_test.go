@@ -16,7 +16,11 @@
 
 package database
 
-import "testing"
+import (
+	"context"
+	"testing"
+	"time"
+)
 
 const testDSN = "postgres://user:pass@localhost:5432/db"
 
@@ -114,5 +118,55 @@ func TestApplicationNamePrecedence(t *testing.T) {
 
 	if got := applicationName(); got != "explicit-name" {
 		t.Errorf("applicationName() = %q, want the explicit override to win", got)
+	}
+}
+
+// fastRetryOpts returns retry options with millisecond backoffs so tests don't sleep.
+func fastRetryOpts(maxAttempts int) RetryOptions {
+	return RetryOptions{
+		MaxAttempts:    maxAttempts,
+		InitialBackoff: time.Millisecond,
+		MaxBackoff:     5 * time.Millisecond,
+	}
+}
+
+// unreachableDSN points at a port that refuses connections immediately, so each
+// attempt fails fast without waiting for the ping timeout.
+const unreachableDSN = "postgres://u:p@127.0.0.1:1/db"
+
+func TestNewPostgresPoolWithRetry_RetriesThenFails(t *testing.T) {
+	retries := 0
+	pool, err := NewPostgresPoolWithRetry(context.Background(), unreachableDSN, false, fastRetryOpts(3),
+		func(attempt int, err error, backoff time.Duration) { retries++ })
+	if err == nil {
+		pool.Close()
+		t.Fatal("expected error after exhausting attempts, got nil")
+	}
+	// With MaxAttempts=3, onRetry fires after attempts 1 and 2; attempt 3 returns the error.
+	if retries != 2 {
+		t.Errorf("expected 2 retry callbacks before giving up, got %d", retries)
+	}
+}
+
+func TestNewPostgresPoolWithRetry_AbortsOnContextCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // already cancelled
+
+	// MaxAttempts=0 means retry forever; only the cancelled context stops it.
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		pool, err := NewPostgresPoolWithRetry(ctx, unreachableDSN, false, fastRetryOpts(0),
+			func(attempt int, err error, backoff time.Duration) {})
+		if err == nil {
+			pool.Close()
+			t.Error("expected error when context is cancelled, got nil")
+		}
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("NewPostgresPoolWithRetry did not abort on context cancellation")
 	}
 }

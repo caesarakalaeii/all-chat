@@ -100,8 +100,26 @@ func main() {
 	connString := fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
 		dbUser, dbPassword, dbHost, dbPort, dbName)
 
-	db, err := database.NewPostgresPool(connString)
+	// A single startup context, cancelled by SIGINT/SIGTERM, so both the database
+	// and Redis connect-with-retry loops abort promptly on shutdown instead of
+	// blocking termination while a dependency is unavailable. Released once both
+	// dependencies are connected so the normal server signal handling takes over.
+	startupCtx, stopStartup := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
+
+	// Connect to PostgreSQL, retrying with backoff so a transient outage (e.g. a
+	// CNPG primary failover or the pod being rescheduled) does not crash-loop this
+	// service on startup — it stays alive reporting not-ready until the DB returns.
+	db, err := database.NewPostgresPoolWithRetry(startupCtx, connString, false,
+		database.DefaultRetryOptions(),
+		func(attempt int, err error, backoff time.Duration) {
+			log.Warn("Database not reachable, retrying with backoff",
+				zap.Int("attempt", attempt),
+				zap.Duration("backoff", backoff),
+				zap.Error(err),
+			)
+		})
 	if err != nil {
+		stopStartup()
 		log.Fatal("Failed to connect to database", zap.Error(err))
 	}
 	defer db.Close()
@@ -117,7 +135,6 @@ func main() {
 	redisPort := getEnvOrDefault("REDIS_PORT", "6379")
 	redisAddr := sharedredis.BuildDSN(redisHost, redisPort)
 
-	startupCtx, stopStartup := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	redisClient, err := sharedredis.NewClientWithRetry(startupCtx, redisAddr, getEnvOrDefault("REDIS_PASSWORD", ""), tracingEnabled,
 		sharedredis.DefaultRetryOptions(),
 		func(attempt int, err error, backoff time.Duration) {
