@@ -103,6 +103,75 @@ func NewPostgresPool(connString string) (*pgxpool.Pool, error) {
 	return NewPostgresPoolWithTracing(connString, false)
 }
 
+// RetryOptions configures startup connection retry with exponential backoff.
+// Mirrors shared/redis.RetryOptions so services connect to Postgres and Redis
+// with the same resilience semantics.
+type RetryOptions struct {
+	// MaxAttempts is the maximum number of connection attempts. A value <= 0
+	// means retry until the supplied context is cancelled.
+	MaxAttempts int
+	// InitialBackoff is the wait before the second attempt. Defaults to 1s.
+	InitialBackoff time.Duration
+	// MaxBackoff caps the backoff between attempts. Defaults to 30s.
+	MaxBackoff time.Duration
+}
+
+// DefaultRetryOptions returns sensible startup-retry defaults: retry indefinitely
+// (bounded only by the caller's context) with backoff growing from 1s to 30s.
+// This keeps a service alive — reporting not-ready via its readiness probe —
+// while PostgreSQL is briefly unavailable (e.g. a CNPG primary failover or the
+// pod being rescheduled), instead of crash-looping on a fatal connection error.
+func DefaultRetryOptions() RetryOptions {
+	return RetryOptions{
+		MaxAttempts:    0,
+		InitialBackoff: 1 * time.Second,
+		MaxBackoff:     30 * time.Second,
+	}
+}
+
+// NewPostgresPoolWithRetry behaves like NewPostgresPoolWithTracing but retries the
+// initial connection (pool create + ping) with exponential backoff instead of
+// returning on the first failure. It stops and returns an error when MaxAttempts
+// is exhausted or ctx is cancelled. onRetry, if non-nil, is invoked after each
+// failed attempt (before the backoff sleep) so callers can log progress.
+func NewPostgresPoolWithRetry(ctx context.Context, connString string, tracingEnabled bool, opts RetryOptions, onRetry func(attempt int, err error, backoff time.Duration)) (*pgxpool.Pool, error) {
+	if opts.InitialBackoff <= 0 {
+		opts.InitialBackoff = 1 * time.Second
+	}
+	if opts.MaxBackoff <= 0 {
+		opts.MaxBackoff = 30 * time.Second
+	}
+
+	backoff := opts.InitialBackoff
+	var lastErr error
+	for attempt := 1; ; attempt++ {
+		pool, err := NewPostgresPoolWithTracing(connString, tracingEnabled)
+		if err == nil {
+			return pool, nil
+		}
+		lastErr = err
+
+		if opts.MaxAttempts > 0 && attempt >= opts.MaxAttempts {
+			return nil, fmt.Errorf("database connection failed after %d attempts: %w", attempt, lastErr)
+		}
+
+		if onRetry != nil {
+			onRetry(attempt, err, backoff)
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("database connection aborted after %d attempts (%v): %w", attempt, ctx.Err(), lastErr)
+		case <-time.After(backoff):
+		}
+
+		backoff *= 2
+		if backoff > opts.MaxBackoff {
+			backoff = opts.MaxBackoff
+		}
+	}
+}
+
 // HealthCheck verifies the database connection is healthy
 func HealthCheck(pool *pgxpool.Pool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
