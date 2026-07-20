@@ -41,7 +41,7 @@ func setupStatsTestRedis(t *testing.T) (*redis.Client, *miniredis.Miniredis) {
 func TestGetActiveOverlays_Empty(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	client, _ := setupStatsTestRedis(t)
-	handler := NewStatsHandler(client)
+	handler := NewStatsHandler(client, nil)
 
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -60,7 +60,7 @@ func TestGetActiveOverlays_Empty(t *testing.T) {
 func TestGetActiveOverlays_ReturnsConnectedIDs(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	client, mr := setupStatsTestRedis(t)
-	handler := NewStatsHandler(client)
+	handler := NewStatsHandler(client, nil)
 
 	// Simulate active overlays in Redis
 	mr.Set("overlay:connected:abc-123", "1")
@@ -94,7 +94,7 @@ func TestGetActiveOverlays_ReturnsConnectedIDs(t *testing.T) {
 func TestGetActiveOverlays_IncludesConnectedSince(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	client, mr := setupStatsTestRedis(t)
-	handler := NewStatsHandler(client)
+	handler := NewStatsHandler(client, nil)
 
 	// Overlay with a session hash carrying a start time.
 	startedAt := time.Now().UTC().Add(-90 * time.Minute).Truncate(time.Second)
@@ -130,4 +130,35 @@ func TestGetActiveOverlays_IncludesConnectedSince(t *testing.T) {
 	noSession, ok := byID["no-session"]
 	require.True(t, ok)
 	assert.Nil(t, noSession.ConnectedSince)
+}
+
+// TestGetActiveOverlays_EnrichmentFailureStillReturnsStatus guards the regression
+// where a failure of the optional started_at enrichment discarded the entire
+// connection-status answer: the endpoint 500'd and the admin UI (which silently
+// ignores non-OK responses) showed every overlay as "not connected" even while
+// live. A stray/mistyped session key (here a plain string where a hash is
+// expected) makes the pipelined HGET return WRONGTYPE, which must degrade to
+// "status without durations", not fail the whole request.
+func TestGetActiveOverlays_EnrichmentFailureStillReturnsStatus(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	client, mr := setupStatsTestRedis(t)
+	handler := NewStatsHandler(client, nil)
+
+	mr.Set("overlay:connected:live-overlay", "1")
+	mr.SetTTL("overlay:connected:live-overlay", 10*time.Minute)
+	// Wrong type for the session key: HGET session:active:live-overlay -> WRONGTYPE.
+	mr.Set("session:active:live-overlay", "not-a-hash")
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/overlays/active", nil)
+
+	handler.GetActiveOverlays(c)
+
+	assert.Equal(t, http.StatusOK, w.Code, "enrichment failure must not 500 the connection status")
+	var overlays []ActiveOverlay
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &overlays))
+	require.Len(t, overlays, 1)
+	assert.Equal(t, "live-overlay", overlays[0].OverlayID)
+	assert.Nil(t, overlays[0].ConnectedSince, "duration is dropped, but the overlay is still reported connected")
 }
