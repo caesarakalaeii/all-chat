@@ -25,7 +25,13 @@
  * is grounded in current product facts: supported platforms (Twitch/YouTube/Kick/
  * TikTok/Discord), OBS browser source, free & open source (AGPL-3.0), 7TV/BTTV/FFZ +
  * native emotes, 16 built-in themes + custom CSS, cookieless self-hosted analytics
- * with ~1h chat retention, and the browser extension.
+ * with ~1h chat retention, the browser extension, and the premium gating reasons
+ * (TTS users bring their own ElevenLabs API key — the gate is the audio streams,
+ * which cost far more to deliver than chat websocket traffic; YouTube API quota for
+ * moderation actions; stream selection is fully InnerTube (no quota cost) and gated
+ * as a power-user feature very few need; chat send quota for poll/prediction
+ * announcements; abuse prevention for sharing; cosmetics as supporter perks — see
+ * feature_gates migrations 044-076).
  */
 export interface FaqItem {
   question: string
@@ -46,6 +52,11 @@ export const FAQ_ITEMS: FaqItem[] = [
   {
     question: 'Is All-Chat free?',
     answer: 'Yes. All-Chat is free and open source under the AGPL-3.0 license.',
+  },
+  {
+    question: 'Why are some features premium?',
+    answer:
+      'Premium covers what costs real money or scarce quota to run, plus a few power-user extras: text-to-speech streams audio to your overlay, which is far more expensive to deliver than regular chat messages; YouTube moderation actions and poll announcements posted to chat consume strictly limited platform quotas; YouTube stream selection is an advanced option very few channels need; shared chat is gated to prevent abuse; and viewer flairs are cosmetic perks for supporters. Premium is funded through Patreon and keeps All-Chat running for everyone.',
   },
   {
     question: 'Which emotes are supported?',
