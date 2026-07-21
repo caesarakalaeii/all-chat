@@ -60,6 +60,7 @@ import {
   buildDeleteRequest,
   buildTimeoutRequest,
   buildUnbanRequest,
+  isModerationReauthError,
   moderationApi,
 } from '@/lib/api/moderation'
 import type { ChatMessage, DeletionMetadata } from '@/lib/types/message'
@@ -349,9 +350,22 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
 
   // --- Optimistic moderation actions ---------------------------------------
 
+  // A moderation action that failed because the platform token can no longer perform
+  // it (missing/lapsed scope, or a Helix 401 a refresh couldn't fix). The backend asked
+  // for re-consent (requires_reauth); we surface a per-platform banner so the streamer
+  // can re-authorize — without it the action just dead-ends on a generic error toast,
+  // and the capabilities endpoint can even keep advertising the action as available
+  // (granted_scopes may overstate the real grant), so it would fail again on every click.
+  const [reauthPrompt, setReauthPrompt] = useState<{ platform: string } | null>(null)
+
   // Apply an optimistic mark + log entry, fire the API, and roll back on error.
   const runModeration = useCallback(
-    async (meta: DeletionMetadata, call: () => Promise<unknown>, successMsg: string) => {
+    async (
+      platform: string,
+      meta: DeletionMetadata,
+      call: () => Promise<unknown>,
+      successMsg: string
+    ) => {
       const sig = deletionSignature(meta)
       const clientId = crypto.randomUUID()
       const entryId = (modSeqRef.current += 1)
@@ -371,7 +385,7 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
       try {
         await call()
         toastManager.add({ title: successMsg, type: 'success' })
-      } catch {
+      } catch (err) {
         // Roll back: drop the optimistic entry + clear the dedup signature, and
         // un-mark exactly the items we struck through.
         pendingDeletionsRef.current.delete(sig)
@@ -380,7 +394,17 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         setItems((prev) =>
           prev.map((it) => (touchedSet.has(it.id) ? { ...it, _moderated: undefined } : it))
         )
-        toastManager.add({ title: 'Moderation action failed', type: 'error' })
+        if (isModerationReauthError(err)) {
+          // Actionable failure: the streamer must re-authorize this platform. Show the
+          // recovery banner and a toast pointing at it (mirrors the chat-send reauth path).
+          setReauthPrompt({ platform })
+          toastManager.add({
+            title: `${platform} needs you to re-authorize moderation`,
+            type: 'error',
+          })
+        } else {
+          toastManager.add({ title: 'Moderation action failed', type: 'error' })
+        }
       }
     },
     []
@@ -394,7 +418,12 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         target_uuid: req.target_uuid,
         target_msg_id: req.native_message_id,
       }
-      void runModeration(meta, () => moderationApi.deleteMessage(id, req), 'Message deleted')
+      void runModeration(
+        item.platform,
+        meta,
+        () => moderationApi.deleteMessage(id, req),
+        'Message deleted'
+      )
     },
     [id, runModeration]
   )
@@ -409,6 +438,7 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         ban_duration: durationSeconds,
       }
       void runModeration(
+        item.platform,
         meta,
         () => moderationApi.timeoutUser(id, req),
         `Timed out ${req.target_username || 'user'}`
@@ -427,6 +457,7 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         ban_duration: 0,
       }
       void runModeration(
+        item.platform,
         meta,
         () => moderationApi.banUser(id, req),
         `Banned ${req.target_username || 'user'}`
@@ -442,7 +473,17 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
       moderationApi
         .unbanUser(id, buildUnbanRequest(item))
         .then(() => toastManager.add({ title: `Unbanned ${name}`, type: 'success' }))
-        .catch(() => toastManager.add({ title: 'Unban failed', type: 'error' }))
+        .catch((err) => {
+          if (isModerationReauthError(err)) {
+            setReauthPrompt({ platform: item.platform })
+            toastManager.add({
+              title: `${item.platform} needs you to re-authorize moderation`,
+              type: 'error',
+            })
+          } else {
+            toastManager.add({ title: 'Unban failed', type: 'error' })
+          }
+        })
     },
     [id]
   )
@@ -595,6 +636,31 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
             )}
           </div>
         ))}
+
+      {/* Re-auth prompt: a moderation action failed because the platform token can no
+          longer perform it. The backend asked for re-consent; give the streamer the CTA. */}
+      {reauthPrompt && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-xs text-text-sub">
+          <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
+          <span>
+            Your {reauthPrompt.platform} moderation permission expired or was never granted —
+            re-authorize to keep moderating from your overlay.
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              const platform = reauthPrompt.platform
+              setReauthPrompt(null)
+              void enableModeration(platform)
+            }}
+            className="font-medium text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+          >
+            {reauthPrompt.platform === 'discord'
+              ? 'Re-invite the bot'
+              : 'Re-authorize moderation & chat sending'}
+          </button>
+        </div>
+      )}
 
       {showDetails && (
         <ObservabilitySummary
