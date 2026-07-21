@@ -16,7 +16,13 @@
 
 package clients
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+	"net/http"
+	"strconv"
+	"time"
+)
 
 // ErrNotFound signals that a provider has no emotes for the requested channel — an HTTP
 // 404 / unknown-channel response. This is the NORMAL case for most channels on BTTV and
@@ -24,3 +30,38 @@ import "errors"
 // classify it as a benign "not_found" miss rather than a real API failure. Wrap it with
 // %w so callers can detect it via errors.Is.
 var ErrNotFound = errors.New("emotes not found for channel")
+
+// ErrRateLimited signals that a provider throttled us (HTTP 429). This is a transient,
+// provider-wide condition, not a per-channel fact: retrying the same request only keeps
+// the provider throttling, so the handler opens a short cooldown for the provider and
+// skips upstream fetches until it expires. Detect with errors.Is(err, ErrRateLimited);
+// the provider's Retry-After hint is available via errors.As with *RateLimitedError.
+var ErrRateLimited = errors.New("provider rate limited")
+
+// RateLimitedError wraps ErrRateLimited and carries the provider's Retry-After hint.
+// RetryAfter is zero when the provider sent no (or an unparseable) header.
+type RateLimitedError struct {
+	Provider   string
+	RetryAfter time.Duration
+}
+
+func (e *RateLimitedError) Error() string {
+	if e.RetryAfter > 0 {
+		return fmt.Sprintf("%s: rate limited (429), retry after %s", e.Provider, e.RetryAfter)
+	}
+	return fmt.Sprintf("%s: rate limited (429)", e.Provider)
+}
+
+func (e *RateLimitedError) Unwrap() error { return ErrRateLimited }
+
+// rateLimited builds the error for a 429 response, honoring a numeric Retry-After
+// header when present (the delta-seconds form; the rare HTTP-date form is ignored).
+func rateLimited(provider string, resp *http.Response) error {
+	var retryAfter time.Duration
+	if s := resp.Header.Get("Retry-After"); s != "" {
+		if secs, err := strconv.Atoi(s); err == nil && secs > 0 {
+			retryAfter = time.Duration(secs) * time.Second
+		}
+	}
+	return &RateLimitedError{Provider: provider, RetryAfter: retryAfter}
+}

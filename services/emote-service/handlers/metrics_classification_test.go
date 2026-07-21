@@ -41,16 +41,19 @@ func TestRecordAPIResult_Classification(t *testing.T) {
 	h.recordAPIResult("bttv", fmt.Errorf("bttv: no emotes: %w", clients.ErrNotFound))
 	h.recordAPIResult("7tv", errors.New("7tv api returned status 503"))
 	h.recordAPIResult("twitch", nil)
+	h.recordAPIResult("ffz", &clients.RateLimitedError{Provider: "ffz"})
 
 	cases := []struct {
 		provider, result string
 		want             float64
 	}{
-		{"bttv", "not_found", 1}, // 404 classified as a benign miss
-		{"bttv", "error", 0},     // and NOT as an error
-		{"7tv", "error", 1},      // a real 5xx stays an error
-		{"7tv", "not_found", 0},  //
-		{"twitch", "success", 1}, // nil error is success
+		{"bttv", "not_found", 1},   // 404 classified as a benign miss
+		{"bttv", "error", 0},       // and NOT as an error
+		{"7tv", "error", 1},        // a real 5xx stays an error
+		{"7tv", "not_found", 0},    //
+		{"twitch", "success", 1},   // nil error is success
+		{"ffz", "rate_limited", 1}, // 429 classified as throttling
+		{"ffz", "error", 0},        // and NOT as an error
 	}
 	for _, tc := range cases {
 		got := testutil.ToFloat64(vec.WithLabelValues("emote-service", tc.provider, tc.result))

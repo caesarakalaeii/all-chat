@@ -90,6 +90,9 @@ func (c *FFZClient) FetchEmotes(ctx context.Context, channel string) ([]models.E
 		// Channel has no FFZ room — the normal case for most channels, not a failure.
 		return nil, fmt.Errorf("ffz: no emotes for channel %q: %w", channel, ErrNotFound)
 	}
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return nil, rateLimited("ffz", resp)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to fetch emotes: status code %d", resp.StatusCode)
 	}
