@@ -249,6 +249,9 @@ func (c *TwitchClient) apiGet(ctx context.Context, path string, query url.Values
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return rateLimited("twitch", resp)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("twitch api %s returned status %d", path, resp.StatusCode)
 	}
