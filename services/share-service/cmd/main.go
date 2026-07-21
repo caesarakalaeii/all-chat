@@ -123,6 +123,7 @@ func main() {
 	// Initialize repositories
 	recomputer := premium.NewRecomputer(dbPool, log)
 	premiumRepo := repository.NewPremiumRepository(dbPool, recomputer, log)
+	ambassadorRepo := repository.NewAmbassadorRepository(dbPool, recomputer, log)
 	userSearchRepo := repository.NewUserSearchRepository(dbPool, log)
 	shareRepo := repository.NewShareRepository(dbPool, log)
 
@@ -139,6 +140,7 @@ func main() {
 
 	// Initialize handlers
 	adminHandler := handlers.NewAdminHandler(premiumRepo, log)
+	ambassadorHandler := handlers.NewAmbassadorHandler(ambassadorRepo, log)
 	searchHandler := handlers.NewSearchHandler(userSearchRepo, log)
 	shareHandler := handlers.NewShareHandler(shareRepo, userSearchRepo, dbPool, log, cycleDetector, serviceKeyChain)
 	adminFGHandler := handlers.NewAdminFeatureGatesHandler(dbPool, redisClientForJobs, log)
@@ -183,12 +185,23 @@ func main() {
 	// Prometheus metrics endpoint
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
+	// Public "Featured Ambassadors" list (ADR-0041) — no auth. Registered directly on
+	// the router (NOT the JWT-guarded /api/v1 group below) so the marketing homepage
+	// can fetch it unauthenticated, mirroring the public GET /api/v1/stats path.
+	router.GET("/api/v1/ambassadors", ambassadorHandler.ListPublic)
+
 	// API routes with authentication
 	api := router.Group("/api/v1")
 	api.Use(middleware.JWTAuthWithRevocation(userKeyChain, redisClient)) // All routes require auth
 	{
 		// User search - no premium required
 		api.GET("/users/search", searchHandler.SearchUsers)
+
+		// Ambassador self-service (ADR-0041): a streamer reads their own showcase and
+		// opts in/out of the public homepage. Authenticated; the handler enforces that
+		// the caller actually holds the ambassador role (403 otherwise).
+		api.GET("/ambassadors/me/showcase", ambassadorHandler.GetMyShowcase)
+		api.PUT("/ambassadors/me/showcase", ambassadorHandler.UpdateMyConsent)
 
 		// Share requests - GET doesn't need premium check
 		// User decision from RESEARCH.md Pitfall #5: Non-premium users can VIEW but cannot CREATE/ACCEPT
@@ -223,6 +236,15 @@ func main() {
 		betaTesterRoutes.Use(middleware.AdminOnly())
 		{
 			betaTesterRoutes.POST("/users/:id", adminHandler.SetUserBetaTester)
+		}
+
+		// Ambassador admin routes (ADR-0041) — separate prefix, same AdminOnly gate.
+		// Grants the ambassador role (all premium + early-access) and curates the
+		// public showcase card (tagline / sort_order).
+		ambassadorRoutes := api.Group("/admin/ambassadors")
+		ambassadorRoutes.Use(middleware.AdminOnly())
+		{
+			ambassadorRoutes.POST("/users/:id", ambassadorHandler.SetUserAmbassador)
 		}
 
 		// Feature gate admin routes (separate from /admin/premium to avoid path conflict)

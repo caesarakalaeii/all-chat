@@ -33,6 +33,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { VisuallyHidden } from '@/components/ui/visually-hidden'
 import { toastManager } from '@/lib/toast'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
+import { AmbassadorSettingsCard } from '@/components/settings/AmbassadorSettingsCard'
 import { getGuilds, disconnectGuild, startDiscordOAuth } from '@/lib/api/discord'
 import type { DiscordGuild } from '@/lib/api/discord'
 
@@ -191,6 +192,10 @@ function SettingsContent() {
             </Link>
           </div>
         </Card>
+
+        {/* Ambassador section (ADR-0041) — only for ambassadors; opt in/out of the
+            public homepage showcase. */}
+        {user.is_ambassador && <AmbassadorSettingsCard />}
 
         {/* Data & Privacy section */}
         <Card className="p-6">

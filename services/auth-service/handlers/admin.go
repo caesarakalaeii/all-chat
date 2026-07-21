@@ -86,22 +86,25 @@ func (h *AdminHandler) ListUsers(c *gin.Context) {
 
 	// Return users without sensitive information
 	type UserResponse struct {
-		ID               string  `json:"id"`
-		Username         string  `json:"username"`
-		DisplayName      string  `json:"display_name"`
-		AuthProvider     string  `json:"auth_provider"`
-		ProfileImageURL  string  `json:"profile_image_url"`
-		CreatedAt        string  `json:"created_at"`
-		TwitchID         *string `json:"twitch_id"`
-		YouTubeID        *string `json:"youtube_id"`
-		KickID           *string `json:"kick_id"`
-		IsPremium        bool    `json:"is_premium"`
-		IsBetaTester     bool    `json:"is_beta_tester"`
-		PremiumExpiresAt *string `json:"premium_expires_at,omitempty"`
-		IsBanned         bool    `json:"is_banned"`
-		BannedAt         *string `json:"banned_at,omitempty"`
-		BannedReason     *string `json:"banned_reason,omitempty"`
-		BannedBy         *string `json:"banned_by,omitempty"`
+		ID                  string  `json:"id"`
+		Username            string  `json:"username"`
+		DisplayName         string  `json:"display_name"`
+		AuthProvider        string  `json:"auth_provider"`
+		ProfileImageURL     string  `json:"profile_image_url"`
+		CreatedAt           string  `json:"created_at"`
+		TwitchID            *string `json:"twitch_id"`
+		YouTubeID           *string `json:"youtube_id"`
+		KickID              *string `json:"kick_id"`
+		IsPremium           bool    `json:"is_premium"`
+		IsBetaTester        bool    `json:"is_beta_tester"`
+		IsAmbassador        bool    `json:"is_ambassador"`
+		AmbassadorTagline   *string `json:"ambassador_tagline,omitempty"`
+		AmbassadorSortOrder int     `json:"ambassador_sort_order"`
+		PremiumExpiresAt    *string `json:"premium_expires_at,omitempty"`
+		IsBanned            bool    `json:"is_banned"`
+		BannedAt            *string `json:"banned_at,omitempty"`
+		BannedReason        *string `json:"banned_reason,omitempty"`
+		BannedBy            *string `json:"banned_by,omitempty"`
 	}
 
 	response := make([]UserResponse, len(users))
@@ -121,22 +124,25 @@ func (h *AdminHandler) ListUsers(c *gin.Context) {
 		}
 
 		response[i] = UserResponse{
-			ID:               user.ID,
-			Username:         user.Username,
-			DisplayName:      user.DisplayName,
-			AuthProvider:     user.AuthProvider,
-			ProfileImageURL:  user.ProfileImageURL,
-			CreatedAt:        user.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-			TwitchID:         user.TwitchID,
-			YouTubeID:        user.GoogleID,
-			KickID:           user.KickID,
-			IsPremium:        user.IsPremium,
-			IsBetaTester:     user.IsBetaTester,
-			PremiumExpiresAt: premiumExpiresAt,
-			IsBanned:         user.IsBanned,
-			BannedAt:         bannedAt,
-			BannedReason:     user.BannedReason,
-			BannedBy:         user.BannedBy,
+			ID:                  user.ID,
+			Username:            user.Username,
+			DisplayName:         user.DisplayName,
+			AuthProvider:        user.AuthProvider,
+			ProfileImageURL:     user.ProfileImageURL,
+			CreatedAt:           user.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			TwitchID:            user.TwitchID,
+			YouTubeID:           user.GoogleID,
+			KickID:              user.KickID,
+			IsPremium:           user.IsPremium,
+			IsBetaTester:        user.IsBetaTester,
+			IsAmbassador:        user.IsAmbassador,
+			AmbassadorTagline:   user.AmbassadorTagline,
+			AmbassadorSortOrder: user.AmbassadorSortOrder,
+			PremiumExpiresAt:    premiumExpiresAt,
+			IsBanned:            user.IsBanned,
+			BannedAt:            bannedAt,
+			BannedReason:        user.BannedReason,
+			BannedBy:            user.BannedBy,
 		}
 	}
 

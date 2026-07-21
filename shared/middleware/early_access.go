@@ -25,17 +25,22 @@ import (
 )
 
 // betaTesterQuerier is an injectable function type for querying a user's
-// beta-tester status. Mirrors premiumQuerier so the early-access gate can be unit
-// tested without a real pgxpool.Pool.
-type betaTesterQuerier func(ctx context.Context, userID string) (isBetaTester bool, err error)
+// early-access eligibility. Mirrors premiumQuerier so the early-access gate can be
+// unit tested without a real pgxpool.Pool. The bool it returns is "eligible for
+// early access", which is is_beta_tester OR is_ambassador (see the DB querier).
+type betaTesterQuerier func(ctx context.Context, userID string) (isEligible bool, err error)
 
 // newBetaTesterDBQuerier returns a betaTesterQuerier backed by a pgxpool.Pool.
+//
+// Early-access eligibility is is_beta_tester OR is_ambassador (ADR-0041): an
+// ambassador holds the beta-tester capability, so both roles pass early-access
+// gates. The OR is evaluated in SQL so the middleware logic stays a single boolean.
 func newBetaTesterDBQuerier(db *pgxpool.Pool) betaTesterQuerier {
 	return func(ctx context.Context, userID string) (bool, error) {
-		var isBetaTester bool
+		var isEligible bool
 		err := db.QueryRow(ctx,
-			"SELECT is_beta_tester FROM users WHERE id = $1", userID).Scan(&isBetaTester)
-		return isBetaTester, err
+			"SELECT (is_beta_tester OR is_ambassador) FROM users WHERE id = $1", userID).Scan(&isEligible)
+		return isEligible, err
 	}
 }
 
@@ -50,10 +55,11 @@ func newBetaTesterDBQuerier(db *pgxpool.Pool) betaTesterQuerier {
 //     (or has graduated), so allow through. Any premium requirement on the same
 //     route is enforced separately by RequirePremium.
 //  3. If gates.IsEarlyAccess(featureKey) is true: query the DB and require
-//     users.is_beta_tester = true, else 403.
+//     early-access eligibility (is_beta_tester OR is_ambassador, ADR-0041), else 403.
 //
-// Note: beta-testers are also premium (shared/premium.Recompute folds is_beta_tester
-// into is_premium), so they transparently pass any RequirePremium gate as well.
+// Note: beta-testers and ambassadors are also premium (shared/premium.Recompute
+// folds both is_beta_tester and is_ambassador into is_premium), so they
+// transparently pass any RequirePremium gate as well.
 func RequireEarlyAccess(db *pgxpool.Pool, gates GateChecker, featureKey string, logger *zap.Logger) gin.HandlerFunc {
 	querier := newBetaTesterDBQuerier(db)
 	return requireEarlyAccessCore(gates, featureKey, querier, logger)

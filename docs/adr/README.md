@@ -508,6 +508,15 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 **Impact**: The CSS editor loads and its CSS language features work under the exact production CSP (verified end-to-end with Playwright); the editor works offline / during a jsdelivr outage and the script-execution surface stays first-party. The only CSP broadening is `worker-src 'self' blob:` (already trusted in `media-src`). (ADR numbering shared with caesar-deployment, so this is 0040)
 **→ Read**: [0040-self-host-monaco-editor.md](./0040-self-host-monaco-editor.md)
 
+### ADR-0041: Ambassador Role + Public Homepage Showcase
+
+**Status**: ✅ Accepted
+**Date**: 2026-07-21
+**Problem**: We want to recognise a curated set of streamers as "ambassadors" who receive premium + beta-tester (early-access) capabilities AND are showcased on the public marketing homepage. The entitlement half maps onto the beta-tester role (ADR-0020), but there is no public endpoint exposing a streamer's avatar/display name, and featuring real people publicly raises a consent question
+**Decision**: Model `users.is_ambassador` as an admin-granted boolean folded into `shared/premium.Recompute` (→ premium) and into `RequireEarlyAccess` as `is_beta_tester OR is_ambassador` (→ early access), mirroring beta-tester (fresh DB enforcement, not a JWT role). Keep marketing-card presentation in a separate `ambassador_showcase` table (tagline + sort_order + featured_consent) so the entitlement stays one boolean. Public `GET /api/v1/ambassadors` returns a streamer only when `is_ambassador AND featured_consent` — assigning the role is an admin action, but public display is the streamer's own opt-in. Not a `feature_gates` entry / not in the `/upgrade` funnel (it is a recognition role, not a purchasable feature)
+**Impact**: A third admin-granted role reusing the beta-tester machinery; grants take effect immediately; real people are only featured with explicit consent; the homepage section self-hides when nobody has opted in. A generic `user_roles` table stays deferred (reconsider at a fourth role). (ADR numbering shared with caesar-deployment, so this is 0041)
+**→ Read**: [0041-ambassador-role.md](./0041-ambassador-role.md)
+
 ---
 
 ## How to Create a New ADR
@@ -631,7 +640,7 @@ Create a new ADR if:
 
 ## Summary
 
-**Total ADRs**: 19
+**Total ADRs**: 39 (all-chat repo; ADR numbers are shared with caesar-deployment)
 **Status**: All accepted (✅)
 **Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation, overlay observability view, demand linger, EventSub chat-ownership partition, linked Twitch credentials, chat moderation write-path, premium entitlements via Patreon, streamer/viewer premium split, engagement economy, source-liveness heartbeat, admin URL-addressable views + viewer identity model + global search)
 
@@ -640,4 +649,4 @@ Create a new ADR if:
 2. ADR-0001 (Go layout) - Referenced by all services
 3. ADR-0006 (Quota tracking) - Referenced by YouTube listener, overlay manager
 
-**Last Updated**: 2026-07-17
+**Last Updated**: 2026-07-21

@@ -76,6 +76,27 @@ func TestMigrationsSurviveRerun(t *testing.T) {
 		t.Fatalf("failed to insert canary overlay: %v", err)
 	}
 
+	// Live state a deploy must not destroy: an ambassador (ADR-0041) with the role
+	// granted and a public showcase card they opted into. Migration 078 must write
+	// NO is_ambassador VALUES and NO showcase rows, so a re-run cannot clobber the
+	// grant or flip the streamer's consent back off.
+	_, err = pool.Exec(ctx, `
+		INSERT INTO users (twitch_id, auth_provider, username, display_name,
+		                   access_token, refresh_token, token_expires_at, is_ambassador)
+		VALUES ('525252', 'twitch', 'amb_canary', 'Ambassador Canary',
+		        'access-token', 'refresh-token', NOW() + INTERVAL '4 hours', TRUE)
+	`)
+	if err != nil {
+		t.Fatalf("failed to insert ambassador canary: %v", err)
+	}
+	_, err = pool.Exec(ctx, `
+		INSERT INTO ambassador_showcase (user_id, tagline, sort_order, featured_consent)
+		SELECT id, 'Multistreams to 3 platforms', 10, TRUE FROM users WHERE username = 'amb_canary'
+	`)
+	if err != nil {
+		t.Fatalf("failed to insert ambassador showcase: %v", err)
+	}
+
 	// Second pass = pod restart.
 	runMigrations(t, pool, migrations)
 
@@ -114,6 +135,28 @@ func TestMigrationsSurviveRerun(t *testing.T) {
 	}
 	if onboardingCompleted != nil {
 		t.Errorf("re-running migrations re-fired the 077 onboarding backfill (onboarding_completed_at = %v); a deploy would silently complete onboarding for users who restarted it", onboardingCompleted)
+	}
+
+	// The ambassador grant + opted-in showcase must survive the re-run (ADR-0041):
+	// migration 078 writes no entitlement/consent VALUES.
+	var isAmbassador, featuredConsent bool
+	var tagline string
+	err = pool.QueryRow(ctx, `
+		SELECT u.is_ambassador, s.featured_consent, s.tagline
+		FROM users u JOIN ambassador_showcase s ON s.user_id = u.id
+		WHERE u.username = 'amb_canary'
+	`).Scan(&isAmbassador, &featuredConsent, &tagline)
+	if err != nil {
+		t.Fatalf("ambassador canary state vanished after migration re-run: %v", err)
+	}
+	if !isAmbassador {
+		t.Errorf("re-running migrations cleared users.is_ambassador; a deploy would revoke ambassadors")
+	}
+	if !featuredConsent {
+		t.Errorf("re-running migrations reset featured_consent; a deploy would pull opted-in streamers off the homepage")
+	}
+	if tagline != "Multistreams to 3 platforms" {
+		t.Errorf("re-running migrations clobbered the showcase tagline: %q", tagline)
 	}
 }
 

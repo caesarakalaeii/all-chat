@@ -77,14 +77,15 @@ func NewRecomputer(db *pgxpool.Pool, logger *zap.Logger) *Recomputer {
 }
 
 // Recompute derives users.is_premium for userID from premium_admin_override (with
-// its optional expiry), the user's premium_subscriptions, and the beta-tester flag,
-// writes it, and returns the new value.
+// its optional expiry), the user's premium_subscriptions, the beta-tester flag, and
+// the ambassador flag, writes it, and returns the new value.
 //
 // The "premium half" (the non-override input to Effective) is the OR of an active
-// subscription and is_beta_tester (ADR-0020): a beta-tester is premium, the same
-// clobber-free way an admin force-grant is, while ALSO unlocking early-access gates
-// that plain premium does not (see shared/middleware.RequireEarlyAccess). An admin
-// force-deny (override FALSE) still wins over both.
+// subscription, is_beta_tester (ADR-0020), and is_ambassador (ADR-0041): a
+// beta-tester or an ambassador is premium, the same clobber-free way an admin
+// force-grant is, while ALSO unlocking early-access gates that plain premium does
+// not (see shared/middleware.RequireEarlyAccess). An admin force-deny (override
+// FALSE) still wins over all of them.
 //
 // It is convergent and idempotent: the value is a pure function (Effective) of
 // the user's current rows and the database clock, so calling it any number of times
@@ -118,6 +119,7 @@ func (r *Recomputer) recomputeUserTx(ctx context.Context, tx pgx.Tx, userID stri
 	var adminOverride *bool
 	var hasActiveSub bool
 	var isBetaTester bool
+	var isAmbassador bool
 	err := tx.QueryRow(ctx, `
 		SELECT CASE
 		           WHEN u.premium_admin_override_expires_at IS NOT NULL
@@ -129,10 +131,11 @@ func (r *Recomputer) recomputeUserTx(ctx context.Context, tx pgx.Tx, userID stri
 		           SELECT 1 FROM premium_subscriptions s
 		           WHERE s.user_id = u.id AND s.status = 'active'
 		       ),
-		       u.is_beta_tester
+		       u.is_beta_tester,
+		       u.is_ambassador
 		FROM users u
 		WHERE u.id = $1
-		FOR UPDATE`, userID).Scan(&adminOverride, &hasActiveSub, &isBetaTester)
+		FOR UPDATE`, userID).Scan(&adminOverride, &hasActiveSub, &isBetaTester, &isAmbassador)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, fmt.Errorf("user not found: %s", userID)
 	}
@@ -140,7 +143,7 @@ func (r *Recomputer) recomputeUserTx(ctx context.Context, tx pgx.Tx, userID stri
 		return false, fmt.Errorf("failed to read premium inputs: %w", err)
 	}
 
-	effective := Effective(adminOverride, hasActiveSub || isBetaTester)
+	effective := Effective(adminOverride, hasActiveSub || isBetaTester || isAmbassador)
 
 	if _, err := tx.Exec(ctx,
 		"UPDATE users SET is_premium = $1 WHERE id = $2", effective, userID); err != nil {
@@ -153,6 +156,7 @@ func (r *Recomputer) recomputeUserTx(ctx context.Context, tx pgx.Tx, userID stri
 			zap.Boolp("effective_admin_override", adminOverride),
 			zap.Bool("has_active_sub", hasActiveSub),
 			zap.Bool("is_beta_tester", isBetaTester),
+			zap.Bool("is_ambassador", isAmbassador),
 			zap.Bool("is_premium", effective))
 	}
 	return effective, nil
