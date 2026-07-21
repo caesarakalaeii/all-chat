@@ -90,6 +90,7 @@ func setupTestDB(t *testing.T) (*pgxpool.Pool, func()) {
 			is_admin BOOLEAN NOT NULL DEFAULT FALSE,
 			is_premium BOOLEAN NOT NULL DEFAULT FALSE,
 			is_beta_tester BOOLEAN NOT NULL DEFAULT FALSE,
+			is_ambassador BOOLEAN NOT NULL DEFAULT FALSE,
 			premium_admin_override_expires_at TIMESTAMP,
 			is_banned BOOLEAN NOT NULL DEFAULT FALSE,
 			banned_at TIMESTAMP,
@@ -122,6 +123,15 @@ func setupTestDB(t *testing.T) (*pgxpool.Pool, func()) {
 			banned_at TIMESTAMP NOT NULL DEFAULT NOW(),
 			unbanned_at TIMESTAMP NULL,
 			is_active BOOLEAN NOT NULL DEFAULT TRUE
+		);
+
+		CREATE TABLE IF NOT EXISTS ambassador_showcase (
+			user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+			tagline TEXT,
+			sort_order INTEGER NOT NULL DEFAULT 0,
+			featured_consent BOOLEAN NOT NULL DEFAULT FALSE,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		);
 	`
 

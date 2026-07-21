@@ -31,17 +31,23 @@ type User struct {
 	IsAdmin          bool       `json:"is_admin"`                     // Admin role for access control
 	IsPremium        bool       `json:"is_premium"`                   // Premium feature access (derived)
 	IsBetaTester     bool       `json:"is_beta_tester"`               // Beta-tester role (ADR-0020): all premium + early-access
+	IsAmbassador     bool       `json:"is_ambassador"`                // Ambassador role (ADR-0041): all premium + early-access + public homepage showcase
 	PremiumExpiresAt *time.Time `json:"premium_expires_at,omitempty"` // ADR-0027: time-limited admin premium override deadline (NULL = permanent)
-	IsBanned         bool       `json:"is_banned"`                    // Ban status
-	BannedAt         *time.Time `json:"banned_at,omitempty"`          // When user was banned
-	BannedReason     *string    `json:"banned_reason,omitempty"`      // Reason for ban
-	BannedBy         *string    `json:"banned_by,omitempty"`          // Admin who banned (user ID)
-	AccessToken      string     `json:"-"`                            // Never expose in JSON
-	RefreshToken     string     `json:"-"`                            // Never expose in JSON
-	TokenExpiresAt   time.Time  `json:"-"`
-	GrantedScopes    []string   `json:"-"` // OAuth scopes granted at consent (TEXT[] in DB); gates EventSub chat reading
-	CreatedAt        time.Time  `json:"created_at"`
-	UpdatedAt        time.Time  `json:"updated_at"`
+	// Ambassador showcase card metadata (ADR-0041), populated ONLY by the admin
+	// listing (GetAllUsers LEFT JOINs ambassador_showcase). omitempty keeps them off
+	// the /auth/me response, which does not populate them.
+	AmbassadorTagline   *string    `json:"ambassador_tagline,omitempty"`
+	AmbassadorSortOrder int        `json:"ambassador_sort_order,omitempty"`
+	IsBanned            bool       `json:"is_banned"`               // Ban status
+	BannedAt            *time.Time `json:"banned_at,omitempty"`     // When user was banned
+	BannedReason        *string    `json:"banned_reason,omitempty"` // Reason for ban
+	BannedBy            *string    `json:"banned_by,omitempty"`     // Admin who banned (user ID)
+	AccessToken         string     `json:"-"`                       // Never expose in JSON
+	RefreshToken        string     `json:"-"`                       // Never expose in JSON
+	TokenExpiresAt      time.Time  `json:"-"`
+	GrantedScopes       []string   `json:"-"` // OAuth scopes granted at consent (TEXT[] in DB); gates EventSub chat reading
+	CreatedAt           time.Time  `json:"created_at"`
+	UpdatedAt           time.Time  `json:"updated_at"`
 	// NULL = first-run setup guide is shown; deliberately no omitempty so the
 	// frontend receives an explicit null for users who have not onboarded.
 	OnboardingCompletedAt *time.Time `json:"onboarding_completed_at"`

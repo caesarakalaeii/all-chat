@@ -43,6 +43,9 @@ interface User {
   kick_id?: string
   is_premium: boolean
   is_beta_tester: boolean
+  is_ambassador: boolean
+  ambassador_tagline?: string | null
+  ambassador_sort_order?: number
   premium_expires_at?: string | null
   is_banned: boolean
   banned_at?: string
@@ -81,6 +84,21 @@ export default function UsersPage() {
   const [grantDurationValid, setGrantDurationValid] = useState(true)
   const [betaDialogUser, setBetaDialogUser] = useState<User | null>(null)
   const [betaLoading, setBetaLoading] = useState(false)
+  // Ambassador role + curated showcase card (ADR-0041).
+  const [ambassadorDialogUser, setAmbassadorDialogUser] = useState<User | null>(null)
+  const [ambassadorLoading, setAmbassadorLoading] = useState(false)
+  const [ambassadorTagline, setAmbassadorTagline] = useState('')
+  const [ambassadorSortOrder, setAmbassadorSortOrder] = useState('0')
+  // Seed the ambassador showcase inputs from the selected user (ADR-0041) so the
+  // admin edits the CURRENT card. Adjust-state-during-render (not an effect) is the
+  // React-recommended way to reset editable state when the selected row changes; it
+  // only fires when the user id changes, so a save never clobbers in-progress edits.
+  const [ambassadorSeedId, setAmbassadorSeedId] = useState<string | null>(null)
+  if (selectedUser && selectedUser.id !== ambassadorSeedId) {
+    setAmbassadorSeedId(selectedUser.id)
+    setAmbassadorTagline(selectedUser.ambassador_tagline ?? '')
+    setAmbassadorSortOrder(String(selectedUser.ambassador_sort_order ?? 0))
+  }
   const banReasonId = useId()
 
   // Fetch all users from the database
@@ -154,19 +172,22 @@ export default function UsersPage() {
     fetchUserOverlays()
   }, [selectedUser])
 
-  // Refetch users helper
-  const refetchUsers = async () => {
+  // Refetch users helper. Returns the fresh list so callers can re-sync a selected
+  // user from backend truth (e.g. after a role change that recomputed is_premium).
+  const refetchUsers = async (): Promise<User[]> => {
     try {
       const response = await fetch('/api/v1/admin/users', {
         credentials: 'same-origin',
       })
       if (response.ok) {
-        const data = await response.json()
+        const data = (await response.json()) as User[]
         setUsers(data)
+        return data
       }
     } catch (err) {
       console.error('Failed to refetch users:', err)
     }
+    return []
   }
 
   // Handle impersonation (called from Dialog confirm). H3 cookie auth: the
@@ -349,6 +370,63 @@ export default function UsersPage() {
     }
   }
 
+  // handleSetAmbassador grants/revokes the ambassador role (ADR-0041): all premium
+  // + early-access features, plus eligibility for the public homepage showcase. On a
+  // grant it also curates the card (tagline + sort_order); the streamer opts into
+  // being shown publicly themselves. Sending null for a card field preserves it.
+  const handleSetAmbassador = async (
+    userId: string,
+    username: string,
+    isAmbassador: boolean,
+    card?: { tagline: string | null; sortOrder: number }
+  ) => {
+    setAmbassadorLoading(true)
+    try {
+      const body: { is_ambassador: boolean; tagline?: string | null; sort_order?: number } = {
+        is_ambassador: isAmbassador,
+      }
+      if (isAmbassador && card) {
+        // Empty tagline => null (preserve the existing one); a non-empty value sets it.
+        body.tagline = card.tagline && card.tagline.trim() !== '' ? card.tagline.trim() : null
+        body.sort_order = card.sortOrder
+      }
+      const response = await fetch(`/api/v1/admin/ambassadors/users/${userId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(body),
+      })
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to update ambassador status')
+      }
+
+      toastManager.add({
+        title: isAmbassador
+          ? `${username} is now an ambassador`
+          : `${username} is no longer an ambassador`,
+        type: 'success',
+      })
+      setAmbassadorDialogUser(null)
+      const fresh = await refetchUsers()
+
+      // Re-sync the detail panel from backend truth. A role change recomputes
+      // is_premium server-side (ambassador is folded in, and a revoke may drop it if
+      // no subscription/override remains), so patching locally would go stale —
+      // adopt the freshly-listed row instead of guessing.
+      if (selectedUser?.id === userId) {
+        setSelectedUser(fresh.find((u) => u.id === userId) ?? null)
+      }
+    } catch (err: any) {
+      toastManager.add({
+        title: err.message || 'Failed to update ambassador status',
+        type: 'error',
+      })
+    } finally {
+      setAmbassadorLoading(false)
+    }
+  }
+
   // Filter and search users
   const displayUsers = users.filter((u) => {
     // Filter by status
@@ -501,39 +579,44 @@ export default function UsersPage() {
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center">
                               <p className="text-sm font-medium text-text">{user.display_name}</p>
-                            <div className="ml-2 flex space-x-1">
-                              {user.is_beta_tester && (
-                                <span className="inline-flex items-center rounded border border-violet-500/20 bg-violet-500/10 px-2 py-0.5 text-xs font-medium text-violet-400">
-                                  BETA
-                                </span>
-                              )}
-                              {user.is_premium && !user.is_beta_tester && (
-                                <span className="inline-flex items-center rounded border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400">
-                                  PREMIUM
-                                </span>
-                              )}
-                              {user.is_banned && (
-                                <span className="bg-destructive/10 text-destructive border-destructive/20 inline-flex items-center rounded border px-2 py-0.5 text-xs font-medium">
-                                  BANNED
-                                </span>
-                              )}
-                              {user.twitch_id && (
-                                <span className="inline-flex items-center rounded bg-badge-bg px-2 py-0.5 text-xs font-medium text-twitch">
-                                  Twitch
-                                </span>
-                              )}
-                              {user.youtube_id && (
-                                <span className="inline-flex items-center rounded bg-badge-bg px-2 py-0.5 text-xs font-medium text-youtube">
-                                  YouTube
-                                </span>
-                              )}
-                              {user.kick_id && (
-                                <span className="inline-flex items-center rounded bg-badge-bg px-2 py-0.5 text-xs font-medium text-kick">
-                                  Kick
-                                </span>
-                              )}
+                              <div className="ml-2 flex space-x-1">
+                                {user.is_ambassador && (
+                                  <span className="inline-flex items-center rounded border border-sky-500/20 bg-sky-500/10 px-2 py-0.5 text-xs font-medium text-sky-400">
+                                    AMBASSADOR
+                                  </span>
+                                )}
+                                {user.is_beta_tester && !user.is_ambassador && (
+                                  <span className="inline-flex items-center rounded border border-violet-500/20 bg-violet-500/10 px-2 py-0.5 text-xs font-medium text-violet-400">
+                                    BETA
+                                  </span>
+                                )}
+                                {user.is_premium && !user.is_beta_tester && !user.is_ambassador && (
+                                  <span className="inline-flex items-center rounded border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400">
+                                    PREMIUM
+                                  </span>
+                                )}
+                                {user.is_banned && (
+                                  <span className="bg-destructive/10 text-destructive border-destructive/20 inline-flex items-center rounded border px-2 py-0.5 text-xs font-medium">
+                                    BANNED
+                                  </span>
+                                )}
+                                {user.twitch_id && (
+                                  <span className="inline-flex items-center rounded bg-badge-bg px-2 py-0.5 text-xs font-medium text-twitch">
+                                    Twitch
+                                  </span>
+                                )}
+                                {user.youtube_id && (
+                                  <span className="inline-flex items-center rounded bg-badge-bg px-2 py-0.5 text-xs font-medium text-youtube">
+                                    YouTube
+                                  </span>
+                                )}
+                                {user.kick_id && (
+                                  <span className="inline-flex items-center rounded bg-badge-bg px-2 py-0.5 text-xs font-medium text-kick">
+                                    Kick
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                          </div>
                             <p className="text-sm text-text-sub">@{user.username}</p>
                             <p className="mt-1 text-xs text-text-dim">
                               Joined {new Date(user.created_at).toLocaleDateString()}
@@ -947,6 +1030,141 @@ export default function UsersPage() {
                   )}
                 </div>
 
+                {/* Ambassador Section (ADR-0041): premium + early-access + public showcase */}
+                <div className="mt-6 border-t border-border pt-6">
+                  {selectedUser.is_ambassador ? (
+                    <>
+                      <div className="mb-3 rounded-lg border border-sky-500/20 bg-sky-500/10 p-3">
+                        <p className="text-sm font-medium text-sky-400">Ambassador</p>
+                        <p className="mt-1 text-xs text-sky-400/70">
+                          Has all premium plus early-access features. Appears on the homepage only
+                          after the streamer opts in from their settings.
+                        </p>
+                      </div>
+
+                      {/* Admin-curated showcase card */}
+                      <div className="space-y-3">
+                        <div>
+                          <p className="mb-1 text-xs font-medium text-text-sub">Showcase tagline</p>
+                          <input
+                            type="text"
+                            value={ambassadorTagline}
+                            onChange={(e) => setAmbassadorTagline(e.target.value)}
+                            maxLength={120}
+                            placeholder="e.g. Multistreams to Twitch, YouTube and Kick"
+                            aria-label="Ambassador showcase tagline"
+                            className="focus-visible:ring-ring w-full rounded-lg border border-border bg-surface-2 px-4 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <p className="mb-1 text-xs font-medium text-text-sub">
+                            Display order (lower shows first)
+                          </p>
+                          <input
+                            type="number"
+                            value={ambassadorSortOrder}
+                            onChange={(e) => setAmbassadorSortOrder(e.target.value)}
+                            aria-label="Ambassador display order"
+                            className="focus-visible:ring-ring w-full rounded-lg border border-border bg-surface-2 px-4 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none"
+                          />
+                        </div>
+                        <Button
+                          variant="outline"
+                          className="w-full"
+                          disabled={ambassadorLoading}
+                          aria-label={`Save showcase card for ${selectedUser.username}`}
+                          onClick={() =>
+                            handleSetAmbassador(selectedUser.id, selectedUser.username, true, {
+                              tagline: ambassadorTagline,
+                              sortOrder: Number.parseInt(ambassadorSortOrder, 10) || 0,
+                            })
+                          }
+                        >
+                          {ambassadorLoading ? 'Saving...' : 'Save showcase card'}
+                        </Button>
+                      </div>
+
+                      <Dialog.Root
+                        open={ambassadorDialogUser?.id === selectedUser.id}
+                        onOpenChange={(open) => {
+                          if (!open) setAmbassadorDialogUser(null)
+                        }}
+                      >
+                        <Dialog.Trigger
+                          render={
+                            <Button
+                              variant="outline"
+                              className="mt-3 w-full"
+                              aria-label={`Revoke Ambassador for ${selectedUser.username}`}
+                              onClick={() => setAmbassadorDialogUser(selectedUser)}
+                            >
+                              Revoke Ambassador
+                            </Button>
+                          }
+                        />
+                        <Dialog.Content showCloseButton={false}>
+                          <Dialog.Title>
+                            Revoke ambassador for &ldquo;{selectedUser.username}&rdquo;?
+                          </Dialog.Title>
+                          <Dialog.Description>
+                            They are removed from the homepage showcase and lose early-access
+                            features. Premium then follows their subscription or any admin override.
+                          </Dialog.Description>
+                          <div className="mt-6 flex justify-end gap-3">
+                            <Dialog.Close
+                              render={
+                                <Button variant="outline" disabled={ambassadorLoading}>
+                                  Cancel
+                                </Button>
+                              }
+                            />
+                            <Button
+                              variant="destructive"
+                              disabled={ambassadorLoading}
+                              onClick={() =>
+                                handleSetAmbassador(selectedUser.id, selectedUser.username, false)
+                              }
+                            >
+                              {ambassadorLoading ? 'Saving...' : 'Revoke Ambassador'}
+                            </Button>
+                          </div>
+                        </Dialog.Content>
+                      </Dialog.Root>
+                    </>
+                  ) : (
+                    <div className="space-y-3">
+                      <div>
+                        <p className="mb-1 text-xs font-medium text-text-sub">
+                          Showcase tagline (optional)
+                        </p>
+                        <input
+                          type="text"
+                          value={ambassadorTagline}
+                          onChange={(e) => setAmbassadorTagline(e.target.value)}
+                          maxLength={120}
+                          placeholder="e.g. Multistreams to Twitch, YouTube and Kick"
+                          aria-label="Ambassador showcase tagline"
+                          className="focus-visible:ring-ring w-full rounded-lg border border-border bg-surface-2 px-4 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none"
+                        />
+                      </div>
+                      <Button
+                        variant="outline"
+                        className="w-full border-sky-500/40 text-sky-400 hover:border-sky-500/60 hover:bg-sky-500/10"
+                        disabled={ambassadorLoading}
+                        aria-label={`Grant Ambassador to ${selectedUser.username}`}
+                        onClick={() =>
+                          handleSetAmbassador(selectedUser.id, selectedUser.username, true, {
+                            tagline: ambassadorTagline,
+                            sortOrder: Number.parseInt(ambassadorSortOrder, 10) || 0,
+                          })
+                        }
+                      >
+                        {ambassadorLoading ? 'Saving...' : 'Grant Ambassador'}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+
                 {/* Ban/Unban Section */}
                 <div className="mt-6 border-t border-border pt-6">
                   {selectedUser.is_banned ? (
@@ -1026,7 +1244,10 @@ export default function UsersPage() {
                           className="flex items-center gap-2 rounded-lg border border-border bg-surface-2 px-3 py-2 transition-colors hover:bg-surface-2/80"
                         >
                           {/* Primary: admin detail (owner-linked, in-app). */}
-                          <Link href={`/admin/overlays?overlay=${overlay.id}`} className="min-w-0 flex-1">
+                          <Link
+                            href={`/admin/overlays?overlay=${overlay.id}`}
+                            className="min-w-0 flex-1"
+                          >
                             <div className="truncate text-sm font-medium text-text">
                               {overlay.name}
                             </div>
@@ -1065,7 +1286,7 @@ export default function UsersPage() {
                   )}
                   <Link
                     href={`/admin/sources?user=${selectedUser.id}`}
-                    className="mt-3 inline-block text-xs font-medium text-primary hover:underline"
+                    className="text-primary mt-3 inline-block text-xs font-medium hover:underline"
                   >
                     View this user&rsquo;s sources
                   </Link>

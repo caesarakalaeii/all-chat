@@ -198,6 +198,25 @@ func NewServiceRegistry() (*ServiceRegistry, error) {
 		PathPrefix:  "/api/v1/admin/beta-tester",
 		StripPrefix: false,
 	}
+	// Ambassador routes (ADR-0041) → share-service. One prefix covers the public
+	// list (GET /api/v1/ambassadors) and the self-service showcase
+	// (/api/v1/ambassadors/me/showcase) by longest-prefix match.
+	registry.Services["share-service-ambassadors"] = &ServiceConfig{
+		Name:        "share-service-ambassadors",
+		BaseURL:     shareURL,
+		HealthPath:  "/health/live",
+		PathPrefix:  "/api/v1/ambassadors",
+		StripPrefix: false,
+	}
+	// Admin ambassador routes (ADR-0041) → share-service — separate prefix to avoid
+	// conflict with admin-users → auth-service, like admin/beta-tester above.
+	registry.Services["share-service-admin-ambassadors"] = &ServiceConfig{
+		Name:        "share-service-admin-ambassadors",
+		BaseURL:     shareURL,
+		HealthPath:  "/health/live",
+		PathPrefix:  "/api/v1/admin/ambassadors",
+		StripPrefix: false,
+	}
 
 	// Admin maintenance window routes → overlay-manager
 	registry.Services["admin-maintenance"] = &ServiceConfig{
