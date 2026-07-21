@@ -25,9 +25,26 @@
  * server-side and only performs the action once.
  */
 
-import { apiClient } from './client'
+import { ApiError, apiClient } from './client'
 import type { ModerationAction, ModerationCapabilities, ModerationPlatform } from '@/lib/types/moderation'
 import type { ViewItem } from '@/lib/utils/overlayViewModel'
+
+/**
+ * Whether a failed moderation action needs the streamer to re-authorize the platform.
+ *
+ * The moderation-service returns 403 with `requires_reauth: true` whenever the stored
+ * broadcaster token can no longer perform the action — the scope was never granted, the
+ * grant lapsed, or Helix rejected the token (401) even after a refresh. In every one of
+ * those cases the only fix is a fresh opt-in re-consent (force_verify superset), so the
+ * monitor view must surface the re-consent CTA rather than a dead-end "action failed".
+ *
+ * Keyed off the body flag, NOT the status code: a 403 without the flag (or the 422
+ * "you are not the broadcaster" case) is a genuine authorization failure that re-consent
+ * would not resolve, so it must not trigger a re-auth prompt.
+ */
+export function isModerationReauthError(err: unknown): boolean {
+  return err instanceof ApiError && err.data?.requires_reauth === true
+}
 
 /** Standard success envelope for every moderation POST. */
 export interface ModerationResult {
