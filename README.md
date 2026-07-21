@@ -58,7 +58,7 @@ The OBS overlay is built for compositing on stream, not for reading. For a **rea
 https://allch.at/overlay/YOUR_OVERLAY_ID/view
 ```
 
-A Twitch-dashboard-inspired monitor with a **resizable live Chat panel + Activity feed**, per-platform connection indicators, a config summary, and its own **light/dark mode**. It ignores the overlay's themes and animations — purely for observability — and even keeps moderated messages visible (struck-through) with a moderation log. No login required; it reuses the same public overlay link.
+A Twitch-dashboard-inspired monitor with a **resizable live Chat panel + Activity feed**, per-platform connection indicators, a config summary, and its own **light/dark mode**. Scrolling up **pauses the chat feed** on what you're reading (a pill shows how many new messages are waiting), and **clicking a username filters chat to that person**: a 1:1 conversation view that keeps up even when chat is flying by. It ignores the overlay's themes and animations — purely for observability — and even keeps moderated messages visible (struck-through) with a moderation log. No login required; it reuses the same public overlay link.
 
 You can also open it from your overlay's settings page (or its preview page) via the **Monitor View** button.
 

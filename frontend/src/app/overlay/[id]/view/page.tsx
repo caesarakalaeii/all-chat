@@ -20,11 +20,13 @@
  * Overlay Monitor View (/overlay/[id]/view) — authenticated dashboard.
  *
  * A Twitch-dashboard-inspired monitor for streamers: a resizable live Chat
- * panel + Activity feed, platform connection indicators, an overlay-config
- * summary, its own light/dark mode, view-local display toggles, and per-message
- * / per-user moderation controls for the overlay's owner. It reuses the exact
- * realtime pipeline the OBS overlay speaks (useOverlayStream) but renders a
- * readable, animation-free dashboard that ignores the overlay's CSS themes.
+ * panel + Activity feed (pause-on-scroll scrollback and a click-a-username 1:1
+ * chat filter live in ChatPanel), platform connection indicators, an
+ * overlay-config summary, its own light/dark mode, view-local display toggles,
+ * and per-message / per-user moderation controls for the overlay's owner. It
+ * reuses the exact realtime pipeline the OBS overlay speaks (useOverlayStream)
+ * but renders a readable, animation-free dashboard that ignores the overlay's
+ * CSS themes.
  *
  * Auth is enforced by the route's layout (ProtectedRoute via OverlayViewGuard);
  * moderation is further gated on overlay ownership + per-source capabilities.

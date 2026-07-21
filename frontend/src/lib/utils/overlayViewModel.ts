@@ -190,3 +190,41 @@ export function shouldAutoScroll(
 ): boolean {
   return metrics.scrollHeight - metrics.scrollTop - metrics.clientHeight <= threshold
 }
+
+/**
+ * One platform identity of a chatter, used to narrow the chat panel to a 1:1
+ * conversation. Keyed per platform: the same person on Twitch and Kick is two
+ * identities, which is what moderation and replies operate on too.
+ */
+export interface UserFilter {
+  /** Stable identity key: `platform:user.id`, falling back to the lowercased username. */
+  key: string
+  /** Human-readable name for the filter bar. */
+  label: string
+}
+
+/** Build the filter targeting an item's author, or null when it carries no user identity. */
+export function userFilterFor(item: ChatMessage): UserFilter | null {
+  const user = item.user
+  if (!user) return null
+  const id = user.id || user.username?.toLowerCase()
+  if (!id) return null
+  return { key: `${item.platform}:${id}`, label: user.display_name || user.username || id }
+}
+
+/** Whether an item was written by the identity a filter targets. */
+export function matchesUserFilter(item: ChatMessage, filter: UserFilter): boolean {
+  return userFilterFor(item)?.key === filter.key
+}
+
+/**
+ * How many live items arrived after a paused snapshot was taken. Compared by
+ * message id (not length) because the live buffer is capped and trims from the
+ * front while paused.
+ */
+export function countNewItems(snapshot: ViewItem[], live: ViewItem[]): number {
+  const seen = new Set(snapshot.map((m) => m.id))
+  let count = 0
+  for (const m of live) if (!seen.has(m.id)) count += 1
+  return count
+}

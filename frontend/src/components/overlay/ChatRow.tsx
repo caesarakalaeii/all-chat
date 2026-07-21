@@ -55,20 +55,43 @@ export interface ChatRowModeration extends Pick<
  * signal the overlay carries (platform, badges, pronouns, username color /
  * gradient, emotes) using neutral design tokens — no overlay theme CSS, no
  * animations. Moderated messages stay visible but struck-through and tagged.
+ * With `onUserClick`, the username becomes a button (the panel uses it to
+ * narrow chat to a 1:1 conversation with that chatter).
  */
 export function ChatRow({
   item,
   prefs = DEFAULT_VIEW_PREFS,
   moderation,
+  onUserClick,
 }: {
   item: ViewItem
   prefs?: MonitorViewPrefs
   moderation?: ChatRowModeration
+  onUserClick?: (item: ViewItem) => void
 }) {
   const mod = item._moderated
   const displayName = item.user?.display_name || item.user?.username
   const time = new Date(item.timestamp).toLocaleTimeString()
   const isShared = item.metadata?.is_shared_chat === true
+  // Gradient names render with a transparent text color, so a hover underline
+  // alone would be invisible on them — the opacity dip covers that case.
+  const nameEl = item.user?.name_gradient ? (
+    <span
+      className="font-semibold"
+      style={{
+        backgroundImage: buildGradientCSS(item.user.name_gradient),
+        WebkitBackgroundClip: 'text',
+        backgroundClip: 'text',
+        color: 'transparent',
+      }}
+    >
+      {displayName}
+    </span>
+  ) : (
+    <span className="font-semibold" style={{ color: item.user?.color || undefined }}>
+      {displayName}
+    </span>
+  )
   // System rows are operational notices, never moderatable.
   const showControls = prefs.showModeration && !!moderation && item.platform !== 'system'
 
@@ -129,22 +152,17 @@ export function ChatRow({
               />
             ) : null
           )}
-        {item.user?.name_gradient ? (
-          <span
-            className="font-semibold"
-            style={{
-              backgroundImage: buildGradientCSS(item.user.name_gradient),
-              WebkitBackgroundClip: 'text',
-              backgroundClip: 'text',
-              color: 'transparent',
-            }}
+        {onUserClick && item.user ? (
+          <button
+            type="button"
+            onClick={() => onUserClick(item)}
+            title={`Show only messages from ${displayName}`}
+            className="cursor-pointer rounded-sm align-baseline hover:underline hover:opacity-75 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
           >
-            {displayName}
-          </span>
+            {nameEl}
+          </button>
         ) : (
-          <span className="font-semibold" style={{ color: item.user?.color || undefined }}>
-            {displayName}
-          </span>
+          nameEl
         )}
         {prefs.showPronouns && item.user?.pronouns && (
           <span className="ml-1 rounded bg-surface-2 px-1 text-[10px] font-medium text-text-sub">
