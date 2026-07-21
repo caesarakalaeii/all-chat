@@ -185,6 +185,9 @@ func (c *SevenTVClient) fetchChannelEmotes(ctx context.Context, channel string) 
 		// No 7TV set for this channel — a benign miss, not a failure.
 		return nil, fmt.Errorf("7tv: no emote set for channel: %w", ErrNotFound)
 	}
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return nil, rateLimited("7tv", resp)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to fetch emotes: status code %d", resp.StatusCode)
 	}
@@ -234,6 +237,9 @@ func (c *SevenTVClient) FetchUserEmotes(ctx context.Context, platform, userID st
 		return []models.Emote{}, nil
 	}
 
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return nil, rateLimited("7tv", resp)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to fetch user emotes: status code %d", resp.StatusCode)
 	}
@@ -341,6 +347,9 @@ func (c *SevenTVClient) fetchPlatformConnectionEmotes(ctx context.Context, platf
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, fmt.Errorf("7TV %s connection not found for %s: %w", platform, channel, ErrNotFound)
+	}
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return nil, rateLimited("7tv", resp)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("7TV %s connection returned status %d", platform, resp.StatusCode)
@@ -460,6 +469,9 @@ func (c *SevenTVClient) fetchEmoteSetByID(ctx context.Context, setID, channel st
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, fmt.Errorf("override emote set %s not found", setID)
 	}
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return nil, rateLimited("7tv", resp)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("override emote set lookup returned status %d", resp.StatusCode)
 	}
@@ -498,6 +510,9 @@ func (c *SevenTVClient) fetchEmoteSet(ctx context.Context, setType, channel stri
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return nil, rateLimited("7tv", resp)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to fetch emote set: status code %d", resp.StatusCode)
 	}

@@ -43,21 +43,23 @@ type RedisClient interface {
 
 // EmoteCache handles caching of emotes in Redis
 type EmoteCache struct {
-	client    RedisClient
-	logger    *zap.Logger
-	ttl       time.Duration
-	globalTTL time.Duration
-	keyNS     string
+	client      RedisClient
+	logger      *zap.Logger
+	ttl         time.Duration
+	globalTTL   time.Duration
+	negativeTTL time.Duration
+	keyNS       string
 }
 
 // NewEmoteCache creates a new emote cache
 func NewEmoteCache(client RedisClient, logger *zap.Logger, ttl time.Duration) *EmoteCache {
 	return &EmoteCache{
-		client:    client,
-		logger:    logger,
-		ttl:       ttl,
-		globalTTL: 30 * 24 * time.Hour, // Global Twitch emotes cached for 30 days
-		keyNS:     cacheNamespace,
+		client:      client,
+		logger:      logger,
+		ttl:         ttl,
+		globalTTL:   30 * 24 * time.Hour, // Global Twitch emotes cached for 30 days
+		negativeTTL: 15 * time.Minute,
+		keyNS:       cacheNamespace,
 	}
 }
 
@@ -109,6 +111,31 @@ func (c *EmoteCache) Set(ctx context.Context, provider, channel string, emotes [
 		zap.Duration("ttl", ttl))
 
 	if err := c.client.Set(ctx, key, data, ttl).Err(); err != nil {
+		return fmt.Errorf("failed to set cache: %w", err)
+	}
+
+	return nil
+}
+
+// SetNegative caches an empty emote list for a provider/channel the provider answered
+// "not found" for. Not-found results were previously never cached, so every enrichment
+// request for a channel without a BTTV/FFZ/7TV set re-hit the provider — the dominant
+// share of upstream volume during a big-chat stream, and what tipped BTTV/FFZ into
+// rate-limiting us. The TTL is shorter than the positive one so a streamer's
+// newly-created emote set still shows up within minutes.
+func (c *EmoteCache) SetNegative(ctx context.Context, provider, channel string) error {
+	key := c.key(provider, channel)
+
+	data, err := json.Marshal([]models.Emote{})
+	if err != nil {
+		return fmt.Errorf("failed to marshal emotes: %w", err)
+	}
+
+	c.logger.Debug("Setting negative cache entry",
+		zap.String("key", key),
+		zap.Duration("ttl", c.negativeTTL))
+
+	if err := c.client.Set(ctx, key, data, c.negativeTTL).Err(); err != nil {
 		return fmt.Errorf("failed to set cache: %w", err)
 	}
 

@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/caesar/all-chat/services/emote-service/cache"
@@ -35,12 +36,14 @@ import (
 
 // mockEmoteClient for testing
 type mockEmoteClient struct {
-	emotes   []models.Emote
-	err      error
-	provider string
+	emotes     []models.Emote
+	err        error
+	provider   string
+	fetchCalls atomic.Int64
 }
 
 func (m *mockEmoteClient) FetchEmotes(ctx context.Context, channel string) ([]models.Emote, error) {
+	m.fetchCalls.Add(1)
 	return m.emotes, m.err
 }
 
@@ -51,8 +54,9 @@ func (m *mockEmoteClient) Provider() string {
 // mockEmoteCache for testing. The handler fans provider fetches out across goroutines,
 // so this shared cache must be safe for concurrent Get/Set.
 type mockEmoteCache struct {
-	mu   sync.Mutex
-	data map[string][]models.Emote
+	mu           sync.Mutex
+	data         map[string][]models.Emote
+	negativeKeys []string
 }
 
 func newMockEmoteCache() *mockEmoteCache {
@@ -77,6 +81,15 @@ func (m *mockEmoteCache) Set(ctx context.Context, provider, channel string, emot
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.data[key] = emotes
+	return nil
+}
+
+func (m *mockEmoteCache) SetNegative(ctx context.Context, provider, channel string) error {
+	key := provider + ":" + channel
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.data[key] = []models.Emote{}
+	m.negativeKeys = append(m.negativeKeys, key)
 	return nil
 }
 
