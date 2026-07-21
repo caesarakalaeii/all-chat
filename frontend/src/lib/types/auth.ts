@@ -35,6 +35,9 @@ export interface User {
   is_admin: boolean
   is_premium: boolean
   is_beta_tester: boolean
+  // Ambassador role (ADR-0041): premium + early-access + eligible for the public
+  // homepage showcase. Admin-granted; the streamer opts into the public card separately.
+  is_ambassador: boolean
   // Impersonation state surfaced from /auth/me when the JWT carries an
   // ImpersonatedBy claim (audit H3). Absent when not impersonating.
   impersonating?: boolean

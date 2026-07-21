@@ -40,6 +40,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { FaqSection } from '@/components/FaqSection'
+import { FeaturedAmbassadors } from '@/components/FeaturedAmbassadors'
 import { HomeHeader } from '@/components/HomeHeader'
 import { ThemeSwitcher } from '@/components/ThemeSwitcher'
 import { PlatformBadge } from '@/components/ui/badge'
@@ -426,6 +427,12 @@ export default function HomeClient() {
               ))}
             </div>
           </section>
+
+          {/* -------------------------------------------------------------- */}
+          {/* Featured Ambassadors — social proof (ADR-0041). Self-hides when */}
+          {/* there are no opted-in ambassadors.                              */}
+          {/* -------------------------------------------------------------- */}
+          <FeaturedAmbassadors />
 
           {/* -------------------------------------------------------------- */}
           {/* Beyond the overlay — extension + API in one compact 2-up band   */}

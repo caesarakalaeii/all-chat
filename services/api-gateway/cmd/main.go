@@ -592,6 +592,10 @@ func main() {
 		// Streamer info (public)
 		publicAPI.GET("/auth/streamers/:username", proxyHandler.ForwardRequest)
 
+		// Featured Ambassadors list (public, ADR-0041) — the marketing homepage
+		// showcase. -> share-service (opted-in ambassadors only).
+		publicAPI.GET("/ambassadors", proxyHandler.ForwardRequest)
+
 		// Emote service routes (public)
 		publicAPI.GET("/emotes/*path", proxyHandler.ForwardRequest)
 
@@ -727,6 +731,11 @@ func main() {
 		// keeps reporting an ended/crashed stream as live.
 		protectedAPI.POST("/moderation/overlays/:id/youtube/rediscover", proxyHandler.ForwardRequest)
 
+		// Ambassador self-service (ADR-0041) — a streamer reads/sets their own
+		// homepage-showcase opt-in. -> share-service (enforces the ambassador role).
+		protectedAPI.GET("/ambassadors/me/showcase", proxyHandler.ForwardRequest)
+		protectedAPI.PUT("/ambassadors/me/showcase", proxyHandler.ForwardRequest)
+
 		// Share service routes (all protected - require JWT auth)
 		protectedAPI.GET("/users/search", proxyHandler.ForwardRequest)              // -> share-service
 		protectedAPI.GET("/shares/incoming", proxyHandler.ForwardRequest)           // -> share-service
@@ -789,6 +798,9 @@ func main() {
 
 		// Beta-tester role management (-> share-service, ADR-0020)
 		adminAPI.POST("/beta-tester/users/:id", proxyHandler.ForwardRequest)
+
+		// Ambassador role management (-> share-service, ADR-0041)
+		adminAPI.POST("/ambassadors/users/:id", proxyHandler.ForwardRequest)
 
 		// Feature gate management (-> share-service)
 		adminAPI.GET("/feature-gates", proxyHandler.ForwardRequest)

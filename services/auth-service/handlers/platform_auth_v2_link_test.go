@@ -191,6 +191,7 @@ func setupLinkTestDB(t *testing.T) (*pgxpool.Pool, func()) {
 			is_admin BOOLEAN NOT NULL DEFAULT FALSE,
 			is_premium BOOLEAN NOT NULL DEFAULT FALSE,
 			is_beta_tester BOOLEAN NOT NULL DEFAULT FALSE,
+			is_ambassador BOOLEAN NOT NULL DEFAULT FALSE,
 			is_banned BOOLEAN NOT NULL DEFAULT FALSE,
 			banned_at TIMESTAMP,
 			banned_reason TEXT,
