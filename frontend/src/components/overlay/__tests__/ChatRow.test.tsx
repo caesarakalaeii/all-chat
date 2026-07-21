@@ -18,8 +18,8 @@
 
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest'
-import { render, screen, cleanup } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { render, screen, cleanup, fireEvent } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ChatRow } from '@/components/overlay/ChatRow'
 import { DEFAULT_VIEW_PREFS, type MonitorViewPrefs } from '@/app/overlay/[id]/view/viewPrefs'
@@ -28,6 +28,18 @@ import type { ViewItem } from '@/lib/utils/overlayViewModel'
 // jsdom doesn't implement SVG geometry; the AllChatBadge -> InfinityLogo
 // animation calls getTotalLength() on mount. Force a stub so rendering succeeds.
 ;(SVGElement.prototype as unknown as { getTotalLength: () => number }).getTotalLength = () => 0
+
+// jsdom may lack window.matchMedia; useReducedMotion (mounted via
+// MessageAttachments in every row) calls it. Static non-matching stub.
+if (typeof window.matchMedia !== 'function') {
+  window.matchMedia = (query: string) =>
+    ({
+      matches: false,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }) as unknown as MediaQueryList
+}
 
 afterEach(() => cleanup())
 
@@ -119,5 +131,21 @@ describe('ChatRow pref gating', () => {
       />
     )
     expect(screen.queryByLabelText('Delete message')).not.toBeInTheDocument()
+  })
+})
+
+describe('ChatRow username click', () => {
+  it('renders the username as a button and reports the clicked item', () => {
+    const onUserClick = vi.fn()
+    const item = makeItem()
+    render(<ChatRow item={item} onUserClick={onUserClick} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Alice' }))
+    expect(onUserClick).toHaveBeenCalledWith(item)
+  })
+
+  it('renders the username as plain text without an onUserClick handler', () => {
+    render(<ChatRow item={makeItem()} />)
+    expect(screen.getByText('Alice')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Alice' })).not.toBeInTheDocument()
   })
 })

@@ -20,12 +20,15 @@ import { describe, it, expect } from 'vitest'
 import type { ChatMessage, DeletionMetadata, EventType } from '@/lib/types/message'
 import {
   applyModerationMark,
+  countNewItems,
   deletionKind,
   isDeletionTarget,
+  matchesUserFilter,
   mergeByAgg,
   partitionItems,
   shouldAutoScroll,
   toModEntry,
+  userFilterFor,
   type ViewItem,
 } from '@/lib/utils/overlayViewModel'
 
@@ -178,6 +181,50 @@ describe('shouldAutoScroll', () => {
   it('respects a custom threshold', () => {
     expect(shouldAutoScroll({ scrollHeight: 1000, scrollTop: 800, clientHeight: 100 }, 100)).toBe(true)
     expect(shouldAutoScroll({ scrollHeight: 1000, scrollTop: 800, clientHeight: 100 }, 50)).toBe(false)
+  })
+})
+
+describe('userFilterFor / matchesUserFilter', () => {
+  it('keys the filter on platform + user id and labels it with the display name', () => {
+    const filter = userFilterFor(item('m1', { userId: 'u7' }))
+    expect(filter).toEqual({ key: 'twitch:u7', label: 'U' })
+  })
+
+  it('falls back to the lowercased username when the user has no id', () => {
+    const it1 = item('m1')
+    it1.user = { id: '', username: 'Alice', display_name: '', badges: [] }
+    expect(userFilterFor(it1)).toEqual({ key: 'twitch:alice', label: 'Alice' })
+  })
+
+  it('returns null for items without a user identity', () => {
+    // The types promise a user, but system rows can arrive without one.
+    const it1 = { ...item('m1'), user: undefined } as unknown as ChatMessage
+    expect(userFilterFor(it1)).toBeNull()
+    const it2 = item('m2')
+    it2.user = { id: '', username: '', display_name: '', badges: [] }
+    expect(userFilterFor(it2)).toBeNull()
+  })
+
+  it('matches only the same identity on the same platform', () => {
+    const filter = userFilterFor(item('m1', { userId: 'u7' }))!
+    expect(matchesUserFilter(item('m2', { userId: 'u7' }), filter)).toBe(true)
+    expect(matchesUserFilter(item('m3', { userId: 'u8' }), filter)).toBe(false)
+    const otherPlatform = { ...item('m4', { userId: 'u7' }), platform: 'kick' as const }
+    expect(matchesUserFilter(otherPlatform, filter)).toBe(false)
+  })
+})
+
+describe('countNewItems', () => {
+  it('counts live items missing from the snapshot, surviving front-trimming', () => {
+    const snapshot = [item('m1'), item('m2'), item('m3')]
+    // Buffer capped at 3: m1 trimmed away, m4 + m5 arrived since the pause.
+    const live = [item('m3'), item('m4'), item('m5')]
+    expect(countNewItems(snapshot, live)).toBe(2)
+  })
+
+  it('returns 0 when nothing arrived', () => {
+    const snapshot = [item('m1')]
+    expect(countNewItems(snapshot, [item('m1')])).toBe(0)
   })
 })
 
