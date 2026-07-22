@@ -51,6 +51,7 @@ jobs:
           - services/youtube-listener
           - services/youtube-listener-innertube
           - services/youtube-quota-monitor
+          - services/support-bot
           # Shared modules
           - shared
           - shared/ratelimit
@@ -105,7 +106,6 @@ jobs:
           - frontend
           - services/discord-bot
           - services/tiktok-listener
-          - services/support-bot
     steps:
       - uses: actions/checkout@v7
 

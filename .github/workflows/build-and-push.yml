@@ -289,6 +289,7 @@ jobs:
           - payment-service
           - engagement-service
           - discord-listener
+          - support-bot
 
     steps:
       - uses: actions/checkout@v7
@@ -303,25 +304,6 @@ jobs:
           cd services/${{ matrix.service }}
           go mod download
           go test -v -short ./...
-
-  test-node:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '22'
-          cache: 'npm'
-          cache-dependency-path: services/support-bot/package-lock.json
-
-      - name: Run tests for support-bot
-        run: |
-          cd services/support-bot
-          npm ci
-          npm test
 
   # engagement-service authz/durability regression tests (idor_test, round5_test,
   # native_mirror_test) are `//go:build integration` and need a real Postgres with the
