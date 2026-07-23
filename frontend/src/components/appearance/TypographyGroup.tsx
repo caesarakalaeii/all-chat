@@ -23,6 +23,7 @@ import { Select } from '@base-ui/react/select'
 import type { VisualSettings } from '@/lib/types/visual-settings'
 import { FontFamilyCombobox } from './FontFamilyCombobox'
 import { SliderControl } from './SliderControl'
+import { AdvancedDisclosure } from '@/components/editor/AdvancedDisclosure'
 
 interface FontWeightOption {
   label: string
@@ -194,26 +195,29 @@ export function TypographyGroup({
         </span>
       </div>
 
-      {/* Line Height */}
-      <SliderControl
-        label="Line Height"
-        value={lineHeight}
-        min={1.0}
-        max={2.5}
-        step={0.1}
-        onChange={(v) => onChange({ lineHeight: String(v) })}
-      />
+      {/* Low-traffic fine-tuning lives behind Advanced (ADR-0042) */}
+      <AdvancedDisclosure count={2}>
+        {/* Line Height */}
+        <SliderControl
+          label="Line Height"
+          value={lineHeight}
+          min={1.0}
+          max={2.5}
+          step={0.1}
+          onChange={(v) => onChange({ lineHeight: String(v) })}
+        />
 
-      {/* Letter Spacing */}
-      <SliderControl
-        label="Letter Spacing"
-        value={letterSpacing}
-        min={-2}
-        max={8}
-        step={0.5}
-        unit="px"
-        onChange={(v) => onChange({ letterSpacing: `${v}px` })}
-      />
+        {/* Letter Spacing */}
+        <SliderControl
+          label="Letter Spacing"
+          value={letterSpacing}
+          min={-2}
+          max={8}
+          step={0.5}
+          unit="px"
+          onChange={(v) => onChange({ letterSpacing: `${v}px` })}
+        />
+      </AdvancedDisclosure>
     </div>
   )
 }

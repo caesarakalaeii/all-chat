@@ -86,8 +86,21 @@ import { PlatformBadge } from '@/components/ui/badge'
 import { StatusBadge } from '@/app/dashboard/shares/components/StatusBadge'
 import { RevocationConfirmModal } from '@/app/dashboard/shares/components/RevocationConfirmModal'
 import { cn } from '@/lib/utils'
-import { AppearancePanel } from '@/components/appearance/AppearancePanel'
-import { CollapsibleSection } from '@/components/appearance/CollapsibleSection'
+import { TypographyGroup } from '@/components/appearance/TypographyGroup'
+import { ColorsGroup } from '@/components/appearance/ColorsGroup'
+import { BackgroundGroup } from '@/components/appearance/BackgroundGroup'
+import { VisibilityGroup } from '@/components/appearance/VisibilityGroup'
+import { SizingGroup } from '@/components/appearance/SizingGroup'
+import { PlatformColorsGroup } from '@/components/appearance/PlatformColorsGroup'
+import { EventsGroup } from '@/components/appearance/EventsGroup'
+import { FilterGroup } from '@/components/appearance/FilterGroup'
+import { SoundGroup } from '@/components/appearance/SoundGroup'
+import { TTSGroup } from '@/components/appearance/TTSGroup'
+import { EditorNav } from '@/components/editor/EditorNav'
+import { EditorSectionHeader } from '@/components/editor/EditorSectionHeader'
+import { SettingsSearch } from '@/components/editor/SettingsSearch'
+import { AdvancedDisclosure } from '@/components/editor/AdvancedDisclosure'
+import { EDITOR_SECTIONS, type EditorSectionId } from '@/components/editor/sectionRegistry'
 import dynamic from 'next/dynamic'
 
 // Dynamically import Monaco Editor to avoid SSR issues
@@ -117,6 +130,19 @@ const PLATFORM_BORDER: Record<string, string> = {
   tiktok: 'border-l-tiktok',
   shared_overlay: 'border-l-twitch',
   discord: 'border-l-discord',
+}
+
+// Last-active settings section (ADR-0042); replaces the retired per-drawer
+// open/closed maps (editor-panel-sections-v1 / appearance-panel-sections-v1).
+const ACTIVE_SECTION_STORAGE_KEY = 'editor-active-section-v1'
+
+// Maps onboarding spotlight targets to left-nav sections (ADR-0042). The
+// guide's 'appearance' target predates the flat nav; Typography is the first
+// Appearance-group section, so the "customize" step lands there.
+const SPOTLIGHT_SECTION: Record<'sources' | 'theme' | 'appearance', EditorSectionId> = {
+  sources: 'sources',
+  theme: 'theme',
+  appearance: 'typography',
 }
 
 // ---- Types -----------------------------------------------------------------
@@ -1521,11 +1547,23 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   const [spotlightOverride, setSpotlightOverride] = useState<
     'sources' | 'theme' | 'appearance' | null
   >(null)
-  const spotlightRefs = {
-    sources: useRef<HTMLDivElement>(null),
-    theme: useRef<HTMLDivElement>(null),
-    appearance: useRef<HTMLDivElement>(null),
-  }
+
+  // --- Settings navigation (ADR-0042): left nav, one section at a time ---
+  const [activeSection, setActiveSection] = useState<EditorSectionId>(() => {
+    if (typeof window === 'undefined') return 'theme'
+    try {
+      const stored = localStorage.getItem(ACTIVE_SECTION_STORAGE_KEY)
+      if (stored !== null && EDITOR_SECTIONS.some((s) => s.id === stored)) {
+        return stored as EditorSectionId
+      }
+    } catch {
+      // localStorage unavailable — fall through to the default section
+    }
+    return 'theme'
+  })
+  // Search jump target: a data-setting-anchor value inside the activating section
+  const [pendingAnchor, setPendingAnchor] = useState<string | null>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
 
   // --- Customization state ---
   const [maxMessages, setMaxMessages] = useState(50)
@@ -1574,10 +1612,9 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   const [themeId, setThemeId] = useState('')
 
   // Setup-guide wiring: bind steps 2-4 to this overlay, and while the guide
-  // is active spotlight exactly one of the three step sections (forced open,
-  // the other two forced closed — progressive disclosure for first-run
-  // users; the user's own section preferences are untouched, see
-  // CollapsibleSection.forceOpen).
+  // is active steer the left nav to the step's section (progressive
+  // disclosure for first-run users; the user's persisted last-active section
+  // is untouched, see the spotlight effect below).
   useEffect(() => {
     setActiveOverlay(id)
   }, [id, setActiveOverlay])
@@ -1611,14 +1648,62 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           ? 'theme'
           : null))
 
-  const sectionForce = (section: 'sources' | 'theme' | 'appearance'): boolean | undefined =>
-    onboardingActive ? spotlight === section : undefined
+  // While the guide is active, steer the nav to the spotlighted section. This
+  // is a one-shot navigation, not a lock: the user can still browse other
+  // sections, and each step change (or "Show me" click) re-steers. The user's
+  // persisted last-active section is untouched — spotlight-driven activations
+  // are not written to localStorage. Implemented as setState-during-render
+  // (React's "adjusting state when props change" pattern) so the redirected
+  // section renders in the same pass instead of flashing the old one.
+  const [lastSpotlight, setLastSpotlight] = useState<typeof spotlight>(null)
+  if (spotlight !== lastSpotlight) {
+    setLastSpotlight(spotlight)
+    if (spotlight !== null) {
+      setActiveSection(SPOTLIGHT_SECTION[spotlight])
+    }
+  }
+
+  function handleSelectSection(section: EditorSectionId): void {
+    setSpotlightOverride(null)
+    setActiveSection(section)
+    try {
+      localStorage.setItem(ACTIVE_SECTION_STORAGE_KEY, section)
+    } catch {
+      // localStorage unavailable — the selection just won't persist
+    }
+  }
+
+  function handleSearchNavigate(section: EditorSectionId, anchorId?: string): void {
+    handleSelectSection(section)
+    setPendingAnchor(anchorId ?? null)
+  }
+
+  // After a search jump renders the target section, scroll to and flash the
+  // anchored control; a control inside an AdvancedDisclosure gets its
+  // <details> forced open first so the target is actually on screen.
+  useEffect(() => {
+    if (pendingAnchor === null) return
+    const frame = requestAnimationFrame(() => {
+      const el = panelRef.current?.querySelector<HTMLElement>(
+        `[data-setting-anchor="${pendingAnchor}"]`
+      )
+      if (el !== null && el !== undefined) {
+        const details = el.closest('details')
+        if (details !== null) details.open = true
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        el.classList.add('setting-flash')
+        window.setTimeout(() => el.classList.remove('setting-flash'), 2000)
+      }
+      setPendingAnchor(null)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [pendingAnchor, activeSection])
 
   function handleSpotlightSection(section: 'sources' | 'theme' | 'appearance') {
     setSpotlightOverride(section)
-    // Let the forced-open render land before scrolling to the section.
+    // Let the section render land before scrolling the panel into view.
     requestAnimationFrame(() => {
-      spotlightRefs[section].current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
   }
 
@@ -1804,7 +1889,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     [sendTtsSettingsToIframe]
   )
 
-  // Phase 13 Plan 03 — ElevenLabs flow handlers (wired via AppearancePanel -> TTSGroup props)
+  // Phase 13 Plan 03 — ElevenLabs flow handlers (wired via TTSGroup props)
   const handleSaveTTSKey = useCallback(
     async (apiKey: string, voiceId: string): Promise<void> => {
       await overlaysApi.saveTTSKey(id, apiKey, voiceId)
@@ -2874,662 +2959,676 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
             </Dialog.Content>
           </Dialog.Root>
 
-          {/* 5-section collapsible editor panel */}
+          {/* Settings: search + left nav + one section at a time (ADR-0042) */}
           {/* sticky footer uses position:sticky bottom-0 — works because split-view-config has overflow-y-auto */}
           <div className="relative">
-            <div className="divide-y divide-border">
-              {/* Theme section — first and open by default */}
-              <div ref={spotlightRefs.theme}>
-                <CollapsibleSection
-                  id="theme"
-                  title="Theme"
-                  headingLevel={2}
-                  storageKey="editor-panel-sections-v1"
-                  defaultOpen={true}
-                  forceOpen={sectionForce('theme')}
-                >
-                  <ThemeContent onApply={handleThemeApply} isAdmin={user?.is_admin === true} />
-                  <button
-                    type="button"
-                    className="mt-3 text-xs text-text-sub underline-offset-2 hover:text-text hover:underline"
-                    onClick={handleResetToTheme}
-                  >
-                    Reset to theme defaults
-                  </button>
-                </CollapsibleSection>
-              </div>
+            <SettingsSearch onNavigate={handleSearchNavigate} />
+            <div className="@container mt-4">
+              <div className="flex flex-col gap-4 @md:flex-row @md:gap-5">
+                <EditorNav activeId={activeSection} onSelect={handleSelectSection} />
+                <div ref={panelRef} className="min-w-0 flex-1">
+                  <EditorSectionHeader id={activeSection} />
 
-              {/* Appearance section */}
-              <div ref={spotlightRefs.appearance}>
-                <CollapsibleSection
-                  id="appearance"
-                  title="Appearance"
-                  headingLevel={2}
-                  storageKey="editor-panel-sections-v1"
-                  defaultOpen={false}
-                  forceOpen={sectionForce('appearance')}
-                >
-                  <AppearancePanel
-                    visualSettings={visualSettings}
-                    onChange={handleVisualSettingsChange}
-                    visibilityDefaults={iframeVisibilityDefaults}
-                    filterSettings={filterSettings}
-                    onFilterChange={handleFilterSettingsChange}
-                    displaySettings={{ ...soundSettings, ...ttsSettings }}
-                    onSoundChange={handleSoundSettingsChange}
-                    isPremium={user?.is_premium ?? false}
-                    onTTSChange={handleTTSSettingsChange}
-                    overlayId={id}
-                    hasElevenLabsConfig={hasElevenLabsConfig}
-                    obsUrl={obsUrl}
-                    onTTSPreview={() => {
-                      // Browser Web Speech API preview — fires the fixed sample phrase through the
-                      // current rate/pitch/volume/voice_uri. Click again mid-speech cancels.
-                      if (
-                        typeof window === 'undefined' ||
-                        typeof window.speechSynthesis === 'undefined'
-                      )
-                        return
-                      const synth = window.speechSynthesis
-                      if (synth.speaking) {
-                        synth.cancel()
-                        return
-                      }
-                      const u = new SpeechSynthesisUtterance(
-                        'Hello, this is how your chat will sound.'
-                      )
-                      u.volume = ttsSettings.tts_volume ?? 0.8
-                      u.rate = ttsSettings.tts_rate ?? 1.0
-                      u.pitch = ttsSettings.tts_pitch ?? 1.0
-                      const savedUri = ttsSettings.tts_voice_uri
-                      if (savedUri) {
-                        const match = synth.getVoices().find((v) => v.voiceURI === savedUri)
-                        if (match) u.voice = match
-                      }
-                      synth.speak(u)
-                    }}
-                    onTTSPreviewStop={() => {
-                      if (typeof window !== 'undefined' && window.speechSynthesis) {
-                        window.speechSynthesis.cancel()
-                      }
-                    }}
-                    onSaveTTSKey={handleSaveTTSKey}
-                    onSaveTTSVoice={handleSaveTTSVoice}
-                    savedTTSVoiceId={elevenLabsVoiceId}
-                    onTestTTSKey={handleTestTTSKey}
-                    onRotateTTSToken={handleRotateTTSToken}
-                    onRemoveTTSKey={handleRemoveTTSKey}
-                    onFetchTTSVoices={handleFetchTTSVoices}
-                    onPreviewTTSVoices={handlePreviewTTSVoices}
-                  />
-                </CollapsibleSection>
-              </div>
+                  {activeSection === 'theme' && (
+                    <div>
+                      <ThemeContent onApply={handleThemeApply} isAdmin={user?.is_admin === true} />
+                      <button
+                        type="button"
+                        className="mt-3 text-xs text-text-sub underline-offset-2 hover:text-text hover:underline"
+                        onClick={handleResetToTheme}
+                      >
+                        Reset to theme defaults
+                      </button>
+                    </div>
+                  )}
 
-              {/* Sources section — open by default */}
-              <div ref={spotlightRefs.sources}>
-                <CollapsibleSection
-                  id="sources"
-                  title="Sources"
-                  headingLevel={2}
-                  storageKey="editor-panel-sections-v1"
-                  defaultOpen={true}
-                  forceOpen={sectionForce('sources')}
-                >
-                  {isLoading ? (
-                    <SourceListSkeleton />
-                  ) : (
-                    <div className="mb-4 space-y-3">
-                      {sources.map((source) => (
-                        <div key={source.id}>
-                          <SourceCard
-                            source={source}
-                            onRemove={handleRemoveSource}
-                            onRevoke={setRevokeTarget}
-                            onConfigureRelay={(s) =>
-                              setRelayExpandedSourceId((prev) => (prev === s.id ? null : s.id))
-                            }
-                            onConfigureStreamSelect={(s) =>
-                              setStreamSelectExpandedSourceId((prev) =>
-                                prev === s.id ? null : s.id
-                              )
-                            }
-                            isOwnChannel={
-                              // Prefer the server-computed flag (covers linked/non-Twitch-login
-                              // owners per ADR-0016); fall back to the username heuristic only if
-                              // the field is absent (older API responses).
-                              source.is_own_channel ??
-                              (user?.auth_provider === 'twitch' &&
-                                !!user?.username &&
-                                user.username.toLowerCase() === source.channel_id.toLowerCase())
-                            }
-                            onReconnectChat={handleReconnectTwitchChat}
-                          />
-                          {source.id === relayExpandedSourceId && source.platform === 'discord' && (
-                            <RelayPanel
-                              source={source}
-                              overlayId={id}
-                              onSaved={handleRelayConfigSaved}
-                            />
-                          )}
-                          {source.id === streamSelectExpandedSourceId &&
-                            source.platform === 'youtube' && (
-                              <StreamSelectionPanel
+                  {/* Appearance groups — promoted from the retired nested AppearancePanel (ADR-0042) */}
+                  {activeSection === 'typography' && (
+                    <TypographyGroup
+                      visualSettings={visualSettings}
+                      onChange={handleVisualSettingsChange}
+                    />
+                  )}
+                  {activeSection === 'colors' && (
+                    <ColorsGroup
+                      visualSettings={visualSettings}
+                      onChange={handleVisualSettingsChange}
+                    />
+                  )}
+                  {activeSection === 'background' && (
+                    <BackgroundGroup
+                      visualSettings={visualSettings}
+                      onChange={handleVisualSettingsChange}
+                    />
+                  )}
+                  {activeSection === 'visibility' && (
+                    <VisibilityGroup
+                      visualSettings={visualSettings}
+                      onChange={handleVisualSettingsChange}
+                      visibilityDefaults={iframeVisibilityDefaults}
+                    />
+                  )}
+                  {activeSection === 'sizing' && (
+                    <SizingGroup
+                      visualSettings={visualSettings}
+                      onChange={handleVisualSettingsChange}
+                    />
+                  )}
+                  {activeSection === 'platform-colors' && (
+                    <PlatformColorsGroup
+                      visualSettings={visualSettings}
+                      onChange={handleVisualSettingsChange}
+                    />
+                  )}
+                  {activeSection === 'events' && (
+                    <EventsGroup
+                      visualSettings={visualSettings}
+                      onChange={handleVisualSettingsChange}
+                    />
+                  )}
+                  {activeSection === 'filters' && (
+                    <FilterGroup
+                      filterSettings={filterSettings}
+                      onChange={handleFilterSettingsChange}
+                    />
+                  )}
+                  {activeSection === 'sounds' && (
+                    <SoundGroup
+                      displaySettings={{ ...soundSettings, ...ttsSettings }}
+                      onChange={handleSoundSettingsChange}
+                      isPremium={user?.is_premium ?? false}
+                    />
+                  )}
+                  {activeSection === 'tts' && (
+                    <TTSGroup
+                      displaySettings={{ ...soundSettings, ...ttsSettings }}
+                      onChange={handleTTSSettingsChange}
+                      isPremium={user?.is_premium ?? false}
+                      overlayId={id}
+                      hasElevenLabsConfig={hasElevenLabsConfig}
+                      obsUrl={obsUrl}
+                      onPreview={() => {
+                        // Browser Web Speech API preview — fires the fixed sample phrase through the
+                        // current rate/pitch/volume/voice_uri. Click again mid-speech cancels.
+                        if (
+                          typeof window === 'undefined' ||
+                          typeof window.speechSynthesis === 'undefined'
+                        )
+                          return
+                        const synth = window.speechSynthesis
+                        if (synth.speaking) {
+                          synth.cancel()
+                          return
+                        }
+                        const u = new SpeechSynthesisUtterance(
+                          'Hello, this is how your chat will sound.'
+                        )
+                        u.volume = ttsSettings.tts_volume ?? 0.8
+                        u.rate = ttsSettings.tts_rate ?? 1.0
+                        u.pitch = ttsSettings.tts_pitch ?? 1.0
+                        const savedUri = ttsSettings.tts_voice_uri
+                        if (savedUri) {
+                          const match = synth.getVoices().find((v) => v.voiceURI === savedUri)
+                          if (match) u.voice = match
+                        }
+                        synth.speak(u)
+                      }}
+                      onPreviewStop={() => {
+                        if (typeof window !== 'undefined' && window.speechSynthesis) {
+                          window.speechSynthesis.cancel()
+                        }
+                      }}
+                      onSaveKey={handleSaveTTSKey}
+                      onSaveVoice={handleSaveTTSVoice}
+                      savedVoiceId={elevenLabsVoiceId}
+                      onTestKey={handleTestTTSKey}
+                      onRotateToken={handleRotateTTSToken}
+                      onRemoveKey={handleRemoveTTSKey}
+                      onFetchVoices={handleFetchTTSVoices}
+                      onPreviewVoices={handlePreviewTTSVoices}
+                    />
+                  )}
+
+                  {activeSection === 'sources' && (
+                    <div>
+                      {isLoading ? (
+                        <SourceListSkeleton />
+                      ) : (
+                        <div className="mb-4 space-y-3">
+                          {sources.map((source) => (
+                            <div key={source.id}>
+                              <SourceCard
                                 source={source}
-                                overlayId={id}
-                                isPremium={user?.is_premium ?? false}
-                                onSaved={async () => {
-                                  const updated = await overlaysApi.getSources(id)
-                                  setSources(updated)
-                                }}
+                                onRemove={handleRemoveSource}
+                                onRevoke={setRevokeTarget}
+                                onConfigureRelay={(s) =>
+                                  setRelayExpandedSourceId((prev) => (prev === s.id ? null : s.id))
+                                }
+                                onConfigureStreamSelect={(s) =>
+                                  setStreamSelectExpandedSourceId((prev) =>
+                                    prev === s.id ? null : s.id
+                                  )
+                                }
+                                isOwnChannel={
+                                  // Prefer the server-computed flag (covers linked/non-Twitch-login
+                                  // owners per ADR-0016); fall back to the username heuristic only if
+                                  // the field is absent (older API responses).
+                                  source.is_own_channel ??
+                                  (user?.auth_provider === 'twitch' &&
+                                    !!user?.username &&
+                                    user.username.toLowerCase() === source.channel_id.toLowerCase())
+                                }
+                                onReconnectChat={handleReconnectTwitchChat}
                               />
-                            )}
-                        </div>
-                      ))}
-                      {sources.length === 0 && (
-                        <p className="py-2 text-sm text-text-sub">
-                          No sources added yet. Add a platform below.
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Accepted shared overlays — add as source */}
-                  {acceptedShares.length > 0 && (
-                    <div className="mb-4 border-t border-border pt-4">
-                      <h3 className="mb-3 text-sm font-medium text-text">Shared Overlays</h3>
-                      <div className="space-y-2">
-                        {acceptedShares.map((share) => (
-                          <button
-                            key={share.share_id}
-                            onClick={() => handleAddSharedOverlay(share)}
-                            className="flex w-full items-center justify-between rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text transition-colors hover:bg-surface-2"
-                          >
-                            <span>{share.sender_display_name}&apos;s overlay</span>
-                            <span className="text-xs text-twitch">+ Add</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <AddSourceForm
-                    overlayId={id}
-                    onAddTikTok={handleAddTikTokSource}
-                    onAddManual={handleAddManual}
-                    onSourceAdded={() =>
-                      overlaysApi.getSources(id).then(setSources).catch(console.error)
-                    }
-                    isAdmin={user?.is_admin === true}
-                  />
-                </CollapsibleSection>
-              </div>
-
-              {/* Behavior section */}
-              <CollapsibleSection
-                id="behavior"
-                title="Behavior"
-                headingLevel={2}
-                storageKey="editor-panel-sections-v1"
-                defaultOpen={false}
-              >
-                <div className="space-y-5">
-                  {/* Max Messages */}
-                  <div>
-                    <label className="mb-1 block text-xs text-text-sub">
-                      Max Messages: <span className="text-twitch">{maxMessages}</span>
-                    </label>
-                    <input
-                      type="range"
-                      min="10"
-                      max="100"
-                      value={maxMessages}
-                      onChange={(e) => setMaxMessages(parseInt(e.target.value))}
-                      className="w-full accent-twitch"
-                    />
-                  </div>
-
-                  {/* Message Duration */}
-                  <div>
-                    <label className="mb-1 block text-xs text-text-sub">
-                      Message Duration: <span className="text-twitch">{messageDuration}s</span>
-                    </label>
-                    <input
-                      type="range"
-                      min="5"
-                      max="60"
-                      value={messageDuration}
-                      onChange={(e) => setMessageDuration(parseInt(e.target.value))}
-                      className="w-full accent-twitch"
-                      disabled={disableMessageFade}
-                    />
-                  </div>
-
-                  {/* Disable fade */}
-                  <div>
-                    <label className="flex items-center gap-2 text-xs text-text-sub">
-                      <input
-                        type="checkbox"
-                        checked={disableMessageFade}
-                        onChange={(e) => setDisableMessageFade(e.target.checked)}
-                        className="accent-twitch"
-                      />
-                      Disable Message Fade Out
-                    </label>
-                    <p className="mt-1 ml-5 text-xs text-text-sub">
-                      Messages stay visible until max is reached
-                    </p>
-                  </div>
-
-                  {/* Invert message order */}
-                  <div>
-                    <label className="flex items-center gap-2 text-xs text-text-sub">
-                      <input
-                        type="checkbox"
-                        checked={invertMessageOrder}
-                        onChange={(e) => setInvertMessageOrder(e.target.checked)}
-                        className="accent-twitch"
-                      />
-                      Invert Message Order
-                    </label>
-                    <p className="mt-1 ml-5 text-xs text-text-sub">
-                      Show newest messages at the top instead of the bottom
-                    </p>
-                  </div>
-
-                  {/* Emote Providers */}
-                  <div>
-                    <p className="mb-2 text-xs text-text-sub">Emote Providers</p>
-                    <div className="space-y-1.5">
-                      <label className="flex items-center gap-2 text-xs text-text-sub">
-                        <input
-                          type="checkbox"
-                          checked={enable7tv}
-                          onChange={(e) => setEnable7tv(e.target.checked)}
-                          className="accent-twitch"
-                        />
-                        7TV
-                      </label>
-                      <label className="flex items-center gap-2 text-xs text-text-sub">
-                        <input
-                          type="checkbox"
-                          checked={enableBttv}
-                          onChange={(e) => setEnableBttv(e.target.checked)}
-                          className="accent-twitch"
-                        />
-                        BetterTTV
-                      </label>
-                      <label className="flex items-center gap-2 text-xs text-text-sub">
-                        <input
-                          type="checkbox"
-                          checked={enableFfz}
-                          onChange={(e) => setEnableFfz(e.target.checked)}
-                          className="accent-twitch"
-                        />
-                        FrankerFaceZ
-                      </label>
-                    </div>
-                  </div>
-
-                  {/* 7TV emote-set override — useful when no Twitch source exists */}
-                  <div>
-                    <p className="mb-1 text-xs text-text-sub">7TV Emote Set</p>
-                    <p className="mb-2 text-[11px] text-text-sub/70">
-                      Optional. Paste a 7TV emote-set ID, an emote-set URL, or your 7TV profile URL
-                      to attach those emotes to this overlay regardless of which platforms you
-                      stream on.
-                    </p>
-                    {/* Saved-state pill: shows what's actually attached right now,
-                        with a one-click Remove. Hidden while nothing is saved. */}
-                    {seventvOverrideSavedID !== '' && (
-                      <div className="mb-2 flex items-center justify-between gap-2 rounded-md border border-border bg-surface-2 px-2 py-1.5 text-[11px]">
-                        <span className="truncate text-text">
-                          <span className="text-text-sub">Currently active: </span>
-                          {seventvSavedDescriptor?.name ? (
-                            <>
-                              <span className="font-medium">
-                                &quot;{seventvSavedDescriptor.name}&quot;
-                              </span>
-                              {typeof seventvSavedDescriptor.emoteCount === 'number'
-                                ? ` (${seventvSavedDescriptor.emoteCount} emotes)`
-                                : ''}
-                            </>
-                          ) : (
-                            <span className="font-mono">{seventvOverrideSavedID}</span>
+                              {source.id === relayExpandedSourceId &&
+                                source.platform === 'discord' && (
+                                  <RelayPanel
+                                    source={source}
+                                    overlayId={id}
+                                    onSaved={handleRelayConfigSaved}
+                                  />
+                                )}
+                              {source.id === streamSelectExpandedSourceId &&
+                                source.platform === 'youtube' && (
+                                  <StreamSelectionPanel
+                                    source={source}
+                                    overlayId={id}
+                                    isPremium={user?.is_premium ?? false}
+                                    onSaved={async () => {
+                                      const updated = await overlaysApi.getSources(id)
+                                      setSources(updated)
+                                    }}
+                                  />
+                                )}
+                            </div>
+                          ))}
+                          {sources.length === 0 && (
+                            <p className="py-2 text-sm text-text-sub">
+                              No sources added yet. Add a platform below.
+                            </p>
                           )}
-                        </span>
+                        </div>
+                      )}
+
+                      {/* Accepted shared overlays — add as source */}
+                      {acceptedShares.length > 0 && (
+                        <div className="mb-4 border-t border-border pt-4">
+                          <h3 className="mb-3 text-sm font-medium text-text">Shared Overlays</h3>
+                          <div className="space-y-2">
+                            {acceptedShares.map((share) => (
+                              <button
+                                key={share.share_id}
+                                onClick={() => handleAddSharedOverlay(share)}
+                                className="flex w-full items-center justify-between rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text transition-colors hover:bg-surface-2"
+                              >
+                                <span>{share.sender_display_name}&apos;s overlay</span>
+                                <span className="text-xs text-twitch">+ Add</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <AddSourceForm
+                        overlayId={id}
+                        onAddTikTok={handleAddTikTokSource}
+                        onAddManual={handleAddManual}
+                        onSourceAdded={() =>
+                          overlaysApi.getSources(id).then(setSources).catch(console.error)
+                        }
+                        isAdmin={user?.is_admin === true}
+                      />
+                    </div>
+                  )}
+
+                  {activeSection === 'messages' && (
+                    <div className="space-y-5">
+                      {/* Max Messages */}
+                      <div data-setting-anchor="maxMessages">
+                        <label className="mb-1 block text-xs text-text-sub">
+                          Max Messages: <span className="text-twitch">{maxMessages}</span>
+                        </label>
+                        <input
+                          type="range"
+                          min="10"
+                          max="100"
+                          value={maxMessages}
+                          onChange={(e) => setMaxMessages(parseInt(e.target.value))}
+                          className="w-full accent-twitch"
+                        />
+                      </div>
+
+                      {/* Message Duration */}
+                      <div data-setting-anchor="messageDuration">
+                        <label className="mb-1 block text-xs text-text-sub">
+                          Message Duration: <span className="text-twitch">{messageDuration}s</span>
+                        </label>
+                        <input
+                          type="range"
+                          min="5"
+                          max="60"
+                          value={messageDuration}
+                          onChange={(e) => setMessageDuration(parseInt(e.target.value))}
+                          className="w-full accent-twitch"
+                          disabled={disableMessageFade}
+                        />
+                      </div>
+
+                      {/* Disable fade */}
+                      <div data-setting-anchor="disableFade">
+                        <label className="flex items-center gap-2 text-xs text-text-sub">
+                          <input
+                            type="checkbox"
+                            checked={disableMessageFade}
+                            onChange={(e) => setDisableMessageFade(e.target.checked)}
+                            className="accent-twitch"
+                          />
+                          Disable Message Fade Out
+                        </label>
+                        <p className="mt-1 ml-5 text-xs text-text-sub">
+                          Messages stay visible until max is reached
+                        </p>
+                      </div>
+
+                      {/* Invert message order */}
+                      <div data-setting-anchor="invertOrder">
+                        <label className="flex items-center gap-2 text-xs text-text-sub">
+                          <input
+                            type="checkbox"
+                            checked={invertMessageOrder}
+                            onChange={(e) => setInvertMessageOrder(e.target.checked)}
+                            className="accent-twitch"
+                          />
+                          Invert Message Order
+                        </label>
+                        <p className="mt-1 ml-5 text-xs text-text-sub">
+                          Show newest messages at the top instead of the bottom
+                        </p>
+                      </div>
+
+                      {/* Emote Providers */}
+                      <div data-setting-anchor="emoteProviders">
+                        <p className="mb-2 text-xs text-text-sub">Emote Providers</p>
+                        <div className="space-y-1.5">
+                          <label className="flex items-center gap-2 text-xs text-text-sub">
+                            <input
+                              type="checkbox"
+                              checked={enable7tv}
+                              onChange={(e) => setEnable7tv(e.target.checked)}
+                              className="accent-twitch"
+                            />
+                            7TV
+                          </label>
+                          <label className="flex items-center gap-2 text-xs text-text-sub">
+                            <input
+                              type="checkbox"
+                              checked={enableBttv}
+                              onChange={(e) => setEnableBttv(e.target.checked)}
+                              className="accent-twitch"
+                            />
+                            BetterTTV
+                          </label>
+                          <label className="flex items-center gap-2 text-xs text-text-sub">
+                            <input
+                              type="checkbox"
+                              checked={enableFfz}
+                              onChange={(e) => setEnableFfz(e.target.checked)}
+                              className="accent-twitch"
+                            />
+                            FrankerFaceZ
+                          </label>
+                        </div>
+                      </div>
+
+                      {/* 7TV emote-set override — useful when no Twitch source exists */}
+                      <AdvancedDisclosure count={1}>
+                        <div data-setting-anchor="seventvOverride">
+                          <p className="mb-1 text-xs text-text-sub">7TV Emote Set</p>
+                          <p className="mb-2 text-[11px] text-text-sub/70">
+                            Optional. Paste a 7TV emote-set ID, an emote-set URL, or your 7TV
+                            profile URL to attach those emotes to this overlay regardless of which
+                            platforms you stream on.
+                          </p>
+                          {/* Saved-state pill: shows what's actually attached right now,
+                        with a one-click Remove. Hidden while nothing is saved. */}
+                          {seventvOverrideSavedID !== '' && (
+                            <div className="mb-2 flex items-center justify-between gap-2 rounded-md border border-border bg-surface-2 px-2 py-1.5 text-[11px]">
+                              <span className="truncate text-text">
+                                <span className="text-text-sub">Currently active: </span>
+                                {seventvSavedDescriptor?.name ? (
+                                  <>
+                                    <span className="font-medium">
+                                      &quot;{seventvSavedDescriptor.name}&quot;
+                                    </span>
+                                    {typeof seventvSavedDescriptor.emoteCount === 'number'
+                                      ? ` (${seventvSavedDescriptor.emoteCount} emotes)`
+                                      : ''}
+                                  </>
+                                ) : (
+                                  <span className="font-mono">{seventvOverrideSavedID}</span>
+                                )}
+                              </span>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="shrink-0 text-[11px] text-red-500 hover:text-red-400"
+                                disabled={seventvRemoving || isSavingConfig}
+                                onClick={async () => {
+                                  setSeventvRemoving(true)
+                                  try {
+                                    await overlaysApi.updateConfig(id, {
+                                      seventv_emote_set_id: '',
+                                    })
+                                    setSeventvOverrideInput('')
+                                    setSeventvOverrideSavedID('')
+                                    setSeventvSavedDescriptor(null)
+                                    setSeventvResolveState({ status: 'idle' })
+                                    setConfigAlert({
+                                      type: 'success',
+                                      message: '7TV emote set removed',
+                                    })
+                                    setTimeout(() => setConfigAlert(null), 5000)
+                                  } catch (err) {
+                                    const message =
+                                      err instanceof Error
+                                        ? err.message
+                                        : 'Failed to remove 7TV emote set'
+                                    setConfigAlert({ type: 'error', message })
+                                    setTimeout(() => setConfigAlert(null), 5000)
+                                  } finally {
+                                    setSeventvRemoving(false)
+                                  }
+                                }}
+                              >
+                                {seventvRemoving ? 'Removing…' : 'Remove'}
+                              </Button>
+                            </div>
+                          )}
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={seventvOverrideInput}
+                              onChange={(e) => {
+                                setSeventvOverrideInput(e.target.value)
+                                setSeventvResolveState({ status: 'idle' })
+                              }}
+                              placeholder={
+                                seventvOverrideSavedID !== ''
+                                  ? 'Paste a new ID/URL to replace…'
+                                  : 'https://7tv.app/users/...'
+                              }
+                              className="flex-1 rounded-md border border-border bg-bg px-2 py-1 text-xs text-text"
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="text-xs"
+                              disabled={
+                                seventvResolveState.status === 'resolving' ||
+                                seventvOverrideInput.trim() === '' ||
+                                seventvOverrideInput.trim() === seventvOverrideSavedID
+                              }
+                              onClick={async () => {
+                                setSeventvResolveState({ status: 'resolving' })
+                                try {
+                                  const result = await overlaysApi.resolveSevenTV(
+                                    id,
+                                    seventvOverrideInput.trim()
+                                  )
+                                  setSeventvResolveState({
+                                    status: 'resolved',
+                                    setID: result.emote_set_id,
+                                    name: result.name,
+                                    emoteCount: result.emote_count,
+                                  })
+                                } catch (err) {
+                                  const message =
+                                    err instanceof Error
+                                      ? err.message
+                                      : 'Could not resolve 7TV reference'
+                                  setSeventvResolveState({ status: 'error', message })
+                                }
+                              }}
+                            >
+                              {seventvResolveState.status === 'resolving' ? 'Checking…' : 'Verify'}
+                            </Button>
+                          </div>
+                          {seventvResolveState.status === 'resolved' &&
+                            seventvResolveState.setID !== seventvOverrideSavedID && (
+                              <p className="mt-1 text-[11px] text-green-500">
+                                Resolved
+                                {seventvResolveState.name
+                                  ? ` to "${seventvResolveState.name}"`
+                                  : ''}
+                                {typeof seventvResolveState.emoteCount === 'number'
+                                  ? ` (${seventvResolveState.emoteCount} emotes)`
+                                  : ''}
+                                {' — click Save Configuration to apply.'}
+                              </p>
+                            )}
+                          {seventvResolveState.status === 'error' && (
+                            <p className="mt-1 text-[11px] text-red-500">
+                              {seventvResolveState.message}
+                            </p>
+                          )}
+                        </div>
+                      </AdvancedDisclosure>
+                    </div>
+                  )}
+
+                  {/* Engagement — polls, predictions & viewer points (issue #523) */}
+                  {activeSection === 'engagement' && <EngagementPanel overlayId={id} />}
+
+                  {activeSection === 'custom-css' && (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-medium text-text">Custom CSS</span>
+                        <label className="flex cursor-pointer items-center gap-2 text-xs text-text-sub">
+                          <input
+                            type="checkbox"
+                            checked={useCustomCss}
+                            onChange={(e) => setUseCustomCss(e.target.checked)}
+                            className="accent-twitch"
+                          />
+                          Enable
+                        </label>
                         <Button
                           type="button"
-                          variant="ghost"
+                          variant="outline"
                           size="sm"
-                          className="shrink-0 text-[11px] text-red-500 hover:text-red-400"
-                          disabled={seventvRemoving || isSavingConfig}
-                          onClick={async () => {
-                            setSeventvRemoving(true)
-                            try {
-                              await overlaysApi.updateConfig(id, {
-                                seventv_emote_set_id: '',
-                              })
-                              setSeventvOverrideInput('')
-                              setSeventvOverrideSavedID('')
-                              setSeventvSavedDescriptor(null)
-                              setSeventvResolveState({ status: 'idle' })
-                              setConfigAlert({
-                                type: 'success',
-                                message: '7TV emote set removed',
-                              })
-                              setTimeout(() => setConfigAlert(null), 5000)
-                            } catch (err) {
-                              const message =
-                                err instanceof Error
-                                  ? err.message
-                                  : 'Failed to remove 7TV emote set'
-                              setConfigAlert({ type: 'error', message })
-                              setTimeout(() => setConfigAlert(null), 5000)
-                            } finally {
-                              setSeventvRemoving(false)
-                            }
+                          className="ml-auto text-xs"
+                          onClick={() => {
+                            setCustomCss('')
+                            setUseCustomCss(false)
                           }}
                         >
-                          {seventvRemoving ? 'Removing…' : 'Remove'}
+                          Reset
                         </Button>
                       </div>
-                    )}
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={seventvOverrideInput}
-                        onChange={(e) => {
-                          setSeventvOverrideInput(e.target.value)
-                          setSeventvResolveState({ status: 'idle' })
-                        }}
-                        placeholder={
-                          seventvOverrideSavedID !== ''
-                            ? 'Paste a new ID/URL to replace…'
-                            : 'https://7tv.app/users/...'
-                        }
-                        className="flex-1 rounded-md border border-border bg-bg px-2 py-1 text-xs text-text"
+
+                      <MonacoCSSEditor
+                        value={customCss}
+                        onChange={setCustomCss}
+                        height="300px"
+                        placeholder="/* Enter your custom CSS here */"
                       />
+
+                      <p className="text-xs text-text-sub">
+                        Need inspiration? Explore{' '}
+                        <a
+                          href="https://github.com/caesarakalaeii/all-chat/tree/main/docs/overlay-themes"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-twitch hover:underline"
+                        >
+                          theme docs
+                        </a>
+                        .
+                      </p>
+                    </div>
+                  )}
+
+                  {activeSection === 'testing' && (
+                    <div className="space-y-3" data-setting-anchor="mockMessage">
+                      <div>
+                        <label
+                          htmlFor={`${mockFieldId}-platform`}
+                          className="mb-1 block text-xs text-text-sub"
+                        >
+                          Platform
+                        </label>
+                        <select
+                          id={`${mockFieldId}-platform`}
+                          value={mockForm.platform}
+                          onChange={(e) =>
+                            handleMockInputChange(
+                              'platform',
+                              e.target.value as MockMessageFormState['platform']
+                            )
+                          }
+                          className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                        >
+                          <option value="twitch">Twitch</option>
+                          <option value="youtube">YouTube</option>
+                          <option value="kick">Kick</option>
+                          <option value="tiktok">TikTok</option>
+                        </select>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label
+                            htmlFor={`${mockFieldId}-display-name`}
+                            className="mb-1 block text-xs text-text-sub"
+                          >
+                            Display Name
+                          </label>
+                          <input
+                            id={`${mockFieldId}-display-name`}
+                            type="text"
+                            value={mockForm.displayName}
+                            onChange={(e) => handleMockInputChange('displayName', e.target.value)}
+                            className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label
+                            htmlFor={`${mockFieldId}-username`}
+                            className="mb-1 block text-xs text-text-sub"
+                          >
+                            Username
+                          </label>
+                          <input
+                            id={`${mockFieldId}-username`}
+                            type="text"
+                            value={mockForm.username}
+                            onChange={(e) => handleMockInputChange('username', e.target.value)}
+                            className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label
+                            htmlFor={`${mockFieldId}-avatar-url`}
+                            className="mb-1 block text-xs text-text-sub"
+                          >
+                            Avatar URL
+                          </label>
+                          <input
+                            id={`${mockFieldId}-avatar-url`}
+                            type="text"
+                            value={mockForm.avatarUrl}
+                            onChange={(e) => handleMockInputChange('avatarUrl', e.target.value)}
+                            placeholder="https://..."
+                            className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label
+                            htmlFor={`${mockFieldId}-color`}
+                            className="mb-1 block text-xs text-text-sub"
+                          >
+                            Name Color
+                          </label>
+                          <input
+                            id={`${mockFieldId}-color`}
+                            type="color"
+                            value={mockForm.color}
+                            onChange={(e) => handleMockInputChange('color', e.target.value)}
+                            className="h-9 w-full rounded-lg border border-border bg-surface px-2 py-1.5"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label
+                          htmlFor={`${mockFieldId}-message`}
+                          className="mb-1 block text-xs text-text-sub"
+                        >
+                          Message
+                        </label>
+                        <textarea
+                          id={`${mockFieldId}-message`}
+                          value={mockForm.message}
+                          onChange={(e) => handleMockInputChange('message', e.target.value)}
+                          className="h-16 w-full resize-none rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                          placeholder="Type something fun..."
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        onClick={() => void handleAddMockMessage()}
+                        disabled={!mockForm.message.trim()}
+                        className="w-full"
+                      >
+                        Inject Message
+                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="flex-1 text-xs"
+                          data-setting-anchor="sampleChat"
+                          onClick={() => void handleAddSampleTranscript()}
+                        >
+                          💬 Sample Chat
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="flex-1 border-yellow-600/40 text-xs text-yellow-400 hover:bg-yellow-900/20"
+                          data-setting-anchor="sampleEvents"
+                          onClick={() => void handleAddSampleEvents()}
+                        >
+                          ⭐ Sample Events
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {activeSection === 'danger-zone' && (
+                    <div className="space-y-3">
+                      <p className="text-xs text-text-sub">
+                        Reset your overlay ID to revoke any leaked OBS URLs. A new overlay with the
+                        same configuration will be created and you will be redirected to it. The old
+                        overlay and its URL will be permanently deleted.
+                      </p>
                       <Button
                         type="button"
                         variant="outline"
-                        size="sm"
-                        className="text-xs"
-                        disabled={
-                          seventvResolveState.status === 'resolving' ||
-                          seventvOverrideInput.trim() === '' ||
-                          seventvOverrideInput.trim() === seventvOverrideSavedID
-                        }
-                        onClick={async () => {
-                          setSeventvResolveState({ status: 'resolving' })
-                          try {
-                            const result = await overlaysApi.resolveSevenTV(
-                              id,
-                              seventvOverrideInput.trim()
-                            )
-                            setSeventvResolveState({
-                              status: 'resolved',
-                              setID: result.emote_set_id,
-                              name: result.name,
-                              emoteCount: result.emote_count,
-                            })
-                          } catch (err) {
-                            const message =
-                              err instanceof Error ? err.message : 'Could not resolve 7TV reference'
-                            setSeventvResolveState({ status: 'error', message })
-                          }
-                        }}
+                        className="border-destructive/50 text-destructive hover:bg-destructive/10 w-full"
+                        onClick={() => setShowResetConfirm(true)}
+                        disabled={isResetting}
                       >
-                        {seventvResolveState.status === 'resolving' ? 'Checking…' : 'Verify'}
+                        {isResetting ? 'Resetting…' : 'Reset Overlay ID'}
                       </Button>
                     </div>
-                    {seventvResolveState.status === 'resolved' &&
-                      seventvResolveState.setID !== seventvOverrideSavedID && (
-                        <p className="mt-1 text-[11px] text-green-500">
-                          Resolved
-                          {seventvResolveState.name ? ` to "${seventvResolveState.name}"` : ''}
-                          {typeof seventvResolveState.emoteCount === 'number'
-                            ? ` (${seventvResolveState.emoteCount} emotes)`
-                            : ''}
-                          {' — click Save Configuration to apply.'}
-                        </p>
-                      )}
-                    {seventvResolveState.status === 'error' && (
-                      <p className="mt-1 text-[11px] text-red-500">{seventvResolveState.message}</p>
-                    )}
-                  </div>
+                  )}
                 </div>
-              </CollapsibleSection>
-
-              {/* Engagement section — polls, predictions & viewer points (issue #523) */}
-              <CollapsibleSection
-                id="engagement"
-                title="Engagement"
-                headingLevel={2}
-                storageKey="editor-panel-sections-v1"
-                defaultOpen={false}
-              >
-                <EngagementPanel overlayId={id} />
-              </CollapsibleSection>
-
-              {/* Expert section — collapsed by default */}
-              <CollapsibleSection
-                id="expert"
-                title="Expert"
-                headingLevel={2}
-                storageKey="editor-panel-sections-v1"
-                defaultOpen={false}
-              >
-                {/* Custom CSS */}
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-medium text-text">Custom CSS</span>
-                    <label className="flex cursor-pointer items-center gap-2 text-xs text-text-sub">
-                      <input
-                        type="checkbox"
-                        checked={useCustomCss}
-                        onChange={(e) => setUseCustomCss(e.target.checked)}
-                        className="accent-twitch"
-                      />
-                      Enable
-                    </label>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="ml-auto text-xs"
-                      onClick={() => {
-                        setCustomCss('')
-                        setUseCustomCss(false)
-                      }}
-                    >
-                      Reset
-                    </Button>
-                  </div>
-
-                  <MonacoCSSEditor
-                    value={customCss}
-                    onChange={setCustomCss}
-                    height="300px"
-                    placeholder="/* Enter your custom CSS here */"
-                  />
-
-                  <p className="text-xs text-text-sub">
-                    Need inspiration? Explore{' '}
-                    <a
-                      href="https://github.com/caesarakalaeii/all-chat/tree/main/docs/overlay-themes"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-twitch hover:underline"
-                    >
-                      theme docs
-                    </a>
-                    .
-                  </p>
-                </div>
-
-                {/* Mock Messages */}
-                <div className="mt-6 space-y-3">
-                  <p className="text-xs font-medium text-text">Mock Messages</p>
-                  <div>
-                    <label
-                      htmlFor={`${mockFieldId}-platform`}
-                      className="mb-1 block text-xs text-text-sub"
-                    >
-                      Platform
-                    </label>
-                    <select
-                      id={`${mockFieldId}-platform`}
-                      value={mockForm.platform}
-                      onChange={(e) =>
-                        handleMockInputChange(
-                          'platform',
-                          e.target.value as MockMessageFormState['platform']
-                        )
-                      }
-                      className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
-                    >
-                      <option value="twitch">Twitch</option>
-                      <option value="youtube">YouTube</option>
-                      <option value="kick">Kick</option>
-                      <option value="tiktok">TikTok</option>
-                    </select>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label
-                        htmlFor={`${mockFieldId}-display-name`}
-                        className="mb-1 block text-xs text-text-sub"
-                      >
-                        Display Name
-                      </label>
-                      <input
-                        id={`${mockFieldId}-display-name`}
-                        type="text"
-                        value={mockForm.displayName}
-                        onChange={(e) => handleMockInputChange('displayName', e.target.value)}
-                        className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label
-                        htmlFor={`${mockFieldId}-username`}
-                        className="mb-1 block text-xs text-text-sub"
-                      >
-                        Username
-                      </label>
-                      <input
-                        id={`${mockFieldId}-username`}
-                        type="text"
-                        value={mockForm.username}
-                        onChange={(e) => handleMockInputChange('username', e.target.value)}
-                        className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label
-                        htmlFor={`${mockFieldId}-avatar-url`}
-                        className="mb-1 block text-xs text-text-sub"
-                      >
-                        Avatar URL
-                      </label>
-                      <input
-                        id={`${mockFieldId}-avatar-url`}
-                        type="text"
-                        value={mockForm.avatarUrl}
-                        onChange={(e) => handleMockInputChange('avatarUrl', e.target.value)}
-                        placeholder="https://..."
-                        className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label
-                        htmlFor={`${mockFieldId}-color`}
-                        className="mb-1 block text-xs text-text-sub"
-                      >
-                        Name Color
-                      </label>
-                      <input
-                        id={`${mockFieldId}-color`}
-                        type="color"
-                        value={mockForm.color}
-                        onChange={(e) => handleMockInputChange('color', e.target.value)}
-                        className="h-9 w-full rounded-lg border border-border bg-surface px-2 py-1.5"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label
-                      htmlFor={`${mockFieldId}-message`}
-                      className="mb-1 block text-xs text-text-sub"
-                    >
-                      Message
-                    </label>
-                    <textarea
-                      id={`${mockFieldId}-message`}
-                      value={mockForm.message}
-                      onChange={(e) => handleMockInputChange('message', e.target.value)}
-                      className="h-16 w-full resize-none rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
-                      placeholder="Type something fun..."
-                    />
-                  </div>
-                  <Button
-                    type="button"
-                    onClick={() => void handleAddMockMessage()}
-                    disabled={!mockForm.message.trim()}
-                    className="w-full"
-                  >
-                    Inject Message
-                  </Button>
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="flex-1 text-xs"
-                      onClick={() => void handleAddSampleTranscript()}
-                    >
-                      💬 Sample Chat
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="flex-1 border-yellow-600/40 text-xs text-yellow-400 hover:bg-yellow-900/20"
-                      onClick={() => void handleAddSampleEvents()}
-                    >
-                      ⭐ Sample Events
-                    </Button>
-                  </div>
-                </div>
-              </CollapsibleSection>
-
-              {/* Danger Zone section */}
-              <CollapsibleSection
-                id="danger-zone"
-                title="Danger Zone"
-                headingLevel={2}
-                storageKey="editor-panel-sections-v1"
-                defaultOpen={false}
-              >
-                <div className="space-y-3">
-                  <p className="text-xs text-text-sub">
-                    Reset your overlay ID to revoke any leaked OBS URLs. A new overlay with the same
-                    configuration will be created and you will be redirected to it. The old overlay
-                    and its URL will be permanently deleted.
-                  </p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="border-destructive/50 text-destructive hover:bg-destructive/10 w-full"
-                    onClick={() => setShowResetConfirm(true)}
-                    disabled={isResetting}
-                  >
-                    {isResetting ? 'Resetting…' : 'Reset Overlay ID'}
-                  </Button>
-                </div>
-              </CollapsibleSection>
+              </div>
             </div>
 
             {/* Sticky Save footer — position:sticky works inside overflow-y-auto split-view-config container */}
