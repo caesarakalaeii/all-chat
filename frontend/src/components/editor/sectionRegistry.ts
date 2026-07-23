@@ -147,6 +147,10 @@ export const EDITOR_SECTIONS: EditorSection[] = [
       { label: 'Username Font', keywords: 'font name' },
       { label: 'Timestamp Font', keywords: 'font time' },
       { label: 'Font Weight', keywords: 'bold thin light black' },
+      {
+        label: 'Text Shadow',
+        keywords: 'shadow outline readability contrast legibility glow drop stroke',
+      },
       { label: 'Body Size', keywords: 'font size text bigger smaller px' },
       { label: 'Username Size', keywords: 'font size name px' },
       { label: 'Timestamp Size', keywords: 'font size time px' },

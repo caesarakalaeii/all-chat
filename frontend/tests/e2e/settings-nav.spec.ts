@@ -108,6 +108,48 @@ test.describe('editor settings navigation', () => {
     await expect(page.getByText('7TV Emote Set', { exact: true })).toBeVisible()
   })
 
+  test('preview backdrop picker recolors the pane and persists', async ({ page }) => {
+    const panel = page.getByTestId('preview-panel')
+    await page.getByRole('button', { name: 'Preview on chroma green' }).click()
+    await expect(panel).toHaveCSS('background-color', 'rgb(0, 177, 64)')
+
+    await page.reload()
+    await expect(page.getByTestId('preview-panel')).toHaveCSS(
+      'background-color',
+      'rgb(0, 177, 64)',
+      { timeout: 20_000 }
+    )
+    // Reset restores the default app background
+    await page.getByRole('button', { name: 'Preview on app background' }).click()
+    await expect(page.getByTestId('preview-panel')).not.toHaveCSS(
+      'background-color',
+      'rgb(0, 177, 64)'
+    )
+  })
+
+  test('text shadow preset reaches the live preview', async ({ page }) => {
+    // Wait for the embed to render before changing settings: its message
+    // listener registers on mount, and the editor re-syncs on EMBED_READY —
+    // but a cold iframe load can otherwise outlast the assertion window.
+    const previewBody = page
+      .frameLocator('iframe[title="Overlay live preview"]')
+      .locator('.overlay-preview-body')
+    await expect(previewBody).toBeVisible({ timeout: 20_000 })
+
+    // Findable by what it is FOR, not just its name
+    const search = page.getByRole('combobox', { name: 'Search settings' })
+    await search.fill('readability')
+    await page.getByRole('option', { name: /^Text Shadow/ }).click()
+    await expect(page.getByRole('heading', { name: 'Typography' })).toBeVisible()
+
+    await page.getByLabel('Text Shadow').selectOption({ label: 'Soft shadow' })
+    // The var travels via VISUAL_CSS_UPDATE into the embed and inherits from
+    // the preview body container.
+    await expect(previewBody).toHaveCSS('text-shadow', 'rgba(0, 0, 0, 0.6) 0px 1px 2px', {
+      timeout: 15_000,
+    })
+  })
+
   test('last active section persists across reloads', async ({ page }) => {
     const nav = page.getByRole('navigation', { name: 'Overlay settings' })
     await nav.getByRole('button', { name: 'Sounds' }).click()

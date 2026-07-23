@@ -667,7 +667,12 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
         />
       )}
 
-      <div className="overlay-live-body space-y-3" style={containerStyle}>
+      {/* text-shadow inherits to every text node below; the var is injected by
+          visualSettingsToCss and gradient usernames force it off locally */}
+      <div
+        className="overlay-live-body space-y-3"
+        style={{ textShadow: 'var(--chat-text-shadow, none)', ...containerStyle }}
+      >
         {invertMessageOrder && <div ref={messagesEndRef} className="scroll-anchor" />}
         {(invertMessageOrder ? [...messages].reverse() : messages).map((message, index) => {
           const isSharedChat = message.metadata?.is_shared_chat === true

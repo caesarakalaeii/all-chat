@@ -135,4 +135,13 @@ describe('visualSettingsToCss', () => {
     const result = visualSettingsToCss({ timestampFontFamily: 'Georgia' })
     expect(result).toContain('--chat-timestamp-font-family: Georgia;')
   })
+
+  it('emits --chat-text-shadow for textShadow, including multi-shadow values', () => {
+    const result = visualSettingsToCss({
+      textShadow: '0 1px 2px rgba(0, 0, 0, 0.9), 0 2px 6px rgba(0, 0, 0, 0.7)',
+    })
+    expect(result).toContain(
+      '--chat-text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 2px 6px rgba(0, 0, 0, 0.7);'
+    )
+  })
 })
