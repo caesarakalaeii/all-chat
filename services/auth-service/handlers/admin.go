@@ -105,6 +105,10 @@ func (h *AdminHandler) ListUsers(c *gin.Context) {
 		BannedAt            *string `json:"banned_at,omitempty"`
 		BannedReason        *string `json:"banned_reason,omitempty"`
 		BannedBy            *string `json:"banned_by,omitempty"`
+		// Overlay-setup counts, used by the admin UI to flag and filter users
+		// who signed up but never configured a working overlay.
+		OverlaysCount int `json:"overlays_count"`
+		SourcesCount  int `json:"sources_count"`
 	}
 
 	response := make([]UserResponse, len(users))
@@ -143,6 +147,8 @@ func (h *AdminHandler) ListUsers(c *gin.Context) {
 			BannedAt:            bannedAt,
 			BannedReason:        user.BannedReason,
 			BannedBy:            user.BannedBy,
+			OverlaysCount:       user.OverlaysCount,
+			SourcesCount:        user.SourcesCount,
 		}
 	}
 

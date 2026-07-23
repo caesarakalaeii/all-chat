@@ -51,6 +51,11 @@ type User struct {
 	// NULL = first-run setup guide is shown; deliberately no omitempty so the
 	// frontend receives an explicit null for users who have not onboarded.
 	OnboardingCompletedAt *time.Time `json:"onboarding_completed_at"`
+	// Overlay-setup counts, populated only by GetAllUsers to power the admin
+	// "never set up an overlay" filter. Not persisted and excluded from JSON;
+	// the admin listing handler exposes them via its own response struct.
+	OverlaysCount int `json:"-"`
+	SourcesCount  int `json:"-"`
 }
 
 // TwitchUserInfo represents Twitch user data from OAuth
