@@ -133,17 +133,19 @@ export function VisibilityGroup({ visualSettings, onChange, visibilityDefaults =
         const defaultChecked = isVisible(defaults[row.field], true)
         const checked = isVisible(settings[row.field], defaultChecked)
         return (
-          <ToggleSwitch
-            key={row.field}
-            label={row.label}
-            checked={checked}
-            onChange={(next) => onChange({ [row.field]: toDisplayValue(row.field, next) })}
-          />
+          // data-setting-anchor: jump target for the editor settings search (ADR-0042)
+          <div key={row.field} data-setting-anchor={row.field}>
+            <ToggleSwitch
+              label={row.label}
+              checked={checked}
+              onChange={(next) => onChange({ [row.field]: toDisplayValue(row.field, next) })}
+            />
+          </div>
         )
       })}
 
       {/* Platform Badge */}
-      <div className="border-t border-border pt-3">
+      <div className="border-t border-border pt-3" data-setting-anchor="showPlatformBadge">
         <ToggleSwitch
           label="Show platform badge"
           checked={platformBadgeVisible}
@@ -174,7 +176,7 @@ export function VisibilityGroup({ visualSettings, onChange, visibilityDefaults =
       </div>
 
       {/* Platform Indicators */}
-      <div className="border-t border-border pt-3">
+      <div className="border-t border-border pt-3" data-setting-anchor="showPlatformIndicators">
         <ToggleSwitch
           label="Show platform indicators"
           checked={platformIndicatorsVisible}
@@ -183,7 +185,7 @@ export function VisibilityGroup({ visualSettings, onChange, visibilityDefaults =
       </div>
 
       {/* Pronouns — Phase 9 */}
-      <div className="border-t border-border pt-3">
+      <div className="border-t border-border pt-3" data-setting-anchor="showPronouns">
         <ToggleSwitch
           label="Show pronouns"
           checked={pronounsVisible}

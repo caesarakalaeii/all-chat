@@ -23,6 +23,7 @@ import React from 'react'
 import type { VisualSettings } from '@/lib/types/visual-settings'
 import { ColorPickerControl } from './ColorPickerControl'
 import { SliderControl } from './SliderControl'
+import { AdvancedDisclosure } from '@/components/editor/AdvancedDisclosure'
 
 export interface BackgroundGroupProps {
   visualSettings: Partial<VisualSettings>
@@ -80,33 +81,36 @@ export function BackgroundGroup({ visualSettings, onChange }: BackgroundGroupPro
         unit="px"
         onChange={(v) => onChange({ bubbleBorderWidth: `${v}px` })}
       />
-      <SliderControl
-        label="Padding"
-        value={parseFloat(visualSettings.bubblePadding ?? '8')}
-        min={0}
-        max={32}
-        step={2}
-        unit="px"
-        onChange={(v) => onChange({ bubblePadding: `${v}px` })}
-      />
-      <SliderControl
-        label="Message gap"
-        value={parseFloat(visualSettings.messageGap ?? '4')}
-        min={0}
-        max={24}
-        step={2}
-        unit="px"
-        onChange={(v) => onChange({ messageGap: `${v}px` })}
-      />
-      <SliderControl
-        label="Backdrop blur"
-        value={parseFloat(visualSettings.backdropBlur ?? '0')}
-        min={0}
-        max={20}
-        step={1}
-        unit="px"
-        onChange={(v) => onChange({ backdropBlur: `${v}px` })}
-      />
+      {/* Low-traffic fine-tuning lives behind Advanced (ADR-0042) */}
+      <AdvancedDisclosure count={3}>
+        <SliderControl
+          label="Padding"
+          value={parseFloat(visualSettings.bubblePadding ?? '8')}
+          min={0}
+          max={32}
+          step={2}
+          unit="px"
+          onChange={(v) => onChange({ bubblePadding: `${v}px` })}
+        />
+        <SliderControl
+          label="Message gap"
+          value={parseFloat(visualSettings.messageGap ?? '4')}
+          min={0}
+          max={24}
+          step={2}
+          unit="px"
+          onChange={(v) => onChange({ messageGap: `${v}px` })}
+        />
+        <SliderControl
+          label="Backdrop blur"
+          value={parseFloat(visualSettings.backdropBlur ?? '0')}
+          min={0}
+          max={20}
+          step={1}
+          unit="px"
+          onChange={(v) => onChange({ backdropBlur: `${v}px` })}
+        />
+      </AdvancedDisclosure>
     </div>
   )
 }

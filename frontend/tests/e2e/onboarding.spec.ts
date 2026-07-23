@@ -172,9 +172,12 @@ test.describe('first-run setup guide', () => {
     // choose_theme active.
     await expect(guide.getByText('2 of 4 steps done')).toBeVisible()
     await expect(guide.getByRole('button', { name: 'Show me' })).toBeVisible()
-    // The theme section is force-opened by the spotlight.
-    const themeTrigger = page.getByRole('button', { name: 'Theme', exact: true })
-    await expect(themeTrigger).toHaveAttribute('aria-expanded', 'true')
+    // The spotlight steers the settings nav to the Theme section (ADR-0042).
+    const themeNavItem = page
+      .getByRole('navigation', { name: 'Overlay settings' })
+      .getByRole('button', { name: 'Theme', exact: true })
+    await expect(themeNavItem).toHaveAttribute('aria-current', 'true')
+    await expect(page.getByRole('heading', { name: 'Theme', exact: true })).toBeVisible()
     await expectNoNewA11yViolations(page, 'overlay-editor', testInfo)
   })
 

@@ -22,6 +22,7 @@
 import React from 'react'
 import { ToggleSwitch } from './ToggleSwitch'
 import { SliderControl } from './SliderControl'
+import { AdvancedDisclosure } from '@/components/editor/AdvancedDisclosure'
 import { PremiumBadge } from '@/components/PremiumBadge'
 import { PremiumUpsellLink } from '@/components/PremiumUpsellLink'
 import { PRESET_NAMES } from '@/lib/utils/soundPlayer'
@@ -87,16 +88,6 @@ export function SoundGroup({ displaySettings, onChange, isPremium, onPreview }: 
             onChange={(v) => onChange({ notification_sound_volume: v })}
           />
 
-          <SliderControl
-            label="Cooldown"
-            value={cooldown}
-            min={100}
-            max={5000}
-            step={100}
-            unit=" ms"
-            onChange={(v) => onChange({ notification_sound_cooldown: v })}
-          />
-
           {onPreview && (
             <button
               type="button"
@@ -107,28 +98,42 @@ export function SoundGroup({ displaySettings, onChange, isPremium, onPreview }: 
             </button>
           )}
 
-          <div>
-            <div className="mb-1 flex items-center gap-2">
-              {!isPremium && <PremiumBadge />}
-              <p className="text-sm text-text-sub">
-                Custom sound URL
-                {!isPremium && (
-                  <span className="ml-1 text-xs text-text-dim">
-                    — Upload your own notification sound (<PremiumUpsellLink>Premium</PremiumUpsellLink>)
-                  </span>
-                )}
-              </p>
-            </div>
-            <input
-              type="url"
-              aria-label="Custom sound URL"
-              placeholder="https://example.com/sound.mp3"
-              value={customUrl}
-              disabled={!isPremium}
-              onChange={(e) => onChange({ notification_sound_url: e.target.value })}
-              className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text placeholder:text-text-dim disabled:cursor-not-allowed disabled:opacity-50"
+          {/* Low-traffic fine-tuning lives behind Advanced (ADR-0042) */}
+          <AdvancedDisclosure count={2}>
+            <SliderControl
+              label="Cooldown"
+              value={cooldown}
+              min={100}
+              max={5000}
+              step={100}
+              unit=" ms"
+              onChange={(v) => onChange({ notification_sound_cooldown: v })}
             />
-          </div>
+
+            <div>
+              <div className="mb-1 flex items-center gap-2">
+                {!isPremium && <PremiumBadge />}
+                <p className="text-sm text-text-sub">
+                  Custom sound URL
+                  {!isPremium && (
+                    <span className="ml-1 text-xs text-text-dim">
+                      — Upload your own notification sound (
+                      <PremiumUpsellLink>Premium</PremiumUpsellLink>)
+                    </span>
+                  )}
+                </p>
+              </div>
+              <input
+                type="url"
+                aria-label="Custom sound URL"
+                placeholder="https://example.com/sound.mp3"
+                value={customUrl}
+                disabled={!isPremium}
+                onChange={(e) => onChange({ notification_sound_url: e.target.value })}
+                className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text placeholder:text-text-dim disabled:cursor-not-allowed disabled:opacity-50"
+              />
+            </div>
+          </AdvancedDisclosure>
         </>
       )}
     </div>

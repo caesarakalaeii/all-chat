@@ -32,6 +32,7 @@ export interface VisualSettings {
   lineHeight?: string         // --chat-line-height
   letterSpacing?: string      // --chat-letter-spacing
   fontSize?: string           // --chat-font-size
+  textShadow?: string         // --chat-text-shadow (inherited from the overlay container)
 
   // Colors
   messageColor?: string       // --chat-message-color

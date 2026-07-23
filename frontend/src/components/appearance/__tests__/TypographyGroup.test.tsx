@@ -19,7 +19,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import React from 'react'
-import { render, screen, cleanup } from '@testing-library/react'
+import { render, screen, cleanup, fireEvent } from '@testing-library/react'
 import type { VisualSettings } from '@/lib/types/visual-settings'
 import { TypographyGroup } from '../TypographyGroup'
 
@@ -55,6 +55,37 @@ describe('TypographyGroup', () => {
     render(<TypographyGroup visualSettings={defaultSettings} onChange={onChange} />)
     expect(screen.getByText(/line height/i)).toBeDefined()
     expect(screen.getByText(/letter spacing/i)).toBeDefined()
+  })
+
+  it('renders the text shadow presets and reports a patch on change', () => {
+    const onChange = vi.fn()
+    render(<TypographyGroup visualSettings={defaultSettings} onChange={onChange} />)
+    const select = screen.getByLabelText(/text shadow/i) as HTMLSelectElement
+    expect(select).toBeDefined()
+    fireEvent.change(select, { target: { value: '0 1px 2px rgba(0, 0, 0, 0.6)' } })
+    expect(onChange).toHaveBeenCalledWith({ textShadow: '0 1px 2px rgba(0, 0, 0, 0.6)' })
+  })
+
+  it('selecting None unsets textShadow (falls back to theme/none)', () => {
+    const onChange = vi.fn()
+    render(
+      <TypographyGroup
+        visualSettings={{ textShadow: '0 1px 2px rgba(0, 0, 0, 0.6)' }}
+        onChange={onChange}
+      />
+    )
+    fireEvent.change(screen.getByLabelText(/text shadow/i), { target: { value: '' } })
+    expect(onChange).toHaveBeenCalledWith({ textShadow: undefined })
+  })
+
+  it('shows a Custom option when the saved shadow matches no preset', () => {
+    const onChange = vi.fn()
+    render(
+      <TypographyGroup visualSettings={{ textShadow: '2px 2px 0 #ff00ff' }} onChange={onChange} />
+    )
+    const select = screen.getByLabelText(/text shadow/i) as HTMLSelectElement
+    expect(select.value).toBe('2px 2px 0 #ff00ff')
+    expect(screen.getByText('Custom')).toBeDefined()
   })
 
   it.todo('onChange called with fontFamily patch when font selection changes')

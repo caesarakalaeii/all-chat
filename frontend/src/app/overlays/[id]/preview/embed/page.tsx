@@ -673,6 +673,9 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
           style={{
             scrollbarWidth: 'thin',
             scrollbarColor: '#374151 transparent',
+            // text-shadow inherits to every text node below; the var arrives
+            // via VISUAL_CSS_UPDATE (live) or the saved visual_settings (load)
+            textShadow: 'var(--chat-text-shadow, none)',
             ...containerStyle,
           }}
         >

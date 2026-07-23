@@ -517,6 +517,15 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 **Impact**: A third admin-granted role reusing the beta-tester machinery; grants take effect immediately; real people are only featured with explicit consent; the homepage section self-hides when nobody has opted in. A generic `user_roles` table stays deferred (reconsider at a fourth role). (ADR numbering shared with caesar-deployment, so this is 0041)
 **→ Read**: [0041-ambassador-role.md](./0041-ambassador-role.md)
 
+### ADR-0042: Overlay Editor Settings Navigation (Left Nav Replaces Stacked Drawers)
+
+**Status**: ✅ Accepted
+**Date**: 2026-07-23
+**Problem**: The overlay editor stacked all settings as nested accordion drawers (7 top-level, "Appearance" nesting 10 more), putting controls 2–3 levels deep with no search and no usage tiering. External usability feedback showed users get lost in the reflowing stack and cannot find settings they can name (e.g. the badge visibility toggle)
+**Decision**: Replace the drawer stack with a searchable left nav inside the existing SplitView config column: every section flat and always visible in the nav (grouped Setup / Appearance / Behavior / Advanced), exactly one section panel rendered at a time, a static `sectionRegistry` powering search over control labels + synonyms (jump-to-control with highlight), and low-traffic controls behind a per-section `AdvancedDisclosure`. `AppearancePanel`'s nested groups become first-class sections; the mock message/event injector is promoted from the Expert drawer to a Setup-group "Testing" section. Presentation-only — the save contract, preview postMessage protocol, and backend are untouched
+**Impact**: Named settings are findable via search; navigation never reflows the column; the onboarding spotlight forces the active section instead of drawer open-state; the 3,600-line editor page decomposes into per-section components opportunistically. (ADR numbering shared with caesar-deployment, so this is 0042)
+**→ Read**: [0042-editor-left-nav-settings.md](./0042-editor-left-nav-settings.md)
+
 ---
 
 ## How to Create a New ADR

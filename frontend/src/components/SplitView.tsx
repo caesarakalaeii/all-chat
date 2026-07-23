@@ -20,9 +20,22 @@
 
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useRef, useState, useCallback } from 'react'
+import { PreviewBackdropPicker } from '@/components/editor/PreviewBackdropPicker'
 
 const MIN_LEFT = 25
 const MAX_LEFT = 70
+
+/** Editor-only preview backdrop color; never part of the overlay config. */
+const PREVIEW_BG_STORAGE_KEY = 'editor-preview-bg-v1'
+
+function readStoredPreviewBg(): string | null {
+  if (typeof window === 'undefined') return null
+  try {
+    return localStorage.getItem(PREVIEW_BG_STORAGE_KEY)
+  } catch {
+    return null
+  }
+}
 
 /** Percentage step applied per click of the divider's step buttons (WCAG 2.5.7). */
 const BUTTON_STEP = 10
@@ -48,6 +61,20 @@ export function SplitView({
   const containerRef = useRef<HTMLDivElement>(null)
   const [leftPct, setLeftPct] = useState(40)
   const isDragging = useRef(false)
+
+  // Preview backdrop: the embed is transparent (OBS keys it), so this pane's
+  // background is what chat is read against. Persisted locally, never saved
+  // to the overlay.
+  const [previewBg, setPreviewBg] = useState<string | null>(readStoredPreviewBg)
+  const handlePreviewBgChange = useCallback((color: string | null) => {
+    setPreviewBg(color)
+    try {
+      if (color === null) localStorage.removeItem(PREVIEW_BG_STORAGE_KEY)
+      else localStorage.setItem(PREVIEW_BG_STORAGE_KEY, color)
+    } catch {
+      // localStorage unavailable — the choice just won't persist
+    }
+  }, [])
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     e.currentTarget.setPointerCapture(e.pointerId)
@@ -137,7 +164,12 @@ export function SplitView({
       </div>
 
       {/* Preview panel */}
-      <div className="min-h-[300px] flex-1 overflow-hidden bg-bg md:min-h-0">
+      <div
+        data-testid="preview-panel"
+        className="relative min-h-[300px] flex-1 overflow-hidden bg-bg md:min-h-0"
+        style={previewBg !== null ? { backgroundColor: previewBg } : undefined}
+      >
+        <PreviewBackdropPicker value={previewBg} onChange={handlePreviewBgChange} />
         <iframe
           ref={useCallback(
             (el: HTMLIFrameElement | null) => {

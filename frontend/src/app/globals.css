@@ -384,3 +384,29 @@ span.font-semibold.text-sm.username-gradient {
   --color-text-dim: #6b7280;
   --color-nav-bg: rgba(255, 255, 255, 0.9);
 }
+
+/* Settings-search jump highlight (ADR-0042): applied by the overlay editor
+   when a search result lands on an anchored control, removed after 2s. */
+@keyframes setting-flash {
+  0%,
+  55% {
+    background-color: color-mix(in oklab, var(--color-twitch) 12%, transparent);
+    box-shadow: inset 0 0 0 1px var(--color-twitch);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: none;
+  }
+}
+
+.setting-flash {
+  border-radius: 8px;
+  animation: setting-flash 2s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .setting-flash {
+    animation: none;
+    background-color: color-mix(in oklab, var(--color-twitch) 12%, transparent);
+  }
+}

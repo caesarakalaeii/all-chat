@@ -23,6 +23,7 @@ import React, { useState } from 'react'
 import { X } from 'lucide-react'
 import { ToggleSwitch } from './ToggleSwitch'
 import { SliderControl } from './SliderControl'
+import { AdvancedDisclosure } from '@/components/editor/AdvancedDisclosure'
 import type { FilterSettings } from '@/lib/types/overlay'
 
 export interface FilterGroupProps {
@@ -132,15 +133,18 @@ export function FilterGroup({ filterSettings, onChange }: FilterGroupProps): Rea
         checked={filterSettings.hide_commands ?? false}
         onChange={(checked) => onChange({ hide_commands: checked })}
       />
-      <SliderControl
-        label="Min message length"
-        value={filterSettings.min_message_length ?? 0}
-        min={0}
-        max={200}
-        step={1}
-        unit=" chars"
-        onChange={(v) => onChange({ min_message_length: v })}
-      />
+      {/* Low-traffic fine-tuning lives behind Advanced (ADR-0042) */}
+      <AdvancedDisclosure count={1}>
+        <SliderControl
+          label="Min message length"
+          value={filterSettings.min_message_length ?? 0}
+          min={0}
+          max={200}
+          step={1}
+          unit=" chars"
+          onChange={(v) => onChange({ min_message_length: v })}
+        />
+      </AdvancedDisclosure>
     </div>
   )
 }

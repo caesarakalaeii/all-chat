@@ -29,6 +29,7 @@ export const PROPERTY_MAP: ReadonlyArray<[keyof VisualSettings, string]> = [
   ['lineHeight',            '--chat-line-height'],
   ['letterSpacing',         '--chat-letter-spacing'],
   ['fontSize',              '--chat-font-size'],
+  ['textShadow',            '--chat-text-shadow'],
   // Colors
   ['messageColor',          '--chat-message-color'],
   ['usernameColor',         '--chat-username-color'],
