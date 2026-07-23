@@ -23,6 +23,7 @@ import { Select } from '@base-ui/react/select'
 import type { VisualSettings } from '@/lib/types/visual-settings'
 import { FontFamilyCombobox } from './FontFamilyCombobox'
 import { SliderControl } from './SliderControl'
+import { AdvancedDisclosure } from '@/components/editor/AdvancedDisclosure'
 
 interface FontWeightOption {
   label: string
@@ -38,6 +39,23 @@ const FONT_WEIGHT_OPTIONS: FontWeightOption[] = [
   { label: '700 Bold', value: '700' },
   { label: '800 ExtraBold', value: '800' },
   { label: '900 Black', value: '900' },
+]
+
+// Readability presets for chat text over live video. Values are full
+// text-shadow declarations applied via --chat-text-shadow (inherited from the
+// overlay container). '' = unset the field, falling back to the theme/none.
+const TEXT_SHADOW_PRESETS: ReadonlyArray<{ label: string; value: string }> = [
+  { label: 'None (default)', value: '' },
+  { label: 'Soft shadow', value: '0 1px 2px rgba(0, 0, 0, 0.6)' },
+  {
+    label: 'Strong shadow',
+    value: '0 1px 2px rgba(0, 0, 0, 0.9), 0 2px 6px rgba(0, 0, 0, 0.7)',
+  },
+  {
+    label: 'Outline',
+    value:
+      '1px 1px 0 rgba(0, 0, 0, 0.85), -1px 1px 0 rgba(0, 0, 0, 0.85), 1px -1px 0 rgba(0, 0, 0, 0.85), -1px -1px 0 rgba(0, 0, 0, 0.85)',
+  },
 ]
 
 export interface TypographyGroupProps {
@@ -194,26 +212,55 @@ export function TypographyGroup({
         </span>
       </div>
 
-      {/* Line Height */}
-      <SliderControl
-        label="Line Height"
-        value={lineHeight}
-        min={1.0}
-        max={2.5}
-        step={0.1}
-        onChange={(v) => onChange({ lineHeight: String(v) })}
-      />
+      {/* Text Shadow — readability against live video */}
+      <div className="flex flex-col gap-1">
+        <label htmlFor={`${fieldId}-text-shadow`} className="text-sm text-text-sub">
+          Text Shadow
+        </label>
+        <select
+          id={`${fieldId}-text-shadow`}
+          value={visualSettings.textShadow ?? ''}
+          onChange={(e) => onChange({ textShadow: e.target.value === '' ? undefined : e.target.value })}
+          className="rounded border border-border bg-bg px-2 py-1.5 text-sm text-text focus-visible:ring-1 focus-visible:ring-border focus-visible:outline-none"
+        >
+          {TEXT_SHADOW_PRESETS.map((preset) => (
+            <option key={preset.label} value={preset.value}>
+              {preset.label}
+            </option>
+          ))}
+          {visualSettings.textShadow !== undefined &&
+            !TEXT_SHADOW_PRESETS.some((p) => p.value === visualSettings.textShadow) && (
+              <option value={visualSettings.textShadow}>Custom</option>
+            )}
+        </select>
+        <p className="text-xs text-text-dim">
+          Keeps chat readable over bright gameplay. Try it with a light preview backdrop.
+        </p>
+      </div>
 
-      {/* Letter Spacing */}
-      <SliderControl
-        label="Letter Spacing"
-        value={letterSpacing}
-        min={-2}
-        max={8}
-        step={0.5}
-        unit="px"
-        onChange={(v) => onChange({ letterSpacing: `${v}px` })}
-      />
+      {/* Low-traffic fine-tuning lives behind Advanced (ADR-0042) */}
+      <AdvancedDisclosure count={2}>
+        {/* Line Height */}
+        <SliderControl
+          label="Line Height"
+          value={lineHeight}
+          min={1.0}
+          max={2.5}
+          step={0.1}
+          onChange={(v) => onChange({ lineHeight: String(v) })}
+        />
+
+        {/* Letter Spacing */}
+        <SliderControl
+          label="Letter Spacing"
+          value={letterSpacing}
+          min={-2}
+          max={8}
+          step={0.5}
+          unit="px"
+          onChange={(v) => onChange({ letterSpacing: `${v}px` })}
+        />
+      </AdvancedDisclosure>
     </div>
   )
 }
