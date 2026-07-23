@@ -51,7 +51,9 @@
   },
   "overrides": {
     "postcss": "$postcss",
-    "dompurify": "^3.4.12"
+    "sharp": "$sharp",
+    "dompurify": "^3.4.12",
+    "monaco-editor": "0.55.1"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",

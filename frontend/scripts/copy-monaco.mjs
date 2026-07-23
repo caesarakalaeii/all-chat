@@ -45,6 +45,9 @@ import { createRequire } from 'node:module'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const require = createRequire(import.meta.url)
 
+// monaco-editor >=0.56.0 removed "./package.json" from its exports map, which
+// breaks both resolves below — the version is pinned via package.json
+// "overrides" until this script resolves the root another way.
 const MONACO_VERSION = require('monaco-editor/package.json').version
 const SRC_VS = join(dirname(require.resolve('monaco-editor/package.json')), 'min', 'vs')
 const DEST_DIR = join(__dirname, '..', 'public', 'monaco')
