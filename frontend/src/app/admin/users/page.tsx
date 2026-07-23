@@ -51,6 +51,10 @@ interface User {
   banned_at?: string
   banned_reason?: string
   banned_by?: string
+  // Overlay-setup counts (from the admin users endpoint). A user with
+  // sources_count === 0 signed up but never configured a working overlay.
+  overlays_count: number
+  sources_count: number
 }
 
 interface UserOverlay {
@@ -69,7 +73,9 @@ export default function UsersPage() {
   const [error, setError] = useState<string | null>(null)
   const [impersonating, setImpersonating] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
-  const [filter, setFilter] = useState<'all' | 'active' | 'banned' | 'premium' | 'beta'>('all')
+  const [filter, setFilter] = useState<
+    'all' | 'active' | 'banned' | 'premium' | 'beta' | 'unconfigured'
+  >('all')
   const [showBanModal, setShowBanModal] = useState(false)
   const [userToBan, setUserToBan] = useState<User | null>(null)
   const [banReason, setBanReason] = useState('')
@@ -134,7 +140,13 @@ export default function UsersPage() {
           }
         }
         const f = params.get('filter')
-        if (f === 'active' || f === 'banned' || f === 'premium' || f === 'beta') {
+        if (
+          f === 'active' ||
+          f === 'banned' ||
+          f === 'premium' ||
+          f === 'beta' ||
+          f === 'unconfigured'
+        ) {
           setFilter(f)
         }
       } catch (err) {
@@ -434,6 +446,9 @@ export default function UsersPage() {
     if (filter === 'active' && u.is_banned) return false
     if (filter === 'premium' && !u.is_premium) return false
     if (filter === 'beta' && !u.is_beta_tester) return false
+    // "Never set up an overlay": no configured chat source anywhere, which
+    // covers both users with zero overlays and users with an empty overlay.
+    if (filter === 'unconfigured' && u.sources_count > 0) return false
 
     // Search filter (id lets an owner deep-link land even before it's typed)
     if (searchTerm) {
@@ -465,6 +480,7 @@ export default function UsersPage() {
   const activeCount = users.filter((u) => !u.is_banned).length
   const premiumCount = users.filter((u) => u.is_premium).length
   const betaCount = users.filter((u) => u.is_beta_tester).length
+  const unconfiguredCount = users.filter((u) => u.sources_count === 0).length
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
@@ -555,6 +571,18 @@ export default function UsersPage() {
                   >
                     Beta ({betaCount})
                   </button>
+                  <button
+                    onClick={() => setFilter('unconfigured')}
+                    title="Signed up but never configured a chat source (0 overlays or 0 sources)"
+                    className={clsx(
+                      'border-b-2 px-1 pb-2 text-sm font-medium transition-colors',
+                      filter === 'unconfigured'
+                        ? 'border-amber-400 text-amber-400'
+                        : 'border-transparent text-text-sub hover:border-border hover:text-text'
+                    )}
+                  >
+                    No setup ({unconfiguredCount})
+                  </button>
                 </div>
               </div>
               <ul className="max-h-[70vh] divide-y divide-border overflow-y-auto">
@@ -598,6 +626,14 @@ export default function UsersPage() {
                                 {user.is_banned && (
                                   <span className="bg-destructive/10 text-destructive border-destructive/20 inline-flex items-center rounded border px-2 py-0.5 text-xs font-medium">
                                     BANNED
+                                  </span>
+                                )}
+                                {user.sources_count === 0 && (
+                                  <span
+                                    className="inline-flex items-center rounded border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400"
+                                    title="Signed up but never configured a chat source"
+                                  >
+                                    {user.overlays_count === 0 ? 'NO OVERLAY' : 'NO SOURCES'}
                                   </span>
                                 )}
                                 {user.twitch_id && (

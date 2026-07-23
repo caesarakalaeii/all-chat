@@ -642,7 +642,10 @@ SELECT u.id, u.twitch_id, u.google_id, u.kick_id, u.auth_provider, u.username, u
        COALESCE(u.banned_at, bpi.banned_at) AS banned_at,
        COALESCE(u.banned_reason, bpi.reason) AS banned_reason,
        COALESCE(u.banned_by, bpi.banned_by) AS banned_by,
-       u.created_at, u.updated_at
+       u.created_at, u.updated_at,
+       (SELECT COUNT(*) FROM overlays o WHERE o.user_id = u.id) AS overlays_count,
+       (SELECT COUNT(*) FROM overlay_chat_sources s
+          WHERE s.overlay_id IN (SELECT o.id FROM overlays o WHERE o.user_id = u.id)) AS sources_count
 FROM users u
 LEFT JOIN ambassador_showcase amb ON amb.user_id = u.id
 LEFT JOIN LATERAL (
@@ -678,6 +681,7 @@ ORDER BY u.created_at DESC
 			&user.AmbassadorTagline, &user.AmbassadorSortOrder,
 			&user.IsBanned, &user.BannedAt, &user.BannedReason, &user.BannedBy,
 			&user.CreatedAt, &user.UpdatedAt,
+			&user.OverlaysCount, &user.SourcesCount,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan user: %w", err)

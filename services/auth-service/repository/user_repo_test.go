@@ -133,6 +133,23 @@ func setupTestDB(t *testing.T) (*pgxpool.Pool, func()) {
 			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		);
+
+		-- Minimal overlays/overlay_chat_sources tables so GetAllUsers can compute
+		-- the per-user overlay/source counts that back the admin "never set up an
+		-- overlay" filter.
+		CREATE TABLE IF NOT EXISTS overlays (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			name VARCHAR(100) NOT NULL,
+			created_at TIMESTAMP DEFAULT NOW()
+		);
+
+		CREATE TABLE IF NOT EXISTS overlay_chat_sources (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			overlay_id UUID NOT NULL REFERENCES overlays(id) ON DELETE CASCADE,
+			platform VARCHAR(50) NOT NULL,
+			created_at TIMESTAMP DEFAULT NOW()
+		);
 	`
 
 	_, err = pool.Exec(ctx, schema)
@@ -322,6 +339,85 @@ func TestUserRepository_GetAllUsers_UndecryptableToken(t *testing.T) {
 	}
 	if users[0].Username != "legacytoken" {
 		t.Errorf("GetAllUsers() Username = %q, want %q", users[0].Username, "legacytoken")
+	}
+}
+
+// TestUserRepository_GetAllUsers_OverlaySetupCounts verifies that GetAllUsers
+// reports per-user overlay and source counts. These back the admin "never set
+// up an overlay" filter, whose criterion is sources_count == 0 (covering both
+// users with no overlays and users with overlays but no configured sources).
+func TestUserRepository_GetAllUsers_OverlaySetupCounts(t *testing.T) {
+	pool, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := newTestUserRepository(t, pool)
+	ctx := context.Background()
+
+	// nooverlays: signed up, never created an overlay.
+	// emptyoverlay: created an overlay but never added a source.
+	// configured: overlay with two sources.
+	insertUser := func(twitchID, username string) string {
+		var id string
+		err := pool.QueryRow(ctx, `
+			INSERT INTO users (twitch_id, auth_provider, username, display_name, profile_image_url, access_token, refresh_token, token_expires_at)
+			VALUES ($1, 'twitch', $2, $2, '', '', '', $3)
+			RETURNING id
+		`, twitchID, username, time.Now().Add(24*time.Hour)).Scan(&id)
+		if err != nil {
+			t.Fatalf("Failed to insert user %s: %v", username, err)
+		}
+		return id
+	}
+
+	insertUser("600001", "nooverlays")
+	emptyUserID := insertUser("600002", "emptyoverlay")
+	configuredUserID := insertUser("600003", "configured")
+
+	var emptyOverlayID, configuredOverlayID string
+	if err := pool.QueryRow(ctx, `INSERT INTO overlays (user_id, name) VALUES ($1, 'empty') RETURNING id`, emptyUserID).Scan(&emptyOverlayID); err != nil {
+		t.Fatalf("Failed to insert empty overlay: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `INSERT INTO overlays (user_id, name) VALUES ($1, 'configured') RETURNING id`, configuredUserID).Scan(&configuredOverlayID); err != nil {
+		t.Fatalf("Failed to insert configured overlay: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO overlay_chat_sources (overlay_id, platform) VALUES ($1, 'twitch'), ($1, 'youtube')`, configuredOverlayID); err != nil {
+		t.Fatalf("Failed to insert sources: %v", err)
+	}
+
+	users, err := repo.GetAllUsers(ctx)
+	if err != nil {
+		t.Fatalf("GetAllUsers() error = %v, want nil", err)
+	}
+
+	byName := make(map[string]*models.User, len(users))
+	for _, u := range users {
+		byName[u.Username] = u
+	}
+
+	cases := []struct {
+		username          string
+		wantOverlaysCount int
+		wantSourcesCount  int
+		wantUnconfigured  bool // sources_count == 0
+	}{
+		{"nooverlays", 0, 0, true},
+		{"emptyoverlay", 1, 0, true},
+		{"configured", 1, 2, false},
+	}
+	for _, tc := range cases {
+		u, ok := byName[tc.username]
+		if !ok {
+			t.Fatalf("GetAllUsers() missing user %q", tc.username)
+		}
+		if u.OverlaysCount != tc.wantOverlaysCount {
+			t.Errorf("%s: OverlaysCount = %d, want %d", tc.username, u.OverlaysCount, tc.wantOverlaysCount)
+		}
+		if u.SourcesCount != tc.wantSourcesCount {
+			t.Errorf("%s: SourcesCount = %d, want %d", tc.username, u.SourcesCount, tc.wantSourcesCount)
+		}
+		if got := u.SourcesCount == 0; got != tc.wantUnconfigured {
+			t.Errorf("%s: unconfigured = %v, want %v", tc.username, got, tc.wantUnconfigured)
+		}
 	}
 }
 
