@@ -1067,6 +1067,7 @@ function AddSourceForm({
   isAdmin?: boolean
 }) {
   const [tiktokUsername, setTiktokUsername] = useState('')
+  const [tiktokDialogOpen, setTiktokDialogOpen] = useState(false)
   const [isAdding, setIsAdding] = useState(false)
   const [adminPlatform, setAdminPlatform] = useState('twitch')
 
@@ -1195,6 +1196,7 @@ function AddSourceForm({
     try {
       await onAddTikTok(username)
       setTiktokUsername('')
+      setTiktokDialogOpen(false)
     } finally {
       setIsAdding(false)
     }
@@ -1202,9 +1204,7 @@ function AddSourceForm({
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-text-sub">
-        Add a platform via OAuth or enter a TikTok username directly.
-      </p>
+      <p className="text-xs text-text-sub">Connect a platform to this overlay.</p>
 
       {/* OAuth buttons — fetch auth_url then redirect, same pattern as login */}
       <div className="grid grid-cols-1 gap-2">
@@ -1249,6 +1249,22 @@ function AddSourceForm({
             />
           </svg>
           Connect Kick
+        </button>
+
+        {/* TikTok — no OAuth; the button matches the OAuth buttons but opens a
+            username dialog, since TikTok Live is keyed on a creator handle. */}
+        <button
+          onClick={() => setTiktokDialogOpen(true)}
+          className="flex items-center gap-2.5 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
+          style={{ backgroundColor: '#010101', '--tw-ring-color': '#69C9D0' } as React.CSSProperties}
+        >
+          <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              fill="#FFFFFF"
+              d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"
+            />
+          </svg>
+          Connect TikTok
         </button>
 
         {/* Discord — guild dialog or settings prompt */}
@@ -1396,21 +1412,42 @@ function AddSourceForm({
         </Dialog.Content>
       </Dialog.Root>
 
-      {/* TikTok — username only, no OAuth */}
-      <form onSubmit={handleTikTokSubmit} className="border-t border-border pt-1">
-        <p className="mb-2 text-xs text-text-sub">TikTok (enter username)</p>
-        <div className="flex gap-2">
-          <Input
-            value={tiktokUsername}
-            onChange={(e) => setTiktokUsername(e.target.value)}
-            placeholder="@username"
-            className="flex-1"
-          />
-          <Button type="submit" disabled={isAdding || !tiktokUsername.trim()} size="sm">
-            Add
-          </Button>
-        </div>
-      </form>
+      {/* TikTok — username dialog opened from the "Connect TikTok" button above */}
+      <Dialog.Root
+        open={tiktokDialogOpen}
+        onOpenChange={(open) => {
+          setTiktokDialogOpen(open)
+          if (!open) setTiktokUsername('')
+        }}
+      >
+        <Dialog.Content>
+          <Dialog.Title>Connect TikTok</Dialog.Title>
+          <Dialog.Description>
+            TikTok has no login step here. Enter the creator&apos;s username and we&apos;ll pull
+            their live chat.
+          </Dialog.Description>
+          <form onSubmit={handleTikTokSubmit} className="mt-3">
+            <Input
+              value={tiktokUsername}
+              onChange={(e) => setTiktokUsername(e.target.value)}
+              placeholder="@username"
+              autoFocus
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <Dialog.Close
+                render={
+                  <Button variant="outline" type="button">
+                    Cancel
+                  </Button>
+                }
+              />
+              <Button type="submit" disabled={isAdding || !tiktokUsername.trim()}>
+                {isAdding ? 'Adding…' : 'Add'}
+              </Button>
+            </div>
+          </form>
+        </Dialog.Content>
+      </Dialog.Root>
 
       {/* Admin manual entry — any platform, any channel ID */}
       {isAdmin && onAddManual && (
