@@ -64,6 +64,19 @@ const SYSTEM_EVENT_TYPES: ReadonlySet<EventType> = new Set<EventType>([
 ])
 
 /**
+ * Whether an item is audience activity — i.e. it would land in the `events`
+ * pane of {@link partitionItems} (a sub, bit, raid, super chat, gift/rose,
+ * follow, …). Excludes plain chat, operational system notices, and deletions.
+ * Kept in lock-step with `partitionItems` so a sound plays exactly when a new
+ * row appears in the Activity & Events panel, and never otherwise.
+ */
+export function isAudienceEvent(item: ChatMessage): boolean {
+  const type = item.event?.type
+  if (!type) return false
+  return !SYSTEM_EVENT_TYPES.has(type) && type !== 'message_deletion'
+}
+
+/**
  * Split the held items into the three panes the view renders:
  *  - chat:   regular messages (no event)
  *  - events: audience activity (subs, bits, raids, super chats, gifts, follows, …)

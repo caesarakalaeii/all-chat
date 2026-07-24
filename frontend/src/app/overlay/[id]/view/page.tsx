@@ -23,6 +23,8 @@
  * panel + Activity feed (pause-on-scroll scrollback and a click-a-username 1:1
  * chat filter live in ChatPanel), platform connection indicators, an
  * overlay-config summary, its own light/dark mode, view-local display toggles,
+ * an optional per-browser sound cue for new Activity items (distinct from the
+ * overlay's on-stream notification sounds; see viewPrefs `activitySound*`),
  * and per-message / per-user moderation controls for the overlay's owner. It
  * reuses the exact realtime pipeline the OBS overlay speaks (useOverlayStream)
  * but renders a readable, animation-free dashboard that ignores the overlay's
@@ -69,12 +71,14 @@ import type { EventSettings } from '@/lib/types/overlay'
 import {
   applyModerationMark,
   deletionSignature,
+  isAudienceEvent,
   mergeByAgg,
   partitionItems,
   toModEntry,
   type ModEntry,
   type ViewItem,
 } from '@/lib/utils/overlayViewModel'
+import { createSoundPlayer, type SoundPlayer, type SoundSettings } from '@/lib/utils/soundPlayer'
 
 import {
   DEFAULT_VIEW_LAYOUT,
@@ -93,6 +97,21 @@ import {
 const MAX_ITEMS = 500
 const MAX_MOD_LOG = 200
 const THEME_KEY = 'overlay-view-theme'
+
+// Gap between activity sounds. Longer than the overlay chat cooldown because a
+// single audience action can fan out into a burst (e.g. a mystery gift emits
+// many gift-sub events); one gentle ping per burst is what a moderator wants.
+const ACTIVITY_SOUND_COOLDOWN_MS = 1500
+
+/** Map the moderator's view prefs onto the shared sound-player settings. */
+function toActivitySoundSettings(prefs: MonitorViewPrefs): SoundSettings {
+  return {
+    enabled: prefs.activitySoundEnabled,
+    preset: prefs.activitySoundPreset,
+    volume: prefs.activitySoundVolume,
+    cooldownMs: ACTIVITY_SOUND_COOLDOWN_MS,
+  }
+}
 
 export default function OverlayMonitorView({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -120,11 +139,22 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
 
   // --- Stream callbacks ----------------------------------------------------
 
+  // Per-browser player for the activity sound. Created after mount (client
+  // only) and kept in sync with prefs by the effects below; onChat plays
+  // through it and the player itself gates on enabled/cooldown/volume, so
+  // onChat needs no prefs in its dependency list.
+  const activitySoundRef = useRef<SoundPlayer | null>(null)
+
   const onChat = useCallback((message: ChatMessage) => {
     setItems((prev) => [...prev, message].slice(-MAX_ITEMS))
     const type = message.event?.type
     if (type) {
       setObservedEventTypes((prev) => (prev.has(type) ? prev : new Set(prev).add(type)))
+    }
+    // Audible cue for easy-to-miss audience activity (channel points, gifts,
+    // follows, …). No-op unless the moderator enabled the activity sound.
+    if (isAudienceEvent(message)) {
+      activitySoundRef.current?.play()
     }
   }, [])
 
@@ -197,6 +227,33 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
     setPrefs(next)
     saveViewPrefs(next)
   }, [])
+
+  // Build the activity-sound player once (client only), then keep its settings
+  // in lock-step with prefs. Split into create-once + sync so we never leak
+  // audio elements across re-renders.
+  useEffect(() => {
+    const player = createSoundPlayer(toActivitySoundSettings(DEFAULT_VIEW_PREFS))
+    activitySoundRef.current = player
+    return () => {
+      player.destroy()
+      activitySoundRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    activitySoundRef.current?.updateSettings(toActivitySoundSettings(prefs))
+  }, [prefs])
+
+  // Preview the activity sound. Bypasses the player's cooldown/enabled gate so
+  // "Test" always previews, and the click doubles as the user gesture browsers
+  // require before any programmatic audio may play in this tab.
+  const testActivitySound = useCallback(() => {
+    const el = new Audio(`/sounds/${prefs.activitySoundPreset}.mp3`)
+    el.volume = prefs.activitySoundVolume
+    el.play().catch(() => {
+      /* autoplay may still be blocked; the next attempt after a gesture works */
+    })
+  }, [prefs.activitySoundPreset, prefs.activitySoundVolume])
 
   // Restore the saved panel layout after mount (per-overlay; localStorage,
   // client only — guards against SSR hydration mismatch like the prefs/theme).
@@ -557,7 +614,11 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
             </button>
           )}
           <LayoutPicker layout={layout} onChange={updateLayout} />
-          <ViewSettingsBar prefs={prefs} onChange={updatePrefs} />
+          <ViewSettingsBar
+            prefs={prefs}
+            onChange={updatePrefs}
+            onTestActivitySound={testActivitySound}
+          />
           <OverlayViewThemeToggle light={light} onToggle={() => setLight((v) => !v)} />
           {isOwner && hasYouTubeSource && (
             <button

@@ -22,6 +22,7 @@ import {
   applyModerationMark,
   countNewItems,
   deletionKind,
+  isAudienceEvent,
   isDeletionTarget,
   matchesUserFilter,
   mergeByAgg,
@@ -77,6 +78,38 @@ describe('partitionItems', () => {
     expect(chat).toHaveLength(0)
     expect(events).toHaveLength(0)
     expect(system).toHaveLength(0)
+  })
+})
+
+describe('isAudienceEvent', () => {
+  it('is true for audience activity (subs, gifts/roses, follows, likes)', () => {
+    expect(isAudienceEvent(item('m1', { eventType: 'subscription' }))).toBe(true)
+    expect(isAudienceEvent(item('m2', { eventType: 'gift' }))).toBe(true)
+    expect(isAudienceEvent(item('m3', { eventType: 'follow' }))).toBe(true)
+    expect(isAudienceEvent(item('m4', { eventType: 'channel_points' }))).toBe(true)
+    expect(isAudienceEvent(item('m5', { eventType: 'like_aggregate' }))).toBe(true)
+  })
+
+  it('is false for plain chat, system notices, and deletions', () => {
+    expect(isAudienceEvent(item('m1'))).toBe(false)
+    expect(isAudienceEvent(item('m2', { eventType: 'token_expiration_warning' }))).toBe(false)
+    expect(isAudienceEvent(item('m3', { eventType: 'source_permission_error' }))).toBe(false)
+    expect(isAudienceEvent(item('m4', { eventType: 'listener_deprecation_notice' }))).toBe(false)
+    expect(isAudienceEvent(item('m5', { eventType: 'message_deletion' }))).toBe(false)
+  })
+
+  it('matches partitionItems: it is true iff the item lands in the events pane', () => {
+    const samples: ViewItem[] = [
+      item('m1'),
+      item('m2', { eventType: 'subscription' }),
+      item('m3', { eventType: 'gift' }),
+      item('m4', { eventType: 'token_expiration_warning' }),
+      item('m5', { eventType: 'message_deletion' }),
+    ]
+    for (const s of samples) {
+      const inEventsPane = partitionItems([s]).events.length === 1
+      expect(isAudienceEvent(s)).toBe(inEventsPane)
+    }
   })
 })
 
