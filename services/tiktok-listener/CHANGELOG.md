@@ -3,6 +3,7 @@
 ## [Unreleased] - Resource Optimization & Message Deduplication
 
 ### Fixed
+- **Duplicated gift events**: Streakable gifts (`gift.type === 1`) fire the `GIFT` event repeatedly while the combo is in progress; only the final frame carries the full `repeatCount`. The handler now skips intermediate frames (`repeatEnd` falsy) so a single streakable gift is published once instead of twice.
 - **Timestamp Issue**: Messages now use TikTok's native `createTime` timestamp instead of generating new ones on receipt
   - Prevents messages from appearing "fresh" when they're actually old/replayed
   - Properly preserves message chronology during reconnects
