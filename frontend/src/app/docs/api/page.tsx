@@ -19,12 +19,41 @@
 import Link from 'next/link'
 import { AppNav } from '@/components/AppNav'
 import { Code, Pre, FieldTable } from '@/components/docs/prose'
+import { JsonLd } from '@/components/JsonLd'
 
 export const metadata = {
   title: 'Developer API',
   description:
     'Connect third-party tools to the All-Chat unified chat WebSocket stream: message format, platform events, status messages and reconnection (Twitch, YouTube, Kick, TikTok, Discord).',
   alternates: { canonical: '/docs/api' },
+}
+
+// Structured data: a technical reference page maps to schema.org TechArticle,
+// plus a Home > Documentation > Developer API breadcrumb trail. Emitted server
+// side so both are in the initial HTML for crawlers.
+const techArticleLd = {
+  '@context': 'https://schema.org',
+  '@type': 'TechArticle',
+  headline: 'All-Chat Developer API reference',
+  description:
+    'Read the All-Chat unified chat WebSocket stream: message format, platform events, status messages and reconnection for Twitch, YouTube, Kick, TikTok and Discord.',
+  url: 'https://allch.at/docs/api',
+  about: 'All-Chat unified chat WebSocket API',
+}
+
+const breadcrumbLd = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://allch.at' },
+    { '@type': 'ListItem', position: 2, name: 'Documentation', item: 'https://allch.at/docs' },
+    {
+      '@type': 'ListItem',
+      position: 3,
+      name: 'Developer API',
+      item: 'https://allch.at/docs/api',
+    },
+  ],
 }
 
 const TEST_OVERLAY_ID = '00000000-0000-4000-8000-000000000a11'
@@ -42,6 +71,8 @@ const toc = [
 export default function DeveloperDocsPage() {
   return (
     <div className="min-h-screen bg-bg transition-colors duration-300">
+      <JsonLd data={techArticleLd} />
+      <JsonLd data={breadcrumbLd} />
       <AppNav />
       <div className="mx-auto max-w-4xl px-4 py-12">
         <div className="rounded-xl border border-border bg-surface p-8 transition-colors duration-300 md:p-12">
