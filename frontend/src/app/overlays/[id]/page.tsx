@@ -1431,7 +1431,6 @@ function AddSourceForm({
               value={tiktokUsername}
               onChange={(e) => setTiktokUsername(e.target.value)}
               placeholder="@username"
-              autoFocus
             />
             <div className="mt-4 flex justify-end gap-2">
               <Dialog.Close
