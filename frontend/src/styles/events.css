@@ -367,19 +367,33 @@
   .overlay-preview-body .flex.gap-1 {
     display: var(--chat-show-badges, flex) !important;
   }
+  /* Scale badges with --chat-badge-size, but keep the header row's height tied to
+     the USERNAME line so a larger badge stays vertically centred on the name
+     WITHOUT pushing the message text away. Symmetric (often negative) block
+     margins collapse each badge's *layout* box to the username line-height while
+     the visible badge overflows that box, centred. Without this, `items-center`
+     grows the row with the badge and the name→message gap drifts with badge size
+     (the offset regressed when da636cd5 made platform badges size-responsive). */
   .overlay-preview-body .flex.gap-1 img {
     width: var(--chat-badge-size, 1rem) !important;
     height: var(--chat-badge-size, 1rem) !important;
+    margin-top: calc((var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2) !important;
+    margin-bottom: calc((var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2) !important;
   }
 
   /* ── Platform badge (TWITCH/YOUTUBE pill or icon) ──────────────────── */
   .overlay-preview-body .platform-badge-text {
     font-size: var(--chat-badge-size, 0.75rem) !important;
+    line-height: 1 !important;
+    margin-top: calc((var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 0.75rem)) / 2) !important;
+    margin-bottom: calc((var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 0.75rem)) / 2) !important;
   }
   .overlay-preview-body .platform-badge-icon svg,
   .overlay-preview-body .platform-badge-icon img {
     width: var(--chat-badge-size, 1rem) !important;
     height: var(--chat-badge-size, 1rem) !important;
+    margin-top: calc((var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2) !important;
+    margin-bottom: calc((var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2) !important;
   }
 
   /* ── Username ──────────────────────────────────────────────────────── */
@@ -484,19 +498,29 @@
   }
 
   /* ── User badges (subscriber/mod/bits icons) ───────────────────────── */
+  /* Keep the header row's height tied to the username line so changing badge
+     size never drifts the name→message gap — see the .overlay-preview-body
+     block above for the full rationale. */
   .overlay-live-body .flex.gap-1 img {
     width: var(--chat-badge-size, 1rem) !important;
     height: var(--chat-badge-size, 1rem) !important;
+    margin-top: calc((var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2) !important;
+    margin-bottom: calc((var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2) !important;
   }
 
   /* ── Platform badge (TWITCH/YOUTUBE pill or icon) ──────────────────── */
   .overlay-live-body .platform-badge-text {
     font-size: var(--chat-badge-size, 0.75rem) !important;
+    line-height: 1 !important;
+    margin-top: calc((var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 0.75rem)) / 2) !important;
+    margin-bottom: calc((var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 0.75rem)) / 2) !important;
   }
   .overlay-live-body .platform-badge-icon svg,
   .overlay-live-body .platform-badge-icon img {
     width: var(--chat-badge-size, 1rem) !important;
     height: var(--chat-badge-size, 1rem) !important;
+    margin-top: calc((var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2) !important;
+    margin-bottom: calc((var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2) !important;
   }
 
   /* ── Username ──────────────────────────────────────────────────────── */

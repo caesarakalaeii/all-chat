@@ -318,9 +318,11 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
         }
         return
       }
-      // Full theme CSS replacement (sent when user applies a new theme)
+      // Live custom/theme CSS from the editor (theme apply, or typing in the
+      // Advanced editor). Rewrite Google Fonts @imports to the same-origin proxy
+      // so fonts load under CSP during live editing, matching the initial-load path.
       if (event.data?.type === 'CUSTOM_CSS_UPDATE') {
-        const css = event.data.css as string
+        const css = rewriteThemeFontImports(event.data.css as string)
         setCustomCss(css)
         setUseCustomCss(Boolean(css.trim().length))
         return
@@ -819,10 +821,12 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                             <span
                               ref={(el) => {
                                 if (el) {
-                                  el.style.setProperty('text-shadow', 'none', 'important')
+                                  // Clean drop shadow behind the gradient fill instead of a
+                                  // -webkit-text-stroke that muddied the colours (ADR-0044).
+                                  el.style.setProperty('-webkit-text-stroke', '0', 'important')
                                   el.style.setProperty(
-                                    '-webkit-text-stroke',
-                                    '0.5px rgba(0,0,0,0.5)',
+                                    'text-shadow',
+                                    '0 1px 2px rgba(0,0,0,0.65), 0 0 2px rgba(0,0,0,0.5)',
                                     'important'
                                   )
                                   el.style.setProperty('color', 'transparent', 'important')

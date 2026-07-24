@@ -30,12 +30,18 @@
 // stays the first import; otherwise the loader falls back to cdn.jsdelivr.net,
 // which the app CSP blocks — leaving the editor stuck on "Loading editor...".
 import '@/lib/monaco'
-import { Editor, OnMount } from '@monaco-editor/react'
+import { Editor, OnMount, OnValidate } from '@monaco-editor/react'
 import { useRef, useEffect } from 'react'
+import { markerSeverityToLevel } from '@/lib/utils/custom-css'
+import type { CssIssue } from '@/lib/utils/custom-css'
+
+export type { CssIssue }
 
 interface MonacoCSSEditorProps {
   value: string
   onChange: (value: string) => void
+  /** Fired whenever Monaco re-validates the model; use to surface tips for broken CSS. */
+  onValidate?: (issues: CssIssue[]) => void
   height?: string
   placeholder?: string
   readOnly?: boolean
@@ -44,11 +50,16 @@ interface MonacoCSSEditorProps {
 export default function MonacoCSSEditor({
   value,
   onChange,
+  onValidate,
   height = '300px',
   placeholder = '/* Enter your custom CSS here */',
   readOnly = false,
 }: MonacoCSSEditorProps) {
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null)
+  // Guards the onChange that Monaco fires when WE call setValue() to sync an
+  // external value (theme preload, "Reset to theme"). Without this, a preload
+  // would look like a user edit and wrongly fork the overlay off its theme.
+  const suppressNextChange = useRef(false)
 
   const handleEditorDidMount: OnMount = (editor, monaco) => {
     editorRef.current = editor
@@ -72,15 +83,33 @@ export default function MonacoCSSEditor({
   }
 
   const handleEditorChange = (value: string | undefined) => {
+    if (suppressNextChange.current) {
+      suppressNextChange.current = false
+      return
+    }
     onChange(value || '')
   }
 
-  // Update editor value when prop changes (for external updates like "Load Example")
+  const handleValidate: OnValidate = (markers) => {
+    if (!onValidate) return
+    onValidate(
+      markers.map((m) => ({
+        line: m.startLineNumber,
+        column: m.startColumn,
+        message: m.message,
+        severity: markerSeverityToLevel(m.severity),
+      }))
+    )
+  }
+
+  // Update editor value when prop changes (theme preload / "Reset to theme").
+  // setValue triggers Monaco's change event, so flag it as programmatic first.
   useEffect(() => {
     if (editorRef.current) {
       const editor = editorRef.current
       const currentValue = editor.getValue()
       if (currentValue !== value) {
+        suppressNextChange.current = true
         editor.setValue(value)
       }
     }
@@ -100,6 +129,7 @@ export default function MonacoCSSEditor({
           defaultLanguage="css"
           value={value}
           onChange={handleEditorChange}
+          onValidate={handleValidate}
           onMount={handleEditorDidMount}
           theme="vs-dark"
           options={{
