@@ -48,9 +48,20 @@ beforeEach(() => stubLocalStorage())
 afterEach(() => vi.unstubAllGlobals())
 
 describe('viewPrefs', () => {
-  it('returns all-on defaults when nothing is stored', () => {
+  it('returns defaults when nothing is stored: display toggles on, activity sound off', () => {
     expect(loadViewPrefs()).toEqual(DEFAULT_VIEW_PREFS)
-    expect(Object.values(DEFAULT_VIEW_PREFS).every((v) => v === true)).toBe(true)
+    // Display toggles default on so the readable monitor shows everything…
+    const displayToggles: Array<keyof MonitorViewPrefs> = [
+      'showAvatars',
+      'showBadges',
+      'showPronouns',
+      'showTimestamps',
+      'showPlatformGlyph',
+      'showModeration',
+    ]
+    expect(displayToggles.every((k) => DEFAULT_VIEW_PREFS[k] === true)).toBe(true)
+    // …but the activity sound is opt-in, so the dashboard is silent by default.
+    expect(DEFAULT_VIEW_PREFS.activitySoundEnabled).toBe(false)
   })
 
   it('merges a partial stored payload over the defaults', () => {
@@ -61,6 +72,40 @@ describe('viewPrefs', () => {
     expect(prefs.showBadges).toBe(true)
     expect(prefs.showModeration).toBe(true)
     expect(prefs.showTimestamps).toBe(true)
+  })
+
+  it('gives an older payload (no sound keys) the activity-sound defaults', () => {
+    // A payload saved before the activity sound existed has none of its keys.
+    localStorage.setItem(VIEW_PREFS_KEY, JSON.stringify({ showAvatars: false }))
+    const prefs = loadViewPrefs()
+    expect(prefs.activitySoundEnabled).toBe(DEFAULT_VIEW_PREFS.activitySoundEnabled)
+    expect(prefs.activitySoundVolume).toBe(DEFAULT_VIEW_PREFS.activitySoundVolume)
+    expect(prefs.activitySoundPreset).toBe(DEFAULT_VIEW_PREFS.activitySoundPreset)
+  })
+
+  it('preserves valid stored activity-sound settings', () => {
+    localStorage.setItem(
+      VIEW_PREFS_KEY,
+      JSON.stringify({ activitySoundEnabled: true, activitySoundVolume: 0.25, activitySoundPreset: 'pop' })
+    )
+    const prefs = loadViewPrefs()
+    expect(prefs.activitySoundEnabled).toBe(true)
+    expect(prefs.activitySoundVolume).toBe(0.25)
+    expect(prefs.activitySoundPreset).toBe('pop')
+  })
+
+  it('sanitizes an unknown preset back to the default', () => {
+    localStorage.setItem(VIEW_PREFS_KEY, JSON.stringify({ activitySoundPreset: 'airhorn' }))
+    expect(loadViewPrefs().activitySoundPreset).toBe(DEFAULT_VIEW_PREFS.activitySoundPreset)
+  })
+
+  it('clamps an out-of-range or non-numeric volume', () => {
+    localStorage.setItem(VIEW_PREFS_KEY, JSON.stringify({ activitySoundVolume: 5 }))
+    expect(loadViewPrefs().activitySoundVolume).toBe(1)
+    localStorage.setItem(VIEW_PREFS_KEY, JSON.stringify({ activitySoundVolume: -2 }))
+    expect(loadViewPrefs().activitySoundVolume).toBe(0)
+    localStorage.setItem(VIEW_PREFS_KEY, JSON.stringify({ activitySoundVolume: 'loud' }))
+    expect(loadViewPrefs().activitySoundVolume).toBe(DEFAULT_VIEW_PREFS.activitySoundVolume)
   })
 
   it('falls back to defaults on corrupt JSON', () => {
@@ -81,6 +126,9 @@ describe('viewPrefs', () => {
       showTimestamps: false,
       showPlatformGlyph: true,
       showModeration: false,
+      activitySoundEnabled: true,
+      activitySoundVolume: 0.8,
+      activitySoundPreset: 'chime',
     }
     saveViewPrefs(custom)
     expect(loadViewPrefs()).toEqual(custom)

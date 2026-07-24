@@ -51,6 +51,12 @@ export function SoundGroup({ displaySettings, onChange, isPremium, onPreview }: 
 
   return (
     <div className="space-y-4">
+      <p className="text-xs text-text-dim">
+        These sounds play on your public OBS overlay, for everyone watching your stream. Want a
+        private alert only you hear when new activity arrives (channel-point redeems, a TikTok Rose,
+        and so on)? Open the Monitor view and turn on Activity sound in its Display menu. That is a
+        separate setting and stays on that device.
+      </p>
       <ToggleSwitch
         label="Enable notification sounds"
         checked={enabled}
