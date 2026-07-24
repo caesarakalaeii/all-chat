@@ -212,7 +212,7 @@ interface TikTokChatData {
 interface TikTokGift {
   id?: string;
   name?: string;
-  type?: number; // gift type: 1 = normal, 2 = streakable (was top-level `giftType`)
+  type?: number; // gift type: 1 = streakable (combo), other = non-streakable (was top-level `giftType`)
   diamondCount?: number;
 }
 
@@ -221,6 +221,7 @@ interface TikTokGiftData {
   user?: TikTokUser;
   giftId?: string; // now top-level (was `gift.giftId`)
   repeatCount?: number;
+  repeatEnd?: number; // 1 once a streakable gift's combo has finished; intermediate frames are 0
   gift?: TikTokGift;
 }
 
@@ -1144,6 +1145,14 @@ class TikTokListenerService {
   private async handleGift(username: string, overlayId: string, data: TikTokGiftData): Promise<void> {
     try {
       this.heartbeatMonitor.recordMessage(username);
+
+      // Streakable gifts (gift.type === 1) fire GIFT repeatedly while the combo
+      // is in progress; only the final frame (repeatEnd) carries the complete
+      // repeatCount. Publishing the intermediate frames would show the same gift
+      // multiple times (e.g. a single Rose renders twice). Skip until the streak ends.
+      if (data.gift?.type === 1 && !data.repeatEnd) {
+        return;
+      }
 
       const msgId = data.common?.msgId || randomUUID();
       const createTime = data.common?.createTime;
