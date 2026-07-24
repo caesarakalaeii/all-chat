@@ -20,6 +20,7 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { AppNav } from '@/components/AppNav'
 import { Code, Pre } from '@/components/docs/prose'
+import { JsonLd } from '@/components/JsonLd'
 import { DISCORD_INVITE_URL } from '@/lib/constants'
 
 export const metadata = {
@@ -27,6 +28,47 @@ export const metadata = {
   description:
     'Get your All-Chat overlay live in OBS, pick from 16 built-in themes, and make it your own — no CSS required to start, full CSS control when you want it.',
   alternates: { canonical: '/docs' },
+}
+
+// Structured data: the "Get your overlay live" section is a genuine step-by-step
+// procedure, so it maps to schema.org HowTo (rich-result eligible). Breadcrumbs
+// give Google the Home > Documentation trail. Emitted from this server page, so
+// both land in the initial HTML for crawlers.
+const howToLd = {
+  '@context': 'https://schema.org',
+  '@type': 'HowTo',
+  name: 'Get your All-Chat overlay live in OBS',
+  description:
+    'Set up a multi-platform chat overlay in OBS with All-Chat, combining Twitch, YouTube, Kick, TikTok and Discord chat into one browser source.',
+  step: [
+    {
+      '@type': 'HowToStep',
+      position: 1,
+      name: 'Sign in',
+      text: 'Sign in at allch.at with your Twitch, YouTube, or Kick account.',
+    },
+    {
+      '@type': 'HowToStep',
+      position: 2,
+      name: 'Create an overlay and connect your platforms',
+      text: 'In the dashboard, create an overlay and connect the platforms you stream on. Each connected platform becomes a chat source on that overlay.',
+    },
+    {
+      '@type': 'HowToStep',
+      position: 3,
+      name: 'Add the overlay to OBS',
+      text: 'Copy the overlay browser-source URL and add it to OBS as a Browser Source. Chat appears the moment the overlay connects.',
+    },
+  ],
+}
+
+const breadcrumbLd = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://allch.at' },
+    { '@type': 'ListItem', position: 2, name: 'Documentation', item: 'https://allch.at/docs' },
+  ],
 }
 
 /** A "variable / default / effect" row table for the CSS custom properties. */
@@ -122,6 +164,8 @@ const toc = [
 export default function DocsPage() {
   return (
     <div className="min-h-screen bg-bg transition-colors duration-300">
+      <JsonLd data={howToLd} />
+      <JsonLd data={breadcrumbLd} />
       <AppNav />
       <main id="main-content" tabIndex={-1} className="mx-auto max-w-4xl px-4 py-12">
         <div className="rounded-xl border border-border bg-surface p-8 transition-colors duration-300 md:p-12">

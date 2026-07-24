@@ -61,14 +61,18 @@ export const metadata: Metadata = {
     template: '%s | All-Chat',
   },
   description:
-    'See all your Twitch, YouTube, Kick, and TikTok chat in one overlay. Drop it into OBS and go. 7TV, BTTV, and FFZ emotes built in. Free and open source.',
+    'See all your Twitch, YouTube, Kick, TikTok, and Discord chat in one OBS chat overlay. Drop it into OBS and go. 7TV, BTTV, and FFZ emotes built in. Free and open source.',
   keywords: [
     'twitch chat',
     'youtube chat',
     'kick chat',
     'tiktok chat',
+    'discord chat',
     'chat overlay',
     'obs overlay',
+    'obs chat overlay',
+    'multichat',
+    'streamelements alternative',
     'streaming',
     'multistream',
     'chat aggregator',
@@ -87,13 +91,13 @@ export const metadata: Metadata = {
     siteName: 'All-Chat',
     title: 'All-Chat — Every chat. One overlay.',
     description:
-      'All your Twitch, YouTube, Kick, and TikTok chat in one overlay. 7TV, BTTV, and FFZ emotes built in.',
+      'All your Twitch, YouTube, Kick, TikTok, and Discord chat in one OBS overlay. 7TV, BTTV, and FFZ emotes built in.',
   },
   twitter: {
     card: 'summary_large_image',
     title: 'All-Chat — Every chat. One overlay.',
     description:
-      'All your Twitch, YouTube, Kick, and TikTok chat in one overlay. 7TV, BTTV, and FFZ emotes built in.',
+      'All your Twitch, YouTube, Kick, TikTok, and Discord chat in one OBS overlay. 7TV, BTTV, and FFZ emotes built in.',
   },
   robots: {
     index: true,
