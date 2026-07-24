@@ -70,6 +70,9 @@ import type { VisualSettings } from '@/lib/types/visual-settings'
 import { visualSettingsToCss } from '@/lib/utils/visual-settings-to-css'
 import { useNotificationSocket } from '@/hooks/useNotificationSocket'
 import { parseCssToVisualSettings } from '@/lib/utils/theme-css-parser'
+import { getBundledTheme } from '@/lib/theme-marketplace/bundled-themes'
+import { isCustomCssForked, persistedCustomCss } from '@/lib/utils/custom-css'
+import type { CssIssue } from '@/lib/utils/custom-css'
 import type { Theme } from '@/lib/theme-marketplace/types'
 import { toastManager } from '@/lib/toast'
 import { safeExternalRedirect } from '@/lib/auth/redirect-allowlist'
@@ -1639,13 +1642,19 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   // --- Mock messages state ---
   const [mockForm, setMockForm] = useState<MockMessageFormState>(DEFAULT_MOCK_FORM)
 
-  // --- Custom CSS state ---
-  // customCss/useCustomCss are the user's RAW override CSS only. The applied
-  // marketplace theme is referenced by themeId (resolved from the build bundle
-  // at render) rather than copied here, so theme fixes propagate on deploy.
+  // --- Custom CSS state (ADR-0043) ---
+  // customCss is the CSS shown in the Advanced editor. On a themed overlay it is
+  // PRELOADED with the bundled theme's CSS (pristineThemeCss) so users see and can
+  // edit real CSS instead of a blank box. While customCss still equals the pristine
+  // theme the overlay stays linked to the bundle (theme fixes propagate on deploy);
+  // editing it detaches this overlay onto its own saved custom_css copy. "Forked"
+  // is derived (customCss present && != pristine), not a separate flag.
   const [customCss, setCustomCss] = useState('')
-  const [useCustomCss, setUseCustomCss] = useState(false)
+  const [pristineThemeCss, setPristineThemeCss] = useState('')
+  const [cssIssues, setCssIssues] = useState<CssIssue[]>([])
   const [themeId, setThemeId] = useState('')
+  // Debounce handle for pushing raw custom CSS to the live preview as the user types.
+  const customCssDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Setup-guide wiring: bind steps 2-4 to this overlay, and while the guide
   // is active steer the left nav to the step's section (progressive
@@ -1991,22 +2000,56 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     [id]
   )
 
-  // --- sendCustomCssToIframe: post the full theme CSS to the embed preview ---
+  // --- sendCustomCssToIframe: post custom/theme CSS to the embed preview ---
   const sendCustomCssToIframe = useCallback((css: string) => {
     iframeRef.current?.contentWindow?.postMessage({ type: 'CUSTOM_CSS_UPDATE', css }, '*')
   }, [])
 
+  // --- handleCustomCssChange: user typed in the Advanced CSS editor ---
+  // WYSIWYG for raw CSS: debounce-push to the preview as they type so edits show
+  // live (ADR-0043). Guarded so a mid-edit unclosed brace can't blank the preview.
+  const handleCustomCssChange = useCallback((value: string) => {
+    setCustomCss(value)
+    if (customCssDebounceRef.current) clearTimeout(customCssDebounceRef.current)
+    customCssDebounceRef.current = setTimeout(() => {
+      const opens = (value.match(/{/g) ?? []).length
+      const closes = (value.match(/}/g) ?? []).length
+      // Only push when braces balance; otherwise keep the last good preview and
+      // let Monaco's inline markers guide the user until the rule is closed.
+      if (opens === closes) sendCustomCssToIframe(value)
+    }, 300)
+  }, [sendCustomCssToIframe])
+
+  // Clear the pending debounce on unmount so it can't setState after teardown.
+  useEffect(
+    () => () => {
+      if (customCssDebounceRef.current) clearTimeout(customCssDebounceRef.current)
+    },
+    []
+  )
+
+  // --- handleResetCustomCss: revert the editor to the bundled theme (re-link) ---
+  // Restores the pristine theme CSS (or empties the box when the overlay has no
+  // theme). Since customCss then equals pristineThemeCss, the overlay is no longer
+  // "forked" and starts receiving bundled theme updates again on save.
+  const handleResetCustomCss = useCallback(() => {
+    setCustomCss(pristineThemeCss)
+    setCssIssues([])
+    sendCustomCssToIframe(pristineThemeCss)
+  }, [pristineThemeCss, sendCustomCssToIframe])
+
   // --- applyThemeImmediately: reference the theme by id + apply its parsed
-  // settings. The theme CSS is NOT copied into custom_css — it's resolved from
-  // the bundle at render (and pushed to the preview iframe here). Raw custom CSS
-  // is cleared so a freshly applied theme is exactly the bundled theme; users
-  // re-add overrides in the Custom CSS box afterwards. ---
+  // settings, and PRELOAD its full CSS into the Advanced editor (ADR-0043) so it
+  // is visible and directly editable. The overlay stays linked to the bundled
+  // theme (theme_id) — the preloaded copy is persisted to custom_css only if the
+  // user edits it (fork-on-save), so untouched themed overlays keep receiving
+  // theme fixes on deploy. ---
   const applyThemeImmediately = useCallback(
     (theme: Theme) => {
       const parsed = parseCssToVisualSettings(theme.css)
       setThemeId(theme.id)
-      setCustomCss('')
-      setUseCustomCss(false)
+      setPristineThemeCss(theme.css)
+      setCustomCss(theme.css)
       setVisualSettings(parsed)
       setParsedThemeSettings(parsed)
       sendCssToIframe(parsed)
@@ -2168,17 +2211,24 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
             }
           }
 
-          const css = config.custom_css || ''
-          setCustomCss(css)
-          setUseCustomCss(Boolean(css.trim().length))
-          setThemeId(typeof config.theme_id === 'string' ? config.theme_id : '')
+          const savedCss = config.custom_css || ''
+          const tid = typeof config.theme_id === 'string' ? config.theme_id : ''
+          setThemeId(tid)
+          // Resolve the bundled theme CSS for this overlay: preloaded into the
+          // Advanced editor and used as the "reset to theme" baseline (ADR-0043).
+          const themeCss = tid ? (getBundledTheme(tid)?.css ?? '') : ''
+          setPristineThemeCss(themeCss)
+          // Preload the theme CSS when there is no saved override yet, so the
+          // Advanced tab shows real, editable CSS instead of a blank box. A saved
+          // override (a fork) is shown as-is.
+          setCustomCss(savedCss.trim() ? savedCss : themeCss)
 
-          // Parse theme CSS — always set parsedThemeSettings so "Reset to theme defaults" works
-          // after save+reload (when visual_settings is non-empty, theme defaults are still needed)
+          // Parse CSS → parsedThemeSettings so "Reset to theme defaults" works after
+          // save+reload. Prefer the saved override, else the bundled theme CSS.
           const savedVisual = config.visual_settings as Partial<VisualSettings> | null
-          const hasNoSavedVisual = !savedVisual || Object.keys(savedVisual).length === 0
-          const parsedFromCss = css.trim() ? parseCssToVisualSettings(css) : {}
-          if (css.trim()) {
+          const parseSource = savedCss.trim() ? savedCss : themeCss
+          const parsedFromCss = parseSource.trim() ? parseCssToVisualSettings(parseSource) : {}
+          if (parseSource.trim()) {
             setParsedThemeSettings(parsedFromCss)
           }
 
@@ -2668,7 +2718,10 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
         enable_7tv: enable7tv,
         enable_bttv: enableBttv,
         enable_ffz: enableFfz,
-        custom_css: useCustomCss ? customCss : '',
+        // Fork-on-edit (ADR-0043): persist the editor's CSS only when it diverges
+        // from the bundled theme; an untouched theme saves an empty override so the
+        // overlay keeps receiving bundled theme updates on deploy.
+        custom_css: persistedCustomCss(customCss, pristineThemeCss),
         theme_id: themeId,
         visual_settings: visualSettings,
         filter_settings: filterSettings,
@@ -3459,37 +3512,78 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
 
                   {activeSection === 'custom-css' && (
                     <div className="space-y-3">
-                      <div className="flex items-center gap-3">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="text-xs font-medium text-text">Custom CSS</span>
-                        <label className="flex cursor-pointer items-center gap-2 text-xs text-text-sub">
-                          <input
-                            type="checkbox"
-                            checked={useCustomCss}
-                            onChange={(e) => setUseCustomCss(e.target.checked)}
-                            className="accent-twitch"
-                          />
-                          Enable
-                        </label>
+                        {isCustomCssForked(customCss, pristineThemeCss) ? (
+                          <span className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-400">
+                            Custom — detached from the bundled theme
+                          </span>
+                        ) : themeId ? (
+                          <span className="inline-flex items-center rounded-full border border-green-500/20 bg-green-500/10 px-2 py-0.5 text-[11px] font-medium text-green-400">
+                            Using “{getBundledTheme(themeId)?.name ?? themeId}” theme · auto-updates
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-text-dim">No theme applied</span>
+                        )}
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
                           className="ml-auto text-xs"
-                          onClick={() => {
-                            setCustomCss('')
-                            setUseCustomCss(false)
-                          }}
+                          onClick={handleResetCustomCss}
                         >
-                          Reset
+                          {themeId ? 'Reset to theme' : 'Clear'}
                         </Button>
                       </div>
 
+                      <p className="text-xs text-text-sub">
+                        Edit the CSS below — the preview updates as you type. Saving your edits
+                        detaches this overlay from the bundled theme so your CSS is kept exactly;
+                        “Reset to theme” re-links it to receive future theme updates.
+                      </p>
+
                       <MonacoCSSEditor
                         value={customCss}
-                        onChange={setCustomCss}
-                        height="300px"
+                        onChange={handleCustomCssChange}
+                        onValidate={setCssIssues}
+                        height="320px"
                         placeholder="/* Enter your custom CSS here */"
                       />
+
+                      {/* Tips for broken CSS, surfaced from Monaco's CSS language service. */}
+                      {(() => {
+                        const errors = cssIssues.filter((i) => i.severity === 'error')
+                        const warnings = cssIssues.filter((i) => i.severity === 'warning')
+                        if (errors.length === 0 && warnings.length === 0) {
+                          return <p className="text-xs text-green-400">✓ No CSS problems detected.</p>
+                        }
+                        const parts: string[] = []
+                        if (errors.length > 0)
+                          parts.push(`${errors.length} error${errors.length > 1 ? 's' : ''}`)
+                        if (warnings.length > 0)
+                          parts.push(`${warnings.length} warning${warnings.length > 1 ? 's' : ''}`)
+                        return (
+                          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2">
+                            <p className="text-xs font-medium text-amber-300">
+                              {parts.join(' · ')} — invalid rules are ignored by the browser, so fix
+                              these for your styles to take effect. Incomplete rules aren’t previewed.
+                            </p>
+                            <ul className="mt-1 space-y-0.5">
+                              {[...errors, ...warnings].slice(0, 5).map((issue, idx) => (
+                                <li key={idx} className="text-[11px] text-text-sub">
+                                  <span className="font-mono text-text-dim">L{issue.line}:</span>{' '}
+                                  {issue.message}
+                                </li>
+                              ))}
+                              {errors.length + warnings.length > 5 && (
+                                <li className="text-[11px] text-text-dim">
+                                  …and {errors.length + warnings.length - 5} more
+                                </li>
+                              )}
+                            </ul>
+                          </div>
+                        )
+                      })()}
 
                       <p className="text-xs text-text-sub">
                         Need inspiration? Explore{' '}

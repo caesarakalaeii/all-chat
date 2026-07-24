@@ -526,6 +526,24 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 **Impact**: Named settings are findable via search; navigation never reflows the column; the onboarding spotlight forces the active section instead of drawer open-state; the 3,600-line editor page decomposes into per-section components opportunistically. (ADR numbering shared with caesar-deployment, so this is 0042)
 **→ Read**: [0042-editor-left-nav-settings.md](./0042-editor-left-nav-settings.md)
 
+### ADR-0043: Preloaded, live-preview Custom CSS editor with fork-on-edit
+
+**Status**: ✅ Accepted
+**Date**: 2026-07-24
+**Problem**: The Advanced → Custom CSS editor was unusable for streamers — applying a theme cleared it to a blank box (no starting point), raw edits reached the preview only on Save + reload ("nothing happens"), and Monaco's diagnostics were never surfaced. But `custom_css` had to stay "overrides only" so themes resolve from the bundle by `theme_id` and fixes propagate on deploy
+**Decision**: Preload the applied theme's full CSS into the editor so it's visible and directly editable; debounce-push edits to the preview as you type (brace-balance guarded, fonts proxied); persist a copy to `custom_css` only when the content diverges from the pristine theme ("fork-on-edit", `persistedCustomCss`) so untouched themed overlays stay linked and auto-update; add "Reset to theme" and surface Monaco CSS diagnostics as line-numbered tips. Pure logic in `lib/utils/custom-css.ts`, unit-tested
+**Impact**: Streamers can see + edit theme CSS with a live preview; untouched overlays are unchanged on the wire and keep receiving theme fixes; only deliberately-edited overlays store a frozen copy. No new premium gate (enhances an existing free tool); CSP + `scopeCustomCss` blast-radius controls unchanged. (ADR numbering shared with caesar-deployment, so this is 0043)
+**→ Read**: [0043-preloaded-live-custom-css-editor.md](./0043-preloaded-live-custom-css-editor.md)
+
+### ADR-0044: Overlay chat text outlines use layered text-shadow, not -webkit-text-stroke
+
+**Status**: ✅ Accepted
+**Date**: 2026-07-24
+**Problem**: Chat text needs a dark edge to stay legible over live video. The minimal/comic-speech/neo-brutalist themes and gradient usernames used `-webkit-text-stroke` + `paint-order: stroke fill`, which centres the stroke on the glyph path and eats into the fill — chunky corners, eroded thin strokes, muddied gradients ("looks very off and not clean")
+**Decision**: Standardise on layered `text-shadow` outlines (painted behind glyphs, never eroding the fill; render correctly behind gradient text). Migrate the three stroke themes to equivalent-weight layered outlines and gradient usernames to a clean drop shadow; leave intentional glow themes (cyberpunk/neon-glass/vaporwave) untouched. Regression test asserts no bundled theme's active CSS uses text-stroke/paint-order
+**Impact**: Usernames + message text read cleanly at all sizes (verified before/after); new themes must use layered `text-shadow` for legibility outlines (glow effects still fine). (ADR numbering shared with caesar-deployment, so this is 0044)
+**→ Read**: [0044-overlay-text-outline-via-layered-text-shadow.md](./0044-overlay-text-outline-via-layered-text-shadow.md)
+
 ---
 
 ## How to Create a New ADR

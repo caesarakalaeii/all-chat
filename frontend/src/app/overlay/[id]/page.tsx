@@ -772,10 +772,12 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                         <span
                           ref={(el) => {
                             if (el) {
-                              el.style.setProperty('text-shadow', 'none', 'important')
+                              // Clean drop shadow behind the gradient fill instead of a
+                              // -webkit-text-stroke that muddied the colours (ADR-0044).
+                              el.style.setProperty('-webkit-text-stroke', '0', 'important')
                               el.style.setProperty(
-                                '-webkit-text-stroke',
-                                '0.5px rgba(0,0,0,0.5)',
+                                'text-shadow',
+                                '0 1px 2px rgba(0,0,0,0.65), 0 0 2px rgba(0,0,0,0.5)',
                                 'important'
                               )
                               el.style.setProperty('color', 'transparent', 'important')

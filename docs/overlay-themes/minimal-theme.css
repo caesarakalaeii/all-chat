@@ -171,10 +171,11 @@ body {
   font-family: var(--chat-font-family, 'Roboto', Arial, sans-serif) !important;
   font-size: var(--chat-font-size, 16px) !important;
   font-weight: var(--chat-font-weight, 400) !important;
-  /* Smooth vector outline via -webkit-text-stroke + paint-order */
-  text-shadow: none !important;
-  paint-order: stroke fill !important;
-  -webkit-text-stroke: 3px #000 !important;
+  /* Crisp readability outline via layered text-shadow (ADR-0044) — replaces the
+     -webkit-text-stroke that eroded thin glyph strokes and chunked corners at 3px. */
+  text-shadow:
+    -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000,
+    -2px 0 0 #000, 2px 0 0 #000, 0 -2px 0 #000, 0 2px 0 #000 !important;
   margin-left: 0 !important;
 }
 
@@ -224,11 +225,12 @@ body {
   display: var(--chat-show-username, inline) !important;
   margin-bottom: 0 !important;
   margin-right: 0 !important;
-  /* Smooth vector outline via -webkit-text-stroke + paint-order, replacing
-     the previous 12-layer text-shadow that produced choppy corners. */
-  text-shadow: none !important;
-  paint-order: stroke fill !important;
-  -webkit-text-stroke: 3px #000 !important;
+  /* Crisp readability outline via layered text-shadow (ADR-0044). The earlier
+     -webkit-text-stroke eroded thin glyph strokes; a layered shadow sits behind
+     the fill and keeps corners clean. */
+  text-shadow:
+    -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000,
+    -2px 0 0 #000, 2px 0 0 #000, 0 -2px 0 #000, 0 2px 0 #000 !important;
   /* Colors are preserved from backend (dynamic per user) */
 }
 
@@ -270,10 +272,10 @@ body {
   word-break: break-word !important;
   overflow-wrap: break-word !important;
   white-space: pre-wrap !important;
-  /* Smooth vector outline (see username block for rationale) */
-  text-shadow: none !important;
-  paint-order: stroke fill !important;
-  -webkit-text-stroke: 3px #000 !important;
+  /* Crisp readability outline via layered text-shadow (see username block). */
+  text-shadow:
+    -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000,
+    -2px 0 0 #000, 2px 0 0 #000, 0 -2px 0 #000, 0 2px 0 #000 !important;
   margin: 0 !important;
   padding: 0 !important;
   background: transparent !important;
