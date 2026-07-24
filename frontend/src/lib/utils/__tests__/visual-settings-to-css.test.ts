@@ -49,6 +49,7 @@ describe('visualSettingsToCss', () => {
       lineHeight: '1.5',
       letterSpacing: '0px',
       fontSize: '16px',
+      textShadow: '0 1px 2px rgba(0, 0, 0, 0.6)',
       messageColor: '#ffffff',
       usernameColor: '#aaaaaa',
       timestampColor: '#666666',
@@ -115,8 +116,8 @@ describe('visualSettingsToCss', () => {
     // platformBadgePosition and platformBadgeStyle are not CSS properties, so not emitted
     expect(result).not.toContain('platformBadgePosition')
     expect(result).not.toContain('platformBadgeStyle')
-    // All 51 CSS properties present (excludes non-CSS fields)
-    expect((result.match(/--chat-|--platform-/g) ?? []).length).toBe(51)
+    // All 52 CSS properties present (excludes non-CSS fields)
+    expect((result.match(/--chat-|--platform-/g) ?? []).length).toBe(52)
   })
 
   it('wraps output in correct cascade layer syntax', () => {

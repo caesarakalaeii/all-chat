@@ -647,6 +647,18 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
 
   return (
     <main id="main-content" tabIndex={-1} className="min-h-screen bg-transparent">
+      {/*
+        Force the embed document transparent so the editor's preview-backdrop
+        color (SplitView PreviewBackdropPicker) shows THROUGH this iframe.
+        globals.css paints BOTH `html { background: var(--color-bg) }` and a
+        `body` background+grid on every page; the root element (html) paints the
+        iframe canvas, so body-only is not enough — both must be cleared.
+      */}
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `html, body { background: transparent !important; background-image: none !important; }`,
+        }}
+      />
       {useCustomCss && scopedPreviewCss && (
         <style
           key={scopedPreviewCss}

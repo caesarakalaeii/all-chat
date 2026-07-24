@@ -113,6 +113,17 @@ test.describe('editor settings navigation', () => {
     await page.getByRole('button', { name: 'Preview on chroma green' }).click()
     await expect(panel).toHaveCSS('background-color', 'rgb(0, 177, 64)')
 
+    // The embed iframe must be transparent so the panel backdrop shows THROUGH
+    // it — otherwise the pane stays black regardless of the picker. The root
+    // element (html) paints the iframe canvas, so BOTH html and body must be
+    // transparent; asserting body alone gave a false pass while html stayed
+    // opaque (the actual regression).
+    const frame = page.frameLocator('iframe[title="Overlay live preview"]')
+    await expect(frame.locator('html')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)', {
+      timeout: 20_000,
+    })
+    await expect(frame.locator('body')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+
     await page.reload()
     await expect(page.getByTestId('preview-panel')).toHaveCSS(
       'background-color',
