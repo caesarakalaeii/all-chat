@@ -70,8 +70,11 @@ body {
    brutalist look and stays readable on the white card (technique from Minimal). */
 .chat-username {
   font-weight: 800 !important;
-  paint-order: stroke fill !important;
-  -webkit-text-stroke: 2px #000000 !important;
+  /* Chunky brutalist outline via layered text-shadow (ADR-0044), not
+     -webkit-text-stroke, so thin glyph strokes stay intact. */
+  text-shadow:
+    -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000,
+    -2px 0 0 #000, 2px 0 0 #000, 0 -2px 0 #000, 0 2px 0 #000 !important;
 }
 
 /* Avatar — hard square */

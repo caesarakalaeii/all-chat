@@ -65,16 +65,27 @@
 **Advantages**: Changes apply instantly without page reload
 **Limitations**: No live preview, must test in OBS
 
-### Method 2: In-App CSS Editor (Recommended for Testing)
+### Method 2: In-App CSS Editor (Recommended)
 
 1. Go to All-Chat dashboard
 2. Navigate to **Overlays** → Select your overlay
-3. Click **Customize CSS** (or **Preview** tab)
-4. Enter CSS in the editor
-5. Click **Save**
+3. Open the **Advanced → Custom CSS** section in the left nav
+4. If a theme is applied, its **full CSS is already loaded** in the editor — edit
+   it directly. Otherwise start typing your own rules.
+5. The **preview updates live as you type** (no save needed to see it). Syntax
+   highlighting and inline tips flag broken CSS; an incomplete rule (unbalanced
+   `{ }`) simply isn't previewed until you close it.
+6. Click **Save** to persist. We save **only your changes** (a diff against the
+   theme), so fixes we ship to the theme still reach the rules you didn't touch.
+   Deleting a theme rule can't be layered on top, so that stores a full copy and
+   pauses theme updates for that overlay; click **Reset to theme** to discard your
+   edits and re-link.
 
-**Advantages**: Live preview, syntax highlighting, scoped testing
-**Limitations**: Requires login, changes must be saved
+**Advantages**: Theme CSS preloaded, live preview as you type, syntax highlighting,
+inline validation, scoped testing, and theme fixes keep reaching the parts you
+haven't customised
+**Limitations**: Requires login; if you *delete* theme rules (rather than override
+them) that overlay stops auto-updating until you **Reset to theme**
 
 ### Method 3: Direct CSS File (Advanced)
 

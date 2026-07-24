@@ -92,8 +92,9 @@ body {
   font-weight: 400 !important;
   font-size: 1.2em !important;
   letter-spacing: 0.03em !important;
-  paint-order: stroke fill !important;
-  -webkit-text-stroke: 1px #000000 !important;
+  /* Comic ink outline via layered text-shadow (ADR-0044), not -webkit-text-stroke. */
+  text-shadow:
+    -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000 !important;
 }
 
 /* Message text — dark ink on the balloon */

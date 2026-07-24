@@ -240,12 +240,16 @@
   animation: none !important;
 }
 
-/* Gradient usernames: override theme text-shadow to prevent black outline
-   from hiding the gradient. Selector must be more specific than theme rules
-   like .font-semibold.text-sm which also use !important. */
+/* Gradient usernames fill with a clipped background (the text itself is
+   transparent), so a -webkit-text-stroke bit into the gradient and looked
+   muddy. A layered drop shadow sits BEHIND the glyphs instead, reading cleanly
+   without masking the colours (ADR-0044). Selector must be more specific than
+   theme rules like .font-semibold.text-sm which also use !important. */
 span.font-semibold.text-sm.username-gradient {
-  text-shadow: none !important;
-  -webkit-text-stroke: 0.5px rgba(0, 0, 0, 0.5) !important;
+  -webkit-text-stroke: 0 !important;
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.65),
+    0 0 2px rgba(0, 0, 0, 0.5) !important;
 }
 
 /* ============================================================
