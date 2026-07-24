@@ -6,11 +6,11 @@ import { test, expect } from '@playwright/test'
  * Frontend behaviour (API mocked, no backend):
  * - Applying a theme PRELOADS its CSS so the editor is not a blank box, and the
  *   overlay reads as still linked to the bundle ("Using … theme").
- * - A saved override reads as a fork ("detached from the bundled theme") and
- *   offers "Reset to theme".
+ * - A saved override reads as customised ("theme updates paused" for a full copy)
+ *   and offers "Reset to theme".
  * - The editor region + validation status render.
  *
- * The fork-on-save decision itself is unit-tested (src/lib/utils/custom-css.ts);
+ * The diff/fork storage decision is unit-tested (src/lib/utils/theme-css-diff.ts);
  * live-preview-as-you-type is verified manually against the running app because
  * it needs the preview iframe + WebSocket message flow.
  */
@@ -66,7 +66,9 @@ test.describe('Advanced → Custom CSS', () => {
     await expect(page.getByRole('button', { name: 'Reset to theme' })).toBeVisible()
   })
 
-  test('a saved override reads as a fork detached from the theme', async ({ page }) => {
+  test('a saved (legacy, unmarked) override reads as customised with theme updates paused', async ({
+    page,
+  }) => {
     await setup(page, {
       theme_id: 'minimal',
       custom_css: '.chat-message { background: rebeccapurple; }',
@@ -74,7 +76,7 @@ test.describe('Advanced → Custom CSS', () => {
     })
     await openCustomCss(page)
 
-    await expect(page.getByText(/detached from the bundled theme/i)).toBeVisible()
+    await expect(page.getByText(/theme updates paused/i)).toBeVisible()
     await expect(page.getByRole('button', { name: 'Reset to theme' })).toBeVisible()
   })
 

@@ -39,29 +39,21 @@ export function markerSeverityToLevel(severity: number): CssIssue['severity'] {
 }
 
 /**
- * Custom-CSS fork model (ADR-0043).
+ * Custom-CSS model (ADR-0043).
  *
  * The overlay editor PRELOADS the applied bundled theme's CSS into the Advanced
- * editor so it is visible and directly editable. To keep theme fixes propagating
- * on deploy, that preloaded copy is persisted to `custom_css` only when the user
- * actually diverges from the pristine theme ("fork-on-edit"). An untouched theme
- * (or an editor still equal to its pristine theme) saves an empty override so the
- * overlay stays linked to the bundle.
+ * editor so it is visible and directly editable. What actually gets persisted to
+ * `custom_css` is computed by the semantic diff in `theme-css-diff.ts` (only the
+ * user's changes, so untouched theme rules keep updating). This helper is the
+ * lightweight "has the user customised the theme at all?" check the editor UI uses
+ * to pick its status pill, without running the full diff on every keystroke.
  */
 
 /**
- * True when the editor content represents a user fork: it has content AND differs
- * from the pristine bundled theme CSS. When there is no theme (pristine === ''),
- * any non-empty content is a fork.
+ * True when the editor content diverges from the pristine bundled theme CSS: it has
+ * content AND differs from the theme. When there is no theme (pristine === ''), any
+ * non-empty content counts as customised.
  */
 export function isCustomCssForked(customCss: string, pristineThemeCss: string): boolean {
   return customCss.trim().length > 0 && customCss !== pristineThemeCss
-}
-
-/**
- * The value to persist to `custom_css`: the editor content when forked, else ''
- * (which re-links the overlay to its bundled theme_id).
- */
-export function persistedCustomCss(customCss: string, pristineThemeCss: string): string {
-  return isCustomCssForked(customCss, pristineThemeCss) ? customCss : ''
 }

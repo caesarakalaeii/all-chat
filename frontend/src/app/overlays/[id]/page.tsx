@@ -71,8 +71,10 @@ import { visualSettingsToCss } from '@/lib/utils/visual-settings-to-css'
 import { useNotificationSocket } from '@/hooks/useNotificationSocket'
 import { parseCssToVisualSettings } from '@/lib/utils/theme-css-parser'
 import { getBundledTheme } from '@/lib/theme-marketplace/bundled-themes'
-import { isCustomCssForked, persistedCustomCss } from '@/lib/utils/custom-css'
+import { isCustomCssForked } from '@/lib/utils/custom-css'
 import type { CssIssue } from '@/lib/utils/custom-css'
+import { computeThemeCssDiff, reconstructEditorCss } from '@/lib/utils/theme-css-diff'
+import type { CustomCssMode } from '@/lib/utils/theme-css-diff'
 import type { Theme } from '@/lib/theme-marketplace/types'
 import { toastManager } from '@/lib/toast'
 import { safeExternalRedirect } from '@/lib/auth/redirect-allowlist'
@@ -1653,6 +1655,10 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   const [pristineThemeCss, setPristineThemeCss] = useState('')
   const [cssIssues, setCssIssues] = useState<CssIssue[]>([])
   const [themeId, setThemeId] = useState('')
+  // How the current editor content maps to storage (ADR-0043): 'linked' = equals
+  // theme, 'diff' = only-changes stored (theme still updates), 'fork' = full copy
+  // stored because theme rules were deleted (this overlay stops auto-updating).
+  const [customCssMode, setCustomCssMode] = useState<CustomCssMode>('linked')
   // Debounce handle for pushing raw custom CSS to the live preview as the user types.
   const customCssDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -2008,17 +2014,23 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   // --- handleCustomCssChange: user typed in the Advanced CSS editor ---
   // WYSIWYG for raw CSS: debounce-push to the preview as they type so edits show
   // live (ADR-0043). Guarded so a mid-edit unclosed brace can't blank the preview.
-  const handleCustomCssChange = useCallback((value: string) => {
-    setCustomCss(value)
-    if (customCssDebounceRef.current) clearTimeout(customCssDebounceRef.current)
-    customCssDebounceRef.current = setTimeout(() => {
-      const opens = (value.match(/{/g) ?? []).length
-      const closes = (value.match(/}/g) ?? []).length
-      // Only push when braces balance; otherwise keep the last good preview and
-      // let Monaco's inline markers guide the user until the rule is closed.
-      if (opens === closes) sendCustomCssToIframe(value)
-    }, 300)
-  }, [sendCustomCssToIframe])
+  const handleCustomCssChange = useCallback(
+    (value: string) => {
+      setCustomCss(value)
+      if (customCssDebounceRef.current) clearTimeout(customCssDebounceRef.current)
+      customCssDebounceRef.current = setTimeout(() => {
+        const opens = (value.match(/{/g) ?? []).length
+        const closes = (value.match(/}/g) ?? []).length
+        // Only push when braces balance; otherwise keep the last good preview and
+        // let Monaco's inline markers guide the user until the rule is closed.
+        if (opens === closes) sendCustomCssToIframe(value)
+        // Recompute the storage mode (linked / diff / fork) so the status pill tells
+        // the user whether this overlay still tracks theme updates.
+        void computeThemeCssDiff(pristineThemeCss, value).then((d) => setCustomCssMode(d.mode))
+      }, 300)
+    },
+    [sendCustomCssToIframe, pristineThemeCss]
+  )
 
   // Clear the pending debounce on unmount so it can't setState after teardown.
   useEffect(
@@ -2035,6 +2047,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   const handleResetCustomCss = useCallback(() => {
     setCustomCss(pristineThemeCss)
     setCssIssues([])
+    setCustomCssMode('linked')
     sendCustomCssToIframe(pristineThemeCss)
   }, [pristineThemeCss, sendCustomCssToIframe])
 
@@ -2050,6 +2063,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
       setThemeId(theme.id)
       setPristineThemeCss(theme.css)
       setCustomCss(theme.css)
+      setCustomCssMode('linked')
       setVisualSettings(parsed)
       setParsedThemeSettings(parsed)
       sendCssToIframe(parsed)
@@ -2218,15 +2232,18 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           // Advanced editor and used as the "reset to theme" baseline (ADR-0043).
           const themeCss = tid ? (getBundledTheme(tid)?.css ?? '') : ''
           setPristineThemeCss(themeCss)
-          // Preload the theme CSS when there is no saved override yet, so the
-          // Advanced tab shows real, editable CSS instead of a blank box. A saved
-          // override (a fork) is shown as-is.
-          setCustomCss(savedCss.trim() ? savedCss : themeCss)
+          // Reconstruct the full editable CSS from the stored delta/fork (ADR-0043):
+          // 'linked' → the bundled theme (preloaded, not a blank box), 'diff' → the
+          // theme merged with the user's saved changes, 'fork' → the saved copy as-is.
+          const { editor: editorCss, mode: cssMode } = await reconstructEditorCss(themeCss, savedCss)
+          setCustomCss(editorCss)
+          setCustomCssMode(cssMode)
 
           // Parse CSS → parsedThemeSettings so "Reset to theme defaults" works after
-          // save+reload. Prefer the saved override, else the bundled theme CSS.
+          // save+reload. Prefer the bundled theme CSS (the actual defaults), else the
+          // saved override.
           const savedVisual = config.visual_settings as Partial<VisualSettings> | null
-          const parseSource = savedCss.trim() ? savedCss : themeCss
+          const parseSource = themeCss.trim() ? themeCss : savedCss
           const parsedFromCss = parseSource.trim() ? parseCssToVisualSettings(parseSource) : {}
           if (parseSource.trim()) {
             setParsedThemeSettings(parsedFromCss)
@@ -2695,6 +2712,12 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     setIsSavingConfig(true)
     setConfigAlert(null)
     try {
+      // Compute what to persist for custom_css (ADR-0043): only the user's changed/
+      // added declarations when they tweaked the theme (so untouched rules keep
+      // receiving bundled theme updates), or a full copy when they deleted theme
+      // rules (which layering can't express — that overlay detaches). See
+      // theme-css-diff.ts.
+      const cssDiff = await computeThemeCssDiff(pristineThemeCss, customCss)
       await overlaysApi.updateConfig(id, {
         display_settings: {
           font_size: parseInt(visualSettings.fontSize ?? '16') || 16,
@@ -2718,10 +2741,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
         enable_7tv: enable7tv,
         enable_bttv: enableBttv,
         enable_ffz: enableFfz,
-        // Fork-on-edit (ADR-0043): persist the editor's CSS only when it diverges
-        // from the bundled theme; an untouched theme saves an empty override so the
-        // overlay keeps receiving bundled theme updates on deploy.
-        custom_css: persistedCustomCss(customCss, pristineThemeCss),
+        custom_css: cssDiff.stored,
         theme_id: themeId,
         visual_settings: visualSettings,
         filter_settings: filterSettings,
@@ -2746,6 +2766,8 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           emoteCount: seventvResolveState.emoteCount,
         })
       }
+      // Reflect the persisted storage mode in the status pill after a successful save.
+      setCustomCssMode(cssDiff.mode)
       setConfigAlert({ type: 'success', message: 'Configuration saved!' })
     } catch (error) {
       console.error('[Editor] Failed to save config', error)
@@ -3514,17 +3536,35 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                     <div className="space-y-3">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-xs font-medium text-text">Custom CSS</span>
-                        {isCustomCssForked(customCss, pristineThemeCss) ? (
-                          <span className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-400">
-                            Custom — detached from the bundled theme
-                          </span>
-                        ) : themeId ? (
-                          <span className="inline-flex items-center rounded-full border border-green-500/20 bg-green-500/10 px-2 py-0.5 text-[11px] font-medium text-green-400">
-                            Using “{getBundledTheme(themeId)?.name ?? themeId}” theme · auto-updates
-                          </span>
-                        ) : (
-                          <span className="text-[11px] text-text-dim">No theme applied</span>
-                        )}
+                        {(() => {
+                          const customized = isCustomCssForked(customCss, pristineThemeCss)
+                          if (!customized) {
+                            return themeId ? (
+                              <span className="inline-flex items-center rounded-full border border-green-500/20 bg-green-500/10 px-2 py-0.5 text-[11px] font-medium text-green-400">
+                                Using “{getBundledTheme(themeId)?.name ?? themeId}” theme ·
+                                auto-updates
+                              </span>
+                            ) : (
+                              <span className="text-[11px] text-text-dim">No theme applied</span>
+                            )
+                          }
+                          if (!themeId) {
+                            return (
+                              <span className="inline-flex items-center rounded-full border border-border bg-surface-2 px-2 py-0.5 text-[11px] font-medium text-text-sub">
+                                Custom CSS
+                              </span>
+                            )
+                          }
+                          return customCssMode === 'fork' ? (
+                            <span className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-400">
+                              Full copy saved — theme updates paused
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center rounded-full border border-green-500/20 bg-green-500/10 px-2 py-0.5 text-[11px] font-medium text-green-400">
+                              Customized — untouched theme rules still auto-update
+                            </span>
+                          )
+                        })()}
                         <Button
                           type="button"
                           variant="outline"
@@ -3537,9 +3577,10 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                       </div>
 
                       <p className="text-xs text-text-sub">
-                        Edit the CSS below — the preview updates as you type. Saving your edits
-                        detaches this overlay from the bundled theme so your CSS is kept exactly;
-                        “Reset to theme” re-links it to receive future theme updates.
+                        Edit the CSS below — the preview updates as you type. Only your changes are
+                        saved, so fixes we ship to the theme still reach the rules you didn’t touch.
+                        Deleting theme rules can’t be layered, so it stores a full copy and pauses
+                        theme updates for this overlay; “Reset to theme” re-links it.
                       </p>
 
                       <MonacoCSSEditor

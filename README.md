@@ -87,9 +87,10 @@ All-Chat ships with **16 ready-made themes** you can paste into your OBS Browser
 
 Pick a theme in the editor's **Advanced → Custom CSS** tab and its full CSS is
 **preloaded into an in-app editor you can edit directly** — changes preview live as
-you type, with syntax highlighting and inline tips for broken CSS. Your edits are
-kept exactly (the overlay detaches from the bundled theme); **Reset to theme**
-re-links it. Want to build your own from scratch? See the **[CSS Customization Guide](./docs/CSS_CUSTOMIZATION.md)** or the **[Theme Gallery & Creation Guide](./docs/overlay-themes/README.md)**.
+you type, with syntax highlighting and inline tips for broken CSS. Only your *changes*
+are saved, so fixes we ship to a theme still reach the rules you didn't touch;
+**Reset to theme** discards your edits and re-links. Want to build your own from
+scratch? See the **[CSS Customization Guide](./docs/CSS_CUSTOMIZATION.md)** or the **[Theme Gallery & Creation Guide](./docs/overlay-themes/README.md)**.
 
 ---
 

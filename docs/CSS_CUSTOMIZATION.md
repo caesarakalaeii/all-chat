@@ -75,14 +75,17 @@
 5. The **preview updates live as you type** (no save needed to see it). Syntax
    highlighting and inline tips flag broken CSS; an incomplete rule (unbalanced
    `{ }`) simply isn't previewed until you close it.
-6. Click **Save** to persist. Editing a theme's CSS **detaches this overlay from
-   the bundled theme** so your edits are kept exactly as written; click **Reset to
-   theme** to discard your edits and re-link (so it receives future theme updates).
+6. Click **Save** to persist. We save **only your changes** (a diff against the
+   theme), so fixes we ship to the theme still reach the rules you didn't touch.
+   Deleting a theme rule can't be layered on top, so that stores a full copy and
+   pauses theme updates for that overlay; click **Reset to theme** to discard your
+   edits and re-link.
 
 **Advantages**: Theme CSS preloaded, live preview as you type, syntax highlighting,
-inline validation, scoped testing
-**Limitations**: Requires login; an edited overlay no longer auto-updates when we
-ship theme fixes (use **Reset to theme** to re-link)
+inline validation, scoped testing, and theme fixes keep reaching the parts you
+haven't customised
+**Limitations**: Requires login; if you *delete* theme rules (rather than override
+them) that overlay stops auto-updating until you **Reset to theme**
 
 ### Method 3: Direct CSS File (Advanced)
 

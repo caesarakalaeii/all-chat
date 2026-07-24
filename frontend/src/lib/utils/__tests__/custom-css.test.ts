@@ -17,11 +17,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import {
-  isCustomCssForked,
-  persistedCustomCss,
-  markerSeverityToLevel,
-} from '../custom-css'
+import { isCustomCssForked, markerSeverityToLevel } from '../custom-css'
 
 const THEME = '.chat-username { color: gold; }'
 
@@ -44,26 +40,6 @@ describe('isCustomCssForked', () => {
 
   it('is true for hand-written CSS with no theme applied', () => {
     expect(isCustomCssForked('.x { color: red; }', '')).toBe(true)
-  })
-})
-
-describe('persistedCustomCss', () => {
-  it('persists nothing when the theme is untouched (keeps the overlay linked to the bundle)', () => {
-    expect(persistedCustomCss(THEME, THEME)).toBe('')
-  })
-
-  it('persists nothing for an empty editor', () => {
-    expect(persistedCustomCss('', '')).toBe('')
-    expect(persistedCustomCss('', THEME)).toBe('')
-  })
-
-  it('persists the edited CSS verbatim once it diverges from the theme (fork)', () => {
-    const edited = THEME + '\n.chat-message { background: blue; }'
-    expect(persistedCustomCss(edited, THEME)).toBe(edited)
-  })
-
-  it('persists hand-written CSS when there is no theme', () => {
-    expect(persistedCustomCss('.x { color: red; }', '')).toBe('.x { color: red; }')
   })
 })
 
