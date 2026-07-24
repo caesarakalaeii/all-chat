@@ -745,11 +745,11 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - api.allchat.io
-        - overlays.allchat.io
+        - api.allch.at
+        - overlays.allch.at
       secretName: allchat-tls
   rules:
-    - host: api.allchat.io
+    - host: api.allch.at
       http:
         paths:
           - path: /
@@ -759,7 +759,7 @@ spec:
                 name: api-gateway
                 port:
                   number: 8080
-    - host: overlays.allchat.io
+    - host: overlays.allch.at
       http:
         paths:
           - path: /ws
@@ -808,13 +808,13 @@ data:
   emote_service_url: "http://emote-service:8083"
 
   # Frontend URL (used for OAuth redirect generation)
-  frontend_url: "https://app.allchat.io"
+  frontend_url: "https://app.allch.at"
 
   # Logging
   log_level: "info"
 
   # WebSocket Overlay Security
-  websocket_allowed_origins: "https://app.allchat.io,https://studio.allchat.io"
+  websocket_allowed_origins: "https://app.allch.at,https://studio.allch.at"
 ```
 
 > **API Gateway runtime knobs**

@@ -581,7 +581,7 @@ artillery run test/load/websocket-surge.yaml
 ```yaml
 # test/load/websocket-surge.yaml
 config:
-  target: "wss://overlays.allchat.io"
+  target: "wss://overlays.allch.at"
   phases:
     - duration: 60
       arrivalRate: 100  # 100 connections/second
