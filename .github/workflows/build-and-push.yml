@@ -283,7 +283,12 @@ jobs:
   test:
     runs-on: ubuntu-latest
     needs: detect-changes
-    if: github.event_name == 'pull_request' && needs.detect-changes.outputs.code == 'true'
+    # Keep this job RUNNING on every PR (do not gate it at the job level) so the
+    # matrix expands and each `test (<service>)` required context is created and
+    # reports. A matrix job skipped via job-level `if:` collapses to a single
+    # `test` check, which would leave the per-leg required contexts unreported and
+    # block docs-only PRs. The expensive step is gated instead (see below).
+    if: github.event_name == 'pull_request'
     strategy:
       matrix:
         service:
@@ -313,6 +318,9 @@ jobs:
           go-version: '1.25.12'
 
       - name: Run tests for ${{ matrix.service }}
+        # Skip the actual suite on docs-only PRs. The job still succeeds, so the
+        # required `test (<service>)` context reports Success without running Go.
+        if: needs.detect-changes.outputs.code == 'true'
         run: |
           cd services/${{ matrix.service }}
           go mod download
