@@ -292,7 +292,7 @@ groups:
         annotations:
           summary: "{{ $labels.pod }} is down"
           description: "Service {{ $labels.app }} ({{ $labels.pod }}) has been down for >2 minutes"
-          runbook: "https://docs.allchat.io/runbooks/service-down"
+          runbook: "https://docs.allch.at/runbooks/service-down"
 
       # Error rate
       - alert: HighErrorRate
@@ -309,7 +309,7 @@ groups:
         annotations:
           summary: "High error rate on {{ $labels.service }}"
           description: "Error rate: {{ $value | humanizePercentage }} (threshold: 5%)"
-          runbook: "https://docs.allchat.io/runbooks/high-error-rate"
+          runbook: "https://docs.allch.at/runbooks/high-error-rate"
 
       # Database connections
       - alert: DatabaseConnectionPoolExhausted
@@ -324,7 +324,7 @@ groups:
         annotations:
           summary: "Database pool exhausted on {{ $labels.service }}"
           description: "Active: {{ $value }}, Max: {{ $labels.max_conns }}"
-          runbook: "https://docs.allchat.io/runbooks/db-pool-exhausted"
+          runbook: "https://docs.allch.at/runbooks/db-pool-exhausted"
 
       # Redis availability
       - alert: RedisDown
@@ -336,7 +336,7 @@ groups:
         annotations:
           summary: "Redis is down"
           description: "All message processing will stop"
-          runbook: "https://docs.allchat.io/runbooks/redis-down"
+          runbook: "https://docs.allch.at/runbooks/redis-down"
 
       # CNPG health
       - alert: CNPGClusterDegraded
@@ -348,7 +348,7 @@ groups:
         annotations:
           summary: "CNPG cluster has < 2 ready instances"
           description: "Ready instances: {{ $value }}/3"
-          runbook: "https://docs.allchat.io/runbooks/cnpg-degraded"
+          runbook: "https://docs.allch.at/runbooks/cnpg-degraded"
 
       # WebSocket capacity
       - alert: WebSocketCapacityHigh
@@ -360,7 +360,7 @@ groups:
         annotations:
           summary: "API Gateway approaching WebSocket capacity"
           description: "Connections: {{ $value }}/2500 limit"
-          runbook: "https://docs.allchat.io/runbooks/websocket-capacity"
+          runbook: "https://docs.allch.at/runbooks/websocket-capacity"
 
       # YouTube quota
       - alert: YouTubeQuotaExhausted
@@ -372,7 +372,7 @@ groups:
         annotations:
           summary: "YouTube API quota nearly exhausted"
           description: "Used: {{ $value }}/10000 units"
-          runbook: "https://docs.allchat.io/runbooks/youtube-quota"
+          runbook: "https://docs.allch.at/runbooks/youtube-quota"
 
   - name: warning
     interval: 1m
@@ -401,7 +401,7 @@ groups:
         annotations:
           summary: "High message backlog in Redis Stream"
           description: "Pending messages: {{ $value }}"
-          runbook: "https://docs.allchat.io/runbooks/message-backlog"
+          runbook: "https://docs.allch.at/runbooks/message-backlog"
 
       # CPU usage
       - alert: HighCPUUsage
