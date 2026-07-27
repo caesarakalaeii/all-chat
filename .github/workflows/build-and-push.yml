@@ -14,11 +14,13 @@ on:
   pull_request:
     branches:
       - main
-    paths:
-      - 'services/**'
-      - 'frontend/**'
-      - 'shared/**'
-      - '.github/workflows/**'
+    # No `paths:` filter here on purpose. Required status checks (`test (*)`,
+    # `test-node`) live in this workflow; if a `paths:` filter skipped the whole
+    # workflow for docs-only PRs, those required checks would never report and the
+    # PR would be stuck in "Expected — Waiting for status to be reported" forever.
+    # Instead the workflow always triggers and the individual jobs skip cheaply via
+    # a job-level `if:` on detect-changes.outputs.code. A job skipped by a
+    # conditional reports "Success", which satisfies branch protection.
   workflow_dispatch:
 
 env:
@@ -53,6 +55,7 @@ jobs:
       frontend: ${{ steps.changes.outputs.frontend }}
       shared: ${{ steps.changes.outputs.shared }}
       migrations: ${{ steps.changes.outputs.migrations }}
+      code: ${{ steps.changes.outputs.code }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -131,6 +134,16 @@ jobs:
             migrations:
               - 'migrations/**'
               - 'scripts/run-migrations.sh'
+            # Aggregate "any test-relevant code changed" signal. Gates the test
+            # jobs so docs-only PRs skip them (and thus report Success) instead of
+            # running the full Go/Node suites.
+            code:
+              - 'services/**'
+              - 'frontend/**'
+              - 'shared/**'
+              - 'migrations/**'
+              - 'scripts/**'
+              - '.github/workflows/**'
 
   build-and-push:
     runs-on: ubuntu-latest
@@ -269,7 +282,8 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    needs: detect-changes
+    if: github.event_name == 'pull_request' && needs.detect-changes.outputs.code == 'true'
     strategy:
       matrix:
         service:
@@ -306,7 +320,8 @@ jobs:
 
   test-node:
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    needs: detect-changes
+    if: github.event_name == 'pull_request' && needs.detect-changes.outputs.code == 'true'
     steps:
       - uses: actions/checkout@v7
 
@@ -328,7 +343,8 @@ jobs:
   # migrations applied, so they run in a dedicated job (they would t.Skipf without a DB).
   test-engagement-integration:
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    needs: detect-changes
+    if: github.event_name == 'pull_request' && needs.detect-changes.outputs.code == 'true'
     services:
       postgres:
         image: postgres:16-alpine
