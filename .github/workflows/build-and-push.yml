@@ -14,11 +14,13 @@ on:
   pull_request:
     branches:
       - main
-    paths:
-      - 'services/**'
-      - 'frontend/**'
-      - 'shared/**'
-      - '.github/workflows/**'
+    # No `paths:` filter here on purpose. Required status checks (`test (*)`,
+    # `test-node`) live in this workflow; if a `paths:` filter skipped the whole
+    # workflow for docs-only PRs, those required checks would never report and the
+    # PR would be stuck in "Expected — Waiting for status to be reported" forever.
+    # Instead the workflow always triggers and the individual jobs skip cheaply via
+    # a job-level `if:` on detect-changes.outputs.code. A job skipped by a
+    # conditional reports "Success", which satisfies branch protection.
   workflow_dispatch:
 
 env:
@@ -53,6 +55,7 @@ jobs:
       frontend: ${{ steps.changes.outputs.frontend }}
       shared: ${{ steps.changes.outputs.shared }}
       migrations: ${{ steps.changes.outputs.migrations }}
+      code: ${{ steps.changes.outputs.code }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -131,6 +134,16 @@ jobs:
             migrations:
               - 'migrations/**'
               - 'scripts/run-migrations.sh'
+            # Aggregate "any test-relevant code changed" signal. Gates the test
+            # jobs so docs-only PRs skip them (and thus report Success) instead of
+            # running the full Go/Node suites.
+            code:
+              - 'services/**'
+              - 'frontend/**'
+              - 'shared/**'
+              - 'migrations/**'
+              - 'scripts/**'
+              - '.github/workflows/**'
 
   build-and-push:
     runs-on: ubuntu-latest
@@ -269,6 +282,12 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    needs: detect-changes
+    # Keep this job RUNNING on every PR (do not gate it at the job level) so the
+    # matrix expands and each `test (<service>)` required context is created and
+    # reports. A matrix job skipped via job-level `if:` collapses to a single
+    # `test` check, which would leave the per-leg required contexts unreported and
+    # block docs-only PRs. The expensive step is gated instead (see below).
     if: github.event_name == 'pull_request'
     strategy:
       matrix:
@@ -299,6 +318,9 @@ jobs:
           go-version: '1.25.12'
 
       - name: Run tests for ${{ matrix.service }}
+        # Skip the actual suite on docs-only PRs. The job still succeeds, so the
+        # required `test (<service>)` context reports Success without running Go.
+        if: needs.detect-changes.outputs.code == 'true'
         run: |
           cd services/${{ matrix.service }}
           go mod download
@@ -306,7 +328,8 @@ jobs:
 
   test-node:
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    needs: detect-changes
+    if: github.event_name == 'pull_request' && needs.detect-changes.outputs.code == 'true'
     steps:
       - uses: actions/checkout@v7
 
@@ -328,7 +351,8 @@ jobs:
   # migrations applied, so they run in a dedicated job (they would t.Skipf without a DB).
   test-engagement-integration:
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    needs: detect-changes
+    if: github.event_name == 'pull_request' && needs.detect-changes.outputs.code == 'true'
     services:
       postgres:
         image: postgres:16-alpine
