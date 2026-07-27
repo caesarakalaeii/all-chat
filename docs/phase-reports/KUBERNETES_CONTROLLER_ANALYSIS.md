@@ -155,7 +155,7 @@ data:
 
 ```yaml
 ---
-apiVersion: allchat.io/v1alpha1
+apiVersion: allch.at/v1alpha1
 kind: Overlay
 metadata:
   name: streamer-xqc-main
@@ -179,13 +179,13 @@ status:
   phase: "Active"
 
 ---
-apiVersion: allchat.io/v1alpha1
+apiVersion: allch.at/v1alpha1
 kind: ChatSource
 metadata:
   name: xqc-twitch
   namespace: allchat
   ownerReferences:
-    - apiVersion: allchat.io/v1alpha1
+    - apiVersion: allch.at/v1alpha1
       kind: Overlay
       name: streamer-xqc-main
 spec:

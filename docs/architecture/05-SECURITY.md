@@ -350,7 +350,7 @@ func (rl *RateLimiter) Limit() gin.HandlerFunc {
 // pkg/middleware/cors.go
 func CORS() gin.HandlerFunc {
     return cors.New(cors.Config{
-        AllowOrigins:     []string{"https://allchat.io", "https://*.allchat.io"},
+        AllowOrigins:     []string{"https://allch.at", "https://*.allch.at"},
         AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
         AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
         ExposeHeaders:    []string{"Content-Length", "X-RateLimit-Limit"},
@@ -430,7 +430,7 @@ func (r *PostgresOverlayRepository) GetByID(ctx context.Context, id string) (*do
 spec:
   tls:
     - hosts:
-        - api.allchat.io
+        - api.allch.at
       secretName: allchat-tls  # Let's Encrypt certificate
 ```
 
