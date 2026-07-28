@@ -280,6 +280,165 @@ func TestSevenTVClient_FetchEmotes(t *testing.T) {
 	}
 }
 
+func TestSevenTVClient_FetchEmotes_NullEmoteSet(t *testing.T) {
+	// Since 2026-08-03, /v3/users/{platform}/{platform_id} returns emote_set as
+	// null and only carries emote_set_id; the set contents must be fetched via
+	// a follow-up /v3/emote-sets/{id} call.
+	connectionResponse := `{
+		"id": "71092938",
+		"platform": "TWITCH",
+		"username": "xqc",
+		"emote_set_id": "set-123",
+		"emote_set": null
+	}`
+
+	setResponse := `{
+		"id": "set-123",
+		"name": "Cool Emotes",
+		"emotes": [
+			{
+				"id": "60ae7316f7c927fad14e6ca2",
+				"name": "xqcL",
+				"data": {
+					"host": {
+						"url": "//cdn.7tv.app/emote/60ae7316f7c927fad14e6ca2",
+						"files": [{"name": "1x.webp", "width": 28}]
+					}
+				}
+			}
+		]
+	}`
+
+	globalResponse := `{
+		"id": "global-set",
+		"name": "Global Emotes",
+		"emotes": [
+			{
+				"id": "603cac391cd55c0014d989be",
+				"name": "Stare",
+				"data": {
+					"host": {
+						"url": "//cdn.7tv.app/emote/603cac391cd55c0014d989be",
+						"files": [{"name": "1x.webp", "width": 28}]
+					}
+				}
+			}
+		]
+	}`
+
+	tests := []struct {
+		name               string
+		connectionResponse string
+		setStatusCode      int
+		setResponse        string
+		wantEmotes         []string
+		wantMissingEmotes  []string
+		wantSetFetch       bool
+	}{
+		{
+			name:               "null emote_set resolves via emote_set_id follow-up fetch",
+			connectionResponse: connectionResponse,
+			setStatusCode:      http.StatusOK,
+			setResponse:        setResponse,
+			wantEmotes:         []string{"xqcL", "Stare"},
+			wantSetFetch:       true,
+		},
+		{
+			name:               "null emote_set and null emote_set_id yields globals only",
+			connectionResponse: `{"id": "71092938", "platform": "TWITCH", "username": "xqc", "emote_set_id": null, "emote_set": null}`,
+			wantEmotes:         []string{"Stare"},
+			wantMissingEmotes:  []string{"xqcL"},
+		},
+		{
+			name:               "dangling emote_set_id (set deleted) degrades to globals only",
+			connectionResponse: connectionResponse,
+			setStatusCode:      http.StatusNotFound,
+			wantEmotes:         []string{"Stare"},
+			wantMissingEmotes:  []string{"xqcL"},
+			wantSetFetch:       true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sawSetFetch := false
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch {
+				case strings.HasSuffix(r.URL.Path, "/v3/emote-sets/global"):
+					w.WriteHeader(http.StatusOK)
+					w.Write([]byte(globalResponse))
+				case strings.Contains(r.URL.Path, "/v3/emote-sets/set-123"):
+					sawSetFetch = true
+					w.WriteHeader(tt.setStatusCode)
+					if tt.setResponse != "" {
+						w.Write([]byte(tt.setResponse))
+					}
+				case strings.Contains(r.URL.Path, "/v3/users/twitch/"):
+					w.WriteHeader(http.StatusOK)
+					w.Write([]byte(tt.connectionResponse))
+				default:
+					w.WriteHeader(http.StatusNotFound)
+				}
+			}))
+			defer server.Close()
+
+			logger := zaptest.NewLogger(t)
+			client := NewSevenTVClient(logger, &mockTwitchLookup{id: "71092938"}, &mockKickLookup{id: "0"})
+			client.baseURL = server.URL
+
+			emotes, err := client.FetchEmotes(context.Background(), "xqc")
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantSetFetch, sawSetFetch, "emote-set follow-up fetch expectation")
+
+			emoteMap := make(map[string]models.Emote)
+			for _, e := range emotes {
+				emoteMap[e.Code] = e
+			}
+			for _, code := range tt.wantEmotes {
+				assert.Contains(t, emoteMap, code)
+			}
+			for _, code := range tt.wantMissingEmotes {
+				assert.NotContains(t, emoteMap, code)
+			}
+		})
+	}
+}
+
+func TestSevenTVClient_FetchUserEmotes_NullEmoteSet(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "/v3/emote-sets/personal-set"):
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{
+				"id": "personal-set",
+				"name": "Personal Emotes",
+				"emotes": [{
+					"id": "emote-1",
+					"name": "myEmote",
+					"data": {"host": {"url": "//cdn.7tv.app/emote/emote-1", "files": [{"name": "1x.webp", "width": 28}]}}
+				}]
+			}`))
+		case strings.Contains(r.URL.Path, "/v3/users/twitch/"):
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"id": "123", "platform": "TWITCH", "emote_set_id": "personal-set", "emote_set": null}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	logger := zaptest.NewLogger(t)
+	client := NewSevenTVClient(logger, &mockTwitchLookup{id: "123"}, &mockKickLookup{id: "0"})
+	client.baseURL = server.URL
+
+	emotes, err := client.FetchUserEmotes(context.Background(), "twitch", "123")
+
+	require.NoError(t, err)
+	require.Len(t, emotes, 1)
+	assert.Equal(t, "myEmote", emotes[0].Code)
+}
+
 func TestSevenTVClient_Provider(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	client := NewSevenTVClient(logger, &mockTwitchLookup{id: "1"}, &mockKickLookup{id: "0"})
