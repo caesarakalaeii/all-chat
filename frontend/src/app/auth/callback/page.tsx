@@ -46,6 +46,7 @@ import Link from 'next/link'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import type { User } from '@/lib/types/auth'
 import { trackEvent } from '@/lib/analytics'
+import { resolveSigninPlatform, readAndClearSigninPlatform } from '@/lib/analytics-auth'
 import { isAllowedExternalRedirect } from '@/lib/auth/redirect-allowlist'
 import { InfinityLogo } from '@/components/InfinityLogo'
 
@@ -109,12 +110,19 @@ function AuthCallbackContent() {
 
         // Distinct funnel steps: a completion marker means an OAuth source-add or
         // moderation re-consent finished, rather than a fresh sign-in.
+        // Consume the stashed sign-in platform unconditionally (in every branch)
+        // so an abandoned or reflow login can't leave stale sessionStorage that
+        // later misattributes a fresh sign-in on the same tab.
+        const signinPlatform = readAndClearSigninPlatform()
         if (moderationEnabled) {
           trackEvent('moderation_enabled', { via: 'oauth', platform: moderationEnabled })
         } else if (sourceAdded) {
           trackEvent('source_added', { via: 'oauth' })
         } else {
-          trackEvent('signin_completed', { platform: user.auth_provider ?? 'unknown' })
+          // Attribute the platform reliably: the just-clicked platform (stashed
+          // before the OAuth redirect) wins, then auth_provider, then inference
+          // from the provider id fields. auth_provider alone was ~58% 'unknown'.
+          trackEvent('signin_completed', { platform: resolveSigninPlatform(user, signinPlatform) })
         }
 
         if (redirectTo) {

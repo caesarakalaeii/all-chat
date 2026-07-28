@@ -41,6 +41,18 @@ export type AnalyticsEvent =
   | 'source_add_failed'
   | 'moderation_enabled'
   | 'obs_url_copied'
+  // Streamer editor & activation. Instruments the editor/preview surface where
+  // the activation funnel bleeds most (analytics review 2026-07-27): most users
+  // sign in but never get an overlay into OBS. `preview_rendered` is the aha —
+  // the first real chat message rendering in the editor preview.
+  | 'editor_opened'
+  | 'source_configured'
+  | 'overlay_settings_saved'
+  | 'preview_rendered'
+  // Viewer / browser-extension auth funnel (separate from the streamer sign-in
+  // above). Lets us measure the viewer auth error rate and its causes.
+  | 'viewer_signin_completed'
+  | 'viewer_signin_failed'
   // First-run setup guide (onboarding) funnel. `step` payloads use the
   // OnboardingStepId enum values, never IDs or user data.
   | 'onboarding_started'
@@ -62,8 +74,10 @@ export type AnalyticsEvent =
   // Outbound & CTA
   | 'outbound_click'
   | 'cta_click'
-  // Errors & friction
-  | 'capacity_limit_hit'
+  // NOTE: a `capacity_limit_hit` event lived here but was never fired — no
+  // user-facing overlay/source cap exists in the product (verified 2026-07-27:
+  // neither HandleCreateOverlay nor HandleAddSource enforces a count). Re-add it
+  // if a cap is ever introduced, wired to the real error at its enforcement site.
 
 /** Umami only accepts flat primitive values in event data. */
 export type EventData = Record<string, string | number | boolean>

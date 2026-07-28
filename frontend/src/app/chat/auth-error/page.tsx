@@ -30,6 +30,8 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
+import { useTrackOnce } from '@/hooks/useTrackOnce'
+import { bucketViewerAuthError, sanitizeViewerPlatform } from '@/lib/analytics-auth'
 
 // Map the backend `platform` query param to a display name. Falls back to a
 // platform-neutral label so the page never misnames the provider that failed
@@ -53,6 +55,13 @@ function AuthErrorContent() {
   const platformLabel = PLATFORM_LABELS[platform]
   const accountLabel =
     typeof platformLabel === 'string' ? `${platformLabel} account` : 'streaming account'
+
+  // Instrument the viewer/extension auth error rate + causes (previously untracked).
+  // The raw `error` is bucketed to a non-PII enum before it leaves the browser.
+  useTrackOnce('viewer_signin_failed', {
+    platform: sanitizeViewerPlatform(platform),
+    reason: bucketViewerAuthError(searchParams.get('error')),
+  })
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-bg">

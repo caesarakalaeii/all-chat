@@ -39,6 +39,7 @@ import Link from 'next/link'
 import { useViewerAuthStore } from '@/lib/stores/viewer-auth-store'
 import { viewerApi } from '@/lib/api/viewer'
 import { isAllowedExternalRedirect } from '@/lib/auth/redirect-allowlist'
+import { trackEvent } from '@/lib/analytics'
 
 /*
  * SECURITY (audit H4 + #10): postMessage targetOrigin must be an explicit
@@ -80,6 +81,7 @@ function AuthSuccessContent() {
       const streamer = searchParams.get('streamer')
 
       if (!code) {
+        trackEvent('viewer_signin_failed', { reason: 'no_code' })
         setError('No authentication code received')
         setLoading(false)
 
@@ -106,8 +108,18 @@ function AuthSuccessContent() {
         }
         const data = await resp.json()
         token = data.token
+        // Viewer auth funnel: completion = a token was actually returned. Guard
+        // on truthiness so a 200-with-no-token isn't mis-recorded as a success
+        // (it's a failed exchange). Together with the no_code branch above and the
+        // catch below, both sides of the ~11% viewer error rate are measurable.
+        if (token) {
+          trackEvent('viewer_signin_completed')
+        } else {
+          trackEvent('viewer_signin_failed', { reason: 'exchange_failed' })
+        }
       } catch (err) {
         console.error('Token exchange failed:', err)
+        trackEvent('viewer_signin_failed', { reason: 'exchange_failed' })
         setError('Authentication failed. The code may have expired — please try again.')
         setLoading(false)
         return

@@ -51,6 +51,7 @@ import { DISCORD_INVITE_URL } from '@/lib/constants'
 import { LayoutGrid, Zap, Palette, Puzzle, Code2, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { trackEvent } from '@/lib/analytics'
+import { stashSigninPlatform } from '@/lib/analytics-auth'
 import { safeExternalRedirect } from '@/lib/auth/redirect-allowlist'
 import { dashStyleFor } from '@/lib/dashboard-button-styles'
 
@@ -130,6 +131,9 @@ export default function HomeClient() {
 
   const handleTwitchLogin = async () => {
     trackEvent('signin_started', { platform: 'twitch' })
+    // Remember the clicked platform so /auth/callback can attribute the eventual
+    // signin_completed reliably (auth_provider is often empty on the exchange).
+    stashSigninPlatform('twitch')
     try {
       const response = await fetch('/api/v1/auth/twitch/login')
       const data = await response.json()
@@ -145,6 +149,7 @@ export default function HomeClient() {
 
   const handleYouTubeLogin = async () => {
     trackEvent('signin_started', { platform: 'youtube' })
+    stashSigninPlatform('youtube')
     try {
       const response = await fetch('/api/v1/auth/youtube/login')
       const data = await response.json()
@@ -160,6 +165,7 @@ export default function HomeClient() {
 
   const handleKickLogin = async () => {
     trackEvent('signin_started', { platform: 'kick' })
+    stashSigninPlatform('kick')
     try {
       const response = await fetch('/api/v1/auth/kick/login')
       const data = await response.json()

@@ -51,6 +51,7 @@ import { PremiumBadge } from '@/components/PremiumBadge'
 import { EventContent } from '@/components/overlay/EventContent'
 import { MessageAttachments } from '@/components/overlay/MessageAttachments'
 import { shouldFilterMessage } from '@/lib/utils/filterMessage'
+import { useTrackOnce } from '@/hooks/useTrackOnce'
 import type { FilterSettings } from '@/lib/types/overlay'
 import { createSoundPlayer } from '@/lib/utils/soundPlayer'
 import type { SoundPlayer, SoundSettings } from '@/lib/utils/soundPlayer'
@@ -205,6 +206,10 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
 
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [maxMessages, setMaxMessages] = useState(50)
+
+  // Activation aha-moment: the first real chat message rendering in the editor
+  // preview means the overlay is actually working. Fires once per mount.
+  useTrackOnce('preview_rendered', undefined, messages.length > 0)
   const [fontSize, setFontSize] = useState(16)
   const [customCss, setCustomCss] = useState('')
   const [useCustomCss, setUseCustomCss] = useState(false)

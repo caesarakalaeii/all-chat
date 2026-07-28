@@ -79,6 +79,7 @@ import type { Theme } from '@/lib/theme-marketplace/types'
 import { toastManager } from '@/lib/toast'
 import { safeExternalRedirect } from '@/lib/auth/redirect-allowlist'
 import { trackEvent } from '@/lib/analytics'
+import { useTrackOnce } from '@/hooks/useTrackOnce'
 import { AppNav } from '@/components/AppNav'
 import { SplitView } from '@/components/SplitView'
 import { PremiumUpsellLink } from '@/components/PremiumUpsellLink'
@@ -1149,6 +1150,7 @@ function AddSourceForm({
       setSelectedChannelId('')
       setSelectedChannelName('')
       onSourceAdded?.()
+      trackEvent('source_configured', { platform: 'discord' })
       toastManager.add({ title: 'Discord source added', type: 'success' })
     } catch {
       toastManager.add({ title: 'Failed to add Discord source', type: 'error' })
@@ -1571,6 +1573,9 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   const searchParams = useSearchParams()
   const { user } = useAuthStore()
   const mockFieldId = useId()
+
+  // Activation funnel: the editor is the most-used, least-instrumented surface.
+  useTrackOnce('editor_opened')
 
   // --- Overlay / sources state ---
   const [overlay, setOverlay] = useState<Overlay | null>(null)
@@ -2415,6 +2420,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
       overlaysApi.getSources(id).then(setSources).catch(console.error)
       window.history.replaceState({}, '', `/overlays/${id}`)
     } else if (error === 'youtube_permission_required') {
+      trackEvent('source_add_failed', { platform: 'youtube', reason: 'permission_required' })
       toastManager.add({
         title: 'YouTube permission required',
         description:
@@ -2422,6 +2428,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
         type: 'error',
       })
     } else if (error === 'youtube_no_channel') {
+      trackEvent('source_add_failed', { platform: 'youtube', reason: 'no_channel' })
       toastManager.add({
         title: 'No YouTube channel found',
         description:
@@ -2429,11 +2436,23 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
         type: 'error',
       })
     } else if (error === 'failed_to_add_source') {
+      trackEvent('source_add_failed', { reason: 'failed' })
       toastManager.add({
         title: 'Failed to add source',
         description: 'Please try again.',
         type: 'error',
       })
+    }
+
+    // Strip a handled add-source ?error= from the URL (mirrors the source_added
+    // strip above) so a reload or effect re-run doesn't re-show the toast and
+    // re-fire source_add_failed, double-counting the failure in the funnel.
+    if (
+      error === 'youtube_permission_required' ||
+      error === 'youtube_no_channel' ||
+      error === 'failed_to_add_source'
+    ) {
+      window.history.replaceState({}, '', `/overlays/${id}`)
     }
   }, [id, searchParams])
 
@@ -2484,6 +2503,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
         channel_id: username,
       })
       setSources((prev) => [...prev, source])
+      trackEvent('source_configured', { platform: 'tiktok' })
       toastManager.add({ title: 'TikTok source added', type: 'success' })
     } catch {
       toastManager.add({
@@ -2501,6 +2521,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
         channel_id: channelId,
       })
       setSources((prev) => [...prev, source])
+      trackEvent('source_configured', { platform })
       toastManager.add({ title: 'Source added', type: 'success' })
     } catch {
       toastManager.add({
@@ -2520,6 +2541,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
       })
       const updated = await overlaysApi.getSources(id)
       setSources(updated)
+      trackEvent('source_configured', { platform: 'shared_overlay' })
       toastManager.add({
         title: 'Shared overlay added',
         description: `Added ${share.sender_display_name}'s overlay`,
@@ -2769,6 +2791,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
       // Reflect the persisted storage mode in the status pill after a successful save.
       setCustomCssMode(cssDiff.mode)
       setConfigAlert({ type: 'success', message: 'Configuration saved!' })
+      trackEvent('overlay_settings_saved')
     } catch (error) {
       console.error('[Editor] Failed to save config', error)
       setConfigAlert({ type: 'error', message: 'Failed to save configuration' })
