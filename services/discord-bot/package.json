@@ -26,6 +26,7 @@
     "redis": "^4.6.13"
   },
   "overrides": {
-    "undici": "^6.27.0"
+    "undici": "^6.27.0",
+    "brace-expansion": "^5.0.8"
   }
 }
