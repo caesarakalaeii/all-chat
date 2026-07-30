@@ -81,7 +81,11 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-      JWT_SECRET: ${JWT_SECRET:-frontend-dev-secret-12345}
+      JWT_SECRET: frontend-dev-secret-12345-padded-to-32b
+      # Versioned key chain (shared/auth): services fatal without _V1 since the
+      # JWT key-rotation migration
+      JWT_SECRET_V1: frontend-dev-secret-12345-padded-to-32b
+      SERVICE_JWT_SECRET_V1: frontend-dev-service-secret-padded-32b
       TWITCH_CLIENT_ID: ${TWITCH_CLIENT_ID}
       TWITCH_CLIENT_SECRET: ${TWITCH_CLIENT_SECRET}
       MESSAGE_PROCESSOR_URL: http://message-processor:8087
@@ -90,6 +94,7 @@ services:
       # docker-compose.yml fallback so `make frontend-dev` works without an .env.
       # Override for local key-rotation testing: TOKEN_ENCRYPTION_KEY=$(openssl rand -base64 32)
       TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef}
+      TOKEN_ENCRYPTION_KEY_V1: ${TOKEN_ENCRYPTION_KEY_V1:-0123456789abcdef0123456789abcdef}
       OVERLAY_PUBLIC_BASE_URL: ${OVERLAY_PUBLIC_BASE_URL:-http://localhost:3000}
     ports:
       - "127.0.0.1:8082:8082"
@@ -150,7 +155,11 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-      JWT_SECRET: ${JWT_SECRET:-frontend-dev-secret-12345}
+      JWT_SECRET: frontend-dev-secret-12345-padded-to-32b
+      # Versioned key chain (shared/auth): services fatal without _V1 since the
+      # JWT key-rotation migration
+      JWT_SECRET_V1: frontend-dev-secret-12345-padded-to-32b
+      SERVICE_JWT_SECRET_V1: frontend-dev-service-secret-padded-32b
       API_GATEWAY_URL: http://api-gateway:8080
     ports:
       - "127.0.0.1:8090:8090"
@@ -184,10 +193,15 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-      JWT_SECRET: ${JWT_SECRET:-frontend-dev-secret-12345}
+      JWT_SECRET: frontend-dev-secret-12345-padded-to-32b
+      # Versioned key chain (shared/auth): services fatal without _V1 since the
+      # JWT key-rotation migration
+      JWT_SECRET_V1: frontend-dev-secret-12345-padded-to-32b
+      SERVICE_JWT_SECRET_V1: frontend-dev-service-secret-padded-32b
       TWITCH_CLIENT_ID: ${TWITCH_CLIENT_ID}
       TWITCH_CLIENT_SECRET: ${TWITCH_CLIENT_SECRET}
-      CORS_ORIGIN: "*"  # Allow all origins for frontend dev
+      # Wildcard is rejected when AllowCredentials is on (H3 cookie auth)
+      CORS_ORIGIN: "http://localhost:3000"
       WEBSOCKET_ALLOWED_ORIGINS: "*"
     ports:
       - "127.0.0.1:8080:8080"
