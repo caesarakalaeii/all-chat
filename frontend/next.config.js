@@ -30,7 +30,6 @@ const nextConfig = {
       'cdn.betterttv.net', // BTTV emotes
       'cdn.frankerfacez.com', // FFZ emotes
       'files.kick.com', // Kick emotes
-      'ui-avatars.com', // Generated avatar fallbacks
       'cdn.discordapp.com', // Discord guild icons
     ],
   },
@@ -66,7 +65,7 @@ const nextConfig = {
   async headers() {
     const cspBase = [
       "default-src 'self'",
-      "img-src 'self' data: https: static-cdn.jtvnw.net yt3.ggpht.com cdn.7tv.app cdn.betterttv.net cdn.frankerfacez.com files.kick.com ui-avatars.com cdn.discordapp.com",
+      "img-src 'self' data: https: static-cdn.jtvnw.net yt3.ggpht.com cdn.7tv.app cdn.betterttv.net cdn.frankerfacez.com files.kick.com cdn.discordapp.com",
       // embed.twitch.tv hosts the Twitch Embed SDK used by the credits/clips
       // overlay route (audit #3); without it the SDK script is CSP-blocked and
       // clips never play. analytics.allch.at hosts the self-hosted Umami tracker
