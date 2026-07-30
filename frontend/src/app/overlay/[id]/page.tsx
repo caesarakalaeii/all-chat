@@ -52,7 +52,12 @@ import { getBundledTheme } from '@/lib/theme-marketplace/bundled-themes'
 import { rewriteThemeFontImports } from '@/lib/theme-marketplace/font-proxy'
 import { chatBubbleStyle, overlayContainerStyle } from '@/lib/utils/visual-inline-styles'
 import { isDisplayVisible } from '@/lib/utils/displayVisibility'
-import type { VisualSettings } from '@/lib/types/visual-settings'
+import {
+  isMessageAnimation,
+  MESSAGE_ANIMATION_CLASS,
+  type MessageAnimation,
+  type VisualSettings,
+} from '@/lib/types/visual-settings'
 import { shouldFilterMessage } from '@/lib/utils/filterMessage'
 import type { FilterSettings } from '@/lib/types/overlay'
 import { createSoundPlayer } from '@/lib/utils/soundPlayer'
@@ -136,6 +141,8 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   const [bubbleStyle, setBubbleStyle] = useState<React.CSSProperties>({})
   const [platformBadgePosition, setPlatformBadgePosition] = useState<'before' | 'after'>('before')
   const [platformBadgeStyle, setPlatformBadgeStyle] = useState<'text' | 'icon'>('text')
+  // Entry animation for new chat bubbles; null keeps the default fade + slide-up
+  const [messageAnimation, setMessageAnimation] = useState<MessageAnimation | null>(null)
   const [showPlatformBadge, setShowPlatformBadge] = useState(true)
   const [showPlatformIndicators, setShowPlatformIndicators] = useState(true)
   // Visibility toggles whose CSS rules are scoped to `.overlay-preview-body`
@@ -366,6 +373,8 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
       if (vs.platformBadgeStyle !== undefined) {
         setPlatformBadgeStyle(vs.platformBadgeStyle)
       }
+      // Unconditional so clearing the setting restores the default on reload
+      setMessageAnimation(isMessageAnimation(vs.messageAnimation) ? vs.messageAnimation : null)
       if (vs.showPlatformIndicators !== undefined) {
         setShowPlatformIndicators(vs.showPlatformIndicators !== 'none')
       }
@@ -670,7 +679,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
       {/* text-shadow inherits to every text node below; the var is injected by
           visualSettingsToCss and gradient usernames force it off locally */}
       <div
-        className="overlay-live-body space-y-3"
+        className={clsx('overlay-live-body space-y-3', messageAnimation && 'msg-anim-container')}
         style={{ textShadow: 'var(--chat-text-shadow, none)', ...containerStyle }}
       >
         {invertMessageOrder && <div ref={messagesEndRef} className="scroll-anchor" />}
@@ -691,7 +700,10 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                 isEvent
                   ? ['event-message', eventTierClass, eventTypeClass]
                   : [
-                      'chat-message animate-in rounded-lg p-3 shadow-lg backdrop-blur-sm duration-300 slide-in-from-bottom-2',
+                      'chat-message rounded-lg p-3 shadow-lg backdrop-blur-sm',
+                      messageAnimation
+                        ? MESSAGE_ANIMATION_CLASS[messageAnimation]
+                        : 'animate-in duration-300 slide-in-from-bottom-2',
                       isSharedChat
                         ? 'border-2 border-purple-500/50 bg-purple-900/40'
                         : 'bg-slate-900/90',

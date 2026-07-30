@@ -98,6 +98,8 @@ describe('visualSettingsToCss', () => {
       membershipGiftSizeModifier: '1.2',
       platformBadgePosition: 'before',
       platformBadgeStyle: 'text',
+      // Message entry animation (not CSS-driven, not emitted as CSS properties)
+      messageAnimation: 'fly-left',
       // Phase 9: Pronoun display (not CSS-driven, not emitted as CSS properties)
       showPronouns: 'inline',
       pronounPosition: 'after',
@@ -116,6 +118,9 @@ describe('visualSettingsToCss', () => {
     // platformBadgePosition and platformBadgeStyle are not CSS properties, so not emitted
     expect(result).not.toContain('platformBadgePosition')
     expect(result).not.toContain('platformBadgeStyle')
+    // messageAnimation is applied as a .msg-anim-* class, never as a CSS property
+    expect(result).not.toContain('messageAnimation')
+    expect(result).not.toContain('fly-left')
     // All 52 CSS properties present (excludes non-CSS fields)
     expect((result.match(/--chat-|--platform-/g) ?? []).length).toBe(52)
   })

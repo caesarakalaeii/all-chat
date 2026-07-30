@@ -43,6 +43,11 @@ import { renderMessageContent } from '@/lib/renderMessage'
 import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges'
 import { sortMessageBadges } from '@/lib/badgeOrder'
 import { visualSettingsToCss } from '@/lib/utils/visual-settings-to-css'
+import {
+  isMessageAnimation,
+  MESSAGE_ANIMATION_CLASS,
+  type MessageAnimation,
+} from '@/lib/types/visual-settings'
 import { getBundledTheme } from '@/lib/theme-marketplace/bundled-themes'
 import { rewriteThemeFontImports } from '@/lib/theme-marketplace/font-proxy'
 import { chatBubbleStyle, overlayContainerStyle } from '@/lib/utils/visual-inline-styles'
@@ -216,6 +221,8 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
   const [platformBadgePosition, setPlatformBadgePosition] = useState<'before' | 'after'>('before')
   const [platformBadgeStyle, setPlatformBadgeStyle] = useState<'text' | 'icon'>('text')
   const [showPlatformBadge, setShowPlatformBadge] = useState(true)
+  // Entry animation for new chat bubbles; null keeps the default fade + slide-up
+  const [messageAnimation, setMessageAnimation] = useState<MessageAnimation | null>(null)
 
   // Phase 11: Filter settings state
   const [filterSettings, setFilterSettings] = useState<FilterSettings>({})
@@ -316,6 +323,8 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
         if (s.showPlatformBadge !== undefined) {
           setShowPlatformBadge(s.showPlatformBadge !== 'none')
         }
+        // Unconditional so switching back to the default clears the class live
+        setMessageAnimation(isMessageAnimation(s.messageAnimation) ? s.messageAnimation : null)
         return
       }
       // Live custom/theme CSS from the editor (theme apply, or typing in the
@@ -455,6 +464,9 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
         }
         if (vs.platformBadgeStyle === 'text' || vs.platformBadgeStyle === 'icon') {
           setPlatformBadgeStyle(vs.platformBadgeStyle)
+        }
+        if (isMessageAnimation(vs.messageAnimation)) {
+          setMessageAnimation(vs.messageAnimation)
         }
         // Phase 11: Load filter settings from config
         if (config.filter_settings) {
@@ -683,7 +695,10 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
         )}
       >
         <div
-          className="overlay-preview-body h-full space-y-3 overflow-y-auto p-4"
+          className={clsx(
+            'overlay-preview-body h-full space-y-3 overflow-y-auto p-4',
+            messageAnimation && 'msg-anim-container'
+          )}
           style={{
             scrollbarWidth: 'thin',
             scrollbarColor: '#374151 transparent',
@@ -728,7 +743,14 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                     className={
                       isEvent
                         ? clsx('event-message', eventTierClass, eventTypeClass)
-                        : 'rounded-lg bg-slate-900/90 p-3 shadow-lg backdrop-blur-sm'
+                        : clsx(
+                            'rounded-lg bg-slate-900/90 p-3 shadow-lg backdrop-blur-sm',
+                            // Mirror the live overlay's entry animation so the
+                            // editor preview is a faithful pick-and-compare
+                            messageAnimation
+                              ? MESSAGE_ANIMATION_CLASS[messageAnimation]
+                              : 'animate-in duration-300 slide-in-from-bottom-2'
+                          )
                     }
                     style={isEvent ? undefined : bubbleStyle}
                   >
