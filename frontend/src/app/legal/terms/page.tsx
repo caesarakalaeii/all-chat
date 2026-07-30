@@ -29,7 +29,7 @@ const listClasses = 'list-disc pl-6 space-y-1 text-text-sub'
 
 export default function TermsOfServicePage() {
   return (
-    <LegalLayout title="Terms of Service (Nutzungsbedingungen)" lastUpdated="June 8, 2026">
+    <LegalLayout title="Terms of Service (Nutzungsbedingungen)" lastUpdated="July 30, 2026">
       <section className="space-y-4">
         <h2 className="text-2xl font-semibold text-text">1. Acceptance of Terms</h2>
         <p>
@@ -180,26 +180,58 @@ export default function TermsOfServicePage() {
       <section className="space-y-4">
         <h2 className="text-2xl font-semibold text-text">9. Limitation of Liability</h2>
         <p>
-          To the fullest extent permitted by law, All-Chat is not liable for indirect, incidental,
-          special, or consequential damages arising from your use of the Service.
+          We are liable without limitation for damages caused intentionally or by gross negligence,
+          for injury to life, body, or health, and under the German Product Liability Act
+          (Produkthaftungsgesetz).
+        </p>
+        <p>
+          In cases of slight negligence, we are liable only for the breach of essential contractual
+          obligations (Kardinalpflichten): obligations whose fulfilment makes the proper performance
+          of the contract possible in the first place and on whose fulfilment you may regularly
+          rely. In such cases, our liability is limited to the damage that is foreseeable and
+          typical for this type of service. Any further liability is excluded.
+        </p>
+        <p>
+          These limitations also apply in favour of our legal representatives and vicarious agents
+          (Erf&uuml;llungsgehilfen).
         </p>
       </section>
 
       <section className="space-y-4">
         <h2 className="text-2xl font-semibold text-text">10. Indemnification</h2>
         <p>
-          You agree to indemnify All-Chat against claims, damages, losses, and expenses arising from
-          your use of the Service, violation of these Terms, or infringement of another party&apos;s
-          rights.
+          You agree to indemnify All-Chat against third-party claims, including the reasonable costs
+          of legal defence, arising from your culpable violation of these Terms, applicable law, or
+          the rights of others. This does not apply to the extent you are not responsible for the
+          violation.
         </p>
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">11. Right of Withdrawal (Widerrufsrecht)</h2>
+        <h2 className="text-2xl font-semibold text-text">
+          11. Premium Subscriptions &amp; Right of Withdrawal (Widerrufsrecht)
+        </h2>
         <p>
-          As All-Chat is a free service, there is no contract requiring a formal withdrawal period.
-          You may stop using the service and delete your account at any time via the Settings page.
-          Upon deletion, all your personal data is removed as described in our Privacy Policy.
+          The core All-Chat service is free of charge. Premium features are unlocked through a paid
+          membership on{' '}
+          <a
+            href="https://www.patreon.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-twitch underline decoration-twitch/30 underline-offset-4"
+          >
+            Patreon
+          </a>
+          : you subscribe to our campaign on patreon.com and then connect your Patreon account to
+          All-Chat. The subscription contract, billing, cancellation, and any statutory right of
+          withdrawal for the paid membership are handled by Patreon under Patreon&apos;s own terms.
+          All-Chat itself does not charge you and does not process payments.
+        </p>
+        <p>
+          You may stop using All-Chat and delete your account at any time via the Settings page.
+          Upon deletion, your personal data is removed as described in our Privacy Policy. Note that
+          deleting your All-Chat account does not cancel a Patreon membership; cancel it directly on
+          Patreon.
         </p>
       </section>
 
@@ -223,9 +255,12 @@ export default function TermsOfServicePage() {
       <section className="space-y-4">
         <h2 className="text-2xl font-semibold text-text">14. Governing Law &amp; Jurisdiction</h2>
         <p>
-          These Terms are governed by the laws of the Federal Republic of Germany. The courts at the
-          domicile of the operator shall have jurisdiction, unless mandatory consumer protection
-          rules provide otherwise.
+          These Terms are governed by the laws of the Federal Republic of Germany, excluding the UN
+          Convention on Contracts for the International Sale of Goods (CISG). If you are a consumer,
+          the mandatory consumer protection provisions of the country in which you habitually reside
+          remain unaffected. If you are a merchant (Kaufmann), a legal entity under public law, or a
+          special fund under public law, the exclusive place of jurisdiction is the domicile of the
+          operator.
         </p>
       </section>
 

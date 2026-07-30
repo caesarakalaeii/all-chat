@@ -29,7 +29,7 @@ const listClasses = 'list-disc pl-6 space-y-1 text-text-sub'
 
 export default function PrivacyPolicyPage() {
   return (
-    <LegalLayout title="Privacy Policy (Datenschutzerkl&auml;rung)" lastUpdated="June 8, 2026">
+    <LegalLayout title="Privacy Policy (Datenschutzerkl&auml;rung)" lastUpdated="July 30, 2026">
       <div className="space-y-4">
         <div className="rounded-xl border border-twitch/20 bg-twitch/5 p-5 text-text-sub">
           <strong className="text-text">TL;DR:</strong> All-Chat only collects the information we
@@ -160,6 +160,42 @@ export default function PrivacyPolicyPage() {
             security and availability.
           </p>
         </div>
+
+        <div>
+          <h3 className="text-lg font-semibold text-text">2.6 Premium Membership (Patreon)</h3>
+          <p>
+            Premium features are unlocked through a paid membership on Patreon. If you connect your
+            Patreon account to All-Chat, we store:
+          </p>
+          <ul className={listClasses}>
+            <li>Your Patreon user ID</li>
+            <li>Encrypted OAuth access and refresh tokens for the Patreon API</li>
+            <li>
+              Your membership state for our campaign (status, tier, pledge amount, renewal date)
+            </li>
+          </ul>
+          <p className="text-sm text-text-dim">
+            We do <strong className="text-text">not</strong> receive or store your payment details;
+            payments are processed entirely by Patreon. Patreon notifies us via webhooks when your
+            membership changes, and a periodic reconciliation keeps the state current. Disconnecting
+            Patreon in the Settings page deletes the stored tokens and revokes subscription-derived
+            premium.
+          </p>
+          <p className="text-sm text-text-dim">
+            Legal basis: Art.&nbsp;6(1)(b) DSGVO &ndash; providing the premium features you
+            subscribed to. For the data you provide on patreon.com itself, Patreon, Inc. (US) is an
+            independent controller; see the{' '}
+            <a
+              href="https://www.patreon.com/policy/legal"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-twitch underline decoration-twitch/30 underline-offset-4"
+            >
+              Patreon Privacy Policy
+            </a>
+            .
+          </p>
+        </div>
       </section>
 
       {/* --- How We Use --- */}
@@ -182,6 +218,10 @@ export default function PrivacyPolicyPage() {
         <ul className={listClasses}>
           <li>PostgreSQL for account data, overlays, and encrypted OAuth tokens</li>
           <li>Redis for ephemeral sessions, message fan-out, and rate limiting</li>
+          <li>
+            All of the above runs on our own infrastructure on servers located in{' '}
+            <strong className="text-text">Germany</strong> (hosting provider: Hetzner Online GmbH)
+          </li>
         </ul>
         <h3 className="text-lg font-semibold text-text">4.2 Safeguards</h3>
         <ul className={listClasses}>
@@ -207,7 +247,7 @@ export default function PrivacyPolicyPage() {
         <h3 className="text-lg font-semibold text-text">5.1 Streaming Platform APIs</h3>
         <p>We connect to the following services to deliver the core product:</p>
         <ul className={listClasses}>
-          <li>Twitch IRC and Helix APIs</li>
+          <li>Twitch EventSub and Helix APIs</li>
           <li>YouTube Live Chat and OAuth APIs</li>
           <li>TikTok Live APIs and Kick APIs</li>
           <li>Discord Gateway API</li>
@@ -246,10 +286,6 @@ export default function PrivacyPolicyPage() {
         </p>
         <ul className={listClasses}>
           <li>
-            <strong className="text-text">UI Avatars</strong> (ui-avatars.com) &ndash; generates
-            fallback avatar images from display names when a platform avatar is unavailable
-          </li>
-          <li>
             <strong className="text-text">GitHub API</strong> (api.github.com) &ndash; fetches
             community themes from our public repository in the theme marketplace
           </li>
@@ -257,7 +293,8 @@ export default function PrivacyPolicyPage() {
         <p className="text-sm text-text-dim">
           Legal basis: Art.&nbsp;6(1)(f) DSGVO &ndash; legitimate interest in providing a functional
           and visually complete overlay experience. You can avoid loading these by not opening the
-          theme marketplace and by providing a custom avatar URL.
+          theme marketplace. Fallback avatars (shown when a platform avatar is unavailable) are
+          generated locally in your browser and involve no external request.
         </p>
 
         <h3 className="text-lg font-semibold text-text">5.4 YouTube-Specific Notice</h3>
@@ -318,7 +355,7 @@ export default function PrivacyPolicyPage() {
         </p>
         <p className="text-sm text-text-dim">
           Because the tracker stores no information on, and reads none from, your device, it does
-          not require consent under &sect;&nbsp;25 TTDSG; the processing of the resulting data rests
+          not require consent under &sect;&nbsp;25 TDDDG; the processing of the resulting data rests
           on Art.&nbsp;6(1)(f) DSGVO &ndash; our legitimate interest in measuring and improving the
           service.
         </p>
@@ -400,6 +437,10 @@ export default function PrivacyPolicyPage() {
           or use the Settings page. You also have the right to lodge a complaint with your
           supervisory authority (Aufsichtsbeh&ouml;rde).
         </p>
+        <p className="text-sm text-text-dim">
+          We do not use automated decision-making or profiling within the meaning of Art.&nbsp;22
+          DSGVO.
+        </p>
         <p className="font-semibold text-text">
           For YouTube Data: You can revoke All-Chat&apos;s access to your YouTube data via the{' '}
           <a
@@ -432,9 +473,8 @@ export default function PrivacyPolicyPage() {
           <strong className="text-text">privacy-friendly, cookieless usage analytics</strong>{' '}
           (self-hosted Umami) &ndash; it sets nothing on your device and stores no personal
           identifier; see Section&nbsp;5.6 for the full description. Fonts are self-hosted
-          (Section&nbsp;5.2) and do not set cookies. The third-party resources listed in
-          Section&nbsp;5.3 (UI Avatars, GitHub API) may cause the respective providers to set their
-          own cookies when loaded.
+          (Section&nbsp;5.2) and do not set cookies. The GitHub API (Section&nbsp;5.3) may cause
+          GitHub to set its own cookies when the theme marketplace is loaded.
         </p>
       </section>
 
@@ -452,11 +492,18 @@ export default function PrivacyPolicyPage() {
       <section className="space-y-4">
         <h2 className="text-2xl font-semibold text-text">10. International Data Transfers</h2>
         <p>
-          When you use streaming platform integrations, data is transferred to servers operated by
-          Twitch (Amazon, US), Google/YouTube (US), TikTok (various), and Kick (AU). These transfers
-          are necessary to perform the service you requested (Art.&nbsp;49(1)(b) DSGVO). The GitHub
-          API (theme marketplace) may also involve transfers to the US. Fonts are self-hosted on our
-          infrastructure and therefore do not involve any third-country transfer when loaded.
+          All-Chat itself is hosted on servers located in Germany (see Section&nbsp;4.1). However,
+          when you use streaming platform integrations, data is transferred to servers operated by
+          Twitch (Amazon, US), Google/YouTube (US), TikTok (various), and Kick (AU). If you connect
+          a Patreon membership, data is exchanged with Patreon, Inc. (US). The GitHub API (theme
+          marketplace) may also involve transfers to the US.
+        </p>
+        <p className="text-sm text-text-dim">
+          Where a provider is certified under the EU&ndash;US Data Privacy Framework, the transfer
+          rests on the EU Commission&apos;s adequacy decision (Art.&nbsp;45 DSGVO). Otherwise, the
+          transfer is necessary to perform the service you requested (Art.&nbsp;49(1)(b) DSGVO).
+          Fonts are self-hosted on our infrastructure and therefore do not involve any third-country
+          transfer when loaded.
         </p>
       </section>
 
@@ -499,8 +546,8 @@ export default function PrivacyPolicyPage() {
 
         <h3 className="text-lg font-semibold text-text">Twitch</h3>
         <p>
-          We connect to Twitch IRC to receive chat messages. We do not access channel analytics,
-          subscriber information, or payment data.
+          We connect to Twitch EventSub to receive chat messages. We do not access channel
+          analytics, subscriber information, or payment data.
         </p>
 
         <h3 className="text-lg font-semibold text-text">YouTube</h3>

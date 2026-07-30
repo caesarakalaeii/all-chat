@@ -23,7 +23,7 @@ export const dynamic = 'force-dynamic'
 
 export const metadata = {
   title: 'Impressum | All-Chat',
-  description: 'Legal notice (Impressum) as required by TMG 5.',
+  description: 'Legal notice (Impressum) as required by § 5 DDG.',
   alternates: { canonical: '/legal/impressum' },
 }
 

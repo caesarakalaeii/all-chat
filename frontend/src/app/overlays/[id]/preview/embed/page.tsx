@@ -52,6 +52,7 @@ import { getBundledTheme } from '@/lib/theme-marketplace/bundled-themes'
 import { rewriteThemeFontImports } from '@/lib/theme-marketplace/font-proxy'
 import { chatBubbleStyle, overlayContainerStyle } from '@/lib/utils/visual-inline-styles'
 import { AllChatBadge } from '@/components/AllChatBadge'
+import { UserAvatar } from '@/components/UserAvatar'
 import { PremiumBadge } from '@/components/PremiumBadge'
 import { EventContent } from '@/components/overlay/EventContent'
 import { MessageAttachments } from '@/components/overlay/MessageAttachments'
@@ -756,25 +757,14 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                   >
                     <div className="flex items-start gap-3">
                       {/* Avatar */}
-                      <div className="flex-shrink-0">
-                        {message.user.avatar_url ? (
-                          <Image
-                            src={message.user.avatar_url}
-                            alt={message.user.display_name}
-                            width={40}
-                            height={40}
-                            className="h-10 w-10 rounded-full object-cover"
-                            onError={(e) => {
-                              e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(
-                                message.user.display_name
-                              )}&background=6b7280&color=fff&size=40`
-                            }}
-                          />
-                        ) : (
-                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-700 font-semibold text-white">
-                            {message.user.display_name?.slice(0, 2).toUpperCase() || '?'}
-                          </div>
-                        )}
+                      <div className="flex-shrink-0" style={{ overflow: 'visible' }}>
+                        <UserAvatar
+                          avatarUrl={message.user.avatar_url}
+                          frameUrl={message.user.avatar_frame_url}
+                          flairUrl={message.user.avatar_flair_url}
+                          size={40}
+                          displayName={message.user.display_name}
+                        />
                       </div>
 
                       {/* Message Content */}
