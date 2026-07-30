@@ -204,6 +204,94 @@
 }
 
 /* ============================================================
+   MESSAGE ENTRY ANIMATIONS — how a new chat message appears on the overlay.
+   Document scope (same rationale as ring-spin) and BEFORE the reduced-motion
+   gate below, so the gate collapses these to their end state.
+   Applied as .msg-anim-* on the chat bubble by the live overlay page and the
+   editor's embed preview when visual_settings.messageAnimation is set; the
+   class list lives in lib/types/visual-settings.ts (MESSAGE_ANIMATIONS).
+   Bundled themes / custom CSS can override: these are single unlayered class
+   rules, and theme <style> blocks are injected later in the document.
+   ============================================================ */
+
+/* Fly-in variants start outside the overlay edge; clip the horizontal
+   overshoot at the message container so no horizontal scroll area appears
+   (OBS browser sources and the editor preview iframe). */
+.msg-anim-container {
+  overflow-x: clip;
+}
+
+.msg-anim-fly-left {
+  animation: msg-anim-fly-left 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes msg-anim-fly-left {
+  from { transform: translateX(-115%); }
+  to   { transform: none; }
+}
+
+.msg-anim-fly-right {
+  animation: msg-anim-fly-right 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes msg-anim-fly-right {
+  from { transform: translateX(115%); }
+  to   { transform: none; }
+}
+
+.msg-anim-fly-spring {
+  animation: msg-anim-fly-spring 550ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes msg-anim-fly-spring {
+  from { opacity: 0; transform: translateX(-70%); }
+  to   { opacity: 1; transform: none; }
+}
+
+.msg-anim-pop {
+  transform-origin: 18% 100%;
+  animation: msg-anim-pop 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes msg-anim-pop {
+  from { opacity: 0; transform: scale(0.5); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.msg-anim-bounce {
+  animation: msg-anim-bounce 600ms linear both;
+}
+@keyframes msg-anim-bounce {
+  0%   { opacity: 0; transform: translateY(110%); }
+  55%  { opacity: 1; transform: translateY(-7%); }
+  75%  { transform: translateY(4%); }
+  90%  { transform: translateY(-2%); }
+  100% { transform: none; }
+}
+
+.msg-anim-flip {
+  transform-origin: 50% 100%;
+  animation: msg-anim-flip 500ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes msg-anim-flip {
+  from { opacity: 0; transform: perspective(600px) rotateX(-75deg); }
+  to   { opacity: 1; transform: perspective(600px) rotateX(0deg); }
+}
+
+.msg-anim-swoosh {
+  animation: msg-anim-swoosh 450ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes msg-anim-swoosh {
+  0%   { opacity: 0; transform: translateX(-45%) skewX(8deg); filter: blur(6px); }
+  60%  { opacity: 1; transform: translateX(2%) skewX(-2deg); filter: blur(0); }
+  100% { transform: none; }
+}
+
+.msg-anim-soft-focus {
+  animation: msg-anim-soft-focus 400ms cubic-bezier(0, 0, 0.2, 1) both;
+}
+@keyframes msg-anim-soft-focus {
+  from { opacity: 0; transform: scale(0.96); filter: blur(12px); }
+  to   { opacity: 1; transform: none; filter: blur(0); }
+}
+
+/* ============================================================
    REDUCED MOTION — global gate (WCAG 2.3.3 / supports 2.2.2)
    Document scope, after the layered styles, so it wins everywhere in the app
    chrome: decorative animation (logo ring-spin, fade-ins, slide-up, spinners)
