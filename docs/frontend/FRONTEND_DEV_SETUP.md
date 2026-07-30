@@ -68,13 +68,15 @@ No secrets required! All services use development defaults:
 ```bash
 # Database
 DB_PASSWORD=dev_password_123
-JWT_SECRET=frontend-dev-secret-12345
+# JWT key chain (shared/auth) — dev values are hardcoded in
+# docker-compose.frontend.yml (JWT_SECRET, JWT_SECRET_V1, SERVICE_JWT_SECRET_V1;
+# secrets must be at least 32 bytes)
 
 # API Keys
 MESSAGE_PROCESSOR_API_KEY=dev-frontend-key
 
 # CORS
-CORS_ORIGIN=*  # All origins allowed
+CORS_ORIGIN=http://localhost:3000  # wildcard is rejected with cookie auth
 ```
 
 ### Message Generator Options

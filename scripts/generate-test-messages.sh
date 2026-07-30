@@ -71,20 +71,17 @@ if ! command -v curl &> /dev/null; then
     exit 1
 fi
 
-# Check if redis-cli is available
-if ! command -v redis-cli &> /dev/null; then
-    echo -e "${RED}Error: redis-cli is required but not installed${NC}"
-    exit 1
+# Redis check is a nicety only (messages go through the processor's HTTP API);
+# don't hard-require redis-cli on the host.
+if command -v redis-cli &> /dev/null; then
+    echo -e "${YELLOW}Testing Redis connection...${NC}"
+    if redis-cli -h $REDIS_HOST -p $REDIS_PORT ping > /dev/null 2>&1; then
+        echo -e "${GREEN}✓ Redis connection OK${NC}"
+    else
+        echo -e "${YELLOW}⚠ Cannot reach Redis at $REDIS_HOST:$REDIS_PORT (continuing; the processor connects to Redis itself)${NC}"
+    fi
+    echo ""
 fi
-
-# Test Redis connection
-echo -e "${YELLOW}Testing Redis connection...${NC}"
-if ! redis-cli -h $REDIS_HOST -p $REDIS_PORT ping > /dev/null 2>&1; then
-    echo -e "${RED}Error: Cannot connect to Redis at $REDIS_HOST:$REDIS_PORT${NC}"
-    exit 1
-fi
-echo -e "${GREEN}✓ Redis connection OK${NC}"
-echo ""
 
 # Test Message Processor connection
 echo -e "${YELLOW}Testing Message Processor connection...${NC}"
@@ -98,37 +95,30 @@ echo ""
 
 # Function to generate a random message
 generate_message() {
-    local message_id=$1
     local platform=${PLATFORMS[$RANDOM % ${#PLATFORMS[@]}]}
     local username=${USERNAMES[$RANDOM % ${#USERNAMES[@]}]}
     local message_text=${MESSAGES[$RANDOM % ${#MESSAGES[@]}]}
-    local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-    # Create JSON payload
+    # Create JSON payload (schema: mockMessageRequest in
+    # services/message-processor/cmd/main.go — overlay_id + text required)
     local json_payload=$(cat <<EOF
 {
     "overlay_id": "$TEST_OVERLAY_ID",
     "platform": "$platform",
     "channel_id": "test_channel_123",
-    "message_id": "test_msg_$message_id",
     "user_id": "user_$(($RANDOM % 1000))",
     "username": "$username",
     "display_name": "$username",
-    "message": "$message_text",
-    "timestamp": "$timestamp",
-    "is_moderator": $([ $(($RANDOM % 10)) -eq 0 ] && echo "true" || echo "false"),
-    "is_subscriber": $([ $(($RANDOM % 3)) -eq 0 ] && echo "true" || echo "false"),
-    "is_vip": $([ $(($RANDOM % 5)) -eq 0 ] && echo "true" || echo "false"),
-    "color": "#$(printf '%06X' $(($RANDOM % 16777216)))",
-    "emotes": []
+    "text": "$message_text",
+    "color": "#$(printf '%06X' $(($RANDOM % 16777216)))"
 }
 EOF
 )
 
     # Send to Message Processor mock endpoint
-    local response=$(curl -s -X POST "$MESSAGE_PROCESSOR_URL/api/mock/message" \
+    local response=$(curl -s -X POST "$MESSAGE_PROCESSOR_URL/internal/mock-messages" \
         -H "Content-Type: application/json" \
-        -H "X-API-Key: $API_KEY" \
+        -H "X-Internal-Token: $API_KEY" \
         -d "$json_payload" \
         -w "\n%{http_code}")
 
