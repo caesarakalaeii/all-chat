@@ -17,6 +17,47 @@
  */
 
 /**
+ * Message entry animations — how a new chat message appears on the overlay.
+ *
+ * Each value maps to a `.msg-anim-<value>` class defined in globals.css
+ * (document scope, so bundled themes and custom CSS can override it).
+ * `undefined` keeps the default tailwindcss-animate fade + slide-up.
+ */
+export const MESSAGE_ANIMATIONS = [
+  'fly-left',
+  'fly-right',
+  'fly-spring',
+  'pop',
+  'bounce',
+  'flip',
+  'swoosh',
+  'soft-focus',
+] as const
+
+export type MessageAnimation = (typeof MESSAGE_ANIMATIONS)[number]
+
+export function isMessageAnimation(value: unknown): value is MessageAnimation {
+  return (
+    typeof value === 'string' && (MESSAGE_ANIMATIONS as readonly string[]).includes(value)
+  )
+}
+
+/**
+ * Static value → class map (no runtime string building; className strings must
+ * be statically greppable, see DESIGN_SYSTEM.md). Classes live in globals.css.
+ */
+export const MESSAGE_ANIMATION_CLASS: Record<MessageAnimation, string> = {
+  'fly-left': 'msg-anim-fly-left',
+  'fly-right': 'msg-anim-fly-right',
+  'fly-spring': 'msg-anim-fly-spring',
+  pop: 'msg-anim-pop',
+  bounce: 'msg-anim-bounce',
+  flip: 'msg-anim-flip',
+  swoosh: 'msg-anim-swoosh',
+  'soft-focus': 'msg-anim-soft-focus',
+}
+
+/**
  * VisualSettings — structured CSS properties for the visual-customizer cascade layer.
  *
  * Each field maps to a CSS custom property on :root.
@@ -73,6 +114,10 @@ export interface VisualSettings {
   // Platform badge options (not CSS-driven, stored for settings persistence)
   platformBadgePosition?: 'before' | 'after'
   platformBadgeStyle?: 'text' | 'icon'
+
+  // Message entry animation (not CSS-driven, stored for settings persistence;
+  // applied as a .msg-anim-* class on the chat bubble)
+  messageAnimation?: MessageAnimation
 
   // Phase 9: Pronoun display
   showPronouns?: 'inline' | 'none'      // --chat-show-pronouns

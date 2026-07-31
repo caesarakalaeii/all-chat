@@ -19,6 +19,7 @@ package clients
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -44,7 +45,12 @@ type SevenTVClient struct {
 }
 
 type sevenTVUserResponse struct {
-	EmoteSet sevenTVEmoteSet `json:"emote_set"`
+	// EmoteSetID is the active emote-set ID. Since 2026-08-03 the
+	// /v3/users/{platform}/{platform_id} endpoint no longer embeds the full
+	// active set (emote_set is null), so this ID is what a follow-up
+	// /v3/emote-sets/{id} fetch must use.
+	EmoteSetID string           `json:"emote_set_id"`
+	EmoteSet   *sevenTVEmoteSet `json:"emote_set"`
 }
 
 type sevenTVEmoteSet struct {
@@ -197,7 +203,38 @@ func (c *SevenTVClient) fetchChannelEmotes(ctx context.Context, channel string) 
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	return c.parseEmoteSet(apiResp.EmoteSet, channel), nil
+	return c.resolveConnectionEmotes(ctx, apiResp, channel)
+}
+
+// resolveConnectionEmotes turns a /v3/users/{platform}/{platform_id} response
+// into emotes. Since 2026-08-03 that endpoint returns emote_set as null and
+// only carries emote_set_id, so the set contents must be fetched separately
+// via /v3/emote-sets/{id}. When the embedded set is still populated the extra
+// round trip is skipped.
+func (c *SevenTVClient) resolveConnectionEmotes(ctx context.Context, apiResp sevenTVUserResponse, channel string) ([]models.Emote, error) {
+	if apiResp.EmoteSet != nil && len(apiResp.EmoteSet.Emotes) > 0 {
+		return c.parseEmoteSet(*apiResp.EmoteSet, channel), nil
+	}
+
+	setID := apiResp.EmoteSetID
+	if setID == "" && apiResp.EmoteSet != nil {
+		setID = apiResp.EmoteSet.ID
+	}
+	if setID == "" {
+		// User exists on 7TV but has no active emote set.
+		return []models.Emote{}, nil
+	}
+
+	emotes, err := c.fetchEmoteSetByID(ctx, setID, channel)
+	if errors.Is(err, ErrNotFound) {
+		// The connection references a set that no longer exists — treat as
+		// "no active set" rather than failing the whole emote fetch.
+		c.logger.Warn("7TV connection references a missing emote set",
+			zap.String("channel", channel),
+			zap.String("set_id", setID))
+		return []models.Emote{}, nil
+	}
+	return emotes, err
 }
 
 // FetchUserEmotes fetches a user's personal emote set from 7TV
@@ -250,7 +287,7 @@ func (c *SevenTVClient) FetchUserEmotes(ctx context.Context, platform, userID st
 	}
 
 	// Use a special marker for user emotes (will be used for cache key)
-	return c.parseEmoteSet(apiResp.EmoteSet, fmt.Sprintf("user:%s:%s", platform, userID)), nil
+	return c.resolveConnectionEmotes(ctx, apiResp, fmt.Sprintf("user:%s:%s", platform, userID))
 }
 
 // fetchEmotesForPlatform fetches 7TV emotes with platform awareness.
@@ -360,7 +397,7 @@ func (c *SevenTVClient) fetchPlatformConnectionEmotes(ctx context.Context, platf
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	return c.parseEmoteSet(apiResp.EmoteSet, channel), nil
+	return c.resolveConnectionEmotes(ctx, apiResp, channel)
 }
 
 // mergeSevenTVEmotes merges two 7TV emote slices, with the second slice taking
@@ -449,8 +486,9 @@ func (c *SevenTVClient) FetchCombinedEmotes(ctx context.Context, channel, platfo
 }
 
 // fetchEmoteSetByID fetches a specific 7TV emote set by its ID (24-char hex
-// legacy ObjectID or 26-char ULID). channel is only used to populate the
-// Channel field on the parsed emotes.
+// legacy ObjectID or 26-char ULID). Used for per-overlay override sets and for
+// resolving connection emote_set_id references. channel is only used to
+// populate the Channel field on the parsed emotes.
 func (c *SevenTVClient) fetchEmoteSetByID(ctx context.Context, setID, channel string) ([]models.Emote, error) {
 	urlPath := fmt.Sprintf("%s/v3/emote-sets/%s", c.baseURL, setID)
 
@@ -462,23 +500,23 @@ func (c *SevenTVClient) fetchEmoteSetByID(ctx context.Context, setID, channel st
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch override emote set: %w", err)
+		return nil, fmt.Errorf("failed to fetch emote set: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return nil, fmt.Errorf("override emote set %s not found", setID)
+		return nil, fmt.Errorf("emote set %s not found: %w", setID, ErrNotFound)
 	}
 	if resp.StatusCode == http.StatusTooManyRequests {
 		return nil, rateLimited("7tv", resp)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("override emote set lookup returned status %d", resp.StatusCode)
+		return nil, fmt.Errorf("emote set lookup returned status %d", resp.StatusCode)
 	}
 
 	var emoteSet sevenTVEmoteSet
 	if err := json.NewDecoder(resp.Body).Decode(&emoteSet); err != nil {
-		return nil, fmt.Errorf("failed to decode override response: %w", err)
+		return nil, fmt.Errorf("failed to decode emote set response: %w", err)
 	}
 
 	return c.parseEmoteSet(emoteSet, channel), nil

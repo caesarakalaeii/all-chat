@@ -66,7 +66,11 @@ import type {
 } from '@/lib/types/overlay'
 import type { ChatMessage } from '@/lib/types/message'
 import type { AcceptedShare } from '@/lib/types/share'
-import type { VisualSettings } from '@/lib/types/visual-settings'
+import {
+  isMessageAnimation,
+  type MessageAnimation,
+  type VisualSettings,
+} from '@/lib/types/visual-settings'
 import { visualSettingsToCss } from '@/lib/utils/visual-settings-to-css'
 import { useNotificationSocket } from '@/hooks/useNotificationSocket'
 import { parseCssToVisualSettings } from '@/lib/utils/theme-css-parser'
@@ -141,6 +145,20 @@ const PLATFORM_BORDER: Record<string, string> = {
 // Last-active settings section (ADR-0042); replaces the retired per-drawer
 // open/closed maps (editor-panel-sections-v1 / appearance-panel-sections-v1).
 const ACTIVE_SECTION_STORAGE_KEY = 'editor-active-section-v1'
+
+// Entry-animation choices for new chat messages ('' = default fade + slide up).
+// Values map to .msg-anim-* classes in globals.css via visual_settings.
+const ENTRY_ANIMATION_OPTIONS: ReadonlyArray<{ value: MessageAnimation | ''; label: string }> = [
+  { value: '', label: 'Fade + slide up (default)' },
+  { value: 'fly-left', label: 'Fly in from left' },
+  { value: 'fly-right', label: 'Fly in from right' },
+  { value: 'fly-spring', label: 'Fly in with overshoot' },
+  { value: 'pop', label: 'Pop in' },
+  { value: 'bounce', label: 'Bounce up' },
+  { value: 'flip', label: 'Flip in' },
+  { value: 'swoosh', label: 'Swoosh' },
+  { value: 'soft-focus', label: 'Soft focus' },
+]
 
 // Maps onboarding spotlight targets to left-nav sections (ADR-0042). The
 // guide's 'appearance' target predates the flat nav; Typography is the first
@@ -1612,6 +1630,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   const panelRef = useRef<HTMLDivElement>(null)
 
   // --- Customization state ---
+  const entryAnimationSelectId = useId()
   const [maxMessages, setMaxMessages] = useState(50)
   const [messageDuration, setMessageDuration] = useState(15)
   const [disableMessageFade, setDisableMessageFade] = useState(false)
@@ -1891,6 +1910,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           platformBadgeStyle: settings.platformBadgeStyle,
           showPlatformBadge: settings.showPlatformBadge,
           showPlatformIndicators: settings.showPlatformIndicators,
+          messageAnimation: settings.messageAnimation,
         },
       },
       '*'
@@ -3377,6 +3397,37 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                         </label>
                         <p className="mt-1 ml-5 text-xs text-text-sub">
                           Show newest messages at the top instead of the bottom
+                        </p>
+                      </div>
+
+                      {/* Entry Animation */}
+                      <div data-setting-anchor="entryAnimation">
+                        <label
+                          htmlFor={entryAnimationSelectId}
+                          className="mb-1 block text-xs text-text-sub"
+                        >
+                          Entry Animation
+                        </label>
+                        <select
+                          id={entryAnimationSelectId}
+                          value={visualSettings.messageAnimation ?? ''}
+                          onChange={(e) =>
+                            handleVisualSettingsChange({
+                              messageAnimation: isMessageAnimation(e.target.value)
+                                ? e.target.value
+                                : undefined,
+                            })
+                          }
+                          className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-xs text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                        >
+                          {ENTRY_ANIMATION_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="mt-1 text-xs text-text-sub">
+                          How new messages appear on the overlay
                         </p>
                       </div>
 

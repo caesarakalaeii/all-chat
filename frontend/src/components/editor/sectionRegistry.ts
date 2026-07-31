@@ -279,7 +279,7 @@ export const EDITOR_SECTIONS: EditorSection[] = [
     id: 'messages',
     group: 'behavior',
     title: 'Messages',
-    description: 'How many messages show, and how long they stay.',
+    description: 'How messages appear, how many show, and how long they stay.',
     keywords: 'behavior chat flow',
     entries: [
       { label: 'Max Messages', keywords: 'limit count maximum', anchorId: 'maxMessages' },
@@ -297,6 +297,11 @@ export const EDITOR_SECTIONS: EditorSection[] = [
         label: 'Invert Message Order',
         keywords: 'newest top reverse direction bottom',
         anchorId: 'invertOrder',
+      },
+      {
+        label: 'Entry Animation',
+        keywords: 'animation animate fly slide bounce pop flip swoosh blur appear motion effect',
+        anchorId: 'entryAnimation',
       },
       {
         label: 'Emote Providers',

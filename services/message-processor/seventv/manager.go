@@ -39,10 +39,23 @@ type UserResponse struct {
 	ID       string `json:"id"`
 	Platform string `json:"platform"`
 	Username string `json:"username"`
-	EmoteSet struct {
+	// EmoteSetID is the active emote-set ID. Since 2026-08-03 the
+	// /v3/users/{platform}/{platform_id} endpoint returns emote_set as null,
+	// so this top-level ID is the reliable source.
+	EmoteSetID string `json:"emote_set_id"`
+	EmoteSet   struct {
 		ID   string `json:"id"`
 		Name string `json:"name"`
 	} `json:"emote_set"`
+}
+
+// ActiveEmoteSetID returns the user's active emote-set ID, preferring the
+// top-level emote_set_id over the (possibly null) embedded emote_set object.
+func (u *UserResponse) ActiveEmoteSetID() string {
+	if u.EmoteSetID != "" {
+		return u.EmoteSetID
+	}
+	return u.EmoteSet.ID
 }
 
 // Manager manages 7TV event subscriptions and cache invalidation
@@ -116,7 +129,7 @@ func (m *Manager) TrackChannel(ctx context.Context, platform, channelID string) 
 			return nil
 		}
 
-		emoteSetID = user.EmoteSet.ID
+		emoteSetID = user.ActiveEmoteSetID()
 		if emoteSetID == "" {
 			m.logger.Debug("Channel has no emote set on 7TV",
 				zap.String("channel_id", channelID),
@@ -191,7 +204,7 @@ func (m *Manager) TrackUser(ctx context.Context, platform, userID string) error 
 			return nil
 		}
 
-		emoteSetID = user.EmoteSet.ID
+		emoteSetID = user.ActiveEmoteSetID()
 		if emoteSetID == "" {
 			m.logger.Debug("User has no emote set on 7TV",
 				zap.String("user_id", userID),

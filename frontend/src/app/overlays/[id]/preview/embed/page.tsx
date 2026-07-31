@@ -43,10 +43,16 @@ import { renderMessageContent } from '@/lib/renderMessage'
 import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges'
 import { sortMessageBadges } from '@/lib/badgeOrder'
 import { visualSettingsToCss } from '@/lib/utils/visual-settings-to-css'
+import {
+  isMessageAnimation,
+  MESSAGE_ANIMATION_CLASS,
+  type MessageAnimation,
+} from '@/lib/types/visual-settings'
 import { getBundledTheme } from '@/lib/theme-marketplace/bundled-themes'
 import { rewriteThemeFontImports } from '@/lib/theme-marketplace/font-proxy'
 import { chatBubbleStyle, overlayContainerStyle } from '@/lib/utils/visual-inline-styles'
 import { AllChatBadge } from '@/components/AllChatBadge'
+import { UserAvatar } from '@/components/UserAvatar'
 import { PremiumBadge } from '@/components/PremiumBadge'
 import { EventContent } from '@/components/overlay/EventContent'
 import { MessageAttachments } from '@/components/overlay/MessageAttachments'
@@ -221,6 +227,8 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
   const [platformBadgePosition, setPlatformBadgePosition] = useState<'before' | 'after'>('before')
   const [platformBadgeStyle, setPlatformBadgeStyle] = useState<'text' | 'icon'>('text')
   const [showPlatformBadge, setShowPlatformBadge] = useState(true)
+  // Entry animation for new chat bubbles; null keeps the default fade + slide-up
+  const [messageAnimation, setMessageAnimation] = useState<MessageAnimation | null>(null)
 
   // Phase 11: Filter settings state
   const [filterSettings, setFilterSettings] = useState<FilterSettings>({})
@@ -321,6 +329,8 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
         if (s.showPlatformBadge !== undefined) {
           setShowPlatformBadge(s.showPlatformBadge !== 'none')
         }
+        // Unconditional so switching back to the default clears the class live
+        setMessageAnimation(isMessageAnimation(s.messageAnimation) ? s.messageAnimation : null)
         return
       }
       // Live custom/theme CSS from the editor (theme apply, or typing in the
@@ -460,6 +470,9 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
         }
         if (vs.platformBadgeStyle === 'text' || vs.platformBadgeStyle === 'icon') {
           setPlatformBadgeStyle(vs.platformBadgeStyle)
+        }
+        if (isMessageAnimation(vs.messageAnimation)) {
+          setMessageAnimation(vs.messageAnimation)
         }
         // Phase 11: Load filter settings from config
         if (config.filter_settings) {
@@ -688,7 +701,10 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
         )}
       >
         <div
-          className="overlay-preview-body h-full space-y-3 overflow-y-auto p-4"
+          className={clsx(
+            'overlay-preview-body h-full space-y-3 overflow-y-auto p-4',
+            messageAnimation && 'msg-anim-container'
+          )}
           style={{
             scrollbarWidth: 'thin',
             scrollbarColor: '#374151 transparent',
@@ -733,31 +749,27 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                     className={
                       isEvent
                         ? clsx('event-message', eventTierClass, eventTypeClass)
-                        : 'rounded-lg bg-slate-900/90 p-3 shadow-lg backdrop-blur-sm'
+                        : clsx(
+                            'rounded-lg bg-slate-900/90 p-3 shadow-lg backdrop-blur-sm',
+                            // Mirror the live overlay's entry animation so the
+                            // editor preview is a faithful pick-and-compare
+                            messageAnimation
+                              ? MESSAGE_ANIMATION_CLASS[messageAnimation]
+                              : 'animate-in duration-300 slide-in-from-bottom-2'
+                          )
                     }
                     style={isEvent ? undefined : bubbleStyle}
                   >
                     <div className="flex items-start gap-3">
                       {/* Avatar */}
-                      <div className="flex-shrink-0">
-                        {message.user.avatar_url ? (
-                          <Image
-                            src={message.user.avatar_url}
-                            alt={message.user.display_name}
-                            width={40}
-                            height={40}
-                            className="h-10 w-10 rounded-full object-cover"
-                            onError={(e) => {
-                              e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(
-                                message.user.display_name
-                              )}&background=6b7280&color=fff&size=40`
-                            }}
-                          />
-                        ) : (
-                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-700 font-semibold text-white">
-                            {message.user.display_name?.slice(0, 2).toUpperCase() || '?'}
-                          </div>
-                        )}
+                      <div className="flex-shrink-0" style={{ overflow: 'visible' }}>
+                        <UserAvatar
+                          avatarUrl={message.user.avatar_url}
+                          frameUrl={message.user.avatar_frame_url}
+                          flairUrl={message.user.avatar_flair_url}
+                          size={40}
+                          displayName={message.user.display_name}
+                        />
                       </div>
 
                       {/* Message Content */}
