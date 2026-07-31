@@ -544,6 +544,15 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 **Impact**: Usernames + message text read cleanly at all sizes (verified before/after); new themes must use layered `text-shadow` for legibility outlines (glow effects still fine). (ADR numbering shared with caesar-deployment, so this is 0044)
 **→ Read**: [0044-overlay-text-outline-via-layered-text-shadow.md](./0044-overlay-text-outline-via-layered-text-shadow.md)
 
+### ADR-0045: Auto-Provision a First Overlay + Default Source on First Sign-In (Activation Cliff)
+
+**Status**: 📝 Proposed (needs owner sign-off; changes cross-service behavior)
+**Date**: 2026-07-27
+**Problem**: The 2026-07-27 Umami analytics review found the dominant UX chokepoint: **~68% of users who sign in never copy an OBS URL** (588 `signin_completed` → 188 `obs_url_copied` sessions), i.e. they never get an overlay onto their stream. New users land on an empty dashboard and must manually create an overlay, run an OAuth reflow to add their own channel, then find + copy the OBS URL — re-assembling information the backend already holds after the login OAuth (channel identity + credentials)
+**Decision (proposed)**: On the first successful sign-in for a user with zero overlays, the backend auto-provisions one overlay (named from the channel) + a working default source for the just-authed channel (backend-driven because the frontend never receives a ready source `channel_id`), then the client lands the user in the editor with the OBS URL + live preview front-and-centre. Idempotent (guard on zero-overlays + a `first_overlay_provisioned` marker). Fallback: a primed one-click "create my <platform> overlay" empty state
+**Impact**: Removes the empty-start friction for the majority path (streamer adding their own channel); first sign-in yields an on-stream-ready overlay. Measurable via the instrumentation shipped alongside the review (`preview_rendered` aha, `obs_url_copied`, `source_add_failed`). Proposed, not accepted — auto-creating user content + auth↔overlay-manager coupling need sign-off first. (ADR numbering shared with caesar-deployment, so this is 0045)
+**→ Read**: [0045-activation-auto-provision-first-overlay.md](./0045-activation-auto-provision-first-overlay.md)
+
 ---
 
 ## How to Create a New ADR
@@ -667,7 +676,7 @@ Create a new ADR if:
 
 ## Summary
 
-**Total ADRs**: 39 (all-chat repo; ADR numbers are shared with caesar-deployment)
+**Total ADRs**: 42 (all-chat repo; ADR numbers are shared with caesar-deployment) — re-verify against `docs/adr/` rather than trusting this count
 **Status**: All accepted (✅)
 **Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation, overlay observability view, demand linger, EventSub chat-ownership partition, linked Twitch credentials, chat moderation write-path, premium entitlements via Patreon, streamer/viewer premium split, engagement economy, source-liveness heartbeat, admin URL-addressable views + viewer identity model + global search)
 
@@ -676,4 +685,4 @@ Create a new ADR if:
 2. ADR-0001 (Go layout) - Referenced by all services
 3. ADR-0006 (Quota tracking) - Referenced by YouTube listener, overlay manager
 
-**Last Updated**: 2026-07-21
+**Last Updated**: 2026-07-27
