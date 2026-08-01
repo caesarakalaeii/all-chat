@@ -98,20 +98,23 @@ func (e *ViewerBadgeEnricher) Enrich(ctx context.Context, msg *models.UnifiedCha
 		return nil
 	}
 
-	// Auto-color fallback: if the message reaches the end of enrichment with no
-	// platform-native color, no All-Chat cosmetic color, and no gradient, assign
-	// a deterministic palette color so the viewer stays visually distinct instead
-	// of collapsing to the overlay's CSS fallback. The key starts as
-	// "platform:userID" (per-platform stable) and is upgraded to the All-Chat
-	// viewer UUID at the cache-hit and DB-hit paths below, so a viewer linked
-	// across platforms gets the same fallback color everywhere. Runs on every
-	// return path via defer; the priority ordering (cosmetic > platform >
-	// auto-color) holds because both higher-priority sources set Color before
-	// this fires.
+	// Auto-color fallback (ADR-0047): publish a deterministic palette color in
+	// its own AutoColor field rather than writing it into Color. Color is
+	// reserved for AUTHORITATIVE colors — the viewer's manual All-Chat choice,
+	// else the platform-native color — so the overlay can rank the streamer's
+	// per-overlay "Username color" setting between the platform color and this
+	// fallback. Folding the fallback into Color (as this once did) made Color
+	// always non-empty, which silently dead-lettered that setting.
+	//
+	// The key starts as "platform:userID" (per-platform stable) and is upgraded
+	// to the All-Chat viewer UUID at the cache-hit and DB-hit paths below, so a
+	// viewer linked across platforms gets the same fallback color everywhere.
+	// Runs on every return path via defer, after the key has been upgraded.
+	// Skipped entirely for gradients, which replace the username color outright.
 	autoColorKey := fmt.Sprintf("%s:%s", msg.Platform, msg.User.ID)
 	defer func() {
-		if msg.User.Color == "" && msg.User.NameGradient == "" {
-			msg.User.Color = AutoColor(autoColorKey)
+		if msg.User.NameGradient == "" {
+			msg.User.AutoColor = AutoColor(autoColorKey)
 		}
 	}()
 

@@ -63,6 +63,7 @@ import { createSoundPlayer } from '@/lib/utils/soundPlayer'
 import type { SoundPlayer, SoundSettings } from '@/lib/utils/soundPlayer'
 import { createTTSPlayer } from '@/lib/utils/ttsPlayer'
 import type { TTSPlayer, TTSSettings } from '@/lib/utils/ttsPlayer'
+import { resolveUsernameColor } from '@/lib/utils/usernameColor'
 import '@/styles/events.css'
 
 // ---- Utilities (identical to preview/page.tsx) ----------------------------
@@ -870,7 +871,7 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                           ) : (
                             <span
                               className="chat-username text-sm font-semibold"
-                              style={{ color: message.user.color || '#FFFFFF' }}
+                              style={{ color: resolveUsernameColor(message.user) }}
                             >
                               {message.user.display_name}
                             </span>
