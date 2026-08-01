@@ -309,6 +309,14 @@ default:
    - Cross-platform Twitch username resolution via `LEFT JOIN viewer_platform_identities`
    - Sets `msg.User.TwitchUsername` (internal pipeline field, never serialized)
    - Cache: `viewer:identity:{platform}:{user_id}`, 5 min TTL
+   - **Username colour (ADR-0047)**: writes two separate fields. `User.Color` is
+     *authoritative only* — the viewer's manually chosen All-Chat colour, else the
+     platform-native colour, else **empty**. `User.AutoColor` always carries the
+     deterministic palette fallback (`enricher/viewer_color.go`), keyed by the
+     viewer UUID when registered and `platform:userID` otherwise, and omitted when
+     a gradient is set. Do **not** fold the fallback back into `Color`: the overlay
+     ranks the streamer's per-overlay "Username color" setting *between* the two,
+     and a always-populated `Color` silently disables that setting.
 
 5. **Pronoun Enrichment** (`enricher/pronoun_enricher.go`):
    - Fetches pronouns from Alejo API (api.pronouns.alejo.io/v1/)
@@ -383,7 +391,8 @@ err := redis.Publish(ctx, channel, messageJSON).Err()
     "display_name": "Viewer123",
     "avatar_url": "https://static-cdn.jtvnw.net/...",
     "badges": ["subscriber", "moderator"],
-    "color": "#FF0000"
+    "color": "#FF0000",
+    "auto_color": "#1ABC9C"
   },
   "message": {
     "text": "Hello Kappa PogChamp",

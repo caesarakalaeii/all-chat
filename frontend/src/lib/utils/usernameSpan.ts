@@ -19,12 +19,12 @@
 import type { CSSProperties } from 'react';
 import { NameGradient } from '@/lib/types/message';
 import { buildGradientCSS } from '@/lib/utils/gradient';
+import { resolveUsernameColor, type UsernameColorUser } from '@/lib/utils/usernameColor';
 
 /**
  * User info subset needed to compute username span rendering props.
  */
-export interface UsernameSpanUser {
-  color?: string;
+export interface UsernameSpanUser extends UsernameColorUser {
   name_gradient?: NameGradient;
 }
 
@@ -47,6 +47,7 @@ export function getUsernameSpanProps(user: UsernameSpanUser): {
   }
   return {
     className: 'font-semibold text-sm',
-    style: { color: user.color || '#FFFFFF' },
+    // Shared resolver so this can't drift from the overlay render sites (ADR-0047).
+    style: { color: resolveUsernameColor(user) },
   };
 }
