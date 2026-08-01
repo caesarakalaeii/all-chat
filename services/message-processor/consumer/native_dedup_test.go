@@ -33,6 +33,13 @@ import (
 
 func twitchStreamMsg(t *testing.T, internalID, nativeID, text string) redis.XMessage {
 	t.Helper()
+	return twitchStreamEventMsg(t, internalID, nativeID, text, "")
+}
+
+// twitchStreamEventMsg builds a Twitch stream message with an explicit event type, so tests can
+// cover chat notices (ADR-0046) as well as plain chat.
+func twitchStreamEventMsg(t *testing.T, internalID, nativeID, text, eventType string) redis.XMessage {
+	t.Helper()
 	raw := &models.RawChatMessage{
 		MessageID: internalID, // internal UUID — differs between the IRC and EventSub copies
 		Platform:  "twitch",
@@ -42,6 +49,7 @@ func twitchStreamMsg(t *testing.T, internalID, nativeID, text string) redis.XMes
 		Text:      text,
 		Timestamp: time.Now().UTC(),
 		Tags:      map[string]string{"id": nativeID}, // native Twitch id — identical across both paths
+		EventType: eventType,
 	}
 	data, err := json.Marshal(raw)
 	require.NoError(t, err)
@@ -80,6 +88,88 @@ func TestProcessMessage_NativeIDDedup(t *testing.T) {
 	require.NoError(t, c.processMessage(ctx, twitchStreamMsg(t, "irc-uuid-2", "def", "world")))
 	if calls != 2 {
 		t.Fatalf("handler called %d times after distinct native id, want 2", calls)
+	}
+}
+
+// A chat notice (watch streak, announcement) carries the same native Twitch message id that a
+// channel.chat.message for the same message would, so the two must collapse to one rendered message
+// in EITHER arrival order (ADR-0046). Twitch documents the subscriptions as disjoint; keying on the
+// native id makes that an assumption we cannot get wrong.
+func TestProcessMessage_NativeIDDedup_ChatNoticeVersusChatMessage(t *testing.T) {
+	tests := []struct {
+		name   string
+		first  string // event type of the copy that arrives first
+		second string
+	}{
+		{name: "notice then chat message", first: "watch_streak", second: ""},
+		{name: "chat message then notice", first: "", second: "watch_streak"},
+		{name: "announcement then chat message", first: "announcement", second: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mr, err := miniredis.Run()
+			require.NoError(t, err)
+			defer mr.Close()
+			client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+			defer client.Close()
+			logger := zaptest.NewLogger(t)
+
+			var calls int
+			c := NewStreamConsumer(client, logger, sharedTestMetrics,
+				func(ctx context.Context, msg *models.RawChatMessage) error { calls++; return nil },
+				nil, registry.NewRedisDeletionBuffer(client, time.Hour), "host")
+			c.SetNativeDeduplicator(dedup.NewDeduplicator(client, logger))
+
+			ctx := context.Background()
+			require.NoError(t, c.processMessage(ctx,
+				twitchStreamEventMsg(t, "uuid-1", "native-1", "morning all", tt.first)))
+			require.NoError(t, c.processMessage(ctx,
+				twitchStreamEventMsg(t, "uuid-2", "native-1", "morning all", tt.second)))
+
+			if calls != 1 {
+				t.Fatalf("handler called %d times for one native message id, want 1", calls)
+			}
+		})
+	}
+}
+
+// Deletion events carry no Tags["id"] (the target id lives in EventData), so widening dedup to
+// events must never swallow them — two deletions in a row still both apply.
+func TestProcessMessage_NativeIDDedup_DeletionEventsUnaffected(t *testing.T) {
+	mr, err := miniredis.Run()
+	require.NoError(t, err)
+	defer mr.Close()
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer client.Close()
+	logger := zaptest.NewLogger(t)
+
+	var calls int
+	c := NewStreamConsumer(client, logger, sharedTestMetrics,
+		func(ctx context.Context, msg *models.RawChatMessage) error { calls++; return nil },
+		nil, registry.NewRedisDeletionBuffer(client, time.Hour), "host")
+	c.SetNativeDeduplicator(dedup.NewDeduplicator(client, logger))
+
+	// Two separate clear events for the same channel — both must be processed.
+	clear := func(id string) redis.XMessage {
+		raw := &models.RawChatMessage{
+			MessageID: id,
+			Platform:  "twitch",
+			ChannelID: "somechannel",
+			Timestamp: time.Now().UTC(),
+			EventType: "message_deletion",
+			EventData: map[string]interface{}{"deletion_type": "clear"},
+		}
+		data, err := json.Marshal(raw)
+		require.NoError(t, err)
+		return redis.XMessage{ID: "0-1", Values: map[string]interface{}{"data": string(data)}}
+	}
+
+	ctx := context.Background()
+	require.NoError(t, c.processMessage(ctx, clear("del-1")))
+	require.NoError(t, c.processMessage(ctx, clear("del-2")))
+	if calls != 2 {
+		t.Fatalf("both deletion events must be applied, not deduped; handler called %d times, want 2", calls)
 	}
 }
 

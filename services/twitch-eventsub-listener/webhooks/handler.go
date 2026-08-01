@@ -452,6 +452,8 @@ func (h *Handler) routeEvent(ctx context.Context, subscriptionType string, event
 	switch subscriptionType {
 	case "channel.chat.message":
 		return h.handleChatMessage(ctx, eventData)
+	case "channel.chat.notification":
+		return h.handleChatNotification(ctx, eventData)
 	case "channel.chat.message_delete":
 		return h.handleChatMessageDelete(ctx, eventData)
 	case "channel.chat.clear_user_messages":
@@ -874,6 +876,250 @@ func (h *Handler) handleChatMessage(ctx context.Context, eventData json.RawMessa
 	h.publishChatConnected(event.BroadcasterUserLogin)
 
 	return h.publisher.Publish(ctx, rawMsg)
+}
+
+// handleChatNotification processes a channel.chat.notification event — Twitch's "an event that
+// appears in chat" feed. Crucially this is the only path on which a **watch streak** arrives, and
+// the watch-streak payload carries the viewer's own chat message, so before this handler existed
+// those messages were never received at all (ADR-0046). Announcements were lost the same way.
+//
+// Notices already delivered by a dedicated subscription (sub, resub, sub_gift, community_sub_gift,
+// raid) are skipped so nothing double-renders.
+func (h *Handler) handleChatNotification(ctx context.Context, eventData json.RawMessage) error {
+	var event eventsub.ChatNotificationEvent
+	if err := json.Unmarshal(eventData, &event); err != nil {
+		return fmt.Errorf("failed to unmarshal channel.chat.notification: %w", err)
+	}
+
+	rawMsg := buildChatNotice(&event)
+	if rawMsg == nil {
+		// Either unusable (no broadcaster/notice type) or covered by a dedicated subscription.
+		h.logger.Debug("Skipping chat notification",
+			zap.String("broadcaster", event.BroadcasterUserLogin),
+			zap.String("notice_type", event.NoticeType))
+		return nil
+	}
+
+	if rawMsg.EventType == noticeEventTypeGeneric {
+		// Twitch adds notice types over time (modiversary arrived after the initial enum). Emitting
+		// them generically off system_message means a new notice degrades to a plain event instead of
+		// vanishing; the log tells us to add a first-class mapping.
+		h.logger.Info("Unmapped Twitch chat notice emitted generically",
+			zap.String("broadcaster", event.BroadcasterUserLogin),
+			zap.String("notice_type", event.NoticeType))
+	}
+
+	// Register the native→internal-UUID mapping so a later channel.chat.message_delete can resolve
+	// this notice (a moderator can delete a watch-streak message or an announcement like any other
+	// message). Best-effort, exactly as on the chat path.
+	if h.registry != nil {
+		if nativeID := rawMsg.Tags["id"]; nativeID != "" {
+			if err := h.registry.Add(ctx, rawMsg.Platform, rawMsg.ChannelID, nativeID, rawMsg.MessageID); err != nil {
+				h.logger.Error("Failed to add chat notice to registry",
+					zap.String("native_id", nativeID),
+					zap.Error(err))
+			}
+		}
+	}
+
+	// A delivered notice proves EventSub owns this channel's chat, same as a delivered message.
+	h.refreshChatClaim(event.BroadcasterUserLogin, event.BroadcasterUserID)
+	h.publishChatConnected(event.BroadcasterUserLogin)
+
+	return h.publisher.Publish(ctx, rawMsg)
+}
+
+// noticeEventTypeGeneric is the event type used for notice types all-chat has no first-class
+// mapping for. Such a notice still reaches the overlay, rendered from Twitch's system_message.
+const noticeEventTypeGeneric = "twitch_notice"
+
+// buildChatNotice converts a channel.chat.notification event into a RawChatMessage on all-chat's
+// event taxonomy, or returns nil when the notice must not be emitted (unusable payload, or a notice
+// type a dedicated subscription already delivers).
+//
+// Tags are built with exactly the chat-path builder, so a notice that carries the chatter's message
+// (watch_streak, announcement) enriches identically to ordinary chat: first-party emotes, badges,
+// colour, per-channel emote keys and shared-chat provenance. Tags["id"] carries the native Twitch
+// message id, which both drives deletion resolution and lets the message-processor's native-id
+// dedup collapse the notice against a same-id channel.chat.message should Twitch ever send both.
+func buildChatNotice(e *eventsub.ChatNotificationEvent) *models.RawChatMessage {
+	if e.BroadcasterUserLogin == "" || e.NoticeType == "" {
+		return nil
+	}
+
+	base, shared := splitSharedChatNotice(e.NoticeType)
+	if noticeCoveredByDedicatedSubscription(base) {
+		return nil
+	}
+
+	// Prefer the chatter's own text (watch streaks, announcements); fall back to Twitch's rendering
+	// so an event-only notice never shows up blank.
+	text := e.Message.Text
+	if text == "" {
+		text = e.SystemMessage
+	}
+
+	return &models.RawChatMessage{
+		MessageID: uuid.New().String(), // internal UUID; native Twitch id lives in Tags["id"]
+		Platform:  "twitch",
+		ChannelID: strings.ToLower(e.BroadcasterUserLogin),
+		UserID:    e.ChatterUserID,
+		Username:  strings.ToLower(e.ChatterUserLogin),
+		Text:      text,
+		Timestamp: time.Now().UTC(),
+		Tags:      buildNoticeTags(e),
+		EventType: noticeEventType(base),
+		EventData: buildNoticeEventData(e, base, shared),
+	}
+}
+
+// splitSharedChatNotice strips Twitch's "shared_chat_" prefix from a notice type, reporting whether
+// it was present. During a shared-chat session the same notice arrives under the prefixed name (and
+// with its payload under a prefixed key), so every mapping keys off the base type.
+func splitSharedChatNotice(noticeType string) (base string, shared bool) {
+	if strings.HasPrefix(noticeType, "shared_chat_") {
+		return strings.TrimPrefix(noticeType, "shared_chat_"), true
+	}
+	return noticeType, false
+}
+
+// noticeCoveredByDedicatedSubscription reports whether a base notice type is already delivered by a
+// dedicated subscription that carries strictly richer data (channel.subscribe,
+// channel.subscription.message, channel.subscription.gift, channel.raid). Emitting those from the
+// notification feed too would double-render every sub and raid — this is the EventSub-side twin of
+// twitch-listener's isCoveredByEventSub.
+func noticeCoveredByDedicatedSubscription(base string) bool {
+	switch base {
+	case "sub", "resub", "sub_gift", "community_sub_gift", "raid":
+		return true
+	default:
+		return false
+	}
+}
+
+// noticeEventType maps a base notice type onto all-chat's event taxonomy. bits_badge_tier folds into
+// "bits" to keep parity with the IRC parser's bitsbadgetier mapping (and so it reuses the existing
+// bits classifier, filter column and overlay styling).
+func noticeEventType(base string) string {
+	switch base {
+	case "watch_streak":
+		return "watch_streak"
+	case "announcement":
+		return "announcement"
+	case "bits_badge_tier":
+		return "bits"
+	case "gift_paid_upgrade":
+		return "gift_paid_upgrade"
+	case "prime_paid_upgrade":
+		return "prime_paid_upgrade"
+	case "pay_it_forward":
+		return "pay_it_forward"
+	case "unraid":
+		return "unraid"
+	case "charity_donation":
+		return "charity_donation"
+	case "modiversary":
+		return "modiversary"
+	default:
+		return noticeEventTypeGeneric
+	}
+}
+
+// buildNoticeTags reconstructs the IRC-style tag map for a notice by reusing the chat path's
+// builder verbatim, so notice-borne messages normalize and enrich exactly like ordinary chat.
+// Notices carry no cheer total, so no "bits" tag is produced.
+func buildNoticeTags(e *eventsub.ChatNotificationEvent) map[string]string {
+	view := eventsub.ChatMessageEvent{
+		ChatterUserName:            e.ChatterUserName,
+		Color:                      e.Color,
+		Badges:                     e.Badges,
+		MessageID:                  e.MessageID,
+		BroadcasterUserID:          e.BroadcasterUserID,
+		Message:                    e.Message,
+		SourceBroadcasterUserID:    e.SourceBroadcasterUserID,
+		SourceBroadcasterUserLogin: e.SourceBroadcasterUserLogin,
+		SourceBroadcasterUserName:  e.SourceBroadcasterUserName,
+		SourceMessageID:            e.SourceMessageID,
+		SourceBadges:               e.SourceBadges,
+	}
+	return buildChatTags(&view)
+}
+
+// buildNoticeEventData extracts the notice-specific payload into EventData. Keys are chosen to match
+// what message-processor's normalizer already reads where an event type is shared ("badge_tier" for
+// bits, "months" for tenure), so no downstream special-casing is needed.
+func buildNoticeEventData(e *eventsub.ChatNotificationEvent, base string, shared bool) map[string]interface{} {
+	data := map[string]interface{}{"notice_type": e.NoticeType}
+	if e.SystemMessage != "" {
+		data["system_message"] = e.SystemMessage
+	}
+	if e.ChatterIsAnonymous {
+		data["is_anonymous"] = true
+	}
+	if shared {
+		data["is_shared_chat"] = true
+		if e.SourceBroadcasterUserLogin != "" {
+			data["source_channel"] = e.SourceBroadcasterUserLogin
+		}
+	}
+
+	switch base {
+	case "watch_streak":
+		if w := e.WatchStreak; w != nil {
+			data["streak_count"] = w.StreakCount
+			if w.ChannelPointsAwarded > 0 {
+				data["channel_points_awarded"] = w.ChannelPointsAwarded
+			}
+		}
+	case "announcement":
+		if a := firstNonNil(e.Announcement, e.SharedChatAnnouncement); a != nil && a.Color != "" {
+			data["announcement_color"] = a.Color
+		}
+	case "bits_badge_tier":
+		if b := e.BitsBadgeTier; b != nil {
+			data["badge_tier"] = b.Tier
+		}
+	case "charity_donation":
+		if c := e.CharityDonation; c != nil {
+			data["charity_name"] = c.CharityName
+			data["amount_value"] = c.Amount.Value
+			data["amount_decimal_places"] = c.Amount.DecimalPlaces
+			data["amount_currency"] = c.Amount.Currency
+		}
+	case "pay_it_forward":
+		if p := firstNonNil(e.PayItForward, e.SharedChatPayItForward); p != nil {
+			data["gifter_is_anonymous"] = p.GifterIsAnonymous
+			if p.GifterUserName != "" {
+				data["gifter_name"] = p.GifterUserName
+			}
+		}
+	case "gift_paid_upgrade":
+		if g := firstNonNil(e.GiftPaidUpgrade, e.SharedChatGiftPaidUpgrade); g != nil {
+			data["gifter_is_anonymous"] = g.GifterIsAnonymous
+			if g.GifterUserName != "" {
+				data["gifter_name"] = g.GifterUserName
+			}
+		}
+	case "prime_paid_upgrade":
+		if p := firstNonNil(e.PrimePaidUpgrade, e.SharedChatPrimePaidUpgrade); p != nil && p.SubTier != "" {
+			data["tier"] = p.SubTier
+		}
+	case "modiversary":
+		if m := firstNonNil(e.Modiversary, e.SharedChatModiversary); m != nil {
+			data["months"] = m.Months
+		}
+	}
+
+	return data
+}
+
+// firstNonNil returns the first non-nil pointer, used to read a notice payload that Twitch may
+// deliver under either its plain or its "shared_chat_"-prefixed key.
+func firstNonNil[T any](a, b *T) *T {
+	if a != nil {
+		return a
+	}
+	return b
 }
 
 // handleChatMessageDelete processes a channel.chat.message_delete event (a moderator removed a

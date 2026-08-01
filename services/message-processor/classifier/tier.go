@@ -85,6 +85,41 @@ func classifyTwitchEvent(eventType string, value *models.EventValue) (tier strin
 		// First-time chatter ritual is low value
 		return "low", 10
 
+	case "watch_streak":
+		// One per returning viewer per stream, so common — but it carries the viewer's own chat
+		// message, which must stay readable long enough to read.
+		return "low", 12
+
+	case "announcement":
+		// A broadcaster/mod announcement is chat content the streamer chose to highlight.
+		return "medium", 20
+
+	case "gift_paid_upgrade", "prime_paid_upgrade", "pay_it_forward":
+		// Sub-adjacent conversions — as valuable as a new sub.
+		return "high", 30
+
+	case "charity_donation":
+		// Tier by donated amount (value is already in major units).
+		if value != nil && value.Amount >= 50 {
+			return "high", 45
+		} else if value != nil && value.Amount >= 10 {
+			return "high", 30
+		} else if value != nil && value.Amount >= 5 {
+			return "medium", 20
+		}
+		return "low", 12
+
+	case "modiversary":
+		return "medium", 20
+
+	case "unraid":
+		// The raid was cancelled — informational.
+		return "low", 8
+
+	case "twitch_notice":
+		// A notice type all-chat has no first-class mapping for yet; shown, but unobtrusively.
+		return "low", 10
+
 	default:
 		return "medium", 15
 	}

@@ -435,15 +435,17 @@ func main() {
 				log.Info("Subscribed to chat messages", zap.String("broadcaster_id", broadcasterID))
 			}
 
-			// Chat-moderation subscriptions: deletions of a single message, of a user's messages
-			// (timeout/ban), and full chat clears. They share user:read:chat and the chat
-			// condition, so they live with the chat subscription. Best-effort — a failure here
-			// doesn't undo the chat subscription (the channel still reads chat, just may miss a
-			// deletion type until the next sync re-attempts).
+			// Companion chat subscriptions: the chat-notice feed (watch streaks, announcements —
+			// messages that arrive on no other subscription, see ADR-0046) plus deletions of a
+			// single message, of a user's messages (timeout/ban), and full chat clears. They all
+			// share user:read:chat and the chat condition, so they live with the chat subscription.
+			// Best-effort — a failure here doesn't undo the chat subscription (the channel still
+			// reads chat, just may miss notices or a deletion type until the next sync re-attempts).
 			for _, sub := range []struct {
 				name string
 				fn   func(context.Context, string) (string, error)
 			}{
+				{"channel.chat.notification", subscriptionMgr.SubscribeToChatNotifications},
 				{"channel.chat.message_delete", subscriptionMgr.SubscribeToChatMessageDelete},
 				{"channel.chat.clear_user_messages", subscriptionMgr.SubscribeToChatClearUserMessages},
 				{"channel.chat.clear", subscriptionMgr.SubscribeToChatClear},
@@ -467,6 +469,7 @@ func main() {
 			var firstErr error
 			for _, subType := range []string{
 				"channel.chat.message",
+				"channel.chat.notification",
 				"channel.chat.message_delete",
 				"channel.chat.clear_user_messages",
 				"channel.chat.clear",

@@ -39,11 +39,20 @@ func NewEventFilter(db *pgxpool.Pool, logger *zap.Logger) *EventFilter {
 	}
 }
 
+// columnAlwaysEnabled marks event types that are deliberately not toggleable, so they are enabled
+// without a database round-trip and without the unknown-event warning. Used for notices that are
+// chat content rather than alerts (an announcement is a message the broadcaster chose to highlight —
+// hiding it would hide chat) and for rare informational notices with no natural settings home.
+const columnAlwaysEnabled = "-"
+
 // IsEventEnabled checks if an event type is enabled for a specific overlay
 // Returns true if enabled, false if disabled, and error on database issues
 func (f *EventFilter) IsEventEnabled(ctx context.Context, overlayID, platform, eventType string) (bool, error) {
 	// Map event type to database column name
 	columnName := mapEventTypeToColumn(platform, eventType)
+	if columnName == columnAlwaysEnabled {
+		return true, nil
+	}
 	if columnName == "" {
 		// Unknown event type - default to enabled
 		f.logger.Warn("Unknown event type, defaulting to enabled",
@@ -87,7 +96,8 @@ func mapEventTypeToColumn(platform, eventType string) string {
 			return "enable_twitch_subs"
 		case "resubscription":
 			return "enable_twitch_resubs"
-		case "gift_subscription", "mystery_gift", "gift_paid_upgrade", "anon_gift_paid_upgrade":
+		case "gift_subscription", "mystery_gift", "gift_paid_upgrade", "anon_gift_paid_upgrade",
+			"prime_paid_upgrade", "pay_it_forward":
 			return "enable_twitch_gift_subs"
 		case "bits":
 			return "enable_twitch_bits"
@@ -97,6 +107,11 @@ func mapEventTypeToColumn(platform, eventType string) string {
 			return "enable_twitch_channel_points"
 		case "follow":
 			return "enable_twitch_follows"
+		case "watch_streak":
+			return "enable_twitch_watch_streaks"
+		case "announcement", "charity_donation", "modiversary", "twitch_notice":
+			// Chat notices that are not toggleable — see columnAlwaysEnabled.
+			return columnAlwaysEnabled
 		default:
 			// Unknown Twitch event, group under subs for now
 			if strings.Contains(normalized, "sub") || strings.Contains(normalized, "gift") {
