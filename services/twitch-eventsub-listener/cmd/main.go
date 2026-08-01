@@ -226,6 +226,11 @@ func main() {
 	// Create webhook handler
 	webhookHandler := webhooks.NewHandler(webhookSecret, redisClient, db, streamPublisher, listenerMetrics, statusPublisher, chatClaims, msgRegistry, log)
 
+	// A revocation makes the cached subscription id stale; evicting it is what lets the channel
+	// manager's periodic repair pass recreate the subscription instead of short-circuiting on a
+	// cache hit forever (ADR-0046).
+	webhookHandler.SetSubscriptionForgetter(subscriptionMgr.ForgetSubscription)
+
 	// Set up channel manager callback. Actions: "subscribe" creates the event subscriptions
 	// for every active channel; "subscribe_chat"/"unsubscribe_chat" manage the
 	// channel.chat.message subscription, which the manager gates on chat scope AND live-overlay
@@ -415,24 +420,43 @@ func main() {
 			}
 			return fmt.Errorf("all subscriptions failed for broadcaster %s", broadcasterID)
 
-		} else if action == "subscribe_chat" {
-			// Create the chat subscription. A scope error is non-fatal: return nil so the
-			// manager marks chat active and doesn't retry-spam; that channel just won't get
-			// EventSub chat (it stays on IRC unless/until the owner grants the missing scope).
-			if _, err := subscriptionMgr.SubscribeToChatMessages(ctx, broadcasterID); err != nil {
-				if strings.Contains(err.Error(), "subscription already exists") {
-					// Already subscribed — fall through to ensure deletion subs also exist.
-				} else if isScopeError(err) {
-					log.Info("Chat message subscription requires user:read:chat + user:bot scopes",
+		} else if action == "subscribe_chat" || action == "ensure_chat" {
+			// Both actions assert the same subscription set; they differ only in intent.
+			// "subscribe_chat" fires on the transition into chat-active, "ensure_chat" is the
+			// periodic repair pass that re-asserts it for a channel already chat-active (ADR-0046).
+			// Sharing one branch is deliberate: two copies of this list drifted once already and
+			// left a subscription silently absent. Every call is idempotent — the subscription
+			// manager returns early on a cache hit, so a healthy channel costs no API calls.
+			repairing := action == "ensure_chat"
+
+			// On the repair pass, skip what this pod still holds. Re-calling Subscribe would
+			// succeed either way (cache hit returns the stored id), so checking first is what makes
+			// "created" distinguishable from "no-op" — otherwise every pass would claim to have
+			// recreated every subscription.
+			if !repairing || !subscriptionMgr.HasSubscription(broadcasterID, "channel.chat.message") {
+				// A scope error is non-fatal: return nil so the manager marks chat active and
+				// doesn't retry-spam; that channel just won't get EventSub chat (it stays on IRC
+				// unless/until the owner grants the missing scope).
+				if _, err := subscriptionMgr.SubscribeToChatMessages(ctx, broadcasterID); err != nil {
+					if strings.Contains(err.Error(), "subscription already exists") {
+						// Already subscribed — fall through to ensure the companions exist too.
+					} else if isScopeError(err) {
+						if !repairing {
+							log.Info("Chat message subscription requires user:read:chat + user:bot scopes",
+								zap.String("broadcaster_id", broadcasterID))
+						}
+						// No chat sub → the companions (same scope) would fail too. The channel
+						// stays on IRC, which still handles its deletions.
+						return nil
+					} else {
+						return err
+					}
+				} else if repairing {
+					log.Info("Recreated missing chat subscription",
 						zap.String("broadcaster_id", broadcasterID))
-					// No chat sub → the deletion subs (same scope) would fail too. The channel
-					// stays on IRC, which still handles its deletions.
-					return nil
 				} else {
-					return err
+					log.Info("Subscribed to chat messages", zap.String("broadcaster_id", broadcasterID))
 				}
-			} else {
-				log.Info("Subscribed to chat messages", zap.String("broadcaster_id", broadcasterID))
 			}
 
 			// Companion chat subscriptions: the chat-notice feed (watch streaks, announcements —
@@ -440,7 +464,7 @@ func main() {
 			// single message, of a user's messages (timeout/ban), and full chat clears. They all
 			// share user:read:chat and the chat condition, so they live with the chat subscription.
 			// Best-effort — a failure here doesn't undo the chat subscription (the channel still
-			// reads chat, just may miss notices or a deletion type until the next sync re-attempts).
+			// reads chat, just may miss notices or a deletion type until the next repair pass).
 			for _, sub := range []struct {
 				name string
 				fn   func(context.Context, string) (string, error)
@@ -450,14 +474,22 @@ func main() {
 				{"channel.chat.clear_user_messages", subscriptionMgr.SubscribeToChatClearUserMessages},
 				{"channel.chat.clear", subscriptionMgr.SubscribeToChatClear},
 			} {
+				if repairing && subscriptionMgr.HasSubscription(broadcasterID, sub.name) {
+					continue // still held; nothing to repair
+				}
 				if _, err := sub.fn(ctx, broadcasterID); err != nil {
 					if strings.Contains(err.Error(), "subscription already exists") || isScopeError(err) {
 						continue
 					}
-					log.Warn("Failed to subscribe to chat moderation event",
+					log.Warn("Failed to subscribe to companion chat subscription",
 						zap.String("broadcaster_id", broadcasterID),
 						zap.String("type", sub.name),
+						zap.Bool("repairing", repairing),
 						zap.Error(err))
+				} else if repairing {
+					log.Info("Recreated missing companion chat subscription",
+						zap.String("broadcaster_id", broadcasterID),
+						zap.String("type", sub.name))
 				}
 			}
 			return nil

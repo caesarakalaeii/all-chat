@@ -56,6 +56,30 @@ const (
 // MessageHandler is called for each consumed message
 type MessageHandler func(ctx context.Context, msg *models.RawChatMessage) error
 
+// platformMessageID returns the platform-native message id of a message a moderator could later
+// remove, or "" when there is none.
+//
+// This is the single predicate behind BOTH the buffered-deletion drain and the native-id dedup in
+// processMessage. They must agree on which messages carry a native id: the drain resolves a pending
+// deletion against that id, and the dedup collapses duplicate deliveries of it. They previously
+// duplicated the condition and drifted — widening the dedup to cover Twitch chat notices while the
+// drain still tested for plain chat left a moderator-deleted watch streak visible on every overlay
+// (ADR-0046). Sharing one function makes that class of bug impossible.
+//
+// Deletions are excluded: they carry no Tags, and their target id lives in
+// EventData["target_msg_id"]. Twitch (IRC and EventSub) sets Tags["id"]; YouTube's InnerTube path
+// sets Tags["youtube_message_id"] instead, and without that fallback buffered deletions for YouTube
+// messages never drain (#284).
+func platformMessageID(raw *models.RawChatMessage) string {
+	if raw.EventType == "message_deletion" {
+		return ""
+	}
+	if id := raw.Tags["id"]; id != "" {
+		return id
+	}
+	return raw.Tags["youtube_message_id"]
+}
+
 // NativeDeduplicator drops messages whose platform-native id has already been processed. Both the
 // IRC and EventSub Twitch chat paths stamp the same native id into Tags["id"], so this makes the
 // brief IRC↔EventSub handoff overlap (and Twitch webhook retries) idempotent (ADR-0015).
@@ -324,21 +348,10 @@ func (c *StreamConsumer) processMessage(ctx context.Context, msg redis.XMessage)
 	}
 
 	// For any message a moderator could later remove, check whether its deletion already arrived
-	// and was buffered. Scoped the same way as the native-id dedup below — every non-deletion
-	// message carrying a platform message id — because Twitch chat notices (watch streaks,
-	// announcements) are deletable chat that arrives with an event type set (ADR-0046). Gating this
-	// on plain chat alone meant a deletion that raced ahead of its notice never drained, leaving a
-	// moderator-removed watch streak visible on the overlay until the buffer entry expired.
-	// Messages without a platform id fall through harmlessly (the inner check no-ops).
-	if rawMsg.EventType != "message_deletion" {
-		// Extract platform message ID from tags. Twitch sets Tags["id"] (IRC tag),
-		// YouTube sets Tags["youtube_message_id"] (InnerTube renderer ID); without
-		// the YouTube fallback, buffered deletions for YouTube messages would
-		// never drain (#284).
-		platformMsgID := rawMsg.Tags["id"]
-		if platformMsgID == "" {
-			platformMsgID = rawMsg.Tags["youtube_message_id"]
-		}
+	// and was buffered. Uses the SAME predicate as the native-id dedup below — see
+	// platformMessageID, which exists so these two cannot drift apart again (ADR-0046).
+	{
+		platformMsgID := platformMessageID(rawMsg)
 		if platformMsgID != "" {
 			// NOTE: registry.Add() happens in twitch-listener per user decision (CONTEXT.md)
 			// We only CHECK the buffer here for pending deletions
@@ -374,15 +387,15 @@ func (c *StreamConsumer) processMessage(ctx context.Context, msg redis.XMessage)
 	// webhook retry) can present the same message twice. Drop the second copy before enrichment so
 	// viewers never see doubled chat.
 	//
-	// Scoped to any Twitch message carrying Tags["id"] — the native, globally-unique message id.
-	// That deliberately includes chat notices (watch streaks, announcements), which arrive on
+	// Scoped via the SAME platformMessageID predicate as the buffered-deletion drain above, so the
+	// two can never disagree about which messages carry a native id (ADR-0046). That deliberately
+	// includes chat notices (watch streaks, announcements), which arrive on
 	// channel.chat.notification stamped with the same native id the corresponding
 	// channel.chat.message would carry, so the two collapse to one rendered message in whichever
-	// order they arrive (ADR-0046). Twitch documents the two subscriptions as disjoint, so in
-	// practice only one is sent; keying on the native id makes that an assumption we cannot get
-	// wrong. Deletion events carry no Tags and other platforms are unaffected.
-	if c.nativeDedup != nil && rawMsg.Platform == "twitch" && rawMsg.EventType != "message_deletion" {
-		if nativeID := rawMsg.Tags["id"]; nativeID != "" {
+	// order they arrive. Twitch documents the two subscriptions as disjoint, so in practice only one
+	// is sent; keying on the native id makes that an assumption we cannot get wrong.
+	if c.nativeDedup != nil && rawMsg.Platform == "twitch" {
+		if nativeID := platformMessageID(rawMsg); nativeID != "" {
 			if dup, derr := c.nativeDedup.IsDuplicateNativeID(ctx, rawMsg.Platform, nativeID); derr == nil && dup {
 				c.logger.Debug("Dropping duplicate Twitch message by native id",
 					zap.String("native_id", nativeID),

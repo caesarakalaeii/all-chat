@@ -74,6 +74,11 @@ type Handler struct {
 	registry        registry.MessageIDRegistry // native→internal-UUID map for single-message deletions (nil-safe)
 	logger          *zap.Logger
 
+	// forgetSubscription drops a revoked subscription from the subscription manager's cache so the
+	// periodic reconcile can recreate it (nil-safe). Injected via SetSubscriptionForgetter rather
+	// than passed to NewHandler to avoid the handler depending on the subscription manager.
+	forgetSubscription func(broadcasterID, subType string) bool
+
 	// claimRefreshedAt throttles per-channel claim refreshes (one Redis write per channel per
 	// twitchchat.ClaimRefreshInterval) so high chat volume does not amplify into Redis writes.
 	claimMu          sync.Mutex
@@ -103,6 +108,14 @@ func NewHandler(secret string, redis *redis.Client, db *pgxpool.Pool, publisher 
 		claimRefreshedAt:  make(map[string]time.Time),
 		statusPublishedAt: make(map[string]time.Time),
 	}
+}
+
+// SetSubscriptionForgetter injects the callback that drops a revoked subscription from the
+// subscription manager's cache. Without it a revocation leaves a stale cached id behind, every
+// re-subscribe attempt short-circuits on the cache hit, and that subscription stays dead until the
+// pod restarts (ADR-0046). Safe to leave unset — revocations are then only logged.
+func (h *Handler) SetSubscriptionForgetter(f func(broadcasterID, subType string) bool) {
+	h.forgetSubscription = f
 }
 
 // HandleEventSubWebhook processes incoming EventSub webhook notifications
@@ -304,13 +317,21 @@ func (h *Handler) handleRevocation(c *gin.Context, body []byte) {
 		zap.String("status", revocation.Subscription.Status),
 	)
 
-	// A revoked chat subscription stops delivering chat. Release the ownership claim so the IRC
+	bid := conditionBroadcasterID(revocation.Subscription.Condition)
+
+	// Drop the revoked subscription from the cache. This applies to EVERY type, not just chat: the
+	// cached id is stale the moment Twitch revokes it, and a cache hit makes every subsequent
+	// re-subscribe a silent no-op, so without eviction the subscription can never come back while
+	// this pod lives. Eviction lets the channel manager's periodic reconcile recreate it (ADR-0046).
+	if bid != "" && h.forgetSubscription != nil {
+		h.forgetSubscription(bid, revocation.Subscription.Type)
+	}
+
+	// A revoked chat subscription also stops delivering chat. Release the ownership claim so the IRC
 	// listener resumes this channel immediately (ADR-0015) instead of waiting for the claim TTL,
 	// and clear the channel's indicator.
-	if revocation.Subscription.Type == "channel.chat.message" {
-		if bid := conditionBroadcasterID(revocation.Subscription.Condition); bid != "" {
-			go h.handleChatSubRevoked(bid)
-		}
+	if revocation.Subscription.Type == "channel.chat.message" && bid != "" {
+		go h.handleChatSubRevoked(bid)
 	}
 
 	c.Status(http.StatusNoContent)
@@ -333,7 +354,10 @@ func conditionBroadcasterID(condition map[string]interface{}) string {
 // broadcaster is not a registered all-chat Twitch user. The webhook may land on any pod, so this
 // always reads the DB rather than an in-memory channel map.
 func (h *Handler) resolveLogin(broadcasterID string) string {
-	if broadcasterID == "" {
+	// db may be nil (the other optional collaborators already are). Without this guard a revocation
+	// nil-derefs on QueryRow — and because handleChatSubRevoked runs in its own goroutine, that
+	// panic takes down the whole process rather than failing one request.
+	if broadcasterID == "" || h.db == nil {
 		return ""
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

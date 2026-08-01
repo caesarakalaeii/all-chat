@@ -135,6 +135,63 @@ func TestProcessMessage_NativeIDDedup_ChatNoticeVersusChatMessage(t *testing.T) 
 	}
 }
 
+// platformMessageID is the single predicate shared by the buffered-deletion drain and the native-id
+// dedup. They drifted once (ADR-0046) — widening one and not the other left moderator-deleted chat
+// notices stuck on overlays — so this pins the contract both now depend on.
+func TestPlatformMessageID(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  *models.RawChatMessage
+		want string
+	}{
+		{
+			name: "twitch plain chat uses the IRC id tag",
+			raw:  &models.RawChatMessage{Tags: map[string]string{"id": "native-1"}},
+			want: "native-1",
+		},
+		{
+			name: "twitch chat notice carries a native id despite having an event type",
+			raw:  &models.RawChatMessage{EventType: "watch_streak", Tags: map[string]string{"id": "native-2"}},
+			want: "native-2",
+		},
+		{
+			name: "announcement likewise",
+			raw:  &models.RawChatMessage{EventType: "announcement", Tags: map[string]string{"id": "native-3"}},
+			want: "native-3",
+		},
+		{
+			name: "youtube falls back to the InnerTube renderer id (#284)",
+			raw:  &models.RawChatMessage{Tags: map[string]string{"youtube_message_id": "yt-1"}},
+			want: "yt-1",
+		},
+		{
+			name: "deletions are excluded — their target lives in EventData",
+			raw: &models.RawChatMessage{
+				EventType: "message_deletion",
+				Tags:      map[string]string{"id": "should-be-ignored"},
+				EventData: map[string]interface{}{"target_msg_id": "native-4"},
+			},
+			want: "",
+		},
+		{
+			name: "events with no platform id (follow, raid) yield nothing",
+			raw:  &models.RawChatMessage{EventType: "follow"},
+			want: "",
+		},
+		{
+			name: "nil tags are safe",
+			raw:  &models.RawChatMessage{EventType: "subscription", Tags: nil},
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, platformMessageID(tt.raw))
+		})
+	}
+}
+
 // A moderator can delete a watch-streak message or an announcement like any other message. When the
 // deletion races ahead of the message it is buffered and drained on arrival — but that drain used to
 // be gated on plain chat only, so a notice (which arrives with an event type set) never drained it
