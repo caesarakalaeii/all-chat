@@ -173,3 +173,58 @@ func Test409GetExistingFails(t *testing.T) {
 	sm.mu.RUnlock()
 	require.False(t, cached, "cache must not be populated when reconciliation GET fails")
 }
+
+// ForgetSubscription drops a revoked subscription's cached id WITHOUT calling Twitch. This is what
+// makes a revocation recoverable: subscribeChatScoped/Subscribe return early on a cache hit, so a
+// stale entry turns every future re-subscribe into a silent no-op and the subscription can never
+// come back while the pod lives (ADR-0046).
+func TestForgetSubscription(t *testing.T) {
+	log := zap.NewNop()
+
+	var deleteCalls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			deleteCalls++
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	sm := NewSubscriptionManager("client-id", "client-secret", "webhook-secret", "https://example.com/callback", log)
+	sm.apiURL = server.URL + "/helix/eventsub/subscriptions"
+	sm.tokenURL = server.URL + "/oauth2/token"
+
+	sm.mu.Lock()
+	sm.subscriptions["b-1:channel.chat.notification"] = "sub-abc"
+	sm.mu.Unlock()
+
+	require.True(t, sm.HasSubscription("b-1", "channel.chat.notification"))
+
+	require.True(t, sm.ForgetSubscription("b-1", "channel.chat.notification"),
+		"forgetting a cached subscription must report that an entry was removed")
+	require.False(t, sm.HasSubscription("b-1", "channel.chat.notification"),
+		"the cache entry must be gone so the repair pass can recreate the subscription")
+	require.Equal(t, 0, deleteCalls,
+		"a revoked subscription no longer exists on Twitch — ForgetSubscription must not issue a DELETE")
+
+	// Idempotent, and never invents entries for unknown keys.
+	require.False(t, sm.ForgetSubscription("b-1", "channel.chat.notification"))
+	require.False(t, sm.ForgetSubscription("", "channel.chat.notification"))
+	require.False(t, sm.ForgetSubscription("b-1", ""))
+	require.False(t, sm.HasSubscription("b-1", ""))
+	require.False(t, sm.HasSubscription("", ""))
+}
+
+// HasSubscription must be scoped per (broadcaster, type) so repairing one channel's notice feed
+// never masks another channel's missing one.
+func TestHasSubscriptionIsScopedPerBroadcasterAndType(t *testing.T) {
+	sm := NewSubscriptionManager("client-id", "client-secret", "webhook-secret", "https://example.com/callback", zap.NewNop())
+
+	sm.mu.Lock()
+	sm.subscriptions["b-1:channel.chat.message"] = "sub-1"
+	sm.mu.Unlock()
+
+	require.True(t, sm.HasSubscription("b-1", "channel.chat.message"))
+	require.False(t, sm.HasSubscription("b-1", "channel.chat.notification"), "different type")
+	require.False(t, sm.HasSubscription("b-2", "channel.chat.message"), "different broadcaster")
+}

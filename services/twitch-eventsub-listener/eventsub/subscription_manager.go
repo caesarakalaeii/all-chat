@@ -336,6 +336,49 @@ func (sm *SubscriptionManager) subscribeChatScoped(ctx context.Context, subType,
 	return sm.subscribeWithCondition(ctx, subType, broadcasterID, token, "1", condition, cacheKey)
 }
 
+// HasSubscription reports whether this pod still holds a subscription of the given type for the
+// broadcaster. Used by the periodic repair pass to tell "still held" from "genuinely missing" —
+// re-calling Subscribe would succeed either way (it returns the cached id on a hit), so without this
+// the repair could not distinguish a no-op from an actual recreation.
+func (sm *SubscriptionManager) HasSubscription(broadcasterID, subType string) bool {
+	if broadcasterID == "" || subType == "" {
+		return false
+	}
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	_, exists := sm.subscriptions[broadcasterID+":"+subType]
+	return exists
+}
+
+// ForgetSubscription drops one cached subscription id WITHOUT calling Twitch, reporting whether an
+// entry was actually removed.
+//
+// Used when Twitch tells us a subscription is already gone (a revocation webhook). The cached id is
+// stale from that moment on, and because subscribeChatScoped/Subscribe return early on a cache hit,
+// leaving it in place makes every future re-subscribe attempt a silent no-op — the subscription can
+// then never be recreated for the lifetime of the pod. Evicting the entry lets the periodic
+// reconcile (channels.Manager) create a fresh one. Deleting from Twitch would be wrong here: the
+// subscription no longer exists, and DELETE on a stale id is a pointless 404.
+func (sm *SubscriptionManager) ForgetSubscription(broadcasterID, subType string) bool {
+	if broadcasterID == "" || subType == "" {
+		return false
+	}
+	cacheKey := broadcasterID + ":" + subType
+
+	sm.mu.Lock()
+	_, existed := sm.subscriptions[cacheKey]
+	delete(sm.subscriptions, cacheKey)
+	sm.mu.Unlock()
+
+	if existed {
+		sm.logger.Info("Dropped revoked EventSub subscription from cache so it can be recreated",
+			zap.String("broadcaster_id", broadcasterID),
+			zap.String("type", subType),
+		)
+	}
+	return existed
+}
+
 // Unsubscribe deletes ALL EventSub subscriptions for a broadcaster.
 //
 // Every subscription is cached under "broadcasterID:type" (see subscribeWithCondition),

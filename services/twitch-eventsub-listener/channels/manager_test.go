@@ -33,16 +33,18 @@ import (
 )
 
 // recordingCallback records the (broadcasterID, action) pairs the manager invokes, in order.
+// err, when set, is returned from every call so tests can exercise failure handling.
 type recordingCallback struct {
 	mu      sync.Mutex
 	actions []string // "action:broadcasterID"
+	err     error
 }
 
 func (r *recordingCallback) fn(broadcasterID, _ string, action string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.actions = append(r.actions, action+":"+broadcasterID)
-	return nil
+	return r.err
 }
 
 func (r *recordingCallback) snapshot() []string {
