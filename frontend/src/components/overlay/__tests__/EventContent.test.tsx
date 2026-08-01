@@ -20,12 +20,41 @@
 
 import '@testing-library/jest-dom/vitest'
 import { render, screen, cleanup } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { EventContent } from '@/components/overlay/EventContent'
 import type { ChatMessage, EventType } from '@/lib/types/message'
 
+// The shared chat renderer draws emotes with next/image, whose loader validates the host against
+// next.config.js — which vitest never loads, so any remote src throws. Render a plain img instead;
+// this suite asserts what reaches the DOM, not Next's optimizer.
+vi.mock('next/image', () => ({
+  __esModule: true,
+  default: ({ src, alt, ...rest }: { src: string; alt: string }) => (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={src} alt={alt} {...rest} />
+  ),
+}))
+
 afterEach(cleanup)
+
+// MessageAttachments (now rendered for events too, so event-borne GIFs appear) reads
+// window.matchMedia via useReducedMotion; jsdom has no implementation.
+beforeEach(() => {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches: false, // motion-on
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  })
+})
 
 /** Build a minimal event-bearing ChatMessage for the renderer. */
 function eventMessage(type: EventType, metadata: Record<string, unknown> = {}): ChatMessage {
@@ -131,6 +160,39 @@ describe('EventContent — Twitch chat notices (ADR-0046)', () => {
       expect(screen.getByText(title)).toBeInTheDocument()
       unmount()
     }
+  })
+
+  it('renders emotes in a notice-borne message as images, not as literal codes', () => {
+    const msg = eventMessage('watch_streak', { streak_count: 4 })
+    msg.message.text = 'back again Kappa'
+    msg.message.emotes = [
+      {
+        code: 'Kappa',
+        provider: 'twitch',
+        url: 'https://static-cdn.jtvnw.net/emoticons/v2/25/default/dark/1.0',
+        positions: [[11, 15]],
+      },
+    ]
+    render(<EventContent message={msg} />)
+
+    // The emote must become an image (the shared renderer marks it decorative with alt="" and
+    // puts the code in title), and must NOT survive as literal text — printing message.text
+    // directly showed "Kappa" as a word, undercutting the notice work.
+    const img = screen.getByTitle('Kappa (twitch)')
+    expect(img.tagName).toBe('IMG')
+    expect(img).toHaveAttribute(
+      'src',
+      'https://static-cdn.jtvnw.net/emoticons/v2/25/default/dark/1.0'
+    )
+    expect(screen.queryByText('back again Kappa')).not.toBeInTheDocument()
+    expect(screen.getByText(/back again/)).toBeInTheDocument()
+  })
+
+  it('renders a bits badge unlock as a badge, never as a cheer', () => {
+    render(<EventContent message={eventMessage('bits_badge_tier', { badge_tier: 1000 })} />)
+    expect(screen.getByText('Bits Badge Unlocked!')).toBeInTheDocument()
+    // Regression guard: it used to reuse the "bits" type and announce a cheer nobody made.
+    expect(screen.queryByText('Bits Cheered!')).not.toBeInTheDocument()
   })
 
   it('falls back to the generic title for an unmapped Twitch notice but still shows its text', () => {

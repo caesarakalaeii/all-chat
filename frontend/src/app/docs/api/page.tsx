@@ -355,7 +355,8 @@ ws.run_forever()`}</Pre>
                   <Code>resubscription</Code>, <Code>gift_subscription</Code>,{' '}
                   <Code>mystery_gift</Code>, <Code>bits</Code>, <Code>raid</Code>,{' '}
                   <Code>channel_points</Code>, <Code>watch_streak</Code>,{' '}
-                  <Code>announcement</Code>, <Code>unraid</Code>, <Code>modiversary</Code>,{' '}
+                  <Code>announcement</Code>, <Code>bits_badge_tier</Code>,{' '}
+                  <Code>unraid</Code>, <Code>modiversary</Code>,{' '}
                   <Code>charity_donation</Code>, <Code>gift_paid_upgrade</Code>,{' '}
                   <Code>prime_paid_upgrade</Code>, <Code>pay_it_forward</Code>,{' '}
                   <Code>twitch_notice</Code>, <Code>message_deletion</Code>

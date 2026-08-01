@@ -31,7 +31,7 @@ export type EventType =
   | 'bits' | 'raid' | 'channel_points' | 'ritual'
   // Twitch chat notices (channel.chat.notification, ADR-0046). watch_streak and
   // announcement carry the chatter's own message text in message.text.
-  | 'watch_streak' | 'announcement' | 'unraid' | 'modiversary'
+  | 'watch_streak' | 'announcement' | 'unraid' | 'modiversary' | 'bits_badge_tier'
   | 'charity_donation' | 'gift_paid_upgrade' | 'prime_paid_upgrade'
   | 'pay_it_forward' | 'twitch_notice'
   // YouTube

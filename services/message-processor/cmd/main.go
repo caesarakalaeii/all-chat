@@ -371,6 +371,45 @@ func main() {
 			var err error
 			isEvent := rawMsg.EventType != "" && rawMsg.EventType != "chat"
 
+			// Per-overlay event filtering runs BEFORE the event/chat branch, so a disabled event
+			// whose text is the chatter's own message can fall through to the chat path instead of
+			// being discarded. Turning "Watch Streaks" off must suppress the milestone decoration
+			// only — the viewer's message still renders as ordinary chat, with its emotes and
+			// badges. Dropping it would silently re-create the very bug ADR-0046 fixed, this time
+			// triggered by a settings toggle. Deletions are never filtered.
+			if isEvent && rawMsg.EventType != "message_deletion" {
+				enabled, filterErr := eventFilter.IsEventEnabled(ctx, overlay.OverlayID, rawMsg.Platform, rawMsg.EventType)
+				if filterErr != nil {
+					log.Warn("Failed to check event filter, allowing event",
+						zap.String("overlay_id", overlay.OverlayID),
+						zap.String("event_type", rawMsg.EventType),
+						zap.Error(filterErr),
+					)
+					// Fail open - allow event if filter check fails
+					enabled = true
+				}
+
+				if !enabled {
+					if filter.CarriesChatterMessage(rawMsg.Platform, rawMsg.EventType) && strings.TrimSpace(rawMsg.Text) != "" {
+						log.Debug("Event type disabled for overlay, delivering as plain chat",
+							zap.String("overlay_id", overlay.OverlayID),
+							zap.String("platform", rawMsg.Platform),
+							zap.String("event_type", rawMsg.EventType),
+						)
+						processorMetrics.RecordMessageProcessed("message-processor", rawMsg.Platform, "filtered_event", "demoted_to_chat")
+						isEvent = false
+					} else {
+						log.Debug("Event type disabled for overlay, skipping",
+							zap.String("overlay_id", overlay.OverlayID),
+							zap.String("platform", rawMsg.Platform),
+							zap.String("event_type", rawMsg.EventType),
+						)
+						processorMetrics.RecordMessageProcessed("message-processor", rawMsg.Platform, "filtered_event", "skipped")
+						continue
+					}
+				}
+			}
+
 			if isEvent {
 				// DELETION EVENT PATH: Handle message deletions specially
 				if rawMsg.EventType == "message_deletion" {
@@ -385,28 +424,8 @@ func main() {
 					goto publish
 				}
 
-				// EVENT PATH: Check if event type is enabled for this overlay
-				enabled, filterErr := eventFilter.IsEventEnabled(ctx, overlay.OverlayID, rawMsg.Platform, rawMsg.EventType)
-				if filterErr != nil {
-					log.Warn("Failed to check event filter, allowing event",
-						zap.String("overlay_id", overlay.OverlayID),
-						zap.String("event_type", rawMsg.EventType),
-						zap.Error(filterErr),
-					)
-					// Fail open - allow event if filter check fails
-					enabled = true
-				}
-
-				if !enabled {
-					log.Debug("Event type disabled for overlay, skipping",
-						zap.String("overlay_id", overlay.OverlayID),
-						zap.String("platform", rawMsg.Platform),
-						zap.String("event_type", rawMsg.EventType),
-					)
-					processorMetrics.RecordMessageProcessed("message-processor", rawMsg.Platform, "filtered_event", "skipped")
-					continue
-				}
-
+				// EVENT PATH: per-overlay filtering already ran above the branch, so reaching
+				// here means this event type is enabled for this overlay.
 				// Normalize event using platform-specific event normalizer
 				startNormalize := time.Now()
 

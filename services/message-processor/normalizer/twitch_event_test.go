@@ -291,6 +291,94 @@ func TestNormalizeEvent_TwitchWatchStreakFromJSONNumbers(t *testing.T) {
 	assert.Equal(t, "9-stream watch streak", unified.Event.Value.DisplayText)
 }
 
+// A bits badge unlock is a lifetime threshold, not a cheer. Rendering it as "1000 bits" at cheer
+// prominence announces bits nobody spent in that moment.
+func TestNormalizeEvent_TwitchBitsBadgeTierIsNotACheer(t *testing.T) {
+	normalizer := NewTwitchNormalizer()
+
+	unified, err := normalizer.NormalizeEvent(&models.RawChatMessage{
+		MessageID: "test-msg-badge",
+		Platform:  "twitch",
+		ChannelID: "streamer",
+		Username:  "viewer",
+		Text:      "viewer just earned the 1000 Bits badge!",
+		Timestamp: time.Now(),
+		EventType: "bits_badge_tier",
+		EventData: map[string]interface{}{"badge_tier": float64(1000)},
+	}, "overlay-1")
+	require.NoError(t, err)
+
+	assert.Equal(t, "bits_badge_tier", unified.Event.Type)
+	require.NotNil(t, unified.Event.Value)
+	assert.Equal(t, "1,000-bit badge", unified.Event.Value.DisplayText)
+	assert.Equal(t, "bits_badge", unified.Event.Value.Currency)
+	assert.NotContains(t, unified.Event.Value.DisplayText, "bits cheered")
+	// Not the "bits" tier ladder: a 1000-tier badge must not inherit a 1000-bit cheer's priority.
+	assert.Equal(t, "medium", unified.Event.Tier)
+	assert.Equal(t, 20, unified.Event.Duration)
+}
+
+func TestFormatThousands(t *testing.T) {
+	tests := []struct {
+		in   int
+		want string
+	}{
+		{0, "0"}, {1, "1"}, {999, "999"}, {1000, "1,000"}, {5000, "5,000"},
+		{25000, "25,000"}, {100000, "100,000"}, {1000000, "1,000,000"}, {-5, "-5"},
+	}
+	for _, tt := range tests {
+		assert.Equal(t, tt.want, formatThousands(tt.in), "formatThousands(%d)", tt.in)
+	}
+}
+
+// A chat GIF inside an event's message (e.g. a watch-streak message) must become an attachment with
+// the alt caption stripped from the text, exactly as on the chat path — otherwise the overlay shows
+// the literal "[Some GIF]" caption and no image.
+func TestNormalizeEvent_TwitchChatGifInNoticeMessage(t *testing.T) {
+	normalizer := NewTwitchNormalizer()
+
+	unified, err := normalizer.NormalizeEvent(&models.RawChatMessage{
+		MessageID: "test-msg-gif",
+		Platform:  "twitch",
+		ChannelID: "streamer",
+		Username:  "viewer",
+		Text:      "back again [Party Time GIF]",
+		Timestamp: time.Now(),
+		Tags: map[string]string{
+			"gifs": "11-26|gif-1|https://media.example.com/party.gif",
+		},
+		EventType: "watch_streak",
+		EventData: map[string]interface{}{"streak_count": 3},
+	}, "overlay-1")
+	require.NoError(t, err)
+
+	require.Len(t, unified.Message.Attachments, 1, "the GIF must surface as an attachment")
+	assert.Equal(t, "https://media.example.com/party.gif", unified.Message.Attachments[0].URL)
+	assert.NotContains(t, unified.Message.Text, "[Party Time GIF]",
+		"the alt caption must be stripped from the visible text")
+	assert.Contains(t, unified.Message.Text, "back again")
+}
+
+// Without a "gifs" tag the text and emotes must pass through byte-for-byte.
+func TestNormalizeEvent_TwitchNoGifTagLeavesTextUntouched(t *testing.T) {
+	normalizer := NewTwitchNormalizer()
+
+	unified, err := normalizer.NormalizeEvent(&models.RawChatMessage{
+		MessageID: "test-msg-nogif",
+		Platform:  "twitch",
+		ChannelID: "streamer",
+		Username:  "viewer",
+		Text:      "plain [not a gif] text",
+		Timestamp: time.Now(),
+		EventType: "watch_streak",
+		EventData: map[string]interface{}{"streak_count": 2},
+	}, "overlay-1")
+	require.NoError(t, err)
+
+	assert.Equal(t, "plain [not a gif] text", unified.Message.Text)
+	assert.Empty(t, unified.Message.Attachments)
+}
+
 func TestNormalizeEvent_TwitchAnnouncementHasNoValuePill(t *testing.T) {
 	normalizer := NewTwitchNormalizer()
 
