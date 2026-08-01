@@ -432,6 +432,16 @@ func (n *TwitchNormalizer) NormalizeEvent(raw *models.RawChatMessage, overlayID 
 	// Extract Twitch native emotes from tags (for events with user text like resubs)
 	emotes := n.extractTwitchEmotes(raw)
 
+	// Chat GIFs, handled exactly as on the chat path (ADR-0037): strip the bracketed alt caption
+	// from the visible text, re-anchor emote offsets, and surface the GIF as an attachment. Events
+	// need this too because a chat notice can carry the chatter's own message — a watch-streak
+	// message containing a GIF otherwise rendered the literal "[Some GIF caption]" text with no
+	// image (ADR-0046). No "gifs" tag means text and emotes pass through untouched.
+	attachments, text, removed := extractTwitchGifs(raw.Text, raw.Tags["gifs"])
+	if len(removed) > 0 {
+		emotes = remapEmotePositions(emotes, removed)
+	}
+
 	// Build EventValue from EventData
 	var eventValue *models.EventValue
 
@@ -549,6 +559,16 @@ func (n *TwitchNormalizer) NormalizeEvent(raw *models.RawChatMessage, overlayID 
 			DisplayText: fmt.Sprintf("%d-stream watch streak", streak),
 		}
 
+	case "bits_badge_tier":
+		// A lifetime badge threshold was crossed — no bits were cheered in this moment, so the
+		// wording must not read as a cheer total.
+		tier := eventDataInt(raw.EventData, "badge_tier")
+		eventValue = &models.EventValue{
+			Amount:      float64(tier),
+			Currency:    "bits_badge",
+			DisplayText: fmt.Sprintf("%s-bit badge", formatThousands(tier)),
+		}
+
 	case "modiversary":
 		months := eventDataInt(raw.EventData, "months")
 		eventValue = &models.EventValue{
@@ -620,8 +640,11 @@ func (n *TwitchNormalizer) NormalizeEvent(raw *models.RawChatMessage, overlayID 
 		ChannelName: raw.ChannelID,
 		User:        userInfo,
 		Message: models.MessageInfo{
-			Text:   raw.Text, // User message (resubs, channel points) or system message
-			Emotes: emotes,   // Twitch native emotes from tags (will be enriched with 3rd party later)
+			// text is raw.Text with any chat-GIF alt caption stripped (identical to the chat path);
+			// it equals raw.Text when the message carries no GIF.
+			Text:        text,
+			Emotes:      emotes, // Twitch native emotes from tags (enriched with 3rd party later)
+			Attachments: attachments,
 		},
 		Timestamp: raw.Timestamp,
 		Metadata:  n.extractMetadata(raw),
@@ -629,6 +652,27 @@ func (n *TwitchNormalizer) NormalizeEvent(raw *models.RawChatMessage, overlayID 
 	}
 
 	return unified, nil
+}
+
+// formatThousands renders an integer with thin thousands separators (1000 → "1,000"), so bits
+// badge tiers read as the badge names Twitch uses rather than as a bare number.
+func formatThousands(n int) string {
+	s := strconv.Itoa(n)
+	if n < 0 || len(s) <= 3 {
+		return s
+	}
+	var b strings.Builder
+	lead := len(s) % 3
+	if lead > 0 {
+		b.WriteString(s[:lead])
+	}
+	for i := lead; i < len(s); i += 3 {
+		if b.Len() > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteString(s[i : i+3])
+	}
+	return b.String()
 }
 
 // eventDataInt reads a numeric EventData field. Values survive a JSON round-trip through the

@@ -155,7 +155,8 @@ func TestBuildChatNoticeEventTypeMapping(t *testing.T) {
 	}{
 		{"watch_streak", "watch_streak"},
 		{"announcement", "announcement"},
-		{"bits_badge_tier", "bits"}, // parity with the IRC parser's bitsbadgetier mapping
+		// Its own type, NOT "bits": nothing was cheered, so it must not render as a cheer.
+		{"bits_badge_tier", "bits_badge_tier"},
 		{"gift_paid_upgrade", "gift_paid_upgrade"},
 		{"prime_paid_upgrade", "prime_paid_upgrade"},
 		{"pay_it_forward", "pay_it_forward"},
@@ -212,9 +213,17 @@ func TestBuildChatNoticeFallsBackToSystemMessage(t *testing.T) {
 	if msg.Text != "viewer is now a bits badge tier 1000 holder!" {
 		t.Errorf("Text = %q, want the system message", msg.Text)
 	}
-	// "badge_tier" is the key the message-processor's existing "bits" case reads.
 	if got := msg.EventData["badge_tier"]; got != 1000 {
 		t.Errorf("EventData[badge_tier] = %v, want 1000", got)
+	}
+	// Regression guard: a badge unlock must never be presented as a cheer. Publishing a "bits"
+	// key here (or mapping the notice to the "bits" event type) makes the overlay announce
+	// "Bits Cheered! 1000 bits" for a cheer that never happened.
+	if _, present := msg.EventData["bits"]; present {
+		t.Error("EventData must not carry a bits total — no bits were cheered")
+	}
+	if msg.EventType != "bits_badge_tier" {
+		t.Errorf("EventType = %q, want bits_badge_tier (not bits)", msg.EventType)
 	}
 }
 

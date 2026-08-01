@@ -997,9 +997,13 @@ func noticeCoveredByDedicatedSubscription(base string) bool {
 	}
 }
 
-// noticeEventType maps a base notice type onto all-chat's event taxonomy. bits_badge_tier folds into
-// "bits" to keep parity with the IRC parser's bitsbadgetier mapping (and so it reuses the existing
-// bits classifier, filter column and overlay styling).
+// noticeEventType maps a base notice type onto all-chat's event taxonomy.
+//
+// bits_badge_tier gets its own type rather than folding into "bits". The IRC parser mapped
+// bitsbadgetier → "bits", but that renders a lifetime badge unlock as "💎 Bits Cheered! / 1000 bits"
+// at cheer priority — an alert for a cheer that never happened. IRC parity is not worth preserving
+// here: the IRC listener serves no channels (ADR-0026), so this mapping would have been newly
+// activating a misleading alert rather than matching existing behaviour.
 func noticeEventType(base string) string {
 	switch base {
 	case "watch_streak":
@@ -1007,7 +1011,7 @@ func noticeEventType(base string) string {
 	case "announcement":
 		return "announcement"
 	case "bits_badge_tier":
-		return "bits"
+		return "bits_badge_tier"
 	case "gift_paid_upgrade":
 		return "gift_paid_upgrade"
 	case "prime_paid_upgrade":
@@ -1078,6 +1082,8 @@ func buildNoticeEventData(e *eventsub.ChatNotificationEvent, base string, shared
 	case "bits_badge_tier":
 		if b := e.BitsBadgeTier; b != nil {
 			data["badge_tier"] = b.Tier
+			// Explicitly NOT "bits": nothing was cheered now, so downstream must never present
+			// this as a cheer total.
 		}
 	case "charity_donation":
 		if c := e.CharityDonation; c != nil {

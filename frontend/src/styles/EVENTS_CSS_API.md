@@ -58,6 +58,7 @@ Applied alongside `.event-message` to identify the specific event type:
 | `.event-type-member`                   | YouTube membership                                  |
 | `.event-type-watch_streak`             | Twitch watch streak (carries the viewer's message)  |
 | `.event-type-announcement`             | Twitch `/announce` (carries the announcement body)  |
+| `.event-type-bits_badge_tier`          | Twitch bits badge unlocked (not a cheer)            |
 | `.event-type-unraid`                   | Twitch raid cancelled                               |
 | `.event-type-modiversary`              | Twitch moderator anniversary                        |
 | `.event-type-charity_donation`         | Twitch charity donation                             |

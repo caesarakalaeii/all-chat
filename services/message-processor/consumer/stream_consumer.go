@@ -323,8 +323,14 @@ func (c *StreamConsumer) processMessage(ctx context.Context, msg redis.XMessage)
 		return c.processDeletionEvent(ctx, rawMsg)
 	}
 
-	// For regular messages, check if deletion was buffered
-	if rawMsg.EventType == "" || rawMsg.EventType == "chat_message" {
+	// For any message a moderator could later remove, check whether its deletion already arrived
+	// and was buffered. Scoped the same way as the native-id dedup below — every non-deletion
+	// message carrying a platform message id — because Twitch chat notices (watch streaks,
+	// announcements) are deletable chat that arrives with an event type set (ADR-0046). Gating this
+	// on plain chat alone meant a deletion that raced ahead of its notice never drained, leaving a
+	// moderator-removed watch streak visible on the overlay until the buffer entry expired.
+	// Messages without a platform id fall through harmlessly (the inner check no-ops).
+	if rawMsg.EventType != "message_deletion" {
 		// Extract platform message ID from tags. Twitch sets Tags["id"] (IRC tag),
 		// YouTube sets Tags["youtube_message_id"] (InnerTube renderer ID); without
 		// the YouTube fallback, buffered deletions for YouTube messages would

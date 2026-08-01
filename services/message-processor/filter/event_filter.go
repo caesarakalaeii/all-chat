@@ -39,6 +39,32 @@ func NewEventFilter(db *pgxpool.Pool, logger *zap.Logger) *EventFilter {
 	}
 }
 
+// CarriesChatterMessage reports whether an event type's text IS the chatter's own chat message,
+// rather than a system description of something that happened.
+//
+// These events are chat first and decoration second: a Twitch watch streak is a returning viewer's
+// ordinary message that Twitch happens to tag with a milestone, and an announcement is a message the
+// broadcaster chose to highlight (ADR-0046). That distinction decides what a disabled per-overlay
+// toggle may do. For an ordinary event (a follow, a raid) "disabled" means drop it. For these, the
+// caller suppresses only the decoration and still delivers the message down the chat path — a
+// settings toggle must never delete a viewer's message, which would silently re-create the
+// dropped-message bug that ADR-0046 fixed.
+//
+// Deliberately NOT included: resubscription. Its text is an optional message attached to a
+// subscription event, so a streamer disabling "Resubscriptions" means the whole notice, and
+// including it here would change long-standing behaviour rather than fix a regression.
+func CarriesChatterMessage(platform, eventType string) bool {
+	if platform != "twitch" {
+		return false
+	}
+	switch eventType {
+	case "watch_streak", "announcement":
+		return true
+	default:
+		return false
+	}
+}
+
 // columnAlwaysEnabled marks event types that are deliberately not toggleable, so they are enabled
 // without a database round-trip and without the unknown-event warning. Used for notices that are
 // chat content rather than alerts (an announcement is a message the broadcaster chose to highlight —
@@ -99,7 +125,7 @@ func mapEventTypeToColumn(platform, eventType string) string {
 		case "gift_subscription", "mystery_gift", "gift_paid_upgrade", "anon_gift_paid_upgrade",
 			"prime_paid_upgrade", "pay_it_forward":
 			return "enable_twitch_gift_subs"
-		case "bits":
+		case "bits", "bits_badge_tier":
 			return "enable_twitch_bits"
 		case "raid", "unraid":
 			return "enable_twitch_raids"
