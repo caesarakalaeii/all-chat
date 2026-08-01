@@ -76,6 +76,15 @@ notice refreshes the ownership claim and the connected indicator, exactly like a
 (but a *revoked* notification subscription does not release the claim — losing notices does not mean
 chat is dead).
 
+**Self-healing.** `reconcileChat` only fires on the demand transition, so a subscription that failed
+at creation or was later revoked used to stay dead until demand cycled or the pod restarted — silent
+for the companions, since nothing logs "no watch streaks arriving". Two mechanisms fix that: a
+revocation evicts the cached subscription id (`ForgetSubscription`, without calling Twitch — the
+subscription is already gone, and a stale cache entry would make every re-subscribe a silent no-op),
+and a leader-gated repair pass (`ensure_chat`, every `ChatSubscriptionReconcileInterval` = 5m)
+re-asserts the set for every chat-active channel. The pass checks `HasSubscription` first, so a
+healthy channel costs a map lookup and no API call, and only genuine recreations are logged.
+
 Notices are routed by `notice_type` (any `shared_chat_` prefix is stripped first, since the payload
 arrives under a prefixed key too):
 

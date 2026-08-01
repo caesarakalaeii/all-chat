@@ -100,13 +100,37 @@ subscription. It shares the chat condition (`broadcaster_user_id == user_id`) an
 authorization (`user:read:chat` + `user:bot`, broadcaster == chatter), so it joins
 the existing `subscribe_chat` / `unsubscribe_chat` bundle alongside the three
 moderation subscriptions. Creation is best-effort: a failure leaves chat working.
-Recovery is *not* a periodic retry — `reconcileChatLocked` only calls `subscribe_chat`
-on the `want && !ChatActive` transition, so a channel whose notice subscription
-failed or was revoked while chat stays active keeps working chat with no notices
-until demand cycles (the last overlay using it disconnects and reconnects) or the pod
-restarts. Acceptable because overlays disconnect routinely, but it means a
-continuously-connected overlay can sit without notices for a long time; a periodic
-reconcile of the companion subscriptions would close that gap.
+
+**Recovery is an explicit repair pass, not a hope.** `reconcileChatLocked` only acts
+on the `want ↔ ChatActive` *transition*, so once chat is active it never re-asserts
+anything. A subscription that failed at creation or was later revoked therefore stayed
+dead until demand cycled or the pod restarted — survivable for the chat subscription
+itself, whose absence is loud, but silent for the companions: a revoked
+`channel.chat.notification` meant watch streaks and announcements simply stopped
+arriving, with nothing in the logs and no recovery. Two mechanisms close that:
+
+1. **Revocation evicts the cache.** `SubscriptionManager.ForgetSubscription` drops the
+   cached id for *any* revoked type without calling Twitch (the subscription is
+   already gone; a DELETE on a stale id is a pointless 404). This matters because
+   `subscribeChatScoped`/`Subscribe` return early on a cache hit — a stale entry makes
+   every future re-subscribe a silent no-op, so eviction is what makes the
+   subscription recreatable at all. Wired into the webhook handler via
+   `SetSubscriptionForgetter` so the handler needs no dependency on the manager.
+2. **A periodic repair pass.** `reconcileChatSubscriptions` re-asserts the whole chat
+   subscription set for every `ChatActive` channel on its own coarse ticker
+   (`ChatSubscriptionReconcileInterval`, 5m — deliberately much slower than the sync
+   interval, since this is the only pass that can issue Twitch calls for a channel
+   whose demand never changed). Leader-gated, and cheap by construction: it consults
+   `HasSubscription` first, so a healthy channel costs a map lookup per type and zero
+   API calls. `HasSubscription` also lets the repair distinguish "still held" from
+   "genuinely recreated", which is what keeps the recreation logs honest instead of
+   claiming a repair on every pass.
+
+`subscribe_chat` and the repair action `ensure_chat` share one code path in `main.go`
+rather than duplicating the subscription list — the same anti-drift reasoning as the
+message-processor predicates below, and for the same reason: a duplicated list here
+already went stale once.
+
 Notice delivery also refreshes the EventSub chat
 ownership claim and the "connected" indicator, exactly as a chat message does — a
 delivered notice is equally proof the channel's chat is live.
@@ -170,15 +194,19 @@ and removes the assumption entirely.
 Deletion events are excluded and unaffected: they carry no `Tags` at all (the target
 id lives in `EventData.target_msg_id`).
 
-**The buffered-deletion drain is widened the same way**, and must be kept in lockstep
-with the dedup predicate above. A moderator can delete a watch-streak message or an
-announcement like any other message, and when the deletion races ahead of the message
-it is buffered and drained on the message's arrival. That drain was gated on plain
-chat only (`EventType == "" || "chat_message"`), so a notice — which arrives *with* an
-event type set — never drained its buffered deletion and the removed message stayed
-visible on every overlay until the buffer entry expired. Both predicates now read
-"any Twitch message that is not a deletion", and a regression test asserts the drain
-fires for `watch_streak`, `announcement` and plain chat alike.
+**The buffered-deletion drain shares the dedup's predicate.** A moderator can delete a
+watch-streak message or an announcement like any other message, and when the deletion
+races ahead of the message it is buffered and drained on the message's arrival. That
+drain was gated on plain chat only (`EventType == "" || "chat_message"`), so a notice —
+which arrives *with* an event type set — never drained its buffered deletion and the
+removed message stayed visible on every overlay until the buffer entry expired.
+
+Rather than fix the second condition to match the first, both call sites now go through
+a single `platformMessageID` helper. Keeping two copies in sync by discipline is exactly
+what failed: the dedup was widened for notices and its twin forty lines above was not.
+One function makes the class of bug unrepresentable. A regression test asserts the drain
+fires for `watch_streak`, `announcement` and plain chat alike, and a table test pins the
+predicate itself (deletions excluded, YouTube's InnerTube id as fallback, nil tags safe).
 
 ### Settings and rendering
 
@@ -247,11 +275,16 @@ Super Chats, channel-point redemptions), not just notices.
 ### Negative
 
 - One more EventSub subscription per chat-active channel (created with a user-scoped
-  condition, so no additional subscription cost, but more state to reconcile) — and
-  it recovers only on a demand cycle, as described above.
-- Two predicates in the message-processor (native-id dedup and the buffered-deletion
-  drain) must stay in lockstep. They already drifted once: widening only the first
-  left moderator-deleted notices stuck on screen.
+  condition, so no additional subscription cost, but more state to reconcile).
+- A new periodic pass that can talk to Twitch. It is bounded (leader-only,
+  `HasSubscription`-guarded, 5-minute ticker), but a channel whose subscription
+  permanently cannot be created — a scope the owner never granted — is retried once
+  per pass forever. The scope-error branch returns before the companions, so that
+  costs one call per channel per 5 minutes, not five.
+- `ForgetSubscription` deliberately does not verify against Twitch before evicting.
+  A spurious revocation notification would therefore cause one redundant re-create
+  (Twitch answers 409, which the existing reconcile path turns back into the live id),
+  which is strictly better than the alternative of never recovering.
 - The demote-to-chat path means the same raw message can render as an event on one
   overlay and as plain chat on another. That is correct per-overlay behaviour, but it
   is the first place where the event/chat distinction is not a property of the message

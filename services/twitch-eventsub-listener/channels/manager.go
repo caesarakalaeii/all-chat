@@ -43,14 +43,22 @@ type Channel struct {
 }
 
 // SubscriptionCallback is invoked by the manager to create/delete subscriptions. action is one of:
-//   - "subscribe":       create the event subscriptions (points, subs, raids, …) for the channel
-//   - "subscribe_chat":   create the channel.chat.message subscription
-//   - "unsubscribe_chat": delete only the channel.chat.message subscription
+//   - "subscribe":        create the event subscriptions (points, subs, raids, …) for the channel
+//   - "subscribe_chat":   create the chat subscription and its companions
+//   - "ensure_chat":      re-assert the chat subscription set for an already-chat-active channel
+//     (idempotent; a no-op for every subscription the manager still holds)
+//   - "unsubscribe_chat": delete the chat subscription and its companions
 //   - "unsubscribe":      delete ALL subscriptions for the channel
 //
 // Event subscriptions are created for every active channel; the chat subscription is gated on
 // chat scope AND live-overlay demand (see reconcileChatLocked), so it uses the *_chat actions.
 type SubscriptionCallback func(broadcasterID string, accessToken string, action string) error
+
+// ChatSubscriptionReconcileInterval is how often a chat-active channel's subscription set is
+// re-asserted. Deliberately much coarser than the sync interval: for a healthy channel every
+// re-assert is an in-memory cache hit costing nothing, but a channel whose subscription genuinely
+// went missing does one Twitch API call per pass, so this bounds that repair traffic.
+const ChatSubscriptionReconcileInterval = 5 * time.Minute
 
 // UserIDResolver resolves Twitch usernames to user IDs
 type UserIDResolver interface {
@@ -110,6 +118,10 @@ type Manager struct {
 	stopChan     chan struct{}
 	wg           sync.WaitGroup
 	syncInterval time.Duration
+
+	// chatReconcileInterval drives reconcileChatSubscriptions. Defaults to
+	// ChatSubscriptionReconcileInterval; tests shorten it via SetChatReconcileInterval.
+	chatReconcileInterval time.Duration
 }
 
 // compile-time assertion: Manager must satisfy listener.ChannelManager
@@ -128,6 +140,16 @@ func NewManager(db *pgxpool.Pool, logger *zap.Logger, resolver UserIDResolver, c
 		syncSignal:   make(chan struct{}, 1),
 		stopChan:     make(chan struct{}),
 		syncInterval: syncInterval,
+
+		chatReconcileInterval: ChatSubscriptionReconcileInterval,
+	}
+}
+
+// SetChatReconcileInterval overrides how often the chat subscription set is re-asserted. Values <= 0
+// are ignored so a misconfiguration can never turn the repair pass into a busy loop.
+func (m *Manager) SetChatReconcileInterval(d time.Duration) {
+	if d > 0 {
+		m.chatReconcileInterval = d
 	}
 }
 
@@ -405,6 +427,57 @@ func (m *Manager) releaseClaim(login string) {
 	}
 }
 
+// reconcileChatSubscriptions re-asserts the chat subscription set for every channel this pod
+// currently serves chat for, healing subscriptions that went missing without the channel's
+// demand state changing.
+//
+// Why this is needed: reconcileChatLocked only acts on the want↔ChatActive *transition*. Once
+// ChatActive is true it never calls subscribe_chat again, so a subscription that failed at creation
+// time or was later revoked by Twitch stayed dead until demand cycled (the last overlay disconnects
+// and reconnects) or the pod restarted. That was survivable for the chat subscription itself, whose
+// absence is loud, but silent for the companions — a revoked channel.chat.notification meant watch
+// streaks and announcements simply stopped arriving with nothing in the logs and no recovery
+// (ADR-0046). Revocations now also evict the subscription-manager cache entry, so this pass sees the
+// gap and recreates it.
+//
+// Leader-gated, and cheap by construction: the subscription manager returns early on a cache hit, so
+// a healthy channel costs a map lookup per type and no API call. Channels are snapshotted under the
+// read lock; callbacks run outside it so a slow Twitch API never blocks syncing.
+func (m *Manager) reconcileChatSubscriptions(ctx context.Context) {
+	if m.callback == nil || !m.leads() {
+		return
+	}
+
+	type target struct{ broadcasterID, accessToken string }
+	m.mu.RLock()
+	pending := make([]target, 0, len(m.channels))
+	for broadcasterID, ch := range m.channels {
+		if ch.ChatActive {
+			pending = append(pending, target{broadcasterID, ch.AccessToken})
+		}
+	}
+	m.mu.RUnlock()
+
+	if len(pending) == 0 {
+		return
+	}
+
+	for _, t := range pending {
+		if ctx.Err() != nil {
+			return
+		}
+		if err := m.callback(t.broadcasterID, t.accessToken, "ensure_chat"); err != nil {
+			// Non-fatal: chat itself keeps flowing, and the next pass retries. Logged at Warn
+			// because a persistent failure here is exactly the silent-loss case this pass exists
+			// to surface.
+			m.logger.Warn("Failed to re-assert chat subscription set",
+				zap.String("broadcaster_id", t.broadcasterID),
+				zap.Error(err),
+			)
+		}
+	}
+}
+
 // reconcileChatLocked creates or deletes channel.chat.message subscriptions so that a chat
 // subscription exists exactly for channels that (a) have the chat scope and (b) have live
 // overlay demand. Must be called with m.mu held. Only the leader's callback performs real
@@ -457,6 +530,12 @@ func (m *Manager) Start(ctx context.Context) error {
 		ticker := time.NewTicker(m.syncInterval)
 		defer ticker.Stop()
 
+		// Separate, much coarser ticker: re-asserting subscriptions is repair work, not steady-state
+		// syncing, and it is the only pass that can issue Twitch API calls for a channel whose
+		// demand never changed. See ChatSubscriptionReconcileInterval.
+		reconcileTicker := time.NewTicker(m.chatReconcileInterval)
+		defer reconcileTicker.Stop()
+
 		for {
 			select {
 			case <-ctx.Done():
@@ -475,6 +554,8 @@ func (m *Manager) Start(ctx context.Context) error {
 				}
 				m.refreshClaims(ctx)
 				m.heartbeatActiveSources(ctx)
+			case <-reconcileTicker.C:
+				m.reconcileChatSubscriptions(ctx)
 			}
 		}
 	}()
