@@ -19,6 +19,7 @@
 import { MessageAttachments } from '@/components/overlay/MessageAttachments'
 import { renderMessageContent } from '@/lib/renderMessage'
 import type { ChatMessage } from '@/lib/types/message'
+import { resolveUsernameColor } from '@/lib/utils/usernameColor'
 
 /**
  * Inner content for an event / system-notice row: icon + title + user + optional
@@ -172,7 +173,7 @@ export function EventContent({ message }: { message: ChatMessage }) {
           <div className="event-title text-lg font-bold text-white">{getEventTitle()}</div>
           <div
             className="event-user text-sm font-semibold"
-            style={{ color: message.user?.color || 'var(--chat-username-color, #FFFFFF)' }}
+            style={{ color: resolveUsernameColor(message.user) }}
           >
             {message.user?.display_name || message.user?.username}
           </div>

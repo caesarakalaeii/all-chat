@@ -69,7 +69,16 @@ type UserInfo struct {
 	DisplayName   string  `json:"display_name"`
 	AvatarURL     string  `json:"avatar_url,omitempty"`
 	Badges        []Badge `json:"badges"`
-	Color         string  `json:"color,omitempty"`
+	// Color is the AUTHORITATIVE username colour: the viewer's manually chosen
+	// All-Chat colour, else the platform-native colour (Twitch/Kick/Discord).
+	// Empty when the chatter has neither — the overlay then falls back to the
+	// streamer's "Username color" setting and finally to AutoColor (ADR-0047).
+	Color string `json:"color,omitempty"`
+	// AutoColor is the deterministic palette fallback, always populated (except
+	// when a gradient is set) so the overlay never has to invent one. It is a
+	// SEPARATE field from Color precisely so the streamer's per-overlay setting
+	// can rank between the platform colour and this fallback (ADR-0047).
+	AutoColor      string  `json:"auto_color,omitempty"`
 	NameGradient   string  `json:"name_gradient,omitempty"`   // Phase 29: raw JSONB string e.g. {"type":"linear","colors":["#ff0000","#0000ff"],"angle":90}
 	SourceBadges   []Badge `json:"source_badges,omitempty"`   // Badges from source channel (shared chat)
 	SourceUserID   string  `json:"source_user_id,omitempty"`  // User ID in source channel (shared chat)

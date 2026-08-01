@@ -99,6 +99,7 @@ import { AllChatBadge } from '@/components/AllChatBadge'
 import { PremiumBadge } from '@/components/PremiumBadge'
 import { EventContent } from '@/components/overlay/EventContent'
 import { MessageAttachments } from '@/components/overlay/MessageAttachments'
+import { resolveUsernameColor } from '@/lib/utils/usernameColor'
 import '@/styles/events.css'
 
 // Default display duration (seconds) for an event based on its tier. Pure
@@ -811,7 +812,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                         <span
                           className="chat-username text-sm font-semibold"
                           style={{
-                            color: message.user?.color || 'var(--chat-username-color, #FFFFFF)',
+                            color: resolveUsernameColor(message.user),
                           }}
                         >
                           {message.user?.display_name || message.user?.username}

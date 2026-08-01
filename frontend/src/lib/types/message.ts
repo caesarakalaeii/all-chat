@@ -111,7 +111,8 @@ export interface UserInfo {
   display_name: string;
   avatar_url?: string;
   badges: Badge[];
-  color?: string;
+  color?: string; // ADR-0047: authoritative only — viewer's manual All-Chat color, else platform-native
+  auto_color?: string; // ADR-0047: deterministic palette fallback; ranks BELOW the streamer's overlay setting
   name_gradient?: NameGradient; // Phase 29: premium gradient replaces color when set
   source_badges?: Badge[];  // Badges from source channel (shared chat)
   source_user_id?: string;  // User ID in source channel (shared chat)
