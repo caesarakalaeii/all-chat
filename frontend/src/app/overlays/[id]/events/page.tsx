@@ -351,7 +351,7 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
                     {
                       key: 'enable_twitch_watch_streaks',
                       label: 'Watch Streaks',
-                      desc: "Returning viewers' watch-streak milestones, shown with their chat message",
+                      desc: "Returning viewers' watch-streak milestones. Turning this off hides the milestone only — their chat message still shows",
                     },
                   ].map(({ key, label, desc }) => (
                     <EventToggle

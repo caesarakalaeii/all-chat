@@ -16,6 +16,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+import { MessageAttachments } from '@/components/overlay/MessageAttachments'
+import { renderMessageContent } from '@/lib/renderMessage'
 import type { ChatMessage } from '@/lib/types/message'
 
 /**
@@ -53,6 +55,8 @@ export function EventContent({ message }: { message: ChatMessage }) {
         return '🔥'
       case 'announcement':
         return '📣'
+      case 'bits_badge_tier':
+        return '🏅'
       case 'unraid':
         return '🛑'
       case 'modiversary':
@@ -111,6 +115,10 @@ export function EventContent({ message }: { message: ChatMessage }) {
         return 'Watch Streak!'
       case 'announcement':
         return 'Announcement'
+      case 'bits_badge_tier':
+        // Deliberately not "Bits Cheered!" — a lifetime badge threshold was crossed, no bits
+        // were cheered in this moment.
+        return 'Bits Badge Unlocked!'
       case 'unraid':
         return 'Raid Cancelled'
       case 'modiversary':
@@ -177,9 +185,20 @@ export function EventContent({ message }: { message: ChatMessage }) {
       </div>
       {message.message.text && (
         <div className="event-message-text ml-14 text-sm text-slate-200">
-          {message.message.text}
+          {/* Rendered through the shared chat renderer, not as a bare string: several events
+              carry the chatter's own message (a watch streak IS their chat message, plus resub
+              messages, announcements, Super Chats), and the pipeline enriches those with emotes.
+              Printing message.text directly showed emote codes as literal text — "Kappa" instead
+              of the image — which undercut the notice work in ADR-0046. */}
+          {renderMessageContent(message)}
         </div>
       )}
+      {/* Twitch chat GIFs and Discord uploads attached to an event's message (ADR-0037). The
+          overlay's chat rows render these separately; without this an event-borne GIF was dropped
+          entirely. Renders nothing when there are no attachments. */}
+      <div className="event-message-attachments ml-14">
+        <MessageAttachments message={message} />
+      </div>
       {event.type === 'token_expiration_warning' && (
         <div className="event-warning-message mt-2 ml-14 space-y-1 text-sm text-orange-200">
           <div className="font-semibold">

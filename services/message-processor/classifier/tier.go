@@ -94,6 +94,10 @@ func classifyTwitchEvent(eventType string, value *models.EventValue) (tier strin
 		// A broadcaster/mod announcement is chat content the streamer chose to highlight.
 		return "medium", 20
 
+	case "bits_badge_tier":
+		// A lifetime badge unlock, not a cheer — worth showing, but never at cheer prominence.
+		return "medium", 20
+
 	case "gift_paid_upgrade", "prime_paid_upgrade", "pay_it_forward":
 		// Sub-adjacent conversions — as valuable as a new sub.
 		return "high", 30

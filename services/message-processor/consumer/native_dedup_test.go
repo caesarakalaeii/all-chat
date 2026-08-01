@@ -27,6 +27,7 @@ import (
 	"github.com/caesar/all-chat/services/message-processor/models"
 	"github.com/caesar/all-chat/services/message-processor/registry"
 	"github.com/redis/go-redis/v9"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 )
@@ -130,6 +131,72 @@ func TestProcessMessage_NativeIDDedup_ChatNoticeVersusChatMessage(t *testing.T) 
 			if calls != 1 {
 				t.Fatalf("handler called %d times for one native message id, want 1", calls)
 			}
+		})
+	}
+}
+
+// A moderator can delete a watch-streak message or an announcement like any other message. When the
+// deletion races ahead of the message it is buffered and drained on arrival — but that drain used to
+// be gated on plain chat only, so a notice (which arrives with an event type set) never drained it
+// and the deleted message stayed visible on the overlay (ADR-0046).
+func TestProcessMessage_BufferedDeletionDrainsForChatNotices(t *testing.T) {
+	for _, eventType := range []string{"watch_streak", "announcement", ""} {
+		name := eventType
+		if name == "" {
+			name = "plain_chat"
+		}
+		t.Run(name, func(t *testing.T) {
+			mr, err := miniredis.Run()
+			require.NoError(t, err)
+			defer mr.Close()
+			client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+			defer client.Close()
+			logger := zaptest.NewLogger(t)
+
+			buffer := registry.NewRedisDeletionBuffer(client, time.Hour)
+			msgIDs := registry.NewRedisRegistry(client, time.Hour)
+			var handled []*models.RawChatMessage
+			c := NewStreamConsumer(client, logger, sharedTestMetrics,
+				func(ctx context.Context, msg *models.RawChatMessage) error {
+					handled = append(handled, msg)
+					return nil
+				},
+				msgIDs, buffer, "host")
+			c.SetNativeDeduplicator(dedup.NewDeduplicator(client, logger))
+
+			ctx := context.Background()
+
+			// The listener registers native id → internal UUID at its capture point, before
+			// publishing, so the drain can resolve which rendered message to remove.
+			require.NoError(t, msgIDs.Add(ctx, "twitch", "somechannel", "native-early", "msg-uuid"))
+
+			// The moderator's deletion arrives first and is buffered against the native id.
+			require.NoError(t, buffer.Add(ctx, "twitch", "somechannel", "native-early", &models.RawChatMessage{
+				MessageID: "del-uuid",
+				Platform:  "twitch",
+				ChannelID: "somechannel",
+				Timestamp: time.Now().UTC(),
+				EventType: "message_deletion",
+				EventData: map[string]interface{}{"deletion_type": "single", "target_msg_id": "native-early"},
+			}))
+
+			// Then the message itself lands.
+			require.NoError(t, c.processMessage(ctx,
+				twitchStreamEventMsg(t, "msg-uuid", "native-early", "morning all", eventType)))
+
+			// The buffered deletion must have drained: the buffer entry is gone...
+			pending, err := buffer.Get(ctx, "twitch", "somechannel", "native-early")
+			require.NoError(t, err)
+			assert.Nil(t, pending, "buffered deletion was never drained, so the message stays visible")
+
+			// ...and the deletion reached the handler alongside the message itself.
+			var sawDeletion bool
+			for _, m := range handled {
+				if m.EventType == "message_deletion" {
+					sawDeletion = true
+				}
+			}
+			assert.True(t, sawDeletion, "the drained deletion must be applied")
 		})
 	}
 }

@@ -82,9 +82,9 @@ arrives under a prefixed key too):
 | Notice type | Handling |
 |---|---|
 | `sub`, `resub`, `sub_gift`, `community_sub_gift`, `raid` | **skipped** — already delivered by `channel.subscribe` / `channel.subscription.message` / `channel.subscription.gift` / `channel.raid` with richer data. Emitting them here would double-render every sub and raid |
-| `watch_streak` | event `watch_streak`; text = the viewer's message. Toggle: `enable_twitch_watch_streaks` |
+| `watch_streak` | event `watch_streak`; text = the viewer's message. Toggle: `enable_twitch_watch_streaks` (off ⇒ the message still renders as plain chat, only the milestone row is suppressed) |
 | `announcement` | event `announcement`; text = the announcement body. Not toggleable (it is chat) |
-| `bits_badge_tier` | event `bits` — parity with IRC's `bitsbadgetier` |
+| `bits_badge_tier` | event `bits_badge_tier` — its own type, **not** `bits`: a lifetime badge unlock must not render as "Bits Cheered!" for a cheer that never happened. Rides the bits toggle |
 | `gift_paid_upgrade` / `prime_paid_upgrade` / `pay_it_forward` | events of the same name (gift-sub toggle) |
 | `unraid` | event `unraid` (raid toggle) |
 | `charity_donation` / `modiversary` | events of the same name |

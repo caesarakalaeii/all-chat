@@ -99,8 +99,15 @@ and raid.
 subscription. It shares the chat condition (`broadcaster_user_id == user_id`) and
 authorization (`user:read:chat` + `user:bot`, broadcaster == chatter), so it joins
 the existing `subscribe_chat` / `unsubscribe_chat` bundle alongside the three
-moderation subscriptions. Creation is best-effort: a failure leaves chat working
-and is retried on the next sync. Notice delivery also refreshes the EventSub chat
+moderation subscriptions. Creation is best-effort: a failure leaves chat working.
+Recovery is *not* a periodic retry — `reconcileChatLocked` only calls `subscribe_chat`
+on the `want && !ChatActive` transition, so a channel whose notice subscription
+failed or was revoked while chat stays active keeps working chat with no notices
+until demand cycles (the last overlay using it disconnects and reconnects) or the pod
+restarts. Acceptable because overlays disconnect routinely, but it means a
+continuously-connected overlay can sit without notices for a long time; a periodic
+reconcile of the companion subscriptions would close that gap.
+Notice delivery also refreshes the EventSub chat
 ownership claim and the "connected" indicator, exactly as a chat message does — a
 delivered notice is equally proof the channel's chat is live.
 
@@ -117,7 +124,7 @@ prefixed key too, e.g. `shared_chat_announcement`), then:
 | `sub`, `resub`, `sub_gift`, `community_sub_gift`, `raid` | **skipped** — already delivered by a dedicated subscription |
 | `watch_streak` | event `watch_streak`, text = the viewer's message |
 | `announcement` | event `announcement`, text = the announcement body |
-| `bits_badge_tier` | event `bits` (parity with IRC's `bitsbadgetier`, reuses the bits classifier/toggle/CSS) |
+| `bits_badge_tier` | event `bits_badge_tier` (see below) |
 | `gift_paid_upgrade`, `prime_paid_upgrade`, `pay_it_forward` | events of the same name |
 | `unraid`, `charity_donation`, `modiversary` | events of the same name |
 | anything else (incl. Twitch's own `unknown`) | event `twitch_notice`, text = `system_message`, logged at Info |
@@ -128,6 +135,15 @@ which does the same job for IRC USERNOTICEs.
 Text selection is: the chatter's `message.text` when present, else Twitch's
 `system_message`. That keeps message-bearing notices as real messages and stops
 event-only notices from rendering blank.
+
+**`bits_badge_tier` gets its own event type**, rather than folding into `bits` as
+IRC's `bitsbadgetier` did. The IRC mapping renders a *lifetime badge unlock* as
+"💎 Bits Cheered! / 1000 bits" at cheer prominence — an alert for a cheer that never
+happened, tiered by the badge threshold as though it were the amount spent. IRC
+parity was not worth preserving: since the IRC listener serves no channels, keeping
+that mapping would have newly activated a misleading alert rather than matched any
+behaviour users see. It renders as "🏅 Bits Badge Unlocked! / 1,000-bit badge" at
+medium tier and still rides the existing bits toggle.
 
 ### Chat parity for notice-borne messages
 
@@ -154,14 +170,44 @@ and removes the assumption entirely.
 Deletion events are excluded and unaffected: they carry no `Tags` at all (the target
 id lives in `EventData.target_msg_id`).
 
+**The buffered-deletion drain is widened the same way**, and must be kept in lockstep
+with the dedup predicate above. A moderator can delete a watch-streak message or an
+announcement like any other message, and when the deletion races ahead of the message
+it is buffered and drained on the message's arrival. That drain was gated on plain
+chat only (`EventType == "" || "chat_message"`), so a notice — which arrives *with* an
+event type set — never drained its buffered deletion and the removed message stayed
+visible on every overlay until the buffer entry expired. Both predicates now read
+"any Twitch message that is not a deletion", and a regression test asserts the drain
+fires for `watch_streak`, `announcement` and plain chat alike.
+
 ### Settings and rendering
 
 `watch_streak` gets one new per-overlay toggle, `enable_twitch_watch_streaks`
 (migration 079, default TRUE) — it fires once per returning viewer per stream, so
 busy overlays need an off switch. The sub-adjacent conversions
 (`gift_paid_upgrade`, `prime_paid_upgrade`, `pay_it_forward`) ride the existing
-gift-sub toggle; `unraid` rides the existing raid toggle; `bits` rides the bits
-toggle.
+gift-sub toggle; `unraid` rides the existing raid toggle; `bits` and
+`bits_badge_tier` ride the bits toggle.
+
+**A disabled toggle suppresses the decoration, never the message.** This matters
+specifically because of what these notices are. The message-processor's event filter
+used to `continue` on a disabled event — fine for a follow or a raid, but for a
+watch streak the event *is* the viewer's chat message, so switching the toggle off
+would have deleted real chat and silently re-created the very bug this ADR fixes,
+this time triggered from the settings UI.
+
+So per-overlay filtering now runs *before* the event/chat branch in the
+message-processor. When an event is disabled and `filter.CarriesChatterMessage`
+reports that its text is the chatter's own message (Twitch `watch_streak` and
+`announcement`), the message is demoted to the chat path — `Normalize` instead of
+`NormalizeEvent` — and renders as an ordinary chat line with its emotes, badges,
+colour and GIFs, just without the milestone row. Everything else still drops as
+before. The demotion is counted as `filtered_event/demoted_to_chat`.
+
+`resubscription` is deliberately excluded: its text is an *optional* message
+attached to a subscription event, so a streamer disabling "Resubscriptions"
+reasonably means the whole notice, and including it would change long-standing
+behaviour rather than fix a regression.
 
 `announcement`, `charity_donation`, `modiversary` and `twitch_notice` are
 deliberately **not** toggleable, marked with a `columnAlwaysEnabled` sentinel that
@@ -173,6 +219,17 @@ The frontend adds icons, titles and CompactEvent labels for each new type. No CS
 work is required: the `.event-type-{type}` class is generated from `event.type`, and
 the overlay's event partitioning is allowlist-free, so new types flow through
 automatically.
+
+**The event renderer renders the message like chat.** `EventContent` printed
+`message.message.text` as a bare string, so emote codes appeared as literal words —
+enrichment ran and produced the emote list, but nothing consumed it. For a notice
+whose payload *is* a chat message that defeated the point, so `EventContent` now
+renders through the shared `renderMessageContent` used by chat rows, and includes
+`MessageAttachments` so an event-borne GIF appears instead of vanishing. To make
+those attachments exist, `NormalizeEvent` also runs the chat path's chat-GIF
+extraction (ADR-0037): strip the bracketed alt caption, re-anchor emote offsets,
+surface the GIF. This benefits every event with user text (resub messages,
+Super Chats, channel-point redemptions), not just notices.
 
 ## Consequences
 
@@ -190,7 +247,15 @@ automatically.
 ### Negative
 
 - One more EventSub subscription per chat-active channel (created with a user-scoped
-  condition, so no additional subscription cost, but more state to reconcile).
+  condition, so no additional subscription cost, but more state to reconcile) — and
+  it recovers only on a demand cycle, as described above.
+- Two predicates in the message-processor (native-id dedup and the buffered-deletion
+  drain) must stay in lockstep. They already drifted once: widening only the first
+  left moderator-deleted notices stuck on screen.
+- The demote-to-chat path means the same raw message can render as an event on one
+  overlay and as plain chat on another. That is correct per-overlay behaviour, but it
+  is the first place where the event/chat distinction is not a property of the message
+  alone.
 - The skip-list couples this handler to the set of dedicated subscriptions: dropping
   `channel.raid` (say) without updating `noticeCoveredByDedicatedSubscription` would
   silently lose raids.
