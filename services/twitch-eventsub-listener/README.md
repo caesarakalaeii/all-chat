@@ -37,6 +37,7 @@ The Twitch EventSub Listener connects to Twitch's EventSub WebSocket API to rece
 - ✅ `channel.cheer`, `channel.raid`, `channel.follow` - Bits, raids, follows
 - ✅ `stream.online` / `stream.offline` - Stream lifecycle (cross-platform discovery + credits)
 - ✅ `channel.chat.message` - **Chat reading** (demand-gated; see below)
+- ✅ `channel.chat.notification` - **Chat notices** (watch streaks, announcements, and other "events that appear in chat"; see below)
 - ✅ `channel.chat.message_delete` / `channel.chat.clear_user_messages` / `channel.chat.clear` - **Chat moderation** (single delete, user timeout/ban, full clear; see below)
 
 > Transport note: subscriptions use **webhook** transport (HTTP callback at `EVENTSUB_CALLBACK_URL`), not the EventSub WebSocket. Twitch verifies each subscription via a `webhook_callback_verification` challenge before it becomes `enabled`.
@@ -60,6 +61,41 @@ channel was dropped by IRC yet not delivered by EventSub.
 The chat subscription is **demand-gated**: it exists only while an overlay using the channel has a
 live WebSocket. When demand arrives, the chat subscription is created *before* the always-on event
 subscriptions so chat starts flowing with minimal latency.
+
+### Chat Notices (channel.chat.notification)
+
+`channel.chat.message` carries plain chat and nothing else. Twitch delivers "events that appear in
+chat" on a separate subscription, and for some of them **the notice is the only carrier of the
+chatter's own message text** — most importantly `watch_streak` (a returning viewer's message plus
+their milestone) and `announcement` (a `/announce` body). Without this subscription those messages
+never arrive at all; they were silently dropped until ADR-0046.
+
+It shares the chat subscription's condition, scopes and lifecycle, so it is created on
+`subscribe_chat` and removed on `unsubscribe_chat` alongside the deletion subscriptions. A delivered
+notice refreshes the ownership claim and the connected indicator, exactly like a delivered message
+(but a *revoked* notification subscription does not release the claim — losing notices does not mean
+chat is dead).
+
+Notices are routed by `notice_type` (any `shared_chat_` prefix is stripped first, since the payload
+arrives under a prefixed key too):
+
+| Notice type | Handling |
+|---|---|
+| `sub`, `resub`, `sub_gift`, `community_sub_gift`, `raid` | **skipped** — already delivered by `channel.subscribe` / `channel.subscription.message` / `channel.subscription.gift` / `channel.raid` with richer data. Emitting them here would double-render every sub and raid |
+| `watch_streak` | event `watch_streak`; text = the viewer's message. Toggle: `enable_twitch_watch_streaks` |
+| `announcement` | event `announcement`; text = the announcement body. Not toggleable (it is chat) |
+| `bits_badge_tier` | event `bits` — parity with IRC's `bitsbadgetier` |
+| `gift_paid_upgrade` / `prime_paid_upgrade` / `pay_it_forward` | events of the same name (gift-sub toggle) |
+| `unraid` | event `unraid` (raid toggle) |
+| `charity_donation` / `modiversary` | events of the same name |
+| anything else, incl. Twitch's `unknown` | event `twitch_notice` off `system_message`, logged at Info so a new Twitch notice type degrades instead of vanishing |
+
+Notice tags are built by delegating to the chat path's own `buildChatTags`, so a notice-borne message
+enriches identically to ordinary chat (first-party emote positions, badges, colour, `room-id`,
+shared-chat provenance) and is registered in the message-ID registry — a moderator can delete a
+watch-streak message like any other. Because the notice carries the same native message id a
+`channel.chat.message` would, the message-processor's native-id dedup collapses the two should Twitch
+ever send both.
 
 ### Chat Moderation (deletions)
 

@@ -29,6 +29,11 @@ export type EventType =
   // Twitch
   | 'subscription' | 'resubscription' | 'gift_subscription' | 'mystery_gift'
   | 'bits' | 'raid' | 'channel_points' | 'ritual'
+  // Twitch chat notices (channel.chat.notification, ADR-0046). watch_streak and
+  // announcement carry the chatter's own message text in message.text.
+  | 'watch_streak' | 'announcement' | 'unraid' | 'modiversary'
+  | 'charity_donation' | 'gift_paid_upgrade' | 'prime_paid_upgrade'
+  | 'pay_it_forward' | 'twitch_notice'
   // YouTube
   | 'super_chat' | 'super_sticker' | 'new_sponsor'
   | 'member_milestone' | 'membership_gift' | 'gift_received'

@@ -354,7 +354,11 @@ ws.run_forever()`}</Pre>
                   <strong className="text-twitch">Twitch</strong>: <Code>subscription</Code>,{' '}
                   <Code>resubscription</Code>, <Code>gift_subscription</Code>,{' '}
                   <Code>mystery_gift</Code>, <Code>bits</Code>, <Code>raid</Code>,{' '}
-                  <Code>channel_points</Code>, <Code>message_deletion</Code>
+                  <Code>channel_points</Code>, <Code>watch_streak</Code>,{' '}
+                  <Code>announcement</Code>, <Code>unraid</Code>, <Code>modiversary</Code>,{' '}
+                  <Code>charity_donation</Code>, <Code>gift_paid_upgrade</Code>,{' '}
+                  <Code>prime_paid_upgrade</Code>, <Code>pay_it_forward</Code>,{' '}
+                  <Code>twitch_notice</Code>, <Code>message_deletion</Code>
                 </li>
                 <li>
                   <strong className="text-youtube">YouTube</strong>: <Code>super_chat</Code>,{' '}

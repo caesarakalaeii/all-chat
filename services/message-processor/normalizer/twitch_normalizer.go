@@ -18,6 +18,7 @@ package normalizer
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -538,6 +539,63 @@ func (n *TwitchNormalizer) NormalizeEvent(raw *models.RawChatMessage, overlayID 
 			Currency:    "points",
 			DisplayText: fmt.Sprintf("%s (%d points)", title, cost),
 		}
+
+	case "watch_streak":
+		// Twitch counts watch streaks in consecutive streams watched, not months.
+		streak := eventDataInt(raw.EventData, "streak_count")
+		eventValue = &models.EventValue{
+			Amount:      float64(streak),
+			Currency:    "streams",
+			DisplayText: fmt.Sprintf("%d-stream watch streak", streak),
+		}
+
+	case "modiversary":
+		months := eventDataInt(raw.EventData, "months")
+		eventValue = &models.EventValue{
+			Amount:      float64(months),
+			Currency:    "months",
+			DisplayText: fmt.Sprintf("%d months as moderator", months),
+		}
+
+	case "charity_donation":
+		// Twitch sends minor units plus a decimal position (1234 / 2 → 12.34).
+		minor := eventDataInt(raw.EventData, "amount_value")
+		places := eventDataInt(raw.EventData, "amount_decimal_places")
+		currency, _ := raw.EventData["amount_currency"].(string)
+		amount := float64(minor) / math.Pow(10, float64(places))
+		eventValue = &models.EventValue{
+			Amount:      amount,
+			Currency:    currency,
+			DisplayText: strings.TrimSpace(fmt.Sprintf("%.*f %s", places, amount, currency)),
+		}
+
+	case "prime_paid_upgrade":
+		tier, _ := raw.EventData["tier"].(string)
+		eventValue = &models.EventValue{
+			Amount:      1,
+			Currency:    "upgrade",
+			DisplayText: fmt.Sprintf("Prime → %s", getTierName(tier)),
+		}
+
+	case "gift_paid_upgrade":
+		gifter, _ := raw.EventData["gifter_name"].(string)
+		text := "Continuing their gift sub"
+		if gifter != "" {
+			text = fmt.Sprintf("Continuing the gift sub from %s", gifter)
+		}
+		eventValue = &models.EventValue{Amount: 1, Currency: "upgrade", DisplayText: text}
+
+	case "pay_it_forward":
+		gifter, _ := raw.EventData["gifter_name"].(string)
+		text := "Paying it forward"
+		if gifter != "" {
+			text = fmt.Sprintf("Paying forward %s's gift", gifter)
+		}
+		eventValue = &models.EventValue{Amount: 1, Currency: "gift", DisplayText: text}
+
+	case "announcement", "unraid", "twitch_notice":
+		// Nothing to quantify — the message text (announcement body) or Twitch's system_message
+		// carries the whole meaning, so no value pill is rendered.
 	}
 
 	// Classify event tier and duration
@@ -571,6 +629,20 @@ func (n *TwitchNormalizer) NormalizeEvent(raw *models.RawChatMessage, overlayID 
 	}
 
 	return unified, nil
+}
+
+// eventDataInt reads a numeric EventData field. Values survive a JSON round-trip through the
+// chat:raw stream, so an int written by a listener arrives as float64 — both shapes are accepted.
+// Returns 0 when the key is absent or not numeric.
+func eventDataInt(data map[string]interface{}, key string) int {
+	switch v := data[key].(type) {
+	case int:
+		return v
+	case float64:
+		return int(v)
+	default:
+		return 0
+	}
 }
 
 // getTierName converts Twitch subscription tier to human-readable name

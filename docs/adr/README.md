@@ -553,6 +553,15 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 **Impact**: Removes the empty-start friction for the majority path (streamer adding their own channel); first sign-in yields an on-stream-ready overlay. Measurable via the instrumentation shipped alongside the review (`preview_rendered` aha, `obs_url_copied`, `source_add_failed`). Proposed, not accepted — auto-creating user content + auth↔overlay-manager coupling need sign-off first. (ADR numbering shared with caesar-deployment, so this is 0045)
 **→ Read**: [0045-activation-auto-provision-first-overlay.md](./0045-activation-auto-provision-first-overlay.md)
 
+### ADR-0046: Twitch chat notices (watch streaks, announcements) via channel.chat.notification
+
+**Status**: ✅ Accepted
+**Date**: 2026-08-01
+**Problem**: `twitch-eventsub-listener` subscribed only to `channel.chat.message`, never to `channel.chat.notification`. Several notice types carry the **chatter's own message text** and are delivered on no other subscription — above all `watch_streak` (a returning viewer's message plus their milestone) and `announcement` (a `/announce` body) — so those messages were **silently dropped**: never published to `chat:raw`, never rendered, no error anywhere. Since ADR-0026 put IRC in `enforce` mode, EventSub is the only Twitch chat path, so nothing else could pick them up (IRC mapped `viewermilestone`/`announcement` to `"unknown"` and dropped them too). Seven further event types and every `shared_chat_*` variant were missing as well. The complication: `sub`/`resub`/`sub_gift`/`community_sub_gift`/`raid` also appear as notice types while already arriving on dedicated, richer subscriptions
+**Decision**: Subscribe to `channel.chat.notification` on the chat subscription's lifecycle (same condition + scopes, alongside the moderation subs), and route by notice type — skip the five types dedicated subscriptions already deliver, map the rest onto the event taxonomy (`bits_badge_tier` → `bits` for IRC parity), and emit anything unrecognised as a generic `twitch_notice` off `system_message` plus an Info log so future Twitch notice types degrade instead of vanishing. Notice tags are built by delegating to the chat path's own `buildChatTags`, so notice-borne messages get identical emote/badge/colour/`room-id` enrichment and are deletable via the message-ID registry. The message-processor's native-id dedup is widened from "regular chat" to "any Twitch message with `Tags["id"]` except deletions", so a notice and a same-id chat message can never both render, in either order
+**Impact**: Watch-streak and announcement messages appear on overlays at all; nine Twitch event types added with no double-rendering. One new per-overlay toggle `enable_twitch_watch_streaks` (migration 079, default TRUE); announcements/charity/modiversary/generic notices are intentionally not toggleable (`columnAlwaysEnabled` sentinel — an announcement is chat, not an alert). A true E2E test is impossible (a watch streak cannot be triggered on demand and no CLI event synthesizes chat notices), so coverage tops out at a verbatim-Twitch-payload pipeline test. `twitch-listener`'s IRC parser is left unfixed by design (dead in `enforce` mode, slated for removal). (ADR numbering shared with caesar-deployment, so this is 0046)
+**→ Read**: [0046-twitch-chat-notices-via-chat-notification.md](./0046-twitch-chat-notices-via-chat-notification.md)
+
 ---
 
 ## How to Create a New ADR
@@ -685,4 +694,4 @@ Create a new ADR if:
 2. ADR-0001 (Go layout) - Referenced by all services
 3. ADR-0006 (Quota tracking) - Referenced by YouTube listener, overlay manager
 
-**Last Updated**: 2026-07-27
+**Last Updated**: 2026-08-01

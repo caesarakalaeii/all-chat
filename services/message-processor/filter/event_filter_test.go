@@ -36,6 +36,16 @@ func TestMapEventTypeToColumn_Twitch(t *testing.T) {
 		{"unraid", "enable_twitch_raids"},
 		{"channel_points", "enable_twitch_channel_points"},
 		{"follow", "enable_twitch_follows"},
+		// Chat notices (ADR-0046): watch streaks get their own toggle; the sub-adjacent
+		// conversions ride the gift-sub toggle; the rest are chat content, never toggleable.
+		{"watch_streak", "enable_twitch_watch_streaks"},
+		{"gift_paid_upgrade", "enable_twitch_gift_subs"},
+		{"prime_paid_upgrade", "enable_twitch_gift_subs"},
+		{"pay_it_forward", "enable_twitch_gift_subs"},
+		{"announcement", columnAlwaysEnabled},
+		{"charity_donation", columnAlwaysEnabled},
+		{"modiversary", columnAlwaysEnabled},
+		{"twitch_notice", columnAlwaysEnabled},
 		{"unknown", ""},
 	}
 

@@ -366,10 +366,16 @@ func (c *StreamConsumer) processMessage(ctx context.Context, msg redis.XMessage)
 	// Native-id dedup (ADR-0015): the IRC and EventSub Twitch paths both stamp the identical
 	// native Twitch message id into Tags["id"], so a channel handed off between them (or a Twitch
 	// webhook retry) can present the same message twice. Drop the second copy before enrichment so
-	// viewers never see doubled chat. Scoped to Twitch regular chat, where Tags["id"] is the native,
-	// globally-unique message id; deletion events and other platforms are unaffected.
-	if c.nativeDedup != nil && rawMsg.Platform == "twitch" &&
-		(rawMsg.EventType == "" || rawMsg.EventType == "chat_message") {
+	// viewers never see doubled chat.
+	//
+	// Scoped to any Twitch message carrying Tags["id"] — the native, globally-unique message id.
+	// That deliberately includes chat notices (watch streaks, announcements), which arrive on
+	// channel.chat.notification stamped with the same native id the corresponding
+	// channel.chat.message would carry, so the two collapse to one rendered message in whichever
+	// order they arrive (ADR-0046). Twitch documents the two subscriptions as disjoint, so in
+	// practice only one is sent; keying on the native id makes that an assumption we cannot get
+	// wrong. Deletion events carry no Tags and other platforms are unaffected.
+	if c.nativeDedup != nil && rawMsg.Platform == "twitch" && rawMsg.EventType != "message_deletion" {
 		if nativeID := rawMsg.Tags["id"]; nativeID != "" {
 			if dup, derr := c.nativeDedup.IsDuplicateNativeID(ctx, rawMsg.Platform, nativeID); derr == nil && dup {
 				c.logger.Debug("Dropping duplicate Twitch message by native id",

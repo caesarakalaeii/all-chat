@@ -49,6 +49,20 @@ export function EventContent({ message }: { message: ChatMessage }) {
         return '💎'
       case 'raid':
         return '🚀'
+      case 'watch_streak':
+        return '🔥'
+      case 'announcement':
+        return '📣'
+      case 'unraid':
+        return '🛑'
+      case 'modiversary':
+        return '🛡️'
+      case 'charity_donation':
+        return '💝'
+      case 'gift_paid_upgrade':
+      case 'prime_paid_upgrade':
+      case 'pay_it_forward':
+        return '⭐'
       case 'channel_points':
         return '🎁'
       case 'super_chat':
@@ -93,6 +107,22 @@ export function EventContent({ message }: { message: ChatMessage }) {
         return 'Bits Cheered!'
       case 'raid':
         return 'Raid Incoming!'
+      case 'watch_streak':
+        return 'Watch Streak!'
+      case 'announcement':
+        return 'Announcement'
+      case 'unraid':
+        return 'Raid Cancelled'
+      case 'modiversary':
+        return 'Mod Anniversary!'
+      case 'charity_donation':
+        return 'Charity Donation!'
+      case 'gift_paid_upgrade':
+        return 'Continued Their Gift Sub!'
+      case 'prime_paid_upgrade':
+        return 'Upgraded From Prime!'
+      case 'pay_it_forward':
+        return 'Paid It Forward!'
       case 'channel_points':
         return 'Channel Points Redeemed!'
       case 'super_chat':
@@ -198,6 +228,10 @@ export function EventContent({ message }: { message: ChatMessage }) {
           if (num(m.streak) > 0) parts.push(`${num(m.streak)} month streak`)
           if (num(m.gift_count) > 0) parts.push(`${num(m.gift_count)} gifts`)
           if (num(m.bits) > 0) parts.push(`${num(m.bits)} bits`)
+          // Watch streaks pay out channel points; the streak count itself is already in the value
+          // pill, so only the reward is added here.
+          if (num(m.channel_points_awarded) > 0)
+            parts.push(`+${num(m.channel_points_awarded).toLocaleString()} points`)
           if (num(m.like_count) > 0) parts.push(`${num(m.like_count)} likes`)
           if (num(m.diamonds) > 0) parts.push(`${num(m.diamonds)} diamonds`)
           return parts.length > 0 ? (
