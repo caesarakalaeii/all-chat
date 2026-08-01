@@ -297,6 +297,17 @@ func (sm *SubscriptionManager) SubscribeToChatClear(ctx context.Context, broadca
 	return sm.subscribeChatScoped(ctx, "channel.chat.clear", broadcasterID)
 }
 
+// SubscribeToChatNotifications creates a channel.chat.notification subscription — Twitch's feed of
+// "events that appear in chat". It shares the chat subscription's authorization and lifecycle
+// (user:read:chat + user:bot, broadcaster == chatter), so it is created and torn down alongside it.
+//
+// It is not optional decoration: watch streaks and announcements are delivered ONLY here, and both
+// carry the chatter's own message text, so without this subscription those messages never arrive at
+// all (ADR-0046). Notices that a dedicated subscription already delivers are dropped by the handler.
+func (sm *SubscriptionManager) SubscribeToChatNotifications(ctx context.Context, broadcasterID string) (string, error) {
+	return sm.subscribeChatScoped(ctx, "channel.chat.notification", broadcasterID)
+}
+
 // subscribeChatScoped creates a channel.chat.* EventSub subscription whose condition is the
 // own-channel reading pair broadcaster_user_id == user_id == broadcasterID. Every channel.chat.*
 // type (message, message_delete, clear_user_messages, clear) shares this exact condition, version,

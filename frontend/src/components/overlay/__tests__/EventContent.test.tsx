@@ -99,3 +99,45 @@ describe('EventContent — system notices', () => {
     expect(screen.getByText('6 months • 3 month streak')).toBeInTheDocument()
   })
 })
+
+describe('EventContent — Twitch chat notices (ADR-0046)', () => {
+  it('renders a watch streak with its own title, not the generic fallback', () => {
+    render(<EventContent message={eventMessage('watch_streak', { streak_count: 5 })} />)
+    expect(screen.getByText('Watch Streak!')).toBeInTheDocument()
+    expect(screen.queryByText('Event!')).not.toBeInTheDocument()
+  })
+
+  it("shows the viewer's chat message on a watch streak — the message that used to be dropped", () => {
+    const msg = eventMessage('watch_streak', { streak_count: 5, channel_points_awarded: 350 })
+    msg.message.text = 'morning everyone'
+    render(<EventContent message={msg} />)
+    expect(screen.getByText('morning everyone')).toBeInTheDocument()
+    // The streak count itself lives in the value pill, so only the reward is in the footer.
+    expect(screen.getByText('+350 points')).toBeInTheDocument()
+  })
+
+  it('renders the remaining notice titles', () => {
+    const cases: Array<[EventType, string]> = [
+      ['announcement', 'Announcement'],
+      ['unraid', 'Raid Cancelled'],
+      ['modiversary', 'Mod Anniversary!'],
+      ['charity_donation', 'Charity Donation!'],
+      ['gift_paid_upgrade', 'Continued Their Gift Sub!'],
+      ['prime_paid_upgrade', 'Upgraded From Prime!'],
+      ['pay_it_forward', 'Paid It Forward!'],
+    ]
+    for (const [type, title] of cases) {
+      const { unmount } = render(<EventContent message={eventMessage(type)} />)
+      expect(screen.getByText(title)).toBeInTheDocument()
+      unmount()
+    }
+  })
+
+  it('falls back to the generic title for an unmapped Twitch notice but still shows its text', () => {
+    const msg = eventMessage('twitch_notice')
+    msg.message.text = 'Some brand-new Twitch notice'
+    render(<EventContent message={msg} />)
+    expect(screen.getByText('Event!')).toBeInTheDocument()
+    expect(screen.getByText('Some brand-new Twitch notice')).toBeInTheDocument()
+  })
+})

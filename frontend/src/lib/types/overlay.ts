@@ -107,6 +107,7 @@ export interface EventSettings {
   enable_twitch_raids: boolean
   enable_twitch_channel_points: boolean
   enable_twitch_follows: boolean
+  enable_twitch_watch_streaks: boolean
   // YouTube
   enable_youtube_super_chat: boolean
   enable_youtube_super_sticker: boolean

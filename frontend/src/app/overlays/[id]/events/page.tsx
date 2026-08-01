@@ -42,6 +42,7 @@ interface EventSettings {
   enable_twitch_raids: boolean
   enable_twitch_channel_points: boolean
   enable_twitch_follows: boolean
+  enable_twitch_watch_streaks: boolean
   // YouTube
   enable_youtube_super_chat: boolean
   enable_youtube_super_sticker: boolean
@@ -346,6 +347,11 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
                       key: 'enable_twitch_follows',
                       label: 'Follows',
                       desc: 'New channel followers (requires EventSub service)',
+                    },
+                    {
+                      key: 'enable_twitch_watch_streaks',
+                      label: 'Watch Streaks',
+                      desc: "Returning viewers' watch-streak milestones, shown with their chat message",
                     },
                   ].map(({ key, label, desc }) => (
                     <EventToggle

@@ -128,17 +128,17 @@ type SubscriptionGiftEvent struct {
 // ResubscriptionEvent represents a resubscription message event
 // subscription type: channel.subscription.message
 type ResubscriptionEvent struct {
-	UserID               string             `json:"user_id"`
-	UserLogin            string             `json:"user_login"`
-	UserName             string             `json:"user_name"`
-	BroadcasterUserID    string             `json:"broadcaster_user_id"`
-	BroadcasterUserLogin string             `json:"broadcaster_user_login"`
-	BroadcasterUserName  string             `json:"broadcaster_user_name"`
-	Tier                 string             `json:"tier"`
+	UserID               string                `json:"user_id"`
+	UserLogin            string                `json:"user_login"`
+	UserName             string                `json:"user_name"`
+	BroadcasterUserID    string                `json:"broadcaster_user_id"`
+	BroadcasterUserLogin string                `json:"broadcaster_user_login"`
+	BroadcasterUserName  string                `json:"broadcaster_user_name"`
+	Tier                 string                `json:"tier"`
 	Message              ResubscriptionMessage `json:"message"`
-	CumulativeMonths     int                `json:"cumulative_months"`
-	StreakMonths         int                `json:"streak_months"`
-	DurationMonths       int                `json:"duration_months"`
+	CumulativeMonths     int                   `json:"cumulative_months"`
+	StreakMonths         int                   `json:"streak_months"`
+	DurationMonths       int                   `json:"duration_months"`
 }
 
 // ResubscriptionMessage contains the resub message
@@ -150,13 +150,13 @@ type ResubscriptionMessage struct {
 // RaidEvent represents a raid event
 // subscription type: channel.raid
 type RaidEvent struct {
-	FromBroadcasterUserID    string    `json:"from_broadcaster_user_id"`
-	FromBroadcasterUserLogin string    `json:"from_broadcaster_user_login"`
-	FromBroadcasterUserName  string    `json:"from_broadcaster_user_name"`
-	ToBroadcasterUserID      string    `json:"to_broadcaster_user_id"`
-	ToBroadcasterUserLogin   string    `json:"to_broadcaster_user_login"`
-	ToBroadcasterUserName    string    `json:"to_broadcaster_user_name"`
-	Viewers                  int       `json:"viewers"`
+	FromBroadcasterUserID    string `json:"from_broadcaster_user_id"`
+	FromBroadcasterUserLogin string `json:"from_broadcaster_user_login"`
+	FromBroadcasterUserName  string `json:"from_broadcaster_user_name"`
+	ToBroadcasterUserID      string `json:"to_broadcaster_user_id"`
+	ToBroadcasterUserLogin   string `json:"to_broadcaster_user_login"`
+	ToBroadcasterUserName    string `json:"to_broadcaster_user_name"`
+	Viewers                  int    `json:"viewers"`
 }
 
 // CheerEvent represents a bits/cheer event
@@ -285,6 +285,128 @@ type ChatReply struct {
 	ThreadUserID      string `json:"thread_user_id"`
 	ThreadUserLogin   string `json:"thread_user_login"`
 	ThreadUserName    string `json:"thread_user_name"`
+}
+
+// ChatNotificationEvent represents a chat notice — in Twitch's words, "a notification for when
+// an event that appears in chat has occurred".
+// subscription type: channel.chat.notification (v1)
+// Reference: https://dev.twitch.tv/docs/eventsub/eventsub-reference/#channel-chat-notification-event
+//
+// This is the ONLY delivery path for several notices; channel.chat.message covers plain chat and
+// nothing else. Most importantly it is how a **watch streak** arrives, and the watch-streak payload
+// carries the viewer's own chat message in Message — so without this subscription that message is
+// never received at all, not merely stripped of its milestone decoration. Announcements are the same
+// shape (the announcement body lives in Message). See ADR-0046.
+//
+// Notices that all-chat already receives through a dedicated, richer subscription (sub, resub,
+// sub_gift, community_sub_gift, raid) are deliberately dropped here to avoid double-rendering —
+// mirroring twitch-listener's isCoveredByEventSub for IRC USERNOTICEs.
+type ChatNotificationEvent struct {
+	BroadcasterUserID    string `json:"broadcaster_user_id"`
+	BroadcasterUserLogin string `json:"broadcaster_user_login"`
+	BroadcasterUserName  string `json:"broadcaster_user_name"`
+	ChatterUserID        string `json:"chatter_user_id"`
+	ChatterUserLogin     string `json:"chatter_user_login"`
+	ChatterUserName      string `json:"chatter_user_name"`
+	ChatterIsAnonymous   bool   `json:"chatter_is_anonymous"`
+
+	Color         string          `json:"color"` // hex, may be ""
+	Badges        []ChatBadge     `json:"badges"`
+	SystemMessage string          `json:"system_message"` // Twitch's own rendering of the notice
+	MessageID     string          `json:"message_id"`     // native Twitch message id
+	Message       ChatMessageBody `json:"message"`        // the chatter's text, when the notice carries one
+
+	// NoticeType is one of the values in Twitch's notice_type enum ("watch_streak",
+	// "announcement", "sub", "shared_chat_resub", ..., or "unknown").
+	NoticeType string `json:"notice_type"`
+
+	// Notice-specific payloads. Exactly one is populated, named after NoticeType.
+	WatchStreak      *ChatNoticeWatchStreak      `json:"watch_streak,omitempty"`
+	Announcement     *ChatNoticeAnnouncement     `json:"announcement,omitempty"`
+	BitsBadgeTier    *ChatNoticeBitsBadgeTier    `json:"bits_badge_tier,omitempty"`
+	CharityDonation  *ChatNoticeCharityDonation  `json:"charity_donation,omitempty"`
+	PayItForward     *ChatNoticePayItForward     `json:"pay_it_forward,omitempty"`
+	GiftPaidUpgrade  *ChatNoticeGiftPaidUpgrade  `json:"gift_paid_upgrade,omitempty"`
+	PrimePaidUpgrade *ChatNoticePrimePaidUpgrade `json:"prime_paid_upgrade,omitempty"`
+	Modiversary      *ChatNoticeModiversary      `json:"modiversary,omitempty"`
+
+	// Shared-chat aliases. During a shared-chat session Twitch renames both the notice type and
+	// its payload field with a "shared_chat_" prefix, so the same notice arrives under a different
+	// key. Only the notices all-chat emits have aliases here; there is no shared_chat_watch_streak
+	// or shared_chat_bits_badge_tier in Twitch's enum.
+	SharedChatAnnouncement     *ChatNoticeAnnouncement     `json:"shared_chat_announcement,omitempty"`
+	SharedChatPayItForward     *ChatNoticePayItForward     `json:"shared_chat_pay_it_forward,omitempty"`
+	SharedChatGiftPaidUpgrade  *ChatNoticeGiftPaidUpgrade  `json:"shared_chat_gift_paid_upgrade,omitempty"`
+	SharedChatPrimePaidUpgrade *ChatNoticePrimePaidUpgrade `json:"shared_chat_prime_paid_upgrade,omitempty"`
+	SharedChatModiversary      *ChatNoticeModiversary      `json:"shared_chat_modiversary,omitempty"`
+
+	// Shared-chat provenance — present only during a shared-chat session.
+	SourceBroadcasterUserID    string      `json:"source_broadcaster_user_id,omitempty"`
+	SourceBroadcasterUserLogin string      `json:"source_broadcaster_user_login,omitempty"`
+	SourceBroadcasterUserName  string      `json:"source_broadcaster_user_name,omitempty"`
+	SourceMessageID            string      `json:"source_message_id,omitempty"`
+	SourceBadges               []ChatBadge `json:"source_badges,omitempty"`
+}
+
+// ChatNoticeWatchStreak is the watch_streak notice payload. StreakCount counts consecutive
+// streams watched, matching IRC's msg-param-value on a viewermilestone USERNOTICE.
+type ChatNoticeWatchStreak struct {
+	StreakCount          int `json:"streak_count"`
+	ChannelPointsAwarded int `json:"channel_points_awarded"`
+}
+
+// ChatNoticeAnnouncement is the announcement notice payload. Color is Twitch's announcement
+// highlight colour ("PRIMARY", "BLUE", "GREEN", "ORANGE", "PURPLE").
+type ChatNoticeAnnouncement struct {
+	Color string `json:"color"`
+}
+
+// ChatNoticeBitsBadgeTier is the bits_badge_tier notice payload (the viewer unlocked a new bits
+// badge). Tier is the bits threshold reached, e.g. 1000.
+type ChatNoticeBitsBadgeTier struct {
+	Tier int `json:"tier"`
+}
+
+// ChatNoticeCharityDonation is the charity_donation notice payload.
+type ChatNoticeCharityDonation struct {
+	CharityName string             `json:"charity_name"`
+	Amount      ChatNoticeMoneyAmt `json:"amount"`
+}
+
+// ChatNoticeMoneyAmt is a Twitch minor-unit money amount: Value is in the currency's smallest
+// unit and DecimalPlaces says where the decimal point goes (1234 / 2 → 12.34).
+type ChatNoticeMoneyAmt struct {
+	Value         int    `json:"value"`
+	DecimalPlaces int    `json:"decimal_place"`
+	Currency      string `json:"currency"`
+}
+
+// ChatNoticePayItForward is the pay_it_forward notice payload (a gift-sub recipient gifts onward).
+type ChatNoticePayItForward struct {
+	GifterIsAnonymous bool   `json:"gifter_is_anonymous"`
+	GifterUserID      string `json:"gifter_user_id"`
+	GifterUserName    string `json:"gifter_user_name"`
+	GifterUserLogin   string `json:"gifter_user_login"`
+}
+
+// ChatNoticeGiftPaidUpgrade is the gift_paid_upgrade notice payload (a gifted sub was continued
+// as a paid one).
+type ChatNoticeGiftPaidUpgrade struct {
+	GifterIsAnonymous bool   `json:"gifter_is_anonymous"`
+	GifterUserID      string `json:"gifter_user_id"`
+	GifterUserName    string `json:"gifter_user_name"`
+	GifterUserLogin   string `json:"gifter_user_login"`
+}
+
+// ChatNoticePrimePaidUpgrade is the prime_paid_upgrade notice payload (a Prime sub was continued
+// as a paid one). SubTier is "1000"/"2000"/"3000".
+type ChatNoticePrimePaidUpgrade struct {
+	SubTier string `json:"sub_tier"`
+}
+
+// ChatNoticeModiversary is the modiversary notice payload (moderator anniversary).
+type ChatNoticeModiversary struct {
+	Months int `json:"months"`
 }
 
 // ChatMessageDeleteEvent represents a single-message deletion (a moderator removed one message).

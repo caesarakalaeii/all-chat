@@ -31,6 +31,7 @@ const EVENT_TOGGLES: Array<{ key: keyof EventSettings; label: string }> = [
   { key: 'enable_twitch_raids', label: 'Twitch Raids' },
   { key: 'enable_twitch_channel_points', label: 'Channel Points' },
   { key: 'enable_twitch_follows', label: 'Twitch Follows' },
+  { key: 'enable_twitch_watch_streaks', label: 'Watch Streaks' },
   { key: 'enable_youtube_super_chat', label: 'YouTube Super Chat' },
   { key: 'enable_youtube_super_sticker', label: 'Super Sticker' },
   { key: 'enable_youtube_members', label: 'YouTube Members' },

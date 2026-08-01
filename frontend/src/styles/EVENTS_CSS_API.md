@@ -56,6 +56,15 @@ Applied alongside `.event-message` to identify the specific event type:
 | `.event-type-follow`                   | New follow                                          |
 | `.event-type-like_aggregate`           | TikTok like count milestone                         |
 | `.event-type-member`                   | YouTube membership                                  |
+| `.event-type-watch_streak`             | Twitch watch streak (carries the viewer's message)  |
+| `.event-type-announcement`             | Twitch `/announce` (carries the announcement body)  |
+| `.event-type-unraid`                   | Twitch raid cancelled                               |
+| `.event-type-modiversary`              | Twitch moderator anniversary                        |
+| `.event-type-charity_donation`         | Twitch charity donation                             |
+| `.event-type-gift_paid_upgrade`        | Gifted sub continued as paid                        |
+| `.event-type-prime_paid_upgrade`       | Prime sub continued as paid                         |
+| `.event-type-pay_it_forward`           | Gift recipient gifting onward                       |
+| `.event-type-twitch_notice`            | Twitch chat notice with no first-class mapping yet   |
 | `.event-type-token_expiration_warning` | Platform OAuth token about to expire (system event) |
 
 ### Attribute Selectors

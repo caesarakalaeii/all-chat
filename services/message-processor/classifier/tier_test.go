@@ -261,6 +261,60 @@ func TestClassifyUnknownEventType(t *testing.T) {
 	assert.Equal(t, 15, duration)
 }
 
+// Twitch chat notices (ADR-0046).
+func TestClassifyTwitchWatchStreak(t *testing.T) {
+	tier, duration := ClassifyEvent("twitch", "watch_streak", nil)
+	assert.Equal(t, "low", tier)
+	// Long enough to read the viewer's message the notice carries.
+	assert.Equal(t, 12, duration)
+}
+
+func TestClassifyTwitchAnnouncement(t *testing.T) {
+	tier, duration := ClassifyEvent("twitch", "announcement", nil)
+	assert.Equal(t, "medium", tier)
+	assert.Equal(t, 20, duration)
+}
+
+func TestClassifyTwitchSubAdjacentUpgrades(t *testing.T) {
+	for _, eventType := range []string{"gift_paid_upgrade", "prime_paid_upgrade", "pay_it_forward"} {
+		t.Run(eventType, func(t *testing.T) {
+			tier, duration := ClassifyEvent("twitch", eventType, nil)
+			assert.Equal(t, "high", tier)
+			assert.Equal(t, 30, duration)
+		})
+	}
+}
+
+func TestClassifyTwitchCharityDonation_ByAmount(t *testing.T) {
+	tests := []struct {
+		amount   float64
+		tier     string
+		duration int
+	}{
+		{75, "high", 45},
+		{20, "high", 30},
+		{7, "medium", 20},
+		{2, "low", 12},
+	}
+	for _, tt := range tests {
+		tier, duration := ClassifyEvent("twitch", "charity_donation", &models.EventValue{
+			Amount: tt.amount, Currency: "EUR",
+		})
+		assert.Equal(t, tt.tier, tier, "amount %v", tt.amount)
+		assert.Equal(t, tt.duration, duration, "amount %v", tt.amount)
+	}
+}
+
+func TestClassifyTwitchUnraidAndGenericNotice(t *testing.T) {
+	tier, duration := ClassifyEvent("twitch", "unraid", nil)
+	assert.Equal(t, "low", tier)
+	assert.Equal(t, 8, duration)
+
+	tier, duration = ClassifyEvent("twitch", "twitch_notice", nil)
+	assert.Equal(t, "low", tier)
+	assert.Equal(t, 10, duration)
+}
+
 func TestClassifyListenerDeprecationNotice(t *testing.T) {
 	tier, duration := ClassifyEvent("system", "listener_deprecation_notice", nil)
 	assert.Equal(t, "high", tier)

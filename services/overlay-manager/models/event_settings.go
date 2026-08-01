@@ -34,6 +34,9 @@ type EventSettings struct {
 	EnableTwitchRaids         bool `json:"enable_twitch_raids" db:"enable_twitch_raids"`
 	EnableTwitchChannelPoints bool `json:"enable_twitch_channel_points" db:"enable_twitch_channel_points"`
 	EnableTwitchFollows       bool `json:"enable_twitch_follows" db:"enable_twitch_follows"`
+	// Watch streaks arrive on channel.chat.notification and carry the viewer's own chat message
+	// (ADR-0046); they fire once per returning viewer per stream, hence a dedicated toggle.
+	EnableTwitchWatchStreaks bool `json:"enable_twitch_watch_streaks" db:"enable_twitch_watch_streaks"`
 
 	// YouTube Events
 	EnableYouTubeSuperChat        bool `json:"enable_youtube_super_chat" db:"enable_youtube_super_chat"`
