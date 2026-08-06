@@ -41,11 +41,15 @@ type TokenRepo interface {
 	GetExpiringViewerTokens(ctx context.Context, expiresWithin time.Duration, limit int) ([]*repository.ExpiringToken, error)
 	GetExpiringYouTubeTokens(ctx context.Context, expiresWithin time.Duration, limit int) ([]*repository.ExpiringToken, error)
 	GetExpiringTwitchLinkTokens(ctx context.Context, expiresWithin time.Duration, limit int) ([]*repository.ExpiringToken, error)
+	// Delegated-moderator credentials (ADR-0048). Without this the credential expires and
+	// every delegated action fails while the grant still looks active.
+	GetExpiringModCredentials(ctx context.Context, expiresWithin time.Duration, limit int) ([]*repository.ExpiringToken, error)
 
 	UpdateUserTokens(ctx context.Context, userID string, token *oauth2Lib.Token) error
 	UpdateViewerTokens(ctx context.Context, sessionID string, token *oauth2Lib.Token) error
 	UpdateYouTubeTokens(ctx context.Context, userID, channelID string, token *oauth2Lib.Token) error
 	UpdateTwitchLinkTokens(ctx context.Context, userID, twitchLogin string, token *oauth2Lib.Token) error
+	UpdateModCredentialTokens(ctx context.Context, userID, platform string, token *oauth2Lib.Token) error
 
 	GetUserOverlays(ctx context.Context, userID string) ([]string, error)
 
@@ -53,6 +57,7 @@ type TokenRepo interface {
 	MarkViewerTokenPermanentlyFailed(ctx context.Context, sessionID string, suppressDuration time.Duration) error
 	MarkYouTubeTokenPermanentlyFailed(ctx context.Context, userID, channelID string, suppressDuration time.Duration) error
 	MarkTwitchLinkTokenPermanentlyFailed(ctx context.Context, userID, twitchLogin string, suppressDuration time.Duration) error
+	MarkModCredentialPermanentlyFailed(ctx context.Context, userID, platform string, suppressDuration time.Duration) error
 }
 
 // permanentFailSuppress is the duration pushed onto token_expires_at after a
@@ -216,16 +221,23 @@ func (m *Manager) ProcessBatch(ctx context.Context) error {
 		return fmt.Errorf("failed to get expiring linked Twitch tokens: %w", err)
 	}
 
+	modCredentials, err := m.repo.GetExpiringModCredentials(ctx, m.expiryBuffer, m.batchSize)
+	if err != nil {
+		return fmt.Errorf("failed to get expiring moderator credentials: %w", err)
+	}
+
 	// Combine all tokens
 	allTokens := append(userTokens, viewerTokens...)
 	allTokens = append(allTokens, youtubeTokens...)
 	allTokens = append(allTokens, twitchLinkTokens...)
+	allTokens = append(allTokens, modCredentials...)
 
 	m.logger.Info("Found expiring tokens",
 		zap.Int("user_tokens", len(userTokens)),
 		zap.Int("viewer_tokens", len(viewerTokens)),
 		zap.Int("youtube_tokens", len(youtubeTokens)),
 		zap.Int("twitch_link_tokens", len(twitchLinkTokens)),
+		zap.Int("mod_credentials", len(modCredentials)),
 		zap.Int("total", len(allTokens)),
 	)
 
@@ -335,6 +347,9 @@ func (m *Manager) refreshPlatform(ctx context.Context, platform oauth.Platform, 
 			updateErr = m.repo.UpdateYouTubeTokens(ctx, token.ID, token.ChannelID, newToken)
 		case "twitch_link":
 			updateErr = m.repo.UpdateTwitchLinkTokens(ctx, token.ID, token.ChannelID, newToken)
+		case "mod_credential":
+			// ChannelID carries the platform here: the row is keyed (user_id, platform).
+			updateErr = m.repo.UpdateModCredentialTokens(ctx, token.ID, token.ChannelID, newToken)
 		default:
 			updateErr = fmt.Errorf("unknown token type: %s", token.TokenType)
 		}
@@ -484,6 +499,8 @@ func (m *Manager) markTokenPermanentlyFailed(ctx context.Context, token *reposit
 		markErr = m.repo.MarkYouTubeTokenPermanentlyFailed(ctx, token.ID, token.ChannelID, permanentFailSuppress)
 	case "twitch_link":
 		markErr = m.repo.MarkTwitchLinkTokenPermanentlyFailed(ctx, token.ID, token.ChannelID, permanentFailSuppress)
+	case "mod_credential":
+		markErr = m.repo.MarkModCredentialPermanentlyFailed(ctx, token.ID, token.ChannelID, permanentFailSuppress)
 	default:
 		m.logger.Warn("Unknown token type for permanent-failure marking",
 			zap.String("token_type", token.TokenType),
