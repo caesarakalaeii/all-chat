@@ -36,6 +36,8 @@ import (
 	"github.com/caesar/all-chat/services/moderation-service/publisher"
 	"github.com/caesar/all-chat/services/moderation-service/repository"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 )
 
@@ -142,6 +144,18 @@ func (h *Handler) SetSendChecker(s SendChecker) { h.send = s }
 // notAuthorizedMsg is used for BOTH "you have no role on this overlay" and "this overlay does
 // not exist", so the two are indistinguishable to a caller probing overlay ids.
 const notAuthorizedMsg = "not authorized for this overlay"
+
+// unauthorizedDenials counts refusals of callers who hold no role on the overlay.
+//
+// These are deliberately NOT written to moderation_actions (ADR-0048): the overlay id is
+// caller-supplied and that table has no foreign key on it, so probing would pad the audit log
+// with rows for overlays that never existed. Denials of a legitimate owner or moderator — the
+// forensically interesting ones — are still audited as ADR-0017 requires. A counter plus a Warn
+// log carrying the caller's id keeps probing visible and alertable without the junk rows.
+var unauthorizedDenials = promauto.NewCounterVec(prometheus.CounterOpts{
+	Name: "allchat_moderation_unauthorized_denials_total",
+	Help: "Moderation requests refused because the caller holds no role on the overlay.",
+}, []string{"reason"})
 
 // caller is the authenticated identity behind a request.
 type caller struct {
@@ -345,14 +359,7 @@ func (h *Handler) authorize(c *gin.Context, cl *caller, platform, channelID stri
 	access, err := h.repo.ResolveOverlayAccess(ctx, cl.overlayID, cl.userID)
 	switch {
 	case errors.Is(err, repository.ErrOverlayNotFound):
-		// Deliberately identical to the response an unauthorized stranger gets, audit row
-		// included: a distinguishable status — or even a difference in side effects — would
-		// make these endpoints an overlay-existence oracle. Note the cost: the overlay id is
-		// caller-supplied and moderation_actions has no FK on it, so probing writes audit
-		// rows for overlays that never existed. Suppressing those in favour of a metric is
-		// an open decision in ADR-0048, not something to change unilaterally here, since
-		// ADR-0017 deliberately audits every denial.
-		h.deny(c, *cl, platform, channelID, action, http.StatusForbidden, notAuthorizedMsg)
+		h.denyUnauthorized(c, *cl, "unknown_overlay")
 		return false
 	case err != nil:
 		h.logger.Error("overlay access resolution failed", zap.Error(err))
@@ -362,7 +369,7 @@ func (h *Handler) authorize(c *gin.Context, cl *caller, platform, channelID stri
 	cl.access = access
 
 	if !access.Authorized() {
-		h.deny(c, *cl, platform, channelID, action, http.StatusForbidden, notAuthorizedMsg)
+		h.denyUnauthorized(c, *cl, "no_role")
 		return false
 	}
 
@@ -473,6 +480,21 @@ func (h *Handler) execute(c *gin.Context, cl caller, action models.Action, dreq 
 	}
 	h.record(ctx, e)
 	c.JSON(http.StatusOK, gin.H{"status": "ok", "dry_run": dryRun})
+}
+
+// denyUnauthorized refuses a caller who holds no role on the overlay.
+//
+// The response is byte-identical whether the overlay is unauthorized or does not exist at all —
+// including the absence of an audit row — because any observable difference, side effects
+// included, would make these endpoints an overlay-existence oracle for any valid token holder.
+// The reason is recorded in the metric and log, which the caller cannot see.
+func (h *Handler) denyUnauthorized(c *gin.Context, cl caller, reason string) {
+	unauthorizedDenials.WithLabelValues(reason).Inc()
+	h.logger.Warn("moderation request from a caller with no role on the overlay",
+		zap.String("user_id", cl.userID),
+		zap.String("overlay_id", cl.overlayID),
+		zap.String("reason", reason))
+	c.JSON(http.StatusForbidden, gin.H{"error": notAuthorizedMsg})
 }
 
 // deny audits an authorization failure (when the caller is known) and responds.

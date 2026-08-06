@@ -29,6 +29,7 @@ import (
 	"github.com/caesar/all-chat/services/moderation-service/models"
 	"github.com/caesar/all-chat/services/moderation-service/repository"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -186,20 +187,28 @@ func TestDelete_OwnerEmitsReflectBackAndAudits(t *testing.T) {
 	assert.Empty(t, rec.entries[0].ImpersonatedBy)
 }
 
-func TestDelete_NotOwnerIsDeniedAndAudited(t *testing.T) {
+// A caller with no role on the overlay is refused, counted and logged — but deliberately NOT
+// written to moderation_actions (ADR-0048). The overlay id is caller-supplied and the audit table
+// has no foreign key on it, so auditing these would let anyone with a token pad the log with rows
+// for overlays that never existed. Denials of a legitimate owner or moderator are still audited
+// (see moderation_delegation_test.go).
+func TestDelete_NotOwnerIsDeniedAndCountedNotAudited(t *testing.T) {
 	auth := &fakeAuthorizer{owns: false}
 	emitter := &fakeEmitter{}
 	rec := &fakeRecorder{}
 	h := New(auth, emitter, rec, NoScopeChecker{}, DryRunDispatcher{}, zap.NewNop())
 	r := newTestRouter(h, strangerID(), "")
 
+	before := testutil.ToFloat64(unauthorizedDenials.WithLabelValues("no_role"))
+
 	resp := do(r, http.MethodPost, "/api/v1/moderation/overlays/"+overlayID+"/delete",
 		`{"platform":"twitch","channel_id":"somestreamer","native_message_id":"nm1"}`)
 
 	assert.Equal(t, http.StatusForbidden, resp.Code)
 	assert.Empty(t, emitter.published, "a denied request must not emit a deletion")
-	require.Len(t, rec.entries, 1)
-	assert.Equal(t, audit.OutcomeDenied, rec.entries[0].Outcome)
+	assert.Empty(t, rec.entries, "a no-role denial must not write an audit row")
+	assert.Equal(t, before+1, testutil.ToFloat64(unauthorizedDenials.WithLabelValues("no_role")),
+		"probing must still be visible in metrics")
 }
 
 func TestDelete_TikTokIsUnsupported(t *testing.T) {
