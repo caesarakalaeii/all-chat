@@ -19,6 +19,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"testing"
 
@@ -36,6 +37,10 @@ const modUserID = "33333333-3333-4333-8333-333333333333"
 type gateFor map[string]bool
 
 func (g gateFor) ModerationEnabled(_ context.Context, userID string) (bool, error) {
+	return g[userID], nil
+}
+
+func (g gateFor) DelegationEnabled(_ context.Context, userID string) (bool, error) {
 	return g[userID], nil
 }
 
@@ -77,6 +82,55 @@ func TestDelete_DelegatedModeratorIsAuthorized(t *testing.T) {
 	require.Len(t, rec.entries, 1)
 	assert.Equal(t, modUserID, rec.entries[0].ActorUserID,
 		"the audit row records the human who pressed the button")
+}
+
+// last_action_at is what the 90-day dormancy rule reads. Stamping it from the first delegated
+// action onwards is what stops a dormancy job introduced later from reading a working mod team as
+// idle since the day their grants were created.
+func TestDelete_DelegatedActionStampsGrantActivity(t *testing.T) {
+	auth := &fakeAuthorizer{
+		access: &repository.OverlayAccess{
+			OwnerUserID: ownerID, OwnerIsPremium: true, Role: repository.RoleModerator,
+			GrantID: "grant-1", Actions: []string{"delete"},
+		},
+		isSource: map[string]bool{"twitch|somestreamer": true},
+	}
+	h := New(auth, &fakeEmitter{}, &fakeRecorder{}, NoScopeChecker{}, DryRunDispatcher{}, zap.NewNop())
+
+	resp := do(newTestRouter(h, modUserID, ""), http.MethodPost, deletePath(), deleteBody)
+
+	require.Equal(t, http.StatusOK, resp.Code)
+	assert.Equal(t, []string{"grant-1"}, auth.touchedGrants)
+}
+
+// An owner acts by ownership, not by a grant, so there is nothing to stamp — and no dormancy
+// clock that could ever suspend them.
+func TestDelete_OwnerActionStampsNothing(t *testing.T) {
+	auth := &fakeAuthorizer{owns: true, isSource: map[string]bool{"twitch|somestreamer": true}}
+	h := New(auth, &fakeEmitter{}, &fakeRecorder{}, NoScopeChecker{}, DryRunDispatcher{}, zap.NewNop())
+
+	resp := do(newTestRouter(h, ownerID, ""), http.MethodPost, deletePath(), deleteBody)
+
+	require.Equal(t, http.StatusOK, resp.Code)
+	assert.Empty(t, auth.touchedGrants)
+}
+
+// A failed stamp is bookkeeping, not the action: the moderation already happened on the platform,
+// so the request must still succeed.
+func TestDelete_AStampFailureDoesNotFailTheAction(t *testing.T) {
+	auth := &fakeAuthorizer{
+		access: &repository.OverlayAccess{
+			OwnerUserID: ownerID, OwnerIsPremium: true, Role: repository.RoleModerator,
+			GrantID: "grant-1", Actions: []string{"delete"},
+		},
+		isSource: map[string]bool{"twitch|somestreamer": true},
+		touchErr: errors.New("database unavailable"),
+	}
+	h := New(auth, &fakeEmitter{}, &fakeRecorder{}, NoScopeChecker{}, DryRunDispatcher{}, zap.NewNop())
+
+	resp := do(newTestRouter(h, modUserID, ""), http.MethodPost, deletePath(), deleteBody)
+
+	assert.Equal(t, http.StatusOK, resp.Code)
 }
 
 // The action set on the grant is enforced server-side, not merely hidden in the UI.

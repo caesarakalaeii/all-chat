@@ -737,6 +737,20 @@ func main() {
 		// keeps reporting an ended/crashed stream as live.
 		protectedAPI.POST("/moderation/overlays/:id/youtube/rediscover", proxyHandler.ForwardRequest)
 
+		// Delegated moderators (ADR-0048) — grant lifecycle. Owner-only; moderation-service
+		// resolves the caller's role itself and answers a non-owner exactly as it answers an
+		// unknown overlay.
+		protectedAPI.GET("/moderation/overlays/:id/moderators", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/moderation/overlays/:id/moderators", proxyHandler.ForwardRequest)
+		protectedAPI.PATCH("/moderation/overlays/:id/moderators/:grant_id", proxyHandler.ForwardRequest)
+		protectedAPI.DELETE("/moderation/overlays/:id/moderators/:grant_id", proxyHandler.ForwardRequest)
+		protectedAPI.DELETE("/moderation/overlays/:id/moderators", proxyHandler.ForwardRequest)
+		// Invite redemption is authorized by the SECRET, which travels in the request body — never
+		// in the path, where it would be captured by every access log along the way. The caller
+		// still needs a signed-in All-Chat account for the grant to bind to.
+		protectedAPI.POST("/moderation/invites/preview", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/moderation/invites/accept", proxyHandler.ForwardRequest)
+
 		// Ambassador self-service (ADR-0041) — a streamer reads/sets their own
 		// homepage-showcase opt-in. -> share-service (enforces the ambassador role).
 		protectedAPI.GET("/ambassadors/me/showcase", proxyHandler.ForwardRequest)

@@ -51,6 +51,9 @@ type Authorizer interface {
 	ResolveOverlayAccess(ctx context.Context, overlayID, callerID string) (repository.OverlayAccess, error)
 	IsModeratableSource(ctx context.Context, overlayID, platform, channelID string) (bool, error)
 	ListModeratableSources(ctx context.Context, overlayID string) ([]repository.Source, error)
+	// TouchGrantActivity records that a delegated grant was just used, which is what the
+	// dormancy rule reads. A no-op for owner actions, which carry no grant.
+	TouchGrantActivity(ctx context.Context, grantID string) error
 }
 
 // DeletionEmitter publishes the reflect-back deletion event onto chat:raw.
@@ -98,12 +101,15 @@ func (DryRunDispatcher) Dispatch(context.Context, string, models.Action, models.
 	return models.DispatchResult{Outcome: models.DispatchDryRun}, nil
 }
 
-// FeatureGate reports whether the moderation feature is enabled for a user under
-// the ADR-0008 cohort rollout. The capabilities endpoint surfaces this so the
-// dashboard hides controls for users outside the cohort; the action endpoints are
-// independently gated in cmd/main.go (defense in depth).
+// FeatureGate reports whether a moderation capability is enabled for a user under the ADR-0008
+// cohort rollout. Both questions are asked about the OVERLAY OWNER, never the caller: a delegated
+// moderator moderates on a premium streamer's overlay for free (ADR-0048).
 type FeatureGate interface {
+	// ModerationEnabled gates the moderation write-path itself.
 	ModerationEnabled(ctx context.Context, userID string) (bool, error)
+	// DelegationEnabled gates handing that write-path to someone else. A separate key so
+	// delegation can be rolled back without disabling owner moderation.
+	DelegationEnabled(ctx context.Context, userID string) (bool, error)
 }
 
 // OpenGate enables moderation for everyone. It is the default when no feature-gate
@@ -114,12 +120,15 @@ type OpenGate struct{}
 // ModerationEnabled always reports enabled.
 func (OpenGate) ModerationEnabled(context.Context, string) (bool, error) { return true, nil }
 
+// DelegationEnabled always reports enabled.
+func (OpenGate) DelegationEnabled(context.Context, string) (bool, error) { return true, nil }
+
 // Handler serves the moderation endpoints.
 type Handler struct {
-	repo     Authorizer
-	pub      DeletionEmitter
-	audit    Recorder
-	scopes   ScopeChecker
+	repo       Authorizer
+	pub        DeletionEmitter
+	audit      Recorder
+	scopes     ScopeChecker
 	send       SendChecker
 	dispatch   Dispatcher
 	gate       FeatureGate
@@ -479,7 +488,24 @@ func (h *Handler) execute(c *gin.Context, cl caller, action models.Action, dreq 
 		e.Outcome = audit.OutcomeSuccess
 	}
 	h.record(ctx, e)
+	h.touchGrant(ctx, cl)
 	c.JSON(http.StatusOK, gin.H{"status": "ok", "dry_run": dryRun})
+}
+
+// touchGrant stamps a delegated grant's last successful action.
+//
+// This is what the 90-day dormancy suspension reads, so it is written from the very first delegated
+// action: a dormancy job introduced later must not find a working mod team looking idle since the
+// day their grant was created. Owners have no grant to stamp. A failure is logged, never surfaced —
+// the moderation action already succeeded and the stamp is bookkeeping.
+func (h *Handler) touchGrant(ctx context.Context, cl caller) {
+	if cl.access.GrantID == "" {
+		return
+	}
+	if err := h.repo.TouchGrantActivity(ctx, cl.access.GrantID); err != nil {
+		h.logger.Warn("failed to stamp grant activity",
+			zap.String("grant_id", cl.access.GrantID), zap.Error(err))
+	}
 }
 
 // denyUnauthorized refuses a caller who holds no role on the overlay.

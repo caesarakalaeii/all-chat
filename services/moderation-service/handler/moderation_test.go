@@ -50,6 +50,10 @@ type fakeAuthorizer struct {
 	// pre-delegation tests keep expressing intent as "the caller owns the overlay".
 	access    *repository.OverlayAccess
 	accessErr error
+	// touchedGrants records the grants whose activity stamp was refreshed, which is what the
+	// dormancy rule later reads.
+	touchedGrants []string
+	touchErr      error
 }
 
 func (f *fakeAuthorizer) VerifyOverlayOwnership(context.Context, string, string) (bool, error) {
@@ -84,6 +88,10 @@ func (f *fakeAuthorizer) IsModeratableSource(_ context.Context, _, platform, cha
 func (f *fakeAuthorizer) ListModeratableSources(context.Context, string) ([]repository.Source, error) {
 	return f.sources, nil
 }
+func (f *fakeAuthorizer) TouchGrantActivity(_ context.Context, grantID string) error {
+	f.touchedGrants = append(f.touchedGrants, grantID)
+	return f.touchErr
+}
 
 type fakeEmitter struct{ published []*mpmodels.RawChatMessage }
 
@@ -112,6 +120,10 @@ type fakeGate struct {
 }
 
 func (f fakeGate) ModerationEnabled(context.Context, string) (bool, error) {
+	return f.enabled, f.err
+}
+
+func (f fakeGate) DelegationEnabled(context.Context, string) (bool, error) {
 	return f.enabled, f.err
 }
 
