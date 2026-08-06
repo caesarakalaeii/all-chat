@@ -1170,8 +1170,15 @@ function AddSourceForm({
       onSourceAdded?.()
       trackEvent('source_configured', { platform: 'discord' })
       toastManager.add({ title: 'Discord source added', type: 'success' })
-    } catch {
-      toastManager.add({ title: 'Failed to add Discord source', type: 'error' })
+    } catch (err) {
+      // Surface the server's reason: the Discord source guard (ADR-0048) refuses channels in
+      // servers the user has not connected and explains what to do, which a generic failure
+      // toast would throw away.
+      toastManager.add({
+        title: 'Failed to add Discord source',
+        description: err instanceof ApiError ? err.message : undefined,
+        type: 'error',
+      })
     } finally {
       setIsAddingDiscord(false)
     }
