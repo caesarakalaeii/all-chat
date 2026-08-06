@@ -25,11 +25,26 @@ All require a user JWT (forwarded by the gateway; re-validated here). Mounted un
 Send a unique `Idempotency-Key` header on each POST (double-click/retry dedup). Per-user rate limiting
 applies (`MODERATION_RATE_PER_MIN`, default 30/min).
 
-## Authorization (owner-only, ADR-0017)
+## Authorization (owner or delegated moderator — ADR-0017, amended by ADR-0048)
 
-1. The JWT user must own the overlay (`VerifyOverlayOwnership`).
-2. The `(platform, channel_id)` must be a real source on that overlay and **not** `shared_overlay`.
-3. The action uses the **broadcaster's own** stored OAuth token (`broadcaster_id == moderator_id`).
+1. `ResolveOverlayAccess` resolves, in one round trip, the caller's role (`owner` / `moderator` /
+   `none`) plus the **overlay owner's** identity and entitlement. A caller with no role is refused —
+   with the same status *and* body an unknown overlay gets, so the endpoints are not an
+   overlay-existence oracle. Grants are read live on every action, never cached, so a revocation
+   takes effect within one request.
+2. **Entitlement is keyed on the overlay OWNER**, not the caller: a premium streamer's moderators
+   moderate for free, and a moderator never sees an upgrade prompt for a plan that is not theirs to
+   buy. Enforced inside `authorize()` rather than in `RequirePremium` middleware, which keys on the
+   caller — so the denial is audited like every other denial and the copy can differ by role.
+3. A delegated moderator may only perform the actions the grant lists; an owner may perform anything
+   the platform supports.
+4. The `(platform, channel_id)` must be a real source on that overlay and **not** `shared_overlay`.
+   Under owner-only authorization that exclusion was true by construction; under role-based
+   authorization this predicate carries it alone, so it has its own regression test.
+5. The action uses the **acting human's own** stored OAuth token — the owner's when the owner acts,
+   the moderator's when a delegated moderator acts, never a fallback between them. Discord is the
+   exception: the shared bot is always the actor, so All-Chat must verify the actor's own guild
+   permissions itself.
 
 Admin **impersonation** is allowed but always attributed: the action runs as the impersonated owner
 (their token), while the `moderation_actions` audit row records the real admin in `impersonated_by`.
@@ -69,8 +84,9 @@ moderation permissions reports no actions and the dashboard shows the re-invite 
 ## Rollout (feature gate, ADR-0008)
 
 The write path is gated on the `moderation` feature gate, seeded `is_premium=TRUE` (migration 061) so
-it ships to a premium cohort first. The `delete/timeout/ban/unban` routes enforce it with
-`RequirePremium` (403 outside the cohort); `capabilities` stays ungated but returns `enabled`
+it ships to a premium cohort first. The `delete/timeout/ban/unban` routes enforce it inside
+`authorize()`, keyed on the **overlay owner** (ADR-0048 — `RequirePremium` middleware keys on the
+caller, which delegation inverts); `capabilities` stays ungated but returns `enabled`
 (gate ∧ `users.is_premium`, fail-closed) so the dashboard hides controls for non-cohort owners.
 Graduate to everyone by flipping the gate to `is_premium=FALSE` via the feature-gate admin endpoint —
 no redeploy. Locally, non-premium users can either set `users.is_premium=true` or flip the gate to test.

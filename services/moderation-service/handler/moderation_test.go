@@ -45,10 +45,37 @@ type fakeAuthorizer struct {
 	ownsErr  error
 	isSource map[string]bool
 	sources  []repository.Source
+	// access overrides the role/entitlement answer; when nil it is derived from owns so the
+	// pre-delegation tests keep expressing intent as "the caller owns the overlay".
+	access    *repository.OverlayAccess
+	accessErr error
 }
 
 func (f *fakeAuthorizer) VerifyOverlayOwnership(context.Context, string, string) (bool, error) {
 	return f.owns, f.ownsErr
+}
+
+func (f *fakeAuthorizer) ResolveOverlayAccess(_ context.Context, _, callerID string) (repository.OverlayAccess, error) {
+	switch {
+	case f.accessErr != nil:
+		return repository.OverlayAccess{}, f.accessErr
+	case f.access != nil:
+		return *f.access, nil
+	case f.ownsErr != nil:
+		return repository.OverlayAccess{}, f.ownsErr
+	case f.owns:
+		return repository.OverlayAccess{
+			OwnerUserID:    callerID,
+			OwnerIsPremium: true,
+			Role:           repository.RoleOwner,
+		}, nil
+	}
+	// Not the owner and no grant: someone else owns it.
+	return repository.OverlayAccess{
+		OwnerUserID:    ownerID,
+		OwnerIsPremium: true,
+		Role:           repository.RoleNone,
+	}, nil
 }
 func (f *fakeAuthorizer) IsModeratableSource(_ context.Context, _, platform, channelID string) (bool, error) {
 	return f.isSource[platform+"|"+channelID], nil

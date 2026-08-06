@@ -27,6 +27,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	mpmodels "github.com/caesar/all-chat/services/message-processor/models"
@@ -42,6 +43,10 @@ import (
 // the codebase's interface-for-DI convention) so handlers are unit-testable with fakes.
 type Authorizer interface {
 	VerifyOverlayOwnership(ctx context.Context, overlayID, userID string) (bool, error)
+	// ResolveOverlayAccess answers the caller's role AND the owner's identity/entitlement in
+	// one round trip. The action path uses this rather than VerifyOverlayOwnership, because
+	// authorization keys on the caller while the premium gate keys on the owner (ADR-0048).
+	ResolveOverlayAccess(ctx context.Context, overlayID, callerID string) (repository.OverlayAccess, error)
 	IsModeratableSource(ctx context.Context, overlayID, platform, channelID string) (bool, error)
 	ListModeratableSources(ctx context.Context, overlayID string) ([]repository.Source, error)
 }
@@ -134,11 +139,17 @@ func (h *Handler) SetFeatureGate(g FeatureGate) { h.gate = g }
 // which reports nothing sendable). Call once at startup before serving.
 func (h *Handler) SetSendChecker(s SendChecker) { h.send = s }
 
+// notAuthorizedMsg is used for BOTH "you have no role on this overlay" and "this overlay does
+// not exist", so the two are indistinguishable to a caller probing overlay ids.
+const notAuthorizedMsg = "not authorized for this overlay"
+
 // caller is the authenticated identity behind a request.
 type caller struct {
 	userID         string
 	impersonatedBy string // the real admin when acting under impersonation, else ""
 	overlayID      string
+	// access is filled in by authorize() and drives audit attribution.
+	access repository.OverlayAccess
 }
 
 func newCaller(c *gin.Context) caller {
@@ -157,7 +168,7 @@ func (h *Handler) HandleDelete(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if !h.authorize(c, cl, req.Platform, req.ChannelID, models.ActionDelete) {
+	if !h.authorize(c, &cl, req.Platform, req.ChannelID, models.ActionDelete) {
 		return
 	}
 
@@ -177,7 +188,7 @@ func (h *Handler) HandleTimeout(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if !h.authorize(c, cl, req.Platform, req.ChannelID, models.ActionTimeout) {
+	if !h.authorize(c, &cl, req.Platform, req.ChannelID, models.ActionTimeout) {
 		return
 	}
 
@@ -200,7 +211,7 @@ func (h *Handler) HandleBan(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if !h.authorize(c, cl, req.Platform, req.ChannelID, models.ActionBan) {
+	if !h.authorize(c, &cl, req.Platform, req.ChannelID, models.ActionBan) {
 		return
 	}
 
@@ -224,7 +235,7 @@ func (h *Handler) HandleUnban(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if !h.authorize(c, cl, req.Platform, req.ChannelID, models.ActionUnban) {
+	if !h.authorize(c, &cl, req.Platform, req.ChannelID, models.ActionUnban) {
 		return
 	}
 
@@ -317,32 +328,80 @@ func (h *Handler) capabilityFor(ctx context.Context, userID string, s repository
 	return sc
 }
 
-// authorize runs the owner-only + source-membership + platform-support checks shared
-// by every action. On failure it audits the denial (when the caller is known) and
+// authorize runs the role + entitlement + source-membership + platform-support checks
+// shared by every action. On failure it audits the denial (when the caller is known) and
 // writes the HTTP response. Returns true only when the action may proceed.
-func (h *Handler) authorize(c *gin.Context, cl caller, platform, channelID string, action models.Action) bool {
+//
+// The resolved access is stashed on the caller so execute() can attribute the audit row
+// without a second lookup.
+func (h *Handler) authorize(c *gin.Context, cl *caller, platform, channelID string, action models.Action) bool {
 	ctx := c.Request.Context()
 	if cl.userID == "" {
+		// No known actor, so nothing to attribute an audit row to.
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing user context"})
 		return false
 	}
 
-	owns, err := h.repo.VerifyOverlayOwnership(ctx, cl.overlayID, cl.userID)
-	if err != nil {
-		h.logger.Error("ownership check failed", zap.Error(err))
+	access, err := h.repo.ResolveOverlayAccess(ctx, cl.overlayID, cl.userID)
+	switch {
+	case errors.Is(err, repository.ErrOverlayNotFound):
+		// Deliberately identical to the response an unauthorized stranger gets, audit row
+		// included: a distinguishable status — or even a difference in side effects — would
+		// make these endpoints an overlay-existence oracle. Note the cost: the overlay id is
+		// caller-supplied and moderation_actions has no FK on it, so probing writes audit
+		// rows for overlays that never existed. Suppressing those in favour of a metric is
+		// an open decision in ADR-0048, not something to change unilaterally here, since
+		// ADR-0017 deliberately audits every denial.
+		h.deny(c, *cl, platform, channelID, action, http.StatusForbidden, notAuthorizedMsg)
+		return false
+	case err != nil:
+		h.logger.Error("overlay access resolution failed", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return false
 	}
-	if !owns {
-		h.deny(c, cl, platform, channelID, action, http.StatusForbidden, "not authorized for this overlay")
+	cl.access = access
+
+	if !access.Authorized() {
+		h.deny(c, *cl, platform, channelID, action, http.StatusForbidden, notAuthorizedMsg)
+		return false
+	}
+
+	// Entitlement is keyed on the OVERLAY OWNER, never the caller: a premium streamer's
+	// moderators moderate for free. Enforced here rather than in middleware so the denial is
+	// audited like every other denial in this service, and so the copy can differ by role —
+	// a delegated moderator must never be pointed at an upgrade page for a plan that is not
+	// theirs to buy.
+	enabled, err := h.gate.ModerationEnabled(ctx, access.OwnerUserID)
+	if err != nil {
+		h.logger.Error("moderation gate check failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return false
+	}
+	if !enabled {
+		msg := "moderation requires All-Chat premium"
+		if !access.IsOwner() {
+			msg = "this streamer's plan does not include moderation right now"
+		}
+		h.deny(c, *cl, platform, channelID, action, http.StatusForbidden, msg)
+		return false
+	}
+
+	// A delegated moderator is limited to the actions the owner granted. Owners may perform
+	// anything the platform supports.
+	if !access.MayPerform(string(action)) {
+		h.deny(c, *cl, platform, channelID, action, http.StatusForbidden, "this action was not delegated to you")
 		return false
 	}
 
 	if !models.SupportsAction(platform, action) {
-		h.deny(c, cl, platform, channelID, action, http.StatusUnprocessableEntity, "platform does not support this moderation action")
+		h.deny(c, *cl, platform, channelID, action, http.StatusUnprocessableEntity, "platform does not support this moderation action")
 		return false
 	}
 
+	// Unchanged, and now security-critical rather than incidental: this is what keeps a
+	// shared_overlay source non-moderatable. Owner-only authorization made "a recipient must
+	// not moderate the original streamer's channel" true by construction; role-based
+	// authorization does not, so the predicate carries the invariant on its own.
 	moderatable, err := h.repo.IsModeratableSource(ctx, cl.overlayID, platform, channelID)
 	if err != nil {
 		h.logger.Error("source check failed", zap.Error(err))
@@ -350,7 +409,7 @@ func (h *Handler) authorize(c *gin.Context, cl caller, platform, channelID strin
 		return false
 	}
 	if !moderatable {
-		h.deny(c, cl, platform, channelID, action, http.StatusUnprocessableEntity, "channel is not a moderatable source on this overlay")
+		h.deny(c, *cl, platform, channelID, action, http.StatusUnprocessableEntity, "channel is not a moderatable source on this overlay")
 		return false
 	}
 	return true
