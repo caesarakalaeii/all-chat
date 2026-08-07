@@ -137,11 +137,17 @@ func main() {
 	default:
 		twitchSource := tokens.NewTwitchSource(dbPool, cipher, cfg.TwitchClientID, cfg.TwitchClientSecret)
 		twitchClient := clients.NewTwitchClient(cfg.TwitchClientID)
-		dispatchers["twitch"] = dispatch.NewTwitch(twitchSource, twitchClient, log)
+		twitchDispatcher := dispatch.NewTwitch(twitchSource, twitchClient, log)
+		// Delegated moderation (ADR-0048): a moderator acts with their OWN credential, read from
+		// mod_oauth_credentials and never from the streamer's rows. Without this the dispatcher
+		// refuses delegated Twitch actions outright rather than falling back to the owner's
+		// token — the refusal, not the fallback, is the invariant.
+		twitchDispatcher.SetModSource(tokens.NewModTwitchSource(dbPool, cipher, cfg.TwitchClientID, cfg.TwitchClientSecret))
+		dispatchers["twitch"] = twitchDispatcher
 		twitchScopes := tokens.NewTwitchScopeChecker(twitchSource)
 		scopeCheckers["twitch"] = twitchScopes
 		sendCheckers["twitch"] = twitchScopes
-		log.Info("Twitch moderation enabled (real Helix calls)")
+		log.Info("Twitch moderation enabled (real Helix calls, owner + delegated moderator)")
 	}
 
 	// Kick (timeout/ban/unban; no single-message delete) uses the broadcaster's own

@@ -281,6 +281,37 @@ func RequiredDiscordPermission(a Action) uint64 {
 	}
 }
 
+// Actor is who is performing a moderation action, and on whose behalf.
+//
+// It travels with every dispatch because *whose credential acts* is the load-bearing
+// question of ADR-0048, and it must never be inferred from the caller's id alone: an owner acts
+// with their own broadcaster credential, a delegated moderator with their own moderator
+// credential against the OWNER's channel, and there is no fallback between them. Passing this
+// explicitly is what makes a dispatcher that ignores the distinction a compile-time change rather
+// than a silent one.
+type Actor struct {
+	// UserID is the human who pressed the button, and whose credential must perform the call.
+	UserID string
+	// Role is RoleOwner or RoleModerator as resolved on the overlay.
+	Role string
+	// OwnerUserID is the overlay owner the action is performed for. Equals UserID when the owner
+	// acts themselves; for a moderator it is whose channel is being moderated, and it is the only
+	// identity the owner-reach anchor may be resolved against.
+	OwnerUserID string
+	// GrantID is the delegation the moderator is acting under. Empty for an owner.
+	GrantID string
+}
+
+// IsModerator reports whether a delegated moderator is acting.
+func (a Actor) IsModerator() bool { return a.Role == RoleModerator }
+
+// Roles an Actor can hold. These mirror repository.Role* — duplicated rather than imported
+// because models must not depend on the repository (the dependency runs the other way).
+const (
+	RoleOwner     = "owner"
+	RoleModerator = "moderator"
+)
+
 // DispatchRequest carries the identifiers a platform moderation call needs. It is
 // the platform-agnostic input the handler hands to a Dispatcher.
 type DispatchRequest struct {
@@ -304,9 +335,26 @@ const (
 	// DispatchReauthRequired: the owner's token lacks the required scope (or the
 	// platform rejected it as unauthorized). The handler returns 403 + missing_scopes.
 	DispatchReauthRequired
-	// DispatchNoCredential: the owner holds no moderator credential for this channel.
+	// DispatchNoCredential: the actor holds no moderator credential for this channel.
 	// The handler returns 422.
 	DispatchNoCredential
+	// DispatchOwnerUnverified: the overlay owner cannot prove they control this channel, so
+	// there is nothing for them to delegate (ADR-0048's owner-reach anchor). Delegation never
+	// exceeds what the owner could do themselves. The handler returns 403 with copy aimed at the
+	// OWNER — reconnecting their account is the fix, and the moderator cannot perform it.
+	DispatchOwnerUnverified
+	// DispatchNotPlatformModerator: the platform accepted the credential and refused the action
+	// because this person is not a moderator of that channel. Only reported for a delegated
+	// moderator, and only once the scope pre-check has already passed — which is what makes the
+	// inference sound. It is the platform answering the question ADR-0048 defers to it, and the
+	// remediation is the streamer adding them in the platform's own tools, never a re-consent.
+	DispatchNotPlatformModerator
+	// DispatchDelegationUnsupported: this platform's delegated path is not built yet, so a
+	// delegated action must be refused rather than fall through to whatever credential the
+	// dispatcher would otherwise use. Load-bearing for Discord in particular, where the actor is
+	// always the shared bot: without this, a delegated action would execute with the bot's full
+	// guild authority and no check that the moderator holds any of it.
+	DispatchDelegationUnsupported
 )
 
 // DispatchResult is what a Dispatcher reports back to the handler.
@@ -314,6 +362,13 @@ type DispatchResult struct {
 	Outcome        DispatchOutcome
 	MissingScopes  []string // populated on DispatchReauthRequired
 	PlatformStatus string   // platform detail for the audit row
+	// CredentialUserID is whose OAuth token actually performed the call, and PlatformActorID the
+	// id sent as the platform's moderator field. Together they are the machine-checkable proof
+	// that a delegated action never fell back to the owner's credential (ADR-0048), which is why
+	// they are reported back rather than assumed by the handler. Both are empty where no per-user
+	// credential acts — Discord, where the shared bot is always the actor, and dry runs.
+	CredentialUserID string
+	PlatformActorID  string
 }
 
 // PlatformSupported reports whether the platform has any moderation support at all.

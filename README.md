@@ -65,10 +65,11 @@ You can also open it from your overlay's settings page (or its preview page) via
 **Your moderators can use it too.** Under **Moderators** in the overlay editor you can invite the
 people who already moderate for you (Premium). You get a private link to send them; they accept it
 with their own All-Chat account, and every channel handed to them shows up under **Channels you
-moderate** (`/moderate`). They act with **their own** platform accounts, so Twitch, YouTube and Kick
-re-check their moderator role on every action and it lands in your native mod log under their name —
-and they never need a plan of their own. Connecting a platform is deferred until the first time they
-moderate on it, and one connection covers every streamer who delegated that platform to them.
+moderate** (`/moderate`). They act with **their own** platform accounts, so Twitch re-checks their
+moderator role on every single action and it lands in your native mod log under their name — never
+yours — and they never need a plan of their own. Connecting an account is deferred until the first
+time they moderate on it, and one connection covers every streamer who delegated that platform to
+them. Twitch is live today; Kick, YouTube and Discord moderation stays with you for now.
 
 ### 3. Customize the look
 

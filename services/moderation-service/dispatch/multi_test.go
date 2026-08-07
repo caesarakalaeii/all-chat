@@ -30,7 +30,7 @@ type recordingDispatcher struct {
 	calls    int
 }
 
-func (r *recordingDispatcher) Dispatch(_ context.Context, _ string, _ models.Action, _ models.DispatchRequest) (models.DispatchResult, error) {
+func (r *recordingDispatcher) Dispatch(_ context.Context, _ models.Actor, _ models.Action, _ models.DispatchRequest) (models.DispatchResult, error) {
 	r.calls++
 	return models.DispatchResult{Outcome: models.DispatchPerformed, PlatformStatus: r.platform}, nil
 }
@@ -40,7 +40,7 @@ func TestMulti_RoutesByPlatform(t *testing.T) {
 	discord := &recordingDispatcher{platform: "discord"}
 	m := NewMulti(map[string]PlatformDispatcher{"twitch": twitch, "discord": discord})
 
-	res, err := m.Dispatch(context.Background(), "u1", models.ActionDelete, models.DispatchRequest{Platform: "discord"})
+	res, err := m.Dispatch(context.Background(), owner("u1"), models.ActionDelete, models.DispatchRequest{Platform: "discord"})
 	require.NoError(t, err)
 	assert.Equal(t, "discord", res.PlatformStatus, "request routed to the discord dispatcher")
 	assert.Equal(t, 1, discord.calls)
@@ -51,8 +51,48 @@ func TestMulti_UnregisteredPlatformIsDryRun(t *testing.T) {
 	twitch := &recordingDispatcher{platform: "twitch"}
 	m := NewMulti(map[string]PlatformDispatcher{"twitch": twitch})
 
-	res, err := m.Dispatch(context.Background(), "u1", models.ActionBan, models.DispatchRequest{Platform: "kick"})
+	res, err := m.Dispatch(context.Background(), owner("u1"), models.ActionBan, models.DispatchRequest{Platform: "kick"})
 	require.NoError(t, err)
 	assert.Equal(t, models.DispatchDryRun, res.Outcome, "an unconfigured platform falls back to dry-run reflect-back")
 	assert.Zero(t, twitch.calls)
+}
+
+// owner builds an Actor for a streamer moderating their own overlay — the role every test in
+// this package used implicitly before delegation existed.
+func owner(userID string) models.Actor {
+	return models.Actor{UserID: userID, Role: models.RoleOwner, OwnerUserID: userID}
+}
+
+// moderator builds an Actor for a delegated moderator acting on ownerID's overlay.
+func moderator(userID, ownerID string) models.Actor {
+	return models.Actor{
+		UserID: userID, Role: models.RoleModerator, OwnerUserID: ownerID, GrantID: "grant-1",
+	}
+}
+
+// Delegation is gated per platform (ADR-0048 Phase 2), and each unbuilt leg must REFUSE rather
+// than fall through. The reasons differ by platform but the requirement does not.
+func TestDelegatedActionsAreRefusedOnUnbuiltLegs(t *testing.T) {
+	t.Run("unregistered platform is not a dry run for a moderator", func(t *testing.T) {
+		// For an owner, dry-run means "reflect back, nothing happened upstream". For a moderator
+		// it would report success for an action nobody performed on a platform with no delegated
+		// path at all.
+		m := NewMulti(map[string]PlatformDispatcher{})
+
+		res, err := m.Dispatch(context.Background(), moderator("mod", "own"), models.ActionDelete,
+			models.DispatchRequest{Platform: "tiktok"})
+
+		require.NoError(t, err)
+		assert.Equal(t, models.DispatchDelegationUnsupported, res.Outcome)
+	})
+
+	t.Run("an owner still gets the dry run", func(t *testing.T) {
+		m := NewMulti(map[string]PlatformDispatcher{})
+
+		res, err := m.Dispatch(context.Background(), owner("u1"), models.ActionDelete,
+			models.DispatchRequest{Platform: "tiktok"})
+
+		require.NoError(t, err)
+		assert.Equal(t, models.DispatchDryRun, res.Outcome)
+	})
 }

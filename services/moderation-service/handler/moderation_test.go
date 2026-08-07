@@ -145,13 +145,15 @@ type fakeDispatcher struct {
 	err       error
 	calls     int
 	gotUserID string
+	gotActor  models.Actor
 	gotAction models.Action
 	gotReq    models.DispatchRequest
 }
 
-func (f *fakeDispatcher) Dispatch(_ context.Context, userID string, action models.Action, req models.DispatchRequest) (models.DispatchResult, error) {
+func (f *fakeDispatcher) Dispatch(_ context.Context, actor models.Actor, action models.Action, req models.DispatchRequest) (models.DispatchResult, error) {
 	f.calls++
-	f.gotUserID = userID
+	f.gotUserID = actor.UserID
+	f.gotActor = actor
 	f.gotAction = action
 	f.gotReq = req
 	return f.res, f.err

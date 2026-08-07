@@ -83,7 +83,7 @@ func newDiscordDispatcher(api *fakeDiscordAPI, guilds *fakeGuildResolver) *Disco
 func TestDiscordDispatch_NonDiscordIsDryRun(t *testing.T) {
 	api := &fakeDiscordAPI{}
 	d := newDiscordDispatcher(api, &fakeGuildResolver{})
-	res, err := d.Dispatch(context.Background(), "u1", models.ActionDelete, models.DispatchRequest{Platform: "twitch", ChannelID: "c"})
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionDelete, models.DispatchRequest{Platform: "twitch", ChannelID: "c"})
 	require.NoError(t, err)
 	assert.Equal(t, models.DispatchDryRun, res.Outcome)
 	assert.Zero(t, api.deleteCalls)
@@ -93,7 +93,7 @@ func TestDiscordDispatch_DeletePerformed(t *testing.T) {
 	api := &fakeDiscordAPI{}
 	guilds := &fakeGuildResolver{guildID: "g"}
 	d := newDiscordDispatcher(api, guilds)
-	res, err := d.Dispatch(context.Background(), "u1", models.ActionDelete,
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionDelete,
 		models.DispatchRequest{Platform: "discord", ChannelID: "chan-1", NativeMessageID: "msg-1"})
 	require.NoError(t, err)
 	assert.Equal(t, models.DispatchPerformed, res.Outcome)
@@ -107,7 +107,7 @@ func TestDiscordDispatch_BanResolvesGuildAndPerforms(t *testing.T) {
 	api := &fakeDiscordAPI{}
 	guilds := &fakeGuildResolver{guildID: "guild-42"}
 	d := newDiscordDispatcher(api, guilds)
-	res, err := d.Dispatch(context.Background(), "u1", models.ActionBan,
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionBan,
 		models.DispatchRequest{Platform: "discord", ChannelID: "chan-1", TargetUserID: "member-7"})
 	require.NoError(t, err)
 	assert.Equal(t, models.DispatchPerformed, res.Outcome)
@@ -120,7 +120,7 @@ func TestDiscordDispatch_TimeoutSetsFutureUntil(t *testing.T) {
 	api := &fakeDiscordAPI{}
 	guilds := &fakeGuildResolver{guildID: "g"}
 	d := newDiscordDispatcher(api, guilds)
-	res, err := d.Dispatch(context.Background(), "u1", models.ActionTimeout,
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionTimeout,
 		models.DispatchRequest{Platform: "discord", ChannelID: "c", TargetUserID: "u", DurationSeconds: 600})
 	require.NoError(t, err)
 	assert.Equal(t, models.DispatchPerformed, res.Outcome)
@@ -132,7 +132,7 @@ func TestDiscordDispatch_UnbanPerformed(t *testing.T) {
 	api := &fakeDiscordAPI{}
 	guilds := &fakeGuildResolver{guildID: "g"}
 	d := newDiscordDispatcher(api, guilds)
-	res, err := d.Dispatch(context.Background(), "u1", models.ActionUnban,
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionUnban,
 		models.DispatchRequest{Platform: "discord", ChannelID: "c", TargetUserID: "u"})
 	require.NoError(t, err)
 	assert.Equal(t, models.DispatchPerformed, res.Outcome)
@@ -142,7 +142,7 @@ func TestDiscordDispatch_UnbanPerformed(t *testing.T) {
 func TestDiscordDispatch_ForbiddenIsError(t *testing.T) {
 	api := &fakeDiscordAPI{err: clients.ErrDiscordForbidden}
 	d := newDiscordDispatcher(api, &fakeGuildResolver{guildID: "g"})
-	res, err := d.Dispatch(context.Background(), "u1", models.ActionDelete,
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionDelete,
 		models.DispatchRequest{Platform: "discord", ChannelID: "c", NativeMessageID: "m"})
 	require.Error(t, err, "a missing bot permission must fail the dispatch so no reflect-back fires")
 	assert.NotEqual(t, models.DispatchPerformed, res.Outcome)
@@ -152,7 +152,7 @@ func TestDiscordDispatch_ForbiddenIsError(t *testing.T) {
 func TestDiscordDispatch_BanForbiddenSurfacesReinvite(t *testing.T) {
 	api := &fakeDiscordAPI{err: clients.ErrDiscordForbidden}
 	d := newDiscordDispatcher(api, &fakeGuildResolver{guildID: "g"})
-	_, err := d.Dispatch(context.Background(), "u1", models.ActionBan,
+	_, err := d.Dispatch(context.Background(), owner("u1"), models.ActionBan,
 		models.DispatchRequest{Platform: "discord", ChannelID: "c", TargetUserID: "u"})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, clients.ErrDiscordForbidden)
@@ -163,8 +163,36 @@ func TestDiscordDispatch_GuildResolutionFailureIsError(t *testing.T) {
 	api := &fakeDiscordAPI{}
 	guilds := &fakeGuildResolver{err: errors.New("channel gone")}
 	d := newDiscordDispatcher(api, guilds)
-	_, err := d.Dispatch(context.Background(), "u1", models.ActionBan,
+	_, err := d.Dispatch(context.Background(), owner("u1"), models.ActionBan,
 		models.DispatchRequest{Platform: "discord", ChannelID: "c", TargetUserID: "u"})
 	require.Error(t, err)
 	assert.Zero(t, api.banCalls, "no ban is attempted when the guild cannot be resolved")
+}
+
+// Discord is the one platform where refusing delegation is load-bearing rather than tidy.
+//
+// Everywhere else the actor supplies their own credential, so an unconsented moderator simply
+// fails. Here the actor is always the shared bot, holding the streamer's full guild authority —
+// so without this refusal a delegated action would execute with that authority and no check that
+// the moderator holds any of it. All-Chat's own check is the ONLY authority on Discord, and it is
+// not built yet.
+func TestDiscord_DelegatedActionNeverReachesTheSharedBot(t *testing.T) {
+	for _, action := range []models.Action{
+		models.ActionDelete, models.ActionTimeout, models.ActionBan, models.ActionUnban,
+	} {
+		t.Run(string(action), func(t *testing.T) {
+			api := &fakeDiscordAPI{}
+			guilds := &fakeGuildResolver{guildID: "g1"}
+			d := newDiscordDispatcher(api, guilds)
+
+			res, err := d.Dispatch(context.Background(), moderator("mod", "own"), action,
+				models.DispatchRequest{Platform: "discord", ChannelID: "c", NativeMessageID: "m", TargetUserID: "42"})
+
+			require.NoError(t, err)
+			assert.Equal(t, models.DispatchDelegationUnsupported, res.Outcome)
+			assert.Zero(t, api.deleteCalls+api.timeoutCalls+api.banCalls+api.unbanCalls,
+				"the bot must not act for a delegated moderator")
+			assert.Zero(t, guilds.calls, "not even the guild lookup should run")
+		})
+	}
 }

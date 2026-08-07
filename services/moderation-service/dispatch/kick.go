@@ -61,12 +61,19 @@ func NewKick(src kickTokenSource, api kickAPI, logger *zap.Logger) *Kick {
 // Dispatch resolves the owner's Kick credential, verifies it carries the moderation
 // scope, refreshes it if expired, and calls the Kick API — retrying once after a
 // reactive refresh on 401.
-func (d *Kick) Dispatch(ctx context.Context, userID string, action models.Action, req models.DispatchRequest) (models.DispatchResult, error) {
+func (d *Kick) Dispatch(ctx context.Context, actor models.Actor, action models.Action, req models.DispatchRequest) (models.DispatchResult, error) {
 	if req.Platform != "kick" {
 		return models.DispatchResult{Outcome: models.DispatchDryRun}, nil
 	}
+	// The delegated path for this platform is not built yet (ADR-0048 gates each leg
+	// independently). Refuse explicitly: resolving by the caller's id happens to find nothing for
+	// a moderator today, but relying on that coincidence would turn any future change to
+	// credential selection into a silent privilege escalation.
+	if actor.IsModerator() {
+		return models.DispatchResult{Outcome: models.DispatchDelegationUnsupported}, nil
+	}
 
-	cred, err := d.tokens.Resolve(ctx, userID, req.ChannelID)
+	cred, err := d.tokens.Resolve(ctx, actor.UserID, req.ChannelID)
 	if errors.Is(err, tokens.ErrNoCredential) {
 		return models.DispatchResult{Outcome: models.DispatchNoCredential}, nil
 	}

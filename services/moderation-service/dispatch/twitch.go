@@ -38,106 +38,245 @@ import (
 // so a foreseeable expiry does not cost the user a failed first attempt.
 const refreshLeadTime = 5 * time.Minute
 
-// twitchTokenSource resolves and refreshes broadcaster credentials.
-// *tokens.TwitchSource satisfies it; an interface keeps dispatch unit-testable.
+// twitchTokenSource resolves and refreshes broadcaster credentials, and answers the owner-reach
+// anchor. *tokens.TwitchSource satisfies it; an interface keeps dispatch unit-testable.
 type twitchTokenSource interface {
 	Resolve(ctx context.Context, userID, channelID string) (*tokens.TwitchCredential, error)
 	Refresh(ctx context.Context, cred *tokens.TwitchCredential) error
+	// OwnerTwitchAnchor proves the overlay OWNER controls a channel and yields the numeric
+	// broadcaster id. It applies no scope predicate and reads no token: an owner who delegates
+	// precisely because they do not moderate themselves must still be able to delegate.
+	OwnerTwitchAnchor(ctx context.Context, ownerUserID, channelID string) (string, error)
+}
+
+// modTokenSource resolves and refreshes a delegated moderator's OWN Twitch credential.
+// *tokens.ModTwitchSource satisfies it.
+type modTokenSource interface {
+	Resolve(ctx context.Context, userID string) (*tokens.ModCredential, error)
+	Refresh(ctx context.Context, userID string, cred *tokens.ModCredential) error
 }
 
 // twitchAPI is the subset of clients.TwitchClient the dispatcher calls.
 type twitchAPI interface {
-	DeleteMessage(ctx context.Context, token, broadcasterID, nativeMessageID string) error
-	TimeoutUser(ctx context.Context, token, broadcasterID, targetUserID string, durationSeconds int, reason string) error
-	BanUser(ctx context.Context, token, broadcasterID, targetUserID, reason string) error
-	UnbanUser(ctx context.Context, token, broadcasterID, targetUserID string) error
+	DeleteMessage(ctx context.Context, token, broadcasterID, moderatorID, nativeMessageID string) error
+	TimeoutUser(ctx context.Context, token, broadcasterID, moderatorID, targetUserID string, durationSeconds int, reason string) error
+	BanUser(ctx context.Context, token, broadcasterID, moderatorID, targetUserID, reason string) error
+	UnbanUser(ctx context.Context, token, broadcasterID, moderatorID, targetUserID string) error
 }
 
 // Twitch dispatches moderation commands to the Twitch Helix API. Platforms other
 // than Twitch report DispatchDryRun (their clients ship in later phases).
 type Twitch struct {
 	tokens twitchTokenSource
+	mod    modTokenSource // nil ⇒ delegation unsupported for this deployment
 	api    twitchAPI
 	logger *zap.Logger
 }
 
-// NewTwitch wires a Twitch dispatcher.
+// NewTwitch wires a Twitch dispatcher for owner actions only.
 func NewTwitch(src twitchTokenSource, api twitchAPI, logger *zap.Logger) *Twitch {
 	return &Twitch{tokens: src, api: api, logger: logger}
 }
 
-// Dispatch resolves the owner's Twitch credential, verifies it carries the scope the
-// action needs, refreshes it if expired, and calls Helix — retrying once after a
-// reactive refresh on 401. Authorization (ownership, source membership) has already
-// happened in the handler.
-func (d *Twitch) Dispatch(ctx context.Context, userID string, action models.Action, req models.DispatchRequest) (models.DispatchResult, error) {
+// SetModSource enables delegated moderation (ADR-0048). Until it is called, a delegated action is
+// refused rather than falling back to the owner's credential — the refusal is the invariant, not
+// an oversight.
+func (d *Twitch) SetModSource(src modTokenSource) { d.mod = src }
+
+// twitchCall is one resolved Twitch write: whose token, against which channel, as which
+// moderator. Building it is the whole difference between an owner action and a delegated one;
+// everything after it — scope pre-check, refresh, retry, error mapping — is identical.
+type twitchCall struct {
+	accessToken   string
+	broadcasterID string
+	moderatorID   string
+	scopes        []string
+	expiresAt     time.Time
+	// credentialUserID is whose token this is, reported back as the proof that a delegated action
+	// used the moderator's own credential and not the owner's.
+	credentialUserID string
+	// refresh renews this credential in place, whichever store it came from.
+	refresh func(ctx context.Context) error
+}
+
+// Dispatch resolves the acting human's own Twitch credential, verifies it carries the scope the
+// action needs, refreshes it if expired, and calls Helix — retrying once after a reactive refresh
+// on 401. Authorization (role, grant, source membership) has already happened in the handler.
+//
+// For a delegated moderator the credential is theirs, and the channel comes from the owner-reach
+// anchor. There is deliberately no fallback between the two: if the moderator has not consented,
+// the action fails rather than quietly running as the streamer.
+func (d *Twitch) Dispatch(ctx context.Context, actor models.Actor, action models.Action, req models.DispatchRequest) (models.DispatchResult, error) {
 	if req.Platform != "twitch" {
 		// No client for this platform yet — keep the reflect-back-only dry run.
 		return models.DispatchResult{Outcome: models.DispatchDryRun}, nil
 	}
 
-	cred, err := d.tokens.Resolve(ctx, userID, req.ChannelID)
-	if errors.Is(err, tokens.ErrNoCredential) {
-		return models.DispatchResult{Outcome: models.DispatchNoCredential}, nil
-	}
-	if err != nil {
-		return models.DispatchResult{}, fmt.Errorf("resolve twitch credential: %w", err)
+	call, result, err := d.resolveCall(ctx, actor, req)
+	if err != nil || call == nil {
+		return result, err
 	}
 
 	// Scope pre-check: fail fast (no API call) when the token cannot perform the
 	// action, surfacing exactly the scope the opt-in re-consent must request.
 	need := models.RequiredTwitchScope(action)
-	if need != "" && !hasScope(cred.GrantedScopes, need) {
+	if need != "" && !hasScope(call.scopes, need) {
 		return models.DispatchResult{Outcome: models.DispatchReauthRequired, MissingScopes: []string{need}}, nil
 	}
 
 	// Proactive refresh: token-refresh-service keeps tokens fresh, but refresh here
 	// too if expiry is imminent so we don't spend the first attempt on a 401.
-	if !cred.ExpiresAt.IsZero() && time.Until(cred.ExpiresAt) < refreshLeadTime {
-		if err := d.tokens.Refresh(ctx, cred); err != nil {
+	if !call.expiresAt.IsZero() && time.Until(call.expiresAt) < refreshLeadTime {
+		if err := call.refresh(ctx); err != nil {
 			d.logger.Warn("proactive token refresh failed; attempting with current token",
 				zap.String("channel_id", req.ChannelID), zap.Error(err))
 		}
 	}
 
-	err = d.call(ctx, action, cred, req)
+	proof := models.DispatchResult{
+		CredentialUserID: call.credentialUserID,
+		PlatformActorID:  call.moderatorID,
+	}
+
+	err = d.call(ctx, action, call, req)
 	if errors.Is(err, clients.ErrUnauthorized) {
 		// Reactive refresh + single retry: the token expired between refresh cycles.
-		if rerr := d.tokens.Refresh(ctx, cred); rerr != nil {
+		if rerr := call.refresh(ctx); rerr != nil {
 			d.logger.Warn("reactive token refresh failed", zap.String("channel_id", req.ChannelID), zap.Error(rerr))
-			return models.DispatchResult{Outcome: models.DispatchReauthRequired, PlatformStatus: "token refresh failed"}, nil
+			proof.Outcome = models.DispatchReauthRequired
+			proof.PlatformStatus = "token refresh failed"
+			return proof, nil
 		}
-		err = d.call(ctx, action, cred, req)
+		err = d.call(ctx, action, call, req)
 	}
 
 	switch {
 	case err == nil:
-		return models.DispatchResult{Outcome: models.DispatchPerformed}, nil
+		proof.Outcome = models.DispatchPerformed
+		return proof, nil
 	case errors.Is(err, clients.ErrForbidden):
-		// Token is valid but lacks the scope (or moderator privilege) — re-consent.
-		missing := []string{}
-		if need != "" {
-			missing = []string{need}
+		// Helix accepted the token and refused the action. For a delegated moderator that is
+		// almost never about scope — the pre-check above already confirmed the scope is present —
+		// so it is Twitch answering the question the whole design defers to it: this person is not
+		// a moderator of this channel. Reporting it as "re-authorize" would loop a volunteer
+		// through a consent screen that cannot fix anything; the remediation is the streamer
+		// modding them on Twitch.
+		if actor.IsModerator() && need != "" {
+			proof.Outcome = models.DispatchNotPlatformModerator
+			proof.PlatformStatus = "forbidden"
+			return proof, nil
 		}
-		return models.DispatchResult{Outcome: models.DispatchReauthRequired, MissingScopes: missing, PlatformStatus: "forbidden"}, nil
+		// Owner path unchanged: a broadcaster is always a moderator of their own channel, so a
+		// 403 there really is about the grant.
+		if need != "" {
+			proof.MissingScopes = []string{need}
+		}
+		proof.Outcome = models.DispatchReauthRequired
+		proof.PlatformStatus = "forbidden"
+		return proof, nil
 	case errors.Is(err, clients.ErrUnauthorized):
-		return models.DispatchResult{Outcome: models.DispatchReauthRequired, PlatformStatus: "unauthorized after refresh"}, nil
+		proof.Outcome = models.DispatchReauthRequired
+		proof.PlatformStatus = "unauthorized after refresh"
+		return proof, nil
 	default:
-		return models.DispatchResult{}, err
+		// An unexpected failure still carries the attribution: "which credential did we try?" is
+		// exactly the question a failed delegated action raises, and dropping it here would leave
+		// the audit row unable to answer it.
+		return proof, err
 	}
 }
 
+// resolveCall builds the credential + channel pair for this actor. A non-nil DispatchResult with
+// a nil call means the dispatch is already decided (no credential, owner unverified, delegation
+// unsupported).
+func (d *Twitch) resolveCall(ctx context.Context, actor models.Actor, req models.DispatchRequest) (*twitchCall, models.DispatchResult, error) {
+	if !actor.IsModerator() {
+		cred, err := d.tokens.Resolve(ctx, actor.UserID, req.ChannelID)
+		if errors.Is(err, tokens.ErrNoCredential) {
+			return nil, models.DispatchResult{Outcome: models.DispatchNoCredential}, nil
+		}
+		if err != nil {
+			return nil, models.DispatchResult{}, fmt.Errorf("resolve twitch credential: %w", err)
+		}
+		// A streamer moderating their own channel IS the moderator, so Helix gets the same id
+		// twice. This is the one case where they legitimately coincide.
+		call := &twitchCall{
+			accessToken:      cred.AccessToken,
+			broadcasterID:    cred.BroadcasterID,
+			moderatorID:      cred.BroadcasterID,
+			scopes:           cred.GrantedScopes,
+			expiresAt:        cred.ExpiresAt,
+			credentialUserID: actor.UserID,
+		}
+		// The refresh writes the new token back onto the call, not just onto the credential:
+		// the retry after a 401 reads from the call, so a snapshot taken at construction would
+		// silently retry with the same expired token.
+		call.refresh = func(ctx context.Context) error {
+			if err := d.tokens.Refresh(ctx, cred); err != nil {
+				return err
+			}
+			call.accessToken, call.expiresAt = cred.AccessToken, cred.ExpiresAt
+			return nil
+		}
+		return call, models.DispatchResult{}, nil
+	}
+
+	if d.mod == nil {
+		return nil, models.DispatchResult{Outcome: models.DispatchDelegationUnsupported}, nil
+	}
+
+	// The owner-reach anchor first: delegation never exceeds what the owner could do themselves,
+	// and this is also the only honest source of the broadcaster id — the moderator's credential
+	// knows nothing about the streamer's channel.
+	broadcasterID, err := d.tokens.OwnerTwitchAnchor(ctx, actor.OwnerUserID, req.ChannelID)
+	if errors.Is(err, tokens.ErrOwnerChannelUnverified) {
+		return nil, models.DispatchResult{Outcome: models.DispatchOwnerUnverified}, nil
+	}
+	if err != nil {
+		return nil, models.DispatchResult{}, fmt.Errorf("resolve owner anchor: %w", err)
+	}
+
+	cred, err := d.mod.Resolve(ctx, actor.UserID)
+	if errors.Is(err, tokens.ErrNoCredential) {
+		// They have not consented for Twitch yet. Consent is deferred to first use, so this is
+		// the normal state of a fresh grant, not a fault.
+		return nil, models.DispatchResult{Outcome: models.DispatchNoCredential}, nil
+	}
+	if err != nil {
+		return nil, models.DispatchResult{}, fmt.Errorf("resolve moderator twitch credential: %w", err)
+	}
+
+	call := &twitchCall{
+		accessToken:   cred.AccessToken,
+		broadcasterID: broadcasterID,
+		moderatorID:   cred.PlatformUserID,
+		scopes:        cred.GrantedScopes,
+		expiresAt:     cred.ExpiresAt,
+		// The moderator's own id, never the owner's. This is the field an auditor reads to
+		// confirm the no-fallback invariant held.
+		credentialUserID: actor.UserID,
+	}
+	call.refresh = func(ctx context.Context) error {
+		if err := d.mod.Refresh(ctx, actor.UserID, cred); err != nil {
+			return err
+		}
+		call.accessToken, call.expiresAt = cred.AccessToken, cred.ExpiresAt
+		return nil
+	}
+	return call, models.DispatchResult{}, nil
+}
+
 // call routes an action to the matching Helix endpoint.
-func (d *Twitch) call(ctx context.Context, action models.Action, cred *tokens.TwitchCredential, req models.DispatchRequest) error {
+func (d *Twitch) call(ctx context.Context, action models.Action, c *twitchCall, req models.DispatchRequest) error {
 	switch action {
 	case models.ActionDelete:
-		return d.api.DeleteMessage(ctx, cred.AccessToken, cred.BroadcasterID, req.NativeMessageID)
+		return d.api.DeleteMessage(ctx, c.accessToken, c.broadcasterID, c.moderatorID, req.NativeMessageID)
 	case models.ActionTimeout:
-		return d.api.TimeoutUser(ctx, cred.AccessToken, cred.BroadcasterID, req.TargetUserID, req.DurationSeconds, req.Reason)
+		return d.api.TimeoutUser(ctx, c.accessToken, c.broadcasterID, c.moderatorID, req.TargetUserID, req.DurationSeconds, req.Reason)
 	case models.ActionBan:
-		return d.api.BanUser(ctx, cred.AccessToken, cred.BroadcasterID, req.TargetUserID, req.Reason)
+		return d.api.BanUser(ctx, c.accessToken, c.broadcasterID, c.moderatorID, req.TargetUserID, req.Reason)
 	case models.ActionUnban:
-		return d.api.UnbanUser(ctx, cred.AccessToken, cred.BroadcasterID, req.TargetUserID)
+		return d.api.UnbanUser(ctx, c.accessToken, c.broadcasterID, c.moderatorID, req.TargetUserID)
 	default:
 		return fmt.Errorf("dispatch: unsupported twitch action %q", action)
 	}

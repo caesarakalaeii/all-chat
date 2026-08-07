@@ -93,7 +93,7 @@ func (NoScopeChecker) GrantedActions(context.Context, string, string, string) ([
 // emits the reflect-back event). The error return is reserved for unexpected /
 // transient failures (mapped to 502).
 type Dispatcher interface {
-	Dispatch(ctx context.Context, userID string, action models.Action, req models.DispatchRequest) (models.DispatchResult, error)
+	Dispatch(ctx context.Context, actor models.Actor, action models.Action, req models.DispatchRequest) (models.DispatchResult, error)
 }
 
 // DryRunDispatcher performs no platform calls; every dispatch is a dry run. Used in
@@ -101,7 +101,7 @@ type Dispatcher interface {
 type DryRunDispatcher struct{}
 
 // Dispatch always reports a dry run.
-func (DryRunDispatcher) Dispatch(context.Context, string, models.Action, models.DispatchRequest) (models.DispatchResult, error) {
+func (DryRunDispatcher) Dispatch(context.Context, models.Actor, models.Action, models.DispatchRequest) (models.DispatchResult, error) {
 	return models.DispatchResult{Outcome: models.DispatchDryRun}, nil
 }
 
@@ -157,6 +157,22 @@ func (h *Handler) SetSendChecker(s SendChecker) { h.send = s }
 // notAuthorizedMsg is used for BOTH "you have no role on this overlay" and "this overlay does
 // not exist", so the two are indistinguishable to a caller probing overlay ids.
 const notAuthorizedMsg = "not authorized for this overlay"
+
+// Machine-readable codes on the action endpoints' failure bodies. The frontend switches on these
+// rather than on the prose, which differs by role and is free to change.
+const (
+	// codeConnectRequired: the actor holds no credential for this platform. For a moderator that
+	// is the deferred-consent state, and the fix is theirs to perform.
+	codeConnectRequired = "connect_required"
+	// codeOwnerUnverified: the overlay owner cannot be shown to control this channel, so there is
+	// nothing to delegate on it. Only the owner can clear it.
+	codeOwnerUnverified = "owner_channel_unverified"
+	// codeDelegationUnsupported: this platform's delegated path is not built yet.
+	codeDelegationUnsupported = "delegation_unsupported"
+	// codeNotPlatformModerator: the platform says the caller does not moderate that channel. The
+	// fix is on the platform, not in All-Chat.
+	codeNotPlatformModerator = "not_moderator_on_platform"
+)
 
 // unauthorizedDenials counts refusals of callers who hold no role on the overlay.
 //
@@ -562,8 +578,24 @@ func (h *Handler) execute(c *gin.Context, cl caller, action models.Action, dreq 
 	e.OverlayID = cl.overlayID
 	e.ActorUserID = cl.userID
 	e.ImpersonatedBy = cl.impersonatedBy
+	// Five identities must stay distinguishable forever (ADR-0048): the human who acted, their
+	// role, the owner they acted for, whose credential actually acted, and the platform id we
+	// sent as the moderator. The last two come back from the dispatcher, because only it knows
+	// which credential it reached for — asserting them here would document an intention rather
+	// than record a fact.
+	e.ActorRole = cl.access.Role
+	e.OnBehalfOfUserID = cl.access.OwnerUserID
+	e.GrantID = cl.access.GrantID
 
-	res, err := h.dispatch.Dispatch(ctx, cl.userID, action, dreq)
+	actor := models.Actor{
+		UserID:      cl.userID,
+		Role:        cl.access.Role,
+		OwnerUserID: cl.access.OwnerUserID,
+		GrantID:     cl.access.GrantID,
+	}
+	res, err := h.dispatch.Dispatch(ctx, actor, action, dreq)
+	e.CredentialUserID = res.CredentialUserID
+	e.PlatformActorID = res.PlatformActorID
 	if err != nil {
 		h.logger.Error("platform dispatch failed", zap.Error(err), zap.String("action", e.Action))
 		e.Outcome = audit.OutcomePlatformError
@@ -577,7 +609,43 @@ func (h *Handler) execute(c *gin.Context, cl caller, action models.Action, dreq 
 	case models.DispatchNoCredential:
 		e.Outcome = audit.OutcomeNoCredential
 		h.record(ctx, e)
-		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "you do not hold moderator credentials for this channel"})
+		// The copy differs by role because the remedy does: a streamer is not the broadcaster of
+		// this channel, whereas a moderator simply has not connected their own account yet —
+		// which is the expected state of a fresh grant, since consent is deferred to first use.
+		msg := "you do not hold moderator credentials for this channel"
+		if actor.IsModerator() {
+			msg = "connect your own " + dreq.Platform + " account to moderate here"
+		}
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": msg, "code": codeConnectRequired})
+		return
+	case models.DispatchOwnerUnverified:
+		// Delegation never exceeds what the owner could do themselves. Only the owner can fix
+		// this, so the copy names them and gives the moderator nothing to attempt.
+		e.Outcome = audit.OutcomeOwnerUnverified
+		h.record(ctx, e)
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": "this streamer's " + dreq.Platform + " account is not connected, so nothing can be delegated on this channel",
+			"code":  codeOwnerUnverified,
+		})
+		return
+	case models.DispatchNotPlatformModerator:
+		// The platform refused, not All-Chat. Pointing this at a re-consent screen would loop a
+		// volunteer through a flow that cannot fix it — the streamer has to mod them there.
+		e.Outcome = audit.OutcomeNotPlatformModerator
+		e.PlatformStatus = res.PlatformStatus
+		h.record(ctx, e)
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": dreq.Platform + " says you're not a moderator of this channel — ask the streamer to add you in " + dreq.Platform + "'s own tools",
+			"code":  codeNotPlatformModerator,
+		})
+		return
+	case models.DispatchDelegationUnsupported:
+		e.Outcome = audit.OutcomeDelegationUnsupported
+		h.record(ctx, e)
+		c.JSON(http.StatusUnprocessableEntity, gin.H{
+			"error": "moderators cannot act on " + dreq.Platform + " yet — ask the streamer to handle this one",
+			"code":  codeDelegationUnsupported,
+		})
 		return
 	case models.DispatchReauthRequired:
 		e.Outcome = audit.OutcomeReauthRequired
@@ -646,16 +714,23 @@ func (h *Handler) denyUnauthorized(c *gin.Context, cl caller, reason string) {
 }
 
 // deny audits an authorization failure (when the caller is known) and responds.
+//
+// The role and the overlay owner are recorded here too, not only on successes: "a delegated
+// moderator was repeatedly refused" is one of the signals that a grant has gone wrong, and it is
+// invisible if a denial cannot be told apart from an owner's.
 func (h *Handler) deny(c *gin.Context, cl caller, platform, channelID string, action models.Action, status int, msg string) {
 	h.record(c.Request.Context(), audit.Entry{
-		OverlayID:      cl.overlayID,
-		ActorUserID:    cl.userID,
-		ImpersonatedBy: cl.impersonatedBy,
-		Platform:       platform,
-		ChannelID:      channelID,
-		Action:         string(action),
-		Outcome:        audit.OutcomeDenied,
-		PlatformStatus: msg,
+		OverlayID:        cl.overlayID,
+		ActorUserID:      cl.userID,
+		ActorRole:        cl.access.Role,
+		OnBehalfOfUserID: cl.access.OwnerUserID,
+		GrantID:          cl.access.GrantID,
+		ImpersonatedBy:   cl.impersonatedBy,
+		Platform:         platform,
+		ChannelID:        channelID,
+		Action:           string(action),
+		Outcome:          audit.OutcomeDenied,
+		PlatformStatus:   msg,
 	})
 	c.JSON(status, gin.H{"error": msg})
 }

@@ -177,48 +177,16 @@ func (s *TwitchSource) Refresh(ctx context.Context, cred *TwitchCredential) erro
 		return errors.New("tokens: no refresh token available")
 	}
 
-	form := url.Values{
-		"client_id":     {s.clientID},
-		"client_secret": {s.clientSecret},
-		"grant_type":    {"refresh_token"},
-		"refresh_token": {cred.RefreshToken},
+	refresher := &twitchRefresher{
+		httpClient: s.httpClient, clientID: s.clientID, clientSecret: s.clientSecret, tokenURL: s.tokenURL,
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.tokenURL, strings.NewReader(form.Encode()))
+	refreshed, err := refresher.exchange(ctx, cred.RefreshToken)
 	if err != nil {
-		return fmt.Errorf("build refresh request: %w", err)
+		return err
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	newRefresh, newExpiry := refreshed.refreshToken, refreshed.expiresAt
 
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("twitch token refresh request: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return fmt.Errorf("twitch token refresh returned %s: %s", strconv.Itoa(resp.StatusCode), string(snippet))
-	}
-
-	var tr struct {
-		AccessToken  string `json:"access_token"`
-		RefreshToken string `json:"refresh_token"`
-		ExpiresIn    int    `json:"expires_in"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&tr); err != nil {
-		return fmt.Errorf("decode refresh response: %w", err)
-	}
-	if tr.AccessToken == "" {
-		return errors.New("twitch token refresh returned an empty access token")
-	}
-
-	// Twitch may rotate the refresh token; keep the old one if it didn't.
-	newRefresh := tr.RefreshToken
-	if newRefresh == "" {
-		newRefresh = cred.RefreshToken
-	}
-	newExpiry := time.Now().Add(time.Duration(tr.ExpiresIn) * time.Second)
-
-	encAccess, err := s.cipher.EncryptString(tr.AccessToken)
+	encAccess, err := s.cipher.EncryptString(refreshed.accessToken)
 	if err != nil {
 		return fmt.Errorf("encrypt refreshed access token: %w", err)
 	}
@@ -240,8 +208,133 @@ func (s *TwitchSource) Refresh(ctx context.Context, cred *TwitchCredential) erro
 		return fmt.Errorf("persist refreshed token: %w", err)
 	}
 
-	cred.AccessToken = tr.AccessToken
+	cred.AccessToken = refreshed.accessToken
 	cred.RefreshToken = newRefresh
 	cred.ExpiresAt = newExpiry
 	return nil
+}
+
+// ErrOwnerChannelUnverified reports that the overlay owner cannot prove they control a channel.
+//
+// The owner-reach anchor (ADR-0048): delegation never exceeds what the owner could do themselves,
+// so a moderator may only act on a channel the owner demonstrably controls. It proves **control
+// only** — never that the owner holds a moderation scope, a live token or premium. Requiring any
+// of those would deny delegation to exactly the streamer who delegates *because* they do not
+// moderate themselves.
+var ErrOwnerChannelUnverified = errors.New("tokens: overlay owner cannot be shown to control this channel")
+
+// ownerAnchorQuery mirrors resolveQuery's UNION and ADR-0016 preference, minus the two things the
+// anchor must not care about: it selects no token material and applies no scope predicate.
+const ownerAnchorQuery = `
+	SELECT broadcaster_id
+	FROM (
+		SELECT u.twitch_id AS broadcaster_id, 1 AS pri
+		FROM users u
+		WHERE u.id = $1
+		  AND u.auth_provider = 'twitch'
+		  AND LOWER(u.username) = LOWER($2)
+		  AND u.twitch_id IS NOT NULL
+		UNION ALL
+		SELECT t.twitch_user_id AS broadcaster_id, 2 AS pri
+		FROM twitch_oauth_tokens t
+		WHERE t.user_id = $1
+		  AND LOWER(t.twitch_login) = LOWER($2)
+	) c
+	ORDER BY c.pri ASC
+	LIMIT 1`
+
+// OwnerTwitchAnchor returns the numeric Twitch broadcaster id for a channel the overlay owner
+// controls, or ErrOwnerChannelUnverified.
+//
+// A Twitch source's channel_id IS the login, which is what makes this answerable: the owner holds
+// a credential row whose login equals it. The numeric id it yields is the `broadcaster_id` the
+// delegated write needs — the moderator's own credential supplies only the `moderator_id`.
+func (s *TwitchSource) OwnerTwitchAnchor(ctx context.Context, ownerUserID, channelID string) (string, error) {
+	var broadcasterID string
+	err := s.db.QueryRow(ctx, ownerAnchorQuery, ownerUserID, channelID).Scan(&broadcasterID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrOwnerChannelUnverified
+	}
+	if err != nil {
+		return "", fmt.Errorf("resolve owner twitch anchor: %w", err)
+	}
+	if broadcasterID == "" {
+		return "", ErrOwnerChannelUnverified
+	}
+	return broadcasterID, nil
+}
+
+// twitchRefresher performs the Twitch OAuth refresh grant. Shared by the broadcaster and the
+// delegated-moderator credential sources: the exchange is identical, only the row it is written
+// back to differs, and duplicating it would let the two drift.
+type twitchRefresher struct {
+	httpClient   *http.Client
+	clientID     string
+	clientSecret string
+	tokenURL     string
+}
+
+func newTwitchRefresher(clientID, clientSecret string) *twitchRefresher {
+	return &twitchRefresher{
+		httpClient:   &http.Client{Timeout: 10 * time.Second},
+		clientID:     clientID,
+		clientSecret: clientSecret,
+		tokenURL:     defaultTwitchTokenURL,
+	}
+}
+
+// refreshedToken is one successful refresh-grant response, normalized.
+type refreshedToken struct {
+	accessToken  string
+	refreshToken string
+	expiresAt    time.Time
+}
+
+// exchange trades a refresh token for a fresh access token.
+func (r *twitchRefresher) exchange(ctx context.Context, refreshToken string) (refreshedToken, error) {
+	form := url.Values{
+		"client_id":     {r.clientID},
+		"client_secret": {r.clientSecret},
+		"grant_type":    {"refresh_token"},
+		"refresh_token": {refreshToken},
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, r.tokenURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return refreshedToken{}, fmt.Errorf("build refresh request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := r.httpClient.Do(req)
+	if err != nil {
+		return refreshedToken{}, fmt.Errorf("twitch token refresh request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return refreshedToken{}, fmt.Errorf("twitch token refresh returned %s: %s",
+			strconv.Itoa(resp.StatusCode), string(snippet))
+	}
+
+	var tr struct {
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+		ExpiresIn    int    `json:"expires_in"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&tr); err != nil {
+		return refreshedToken{}, fmt.Errorf("decode refresh response: %w", err)
+	}
+	if tr.AccessToken == "" {
+		return refreshedToken{}, errors.New("twitch token refresh returned an empty access token")
+	}
+
+	// Twitch may rotate the refresh token; keep the old one if it didn't.
+	rotated := tr.RefreshToken
+	if rotated == "" {
+		rotated = refreshToken
+	}
+	return refreshedToken{
+		accessToken:  tr.AccessToken,
+		refreshToken: rotated,
+		expiresAt:    time.Now().Add(time.Duration(tr.ExpiresIn) * time.Second),
+	}, nil
 }

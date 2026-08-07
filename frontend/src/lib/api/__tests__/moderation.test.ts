@@ -31,6 +31,7 @@ import {
   boundInviteAccount,
   delegationErrorCode,
   isModerationReauthError,
+  moderationActionCode,
   moderationApi,
 } from '@/lib/api/moderation'
 
@@ -163,5 +164,34 @@ describe('moderator-side endpoints', () => {
       '/api/v1/auth/twitch/mod-consent?actions=delete,timeout'
     )
     expect(url).toBe('https://id.twitch.tv/authorize?x')
+  })
+})
+
+// The three action-failure codes (ADR-0048) differ in WHO can fix them, which is the only reason
+// the UI needs to tell them apart: the moderator, the streamer, or nobody yet.
+describe('moderationActionCode', () => {
+  it('reads the code off a failed action', () => {
+    const err = new ApiError(422, 'connect your own twitch account to moderate here', {
+      error: 'connect your own twitch account to moderate here',
+      code: 'connect_required',
+    })
+    expect(moderationActionCode(err)).toBe('connect_required')
+  })
+
+  it('distinguishes the streamer-side failure from the moderator-side one', () => {
+    const owner = new ApiError(403, 'not connected', {
+      error: 'not connected',
+      code: 'owner_channel_unverified',
+    })
+    expect(moderationActionCode(owner)).toBe('owner_channel_unverified')
+  })
+
+  it('is undefined for a plain failure, so callers keep their generic copy', () => {
+    expect(
+      moderationActionCode(
+        new ApiError(502, 'failed to apply moderation', { error: 'failed to apply moderation' })
+      )
+    ).toBeUndefined()
+    expect(moderationActionCode(new TypeError('Failed to fetch'))).toBeUndefined()
   })
 })

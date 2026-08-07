@@ -121,22 +121,29 @@ func setupAuditDB(t *testing.T) (*Store, *pgxpool.Pool, func()) {
 	pool, err := pgxpool.New(ctx, "postgres://testuser:testpass@"+host+":"+port.Port()+"/testdb?sslmode=disable")
 	require.NoError(t, err)
 
-	// Matches migrations/060_moderation_actions.sql.
+	// Matches migrations/060_moderation_actions.sql plus 080's attribution columns. Those are
+	// UUID columns, which is what makes the empty-string-to-NULL mapping load-bearing rather
+	// than cosmetic: an owner action carries no grant, and "" would be a cast error.
 	const schema = `
 		CREATE TABLE moderation_actions (
-			id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-			overlay_id        UUID NOT NULL,
-			actor_user_id     UUID NOT NULL,
-			impersonated_by   UUID,
-			platform          VARCHAR(50)  NOT NULL,
-			channel_id        VARCHAR(100) NOT NULL,
-			action            VARCHAR(20)  NOT NULL,
-			target_user_id    VARCHAR(100),
-			target_message_id VARCHAR(200),
-			reason            TEXT,
-			outcome           VARCHAR(30)  NOT NULL,
-			platform_status   TEXT,
-			created_at        TIMESTAMP NOT NULL DEFAULT NOW()
+			id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			overlay_id           UUID NOT NULL,
+			actor_user_id        UUID NOT NULL,
+			impersonated_by      UUID,
+			platform             VARCHAR(50)  NOT NULL,
+			channel_id           VARCHAR(100) NOT NULL,
+			action               VARCHAR(20)  NOT NULL,
+			target_user_id       VARCHAR(100),
+			target_message_id    VARCHAR(200),
+			reason               TEXT,
+			outcome              VARCHAR(30)  NOT NULL,
+			platform_status      TEXT,
+			actor_role           VARCHAR(24),
+			on_behalf_of_user_id UUID,
+			credential_user_id   UUID,
+			platform_actor_id    VARCHAR(100),
+			grant_id             UUID,
+			created_at           TIMESTAMP NOT NULL DEFAULT NOW()
 		);`
 	_, err = pool.Exec(ctx, schema)
 	require.NoError(t, err)
@@ -145,4 +152,77 @@ func setupAuditDB(t *testing.T) (*Store, *pgxpool.Pool, func()) {
 		pool.Close()
 		_ = container.Terminate(ctx)
 	}
+}
+
+// The five identities (ADR-0048). A delegated action has more of them than an owner action does,
+// and collapsing any pair destroys the trail the streamer needs to answer "who did this?".
+func TestRecord_DelegatedActionKeepsFiveIdentitiesDistinct(t *testing.T) {
+	store, pool, cleanup := setupAuditDB(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	const modID = "33333333-3333-4333-8333-333333333333"
+	const grantID = "44444444-4444-4444-8444-444444444444"
+
+	err := store.Record(ctx, Entry{
+		OverlayID:        overlay,
+		ActorUserID:      modID,
+		ActorRole:        "moderator",
+		OnBehalfOfUserID: ownerID,
+		CredentialUserID: modID,
+		PlatformActorID:  "777",
+		GrantID:          grantID,
+		Platform:         "twitch",
+		ChannelID:        "somestreamer",
+		Action:           "delete",
+		Outcome:          OutcomeSuccess,
+	})
+	require.NoError(t, err)
+
+	var actor, role, onBehalf, credential, platformActor, grant string
+	err = pool.QueryRow(ctx, `
+		SELECT actor_user_id, actor_role, on_behalf_of_user_id, credential_user_id,
+		       platform_actor_id, grant_id
+		FROM moderation_actions WHERE overlay_id=$1`, overlay).
+		Scan(&actor, &role, &onBehalf, &credential, &platformActor, &grant)
+	require.NoError(t, err)
+
+	assert.Equal(t, modID, actor, "the human who pressed the button")
+	assert.Equal(t, "moderator", role)
+	assert.Equal(t, ownerID, onBehalf, "the streamer the action was performed for")
+	assert.Equal(t, modID, credential,
+		"the moderator's OWN token acted — this column is the proof there was no fallback")
+	assert.NotEqual(t, ownerID, credential)
+	assert.Equal(t, "777", platformActor, "reconcilable against Twitch's own mod log")
+	assert.Equal(t, grantID, grant)
+}
+
+// An owner action leaves the delegation columns NULL rather than restating the owner in each,
+// so "was this delegated?" stays answerable with a single IS NOT NULL.
+func TestRecord_OwnerActionLeavesDelegationColumnsNull(t *testing.T) {
+	store, pool, cleanup := setupAuditDB(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	err := store.Record(ctx, Entry{
+		OverlayID:        overlay,
+		ActorUserID:      ownerID,
+		ActorRole:        "owner",
+		OnBehalfOfUserID: ownerID,
+		CredentialUserID: ownerID,
+		PlatformActorID:  "9001",
+		Platform:         "twitch",
+		ChannelID:        "somestreamer",
+		Action:           "ban",
+		Outcome:          OutcomeSuccess,
+	})
+	require.NoError(t, err)
+
+	var grant *string
+	var role string
+	err = pool.QueryRow(ctx, `SELECT grant_id, actor_role FROM moderation_actions WHERE overlay_id=$1`, overlay).
+		Scan(&grant, &role)
+	require.NoError(t, err)
+	assert.Nil(t, grant, "an owner acts by ownership, not under a grant")
+	assert.Equal(t, "owner", role)
 }

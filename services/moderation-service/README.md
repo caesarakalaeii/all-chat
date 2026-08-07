@@ -155,6 +155,41 @@ elevated invite URL). Capability is computed from the bot's effective guild perm
 moderation permissions reports no actions and the dashboard shows the re-invite CTA. A dispatch 403
 (e.g. a channel-level permission overwrite) fails the action — never a false reflect-back.
 
+## Delegated writes (ADR-0048, Twitch)
+
+An owner action and a delegated action differ in exactly one place — which credential performs the
+call and against whose channel — and the dispatcher makes that difference explicit rather than
+inferring it from the caller's id:
+
+| | Owner | Delegated moderator |
+|---|---|---|
+| Token | the owner's broadcaster credential (`users` / `twitch_oauth_tokens`) | the moderator's own credential (`mod_oauth_credentials`) |
+| `broadcaster_id` | their own, from that credential | the **owner-reach anchor** |
+| `moderator_id` | the same id — a streamer is their own moderator | the moderator's `platform_user_id` |
+| Scope pre-check | the owner's `granted_scopes` | the **moderator's** `granted_scopes` |
+
+There is **no fallback** between them. A moderator who has not consented gets `422 connect_required`
+— consent is deferred to first use, so that is the expected first click on a fresh grant — and never
+a call made with the streamer's token.
+
+The **owner-reach anchor** (`tokens.TwitchSource.OwnerTwitchAnchor`) is what stops delegation from
+exceeding what the owner could do themselves: it resolves the numeric broadcaster id from a
+credential row whose login equals the source's `channel_id`. It applies **no scope predicate and
+reads no token** — requiring the owner to hold a moderation scope would deny delegation to exactly
+the streamer who delegates *because* they do not moderate themselves. When it cannot be proven the
+action is refused with `owner_channel_unverified`, and the copy names the streamer: only they can
+fix it.
+
+Twitch itself is the authority on whether the moderator may act. Helix re-checks on every call that
+`moderator_id` is the token's own user and that they moderate `broadcaster_id`; a 403 surfaces as a
+re-consent prompt rather than anything All-Chat cached.
+
+Every write records five identities in `moderation_actions`: who acted, in what role, for whom,
+**whose credential acted** (`credential_user_id` — the machine-checkable proof no fallback
+happened), and the platform id sent as the moderator. Denials carry them too, because "this
+moderator keeps getting refused" is a signal that is invisible if a denial cannot be told apart
+from an owner's.
+
 ## Rollout (feature gate, ADR-0008)
 
 Delegation has its **own** gate key, `delegated_moderation` (seeded `is_premium=TRUE`, migration 080), so
@@ -200,13 +235,13 @@ no redeploy. Locally, non-premium users can either set `users.is_premium=true` o
   resolves the guild from the channel and performs member ops; `handler.DiscordScopeChecker` reports the
   actions the bot's guild permissions allow; the auth-service `GetModerationAuthURL` (elevated invite) +
   `HandleConnect?moderation=true` give an opt-in re-invite that upgrades existing bots in place.
-- **Phase 6 (in progress): delegated moderators** (ADR-0048). Landed so far: role resolution and
-  owner-keyed entitlement; the grant lifecycle; the owner's Moderators panel; the moderator's
-  `/delegations` listing and role-aware `capabilities`; per-platform leg enforcement on the action path.
-  **Not yet landed:** the per-platform legs themselves — the dispatcher still resolves a credential by
-  `(caller, channel)`, so a delegated action currently fails **closed** with `422 no credential` rather
-  than falling back to the owner's token. Twitch is next (`moderator_id`/`broadcaster_id` split + the
-  owner-reach anchor), then Kick, Discord and YouTube, each independently gated.
+- **Phase 6 (in progress): delegated moderators** (ADR-0048). Role resolution and owner-keyed
+  entitlement; the grant lifecycle; the owner's Moderators panel; the moderator's `/delegations`
+  listing and role-aware `capabilities`; per-platform leg enforcement; and the **Twitch leg** — a
+  delegated moderator's Helix write now runs on their own credential (see Delegated writes below).
+  **Kick, Discord and YouTube legs are not built**: a delegated action on those refuses with
+  `delegation_unsupported` rather than falling through to whatever credential the dispatcher would
+  otherwise reach for.
 
 ## Layout
 
