@@ -752,6 +752,19 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 			}
 		}
 
+		// Delegated-moderator consent (ADR-0048) is handled here and returns, BEFORE any of
+		// the login / account-link / add-source machinery below.
+		//
+		// It must not run any of it: the moderator is already signed in (so no account is
+		// created or linked), their login credential and granted_scopes must stay untouched
+		// (so the scope-downgrade guard is never involved), and above all it must not reach
+		// addSourceToOverlay — which the add-source-shaped moderation state does, and which
+		// overlay-manager 404s for a non-owner.
+		if oauthState.IsModConsent() {
+			h.completeModConsent(c, platform, oauthState, platformUser, token)
+			return
+		}
+
 		// Get or create user based on platform and context
 		var user *models.User
 		var jwtToken string

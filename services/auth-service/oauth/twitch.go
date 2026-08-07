@@ -144,6 +144,37 @@ func (t *TwitchOAuth) GetAuthURLWithScopes(state string, extra []string) string 
 	)
 }
 
+// GetModConsentAuthURL builds the consent URL for a delegated moderator granting their own
+// moderation scopes (ADR-0048).
+//
+// Unlike GetAuthURLWithScopes it does NOT prepend the base login scopes. Those exist for a
+// streamer's own channel (channel points, subscriptions, bits, followers) and asking a
+// volunteer for them — on their own channel, to do unpaid work on someone else's — is an
+// ADR-0012 scope-minimisation regression and reads badly on the consent screen.
+//
+// force_verify is still required: without it Twitch may silently reissue a prior, narrower
+// grant, so the moderation scopes would never actually be requested.
+//
+// Returns "" when no scopes are requested: a consent screen granting nothing would only fail
+// later, at the first moderation call, as a confusing missing-scope error.
+func (t *TwitchOAuth) GetModConsentAuthURL(state string, scopes []string) string {
+	seen := make(map[string]bool)
+	minimal := make([]string, 0, len(scopes))
+	for _, s := range scopes {
+		if s != "" && !seen[s] {
+			seen[s] = true
+			minimal = append(minimal, s)
+		}
+	}
+	if len(minimal) == 0 {
+		return ""
+	}
+	return t.config.AuthCodeURL(state,
+		oauth2.SetAuthURLParam("scope", strings.Join(minimal, " ")),
+		oauth2.SetAuthURLParam("force_verify", "true"),
+	)
+}
+
 // ExtractGrantedScopes pulls the granted scope list out of a Twitch token exchange
 // or refresh response. Twitch returns "scope" as a JSON array, which oauth2 surfaces
 // via Extra("scope") as []interface{}. Returns nil when absent. The string case is

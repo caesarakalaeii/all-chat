@@ -399,6 +399,15 @@ func main() {
 		protected.GET("/kick/moderation/:overlay_id", platformAuthHandlerV2.HandleEnableModeration(oauth.PlatformKick))
 		protected.GET("/youtube/moderation/:overlay_id", platformAuthHandlerV2.HandleEnableModeration(oauth.PlatformYouTube))
 
+		// Delegated-moderator consent (ADR-0048): a MODERATOR granting All-Chat their own
+		// moderation scopes. Distinct from the routes above in three ways — no overlay id (the
+		// platform scopes are role-based, so one consent serves every streamer who delegated
+		// that platform), no base login scopes, and the credential lands in
+		// mod_oauth_credentials rather than touching their login grant.
+		protected.GET("/twitch/mod-consent", platformAuthHandlerV2.HandleModConsent(oauth.PlatformTwitch))
+		protected.GET("/kick/mod-consent", platformAuthHandlerV2.HandleModConsent(oauth.PlatformKick))
+		protected.GET("/youtube/mod-consent", platformAuthHandlerV2.HandleModConsent(oauth.PlatformYouTube))
+
 		// Discord guild management routes (require JWT)
 		if discordHandler != nil {
 			protected.GET("/discord/connect", discordHandler.HandleConnect)
