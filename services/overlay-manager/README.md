@@ -84,6 +84,14 @@ OTEL_EXPORTER_OTLP_ENDPOINT=localhost:4317
 # Application
 APP_VERSION=dev
 ENVIRONMENT=development
+
+# Discord source guard (ADR-0048) — the same shared bot token discord-listener uses.
+# Required to ADD or RECONFIGURE a Discord chat source: every Discord channel is acted on by
+# the shared bot, so Discord authorizes the bot rather than the requesting user and will not
+# refuse a channel the user has no claim to. overlay-manager resolves each channel's guild via
+# GET /channels/{id} and requires a matching discord_guilds row for the overlay owner.
+# When unset, Discord source add/patch fails closed with 503 (other platforms are unaffected).
+DISCORD_BOT_TOKEN=your_discord_bot_token_here
 ```
 
 ---

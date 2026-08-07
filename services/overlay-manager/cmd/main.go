@@ -215,6 +215,20 @@ func main() {
 	seventvResolver := clients.NewSevenTVResolver(log)
 	configHandler := handlers.NewConfigHandler(configRepo, overlayRepo, sourceRepo, seventvResolver)
 	sourcesHandler := handlers.NewSourcesHandler(sourceRepo, overlayRepo, dbPool, log, redisClient, bm, tokenCipher)
+
+	// Discord source guard (ADR-0048): a Discord source is acted on by the SHARED bot, so
+	// Discord authorizes the bot rather than the caller and will not refuse a channel the
+	// caller has no claim to. Bind every Discord channel to a guild the user has connected.
+	// Without the bot token there is no way to resolve a channel's guild — Discord chat cannot
+	// work at all in that case, and adding a source fails closed rather than unvalidated.
+	if config.DiscordBotToken != "" {
+		sourcesHandler.SetDiscordGuard(
+			clients.NewDiscordClient(config.DiscordBotToken, log),
+			repository.NewDiscordGuildRepository(dbPool),
+		)
+	} else {
+		log.Warn("DISCORD_BOT_TOKEN not set — Discord sources cannot be validated and will be refused")
+	}
 	mockHandler := handlers.NewMockMessageHandler(overlayRepo, sourceRepo, mpClient, log)
 	healthHandler := handlers.NewHealthHandler(dbPool, redisClient)
 	adminHandler := handlers.NewAdminHandler(overlayRepo, sourceRepo, log)
@@ -408,6 +422,7 @@ type Config struct {
 	MessageProcessorAPIKey string
 	TwitchClientID         string
 	TwitchClientSecret     string
+	DiscordBotToken        string
 }
 
 // loadConfig loads configuration from environment variables
@@ -426,6 +441,7 @@ func loadConfig() *Config {
 		MessageProcessorAPIKey: getEnv("MESSAGE_PROCESSOR_API_KEY", ""),
 		TwitchClientID:         getEnv("TWITCH_CLIENT_ID", ""),
 		TwitchClientSecret:     getEnv("TWITCH_CLIENT_SECRET", ""),
+		DiscordBotToken:        getEnv("DISCORD_BOT_TOKEN", ""),
 	}
 }
 

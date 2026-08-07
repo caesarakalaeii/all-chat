@@ -112,6 +112,10 @@ func setupPatchRouter(h *SourcesHandler) *gin.Engine {
 
 // TestHandleUpdateSourceConfig_Success verifies that a valid PATCH request with
 // ownership and config returns 200 with "config updated" message.
+//
+// Since ADR-0048 the handler also requires the source to exist on the overlay named in the
+// path, and — for a Discord source — that every channel in the config sits in a guild the
+// caller has connected. The stored source and the approving guard below satisfy both.
 func TestHandleUpdateSourceConfig_Success(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -120,6 +124,14 @@ func TestHandleUpdateSourceConfig_Success(t *testing.T) {
 
 	h := buildPatchHandler(
 		&mockSourceRepositoryWithConfig{
+			getByIDFunc: func(_ context.Context, id string) (*models.ChatSource, error) {
+				return &models.ChatSource{
+					ID:        id,
+					OverlayID: "overlay-id",
+					Platform:  "discord",
+					ChannelID: "987654321",
+				}, nil
+			},
 			updateConfigFunc: func(_ context.Context, id string, cfg map[string]interface{}) error {
 				capturedID = id
 				capturedConfig = cfg
@@ -131,6 +143,10 @@ func TestHandleUpdateSourceConfig_Success(t *testing.T) {
 				return &models.Overlay{ID: id, UserID: userID, Name: "Test"}, nil
 			},
 		},
+	)
+	h.SetDiscordGuard(
+		&mockDiscordChannelResolver{guilds: map[string]string{"987654321": "123456789"}},
+		&mockDiscordGuildOwnership{owned: map[string]bool{"test-user-id|123456789": true}},
 	)
 
 	router := setupPatchRouter(h)
