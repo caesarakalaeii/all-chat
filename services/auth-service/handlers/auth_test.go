@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/caesar/all-chat/services/auth-service/models"
 	"github.com/caesar/all-chat/services/auth-service/oauth"
 	"github.com/caesar/all-chat/services/auth-service/repository"
@@ -48,9 +49,7 @@ func TestAuthHandlerCreation(t *testing.T) {
 	}
 
 	logger := zaptest.NewLogger(t)
-	redisClient := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
-	})
+	redisClient := redis.NewClient(&redis.Options{Addr: miniredis.RunT(t).Addr()})
 
 	twitchOAuth := oauth.NewTwitchOAuth("test-id", "test-secret", "http://localhost/callback")
 	youtubeOAuth := oauth.NewYouTubeOAuth("test-id", "test-secret", "http://localhost/callback")
@@ -78,78 +77,147 @@ func TestAuthHandlerCreation(t *testing.T) {
 	}
 }
 
-// TestAuthHandlerLogout tests the logout endpoint
+// TestAuthHandlerLogout covers the logout endpoint's contract: a request with no usable token is
+// refused, and a request with one has that token blacklisted so it cannot be replayed.
+//
+// It runs against miniredis rather than a real server on localhost:6379. The previous version
+// dialled the real port, which meant it passed only on a developer machine that happened to have
+// Redis up, and failed every night in CI (the nightly job runs without -short and has no Redis
+// service) — a permanently red job tells nobody anything. It also asserted only the status code,
+// so the blacklist write, which is the entire security purpose of logout, went unverified.
 func TestAuthHandlerLogout(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping integration test in short mode")
-	}
-
 	gin.SetMode(gin.TestMode)
 
-	tests := []struct {
-		name           string
-		authHeader     string
-		wantStatusCode int
-	}{
-		{
-			name:           "logout without authorization",
-			authHeader:     "",
-			wantStatusCode: http.StatusUnauthorized,
-		},
-		{
-			name:           "logout with invalid authorization format",
-			authHeader:     "InvalidFormat",
-			wantStatusCode: http.StatusUnauthorized,
-		},
-		{
-			name:           "logout with authorization (requires Redis)",
-			authHeader:     "Bearer valid.jwt.token",
-			wantStatusCode: http.StatusOK, // Will fail if Redis not available, but structure is correct
-		},
+	newLogoutHandler := func(t *testing.T) (*AuthHandler, *miniredis.Miniredis) {
+		t.Helper()
+		mr := miniredis.RunT(t)
+		return NewAuthHandler(
+			oauth.NewTwitchOAuth("test-id", "test-secret", "http://localhost/callback"),
+			nil,
+			nil, // kickOAuth
+			&repository.UserRepository{},
+			redis.NewClient(&redis.Options{Addr: mr.Addr()}),
+			testUserKeyChain("test-jwt-secret"),
+			24,
+			zaptest.NewLogger(t),
+		), mr
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			logger := zaptest.NewLogger(t)
-			redisClient := redis.NewClient(&redis.Options{
-				Addr: "localhost:6379",
+	t.Run("a request carrying no token is refused", func(t *testing.T) {
+		for _, header := range []struct{ name, value string }{
+			{"absent", ""},
+			{"not a bearer token", "InvalidFormat"},
+		} {
+			t.Run(header.name, func(t *testing.T) {
+				handler, mr := newLogoutHandler(t)
+				router := gin.New()
+				router.POST("/auth/logout", handler.HandleLogout)
+
+				req := httptest.NewRequest(http.MethodPost, "/auth/logout", nil)
+				if header.value != "" {
+					req.Header.Set("Authorization", header.value)
+				}
+				w := httptest.NewRecorder()
+				router.ServeHTTP(w, req)
+
+				if w.Code != http.StatusUnauthorized {
+					t.Errorf("status = %d, want 401, body: %s", w.Code, w.Body.String())
+				}
+				if keys := mr.Keys(); len(keys) != 0 {
+					t.Errorf("a refused logout must write nothing, got %v", keys)
+				}
 			})
+		}
+	})
 
-			twitchOAuth := oauth.NewTwitchOAuth("test-id", "test-secret", "http://localhost/callback")
-			userRepo := &repository.UserRepository{}
+	t.Run("a bearer token is blacklisted for as long as it could still be valid", func(t *testing.T) {
+		handler, mr := newLogoutHandler(t)
+		router := gin.New()
+		router.POST("/auth/logout", handler.HandleLogout)
 
-			handler := NewAuthHandler(
-				twitchOAuth,
-				nil,
-				nil, // kickOAuth
-				userRepo,
-				redisClient,
-				testUserKeyChain("test-jwt-secret"),
-				24,
-				logger,
-			)
+		req := httptest.NewRequest(http.MethodPost, "/auth/logout", nil)
+		req.Header.Set("Authorization", "Bearer valid.jwt.token")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
 
-			router := gin.New()
-			router.POST("/auth/logout", handler.HandleLogout)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body: %s", w.Code, w.Body.String())
+		}
+		// The blacklist entry is what makes logout mean anything: shared/middleware checks this key
+		// on every request, so without it a logged-out JWT keeps working until it expires.
+		if got, err := mr.Get("blacklist:valid.jwt.token"); err != nil {
+			t.Errorf("logout must blacklist the presented token: %v", err)
+		} else if got != "1" {
+			t.Errorf("blacklist value = %q, want \"1\"", got)
+		}
+		// A TTL shorter than the JWT would let the token come back to life.
+		if ttl := mr.TTL("blacklist:valid.jwt.token"); ttl != 24*time.Hour {
+			t.Errorf("blacklist TTL = %v, want the JWT expiry (24h)", ttl)
+		}
+	})
 
-			req := httptest.NewRequest(http.MethodPost, "/auth/logout", nil)
-			if tt.authHeader != "" {
-				req.Header.Set("Authorization", tt.authHeader)
-			}
-			w := httptest.NewRecorder()
+	// The gateway forwards the access token in X-Access-Token; Authorization is backward compat.
+	t.Run("the gateway's X-Access-Token header is honoured", func(t *testing.T) {
+		handler, mr := newLogoutHandler(t)
+		router := gin.New()
+		router.POST("/auth/logout", handler.HandleLogout)
 
-			router.ServeHTTP(w, req)
+		req := httptest.NewRequest(http.MethodPost, "/auth/logout", nil)
+		req.Header.Set("X-Access-Token", "from.the.gateway")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
 
-			// Skip Redis-dependent tests in short mode
-			if testing.Short() && tt.name == "logout with authorization (requires Redis)" {
-				t.Skip("Skipping Redis-dependent test in short mode")
-			}
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body: %s", w.Code, w.Body.String())
+		}
+		if _, err := mr.Get("blacklist:from.the.gateway"); err != nil {
+			t.Errorf("the gateway-forwarded token must be blacklisted: %v", err)
+		}
+	})
 
-			if w.Code != tt.wantStatusCode {
-				t.Errorf("HandleLogout() status = %v, want %v, body: %s", w.Code, tt.wantStatusCode, w.Body.String())
-			}
-		})
-	}
+	// Audit H3: logging out must also kill the refresh token, or the session can be minted again.
+	t.Run("a presented refresh token is revoked too", func(t *testing.T) {
+		handler, mr := newLogoutHandler(t)
+		router := gin.New()
+		router.POST("/auth/logout", handler.HandleLogout)
+
+		const refreshToken = "refresh-token-value"
+		rtKey := "refresh_token:" + refreshTokenHash(refreshToken)
+		if err := mr.Set(rtKey, "user-1"); err != nil {
+			t.Fatalf("seed refresh token: %v", err)
+		}
+
+		req := httptest.NewRequest(http.MethodPost, "/auth/logout", nil)
+		req.Header.Set("Authorization", "Bearer valid.jwt.token")
+		req.Header.Set("X-Refresh-Token", refreshToken)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body: %s", w.Code, w.Body.String())
+		}
+		if mr.Exists(rtKey) {
+			t.Error("the refresh token family entry must be gone, or logout is reversible")
+		}
+	})
+
+	// Redis is the only place the blacklist can live, so a write failure must fail the logout
+	// rather than reporting success and leaving the token usable.
+	t.Run("an unreachable Redis fails the logout instead of lying", func(t *testing.T) {
+		handler, mr := newLogoutHandler(t)
+		mr.Close()
+		router := gin.New()
+		router.POST("/auth/logout", handler.HandleLogout)
+
+		req := httptest.NewRequest(http.MethodPost, "/auth/logout", nil)
+		req.Header.Set("Authorization", "Bearer valid.jwt.token")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		if w.Code != http.StatusInternalServerError {
+			t.Errorf("status = %d, want 500 when the blacklist cannot be written", w.Code)
+		}
+	})
 }
 
 // TestAuthHandlerGetMe tests the /me endpoint behavior without auth
@@ -161,9 +229,7 @@ func TestAuthHandlerGetMe_Unauthorized(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	logger := zaptest.NewLogger(t)
-	redisClient := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
-	})
+	redisClient := redis.NewClient(&redis.Options{Addr: miniredis.RunT(t).Addr()})
 
 	twitchOAuth := oauth.NewTwitchOAuth("test-id", "test-secret", "http://localhost/callback")
 	userRepo := &repository.UserRepository{}
