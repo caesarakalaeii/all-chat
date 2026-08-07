@@ -138,6 +138,27 @@ spec:
 
 ## Token Refresh Logic
 
+### Credential sources
+
+Each batch queries every credential source separately and refreshes them in one pass. The
+`token_type` on each row decides which table the refreshed token is written back to — writing one
+source's token through another's updater would target the wrong row, and for the channel-keyed
+tables could make a credential visible to a listener that selects by channel with no user scoping.
+
+| `token_type` | Table | What it is |
+|---|---|---|
+| `user` | `users` | The account's login credential |
+| `viewer` | `viewer_sessions` | Viewer sessions |
+| `youtube_channel` | `youtube_oauth_tokens` | Per-channel YouTube grants, keyed `(user_id, channel_id)` |
+| `twitch_link` | `twitch_oauth_tokens` | Linked Twitch credentials (ADR-0016), keyed `(user_id, twitch_login)` |
+| `mod_credential` | `mod_oauth_credentials` | Delegated-moderator credentials (ADR-0048), keyed `(user_id, platform)` |
+
+`mod_credential` is the only source that **spans platforms**, so its platform is read from the row
+rather than assumed. It is not optional: without it a moderator's credential simply expires, the
+grant keeps looking active in the UI while every action fails, and the 90-day dormancy suspension
+can never fire because the moderator stopped being able to act long before that. A refresh never
+rewrites `granted_scopes` — a periodic job must not be able to narrow what someone consented to.
+
 ### Query Expiring Tokens
 
 ```sql

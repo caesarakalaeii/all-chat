@@ -645,3 +645,145 @@ func (r *TokenRepository) decryptToken(token string) (string, error) {
 	}
 	return r.cipher.DecryptString(token)
 }
+
+// QueryGetExpiringModCredentials selects expiring delegated-moderator credentials
+// (mod_oauth_credentials, ADR-0048). Unlike every other source here this table spans
+// platforms, so the platform is read from the row rather than assumed.
+//
+// Without this loop a moderator's credential simply expires. The grant would still look
+// active in the UI while every action failed, and the 90-day dormancy rule could never
+// fire because the moderator stopped being able to act long before that. Same bounded
+// 48-hour recovery window as the other sources.
+const QueryGetExpiringModCredentials = `
+	SELECT user_id, platform, platform_login, access_token, refresh_token, token_expires_at
+	FROM mod_oauth_credentials
+	WHERE (
+	    (token_expires_at < $1 AND token_expires_at > NOW())
+	    OR (token_expires_at BETWEEN NOW() - INTERVAL '48 hours' AND NOW())
+	  )
+	  AND refresh_token IS NOT NULL
+	  AND refresh_token != ''
+	ORDER BY token_expires_at ASC
+	LIMIT $2
+`
+
+// GetExpiringModCredentials returns delegated-moderator credentials (ADR-0048) expiring
+// within the specified duration.
+func (r *TokenRepository) GetExpiringModCredentials(ctx context.Context, expiresWithin time.Duration, limit int) ([]*ExpiringToken, error) {
+	expiryThreshold := time.Now().Add(expiresWithin)
+	rows, err := r.db.Query(ctx, QueryGetExpiringModCredentials, expiryThreshold, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query expiring moderator credentials: %w", err)
+	}
+	defer rows.Close()
+
+	var tokens []*ExpiringToken
+	for rows.Next() {
+		var token ExpiringToken
+		var encAccessToken, encRefreshToken string
+		var platformLogin *string
+
+		if err := rows.Scan(
+			&token.ID, // user_id (the moderator)
+			&token.Platform,
+			&platformLogin,
+			&encAccessToken,
+			&encRefreshToken,
+			&token.ExpiresAt,
+		); err != nil {
+			r.logger.Warn("Failed to scan moderator credential row", zap.Error(err))
+			continue
+		}
+
+		token.AccessToken, err = r.decryptToken(encAccessToken)
+		if err != nil {
+			r.logger.Warn("Failed to decrypt moderator access token",
+				zap.String("user_id", token.ID),
+				zap.String("platform", token.Platform),
+				zap.Error(err),
+			)
+			continue
+		}
+
+		token.RefreshToken, err = r.decryptToken(encRefreshToken)
+		if err != nil {
+			r.logger.Warn("Failed to decrypt moderator refresh token",
+				zap.String("user_id", token.ID),
+				zap.String("platform", token.Platform),
+				zap.Error(err),
+			)
+			continue
+		}
+
+		if platformLogin != nil {
+			token.Username = *platformLogin
+		}
+		// ChannelID doubles as the second half of this row's key, as it does for the other
+		// composite-key sources — here the platform, since the row is keyed
+		// (user_id, platform).
+		token.ChannelID = token.Platform
+		token.TokenType = "mod_credential"
+		tokens = append(tokens, &token)
+	}
+
+	return tokens, rows.Err()
+}
+
+// UpdateModCredentialTokens writes a refreshed delegated-moderator credential.
+//
+// granted_scopes is deliberately untouched: a refresh does not change what was consented
+// to, and rewriting it here would let a periodic job silently narrow a moderator's grant.
+func (r *TokenRepository) UpdateModCredentialTokens(ctx context.Context, userID, platform string, token *oauth2.Token) error {
+	encAccessToken, err := r.encryptToken(token.AccessToken)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt moderator access token: %w", err)
+	}
+
+	encRefreshToken, err := r.encryptToken(token.RefreshToken)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt moderator refresh token: %w", err)
+	}
+
+	query := `
+		UPDATE mod_oauth_credentials
+		SET access_token = $3,
+		    refresh_token = $4,
+		    token_expires_at = $5,
+		    updated_at = NOW()
+		WHERE user_id = $1 AND platform = $2
+	`
+
+	result, err := r.db.Exec(ctx, query, userID, platform, encAccessToken, encRefreshToken, token.Expiry)
+	if err != nil {
+		return fmt.Errorf("failed to update moderator credential: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("moderator credential not found: user_id=%s, platform=%s", userID, platform)
+	}
+
+	return nil
+}
+
+// MarkModCredentialPermanentlyFailed suppresses a credential whose refresh token the
+// platform has permanently rejected, so the loop stops retrying it every cycle.
+//
+// The row is kept rather than deleted: the moderator's grants stay intact and the
+// capabilities payload can tell them to reconnect, which is actionable. Deleting it would
+// present as "you were never connected".
+func (r *TokenRepository) MarkModCredentialPermanentlyFailed(ctx context.Context, userID, platform string, suppressDuration time.Duration) error {
+	query := `
+		UPDATE mod_oauth_credentials
+		SET token_expires_at = NOW() + $3::interval,
+		    updated_at = NOW()
+		WHERE user_id = $1 AND platform = $2
+	`
+	interval := fmt.Sprintf("%d seconds", int(suppressDuration.Seconds()))
+	result, err := r.db.Exec(ctx, query, userID, platform, interval)
+	if err != nil {
+		return fmt.Errorf("failed to mark moderator credential permanently failed: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("moderator credential not found: user_id=%s, platform=%s", userID, platform)
+	}
+	return nil
+}

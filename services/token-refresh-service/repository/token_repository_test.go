@@ -174,3 +174,41 @@ func TestMarkTwitchLinkTokenPermanentlyFailed_MethodExists(t *testing.T) {
 	}
 	var _ permanentFailMarker = (*repository.TokenRepository)(nil)
 }
+
+// Delegated-moderator credentials (ADR-0048) get the same query-shape guarantees as every other
+// source: a bounded recovery window rather than an unbounded "expired" sweep, and a batch limit
+// that comes from the caller rather than being hardcoded.
+func TestGetExpiringModCredentials_QueryHasBoundedRecoveryWindow(t *testing.T) {
+	q := repository.QueryGetExpiringModCredentials
+	assertNoBoundedExpiredClause(t, "GetExpiringModCredentials", q)
+	assertBoundedRecoveryWindow(t, "GetExpiringModCredentials", q)
+}
+
+// The table is keyed (user_id, platform) and spans platforms, so both must be selected — the
+// platform cannot be assumed the way it can for the single-platform sources.
+func TestGetExpiringModCredentials_SelectsBothKeyColumns(t *testing.T) {
+	q := repository.QueryGetExpiringModCredentials
+	if !contains(q, "user_id") {
+		t.Error("query must select user_id")
+	}
+	if !contains(q, "platform") {
+		t.Error("query must select platform — the row is keyed (user_id, platform) and the table spans platforms")
+	}
+	if !contains(q, "mod_oauth_credentials") {
+		t.Error("query must read mod_oauth_credentials, not another credential table")
+	}
+}
+
+func TestUpdateModCredentialTokens_MethodExists(t *testing.T) {
+	type updater interface {
+		UpdateModCredentialTokens(ctx context.Context, userID, platform string, token *oauth2.Token) error
+	}
+	var _ updater = (*repository.TokenRepository)(nil)
+}
+
+func TestMarkModCredentialPermanentlyFailed_MethodExists(t *testing.T) {
+	type permanentFailMarker interface {
+		MarkModCredentialPermanentlyFailed(ctx context.Context, userID, platform string, suppressDuration time.Duration) error
+	}
+	var _ permanentFailMarker = (*repository.TokenRepository)(nil)
+}

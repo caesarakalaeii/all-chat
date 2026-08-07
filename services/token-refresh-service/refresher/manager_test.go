@@ -65,6 +65,11 @@ type fakeRepo struct {
 
 	updatedTwitchLinks []updatedTwitchLinkCall
 
+	// Delegated-moderator credentials (ADR-0048).
+	modCredentials     []*repository.ExpiringToken
+	updatedModCreds    []updatedModCredCall
+	markedModCreds     []markedModCredCall
+
 	// If non-nil, UpdateUserTokens / UpdateViewerTokens / UpdateYouTubeTokens return this.
 	updateErr error
 }
@@ -90,6 +95,15 @@ type markedTwitchLinkCall struct {
 type updatedTwitchLinkCall struct {
 	userID      string
 	twitchLogin string
+}
+type updatedModCredCall struct {
+	userID   string
+	platform string
+}
+type markedModCredCall struct {
+	userID           string
+	platform         string
+	suppressDuration time.Duration
 }
 
 func (r *fakeRepo) GetExpiringUserTokens(_ context.Context, _ time.Duration, _ int) ([]*repository.ExpiringToken, error) {
@@ -140,6 +154,23 @@ func (r *fakeRepo) UpdateTwitchLinkTokens(_ context.Context, userID, twitchLogin
 	defer r.mu.Unlock()
 	r.updatedTwitchLinks = append(r.updatedTwitchLinks, updatedTwitchLinkCall{userID: userID, twitchLogin: twitchLogin})
 	return r.updateErr
+}
+func (r *fakeRepo) GetExpiringModCredentials(_ context.Context, _ time.Duration, _ int) ([]*repository.ExpiringToken, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.modCredentials, nil
+}
+func (r *fakeRepo) UpdateModCredentialTokens(_ context.Context, userID, platform string, _ *oauth2.Token) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.updatedModCreds = append(r.updatedModCreds, updatedModCredCall{userID: userID, platform: platform})
+	return r.updateErr
+}
+func (r *fakeRepo) MarkModCredentialPermanentlyFailed(_ context.Context, userID, platform string, d time.Duration) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.markedModCreds = append(r.markedModCreds, markedModCredCall{userID: userID, platform: platform, suppressDuration: d})
+	return nil
 }
 func (r *fakeRepo) MarkTwitchLinkTokenPermanentlyFailed(_ context.Context, userID, twitchLogin string, d time.Duration) error {
 	r.mu.Lock()
