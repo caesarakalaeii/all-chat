@@ -36,6 +36,7 @@ const (
 	userB     = "22222222-bbbb-2222-2222-222222222222" // youtube-login, linked twitch
 	userC     = "33333333-cccc-3333-3333-333333333333" // has BOTH a users row and a linked row
 	strangerD = "44444444-dddd-4444-4444-444444444444"
+	modUser   = "55555555-eeee-5555-5555-555555555555" // a delegated moderator, owns no channel
 )
 
 func TestResolve_UsersRowCredential(t *testing.T) {
@@ -155,6 +156,14 @@ func TestRefresh_KeepsOldRefreshTokenWhenResponseOmitsIt(t *testing.T) {
 // AES cipher used to encrypt the seeded tokens.
 func setupTokenSource(t *testing.T) (*TwitchSource, Cipher, func()) {
 	t.Helper()
+	src, cipher, _, cleanup := setupTokenSourceWithPool(t)
+	return src, cipher, cleanup
+}
+
+// setupTokenSourceWithPool is setupTokenSource plus the pool, for the delegated-moderator
+// credential store — which lives in its own table and needs its own seeding.
+func setupTokenSourceWithPool(t *testing.T) (*TwitchSource, Cipher, *pgxpool.Pool, func()) {
+	t.Helper()
 	ctx := context.Background()
 
 	aes, err := encryption.NewAESEncryptor([]byte("0123456789abcdef0123456789abcdef"))
@@ -208,6 +217,19 @@ func setupTokenSource(t *testing.T) (*TwitchSource, Cipher, func()) {
 			token_expires_at TIMESTAMP NOT NULL,
 			granted_scopes TEXT[] NOT NULL DEFAULT '{}',
 			updated_at TIMESTAMP DEFAULT NOW()
+		);
+		CREATE TABLE mod_oauth_credentials (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			user_id UUID NOT NULL,
+			platform VARCHAR(20) NOT NULL,
+			platform_user_id VARCHAR(100) NOT NULL,
+			platform_login VARCHAR(200),
+			access_token TEXT NOT NULL,
+			refresh_token TEXT,
+			token_expires_at TIMESTAMP,
+			granted_scopes TEXT[] NOT NULL DEFAULT '{}',
+			updated_at TIMESTAMP DEFAULT NOW(),
+			UNIQUE (user_id, platform)
 		);`
 	_, err = pool.Exec(ctx, schema)
 	require.NoError(t, err)
@@ -244,8 +266,18 @@ func setupTokenSource(t *testing.T) (*TwitchSource, Cipher, func()) {
 		userC, enc("accC-linked"), enc("refC2"), exp, []string{"moderator:manage:banned_users"})
 	require.NoError(t, err)
 
+	// modUser: a volunteer who has consented to moderate, and owns no channel of their own.
+	_, err = pool.Exec(ctx, `INSERT INTO users (id, username, auth_provider, access_token, refresh_token, token_expires_at)
+		VALUES ($1,'volunteer','twitch',$2,$3,$4)`, modUser, enc("ignored"), enc("ignored"), exp)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO mod_oauth_credentials
+		(user_id, platform, platform_user_id, platform_login, access_token, refresh_token, token_expires_at, granted_scopes)
+		VALUES ($1,'twitch','7007','volunteer',$2,$3,$4,$5)`,
+		modUser, enc("modAcc"), enc("modRef"), exp, []string{"moderator:manage:chat_messages"})
+	require.NoError(t, err)
+
 	src := NewTwitchSource(pool, cipher, "test-client-id", "test-client-secret")
-	return src, cipher, func() {
+	return src, cipher, pool, func() {
 		pool.Close()
 		_ = container.Terminate(ctx)
 	}

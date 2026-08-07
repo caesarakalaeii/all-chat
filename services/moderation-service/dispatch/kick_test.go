@@ -102,7 +102,7 @@ func kickCredWith(scopes ...string) *tokens.KickCredential {
 func TestKickDispatch_NonKickIsDryRun(t *testing.T) {
 	api := &fakeKickAPI{}
 	d := NewKick(&fakeKickTokens{}, api, zap.NewNop())
-	res, err := d.Dispatch(context.Background(), "u1", models.ActionBan, models.DispatchRequest{Platform: "twitch", ChannelID: "c"})
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionBan, models.DispatchRequest{Platform: "twitch", ChannelID: "c"})
 	require.NoError(t, err)
 	assert.Equal(t, models.DispatchDryRun, res.Outcome)
 	assert.Zero(t, api.calls)
@@ -111,7 +111,7 @@ func TestKickDispatch_NonKickIsDryRun(t *testing.T) {
 func TestKickDispatch_NoCredential(t *testing.T) {
 	api := &fakeKickAPI{}
 	d := NewKick(&fakeKickTokens{resolveErr: tokens.ErrNoCredential}, api, zap.NewNop())
-	res, err := d.Dispatch(context.Background(), "u1", models.ActionBan, models.DispatchRequest{Platform: "kick", ChannelID: "c"})
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionBan, models.DispatchRequest{Platform: "kick", ChannelID: "c"})
 	require.NoError(t, err)
 	assert.Equal(t, models.DispatchNoCredential, res.Outcome)
 	assert.Zero(t, api.calls)
@@ -120,7 +120,7 @@ func TestKickDispatch_NoCredential(t *testing.T) {
 func TestKickDispatch_MissingScopePreCheckSkipsAPICall(t *testing.T) {
 	api := &fakeKickAPI{}
 	d := NewKick(&fakeKickTokens{cred: kickCredWith("user:read")}, api, zap.NewNop())
-	res, err := d.Dispatch(context.Background(), "u1", models.ActionBan, models.DispatchRequest{Platform: "kick", ChannelID: "c", TargetUserID: "42"})
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionBan, models.DispatchRequest{Platform: "kick", ChannelID: "c", TargetUserID: "42"})
 	require.NoError(t, err)
 	assert.Equal(t, models.DispatchReauthRequired, res.Outcome)
 	assert.Equal(t, []string{models.ScopeKickModeration}, res.MissingScopes)
@@ -130,7 +130,7 @@ func TestKickDispatch_MissingScopePreCheckSkipsAPICall(t *testing.T) {
 func TestKickDispatch_BanPerformed(t *testing.T) {
 	api := &fakeKickAPI{results: []error{nil}}
 	d := NewKick(&fakeKickTokens{cred: kickCredWith(models.ScopeKickModeration)}, api, zap.NewNop())
-	res, err := d.Dispatch(context.Background(), "u1", models.ActionBan, models.DispatchRequest{Platform: "kick", ChannelID: "c", TargetUserID: "42"})
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionBan, models.DispatchRequest{Platform: "kick", ChannelID: "c", TargetUserID: "42"})
 	require.NoError(t, err)
 	assert.Equal(t, models.DispatchPerformed, res.Outcome)
 	assert.Equal(t, "ban", api.method)
@@ -141,7 +141,7 @@ func TestKickDispatch_BanPerformed(t *testing.T) {
 func TestKickDispatch_TimeoutThreadsDuration(t *testing.T) {
 	api := &fakeKickAPI{results: []error{nil}}
 	d := NewKick(&fakeKickTokens{cred: kickCredWith(models.ScopeKickModeration)}, api, zap.NewNop())
-	res, err := d.Dispatch(context.Background(), "u1", models.ActionTimeout,
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionTimeout,
 		models.DispatchRequest{Platform: "kick", ChannelID: "c", TargetUserID: "42", DurationSeconds: 600})
 	require.NoError(t, err)
 	assert.Equal(t, models.DispatchPerformed, res.Outcome)
@@ -156,7 +156,7 @@ func TestKickDispatch_UnauthorizedRefreshesAndRetries(t *testing.T) {
 		onRefresh: func(c *tokens.KickCredential) { c.AccessToken = "tok2" },
 	}
 	d := NewKick(src, api, zap.NewNop())
-	res, err := d.Dispatch(context.Background(), "u1", models.ActionBan, models.DispatchRequest{Platform: "kick", ChannelID: "c", TargetUserID: "42"})
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionBan, models.DispatchRequest{Platform: "kick", ChannelID: "c", TargetUserID: "42"})
 	require.NoError(t, err)
 	assert.Equal(t, models.DispatchPerformed, res.Outcome)
 	assert.Equal(t, 1, src.refreshes, "a 401 triggers exactly one reactive refresh")
@@ -166,8 +166,24 @@ func TestKickDispatch_UnauthorizedRefreshesAndRetries(t *testing.T) {
 func TestKickDispatch_ForbiddenIsReauthWithScope(t *testing.T) {
 	api := &fakeKickAPI{results: []error{clients.ErrKickForbidden}}
 	d := NewKick(&fakeKickTokens{cred: kickCredWith(models.ScopeKickModeration)}, api, zap.NewNop())
-	res, err := d.Dispatch(context.Background(), "u1", models.ActionBan, models.DispatchRequest{Platform: "kick", ChannelID: "c", TargetUserID: "42"})
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionBan, models.DispatchRequest{Platform: "kick", ChannelID: "c", TargetUserID: "42"})
 	require.NoError(t, err)
 	assert.Equal(t, models.DispatchReauthRequired, res.Outcome)
 	assert.Equal(t, []string{models.ScopeKickModeration}, res.MissingScopes)
+}
+
+// Kick's delegated leg is not built (ADR-0048 gates each independently). The refusal is explicit
+// rather than relying on the caller-keyed credential lookup happening to find nothing: any future
+// change to credential selection would otherwise become a silent privilege escalation.
+func TestKick_DelegatedActionIsRefused(t *testing.T) {
+	tok := &fakeKickTokens{cred: kickCredWith(models.ScopeKickModeration)}
+	api := &fakeKickAPI{}
+	d := NewKick(tok, api, zap.NewNop())
+
+	res, err := d.Dispatch(context.Background(), moderator("mod", "own"), models.ActionBan,
+		models.DispatchRequest{Platform: "kick", ChannelID: "c", TargetUserID: "42"})
+
+	require.NoError(t, err)
+	assert.Equal(t, models.DispatchDelegationUnsupported, res.Outcome)
+	assert.Zero(t, api.calls, "no platform call, and no credential resolution either")
 }

@@ -111,7 +111,7 @@ func banReq() models.DispatchRequest {
 func TestYouTubeDispatch_NonYouTubeIsDryRun(t *testing.T) {
 	api, q := &fakeYTAPI{}, &fakeQuota{reserveOK: true}
 	d := newYT(&fakeYTTokens{}, api, fakeLiveChat{id: "lc"}, q)
-	res, err := d.Dispatch(context.Background(), "u1", models.ActionBan, models.DispatchRequest{Platform: "twitch"})
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionBan, models.DispatchRequest{Platform: "twitch"})
 	require.NoError(t, err)
 	assert.Equal(t, models.DispatchDryRun, res.Outcome)
 	assert.Zero(t, api.calls)
@@ -121,7 +121,7 @@ func TestYouTubeDispatch_NonYouTubeIsDryRun(t *testing.T) {
 func TestYouTubeDispatch_NoCredential(t *testing.T) {
 	api, q := &fakeYTAPI{}, &fakeQuota{reserveOK: true}
 	d := newYT(&fakeYTTokens{resolveErr: tokens.ErrNoCredential}, api, fakeLiveChat{id: "lc"}, q)
-	res, err := d.Dispatch(context.Background(), "u1", models.ActionBan, banReq())
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionBan, banReq())
 	require.NoError(t, err)
 	assert.Equal(t, models.DispatchNoCredential, res.Outcome)
 	assert.Zero(t, q.reserves)
@@ -130,7 +130,7 @@ func TestYouTubeDispatch_NoCredential(t *testing.T) {
 func TestYouTubeDispatch_MissingScopeSkipsEverything(t *testing.T) {
 	api, q := &fakeYTAPI{}, &fakeQuota{reserveOK: true}
 	d := newYT(&fakeYTTokens{cred: ytCredWith("https://www.googleapis.com/auth/youtube.readonly")}, api, fakeLiveChat{id: "lc"}, q)
-	res, err := d.Dispatch(context.Background(), "u1", models.ActionBan, banReq())
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionBan, banReq())
 	require.NoError(t, err)
 	assert.Equal(t, models.DispatchReauthRequired, res.Outcome)
 	assert.Equal(t, []string{models.ScopeYouTubeModeration}, res.MissingScopes)
@@ -141,7 +141,7 @@ func TestYouTubeDispatch_MissingScopeSkipsEverything(t *testing.T) {
 func TestYouTubeDispatch_NotLiveIsErrorNoQuota(t *testing.T) {
 	api, q := &fakeYTAPI{}, &fakeQuota{reserveOK: true}
 	d := newYT(&fakeYTTokens{cred: ytCredWith(models.ScopeYouTubeModeration)}, api, fakeLiveChat{err: clients.ErrYouTubeNotLive}, q)
-	_, err := d.Dispatch(context.Background(), "u1", models.ActionBan, banReq())
+	_, err := d.Dispatch(context.Background(), owner("u1"), models.ActionBan, banReq())
 	require.Error(t, err)
 	assert.Zero(t, q.reserves, "no quota reserved when there is no live chat to ban in")
 	assert.Zero(t, api.calls)
@@ -150,7 +150,7 @@ func TestYouTubeDispatch_NotLiveIsErrorNoQuota(t *testing.T) {
 func TestYouTubeDispatch_QuotaExhausted(t *testing.T) {
 	api, q := &fakeYTAPI{}, &fakeQuota{reserveOK: false}
 	d := newYT(&fakeYTTokens{cred: ytCredWith(models.ScopeYouTubeModeration)}, api, fakeLiveChat{id: "lc"}, q)
-	_, err := d.Dispatch(context.Background(), "u1", models.ActionBan, banReq())
+	_, err := d.Dispatch(context.Background(), owner("u1"), models.ActionBan, banReq())
 	require.Error(t, err)
 	assert.Equal(t, 1, q.reserves)
 	assert.Zero(t, api.calls, "no API call when the reservation is refused")
@@ -159,7 +159,7 @@ func TestYouTubeDispatch_QuotaExhausted(t *testing.T) {
 func TestYouTubeDispatch_BanPerformedConfirmsQuota(t *testing.T) {
 	api, q := &fakeYTAPI{results: []error{nil}}, &fakeQuota{reserveOK: true}
 	d := newYT(&fakeYTTokens{cred: ytCredWith(models.ScopeYouTubeModeration)}, api, fakeLiveChat{id: "lc-1"}, q)
-	res, err := d.Dispatch(context.Background(), "u1", models.ActionBan, banReq())
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionBan, banReq())
 	require.NoError(t, err)
 	assert.Equal(t, models.DispatchPerformed, res.Outcome)
 	assert.Equal(t, "lc-1", api.liveChat)
@@ -173,7 +173,7 @@ func TestYouTubeDispatch_UnauthorizedRefreshesAndRetries(t *testing.T) {
 	q := &fakeQuota{reserveOK: true}
 	src := &fakeYTTokens{cred: ytCredWith(models.ScopeYouTubeModeration), onRefresh: func(c *tokens.YouTubeCredential) { c.AccessToken = "tok2" }}
 	d := newYT(src, api, fakeLiveChat{id: "lc"}, q)
-	res, err := d.Dispatch(context.Background(), "u1", models.ActionBan, banReq())
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionBan, banReq())
 	require.NoError(t, err)
 	assert.Equal(t, models.DispatchPerformed, res.Outcome)
 	assert.Equal(t, 1, src.refreshes)
@@ -185,7 +185,7 @@ func TestYouTubeDispatch_UnauthorizedRefreshesAndRetries(t *testing.T) {
 func TestYouTubeDispatch_ForbiddenRollsBackQuota(t *testing.T) {
 	api, q := &fakeYTAPI{results: []error{clients.ErrYouTubeForbidden}}, &fakeQuota{reserveOK: true}
 	d := newYT(&fakeYTTokens{cred: ytCredWith(models.ScopeYouTubeModeration)}, api, fakeLiveChat{id: "lc"}, q)
-	res, err := d.Dispatch(context.Background(), "u1", models.ActionBan, banReq())
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionBan, banReq())
 	require.NoError(t, err)
 	assert.Equal(t, models.DispatchReauthRequired, res.Outcome)
 	assert.Equal(t, []string{models.ScopeYouTubeModeration}, res.MissingScopes)
@@ -196,7 +196,22 @@ func TestYouTubeDispatch_ForbiddenRollsBackQuota(t *testing.T) {
 func TestYouTubeDispatch_OtherErrorRollsBack(t *testing.T) {
 	api, q := &fakeYTAPI{results: []error{errors.New("boom")}}, &fakeQuota{reserveOK: true}
 	d := newYT(&fakeYTTokens{cred: ytCredWith(models.ScopeYouTubeModeration)}, api, fakeLiveChat{id: "lc"}, q)
-	_, err := d.Dispatch(context.Background(), "u1", models.ActionBan, banReq())
+	_, err := d.Dispatch(context.Background(), owner("u1"), models.ActionBan, banReq())
 	require.Error(t, err)
 	assert.Equal(t, 1, q.rollbacks)
+}
+
+// YouTube's delegated leg is not built, and its write path is permanent-ban-only besides —
+// handing a volunteer permanent-ban-only would be a moderation-safety problem, so the refusal is
+// explicit rather than incidental.
+func TestYouTube_DelegatedActionIsRefused(t *testing.T) {
+	api, q := &fakeYTAPI{}, &fakeQuota{reserveOK: true}
+	d := newYT(&fakeYTTokens{cred: ytCredWith(models.ScopeYouTubeModeration)}, api, fakeLiveChat{id: "lc"}, q)
+
+	res, err := d.Dispatch(context.Background(), moderator("mod", "own"), models.ActionBan, banReq())
+
+	require.NoError(t, err)
+	assert.Equal(t, models.DispatchDelegationUnsupported, res.Outcome)
+	assert.Zero(t, api.calls)
+	assert.Zero(t, q.reserves, "no quota is spent on an action that cannot happen")
 }

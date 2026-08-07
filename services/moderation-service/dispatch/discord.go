@@ -65,9 +65,19 @@ func NewDiscord(api discordAPI, guilds discordGuildResolver, logger *zap.Logger)
 
 // Dispatch performs a Discord moderation action. delete is channel-scoped; timeout/ban/
 // unban are guild-scoped, so the guild id is resolved from the channel id first.
-func (d *Discord) Dispatch(ctx context.Context, _ string, action models.Action, req models.DispatchRequest) (models.DispatchResult, error) {
+func (d *Discord) Dispatch(ctx context.Context, actor models.Actor, action models.Action, req models.DispatchRequest) (models.DispatchResult, error) {
 	if req.Platform != "discord" {
 		return models.DispatchResult{Outcome: models.DispatchDryRun}, nil
+	}
+
+	// Discord is the one platform where refusing delegation is load-bearing rather than tidy.
+	// Every other dispatcher acts with the caller's own credential, so a moderator without one
+	// simply fails; here the actor is always the shared bot, which holds the streamer's full
+	// guild authority. Without this refusal a delegated action would execute with that authority
+	// and no check that the moderator holds any of it — All-Chat's own check is the ONLY
+	// authority on Discord, and it is not built yet (ADR-0048 Phase 2).
+	if actor.IsModerator() {
+		return models.DispatchResult{Outcome: models.DispatchDelegationUnsupported}, nil
 	}
 
 	if action == models.ActionDelete {

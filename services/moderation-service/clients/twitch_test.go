@@ -64,7 +64,7 @@ func TestDeleteMessage(t *testing.T) {
 	c, done := newTestClient(t, http.StatusNoContent, &got)
 	defer done()
 
-	err := c.DeleteMessage(context.Background(), "tok", "12345", "msg-1")
+	err := c.DeleteMessage(context.Background(), "tok", "12345", "12345", "msg-1")
 	require.NoError(t, err)
 	assert.Equal(t, http.MethodDelete, got.method)
 	assert.Equal(t, "/moderation/chat", got.path)
@@ -80,7 +80,7 @@ func TestBanUser_PermanentOmitsDuration(t *testing.T) {
 	c, done := newTestClient(t, http.StatusOK, &got)
 	defer done()
 
-	err := c.BanUser(context.Background(), "tok", "12345", "999", "spam")
+	err := c.BanUser(context.Background(), "tok", "12345", "12345", "999", "spam")
 	require.NoError(t, err)
 	assert.Equal(t, http.MethodPost, got.method)
 	assert.Equal(t, "/moderation/bans", got.path)
@@ -97,7 +97,7 @@ func TestTimeoutUser_IncludesDuration(t *testing.T) {
 	c, done := newTestClient(t, http.StatusOK, &got)
 	defer done()
 
-	err := c.TimeoutUser(context.Background(), "tok", "12345", "999", 600, "cool down")
+	err := c.TimeoutUser(context.Background(), "tok", "12345", "12345", "999", 600, "cool down")
 	require.NoError(t, err)
 	data := got.body["data"].(map[string]any)
 	assert.Equal(t, float64(600), data["duration"], "timeout must carry the duration (seconds)")
@@ -109,7 +109,7 @@ func TestUnbanUser(t *testing.T) {
 	c, done := newTestClient(t, http.StatusNoContent, &got)
 	defer done()
 
-	err := c.UnbanUser(context.Background(), "tok", "12345", "999")
+	err := c.UnbanUser(context.Background(), "tok", "12345", "12345", "999")
 	require.NoError(t, err)
 	assert.Equal(t, http.MethodDelete, got.method)
 	assert.Equal(t, "/moderation/bans", got.path)
@@ -127,7 +127,7 @@ func TestStatusMapping(t *testing.T) {
 	for _, tc := range cases {
 		var got capturedRequest
 		c, done := newTestClient(t, tc.status, &got)
-		err := c.BanUser(context.Background(), "tok", "1", "2", "")
+		err := c.BanUser(context.Background(), "tok", "1", "1", "2", "")
 		assert.ErrorIs(t, err, tc.want, "status %d", tc.status)
 		done()
 	}
@@ -136,8 +136,55 @@ func TestStatusMapping(t *testing.T) {
 	var got capturedRequest
 	c, done := newTestClient(t, http.StatusInternalServerError, &got)
 	defer done()
-	err := c.BanUser(context.Background(), "tok", "1", "2", "")
+	err := c.BanUser(context.Background(), "tok", "1", "1", "2", "")
 	require.Error(t, err)
 	assert.NotErrorIs(t, err, ErrUnauthorized)
 	assert.NotErrorIs(t, err, ErrForbidden)
+}
+
+// A delegated moderator's write is the whole point of the moderator_id/broadcaster_id split
+// (ADR-0048): Helix re-checks that moderator_id is the token's own user and that they moderate
+// broadcaster_id, which is the authority All-Chat cannot and must not replicate. Collapsing these
+// back into one parameter would either act as the streamer or fail every delegated call.
+func TestDelegatedWriteSendsDistinctModeratorID(t *testing.T) {
+	t.Run("delete", func(t *testing.T) {
+		var got capturedRequest
+		c, done := newTestClient(t, http.StatusNoContent, &got)
+		defer done()
+
+		require.NoError(t, c.DeleteMessage(context.Background(), "mod-tok", "12345", "777", "msg-1"))
+		assert.Equal(t, "12345", got.query["broadcaster_id"], "the channel being moderated")
+		assert.Equal(t, "777", got.query["moderator_id"], "the moderator's own id, not the streamer's")
+		assert.Equal(t, "Bearer mod-tok", got.auth, "the moderator's own token performs the call")
+	})
+
+	t.Run("ban", func(t *testing.T) {
+		var got capturedRequest
+		c, done := newTestClient(t, http.StatusOK, &got)
+		defer done()
+
+		require.NoError(t, c.BanUser(context.Background(), "mod-tok", "12345", "777", "999", ""))
+		assert.Equal(t, "12345", got.query["broadcaster_id"])
+		assert.Equal(t, "777", got.query["moderator_id"])
+	})
+
+	t.Run("unban", func(t *testing.T) {
+		var got capturedRequest
+		c, done := newTestClient(t, http.StatusNoContent, &got)
+		defer done()
+
+		require.NoError(t, c.UnbanUser(context.Background(), "mod-tok", "12345", "777", "999"))
+		assert.Equal(t, "12345", got.query["broadcaster_id"])
+		assert.Equal(t, "777", got.query["moderator_id"])
+	})
+
+	t.Run("timeout", func(t *testing.T) {
+		var got capturedRequest
+		c, done := newTestClient(t, http.StatusOK, &got)
+		defer done()
+
+		require.NoError(t, c.TimeoutUser(context.Background(), "mod-tok", "12345", "777", "999", 60, ""))
+		assert.Equal(t, "12345", got.query["broadcaster_id"])
+		assert.Equal(t, "777", got.query["moderator_id"])
+	})
 }

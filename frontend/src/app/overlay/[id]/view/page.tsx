@@ -63,6 +63,7 @@ import {
   buildTimeoutRequest,
   buildUnbanRequest,
   isModerationReauthError,
+  moderationActionCode,
   moderationApi,
 } from '@/lib/api/moderation'
 import type { ChatMessage, DeletionMetadata } from '@/lib/types/message'
@@ -464,6 +465,29 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
   // (granted_scopes may overstate the real grant), so it would fail again on every click.
   const [reauthPrompt, setReauthPrompt] = useState<{ platform: string } | null>(null)
 
+  // Copy for a moderation failure the actor can do something about (ADR-0048). Returns null when
+  // the failure is not one of the delegation-aware ones, so the caller falls back to its own
+  // wording — and to the re-consent banner, which is checked first because it has a CTA.
+  const delegatedFailureMessage = useCallback(
+    (err: unknown, platform: string): string | null => {
+      switch (moderationActionCode(err)) {
+        case 'connect_required':
+          // Consent is deferred to first use, so for a moderator this is the expected first click,
+          // not a fault. The per-source banner already offers the button; this names the reason.
+          return isModerator ? `Connect your own ${platform} account to moderate here` : null
+        case 'owner_channel_unverified':
+          // Only the streamer can fix this, so the copy stops at the cause rather than offering a
+          // button that would do nothing.
+          return `This streamer's ${platform} account isn't connected, so nothing can be moderated here`
+        case 'delegation_unsupported':
+          return `Moderators can't act on ${platform} yet — ask the streamer to handle this one`
+        default:
+          return null
+      }
+    },
+    [isModerator]
+  )
+
   // Apply an optimistic mark + log entry, fire the API, and roll back on error.
   const runModeration = useCallback(
     async (
@@ -500,20 +524,23 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         setItems((prev) =>
           prev.map((it) => (touchedSet.has(it.id) ? { ...it, _moderated: undefined } : it))
         )
+        const delegated = delegatedFailureMessage(err, platform)
         if (isModerationReauthError(err)) {
-          // Actionable failure: the streamer must re-authorize this platform. Show the
+          // Actionable failure: the actor must re-authorize this platform. Show the
           // recovery banner and a toast pointing at it (mirrors the chat-send reauth path).
           setReauthPrompt({ platform })
           toastManager.add({
             title: `${platform} needs you to re-authorize moderation`,
             type: 'error',
           })
+        } else if (delegated !== null) {
+          toastManager.add({ title: delegated, type: 'error' })
         } else {
           toastManager.add({ title: 'Moderation action failed', type: 'error' })
         }
       }
     },
-    []
+    [delegatedFailureMessage]
   )
 
   const handleDelete = useCallback(
@@ -580,18 +607,21 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         .unbanUser(id, buildUnbanRequest(item))
         .then(() => toastManager.add({ title: `Unbanned ${name}`, type: 'success' }))
         .catch((err) => {
+          const delegated = delegatedFailureMessage(err, item.platform)
           if (isModerationReauthError(err)) {
             setReauthPrompt({ platform: item.platform })
             toastManager.add({
               title: `${item.platform} needs you to re-authorize moderation`,
               type: 'error',
             })
+          } else if (delegated !== null) {
+            toastManager.add({ title: delegated, type: 'error' })
           } else {
             toastManager.add({ title: 'Unban failed', type: 'error' })
           }
         })
     },
-    [id]
+    [id, delegatedFailureMessage]
   )
 
   // Only owners in the rollout cohort get live action callbacks; everyone else
