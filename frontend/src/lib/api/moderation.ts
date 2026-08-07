@@ -60,6 +60,33 @@ export function isModerationReauthError(err: unknown): boolean {
   return err instanceof ApiError && err.data?.requires_reauth === true
 }
 
+/**
+ * The machine-readable `code` on a failed moderation ACTION (ADR-0048), or undefined.
+ *
+ * Distinct from `delegationErrorCode`, which covers the grant-lifecycle endpoints. These three
+ * describe why a write could not happen, and they differ in who can fix it:
+ *
+ * - `connect_required` — the actor holds no credential for this platform. For a moderator that is
+ *   the deferred-consent state, and the fix is theirs.
+ * - `owner_channel_unverified` — the streamer's own account is not connected, so there is nothing
+ *   on this channel to delegate. Only the streamer can clear it; the moderator gets no CTA.
+ * - `delegation_unsupported` — this platform's delegated path is not built yet.
+ * - `not_moderator_on_platform` — the PLATFORM refused: All-Chat allowed the action and Twitch
+ *   said this person does not moderate that channel. Re-consent cannot fix it, so this must never
+ *   be rendered as a re-authorize prompt; the streamer has to add them in the platform's own tools.
+ */
+export type ModerationActionErrorCode =
+  | 'connect_required'
+  | 'owner_channel_unverified'
+  | 'delegation_unsupported'
+  | 'not_moderator_on_platform'
+
+export function moderationActionCode(err: unknown): ModerationActionErrorCode | undefined {
+  if (!(err instanceof ApiError)) return undefined
+  const code = err.data?.code
+  return typeof code === 'string' ? (code as ModerationActionErrorCode) : undefined
+}
+
 /** Standard success envelope for every moderation POST. */
 export interface ModerationResult {
   status: 'ok'

@@ -46,8 +46,13 @@ var (
 
 const defaultHelixBaseURL = "https://api.twitch.tv/helix"
 
-// TwitchClient calls Twitch Helix moderation endpoints. For own-channel moderation the
-// broadcaster is also the moderator (moderator_id == broadcaster_id).
+// TwitchClient calls Twitch Helix moderation endpoints.
+//
+// Every call takes broadcasterID and moderatorID separately. They are equal when a streamer
+// moderates their own channel, and different when a delegated moderator acts (ADR-0048) — and
+// Helix re-checks on every call that moderatorID is the token's own user and that they are a
+// moderator of broadcasterID. That check is the authority the whole delegation design rests on,
+// so these must never be collapsed back into one parameter.
 type TwitchClient struct {
 	httpClient *http.Client
 	clientID   string
@@ -65,10 +70,10 @@ func NewTwitchClient(clientID string) *TwitchClient {
 
 // DeleteMessage removes a single chat message.
 // DELETE /helix/moderation/chat — scope moderator:manage:chat_messages.
-func (t *TwitchClient) DeleteMessage(ctx context.Context, token, broadcasterID, nativeMessageID string) error {
+func (t *TwitchClient) DeleteMessage(ctx context.Context, token, broadcasterID, moderatorID, nativeMessageID string) error {
 	q := url.Values{
 		"broadcaster_id": {broadcasterID},
-		"moderator_id":   {broadcasterID},
+		"moderator_id":   {moderatorID},
 		"message_id":     {nativeMessageID},
 	}
 	return t.do(ctx, http.MethodDelete, "/moderation/chat?"+q.Encode(), token, nil)
@@ -76,32 +81,32 @@ func (t *TwitchClient) DeleteMessage(ctx context.Context, token, broadcasterID, 
 
 // TimeoutUser removes a user's messages for durationSeconds.
 // POST /helix/moderation/bans with a duration — scope moderator:manage:banned_users.
-func (t *TwitchClient) TimeoutUser(ctx context.Context, token, broadcasterID, targetUserID string, durationSeconds int, reason string) error {
-	return t.ban(ctx, token, broadcasterID, targetUserID, &durationSeconds, reason)
+func (t *TwitchClient) TimeoutUser(ctx context.Context, token, broadcasterID, moderatorID, targetUserID string, durationSeconds int, reason string) error {
+	return t.ban(ctx, token, broadcasterID, moderatorID, targetUserID, &durationSeconds, reason)
 }
 
 // BanUser permanently bans a user.
 // POST /helix/moderation/bans without a duration — scope moderator:manage:banned_users.
-func (t *TwitchClient) BanUser(ctx context.Context, token, broadcasterID, targetUserID, reason string) error {
-	return t.ban(ctx, token, broadcasterID, targetUserID, nil, reason)
+func (t *TwitchClient) BanUser(ctx context.Context, token, broadcasterID, moderatorID, targetUserID, reason string) error {
+	return t.ban(ctx, token, broadcasterID, moderatorID, targetUserID, nil, reason)
 }
 
 // UnbanUser lifts a ban or timeout.
 // DELETE /helix/moderation/bans — scope moderator:manage:banned_users.
-func (t *TwitchClient) UnbanUser(ctx context.Context, token, broadcasterID, targetUserID string) error {
+func (t *TwitchClient) UnbanUser(ctx context.Context, token, broadcasterID, moderatorID, targetUserID string) error {
 	q := url.Values{
 		"broadcaster_id": {broadcasterID},
-		"moderator_id":   {broadcasterID},
+		"moderator_id":   {moderatorID},
 		"user_id":        {targetUserID},
 	}
 	return t.do(ctx, http.MethodDelete, "/moderation/bans?"+q.Encode(), token, nil)
 }
 
 // ban posts to /moderation/bans; a non-nil duration makes it a timeout.
-func (t *TwitchClient) ban(ctx context.Context, token, broadcasterID, targetUserID string, durationSeconds *int, reason string) error {
+func (t *TwitchClient) ban(ctx context.Context, token, broadcasterID, moderatorID, targetUserID string, durationSeconds *int, reason string) error {
 	q := url.Values{
 		"broadcaster_id": {broadcasterID},
-		"moderator_id":   {broadcasterID},
+		"moderator_id":   {moderatorID},
 	}
 	data := map[string]any{"user_id": targetUserID}
 	if durationSeconds != nil {

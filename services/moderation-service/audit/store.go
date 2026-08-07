@@ -33,13 +33,47 @@ const (
 	OutcomeDenied         = "denied"          // authorization failed (not owner, not a source, etc.)
 	OutcomePlatformError  = "platform_error"  // platform API rejected/failed the action
 	OutcomeReauthRequired = "reauth_required" // owner's token lacks the moderation scope; needs opt-in re-consent
-	OutcomeNoCredential   = "no_credential"   // owner holds no moderator credential for the channel
+	OutcomeNoCredential   = "no_credential"   // the actor holds no moderator credential for the channel
+	// OutcomeOwnerUnverified: the overlay owner cannot be shown to control the channel, so there
+	// was nothing for them to delegate on it (ADR-0048's owner-reach anchor).
+	OutcomeOwnerUnverified = "owner_unverified"
+	// OutcomeNotPlatformModerator: the platform says the delegated moderator does not moderate
+	// that channel. Distinct from a denial: All-Chat allowed it and the platform did not, which is
+	// exactly the authority split the design intends — and a spike of these is one of the signals
+	// that a grant has gone stale.
+	OutcomeNotPlatformModerator = "not_platform_moderator"
+	// OutcomeDelegationUnsupported: a delegated action on a platform whose delegated path is not
+	// built yet. Recorded rather than dropped — it is how a moderator hitting a wall becomes
+	// visible instead of just looking broken.
+	OutcomeDelegationUnsupported = "delegation_unsupported"
 )
 
 // Entry is one audited moderation command.
+//
+// Five identities are kept distinguishable forever (ADR-0048), because a delegated action has
+// more of them than an owner action does and collapsing any pair would destroy the trail:
+// who acted, in what role, for whom, with whose credential, and as which platform id.
 type Entry struct {
-	OverlayID       string
-	ActorUserID     string // effective identity whose token acts (the overlay owner)
+	OverlayID string
+	// ActorUserID is the human who performed the action — the owner when they moderate their own
+	// overlay, the delegated moderator when one acts. It is NOT necessarily whose credential ran
+	// the platform call (see CredentialUserID) and NOT necessarily the overlay owner.
+	ActorUserID string
+	// ActorRole is owner | moderator. Empty on legacy rows, where the actor was always the owner.
+	ActorRole string
+	// OnBehalfOfUserID is the overlay owner the action was performed for. Equals ActorUserID when
+	// the owner acted themselves.
+	OnBehalfOfUserID string
+	// CredentialUserID is whose OAuth token actually performed the platform call. This is the
+	// machine-checkable proof that a delegated action never fell back to the owner's credential:
+	// for a delegated row it must equal ActorUserID, never OnBehalfOfUserID. Empty where no
+	// per-user credential acts (Discord's shared bot, and dry runs).
+	CredentialUserID string
+	// PlatformActorID is the id sent as the platform's moderator field, so a row can be
+	// reconciled against the platform's own moderator log.
+	PlatformActorID string
+	// GrantID is the delegation the action was performed under. Empty for an owner action.
+	GrantID         string
 	ImpersonatedBy  string // real admin when acting under impersonation; "" otherwise
 	Platform        string
 	ChannelID       string
@@ -62,14 +96,15 @@ func New(db *pgxpool.Pool) *Store {
 }
 
 // Record inserts one audit row. Optional string fields are stored as NULL when
-// empty (notably impersonated_by, which is a UUID column and must be NULL — not the
-// empty string — for non-impersonated actions).
+// empty (notably impersonated_by and the ADR-0048 attribution columns, which are UUID columns and
+// must be NULL — not the empty string — when they do not apply).
 func (s *Store) Record(ctx context.Context, e Entry) error {
 	const query = `
 		INSERT INTO moderation_actions
 			(overlay_id, actor_user_id, impersonated_by, platform, channel_id, action,
-			 target_user_id, target_message_id, reason, outcome, platform_status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
+			 target_user_id, target_message_id, reason, outcome, platform_status,
+			 actor_role, on_behalf_of_user_id, credential_user_id, platform_actor_id, grant_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`
 	_, err := s.db.Exec(ctx, query,
 		e.OverlayID,
 		e.ActorUserID,
@@ -82,6 +117,11 @@ func (s *Store) Record(ctx context.Context, e Entry) error {
 		nullIfEmpty(e.Reason),
 		e.Outcome,
 		nullIfEmpty(e.PlatformStatus),
+		nullIfEmpty(e.ActorRole),
+		nullIfEmpty(e.OnBehalfOfUserID),
+		nullIfEmpty(e.CredentialUserID),
+		nullIfEmpty(e.PlatformActorID),
+		nullIfEmpty(e.GrantID),
 	)
 	if err != nil {
 		return fmt.Errorf("record moderation action: %w", err)

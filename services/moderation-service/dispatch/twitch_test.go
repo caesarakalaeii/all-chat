@@ -35,6 +35,47 @@ type fakeTokens struct {
 	refreshErr error
 	refreshes  int
 	onRefresh  func(*tokens.TwitchCredential) // mutate cred to simulate a successful refresh
+	// anchor is the broadcaster id the owner-reach anchor resolves; anchorErr overrides it.
+	anchor    string
+	anchorErr error
+	anchorFor []string // the (owner, channel) pairs the anchor was asked about
+}
+
+func (f *fakeTokens) OwnerTwitchAnchor(_ context.Context, ownerUserID, channelID string) (string, error) {
+	f.anchorFor = append(f.anchorFor, ownerUserID+"|"+channelID)
+	if f.anchorErr != nil {
+		return "", f.anchorErr
+	}
+	return f.anchor, nil
+}
+
+// fakeModTokens stands in for a delegated moderator's OWN credential store.
+type fakeModTokens struct {
+	cred        *tokens.ModCredential
+	resolveErr  error
+	refreshErr  error
+	refreshes   int
+	resolvedFor []string
+	onRefresh   func(*tokens.ModCredential)
+}
+
+func (f *fakeModTokens) Resolve(_ context.Context, userID string) (*tokens.ModCredential, error) {
+	f.resolvedFor = append(f.resolvedFor, userID)
+	if f.resolveErr != nil {
+		return nil, f.resolveErr
+	}
+	return f.cred, nil
+}
+
+func (f *fakeModTokens) Refresh(_ context.Context, _ string, cred *tokens.ModCredential) error {
+	f.refreshes++
+	if f.refreshErr != nil {
+		return f.refreshErr
+	}
+	if f.onRefresh != nil {
+		f.onRefresh(cred)
+	}
+	return nil
 }
 
 func (f *fakeTokens) Resolve(context.Context, string, string) (*tokens.TwitchCredential, error) {
@@ -62,14 +103,15 @@ type fakeAPI struct {
 	tokensSeen  []string
 	method      string
 	broadcaster string
+	moderator   string
 	target      string
 	msgID       string
 	duration    int
 }
 
-func (f *fakeAPI) next(token, broadcaster string) error {
+func (f *fakeAPI) next(token, broadcaster, moderator string) error {
 	f.tokensSeen = append(f.tokensSeen, token)
-	f.broadcaster = broadcaster
+	f.broadcaster, f.moderator = broadcaster, moderator
 	var err error
 	if f.calls < len(f.results) {
 		err = f.results[f.calls]
@@ -78,21 +120,21 @@ func (f *fakeAPI) next(token, broadcaster string) error {
 	return err
 }
 
-func (f *fakeAPI) DeleteMessage(_ context.Context, token, b, msgID string) error {
+func (f *fakeAPI) DeleteMessage(_ context.Context, token, b, m, msgID string) error {
 	f.method, f.msgID = "delete", msgID
-	return f.next(token, b)
+	return f.next(token, b, m)
 }
-func (f *fakeAPI) TimeoutUser(_ context.Context, token, b, target string, dur int, _ string) error {
+func (f *fakeAPI) TimeoutUser(_ context.Context, token, b, m, target string, dur int, _ string) error {
 	f.method, f.target, f.duration = "timeout", target, dur
-	return f.next(token, b)
+	return f.next(token, b, m)
 }
-func (f *fakeAPI) BanUser(_ context.Context, token, b, target, _ string) error {
+func (f *fakeAPI) BanUser(_ context.Context, token, b, m, target, _ string) error {
 	f.method, f.target = "ban", target
-	return f.next(token, b)
+	return f.next(token, b, m)
 }
-func (f *fakeAPI) UnbanUser(_ context.Context, token, b, target string) error {
+func (f *fakeAPI) UnbanUser(_ context.Context, token, b, m, target string) error {
 	f.method, f.target = "unban", target
-	return f.next(token, b)
+	return f.next(token, b, m)
 }
 
 func credWith(scopes ...string) *tokens.TwitchCredential {
@@ -108,7 +150,7 @@ func credWith(scopes ...string) *tokens.TwitchCredential {
 func TestDispatch_NonTwitchIsDryRun(t *testing.T) {
 	api := &fakeAPI{}
 	d := NewTwitch(&fakeTokens{}, api, zap.NewNop())
-	res, err := d.Dispatch(context.Background(), "u1", models.ActionDelete, models.DispatchRequest{Platform: "kick", ChannelID: "c"})
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionDelete, models.DispatchRequest{Platform: "kick", ChannelID: "c"})
 	require.NoError(t, err)
 	assert.Equal(t, models.DispatchDryRun, res.Outcome)
 	assert.Zero(t, api.calls, "no platform call for an unimplemented platform")
@@ -117,7 +159,7 @@ func TestDispatch_NonTwitchIsDryRun(t *testing.T) {
 func TestDispatch_NoCredential(t *testing.T) {
 	api := &fakeAPI{}
 	d := NewTwitch(&fakeTokens{resolveErr: tokens.ErrNoCredential}, api, zap.NewNop())
-	res, err := d.Dispatch(context.Background(), "u1", models.ActionDelete, models.DispatchRequest{Platform: "twitch", ChannelID: "c"})
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionDelete, models.DispatchRequest{Platform: "twitch", ChannelID: "c"})
 	require.NoError(t, err)
 	assert.Equal(t, models.DispatchNoCredential, res.Outcome)
 	assert.Zero(t, api.calls)
@@ -127,7 +169,7 @@ func TestDispatch_MissingScopePreCheckSkipsAPICall(t *testing.T) {
 	api := &fakeAPI{}
 	// Token has banned-users scope but the action is delete (needs manage:chat_messages).
 	d := NewTwitch(&fakeTokens{cred: credWith(models.ScopeTwitchManageBannedUsers)}, api, zap.NewNop())
-	res, err := d.Dispatch(context.Background(), "u1", models.ActionDelete, models.DispatchRequest{Platform: "twitch", ChannelID: "c", NativeMessageID: "m1"})
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionDelete, models.DispatchRequest{Platform: "twitch", ChannelID: "c", NativeMessageID: "m1"})
 	require.NoError(t, err)
 	assert.Equal(t, models.DispatchReauthRequired, res.Outcome)
 	assert.Equal(t, []string{models.ScopeTwitchManageMessages}, res.MissingScopes)
@@ -137,7 +179,7 @@ func TestDispatch_MissingScopePreCheckSkipsAPICall(t *testing.T) {
 func TestDispatch_DeletePerformed(t *testing.T) {
 	api := &fakeAPI{results: []error{nil}}
 	d := NewTwitch(&fakeTokens{cred: credWith(models.ScopeTwitchManageMessages)}, api, zap.NewNop())
-	res, err := d.Dispatch(context.Background(), "u1", models.ActionDelete, models.DispatchRequest{Platform: "twitch", ChannelID: "c", NativeMessageID: "m1"})
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionDelete, models.DispatchRequest{Platform: "twitch", ChannelID: "c", NativeMessageID: "m1"})
 	require.NoError(t, err)
 	assert.Equal(t, models.DispatchPerformed, res.Outcome)
 	assert.Equal(t, 1, api.calls)
@@ -150,7 +192,7 @@ func TestDispatch_DeletePerformed(t *testing.T) {
 func TestDispatch_TimeoutThreadsDuration(t *testing.T) {
 	api := &fakeAPI{results: []error{nil}}
 	d := NewTwitch(&fakeTokens{cred: credWith(models.ScopeTwitchManageBannedUsers)}, api, zap.NewNop())
-	res, err := d.Dispatch(context.Background(), "u1", models.ActionTimeout,
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionTimeout,
 		models.DispatchRequest{Platform: "twitch", ChannelID: "c", TargetUserID: "42", DurationSeconds: 600})
 	require.NoError(t, err)
 	assert.Equal(t, models.DispatchPerformed, res.Outcome)
@@ -166,7 +208,7 @@ func TestDispatch_UnauthorizedRefreshesAndRetries(t *testing.T) {
 		onRefresh: func(c *tokens.TwitchCredential) { c.AccessToken = "tok2" },
 	}
 	d := NewTwitch(src, api, zap.NewNop())
-	res, err := d.Dispatch(context.Background(), "u1", models.ActionDelete, models.DispatchRequest{Platform: "twitch", ChannelID: "c", NativeMessageID: "m1"})
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionDelete, models.DispatchRequest{Platform: "twitch", ChannelID: "c", NativeMessageID: "m1"})
 	require.NoError(t, err)
 	assert.Equal(t, models.DispatchPerformed, res.Outcome)
 	assert.Equal(t, 1, src.refreshes, "a 401 triggers exactly one reactive refresh")
@@ -178,7 +220,7 @@ func TestDispatch_UnauthorizedRefreshFailsIsReauth(t *testing.T) {
 	api := &fakeAPI{results: []error{clients.ErrUnauthorized}}
 	src := &fakeTokens{cred: credWith(models.ScopeTwitchManageMessages), refreshErr: assertErr("refresh dead")}
 	d := NewTwitch(src, api, zap.NewNop())
-	res, err := d.Dispatch(context.Background(), "u1", models.ActionDelete, models.DispatchRequest{Platform: "twitch", ChannelID: "c", NativeMessageID: "m1"})
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionDelete, models.DispatchRequest{Platform: "twitch", ChannelID: "c", NativeMessageID: "m1"})
 	require.NoError(t, err)
 	assert.Equal(t, models.DispatchReauthRequired, res.Outcome)
 	assert.Equal(t, 1, api.calls, "no retry when the refresh fails")
@@ -188,7 +230,7 @@ func TestDispatch_ForbiddenIsReauthWithScope(t *testing.T) {
 	api := &fakeAPI{results: []error{clients.ErrForbidden}}
 	// Token claims the scope locally, but Twitch rejects (e.g. not actually a moderator).
 	d := NewTwitch(&fakeTokens{cred: credWith(models.ScopeTwitchManageBannedUsers)}, api, zap.NewNop())
-	res, err := d.Dispatch(context.Background(), "u1", models.ActionBan, models.DispatchRequest{Platform: "twitch", ChannelID: "c", TargetUserID: "42"})
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionBan, models.DispatchRequest{Platform: "twitch", ChannelID: "c", TargetUserID: "42"})
 	require.NoError(t, err)
 	assert.Equal(t, models.DispatchReauthRequired, res.Outcome)
 	assert.Equal(t, []string{models.ScopeTwitchManageBannedUsers}, res.MissingScopes)
@@ -200,7 +242,7 @@ func TestDispatch_ProactiveRefreshNearExpiry(t *testing.T) {
 	cred.ExpiresAt = time.Now().Add(time.Minute) // within the lead time
 	src := &fakeTokens{cred: cred}
 	d := NewTwitch(src, api, zap.NewNop())
-	res, err := d.Dispatch(context.Background(), "u1", models.ActionDelete, models.DispatchRequest{Platform: "twitch", ChannelID: "c", NativeMessageID: "m1"})
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionDelete, models.DispatchRequest{Platform: "twitch", ChannelID: "c", NativeMessageID: "m1"})
 	require.NoError(t, err)
 	assert.Equal(t, models.DispatchPerformed, res.Outcome)
 	assert.Equal(t, 1, src.refreshes, "an imminent expiry triggers a proactive refresh")

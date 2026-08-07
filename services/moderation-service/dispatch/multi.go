@@ -25,7 +25,7 @@ import (
 // PlatformDispatcher performs the real moderation call for a single platform.
 // *Twitch, *Discord, *Kick, and *YouTube each satisfy it.
 type PlatformDispatcher interface {
-	Dispatch(ctx context.Context, userID string, action models.Action, req models.DispatchRequest) (models.DispatchResult, error)
+	Dispatch(ctx context.Context, actor models.Actor, action models.Action, req models.DispatchRequest) (models.DispatchResult, error)
 }
 
 // Multi routes a platform-agnostic moderation command to the dispatcher registered for
@@ -44,9 +44,16 @@ func NewMulti(byPlatform map[string]PlatformDispatcher) *Multi {
 }
 
 // Dispatch routes by req.Platform.
-func (m *Multi) Dispatch(ctx context.Context, userID string, action models.Action, req models.DispatchRequest) (models.DispatchResult, error) {
+func (m *Multi) Dispatch(ctx context.Context, actor models.Actor, action models.Action, req models.DispatchRequest) (models.DispatchResult, error) {
 	if d, ok := m.byPlatform[req.Platform]; ok && d != nil {
-		return d.Dispatch(ctx, userID, action, req)
+		return d.Dispatch(ctx, actor, action, req)
+	}
+	// No dispatcher for this platform in this deployment. Dry-run is the safe answer for an
+	// owner (reflect-back only, nothing happened upstream), but for a delegated moderator it
+	// would report success for an action nobody performed, on a platform whose delegated path
+	// does not exist — so that is refused instead.
+	if actor.IsModerator() {
+		return models.DispatchResult{Outcome: models.DispatchDelegationUnsupported}, nil
 	}
 	return models.DispatchResult{Outcome: models.DispatchDryRun}, nil
 }
