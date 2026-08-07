@@ -19,10 +19,12 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 
+	"github.com/caesar/all-chat/services/overlay-manager/clients"
 	"github.com/caesar/all-chat/services/overlay-manager/models"
 	"github.com/caesar/all-chat/shared/encryption"
 	"github.com/caesar/all-chat/shared/metrics"
@@ -43,6 +45,19 @@ type SourceRepository interface {
 	UpdateConfig(ctx context.Context, id string, config map[string]interface{}) error
 }
 
+// discordChannelGuildResolver reports which guild a Discord channel belongs to, as Discord
+// itself sees it. A client-supplied guild id is never a substitute: the whole point is to stop
+// a caller pairing a channel they do not control with a guild they do.
+type discordChannelGuildResolver interface {
+	GuildIDForChannel(ctx context.Context, channelID string) (string, error)
+}
+
+// discordGuildOwnership reports whether a user has connected a guild — i.e. invited the
+// shared bot to it, which Discord only offers to members holding Manage Server.
+type discordGuildOwnership interface {
+	UserOwnsGuild(ctx context.Context, userID, guildID string) (bool, error)
+}
+
 // SourcesHandler handles HTTP requests for overlay chat sources
 type SourcesHandler struct {
 	sourceRepo  SourceRepository
@@ -52,6 +67,19 @@ type SourcesHandler struct {
 	logger      *zap.Logger
 	bm          *metrics.BusinessMetrics
 	cipher      *encryption.MultiKeyEncryptor // Encrypts kick_oauth_tokens on write (D-16; nil = no encryption)
+
+	// Discord source guard (ADR-0048). Both nil means Discord sources cannot be validated,
+	// and adding one fails closed.
+	discordChannels discordChannelGuildResolver
+	discordGuilds   discordGuildOwnership
+}
+
+// SetDiscordGuard wires the Discord source guard. Injected separately from the constructor
+// because it is optional configuration (DISCORD_BOT_TOKEN): when it is absent, Discord chat
+// cannot work at all, and Discord sources must be refused rather than accepted unvalidated.
+func (h *SourcesHandler) SetDiscordGuard(channels discordChannelGuildResolver, guilds discordGuildOwnership) {
+	h.discordChannels = channels
+	h.discordGuilds = guilds
 }
 
 // discordChannelEntry is the JSON value stored at discord:channels:{channel_id}.
@@ -76,6 +104,98 @@ func NewSourcesHandler(sourceRepo SourceRepository, overlayRepo OverlayRepositor
 		bm:          bm,
 		cipher:      cipher,
 	}
+}
+
+// discordConfigChannelKeys are the config fields that name a Discord channel All-Chat will
+// act on. Each is attacker-controlled and each is exercised by the SHARED bot, so Discord
+// authorizes the bot and never the caller:
+//   - inbound_channel_id is the discord:channels:{id} registry key that routes a guild's chat
+//     into an overlay (a read capability over that channel).
+//   - relay_channel_id is an outbound webhook target that discord-listener provisions and
+//     posts chat into (a write capability).
+//
+// channel_id itself is checked alongside these, since it is what the moderation write-path
+// acts on.
+var discordConfigChannelKeys = []string{"inbound_channel_id", "relay_channel_id"}
+
+// authorizeDiscordChannels verifies that every Discord channel a request would put to work
+// belongs to a guild the user has connected. It returns (0, "") when the request is allowed,
+// or an HTTP status plus message when it must be refused.
+//
+// It fails closed on every uncertainty: an unconfigured guard, a Discord API error and a
+// database error all refuse, because "cannot verify" must never read as "allowed". A guild id
+// supplied in config is not trusted as the binding — Discord's own answer for the channel is
+// authoritative — but a value that contradicts it is refused rather than stored, since a
+// mislabelled source would misinform the owner about what they attached. (ADR-0048.)
+//
+// channelID is the source's primary channel, and is validated (and used for the guild_id
+// claim check) only when non-empty. Reconfiguring an existing source passes "" so that a
+// primary channel deleted on Discord's side cannot strand the owner: they must still be able
+// to turn a relay off, and the stored channel is not what this request changes.
+func (h *SourcesHandler) authorizeDiscordChannels(ctx context.Context, userID, channelID string, config map[string]interface{}) (int, string) {
+	if h.discordChannels == nil || h.discordGuilds == nil {
+		h.logger.Error("Discord source guard unconfigured — refusing Discord source",
+			zap.String("user_id", userID))
+		return http.StatusServiceUnavailable, "Discord source validation is unavailable, please try again later"
+	}
+
+	// channel_id first: its resolved guild is also what a supplied guild_id must match.
+	var candidates []string
+	if channelID != "" {
+		candidates = append(candidates, channelID)
+	}
+	for _, key := range discordConfigChannelKeys {
+		if v, ok := config[key].(string); ok && v != "" && v != channelID {
+			candidates = append(candidates, v)
+		}
+	}
+
+	claimedGuild, _ := config["guild_id"].(string)
+	if channelID == "" {
+		claimedGuild = "" // no primary channel to compare a claim against
+	}
+	seen := make(map[string]bool, len(candidates))
+
+	for i, candidate := range candidates {
+		if seen[candidate] {
+			continue
+		}
+		seen[candidate] = true
+
+		guildID, err := h.discordChannels.GuildIDForChannel(ctx, candidate)
+		switch {
+		case errors.Is(err, clients.ErrDiscordChannelNotFound), errors.Is(err, clients.ErrDiscordNoGuild):
+			return http.StatusBadRequest, fmt.Sprintf("Discord channel '%s' does not exist or is not a server channel", candidate)
+		case errors.Is(err, clients.ErrDiscordForbidden):
+			return http.StatusBadRequest, fmt.Sprintf("All-Chat's bot cannot see Discord channel '%s' — re-invite the bot with access to it", candidate)
+		case err != nil:
+			h.logger.Error("Failed to resolve Discord channel guild",
+				zap.String("channel_id", candidate), zap.Error(err))
+			return http.StatusServiceUnavailable, "Could not verify the Discord channel right now, please try again"
+		}
+
+		// Only the primary channel_id's guild is compared against the claim; the other fields
+		// are validated by ownership alone (they may legitimately sit in the same guild).
+		if i == 0 && claimedGuild != "" && claimedGuild != guildID {
+			return http.StatusBadRequest, "The Discord server does not match the selected channel"
+		}
+
+		owns, err := h.discordGuilds.UserOwnsGuild(ctx, userID, guildID)
+		if err != nil {
+			h.logger.Error("Failed to check Discord guild ownership",
+				zap.String("user_id", userID), zap.String("guild_id", guildID), zap.Error(err))
+			return http.StatusServiceUnavailable, "Could not verify the Discord server right now, please try again"
+		}
+		if !owns {
+			h.logger.Warn("Refused Discord channel in a guild the user has not connected",
+				zap.String("user_id", userID),
+				zap.String("channel_id", candidate),
+				zap.String("guild_id", guildID))
+			return http.StatusForbidden, "You have not connected that Discord server to All-Chat"
+		}
+	}
+
+	return 0, ""
 }
 
 // setDiscordChannelRegistry writes the channel registry Redis key and publishes an invalidation event.
@@ -449,6 +569,16 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 		// If fetch fails, channelName retains the fallback value (channel_id) — acceptable
 	}
 
+	// Discord sources are acted on by the shared bot, which Discord authorizes instead of the
+	// caller — so nothing upstream refuses a channel the caller has no claim to. Verify guild
+	// ownership here, fail closed. (ADR-0048.)
+	if req.Platform == "discord" {
+		if status, msg := h.authorizeDiscordChannels(c.Request.Context(), userID.(string), channelID, req.Config); status != 0 {
+			c.JSON(status, gin.H{"error": msg})
+			return
+		}
+	}
+
 	var channelHandle *string
 	if req.ChannelHandle != "" {
 		channelHandle = &req.ChannelHandle
@@ -623,6 +753,24 @@ func (h *SourcesHandler) HandleUpdateSourceConfig(c *gin.Context) {
 		return
 	}
 
+	// Owning the overlay in the path is not enough: UpdateConfig is keyed on source_id alone,
+	// so without this the caller could patch a source belonging to someone else's overlay.
+	source, err := h.sourceRepo.GetByID(c.Request.Context(), sourceID)
+	if err != nil || source == nil || source.OverlayID != overlayID {
+		c.JSON(http.StatusNotFound, gin.H{"error": "source not found on this overlay"})
+		return
+	}
+
+	// A Discord relay/inbound target can be introduced by PATCH just as easily as at create
+	// time, so it needs the same ownership guard. Only the channels named in THIS request are
+	// validated — the stored primary channel was checked when the source was created. (ADR-0048.)
+	if source.Platform == "discord" {
+		if status, msg := h.authorizeDiscordChannels(c.Request.Context(), userID.(string), "", req.Config); status != 0 {
+			c.JSON(status, gin.H{"error": msg})
+			return
+		}
+	}
+
 	// Validate stream_select if present (YouTube stream selection strategy)
 	if strategy, ok := req.Config["stream_select"].(string); ok && strategy != "" {
 		validStrategies := map[string]bool{
@@ -733,6 +881,15 @@ func (h *SourcesHandler) HandleAddSourceAuto(c *gin.Context) {
 			})
 			return
 		}
+	}
+
+	// This endpoint serves the OAuth callback (twitch/youtube/kick) and has no legitimate
+	// Discord caller — Discord connects through auth-service's bot-invite flow, which writes
+	// discord_guilds rather than overlay sources. A source row alone is enough to make a
+	// channel moderatable, so refuse outright instead of running an add-source guard here.
+	if req.Platform == "discord" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "discord sources cannot be added through this endpoint"})
+		return
 	}
 
 	var channelHandle *string
