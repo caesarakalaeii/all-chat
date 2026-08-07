@@ -183,4 +183,48 @@ test.describe('a11y smoke (axe, WCAG 2.2 AA)', () => {
     await expect(page.getByText(OVERLAY.name)).toBeVisible({ timeout: 20_000 })
     await expectNoNewA11yViolations(page, 'overlay-editor', testInfo)
   })
+
+  // The moderator's side of delegation (ADR-0048). Worth its own scan rather than
+  // trusting the owner pages: it is the only surface a volunteer ever sees, and they
+  // reach it from a link rather than by exploring the app.
+  test('channels you moderate', async ({ page }, testInfo) => {
+    await mockAuthedApi(page, {
+      '**/api/v1/moderation/delegations': {
+        delegations: [
+          {
+            grant_id: 'grant-1',
+            overlay_id: OVERLAY.id,
+            overlay_name: OVERLAY.name,
+            owner_display_name: 'Some Streamer',
+            status: 'active',
+            actions: ['delete', 'timeout'],
+            platforms: [{ platform: 'twitch', enabled: true, verification: 'unverified' }],
+            available: true,
+          },
+        ],
+      },
+    })
+    await page.goto('/moderate')
+    await expect(page.getByRole('heading', { name: 'Channels you moderate' })).toBeVisible({
+      timeout: 20_000,
+    })
+    await expectNoNewA11yViolations(page, 'moderate-delegations', testInfo)
+  })
+
+  test('moderation invite acceptance', async ({ page }, testInfo) => {
+    await mockAuthedApi(page, {
+      '**/api/v1/moderation/invites/preview': {
+        overlay_name: OVERLAY.name,
+        owner_display_name: 'Some Streamer',
+        actions: ['delete', 'timeout'],
+        platforms: [{ platform: 'twitch', enabled: true, verification: 'unverified' }],
+        expires_at: '2026-08-14T10:00:00Z',
+      },
+    })
+    await page.goto('/moderate/accept?token=a11y-smoke-token')
+    await expect(page.getByRole('heading', { name: 'Moderation invite' })).toBeVisible({
+      timeout: 20_000,
+    })
+    await expectNoNewA11yViolations(page, 'moderate-accept', testInfo)
+  })
 })

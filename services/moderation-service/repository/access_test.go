@@ -88,6 +88,56 @@ func TestResolveOverlayAccess(t *testing.T) {
 	})
 }
 
+// The enabled platform legs travel with the role, because the action path needs both in the same
+// round trip: a grant's action set and its platform set are two separate grants of authority, and
+// checking only the first would let a Twitch-only moderator act on every source the overlay has.
+func TestResolveOverlayAccess_PlatformLegs(t *testing.T) {
+	repo, cleanup := setupTestRepo(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	t.Run("only enabled legs are reported", func(t *testing.T) {
+		modID := uuid.New().String()
+		_, err := repo.db.Exec(ctx, `INSERT INTO users (id, is_premium) VALUES ($1, false)`, modID)
+		require.NoError(t, err)
+		grant(t, repo, modID, "active", []string{"delete"}, false)
+
+		var grantID string
+		require.NoError(t, repo.db.QueryRow(ctx,
+			`SELECT id::text FROM overlay_moderators WHERE moderator_user_id = $1`, modID).Scan(&grantID))
+		_, err = repo.db.Exec(ctx, `
+			INSERT INTO overlay_moderator_platforms (grant_id, platform, enabled) VALUES
+			($1, 'twitch', TRUE), ($1, 'kick', FALSE)`, grantID)
+		require.NoError(t, err)
+
+		access, err := repo.ResolveOverlayAccess(ctx, overlayID, modID)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"twitch"}, access.Platforms,
+			"a disabled leg is not a delegated platform")
+		assert.True(t, access.MayUsePlatform("twitch"))
+		assert.False(t, access.MayUsePlatform("kick"))
+	})
+
+	t.Run("a grant with no legs delegates no platform", func(t *testing.T) {
+		modID := uuid.New().String()
+		_, err := repo.db.Exec(ctx, `INSERT INTO users (id, is_premium) VALUES ($1, false)`, modID)
+		require.NoError(t, err)
+		grant(t, repo, modID, "active", []string{"delete"}, false)
+
+		access, err := repo.ResolveOverlayAccess(ctx, overlayID, modID)
+		require.NoError(t, err)
+		assert.Empty(t, access.Platforms, "absence is disablement, not a default of everything")
+		assert.False(t, access.MayUsePlatform("twitch"))
+	})
+
+	t.Run("an owner is never narrowed by legs", func(t *testing.T) {
+		access, err := repo.ResolveOverlayAccess(ctx, overlayID, ownerID)
+		require.NoError(t, err)
+		assert.True(t, access.MayUsePlatform("twitch"))
+		assert.True(t, access.MayUsePlatform("discord"))
+	})
+}
+
 func TestResolveOverlayAccess_GrantLifecycle(t *testing.T) {
 	repo, cleanup := setupTestRepo(t)
 	defer cleanup()

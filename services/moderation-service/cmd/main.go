@@ -293,6 +293,11 @@ func main() {
 	api.POST("/invites/preview", grantHandler.HandlePreviewInvite)
 	api.POST("/invites/accept", grantHandler.HandleAcceptInvite)
 
+	// "Channels I moderate" — the moderator's own delegations. Ungated and keyed on nothing but
+	// the caller's own id: /api/v1/overlays is owner-filtered, so this is the only route an
+	// accepted moderator has into an overlay they do not own (ADR-0048).
+	api.GET("/delegations", grantHandler.HandleListDelegations)
+
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,
 		Handler:      router,

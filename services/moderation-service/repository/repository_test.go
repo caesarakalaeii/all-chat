@@ -144,6 +144,7 @@ func setupTestRepo(t *testing.T) (*Repository, func()) {
 		CREATE TABLE users (
 			id UUID PRIMARY KEY,
 			is_premium BOOLEAN NOT NULL DEFAULT false,
+			username VARCHAR(100) NOT NULL DEFAULT '',
 			display_name VARCHAR(100) NOT NULL DEFAULT '',
 			twitch_id VARCHAR(50),
 			kick_id VARCHAR(255),
@@ -175,6 +176,7 @@ func setupTestRepo(t *testing.T) (*Repository, func()) {
 			platform VARCHAR(20) NOT NULL,
 			platform_user_id VARCHAR(100) NOT NULL,
 			access_token TEXT NOT NULL,
+			granted_scopes TEXT[] NOT NULL DEFAULT '{}',
 			UNIQUE (user_id, platform)
 		);
 		CREATE TABLE overlay_moderators (
@@ -218,7 +220,8 @@ func setupTestRepo(t *testing.T) (*Repository, func()) {
 
 	// owner is premium (in the rollout cohort); stranger is a non-premium user.
 	_, err = pool.Exec(ctx,
-		`INSERT INTO users (id, is_premium, display_name) VALUES ($1, true, 'The Streamer'), ($2, false, 'A Stranger')`,
+		`INSERT INTO users (id, is_premium, username, display_name) VALUES
+			($1, true, 'thestreamer', 'The Streamer'), ($2, false, 'astranger', 'A Stranger')`,
 		ownerID, strangerID)
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, `INSERT INTO overlays (id, user_id, name) VALUES ($1, $2, 'My Overlay')`, overlayID, ownerID)

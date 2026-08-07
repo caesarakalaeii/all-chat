@@ -112,6 +112,18 @@ function grantName(grant: ModeratorGrant): string {
   return grant.display_name || grant.invitee_label || 'Unnamed invite'
 }
 
+/**
+ * The redemption link for a fresh invite secret.
+ *
+ * Absolute, because the streamer pastes it into a DM on some other service where a
+ * relative path means nothing. Built from the current origin rather than a configured
+ * base URL so a preview deployment hands out links to itself.
+ */
+function inviteURL(token: string): string {
+  const path = `/moderate/accept?token=${encodeURIComponent(token)}`
+  return typeof window === 'undefined' ? path : `${window.location.origin}${path}`
+}
+
 export function ModeratorsPanel({ overlayId }: { overlayId: string }) {
   const [list, setList] = useState<ModeratorList | null>(null)
   const [loadFailed, setLoadFailed] = useState(false)
@@ -498,13 +510,19 @@ function InviteDialog({ overlayId, open, onOpenChange }: InviteDialogProps) {
     }
   }
 
+  // What the streamer actually sends. A bare secret is not actionable — the recipient
+  // would have to be told separately where to paste it — so the invite is handed over as
+  // the link that redeems it. The secret is still the only thing that authorizes, and it
+  // still exists only in this response.
+  const inviteLink = created === null ? '' : inviteURL(created.invite_token)
+
   const handleCopy = async () => {
     if (created === null) return
     try {
-      await navigator.clipboard.writeText(created.invite_token)
+      await navigator.clipboard.writeText(inviteLink)
       setCopied(true)
     } catch {
-      setError('Could not copy. Select the code and copy it manually.')
+      setError('Could not copy. Select the link and copy it manually.')
     }
   }
 
@@ -522,15 +540,15 @@ function InviteDialog({ overlayId, open, onOpenChange }: InviteDialogProps) {
         {created !== null ? (
           <div className="space-y-3">
             <Dialog.Description className="text-xs">
-              Send this code to the person you want to moderate. It works once, expires in 7 days,
+              Send this link to the person you want to moderate. It works once, expires in 7 days,
               and <strong>won&apos;t be shown again</strong> — if it gets lost, create a new invite.
             </Dialog.Description>
             <code className="bg-surface-alt block overflow-x-auto rounded-lg border border-border p-2 text-xs break-all text-text">
-              {created.invite_token}
+              {inviteLink}
             </code>
             <div className="flex justify-end gap-2">
               <Button variant="outline" size="sm" onClick={() => void handleCopy()}>
-                {copied ? 'Copied' : 'Copy'}
+                {copied ? 'Copied' : 'Copy link'}
               </Button>
               <Button size="sm" onClick={() => onOpenChange(false)}>
                 Done

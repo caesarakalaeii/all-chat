@@ -30,6 +30,10 @@ const (
 )
 
 // Reasons explaining why a source is not (currently) moderatable.
+//
+// The first two can be reported to either role; the last three only ever describe a delegated
+// moderator's source (ADR-0048), because they are about the grant or about the moderator's own
+// consent rather than about the streamer's credential.
 const (
 	// ReasonUnsupportedPlatform: the platform has no usable moderation API (TikTok).
 	ReasonUnsupportedPlatform = "unsupported_platform"
@@ -37,8 +41,18 @@ const (
 	// this platform/account yet (covers both "never opted in" and "partially granted").
 	// Cleared via the opt-in re-consent flow.
 	ReasonMissingScope = "missing_scope"
-	// ReasonNotOwner: the requester does not own this overlay.
-	ReasonNotOwner = "not_owner"
+	// ReasonNotDelegated: the overlay owner did not delegate this platform to this moderator —
+	// either its leg is disabled (absence IS disablement, migration 080) or none of the granted
+	// actions exist on this platform. Only the streamer can clear it.
+	ReasonNotDelegated = "not_delegated"
+	// ReasonNeedsConsent: the moderator has not yet granted All-Chat their OWN moderation scopes
+	// for this platform. This is the "Connect to moderate" state, and it is the one the moderator
+	// can clear themselves (ADR-0048 defers consent to first use).
+	ReasonNeedsConsent = "needs_consent"
+	// ReasonNeedsDiscordLink: Discord has no per-user moderation API, so the shared bot acts and
+	// All-Chat must know which Discord account the moderator is. No such link exists today, so a
+	// moderator's Discord source always reports this — there is no consent flow to point them at.
+	ReasonNeedsDiscordLink = "needs_discord_link"
 )
 
 // PlatformActions is the moderation support matrix per platform in All-Chat.
@@ -356,15 +370,68 @@ type SourceCapability struct {
 	Actions []Action `json:"actions"`
 }
 
-// Capabilities is the response of the capabilities endpoint: whether the caller
-// owns the overlay, whether the moderation feature gate is open for them, and the
-// per-source moderation capability.
+// Capabilities is the response of the capabilities endpoint: which role the caller holds on the
+// overlay, whether the moderation feature gate is open for it, and the per-source capability.
 type Capabilities struct {
+	// Role is the caller's role: owner, moderator or none (ADR-0048). A caller with no role and a
+	// caller asking about an overlay that does not exist get the identical body, so this must
+	// never be read as evidence that an overlay exists.
+	Role string `json:"role"`
+	// IsOwner is Role == owner, kept as its own field because it is the flag the dashboard has
+	// always branched on and the two must never drift apart.
 	IsOwner bool `json:"is_owner"`
-	// Enabled reports whether the moderation feature gate (ADR-0008) is open for
-	// this user. When false the owner is outside the rollout cohort: the dashboard
-	// hides moderation controls (the action endpoints are independently gated and
-	// would 403). Always false for non-owners.
-	Enabled bool               `json:"enabled"`
-	Sources []SourceCapability `json:"sources"`
+	// Enabled reports whether the moderation feature gate (ADR-0008) is open. It is keyed on the
+	// overlay OWNER, never the caller: a premium streamer's moderators moderate for free, and the
+	// action path decides the same way. False for a caller with no role.
+	Enabled bool `json:"enabled"`
+	// CanModerate is the single flag the UI switches its controls on: the caller holds a role AND
+	// the owner's plan has moderation open. Which actions are actually available per source is
+	// still decided source by source.
+	CanModerate bool `json:"can_moderate"`
+	// DelegatedActions is the grant's action set, present for a moderator only.
+	//
+	// It is what a source's "Connect to moderate" must request scopes for: a source that needs
+	// consent reports no usable actions yet, so without this the consent screen would have to
+	// guess — and guessing high would ask a volunteer for ban scope the streamer never delegated.
+	DelegatedActions []Action           `json:"delegated_actions,omitempty"`
+	Sources          []SourceCapability `json:"sources"`
+}
+
+// ActionsForModeratorScopes maps a delegated moderator's OWN granted scopes to the actions they
+// can perform on a platform.
+//
+// This is the same scope→action mapping the owner path uses; what differs is whose credential the
+// scopes came from. Discord is absent by construction: its authority is the shared bot's guild
+// permissions plus a link to the moderator's Discord account, neither of which is an OAuth scope
+// the moderator grants (see ReasonNeedsDiscordLink).
+func ActionsForModeratorScopes(platform string, scopes []string) []Action {
+	switch platform {
+	case "twitch":
+		return ActionsForTwitchScopes(scopes)
+	case "kick":
+		return ActionsForKickScopes(scopes)
+	case "youtube":
+		return ActionsForYouTubeScopes(scopes)
+	default:
+		return nil
+	}
+}
+
+// IntersectActions returns the actions present in both sets, in the order of the first.
+//
+// A delegated moderator's usable actions are the intersection of what the platform supports, what
+// their own scopes allow, and what the streamer delegated — so this is applied, not assumed, and
+// the result can legitimately be empty.
+func IntersectActions(actions []Action, allowed []string) []Action {
+	permitted := make(map[string]bool, len(allowed))
+	for _, a := range allowed {
+		permitted[a] = true
+	}
+	out := make([]Action, 0, len(actions))
+	for _, a := range actions {
+		if permitted[string(a)] {
+			out = append(out, a)
+		}
+	}
+	return out
 }

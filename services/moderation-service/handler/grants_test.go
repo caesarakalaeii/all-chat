@@ -65,6 +65,11 @@ type fakeGrantStore struct {
 	acceptErr   error
 	acceptedFor []string
 	seenHashes  [][]byte
+	delegations []repository.Delegation
+	delegateErr error
+	// listedFor records whose delegations were asked for, so a test can prove the listing is
+	// keyed on the caller and nothing else.
+	listedFor []string
 }
 
 func (f *fakeGrantStore) CreateInvite(_ context.Context, p repository.InviteParams) (repository.Grant, error) {
@@ -116,6 +121,11 @@ func (f *fakeGrantStore) AcceptInvite(_ context.Context, hash []byte, userID str
 	return f.accepted, nil
 }
 
+func (f *fakeGrantStore) ListDelegationsFor(_ context.Context, moderatorUserID string) ([]repository.Delegation, error) {
+	f.listedFor = append(f.listedFor, moderatorUserID)
+	return f.delegations, f.delegateErr
+}
+
 // delegationGateFor reports delegation enabled only for the listed user ids, so a test can prove
 // the gate is asked about the overlay OWNER.
 type delegationGateFor map[string]bool
@@ -163,6 +173,7 @@ func grantRouter(h *GrantHandler, userID string, roles ...string) *gin.Engine {
 	api.DELETE("/overlays/:id/moderators", h.HandleRevokeAll)
 	api.POST("/invites/preview", h.HandlePreviewInvite)
 	api.POST("/invites/accept", h.HandleAcceptInvite)
+	api.GET("/delegations", h.HandleListDelegations)
 	return r
 }
 

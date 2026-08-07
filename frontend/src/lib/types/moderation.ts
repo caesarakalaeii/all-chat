@@ -32,8 +32,23 @@ export type ModerationPlatform = 'twitch' | 'youtube' | 'kick' | 'tiktok' | 'dis
 /** A single moderation action the backend can perform on a source. */
 export type ModerationAction = 'delete' | 'timeout' | 'ban' | 'unban'
 
-/** Why a source cannot be moderated, when `moderatable` is false. */
-export type ModerationUnavailableReason = 'unsupported_platform' | 'missing_scope'
+/**
+ * Why a source cannot be moderated, when `moderatable` is false.
+ *
+ * The first two can describe either role. The last three only ever describe a
+ * delegated moderator's source (ADR-0048), and they differ in who can clear
+ * them: `not_delegated` needs the streamer, `needs_consent` needs the
+ * moderator, and `needs_discord_link` needs neither — nothing can clear it yet.
+ */
+export type ModerationUnavailableReason =
+  | 'unsupported_platform'
+  | 'missing_scope'
+  | 'not_delegated'
+  | 'needs_consent'
+  | 'needs_discord_link'
+
+/** The caller's role on an overlay's moderation write-path. */
+export type ModerationRole = 'owner' | 'moderator' | 'none'
 
 /** Per-source moderation capability, as returned by the capabilities endpoint. */
 export interface SourceCapability {
@@ -52,13 +67,34 @@ export interface SourceCapability {
 
 /** Overlay-wide moderation capabilities for the logged-in viewer. */
 export interface ModerationCapabilities {
+  /**
+   * The caller's role. A caller with no role and an overlay that does not exist
+   * produce the identical payload, so `none` must never be read as proof that
+   * the overlay is real.
+   */
+  role: ModerationRole
   is_owner: boolean
   /**
-   * Whether the moderation feature gate (ADR-0008) is open for this viewer. When
-   * false, the owner is outside the rollout cohort: controls are hidden and the
-   * action endpoints would 403. Always false for non-owners.
+   * Whether the moderation feature gate (ADR-0008) is open. Keyed on the overlay
+   * OWNER, never the caller: a premium streamer's moderators moderate for free,
+   * so a moderator seeing `false` here must be shown the streamer's plan as the
+   * cause, never an upgrade prompt.
    */
   enabled: boolean
+  /**
+   * The single flag the controls switch on: the caller holds a role AND the
+   * owner's plan has moderation open. Which actions are actually available is
+   * still decided source by source.
+   */
+  can_moderate: boolean
+  /**
+   * The grant's action set, present for a moderator only.
+   *
+   * What a `needs_consent` source's "Connect to moderate" requests scopes for: such a
+   * source reports no usable actions yet, and guessing high would ask a volunteer for
+   * ban scope the streamer never delegated.
+   */
+  delegated_actions?: ModerationAction[]
   sources: SourceCapability[]
 }
 
@@ -181,6 +217,35 @@ export interface InviteCreated {
   invitee_label?: string
 }
 
+/**
+ * What an invite holder is shown before agreeing to moderate.
+ *
+ * Deliberately carries NO `overlay_id`: an overlay UUID already grants chat read
+ * to anyone holding it, so it is disclosed on acceptance rather than to everyone
+ * who merely opens the link.
+ */
+export interface InvitePreview {
+  overlay_name: string
+  owner_display_name: string
+  actions: ModerationAction[]
+  platforms: GrantPlatformLeg[]
+  expires_at: string
+  invitee_label?: string
+  /** Set when the invite is pre-bound to one platform account. */
+  expected_platform?: DelegatablePlatform
+  expected_account?: string
+}
+
+/** A redeemed invite, with the overlay the moderator may now act on. */
+export interface InviteAccepted {
+  grant_id: string
+  overlay_id: string
+  overlay_name: string
+  owner_display_name: string
+  actions: ModerationAction[]
+  platforms: GrantPlatformLeg[]
+}
+
 /** Body for narrowing or widening an existing grant. */
 export interface UpdateGrantRequest {
   /** Omit to leave the action set untouched. */
@@ -203,6 +268,38 @@ export type DelegationErrorCode =
   | 'already_moderator'
   | 'owner_cannot_accept'
   | 'invite_bound_to_other_account'
+
+/**
+ * One channel a moderator has been handed, as the MODERATOR sees it.
+ *
+ * The mirror image of `ModeratorGrant`: the owner's view names the moderator,
+ * this one names the streamer. It carries no user ids — a volunteer learns who
+ * delegated to them, not who else moderates there.
+ */
+export interface Delegation {
+  grant_id: string
+  /** The only way to reach the overlay: `GET /api/v1/overlays` is owner-filtered. */
+  overlay_id: string
+  overlay_name: string
+  owner_display_name: string
+  /** `active` or `suspended`. A suspended grant is listed, not hidden. */
+  status: GrantStatus
+  actions: ModerationAction[]
+  platforms: GrantPlatformLeg[]
+  /**
+   * Whether the streamer's plan currently has delegated moderation open. False
+   * means the streamer's plan lapsed — say so, and never link a volunteer to
+   * `/upgrade` for a plan that is not theirs to buy.
+   */
+  available: boolean
+  accepted_at?: string
+  last_action_at?: string
+}
+
+/** The "channels I moderate" payload. */
+export interface DelegationList {
+  delegations: Delegation[]
+}
 
 /** Platforms a grant leg may cover, in display order. */
 export const DELEGATABLE_PLATFORMS: ReadonlyArray<DelegatablePlatform> = [
