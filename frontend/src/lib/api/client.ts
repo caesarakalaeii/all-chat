@@ -117,10 +117,14 @@ class ApiClient {
       // it must NOT trigger the generic refresh→retry path.
       let errorValue: string | undefined
       try {
-        const errorData = await response.clone().json().catch(() => ({} as Record<string, unknown>))
-        errorValue = typeof (errorData as Record<string, unknown>).error === 'string'
-          ? (errorData as Record<string, unknown>).error as string
-          : undefined
+        const errorData = await response
+          .clone()
+          .json()
+          .catch(() => ({}) as Record<string, unknown>)
+        errorValue =
+          typeof (errorData as Record<string, unknown>).error === 'string'
+            ? ((errorData as Record<string, unknown>).error as string)
+            : undefined
       } catch {
         errorValue = undefined
       }
@@ -154,13 +158,17 @@ class ApiClient {
         if (typeof window !== 'undefined' && !endpoint.startsWith('/api/v1/auth/me')) {
           window.location.href = '/'
         }
-        throw new ApiError(401, errorValue || 'Unauthorized', { error: errorValue || 'Unauthorized' })
+        throw new ApiError(401, errorValue || 'Unauthorized', {
+          error: errorValue || 'Unauthorized',
+        })
       }
       // reauth_required: fall through to the generic error path (no refresh, no redirect)
     }
 
     if (!response.ok) {
-      const errorData: Record<string, unknown> = await response.json().catch(() => ({ error: 'Unknown error' }))
+      const errorData: Record<string, unknown> = await response
+        .json()
+        .catch(() => ({ error: 'Unknown error' }))
       const errorValue = typeof errorData.error === 'string' ? errorData.error : undefined
       throw new ApiError(response.status, errorValue || response.statusText, errorData)
     }
@@ -224,6 +232,18 @@ class ApiClient {
 
   async delete(endpoint: string): Promise<void> {
     await this.fetch(endpoint, { method: 'DELETE' })
+  }
+
+  /**
+   * DELETE whose response body matters (e.g. "how many were revoked").
+   *
+   * A sibling of `delete` rather than a change to it: every existing caller
+   * legitimately ignores the body, and widening `delete`'s return type would
+   * invite callers to await a body that most endpoints do not send.
+   */
+  async deleteJson<T>(endpoint: string): Promise<T> {
+    const response = await this.fetch(endpoint, { method: 'DELETE' })
+    return response.json()
   }
 }
 

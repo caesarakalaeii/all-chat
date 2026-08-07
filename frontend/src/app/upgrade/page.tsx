@@ -16,7 +16,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { Check, MessagesSquare, Radio, ShieldCheck, Sparkles, Volume2 } from 'lucide-react'
+import { Check, MessagesSquare, Radio, ShieldCheck, Sparkles, Users, Volume2 } from 'lucide-react'
 import Link from 'next/link'
 import { AppNav } from '@/components/AppNav'
 import { Card } from '@/components/ui/card'
@@ -45,6 +45,12 @@ const features: PremiumFeature[] = [
     title: 'Moderate from your overlay',
     description:
       'Moderate straight from the monitor view — no second dashboard. Delete, timeout, ban and unban on Twitch and Discord; timeout, ban and unban on Kick; ban on YouTube. (TikTok has no moderation API.)',
+  },
+  {
+    icon: Users,
+    title: 'Let your moderators help',
+    description:
+      'Hand the monitor view to the moderators you already trust. They act with their own platform accounts, so Twitch, YouTube and Kick check their moderator role on every action — and they never need a plan of their own.',
   },
   {
     icon: Volume2,
