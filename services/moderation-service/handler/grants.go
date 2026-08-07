@@ -42,6 +42,9 @@ type GrantStore interface {
 	RevokeAllGrants(ctx context.Context, overlayID, revokedBy string) (int, error)
 	PreviewInvite(ctx context.Context, tokenHash []byte) (repository.InviteDetails, error)
 	AcceptInvite(ctx context.Context, tokenHash []byte, userID string) (repository.InviteDetails, error)
+	// ListDelegationsFor is the mirror of ListGrants: the overlays this user moderates for
+	// someone else, which is the only way an accepted moderator can find them at all.
+	ListDelegationsFor(ctx context.Context, moderatorUserID string) ([]repository.Delegation, error)
 }
 
 // AccessResolver answers who the caller is on an overlay. The grant endpoints need only the role,

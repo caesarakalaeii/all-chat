@@ -51,6 +51,10 @@ type Authorizer interface {
 	ResolveOverlayAccess(ctx context.Context, overlayID, callerID string) (repository.OverlayAccess, error)
 	IsModeratableSource(ctx context.Context, overlayID, platform, channelID string) (bool, error)
 	ListModeratableSources(ctx context.Context, overlayID string) ([]repository.Source, error)
+	// ModeratorGrantedScopes reads the scopes on a delegated moderator's OWN credential for a
+	// platform, and whether one exists at all. Never the token itself: the capability answer
+	// needs no decryption.
+	ModeratorGrantedScopes(ctx context.Context, userID, platform string) ([]string, bool, error)
 	// TouchGrantActivity records that a delegated grant was just used, which is what the
 	// dormancy rule reads. A no-op for owner actions, which carry no grant.
 	TouchGrantActivity(ctx context.Context, grantID string) error
@@ -271,7 +275,24 @@ func (h *Handler) HandleUnban(c *gin.Context) {
 	}, nil)
 }
 
+// noRoleCapabilities is the answer for a caller who may not moderate this overlay.
+//
+// The SAME body is returned for "you hold no role here" and "this overlay does not exist", so the
+// endpoint cannot be used to test overlay ids — the action path already takes that care and the
+// capability path must not undo it.
+func noRoleCapabilities() models.Capabilities {
+	return models.Capabilities{
+		Role:    repository.RoleNone,
+		Sources: []models.SourceCapability{},
+	}
+}
+
 // HandleCapabilities reports, per source, which moderation actions the caller can use.
+//
+// Role-aware since ADR-0048: an overlay owner and a delegated moderator both get real source
+// detail, computed from different authorities. The owner's comes from the scopes on their
+// broadcaster credential; the moderator's from what the streamer delegated intersected with the
+// scopes on the moderator's OWN credential.
 func (h *Handler) HandleCapabilities(c *gin.Context) {
 	cl := newCaller(c)
 	if cl.userID == "" {
@@ -279,21 +300,27 @@ func (h *Handler) HandleCapabilities(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	owns, err := h.repo.VerifyOverlayOwnership(ctx, cl.overlayID, cl.userID)
-	if err != nil {
-		h.logger.Error("capabilities: ownership check failed", zap.Error(err))
+
+	access, err := h.repo.ResolveOverlayAccess(ctx, cl.overlayID, cl.userID)
+	switch {
+	case errors.Is(err, repository.ErrOverlayNotFound):
+		c.JSON(http.StatusOK, noRoleCapabilities())
+		return
+	case err != nil:
+		h.logger.Error("capabilities: access resolution failed", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
-	// Non-owners get a read-only view: no source detail, no controls.
-	if !owns {
-		c.JSON(http.StatusOK, models.Capabilities{IsOwner: false, Sources: []models.SourceCapability{}})
+	if !access.Authorized() {
+		c.JSON(http.StatusOK, noRoleCapabilities())
 		return
 	}
 
-	// Feature-gate cohort check (ADR-0008). A gate-lookup error fails closed so a
-	// transient DB hiccup never opens the feature to a non-cohort user.
-	enabled, err := h.gate.ModerationEnabled(ctx, cl.userID)
+	// Feature-gate cohort check (ADR-0008), keyed on the OVERLAY OWNER exactly as authorize()
+	// keys it — a premium streamer's moderators moderate for free, and a moderator must never be
+	// told to upgrade a plan that is not theirs. A gate-lookup error fails closed so a transient
+	// DB hiccup never opens the feature to a non-cohort user.
+	enabled, err := h.gateOpenFor(ctx, access)
 	if err != nil {
 		h.logger.Warn("capabilities: feature-gate check failed; treating moderation as disabled", zap.Error(err))
 		enabled = false
@@ -306,11 +333,97 @@ func (h *Handler) HandleCapabilities(c *gin.Context) {
 		return
 	}
 
-	caps := models.Capabilities{IsOwner: true, Enabled: enabled, Sources: make([]models.SourceCapability, 0, len(sources))}
+	caps := models.Capabilities{
+		Role:        access.Role,
+		IsOwner:     access.IsOwner(),
+		Enabled:     enabled,
+		CanModerate: enabled,
+		Sources:     make([]models.SourceCapability, 0, len(sources)),
+	}
+	if !access.IsOwner() {
+		// Only a grant has an action set; an owner's authority is not enumerable this way.
+		caps.DelegatedActions = models.IntersectActions(models.DelegatableActions, access.Actions)
+	}
 	for _, s := range sources {
-		caps.Sources = append(caps.Sources, h.capabilityFor(ctx, cl.userID, s))
+		if access.IsOwner() {
+			caps.Sources = append(caps.Sources, h.capabilityFor(ctx, cl.userID, s))
+			continue
+		}
+		caps.Sources = append(caps.Sources, h.delegatedCapabilityFor(ctx, cl.userID, access, s))
 	}
 	c.JSON(http.StatusOK, caps)
+}
+
+// gateOpenFor answers whether moderation is open for this overlay, keyed on the owner.
+//
+// A delegated moderator needs BOTH keys: closing `delegated_moderation` must stop delegated
+// actions without touching the streamer's own write-path, which is the entire point of it being a
+// second key (ADR-0048).
+func (h *Handler) gateOpenFor(ctx context.Context, access repository.OverlayAccess) (bool, error) {
+	if access.IsOwner() {
+		return h.gate.ModerationEnabled(ctx, access.OwnerUserID)
+	}
+	return h.gate.DelegationEnabled(ctx, access.OwnerUserID)
+}
+
+// delegatedCapabilityFor computes one source's capability for a DELEGATED MODERATOR.
+//
+// Three fail-closed filters, in the order that produces the most actionable answer: what the
+// streamer delegated (only they can widen it), then whether the moderator has connected their own
+// account for that platform (only the moderator can clear that). Chat-send is never reported —
+// moderators get no send in v1, and it is a distinct, higher-trust capability.
+func (h *Handler) delegatedCapabilityFor(
+	ctx context.Context, userID string, access repository.OverlayAccess, s repository.Source,
+) models.SourceCapability {
+	sc := models.SourceCapability{
+		Platform:    s.Platform,
+		ChannelID:   s.ChannelID,
+		ChannelName: s.ChannelName,
+		Actions:     []models.Action{},
+	}
+	if !models.PlatformSupported(s.Platform) {
+		sc.Reason = models.ReasonUnsupportedPlatform
+		return sc
+	}
+	// The grant's platform leg and its action set are separate grants of authority, and a source
+	// the streamer did not hand over is indistinguishable from one where they delegated only
+	// actions this platform cannot perform: both mean "ask the streamer", not "connect your
+	// account".
+	delegated := models.IntersectActions(models.PlatformActions[s.Platform], access.Actions)
+	if !access.MayUsePlatform(s.Platform) || len(delegated) == 0 {
+		sc.Reason = models.ReasonNotDelegated
+		return sc
+	}
+	// Discord's authority is the shared bot plus a link to the moderator's Discord account, not an
+	// OAuth scope they can grant. No such link exists yet, so there is no consent flow to send
+	// them to and the copy must say so rather than offering a dead button.
+	if s.Platform == "discord" {
+		sc.Reason = models.ReasonNeedsDiscordLink
+		return sc
+	}
+
+	scopes, ok, err := h.repo.ModeratorGrantedScopes(ctx, userID, s.Platform)
+	if err != nil {
+		h.logger.Warn("capabilities: moderator scope lookup failed; treating as not connected",
+			zap.String("platform", s.Platform), zap.Error(err))
+		ok = false
+	}
+	if !ok {
+		sc.Reason = models.ReasonNeedsConsent
+		return sc
+	}
+	// The scope→action mapping is already per-platform, so the delegated action set is the only
+	// narrowing left. An empty result means they consented for a narrower set than this streamer
+	// delegated — they may have connected for someone who delegated less — and re-running consent
+	// is exactly the fix, so it reads as "connect" rather than as a refusal.
+	usable := models.IntersectActions(models.ActionsForModeratorScopes(s.Platform, scopes), access.Actions)
+	if len(usable) == 0 {
+		sc.Reason = models.ReasonNeedsConsent
+		return sc
+	}
+	sc.Moderatable = true
+	sc.Actions = usable
+	return sc
 }
 
 // capabilityFor computes one source's capability: unsupported platforms (TikTok) are
@@ -386,8 +499,9 @@ func (h *Handler) authorize(c *gin.Context, cl *caller, platform, channelID stri
 	// moderators moderate for free. Enforced here rather than in middleware so the denial is
 	// audited like every other denial in this service, and so the copy can differ by role —
 	// a delegated moderator must never be pointed at an upgrade page for a plan that is not
-	// theirs to buy.
-	enabled, err := h.gate.ModerationEnabled(ctx, access.OwnerUserID)
+	// theirs to buy. A moderator additionally needs the `delegated_moderation` key, which is what
+	// makes that key a working rollback lever rather than a label on the invite button.
+	enabled, err := h.gateOpenFor(ctx, access)
 	if err != nil {
 		h.logger.Error("moderation gate check failed", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
@@ -406,6 +520,14 @@ func (h *Handler) authorize(c *gin.Context, cl *caller, platform, channelID stri
 	// anything the platform supports.
 	if !access.MayPerform(string(action)) {
 		h.deny(c, *cl, platform, channelID, action, http.StatusForbidden, "this action was not delegated to you")
+		return false
+	}
+
+	// ...and to the platforms whose leg the owner enabled. A separate grant of authority from the
+	// action set: without this check, delegating Twitch would silently delegate every other source
+	// on the overlay, since the action names are shared across platforms.
+	if !access.MayUsePlatform(platform) {
+		h.deny(c, *cl, platform, channelID, action, http.StatusForbidden, "this platform was not delegated to you")
 		return false
 	}
 

@@ -750,6 +750,9 @@ func main() {
 		// still needs a signed-in All-Chat account for the grant to bind to.
 		protectedAPI.POST("/moderation/invites/preview", proxyHandler.ForwardRequest)
 		protectedAPI.POST("/moderation/invites/accept", proxyHandler.ForwardRequest)
+		// "Channels I moderate". /overlays is owner-filtered, so this is the only listing that
+		// can surface an overlay someone else owns to a delegated moderator.
+		protectedAPI.GET("/moderation/delegations", proxyHandler.ForwardRequest)
 
 		// Ambassador self-service (ADR-0041) — a streamer reads/sets their own
 		// homepage-showcase opt-in. -> share-service (enforces the ambassador role).

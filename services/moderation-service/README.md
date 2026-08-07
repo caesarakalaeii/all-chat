@@ -16,7 +16,7 @@ All require a user JWT (forwarded by the gateway; re-validated here). Mounted un
 
 | Method | Path | Body |
 |---|---|---|
-| `GET`  | `/overlays/:id/capabilities` | — → `{ is_owner, enabled, sources: [{platform, channel_id, channel_name, moderatable, reason?, actions[]}] }` |
+| `GET`  | `/overlays/:id/capabilities` | — → `{ role, is_owner, enabled, can_moderate, delegated_actions?, sources: [{platform, channel_id, channel_name, moderatable, reason?, actions[]}] }` |
 | `POST` | `/overlays/:id/delete`  | `{ platform, channel_id, native_message_id, target_uuid }` |
 | `POST` | `/overlays/:id/timeout` | `{ platform, channel_id, target_user_id, target_username, duration_seconds, reason? }` |
 | `POST` | `/overlays/:id/ban`     | `{ platform, channel_id, target_user_id, target_username, reason? }` |
@@ -24,6 +24,20 @@ All require a user JWT (forwarded by the gateway; re-validated here). Mounted un
 
 Send a unique `Idempotency-Key` header on each POST (double-click/retry dedup). Per-user rate limiting
 applies (`MODERATION_RATE_PER_MIN`, default 30/min).
+
+`capabilities` is role-aware (ADR-0048): `role` is `owner` / `moderator` / `none`, and `can_moderate` is
+the single flag the UI switches controls on. An owner's per-source answer comes from the scopes on their
+broadcaster credential; a **moderator's** comes from what the streamer delegated intersected with the
+scopes on the moderator's *own* credential, so `reason` gains three moderator-only values that differ in
+who can clear them: `not_delegated` (only the streamer can), `needs_consent` (only the moderator can —
+this is the "Connect to moderate" state) and `needs_discord_link` (nobody yet; Discord has no per-user
+moderation API and All-Chat holds no Discord identity for a user). `can_send` is never true for a
+moderator: chat send is a distinct, higher-trust capability and stays owner-only in v1.
+`delegated_actions` echoes the grant's action set so a `needs_consent` source can request scopes for
+exactly what was delegated rather than guessing high.
+
+A caller with **no role** and an overlay that **does not exist** produce a byte-identical body, so this
+endpoint is not an overlay-existence oracle either.
 
 ### Delegation grant lifecycle (ADR-0048)
 
@@ -60,6 +74,19 @@ Redemption is keyed on the secret, not on any role:
 | `POST` | `/invites/preview` | `{ token }` → `{ overlay_name, owner_display_name, actions[], platforms[], expires_at, expected_account? }` |
 | `POST` | `/invites/accept`  | `{ token }` → `{ grant_id, overlay_id, overlay_name, … }` |
 
+Once accepted, the moderator finds the channel through their own listing:
+
+| Method | Path | Body |
+|---|---|---|
+| `GET` | `/delegations` | — → `{ delegations: [{grant_id, overlay_id, overlay_name, owner_display_name, status, actions[], platforms[], available, accepted_at?, last_action_at?}] }` |
+
+This is **not** a convenience: `GET /api/v1/overlays` is owner-filtered and there is no shared-with-me
+listing, so without it an accepted grant is unreachable. It is keyed on the caller alone, carries no user
+ids (the moderator learns who delegated to them, not who else moderates there), and is never gated — a
+moderator must be able to see a delegation even when the streamer's plan has lapsed, which surfaces as
+`available: false` with the streamer's plan named as the cause. `suspended` grants are listed rather than
+hidden: a channel that silently vanished would be indistinguishable from a revocation.
+
 The secret travels in the **body**, never in a path — a URL would put a live moderation credential into
 every access log, proxy log and `Referer` header along the way. `preview` deliberately omits
 `overlay_id`: an overlay UUID already grants chat *read* to whoever holds it, so it is disclosed on
@@ -80,8 +107,11 @@ feature is rolled back — otherwise a streamer could be left holding moderators
    moderate for free, and a moderator never sees an upgrade prompt for a plan that is not theirs to
    buy. Enforced inside `authorize()` rather than in `RequirePremium` middleware, which keys on the
    caller — so the denial is audited like every other denial and the copy can differ by role.
-3. A delegated moderator may only perform the actions the grant lists; an owner may perform anything
-   the platform supports.
+3. A delegated moderator may only perform the actions the grant lists, **and** only on the platforms
+   whose leg the grant enables. Two separate grants of authority: the action names are shared across
+   platforms, so an action-only check would let a Twitch-only moderator act on every source the overlay
+   carries. An absent leg row is a disabled leg, so this fails closed. An owner may perform anything the
+   platform supports and is narrowed by neither.
 4. The `(platform, channel_id)` must be a real source on that overlay and **not** `shared_overlay`.
    Under owner-only authorization that exclusion was true by construction; under role-based
    authorization this predicate carries it alone, so it has its own regression test.
@@ -170,6 +200,13 @@ no redeploy. Locally, non-premium users can either set `users.is_premium=true` o
   resolves the guild from the channel and performs member ops; `handler.DiscordScopeChecker` reports the
   actions the bot's guild permissions allow; the auth-service `GetModerationAuthURL` (elevated invite) +
   `HandleConnect?moderation=true` give an opt-in re-invite that upgrades existing bots in place.
+- **Phase 6 (in progress): delegated moderators** (ADR-0048). Landed so far: role resolution and
+  owner-keyed entitlement; the grant lifecycle; the owner's Moderators panel; the moderator's
+  `/delegations` listing and role-aware `capabilities`; per-platform leg enforcement on the action path.
+  **Not yet landed:** the per-platform legs themselves — the dispatcher still resolves a credential by
+  `(caller, channel)`, so a delegated action currently fails **closed** with `422 no credential` rather
+  than falling back to the owner's token. Twitch is next (`moderator_id`/`broadcaster_id` split + the
+  owner-reach anchor), then Kick, Discord and YouTube, each independently gated.
 
 ## Layout
 
