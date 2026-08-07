@@ -52,7 +52,7 @@ var ErrNoActions = errors.New("a grant must delegate at least one action")
 // volunteer moderator needs day to day. Ban and unban stay opt-in.
 var DefaultDelegatedActions = []string{string(ActionDelete), string(ActionTimeout)}
 
-// delegatableActions is the closed allowlist of verbs a grant may carry, in canonical order.
+// DelegatableActions is the closed allowlist of verbs a grant may carry, in canonical order.
 //
 // This is the ONLY admission point for a grant's actions, and it is load-bearing beyond tidiness:
 // ModerationScopesForActions downstream also accepts "engagement", which maps to
@@ -60,9 +60,17 @@ var DefaultDelegatedActions = []string{string(ActionDelete), string(ActionTimeou
 // moderator's consent screen to scopes on their own channel that have nothing to do with
 // moderation (an ADR-0012 regression). Chat send is absent by decision — it is a distinct,
 // higher-trust capability and stays owner-only in v1.
-var delegatableActions = []string{
-	string(ActionDelete), string(ActionTimeout), string(ActionBan), string(ActionUnban),
-}
+var DelegatableActions = []Action{ActionDelete, ActionTimeout, ActionBan, ActionUnban}
+
+// delegatableActions is DelegatableActions as strings, since a grant stores verbs rather than
+// typed actions. Derived rather than restated so the two can never disagree.
+var delegatableActions = func() []string {
+	out := make([]string, 0, len(DelegatableActions))
+	for _, a := range DelegatableActions {
+		out = append(out, string(a))
+	}
+	return out
+}()
 
 // IsDelegatableAction reports whether action may be carried by a delegation grant.
 func IsDelegatableAction(action string) bool {
@@ -272,4 +280,36 @@ type InviteAccepted struct {
 	OwnerDisplayName string             `json:"owner_display_name"`
 	Actions          []string           `json:"actions"`
 	Platforms        []GrantPlatformLeg `json:"platforms"`
+}
+
+// Delegation is one channel a moderator has been handed, as the MODERATOR sees it.
+//
+// This is the mirror image of ModeratorGrant and deliberately not the same type: the owner's view
+// names the moderator, and the moderator's view names the streamer. Nothing here identifies the
+// other moderators on the overlay — a volunteer learns who delegated to them, not who else did.
+type Delegation struct {
+	GrantID          string `json:"grant_id"`
+	OverlayID        string `json:"overlay_id"`
+	OverlayName      string `json:"overlay_name"`
+	OwnerDisplayName string `json:"owner_display_name"`
+	// Status is active or suspended. A suspended grant is listed rather than hidden: dormancy
+	// suspension must read as "ask the streamer to reactivate", not as a channel that silently
+	// vanished.
+	Status    string             `json:"status"`
+	Actions   []string           `json:"actions"`
+	Platforms []GrantPlatformLeg `json:"platforms"`
+	// Available reports whether the streamer's plan currently has delegated moderation open
+	// (ADR-0008, keyed on the owner). When false the moderator is shown the streamer's plan as the
+	// cause — never an upgrade prompt for a plan that is not theirs to buy.
+	Available    bool       `json:"available"`
+	AcceptedAt   *time.Time `json:"accepted_at,omitempty"`
+	LastActionAt *time.Time `json:"last_action_at,omitempty"`
+}
+
+// DelegationList is the "channels I moderate" payload.
+//
+// It is the only way an accepted moderator can reach an overlay at all: GET /api/v1/overlays is
+// owner-filtered, so without this endpoint a grant is unreachable (ADR-0048).
+type DelegationList struct {
+	Delegations []Delegation `json:"delegations"`
 }

@@ -54,6 +54,10 @@ type fakeAuthorizer struct {
 	// dormancy rule later reads.
 	touchedGrants []string
 	touchErr      error
+	// modScopes are the scopes on the delegated moderator's OWN credential, keyed by platform.
+	// An absent platform means they have not consented for it at all.
+	modScopes    map[string][]string
+	modScopesErr error
 }
 
 func (f *fakeAuthorizer) VerifyOverlayOwnership(context.Context, string, string) (bool, error) {
@@ -91,6 +95,13 @@ func (f *fakeAuthorizer) ListModeratableSources(context.Context, string) ([]repo
 func (f *fakeAuthorizer) TouchGrantActivity(_ context.Context, grantID string) error {
 	f.touchedGrants = append(f.touchedGrants, grantID)
 	return f.touchErr
+}
+func (f *fakeAuthorizer) ModeratorGrantedScopes(_ context.Context, _, platform string) ([]string, bool, error) {
+	if f.modScopesErr != nil {
+		return nil, false, f.modScopesErr
+	}
+	scopes, ok := f.modScopes[platform]
+	return scopes, ok, nil
 }
 
 type fakeEmitter struct{ published []*mpmodels.RawChatMessage }

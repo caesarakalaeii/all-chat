@@ -48,9 +48,12 @@ type OverlayAccess struct {
 	OwnerUserID    string
 	OwnerIsPremium bool
 	Role           string
-	// GrantID and Actions are populated for RoleModerator only.
+	// GrantID, Actions and Platforms are populated for RoleModerator only.
 	GrantID string
 	Actions []string
+	// Platforms are the grant's ENABLED platform legs. An absent row is a disabled leg
+	// (migration 080), so this list is the complete set — never a filter over a default.
+	Platforms []string
 }
 
 // IsOwner reports whether the caller owns the overlay.
@@ -69,6 +72,26 @@ func (a OverlayAccess) MayPerform(action string) bool {
 	case RoleModerator:
 		for _, granted := range a.Actions {
 			if granted == action {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// MayUsePlatform reports whether the caller's role permits acting on this platform.
+//
+// The per-platform leg is one of the grant's three fail-closed filters (ADR-0048) and is a
+// separate question from the action set: a streamer who delegates Twitch and Kick to one person
+// and only Discord to another has expressed two different grants, and an action-only check would
+// let either of them act anywhere the overlay has a source. Owners are unrestricted.
+func (a OverlayAccess) MayUsePlatform(platform string) bool {
+	switch a.Role {
+	case RoleOwner:
+		return true
+	case RoleModerator:
+		for _, enabled := range a.Platforms {
+			if enabled == platform {
 				return true
 			}
 		}
@@ -102,7 +125,10 @@ func (r *Repository) ResolveOverlayAccess(ctx context.Context, overlayID, caller
 		            WHEN m.id IS NOT NULL     THEN 'moderator'
 		            ELSE 'none' END,
 		       COALESCE(m.id::text, ''),
-		       COALESCE(m.actions, '{}')
+		       COALESCE(m.actions, '{}'),
+		       ARRAY(SELECT p.platform
+		               FROM overlay_moderator_platforms p
+		              WHERE p.grant_id = m.id AND p.enabled)
 		FROM overlays o
 		JOIN users u ON u.id = o.user_id
 		LEFT JOIN overlay_moderators m
@@ -119,6 +145,7 @@ func (r *Repository) ResolveOverlayAccess(ctx context.Context, overlayID, caller
 		&access.Role,
 		&access.GrantID,
 		&access.Actions,
+		&access.Platforms,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return OverlayAccess{}, ErrOverlayNotFound

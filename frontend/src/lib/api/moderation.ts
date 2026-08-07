@@ -30,7 +30,10 @@ import type {
   CreateInviteRequest,
   DelegatablePlatform,
   DelegationErrorCode,
+  DelegationList,
+  InviteAccepted,
   InviteCreated,
+  InvitePreview,
   ModerationAction,
   ModerationCapabilities,
   ModerationPlatform,
@@ -328,5 +331,54 @@ export const moderationApi = {
     return apiClient.deleteJson<{ revoked: number }>(
       `/api/v1/moderation/overlays/${overlayId}/moderators`
     )
+  },
+
+  // --- Moderator side (ADR-0048) -------------------------------------------
+
+  /**
+   * The channels this user moderates for other people.
+   *
+   * `GET /api/v1/overlays` is owner-filtered and there is no shared-with-me listing,
+   * so this is the ONLY route a delegated moderator has into an overlay they do not
+   * own. Never feature-gated: a moderator must be able to see a delegation even when
+   * the streamer's plan has lapsed, which shows up as `available: false` per row.
+   */
+  listDelegations(): Promise<DelegationList> {
+    return apiClient.get<DelegationList>('/api/v1/moderation/delegations')
+  },
+
+  /**
+   * Read an invite without redeeming it. The secret travels in the BODY, never the
+   * path — a moderation credential in a URL lands in access logs, proxy logs and
+   * `Referer` headers on the way. The response carries no `overlay_id`; that is
+   * disclosed on acceptance.
+   */
+  previewInvite(token: string): Promise<InvitePreview> {
+    return apiClient.post<InvitePreview>('/api/v1/moderation/invites/preview', { token })
+  },
+
+  /** Redeem an invite, binding the grant to the signed-in account. */
+  acceptInvite(token: string): Promise<InviteAccepted> {
+    return apiClient.post<InviteAccepted>(
+      '/api/v1/moderation/invites/accept',
+      { token },
+      idempotencyHeader()
+    )
+  },
+
+  /**
+   * Fetch the OAuth URL for a delegated moderator's OWN consent (ADR-0048).
+   *
+   * Distinct from `get*ConsentUrl` above in three ways that matter: no overlay id
+   * (Twitch/Kick moderation scopes are role-based, so one consent serves every
+   * streamer who delegated that platform), no base login scopes on the screen, and
+   * the credential lands in the moderator's own store rather than touching their
+   * login grant. Twitch is the only platform wired today; the others answer 400.
+   */
+  async getModConsentUrl(platform: DelegatablePlatform, actions: ModerationAction[]) {
+    const res = await apiClient.get<ConsentUrlResponse>(
+      `/api/v1/auth/${platform}/mod-consent?actions=${actions.join(',')}`
+    )
+    return res.auth_url
   },
 }

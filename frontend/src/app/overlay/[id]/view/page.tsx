@@ -66,7 +66,12 @@ import {
   moderationApi,
 } from '@/lib/api/moderation'
 import type { ChatMessage, DeletionMetadata } from '@/lib/types/message'
-import type { ModerationCapabilities, SourceCapability } from '@/lib/types/moderation'
+import type {
+  DelegatablePlatform,
+  ModerationAction,
+  ModerationCapabilities,
+  SourceCapability,
+} from '@/lib/types/moderation'
 import type { EventSettings } from '@/lib/types/overlay'
 import {
   applyModerationMark,
@@ -200,8 +205,9 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
     }
   }, [id])
 
-  // Fetch moderation capabilities once the user is known. A non-owner gets
-  // { is_owner:false, sources:[] }; any failure leaves moderation disabled.
+  // Fetch moderation capabilities once the user is known. A caller with no role gets
+  // { role:'none', sources:[] } — the same body an overlay that does not exist produces,
+  // so it says nothing about the overlay. Any failure leaves moderation disabled.
   useEffect(() => {
     let cancelled = false
     moderationApi
@@ -210,7 +216,14 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         if (!cancelled) setCapabilities(data)
       })
       .catch(() => {
-        if (!cancelled) setCapabilities({ is_owner: false, enabled: false, sources: [] })
+        if (!cancelled)
+          setCapabilities({
+            role: 'none',
+            is_owner: false,
+            enabled: false,
+            can_moderate: false,
+            sources: [],
+          })
       })
     return () => {
       cancelled = true
@@ -302,6 +315,28 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
     [id]
   )
 
+  // A delegated moderator connecting their OWN account for a platform (ADR-0048).
+  //
+  // A different flow from enableModeration above, not a variant of it: it carries no
+  // overlay id, because Twitch's and Kick's moderation scopes are role-based rather than
+  // channel-scoped — one consent covers every streamer who delegated that platform. It
+  // also requests only the delegated actions, so a volunteer is never shown a consent
+  // screen asking for channel-point or subscription read on their own channel.
+  const connectAsModerator = useCallback(
+    async (platform: DelegatablePlatform, actions: ModerationAction[]) => {
+      try {
+        const url = await moderationApi.getModConsentUrl(platform, actions)
+        if (url) window.location.href = url
+      } catch {
+        toastManager.add({
+          title: `Connecting ${platform} is not available yet. Ask the streamer to moderate there for now.`,
+          type: 'error',
+        })
+      }
+    },
+    []
+  )
+
   // Re-consent when a send fails with `reauth_required` (the streamer's platform
   // send token expired or was revoked). Chat sending requires the advanced-controls
   // grant — Twitch `user:write:chat`, Kick `chat:write`, YouTube force-ssl — which is
@@ -352,10 +387,16 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
   // --- Moderation capability lookups ---------------------------------------
 
   const isOwner = capabilities?.is_owner === true
-  // The moderation feature gate (ADR-0008): an owner outside the rollout cohort can
-  // view the dashboard but gets no controls (the endpoints would 403 anyway).
-  const moderationEnabled = isOwner && capabilities?.enabled === true
-  const featureGated = isOwner && capabilities?.enabled === false
+  // A delegated moderator (ADR-0048). They get the moderation controls their grant allows
+  // and nothing else: no engagement, no send bar, no stream re-discovery — those are
+  // ownership powers, not moderation powers.
+  const isModerator = capabilities?.role === 'moderator'
+  const hasRole = isOwner || isModerator
+  // The moderation feature gate (ADR-0008), keyed on the OVERLAY OWNER. Someone with a
+  // role but a closed gate can view the monitor but gets no controls (the endpoints would
+  // 403 anyway).
+  const moderationEnabled = capabilities?.can_moderate === true
+  const featureGated = hasRole && capabilities?.can_moderate === false
   const capabilitiesByChannel = useMemo(() => {
     const map = new Map<string, SourceCapability>()
     capabilities?.sources.forEach((s) => map.set(s.channel_id, s))
@@ -365,6 +406,14 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
   // Sources the owner could moderate but hasn't granted the scope for.
   const missingScopeSources = useMemo(
     () => (capabilities?.sources ?? []).filter((s) => s.reason === 'missing_scope'),
+    [capabilities]
+  )
+
+  // Sources a delegated moderator could moderate once they connect their OWN account for
+  // that platform. Consent is deferred to first use, so this is the normal state on a
+  // fresh grant rather than an error.
+  const needsConsentSources = useMemo(
+    () => (capabilities?.sources ?? []).filter((s) => s.reason === 'needs_consent'),
     [capabilities]
   )
 
@@ -643,30 +692,78 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         </div>
       </header>
 
-      {/* Non-owner notice: viewing is allowed, moderation is not. */}
-      {capabilities && !isOwner && (
+      {/* No-role notice: viewing is allowed, moderation is not. Says nothing about the
+          overlay itself — the payload behind it is identical for an overlay that does not
+          exist, so it must not be phrased as a fact about this one. */}
+      {capabilities && !hasRole && (
         <div className="flex items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-xs text-text-sub">
           <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
-          You can view this monitor but aren&apos;t its owner — moderation is disabled.
+          You can view this monitor, but you don&apos;t moderate here — moderation is disabled.
         </div>
       )}
 
-      {/* Feature-gated notice: owner is outside the moderation rollout cohort. */}
-      {featureGated && (
-        <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-xs text-text-sub">
-          <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
-          <span>Chat moderation is a premium feature.</span>
-          <Link
-            href="/upgrade"
-            className="font-medium text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
-          >
-            Upgrade to moderate from your overlay
-          </Link>
-        </div>
-      )}
+      {/* Feature-gated notice. The gate is keyed on the OWNER, so a moderator is told
+          whose plan it is and given no call to action: /upgrade would sell them a plan
+          that is not theirs to buy. */}
+      {featureGated &&
+        (isOwner ? (
+          <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-xs text-text-sub">
+            <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
+            <span>Chat moderation is a premium feature.</span>
+            <Link
+              href="/upgrade"
+              className="font-medium text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+            >
+              Upgrade to moderate from your overlay
+            </Link>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-xs text-text-sub">
+            <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
+            <span>
+              This streamer&apos;s plan doesn&apos;t include moderation right now, so your actions
+              are unavailable until they renew it.
+            </span>
+          </div>
+        ))}
 
-      {/* Missing-scope notices: owner must grant permissions per platform. */}
+      {/* Connect-to-moderate notices: a delegated moderator acts with their OWN account,
+          and consent is deferred to the first time they need it — so this is the normal
+          state on a fresh grant rather than an error. */}
       {moderationEnabled &&
+        isModerator &&
+        needsConsentSources.map((s) => (
+          <div
+            key={s.channel_id}
+            className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-xs text-text-sub"
+          >
+            <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
+            <span>
+              Connect your own {s.platform} account to moderate
+              {s.channel_name ? ` ${s.channel_name}` : ''}.
+            </span>
+            {s.platform === 'twitch' || s.platform === 'kick' || s.platform === 'youtube' ? (
+              <button
+                type="button"
+                onClick={() =>
+                  void connectAsModerator(
+                    s.platform as DelegatablePlatform,
+                    capabilities?.delegated_actions ?? []
+                  )
+                }
+                className="font-medium text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+              >
+                Connect {s.platform}
+              </button>
+            ) : null}
+          </div>
+        ))}
+
+      {/* Missing-scope notices: owner must grant permissions per platform. Owner-only —
+          the flow behind it re-consents the STREAMER's broadcaster credential, which is
+          not a moderator's to re-consent. */}
+      {moderationEnabled &&
+        isOwner &&
         missingScopeSources.map((s) => (
           <div
             key={s.channel_id}
@@ -699,26 +796,38 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         ))}
 
       {/* Re-auth prompt: a moderation action failed because the platform token can no
-          longer perform it. The backend asked for re-consent; give the streamer the CTA. */}
+          longer perform it. The backend asked for re-consent; give the actor the CTA —
+          which differs by role. Sending a moderator down the streamer's re-consent path
+          would half-succeed and then error: that flow is an add-source state, and
+          add-source 404s for anyone who does not own the overlay. */}
       {reauthPrompt && (
         <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-xs text-text-sub">
           <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
           <span>
             Your {reauthPrompt.platform} moderation permission expired or was never granted —
-            re-authorize to keep moderating from your overlay.
+            re-authorize to keep moderating {isOwner ? 'from your overlay' : 'here'}.
           </span>
           <button
             type="button"
             onClick={() => {
               const platform = reauthPrompt.platform
               setReauthPrompt(null)
+              if (isModerator) {
+                void connectAsModerator(
+                  platform as DelegatablePlatform,
+                  capabilities?.delegated_actions ?? []
+                )
+                return
+              }
               void enableModeration(platform)
             }}
             className="font-medium text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
           >
             {reauthPrompt.platform === 'discord'
               ? 'Re-invite the bot'
-              : 'Re-authorize moderation & chat sending'}
+              : isModerator
+                ? `Reconnect ${reauthPrompt.platform}`
+                : 'Re-authorize moderation & chat sending'}
           </button>
         </div>
       )}

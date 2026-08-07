@@ -73,6 +73,7 @@ func TestDelete_DelegatedModeratorIsAuthorized(t *testing.T) {
 		Role:           repository.RoleModerator,
 		GrantID:        "grant-1",
 		Actions:        []string{"delete", "timeout"},
+		Platforms:      []string{"twitch"},
 	}, nil)
 
 	resp := do(newTestRouter(h, modUserID, ""), http.MethodPost, deletePath(), deleteBody)
@@ -91,7 +92,7 @@ func TestDelete_DelegatedActionStampsGrantActivity(t *testing.T) {
 	auth := &fakeAuthorizer{
 		access: &repository.OverlayAccess{
 			OwnerUserID: ownerID, OwnerIsPremium: true, Role: repository.RoleModerator,
-			GrantID: "grant-1", Actions: []string{"delete"},
+			GrantID: "grant-1", Actions: []string{"delete"}, Platforms: []string{"twitch"},
 		},
 		isSource: map[string]bool{"twitch|somestreamer": true},
 	}
@@ -121,7 +122,7 @@ func TestDelete_AStampFailureDoesNotFailTheAction(t *testing.T) {
 	auth := &fakeAuthorizer{
 		access: &repository.OverlayAccess{
 			OwnerUserID: ownerID, OwnerIsPremium: true, Role: repository.RoleModerator,
-			GrantID: "grant-1", Actions: []string{"delete"},
+			GrantID: "grant-1", Actions: []string{"delete"}, Platforms: []string{"twitch"},
 		},
 		isSource: map[string]bool{"twitch|somestreamer": true},
 		touchErr: errors.New("database unavailable"),
@@ -140,6 +141,7 @@ func TestDelete_ActionNotDelegatedIsRefused(t *testing.T) {
 		OwnerIsPremium: true,
 		Role:           repository.RoleModerator,
 		Actions:        []string{"timeout"}, // delete withheld
+		Platforms:      []string{"twitch"},
 	}, nil)
 
 	resp := do(newTestRouter(h, modUserID, ""), http.MethodPost, deletePath(), deleteBody)
@@ -150,6 +152,103 @@ func TestDelete_ActionNotDelegatedIsRefused(t *testing.T) {
 	assert.Equal(t, audit.OutcomeDenied, rec.entries[0].Outcome)
 }
 
+// The per-platform leg is a separate grant of authority from the action set. Without this check,
+// delegating Twitch would silently delegate every other source on the overlay, since the action
+// names are shared across platforms.
+func TestDelete_PlatformNotDelegatedIsRefused(t *testing.T) {
+	h, emitter, rec := delegationHandler(t, repository.OverlayAccess{
+		OwnerUserID:    ownerID,
+		OwnerIsPremium: true,
+		Role:           repository.RoleModerator,
+		Actions:        []string{"delete"},
+		Platforms:      []string{"kick"}, // Twitch deliberately withheld
+	}, nil)
+
+	resp := do(newTestRouter(h, modUserID, ""), http.MethodPost, deletePath(), deleteBody)
+
+	assert.Equal(t, http.StatusForbidden, resp.Code)
+	assert.Empty(t, emitter.published)
+	require.Len(t, rec.entries, 1)
+	assert.Equal(t, audit.OutcomeDenied, rec.entries[0].Outcome)
+}
+
+// A grant with no enabled leg at all delegates nothing: absence IS disablement (migration 080),
+// so it must fail closed rather than defaulting to every platform the overlay carries.
+func TestDelete_GrantWithNoEnabledLegDelegatesNothing(t *testing.T) {
+	h, emitter, _ := delegationHandler(t, repository.OverlayAccess{
+		OwnerUserID:    ownerID,
+		OwnerIsPremium: true,
+		Role:           repository.RoleModerator,
+		Actions:        []string{"delete"},
+	}, nil)
+
+	resp := do(newTestRouter(h, modUserID, ""), http.MethodPost, deletePath(), deleteBody)
+
+	assert.Equal(t, http.StatusForbidden, resp.Code)
+	assert.Empty(t, emitter.published)
+}
+
+// An owner is not narrowed by legs — they hold no grant, so there is nothing to narrow.
+func TestDelete_OwnerIsNotNarrowedByPlatformLegs(t *testing.T) {
+	h, emitter, _ := delegationHandler(t, repository.OverlayAccess{
+		OwnerUserID:    ownerID,
+		OwnerIsPremium: true,
+		Role:           repository.RoleOwner,
+	}, nil)
+
+	resp := do(newTestRouter(h, ownerID, ""), http.MethodPost, deletePath(), deleteBody)
+
+	assert.Equal(t, http.StatusOK, resp.Code)
+	assert.NotEmpty(t, emitter.published)
+}
+
+// Closing `delegated_moderation` must stop delegated actions while leaving the streamer's own
+// write-path alone — otherwise the second gate key is a label on the invite button rather than a
+// rollback lever.
+func TestDelete_ClosingTheDelegationGateStopsModeratorsOnly(t *testing.T) {
+	access := repository.OverlayAccess{
+		OwnerUserID:    ownerID,
+		OwnerIsPremium: true,
+		Role:           repository.RoleModerator,
+		Actions:        []string{"delete"},
+		Platforms:      []string{"twitch"},
+	}
+	// Base moderation open for the owner, delegation closed for everyone.
+	gate := splitGate{moderation: map[string]bool{ownerID: true}}
+
+	hMod, emitter, _ := delegationHandler(t, access, gate)
+	respMod := do(newTestRouter(hMod, modUserID, ""), http.MethodPost, deletePath(), deleteBody)
+	assert.Equal(t, http.StatusForbidden, respMod.Code)
+	assert.Empty(t, emitter.published)
+
+	owner := access
+	owner.Role = repository.RoleOwner
+	hOwner, ownerEmitter, _ := delegationHandler(t, owner, gate)
+	respOwner := do(newTestRouter(hOwner, ownerID, ""), http.MethodPost, deletePath(), deleteBody)
+	assert.Equal(t, http.StatusOK, respOwner.Code,
+		"rolling delegation back must not take the streamer's own moderation away")
+	assert.NotEmpty(t, ownerEmitter.published)
+}
+
+// splitGate answers the two gate keys independently, which is what tells a delegation rollback
+// apart from a moderation rollback.
+type splitGate struct {
+	moderation map[string]bool
+	delegation map[string]bool
+}
+
+func (g splitGate) ModerationEnabled(_ context.Context, userID string) (bool, error) {
+	return g.moderation[userID], nil
+}
+
+func (g splitGate) DelegationEnabled(ctx context.Context, userID string) (bool, error) {
+	enabled, err := g.ModerationEnabled(ctx, userID)
+	if err != nil || !enabled {
+		return false, err
+	}
+	return g.delegation[userID], nil
+}
+
 // The premium gate must be asked about the OVERLAY OWNER. A moderator with no entitlement of
 // their own moderates freely on a premium streamer's overlay.
 func TestDelete_GateIsKeyedOnTheOwnerNotTheCaller(t *testing.T) {
@@ -158,6 +257,7 @@ func TestDelete_GateIsKeyedOnTheOwnerNotTheCaller(t *testing.T) {
 		OwnerIsPremium: true,
 		Role:           repository.RoleModerator,
 		Actions:        []string{"delete"},
+		Platforms:      []string{"twitch"},
 	}, gateFor{ownerID: true}) // the moderator is deliberately absent
 
 	resp := do(newTestRouter(h, modUserID, ""), http.MethodPost, deletePath(), deleteBody)
@@ -174,6 +274,7 @@ func TestDelete_ModeratorCannotSubstituteTheirOwnEntitlement(t *testing.T) {
 		OwnerIsPremium: false,
 		Role:           repository.RoleModerator,
 		Actions:        []string{"delete"},
+		Platforms:      []string{"twitch"},
 	}, gateFor{modUserID: true}) // only the moderator is "premium"
 
 	resp := do(newTestRouter(h, modUserID, ""), http.MethodPost, deletePath(), deleteBody)
@@ -256,6 +357,7 @@ func TestDelete_DelegatedModeratorCannotReachANonSource(t *testing.T) {
 			OwnerIsPremium: true,
 			Role:           repository.RoleModerator,
 			Actions:        []string{"delete"},
+			Platforms:      []string{"twitch"},
 		},
 		isSource: map[string]bool{}, // nothing is a moderatable source on this overlay
 	}

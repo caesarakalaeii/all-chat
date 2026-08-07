@@ -34,6 +34,7 @@ import { PlatformBadge } from '@/components/ui/badge'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { MaintenanceBanner } from '@/components/MaintenanceBanner'
 import { EventSubMigrationBanner } from '@/components/EventSubMigrationBanner'
+import { ModeratingElsewhereCard } from '@/components/ModeratingElsewhereCard'
 import { OnboardingChecklist } from '@/components/onboarding/OnboardingChecklist'
 import { CreateOverlayDialog } from '@/components/onboarding/CreateOverlayDialog'
 import { useOnboardingStore } from '@/lib/stores/onboarding-store'
@@ -252,6 +253,9 @@ function DashboardContent() {
         <div className="mb-4 space-y-4">
           <MaintenanceBanner />
           <EventSubMigrationBanner sourcesByOverlay={sourcesByOverlay} />
+          {/* Channels other streamers delegated to this user. Renders nothing when there
+              are none, so it costs a non-moderator a single request and no pixels. */}
+          <ModeratingElsewhereCard />
         </div>
         <div className="mb-8 flex items-center justify-between">
           <h1 className="text-2xl font-bold text-text">Overlays</h1>

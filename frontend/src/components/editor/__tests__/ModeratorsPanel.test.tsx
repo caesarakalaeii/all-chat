@@ -230,7 +230,9 @@ describe('ModeratorsPanel invite', () => {
     expect(api.createInvite).not.toHaveBeenCalled()
   })
 
-  it('shows the secret once, says it cannot be shown again, and copies it', async () => {
+  // Handed over as the link that redeems it, not a bare secret: a code the recipient has
+  // to be told where to paste is not something a streamer can just send.
+  it('shows the redemption link once, says it cannot be shown again, and copies it', async () => {
     api.createInvite.mockResolvedValue({
       grant_id: 'g9',
       invite_token: 'SEEKRIT-TOKEN-VALUE',
@@ -241,14 +243,13 @@ describe('ModeratorsPanel invite', () => {
     const create = await openInvite()
     fireEvent.click(create)
 
-    expect(await screen.findByText('SEEKRIT-TOKEN-VALUE')).toBeInTheDocument()
+    const link = `${window.location.origin}/moderate/accept?token=SEEKRIT-TOKEN-VALUE`
+    expect(await screen.findByText(link)).toBeInTheDocument()
     // The digest is all that is stored, so the copy must not promise a second chance.
     expect(screen.getByText(/won't be shown again/i)).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /copy/i }))
-    await waitFor(() =>
-      expect(navigator.clipboard.writeText).toHaveBeenCalledWith('SEEKRIT-TOKEN-VALUE')
-    )
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(link))
   })
 
   it('drops the secret from the DOM once the reveal is dismissed', async () => {
@@ -261,10 +262,10 @@ describe('ModeratorsPanel invite', () => {
     })
     const create = await openInvite()
     fireEvent.click(create)
-    await screen.findByText('SEEKRIT-TOKEN-VALUE')
+    await screen.findByText(/SEEKRIT-TOKEN-VALUE/)
 
     fireEvent.click(screen.getByRole('button', { name: /done/i }))
-    await waitFor(() => expect(screen.queryByText('SEEKRIT-TOKEN-VALUE')).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByText(/SEEKRIT-TOKEN-VALUE/)).not.toBeInTheDocument())
   })
 
   // A moderator must never be shown an upgrade prompt, but the OWNER here is the caller,

@@ -16,13 +16,22 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+// vi.mock's factory is hoisted above every import, so anything it closes over must be
+// created with vi.hoisted() or the suite fails to collect.
+const client = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }))
+vi.mock('@/lib/api/client', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api/client')>('@/lib/api/client')
+  return { ...actual, apiClient: client }
+})
 
 import { ApiError } from '@/lib/api/client'
 import {
   boundInviteAccount,
   delegationErrorCode,
   isModerationReauthError,
+  moderationApi,
 } from '@/lib/api/moderation'
 
 describe('isModerationReauthError', () => {
@@ -109,5 +118,50 @@ describe('boundInviteAccount', () => {
       code: 'already_moderator',
     })
     expect(boundInviteAccount(err)).toBeNull()
+  })
+})
+
+describe('moderator-side endpoints', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('reads the delegation list from the moderator-scoped route', async () => {
+    client.get.mockResolvedValue({ delegations: [] })
+    await moderationApi.listDelegations()
+    expect(client.get).toHaveBeenCalledWith('/api/v1/moderation/delegations')
+  })
+
+  // The secret must never reach a URL: a path parameter would be captured by every
+  // access log, proxy log and Referer header between here and the service.
+  it('sends the invite secret in the body, never the path', async () => {
+    client.post.mockResolvedValue({})
+    await moderationApi.previewInvite('SEEKRIT')
+    const [path, body] = client.post.mock.calls[0]
+    expect(path).toBe('/api/v1/moderation/invites/preview')
+    expect(path).not.toContain('SEEKRIT')
+    expect(body).toEqual({ token: 'SEEKRIT' })
+  })
+
+  it('accepts an invite with the secret in the body and an idempotency key', async () => {
+    client.post.mockResolvedValue({})
+    await moderationApi.acceptInvite('SEEKRIT')
+    const [path, body, headers] = client.post.mock.calls[0]
+    expect(path).toBe('/api/v1/moderation/invites/accept')
+    expect(path).not.toContain('SEEKRIT')
+    expect(body).toEqual({ token: 'SEEKRIT' })
+    expect(headers).toHaveProperty('Idempotency-Key')
+  })
+
+  // A moderator's consent carries no overlay id — Twitch/Kick moderation scopes are
+  // role-based, so one consent serves every streamer who delegated that platform — and
+  // requests only the delegated actions, so a volunteer is never shown a wider screen.
+  it('requests mod consent without an overlay and with only the delegated actions', async () => {
+    client.get.mockResolvedValue({ auth_url: 'https://id.twitch.tv/authorize?x' })
+    const url = await moderationApi.getModConsentUrl('twitch', ['delete', 'timeout'])
+    expect(client.get).toHaveBeenCalledWith(
+      '/api/v1/auth/twitch/mod-consent?actions=delete,timeout'
+    )
+    expect(url).toBe('https://id.twitch.tv/authorize?x')
   })
 })
