@@ -79,3 +79,143 @@ export const TIMEOUT_PRESETS: ReadonlyArray<{ label: string; seconds: number }> 
   { label: '10m', seconds: 600 },
   { label: '1h', seconds: 3600 },
 ]
+
+// ---------------------------------------------------------------------------
+// Delegated moderators (ADR-0048)
+// ---------------------------------------------------------------------------
+
+/**
+ * Lifecycle state of a delegation grant. `revoked` never reaches the client —
+ * the roster endpoint excludes it — but it is in the union because the backend
+ * column allows it and a future activity view will show it.
+ */
+export type GrantStatus = 'pending' | 'active' | 'suspended' | 'revoked'
+
+/**
+ * Last known platform moderator status for one leg of a grant.
+ *
+ * TELEMETRY ONLY. The platform's own answer at action time is the authority, so
+ * this must be rendered as advisory readiness and never as an authorization
+ * verdict: a single transient 403 can set `not_a_moderator`, and treating that
+ * as a denial would lock out a legitimate moderator.
+ */
+export type GrantVerification =
+  | 'unverified'
+  | 'verified'
+  | 'not_a_moderator'
+  | 'needs_consent'
+  | 'needs_discord_link'
+  | 'unavailable'
+
+/** Platforms a grant can delegate. TikTok has no moderation API, so it is absent. */
+export type DelegatablePlatform = 'twitch' | 'youtube' | 'kick' | 'discord'
+
+/** One platform's enablement on a grant. An absent leg means disabled. */
+export interface GrantPlatformLeg {
+  platform: DelegatablePlatform
+  enabled: boolean
+  verification: GrantVerification
+  verified_at?: string
+}
+
+/** One delegation grant as the overlay owner sees it. */
+export interface ModeratorGrant {
+  id: string
+  status: GrantStatus
+  /** Absent while the invite is unredeemed. */
+  moderator_user_id?: string
+  /** Captured at accept time, so it survives the moderator deleting their account. */
+  display_name?: string
+  /** What the streamer typed when creating the invite. Display only. */
+  invitee_label?: string
+  actions: ModerationAction[]
+  platforms: GrantPlatformLeg[]
+  /** Set when the invite is pre-bound to one platform account. */
+  expected_platform?: DelegatablePlatform
+  expected_account?: string
+  created_at: string
+  accepted_at?: string
+  /** Present only while an invite is still outstanding. */
+  invite_expires_at?: string
+  suspended_at?: string
+  last_action_at?: string
+}
+
+/**
+ * The owner's Moderators roster. `used`/`cap` let the UI refuse an over-cap
+ * invite before the request, rather than explaining a 409 afterwards.
+ */
+export interface ModeratorList {
+  moderators: ModeratorGrant[]
+  cap: number
+  used: number
+}
+
+/** Body for creating an invite. Omit a field to leave it at its default. */
+export interface CreateInviteRequest {
+  /**
+   * Absent means the backend default (`delete` + `timeout`). An explicitly empty
+   * array is a 400 rather than being widened, so never send `[]` to mean
+   * "unchanged" — omit the key.
+   */
+  actions?: ModerationAction[]
+  /** Absent enables nothing: absence IS disablement, so the grant does nothing yet. */
+  platforms?: DelegatablePlatform[]
+  invitee_label?: string
+  /** Twitch only — the one platform where acceptance can verify the account. */
+  expected_platform?: 'twitch'
+  expected_platform_user_id?: string
+}
+
+/**
+ * A freshly minted invite. `invite_token` is returned exactly once and stored
+ * only as a SHA-256 digest, so it can never be re-displayed: a lost invite is
+ * re-minted, not recovered.
+ */
+export interface InviteCreated {
+  grant_id: string
+  invite_token: string
+  expires_at: string
+  actions: ModerationAction[]
+  platforms: DelegatablePlatform[]
+  invitee_label?: string
+}
+
+/** Body for narrowing or widening an existing grant. */
+export interface UpdateGrantRequest {
+  /** Omit to leave the action set untouched. */
+  actions?: ModerationAction[]
+  /** Partial map: only the platforms named here change. */
+  platforms?: Partial<Record<DelegatablePlatform, boolean>>
+}
+
+/**
+ * Machine-readable `code` on every delegation error body. Switch on these
+ * rather than parsing the human-readable `error` string.
+ */
+export type DelegationErrorCode =
+  | 'moderator_cap_reached'
+  | 'delegation_unavailable'
+  | 'grant_not_found'
+  | 'invalid_request'
+  | 'invite_not_found'
+  | 'invite_expired'
+  | 'already_moderator'
+  | 'owner_cannot_accept'
+  | 'invite_bound_to_other_account'
+
+/** Platforms a grant leg may cover, in display order. */
+export const DELEGATABLE_PLATFORMS: ReadonlyArray<DelegatablePlatform> = [
+  'twitch',
+  'youtube',
+  'kick',
+  'discord',
+]
+
+/** Every action a grant may delegate, in the backend's canonical order. */
+export const DELEGATABLE_ACTIONS: ReadonlyArray<ModerationAction> = [
+  'delete',
+  'timeout',
+  'ban',
+  'unban',
+]

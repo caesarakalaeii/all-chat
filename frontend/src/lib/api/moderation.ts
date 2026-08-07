@@ -26,7 +26,18 @@
  */
 
 import { ApiError, apiClient } from './client'
-import type { ModerationAction, ModerationCapabilities, ModerationPlatform } from '@/lib/types/moderation'
+import type {
+  CreateInviteRequest,
+  DelegatablePlatform,
+  DelegationErrorCode,
+  InviteCreated,
+  ModerationAction,
+  ModerationCapabilities,
+  ModerationPlatform,
+  ModeratorGrant,
+  ModeratorList,
+  UpdateGrantRequest,
+} from '@/lib/types/moderation'
 import type { ViewItem } from '@/lib/utils/overlayViewModel'
 
 /**
@@ -141,6 +152,34 @@ export function buildUnbanRequest(item: ViewItem): UnbanUserRequest {
   }
 }
 
+/**
+ * The machine-readable `code` on a delegation error body (ADR-0048), or undefined.
+ *
+ * Always branch on this rather than on the human-readable `error` string: the copy
+ * differs by role and is free to change. Undefined covers both a non-delegation
+ * failure and the deliberately code-less owner-only 403, which is identical for an
+ * unauthorized caller, a delegated moderator, and an overlay that does not exist —
+ * so it must never be read as evidence of a role.
+ */
+export function delegationErrorCode(err: unknown): DelegationErrorCode | undefined {
+  if (!(err instanceof ApiError)) return undefined
+  const code = err.data?.code
+  return typeof code === 'string' ? (code as DelegationErrorCode) : undefined
+}
+
+/**
+ * The account a pre-bound invite belongs to, when acceptance was refused because the
+ * signed-in user is someone else. Turns a dead end into an instruction.
+ */
+export function boundInviteAccount(err: unknown): { account: string; platform: string } | null {
+  if (delegationErrorCode(err) !== 'invite_bound_to_other_account') return null
+  const data = (err as ApiError).data
+  return {
+    account: typeof data?.expected_account === 'string' ? data.expected_account : '',
+    platform: typeof data?.expected_platform === 'string' ? data.expected_platform : '',
+  }
+}
+
 /** Response of the moderation re-consent endpoint. */
 interface ConsentUrlResponse {
   auth_url: string
@@ -234,6 +273,60 @@ export const moderationApi = {
       `/api/v1/moderation/overlays/${overlayId}/youtube/rediscover`,
       {},
       idempotencyHeader()
+    )
+  },
+
+  // --- Delegated moderators (ADR-0048) ------------------------------------
+  // Owner-only. Every one of these answers a non-owner with the same 403 body an
+  // unknown overlay gets, so a failure here says nothing about who the caller is.
+
+  /** The overlay's delegation roster, plus `used`/`cap` for the invite button. */
+  listModerators(overlayId: string): Promise<ModeratorList> {
+    return apiClient.get<ModeratorList>(`/api/v1/moderation/overlays/${overlayId}/moderators`)
+  },
+
+  /**
+   * Mint an invite. The returned `invite_token` is the ONLY time the secret exists
+   * outside the streamer's clipboard — only its digest is stored, so there is no
+   * endpoint that can show it again.
+   */
+  createInvite(overlayId: string, body: CreateInviteRequest): Promise<InviteCreated> {
+    return apiClient.post<InviteCreated>(
+      `/api/v1/moderation/overlays/${overlayId}/moderators`,
+      body,
+      idempotencyHeader()
+    )
+  },
+
+  /**
+   * Narrow or widen a grant. Omit a field to leave that dimension alone; `platforms`
+   * is a partial map, so one toggle sends one key.
+   */
+  updateGrant(
+    overlayId: string,
+    grantId: string,
+    body: UpdateGrantRequest
+  ): Promise<ModeratorGrant> {
+    return apiClient.patch<ModeratorGrant>(
+      `/api/v1/moderation/overlays/${overlayId}/moderators/${grantId}`,
+      body
+    )
+  },
+
+  /** Revoke one grant. Takes effect on the moderator's very next request. */
+  revokeGrant(overlayId: string, grantId: string): Promise<{ revoked: boolean }> {
+    return apiClient.deleteJson<{ revoked: boolean }>(
+      `/api/v1/moderation/overlays/${overlayId}/moderators/${grantId}`
+    )
+  },
+
+  /**
+   * The kill switch: revoke every grant on the overlay, unredeemed invites included.
+   * Deliberately still available when the delegation gate is closed.
+   */
+  revokeAllModerators(overlayId: string): Promise<{ revoked: number }> {
+    return apiClient.deleteJson<{ revoked: number }>(
+      `/api/v1/moderation/overlays/${overlayId}/moderators`
     )
   },
 }

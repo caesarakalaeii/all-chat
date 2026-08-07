@@ -35,6 +35,7 @@ export type EditorGroupId = 'setup' | 'appearance' | 'behavior' | 'advanced'
 export type EditorSectionId =
   | 'theme'
   | 'sources'
+  | 'moderators'
   | 'testing'
   | 'typography'
   | 'colors'
@@ -50,6 +51,15 @@ export type EditorSectionId =
   | 'engagement'
   | 'custom-css'
   | 'danger-zone'
+
+/**
+ * Sections the onboarding guide can steer the nav to from a "Show me" click.
+ *
+ * A deliberate subset of EditorSectionId — only sections the checklist actually
+ * points at — but declared once here so the editor page, its spotlight state and
+ * OnboardingChecklist cannot drift apart.
+ */
+export type SpotlightSection = 'sources' | 'theme' | 'appearance' | 'moderators'
 
 export interface EditorGroup {
   id: EditorGroupId
@@ -112,6 +122,23 @@ export const EDITOR_SECTIONS: EditorSection[] = [
       { label: 'Shared overlays', keywords: 'share partner collab accepted' },
       { label: 'Discord relay', keywords: 'relay channel server' },
       { label: 'YouTube stream selection', keywords: 'stream select strategy multiple' },
+    ],
+  },
+  {
+    id: 'moderators',
+    group: 'setup',
+    title: 'Moderators',
+    description: 'People who may moderate this overlay’s chat with their own accounts.',
+    keywords: 'mod mods moderator delegate invite permission team revoke trust helper',
+    entries: [
+      {
+        label: 'Invite a moderator',
+        keywords: 'add mod invite link code delegate trust helper volunteer',
+      },
+      { label: 'Which actions they may use', keywords: 'delete timeout ban unban permission' },
+      { label: 'Which platforms they may act on', keywords: 'twitch youtube kick discord leg' },
+      { label: 'Remove a moderator', keywords: 'revoke remove kick out delete access' },
+      { label: 'Remove all moderators', keywords: 'revoke all kill switch panic emergency' },
     ],
   },
   {
@@ -379,9 +406,7 @@ export const EDITOR_SECTIONS: EditorSection[] = [
     title: 'Custom CSS',
     description: 'Full control over overlay styling. Applied on top of all settings above.',
     keywords: 'expert code stylesheet',
-    entries: [
-      { label: 'Custom CSS', keywords: 'css style stylesheet monaco editor code expert' },
-    ],
+    entries: [{ label: 'Custom CSS', keywords: 'css style stylesheet monaco editor code expert' }],
   },
   {
     id: 'danger-zone',

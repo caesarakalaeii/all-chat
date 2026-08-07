@@ -110,7 +110,12 @@ import { EditorNav } from '@/components/editor/EditorNav'
 import { EditorSectionHeader } from '@/components/editor/EditorSectionHeader'
 import { SettingsSearch } from '@/components/editor/SettingsSearch'
 import { AdvancedDisclosure } from '@/components/editor/AdvancedDisclosure'
-import { EDITOR_SECTIONS, type EditorSectionId } from '@/components/editor/sectionRegistry'
+import { ModeratorsPanel } from '@/components/editor/ModeratorsPanel'
+import {
+  EDITOR_SECTIONS,
+  type EditorSectionId,
+  type SpotlightSection,
+} from '@/components/editor/sectionRegistry'
 import dynamic from 'next/dynamic'
 
 // Dynamically import Monaco Editor to avoid SSR issues
@@ -163,10 +168,13 @@ const ENTRY_ANIMATION_OPTIONS: ReadonlyArray<{ value: MessageAnimation | ''; lab
 // Maps onboarding spotlight targets to left-nav sections (ADR-0042). The
 // guide's 'appearance' target predates the flat nav; Typography is the first
 // Appearance-group section, so the "customize" step lands there.
-const SPOTLIGHT_SECTION: Record<'sources' | 'theme' | 'appearance', EditorSectionId> = {
+// Which nav section a spotlight target opens. Keyed on SpotlightSection so adding a
+// "Show me" target is a compile error until it is mapped, rather than a silent no-op.
+const SPOTLIGHT_SECTION: Record<SpotlightSection, EditorSectionId> = {
   sources: 'sources',
   theme: 'theme',
   appearance: 'typography',
+  moderators: 'moderators',
 }
 
 // ---- Types -----------------------------------------------------------------
@@ -1288,7 +1296,9 @@ function AddSourceForm({
         <button
           onClick={() => setTiktokDialogOpen(true)}
           className="flex items-center gap-2.5 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
-          style={{ backgroundColor: '#010101', '--tw-ring-color': '#69C9D0' } as React.CSSProperties}
+          style={
+            { backgroundColor: '#010101', '--tw-ring-color': '#69C9D0' } as React.CSSProperties
+          }
         >
           <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
             <path
@@ -1615,9 +1625,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   const obsCopiedStep = useOnboardingStore((s) => s.sessionSteps.obsCopied)
   // Explicit spotlight from a checklist "Show me" click; while unset the
   // active step's own section is spotlighted.
-  const [spotlightOverride, setSpotlightOverride] = useState<
-    'sources' | 'theme' | 'appearance' | null
-  >(null)
+  const [spotlightOverride, setSpotlightOverride] = useState<SpotlightSection | null>(null)
 
   // --- Settings navigation (ADR-0042): left nav, one section at a time ---
   const [activeSection, setActiveSection] = useState<EditorSectionId>(() => {
@@ -1721,7 +1729,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
         obsCopied: obsCopiedStep,
       }).find((s) => s.active)?.id
     : undefined
-  const spotlight: 'sources' | 'theme' | 'appearance' | null = !onboardingActive
+  const spotlight: SpotlightSection | null = !onboardingActive
     ? null
     : (spotlightOverride ??
       (onboardingActiveStep === 'connect_source'
@@ -1781,7 +1789,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     return () => cancelAnimationFrame(frame)
   }, [pendingAnchor, activeSection])
 
-  function handleSpotlightSection(section: 'sources' | 'theme' | 'appearance') {
+  function handleSpotlightSection(section: SpotlightSection) {
     setSpotlightOverride(section)
     // Let the section render land before scrolling the panel into view.
     requestAnimationFrame(() => {
@@ -2267,7 +2275,10 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           // Reconstruct the full editable CSS from the stored delta/fork (ADR-0043):
           // 'linked' → the bundled theme (preloaded, not a blank box), 'diff' → the
           // theme merged with the user's saved changes, 'fork' → the saved copy as-is.
-          const { editor: editorCss, mode: cssMode } = await reconstructEditorCss(themeCss, savedCss)
+          const { editor: editorCss, mode: cssMode } = await reconstructEditorCss(
+            themeCss,
+            savedCss
+          )
           setCustomCss(editorCss)
           setCustomCssMode(cssMode)
 
@@ -3613,6 +3624,8 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                   {/* Engagement — polls, predictions & viewer points (issue #523) */}
                   {activeSection === 'engagement' && <EngagementPanel overlayId={id} />}
 
+                  {activeSection === 'moderators' && <ModeratorsPanel overlayId={id} />}
+
                   {activeSection === 'custom-css' && (
                     <div className="space-y-3">
                       <div className="flex flex-wrap items-center gap-2">
@@ -3677,7 +3690,9 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                         const errors = cssIssues.filter((i) => i.severity === 'error')
                         const warnings = cssIssues.filter((i) => i.severity === 'warning')
                         if (errors.length === 0 && warnings.length === 0) {
-                          return <p className="text-xs text-green-400">✓ No CSS problems detected.</p>
+                          return (
+                            <p className="text-xs text-green-400">✓ No CSS problems detected.</p>
+                          )
                         }
                         const parts: string[] = []
                         if (errors.length > 0)
@@ -3688,7 +3703,8 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2">
                             <p className="text-xs font-medium text-amber-300">
                               {parts.join(' · ')} — invalid rules are ignored by the browser, so fix
-                              these for your styles to take effect. Incomplete rules aren’t previewed.
+                              these for your styles to take effect. Incomplete rules aren’t
+                              previewed.
                             </p>
                             <ul className="mt-1 space-y-0.5">
                               {[...errors, ...warnings].slice(0, 5).map((issue, idx) => (
