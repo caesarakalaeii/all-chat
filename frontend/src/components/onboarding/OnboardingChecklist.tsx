@@ -46,6 +46,7 @@ import {
 import { trackEvent } from '@/lib/analytics'
 import { DISCORD_INVITE_URL, PATREON_JOIN_URL } from '@/lib/constants'
 import { cn } from '@/lib/utils'
+import type { SpotlightSection } from '@/components/editor/sectionRegistry'
 
 const STEP_LABELS: Record<OnboardingStepId, string> = {
   create_overlay: 'Create your overlay',
@@ -75,7 +76,7 @@ export interface OnboardingChecklistProps {
   /** Editor only: currently applied theme id (null = none yet). */
   themeId?: string | null
   /** Editor only: scroll to + force open an editor section. */
-  onSpotlightSection?: (section: 'sources' | 'theme' | 'appearance') => void
+  onSpotlightSection?: (section: SpotlightSection) => void
   /** Dashboard only: overlays count from the overlay store. */
   overlayCount?: number
 }
@@ -319,6 +320,46 @@ export function OnboardingChecklist({
                     Delete, timeout, ban and unban from the Monitor View button at the top of the
                     editor. Full controls on Twitch and Discord; Kick has no single-message delete;
                     YouTube is ban-only. (Premium)
+                  </p>
+                </li>
+                <li>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium text-text">Let your mods help</span>
+                    {surface === 'editor' && onSpotlightSection ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          trackEvent('cta_click', {
+                            cta: 'moderators',
+                            location: 'onboarding-extras',
+                          })
+                          onSpotlightSection('moderators')
+                        }}
+                      >
+                        Show me
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={!activeOverlayId}
+                        onClick={() => {
+                          trackEvent('cta_click', {
+                            cta: 'moderators',
+                            location: 'onboarding-extras',
+                          })
+                          if (activeOverlayId) router.push(`/overlays/${activeOverlayId}`)
+                        }}
+                      >
+                        Show me
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-xs text-text-sub">
+                    Hand the Monitor View to your existing moderators under Moderators. They act
+                    with their own platform accounts, and they never need Premium themselves.
+                    (Premium)
                   </p>
                 </li>
                 <li>

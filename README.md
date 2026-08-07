@@ -62,6 +62,11 @@ A Twitch-dashboard-inspired monitor with a **resizable live Chat panel + Activit
 
 You can also open it from your overlay's settings page (or its preview page) via the **Monitor View** button.
 
+**Your moderators can use it too.** Under **Moderators** in the overlay editor you can invite the
+people who already moderate for you (Premium). They act with **their own** platform accounts, so
+Twitch, YouTube and Kick re-check their moderator role on every action and it lands in your native
+mod log under their name — and they never need a plan of their own.
+
 ### 3. Customize the look
 
 All-Chat ships with **16 ready-made themes** you can paste into your OBS Browser Source custom CSS:
@@ -259,6 +264,7 @@ Architecture decisions are documented as ADRs in [`docs/adr/`](./docs/adr/README
 - **ADR-0015**: Dynamic EventSub chat-ownership claim — IRC is the always-on fallback; EventSub owns a channel only while it is actively delivering chat (no silent loss across the partition)
 - **ADR-0026**: Two-phase deprecation of the Twitch IRC listener — `warn` nudges connected sources to re-add their Twitch source (in-overlay notice), `enforce` stops joining channels
 - **ADR-0046**: Twitch chat notices via `channel.chat.notification` — watch streaks and announcements carry the chatter's own message on no other subscription, so they were silently dropped; notices are routed by type, skipping the five a dedicated subscription already delivers
+- **ADR-0048**: Delegated overlay moderators — a moderator acts with their OWN platform credential (never the streamer's, no fallback), so the platform re-checks their role per call; Discord is the exception (the shared bot always acts, so All-Chat verifies guild permissions live) and premium is keyed on the overlay owner
 - **ADR-0027**: Time-limited admin premium grants — an optional expiry on the admin override (streamer + viewer) that reverts on its own; recompute ignores an expired override, and a single-replica payment-service sweep clears lapsed grants
 
 ### Documentation
