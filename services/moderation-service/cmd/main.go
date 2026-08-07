@@ -199,14 +199,20 @@ func main() {
 	var dispatcher handler.Dispatcher = dispatch.NewMulti(dispatchers)
 	var scopeChecker handler.ScopeChecker = handler.MultiScopeChecker(scopeCheckers)
 
+	gate := moderationGate{gates: gateCache, repo: repo}
+
 	modHandler := handler.New(repo, deletionPublisher, auditStore, scopeChecker, dispatcher, log)
 	// Surface the cohort decision on the capabilities endpoint so the dashboard hides
 	// controls for users outside the rollout (the action routes are gated separately).
-	modHandler.SetFeatureGate(moderationGate{gates: gateCache, repo: repo})
+	modHandler.SetFeatureGate(gate)
 	// Wire the chat-send capability checker so capabilities report can_send per source.
 	modHandler.SetSendChecker(handler.MultiSendChecker(sendCheckers))
 	// Wire the YouTube stream re-discovery publisher (owner-triggered recovery from /view).
 	modHandler.SetRediscoverPublisher(publisher.NewRediscoverPublisher(redisClient, log))
+
+	// Delegated-moderator grant lifecycle (ADR-0048): invite, accept, revoke.
+	grantHandler := handler.NewGrantHandler(repo, repo, log)
+	grantHandler.SetFeatureGate(gate)
 
 	if cfg.GinMode == "release" {
 		gin.SetMode(gin.ReleaseMode)
@@ -270,6 +276,23 @@ func main() {
 		actions.POST("/overlays/:id/unban", modHandler.HandleUnban)
 	}
 
+	// Delegation grant lifecycle (ADR-0048). Owner-only, enforced in the handler against the same
+	// role resolution the action path uses, so an unknown overlay and an unauthorized one are
+	// indistinguishable here too. Only invite creation is gated: listing, narrowing and revoking a
+	// grant must keep working after a rollback, or a streamer could be left with moderators they
+	// cannot remove.
+	api.GET("/overlays/:id/moderators", grantHandler.HandleListModerators)
+	api.POST("/overlays/:id/moderators", grantHandler.HandleCreateInvite)
+	api.PATCH("/overlays/:id/moderators/:grant_id", grantHandler.HandleUpdateGrant)
+	api.DELETE("/overlays/:id/moderators/:grant_id", grantHandler.HandleRevokeGrant)
+	api.DELETE("/overlays/:id/moderators", grantHandler.HandleRevokeAll)
+
+	// Invite redemption is keyed on the SECRET, not on any role: the holder has no relationship to
+	// the overlay yet. The secret travels in the request body rather than the path so it never
+	// lands in an access log, a proxy log or a Referer header.
+	api.POST("/invites/preview", grantHandler.HandlePreviewInvite)
+	api.POST("/invites/accept", grantHandler.HandleAcceptInvite)
+
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,
 		Handler:      router,
@@ -310,6 +333,21 @@ type moderationGate struct {
 
 func (g moderationGate) ModerationEnabled(ctx context.Context, userID string) (bool, error) {
 	if !g.gates.IsPremium(featuregates.GateModeration) {
+		return true, nil
+	}
+	return g.repo.IsUserPremium(ctx, userID)
+}
+
+// DelegationEnabled gates handing the write-path to someone else (ADR-0048). Delegation requires
+// the base moderation gate AND its own key, so `delegated_moderation` can be closed to roll
+// delegation back without taking owner moderation away — and closing `moderation` necessarily
+// closes delegation too, since there is nothing left to delegate.
+func (g moderationGate) DelegationEnabled(ctx context.Context, userID string) (bool, error) {
+	enabled, err := g.ModerationEnabled(ctx, userID)
+	if err != nil || !enabled {
+		return false, err
+	}
+	if !g.gates.IsPremium(featuregates.GateDelegatedModeration) {
 		return true, nil
 	}
 	return g.repo.IsUserPremium(ctx, userID)

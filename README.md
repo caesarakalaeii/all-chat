@@ -189,7 +189,7 @@ Platform Listeners (Twitch IRC, YouTube API, Kick Pusher, TikTok WS, Discord Bot
 | `overlay-manager` | Overlay CRUD, source configuration, settings |
 | `source-manager` | Leader election, active source tracking, demand coordination |
 | `share-service` | Shareable overlay link generation; admin premium/beta-tester/ambassador role grants + feature gates; public ambassador showcase (ADR-0041) |
-| `moderation-service` | Cross-platform chat moderation write-path: delete / timeout / ban (ADR-0017) |
+| `moderation-service` | Cross-platform chat moderation write-path: delete / timeout / ban (ADR-0017); delegated-moderator grants (ADR-0048) |
 | `payment-service` | Patreon premium entitlements: grants `users.is_premium` (streamer, ADR-0018) and `viewers.is_premium` (viewer split, ADR-0019) from subscriptions |
 | `token-refresh-service` | OAuth token refresh on schedule |
 | `engagement-service` | Polls, predictions, and a per-overlay viewer points economy (#523) |

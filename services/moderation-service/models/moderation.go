@@ -345,10 +345,10 @@ type UnbanRequest struct {
 
 // SourceCapability describes whether one overlay source can be moderated and how.
 type SourceCapability struct {
-	Platform    string   `json:"platform"`
-	ChannelID   string   `json:"channel_id"`
-	ChannelName string   `json:"channel_name"`
-	Moderatable bool     `json:"moderatable"`
+	Platform    string `json:"platform"`
+	ChannelID   string `json:"channel_id"`
+	ChannelName string `json:"channel_name"`
+	Moderatable bool   `json:"moderatable"`
 	// CanSend reports whether the owner can send chat to this source from the monitor
 	// view (the chat-send scope is granted). Independent of Moderatable/Actions.
 	CanSend bool     `json:"can_send"`

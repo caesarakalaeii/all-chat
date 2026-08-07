@@ -30,36 +30,56 @@ import (
 // It returns all personal data we store for the requesting user in a
 // machine-readable JSON format.
 type DataExportResponse struct {
-	ExportedAt string                   `json:"exported_at"`
-	User       DataExportUser           `json:"user"`
-	Overlays   []DataExportOverlay      `json:"overlays"`
-	Viewers    []DataExportViewer       `json:"viewers,omitempty"`
-	Guilds     []DataExportGuild        `json:"guilds,omitempty"`
-	Messages   []DataExportMessage      `json:"messages,omitempty"`
+	ExportedAt string              `json:"exported_at"`
+	User       DataExportUser      `json:"user"`
+	Overlays   []DataExportOverlay `json:"overlays"`
+	Viewers    []DataExportViewer  `json:"viewers,omitempty"`
+	Guilds     []DataExportGuild   `json:"guilds,omitempty"`
+	Messages   []DataExportMessage `json:"messages,omitempty"`
+	// Delegations covers both directions of a moderation grant (ADR-0048): people this user
+	// delegated moderation to, and overlays delegated to this user. Both are personal data about
+	// the exporting user, and neither is derivable from the sections above.
+	Delegations []DataExportDelegation `json:"moderation_delegations,omitempty"`
+}
+
+// DataExportDelegation is one delegated-moderation grant, from whichever side the exporting user
+// sits on.
+type DataExportDelegation struct {
+	// Direction is "granted" when the user delegated moderation on their own overlay, and
+	// "received" when someone delegated it to them.
+	Direction   string     `json:"direction"`
+	OverlayID   string     `json:"overlay_id"`
+	OverlayName string     `json:"overlay_name"`
+	Status      string     `json:"status"`
+	Actions     []string   `json:"actions"`
+	Counterpart string     `json:"counterpart,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
+	AcceptedAt  *time.Time `json:"accepted_at,omitempty"`
+	RevokedAt   *time.Time `json:"revoked_at,omitempty"`
 }
 
 // DataExportUser contains the user profile (tokens excluded).
 type DataExportUser struct {
-	ID              string     `json:"id"`
-	Username        string     `json:"username"`
-	DisplayName     string     `json:"display_name"`
-	ProfileImageURL string     `json:"profile_image_url"`
-	AuthProvider    string     `json:"auth_provider"`
-	TwitchID        *string    `json:"twitch_id,omitempty"`
-	GoogleID        *string    `json:"google_id,omitempty"`
-	KickID          *string    `json:"kick_id,omitempty"`
-	IsPremium       bool       `json:"is_premium"`
-	CreatedAt       time.Time  `json:"created_at"`
-	UpdatedAt       time.Time  `json:"updated_at"`
+	ID              string    `json:"id"`
+	Username        string    `json:"username"`
+	DisplayName     string    `json:"display_name"`
+	ProfileImageURL string    `json:"profile_image_url"`
+	AuthProvider    string    `json:"auth_provider"`
+	TwitchID        *string   `json:"twitch_id,omitempty"`
+	GoogleID        *string   `json:"google_id,omitempty"`
+	KickID          *string   `json:"kick_id,omitempty"`
+	IsPremium       bool      `json:"is_premium"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 // DataExportOverlay is a single overlay with its sources.
 type DataExportOverlay struct {
-	ID        string               `json:"id"`
-	Name      string               `json:"name"`
-	IsActive  bool                 `json:"is_active"`
-	CreatedAt time.Time            `json:"created_at"`
-	Sources   []DataExportSource   `json:"sources"`
+	ID        string             `json:"id"`
+	Name      string             `json:"name"`
+	IsActive  bool               `json:"is_active"`
+	CreatedAt time.Time          `json:"created_at"`
+	Sources   []DataExportSource `json:"sources"`
 }
 
 // DataExportSource is a connected chat source.
@@ -72,10 +92,10 @@ type DataExportSource struct {
 
 // DataExportViewer is a viewer session (tokens excluded).
 type DataExportViewer struct {
-	Platform      string    `json:"platform"`
-	Username      string    `json:"username"`
-	DisplayName   string    `json:"display_name"`
-	CreatedAt     time.Time `json:"created_at"`
+	Platform    string    `json:"platform"`
+	Username    string    `json:"username"`
+	DisplayName string    `json:"display_name"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 // DataExportGuild is a connected Discord server.
@@ -136,6 +156,7 @@ func (h *AuthHandler) HandleDataExport(c *gin.Context) {
 	export.Viewers = fetchViewerSessions(ctx, db, uid, h.logger)
 	export.Guilds = fetchGuilds(ctx, db, uid, h.logger)
 	export.Messages = fetchMessages(ctx, db, uid, h.logger)
+	export.Delegations = fetchDelegations(ctx, db, uid, h.logger)
 
 	c.Header("Content-Disposition", "attachment; filename=allchat-data-export.json")
 	c.JSON(http.StatusOK, export)
@@ -224,6 +245,54 @@ func fetchGuilds(ctx context.Context, db *pgxpool.Pool, userID string, log *zap.
 			continue
 		}
 		out = append(out, g)
+	}
+	return out
+}
+
+// fetchDelegations returns every delegated-moderation grant the user is a party to, in both
+// directions (ADR-0048).
+//
+// Revoked grants are included deliberately: they are retained as history, so a portability export
+// that omitted them would misreport what All-Chat still holds. Erasure needs no counterpart here —
+// overlay_moderators cascades from both overlays and users, so deleting the account removes every
+// row where this user is the moderator, and every row on their own overlays.
+func fetchDelegations(ctx context.Context, db *pgxpool.Pool, userID string, log *zap.Logger) []DataExportDelegation {
+	rows, err := db.Query(ctx, `
+		SELECT 'granted', m.overlay_id::text, o.name, m.status, m.actions,
+		       -- The name captured at accept time, else whoever the account says it is now, else
+		       -- the label the streamer typed on an invite nobody has redeemed.
+		       COALESCE(NULLIF(m.moderator_display_name, ''), NULLIF(mod_user.display_name, ''),
+		                m.invitee_label, ''),
+		       m.created_at, m.accepted_at, m.revoked_at
+		FROM overlay_moderators m
+		JOIN overlays o ON o.id = m.overlay_id
+		LEFT JOIN users mod_user ON mod_user.id = m.moderator_user_id
+		WHERE o.user_id = $1
+		UNION ALL
+		SELECT 'received', m.overlay_id::text, o.name, m.status, m.actions,
+		       COALESCE(owner.display_name, ''),
+		       m.created_at, m.accepted_at, m.revoked_at
+		FROM overlay_moderators m
+		JOIN overlays o ON o.id = m.overlay_id
+		JOIN users owner ON owner.id = o.user_id
+		WHERE m.moderator_user_id = $1
+		ORDER BY 7`, userID)
+	if err != nil {
+		// The table may not exist yet on a deployment that has not run migration 080. A partial
+		// export is better than none.
+		log.Warn("Data export: failed to fetch moderation delegations", zap.Error(err))
+		return nil
+	}
+	defer rows.Close()
+
+	var out []DataExportDelegation
+	for rows.Next() {
+		var d DataExportDelegation
+		if err := rows.Scan(&d.Direction, &d.OverlayID, &d.OverlayName, &d.Status, &d.Actions,
+			&d.Counterpart, &d.CreatedAt, &d.AcceptedAt, &d.RevokedAt); err != nil {
+			continue
+		}
+		out = append(out, d)
 	}
 	return out
 }
