@@ -560,16 +560,22 @@ func main() {
 		publicAPI.GET("/auth/twitch/add-source/:overlay_id", localmiddleware.CookieToBearer(), proxyHandler.ForwardRequest)
 		// Opt-in moderation re-consent (ADR-0017); auth-service applies its own JWT middleware.
 		publicAPI.GET("/auth/twitch/moderation/:overlay_id", localmiddleware.CookieToBearer(), proxyHandler.ForwardRequest)
+		// Delegated-moderator consent (ADR-0048); auth-service applies its own JWT middleware.
+		publicAPI.GET("/auth/twitch/mod-consent", localmiddleware.CookieToBearer(), proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/youtube/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/youtube/callback", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/youtube/add-source/:overlay_id", localmiddleware.CookieToBearer(), proxyHandler.ForwardRequest)
 		// Opt-in moderation re-consent (ADR-0017); auth-service applies its own JWT middleware.
 		publicAPI.GET("/auth/youtube/moderation/:overlay_id", localmiddleware.CookieToBearer(), proxyHandler.ForwardRequest)
+		// Delegated-moderator consent (ADR-0048); auth-service applies its own JWT middleware.
+		publicAPI.GET("/auth/youtube/mod-consent", localmiddleware.CookieToBearer(), proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/kick/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/kick/callback", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/kick/add-source/:overlay_id", localmiddleware.CookieToBearer(), proxyHandler.ForwardRequest)
 		// Opt-in moderation re-consent (ADR-0017); auth-service applies its own JWT middleware.
 		publicAPI.GET("/auth/kick/moderation/:overlay_id", localmiddleware.CookieToBearer(), proxyHandler.ForwardRequest)
+		// Delegated-moderator consent (ADR-0048); auth-service applies its own JWT middleware.
+		publicAPI.GET("/auth/kick/mod-consent", localmiddleware.CookieToBearer(), proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/tiktok/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/tiktok/callback", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/tiktok/add-source/:overlay_id", localmiddleware.CookieToBearer(), proxyHandler.ForwardRequest)

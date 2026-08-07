@@ -29,6 +29,15 @@ const (
 	ActionLogin OAuthAction = "login"
 	// ActionAddSource is for adding a chat source to an overlay
 	ActionAddSource OAuthAction = "add_source"
+	// ActionModConsent is a delegated moderator granting All-Chat their OWN moderation
+	// scopes (ADR-0048).
+	//
+	// It is deliberately NOT an add-source action. The shared callback calls
+	// addSourceToOverlay for every add-source state, and overlay-manager 404s that for a
+	// non-owner — so a moderator would have their credential persisted and then be
+	// redirected to an error. It also must not touch the moderator's login credential or
+	// granted_scopes: the credential lands in its own table, keyed on the moderator.
+	ActionModConsent OAuthAction = "mod_consent"
 )
 
 // PurposeModeration marks an add-source flow that is really an opt-in moderation
@@ -79,6 +88,25 @@ func (s *OAuthState) IsModeration() bool {
 	return s.Purpose == PurposeModeration
 }
 
+// NewModConsentState creates a state for a delegated moderator granting their own moderation
+// scopes (ADR-0048).
+//
+// No overlay id: because Twitch's and Kick's moderation scopes are role-based rather than
+// channel-scoped, one consent per platform serves every streamer who delegated that platform.
+// Binding it to an overlay would imply a per-streamer consent that the platforms do not model.
+func NewModConsentState(csrfToken, userID string) *OAuthState {
+	return &OAuthState{
+		CSRFToken: csrfToken,
+		UserID:    userID,
+		Action:    ActionModConsent,
+	}
+}
+
+// IsModConsent reports whether this state is a delegated moderator's own consent flow.
+func (s *OAuthState) IsModConsent() bool {
+	return s.Action == ActionModConsent
+}
+
 // Encode serializes the state to JSON string
 func (s *OAuthState) Encode() (string, error) {
 	data, err := json.Marshal(s)
@@ -112,11 +140,16 @@ func (s *OAuthState) Validate() error {
 	if s.CSRFToken == "" {
 		return fmt.Errorf("csrf_token is required")
 	}
-	if s.Action != ActionLogin && s.Action != ActionAddSource {
+	if s.Action != ActionLogin && s.Action != ActionAddSource && s.Action != ActionModConsent {
 		return fmt.Errorf("invalid action: %s", s.Action)
 	}
 	if s.Action == ActionAddSource && s.OverlayID == "" {
 		return fmt.Errorf("overlay_id is required for add_source action")
+	}
+	// A moderator's credential is keyed on them, so without a user id there is nobody to
+	// attribute it to — and the callback must never fall back to creating an account here.
+	if s.Action == ActionModConsent && s.UserID == "" {
+		return fmt.Errorf("user_id is required for mod_consent action")
 	}
 	return nil
 }
