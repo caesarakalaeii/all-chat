@@ -29,6 +29,7 @@ import (
 	"github.com/caesar/all-chat/services/moderation-service/models"
 	"github.com/caesar/all-chat/services/moderation-service/repository"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -45,10 +46,37 @@ type fakeAuthorizer struct {
 	ownsErr  error
 	isSource map[string]bool
 	sources  []repository.Source
+	// access overrides the role/entitlement answer; when nil it is derived from owns so the
+	// pre-delegation tests keep expressing intent as "the caller owns the overlay".
+	access    *repository.OverlayAccess
+	accessErr error
 }
 
 func (f *fakeAuthorizer) VerifyOverlayOwnership(context.Context, string, string) (bool, error) {
 	return f.owns, f.ownsErr
+}
+
+func (f *fakeAuthorizer) ResolveOverlayAccess(_ context.Context, _, callerID string) (repository.OverlayAccess, error) {
+	switch {
+	case f.accessErr != nil:
+		return repository.OverlayAccess{}, f.accessErr
+	case f.access != nil:
+		return *f.access, nil
+	case f.ownsErr != nil:
+		return repository.OverlayAccess{}, f.ownsErr
+	case f.owns:
+		return repository.OverlayAccess{
+			OwnerUserID:    callerID,
+			OwnerIsPremium: true,
+			Role:           repository.RoleOwner,
+		}, nil
+	}
+	// Not the owner and no grant: someone else owns it.
+	return repository.OverlayAccess{
+		OwnerUserID:    ownerID,
+		OwnerIsPremium: true,
+		Role:           repository.RoleNone,
+	}, nil
 }
 func (f *fakeAuthorizer) IsModeratableSource(_ context.Context, _, platform, channelID string) (bool, error) {
 	return f.isSource[platform+"|"+channelID], nil
@@ -159,20 +187,28 @@ func TestDelete_OwnerEmitsReflectBackAndAudits(t *testing.T) {
 	assert.Empty(t, rec.entries[0].ImpersonatedBy)
 }
 
-func TestDelete_NotOwnerIsDeniedAndAudited(t *testing.T) {
+// A caller with no role on the overlay is refused, counted and logged — but deliberately NOT
+// written to moderation_actions (ADR-0048). The overlay id is caller-supplied and the audit table
+// has no foreign key on it, so auditing these would let anyone with a token pad the log with rows
+// for overlays that never existed. Denials of a legitimate owner or moderator are still audited
+// (see moderation_delegation_test.go).
+func TestDelete_NotOwnerIsDeniedAndCountedNotAudited(t *testing.T) {
 	auth := &fakeAuthorizer{owns: false}
 	emitter := &fakeEmitter{}
 	rec := &fakeRecorder{}
 	h := New(auth, emitter, rec, NoScopeChecker{}, DryRunDispatcher{}, zap.NewNop())
 	r := newTestRouter(h, strangerID(), "")
 
+	before := testutil.ToFloat64(unauthorizedDenials.WithLabelValues("no_role"))
+
 	resp := do(r, http.MethodPost, "/api/v1/moderation/overlays/"+overlayID+"/delete",
 		`{"platform":"twitch","channel_id":"somestreamer","native_message_id":"nm1"}`)
 
 	assert.Equal(t, http.StatusForbidden, resp.Code)
 	assert.Empty(t, emitter.published, "a denied request must not emit a deletion")
-	require.Len(t, rec.entries, 1)
-	assert.Equal(t, audit.OutcomeDenied, rec.entries[0].Outcome)
+	assert.Empty(t, rec.entries, "a no-role denial must not write an audit row")
+	assert.Equal(t, before+1, testutil.ToFloat64(unauthorizedDenials.WithLabelValues("no_role")),
+		"probing must still be visible in metrics")
 }
 
 func TestDelete_TikTokIsUnsupported(t *testing.T) {

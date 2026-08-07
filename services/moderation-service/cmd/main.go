@@ -255,11 +255,14 @@ func main() {
 	// in the publisher.
 	api.POST("/overlays/:id/youtube/rediscover", modHandler.HandleYouTubeRediscover)
 
-	// The write actions are gated to the moderation rollout cohort (ADR-0008): a
-	// non-cohort user gets 403 here even though capabilities already hid the controls
-	// (defense in depth — never trust the client).
+	// The write actions are gated to the moderation rollout cohort (ADR-0008), but the check
+	// lives inside the handler's authorize() rather than in middleware here (ADR-0048).
+	// RequirePremium keys on the CALLER, which is the exact inverse of what delegation needs:
+	// entitlement belongs to the overlay OWNER, so a premium streamer's moderators moderate
+	// for free. Enforcing it after role resolution also means the denial is audited like every
+	// other denial, and the copy can differ for an owner versus a delegated moderator.
+	// Still defense in depth: server-side, before any dispatch, and capabilities agrees with it.
 	actions := api.Group("")
-	actions.Use(middleware.RequirePremium(dbPool, gateCache, featuregates.GateModeration, log))
 	{
 		actions.POST("/overlays/:id/delete", modHandler.HandleDelete)
 		actions.POST("/overlays/:id/timeout", modHandler.HandleTimeout)

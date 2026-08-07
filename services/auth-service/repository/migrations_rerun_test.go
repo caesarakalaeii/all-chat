@@ -97,6 +97,31 @@ func TestMigrationsSurviveRerun(t *testing.T) {
 		t.Fatalf("failed to insert ambassador showcase: %v", err)
 	}
 
+	// Live state a deploy must not resurrect: a delegated moderation grant the streamer
+	// REVOKED (ADR-0048). Migration 080 writes no grant VALUES, so a re-run must leave the
+	// revocation intact — a seeded or backfilled grant row would hand a removed moderator the
+	// channel back on every pod restart.
+	_, err = pool.Exec(ctx, `
+		INSERT INTO users (twitch_id, auth_provider, username, display_name,
+		                   access_token, refresh_token, token_expires_at)
+		VALUES ('626262', 'twitch', 'exmod_canary', 'Ex-Mod Canary',
+		        'access-token', 'refresh-token', NOW() + INTERVAL '4 hours')
+	`)
+	if err != nil {
+		t.Fatalf("failed to insert ex-moderator canary: %v", err)
+	}
+	_, err = pool.Exec(ctx, `
+		INSERT INTO overlay_moderators (overlay_id, moderator_user_id, granted_by,
+		                                status, revoked_at)
+		SELECT o.id, m.id, o.user_id, 'revoked', NOW()
+		FROM overlays o
+		CROSS JOIN users m
+		WHERE o.name = 'canary overlay' AND m.username = 'exmod_canary'
+	`)
+	if err != nil {
+		t.Fatalf("failed to insert revoked grant canary: %v", err)
+	}
+
 	// Second pass = pod restart.
 	runMigrations(t, pool, migrations)
 
@@ -157,6 +182,23 @@ func TestMigrationsSurviveRerun(t *testing.T) {
 	}
 	if tagline != "Multistreams to 3 platforms" {
 		t.Errorf("re-running migrations clobbered the showcase tagline: %q", tagline)
+	}
+
+	// A revoked delegation must stay revoked (ADR-0048): migration 080 writes no grant rows,
+	// so nothing can un-revoke one on a pod restart.
+	var grantStatus string
+	var revokedAt *time.Time
+	err = pool.QueryRow(ctx, `
+		SELECT g.status, g.revoked_at
+		FROM overlay_moderators g
+		JOIN users m ON m.id = g.moderator_user_id
+		WHERE m.username = 'exmod_canary'
+	`).Scan(&grantStatus, &revokedAt)
+	if err != nil {
+		t.Fatalf("revoked grant canary vanished after migration re-run: %v", err)
+	}
+	if grantStatus != "revoked" || revokedAt == nil {
+		t.Errorf("re-running migrations resurrected a revoked delegation grant (status=%q revoked_at=%v); a deploy would hand a removed moderator the channel back", grantStatus, revokedAt)
 	}
 }
 
