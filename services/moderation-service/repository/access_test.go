@@ -30,24 +30,6 @@ import (
 // what role the caller holds — because the premium gate must key on the owner while the
 // authorization keys on the caller.
 
-// addGrantSchema extends the test schema with the delegation tables (migration 080). Kept here
-// rather than in setupTestRepo so the existing ownership tests stay unaffected.
-func addGrantSchema(t *testing.T, r *Repository) {
-	t.Helper()
-	_, err := r.db.Exec(context.Background(), `
-		CREATE TABLE IF NOT EXISTS overlay_moderators (
-			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-			overlay_id UUID NOT NULL,
-			moderator_user_id UUID,
-			granted_by UUID NOT NULL,
-			status VARCHAR(16) NOT NULL DEFAULT 'pending',
-			actions TEXT[] NOT NULL DEFAULT '{delete,timeout}',
-			revoked_at TIMESTAMP,
-			last_action_at TIMESTAMP
-		)`)
-	require.NoError(t, err)
-}
-
 func grant(t *testing.T, r *Repository, modID, status string, actions []string, revoked bool) {
 	t.Helper()
 	revokedAt := "NULL"
@@ -64,7 +46,6 @@ func grant(t *testing.T, r *Repository, modID, status string, actions []string, 
 func TestResolveOverlayAccess(t *testing.T) {
 	repo, cleanup := setupTestRepo(t)
 	defer cleanup()
-	addGrantSchema(t, repo)
 	ctx := context.Background()
 
 	modID := uuid.New().String()
@@ -110,7 +91,6 @@ func TestResolveOverlayAccess(t *testing.T) {
 func TestResolveOverlayAccess_GrantLifecycle(t *testing.T) {
 	repo, cleanup := setupTestRepo(t)
 	defer cleanup()
-	addGrantSchema(t, repo)
 	ctx := context.Background()
 
 	cases := []struct {
@@ -146,7 +126,6 @@ func TestResolveOverlayAccess_GrantLifecycle(t *testing.T) {
 func TestResolveOverlayAccess_UnknownOverlayIsIndistinguishable(t *testing.T) {
 	repo, cleanup := setupTestRepo(t)
 	defer cleanup()
-	addGrantSchema(t, repo)
 	ctx := context.Background()
 
 	t.Run("nonexistent overlay", func(t *testing.T) {

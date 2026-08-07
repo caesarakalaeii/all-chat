@@ -54,6 +54,13 @@ const (
 	// cohort first; flip to is_premium=false to graduate to all users.
 	GateModeration = "moderation"
 
+	// GateDelegatedModeration is the feature key for handing the moderation write-path to
+	// someone else's account (ADR-0048). Deliberately separate from GateModeration so
+	// delegation can be rolled back without disabling owner moderation, and keyed on the
+	// overlay OWNER: a premium streamer's moderators moderate for free. Seeded premium-only
+	// (migration 080).
+	GateDelegatedModeration = "delegated_moderation"
+
 	// GateEngagement is the feature key for starting All-Chat polls/predictions
 	// (issue #523). Seeded premium-only: opening a round posts the round + participate
 	// link to chat (announce_on_start), which consumes the streamer's send quota — a

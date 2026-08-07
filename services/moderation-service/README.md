@@ -25,6 +25,50 @@ All require a user JWT (forwarded by the gateway; re-validated here). Mounted un
 Send a unique `Idempotency-Key` header on each POST (double-click/retry dedup). Per-user rate limiting
 applies (`MODERATION_RATE_PER_MIN`, default 30/min).
 
+### Delegation grant lifecycle (ADR-0048)
+
+Owner-only. A delegated moderator gets the same 403 a stranger does — managing who may moderate is an
+ownership power, not a moderation power.
+
+| Method | Path | Body |
+|---|---|---|
+| `GET`    | `/overlays/:id/moderators` | — → `{ moderators: [{id, status, display_name?, invitee_label?, actions[], platforms: [{platform, enabled, verification}], invite_expires_at?, …}], cap, used }` |
+| `POST`   | `/overlays/:id/moderators` | `{ actions?, platforms?, invitee_label?, expected_platform?, expected_platform_user_id? }` → **201** `{ grant_id, invite_token, expires_at, … }` |
+| `PATCH`  | `/overlays/:id/moderators/:grant_id` | `{ actions?, platforms? }` — `platforms` is a `{platform: bool}` map; only the platforms it names change |
+| `DELETE` | `/overlays/:id/moderators/:grant_id` | — revoke one |
+| `DELETE` | `/overlays/:id/moderators` | — the kill switch: revoke every grant on the overlay, unredeemed invites included |
+
+`invite_token` is a 256-bit secret returned **exactly once**; only its SHA-256 is stored, so a lost
+invite is re-minted rather than re-displayed. It expires after 7 days, is single-use, and dies the
+moment the grant is revoked.
+
+Absent `actions` grants the safe default (`delete`, `timeout`); an explicitly empty list is a 400 rather
+than being widened. Absent `platforms` enables nothing — absence *is* disablement, which is what keeps
+Discord (the one platform with no external authority behind it) off until the streamer opts in.
+`expected_platform` pre-binds an invite to one account and is accepted for Twitch only, because that is
+the only platform where acceptance can actually verify the redeeming account; storing an unverifiable
+binding would look like a constraint while protecting nobody.
+
+The 10-moderator cap is enforced at invite time (409 `moderator_cap_reached`), never retroactively, so
+lowering it can't cut off a working mod team mid-stream. Admins bypass it. The count is taken under a row
+lock on the overlay, so two tabs cannot both see nine and both insert.
+
+Redemption is keyed on the secret, not on any role:
+
+| Method | Path | Body |
+|---|---|---|
+| `POST` | `/invites/preview` | `{ token }` → `{ overlay_name, owner_display_name, actions[], platforms[], expires_at, expected_account? }` |
+| `POST` | `/invites/accept`  | `{ token }` → `{ grant_id, overlay_id, overlay_name, … }` |
+
+The secret travels in the **body**, never in a path — a URL would put a live moderation credential into
+every access log, proxy log and `Referer` header along the way. `preview` deliberately omits
+`overlay_id`: an overlay UUID already grants chat *read* to whoever holds it, so it is disclosed on
+acceptance rather than to everyone who merely opens the link. Accepting grants nothing by itself; each
+platform's consent is deferred to the first time the moderator actually uses it.
+
+Only invite **creation** is gated. Listing, narrowing and revoking always work, including after the
+feature is rolled back — otherwise a streamer could be left holding moderators they cannot remove.
+
 ## Authorization (owner or delegated moderator — ADR-0017, amended by ADR-0048)
 
 1. `ResolveOverlayAccess` resolves, in one round trip, the caller's role (`owner` / `moderator` /
@@ -83,6 +127,11 @@ moderation permissions reports no actions and the dashboard shows the re-invite 
 
 ## Rollout (feature gate, ADR-0008)
 
+Delegation has its **own** gate key, `delegated_moderation` (seeded `is_premium=TRUE`, migration 080), so
+it can be rolled back without disabling owner moderation. It requires both keys: closing `moderation`
+necessarily closes delegation, since there would be nothing left to delegate. Both are evaluated against
+the **overlay owner**.
+
 The write path is gated on the `moderation` feature gate, seeded `is_premium=TRUE` (migration 061) so
 it ships to a premium cohort first. The `delete/timeout/ban/unban` routes enforce it inside
 `authorize()`, keyed on the **overlay owner** (ADR-0048 — `RequirePremium` middleware keys on the
@@ -126,15 +175,16 @@ no redeploy. Locally, non-premium users can either set `users.is_premium=true` o
 
 ```
 cmd/main.go        # wiring: db, redis, JWT keychain, cipher, per-platform token sources, dispatch router, rate-limit, routes
-handler/           # HTTP handlers + idempotency middleware (owner-only authz, dispatch, capabilities); scope-check router
+handler/           # HTTP handlers + idempotency middleware (role authz, dispatch, capabilities); grant lifecycle; scope-check router
 clients/           # per-platform moderation API clients (twitch, kick, discord, youtube + liveChat resolver; httptest-mocked)
+invites/           # invite secrets: crypto/rand mint + SHA-256 digest (the plaintext is never stored)
 tokens/            # broadcaster-token resolve/refresh (ADR-0016 selection) + granted-scope checkers (twitch, kick, youtube)
 dispatch/          # per-platform routers + orchestration: multi.go routes by platform; scope pre-check, refresh, 401-retry, 403->re-consent
 quota/             # YouTube ban quota reservation over the shared SQL functions (ADR-0006)
 publisher/         # reflect-back: RawChatMessage{message_deletion} -> chat:raw (carries target_uuid)
-repository/        # owner/source authorization queries (mirrors api-gateway/subscription)
+repository/        # role/source authorization queries + delegation grant lifecycle (migration 080)
 audit/             # moderation_actions audit log (migration 060)
-models/            # request DTOs + capability model + platform support matrix + per-platform scope mapping
+models/            # request DTOs + capability model + platform support matrix + per-platform scope mapping + grant DTOs
 ```
 
 ## Configuration

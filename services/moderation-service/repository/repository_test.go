@@ -32,6 +32,9 @@ const (
 	ownerID    = "11111111-1111-1111-1111-111111111111"
 	strangerID = "22222222-2222-2222-2222-222222222222"
 	overlayID  = "aaaaaaaa-1111-1111-1111-111111111111"
+	// adminActor stands in for an admin acting on the grant lifecycle; revoked_by carries no
+	// foreign key precisely so the trail survives the actor's account.
+	adminActor = "99999999-9999-9999-9999-999999999999"
 )
 
 func TestVerifyOverlayOwnership(t *testing.T) {
@@ -134,14 +137,22 @@ func setupTestRepo(t *testing.T) (*Repository, func()) {
 	pool, err := pgxpool.New(ctx, "postgres://testuser:testpass@"+host+":"+port.Port()+"/testdb?sslmode=disable")
 	require.NoError(t, err)
 
+	// Mirrors the production schema for the columns these queries touch, including the
+	// delegation tables from migration 080 — the partial unique indexes there are part of the
+	// behaviour under test (one live grant per moderator, one live invite per digest).
 	const schema = `
 		CREATE TABLE users (
 			id UUID PRIMARY KEY,
-			is_premium BOOLEAN NOT NULL DEFAULT false
+			is_premium BOOLEAN NOT NULL DEFAULT false,
+			display_name VARCHAR(100) NOT NULL DEFAULT '',
+			twitch_id VARCHAR(50),
+			kick_id VARCHAR(255),
+			google_id VARCHAR(50)
 		);
 		CREATE TABLE overlays (
 			id UUID PRIMARY KEY,
 			user_id UUID NOT NULL,
+			name VARCHAR(100) NOT NULL DEFAULT '',
 			is_active BOOLEAN NOT NULL DEFAULT true
 		);
 		CREATE TABLE overlay_chat_sources (
@@ -151,14 +162,66 @@ func setupTestRepo(t *testing.T) (*Repository, func()) {
 			channel_id VARCHAR(100) NOT NULL,
 			channel_name VARCHAR(100) NOT NULL,
 			is_active BOOLEAN NOT NULL DEFAULT true
+		);
+		CREATE TABLE twitch_oauth_tokens (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			twitch_user_id VARCHAR(50) NOT NULL,
+			twitch_login VARCHAR(100) NOT NULL
+		);
+		CREATE TABLE mod_oauth_credentials (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			platform VARCHAR(20) NOT NULL,
+			platform_user_id VARCHAR(100) NOT NULL,
+			access_token TEXT NOT NULL,
+			UNIQUE (user_id, platform)
+		);
+		CREATE TABLE overlay_moderators (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			overlay_id UUID NOT NULL REFERENCES overlays(id) ON DELETE CASCADE,
+			moderator_user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+			granted_by UUID NOT NULL,
+			status VARCHAR(16) NOT NULL DEFAULT 'pending'
+				CHECK (status IN ('pending', 'active', 'suspended', 'revoked')),
+			actions TEXT[] NOT NULL DEFAULT '{delete,timeout}',
+			invite_token_hash BYTEA,
+			invite_expires_at TIMESTAMP,
+			invitee_label VARCHAR(120),
+			expected_platform VARCHAR(20),
+			expected_platform_user_id VARCHAR(100),
+			moderator_display_name VARCHAR(120),
+			created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+			accepted_at TIMESTAMP,
+			revoked_at TIMESTAMP,
+			revoked_by UUID,
+			suspended_at TIMESTAMP,
+			last_action_at TIMESTAMP
+		);
+		CREATE UNIQUE INDEX uq_overlay_moderators_live
+			ON overlay_moderators (overlay_id, moderator_user_id)
+			WHERE moderator_user_id IS NOT NULL AND revoked_at IS NULL;
+		CREATE UNIQUE INDEX uq_overlay_moderators_invite
+			ON overlay_moderators (invite_token_hash)
+			WHERE invite_token_hash IS NOT NULL;
+		CREATE TABLE overlay_moderator_platforms (
+			grant_id UUID NOT NULL REFERENCES overlay_moderators(id) ON DELETE CASCADE,
+			platform VARCHAR(20) NOT NULL,
+			enabled BOOLEAN NOT NULL DEFAULT FALSE,
+			verification VARCHAR(24) NOT NULL DEFAULT 'unverified',
+			verified_at TIMESTAMP,
+			last_denied_at TIMESTAMP,
+			PRIMARY KEY (grant_id, platform)
 		);`
 	_, err = pool.Exec(ctx, schema)
 	require.NoError(t, err)
 
 	// owner is premium (in the rollout cohort); stranger is a non-premium user.
-	_, err = pool.Exec(ctx, `INSERT INTO users (id, is_premium) VALUES ($1, true), ($2, false)`, ownerID, strangerID)
+	_, err = pool.Exec(ctx,
+		`INSERT INTO users (id, is_premium, display_name) VALUES ($1, true, 'The Streamer'), ($2, false, 'A Stranger')`,
+		ownerID, strangerID)
 	require.NoError(t, err)
-	_, err = pool.Exec(ctx, `INSERT INTO overlays (id, user_id) VALUES ($1, $2)`, overlayID, ownerID)
+	_, err = pool.Exec(ctx, `INSERT INTO overlays (id, user_id, name) VALUES ($1, $2, 'My Overlay')`, overlayID, ownerID)
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, `
 		INSERT INTO overlay_chat_sources (overlay_id, platform, channel_id, channel_name) VALUES
