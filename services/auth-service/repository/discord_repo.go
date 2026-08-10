@@ -23,6 +23,7 @@ import (
 
 	"github.com/caesar/all-chat/services/auth-service/models"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -120,6 +121,74 @@ func (r *DiscordRepository) DeleteDiscordSourcesByGuildID(ctx context.Context, g
 	`, guildID)
 	if err != nil {
 		return fmt.Errorf("DeleteDiscordSourcesByGuildID: %w", err)
+	}
+	return nil
+}
+
+// ErrDiscordIdentityClaimed reports that the Discord account is already linked to a DIFFERENT
+// All-Chat user. It is a distinct error rather than a generic failure because the remedy is a
+// human one: unlink it on the other account, or link the right Discord account here.
+var ErrDiscordIdentityClaimed = errors.New("discord account already linked to another All-Chat user")
+
+// UpsertIdentity records which Discord account belongs to an All-Chat user (migration 083).
+//
+// Re-linking the SAME All-Chat user is allowed and overwrites — someone may link a different
+// Discord account, or refresh a changed username. Linking a Discord account another All-Chat user
+// already holds violates the unique index and returns ErrDiscordIdentityClaimed rather than
+// silently taking the identity over: that would let the second account inherit the first's guild
+// permissions on every delegated moderation action.
+func (r *DiscordRepository) UpsertIdentity(ctx context.Context, userID, discordUserID, discordUsername string) error {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO discord_identities (user_id, discord_user_id, discord_username)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (user_id)
+		DO UPDATE SET discord_user_id  = EXCLUDED.discord_user_id,
+		              discord_username = EXCLUDED.discord_username,
+		              updated_at       = NOW()
+	`, userID, discordUserID, discordUsername)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		// 23505 unique_violation can only be uq_discord_identities_discord_user_id here: the
+		// user_id conflict is handled above.
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return ErrDiscordIdentityClaimed
+		}
+		return fmt.Errorf("UpsertIdentity: %w", err)
+	}
+	return nil
+}
+
+// GetIdentity returns the Discord account linked to an All-Chat user, or ErrNotFound.
+func (r *DiscordRepository) GetIdentity(ctx context.Context, userID string) (*models.DiscordIdentity, error) {
+	identity := &models.DiscordIdentity{}
+	var username *string
+	err := r.db.QueryRow(ctx, `
+		SELECT user_id, discord_user_id, discord_username, linked_at
+		FROM discord_identities
+		WHERE user_id = $1
+	`, userID).Scan(&identity.UserID, &identity.DiscordUserID, &username, &identity.LinkedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("GetIdentity: %w", err)
+	}
+	if username != nil {
+		identity.DiscordUsername = *username
+	}
+	return identity, nil
+}
+
+// DeleteIdentity unlinks a user's Discord account. Idempotent: a missing row is not an error, so
+// an unlink is safe to retry.
+//
+// Unlinking is deliberately allowed even while Discord grants exist. The moderation path resolves
+// the identity live and fails closed without one, so the effect is that Discord moderation stops
+// working for that user — the correct outcome for someone withdrawing the link.
+func (r *DiscordRepository) DeleteIdentity(ctx context.Context, userID string) error {
+	_, err := r.db.Exec(ctx, `DELETE FROM discord_identities WHERE user_id = $1`, userID)
+	if err != nil {
+		return fmt.Errorf("DeleteIdentity: %w", err)
 	}
 	return nil
 }
