@@ -227,64 +227,163 @@ func (d *DiscordClient) GuildBotPermissions(ctx context.Context, guildID string)
 	if err != nil {
 		return 0, err
 	}
-	memberResp, err := d.do(ctx, http.MethodGet, "/guilds/"+guildID+"/members/"+botID, nil)
+	// The ownership read is skipped deliberately: a bot can never own a guild, so asking
+	// would be a wasted call on the capability path.
+	standing, err := d.memberRoleStanding(ctx, guildID, botID)
 	if err != nil {
-		return 0, fmt.Errorf("discord: member request failed: %w", err)
+		return 0, err
+	}
+	return standing.Permissions, nil
+}
+
+// DiscordMember is one user's live standing in one guild.
+//
+// It mirrors models.DiscordMemberAuthority field for field, and the duplication is
+// deliberate: clients holds no dependency on the domain packages, the same reason
+// models.Actor duplicates repository.Role* rather than importing it. The dispatch layer,
+// which already imports both, does the one-line conversion.
+//
+// The zero value is "not a member", which denies everything — so a caller that ignores an
+// error still fails closed.
+type DiscordMember struct {
+	InGuild        bool
+	IsGuildOwner   bool
+	Permissions    uint64
+	HighestRolePos int
+}
+
+// MemberAuthority reads what one Discord user may do in one guild: their effective
+// guild-level permission bits, the position of their highest role, and whether they own the
+// guild.
+//
+// This is the live read ADR-0048's platform-attested model rests on. Discord never re-checks
+// a delegated moderator — every write authenticates as the shared bot — so this read IS the
+// authorization input, and every failure mode other than "not a member" is returned as an
+// error rather than as a permissive or empty standing.
+//
+// A 404 is an answer, not a failure: it means the user is not in the guild, and it
+// short-circuits before the role and ownership reads, so a stranger costs one call.
+func (d *DiscordClient) MemberAuthority(ctx context.Context, guildID, userID string) (DiscordMember, error) {
+	standing, err := d.memberRoleStanding(ctx, guildID, userID)
+	if err != nil || !standing.InGuild {
+		return standing, err
+	}
+
+	ownerID, err := d.guildOwnerID(ctx, guildID)
+	if err != nil {
+		return DiscordMember{}, err
+	}
+	standing.IsGuildOwner = ownerID != "" && ownerID == userID
+	return standing, nil
+}
+
+// memberRoleStanding reads a member's roles and folds the guild's role definitions into
+// effective permission bits and a highest-role position. It is shared by the bot's own
+// permission check and the general member read so the two computations cannot drift.
+func (d *DiscordClient) memberRoleStanding(ctx context.Context, guildID, userID string) (DiscordMember, error) {
+	memberResp, err := d.do(ctx, http.MethodGet, "/guilds/"+guildID+"/members/"+userID, nil)
+	if err != nil {
+		return DiscordMember{}, fmt.Errorf("discord: member request failed: %w", err)
 	}
 	defer memberResp.Body.Close()
 	switch {
 	case memberResp.StatusCode == http.StatusUnauthorized:
-		return 0, ErrDiscordUnauthorized
+		return DiscordMember{}, ErrDiscordUnauthorized
 	case memberResp.StatusCode == http.StatusForbidden:
-		return 0, ErrDiscordForbidden
+		return DiscordMember{}, ErrDiscordForbidden
 	case memberResp.StatusCode == http.StatusNotFound:
-		// The bot is not a member of the guild — it can do nothing here.
-		return 0, nil
+		// Not a member of the guild — they can do nothing here. Discord answers 404
+		// "Unknown User" for any snowflake that is not a member.
+		return DiscordMember{}, nil
 	case memberResp.StatusCode < 200 || memberResp.StatusCode >= 300:
 		snippet, _ := io.ReadAll(io.LimitReader(memberResp.Body, 512))
-		return 0, fmt.Errorf("discord: get member returned %s: %s", strconv.Itoa(memberResp.StatusCode), string(snippet))
+		return DiscordMember{}, fmt.Errorf("discord: get member returned %s: %s", strconv.Itoa(memberResp.StatusCode), string(snippet))
 	}
 	var member struct {
 		Roles []string `json:"roles"`
 	}
 	if err := json.NewDecoder(memberResp.Body).Decode(&member); err != nil {
-		return 0, fmt.Errorf("discord: decode member: %w", err)
+		return DiscordMember{}, fmt.Errorf("discord: decode member: %w", err)
 	}
 
-	rolesResp, err := d.do(ctx, http.MethodGet, "/guilds/"+guildID+"/roles", nil)
+	roles, err := d.guildRoles(ctx, guildID)
 	if err != nil {
-		return 0, fmt.Errorf("discord: roles request failed: %w", err)
-	}
-	defer rolesResp.Body.Close()
-	if rolesResp.StatusCode < 200 || rolesResp.StatusCode >= 300 {
-		snippet, _ := io.ReadAll(io.LimitReader(rolesResp.Body, 512))
-		return 0, fmt.Errorf("discord: get roles returned %s: %s", strconv.Itoa(rolesResp.StatusCode), string(snippet))
-	}
-	var roles []struct {
-		ID          string `json:"id"`
-		Permissions string `json:"permissions"`
-	}
-	if err := json.NewDecoder(rolesResp.Body).Decode(&roles); err != nil {
-		return 0, fmt.Errorf("discord: decode roles: %w", err)
+		return DiscordMember{}, err
 	}
 
-	// The bot has @everyone (role id == guild id) implicitly, plus its assigned roles.
+	// @everyone (role id == guild id) is implicit — Discord does not list it in a member's
+	// roles — so it is always held, on top of the assigned roles.
 	held := map[string]bool{guildID: true}
 	for _, r := range member.Roles {
 		held[r] = true
 	}
-	var effective uint64
+	standing := DiscordMember{InGuild: true}
 	for _, r := range roles {
 		if !held[r.ID] {
 			continue
 		}
 		bits, perr := strconv.ParseUint(r.Permissions, 10, 64)
 		if perr != nil {
-			return 0, fmt.Errorf("discord: parse role permissions %q: %w", r.Permissions, perr)
+			return DiscordMember{}, fmt.Errorf("discord: parse role permissions %q: %w", r.Permissions, perr)
 		}
-		effective |= bits
+		standing.Permissions |= bits
+		if r.Position > standing.HighestRolePos {
+			standing.HighestRolePos = r.Position
+		}
 	}
-	return effective, nil
+	return standing, nil
+}
+
+// discordRole is one guild role as Discord reports it. Permissions is a decimal string
+// because the bitfield exceeds what JSON numbers represent exactly.
+type discordRole struct {
+	ID          string `json:"id"`
+	Permissions string `json:"permissions"`
+	Position    int    `json:"position"`
+}
+
+// guildRoles lists the guild's role definitions.
+func (d *DiscordClient) guildRoles(ctx context.Context, guildID string) ([]discordRole, error) {
+	resp, err := d.do(ctx, http.MethodGet, "/guilds/"+guildID+"/roles", nil)
+	if err != nil {
+		return nil, fmt.Errorf("discord: roles request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return nil, fmt.Errorf("discord: get roles returned %s: %s", strconv.Itoa(resp.StatusCode), string(snippet))
+	}
+	var roles []discordRole
+	if err := json.NewDecoder(resp.Body).Decode(&roles); err != nil {
+		return nil, fmt.Errorf("discord: decode roles: %w", err)
+	}
+	return roles, nil
+}
+
+// guildOwnerID reads the guild's owner. Ownership implicitly grants every permission and
+// makes a member untouchable by timeout/ban, so it cannot be inferred from permission bits.
+func (d *DiscordClient) guildOwnerID(ctx context.Context, guildID string) (string, error) {
+	resp, err := d.do(ctx, http.MethodGet, "/guilds/"+guildID, nil)
+	if err != nil {
+		return "", fmt.Errorf("discord: guild request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	switch {
+	case resp.StatusCode == http.StatusUnauthorized:
+		return "", ErrDiscordUnauthorized
+	case resp.StatusCode == http.StatusForbidden:
+		return "", ErrDiscordForbidden
+	case resp.StatusCode < 200 || resp.StatusCode >= 300:
+		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return "", fmt.Errorf("discord: get guild returned %s: %s", strconv.Itoa(resp.StatusCode), string(snippet))
+	}
+	var guild struct {
+		OwnerID string `json:"owner_id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&guild); err != nil {
+		return "", fmt.Errorf("discord: decode guild: %w", err)
+	}
+	return guild.OwnerID, nil
 }
 
 // TimeoutMember sets a member's communication_disabled_until to `until` (a future
@@ -337,6 +436,7 @@ func (d *DiscordClient) memberWrite(ctx context.Context, method, path string, bo
 type discordResolverAPI interface {
 	GuildIDForChannel(ctx context.Context, channelID string) (string, error)
 	GuildBotPermissions(ctx context.Context, guildID string) (uint64, error)
+	MemberAuthority(ctx context.Context, guildID, userID string) (DiscordMember, error)
 }
 
 // DiscordGuildResolver caches the two Discord lookups the moderation service makes per
@@ -361,6 +461,14 @@ const (
 	// discordPermsCacheTTL bounds the per-guild effective-permissions entry: short, so a
 	// re-invite that grants moderation permissions is reflected on the dashboard quickly.
 	discordPermsCacheTTL = 5 * time.Minute
+	// discordMemberAuthorityCacheTTL bounds a delegated moderator's standing in a guild.
+	//
+	// This is a SECURITY BOUND, not a tuning knob (ADR-0048). Discord is the one platform
+	// where nothing external re-checks a delegated moderator, and because the GUILD_MEMBERS
+	// privileged intent is off, Discord cannot push us a revocation either. So this TTL is
+	// exactly how long someone the streamer just stripped of their roles keeps being able to
+	// act. Raising it lengthens that window; the ADR fixes the ceiling at 60 seconds.
+	discordMemberAuthorityCacheTTL = 60 * time.Second
 )
 
 // GuildID returns the guild id for a channel, from cache when possible.
@@ -401,4 +509,34 @@ func (r *DiscordGuildResolver) GuildBotPermissions(ctx context.Context, guildID 
 		_ = r.redis.Set(ctx, key, bits, discordPermsCacheTTL).Err()
 	}
 	return bits, nil
+}
+
+// MemberAuthority returns a user's standing in a guild, cached for
+// discordMemberAuthorityCacheTTL — the security bound described on that constant, since the
+// check runs on every delegated action and Discord cannot notify us of a revocation.
+//
+// "Not a member" is cached like any other answer: it is a real standing, and it is the most
+// likely one for a prober, so re-reading it every time would let an attacker drive our
+// Discord API traffic. Errors are never cached — caching one would extend a transient
+// Discord outage into a full TTL of denials.
+func (r *DiscordGuildResolver) MemberAuthority(ctx context.Context, guildID, userID string) (DiscordMember, error) {
+	key := "discord:member:authority:" + guildID + ":" + userID
+	if r.redis != nil {
+		if v, err := r.redis.Get(ctx, key).Bytes(); err == nil && len(v) > 0 {
+			var cached DiscordMember
+			if json.Unmarshal(v, &cached) == nil {
+				return cached, nil
+			}
+		}
+	}
+	standing, err := r.api.MemberAuthority(ctx, guildID, userID)
+	if err != nil {
+		return DiscordMember{}, err
+	}
+	if r.redis != nil {
+		if payload, merr := json.Marshal(standing); merr == nil {
+			_ = r.redis.Set(ctx, key, payload, discordMemberAuthorityCacheTTL).Err()
+		}
+	}
+	return standing, nil
 }
