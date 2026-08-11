@@ -117,41 +117,136 @@ func TestDiscordGuildIDForChannel_Forbidden(t *testing.T) {
 	assert.ErrorIs(t, err, ErrDiscordForbidden)
 }
 
-func TestDiscordGuildBotPermissions(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// discordBotID is the snowflake the fake /users/@me hands back. The tests assert it —
+// not "@me" — reaches the guild-member route, because Discord coerces that path segment
+// to a snowflake and rejects "@me" with 400 NUMBER_TYPE_COERCE.
+const discordBotID = "1483074909046444173"
+
+// newBotPermsServer serves the three calls GuildBotPermissions makes: /users/@me to learn
+// the bot's own id, the guild-member record for that id, and the guild's roles. It records
+// every member path it saw so a test can prove no "@me" was used as a user id.
+func newBotPermsServer(t *testing.T, memberStatus int, memberBody, rolesBody string, seen *[]string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case strings.HasSuffix(r.URL.Path, "/members/@me"):
-			_, _ = w.Write([]byte(`{"roles":["r1","r2"]}`))
+		case r.URL.Path == "/users/@me":
+			_, _ = w.Write([]byte(`{"id":"` + discordBotID + `","username":"All-Chat"}`))
+		case strings.Contains(r.URL.Path, "/members/"):
+			*seen = append(*seen, r.URL.Path)
+			if memberStatus != http.StatusOK {
+				w.WriteHeader(memberStatus)
+				return
+			}
+			_, _ = w.Write([]byte(memberBody))
 		case strings.HasSuffix(r.URL.Path, "/roles"):
-			// @everyone (id==guildID "g") none; r1 = MANAGE_MESSAGES (8192); r2 = BAN_MEMBERS (4);
-			// "other" is not held by the bot and must be ignored.
-			_, _ = w.Write([]byte(`[{"id":"g","permissions":"0"},{"id":"r1","permissions":"8192"},{"id":"r2","permissions":"4"},{"id":"other","permissions":"8"}]`))
+			_, _ = w.Write([]byte(rolesBody))
 		default:
-			t.Fatalf("unexpected path %s", r.URL.Path)
+			t.Errorf("unexpected path %s", r.URL.Path)
+			w.WriteHeader(http.StatusInternalServerError)
 		}
 	}))
+}
+
+func TestDiscordGuildBotPermissions(t *testing.T) {
+	var memberPaths []string
+	// @everyone (id==guildID "g") none; r1 = MANAGE_MESSAGES (8192); r2 = BAN_MEMBERS (4);
+	// "other" is not held by the bot and must be ignored.
+	roles := `[{"id":"g","permissions":"0"},{"id":"r1","permissions":"8192"},{"id":"r2","permissions":"4"},{"id":"other","permissions":"8"}]`
+	srv := newBotPermsServer(t, http.StatusOK, `{"roles":["r1","r2"]}`, roles, &memberPaths)
 	defer srv.Close()
 	c := &DiscordClient{httpClient: srv.Client(), botToken: "bot-tok", baseURL: srv.URL}
 
 	perms, err := c.GuildBotPermissions(context.Background(), "g")
 	require.NoError(t, err)
 	assert.Equal(t, uint64(8192|4), perms, "effective = OR of held roles' permissions; unheld 'other' role excluded")
+	require.Len(t, memberPaths, 1)
+	assert.Equal(t, "/guilds/g/members/"+discordBotID, memberPaths[0],
+		"the bot's member record must be fetched by its own snowflake — Discord rejects \"@me\" here with 400")
+}
+
+// TestDiscordGuildBotPermissions_NeverSendsAtMeAsUserID pins the bug this shape exists to
+// prevent: GET /guilds/{g}/members/@me returns 400 (measured against the production app),
+// which silently degraded every Discord source to "re-invite the bot" forever.
+func TestDiscordGuildBotPermissions_NeverSendsAtMeAsUserID(t *testing.T) {
+	var memberPaths []string
+	srv := newBotPermsServer(t, http.StatusOK, `{"roles":[]}`, `[{"id":"g","permissions":"8192"}]`, &memberPaths)
+	defer srv.Close()
+	c := &DiscordClient{httpClient: srv.Client(), botToken: "bot-tok", baseURL: srv.URL}
+
+	_, err := c.GuildBotPermissions(context.Background(), "g")
+	require.NoError(t, err)
+	for _, p := range memberPaths {
+		assert.NotContains(t, p, "@me", "\"@me\" is valid only on /users/@me, never as a {user_id} path parameter")
+	}
+}
+
+// TestDiscordBotUserID_ResolvedOnceAndCached: the bot's user id is immutable, so it is
+// fetched once per process rather than on every capability check.
+func TestDiscordBotUserID_ResolvedOnceAndCached(t *testing.T) {
+	var identityCalls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/users/@me", r.URL.Path)
+		identityCalls++
+		_, _ = w.Write([]byte(`{"id":"` + discordBotID + `"}`))
+	}))
+	defer srv.Close()
+	c := &DiscordClient{httpClient: srv.Client(), botToken: "bot-tok", baseURL: srv.URL}
+
+	for i := 0; i < 3; i++ {
+		id, err := c.BotUserID(context.Background())
+		require.NoError(t, err)
+		assert.Equal(t, discordBotID, id)
+	}
+	assert.Equal(t, 1, identityCalls, "the bot's own id is resolved once and cached for the process lifetime")
+}
+
+// TestDiscordBotUserID_ErrorIsNotCached: a transient failure must not poison the cache,
+// or one blip would disable Discord capabilities until the pod restarts.
+func TestDiscordBotUserID_ErrorIsNotCached(t *testing.T) {
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls == 1 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		_, _ = w.Write([]byte(`{"id":"` + discordBotID + `"}`))
+	}))
+	defer srv.Close()
+	c := &DiscordClient{httpClient: srv.Client(), botToken: "bot-tok", baseURL: srv.URL}
+
+	_, err := c.BotUserID(context.Background())
+	require.Error(t, err)
+	id, err := c.BotUserID(context.Background())
+	require.NoError(t, err, "the next call retries rather than returning the cached failure")
+	assert.Equal(t, discordBotID, id)
+}
+
+// TestDiscordGuildBotPermissions_IdentityFailureIsAnError: fail closed. The scope checker
+// turns this into "no actions" (the re-invite prompt) rather than inventing permissions.
+func TestDiscordGuildBotPermissions_IdentityFailureIsAnError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/users/@me", r.URL.Path, "no guild call may be made without the bot's id")
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+	c := &DiscordClient{httpClient: srv.Client(), botToken: "bot-tok", baseURL: srv.URL}
+
+	_, err := c.GuildBotPermissions(context.Background(), "g")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrDiscordUnauthorized, "an invalid bot token is reported as such, not as zero permissions")
 }
 
 func TestDiscordGuildBotPermissions_NotMemberIsZero(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, "/members/@me") {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		t.Fatalf("roles should not be fetched when the bot is not a member")
-	}))
+	var memberPaths []string
+	srv := newBotPermsServer(t, http.StatusNotFound, "", "", &memberPaths)
 	defer srv.Close()
 	c := &DiscordClient{httpClient: srv.Client(), botToken: "bot-tok", baseURL: srv.URL}
 
 	perms, err := c.GuildBotPermissions(context.Background(), "g")
 	require.NoError(t, err, "a non-member bot reports zero permissions, not an error")
 	assert.Equal(t, uint64(0), perms)
+	require.Len(t, memberPaths, 1, "roles must not be fetched when the bot is not a member")
 }
 
 func TestDiscordTimeoutMember(t *testing.T) {

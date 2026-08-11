@@ -25,6 +25,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -61,6 +62,12 @@ type DiscordClient struct {
 	httpClient *http.Client
 	botToken   string
 	baseURL    string
+
+	// botID caches the bot's own snowflake, needed to read its guild member record.
+	// Guarded by botIDMu rather than a sync.Once so a transient failure is retried
+	// instead of disabling Discord capabilities until the pod restarts.
+	botIDMu sync.Mutex
+	botID   string
 }
 
 // NewDiscordClient builds a client authenticated with the given Discord bot token
@@ -164,14 +171,63 @@ func (d *DiscordClient) GuildIDForChannel(ctx context.Context, channelID string)
 	return ch.GuildID, nil
 }
 
+// BotUserID returns the bot's own Discord user id, resolving it once via GET /users/@me
+// and caching it for the process lifetime (a bot user's id is immutable).
+//
+// The indirection is not incidental. "@me" is only accepted on routes Discord documents as
+// current-user routes, such as /users/@me. As the {user_id} path parameter of
+// GET /guilds/{guild_id}/members/{user_id} it is coerced to a snowflake and rejected with
+// 400 NUMBER_TYPE_COERCE, and /users/@me/guilds/{guild_id}/member is closed to bots
+// outright (403, code 20001) — both measured against the production application. So the
+// bot's own member record is reachable only by its explicit id.
+func (d *DiscordClient) BotUserID(ctx context.Context) (string, error) {
+	d.botIDMu.Lock()
+	defer d.botIDMu.Unlock()
+	if d.botID != "" {
+		return d.botID, nil
+	}
+
+	resp, err := d.do(ctx, http.MethodGet, "/users/@me", nil)
+	if err != nil {
+		return "", fmt.Errorf("discord: bot identity request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	switch {
+	case resp.StatusCode == http.StatusUnauthorized:
+		return "", ErrDiscordUnauthorized
+	case resp.StatusCode < 200 || resp.StatusCode >= 300:
+		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return "", fmt.Errorf("discord: get bot identity returned %s: %s", strconv.Itoa(resp.StatusCode), string(snippet))
+	}
+	var self struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&self); err != nil {
+		return "", fmt.Errorf("discord: decode bot identity: %w", err)
+	}
+	if self.ID == "" {
+		return "", fmt.Errorf("discord: bot identity carried no user id")
+	}
+	d.botID = self.ID
+	return d.botID, nil
+}
+
 // GuildBotPermissions computes the bot's EFFECTIVE guild-level permission bits as the OR
 // of the permissions of every role the bot holds, plus the @everyone role (whose id is
 // the guild id). This is the honest input to ActionsForDiscordPermissions: the capability
 // endpoint reports exactly the moderation actions the bot's invite actually granted.
 // Guild-level perms are authoritative for ban/timeout (member ops); a channel overwrite
 // could still deny delete (MANAGE_MESSAGES), which the dispatcher surfaces as a 403.
+//
+// An unresolvable bot identity is returned as an error rather than as zero permissions:
+// zero is indistinguishable from "invited without moderation permissions", which would
+// tell the streamer to re-invite a bot that is already correctly invited.
 func (d *DiscordClient) GuildBotPermissions(ctx context.Context, guildID string) (uint64, error) {
-	memberResp, err := d.do(ctx, http.MethodGet, "/guilds/"+guildID+"/members/@me", nil)
+	botID, err := d.BotUserID(ctx)
+	if err != nil {
+		return 0, err
+	}
+	memberResp, err := d.do(ctx, http.MethodGet, "/guilds/"+guildID+"/members/"+botID, nil)
 	if err != nil {
 		return 0, fmt.Errorf("discord: member request failed: %w", err)
 	}
@@ -327,8 +383,9 @@ func (r *DiscordGuildResolver) GuildID(ctx context.Context, channelID string) (s
 }
 
 // GuildBotPermissions returns the bot's effective permission bits in the guild, cached
-// for discordPermsCacheTTL so the capability endpoint does not call members/@me + roles
-// on every dashboard load. A cache miss recomputes from the live API.
+// for discordPermsCacheTTL so the capability endpoint does not re-read the bot's member
+// record + the guild roles on every dashboard load. A cache miss recomputes from the live
+// API. Errors are deliberately not cached (see the resolver's other methods).
 func (r *DiscordGuildResolver) GuildBotPermissions(ctx context.Context, guildID string) (uint64, error) {
 	key := "discord:guild:perms:" + guildID
 	if r.redis != nil {
