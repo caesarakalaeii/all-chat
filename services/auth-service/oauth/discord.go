@@ -25,6 +25,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -62,6 +63,14 @@ type DiscordOAuth struct {
 	redirectURL  string
 	botToken     string // DISCORD_BOT_TOKEN — used for REST API calls
 	client       *http.Client
+	// apiBase is the Discord REST base, overridable so the REST paths can be asserted
+	// against a stub. Defaults to discordAPIBase.
+	apiBase string
+
+	// botID caches the bot's own snowflake (see botUserID). A mutex rather than a
+	// sync.Once so a transient failure is retried instead of sticking for the pod's life.
+	botIDMu sync.Mutex
+	botID   string
 }
 
 // NewDiscordOAuth creates a new DiscordOAuth provider.
@@ -72,6 +81,7 @@ func NewDiscordOAuth(clientID, clientSecret, redirectURL string) *DiscordOAuth {
 		clientSecret: clientSecret,
 		redirectURL:  redirectURL,
 		client:       &http.Client{Timeout: 10 * time.Second},
+		apiBase:      discordAPIBase,
 	}
 }
 
@@ -178,7 +188,7 @@ type GuildInfo struct {
 
 // GetGuildInfo fetches the guild name and icon from Discord using the bot token.
 func (d *DiscordOAuth) GetGuildInfo(ctx context.Context, guildID string) (*GuildInfo, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/guilds/%s", discordAPIBase, guildID), nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/guilds/%s", d.apiBase, guildID), nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create guild info request: %w", err)
 	}
@@ -205,12 +215,61 @@ func (d *DiscordOAuth) GetGuildInfo(ctx context.Context, guildID string) (*Guild
 	return &GuildInfo{Name: g.Name, Icon: g.Icon}, nil
 }
 
+// botUserID returns the bot's own Discord user id, resolving it once via GET /users/@me
+// and caching it (a bot user's id is immutable).
+//
+// "@me" is accepted only on routes Discord documents as current-user routes, such as
+// /users/@me. As the {user_id} path parameter of GET /guilds/{guild_id}/members/{user_id}
+// it is coerced to a snowflake and rejected with 400 NUMBER_TYPE_COERCE, and
+// /users/@me/guilds/{guild_id}/member is closed to bots outright (403, code 20001) — both
+// measured against the production application. So the bot's member record in a guild is
+// reachable only by its explicit id.
+func (d *DiscordOAuth) botUserID(ctx context.Context) (string, error) {
+	d.botIDMu.Lock()
+	defer d.botIDMu.Unlock()
+	if d.botID != "" {
+		return d.botID, nil
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "GET", d.apiBase+"/users/@me", nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create bot identity request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bot "+d.botToken)
+	req.Header.Set("User-Agent", discordUserAgent)
+
+	resp, err := d.client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("bot identity request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("discord users/@me returned %d: %s", resp.StatusCode, string(body))
+	}
+	var self struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &self); err != nil {
+		return "", fmt.Errorf("failed to decode bot identity: %w", err)
+	}
+	if self.ID == "" {
+		return "", fmt.Errorf("discord bot identity carried no user id")
+	}
+	d.botID = self.ID
+	return d.botID, nil
+}
+
 // CheckBotPermissions confirms the bot is a member of the guild.
 // Discord enforces the requested permissions (68608) at invite time via the OAuth URL,
 // so we only need to verify the bot joined successfully.
 // Uses the DISCORD_BOT_TOKEN (not the OAuth access token).
 func (d *DiscordOAuth) CheckBotPermissions(ctx context.Context, guildID string) ([]string, error) {
-	reqURL := fmt.Sprintf("%s/guilds/%s/members/@me", discordAPIBase, guildID)
+	botID, err := d.botUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	reqURL := fmt.Sprintf("%s/guilds/%s/members/%s", d.apiBase, guildID, botID)
 	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create membership request: %w", err)
@@ -226,12 +285,13 @@ func (d *DiscordOAuth) CheckBotPermissions(ctx context.Context, guildID string) 
 	io.ReadAll(resp.Body) //nolint:errcheck
 
 	// 200 = bot is in the guild; permissions were enforced by Discord at invite time.
-	// 404 = bot did not join (user may have cancelled or removed it immediately).
+	// 404 = bot did not join (user may have cancelled or removed it immediately). Discord
+	// answers 404 "Unknown User" for any snowflake that is not a member, the bot included.
 	if resp.StatusCode == http.StatusNotFound {
 		return []string{"Bot is not a member of this server"}, nil
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("discord members/@me returned unexpected status %d", resp.StatusCode)
+		return nil, fmt.Errorf("discord guild member lookup returned unexpected status %d", resp.StatusCode)
 	}
 
 	return nil, nil
@@ -255,14 +315,4 @@ func ComputeMissingPermissions(effective uint64) []string {
 		names = append(names, "Read Message History")
 	}
 	return names
-}
-
-// parsePermissions parses the Discord permissions string (decimal uint64 representation).
-func parsePermissions(s string) (uint64, error) {
-	if s == "" {
-		return 0, nil
-	}
-	var v uint64
-	_, err := fmt.Sscanf(s, "%d", &v)
-	return v, err
 }
