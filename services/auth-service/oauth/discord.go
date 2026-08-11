@@ -41,7 +41,6 @@ const (
 	PermViewChannel        uint64 = 1024  // 0x400
 	PermSendMessages       uint64 = 2048  // 0x800
 	PermReadMessageHistory uint64 = 65536 // 0x10000
-	RequiredBotPermissions uint64 = PermViewChannel | PermSendMessages | PermReadMessageHistory // 68608
 
 	// Moderation permission bits, requested ONLY through the opt-in moderation re-invite
 	// (ADR-0017) — never bundled into the base listener invite. MANAGE_MESSAGES → delete,
@@ -49,6 +48,13 @@ const (
 	PermManageMessages  uint64 = 1 << 13 // 8192
 	PermBanMembers      uint64 = 1 << 2  // 4
 	PermModerateMembers uint64 = 1 << 40
+)
+
+// Derived permission sets. Kept out of the bit-value block above so neither declaration has to
+// pad its trailing comments to the width of the longest expression.
+const (
+	// RequiredBotPermissions is the base listener invite: read and write chat, nothing more (68608).
+	RequiredBotPermissions uint64 = PermViewChannel | PermSendMessages | PermReadMessageHistory
 	// ModerationBotPermissions is the elevated permission set the moderation re-invite
 	// URL requests: the base listener permissions plus the moderation permissions.
 	ModerationBotPermissions uint64 = RequiredBotPermissions | PermManageMessages | PermBanMembers | PermModerateMembers
@@ -104,6 +110,74 @@ func (d *DiscordOAuth) GetAuthURL(state string) string {
 // controls once the capability endpoint reports the new permissions.
 func (d *DiscordOAuth) GetModerationAuthURL(state string) string {
 	return d.inviteURL(state, ModerationBotPermissions)
+}
+
+// GetIdentityAuthURL returns the Discord **account link** URL: a normal user OAuth flow
+// requesting `identify` and nothing else.
+//
+// This is a different flow from every other Discord URL here. The invite flows ask a server
+// admin to add a bot and come back with a guild_id; this asks a person which Discord account is
+// theirs, and comes back with nothing else at all. All-Chat needs it because Discord has no
+// per-user moderation API: the shared bot performs every write, so verifying that the acting
+// human may moderate requires knowing who they are on Discord (ADR-0048).
+//
+// `identify` alone, per ADR-0012: not `guilds` (All-Chat learns guilds from the bot's own view),
+// not `email`, and emphatically not `bot`. It reuses the registered bot-invite redirect_uri, so
+// linking needs no change in the Discord developer dashboard; the callback tells the two flows
+// apart from server-side state, never from a query parameter.
+func (d *DiscordOAuth) GetIdentityAuthURL(state string) string {
+	params := url.Values{}
+	params.Set("client_id", d.clientID)
+	params.Set("scope", "identify")
+	params.Set("state", state)
+	params.Set("redirect_uri", d.redirectURL)
+	params.Set("response_type", "code")
+	return discordAuthBase + "?" + params.Encode()
+}
+
+// DiscordIdentity is who a user is on Discord: the snowflake All-Chat stores, plus a display
+// name for copy. No token is retained — the identify grant is used once and discarded.
+type DiscordIdentity struct {
+	ID       string
+	Username string
+}
+
+// GetIdentity reads the Discord account behind an `identify` access token.
+//
+// The token is a USER token, so it authenticates with `Bearer`. Sending the bot token here would
+// return the bot's own identity and link every user to the same account, which is why this does
+// not share a helper with the bot-token reads.
+func (d *DiscordOAuth) GetIdentity(ctx context.Context, accessToken string) (*DiscordIdentity, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", d.apiBase+"/users/@me", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create identity request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("User-Agent", discordUserAgent)
+
+	resp, err := d.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("identity request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("discord identity returned %d: %s", resp.StatusCode, string(body))
+	}
+
+	var self struct {
+		ID       string `json:"id"`
+		Username string `json:"username"`
+	}
+	if err := json.Unmarshal(body, &self); err != nil {
+		return nil, fmt.Errorf("failed to decode discord identity: %w", err)
+	}
+	// A 200 with no id must fail here rather than be stored: a link to the empty snowflake would
+	// make every later permission read answer "not a member", an unexplainable dead end.
+	if self.ID == "" {
+		return nil, fmt.Errorf("discord identity carried no user id")
+	}
+	return &DiscordIdentity{ID: self.ID, Username: self.Username}, nil
 }
 
 // inviteURL builds a bot invite URL requesting the given permission bitfield.

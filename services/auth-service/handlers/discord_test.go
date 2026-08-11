@@ -26,6 +26,7 @@ import (
 
 	"github.com/caesar/all-chat/services/auth-service/models"
 	"github.com/caesar/all-chat/services/auth-service/oauth"
+	"github.com/caesar/all-chat/services/auth-service/repository"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/oauth2"
 )
@@ -39,6 +40,10 @@ type mockDiscordOAuth struct {
 	missingPerms     []string
 	checkPermsErr    error
 	checkPermsCalled bool
+	// Account-link flow (ADR-0048).
+	identity     *oauth.DiscordIdentity
+	identityErr  error
+	identityAuth string
 }
 
 func (m *mockDiscordOAuth) GetAuthURL(state string) string {
@@ -65,17 +70,64 @@ func (m *mockDiscordOAuth) GetGuildInfo(_ context.Context, guildID string) (*oau
 	return &oauth.GuildInfo{Name: "Guild " + guildID, Icon: ""}, nil
 }
 
+func (m *mockDiscordOAuth) GetIdentityAuthURL(state string) string {
+	if m.identityAuth != "" {
+		return m.identityAuth
+	}
+	return "https://discord.com/oauth2/authorize?client_id=test&scope=identify&state=" + state
+}
+
+func (m *mockDiscordOAuth) GetIdentity(_ context.Context, _ string) (*oauth.DiscordIdentity, error) {
+	if m.identityErr != nil {
+		return nil, m.identityErr
+	}
+	if m.identity != nil {
+		return m.identity, nil
+	}
+	return &oauth.DiscordIdentity{ID: "198569499228766208", Username: "volunteer"}, nil
+}
+
 type mockDiscordRepo struct {
-	upsertCalled                      bool
-	upsertErr                         error
-	deleteCalled                      bool
-	deleteErr                         error
-	deleteSourcesCalled               bool
-	deleteSourcesErr                  error
-	listGuilds                        []*models.DiscordGuild
-	listErr                           error
-	getGuild                          *models.DiscordGuild
-	getErr                            error
+	upsertCalled        bool
+	upsertErr           error
+	deleteCalled        bool
+	deleteErr           error
+	deleteSourcesCalled bool
+	deleteSourcesErr    error
+	listGuilds          []*models.DiscordGuild
+	listErr             error
+	getGuild            *models.DiscordGuild
+	getErr              error
+	// Account-link flow (ADR-0048).
+	upsertIdentityCalled bool
+	upsertIdentityUser   string
+	upsertIdentityDiscID string
+	upsertIdentityErr    error
+	getIdentity          *models.DiscordIdentity
+	getIdentityErr       error
+	deleteIdentityCalled bool
+	deleteIdentityErr    error
+}
+
+func (m *mockDiscordRepo) UpsertIdentity(_ context.Context, userID, discordUserID, _ string) error {
+	m.upsertIdentityCalled = true
+	m.upsertIdentityUser, m.upsertIdentityDiscID = userID, discordUserID
+	return m.upsertIdentityErr
+}
+
+func (m *mockDiscordRepo) GetIdentity(_ context.Context, _ string) (*models.DiscordIdentity, error) {
+	if m.getIdentityErr != nil {
+		return nil, m.getIdentityErr
+	}
+	if m.getIdentity == nil {
+		return nil, repository.ErrNotFound
+	}
+	return m.getIdentity, nil
+}
+
+func (m *mockDiscordRepo) DeleteIdentity(_ context.Context, _ string) error {
+	m.deleteIdentityCalled = true
+	return m.deleteIdentityErr
 }
 
 func (m *mockDiscordRepo) UpsertGuild(_ context.Context, _ *models.DiscordGuild) error {
@@ -354,9 +406,9 @@ func TestHandleDiscordDisconnect_APIFailure(t *testing.T) {
 	icon := "icon123"
 	mockRepo := &mockDiscordRepo{
 		getGuild: &models.DiscordGuild{
-			ID:      "1",
-			UserID:  "user-1",
-			GuildID: "guild-111",
+			ID:        "1",
+			UserID:    "user-1",
+			GuildID:   "guild-111",
 			GuildName: "Test Server",
 			GuildIcon: &icon,
 		},

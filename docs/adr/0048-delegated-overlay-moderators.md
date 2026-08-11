@@ -73,9 +73,24 @@ The anchor proves **control only**. It must never require the owner to hold a mo
 | **Twitch** | The owner holds a Twitch credential row whose login equals the source's `channel_id` (a Twitch source's `channel_id` *is* the login). The row also yields the numeric `broadcaster_id` the write needs. `users` branch (`auth_provider='twitch'`) preferred over `twitch_oauth_tokens` (ADR-0016), **no scope predicate**. | 403 `owner_channel_unverified`; the Twitch leg of every grant on that overlay is unusable. Remediation targets the **owner** ("reconnect your Twitch account"), surfaced in the owner's UI. |
 | **Kick** | Same shape: `users.kick_id` (Kick-login) or `kick_oauth_tokens.kick_user_id`, yielding the numeric `broadcaster_user_id`. `kick_user_id IS NOT NULL` is mandatory — it is NULL on legacy listener-only rows (migration 062). | 403 `owner_channel_unverified`. Load-bearing beyond authorization: this is the **only** legitimate source of `broadcaster_user_id`. |
 | **YouTube** | A `youtube_oauth_tokens` row for the owner and **exactly** the source's `channel_id` — that column is only ever written from `channels?mine=true` with the owner's own token. The `users`-row fallback used elsewhere is **forbidden as an anchor**: it is channel-agnostic and would match any channel id. | 403 `owner_channel_unverified`. A non-trivial existing population may fail this; measure before opening the gate. |
-| **Discord** | Both required: a `discord_guilds` row for (owner, guild) — migration 035, `UNIQUE(user_id, guild_id)`, written by the bot-invite callback — **and** a live bot-token read showing the owner's own Discord member permissions in that guild satisfy `owner_id ∥ ADMINISTRATOR ∥ MANAGE_GUILD`. Plus the source's `channel_id` must actually resolve to that guild. | Owner not Discord-linked → 403 `discord_link_required`. Row missing → 403 `owner_guild_unverified`. Live-check error → **fail closed**; no stamp-based bypass. |
+| **Discord** | Both required: a `discord_guilds` row for (owner, guild) — migration 035, `UNIQUE(user_id, guild_id)`, written by the bot-invite callback — **and** a live bot-token read showing the owner's own Discord member permissions in that guild satisfy `owner_id ∥ ADMINISTRATOR ∥ MANAGE_GUILD`. Plus the source's `channel_id` must actually resolve to that guild. **Amended 2026-08-10 — see "Discord anchor strength" below: the live read is required on delegated actions only.** | Owner not Discord-linked → 403 `discord_link_required`. Row missing → 403 `owner_guild_unverified`. Live-check error → **fail closed**; no stamp-based bypass. |
 | **TikTok** | n/a — no moderation API on any TikTok product. Absent from `PlatformActions` by design; reported `unsupported_platform`, never a fake button. | — |
 | **shared_overlay** | n/a — stays non-moderatable. Owner-only authorization made "a recipient must not moderate the original streamer's channel" true by construction; role-based authorization does not, so the existing `platform <> 'shared_overlay'` predicates become security-critical and get an explicit regression test. | — |
+
+#### Discord anchor strength (amendment, 2026-08-10)
+
+The anchor's two halves apply asymmetrically on Discord, decided when the leg was implemented:
+
+| Path | What must hold |
+|---|---|
+| **Owner** action | The `discord_guilds` row for (owner, guild). |
+| **Delegated** action | The row **and** a live `DiscordOwnerControlsGuild` read of the owner's own member permissions. |
+
+The reason is that the row is not a weak substitute for the live read — it is itself platform-attested. Discord only lets someone add a bot to a guild where they hold **Manage Server**, so a `discord_guilds` row *is* Discord's own record that the owner controlled that guild at invite time. What the row cannot see is a later loss of that standing, which is what the live read adds.
+
+That staleness matters on the delegated path, where a third party acts on the strength of the owner's reach, and matters far less on the owner path, where a stale row grants the owner authority over a guild they themselves connected. Set against that: the live read needs the owner's Discord **user id**, which no existing streamer has — the bot-invite flow never captured one — so requiring it on the owner path would switch Discord moderation off for **every** current Discord streamer until each completed a new account link. Disabling a working feature to re-prove something Discord already attested is the worse trade.
+
+So the anchor still applies to owner actions, as the original rule requires; only its strength differs by path. The unlinked-owner case does surface on the delegated path, where the moderator is told the streamer must link their Discord account — remediation aimed at the owner, per the anchor-failure UX decision below.
 
 ### Moderator-status verification model
 

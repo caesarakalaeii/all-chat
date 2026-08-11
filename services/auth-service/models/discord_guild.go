@@ -24,8 +24,27 @@ import "time"
 type DiscordGuild struct {
 	ID          string    `json:"id"`
 	UserID      string    `json:"user_id"`
-	GuildID     string    `json:"guild_id"`   // Discord Snowflake ID — always string
+	GuildID     string    `json:"guild_id"` // Discord Snowflake ID — always string
 	GuildName   string    `json:"guild_name"`
 	GuildIcon   *string   `json:"guild_icon"` // nullable CDN hash
 	ConnectedAt time.Time `json:"connected_at"`
+}
+
+// DiscordIdentity links an All-Chat account to a Discord USER account (migration 083, ADR-0048).
+//
+// Distinct from DiscordGuild, which records which SERVERS a streamer connected: the bot-invite
+// flow returns a guild and no user identity, so this is the only place All-Chat learns who
+// someone is on Discord. It is required because Discord has no per-user moderation API — the
+// shared bot performs every write, so verifying that the acting human may moderate means reading
+// *their* guild permissions, which needs their snowflake.
+//
+// No OAuth token is held: the identify grant is used once, at link time, and discarded.
+type DiscordIdentity struct {
+	UserID string `json:"user_id"`
+	// DiscordUserID is a Snowflake — always a string, for the reason on DiscordGuild.GuildID.
+	DiscordUserID string `json:"discord_user_id"`
+	// DiscordUsername is display only. Discord usernames are mutable, so never identify a user
+	// by this; refreshed on every re-link.
+	DiscordUsername string    `json:"discord_username"`
+	LinkedAt        time.Time `json:"linked_at"`
 }
