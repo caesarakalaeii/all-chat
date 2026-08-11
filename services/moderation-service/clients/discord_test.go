@@ -305,12 +305,15 @@ func TestDiscordMemberWrite_ForbiddenSurfacesSentinel(t *testing.T) {
 // countingResolverAPI records how many times each lookup hits the "API" so the cache
 // test can assert a miss-then-hit.
 type countingResolverAPI struct {
-	guildID    string
-	perms      uint64
-	guildCalls int
-	permsCalls int
-	guildErr   error
-	permsErr   error
+	guildID     string
+	perms       uint64
+	member      DiscordMember
+	guildCalls  int
+	permsCalls  int
+	memberCalls int
+	guildErr    error
+	permsErr    error
+	memberErr   error
 }
 
 func (c *countingResolverAPI) GuildIDForChannel(context.Context, string) (string, error) {
@@ -321,6 +324,11 @@ func (c *countingResolverAPI) GuildIDForChannel(context.Context, string) (string
 func (c *countingResolverAPI) GuildBotPermissions(context.Context, string) (uint64, error) {
 	c.permsCalls++
 	return c.perms, c.permsErr
+}
+
+func (c *countingResolverAPI) MemberAuthority(context.Context, string, string) (DiscordMember, error) {
+	c.memberCalls++
+	return c.member, c.memberErr
 }
 
 func TestDiscordGuildResolver_CachesGuildAndPermissions(t *testing.T) {
