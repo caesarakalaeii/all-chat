@@ -414,6 +414,12 @@ func main() {
 			protected.GET("/guilds", discordHandler.HandleGetGuilds)
 			protected.GET("/guilds/:guild_id/channels", discordHandler.HandleGetGuildChannels)
 			protected.DELETE("/guilds/:guild_id", discordHandler.HandleDisconnect)
+			// Discord ACCOUNT link (ADR-0048): which Discord user this All-Chat account is.
+			// Separate from the guild routes above — those record servers, this records a person,
+			// and Discord moderation needs both. Shares the /discord/callback redirect_uri.
+			protected.GET("/discord/identity/connect", discordHandler.HandleIdentityConnect)
+			protected.GET("/discord/identity", discordHandler.HandleGetIdentity)
+			protected.DELETE("/discord/identity", discordHandler.HandleDeleteIdentity)
 		}
 	}
 

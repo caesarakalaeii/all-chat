@@ -18,10 +18,12 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 )
@@ -40,6 +42,17 @@ type DataExportResponse struct {
 	// delegated moderation to, and overlays delegated to this user. Both are personal data about
 	// the exporting user, and neither is derivable from the sections above.
 	Delegations []DataExportDelegation `json:"moderation_delegations,omitempty"`
+	// DiscordAccount is the linked Discord identity (migration 083). A third-party account
+	// identifier is personal data in its own right and is not derivable from Guilds, which records
+	// servers rather than people.
+	DiscordAccount *DataExportDiscordAccount `json:"discord_account,omitempty"`
+}
+
+// DataExportDiscordAccount is the Discord user account linked to this All-Chat account.
+type DataExportDiscordAccount struct {
+	DiscordUserID   string    `json:"discord_user_id"`
+	DiscordUsername string    `json:"discord_username,omitempty"`
+	LinkedAt        time.Time `json:"linked_at"`
 }
 
 // DataExportDelegation is one delegated-moderation grant, from whichever side the exporting user
@@ -155,6 +168,7 @@ func (h *AuthHandler) HandleDataExport(c *gin.Context) {
 	export.Overlays = fetchOverlays(ctx, db, uid, h.logger)
 	export.Viewers = fetchViewerSessions(ctx, db, uid, h.logger)
 	export.Guilds = fetchGuilds(ctx, db, uid, h.logger)
+	export.DiscordAccount = fetchDiscordAccount(ctx, db, uid, h.logger)
 	export.Messages = fetchMessages(ctx, db, uid, h.logger)
 	export.Delegations = fetchDelegations(ctx, db, uid, h.logger)
 
@@ -247,6 +261,27 @@ func fetchGuilds(ctx context.Context, db *pgxpool.Pool, userID string, log *zap.
 		out = append(out, g)
 	}
 	return out
+}
+
+// fetchDiscordAccount returns the linked Discord identity, or nil when the user has not linked
+// one. Absence is the common case and is not an error.
+func fetchDiscordAccount(ctx context.Context, db *pgxpool.Pool, userID string, log *zap.Logger) *DataExportDiscordAccount {
+	var acc DataExportDiscordAccount
+	var username *string
+	err := db.QueryRow(ctx, `
+		SELECT discord_user_id, discord_username, linked_at
+		FROM discord_identities
+		WHERE user_id = $1`, userID).Scan(&acc.DiscordUserID, &username, &acc.LinkedAt)
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			log.Warn("Data export: failed to fetch discord account", zap.Error(err))
+		}
+		return nil
+	}
+	if username != nil {
+		acc.DiscordUsername = *username
+	}
+	return &acc
 }
 
 // fetchDelegations returns every delegated-moderation grant the user is a party to, in both

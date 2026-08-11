@@ -41,6 +41,10 @@ type DiscordOAuthProvider interface {
 	ExchangeCode(ctx context.Context, code string) (*oauth2.Token, error)
 	CheckBotPermissions(ctx context.Context, guildID string) ([]string, error)
 	GetGuildInfo(ctx context.Context, guildID string) (*oauth.GuildInfo, error)
+	// GetIdentityAuthURL and GetIdentity drive the account link (ADR-0048) — a user OAuth flow
+	// asking only `identify`, distinct from the bot invite above.
+	GetIdentityAuthURL(state string) string
+	GetIdentity(ctx context.Context, accessToken string) (*oauth.DiscordIdentity, error)
 }
 
 // DiscordGuildRepo is the interface for guild persistence (allows mocking in tests).
@@ -50,6 +54,10 @@ type DiscordGuildRepo interface {
 	ListGuildsByUser(ctx context.Context, userID string) ([]*models.DiscordGuild, error)
 	GetGuild(ctx context.Context, userID, guildID string) (*models.DiscordGuild, error)
 	DeleteDiscordSourcesByGuildID(ctx context.Context, guildID string) error
+	// Discord ACCOUNT links, as opposed to the guild records above (migration 083).
+	UpsertIdentity(ctx context.Context, userID, discordUserID, discordUsername string) error
+	GetIdentity(ctx context.Context, userID string) (*models.DiscordIdentity, error)
+	DeleteIdentity(ctx context.Context, userID string) error
 }
 
 // stateStorer abstracts Redis state key operations for testability.
@@ -196,6 +204,11 @@ func (h *DiscordHandler) HandleConnect(c *gin.Context) {
 // It validates the CSRF state from Redis, exchanges the code, checks bot permissions,
 // and stores the guild in the database. If the bot lacks required permissions, it returns
 // 403 Forbidden with a human-readable error listing the missing permissions.
+//
+// Two different Discord flows land here, because they share one registered redirect_uri: the bot
+// invite and the account link (ADR-0048). Which one this is comes from the SERVER-SIDE state
+// value, never from a query parameter — a client that could pick the branch could redirect an
+// invite's code into the link path or vice versa.
 // Route: GET /discord/callback (PUBLIC — no JWT)
 func (h *DiscordHandler) HandleCallback(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -204,13 +217,13 @@ func (h *DiscordHandler) HandleCallback(c *gin.Context) {
 	guildID := c.Query("guild_id")
 	guildName := c.Query("guild_name")
 
-	if state == "" || code == "" || guildID == "" {
+	if state == "" || code == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing required parameters"})
 		return
 	}
 
 	// Validate CSRF state — retrieve and delete atomically
-	userID, err := h.stateStore.Get(ctx, state)
+	stored, err := h.stateStore.Get(ctx, state)
 	if err != nil {
 		h.log.Warn("discord: invalid or expired OAuth state", zap.String("state", state), zap.Error(err))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid or expired state"})
@@ -219,6 +232,19 @@ func (h *DiscordHandler) HandleCallback(c *gin.Context) {
 	// Delete state regardless of subsequent outcome
 	if delErr := h.stateStore.Del(ctx, state); delErr != nil {
 		h.log.Warn("discord: failed to delete OAuth state", zap.Error(delErr))
+	}
+
+	flow := parseDiscordFlowState(stored)
+	if flow.Kind == discordFlowIdentity {
+		h.completeIdentityLink(c, flow, code)
+		return
+	}
+	userID := flow.UserID
+
+	// Only the bot invite carries a guild; the account link never does.
+	if guildID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing required parameters"})
+		return
 	}
 
 	// Exchange code for token (stored for audit only — not used for subsequent calls)
@@ -307,9 +333,9 @@ type discordChannel struct {
 
 // channelCategory is the response category object grouping text channels.
 type channelCategory struct {
-	ID       string              `json:"id"`
-	Name     string              `json:"name"`
-	Channels []channelSummary    `json:"channels"`
+	ID       string           `json:"id"`
+	Name     string           `json:"name"`
+	Channels []channelSummary `json:"channels"`
 }
 
 // channelSummary is the minimal channel data returned to the frontend.
