@@ -28,11 +28,18 @@ applies (`MODERATION_RATE_PER_MIN`, default 30/min).
 `capabilities` is role-aware (ADR-0048): `role` is `owner` / `moderator` / `none`, and `can_moderate` is
 the single flag the UI switches controls on. An owner's per-source answer comes from the scopes on their
 broadcaster credential; a **moderator's** comes from what the streamer delegated intersected with the
-scopes on the moderator's *own* credential, so `reason` gains three moderator-only values that differ in
+scopes on the moderator's *own* credential, so `reason` gains moderator-only values that differ in
 who can clear them: `not_delegated` (only the streamer can), `needs_consent` (only the moderator can —
-this is the "Connect to moderate" state) and `needs_discord_link` (nobody yet; Discord has no per-user
-moderation API and All-Chat holds no Discord identity for a user). `can_send` is never true for a
+this is the "Connect to moderate" state), `needs_discord_link` (the moderator — they must link their
+Discord account, since the shared bot acts and All-Chat checks *their* server permissions),
+`owner_channel_unverified` (only the streamer — on Discord, they have not linked their own account) and
+`bot_missing_permission` (only the streamer — the bot needs re-inviting with moderation permissions).
+`can_send` is never true for a
 moderator: chat send is a distinct, higher-trust capability and stays owner-only in v1.
+
+The Discord answer deliberately makes **no live permission read**: it checks the two account links and
+the bot's cached guild permissions, and leaves the moderator's own standing to the action path. That
+mirrors Twitch, where capabilities checks the scope and Helix decides whether they moderate the channel.
 `delegated_actions` echoes the grant's action set so a `needs_consent` source can request scopes for
 exactly what was delegated rather than guessing high.
 
@@ -153,9 +160,12 @@ the "opt-in" is the bot **re-invite** (`GET /api/v1/auth/discord/connect?moderat
 elevated invite URL). Capability is computed from the bot's effective guild permissions (delete⇐
 `MANAGE_MESSAGES`, timeout⇐`MODERATE_MEMBERS`, ban/unban⇐`BAN_MEMBERS`), so a bot invited without the
 moderation permissions reports no actions and the dashboard shows the re-invite CTA. A dispatch 403
-(e.g. a channel-level permission overwrite) fails the action — never a false reflect-back.
+(e.g. a channel-level permission overwrite) fails the action — never a false reflect-back. A delegated
+moderator additionally needs a Discord **account link** (`GET /api/v1/auth/discord/identity/connect`),
+which grants All-Chat no scopes and stores no token: it only records which Discord account they are, so
+their own server permissions can be checked. See "The Discord leg" below.
 
-## Delegated writes (ADR-0048, Twitch)
+## Delegated writes (ADR-0048, Twitch + Discord)
 
 An owner action and a delegated action differ in exactly one place — which credential performs the
 call and against whose channel — and the dispatcher makes that difference explicit rather than
@@ -189,6 +199,26 @@ Every write records five identities in `moderation_actions`: who acted, in what 
 happened), and the platform id sent as the moderator. Denials carry them too, because "this
 moderator keeps getting refused" is a signal that is invisible if a denial cannot be told apart
 from an owner's.
+
+### The Discord leg
+
+Discord has no per-user moderation API. The shared bot performs every write, so unlike Twitch there is
+no token to hand over and **nothing external re-checks the moderator** — All-Chat's own decision *is* the
+authorization. `dispatch/discord.go` therefore checks, failing closed on any read error:
+
+1. the **owner-reach anchor** — a `discord_guilds` row for (owner, guild), on owner and delegated
+   actions alike, plus (delegated only) a live read showing the owner still holds
+   `owner ∥ ADMINISTRATOR ∥ MANAGE_GUILD`;
+2. the **moderator's Discord identity** (`discord_identities`, migration 083), without which their
+   permissions cannot be read at all;
+3. the **`bot ∩ moderator` action intersection** — the bot bounds what is possible, the moderator what
+   is permitted, so nobody does through the bot what Discord would refuse them directly;
+4. **role hierarchy** for timeout and ban only, because Discord hierarchy-gates the *actor* and the
+   actor is the bot, which typically outranks everyone.
+
+The member-standing cache TTL (60s, `clients/discord.go`) is a **security bound, not a tuning knob**:
+the `GUILD_MEMBERS` intent is off, so Discord cannot push us a revocation, and that TTL is exactly how
+long a moderator whose roles were just stripped keeps acting.
 
 ## Rollout (feature gate, ADR-0008)
 
@@ -237,9 +267,10 @@ no redeploy. Locally, non-premium users can either set `users.is_premium=true` o
   `HandleConnect?moderation=true` give an opt-in re-invite that upgrades existing bots in place.
 - **Phase 6 (in progress): delegated moderators** (ADR-0048). Role resolution and owner-keyed
   entitlement; the grant lifecycle; the owner's Moderators panel; the moderator's `/delegations`
-  listing and role-aware `capabilities`; per-platform leg enforcement; and the **Twitch leg** — a
-  delegated moderator's Helix write now runs on their own credential (see Delegated writes below).
-  **Kick, Discord and YouTube legs are not built**: a delegated action on those refuses with
+  listing and role-aware `capabilities`; per-platform leg enforcement; the **Twitch leg** — a
+  delegated moderator's Helix write now runs on their own credential (see Delegated writes below) —
+  and the **Discord leg**, which works differently on purpose (see below).
+  **Kick and YouTube legs are not built**: a delegated action on those refuses with
   `delegation_unsupported` rather than falling through to whatever credential the dispatcher would
   otherwise reach for.
 

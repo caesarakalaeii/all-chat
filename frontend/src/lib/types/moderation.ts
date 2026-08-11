@@ -35,10 +35,18 @@ export type ModerationAction = 'delete' | 'timeout' | 'ban' | 'unban'
 /**
  * Why a source cannot be moderated, when `moderatable` is false.
  *
- * The first two can describe either role. The last three only ever describe a
- * delegated moderator's source (ADR-0048), and they differ in who can clear
- * them: `not_delegated` needs the streamer, `needs_consent` needs the
- * moderator, and `needs_discord_link` needs neither — nothing can clear it yet.
+ * The first two can describe either role; the rest only ever describe a delegated
+ * moderator's source (ADR-0048). Sort them by WHO CAN CLEAR THEM, because that is
+ * what the copy has to branch on — an unclearable instruction is worse than none:
+ *
+ * - the moderator themselves: `needs_consent`, `needs_discord_link`
+ * - the streamer: `not_delegated`, `owner_channel_unverified`,
+ *   `bot_missing_permission`
+ * - nobody: `unsupported_platform`
+ *
+ * `needs_discord_link` and `owner_channel_unverified` can both be caused by the
+ * same missing thing — a Discord account link — and are kept apart precisely
+ * because one is the reader's to fix and the other is not.
  */
 export type ModerationUnavailableReason =
   | 'unsupported_platform'
@@ -46,6 +54,8 @@ export type ModerationUnavailableReason =
   | 'not_delegated'
   | 'needs_consent'
   | 'needs_discord_link'
+  | 'owner_channel_unverified'
+  | 'bot_missing_permission'
 
 /** The caller's role on an overlay's moderation write-path. */
 export type ModerationRole = 'owner' | 'moderator' | 'none'

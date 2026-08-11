@@ -671,6 +671,14 @@ func main() {
 		protectedAPI.GET("/auth/guilds/:guild_id/channels", proxyHandler.ForwardRequest)
 		protectedAPI.DELETE("/auth/guilds/:guild_id", proxyHandler.ForwardRequest)
 
+		// Discord ACCOUNT link (ADR-0048) — which Discord user an All-Chat account is, as
+		// opposed to which servers it controls. Needed because Discord has no per-user
+		// moderation API: the shared bot performs every write, so All-Chat verifies the acting
+		// human's own guild permissions, which requires their snowflake.
+		protectedAPI.GET("/auth/discord/identity/connect", proxyHandler.ForwardRequest)
+		protectedAPI.GET("/auth/discord/identity", proxyHandler.ForwardRequest)
+		protectedAPI.DELETE("/auth/discord/identity", proxyHandler.ForwardRequest)
+
 		// Viewer protected routes
 		protectedAPI.GET("/auth/viewer/me", proxyHandler.ForwardRequest)
 		// AuthCookieForward so the handler can blacklist the viewer token on logout

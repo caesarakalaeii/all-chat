@@ -46,6 +46,25 @@ const (
 	// built yet. Recorded rather than dropped — it is how a moderator hitting a wall becomes
 	// visible instead of just looking broken.
 	OutcomeDelegationUnsupported = "delegation_unsupported"
+	// The Discord refusals. They are kept apart rather than collapsed into OutcomeDenied because
+	// on Discord no platform message accompanies a refusal — All-Chat's own check is the only
+	// authority (ADR-0048), so the audit row is the entire record of WHY something was refused,
+	// and the five causes have five different remedies.
+	//
+	// OutcomeDiscordLinkRequired: the moderator has no Discord account linked, so their guild
+	// permissions could not be read at all.
+	OutcomeDiscordLinkRequired = "discord_link_required"
+	// OutcomeModNotInGuild: the moderator is not a member of the guild.
+	OutcomeModNotInGuild = "mod_not_in_guild"
+	// OutcomeModLacksPermission: the moderator is in the guild but could not perform the action
+	// themselves, so All-Chat refused to lend them the bot's authority.
+	OutcomeModLacksPermission = "mod_lacks_permission"
+	// OutcomeModBelowTarget: Discord's role hierarchy refused the member operation. Worth its own
+	// value because a run of these against one target is what an escalation attempt looks like.
+	OutcomeModBelowTarget = "mod_below_target"
+	// OutcomeBotMissingPermission: the bot was never invited with the permission, so nobody can
+	// borrow it. Distinct from a platform 403 on the owner path: this one is known before any call.
+	OutcomeBotMissingPermission = "bot_missing_permission"
 )
 
 // Entry is one audited moderation command.

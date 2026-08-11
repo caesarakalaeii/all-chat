@@ -34,8 +34,15 @@ import { VisuallyHidden } from '@/components/ui/visually-hidden'
 import { toastManager } from '@/lib/toast'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { AmbassadorSettingsCard } from '@/components/settings/AmbassadorSettingsCard'
-import { getGuilds, disconnectGuild, startDiscordOAuth } from '@/lib/api/discord'
-import type { DiscordGuild } from '@/lib/api/discord'
+import {
+  getGuilds,
+  disconnectGuild,
+  startDiscordOAuth,
+  getDiscordIdentity,
+  startDiscordAccountLink,
+  unlinkDiscordAccount,
+} from '@/lib/api/discord'
+import type { DiscordGuild, DiscordIdentity } from '@/lib/api/discord'
 
 function SettingsContent() {
   const router = useRouter()
@@ -46,6 +53,8 @@ function SettingsContent() {
   const [guilds, setGuilds] = useState<DiscordGuild[]>([])
   const [guildsLoading, setGuildsLoading] = useState(true)
   const [disconnectTarget, setDisconnectTarget] = useState<DiscordGuild | null>(null)
+  const [identity, setIdentity] = useState<DiscordIdentity | null>(null)
+  const [identityLoading, setIdentityLoading] = useState(true)
   const [restartingGuide, setRestartingGuide] = useState(false)
   const initAuth = useAuthStore((state) => state.init)
   const startOnboarding = useOnboardingStore((state) => state.start)
@@ -92,6 +101,66 @@ function SettingsContent() {
       fetchGuilds()
     }
   }, [searchParams])
+
+  // The account link is fetched separately from the guilds: a user can have servers connected and
+  // no link, or the reverse, and conflating them would hide whichever is missing.
+  //
+  // Keyed on the just-linked marker rather than refetched from the callback effect below, so every
+  // setState here happens in a promise callback: `react-hooks/set-state-in-effect` is a build
+  // error and it follows the call, so an effect must not invoke anything that setStates. When the
+  // marker is cleared from the URL the key flips and this re-reads the freshly linked identity.
+  const justLinked = searchParams.get('discord_account') === 'linked'
+  useEffect(() => {
+    let cancelled = false
+    getDiscordIdentity()
+      .then((data) => {
+        if (!cancelled) setIdentity(data)
+      })
+      .catch(() => {
+        // A failed read is reported as "not linked": the link is an affordance, and offering it
+        // again is harmless, whereas claiming a link we could not confirm is not.
+        if (!cancelled) setIdentity({ linked: false })
+      })
+      .finally(() => {
+        if (!cancelled) setIdentityLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [justLinked])
+
+  // The account-link callback lands here with one of these markers. `already_linked` is the one
+  // needing real copy: it means that Discord account backs a DIFFERENT All-Chat account, which no
+  // amount of retrying fixes — one Discord identity may back at most one account, or a second
+  // account could inherit the first's server permissions.
+  useEffect(() => {
+    if (justLinked) {
+      toastManager.add({ title: 'Discord account linked!', type: 'success' })
+      router.replace('/settings')
+      return
+    }
+    const error = searchParams.get('error')
+    if (!error) return
+    toastManager.add({
+      title:
+        error === 'already_linked'
+          ? 'That Discord account is already linked to another All-Chat account'
+          : 'Could not link your Discord account',
+      description: error === 'already_linked' ? undefined : 'Please try again.',
+      type: 'error',
+    })
+    router.replace('/settings')
+  }, [justLinked, searchParams, router])
+
+  async function handleUnlinkDiscordAccount() {
+    try {
+      await unlinkDiscordAccount()
+      setIdentity({ linked: false })
+      toastManager.add({ title: 'Discord account unlinked', type: 'success' })
+    } catch {
+      toastManager.add({ title: 'Could not unlink your Discord account', type: 'error' })
+    }
+  }
 
   async function handleDisconnectGuild() {
     if (!disconnectTarget) return
@@ -291,6 +360,38 @@ function SettingsContent() {
               </div>
             </div>
           )}
+
+          {/* The Discord ACCOUNT link, kept visually apart from the servers above because it is a
+              different kind of thing: those record which servers this account controls, this
+              records who you are on Discord. Moderation needs both — Discord has no per-user
+              moderation API, so the shared bot writes and All-Chat checks real people's server
+              permissions itself (ADR-0048). No token is kept. */}
+          <div className="mt-6 border-t border-border pt-4">
+            <h3 className="text-sm font-semibold text-text">Your Discord account</h3>
+            {identityLoading ? (
+              <div role="status" className="mt-3">
+                <VisuallyHidden>Loading your Discord account link</VisuallyHidden>
+                <Skeleton className="h-9 w-full" />
+              </div>
+            ) : (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-text-sub">
+                  {identity?.linked
+                    ? `Linked as ${identity.discord_username ?? 'your Discord account'}. Needed so moderators can act on your Discord servers.`
+                    : 'Not linked. Link it to let moderators you invite act on your Discord servers.'}
+                </p>
+                {identity?.linked ? (
+                  <Button variant="outline" onClick={handleUnlinkDiscordAccount}>
+                    Unlink
+                  </Button>
+                ) : (
+                  <Button onClick={() => void startDiscordAccountLink('settings')}>
+                    Link Discord account
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
         </Card>
 
         {/* Danger zone */}

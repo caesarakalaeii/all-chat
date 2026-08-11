@@ -170,18 +170,98 @@ func TestCapabilities_ConsentNarrowerThanTheGrantReadsAsNeedsConsent(t *testing.
 	assert.Equal(t, models.ReasonNeedsConsent, caps.Sources[0].Reason)
 }
 
-// Discord has no per-user moderation API, so there is no consent a moderator could grant. Saying
-// "connect your account" would offer a button that goes nowhere.
+func discordSource() []repository.Source {
+	return []repository.Source{{Platform: "discord", ChannelID: "123", ChannelName: "#general"}}
+}
+
+// Discord has no per-user moderation API, so what a moderator must supply is not a consent but an
+// identity: the shared bot writes, and All-Chat checks their own server permissions. Saying
+// "connect your account" would point them at an OAuth flow that grants nothing usable.
 func TestCapabilities_DiscordReadsAsNeedsLinkNotConsent(t *testing.T) {
 	auth := &fakeAuthorizer{
 		access:    moderatorAccess([]string{"delete"}, []string{"discord"}),
-		sources:   []repository.Source{{Platform: "discord", ChannelID: "123", ChannelName: "#general"}},
+		sources:   discordSource(),
 		modScopes: map[string][]string{},
 	}
 
 	caps := modCaps(t, auth)
 
 	require.Len(t, caps.Sources, 1)
+	assert.Equal(t, models.ReasonNeedsDiscordLink, caps.Sources[0].Reason)
+}
+
+// The same missing thing — a Discord account link — has two subjects, and only one of them is the
+// person reading this. A moderator told to link their account when it is the STREAMER who has not
+// would link it and see nothing change.
+func TestCapabilities_UnlinkedOwnerIsNotTheModeratorsProblemToFix(t *testing.T) {
+	auth := &fakeAuthorizer{
+		access:            moderatorAccess([]string{"delete"}, []string{"discord"}),
+		sources:           discordSource(),
+		discordIdentities: map[string]string{modUserID: "200"}, // the moderator linked; the owner did not
+	}
+
+	caps := modCaps(t, auth)
+
+	require.Len(t, caps.Sources, 1)
+	assert.Equal(t, models.ReasonOwnerChannelUnverified, caps.Sources[0].Reason)
+	assert.False(t, caps.Sources[0].Moderatable)
+}
+
+// With both linked, the answer is what the BOT can do in that guild narrowed to what the streamer
+// delegated. The moderator's own server permissions are checked at action time, not here — exactly
+// as on Twitch, where capabilities checks the scope and the platform decides the rest.
+func TestCapabilities_LinkedDiscordReportsTheDelegatedBotIntersection(t *testing.T) {
+	auth := &fakeAuthorizer{
+		access:            moderatorAccess([]string{"delete", "ban"}, []string{"discord"}),
+		sources:           discordSource(),
+		discordIdentities: map[string]string{modUserID: "200", ownerID: "100"},
+	}
+
+	caps := modCaps(t, auth)
+
+	require.Len(t, caps.Sources, 1)
+	assert.True(t, caps.Sources[0].Moderatable)
+	assert.Empty(t, caps.Sources[0].Reason)
+	// modCapsHandler's scope checker reports the full set as the bot's permissions, so the grant
+	// is the only narrowing left.
+	assert.ElementsMatch(t, []models.Action{models.ActionDelete, models.ActionBan}, caps.Sources[0].Actions)
+}
+
+// A bot invited without the permissions the grant covers cannot lend them to anyone, and only the
+// streamer can fix it — by re-inviting the bot, never by any re-consent.
+func TestCapabilities_DiscordBotWithoutThePermissionsReadsAsReinvite(t *testing.T) {
+	auth := &fakeAuthorizer{
+		access:            moderatorAccess([]string{"ban"}, []string{"discord"}),
+		sources:           discordSource(),
+		discordIdentities: map[string]string{modUserID: "200", ownerID: "100"},
+	}
+	// A bot holding only MANAGE_MESSAGES: it can delete, and the grant covers only ban.
+	h := New(auth, &fakeEmitter{}, &fakeRecorder{}, fakeScopes{actions: []models.Action{models.ActionDelete}},
+		DryRunDispatcher{}, zap.NewNop())
+
+	resp := do(newTestRouter(h, modUserID, ""), http.MethodGet, capsPath, "")
+	require.Equal(t, http.StatusOK, resp.Code)
+	var caps models.Capabilities
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &caps))
+
+	require.Len(t, caps.Sources, 1)
+	assert.Equal(t, models.ReasonBotMissingPermission, caps.Sources[0].Reason)
+	assert.False(t, caps.Sources[0].Moderatable)
+}
+
+// A lookup failure must not advertise a capability the action path would refuse. On Discord that
+// matters more than elsewhere: nothing downstream re-checks it on our behalf.
+func TestCapabilities_DiscordIdentityLookupErrorFailsClosed(t *testing.T) {
+	auth := &fakeAuthorizer{
+		access:          moderatorAccess([]string{"delete"}, []string{"discord"}),
+		sources:         discordSource(),
+		discordIdentErr: errors.New("db down"),
+	}
+
+	caps := modCaps(t, auth)
+
+	require.Len(t, caps.Sources, 1)
+	assert.False(t, caps.Sources[0].Moderatable)
 	assert.Equal(t, models.ReasonNeedsDiscordLink, caps.Sources[0].Reason)
 }
 

@@ -70,7 +70,7 @@ export async function startDiscordOAuth(): Promise<void> {
 // Unlike Twitch/Kick/YouTube this is a bot RE-INVITE, not an OAuth re-consent.
 export async function startDiscordModerationReinvite(): Promise<void> {
   const data = await apiClient.get<{ bot_invite_url: string }>(
-    '/api/v1/auth/discord/connect?moderation=true',
+    '/api/v1/auth/discord/connect?moderation=true'
   )
   if (data.bot_invite_url) {
     safeExternalRedirect(data.bot_invite_url)
@@ -80,7 +80,46 @@ export async function startDiscordModerationReinvite(): Promise<void> {
 export async function updateSourceConfig(
   overlayId: string,
   sourceId: string,
-  config: DiscordSourceConfig,
+  config: DiscordSourceConfig
 ): Promise<void> {
   return apiClient.patch<void>(`/api/v1/overlays/${overlayId}/sources/${sourceId}`, { config })
+}
+
+/**
+ * The Discord ACCOUNT link (ADR-0048) — which Discord user an All-Chat account is.
+ *
+ * Distinct from the guild routes above, and the distinction is the point: those record which
+ * SERVERS a streamer connected, this records a PERSON. Discord moderation needs both, because
+ * Discord has no per-user moderation API — the shared bot performs every write, so All-Chat has to
+ * check the acting human's own server permissions, which needs their snowflake.
+ *
+ * No OAuth token is retained: the `identify` grant is used once, at link time, and discarded.
+ */
+export interface DiscordIdentity {
+  linked: boolean
+  discord_user_id?: string
+  /** Display only. Discord usernames are mutable; never identify anyone by this. */
+  discord_username?: string
+  linked_at?: string
+}
+
+/** Where to send the browser after linking. An allowlisted KEY, never a path — the server owns
+ *  the mapping, so this cannot become an open redirect. */
+export type DiscordLinkReturn = 'settings' | 'moderate'
+
+export async function getDiscordIdentity(): Promise<DiscordIdentity> {
+  return apiClient.get<DiscordIdentity>('/api/v1/auth/discord/identity')
+}
+
+export async function startDiscordAccountLink(returnTo: DiscordLinkReturn): Promise<void> {
+  const data = await apiClient.get<{ auth_url: string }>(
+    `/api/v1/auth/discord/identity/connect?return=${returnTo}`
+  )
+  if (data.auth_url) {
+    safeExternalRedirect(data.auth_url)
+  }
+}
+
+export async function unlinkDiscordAccount(): Promise<void> {
+  return apiClient.delete('/api/v1/auth/discord/identity')
 }

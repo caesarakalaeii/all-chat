@@ -63,8 +63,8 @@ export function isModerationReauthError(err: unknown): boolean {
 /**
  * The machine-readable `code` on a failed moderation ACTION (ADR-0048), or undefined.
  *
- * Distinct from `delegationErrorCode`, which covers the grant-lifecycle endpoints. These three
- * describe why a write could not happen, and they differ in who can fix it:
+ * Distinct from `delegationErrorCode`, which covers the grant-lifecycle endpoints. These describe
+ * why a write could not happen, and they differ in who can fix it:
  *
  * - `connect_required` — the actor holds no credential for this platform. For a moderator that is
  *   the deferred-consent state, and the fix is theirs.
@@ -74,12 +74,33 @@ export function isModerationReauthError(err: unknown): boolean {
  * - `not_moderator_on_platform` — the PLATFORM refused: All-Chat allowed the action and Twitch
  *   said this person does not moderate that channel. Re-consent cannot fix it, so this must never
  *   be rendered as a re-authorize prompt; the streamer has to add them in the platform's own tools.
+ *
+ * The last five are Discord's. They exist as separate codes because Discord has no per-user
+ * moderation API: the shared bot performs every write, so no platform message comes back to
+ * explain a refusal and this code IS the explanation. Only `discord_link_required` is the
+ * moderator's own to clear.
+ *
+ * - `discord_link_required` — the moderator has not linked a Discord account, so their server
+ *   permissions cannot be read. Theirs to fix, and NOT the same as `connect_required`: the link
+ *   stores no token and runs through a different flow.
+ * - `mod_not_in_guild` — they are not a member of the server. The streamer invites them.
+ * - `mod_lacks_permission` — their Discord roles do not carry the permission, and All-Chat will
+ *   not let them do through the bot what Discord would refuse them directly.
+ * - `mod_below_target` — Discord's role hierarchy refused it. Nothing about All-Chat is wrong here;
+ *   Discord's own client would refuse it too.
+ * - `bot_missing_permission` — the bot was never invited with the permission, so nobody can borrow
+ *   it. Cleared by re-inviting the bot, never by an OAuth re-consent.
  */
 export type ModerationActionErrorCode =
   | 'connect_required'
   | 'owner_channel_unverified'
   | 'delegation_unsupported'
   | 'not_moderator_on_platform'
+  | 'discord_link_required'
+  | 'mod_not_in_guild'
+  | 'mod_lacks_permission'
+  | 'mod_below_target'
+  | 'bot_missing_permission'
 
 export function moderationActionCode(err: unknown): ModerationActionErrorCode | undefined {
   if (!(err instanceof ApiError)) return undefined
