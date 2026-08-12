@@ -4,7 +4,7 @@ go 1.25.6
 
 require (
 	github.com/gin-gonic/gin v1.12.0
-	github.com/redis/go-redis/v9 v9.21.0
+	github.com/redis/go-redis/v9 v9.22.0
 	github.com/stretchr/testify v1.11.1
 	go.uber.org/zap v1.28.0
 )

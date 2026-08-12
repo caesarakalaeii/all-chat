@@ -21,7 +21,7 @@ This guide covers deploying your own instance of All-Chat. If you just want to u
 - **Docker & Docker Compose** - Containerization
 - **PostgreSQL 16** - Database (or use Docker)
 - **Redis 7** - Cache and messaging (or use Docker)
-- **Node.js 18+** - Frontend (React + Next.js)
+- **Node.js 22+** - Frontend (React + Next.js)
 - **kubectl** - For Kubernetes deployments (optional)
 
 ### Required API Credentials
