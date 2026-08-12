@@ -368,8 +368,9 @@ func (h *PlatformAuthHandlerV2) HandleEnableModeration(platform oauth.Platform) 
 		}
 
 		// Minimal scopes for exactly the actions being enabled, mapped per platform.
-		// Twitch splits delete vs ban/timeout/unban; Kick gates ban/timeout/unban behind
-		// one scope and has no single-message delete. Unsupported platforms are rejected.
+		// Twitch splits delete vs ban/timeout/unban; Kick likewise splits delete
+		// (moderation:chat_message:manage) from ban/timeout/unban (moderation:ban).
+		// Unsupported platforms are rejected.
 		actions := splitActions(c.Query("actions"))
 		var modScopes []string
 		var sendScope string
@@ -1264,10 +1265,11 @@ var preservableScopes = []string{
 	"user:write:chat", // Twitch chat-send grant (advanced-controls opt-in)
 	"moderator:manage:chat_messages",
 	"moderator:manage:banned_users",
-	"channel:read:polls",       // Twitch engagement grant (poll mirroring, issue #523)
-	"channel:read:predictions", // Twitch engagement grant (prediction mirroring, issue #523)
-	"moderation:ban", // Kick moderation grant (opt-in re-consent, ADR-0017)
-	"chat:write",     // Kick chat-send grant (advanced-controls opt-in)
+	"channel:read:polls",                                // Twitch engagement grant (poll mirroring, issue #523)
+	"channel:read:predictions",                          // Twitch engagement grant (prediction mirroring, issue #523)
+	"moderation:ban",                                    // Kick moderation grant (opt-in re-consent, ADR-0017)
+	"moderation:chat_message:manage",                    // Kick delete grant — a SECOND, independently granted Kick scope
+	"chat:write",                                        // Kick chat-send grant (advanced-controls opt-in)
 	"https://www.googleapis.com/auth/youtube.force-ssl", // YouTube moderation grant (ADR-0017)
 }
 

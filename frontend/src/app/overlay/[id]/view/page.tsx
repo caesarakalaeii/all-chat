@@ -286,8 +286,9 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
 
   // Start the opt-in moderation setup (ADR-0017). For the OAuth platforms this fetches a
   // consent URL (auth-service requests only the minimal moderation scopes for the actions
-  // the platform supports) and redirects to it: Twitch grants all four actions; Kick
-  // supports timeout/ban/unban (no single-message delete); YouTube is ban-only. Discord
+  // the platform supports) and redirects to it: Twitch and Kick grant all four actions
+  // (Kick across two scopes — delete is a separate grant from ban/timeout/unban, so a
+  // streamer who consented before delete existed re-consents here); YouTube is ban-only. Discord
   // is different — its moderation authority is a guild-level BOT permission, so "enabling"
   // it is a bot RE-INVITE with the elevated permissions, not an OAuth re-consent.
   const enableModeration = useCallback(
@@ -301,7 +302,7 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         if (platform === 'twitch') {
           url = await moderationApi.getTwitchConsentUrl(id, ['delete', 'timeout', 'ban', 'unban'])
         } else if (platform === 'kick') {
-          url = await moderationApi.getKickConsentUrl(id, ['timeout', 'ban', 'unban'])
+          url = await moderationApi.getKickConsentUrl(id, ['delete', 'timeout', 'ban', 'unban'])
         } else if (platform === 'youtube') {
           url = await moderationApi.getYouTubeConsentUrl(id, ['ban'])
         }

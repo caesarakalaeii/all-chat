@@ -33,6 +33,7 @@ func newTestKickClient(t *testing.T, status int, captured *capturedRequest) (*Ki
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		captured.method = r.Method
 		captured.path = r.URL.Path
+		captured.escapedPath = r.URL.EscapedPath()
 		captured.auth = r.Header.Get("Authorization")
 		if b, _ := io.ReadAll(r.Body); len(b) > 0 {
 			_ = json.Unmarshal(b, &captured.body)
@@ -92,6 +93,57 @@ func TestKickUnbanUser(t *testing.T) {
 	assert.Equal(t, "/moderation/bans", got.path)
 	assert.Equal(t, float64(12345), got.body["broadcaster_user_id"])
 	assert.Equal(t, float64(999), got.body["user_id"])
+}
+
+func TestKickDeleteMessage(t *testing.T) {
+	var got capturedRequest
+	c, done := newTestKickClient(t, http.StatusOK, &got)
+	defer done()
+
+	err := c.DeleteMessage(context.Background(), "tok", "8f2c1d64-0b3a-4f19-9a2e-1b7c3d5e6f70")
+	require.NoError(t, err)
+	assert.Equal(t, http.MethodDelete, got.method)
+	assert.Equal(t, "/chat/8f2c1d64-0b3a-4f19-9a2e-1b7c3d5e6f70", got.path,
+		"the message id is a path segment, not a body field")
+	assert.Equal(t, "Bearer tok", got.auth)
+	assert.Empty(t, got.body, "the delete endpoint takes no body")
+}
+
+// The message id reaches us from the chat pipeline, so it is attacker-influenced input
+// interpolated into a URL path. Escaping keeps it inside its own segment: without it, an id
+// of "../moderation/bans" would resolve to a completely different endpoint.
+func TestKickDeleteMessage_EscapesTheMessageID(t *testing.T) {
+	var got capturedRequest
+	c, done := newTestKickClient(t, http.StatusOK, &got)
+	defer done()
+
+	err := c.DeleteMessage(context.Background(), "tok", "../moderation/bans")
+	require.NoError(t, err)
+	assert.Equal(t, "/chat/..%2Fmoderation%2Fbans", got.escapedPath,
+		"a slash in the id must stay escaped rather than becoming a path separator")
+}
+
+func TestKickDeleteMessage_RejectsEmptyID(t *testing.T) {
+	var got capturedRequest
+	c, done := newTestKickClient(t, http.StatusOK, &got)
+	defer done()
+
+	err := c.DeleteMessage(context.Background(), "tok", "")
+	require.Error(t, err)
+	assert.Empty(t, got.method, "an empty id must fail before any HTTP request: DELETE /chat/ is not this endpoint")
+}
+
+func TestKickDeleteMessage_StatusMapping(t *testing.T) {
+	for status, want := range map[int]error{
+		http.StatusUnauthorized: ErrKickUnauthorized,
+		http.StatusForbidden:    ErrKickForbidden,
+	} {
+		var got capturedRequest
+		c, done := newTestKickClient(t, status, &got)
+		err := c.DeleteMessage(context.Background(), "tok", "msg-1")
+		assert.ErrorIs(t, err, want, "status %d", status)
+		done()
+	}
 }
 
 func TestKickNonNumericIDIsError(t *testing.T) {

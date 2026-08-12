@@ -35,6 +35,9 @@ const (
 	kickUserK     = "55555555-eeee-5555-5555-555555555555" // kick-login streamer
 	kickStrangerE = "66666666-ffff-6666-6666-666666666666"
 	kickLinkedT   = "77777777-aaaa-7777-7777-777777777777" // twitch-login streamer who linked Kick
+	kickModUser   = "88888888-bbbb-8888-8888-888888888888" // volunteer moderator, owns no channel
+	kickLegacyL   = "99999999-cccc-9999-9999-999999999999" // listener-only Kick row (migration 062 legacy)
+	kickNoScopeN  = "aaaaaaaa-dddd-aaaa-aaaa-aaaaaaaaaaaa" // controls a channel, granted no moderation
 )
 
 func TestKickResolve_UsersRowCredential(t *testing.T) {
@@ -164,6 +167,14 @@ func TestKickRefresh_LinkedPersistsToLinkedRow(t *testing.T) {
 // returns a KickSource wired to a real AES cipher used to encrypt the seeded tokens.
 func setupKickSource(t *testing.T) (*KickSource, Cipher, func()) {
 	t.Helper()
+	src, cipher, _, cleanup := setupKickSourceWithPool(t)
+	return src, cipher, cleanup
+}
+
+// setupKickSourceWithPool is setupKickSource plus the pool, for the delegated-moderator
+// credential store — which lives in its own table and needs its own seeding.
+func setupKickSourceWithPool(t *testing.T) (*KickSource, Cipher, *pgxpool.Pool, func()) {
+	t.Helper()
 	ctx := context.Background()
 
 	aes, err := encryption.NewAESEncryptor([]byte("0123456789abcdef0123456789abcdef"))
@@ -221,6 +232,19 @@ func setupKickSource(t *testing.T) (*KickSource, Cipher, func()) {
 			created_at TIMESTAMP DEFAULT NOW(),
 			updated_at TIMESTAMP DEFAULT NOW(),
 			UNIQUE(user_id, channel_id)
+		);
+		CREATE TABLE mod_oauth_credentials (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			user_id UUID NOT NULL,
+			platform VARCHAR(20) NOT NULL,
+			platform_user_id VARCHAR(100) NOT NULL,
+			platform_login VARCHAR(200),
+			access_token TEXT NOT NULL,
+			refresh_token TEXT,
+			token_expires_at TIMESTAMP,
+			granted_scopes TEXT[] NOT NULL DEFAULT '{}',
+			updated_at TIMESTAMP DEFAULT NOW(),
+			UNIQUE (user_id, platform)
 		);`
 	_, err = pool.Exec(ctx, schema)
 	require.NoError(t, err)
@@ -259,8 +283,40 @@ func setupKickSource(t *testing.T) (*KickSource, Cipher, func()) {
 		kickUserK, enc("listenerAcc"), enc("listenerRef"), exp)
 	require.NoError(t, err)
 
+	// kickLegacyL: a streamer whose ONLY Kick row is a legacy listener row (migration 062
+	// predates kick_user_id). It cannot satisfy the moderation API and must not anchor either.
+	_, err = pool.Exec(ctx, `INSERT INTO users (id, username, auth_provider, access_token, refresh_token, token_expires_at)
+		VALUES ($1,'legacyowner','twitch',$2,$3,$4)`, kickLegacyL, enc("x"), enc("y"), exp)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO kick_oauth_tokens (user_id, channel_id, access_token, refresh_token, expiry, encryption_version)
+		VALUES ($1,'legacychannel',$2,$3,$4,1)`, kickLegacyL, enc("lacc"), enc("lref"), exp)
+	require.NoError(t, err)
+
+	// kickNoScopeN: a kick-login streamer who granted nothing beyond login. They control their
+	// channel, which is all the anchor is allowed to care about.
+	_, err = pool.Exec(ctx, `INSERT INTO users (id, username, auth_provider, kick_id, access_token, refresh_token, token_expires_at, granted_scopes)
+		VALUES ($1,'noscopestreamer','kick','888',$2,$3,$4,$5)`,
+		kickNoScopeN, enc("nacc"), enc("nref"), exp, []string{"user:read"})
+	require.NoError(t, err)
+
+	// kickModUser: a volunteer who consented to moderate on Kick, owns no channel, and also
+	// holds a Twitch moderator credential — so the Kick source must not pick the wrong row.
+	_, err = pool.Exec(ctx, `INSERT INTO users (id, username, auth_provider, access_token, refresh_token, token_expires_at)
+		VALUES ($1,'kickvolunteer','kick',$2,$3,$4)`, kickModUser, enc("ignored"), enc("ignored"), exp)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO mod_oauth_credentials
+		(user_id, platform, platform_user_id, platform_login, access_token, refresh_token, token_expires_at, granted_scopes)
+		VALUES ($1,'kick','9001','kickvolunteer',$2,$3,$4,$5)`,
+		kickModUser, enc("kmodAcc"), enc("kmodRef"), exp, []string{"user:read", "moderation:ban"})
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO mod_oauth_credentials
+		(user_id, platform, platform_user_id, platform_login, access_token, refresh_token, token_expires_at, granted_scopes)
+		VALUES ($1,'twitch','7007','kickvolunteer',$2,$3,$4,$5)`,
+		kickModUser, enc("twitchModAcc"), enc("twitchModRef"), exp, []string{"moderator:manage:banned_users"})
+	require.NoError(t, err)
+
 	src := NewKickSource(pool, cipher, "test-client-id", "test-client-secret")
-	return src, cipher, func() {
+	return src, cipher, pool, func() {
 		pool.Close()
 		_ = container.Terminate(ctx)
 	}

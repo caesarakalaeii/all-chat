@@ -72,28 +72,39 @@ func NewModTwitchSource(db *pgxpool.Pool, cipher Cipher, clientID, clientSecret 
 // to them. ErrNoCredential means they have not consented yet, which is the normal state of a
 // fresh grant (consent is deferred to first use) rather than an error condition.
 func (s *ModTwitchSource) Resolve(ctx context.Context, userID string) (*ModCredential, error) {
+	return resolveModCredential(ctx, s.db, s.cipher, userID, "twitch")
+}
+
+// resolveModCredential reads one moderator credential row and decrypts it.
+//
+// Shared by every platform's mod source: the row shape is identical and the platform is a value,
+// so the only thing a per-platform copy could add is a place for the two to drift apart. The
+// platform is always a literal supplied by the source, never caller input.
+func resolveModCredential(
+	ctx context.Context, db *pgxpool.Pool, cipher Cipher, userID, platform string,
+) (*ModCredential, error) {
 	const query = `
 		SELECT access_token, refresh_token, COALESCE(token_expires_at, TIMESTAMP 'epoch'),
 		       granted_scopes, platform_user_id
 		FROM mod_oauth_credentials
-		WHERE user_id = $1 AND platform = 'twitch'`
+		WHERE user_id = $1 AND platform = $2`
 
 	var encAccess, encRefresh, platformUserID string
 	var expiresAt time.Time
 	var scopes []string
-	err := s.db.QueryRow(ctx, query, userID).Scan(&encAccess, &encRefresh, &expiresAt, &scopes, &platformUserID)
+	err := db.QueryRow(ctx, query, userID, platform).Scan(&encAccess, &encRefresh, &expiresAt, &scopes, &platformUserID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNoCredential
 	}
 	if err != nil {
-		return nil, fmt.Errorf("resolve moderator twitch credential: %w", err)
+		return nil, fmt.Errorf("resolve moderator %s credential: %w", platform, err)
 	}
 
-	access, err := s.cipher.DecryptString(encAccess)
+	access, err := cipher.DecryptString(encAccess)
 	if err != nil {
 		return nil, fmt.Errorf("decrypt moderator access token: %w", err)
 	}
-	refresh, err := s.cipher.DecryptString(encRefresh)
+	refresh, err := cipher.DecryptString(encRefresh)
 	if err != nil {
 		return nil, fmt.Errorf("decrypt moderator refresh token: %w", err)
 	}
@@ -105,6 +116,33 @@ func (s *ModTwitchSource) Resolve(ctx context.Context, userID string) (*ModCrede
 		GrantedScopes:  scopes,
 		ExpiresAt:      expiresAt,
 	}, nil
+}
+
+// persistRefreshedModCredential writes a refreshed token pair back to the moderator's own row.
+//
+// Scoped to (user, platform) rather than a row id: the table's UNIQUE(user_id, platform) makes
+// that exact, and it cannot address another moderator's row by accident. granted_scopes is left
+// untouched — it is owned by the consent flow, and a refresh grant never widens it.
+func persistRefreshedModCredential(
+	ctx context.Context, db *pgxpool.Pool, cipher Cipher, userID, platform string, refreshed refreshedToken,
+) error {
+	encAccess, err := cipher.EncryptString(refreshed.accessToken)
+	if err != nil {
+		return fmt.Errorf("encrypt refreshed moderator access token: %w", err)
+	}
+	encRefresh, err := cipher.EncryptString(refreshed.refreshToken)
+	if err != nil {
+		return fmt.Errorf("encrypt refreshed moderator refresh token: %w", err)
+	}
+
+	const update = `
+		UPDATE mod_oauth_credentials
+		SET access_token = $1, refresh_token = $2, token_expires_at = $3, updated_at = NOW()
+		WHERE user_id = $4 AND platform = $5`
+	if _, err := db.Exec(ctx, update, encAccess, encRefresh, refreshed.expiresAt, userID, platform); err != nil {
+		return fmt.Errorf("persist refreshed moderator token: %w", err)
+	}
+	return nil
 }
 
 // Refresh exchanges the moderator's refresh token for a new access token and writes the
@@ -123,24 +161,64 @@ func (s *ModTwitchSource) Refresh(ctx context.Context, userID string, cred *ModC
 	if err != nil {
 		return err
 	}
-
-	encAccess, err := s.cipher.EncryptString(refreshed.accessToken)
-	if err != nil {
-		return fmt.Errorf("encrypt refreshed moderator access token: %w", err)
-	}
-	encRefresh, err := s.cipher.EncryptString(refreshed.refreshToken)
-	if err != nil {
-		return fmt.Errorf("encrypt refreshed moderator refresh token: %w", err)
+	if err := persistRefreshedModCredential(ctx, s.db, s.cipher, userID, "twitch", refreshed); err != nil {
+		return err
 	}
 
-	// Scoped to (user, platform) rather than a row id: the table's UNIQUE(user_id, platform)
-	// makes that exact, and it cannot address another moderator's row by accident.
-	const update = `
-		UPDATE mod_oauth_credentials
-		SET access_token = $1, refresh_token = $2, token_expires_at = $3, updated_at = NOW()
-		WHERE user_id = $4 AND platform = 'twitch'`
-	if _, err := s.db.Exec(ctx, update, encAccess, encRefresh, refreshed.expiresAt, userID); err != nil {
-		return fmt.Errorf("persist refreshed moderator token: %w", err)
+	cred.AccessToken = refreshed.accessToken
+	cred.RefreshToken = refreshed.refreshToken
+	cred.ExpiresAt = refreshed.expiresAt
+	return nil
+}
+
+// ModKickSource resolves and refreshes a delegated moderator's own Kick credential.
+//
+// Same shape as the Twitch source, and the same table, because Kick's moderation scopes are
+// role-based too: one consent serves every streamer who delegated Kick to them.
+//
+// What differs is what the credential is FOR. Kick's moderation endpoints take no moderator
+// field, so this token is the entire proof of who is acting — there is no id in the request to
+// cross-check it against, which is why the broadcaster id must come from the owner-reach anchor
+// (KickSource.OwnerKickAnchor) and never from here.
+type ModKickSource struct {
+	db      *pgxpool.Pool
+	cipher  Cipher
+	refresh *kickRefresher
+}
+
+// NewModKickSource builds a source over mod_oauth_credentials. clientID/clientSecret are the
+// All-Chat Kick application credentials used for the refresh grant.
+func NewModKickSource(db *pgxpool.Pool, cipher Cipher, clientID, clientSecret string) *ModKickSource {
+	return &ModKickSource{
+		db:      db,
+		cipher:  cipher,
+		refresh: newKickRefresher(clientID, clientSecret),
+	}
+}
+
+// Resolve returns the moderator's decrypted Kick credential, or ErrNoCredential when they have
+// not consented for Kick yet (the normal state of a fresh grant).
+func (s *ModKickSource) Resolve(ctx context.Context, userID string) (*ModCredential, error) {
+	return resolveModCredential(ctx, s.db, s.cipher, userID, "kick")
+}
+
+// Refresh exchanges the moderator's refresh token for a new access token and writes the
+// re-encrypted pair back to their own row.
+//
+// token-refresh-service keeps these fresh on a schedule (it reads the platform off the row, so
+// Kick needed nothing there); this is the proactive/reactive path for the moment of use, so a
+// token that lapsed between cycles does not cost the moderator a failed action.
+func (s *ModKickSource) Refresh(ctx context.Context, userID string, cred *ModCredential) error {
+	if cred.RefreshToken == "" {
+		return errors.New("tokens: no moderator refresh token available")
+	}
+
+	refreshed, err := s.refresh.exchange(ctx, cred.RefreshToken)
+	if err != nil {
+		return err
+	}
+	if err := persistRefreshedModCredential(ctx, s.db, s.cipher, userID, "kick", refreshed); err != nil {
+		return err
 	}
 
 	cred.AccessToken = refreshed.accessToken
