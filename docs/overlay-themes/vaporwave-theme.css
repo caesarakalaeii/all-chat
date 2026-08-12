@@ -273,5 +273,47 @@ body {
 }
 
 /* ============================================================
+   EVENTS - SAME GRADIENT FRAME
+   ============================================================
+
+   The gradient-bordered panel above already covers events (they are
+   `.space-y-3 > div` too); this block strips the platform default's gold
+   glow and bounce and re-tints the type accent in pink/cyan.
+   Tokens: AUTHORING-EVENTS.md
+   ============================================================ */
+
+.event-message {
+  --event-scale: 1;
+  --event-min-height: 0;
+  --event-animation: none;
+  --event-icon-animation: none;
+  --event-icon-filter: drop-shadow(0 0 8px rgba(255, 0, 128, 0.6));
+  --event-icon-size: 1.5rem;
+  --event-decor: none;
+
+  --event-title-font: 'Orbitron', sans-serif;
+  --event-title-size: 13px;
+  --event-title-spacing: 0.16em;
+  --event-title-color: #00ffff;
+  --event-title-shadow: 2px 2px 0 rgba(255, 0, 128, 0.7);
+  --event-value-size: 18px;
+  --event-value-color: #ff0080;
+  --event-value-shadow: 2px 2px 0 rgba(0, 255, 255, 0.6);
+  --event-text-size: 14px;
+  --event-meta-color: rgba(0, 255, 255, 0.75);
+  --event-indent: 2.3rem;
+
+  --event-accent-subscription: #ff00ff;
+  --event-accent-bits: #00ffff;
+  --event-accent-raid: #ff0080;
+  --event-accent-super-chat: #ffd700;
+  --event-accent-channel-points: #00ffff;
+  --event-accent-gift: #ff00ff;
+  --event-accent-follow: #00ffff;
+  --event-accent-like: #ff0080;
+  --event-accent-member: #b967ff;
+}
+
+/* ============================================================
    END OF VAPORWAVE AESTHETIC THEME
    ============================================================ */

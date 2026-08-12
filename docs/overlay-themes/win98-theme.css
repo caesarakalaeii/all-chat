@@ -250,6 +250,65 @@ body {
 }
 
 /* ============================================
+   EVENTS - SYSTEM DIALOG BOXES
+   ============================================
+   An event is a Win98 message box: the same gray window (already applied by
+   `.space-y-3 > div` above), with the event title rendered as a navy title
+   bar. Left to the platform default it arrives as a rounded, gold-glowing,
+   bounce-in card, which no version of Windows ever shipped.
+   Tokens: AUTHORING-EVENTS.md
+   ============================================ */
+
+.event-message {
+  --event-scale: 1;
+  --event-min-height: 0;
+  --event-radius: 0;
+  --event-animation: win98-slide-in 0.2s ease-out;
+  --event-icon-animation: none;
+  --event-icon-filter: none;
+  --event-icon-size: 20px;
+  --event-decor: none;
+
+  --event-title-font: 'MS Sans Serif', 'Microsoft Sans Serif', sans-serif;
+  --event-title-size: 11px;
+  --event-title-transform: none;
+  --event-title-spacing: 0;
+  --event-title-color: #ffffff;
+  --event-title-shadow: none;
+  --event-value-size: 13px;
+  --event-value-color: #000080;
+  --event-value-shadow: none;
+  --event-text-size: 11px;
+  --event-text-color: #000000;
+  --event-meta-color: #404040;
+  --event-meta-size: 10px;
+  --event-indent: 0;
+}
+
+/* Title bar across the top of the dialog */
+.event-title {
+  background: linear-gradient(to right, #000080, #1084d0) !important;
+  padding: 2px 5px !important;
+  margin: -2px -2px 4px -2px !important;
+  font-weight: bold !important;
+}
+
+/* Icon sits inside the dialog like a system icon, not a decoration */
+.event-icon {
+  image-rendering: pixelated !important;
+}
+
+/* Event body panel — inset field, matching the message text box */
+.event-metadata,
+.event-message-text {
+  background: #ffffff !important;
+  border: 1px solid !important;
+  border-color: #808080 #ffffff #ffffff #808080 !important;
+  padding: 3px 5px !important;
+  margin-top: 4px !important;
+}
+
+/* ============================================
    OPTIONAL: HIDE ELEMENTS
    Uncomment the sections below to hide specific elements
    ============================================ */

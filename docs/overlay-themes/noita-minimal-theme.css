@@ -305,6 +305,38 @@ body {
    EVENT MESSAGES
    ============================================ */
 
+/* Alchemical notice: a small parchment plate on the otherwise transparent
+   overlay. Structure comes from the `--event-*` tokens (AUTHORING-EVENTS.md);
+   without them an event falls back to the platform default — a gold glowing,
+   scaled-up, bounce-in card that has no place in the caves. */
+.event-message {
+  --event-scale: 1;
+  --event-min-height: 0;
+  --event-radius: 4px;
+  --event-padding: 8px 12px;
+  --event-animation: noita-fade-in 0.4s ease-out;
+  --event-icon-animation: none;
+  --event-icon-filter: drop-shadow(0 0 6px rgba(244, 208, 63, 0.8));
+  --event-icon-size: 1.4rem;
+  --event-decor: none;
+
+  --event-title-font: 'Noita Blackletter', 'Press Start 2P', serif;
+  --event-title-size: 16px;
+  --event-title-spacing: 0.06em;
+  --event-title-color: #e8d4a0;
+  --event-title-shadow:
+    0 0 8px rgba(157, 123, 216, 0.8),
+    2px 2px 0 #000000;
+  --event-value-size: 16px;
+  --event-value-color: #f4d03f;
+  --event-value-shadow: 2px 2px 0 #000000;
+  --event-text-size: 12px;
+  --event-text-color: #c9b896;
+  --event-meta-color: rgba(201, 184, 150, 0.7);
+  --event-meta-size: 10px;
+  --event-indent: 2.1rem;
+}
+
 /* Event message container */
 .space-y-3 > div[class*="event"],
 .space-y-3 > div:has(.event-icon) {

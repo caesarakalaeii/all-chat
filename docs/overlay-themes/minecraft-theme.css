@@ -244,5 +244,57 @@ body {
 }
 
 /* ============================================================
+   EVENTS - ACHIEVEMENT BLOCKS
+   ============================================================
+
+   Events stay blocky: same dirt-block card, same pixel font, gold
+   "achievement" lettering instead of the platform default's rounded,
+   glowing, bounce-in card. Tokens: AUTHORING-EVENTS.md
+   ============================================================ */
+
+.event-message {
+  --event-scale: 1;
+  --event-min-height: 0;
+  --event-radius: 0;
+  --event-animation: none;
+  --event-icon-animation: none;
+  --event-icon-filter: none;
+  --event-icon-size: 1.5rem;
+  --event-decor: none;
+
+  --event-title-font: 'Press Start 2P', cursive;
+  --event-title-size: 10px;
+  --event-title-spacing: 0;
+  --event-title-color: #ffaa00; /* Minecraft gold */
+  --event-title-shadow: 2px 2px 0 #3f2a00;
+  --event-value-size: 12px;
+  --event-value-color: #ffff55; /* Minecraft yellow */
+  --event-value-shadow: 2px 2px 0 #3f2a00;
+  --event-text-size: 11px;
+  --event-meta-color: #aaaaaa;
+  --event-meta-size: 9px;
+  --event-indent: 2.25rem;
+
+  --event-accent-subscription: #aa00aa;
+  --event-accent-bits: #55ffff;
+  --event-accent-raid: #ff5555;
+  --event-accent-super-chat: #ffaa00;
+  --event-accent-channel-points: #55ffff;
+  --event-accent-gift: #ff55ff;
+  --event-accent-follow: #5555ff;
+  --event-accent-like: #ff5555;
+  --event-accent-member: #55ff55;
+}
+
+/* Keep the 4px black block outline and put the type colour on the left face */
+.space-y-3 > div.event-message {
+  border-left: 8px solid var(--event-accent-color, #ffaa00) !important;
+}
+
+.event-icon {
+  image-rendering: pixelated !important;
+}
+
+/* ============================================================
    END OF MINECRAFT BLOCKY THEME
    ============================================================ */

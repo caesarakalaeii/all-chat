@@ -25,8 +25,11 @@ body {
   gap: var(--chat-message-gap, 14px) !important;
 }
 
-/* Paper note — tilted, soft shadow. Alternate tilt + paper color for rhythm. */
-.chat-message {
+/* Paper note — tilted, soft shadow. Alternate tilt + paper color for rhythm.
+   Events are notes too: a sub is a note in a different paper colour, not the
+   platform default's gold glowing card pinned to a corkboard of paper. */
+.chat-message,
+.event-message {
   position: relative !important;
   background: #fff8c4 !important;
   border: none !important;
@@ -44,7 +47,8 @@ body {
 }
 
 /* Washi tape strip */
-.chat-message::before {
+.chat-message::before,
+.event-message::before {
   content: '' !important;
   position: absolute !important;
   top: -8px !important;
@@ -101,4 +105,49 @@ body {
   color: rgba(0, 0, 0, 0.4) !important;
   font-family: 'Caveat', cursive !important;
   font-size: calc(var(--chat-timestamp-font-size, 11px) * 1.25) !important;
+}
+
+/* ============================================================
+   EVENTS - NOTES IN MARKER
+   ============================================================
+   A sub is a note someone wrote in marker pen: same paper, same handwriting,
+   underlined heading. Tokens: AUTHORING-EVENTS.md
+   ============================================================ */
+
+.event-message {
+  --event-scale: 1;
+  --event-min-height: 0;
+  --event-animation: none;
+  --event-icon-animation: none;
+  --event-icon-filter: none;
+  --event-icon-size: 1.6rem;
+  --event-decor: none;
+
+  --event-title-font: 'Caveat', cursive;
+  --event-title-size: 24px;
+  --event-title-weight: 700;
+  --event-title-transform: none;
+  --event-title-spacing: 0;
+  --event-title-color: #b3261e; /* red marker */
+  --event-title-shadow: none;
+  --event-value-size: 24px;
+  --event-value-color: #2b2b2b;
+  --event-value-shadow: none;
+  --event-text-size: 20px;
+  --event-text-color: #2b2b2b;
+  --event-meta-color: rgba(0, 0, 0, 0.45);
+  --event-meta-size: 15px;
+  --event-indent: 2.4rem;
+}
+
+.event-title {
+  font-family: 'Caveat', cursive !important;
+  border-bottom: 2px solid rgba(179, 38, 30, 0.4) !important;
+  display: inline-block !important;
+  padding-bottom: 1px !important;
+}
+
+.event-value,
+.event-metadata {
+  font-family: 'Caveat', cursive !important;
 }

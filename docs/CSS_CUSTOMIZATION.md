@@ -904,43 +904,36 @@ Events appear as large, prominent notification cards (not regular chat messages)
      data-platform="twitch"
      data-event-type="subscription">
   <div class="flex items-start gap-3">
-    <!-- Avatar (same as chat) -->
+    <!-- Same row header as a chat message: avatar, platform badge, user
+         badges and the chatter's name (.chat-username). Style it once and it
+         covers chat and events alike. -->
     <div class="flex-shrink-0">
       <img src="avatar.png" class="w-10 h-10 rounded-full" />
     </div>
 
-    <!-- Event content (completely different from chat) -->
     <div class="flex-1 min-w-0">
-      <div class="event-content">
-        <!-- Main event display -->
-        <div class="flex items-center gap-3 mb-1">
-          <!-- Large event icon (4xl size, animated) -->
-          <span class="text-4xl event-icon leading-none">⭐</span>
+      <div class="mb-1 flex flex-wrap items-center gap-2">
+        <span class="platform-badge platform-badge-text">TWITCH</span>
+        <span class="chat-username" style="color: #9146FF">Username</span>
+      </div>
 
-          <!-- Event title and user -->
-          <div class="flex-1">
-            <div class="text-lg font-bold event-title text-white">
-              New Subscriber!
+      <div class="break-words">
+        <!-- Event content -->
+        <div class="event-content">
+          <div class="mb-1 flex items-center gap-3">
+            <span class="event-icon">⭐</span>
+            <div class="flex-1">
+              <div class="event-title">New Subscriber!</div>
             </div>
-            <div class="text-sm font-semibold event-user" style="color: #9146FF">
-              Username
-            </div>
+            <div class="event-value">$50.00</div>
           </div>
 
-          <!-- Value (for donations, Super Chats) -->
-          <div class="text-2xl font-bold event-value text-yellow-300">
-            $50.00
-          </div>
-        </div>
+          <!-- The chatter's own message, when the event carries one -->
+          <div class="event-message-text">Love the stream! Keep it up!</div>
+          <div class="event-message-attachments"><!-- GIFs / uploads --></div>
 
-        <!-- Optional message text -->
-        <div class="text-sm event-message-text text-gray-200 ml-14">
-          Love the stream! Keep it up!
-        </div>
-
-        <!-- Metadata (months, viewers, etc.) -->
-        <div class="text-xs event-metadata text-gray-400 mt-1 ml-14">
-          3 months • 2 month streak
+          <!-- Metadata (months, viewers, etc.) -->
+          <div class="event-metadata">3 months • 2 month streak</div>
         </div>
       </div>
     </div>
@@ -948,26 +941,57 @@ Events appear as large, prominent notification cards (not regular chat messages)
 </div>
 ```
 
-**Key Visual Differences from Chat:**
-- Events are **5% larger** (transform: scale(1.05))
-- **Minimum 100px height** (vs ~60px for chat)
-- **Dramatic bounce-in animation** (0.6s spring effect)
-- **Large icons** (4xl = 2.25rem vs 2xl = 1.5rem)
-- **Bold, uppercase titles** with letter-spacing
-- **Prominent value display** (for donations/Super Chats)
-- **Tier-based glow effects** (especially high-tier)
+Note there is **no** size or colour utility class on these elements, and no
+separate username inside the event: every visual comes from `events.css`, so a
+theme can restyle events without fighting unlayered Tailwind utilities.
+
+**Key Visual Differences from Chat (all token-driven, see below):**
+- Events are **5% larger** (`--event-scale`, default `1.05`)
+- **Minimum 100px height** (`--event-min-height`)
+- **Dramatic bounce-in animation** (`--event-animation`)
+- **Large icons** (`--event-icon-size`, default `2.25rem`)
+- **Bold, uppercase titles** with letter-spacing (`--event-title-*`)
+- **Prominent value display** (`--event-value-*`)
+- **Tier-based glow effects** (`--event-tier-*-glow`)
+- Padding, radius and blur follow the visual customizer's chat-bubble settings
+  unless you override them
 
 ### Event Content Classes
 
 | Class | Purpose | Example |
 |-------|---------|---------|
-| `.event-content` | Wrapper for event display | Container for title, user, value |
-| `.event-icon` | Large animated emoji/icon | 4xl size, pulsing animation |
+| `.event-content` | Wrapper for event display | Container for icon, title, value |
+| `.event-icon` | Large animated emoji/icon | `--event-icon-size`, pulsing animation |
 | `.event-title` | Event type title | "New Subscriber!", "Super Chat!" |
-| `.event-user` | Username who triggered event | Colored username |
 | `.event-value` | Monetary value | "$50.00" in large yellow text |
 | `.event-message-text` | Optional message from user | Smaller text below title |
+| `.event-message-attachments` | GIFs/uploads on that message | Twitch chat GIFs, Discord uploads |
 | `.event-metadata` | Additional context | Months, streak, viewer count |
+| `.event-warning-message` | System notice body | Token expiry, missing bot permission |
+
+The chatter's name is the row header's `.chat-username`, exactly as on a chat
+message — there is no `.event-user` element (it duplicated the header name and
+could not render a premium gradient name). Rules targeting `.event-user` are
+harmless no-ops.
+
+### Theming Events With `--event-*` Tokens
+
+Every default above reads a CSS custom property, so a theme re-skins events from
+one block instead of overriding a dozen rules:
+
+```css
+.event-message {
+  --event-scale: 1;            /* no scale-up */
+  --event-animation: none;     /* no bounce */
+  --event-icon-animation: none;
+  --event-title-color: #a5b4fc;
+  --event-accent-subscription: #818cf8;
+}
+```
+
+The complete token table, the tier/type breakdown and a copy-paste recipe for
+flattening events into ordinary chat rows are in
+**[docs/overlay-themes/AUTHORING-EVENTS.md](./overlay-themes/AUTHORING-EVENTS.md)**.
 
 ### Event CSS Classes
 
@@ -1003,22 +1027,28 @@ Events are automatically assigned tiers based on their value/importance:
 - High-value Super Chats ($50+)
 - Large gift bombs (5+ gifts)
 
-**Default Style:**
+**Default Style** (the tier rule only sets tokens; `.event-message` consumes them):
 ```css
 .event-tier-high {
-  background: linear-gradient(135deg,
+  --event-bg: linear-gradient(135deg,
     rgba(255, 215, 0, 0.25) 0%,
-    rgba(255, 140, 0, 0.15) 100%) !important;
-  border: 3px solid #FFD700 !important;
-  box-shadow:
+    rgba(255, 140, 0, 0.15) 100%);
+  --event-border-color: #FFD700;
+  --event-glow:
     0 0 30px rgba(255, 215, 0, 0.5),
     0 8px 32px rgba(0, 0, 0, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
-  min-height: 100px !important;
-  padding: 1.5rem !important;
-  transform: scale(1.05);
-  animation: event-bounce-in 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55),
-             high-tier-glow 2s ease-in-out infinite !important;
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  --event-animation:
+    event-bounce-in 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55),
+    high-tier-glow 2s ease-in-out infinite;
+}
+
+/* Recolour it for your theme by setting the tier's own tokens instead — that
+   keeps the low/medium/high hierarchy intact: */
+.event-message {
+  --event-tier-high-bg: #101820;
+  --event-tier-high-border: #00ffa3;
+  --event-tier-high-glow: none;
 }
 
 /* Pulsing glow animation */
@@ -1048,16 +1078,13 @@ Events are automatically assigned tiers based on their value/importance:
 **Default Style:**
 ```css
 .event-tier-medium {
-  background: linear-gradient(135deg,
+  --event-bg: linear-gradient(135deg,
     rgba(147, 51, 234, 0.2) 0%,
-    rgba(79, 70, 229, 0.15) 100%) !important;
-  border: 3px solid #9333EA !important;
-  box-shadow:
+    rgba(79, 70, 229, 0.15) 100%);
+  --event-border-color: #9333EA;
+  --event-glow:
     0 0 25px rgba(147, 51, 234, 0.4),
-    0 6px 24px rgba(0, 0, 0, 0.3) !important;
-  min-height: 100px !important;
-  padding: 1.5rem !important;
-  transform: scale(1.05);
+    0 6px 24px rgba(0, 0, 0, 0.3);
 }
 ```
 
@@ -1069,12 +1096,10 @@ Events are automatically assigned tiers based on their value/importance:
 **Default Style:**
 ```css
 .event-tier-low {
-  background: rgba(59, 130, 246, 0.15) !important;
-  border: 2px solid #3B82F6 !important;
-  box-shadow: 0 0 15px rgba(59, 130, 246, 0.3) !important;
-  min-height: 100px !important;
-  padding: 1.5rem !important;
-  transform: scale(1.05);
+  --event-bg: rgba(59, 130, 246, 0.15);
+  --event-border-color: #3B82F6;
+  --event-border-width: 2px;
+  --event-glow: 0 0 15px rgba(59, 130, 246, 0.3);
 }
 ```
 

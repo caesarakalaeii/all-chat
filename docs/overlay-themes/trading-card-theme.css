@@ -24,8 +24,11 @@ body {
   gap: var(--chat-message-gap, 16px) !important;
 }
 
-/* The card — animated holographic foil border + inner bevel */
-.chat-message {
+/* The card — animated holographic foil border + inner bevel.
+   Events are cards too: a sub is a rarer pull, not a differently-designed
+   object, so it gets the same foil frame instead of the platform default. */
+.chat-message,
+.event-message {
   --foil: linear-gradient(135deg, #ff6ec4, #7873f5, #4ade80, #ffd166, #ff6ec4);
   position: relative !important;
   overflow: hidden !important;
@@ -67,7 +70,8 @@ body {
 }
 
 /* Diagonal shine sweep across the card surface (under the text) */
-.chat-message::after {
+.chat-message::after,
+.event-message::after {
   content: '' !important;
   position: absolute !important;
   inset: 0 !important;
@@ -92,7 +96,8 @@ body {
 }
 
 /* Vertical layout: framed art on top, title plate + text box below */
-.chat-message .flex.items-start.gap-3 {
+.chat-message .flex.items-start.gap-3,
+.event-message .flex.items-start.gap-3 {
   position: relative !important;
   z-index: 1 !important;
   flex-direction: column !important;
@@ -101,7 +106,8 @@ body {
   gap: 10px !important;
 }
 
-.chat-message .min-w-0.flex-1 {
+.chat-message .min-w-0.flex-1,
+.event-message .min-w-0.flex-1 {
   width: 100% !important;
 }
 
@@ -117,7 +123,8 @@ body {
 }
 
 /* Title plate — the name banner (viewer name color kept) */
-.chat-message .flex.flex-wrap.items-center.gap-2 {
+.chat-message .flex.flex-wrap.items-center.gap-2,
+.event-message .flex.flex-wrap.items-center.gap-2 {
   justify-content: center !important;
   background: rgba(255, 255, 255, 0.07) !important;
   border: 1px solid rgba(255, 255, 255, 0.14) !important;
@@ -151,7 +158,8 @@ body {
 }
 
 /* Message = the ability text box */
-.chat-message .break-words.text-white {
+.chat-message .break-words.text-white,
+.event-message .break-words.text-white {
   display: block !important;
   width: 100% !important;
   background: rgba(0, 0, 0, 0.3) !important;
@@ -163,7 +171,8 @@ body {
   line-height: var(--chat-line-height, 1.5) !important;
 }
 
-.chat-message .break-words img {
+.chat-message .break-words img,
+.event-message .break-words img {
   max-height: calc(22px * var(--chat-emote-scale, 1)) !important;
   vertical-align: middle !important;
 }
@@ -172,4 +181,45 @@ body {
   color: rgba(255, 255, 255, 0.4) !important;
   margin-top: 6px !important;
   font-size: var(--chat-timestamp-font-size, 10px) !important;
+}
+
+/* ============================================================
+   EVENTS - RARE PULLS
+   ============================================================
+   Same foil card; the title becomes the card's rarity line and the value its
+   stat block. Tokens: AUTHORING-EVENTS.md
+   ============================================================ */
+
+.event-message {
+  --event-scale: 1;
+  --event-min-height: 0;
+  --event-animation: none; /* holoShift on the card is the motion */
+  --event-icon-animation: none;
+  --event-icon-filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.6));
+  --event-icon-size: 1.6rem;
+  --event-decor: none;
+
+  --event-title-font: 'Space Grotesk', sans-serif;
+  --event-title-size: 13px;
+  --event-title-spacing: 0.14em;
+  --event-title-color: #ffd166;
+  --event-title-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+  --event-value-size: 20px;
+  --event-value-color: #eef1ff;
+  --event-value-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+  --event-text-size: 14px;
+  --event-text-color: #eef1ff;
+  --event-meta-color: rgba(238, 241, 255, 0.6);
+  --event-indent: 0;
+}
+
+/* The card layout is centred — keep the event block centred with it */
+.event-content {
+  text-align: center !important;
+}
+.event-content .flex.items-center.gap-3 {
+  justify-content: center !important;
+}
+.event-content .flex-1 {
+  flex: 0 1 auto !important;
 }

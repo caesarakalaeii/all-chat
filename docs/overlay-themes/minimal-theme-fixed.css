@@ -357,5 +357,93 @@ body {
 */
 
 /* ============================================================
+   EVENTS - ONE INLINE LINE, LIKE EVERY OTHER MESSAGE
+   ============================================================
+
+   Same premise as the message layout above: everything on one line. An event
+   becomes "[icon] [badges] username ⭐ New Subscriber! x5" rather than the
+   platform default's glowing, scaled-up card, which would tower over the
+   inline chat around it. Tokens: AUTHORING-EVENTS.md
+   ============================================================ */
+
+.event-message {
+  --event-scale: 1;
+  --event-min-height: 0;
+  --event-bg: transparent;
+  --event-border-width: 0;
+  --event-accent-width: 0;
+  --event-glow: none;
+  --event-animation: none;
+  --event-icon-animation: none;
+  --event-icon-filter: none;
+  --event-decor: none;
+  --event-backdrop-blur: 0px;
+  --event-padding: 0;
+  --event-radius: 0;
+  --event-indent: 0;
+
+  --event-icon-size: 1em;
+  --event-title-font: var(--chat-font-family, 'Roboto', Arial, sans-serif);
+  --event-title-size: var(--chat-font-size, 16px);
+  --event-title-weight: 700;
+  --event-title-transform: none;
+  --event-title-spacing: 0;
+  --event-title-color: var(--chat-message-color, #ffffff);
+  --event-title-shadow: none;
+  --event-value-size: var(--chat-font-size, 16px);
+  --event-value-weight: 700;
+  --event-value-color: var(--chat-message-color, #ffffff);
+  --event-value-shadow: none;
+  --event-text-size: var(--chat-font-size, 16px);
+  --event-meta-size: var(--chat-font-size, 16px);
+  --event-meta-color: var(--chat-message-color, #ffffff);
+
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  transform: none !important;
+  animation: none !important;
+  min-height: auto !important;
+  border-radius: 0 !important;
+}
+
+/* Run the whole event block inline so it flows after the username */
+.event-content,
+.event-content > div,
+.event-content > div > div,
+.event-icon,
+.event-title,
+.event-value,
+.event-metadata,
+.event-message-text {
+  display: inline !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Spacing between the inline parts, without adding wrapper elements */
+.event-title::after,
+.event-icon::after {
+  content: ' ' !important;
+}
+.event-value::before,
+.event-metadata::before {
+  content: ' ' !important;
+}
+
+/* Match the chat outline so event text reads on any background */
+.event-title,
+.event-value,
+.event-metadata,
+.event-message-text {
+  font-family: var(--chat-font-family, 'Roboto', Arial, sans-serif) !important;
+  text-shadow:
+    -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000,
+    -2px 0 0 #000, 2px 0 0 #000, 0 -2px 0 #000, 0 2px 0 #000 !important;
+}
+
+/* ============================================================
    END OF MINIMAL THEME (FIXED)
    ============================================================ */

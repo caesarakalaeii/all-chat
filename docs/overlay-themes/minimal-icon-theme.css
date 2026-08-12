@@ -127,3 +127,50 @@
   height: 24px !important;
 }
 */
+
+/* ============================================
+   EVENTS
+   ============================================
+   Events reuse the message card above (they are `.space-y-3 > div` too) and
+   differ only by the colour of the left stripe. Without this block they fall
+   back to the platform default — a gold-glowing, bounce-in, scaled-up card
+   that has nothing to do with this theme. Tokens: AUTHORING-EVENTS.md
+   ============================================ */
+
+.event-message {
+  --event-scale: 1;
+  --event-min-height: 0;
+  --event-animation: none;
+  --event-decor: none;
+  /* Chat rows here carry a left stripe and no box border — events match that
+     instead of gaining the default tier border on all four sides. */
+  --event-border-width: 0;
+  --event-icon-size: 1.35rem;
+  --event-icon-filter: none;
+  --event-icon-animation: none;
+  --event-title-size: 13px;
+  --event-title-spacing: 0.1em;
+  --event-title-color: #f0f0f0;
+  --event-title-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
+  --event-value-size: 16px;
+  --event-value-color: #f0f0f0;
+  --event-value-shadow: none;
+  --event-text-size: 16px;
+  --event-meta-color: #888;
+  --event-indent: 2.15rem;
+
+  /* Left stripe colour per event type — the theme's only accent surface */
+  --event-accent-subscription: #9146ff;
+  --event-accent-bits: #00c8ff;
+  --event-accent-raid: #ff7847;
+  --event-accent-super-chat: #ffc700;
+  --event-accent-channel-points: #00c8ff;
+  --event-accent-gift: #ff5ea8;
+  --event-accent-follow: #4dc3ff;
+  --event-accent-like: #fe2c55;
+  --event-accent-member: #3ddc84;
+}
+
+.space-y-3 > div.event-message {
+  border-left: 4px solid var(--event-accent-color, #9146ff) !important;
+}

@@ -285,5 +285,58 @@ body {
 */
 
 /* ============================================================
+   EVENTS - SYSTEM LOG ENTRIES
+   ============================================================
+
+   An event is just another line in the terminal: same window, same
+   monospace, phosphor-green title instead of the platform default's gold
+   glowing card. Everything is set through `--event-*` tokens — see
+   AUTHORING-EVENTS.md for the list.
+   ============================================================ */
+
+.event-message {
+  --event-scale: 1;
+  --event-min-height: 0;
+  --event-animation: none;
+  --event-icon-animation: none;
+  --event-icon-filter: drop-shadow(0 0 6px rgba(0, 255, 0, 0.5));
+  --event-icon-size: 1.25rem;
+  --event-decor: none; /* the CRT scanlines are decoration enough */
+
+  --event-title-font: 'Source Code Pro', 'Courier New', monospace;
+  --event-title-size: 14px;
+  --event-title-spacing: 0.12em;
+  --event-title-color: #00ff00;
+  --event-title-shadow: 0 0 8px rgba(0, 255, 0, 0.7);
+  --event-value-size: 16px;
+  --event-value-color: #ffb000; /* amber, the terminal's second phosphor */
+  --event-value-shadow: 0 0 8px rgba(255, 176, 0, 0.6);
+  --event-text-size: 14px;
+  --event-meta-color: rgba(0, 255, 0, 0.6);
+  --event-meta-size: 11px;
+  --event-indent: 2rem;
+
+  --event-accent-subscription: #00ff00;
+  --event-accent-bits: #00ffff;
+  --event-accent-raid: #ffb000;
+  --event-accent-super-chat: #ffb000;
+  --event-accent-channel-points: #00ffff;
+  --event-accent-gift: #ff00ff;
+  --event-accent-follow: #00ff88;
+  --event-accent-like: #ff0055;
+  --event-accent-member: #00ff00;
+}
+
+.space-y-3 > div.event-message {
+  border-left: 3px solid var(--event-accent-color, #00ff00) !important;
+}
+
+/* Log-line prefix, in keeping with the terminal metaphor */
+.event-title::before {
+  content: '>> ' !important;
+  opacity: 0.7 !important;
+}
+
+/* ============================================================
    END OF TERMINAL HACKER THEME
    ============================================================ */

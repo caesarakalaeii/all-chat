@@ -117,6 +117,24 @@ Minimal v1.3-compatible theme using the cascade layer architecture:
 
 ---
 
+## What Changed in v1.4 — Event Tokens
+
+Event chrome is now expressed as `--event-*` custom properties. **No class name
+changed and no default look changed**, so existing themes keep working; the
+tokens are an easier way in.
+
+| Change                                   | Impact on your theme                                              |
+| ---------------------------------------- | ----------------------------------------------------------------- |
+| `--event-*` tokens added                 | Optional. Set tokens instead of re-declaring rules.                |
+| `.event-user` element removed            | Rules targeting it are now no-ops. The chatter's name is the row header's `.chat-username` on events, same as on chat. |
+| Events excluded from the forced bubble rules | Your `.event-message` border/padding/radius rules now actually apply. Previously an `!important` rule in `@layer visual-customizer` silently overrode them. |
+| Tier borders now render                  | Cosmetic: the `.event-tier-*` border you were promised was being erased by the rule above. |
+| Event size/colour/indent left Tailwind   | `text-4xl`, `text-yellow-300`, `text-slate-200`, `ml-14` are gone from the markup; the equivalents are `--event-icon-size`, `--event-value-color`, `--event-text-color`, `--event-indent`. |
+
+Full token reference: **[docs/overlay-themes/AUTHORING-EVENTS.md](../../../docs/overlay-themes/AUTHORING-EVENTS.md)**.
+
+---
+
 ## Migration Checklist
 
 - [ ] Replace `!important` rules with `@layer user-overrides { ... }` wrapper

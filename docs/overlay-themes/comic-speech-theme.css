@@ -25,8 +25,12 @@ body {
   gap: var(--chat-message-gap, 14px) !important;
 }
 
-/* The message container is invisible — the balloon is drawn on the content */
-.chat-message {
+/* The message container is invisible — the balloon is drawn on the content.
+   Events get the identical treatment: an event is a chat line that happens to
+   announce something, so it belongs in a balloon, not in the platform's
+   default gold glowing card. */
+.chat-message,
+.event-message {
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
@@ -34,7 +38,8 @@ body {
   overflow: visible !important;
 }
 
-.chat-message .flex.items-start.gap-3 {
+.chat-message .flex.items-start.gap-3,
+.event-message .flex.items-start.gap-3 {
   align-items: center !important;
   gap: 16px !important;
 }
@@ -47,7 +52,8 @@ body {
 }
 
 /* Content → the speech balloon */
-.chat-message .min-w-0.flex-1 {
+.chat-message .min-w-0.flex-1,
+.event-message .min-w-0.flex-1 {
   position: relative !important;
   background-color: #ffffff !important;
   background-image: radial-gradient(rgba(0, 0, 0, 0.06) 1.2px, transparent 1.2px) !important;
@@ -58,8 +64,16 @@ body {
   box-shadow: 4px 4px 0 #000000 !important;
 }
 
+/* An event gets a burst balloon: same ink, sunburst fill, jagged corners */
+.event-message .min-w-0.flex-1 {
+  background-color: #fff3c4 !important;
+  border-radius: 22px 6px 22px 6px !important;
+  box-shadow: 5px 5px 0 #000000 !important;
+}
+
 /* Balloon tail pointing at the avatar (outline + fill) */
-.chat-message .min-w-0.flex-1::before {
+.chat-message .min-w-0.flex-1::before,
+.event-message .min-w-0.flex-1::before {
   content: '' !important;
   position: absolute !important;
   left: -17px !important;
@@ -74,6 +88,14 @@ body {
   top: 18px !important;
   border: 7px solid transparent !important;
   border-right-color: #ffffff !important;
+}
+.event-message .min-w-0.flex-1::after {
+  content: '' !important;
+  position: absolute !important;
+  left: -11px !important;
+  top: 18px !important;
+  border: 7px solid transparent !important;
+  border-right-color: #fff3c4 !important;
 }
 
 /* Platform badge — little ink tab */
@@ -114,4 +136,41 @@ body {
 .text-slate-500 {
   color: #8a8a8a !important;
   font-size: var(--chat-timestamp-font-size, 11px) !important;
+}
+
+/* ============================================================
+   EVENTS - SOUND-EFFECT LETTERING
+   ============================================================
+   Titles get the Bangers comic face on the burst balloon above, so a sub
+   reads like a "POW!" panel instead of the platform's default gold card.
+   Tokens: AUTHORING-EVENTS.md
+   ============================================================ */
+
+.event-message {
+  --event-scale: 1;
+  --event-min-height: 0;
+  --event-animation: none;
+  --event-icon-animation: none;
+  --event-icon-filter: none;
+  --event-icon-size: 1.7rem;
+  --event-decor: none;
+
+  --event-title-font: 'Bangers', cursive;
+  --event-title-size: 22px;
+  --event-title-weight: 400;
+  --event-title-spacing: 0.04em;
+  --event-title-color: #d61f4e;
+  --event-title-shadow: 2px 2px 0 #000000;
+  --event-value-size: 22px;
+  --event-value-weight: 400;
+  --event-value-color: #1a1a1a;
+  --event-value-shadow: none;
+  --event-text-size: 15px;
+  --event-text-color: #1a1a1a;
+  --event-meta-color: #6a6a6a;
+  --event-indent: 2.5rem;
+}
+
+.event-value {
+  font-family: 'Bangers', cursive !important;
 }
