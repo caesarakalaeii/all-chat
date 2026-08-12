@@ -19,7 +19,6 @@
 import { MessageAttachments } from '@/components/overlay/MessageAttachments'
 import { renderMessageContent } from '@/lib/renderMessage'
 import type { ChatMessage } from '@/lib/types/message'
-import { resolveUsernameColor } from '@/lib/utils/usernameColor'
 
 /**
  * Inner content for an event / system-notice row: icon + title + user + optional
@@ -169,27 +168,32 @@ export function EventContent({ message }: { message: ChatMessage }) {
     }
   }
 
+  /*
+   * Size, colour and indentation deliberately live in `events.css` (the
+   * `--event-*` tokens) rather than in Tailwind utilities here: utilities are
+   * unlayered, so a theme could only fight them with `!important`, and every
+   * hardcoded `text-white` / `text-slate-200` / `ml-14` was one more thing a
+   * theme had to override before an event stopped clashing with it. Only
+   * layout (flex, gaps, block spacing) stays in classes.
+   *
+   * There is deliberately no name line here. Both overlay surfaces wrap this in
+   * the SAME row header a chat message gets (avatar, platform badge, user
+   * badges, username), so an event used to print the chatter's name twice — and
+   * the copy here was the worse one: it could not render a premium gradient
+   * name and every theme had to style a second username element to match the
+   * first. The header's `.chat-username` is the one name.
+   */
   return (
     <div className="event-content">
       <div className="mb-1 flex items-center gap-3">
-        <span className="event-icon text-4xl leading-none">{getEventIcon()}</span>
+        <span className="event-icon">{getEventIcon()}</span>
         <div className="flex-1">
-          <div className="event-title text-lg font-bold text-white">{getEventTitle()}</div>
-          <div
-            className="event-user text-sm font-semibold"
-            style={{ color: resolveUsernameColor(message.user) }}
-          >
-            {message.user?.display_name || message.user?.username}
-          </div>
+          <div className="event-title">{getEventTitle()}</div>
         </div>
-        {event.value && (
-          <div className="event-value text-2xl font-bold text-yellow-300">
-            {event.value.display_text}
-          </div>
-        )}
+        {event.value && <div className="event-value">{event.value.display_text}</div>}
       </div>
       {message.message.text && (
-        <div className="event-message-text ml-14 text-sm text-slate-200">
+        <div className="event-message-text">
           {/* Rendered through the shared chat renderer, not as a bare string: several events
               carry the chatter's own message (a watch streak IS their chat message, plus resub
               messages, announcements, Super Chats), and the pipeline enriches those with emotes.
@@ -201,11 +205,11 @@ export function EventContent({ message }: { message: ChatMessage }) {
       {/* Twitch chat GIFs and Discord uploads attached to an event's message (ADR-0037). The
           overlay's chat rows render these separately; without this an event-borne GIF was dropped
           entirely. Renders nothing when there are no attachments. */}
-      <div className="event-message-attachments ml-14">
+      <div className="event-message-attachments">
         <MessageAttachments message={message} />
       </div>
       {event.type === 'token_expiration_warning' && (
-        <div className="event-warning-message mt-2 ml-14 space-y-1 text-sm text-orange-200">
+        <div className="event-warning-message mt-2 space-y-1 text-sm text-orange-200">
           <div className="font-semibold">
             {event.metadata?.failure_reason === 'expired'
               ? 'OAuth token has expired'
@@ -218,7 +222,7 @@ export function EventContent({ message }: { message: ChatMessage }) {
         </div>
       )}
       {event.type === 'source_permission_error' && (
-        <div className="event-warning-message mt-2 ml-14 space-y-1 text-sm text-red-200">
+        <div className="event-warning-message mt-2 space-y-1 text-sm text-red-200">
           <div className="font-semibold">
             {`Channel ${String(event.metadata?.channel_id || '')} is not accessible`}
           </div>
@@ -228,7 +232,7 @@ export function EventContent({ message }: { message: ChatMessage }) {
         </div>
       )}
       {event.type === 'listener_deprecation_notice' && (
-        <div className="event-warning-message mt-2 ml-14 space-y-1 text-sm text-amber-200">
+        <div className="event-warning-message mt-2 space-y-1 text-sm text-amber-200">
           <div className="font-semibold">
             {String(
               event.metadata?.description || 'The legacy Twitch chat connection is being retired.'
@@ -259,9 +263,7 @@ export function EventContent({ message }: { message: ChatMessage }) {
           if (num(m.like_count) > 0) parts.push(`${num(m.like_count)} likes`)
           if (num(m.diamonds) > 0) parts.push(`${num(m.diamonds)} diamonds`)
           return parts.length > 0 ? (
-            <div className="event-metadata mt-1 ml-14 text-xs text-slate-400">
-              {parts.join(' • ')}
-            </div>
+            <div className="event-metadata mt-1">{parts.join(' • ')}</div>
           ) : null
         })()}
     </div>

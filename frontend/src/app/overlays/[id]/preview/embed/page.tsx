@@ -64,51 +64,8 @@ import type { SoundPlayer, SoundSettings } from '@/lib/utils/soundPlayer'
 import { createTTSPlayer } from '@/lib/utils/ttsPlayer'
 import type { TTSPlayer, TTSSettings } from '@/lib/utils/ttsPlayer'
 import { resolveUsernameColor } from '@/lib/utils/usernameColor'
+import { scopeCustomCss } from '@/lib/theme-marketplace/scope-css'
 import '@/styles/events.css'
-
-// ---- Utilities (identical to preview/page.tsx) ----------------------------
-
-// NOTE (M11): scopeCustomCss prefixes selectors so owner-authored CSS is
-// scoped to the preview root. It is NOT a full CSS sanitizer: `@import`,
-// `url(...)`, `expression()`, or escaped-selector tricks could still escape.
-// A complete CSS sanitiser is large and out of scope here; the blast radius
-// is capped by the CSP `style-src` directive added in next.config.js (M10),
-// which blocks external stylesheets and inline style injection vectors that
-// would otherwise be reachable via url()/@import.
-const scopeCustomCss = (css: string, scopeSelector: string, bodySelector: string): string => {
-  if (!css.trim()) {
-    return ''
-  }
-
-  const replaceBody = css.replace(/:root/gi, scopeSelector).replace(/\bbody\b/gi, bodySelector)
-
-  return replaceBody.replace(/(^|}|{)\s*([^@}{]+)\s*{/g, (match, prefix, selectorGroup) => {
-    const trimmed = selectorGroup.trim()
-    if (!trimmed) {
-      return match
-    }
-
-    const isKeyframeStep =
-      ['from', 'to'].includes(trimmed.toLowerCase()) || /^\d+\.?\d*%$/i.test(trimmed)
-    if (isKeyframeStep) {
-      return `${prefix} ${trimmed} {`
-    }
-
-    const scopedSelectors = trimmed
-      .split(',')
-      .map((selector: string) => {
-        const sel = selector.trim()
-        if (!sel || sel.startsWith(scopeSelector) || sel.startsWith(bodySelector)) {
-          return sel
-        }
-        return `${scopeSelector} ${sel}`
-      })
-      .filter(Boolean)
-      .join(', ')
-
-    return `${prefix} ${scopedSelectors} {`
-  })
-}
 
 // ---- Platform helpers (identical to preview/page.tsx) ---------------------
 

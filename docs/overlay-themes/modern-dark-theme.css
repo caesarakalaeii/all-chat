@@ -193,5 +193,58 @@ body {
 }
 
 /* ============================================================
+   EVENTS - SAME CARD, ACCENTED EDGE
+   ============================================================
+
+   Events (subs, raids, gifts, redemptions) are chat rows too. Left alone
+   they fall back to the platform default — a gold-glowing, bounce-in,
+   scaled-up card — which reads as a different product dropped into this
+   theme. The card itself already comes from `.space-y-3 > div` above; this
+   block only calms the default chrome and re-tints the type accent.
+
+   Every value is an `--event-*` token; see AUTHORING-EVENTS.md.
+   ============================================================ */
+
+.event-message {
+  --event-scale: 1;
+  --event-min-height: 0;
+  --event-animation: slideInLeft 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --event-decor: none; /* no orange raid sweep over the dark card */
+
+  /* Type accents in this theme's indigo → cyan → emerald family */
+  --event-accent-subscription: #818cf8;
+  --event-accent-bits: #22d3ee;
+  --event-accent-raid: #34d399;
+  --event-accent-super-chat: #fbbf24;
+  --event-accent-channel-points: #a78bfa;
+  --event-accent-gift: #f472b6;
+  --event-accent-follow: #38bdf8;
+  --event-accent-like: #fb7185;
+  --event-accent-member: #34d399;
+
+  --event-icon-size: 1.5rem;
+  --event-icon-filter: none;
+  --event-icon-animation: none;
+  --event-title-font: 'Inter', sans-serif;
+  --event-title-size: 14px;
+  --event-title-spacing: 0.08em;
+  --event-title-color: #a5b4fc;
+  --event-title-shadow: none;
+  --event-value-size: 18px;
+  --event-value-color: #e5e7eb;
+  --event-value-shadow: none;
+  --event-text-size: 15px;
+  --event-meta-color: rgba(156, 163, 175, 0.75);
+  --event-indent: 2.25rem;
+}
+
+/* The card's own left stripe becomes the event's type accent. Selector matches
+   the `:nth-child` accent-cycling rules above so it takes precedence over them. */
+.space-y-3 > div.event-message {
+  border-left-width: 5px !important;
+  border-left-color: var(--event-accent-color, rgba(99, 102, 241, 0.8)) !important;
+}
+
+/* ============================================================
    END OF MODERN DARK THEME
    ============================================================ */

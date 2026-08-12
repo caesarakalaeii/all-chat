@@ -311,5 +311,54 @@ body {
 */
 
 /* ============================================================
+   EVENTS - GLASS PANEL, BRIGHTER GLOW
+   ============================================================
+
+   Events keep the frosted panel and neon palette; only the glow gets
+   stronger so a sub still reads as an event. Left to the platform default
+   they arrive as a gold gradient card with an unrelated bounce animation.
+   Tokens: AUTHORING-EVENTS.md
+   ============================================================ */
+
+.event-message {
+  --event-scale: 1;
+  --event-min-height: 0;
+  --event-animation: none;
+  --event-icon-animation: none;
+  --event-icon-filter: drop-shadow(0 0 8px rgba(236, 72, 153, 0.7));
+  --event-icon-size: 1.5rem;
+  --event-decor: none;
+
+  --event-title-font: 'Space Grotesk', sans-serif;
+  --event-title-size: 14px;
+  --event-title-spacing: 0.1em;
+  --event-title-color: #f9a8d4;
+  --event-title-shadow: 0 0 12px rgba(236, 72, 153, 0.6);
+  --event-value-size: 18px;
+  --event-value-color: #22d3ee;
+  --event-value-shadow: 0 0 12px rgba(34, 211, 238, 0.6);
+  --event-text-size: 15px;
+  --event-meta-color: rgba(244, 114, 182, 0.7);
+  --event-indent: 2.3rem;
+
+  --event-accent-subscription: #ec4899;
+  --event-accent-bits: #22d3ee;
+  --event-accent-raid: #a855f7;
+  --event-accent-super-chat: #fbbf24;
+  --event-accent-channel-points: #22d3ee;
+  --event-accent-gift: #f472b6;
+  --event-accent-follow: #38bdf8;
+  --event-accent-like: #fb7185;
+  --event-accent-member: #34d399;
+}
+
+.space-y-3 > div.event-message {
+  border-left: 4px solid var(--event-accent-color, #ec4899) !important;
+  box-shadow:
+    0 0 24px rgba(236, 72, 153, 0.35),
+    0 8px 32px rgba(0, 0, 0, 0.35) !important;
+}
+
+/* ============================================================
    END OF NEON GLASS THEME
    ============================================================ */
