@@ -203,3 +203,23 @@ describe('EventContent — Twitch chat notices (ADR-0046)', () => {
     expect(screen.getByText('Some brand-new Twitch notice')).toBeInTheDocument()
   })
 })
+
+describe('EventContent — TikTok events', () => {
+  it('renders a coin chest with its own icon and title, not the generic fallback', () => {
+    render(<EventContent message={eventMessage('treasure_chest', { coins: 20, can_open: 1 })} />)
+    expect(screen.getByText('Coin Chest!')).toBeInTheDocument()
+    expect(screen.getByText('🪙')).toBeInTheDocument()
+    // Regression guard: a case missing from either switch renders "✨ Event!" instead.
+    expect(screen.queryByText('Event!')).not.toBeInTheDocument()
+    expect(screen.queryByText('✨')).not.toBeInTheDocument()
+  })
+
+  it('shows the coin amount from the event value pill, not twice', () => {
+    const msg = eventMessage('treasure_chest', { coins: 20, can_open: 1 })
+    msg.event!.value = { amount: 20, currency: 'coins', display_text: '20 coins' }
+    render(<EventContent message={msg} />)
+    // The normalizer's display_text is the only place the coin count is printed — `coins`
+    // is deliberately absent from the numeric-metadata footer to avoid a duplicate.
+    expect(screen.getAllByText('20 coins')).toHaveLength(1)
+  })
+})

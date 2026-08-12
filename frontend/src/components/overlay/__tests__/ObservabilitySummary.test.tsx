@@ -65,6 +65,7 @@ function eventSettings(over: Partial<EventSettings> = {}): EventSettings {
     enable_tiktok_gifts: false,
     enable_tiktok_follows: false,
     enable_tiktok_shares: false,
+    enable_tiktok_treasure_chests: true,
     enable_token_warnings: true,
     tiktok_like_aggregation_window_seconds: 5,
     event_display_duration_multiplier: 1,
@@ -101,6 +102,7 @@ describe('ObservabilitySummary', () => {
     )
     expect(screen.getByText('Twitch Subs')).toBeInTheDocument()
     expect(screen.getByText('Twitch Bits')).toBeInTheDocument()
+    expect(screen.getByText('TikTok Coin Chests')).toBeInTheDocument()
     expect(screen.getByText('Token Warnings')).toBeInTheDocument()
   })
 

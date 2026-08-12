@@ -249,6 +249,43 @@ func TestClassifyTikTokLikeAggregate_Few(t *testing.T) {
 	assert.Equal(t, 8, duration)
 }
 
+func TestClassifyTikTokTreasureChest_Large(t *testing.T) {
+	value := &models.EventValue{
+		Amount:   1000,
+		Currency: "coins",
+	}
+	tier, duration := ClassifyEvent("tiktok", "treasure_chest", value)
+	assert.Equal(t, "high", tier)
+	assert.Equal(t, 35, duration)
+}
+
+func TestClassifyTikTokTreasureChest_Medium(t *testing.T) {
+	value := &models.EventValue{
+		Amount:   100,
+		Currency: "coins",
+	}
+	tier, duration := ClassifyEvent("tiktok", "treasure_chest", value)
+	assert.Equal(t, "medium", tier)
+	assert.Equal(t, 20, duration)
+}
+
+func TestClassifyTikTokTreasureChest_Small(t *testing.T) {
+	value := &models.EventValue{
+		Amount:   99,
+		Currency: "coins",
+	}
+	tier, duration := ClassifyEvent("tiktok", "treasure_chest", value)
+	assert.Equal(t, "low", tier)
+	assert.Equal(t, 10, duration)
+}
+
+// A chest with no value must not fall through to the medium/15 default.
+func TestClassifyTikTokTreasureChest_NilValue(t *testing.T) {
+	tier, duration := ClassifyEvent("tiktok", "treasure_chest", nil)
+	assert.Equal(t, "low", tier)
+	assert.Equal(t, 10, duration)
+}
+
 func TestClassifyUnknownPlatform(t *testing.T) {
 	tier, duration := ClassifyEvent("unknown", "event", nil)
 	assert.Equal(t, "medium", tier)

@@ -57,6 +57,7 @@ interface EventSettings {
   enable_tiktok_gifts: boolean
   enable_tiktok_follows: boolean
   enable_tiktok_shares: boolean
+  enable_tiktok_treasure_chests: boolean
   // System
   enable_token_warnings: boolean
   // Settings
@@ -458,6 +459,11 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
                       key: 'enable_tiktok_shares',
                       label: 'Shares',
                       desc: 'Stream shares to other platforms',
+                    },
+                    {
+                      key: 'enable_tiktok_treasure_chests',
+                      label: 'Coin Chests',
+                      desc: 'Treasure boxes of coins dropped by viewers',
                     },
                   ].map(({ key, label, desc }) => (
                     <EventToggle

@@ -82,6 +82,8 @@ export function EventContent({ message }: { message: ChatMessage }) {
         return '👍'
       case 'share':
         return '🔗'
+      case 'treasure_chest':
+        return '🪙'
       case 'member_milestone':
         return '🎂'
       case 'membership_gift':
@@ -152,6 +154,8 @@ export function EventContent({ message }: { message: ChatMessage }) {
         return 'Likes!'
       case 'share':
         return 'Stream Shared!'
+      case 'treasure_chest':
+        return 'Coin Chest!'
       case 'token_expiration_warning': {
         const platform = (event.metadata?.platform as string) || 'Platform'
         return `${platform.charAt(0).toUpperCase() + platform.slice(1)} Authentication Error`

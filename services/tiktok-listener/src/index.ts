@@ -58,7 +58,7 @@ import { LeadershipCoordinator } from './coordination/leadership.js';
 
 // Import demand subscriber (Phase 5)
 import { DemandSubscriber, DemandSource } from './demand/subscriber.js';
-import { tiktokAvatarUrl } from './avatar.js';
+import { pickAvatarUrl, tiktokAvatarUrl } from './avatar.js';
 
 // Environment variables
 const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
@@ -162,7 +162,7 @@ interface RawChatMessage {
   text: string;
   timestamp: string; // ISO 8601
   tags: Record<string, string>;
-  event_type?: string; // "gift", "follow", "like_aggregate", "share", etc.
+  event_type?: string; // "gift", "follow", "like_aggregate", "share", "treasure_chest", etc.
   event_data?: Record<string, unknown>; // Event-specific payload
 }
 
@@ -197,9 +197,17 @@ interface TikTokUserIdentity {
   isModeratorOfAnchor?: boolean;
 }
 
+// Localized display string attached to a message. `key` is a stable template id
+// (e.g. `pm_mt_ttlive_superfanbox_join`) — the connector itself probes it to tell
+// the envelope products apart; see isTikTokCoinChest.
+interface TikTokDisplayText {
+  key?: string;
+}
+
 interface TikTokCommon {
   msgId?: string;
   createTime?: string;
+  displayText?: TikTokDisplayText;
 }
 
 interface TikTokChatData {
@@ -236,9 +244,77 @@ interface TikTokSocialData {
   user?: TikTokUser;
 }
 
+// The chest ("red envelope") a viewer drops into the stream. Note the sender is
+// inlined here as flat `sendUser*` fields rather than a nested `user`, and the
+// avatar is a single image model rather than the thumb/medium/large trio.
+interface TikTokEnvelopeInfo {
+  envelopeId?: string; // stable per-chest id, identical on every frame for that chest
+  businessType?: number; // which envelope product this is; see isTikTokCoinChest
+  diamondCount?: number; // coins in the chest
+  peopleCount?: number; // how many viewers may claim it
+  sendUserId?: string; // numeric sender id
+  sendUserName?: string; // sender display name (this payload carries no @handle)
+  sendUserAvatar?: TikTokImageModel;
+}
+
+interface TikTokEnvelopeData {
+  common?: TikTokCommon;
+  envelopeInfo?: TikTokEnvelopeInfo;
+  display?: number; // `EnvelopeDisplay`: add vs. remove the chest; see isTikTokEnvelopeDrop
+}
+
 // Reads the TikTok @handle, falling back to the numeric id then a placeholder.
 function tiktokUserHandle(user: TikTokUser | undefined): string {
   return user?.displayId || user?.id || 'unknown';
+}
+
+// `EnvelopeBusinessType` values. TikTok multiplexes several products onto the
+// ENVELOPE message and the connector forwards every one of them — its dispatcher
+// emits SUPER_FAN_BOX and then falls through to ENVELOPE for the *same* frame —
+// so the coin chest has to be picked out by business type. Only the two
+// diamond-bearing variants are chests; the rest (portals, merch drops, shells,
+// fan-club boxes, Super Fan Box) must not surface as one.
+const TIKTOK_ENVELOPE_BUSINESS_TYPE_UNKNOWN = 0;
+const TIKTOK_ENVELOPE_COIN_BUSINESS_TYPES = new Set<number>([
+  1, // BUSINESS_TYPE_USER_DIAMOND — a viewer drops a chest
+  2 // BUSINESS_TYPE_PLATFORM_DIAMOND — TikTok drops one into the room
+]);
+
+// Tells a coin chest apart from the other envelope products.
+//
+// `businessType` is the authoritative signal, but it decodes to UNKNOWN when
+// TikTok omits it on the wire; treating UNKNOWN as "not a chest" would silently
+// emit nothing for the whole feature, so it falls back to the same display-text
+// probe the connector uses to spot a Super Fan Box.
+function isTikTokCoinChest(data: TikTokEnvelopeData): boolean {
+  if (data.common?.displayText?.key?.toLowerCase().includes('ttlive_superfanbox')) {
+    return false;
+  }
+
+  const businessType = data.envelopeInfo?.businessType ?? TIKTOK_ENVELOPE_BUSINESS_TYPE_UNKNOWN;
+  return (
+    businessType === TIKTOK_ENVELOPE_BUSINESS_TYPE_UNKNOWN ||
+    TIKTOK_ENVELOPE_COIN_BUSINESS_TYPES.has(businessType)
+  );
+}
+
+// `EnvelopeDisplay` values. The ENVELOPE message doubles as a remove
+// instruction: once a chest expires or has been claimed by everyone it may hold,
+// TikTok re-sends it with display=HIDE so the client takes it off screen. That
+// frame repeats the whole envelopeInfo under a fresh msgId, and it can land long
+// after the dedup TTL has forgotten the drop, so this flag is what keeps one
+// chest from being published twice.
+const TIKTOK_ENVELOPE_DISPLAY_UNKNOWN = 0;
+const TIKTOK_ENVELOPE_DISPLAY_NEW = 1;
+
+// Tells a chest being dropped apart from one being taken off screen.
+//
+// As with businessType, `display` decodes to UNKNOWN when TikTok omits it on the
+// wire; treating UNKNOWN as "not a drop" would silently emit nothing for the
+// whole feature, so only an explicit non-NEW display is dropped.
+function isTikTokEnvelopeDrop(data: TikTokEnvelopeData): boolean {
+  const display = data.display ?? TIKTOK_ENVELOPE_DISPLAY_UNKNOWN;
+  return display === TIKTOK_ENVELOPE_DISPLAY_UNKNOWN || display === TIKTOK_ENVELOPE_DISPLAY_NEW;
 }
 
 // Like aggregation window for tracking likes over 30-second periods
@@ -876,6 +952,10 @@ class TikTokListenerService {
         this.handleShare(username, overlayId, data);
       });
 
+      connection.on(WebcastEvent.ENVELOPE, (data) => {
+        this.handleTreasureBox(username, overlayId, data);
+      });
+
       // Cast to EventEmitter for lifecycle events not in ClientEventMap
       const emitter = connection as unknown as EventEmitter;
 
@@ -1292,6 +1372,92 @@ class TikTokListenerService {
       logger.debug('Published TikTok share event', { username, overlay_id: overlayId });
     } catch (error) {
       logger.error('Failed to handle share event', { username, error });
+    }
+  }
+
+  private async handleTreasureBox(username: string, overlayId: string, data: TikTokEnvelopeData): Promise<void> {
+    try {
+      this.heartbeatMonitor.recordMessage(username);
+
+      // ENVELOPE also carries Super Fan Box (and other) frames; publishing those
+      // would show the streamer a coin chest nobody sent.
+      if (!isTikTokCoinChest(data)) {
+        logger.debug('Skipping non-chest ENVELOPE event', {
+          username,
+          business_type: data.envelopeInfo?.businessType
+        });
+        return;
+      }
+
+      // The same chest comes back as a HIDE frame when it expires or is fully
+      // claimed; republishing that would render the drop twice in the activity
+      // panel and the overlay.
+      if (!isTikTokEnvelopeDrop(data)) {
+        logger.debug('Skipping non-drop ENVELOPE event', {
+          username,
+          display: data.display
+        });
+        return;
+      }
+
+      const envelope = data.envelopeInfo;
+      // The sender may be absent entirely on some frames; a chest without an
+      // identifiable sender must still publish (as Anonymous) rather than throw.
+      const senderId = envelope?.sendUserId || 'unknown';
+      const coins = envelope?.diamondCount || 0;
+      const canOpen = envelope?.peopleCount || 0;
+      const text = 'Sent a coin chest';
+
+      const msgId = data.common?.msgId;
+      const createTime = data.common?.createTime;
+      const timestamp = createTime ? new Date(parseInt(createTime)).toISOString() : new Date().toISOString();
+
+      // Key dedup on the envelope's own id rather than the per-frame msgId, so
+      // every frame TikTok emits for one chest — a replay after a reconnect, or
+      // the same room seen twice across pooled connections — collapses into a
+      // single event. The prefix keeps envelope ids out of the msgId namespace
+      // the other handlers share. Falls back to msgId, as the chat handler does,
+      // when TikTok omits the envelope id.
+      const dedupKey = envelope?.envelopeId ? `envelope:${envelope.envelopeId}` : msgId;
+      if (this.messageDeduplicator.isDuplicate(dedupKey, username, text)) {
+        logger.debug('Skipping duplicate treasure chest event', { msg_id: msgId, username });
+        return;
+      }
+
+      const rawMessage: RawChatMessage = {
+        message_id: msgId || randomUUID(),
+        platform: 'tiktok',
+        channel_id: username,
+        user_id: senderId,
+        username: envelope?.sendUserName || 'Anonymous',
+        text,
+        timestamp: timestamp,
+        tags: {
+          overlay_id: overlayId,
+          user_unique_id: '', // no @handle in the envelope payload; the normalizer falls back to user_id
+          profile_picture_url: pickAvatarUrl(envelope?.sendUserAvatar)
+        },
+        event_type: 'treasure_chest',
+        event_data: {
+          coins,
+          can_open: canOpen
+        }
+      };
+
+      await this.redis.xAdd('chat:raw', '*', { data: JSON.stringify(rawMessage) }, { TRIM: { strategy: 'MAXLEN', strategyModifier: '~', threshold: 100000 } });
+      // Logs the decoded fields, not just the outcome: `tiktok-live-proto/v3` is a
+      // package subpath this tsconfig cannot resolve, so a wire-format rename here
+      // compiles clean and only shows up as zeroed values at runtime.
+      logger.debug('Published TikTok treasure chest event', {
+        username,
+        overlay_id: overlayId,
+        business_type: envelope?.businessType,
+        sender: senderId,
+        coins,
+        can_open: canOpen
+      });
+    } catch (error) {
+      logger.error('Failed to handle treasure chest event', { username, error });
     }
   }
 

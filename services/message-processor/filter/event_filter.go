@@ -182,6 +182,8 @@ func mapEventTypeToColumn(platform, eventType string) string {
 			return "enable_tiktok_follows"
 		case "share":
 			return "enable_tiktok_shares"
+		case "treasure_chest":
+			return "enable_tiktok_treasure_chests"
 		default:
 			return ""
 		}

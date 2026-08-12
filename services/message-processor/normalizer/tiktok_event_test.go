@@ -211,6 +211,99 @@ func TestNormalizeEvent_TikTokShare(t *testing.T) {
 	assert.Equal(t, "Shared stream", unified.Event.Value.DisplayText)
 }
 
+func TestNormalizeEvent_TikTokTreasureChest(t *testing.T) {
+	normalizer := NewTikTokNormalizer()
+
+	raw := &models.RawChatMessage{
+		MessageID: "tt-msg-7",
+		Platform:  "tiktok",
+		ChannelID: "creator",
+		UserID:    "user",
+		Username:  "ChestSender",
+		Text:      "Sent a coin chest",
+		Timestamp: time.Now(),
+		Tags:      map[string]string{},
+		EventType: "treasure_chest",
+		EventData: map[string]interface{}{
+			"coins":    20,
+			"can_open": 1,
+		},
+	}
+
+	unified, err := normalizer.NormalizeEvent(raw, "overlay-tt-7")
+	require.NoError(t, err)
+
+	assert.Equal(t, "treasure_chest", unified.Event.Type)
+	// <100 coins = low tier
+	assert.Equal(t, "low", unified.Event.Tier)
+	assert.Equal(t, 10, unified.Event.Duration)
+	assert.Equal(t, float64(20), unified.Event.Value.Amount)
+	assert.Equal(t, "coins", unified.Event.Value.Currency)
+	assert.Equal(t, "20 coins", unified.Event.Value.DisplayText)
+
+	// can_open is carried through untouched for the frontend
+	assert.Equal(t, 1, unified.Event.Metadata["can_open"])
+}
+
+// Production messages arrive as JSON over Redis Streams, so every number decodes to
+// float64 - the int literals used by the other tests never happen in prod.
+func TestNormalizeEvent_TikTokTreasureChest_JSONFloatCoins(t *testing.T) {
+	normalizer := NewTikTokNormalizer()
+
+	raw := &models.RawChatMessage{
+		MessageID: "tt-msg-8",
+		Platform:  "tiktok",
+		ChannelID: "creator",
+		UserID:    "user",
+		Username:  "ChestSender",
+		Text:      "Sent a coin chest",
+		Timestamp: time.Now(),
+		Tags:      map[string]string{},
+		EventType: "treasure_chest",
+		EventData: map[string]interface{}{
+			"coins":    float64(200),
+			"can_open": float64(2),
+		},
+	}
+
+	unified, err := normalizer.NormalizeEvent(raw, "overlay-tt-8")
+	require.NoError(t, err)
+
+	assert.Equal(t, float64(200), unified.Event.Value.Amount)
+	assert.Equal(t, "200 coins", unified.Event.Value.DisplayText)
+	// 100-999 coins = medium tier
+	assert.Equal(t, "medium", unified.Event.Tier)
+	assert.Equal(t, 20, unified.Event.Duration)
+}
+
+// A chest with no coin payload must still produce a value rather than a nil Event.Value.
+func TestNormalizeEvent_TikTokTreasureChest_MissingCoins(t *testing.T) {
+	normalizer := NewTikTokNormalizer()
+
+	raw := &models.RawChatMessage{
+		MessageID: "tt-msg-9",
+		Platform:  "tiktok",
+		ChannelID: "creator",
+		UserID:    "user",
+		Username:  "ChestSender",
+		Text:      "Sent a coin chest",
+		Timestamp: time.Now(),
+		Tags:      map[string]string{},
+		EventType: "treasure_chest",
+		EventData: map[string]interface{}{},
+	}
+
+	unified, err := normalizer.NormalizeEvent(raw, "overlay-tt-9")
+	require.NoError(t, err)
+
+	require.NotNil(t, unified.Event.Value)
+	assert.Equal(t, float64(0), unified.Event.Value.Amount)
+	assert.Equal(t, "0 coins", unified.Event.Value.DisplayText)
+	// Chests are discrete events, never aggregated like updates
+	assert.Equal(t, "", unified.Event.AggregationID)
+	assert.Equal(t, false, unified.Event.IsUpdate)
+}
+
 func TestPluralize(t *testing.T) {
 	tests := []struct {
 		count    int

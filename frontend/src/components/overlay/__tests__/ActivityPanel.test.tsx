@@ -77,6 +77,16 @@ describe('ActivityPanel', () => {
     expect(text.indexOf('Chat cleared')).toBeLessThan(text.indexOf('Subscription'))
   })
 
+  it('labels a TikTok coin chest instead of falling back to the generic badge', () => {
+    // CompactEvent keeps its own title map, separate from EventContent's switch —
+    // a missing entry silently degrades the badge to 'Event' in this very panel.
+    const item = eventItem('e2', 'treasure_chest', '2026-05-31T10:03:00.000Z')
+    item.platform = 'tiktok'
+    render(<ActivityPanel events={[item]} system={[]} moderationLog={[]} />)
+    expect(screen.getByText('Coin Chest')).toBeInTheDocument()
+    expect(screen.queryByText('Event')).not.toBeInTheDocument()
+  })
+
   it('renders system notices from the system bucket', () => {
     const system = [eventItem('s1', 'source_permission_error', '2026-05-31T10:01:00.000Z')]
     render(<ActivityPanel events={[]} system={system} moderationLog={[]} />)

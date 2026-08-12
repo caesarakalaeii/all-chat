@@ -54,6 +54,7 @@ const EVENT_TITLE: Partial<Record<EventType, string>> = {
   follow: 'Follow',
   like_aggregate: 'Likes',
   share: 'Share',
+  treasure_chest: 'Coin Chest',
   message_deleted: 'Message Deleted',
   user_banned: 'User Banned',
   token_expiration_warning: 'Auth Warning',

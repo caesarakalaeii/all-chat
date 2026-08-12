@@ -122,6 +122,7 @@ export interface EventSettings {
   enable_tiktok_gifts: boolean
   enable_tiktok_follows: boolean
   enable_tiktok_shares: boolean
+  enable_tiktok_treasure_chests: boolean
   // System
   enable_token_warnings: boolean
   // Aggregation
