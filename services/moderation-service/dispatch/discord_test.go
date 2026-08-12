@@ -64,7 +64,9 @@ func (f *fakeDiscordAPI) UnbanMember(_ context.Context, guildID, userID string) 
 	return f.err
 }
 
-// fakeGuildResolver maps any channel to guildID (or returns err).
+// fakeGuildResolver maps any channel to guildID (or returns err). The live permission reads are
+// the delegated path's business and are exercised in discord_delegated_test.go; here they answer
+// nothing, which is enough because the owner path performs neither.
 type fakeGuildResolver struct {
 	guildID string
 	err     error
@@ -76,8 +78,28 @@ func (f *fakeGuildResolver) GuildID(_ context.Context, _ string) (string, error)
 	return f.guildID, f.err
 }
 
+func (f *fakeGuildResolver) GuildBotPermissions(_ context.Context, _ string) (uint64, error) {
+	return 0, errors.New("no live permission read is expected on the owner path")
+}
+
+func (f *fakeGuildResolver) MemberAuthority(_ context.Context, _, _ string) (clients.DiscordMember, error) {
+	return clients.DiscordMember{}, errors.New("no live member read is expected on the owner path")
+}
+
+// ownerAnchorStore satisfies the owner-reach anchor for any guild: these tests are about the
+// dispatch mechanics, and the anchor itself is exercised in discord_delegated_test.go.
+type ownerAnchorStore struct{}
+
+func (ownerAnchorStore) DiscordIdentity(_ context.Context, _ string) (string, bool, error) {
+	return "", false, nil
+}
+
+func (ownerAnchorStore) DiscordGuildConnectedBy(_ context.Context, _, _ string) (bool, error) {
+	return true, nil
+}
+
 func newDiscordDispatcher(api *fakeDiscordAPI, guilds *fakeGuildResolver) *Discord {
-	return NewDiscord(api, guilds, zap.NewNop())
+	return NewDiscord(api, guilds, ownerAnchorStore{}, zap.NewNop())
 }
 
 func TestDiscordDispatch_NonDiscordIsDryRun(t *testing.T) {
@@ -100,7 +122,8 @@ func TestDiscordDispatch_DeletePerformed(t *testing.T) {
 	assert.Equal(t, 1, api.deleteCalls)
 	assert.Equal(t, "chan-1", api.channelID)
 	assert.Equal(t, "msg-1", api.msgID, "the Discord native message id (snowflake) is the delete target")
-	assert.Zero(t, guilds.calls, "delete is channel-scoped and needs no guild resolution")
+	assert.Equal(t, 1, guilds.calls,
+		"the write is channel-scoped but authority is per-guild, so even a delete resolves the guild to anchor against")
 }
 
 func TestDiscordDispatch_BanResolvesGuildAndPerforms(t *testing.T) {
@@ -169,30 +192,25 @@ func TestDiscordDispatch_GuildResolutionFailureIsError(t *testing.T) {
 	assert.Zero(t, api.banCalls, "no ban is attempted when the guild cannot be resolved")
 }
 
-// Discord is the one platform where refusing delegation is load-bearing rather than tidy.
-//
-// Everywhere else the actor supplies their own credential, so an unconsented moderator simply
-// fails. Here the actor is always the shared bot, holding the streamer's full guild authority —
-// so without this refusal a delegated action would execute with that authority and no check that
-// the moderator holds any of it. All-Chat's own check is the ONLY authority on Discord, and it is
-// not built yet.
-func TestDiscord_DelegatedActionNeverReachesTheSharedBot(t *testing.T) {
+// The owner path performs no live permission read at all, on any action. That is ADR-0048's
+// anchor-strength decision made checkable: the connected-guild row alone anchors an owner, and
+// adding a live read here would have switched Discord moderation off for every existing Discord
+// streamer until each completed a new account link.
+func TestDiscordDispatch_OwnerPathMakesNoLivePermissionRead(t *testing.T) {
 	for _, action := range []models.Action{
 		models.ActionDelete, models.ActionTimeout, models.ActionBan, models.ActionUnban,
 	} {
 		t.Run(string(action), func(t *testing.T) {
 			api := &fakeDiscordAPI{}
-			guilds := &fakeGuildResolver{guildID: "g1"}
-			d := newDiscordDispatcher(api, guilds)
+			// This resolver errors on every live read, so any attempt to make one fails the test
+			// rather than passing silently.
+			d := newDiscordDispatcher(api, &fakeGuildResolver{guildID: "g1"})
 
-			res, err := d.Dispatch(context.Background(), moderator("mod", "own"), action,
-				models.DispatchRequest{Platform: "discord", ChannelID: "c", NativeMessageID: "m", TargetUserID: "42"})
+			res, err := d.Dispatch(context.Background(), owner("u1"), action,
+				models.DispatchRequest{Platform: "discord", ChannelID: "c", NativeMessageID: "m", TargetUserID: "42", DurationSeconds: 60})
 
 			require.NoError(t, err)
-			assert.Equal(t, models.DispatchDelegationUnsupported, res.Outcome)
-			assert.Zero(t, api.deleteCalls+api.timeoutCalls+api.banCalls+api.unbanCalls,
-				"the bot must not act for a delegated moderator")
-			assert.Zero(t, guilds.calls, "not even the guild lookup should run")
+			assert.Equal(t, models.DispatchPerformed, res.Outcome)
 		})
 	}
 }

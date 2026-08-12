@@ -107,6 +107,18 @@ Asymmetry worth recording: only YouTube (`liveChatModerators.insert`, per-broadc
 
 A cached "not a moderator" state is **telemetry, never authorization**. It is surfaced to the streamer and never read in `authorize()`. Reading it would make All-Chat the stale authority the whole design exists to avoid, and one transient 403 would otherwise lock out a legitimate moderator with no self-service recovery.
 
+#### Discord reason codes as built (amendment, 2026-08-11)
+
+Two departures from the table above, both settled while implementing the leg. They change which name a refusal carries, never which refusals happen.
+
+**The three owner-side Discord failures share one code.** The row above names `discord_link_required` for an unlinked owner and `owner_guild_unverified` for a missing `discord_guilds` row; as built, an unlinked owner, a missing row, and an owner who has lost `MANAGE_GUILD` all report **`owner_channel_unverified`** — the platform-agnostic code the Twitch and Kick anchors already use. The reason vocabulary is sorted by *who can clear a state*, and all three are the streamer's alone; three codes for one remediation would have the frontend branch on a distinction it cannot act on differently. `discord_link_required` is therefore reserved for the **moderator**, the one person it names something actionable for.
+
+**Capabilities makes no live Discord read.** The pre-check column above describes the *action* path, which is where it is load-bearing. `GET /capabilities` checks only the two account links and the bot's cached guild permissions, and deliberately does not read the moderator's live standing. Capabilities is advisory everywhere else too — on Twitch it checks the scope and lets Helix decide whether they moderate the channel — and reading Discord per source per dashboard load would put platform traffic behind a caller-supplied overlay id to produce an answer that can go stale before the button is pressed. A capability the moderator turns out not to hold fails at action time with `mod_lacks_permission`, which names the fix.
+
+#### Every proxied route needs an api-gateway entry (2026-08-11)
+
+`services/api-gateway/cmd/main.go` enumerates each proxied path explicitly; there is no prefix forward for `/api/v1/auth/*`. The Discord account-link routes shipped without their gateway entries and were therefore unreachable from the internet — invisible at the time because nothing called them yet. Adding a route to a service is not finished until the gateway forwards it, and "the service registers it" is not testable from outside without that.
+
 ### Credential storage prohibition
 
 A delegated moderator's credential is stored **only** in a dedicated store keyed on the moderator's own identity, never in the existing per-channel credential tables, and never in any row a listener selects from.

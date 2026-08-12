@@ -58,6 +58,10 @@ type fakeAuthorizer struct {
 	// An absent platform means they have not consented for it at all.
 	modScopes    map[string][]string
 	modScopesErr error
+	// discordIdentities are the users who have linked a Discord account, keyed by user id. An
+	// absent user has not linked one — the state every user is in until they run the link flow.
+	discordIdentities map[string]string
+	discordIdentErr   error
 }
 
 func (f *fakeAuthorizer) VerifyOverlayOwnership(context.Context, string, string) (bool, error) {
@@ -102,6 +106,14 @@ func (f *fakeAuthorizer) ModeratorGrantedScopes(_ context.Context, _, platform s
 	}
 	scopes, ok := f.modScopes[platform]
 	return scopes, ok, nil
+}
+
+func (f *fakeAuthorizer) DiscordIdentity(_ context.Context, userID string) (string, bool, error) {
+	if f.discordIdentErr != nil {
+		return "", false, f.discordIdentErr
+	}
+	snowflake, ok := f.discordIdentities[userID]
+	return snowflake, ok, nil
 }
 
 type fakeEmitter struct{ published []*mpmodels.RawChatMessage }
