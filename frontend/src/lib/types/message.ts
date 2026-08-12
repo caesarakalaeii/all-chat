@@ -41,7 +41,7 @@ export type EventType =
   // Kick
   | 'kick_subscription' | 'kick_gift_subscription' | 'kick_donation'
   // TikTok
-  | 'gift' | 'follow' | 'like_aggregate' | 'share'
+  | 'gift' | 'follow' | 'like_aggregate' | 'share' | 'treasure_chest'
   // System
   | 'token_expiration_warning'
   | 'source_permission_error'
