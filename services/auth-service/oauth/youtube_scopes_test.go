@@ -29,9 +29,14 @@ const ytForceSSL = "https://www.googleapis.com/auth/youtube.force-ssl"
 
 func TestYouTubeModerationScopesForActions(t *testing.T) {
 	assert.Equal(t, []string{ytForceSSL}, YouTubeModerationScopesForActions([]string{"ban"}))
-	assert.Empty(t, YouTubeModerationScopesForActions([]string{"delete"}), "unsupported actions are ignored")
+	assert.Equal(t, []string{ytForceSSL}, YouTubeModerationScopesForActions([]string{"timeout"}),
+		"timeout is a temporary ban on the same endpoint, so it needs the same scope")
+	assert.Empty(t, YouTubeModerationScopesForActions([]string{"delete"}),
+		"delete has no usable id on YouTube, so it maps to no scope")
+	assert.Empty(t, YouTubeModerationScopesForActions([]string{"unban"}),
+		"unban needs a ban resource id nothing persists")
 	assert.Empty(t, YouTubeModerationScopesForActions(nil))
-	// Deduped even if ban appears with other (ignored) actions.
+	// One scope covers both supported actions, and must not be requested twice.
 	assert.Equal(t, []string{ytForceSSL}, YouTubeModerationScopesForActions([]string{"ban", "timeout"}))
 }
 

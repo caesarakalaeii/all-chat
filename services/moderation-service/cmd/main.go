@@ -182,11 +182,16 @@ func main() {
 	default:
 		ytSource := tokens.NewYouTubeSource(dbPool, cipher, cfg.YouTubeClientID, cfg.YouTubeClientSecret)
 		ytQuota := quota.NewReserver(dbPool, getEnvInt("YOUTUBE_QUOTA_LIMIT_DAILY", quota.DefaultDailyLimit))
-		dispatchers["youtube"] = dispatch.NewYouTube(ytSource, clients.NewYouTubeClient(), clients.NewYouTubeLiveChatResolver(redisClient), ytQuota, log)
+		ytDispatcher := dispatch.NewYouTube(ytSource, clients.NewYouTubeClient(), clients.NewYouTubeLiveChatResolver(redisClient), ytQuota, log)
+		// Delegated moderation (ADR-0048): the moderator's own force-ssl credential, and YouTube
+		// re-checking their live-chat moderator status on every call. Without this the dispatcher
+		// refuses delegated YouTube actions outright.
+		ytDispatcher.SetModSource(tokens.NewModYouTubeSource(dbPool, cipher, cfg.YouTubeClientID, cfg.YouTubeClientSecret, ""))
+		dispatchers["youtube"] = ytDispatcher
 		ytScopes := tokens.NewYouTubeScopeChecker(ytSource)
 		scopeCheckers["youtube"] = ytScopes
 		sendCheckers["youtube"] = ytScopes
-		log.Info("YouTube moderation enabled (ban-only, real Data API calls)")
+		log.Info("YouTube moderation enabled (timeout/ban, owner + delegated moderator)")
 	}
 
 	// Discord (delete/timeout/ban/unban) authenticates with the shared bot token — no

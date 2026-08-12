@@ -65,6 +65,11 @@ const (
 	// OutcomeBotMissingPermission: the bot was never invited with the permission, so nobody can
 	// borrow it. Distinct from a platform 403 on the owner path: this one is known before any call.
 	OutcomeBotMissingPermission = "bot_missing_permission"
+	// OutcomeTargetNotActionable: the platform refused the action against this TARGET rather than
+	// this actor — YouTube will not let anyone ban the chat owner or another moderator. Kept apart
+	// from OutcomeReauthRequired because it says nothing about the caller's credential, and from
+	// OutcomePlatformError because nothing malfunctioned.
+	OutcomeTargetNotActionable = "target_not_actionable"
 )
 
 // Entry is one audited moderation command.
