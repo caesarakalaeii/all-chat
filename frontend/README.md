@@ -66,7 +66,8 @@ frontend/
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 22+ (`@testing-library/jest-dom` 7 and `chromatic` 18 declare `engines.node >= 22`;
+  `lint-staged` 17 needs >= 22.22.1 for the pre-commit hook. Node 20 went EOL 2026-04-30.)
 - npm (comes with Node.js)
 - Backend services running (see main repository)
 
@@ -76,6 +77,17 @@ frontend/
 cd frontend
 npm install
 ```
+
+### Dependency overrides
+
+`package.json` `overrides` exist for specific, non-obvious reasons — removing one will break
+the build or CI:
+
+| Override                                                          | Why                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `monaco-editor: 0.55.1`                                           | Self-hosted Monaco must match the copy vendored into `public/monaco` (ADR-0040). Keep pinned exactly.                                                                                                                                                                                                                                                                                                       |
+| `tsconfck.typescript: $typescript`                                | `tsconfck` is unmaintained at 3.1.6 with an _optional_ `typescript@^5.0.0` peer. Unresolved, npm 10 (CI) nests its own `typescript@5.9.3` while npm 12 (local) does not — so a lockfile generated locally fails `npm ci` in CI with `Missing: typescript@5.9.3 from lock file`. Pinning the peer to the root TypeScript makes both npm versions agree.                                                      |
+| `@rolldown/plugin-babel.@babel/plugin-transform-runtime: ^7.29.0` | `@vitejs/plugin-react` lists `@rolldown/plugin-babel` as an optional peer. Because `@babel/core`, `@babel/runtime` and `rolldown` are all already in the tree, npm materializes it and then resolves _its_ optional `@babel/plugin-transform-runtime` peer to 8.x, which demands `@babel/core@^8` and hard-fails `npm install` with ERESOLVE. Pinning to the 7.x line matches the tree's `@babel/core@7.x`. |
 
 ### Run Development Server
 

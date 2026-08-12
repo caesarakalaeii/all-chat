@@ -1,0 +1,21 @@
+# Generated / vendored output — never hand-formatted, and reformatting it would
+# only create churn against the tool that emits it. Mirrors the globalIgnores
+# list in eslint.config.mjs; keep the two in sync.
+
+# Next.js build output
+.next/
+out/
+build/
+next-env.d.ts
+
+# Storybook static build
+storybook-static/
+
+# Self-hosted Monaco vendor bundle (ADR-0040) — copied into public/ by the
+# `copy:monaco` pre-dev/pre-build step and gitignored. Minified upstream code.
+public/monaco/
+
+# Test/report artifacts
+coverage/
+playwright-report/
+test-results/

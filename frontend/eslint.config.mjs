@@ -130,5 +130,10 @@ export default defineConfig([
     'next-env.d.ts',
     'node_modules/**',
     'storybook-static/**',
+    // Self-hosted Monaco vendor bundle (ADR-0040), copied into public/ by the
+    // `copy:monaco` pre-dev/pre-build step and gitignored. Minified upstream
+    // output — linting it only ever yields false positives (react-hooks
+    // rules-of-hooks fires on mangled identifiers like `J.useCaseSensitive…`).
+    'public/monaco/**',
   ]),
 ])
