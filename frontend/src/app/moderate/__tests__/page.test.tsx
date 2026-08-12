@@ -28,12 +28,18 @@ import type { Delegation } from '@/lib/types/moderation'
 // reference these before initialization.
 const api = vi.hoisted(() => ({ listDelegations: vi.fn() }))
 const nav = vi.hoisted(() => ({ params: new URLSearchParams() }))
+const discord = vi.hoisted(() => ({
+  getDiscordIdentity: vi.fn(),
+  startDiscordAccountLink: vi.fn(),
+}))
 
 vi.mock('@/lib/api/moderation', async () => {
   const actual =
     await vi.importActual<typeof import('@/lib/api/moderation')>('@/lib/api/moderation')
   return { ...actual, moderationApi: api }
 })
+
+vi.mock('@/lib/api/discord', () => discord)
 
 vi.mock('next/navigation', () => ({
   useSearchParams: () => nav.params,
@@ -73,6 +79,7 @@ async function renderPage(delegations: Delegation[]) {
 beforeEach(() => {
   vi.clearAllMocks()
   nav.params = new URLSearchParams()
+  discord.getDiscordIdentity.mockResolvedValue({ linked: true })
 })
 afterEach(cleanup)
 
@@ -163,5 +170,54 @@ describe('channels you moderate', () => {
     await renderPage([delegation()])
 
     expect(await screen.findByText(/did not complete/i)).toBeInTheDocument()
+  })
+})
+
+// The Discord account link (ADR-0048). Discord is the one platform where the prerequisite is an
+// identity rather than an OAuth consent: the shared bot performs every write, so All-Chat has to
+// check the acting human's own server permissions, which needs to know who they are on Discord.
+describe('discord account link', () => {
+  it('asks for the link when a delegation covers discord and none is set', async () => {
+    discord.getDiscordIdentity.mockResolvedValue({ linked: false })
+    await renderPage([
+      delegation({
+        platforms: [{ platform: 'discord', enabled: true, verification: 'unverified' }],
+      }),
+    ])
+
+    expect(await screen.findByRole('button', { name: /link discord/i })).toBeInTheDocument()
+  })
+
+  it('stays quiet when the moderator has already linked', async () => {
+    discord.getDiscordIdentity.mockResolvedValue({ linked: true })
+    await renderPage([
+      delegation({
+        platforms: [{ platform: 'discord', enabled: true, verification: 'unverified' }],
+      }),
+    ])
+
+    await waitFor(() => expect(discord.getDiscordIdentity).toHaveBeenCalled())
+    expect(screen.queryByRole('button', { name: /link discord/i })).not.toBeInTheDocument()
+  })
+
+  // No Discord leg means the link buys them nothing, and an unexplained prompt to hand over an
+  // account identifier is exactly the kind of thing a careful volunteer refuses.
+  it('does not ask when no streamer delegated discord', async () => {
+    discord.getDiscordIdentity.mockResolvedValue({ linked: false })
+    await renderPage([delegation()])
+
+    await waitFor(() => expect(discord.getDiscordIdentity).toHaveBeenCalled())
+    expect(screen.queryByRole('button', { name: /link discord/i })).not.toBeInTheDocument()
+  })
+
+  // One Discord account may back at most one All-Chat account, or a second could inherit the
+  // first's server permissions. Retrying cannot fix it, so the copy must not imply it can.
+  it('explains an already-claimed discord account rather than offering a retry', async () => {
+    nav.params = new URLSearchParams('error=already_linked')
+    await renderPage([delegation()])
+
+    expect(
+      await screen.findByText(/already linked to another All-Chat account/i)
+    ).toBeInTheDocument()
   })
 })

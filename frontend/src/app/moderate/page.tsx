@@ -48,6 +48,7 @@ import { Card } from '@/components/ui/card'
 import { PlatformBadge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { VisuallyHidden } from '@/components/ui/visually-hidden'
+import { getDiscordIdentity, startDiscordAccountLink } from '@/lib/api/discord'
 import { moderationApi } from '@/lib/api/moderation'
 import { DELEGATABLE_ACTIONS, type Delegation, type ModerationAction } from '@/lib/types/moderation'
 
@@ -70,9 +71,22 @@ const PLATFORM_LABELS: Record<string, string> = {
  * than to the overlay because one consent covers every streamer who delegated that
  * platform, so there is no single overlay it belongs to.
  */
-function consentNotice(connected: string | null, error: string | null): string | null {
+function consentNotice(
+  connected: string | null,
+  error: string | null,
+  discordAccount: string | null
+): string | null {
+  // `already_linked` is the one failure worth its own words: that Discord account backs a
+  // different All-Chat account, and no amount of retrying changes it. One Discord identity may
+  // back at most one account, or a second could inherit the first's server permissions.
+  if (error === 'already_linked') {
+    return 'That Discord account is already linked to another All-Chat account. Link a different one, or unlink it from the other account first.'
+  }
   if (error) {
     return 'That connection did not complete. Open a channel below and try again from there.'
+  }
+  if (discordAccount === 'linked') {
+    return 'Discord account linked. All-Chat can now check your own server permissions when you moderate Discord.'
   }
   if (connected) {
     const name = PLATFORM_LABELS[connected] ?? connected
@@ -188,7 +202,11 @@ function DelegationCard({ delegation }: { delegation: Delegation }) {
 
 function ModerateContent() {
   const params = useSearchParams()
-  const notice = consentNotice(params.get('connected'), params.get('error'))
+  const notice = consentNotice(
+    params.get('connected'),
+    params.get('error'),
+    params.get('discord_account')
+  )
 
   const [delegations, setDelegations] = useState<Delegation[] | null>(null)
   const [loadFailed, setLoadFailed] = useState(false)
@@ -223,6 +241,31 @@ function ModerateContent() {
     }
   }, [fetchDelegations])
 
+  // Whether this moderator has linked a Discord account. null = not known yet, and the prompt
+  // stays hidden until it is: offering "link Discord" to someone already linked is noise.
+  const [discordLinked, setDiscordLinked] = useState<boolean | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    getDiscordIdentity()
+      .then((identity) => {
+        if (!cancelled) setDiscordLinked(identity.linked)
+      })
+      .catch(() => {
+        // Unknown, not unlinked: prompting on a failed read would nag someone who is already set up.
+        if (!cancelled) setDiscordLinked(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [notice])
+
+  // Only worth asking for if some streamer actually delegated Discord to them. Discord is the one
+  // platform where the link is the prerequisite rather than an OAuth consent — the shared bot
+  // writes, so All-Chat checks the acting human's own server permissions (ADR-0048).
+  const hasDiscordLeg = (delegations ?? []).some((d) =>
+    d.platforms.some((p) => p.platform === 'discord' && p.enabled)
+  )
+
   return (
     <div className="min-h-screen bg-bg">
       <AppNav />
@@ -239,6 +282,21 @@ function ModerateContent() {
           <div className="mb-6 flex items-start gap-2 rounded-lg border border-border bg-surface-2 px-4 py-3 text-sm text-text-sub">
             <Info className="mt-0.5 size-4 shrink-0 text-text-dim" aria-hidden="true" />
             <span>{notice}</span>
+          </div>
+        )}
+
+        {hasDiscordLeg && discordLinked === false && (
+          <div className="mb-6 flex flex-wrap items-start justify-between gap-3 rounded-lg border border-border bg-surface-2 px-4 py-3 text-sm text-text-sub">
+            <span className="flex items-start gap-2">
+              <Info className="mt-0.5 size-4 shrink-0 text-text-dim" aria-hidden="true" />
+              <span>
+                Link your Discord account to moderate Discord. All-Chat checks your own server
+                permissions before it acts, so it needs to know which Discord account is yours.
+              </span>
+            </span>
+            <Button size="sm" onClick={() => void startDiscordAccountLink('moderate')}>
+              Link Discord
+            </Button>
           </div>
         )}
 

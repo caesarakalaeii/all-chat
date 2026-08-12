@@ -193,11 +193,16 @@ func main() {
 	if cfg.DiscordBotToken != "" {
 		discordClient := clients.NewDiscordClient(cfg.DiscordBotToken)
 		discordGuilds := clients.NewDiscordGuildResolver(discordClient, redisClient)
-		dispatchers["discord"] = dispatch.NewDiscord(discordClient, discordGuilds, log)
+		// The repository answers the owner-reach anchor and the Discord account links. It is a
+		// constructor argument rather than an opt-in setter because on Discord nothing external
+		// re-checks a delegated moderator (ADR-0048): without the store the dispatcher can check
+		// nothing, and "cannot check" must never degrade into acting with the streamer's full
+		// guild authority.
+		dispatchers["discord"] = dispatch.NewDiscord(discordClient, discordGuilds, repo, log)
 		// The resolver caches both the channel→guild map AND the per-guild effective
 		// permissions, so the capability endpoint stays cheap on dashboard load.
 		scopeCheckers["discord"] = handler.NewDiscordScopeChecker(discordGuilds, discordGuilds, log)
-		log.Info("Discord moderation enabled (delete/timeout/ban/unban, bot REST)")
+		log.Info("Discord moderation enabled (delete/timeout/ban/unban, bot REST, owner + delegated moderator)")
 	} else {
 		log.Warn("DISCORD_BOT_TOKEN not set; Discord moderation runs in dry-run")
 	}

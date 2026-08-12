@@ -56,7 +56,7 @@ import { ViewSettingsBar } from '@/components/overlay/ViewSettingsBar'
 import { ResizableSplit } from '@/components/ResizableSplit'
 import { useOverlayStream } from '@/hooks/useOverlayStream'
 import { ApiError } from '@/lib/api/client'
-import { startDiscordModerationReinvite } from '@/lib/api/discord'
+import { startDiscordAccountLink, startDiscordModerationReinvite } from '@/lib/api/discord'
 import {
   buildBanRequest,
   buildDeleteRequest,
@@ -338,6 +338,21 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
     []
   )
 
+  // Discord's equivalent of connectAsModerator, and deliberately not the same call: the moderator
+  // grants no scopes and All-Chat keeps no token — it only learns which Discord account they are,
+  // so it can read their own server permissions before acting through the shared bot.
+  const linkDiscordAccount = useCallback(async () => {
+    try {
+      await startDiscordAccountLink('moderate')
+    } catch {
+      toastManager.add({
+        title:
+          'Linking Discord is not available right now. Ask the streamer to moderate there for now.',
+        type: 'error',
+      })
+    }
+  }, [])
+
   // Re-consent when a send fails with `reauth_required` (the streamer's platform
   // send token expired or was revoked). Chat sending requires the advanced-controls
   // grant — Twitch `user:write:chat`, Kick `chat:write`, YouTube force-ssl — which is
@@ -418,6 +433,16 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
     [capabilities]
   )
 
+  // Discord sources waiting on the MODERATOR's own account link. Discord has no per-user
+  // moderation API, so what they must supply is an identity rather than a consent: the shared bot
+  // writes, and All-Chat checks their own server permissions before it will. Deliberately not
+  // merged with needsConsentSources — that banner offers an OAuth consent, and this one a
+  // different flow that grants All-Chat nothing beyond knowing who they are.
+  const needsDiscordLinkSources = useMemo(
+    () => (capabilities?.sources ?? []).filter((s) => s.reason === 'needs_discord_link'),
+    [capabilities]
+  )
+
   // Whether any source can currently send chat from the monitor (gates the send
   // bar). TikTok/Discord have no send path, so only twitch/youtube/kick count.
   const hasSendableSource = useMemo(
@@ -481,6 +506,19 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
           return `This streamer's ${platform} account isn't connected, so nothing can be moderated here`
         case 'delegation_unsupported':
           return `Moderators can't act on ${platform} yet — ask the streamer to handle this one`
+        // Discord's five. The shared bot performs every write there, so All-Chat's own check is
+        // the only authority and these codes carry the entire explanation — which makes naming
+        // the right person to ask the whole job of this copy.
+        case 'discord_link_required':
+          return 'Link your Discord account to moderate here'
+        case 'mod_not_in_guild':
+          return "You're not in this Discord server — ask the streamer to invite you"
+        case 'mod_lacks_permission':
+          return "Your Discord roles don't allow this — ask the streamer for a role that does"
+        case 'mod_below_target':
+          return "Discord's role hierarchy blocks this — your highest role has to sit above theirs"
+        case 'bot_missing_permission':
+          return "The All-Chat bot wasn't given this Discord permission — ask the streamer to re-invite it"
         default:
           return null
       }
@@ -788,6 +826,26 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
             ) : null}
           </div>
         ))}
+
+      {/* Discord account-link notices. One banner for the whole overlay rather than one per
+          source: the link is per PERSON, not per server, so repeating it per channel would offer
+          the same one-time action several times over. */}
+      {moderationEnabled && isModerator && needsDiscordLinkSources.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-xs text-text-sub">
+          <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
+          <span>
+            Link your Discord account to moderate Discord here — All-Chat checks your own server
+            permissions before acting.
+          </span>
+          <button
+            type="button"
+            onClick={() => void linkDiscordAccount()}
+            className="font-medium text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+          >
+            Link Discord
+          </button>
+        </div>
+      )}
 
       {/* Missing-scope notices: owner must grant permissions per platform. Owner-only —
           the flow behind it re-consents the STREAMER's broadcaster credential, which is

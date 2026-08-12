@@ -55,6 +55,11 @@ type Authorizer interface {
 	// platform, and whether one exists at all. Never the token itself: the capability answer
 	// needs no decryption.
 	ModeratorGrantedScopes(ctx context.Context, userID, platform string) ([]string, bool, error)
+	// DiscordIdentity reports whether a user has linked a Discord account, and which one. It is
+	// Discord's analogue of the credential lookup above: the shared bot performs every write, so
+	// what a Discord source needs from a person is not a token but an identity to check their
+	// server permissions against (ADR-0048).
+	DiscordIdentity(ctx context.Context, userID string) (string, bool, error)
 	// TouchGrantActivity records that a delegated grant was just used, which is what the
 	// dormancy rule reads. A no-op for owner actions, which carry no grant.
 	TouchGrantActivity(ctx context.Context, grantID string) error
@@ -172,6 +177,26 @@ const (
 	// codeNotPlatformModerator: the platform says the caller does not moderate that channel. The
 	// fix is on the platform, not in All-Chat.
 	codeNotPlatformModerator = "not_moderator_on_platform"
+	// The Discord refusals (ADR-0048). Discord has no per-user moderation API, so no platform
+	// message comes back to explain a refusal — these codes are the whole explanation, and they
+	// are separate because the remedies are separate PEOPLE's jobs. Only the first is the
+	// moderator's own to clear.
+	//
+	// codeDiscordLinkRequired: the moderator has not linked a Discord account, so there is no
+	// snowflake to read their guild permissions against. Not folded into connect_required: that
+	// means a missing OAuth credential, whereas the Discord link deliberately stores no token, so
+	// it is a different flow the UI has to send them to.
+	codeDiscordLinkRequired = "discord_link_required"
+	// codeModNotInGuild: the moderator is not a member of the Discord server.
+	codeModNotInGuild = "mod_not_in_guild"
+	// codeModLacksPermission: they are in the server but their roles do not carry this permission,
+	// and All-Chat will not let them do through the bot what Discord would refuse them directly.
+	codeModLacksPermission = "mod_lacks_permission"
+	// codeModBelowTarget: Discord's role hierarchy refuses the member operation.
+	codeModBelowTarget = "mod_below_target"
+	// codeBotMissingPermission: the bot was never invited with the permission, so nobody can
+	// borrow it. Cleared by re-inviting the bot — never by an OAuth re-consent.
+	codeBotMissingPermission = "bot_missing_permission"
 )
 
 // unauthorizedDenials counts refusals of callers who hold no role on the overlay.
@@ -410,12 +435,8 @@ func (h *Handler) delegatedCapabilityFor(
 		sc.Reason = models.ReasonNotDelegated
 		return sc
 	}
-	// Discord's authority is the shared bot plus a link to the moderator's Discord account, not an
-	// OAuth scope they can grant. No such link exists yet, so there is no consent flow to send
-	// them to and the copy must say so rather than offering a dead button.
 	if s.Platform == "discord" {
-		sc.Reason = models.ReasonNeedsDiscordLink
-		return sc
+		return h.discordDelegatedCapabilityFor(ctx, userID, access, s, sc)
 	}
 
 	scopes, ok, err := h.repo.ModeratorGrantedScopes(ctx, userID, s.Platform)
@@ -435,6 +456,66 @@ func (h *Handler) delegatedCapabilityFor(
 	usable := models.IntersectActions(models.ActionsForModeratorScopes(s.Platform, scopes), access.Actions)
 	if len(usable) == 0 {
 		sc.Reason = models.ReasonNeedsConsent
+		return sc
+	}
+	sc.Moderatable = true
+	sc.Actions = usable
+	return sc
+}
+
+// discordDelegatedCapabilityFor computes one DISCORD source's capability for a delegated moderator.
+//
+// Discord needs its own branch because what a person must supply here is not an OAuth credential
+// but an identity: the shared bot performs every write, so All-Chat checks the acting human's own
+// server permissions instead of handing over their token. Two people therefore have to be linked,
+// and the whole value of saying so is that only one of them can fix each case — a volunteer told to
+// link their Discord account when it is the streamer who has not is a dead end.
+//
+// What this deliberately does NOT do is read the moderator's live guild permissions. Capabilities
+// is advisory (ADR-0048: a cached moderator state is telemetry, never authorization) and the action
+// path is the authority — exactly as on Twitch, where capabilities checks the scope and Helix
+// decides whether they moderate the channel. Reading them here would also put Discord API traffic
+// on every dashboard load, driven by a caller-supplied overlay id, to produce an answer that can go
+// stale before the button is pressed.
+func (h *Handler) discordDelegatedCapabilityFor(
+	ctx context.Context, userID string, access repository.OverlayAccess,
+	s repository.Source, sc models.SourceCapability,
+) models.SourceCapability {
+	// The moderator's own link first: it is the one blocker on this list they can clear.
+	if _, linked, err := h.repo.DiscordIdentity(ctx, userID); err != nil || !linked {
+		if err != nil {
+			h.logger.Warn("capabilities: discord identity lookup failed; treating as not linked",
+				zap.String("platform", s.Platform), zap.Error(err))
+		}
+		sc.Reason = models.ReasonNeedsDiscordLink
+		return sc
+	}
+	// The owner's link is what proves they still control the guild on a delegated action, so
+	// without it nothing on this source is delegable. Only the streamer can clear it, which is why
+	// it does not read as "link your Discord account" — the moderator would be linking the wrong
+	// account and nothing would change.
+	if _, linked, err := h.repo.DiscordIdentity(ctx, access.OwnerUserID); err != nil || !linked {
+		if err != nil {
+			h.logger.Warn("capabilities: owner discord identity lookup failed; treating as unverified",
+				zap.String("platform", s.Platform), zap.Error(err))
+		}
+		sc.Reason = models.ReasonOwnerChannelUnverified
+		return sc
+	}
+
+	// The bot's permissions in this guild are the ceiling for everyone, so they bound what can be
+	// offered. The moderator's own permissions narrow it further at action time.
+	botActions, err := h.scopes.GrantedActions(ctx, userID, s.Platform, s.ChannelID)
+	if err != nil {
+		h.logger.Warn("capabilities: discord bot permission lookup failed; reporting no actions",
+			zap.String("channel_id", s.ChannelID), zap.Error(err))
+		botActions = nil
+	}
+	usable := models.IntersectActions(botActions, access.Actions)
+	if len(usable) == 0 {
+		// The bot was invited without the permissions this grant covers. Re-inviting it is the
+		// streamer's job, and it is the same wall the action path reports as bot_missing_permission.
+		sc.Reason = models.ReasonBotMissingPermission
 		return sc
 	}
 	sc.Moderatable = true
@@ -645,6 +726,50 @@ func (h *Handler) execute(c *gin.Context, cl caller, action models.Action, dreq 
 		c.JSON(http.StatusUnprocessableEntity, gin.H{
 			"error": "moderators cannot act on " + dreq.Platform + " yet — ask the streamer to handle this one",
 			"code":  codeDelegationUnsupported,
+		})
+		return
+	case models.DispatchModNotLinked:
+		// The one Discord refusal the moderator can clear themselves, so it is the one that gets a
+		// 422 and copy addressed to them.
+		e.Outcome = audit.OutcomeDiscordLinkRequired
+		h.record(ctx, e)
+		c.JSON(http.StatusUnprocessableEntity, gin.H{
+			"error": "link your Discord account to moderate here — All-Chat checks your own server permissions before acting",
+			"code":  codeDiscordLinkRequired,
+		})
+		return
+	case models.DispatchModNotInGuild:
+		e.Outcome = audit.OutcomeModNotInGuild
+		h.record(ctx, e)
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": "you're not a member of this Discord server — ask the streamer to invite you",
+			"code":  codeModNotInGuild,
+		})
+		return
+	case models.DispatchModLacksPermission:
+		e.Outcome = audit.OutcomeModLacksPermission
+		h.record(ctx, e)
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": "your Discord roles don't allow this — ask the streamer to give you a role that can",
+			"code":  codeModLacksPermission,
+		})
+		return
+	case models.DispatchModBelowTarget:
+		// Naming the rule matters: this refusal looks arbitrary otherwise, and it is the one case
+		// where nothing about All-Chat is wrong — Discord would refuse it in its own client too.
+		e.Outcome = audit.OutcomeModBelowTarget
+		h.record(ctx, e)
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": "Discord's role hierarchy blocks this — your highest role has to sit above theirs",
+			"code":  codeModBelowTarget,
+		})
+		return
+	case models.DispatchBotMissingPermission:
+		e.Outcome = audit.OutcomeBotMissingPermission
+		h.record(ctx, e)
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": "the All-Chat bot wasn't given this permission — ask the streamer to re-invite it with moderation permissions",
+			"code":  codeBotMissingPermission,
 		})
 		return
 	case models.DispatchReauthRequired:

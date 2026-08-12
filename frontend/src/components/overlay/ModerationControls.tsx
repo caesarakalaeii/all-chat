@@ -86,6 +86,9 @@ export function ModerationControls({
   const showDelete = disabled || can('delete')
   const showUserActions = disabled || hasUserActions
 
+  // Each string names what stands in the way, and where the reader can act, who to ask. Sending
+  // someone at a fix that is not theirs to make is the failure mode the reason vocabulary exists
+  // to prevent (ADR-0048).
   const disabledReason = !platformSupported
     ? `${platformLabel(item.platform)} has no moderation API`
     : !capability
@@ -94,7 +97,13 @@ export function ModerationControls({
         ? 'Grant moderation permissions to enable mod actions'
         : capability.reason === 'unsupported_platform'
           ? `${platformLabel(item.platform)} has no moderation API`
-          : 'Moderation is unavailable for this source'
+          : capability.reason === 'needs_discord_link'
+            ? 'Link your Discord account to moderate here'
+            : capability.reason === 'owner_channel_unverified'
+              ? "This streamer's Discord account isn't connected, so nothing can be moderated here"
+              : capability.reason === 'bot_missing_permission'
+                ? "The All-Chat bot wasn't given this Discord permission — ask the streamer to re-invite it"
+                : 'Moderation is unavailable for this source'
 
   const closeAfter = (fn: () => void) => () => {
     fn()

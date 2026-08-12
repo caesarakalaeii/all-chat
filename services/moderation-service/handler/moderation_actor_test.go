@@ -206,3 +206,84 @@ func TestExecute_NoCredentialCopyDiffersByRole(t *testing.T) {
 		assert.Contains(t, body["error"], "do not hold moderator credentials")
 	})
 }
+
+// The five Discord refusals (ADR-0048's platform-attested leg).
+//
+// Discord is the one platform where All-Chat's own check is the only authority, so its refusals
+// have no platform message behind them — this mapping IS the explanation the person gets. What
+// each case must get right is WHO is told to do something: a volunteer sent to fix a permission
+// only the streamer controls has been given a dead end, which is the failure mode the whole reason
+// vocabulary exists to prevent.
+func TestExecute_DiscordRefusalsNameTheRightFixer(t *testing.T) {
+	cases := []struct {
+		name     string
+		outcome  models.DispatchOutcome
+		status   int
+		code     string
+		audited  string
+		mentions string
+	}{
+		{
+			name: "moderator has not linked Discord", outcome: models.DispatchModNotLinked,
+			status: http.StatusUnprocessableEntity, code: codeDiscordLinkRequired,
+			audited: audit.OutcomeDiscordLinkRequired, mentions: "your",
+		},
+		{
+			name: "moderator is not in the guild", outcome: models.DispatchModNotInGuild,
+			status: http.StatusForbidden, code: codeModNotInGuild,
+			audited: audit.OutcomeModNotInGuild, mentions: "streamer",
+		},
+		{
+			name: "moderator lacks the Discord permission", outcome: models.DispatchModLacksPermission,
+			status: http.StatusForbidden, code: codeModLacksPermission,
+			audited: audit.OutcomeModLacksPermission, mentions: "streamer",
+		},
+		{
+			name: "role hierarchy refuses", outcome: models.DispatchModBelowTarget,
+			status: http.StatusForbidden, code: codeModBelowTarget,
+			audited: audit.OutcomeModBelowTarget, mentions: "role",
+		},
+		{
+			name: "the bot was never given the permission", outcome: models.DispatchBotMissingPermission,
+			status: http.StatusForbidden, code: codeBotMissingPermission,
+			audited: audit.OutcomeBotMissingPermission, mentions: "re-invite",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h, _, rec := actorHandler(t, delegatedAccess(), models.DispatchResult{Outcome: tc.outcome})
+
+			resp := do(newTestRouter(h, modUserID, ""), http.MethodPost, deletePath(), deleteBody)
+
+			assert.Equal(t, tc.status, resp.Code)
+			var body map[string]any
+			require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &body))
+			assert.Equal(t, tc.code, body["code"])
+			assert.Contains(t, body["error"], tc.mentions, "the copy must name the person who can fix it")
+			assert.NotContains(t, body, "requires_reauth",
+				"no Discord refusal is fixed by an OAuth re-consent — the link stores no token and guild permissions are not scopes")
+			require.Len(t, rec.entries, 1, "a refusal is audited, never silently dropped")
+			assert.Equal(t, tc.audited, rec.entries[0].Outcome)
+			assert.Equal(t, repository.RoleModerator, rec.entries[0].ActorRole)
+		})
+	}
+}
+
+// No refusal may emit the reflect-back: the message is still there on Discord, and hiding it in the
+// overlay would tell the streamer an action landed that never did.
+func TestExecute_DiscordRefusalsEmitNoReflectBack(t *testing.T) {
+	for _, outcome := range []models.DispatchOutcome{
+		models.DispatchModNotLinked, models.DispatchModNotInGuild, models.DispatchModLacksPermission,
+		models.DispatchModBelowTarget, models.DispatchBotMissingPermission,
+	} {
+		access := delegatedAccess()
+		auth := &fakeAuthorizer{access: &access, isSource: map[string]bool{"twitch|somestreamer": true}}
+		emitter := &fakeEmitter{}
+		h := New(auth, emitter, &fakeRecorder{}, NoScopeChecker{}, &fakeDispatcher{res: models.DispatchResult{Outcome: outcome}}, zap.NewNop())
+
+		resp := do(newTestRouter(h, modUserID, ""), http.MethodPost, deletePath(), deleteBody)
+
+		require.NotEqual(t, http.StatusOK, resp.Code)
+		assert.Empty(t, emitter.published, "a refused action must not be reflected back as if it had landed")
+	}
+}

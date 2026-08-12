@@ -69,7 +69,13 @@ moderate** (`/moderate`). They act with **their own** platform accounts, so Twit
 moderator role on every single action and it lands in your native mod log under their name — never
 yours — and they never need a plan of their own. Connecting an account is deferred until the first
 time they moderate on it, and one connection covers every streamer who delegated that platform to
-them. Twitch is live today; Kick, YouTube and Discord moderation stays with you for now.
+them. Twitch and Discord are live today; Kick and YouTube moderation stays with you for now.
+
+Discord works a little differently, because Discord has no per-user moderation API: the All-Chat bot
+does the actual deleting and banning, so before it acts for someone it checks that *they* could do it
+themselves. Both of you link your Discord account once (**Settings → Discord**, and **Channels you
+moderate** for them), and from then on a moderator can only do what their own Discord roles allow —
+never more than the bot was invited with, and never to someone ranked above them.
 
 ### 3. Customize the look
 

@@ -50,9 +50,20 @@ const (
 	// can clear themselves (ADR-0048 defers consent to first use).
 	ReasonNeedsConsent = "needs_consent"
 	// ReasonNeedsDiscordLink: Discord has no per-user moderation API, so the shared bot acts and
-	// All-Chat must know which Discord account the moderator is. No such link exists today, so a
-	// moderator's Discord source always reports this — there is no consent flow to point them at.
+	// All-Chat must know which Discord account the MODERATOR is before it will check their server
+	// permissions. Theirs to clear, via the Discord account link.
 	ReasonNeedsDiscordLink = "needs_discord_link"
+	// ReasonOwnerChannelUnverified: the overlay OWNER cannot be shown to control this channel, so
+	// there is nothing for them to delegate on it (ADR-0048's owner-reach anchor). Kept apart from
+	// ReasonNeedsDiscordLink even though the same missing thing — a Discord account link — can
+	// cause both: the moderator can clear one and only the streamer can clear the other, and
+	// pointing a volunteer at a link flow that would change nothing is the dead end this whole
+	// vocabulary exists to avoid. Matches the action path's owner_channel_unverified code.
+	ReasonOwnerChannelUnverified = "owner_channel_unverified"
+	// ReasonBotMissingPermission: the All-Chat bot was invited to this Discord server without the
+	// permissions this grant covers, so nobody can borrow them. Cleared by the streamer
+	// re-inviting the bot — never by any OAuth re-consent, which cannot touch guild permissions.
+	ReasonBotMissingPermission = "bot_missing_permission"
 )
 
 // PlatformActions is the moderation support matrix per platform in All-Chat.
@@ -76,8 +87,14 @@ var PlatformActions = map[string][]Action{
 
 // SupportsAction reports whether the platform supports the given moderation action.
 func SupportsAction(platform string, a Action) bool {
-	for _, supported := range PlatformActions[platform] {
-		if supported == a {
+	return ActionsInclude(PlatformActions[platform], a)
+}
+
+// ActionsInclude reports whether an action set contains an action. The sets it is asked about are
+// at most four elements long, so a linear scan is the whole implementation.
+func ActionsInclude(actions []Action, a Action) bool {
+	for _, candidate := range actions {
+		if candidate == a {
 			return true
 		}
 	}
@@ -355,6 +372,38 @@ const (
 	// always the shared bot: without this, a delegated action would execute with the bot's full
 	// guild authority and no check that the moderator holds any of it.
 	DispatchDelegationUnsupported
+
+	// The four outcomes below are Discord's, and they exist because Discord is the one platform
+	// where no external party re-checks a delegated moderator (ADR-0048's platform-attested
+	// model). Everywhere else a refusal comes back from the platform and needs no vocabulary of
+	// its own; here All-Chat is the authority, so each way its own check can refuse has to be
+	// nameable — otherwise a volunteer is told "it didn't work" with no route to a fix, and the
+	// fixes genuinely differ.
+
+	// DispatchModNotLinked: the acting moderator has not linked a Discord account, so there is no
+	// snowflake to read their guild permissions against. Theirs to clear, and the only Discord
+	// outcome that is — which is why it is not folded into DispatchNoCredential: that one means a
+	// missing OAuth *credential*, and the Discord link deliberately stores no token at all, so the
+	// remedy is a different flow.
+	DispatchModNotLinked
+	// DispatchModNotInGuild: Discord answered 404 for the moderator in that guild. They are not a
+	// member, so they hold no permissions there and All-Chat must not lend them the bot's. Only
+	// the streamer can clear it, by inviting them to the server.
+	DispatchModNotInGuild
+	// DispatchModLacksPermission: the moderator is in the guild but could not perform this action
+	// themselves. The bot could — that is the point of the intersection: All-Chat never lets
+	// someone do through the bot what Discord would refuse them directly. The streamer clears it
+	// by giving them a role that carries the permission.
+	DispatchModLacksPermission
+	// DispatchModBelowTarget: Discord's role hierarchy refuses this member operation, because the
+	// moderator's highest role does not sit strictly above the target's. All-Chat has to evaluate
+	// this itself: Discord hierarchy-gates the *actor*, and on a delegated action the actor is the
+	// bot, which typically outranks everyone.
+	DispatchModBelowTarget
+	// DispatchBotMissingPermission: the bot itself was never invited with the permission this
+	// action needs, so no moderator can borrow it. The streamer clears it by re-inviting the bot —
+	// never an OAuth re-consent, which cannot touch guild permissions.
+	DispatchBotMissingPermission
 )
 
 // DispatchResult is what a Dispatcher reports back to the handler.

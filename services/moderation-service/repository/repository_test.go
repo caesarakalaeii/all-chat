@@ -35,6 +35,10 @@ const (
 	// adminActor stands in for an admin acting on the grant lifecycle; revoked_by carries no
 	// foreign key precisely so the trail survives the actor's account.
 	adminActor = "99999999-9999-9999-9999-999999999999"
+	// The owner's Discord side: the snowflake their account is linked to, and a guild they
+	// invited the bot to. Both anchor the Discord leg of delegation (ADR-0048).
+	ownerDiscordID = "300000000000000001"
+	ownerGuildID   = "877203185700339742"
 )
 
 func TestVerifyOverlayOwnership(t *testing.T) {
@@ -214,7 +218,21 @@ func setupTestRepo(t *testing.T) (*Repository, func()) {
 			verified_at TIMESTAMP,
 			last_denied_at TIMESTAMP,
 			PRIMARY KEY (grant_id, platform)
-		);`
+		);
+		CREATE TABLE discord_guilds (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			guild_id VARCHAR(30) NOT NULL,
+			guild_name VARCHAR(255) NOT NULL,
+			UNIQUE (user_id, guild_id)
+		);
+		CREATE TABLE discord_identities (
+			user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+			discord_user_id VARCHAR(30) NOT NULL,
+			discord_username VARCHAR(255)
+		);
+		CREATE UNIQUE INDEX uq_discord_identities_discord_user_id
+			ON discord_identities (discord_user_id);`
 	_, err = pool.Exec(ctx, schema)
 	require.NoError(t, err)
 
@@ -231,6 +249,17 @@ func setupTestRepo(t *testing.T) (*Repository, func()) {
 		($1, 'twitch', 'somestreamer', 'SomeStreamer'),
 		($1, 'tiktok', 'tiktokuser', 'TikTokUser'),
 		($1, 'shared_overlay', 'some-share-id', 'A Friend')`, overlayID)
+	require.NoError(t, err)
+
+	// The owner's Discord side: one linked account and one connected guild. The stranger has
+	// neither, so the "not linked" and "not connected" branches have a real subject too.
+	_, err = pool.Exec(ctx,
+		`INSERT INTO discord_identities (user_id, discord_user_id, discord_username) VALUES ($1, $2, 'thestreamer')`,
+		ownerID, ownerDiscordID)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx,
+		`INSERT INTO discord_guilds (user_id, guild_id, guild_name) VALUES ($1, $2, 'The Guild')`,
+		ownerID, ownerGuildID)
 	require.NoError(t, err)
 
 	return New(pool), func() {
