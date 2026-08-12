@@ -55,12 +55,10 @@ export default function ThemeContrastHarness() {
           <h2 className="mb-2 text-sm font-semibold text-text">
             {theme.name} <span className="font-mono text-xs text-text-dim">{theme.id}</span>
           </h2>
-          <ThemePreview
-            css={theme.css}
-            messages={SAMPLE_PREVIEW_MESSAGES}
-            themeId={theme.id}
-            height={260}
-          />
+          {/* `fit` (not a fixed height) so every sample — including the event row,
+              which sorts last — is laid out and measurable rather than clipped
+              inside a scroll container. */}
+          <ThemePreview css={theme.css} messages={SAMPLE_PREVIEW_MESSAGES} themeId={theme.id} fit />
         </section>
       ))}
     </main>

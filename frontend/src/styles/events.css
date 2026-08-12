@@ -120,164 +120,279 @@
 }
 
 @layer marketplace-themes {
-  /* Base event message styling - make events MUCH larger and more prominent */
+  /* ══════════════════════════════════════════════════════════════════════
+     TOKEN-DRIVEN EVENT CHROME
+     ══════════════════════════════════════════════════════════════════════
+
+     Every visual below reads a `--event-*` custom property whose fallback is
+     this file's own default, so an overlay with no theme renders unchanged.
+     A theme restyles events by SETTING TOKENS instead of re-declaring rules:
+
+       .event-message { --event-tier-high-bg: …; --event-accent-raid: …; }
+
+     …and flattens events into ordinary chat rows with the eight-line recipe
+     in EVENTS_CSS_API.md. Themes previously had to hunt down and `!important`
+     every rule in this block, which is why most of them didn't — a gold
+     glowing gift-bomb card would drop into an otherwise minimal overlay.
+
+     Token names are part of the frozen public API. See EVENTS_CSS_API.md.
+     ══════════════════════════════════════════════════════════════════════ */
+
+  /* Base event box. Sizing/blur default to the SAME `--chat-*` values the
+     visual customizer applies to chat bubbles, so an event follows the
+     overlay's look automatically; the tier/type rules below only layer the
+     accent colour, glow and animation on top. */
   .event-message {
     position: relative;
     overflow: hidden;
-    padding: 1.5rem;
-    min-height: 100px;
-    border-radius: 16px;
-    transform: scale(1.05);
+    min-height: var(--event-min-height, 100px);
+    padding: var(--event-padding, var(--chat-bubble-padding, 0.75rem));
+    border-radius: var(--event-radius, var(--chat-bubble-border-radius, 0.5rem));
+    border: var(--event-border-width, 3px) var(--event-border-style, solid)
+      var(--event-border-color, transparent);
+    background: var(--event-bg, transparent);
+    box-shadow: var(--event-glow, none);
+    backdrop-filter: blur(var(--event-backdrop-blur, var(--chat-backdrop-blur, 4px)));
+    transform: scale(var(--event-scale, 1.05));
     transition: all 0.3s ease-in-out;
-  }
-
-  /* Entrance animation for events */
-  .event-message {
-    animation: event-bounce-in 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    animation: var(--event-animation, event-bounce-in 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55));
   }
 
   /* Event tier styling - visual importance hierarchy */
   .event-tier-high {
-    background: linear-gradient(135deg, rgba(255, 215, 0, 0.25) 0%, rgba(255, 140, 0, 0.15) 100%);
-    border: 3px solid #ffd700;
-    box-shadow:
+    --event-bg: var(
+      --event-tier-high-bg,
+      linear-gradient(135deg, rgba(255, 215, 0, 0.25) 0%, rgba(255, 140, 0, 0.15) 100%)
+    );
+    --event-border-color: var(--event-tier-high-border, #ffd700);
+    --event-glow: var(
+      --event-tier-high-glow,
       0 0 30px rgba(255, 215, 0, 0.5),
       0 8px 32px rgba(0, 0, 0, 0.4),
-      inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  }
-
-  /* Pulsing glow for high-tier events */
-  .event-tier-high {
-    animation:
+      inset 0 1px 0 rgba(255, 255, 255, 0.1)
+    );
+    /* Pulsing glow for high-tier events */
+    --event-animation: var(
+      --event-tier-high-animation,
       event-bounce-in 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55),
-      high-tier-glow 2s ease-in-out infinite;
+      high-tier-glow 2s ease-in-out infinite
+    );
   }
 
   .event-tier-medium {
-    background: linear-gradient(135deg, rgba(147, 51, 234, 0.2) 0%, rgba(79, 70, 229, 0.15) 100%);
-    border: 3px solid #9333ea;
-    box-shadow:
+    --event-bg: var(
+      --event-tier-medium-bg,
+      linear-gradient(135deg, rgba(147, 51, 234, 0.2) 0%, rgba(79, 70, 229, 0.15) 100%)
+    );
+    --event-border-color: var(--event-tier-medium-border, #9333ea);
+    --event-glow: var(
+      --event-tier-medium-glow,
       0 0 25px rgba(147, 51, 234, 0.4),
-      0 6px 24px rgba(0, 0, 0, 0.3);
+      0 6px 24px rgba(0, 0, 0, 0.3)
+    );
   }
 
   .event-tier-low {
-    background: rgba(59, 130, 246, 0.15);
-    border: 2px solid #3b82f6;
-    box-shadow: 0 0 15px rgba(59, 130, 246, 0.3);
+    --event-bg: var(--event-tier-low-bg, rgba(59, 130, 246, 0.15));
+    --event-border-color: var(--event-tier-low-border, #3b82f6);
+    --event-border-width: var(--event-tier-low-border-width, 2px);
+    --event-glow: var(--event-tier-low-glow, 0 0 15px rgba(59, 130, 246, 0.3));
   }
 
-  /* Event title styling */
-  .event-title {
-    font-size: 1.125rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
-  }
-
-  /* Event value (Super Chat amount, etc.) */
-  .event-value {
-    text-shadow: 0 2px 12px rgba(255, 215, 0, 0.8);
-    font-weight: 800;
+  /* ── Per-type accent bar ────────────────────────────────────────────────
+     One shared rule draws the left bar; the per-type rules below only pick
+     its colour, so a theme recolours every event type from one token block
+     without repeating this selector list. */
+  .event-message[class*='subscription'],
+  .event-message[class*='super_chat'],
+  .event-message[class*='super_sticker'],
+  .event-message[class*='raid'],
+  .event-message[class*='bits'],
+  .event-message[class*='channel_points'],
+  .event-message[class*='gift'],
+  .event-message[class*='follow'],
+  .event-message[class*='like_aggregate'],
+  .event-message[class*='member'] {
+    border-left-width: var(--event-accent-width, 8px);
+    border-left-style: var(--event-border-style, solid);
+    border-left-color: var(--event-accent-color, var(--event-border-color, transparent));
   }
 
   /* Platform-specific event colors */
   .event-message[class*='subscription'],
   .event-message[class*='gift_subscription'] {
-    border-left: 8px solid #9146ff; /* Thicker Twitch purple */
+    --event-accent-color: var(--event-accent-subscription, #9146ff); /* Twitch purple */
   }
 
   .event-message[class*='super_chat'],
   .event-message[class*='super_sticker'] {
-    border-left: 8px solid #ffd700; /* Gold */
-    background: linear-gradient(135deg, rgba(255, 215, 0, 0.2), rgba(255, 0, 0, 0.1));
+    --event-accent-color: var(--event-accent-super-chat, #ffd700); /* Gold */
+    --event-bg: var(
+      --event-bg-super-chat,
+      linear-gradient(135deg, rgba(255, 215, 0, 0.2), rgba(255, 0, 0, 0.1))
+    );
   }
 
   .event-message[class*='raid'] {
-    border-left: 8px solid #ff4500; /* Orangered */
-    background: linear-gradient(135deg, rgba(255, 69, 0, 0.25), rgba(138, 43, 226, 0.15));
+    --event-accent-color: var(--event-accent-raid, #ff4500); /* Orangered */
+    --event-bg: var(
+      --event-bg-raid,
+      linear-gradient(135deg, rgba(255, 69, 0, 0.25), rgba(138, 43, 226, 0.15))
+    );
   }
 
   .event-message[class*='bits'] {
-    border-left: 8px solid #9146ff; /* Twitch purple */
-    background: linear-gradient(135deg, rgba(145, 70, 255, 0.2), rgba(0, 200, 255, 0.1));
+    --event-accent-color: var(--event-accent-bits, #9146ff); /* Twitch purple */
+    --event-bg: var(
+      --event-bg-bits,
+      linear-gradient(135deg, rgba(145, 70, 255, 0.2), rgba(0, 200, 255, 0.1))
+    );
   }
 
   .event-message[class*='channel_points'] {
-    border-left: 8px solid #00c8ff; /* Channel points blue */
+    --event-accent-color: var(--event-accent-channel-points, #00c8ff); /* Channel points blue */
   }
 
   .event-message[class*='gift'] {
-    border-left: 8px solid #ff69b4; /* Hot pink for gifts */
+    --event-accent-color: var(--event-accent-gift, #ff69b4); /* Hot pink for gifts */
   }
 
   .event-message[class*='follow'] {
-    border-left: 8px solid #1da1f2; /* Twitter blue */
+    --event-accent-color: var(--event-accent-follow, #1da1f2); /* Twitter blue */
   }
 
   .event-message[class*='like_aggregate'] {
-    border-left: 8px solid #fe2c55; /* TikTok pink */
+    --event-accent-color: var(--event-accent-like, #fe2c55); /* TikTok pink */
   }
 
   .event-message[class*='member'] {
-    border-left: 8px solid #00ff00; /* Green for memberships */
+    --event-accent-color: var(--event-accent-member, #00ff00); /* Green for memberships */
   }
+
+  /* ── Inner content ──────────────────────────────────────────────────── */
 
   /* Event icon animations - more dramatic */
   .event-icon {
-    display: inline-block;
-    filter: drop-shadow(0 2px 8px rgba(255, 255, 255, 0.3));
-    animation: event-icon-pulse 1.5s ease-in-out infinite;
+    display: var(--event-icon-display, inline-block);
+    font-size: var(--event-icon-size, 2.25rem);
+    line-height: 1;
+    filter: var(--event-icon-filter, drop-shadow(0 2px 8px rgba(255, 255, 255, 0.3)));
+    animation: var(--event-icon-animation, event-icon-pulse 1.5s ease-in-out infinite);
+  }
+
+  /* Event title styling */
+  .event-title {
+    display: var(--event-title-display, block);
+    font-family: var(--event-title-font, var(--chat-font-family, inherit));
+    font-size: var(--event-title-size, 1.125rem);
+    font-weight: var(--event-title-weight, 700);
+    text-transform: var(--event-title-transform, uppercase);
+    letter-spacing: var(--event-title-spacing, 0.05em);
+    color: var(--event-title-color, #ffffff);
+    text-shadow: var(--event-title-shadow, 0 2px 8px rgba(0, 0, 0, 0.5));
+  }
+
+  /* NOTE: there is no `.event-user` rule (and no such element) — an event row
+     carries the same header as a chat row, so the chatter's name comes from
+     `.chat-username` exactly like it does on a chat message. See the comment in
+     EventContent.tsx. `.event-user` is retained as a no-op hook name only: an
+     older `display: none` rule for it in a community theme still parses. */
+
+  /* Event value (Super Chat amount, etc.) */
+  .event-value {
+    display: var(--event-value-display, block);
+    font-size: var(--event-value-size, 1.5rem);
+    font-weight: var(--event-value-weight, 800);
+    color: var(--event-value-color, #fde047);
+    text-shadow: var(--event-value-shadow, 0 2px 12px rgba(255, 215, 0, 0.8));
+  }
+
+  /* The chatter's own message carried by the event (resub/announcement/watch
+     streak). Defaults to `inherit` so it picks up the overlay's message colour
+     instead of a hardcoded slate. */
+  .event-message-text {
+    margin-left: var(--event-indent, 3.5rem);
+    font-size: var(--event-text-size, 0.875rem);
+    color: var(--event-text-color, inherit);
+  }
+
+  .event-message-attachments {
+    margin-left: var(--event-indent, 3.5rem);
+  }
+
+  .event-metadata {
+    display: var(--event-metadata-display, block);
+    margin-left: var(--event-indent, 3.5rem);
+    font-size: var(--event-meta-size, 0.75rem);
+    color: var(--event-meta-color, #94a3b8);
+  }
+
+  .event-warning-message {
+    margin-left: var(--event-indent, 3.5rem);
   }
 
   /* TikTok like counter animation */
   .event-type-like_aggregate .event-icon {
-    animation: heartbeat 0.6s ease-in-out infinite;
+    --event-icon-animation: var(--event-like-icon-animation, heartbeat 0.6s ease-in-out infinite);
   }
 
-  /* Raid event special effect */
+  /* Raid event special effect. `--event-decor: none` removes every decorative
+     pseudo-element in one declaration (a `content` of `none` suppresses the
+     box entirely), which is what the flatten recipe uses. */
   .event-type-raid::before {
-    content: '';
+    content: var(--event-decor, '');
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    background: linear-gradient(
-      90deg,
-      rgba(255, 69, 0, 0) 0%,
-      rgba(255, 69, 0, 0.2) 50%,
-      rgba(255, 69, 0, 0) 100%
+    background: var(
+      --event-raid-sweep,
+      linear-gradient(
+        90deg,
+        rgba(255, 69, 0, 0) 0%,
+        rgba(255, 69, 0, 0.2) 50%,
+        rgba(255, 69, 0, 0) 100%
+      )
     );
-    animation: raid-sweep 2s ease-in-out infinite;
+    animation: var(--event-raid-sweep-animation, raid-sweep 2s ease-in-out infinite);
     pointer-events: none;
   }
 
   /* Super Chat tier colors (based on YouTube's official tiers) */
   .event-type-super_chat.event-tier-high {
-    background: linear-gradient(135deg, rgba(255, 0, 0, 0.2), rgba(255, 215, 0, 0.15));
-    border-color: #ffd700;
+    --event-bg: var(
+      --event-bg-super-chat-high,
+      linear-gradient(135deg, rgba(255, 0, 0, 0.2), rgba(255, 215, 0, 0.15))
+    );
+    --event-border-color: var(--event-tier-high-border, #ffd700);
   }
 
   /* Subscription gift bomb animation */
   .event-type-mystery_gift {
-    animation: gift-explosion 0.8s ease-out;
+    --event-animation: var(--event-mystery-gift-animation, gift-explosion 0.8s ease-out);
   }
 
-  /* Token expiration warning styling */
+  /* ── System notices ─────────────────────────────────────────────────────
+     Deliberately NOT tokenized down to the palette: these are the overlay
+     telling the streamer something is broken (expired token, missing bot
+     permission). They must stay alarming in every theme, so they keep their
+     own red/amber chrome and only honour the structural tokens. */
   .event-type-token_expiration_warning {
-    background: linear-gradient(135deg, rgba(239, 68, 68, 0.25) 0%, rgba(220, 38, 38, 0.15) 100%);
-    border: 3px solid #ef4444;
-    border-left: 8px solid #dc2626;
-    box-shadow:
-      0 0 30px rgba(239, 68, 68, 0.5),
-      0 8px 32px rgba(0, 0, 0, 0.4);
-    animation: warning-pulse 2s ease-in-out infinite;
+    --event-bg: linear-gradient(135deg, rgba(239, 68, 68, 0.25) 0%, rgba(220, 38, 38, 0.15) 100%);
+    --event-border-color: #ef4444;
+    --event-border-width: 3px;
+    --event-accent-color: #dc2626;
+    --event-accent-width: 8px;
+    --event-glow: 0 0 30px rgba(239, 68, 68, 0.5), 0 8px 32px rgba(0, 0, 0, 0.4);
+    --event-animation: warning-pulse 2s ease-in-out infinite;
+    border-left-width: var(--event-accent-width, 8px);
+    border-left-style: solid;
+    border-left-color: var(--event-accent-color);
   }
 
   .event-type-token_expiration_warning .event-icon {
-    animation: warning-shake 0.5s ease-in-out infinite;
+    --event-icon-animation: warning-shake 0.5s ease-in-out infinite;
   }
 
   .event-type-token_expiration_warning .event-warning-message {
@@ -289,12 +404,15 @@
 
   /* Listener deprecation (IRC retirement) migration notice — ADR-0026 */
   .event-type-listener_deprecation_notice {
-    background: linear-gradient(135deg, rgba(245, 158, 11, 0.22) 0%, rgba(217, 119, 6, 0.14) 100%);
-    border: 3px solid #f59e0b;
-    border-left: 8px solid #d97706;
-    box-shadow:
-      0 0 24px rgba(245, 158, 11, 0.4),
-      0 8px 32px rgba(0, 0, 0, 0.4);
+    --event-bg: linear-gradient(135deg, rgba(245, 158, 11, 0.22) 0%, rgba(217, 119, 6, 0.14) 100%);
+    --event-border-color: #f59e0b;
+    --event-border-width: 3px;
+    --event-accent-color: #d97706;
+    --event-accent-width: 8px;
+    --event-glow: 0 0 24px rgba(245, 158, 11, 0.4), 0 8px 32px rgba(0, 0, 0, 0.4);
+    border-left-width: var(--event-accent-width, 8px);
+    border-left-style: solid;
+    border-left-color: var(--event-accent-color);
   }
 
   .event-type-listener_deprecation_notice .event-warning-message {
@@ -307,6 +425,16 @@
   /* Customization helpers */
   .event-message .event-content {
     transition: all 0.3s ease-in-out;
+  }
+
+  /* Motion is decorative here — the event still reads as an event through its
+     accent, title and icon. Themes that opt back in can re-set the tokens. */
+  @media (prefers-reduced-motion: reduce) {
+    .event-message {
+      --event-animation: none;
+      --event-icon-animation: none;
+      --event-decor: none;
+    }
   }
 
   /* Support for custom CSS overrides */
@@ -339,8 +467,14 @@
     margin-top: var(--chat-message-gap, 0.75rem) !important;
   }
 
-  /* ── Message bubble ────────────────────────────────────────────────── */
-  .overlay-preview-body > div {
+  /* ── Message bubble ─────────────────────────────────────────────────────
+     Events are excluded on purpose. This block is `!important` inside a
+     cascade layer, which beats a theme's unlayered `!important` — so while it
+     matched `.event-message` it hard-pinned every event to the chat bubble's
+     border/padding, erasing the tier borders AND leaving theme authors with no
+     way to restyle them. Events get the same values as a *default* instead,
+     via `--event-*` in the marketplace-themes layer, where a theme can win. */
+  .overlay-preview-body > div:not(.event-message) {
     border-radius: var(--chat-bubble-border-radius, 0.5rem) !important;
     border-width: var(--chat-bubble-border-width, 0px) !important;
     border-color: var(--chat-bubble-border-color, transparent) !important;
@@ -377,23 +511,35 @@
   .overlay-preview-body .flex.gap-1 img {
     width: var(--chat-badge-size, 1rem) !important;
     height: var(--chat-badge-size, 1rem) !important;
-    margin-top: calc((var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2) !important;
-    margin-bottom: calc((var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2) !important;
+    margin-top: calc(
+      (var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2
+    ) !important;
+    margin-bottom: calc(
+      (var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2
+    ) !important;
   }
 
   /* ── Platform badge (TWITCH/YOUTUBE pill or icon) ──────────────────── */
   .overlay-preview-body .platform-badge-text {
     font-size: var(--chat-badge-size, 0.75rem) !important;
     line-height: 1 !important;
-    margin-top: calc((var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 0.75rem)) / 2) !important;
-    margin-bottom: calc((var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 0.75rem)) / 2) !important;
+    margin-top: calc(
+      (var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 0.75rem)) / 2
+    ) !important;
+    margin-bottom: calc(
+      (var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 0.75rem)) / 2
+    ) !important;
   }
   .overlay-preview-body .platform-badge-icon svg,
   .overlay-preview-body .platform-badge-icon img {
     width: var(--chat-badge-size, 1rem) !important;
     height: var(--chat-badge-size, 1rem) !important;
-    margin-top: calc((var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2) !important;
-    margin-bottom: calc((var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2) !important;
+    margin-top: calc(
+      (var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2
+    ) !important;
+    margin-bottom: calc(
+      (var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2
+    ) !important;
   }
 
   /* ── Username ──────────────────────────────────────────────────────── */
@@ -476,8 +622,9 @@
     margin-top: var(--chat-message-gap, 0.75rem) !important;
   }
 
-  /* ── Message bubble ────────────────────────────────────────────────── */
-  .overlay-live-body > div {
+  /* ── Message bubble ─────────────────────────────────────────────────────
+     `:not(.event-message)` for the same reason as the preview block above. */
+  .overlay-live-body > div:not(.event-message) {
     border-radius: var(--chat-bubble-border-radius, 0.5rem) !important;
     border-width: var(--chat-bubble-border-width, 0px) !important;
     border-color: var(--chat-bubble-border-color, transparent) !important;
@@ -504,23 +651,35 @@
   .overlay-live-body .flex.gap-1 img {
     width: var(--chat-badge-size, 1rem) !important;
     height: var(--chat-badge-size, 1rem) !important;
-    margin-top: calc((var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2) !important;
-    margin-bottom: calc((var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2) !important;
+    margin-top: calc(
+      (var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2
+    ) !important;
+    margin-bottom: calc(
+      (var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2
+    ) !important;
   }
 
   /* ── Platform badge (TWITCH/YOUTUBE pill or icon) ──────────────────── */
   .overlay-live-body .platform-badge-text {
     font-size: var(--chat-badge-size, 0.75rem) !important;
     line-height: 1 !important;
-    margin-top: calc((var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 0.75rem)) / 2) !important;
-    margin-bottom: calc((var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 0.75rem)) / 2) !important;
+    margin-top: calc(
+      (var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 0.75rem)) / 2
+    ) !important;
+    margin-bottom: calc(
+      (var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 0.75rem)) / 2
+    ) !important;
   }
   .overlay-live-body .platform-badge-icon svg,
   .overlay-live-body .platform-badge-icon img {
     width: var(--chat-badge-size, 1rem) !important;
     height: var(--chat-badge-size, 1rem) !important;
-    margin-top: calc((var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2) !important;
-    margin-bottom: calc((var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2) !important;
+    margin-top: calc(
+      (var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2
+    ) !important;
+    margin-bottom: calc(
+      (var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2
+    ) !important;
   }
 
   /* ── Username ──────────────────────────────────────────────────────── */
@@ -569,28 +728,35 @@
   }
 }
 
+/*
+ * Per-event-type visibility + size controls.
+ *
+ * The size modifiers fall back to `--event-scale` (not a literal 1.05) so a
+ * theme that flattens events with `--event-scale: 1` also flattens these five
+ * types; an explicitly-set customizer modifier still wins over the theme.
+ */
 @layer visual-customizer {
   .event-message[class*='super_chat'],
   .event-message[class*='super_sticker'] {
     display: var(--chat-show-super-chat, block);
-    transform: scale(var(--chat-super-chat-size-modifier, 1.05));
+    transform: scale(var(--chat-super-chat-size-modifier, var(--event-scale, 1.05)));
   }
   .event-message[class*='subscription'],
   .event-message[class*='gift_subscription'] {
     display: var(--chat-show-subscriptions, block);
-    transform: scale(var(--chat-subscription-size-modifier, 1.05));
+    transform: scale(var(--chat-subscription-size-modifier, var(--event-scale, 1.05)));
   }
   .event-message[class*='raid'] {
     display: var(--chat-show-raids, block);
-    transform: scale(var(--chat-raid-size-modifier, 1.05));
+    transform: scale(var(--chat-raid-size-modifier, var(--event-scale, 1.05)));
   }
   .event-message[class*='bits'] {
     display: var(--chat-show-bits, block);
-    transform: scale(var(--chat-bits-size-modifier, 1.05));
+    transform: scale(var(--chat-bits-size-modifier, var(--event-scale, 1.05)));
   }
   .event-message[class*='member'],
   .event-message[class*='gift'] {
     display: var(--chat-show-membership-gift, block);
-    transform: scale(var(--chat-membership-gift-size-modifier, 1.05));
+    transform: scale(var(--chat-membership-gift-size-modifier, var(--event-scale, 1.05)));
   }
 }

@@ -25,7 +25,11 @@ body {
   gap: var(--chat-message-gap, 14px) !important;
 }
 
-.chat-message {
+/* Events are cards too — same white slab, same thick ink, same hard shadow.
+   Without this they fall back to the platform default (soft gold gradient,
+   rounded, glowing), which is the exact opposite of brutalist. */
+.chat-message,
+.event-message {
   background: #ffffff !important;
   border: 3px solid #000000 !important;
   border-radius: 4px !important;
@@ -111,4 +115,53 @@ body {
   font-size: var(--chat-timestamp-font-size, 10px) !important;
   text-transform: uppercase !important;
   letter-spacing: 0.05em !important;
+}
+
+/* ============================================================
+   EVENTS - SOLID COLOUR SLABS
+   ============================================================
+   Same slab, filled with a flat type colour and a fat black left edge.
+   Tokens: AUTHORING-EVENTS.md
+   ============================================================ */
+
+.event-message {
+  --event-scale: 1;
+  --event-min-height: 0;
+  --event-animation: brutalPop 0.18s ease-out;
+  --event-icon-animation: none;
+  --event-icon-filter: none;
+  --event-icon-size: 1.7rem;
+  --event-decor: none;
+
+  --event-title-font: 'Space Grotesk', sans-serif;
+  --event-title-size: 16px;
+  --event-title-weight: 700;
+  --event-title-spacing: 0.04em;
+  --event-title-color: #000000;
+  --event-title-shadow: none;
+  --event-value-size: 22px;
+  --event-value-weight: 700;
+  --event-value-color: #000000;
+  --event-value-shadow: none;
+  --event-text-size: 15px;
+  --event-text-color: #111111;
+  --event-meta-color: #333333;
+  --event-indent: 2.6rem;
+
+  --event-accent-subscription: #ff5da2;
+  --event-accent-bits: #4dd2ff;
+  --event-accent-raid: #ff8a3d;
+  --event-accent-super-chat: #ffd23f;
+  --event-accent-channel-points: #4dd2ff;
+  --event-accent-gift: #ff5da2;
+  --event-accent-follow: #4dd2ff;
+  --event-accent-like: #ff5da2;
+  --event-accent-member: #7ef29d;
+}
+
+/* Flat colour fill + chunky left edge, hard shadow in the same colour */
+.space-y-3 > div.event-message {
+  background: var(--event-accent-color, #ffd23f) !important;
+  border-left-width: 12px !important;
+  box-shadow: 6px 6px 0 #000000 !important;
 }

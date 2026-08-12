@@ -8,6 +8,7 @@ Custom CSS themes for your All-Chat overlays in OBS. These themes allow you to c
 
 **For developers and advanced customization**, see these guides:
 - **[CSS Customization Guide](../CSS_CUSTOMIZATION.md)** - Complete DOM structure, CSS classes, and advanced techniques
+- **[Styling events in a theme](./AUTHORING-EVENTS.md)** - The `--event-*` tokens; **required reading if you add a theme**
 - **[Platform Badge Customization](../PLATFORM_BADGE_CUSTOMIZATION.md)** - Platform badge position and style options
 
 **This page** focuses on quick theme application and basic customization.
@@ -256,6 +257,18 @@ Based on the current overlay implementation (`frontend/src/app/overlay/[id]/page
 
 #### Timestamp
 - `.text-xs.text-gray-500` - Timestamp text
+
+#### Events (subs, raids, redemptions)
+- `.event-message` - Event row wrapper (instead of `.chat-message`)
+- `.event-tier-{low|medium|high}`, `.event-type-{type}` - Importance and event type
+- `.event-icon`, `.event-title`, `.event-value`, `.event-metadata` - Inner content
+- `--event-*` custom properties - How you actually restyle them
+
+**A theme that styles only chat leaves events in the platform default** (a
+scaled-up gold gradient card with a glow and a bounce), which looks like a
+different product dropped into your overlay. See
+**[AUTHORING-EVENTS.md](./AUTHORING-EVENTS.md)** for the token table and a
+copy-paste recipe; a test fails if a bundled theme has no event styling.
 
 ### Theme Template
 

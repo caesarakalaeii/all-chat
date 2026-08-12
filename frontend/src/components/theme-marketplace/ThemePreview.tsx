@@ -27,12 +27,37 @@
 import { useEffect, useState } from 'react'
 import clsx from 'clsx'
 import type { ChatMessagePreview } from '@/lib/theme-marketplace/types'
+import type { ChatMessage } from '@/lib/types/message'
 import { PLATFORM_COLORS, type Platform } from '@/lib/platform-colors'
 import { rewriteThemeFontImports } from '@/lib/theme-marketplace/font-proxy'
+import { scopeCustomCss } from '@/lib/theme-marketplace/scope-css'
 import { PlatformGlyph } from '@/components/overlay/PlatformGlyph'
+import { EventContent } from '@/components/overlay/EventContent'
 
 /** Static sample time for the preview timestamp — deterministic (no Date() in render). */
 const SAMPLE_TIME = '12:34'
+
+/**
+ * Widen a preview message to the renderer's `ChatMessage`.
+ *
+ * `ChatMessagePreview` mirrors `ChatMessage` field-for-field for everything the
+ * event renderer touches, so this only fills in the handful of fields previews
+ * never carry — no cast, no divergence.
+ */
+const toChatMessage = (msg: ChatMessagePreview): ChatMessage => ({
+  ...msg,
+  user: { ...msg.user },
+  message: { ...msg.message },
+})
+
+/**
+ * Row classes, matching the live overlay's wrapper exactly — an event is
+ * `.event-message` plus its tier and type, never `.chat-message`.
+ */
+const rowClasses = (msg: ChatMessagePreview): string[] =>
+  msg.event
+    ? ['event-message', `event-tier-${msg.event.tier}`, `event-type-${msg.event.type}`]
+    : ['chat-message', 'rounded-lg', 'bg-slate-900/90', 'p-3', 'shadow-lg', 'backdrop-blur-sm']
 
 interface ThemePreviewProps {
   css: string
@@ -48,45 +73,6 @@ interface ThemePreviewProps {
    *  empty padding) — used by the landing carousel so each theme shows at its true
    *  height. Defaults to false (fixed-height, scrollable marketplace card). */
   fit?: boolean
-}
-
-/**
- * Scope CSS to prevent leaking outside preview container
- * (Reused from preview page)
- */
-const scopeCustomCss = (css: string, scopeSelector: string, bodySelector: string): string => {
-  if (!css.trim()) {
-    return ''
-  }
-
-  const replaceBody = css.replace(/:root/gi, scopeSelector).replace(/\bbody\b/gi, bodySelector)
-
-  return replaceBody.replace(/(^|}|{)\s*([^@}{]+)\s*{/g, (match, prefix, selectorGroup) => {
-    const trimmed = selectorGroup.trim()
-    if (!trimmed) {
-      return match
-    }
-
-    const isKeyframeStep =
-      ['from', 'to'].includes(trimmed.toLowerCase()) || /^\d+\.?\d*%$/i.test(trimmed)
-    if (isKeyframeStep) {
-      return `${prefix} ${trimmed} {`
-    }
-
-    const scopedSelectors = trimmed
-      .split(',')
-      .map((selector: string) => {
-        const sel = selector.trim()
-        if (!sel || sel.startsWith(scopeSelector) || sel.startsWith(bodySelector)) {
-          return sel
-        }
-        return `${scopeSelector} ${sel}`
-      })
-      .filter(Boolean)
-      .join(', ')
-
-    return `${prefix} ${scopedSelectors} {`
-  })
 }
 
 export default function ThemePreview({
@@ -152,8 +138,9 @@ export default function ThemePreview({
             <div
               key={msg.id}
               data-platform={msg.platform}
+              data-event-type={msg.event?.type}
               data-username={msg.user.username}
-              className="chat-message rounded-lg bg-slate-900/90 p-3 shadow-lg backdrop-blur-sm"
+              className={clsx(rowClasses(msg))}
             >
               <div className="flex items-start gap-3">
                 {/* Avatar */}
@@ -218,9 +205,11 @@ export default function ThemePreview({
                     </span>
                   </div>
 
-                  {/* Message text */}
+                  {/* Message text — or the shared event renderer, exactly as the
+                      live overlay nests it (inside `.break-words`), so an event
+                      previews with the theme's own message colour and typography. */}
                   <div className="break-words text-white" style={{ fontSize: '16px' }}>
-                    {msg.message.text}
+                    {msg.event ? <EventContent message={toChatMessage(msg)} /> : msg.message.text}
                   </div>
 
                   {/* Timestamp */}
