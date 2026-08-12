@@ -135,7 +135,7 @@ Admin **impersonation** is allowed but always attributed: the action runs as the
 | Platform | Actions | Status |
 |---|---|---|
 | Twitch | delete, timeout, ban, unban | **live** — real Helix calls via the broadcaster's own token (scope-gated) |
-| Kick | timeout, ban, unban | **live** — real Kick API via the broadcaster's own token (`moderation:ban` scope-gated); no single-message delete |
+| Kick | delete, timeout, ban, unban | **live** — real Kick API via the broadcaster's own token. Two independent scopes: `moderation:ban` (timeout/ban/unban) and `moderation:chat_message:manage` (delete). A streamer who consented before delete existed holds only the first, so their capability legitimately reports no delete until they re-consent |
 | Discord | delete, timeout, ban, unban | **live** — bot REST (delete `messages`, member `communication_disabled_until`/`bans`); each action gated by the bot's effective guild permission |
 | YouTube | ban | **live** — `liveChatBans.insert` via the broadcaster's own token (`force-ssl` scope-gated); ban-only (unban needs the ban resource id, deferred); liveChatId from the listener's Redis cache; quota-accounted (ADR-0006) |
 | TikTok | — | unsupported (no moderation API) — reported `unsupported_platform` |
@@ -151,8 +151,8 @@ Moderation OAuth scopes are **opt-in and least-privilege**: requested only via a
 flow (`GET /api/v1/auth/{twitch,kick,youtube}/moderation/:overlay_id?actions=…` on the auth-service), per
 platform/account, minimised to the enabled actions and unioned with the existing grant so the new token
 is always a superset. Twitch splits delete (`moderator:manage:chat_messages`) from ban/timeout/unban
-(`moderator:manage:banned_users`); Kick gates ban/timeout/unban behind one scope (`moderation:ban`);
-YouTube re-adds `youtube.force-ssl` (dropped at login per ADR-0012) for ban.
+(`moderator:manage:banned_users`); Kick splits them the same way (`moderation:chat_message:manage` vs
+`moderation:ban`); YouTube re-adds `youtube.force-ssl` (dropped at login per ADR-0012) for ban.
 `granted_scopes` is the source of truth; the capabilities endpoint reports `missing_scope` until they
 are granted, and the dispatcher pre-checks scopes before any platform call. **Discord is the
 exception**: its authority is a shared bot token (a service credential), not a per-user OAuth grant, so
@@ -244,7 +244,8 @@ no redeploy. Locally, non-premium users can either set `users.is_premium=true` o
   platforms without a client yet. **Scope-gated: inert until a streamer opts in.** Also **cohort-gated**
   behind the `moderation` feature gate (see Rollout above).
 - **Phase 2 (done): Kick + Discord.** Kick mirrors the Twitch pattern (broadcaster's own token,
-  `moderation:ban` scope, opt-in re-consent; ban/timeout/unban — Kick has no single-message delete).
+  `moderation:ban` scope, opt-in re-consent; ban/timeout/unban — believed at the time to be Kick's
+  whole moderation surface; single-message delete was added later, see the Kick delete entry below).
   Discord shipped delete-only via a shared bot token (no per-user OAuth). To make deletions reflect on the
   OBS overlay for non-Twitch platforms (whose listeners don't populate the msgid registry), the delete
   command now threads the internal `target_uuid` through the `message_deletion` event and the
@@ -273,6 +274,12 @@ no redeploy. Locally, non-premium users can either set `users.is_premium=true` o
   **Kick and YouTube legs are not built**: a delegated action on those refuses with
   `delegation_unsupported` rather than falling through to whatever credential the dispatcher would
   otherwise reach for.
+- **Kick single-message delete (done).** Deliberately its own change, not part of the delegation
+  work: it is an owner-facing capability correction, so it must not be coupled to a feature that
+  might be rolled back. Kick does expose `DELETE /public/v1/chat/{message_id}`, behind a second
+  scope (`moderation:chat_message:manage`) — the repo had recorded the endpoint as nonexistent. The
+  message id is Kick's own message UUID, which is already what All-Chat uses as the message id, so
+  the delete path needed no new plumbing through the pipeline.
 
 ## Layout
 

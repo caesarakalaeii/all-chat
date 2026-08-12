@@ -63,6 +63,7 @@ type fakeKickAPI struct {
 	broadcaster string
 	target      string
 	duration    int
+	messageID   string
 }
 
 func (f *fakeKickAPI) next(token, broadcaster string) error {
@@ -87,6 +88,13 @@ func (f *fakeKickAPI) BanUser(_ context.Context, token, b, target, _ string) err
 func (f *fakeKickAPI) UnbanUser(_ context.Context, token, b, target string) error {
 	f.method, f.target = "unban", target
 	return f.next(token, b)
+}
+
+// Delete addresses the message directly, so unlike every other Kick call it is handed no
+// broadcaster id at all.
+func (f *fakeKickAPI) DeleteMessage(_ context.Context, token, messageID string) error {
+	f.method, f.messageID = "delete", messageID
+	return f.next(token, "")
 }
 
 func kickCredWith(scopes ...string) *tokens.KickCredential {
@@ -147,6 +155,31 @@ func TestKickDispatch_TimeoutThreadsDuration(t *testing.T) {
 	assert.Equal(t, models.DispatchPerformed, res.Outcome)
 	assert.Equal(t, "timeout", api.method)
 	assert.Equal(t, 600, api.duration, "duration (seconds) is threaded to the client, which converts to minutes")
+}
+
+func TestKickDispatch_DeletePerformed(t *testing.T) {
+	api := &fakeKickAPI{results: []error{nil}}
+	d := NewKick(&fakeKickTokens{cred: kickCredWith(models.ScopeKickChatMessageManage)}, api, zap.NewNop())
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionDelete,
+		models.DispatchRequest{Platform: "kick", ChannelID: "c", NativeMessageID: "kick-msg-1"})
+	require.NoError(t, err)
+	assert.Equal(t, models.DispatchPerformed, res.Outcome)
+	assert.Equal(t, "delete", api.method)
+	assert.Equal(t, "kick-msg-1", api.messageID)
+}
+
+// The two Kick scopes are granted independently, so the ban scope must not open delete.
+// Every streamer who consented before delete existed holds exactly this credential.
+func TestKickDispatch_BanScopeAloneDoesNotAuthorizeDelete(t *testing.T) {
+	api := &fakeKickAPI{}
+	d := NewKick(&fakeKickTokens{cred: kickCredWith(models.ScopeKickModeration)}, api, zap.NewNop())
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionDelete,
+		models.DispatchRequest{Platform: "kick", ChannelID: "c", NativeMessageID: "kick-msg-1"})
+	require.NoError(t, err)
+	assert.Equal(t, models.DispatchReauthRequired, res.Outcome)
+	assert.Equal(t, []string{models.ScopeKickChatMessageManage}, res.MissingScopes,
+		"the prompt must name the message scope, not the ban scope the token already has")
+	assert.Zero(t, api.calls)
 }
 
 func TestKickDispatch_UnauthorizedRefreshesAndRetries(t *testing.T) {

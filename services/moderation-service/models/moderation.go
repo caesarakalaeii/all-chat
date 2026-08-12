@@ -73,7 +73,12 @@ const (
 // streamer's channel (least-privilege / owner-only authorization).
 var PlatformActions = map[string][]Action{
 	"twitch": {ActionDelete, ActionTimeout, ActionBan, ActionUnban},
-	"kick":   {ActionTimeout, ActionBan, ActionUnban},
+	// Kick supports the full set, across two scopes: delete needs
+	// moderation:chat_message:manage, the rest moderation:ban. Delete was believed absent
+	// until ADR-0048 found the endpoint; a streamer who consented before then holds only
+	// the ban scope, which is why the scope→action mapping decides per scope rather than
+	// per platform (see ActionsForKickScopes).
+	"kick": {ActionDelete, ActionTimeout, ActionBan, ActionUnban},
 	// Discord supports the full set via guild-level bot permissions (MANAGE_MESSAGES
 	// for delete, MODERATE_MEMBERS for timeout, BAN_MEMBERS for ban/unban). Which of
 	// these a given source can actually use depends on the bot's effective permissions
@@ -186,22 +191,36 @@ func scopesContain(scopes []string, want string) bool {
 	return false
 }
 
-// Kick moderation OAuth scope. Kick's public API gates ban/timeout/unban behind a
-// single scope; there is no single-message delete endpoint, so Kick never grants
-// ActionDelete (see PlatformActions["kick"]). Requested only through the opt-in
-// re-consent flow (never bundled into login/add-source), per ADR-0017.
-const ScopeKickModeration = "moderation:ban"
+// Kick moderation OAuth scopes. Kick splits moderation across two: ban/timeout/unban sit
+// behind moderation:ban, and single-message delete behind moderation:chat_message:manage.
+// Both are requested only through the opt-in re-consent flow (never bundled into
+// login/add-source), per ADR-0017.
+const (
+	// ScopeKickModeration permits timeout/ban/unban ("Execute ban/unban actions on users").
+	ScopeKickModeration = "moderation:ban"
+	// ScopeKickChatMessageManage permits deleting individual chat messages ("Execute
+	// moderation actions on chat messages"). Kick's single-message delete was long recorded
+	// here as nonexistent; the endpoint is DELETE /public/v1/chat/{message_id} and this is
+	// the scope that opens it.
+	ScopeKickChatMessageManage = "moderation:chat_message:manage"
+)
 
 // ActionsForKickScopes maps a Kick token's granted scopes to moderation actions. The
 // result is a subset of PlatformActions["kick"], so the UI only enables what the
-// granted scope allows.
+// granted scopes allow.
+//
+// Per scope, not per platform: the two Kick scopes are granted independently, and every
+// streamer who consented before delete existed holds only moderation:ban. Reporting
+// delete for them would enable a button whose call Kick refuses.
 func ActionsForKickScopes(scopes []string) []Action {
-	for _, s := range scopes {
-		if s == ScopeKickModeration {
-			return []Action{ActionTimeout, ActionBan, ActionUnban}
-		}
+	var out []Action
+	if scopesContain(scopes, ScopeKickChatMessageManage) {
+		out = append(out, ActionDelete)
 	}
-	return nil
+	if scopesContain(scopes, ScopeKickModeration) {
+		out = append(out, ActionTimeout, ActionBan, ActionUnban)
+	}
+	return out
 }
 
 // RequiredKickScope returns the Kick OAuth scope an action needs, or "" if the action
@@ -209,6 +228,8 @@ func ActionsForKickScopes(scopes []string) []Action {
 // the Kick API and to populate missing_scopes on a re-consent prompt.
 func RequiredKickScope(a Action) string {
 	switch a {
+	case ActionDelete:
+		return ScopeKickChatMessageManage
 	case ActionTimeout, ActionBan, ActionUnban:
 		return ScopeKickModeration
 	default:

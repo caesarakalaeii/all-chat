@@ -94,10 +94,16 @@ func (k *KickOAuth) GetAuthURL(state string) string {
 const KickSendScope = "chat:write"
 
 // kickModerationScopeByAction maps a moderation action to the Kick OAuth scope it
-// requires. Kick gates ban/timeout/unban behind a single scope and has no
-// single-message delete, so delete maps to nothing. Requested ONLY through the opt-in
-// moderation re-consent flow, never bundled into login/add-source (ADR-0017).
+// requires. Kick splits moderation across two scopes: ban/timeout/unban behind
+// moderation:ban, and single-message delete behind moderation:chat_message:manage
+// (DELETE /public/v1/chat/{message_id}). Requested ONLY through the opt-in moderation
+// re-consent flow, never bundled into login/add-source (ADR-0017).
+//
+// Because they are separate grants, a streamer who consented before delete existed holds
+// only moderation:ban — enabling delete asks them to re-consent for the second scope, and
+// until they do their token legitimately cannot delete.
 var kickModerationScopeByAction = map[string]string{
+	"delete":  "moderation:chat_message:manage",
 	"timeout": "moderation:ban",
 	"ban":     "moderation:ban",
 	"unban":   "moderation:ban",

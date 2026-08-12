@@ -35,9 +35,10 @@ type kickTokenSource interface {
 	Refresh(ctx context.Context, cred *tokens.KickCredential) error
 }
 
-// kickAPI is the subset of clients.KickClient the dispatcher calls. Kick has no
-// single-message delete endpoint, so there is no DeleteMessage.
+// kickAPI is the subset of clients.KickClient the dispatcher calls. DeleteMessage takes no
+// broadcaster id: Kick addresses the message directly, and the channel is implied by it.
 type kickAPI interface {
+	DeleteMessage(ctx context.Context, token, messageID string) error
 	TimeoutUser(ctx context.Context, token, broadcasterID, targetUserID string, durationSeconds int, reason string) error
 	BanUser(ctx context.Context, token, broadcasterID, targetUserID, reason string) error
 	UnbanUser(ctx context.Context, token, broadcasterID, targetUserID string) error
@@ -124,6 +125,8 @@ func (d *Kick) Dispatch(ctx context.Context, actor models.Actor, action models.A
 // call routes an action to the matching Kick endpoint.
 func (d *Kick) call(ctx context.Context, action models.Action, cred *tokens.KickCredential, req models.DispatchRequest) error {
 	switch action {
+	case models.ActionDelete:
+		return d.api.DeleteMessage(ctx, cred.AccessToken, req.NativeMessageID)
 	case models.ActionTimeout:
 		return d.api.TimeoutUser(ctx, cred.AccessToken, cred.BroadcasterID, req.TargetUserID, req.DurationSeconds, req.Reason)
 	case models.ActionBan:

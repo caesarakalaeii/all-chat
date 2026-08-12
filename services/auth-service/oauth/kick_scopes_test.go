@@ -33,8 +33,13 @@ func TestKickModerationScopesForActions(t *testing.T) {
 	}{
 		{"ban only", []string{"ban"}, []string{"moderation:ban"}},
 		{"timeout/ban/unban share one scope", []string{"timeout", "ban", "unban"}, []string{"moderation:ban"}},
-		{"delete is unsupported on kick and ignored", []string{"delete"}, []string{}},
-		{"delete + ban yields only the ban scope", []string{"delete", "ban"}, []string{"moderation:ban"}},
+		{"delete has its own scope", []string{"delete"}, []string{"moderation:chat_message:manage"}},
+		{
+			"delete + ban asks for both, since Kick grants them separately",
+			[]string{"delete", "ban"},
+			[]string{"moderation:chat_message:manage", "moderation:ban"},
+		},
+		{"unknown actions are ignored", []string{"engagement"}, []string{}},
 		{"empty input yields nothing", nil, []string{}},
 	}
 	for _, tt := range tests {
