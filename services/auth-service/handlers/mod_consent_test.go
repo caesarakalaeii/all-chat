@@ -217,16 +217,62 @@ func TestHandleModConsent_KickStashesThePKCEVerifier(t *testing.T) {
 	assert.NotEmpty(t, verifier)
 }
 
-// A platform whose leg has not landed must say so rather than issue a consent screen that cannot
-// be completed. YouTube is that platform until its write path is finished.
-func TestHandleModConsent_UnlandedPlatformIsRefused(t *testing.T) {
+// --- YouTube ----------------------------------------------------------------
+
+// youtubeModConsentHandler adds the YouTube provider, which the base fixture leaves out so the
+// "platform not configured" case stays testable.
+func youtubeModConsentHandler(t *testing.T) *PlatformAuthHandlerV2 {
+	t.Helper()
 	h := modConsentTestHandler(t)
 	h.providers[oauth.PlatformYouTube] = oauth.NewYouTubeOAuth("yt-id", "yt-secret", "https://allch.at/cb")
+	return h
+}
+
+// One scope covers YouTube moderation, plus the identity read the callback needs to know which
+// Google account consented. What must NOT appear is youtube.readonly: it exists so the listener can
+// poll a streamer's own chat, and asking a volunteer for read access to their channel is an
+// ADR-0012 regression that nothing in the moderation path needs.
+func TestHandleModConsent_YouTubeRequestsForceSSLAndIdentityOnly(t *testing.T) {
+	h := youtubeModConsentHandler(t)
 
 	w := startModConsent(t, h, oauth.PlatformYouTube, "mod-user-1", "ban")
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	u := authURLFrom(t, w)
+	scopes := strings.Fields(u.Query().Get("scope"))
+	assert.ElementsMatch(t, []string{
+		"https://www.googleapis.com/auth/youtube.force-ssl",
+		oauth.YouTubeIdentityScope,
+	}, scopes)
+	assert.NotContains(t, scopes, "https://www.googleapis.com/auth/youtube.readonly",
+		"the listener's polling scope must not appear on a volunteer's consent screen")
+}
+
+// Without prompt=consent an already-connected Google account is silently reissued its old, narrower
+// grant, so force-ssl would never actually be requested; without offline access there is no refresh
+// token, so the credential would die at the first expiry.
+func TestHandleModConsent_YouTubeForcesConsentAndOfflineAccess(t *testing.T) {
+	h := youtubeModConsentHandler(t)
+
+	w := startModConsent(t, h, oauth.PlatformYouTube, "mod-user-1", "timeout")
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	q := authURLFrom(t, w).Query()
+	assert.Equal(t, "consent", q.Get("prompt"))
+	assert.Equal(t, "offline", q.Get("access_type"))
+}
+
+// Delete and unban are impossible on YouTube for want of a usable id. Asking for them maps to no
+// scope, and the refusal must say that rather than claim the platform has no delegation at all —
+// two different states with two different fixes.
+func TestHandleModConsent_YouTubeUnsupportedActionsAreRefusedDistinctly(t *testing.T) {
+	h := youtubeModConsentHandler(t)
+
+	w := startModConsent(t, h, oauth.PlatformYouTube, "mod-user-1", "delete,unban")
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
-	assert.Contains(t, w.Body.String(), "not available yet")
+	assert.Contains(t, w.Body.String(), "can be delegated on")
+	assert.NotContains(t, w.Body.String(), "not available yet")
 }
 
 // A platform with no provider configured at all is a different refusal from an unlanded leg.

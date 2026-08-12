@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/caesar/all-chat/shared/youtubetoken"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -168,6 +169,67 @@ func (s *ModTwitchSource) Refresh(ctx context.Context, userID string, cred *ModC
 	cred.AccessToken = refreshed.accessToken
 	cred.RefreshToken = refreshed.refreshToken
 	cred.ExpiresAt = refreshed.expiresAt
+	return nil
+}
+
+// ModYouTubeSource resolves and refreshes a delegated moderator's own YouTube credential.
+//
+// The credential is one force-ssl grant, which is all YouTube needs from a moderator: its
+// liveChatBans endpoint identifies the actor by the token and the target by channel id, with no
+// moderator field to fill in. YouTube then re-checks on every call that the token's account owns or
+// moderates that live chat — the platform-enforced authority the whole design defers to.
+//
+// PlatformUserID here is the moderator's GOOGLE account id (what the consent callback resolves from
+// Google's userinfo), not a YouTube channel id. It is recorded for attribution only; nothing in the
+// request carries it.
+type ModYouTubeSource struct {
+	db      *pgxpool.Pool
+	cipher  Cipher
+	refresh *youtubetoken.Refresher
+}
+
+// NewModYouTubeSource builds a source over mod_oauth_credentials. clientID/clientSecret are the
+// All-Chat Google OAuth application credentials used for the refresh grant; tokenURL may be empty
+// to use Google's (it exists as a test seam).
+func NewModYouTubeSource(db *pgxpool.Pool, cipher Cipher, clientID, clientSecret, tokenURL string) *ModYouTubeSource {
+	return &ModYouTubeSource{
+		db:      db,
+		cipher:  cipher,
+		refresh: youtubetoken.NewRefresher(clientID, clientSecret, tokenURL),
+	}
+}
+
+// Resolve returns the moderator's decrypted YouTube credential, or ErrNoCredential when they have
+// not consented for YouTube yet (the normal state of a fresh grant).
+func (s *ModYouTubeSource) Resolve(ctx context.Context, userID string) (*ModCredential, error) {
+	return resolveModCredential(ctx, s.db, s.cipher, userID, "youtube")
+}
+
+// Refresh exchanges the moderator's refresh token for a new access token and writes the
+// re-encrypted pair back to their own row.
+func (s *ModYouTubeSource) Refresh(ctx context.Context, userID string, cred *ModCredential) error {
+	if cred.RefreshToken == "" {
+		return errors.New("tokens: no moderator refresh token available")
+	}
+
+	refreshed, err := s.refresh.Exchange(ctx, cred.RefreshToken)
+	if err != nil {
+		return err
+	}
+	// Google does not reissue the refresh token, and Exchange already preserves the old one — so
+	// this write never blanks a still-valid refresh token.
+	converted := refreshedToken{
+		accessToken:  refreshed.AccessToken,
+		refreshToken: refreshed.RefreshToken,
+		expiresAt:    refreshed.ExpiresAt,
+	}
+	if err := persistRefreshedModCredential(ctx, s.db, s.cipher, userID, "youtube", converted); err != nil {
+		return err
+	}
+
+	cred.AccessToken = converted.accessToken
+	cred.RefreshToken = converted.refreshToken
+	cred.ExpiresAt = converted.expiresAt
 	return nil
 }
 

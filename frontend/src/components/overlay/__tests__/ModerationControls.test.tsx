@@ -301,21 +301,27 @@ describe('ModerationControls', () => {
     })
   })
 
-  it('YouTube: ban-only — no delete button, no timeout, no unban', () => {
+  // YouTube does timeout and ban (both are liveChatBans.insert), but neither delete nor unban:
+  // each needs an id YouTube gives us no way to hold. The controls follow the capability, so the
+  // two absences must show up as absent controls rather than dead buttons.
+  it('YouTube: timeout and ban, but no delete button and no unban', () => {
     const item = makeItem('youtube')
     const cap: SourceCapability = {
       platform: 'youtube',
       channel_id: 'UCabc',
       channel_name: 'chan',
       moderatable: true,
-      actions: ['ban'], // v1 is ban-only (unban needs the YouTube ban resource id)
+      actions: ['timeout', 'ban'],
     }
+    let timedOut: number | null = null
     render(
       <ModerationControls
         item={item}
         capability={cap}
         onDelete={noop}
-        onTimeout={noop}
+        onTimeout={(_it, seconds) => {
+          timedOut = seconds
+        }}
         onBan={noop}
         onUnban={noop}
       />
@@ -323,10 +329,13 @@ describe('ModerationControls', () => {
 
     expect(screen.queryByLabelText('Delete message')).not.toBeInTheDocument()
     fireEvent.click(screen.getByLabelText('Moderate user'))
-    // Only ban is offered; timeout and unban are not YouTube v1 actions.
     expect(screen.getByText('Ban user')).toBeInTheDocument()
-    expect(screen.queryByText('Timeout')).not.toBeInTheDocument()
+    expect(screen.getByText('Timeout')).toBeInTheDocument()
     expect(screen.queryByText('Unban user')).not.toBeInTheDocument()
+
+    // A preset click must carry a real duration: 0 would become YouTube's silent 300s default.
+    fireEvent.click(screen.getAllByRole('button', { name: /^\d/ })[0])
+    expect(timedOut).toBeGreaterThan(0)
   })
 
   it('missing scope: controls are disabled with a "grant permissions" tooltip', () => {

@@ -94,8 +94,7 @@ func (h *PlatformAuthHandlerV2) HandleModConsent(platform oauth.Platform) gin.Ha
 
 		modScopes, legLanded := modConsentScopes(provider, delegatable)
 		if !legLanded {
-			// Each platform leg is independently gated (ADR-0048). YouTube additionally needs the
-			// moderator's own channel id resolved before a credential can be attributed.
+			// Each platform leg is independently gated (ADR-0048).
 			c.JSON(http.StatusBadRequest, gin.H{
 				"error": fmt.Sprintf("delegated moderation for %s is not available yet", platform),
 			})
@@ -176,6 +175,8 @@ func modConsentScopes(provider oauth.OAuthProvider, delegatable []string) (scope
 		return oauth.ModerationScopesForActions(delegatable), true
 	case *oauth.KickOAuth:
 		return oauth.KickModerationScopesForActions(delegatable), true
+	case *oauth.YouTubeOAuth:
+		return oauth.YouTubeModerationScopesForActions(delegatable), true
 	default:
 		return nil, false
 	}
@@ -189,6 +190,8 @@ func modConsentAuthURL(provider oauth.OAuthProvider, state string, modScopes []s
 		return p.GetModConsentAuthURL(state, modScopes), ""
 	case *oauth.KickOAuth:
 		return p.GetModConsentAuthURLPKCE(state, modScopes)
+	case *oauth.YouTubeOAuth:
+		return p.GetModConsentAuthURL(state, modScopes), ""
 	default:
 		return "", ""
 	}

@@ -85,9 +85,12 @@ var PlatformActions = map[string][]Action{
 	// in that guild (see ActionsForDiscordPermissions) — granted at invite time, so a
 	// bot invited without the elevated permissions reports only what it holds.
 	"discord": {ActionDelete, ActionTimeout, ActionBan, ActionUnban},
-	// YouTube is ban-only for v1: liveChatBans.delete (unban) keys on the ban resource
-	// id returned by insert, which All-Chat does not persist, so unban is deferred.
-	"youtube": {ActionBan},
+	// YouTube supports timeout and ban — both are liveChatBans.insert, which models a timeout as
+	// a temporary ban. The two absences are about missing IDS, not missing endpoints, so neither
+	// can be fixed here: delete keys on a Data API message id and production holds InnerTube
+	// renderer ids instead, and unban keys on the ban resource id returned by insert, which
+	// nothing persists and no list endpoint can recover.
+	"youtube": {ActionTimeout, ActionBan},
 }
 
 // SupportsAction reports whether the platform supports the given moderation action.
@@ -243,12 +246,12 @@ func RequiredKickScope(a Action) string {
 const ScopeYouTubeModeration = "https://www.googleapis.com/auth/youtube.force-ssl"
 
 // ActionsForYouTubeScopes maps a YouTube token's granted scopes to moderation actions.
-// v1 is ban-only (see PlatformActions["youtube"]).
+//
+// One scope covers both supported actions: force-ssl authorizes liveChatBans.insert, and timeout
+// and ban are the same call with a different ban type (see PlatformActions["youtube"]).
 func ActionsForYouTubeScopes(scopes []string) []Action {
-	for _, s := range scopes {
-		if s == ScopeYouTubeModeration {
-			return []Action{ActionBan}
-		}
+	if scopesContain(scopes, ScopeYouTubeModeration) {
+		return []Action{ActionTimeout, ActionBan}
 	}
 	return nil
 }
@@ -256,10 +259,12 @@ func ActionsForYouTubeScopes(scopes []string) []Action {
 // RequiredYouTubeScope returns the YouTube OAuth scope an action needs, or "" if the
 // action is not a YouTube moderation action.
 func RequiredYouTubeScope(a Action) string {
-	if a == ActionBan {
+	switch a {
+	case ActionTimeout, ActionBan:
 		return ScopeYouTubeModeration
+	default:
+		return ""
 	}
-	return ""
 }
 
 // Discord moderation permission bits. Unlike Twitch/Kick/YouTube, Discord moderation
@@ -425,6 +430,16 @@ const (
 	// action needs, so no moderator can borrow it. The streamer clears it by re-inviting the bot —
 	// never an OAuth re-consent, which cannot touch guild permissions.
 	DispatchBotMissingPermission
+
+	// DispatchTargetNotActionable: the platform refused this action against this TARGET, whoever
+	// asked. YouTube's `liveChatBanInsertionNotAllowed` (the chat owner and other moderators cannot
+	// be banned) is the case that needs it.
+	//
+	// It is about the target, not the actor, which is why it is neither a re-consent nor a
+	// not-a-moderator: nobody holds the authority to do it and no credential change would help. The
+	// alternative was a bare 502, which tells a streamer that moderation is broken when in fact the
+	// platform protected the person they aimed at.
+	DispatchTargetNotActionable
 )
 
 // DispatchResult is what a Dispatcher reports back to the handler.

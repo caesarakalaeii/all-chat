@@ -41,11 +41,19 @@ const (
 	// DefaultDailyLimit is an alias used by the Reserver's limit fallback.
 	DefaultDailyLimit = DefaultDailyQuota
 
-	// Quota cost per official YouTube Data API operation.
+	// Quota cost per YouTube Data API operation.
+	//
+	// videos.list and search.list are from Google's published cost table. The three liveChat*
+	// costs are NOT: that table documents no rows for the live-streaming write methods, so these
+	// are inherited estimates, and the word "official" that used to head this block was a
+	// provenance claim the repo could not support (ADR-0048). They are deliberately left on the
+	// HIGH side — over-reserving only under-uses the daily allowance, while under-reserving would
+	// let real usage run past a limit we believe we are respecting. The real numbers need a
+	// Cloud Console measurement over a project-day.
 	QuotaCostLiveChatMessages = 5   // liveChatMessages.stream (listener poll)
 	QuotaCostVideos           = 1   // videos.list
 	QuotaCostSearch           = 100 // search.list
-	QuotaCostBan              = 50  // liveChatBans.insert (moderation)
+	QuotaCostBan              = 50  // liveChatBans.insert — every ban type, so timeout costs the same
 	QuotaCostYouTubeSend      = 5   // liveChatMessages.insert (auth-service send)
 
 	// Default state thresholds, as lower-bound percentages of the daily limit.

@@ -30,11 +30,22 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// YouTube moderation is ban-only against the Data API's liveChatBans endpoint, as the
-// broadcaster (force-ssl scope). A ban needs the live broadcast's liveChatId, which is
-// not on the message — it is read from the youtube-listener's Redis stream-state cache
-// (no expensive search.list, so the only quota cost is the 50-unit ban itself; if the
-// stream isn't live/cached the ban cannot proceed).
+// YouTube moderation goes through the Data API's liveChatBans endpoint with the acting human's own
+// force-ssl token: permanent ban, and timeout as a temporary ban (YouTube models a timeout that
+// way, so it is the same call). Both need the live broadcast's liveChatId, which is not on the
+// message — it is read from the youtube-listener's Redis stream-state cache (no expensive
+// search.list, so the only quota cost is the ban itself; if the stream isn't live/cached the action
+// cannot proceed).
+//
+// Two actions are deliberately absent, both for lack of an id rather than lack of an endpoint:
+//
+//   - **Single-message delete.** `liveChatMessages.delete` keys on a Data API message id
+//     ("LCC."-prefixed). Production ingests chat through the InnerTube listener, whose renderer ids
+//     are a different encoding, so the id All-Chat holds for a YouTube message is not the id this
+//     endpoint accepts. Shipping it would light a delete button that 404s. ADR-0048 lists the
+//     equivalence as an unmeasured unknown; it stays unbuilt until someone measures it.
+//   - **Unban.** `liveChatBans.delete` keys on the ban resource id returned by insert, which
+//     nothing persists, and there is no list endpoint to recover it from.
 var (
 	// ErrYouTubeUnauthorized indicates the access token is invalid/expired (HTTP 401).
 	ErrYouTubeUnauthorized = errors.New("youtube: access token unauthorized")
@@ -44,7 +55,50 @@ var (
 	// ErrYouTubeNotLive indicates no cached live chat for the channel (not live, or the
 	// youtube-listener has not cached the stream state) — the ban cannot proceed.
 	ErrYouTubeNotLive = errors.New("youtube: no active live chat for channel (stream not live or not cached)")
+	// ErrYouTubeQuotaExceeded indicates Google refused the call for quota/rate reasons, not
+	// permission ones. It arrives as an HTTP 403 like a genuine permission failure, and telling
+	// them apart matters: reported as a permission problem it sends a streamer round a re-consent
+	// that cannot help, or tells a delegated moderator they are not a moderator of a channel they
+	// do moderate.
+	ErrYouTubeQuotaExceeded = errors.New("youtube: quota or rate limit exceeded")
+	// ErrYouTubeBanNotAllowed indicates YouTube refused to ban this particular user — the chat
+	// owner or another moderator (`liveChatBanInsertionNotAllowed`). Also a 403, and also not about
+	// the caller's authority: nobody can perform it, and no re-consent changes that.
+	ErrYouTubeBanNotAllowed = errors.New("youtube: this user cannot be banned (chat owner or moderator)")
 )
+
+// quotaReasons are Google's 403 reasons that mean "not now" rather than "not allowed".
+var quotaReasons = map[string]bool{
+	"quotaExceeded":         true,
+	"rateLimitExceeded":     true,
+	"dailyLimitExceeded":    true,
+	"userRateLimitExceeded": true,
+}
+
+// classifyForbidden separates the three things a YouTube 403 can mean, using the `reason` Google
+// puts in the error body. An unrecognised reason falls back to a permission failure, which is the
+// conservative reading: it prompts a re-consent rather than silently swallowing a real refusal.
+func classifyForbidden(body []byte) error {
+	var parsed struct {
+		Error struct {
+			Errors []struct {
+				Reason string `json:"reason"`
+			} `json:"errors"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return ErrYouTubeForbidden
+	}
+	for _, e := range parsed.Error.Errors {
+		switch {
+		case quotaReasons[e.Reason]:
+			return ErrYouTubeQuotaExceeded
+		case e.Reason == "liveChatBanInsertionNotAllowed":
+			return ErrYouTubeBanNotAllowed
+		}
+	}
+	return ErrYouTubeForbidden
+}
 
 const defaultYouTubeBaseURL = "https://www.googleapis.com/youtube/v3"
 
@@ -65,13 +119,38 @@ func NewYouTubeClient() *YouTubeClient {
 // BanUser permanently bans a user from the live chat.
 // POST /liveChat/bans?part=snippet — scope youtube.force-ssl.
 func (y *YouTubeClient) BanUser(ctx context.Context, token, liveChatID, bannedChannelID string) error {
-	body, err := json.Marshal(map[string]any{
-		"snippet": map[string]any{
-			"liveChatId":        liveChatID,
-			"type":              "permanent",
-			"bannedUserDetails": map[string]any{"channelId": bannedChannelID},
-		},
-	})
+	return y.insertBan(ctx, token, liveChatID, bannedChannelID, 0)
+}
+
+// TimeoutUser removes a user's messages for durationSeconds.
+//
+// The same endpoint as BanUser with type=temporary — YouTube models a timeout as a temporary ban,
+// which is why there is no separate call. Without this, YouTube moderation was permanent-ban-only
+// (ADR-0048): the only tool available was the most severe one, which is a moderation-safety problem
+// in its own right and doubly so for a delegated volunteer.
+func (y *YouTubeClient) TimeoutUser(ctx context.Context, token, liveChatID, bannedChannelID string, durationSeconds int) error {
+	if durationSeconds <= 0 {
+		// YouTube would fall back to its documented 300s default, turning a caller's bug into a
+		// surprise five-minute timeout that looks deliberate.
+		return fmt.Errorf("youtube: timeout duration must be positive, got %d", durationSeconds)
+	}
+	return y.insertBan(ctx, token, liveChatID, bannedChannelID, durationSeconds)
+}
+
+// insertBan posts to liveChatBans. A positive durationSeconds makes it a temporary ban (timeout);
+// zero makes it permanent, and then banDurationSeconds is omitted entirely rather than sent as 0 —
+// YouTube ignores it for permanent bans, and sending both would state two intentions at once.
+func (y *YouTubeClient) insertBan(ctx context.Context, token, liveChatID, bannedChannelID string, durationSeconds int) error {
+	snippet := map[string]any{
+		"liveChatId":        liveChatID,
+		"type":              "permanent",
+		"bannedUserDetails": map[string]any{"channelId": bannedChannelID},
+	}
+	if durationSeconds > 0 {
+		snippet["type"] = "temporary"
+		snippet["banDurationSeconds"] = durationSeconds
+	}
+	body, err := json.Marshal(map[string]any{"snippet": snippet})
 	if err != nil {
 		return fmt.Errorf("youtube: marshal ban body: %w", err)
 	}
@@ -96,11 +175,19 @@ func (y *YouTubeClient) BanUser(ctx context.Context, token, liveChatID, bannedCh
 	case http.StatusUnauthorized:
 		return ErrYouTubeUnauthorized
 	case http.StatusForbidden:
-		return ErrYouTubeForbidden
+		// Three different meanings share this status; the body's `reason` tells them apart.
+		return classifyForbidden(readLimited(resp.Body))
 	default:
-		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return fmt.Errorf("youtube: liveChatBans returned %s: %s", strconv.Itoa(resp.StatusCode), string(snippet))
+		return fmt.Errorf("youtube: liveChatBans returned %s: %s",
+			strconv.Itoa(resp.StatusCode), string(readLimited(resp.Body)))
 	}
+}
+
+// readLimited reads a bounded prefix of an error body: enough for Google's `reason`, and never
+// enough for a hostile or runaway response to matter.
+func readLimited(r io.Reader) []byte {
+	b, _ := io.ReadAll(io.LimitReader(r, 1024))
+	return b
 }
 
 // YouTubeLiveChatResolver resolves a channel's active liveChatId from the

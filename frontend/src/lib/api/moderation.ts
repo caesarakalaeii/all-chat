@@ -74,6 +74,9 @@ export function isModerationReauthError(err: unknown): boolean {
  * - `not_moderator_on_platform` — the PLATFORM refused: All-Chat allowed the action and Twitch
  *   said this person does not moderate that channel. Re-consent cannot fix it, so this must never
  *   be rendered as a re-authorize prompt; the streamer has to add them in the platform's own tools.
+ * - `target_not_actionable` — the platform refused this TARGET for everyone, not this caller
+ *   (YouTube protects the chat owner and other moderators). Nobody can clear it, so the copy names
+ *   the cause and offers nothing.
  *
  * The last five are Discord's. They exist as separate codes because Discord has no per-user
  * moderation API: the shared bot performs every write, so no platform message comes back to
@@ -96,6 +99,7 @@ export type ModerationActionErrorCode =
   | 'owner_channel_unverified'
   | 'delegation_unsupported'
   | 'not_moderator_on_platform'
+  | 'target_not_actionable'
   | 'discord_link_required'
   | 'mod_not_in_guild'
   | 'mod_lacks_permission'
@@ -275,9 +279,10 @@ export const moderationApi = {
   },
 
   /**
-   * Fetch the YouTube OAuth re-consent URL to enable moderation. YouTube moderation is
-   * ban-only (force-ssl scope), re-added only via this opt-in flow (ADR-0017 amends
-   * ADR-0012).
+   * Fetch the YouTube OAuth re-consent URL to enable moderation. One scope (force-ssl) covers
+   * both supported actions — timeout and ban are the same liveChatBans call with a different ban
+   * type — and it is re-added only via this opt-in flow (ADR-0017 amends ADR-0012). Delete and
+   * unban are unavailable on YouTube for want of a usable id, not a scope.
    */
   async getYouTubeConsentUrl(overlayId: string, actions: ModerationAction[]): Promise<string> {
     const res = await apiClient.get<ConsentUrlResponse>(

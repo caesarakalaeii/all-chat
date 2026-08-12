@@ -70,6 +70,109 @@ func TestYouTubeBanUser(t *testing.T) {
 	assert.Equal(t, "UCbanned", details["channelId"], "the banned user's YouTube channel id")
 }
 
+// A timeout is the SAME endpoint with type=temporary plus a duration. Getting the type wrong makes
+// a timeout a permanent ban, which is why it is asserted rather than assumed.
+func TestYouTubeTimeoutUser(t *testing.T) {
+	var got capturedRequest
+	c, done := newTestYouTubeClient(t, http.StatusOK, &got)
+	defer done()
+
+	err := c.TimeoutUser(context.Background(), "tok", "livechat-1", "UCbanned", 600)
+	require.NoError(t, err)
+	assert.Equal(t, http.MethodPost, got.method)
+	assert.Equal(t, "/liveChat/bans", got.path)
+
+	snippet, ok := got.body["snippet"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "temporary", snippet["type"], "a timeout must never be sent as a permanent ban")
+	assert.Equal(t, float64(600), snippet["banDurationSeconds"])
+	details, ok := snippet["bannedUserDetails"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "UCbanned", details["channelId"])
+}
+
+// A permanent ban must not carry a duration: YouTube ignores banDurationSeconds unless the type is
+// temporary, and sending both states two intentions at once.
+func TestYouTubeBanUser_OmitsDuration(t *testing.T) {
+	var got capturedRequest
+	c, done := newTestYouTubeClient(t, http.StatusOK, &got)
+	defer done()
+
+	require.NoError(t, c.BanUser(context.Background(), "tok", "lc", "UC"))
+	snippet := got.body["snippet"].(map[string]any)
+	_, hasDuration := snippet["banDurationSeconds"]
+	assert.False(t, hasDuration)
+}
+
+// A non-positive duration would silently become YouTube's 300s default, so it is refused before the
+// request: a caller asking for "0 seconds" has a bug, and a surprise 5-minute timeout hides it.
+func TestYouTubeTimeoutUser_RejectsNonPositiveDuration(t *testing.T) {
+	for _, seconds := range []int{0, -1} {
+		var got capturedRequest
+		c, done := newTestYouTubeClient(t, http.StatusOK, &got)
+		err := c.TimeoutUser(context.Background(), "tok", "lc", "UC", seconds)
+		require.Error(t, err, "duration %d", seconds)
+		assert.Empty(t, got.method, "must fail before any HTTP request")
+		done()
+	}
+}
+
+func TestYouTubeTimeoutUser_StatusMapping(t *testing.T) {
+	var got capturedRequest
+	c, done := newTestYouTubeClient(t, http.StatusForbidden, &got)
+	defer done()
+
+	err := c.TimeoutUser(context.Background(), "tok", "lc", "UC", 60)
+	assert.ErrorIs(t, err, ErrYouTubeForbidden)
+}
+
+// A YouTube 403 means three different things, and only one of them is about the caller's
+// authority. Conflating them tells a streamer to re-consent when the project ran out of quota, or
+// tells a delegated moderator they do not moderate a channel they do.
+func TestYouTubeForbiddenIsClassifiedByReason(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want error
+	}{
+		{
+			"quota exhausted",
+			`{"error":{"code":403,"errors":[{"reason":"quotaExceeded","message":"quota"}]}}`,
+			ErrYouTubeQuotaExceeded,
+		},
+		{
+			"rate limited",
+			`{"error":{"code":403,"errors":[{"reason":"rateLimitExceeded"}]}}`,
+			ErrYouTubeQuotaExceeded,
+		},
+		{
+			"target cannot be banned",
+			`{"error":{"code":403,"errors":[{"reason":"liveChatBanInsertionNotAllowed"}]}}`,
+			ErrYouTubeBanNotAllowed,
+		},
+		{
+			"genuine permission failure",
+			`{"error":{"code":403,"errors":[{"reason":"insufficientPermissions"}]}}`,
+			ErrYouTubeForbidden,
+		},
+		{"unparseable body falls back to a permission failure", `not json`, ErrYouTubeForbidden},
+		{"empty body falls back to a permission failure", ``, ErrYouTubeForbidden},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusForbidden)
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer srv.Close()
+			c := &YouTubeClient{httpClient: srv.Client(), baseURL: srv.URL}
+
+			err := c.BanUser(context.Background(), "tok", "lc", "UC")
+			assert.ErrorIs(t, err, tc.want)
+		})
+	}
+}
+
 func TestYouTubeBanUser_StatusMapping(t *testing.T) {
 	cases := []struct {
 		status int

@@ -35,6 +35,7 @@ const (
 	ytUserY     = "77777777-1111-7777-7777-777777777777" // youtube-login streamer
 	ytStrangerF = "88888888-2222-8888-8888-888888888888"
 	ytLinkedT   = "99999999-3333-9999-9999-999999999999" // twitch-login streamer who linked YouTube
+	ytModUser   = "aaaaaaaa-4444-aaaa-aaaa-aaaaaaaaaaaa" // volunteer moderator, owns no channel
 )
 
 const ytForceSSL = "https://www.googleapis.com/auth/youtube.force-ssl"
@@ -140,6 +141,14 @@ func TestYouTubeRefresh_LinkedPersistsToLinkedRow(t *testing.T) {
 
 func setupYouTubeSource(t *testing.T, opts ...Option) (*YouTubeSource, Cipher, func()) {
 	t.Helper()
+	src, cipher, _, cleanup := setupYouTubeSourceWithPool(t, opts...)
+	return src, cipher, cleanup
+}
+
+// setupYouTubeSourceWithPool is setupYouTubeSource plus the pool, for the delegated-moderator
+// credential store — which lives in its own table and needs its own seeding.
+func setupYouTubeSourceWithPool(t *testing.T, opts ...Option) (*YouTubeSource, Cipher, *pgxpool.Pool, func()) {
+	t.Helper()
 	ctx := context.Background()
 
 	aes, err := encryption.NewAESEncryptor([]byte("0123456789abcdef0123456789abcdef"))
@@ -195,6 +204,19 @@ func setupYouTubeSource(t *testing.T, opts ...Option) (*YouTubeSource, Cipher, f
 			created_at TIMESTAMP DEFAULT NOW(),
 			updated_at TIMESTAMP DEFAULT NOW(),
 			UNIQUE(user_id, channel_id)
+		);
+		CREATE TABLE mod_oauth_credentials (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			user_id UUID NOT NULL,
+			platform VARCHAR(20) NOT NULL,
+			platform_user_id VARCHAR(100) NOT NULL,
+			platform_login VARCHAR(200),
+			access_token TEXT NOT NULL,
+			refresh_token TEXT,
+			token_expires_at TIMESTAMP,
+			granted_scopes TEXT[] NOT NULL DEFAULT '{}',
+			updated_at TIMESTAMP DEFAULT NOW(),
+			UNIQUE (user_id, platform)
 		);`
 	_, err = pool.Exec(ctx, schema)
 	require.NoError(t, err)
@@ -230,8 +252,20 @@ func setupYouTubeSource(t *testing.T, opts ...Option) (*YouTubeSource, Cipher, f
 		ytLinkedT, enc("laccLinked"), enc("lrefLinked"), exp, []string{"https://www.googleapis.com/auth/youtube.readonly", ytForceSSL})
 	require.NoError(t, err)
 
+	// ytModUser: a volunteer who consented to moderate on YouTube and owns no channel. Their
+	// platform_user_id is a GOOGLE account id, not a channel id — nothing in a YouTube moderation
+	// request carries it, so it exists for attribution only.
+	_, err = pool.Exec(ctx, `INSERT INTO users (id, username, auth_provider, access_token, refresh_token, token_expires_at)
+		VALUES ($1,'ytvolunteer','youtube',$2,$3,$4)`, ytModUser, enc("ignored"), enc("ignored"), exp)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO mod_oauth_credentials
+		(user_id, platform, platform_user_id, platform_login, access_token, refresh_token, token_expires_at, granted_scopes)
+		VALUES ($1,'youtube','google-9001','ytvolunteer',$2,$3,$4,$5)`,
+		ytModUser, enc("ytModAcc"), enc("ytModRef"), exp, []string{ytForceSSL})
+	require.NoError(t, err)
+
 	src := NewYouTubeSource(pool, cipher, "test-client-id", "test-client-secret", opts...)
-	return src, cipher, func() {
+	return src, cipher, pool, func() {
 		pool.Close()
 		_ = container.Terminate(ctx)
 	}

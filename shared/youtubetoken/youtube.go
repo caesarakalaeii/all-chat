@@ -178,11 +178,11 @@ func (s *YouTubeSource) Resolve(ctx context.Context, userID, channelID string) (
 
 	return &YouTubeCredential{
 		AccessToken:   access,
-		RefreshToken:   refresh,
-		GrantedScopes:  scopes,
-		ExpiresAt:      expiresAt,
-		origin:         credOrigin(origin),
-		rowID:          rowID,
+		RefreshToken:  refresh,
+		GrantedScopes: scopes,
+		ExpiresAt:     expiresAt,
+		origin:        credOrigin(origin),
+		rowID:         rowID,
 	}, nil
 }
 
@@ -195,47 +195,13 @@ func (s *YouTubeSource) Refresh(ctx context.Context, cred *YouTubeCredential) er
 		return errors.New("tokens: no youtube refresh token available")
 	}
 
-	form := url.Values{
-		"client_id":     {s.clientID},
-		"client_secret": {s.clientSecret},
-		"grant_type":    {"refresh_token"},
-		"refresh_token": {cred.RefreshToken},
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.tokenURL, strings.NewReader(form.Encode()))
+	refreshed, err := s.Refresher().Exchange(ctx, cred.RefreshToken)
 	if err != nil {
-		return fmt.Errorf("build youtube refresh request: %w", err)
+		return err
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	newRefresh, newExpiry := refreshed.RefreshToken, refreshed.ExpiresAt
 
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("youtube token refresh request: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return fmt.Errorf("youtube token refresh returned %s: %s", strconv.Itoa(resp.StatusCode), string(snippet))
-	}
-
-	var tr struct {
-		AccessToken  string `json:"access_token"`
-		RefreshToken string `json:"refresh_token"`
-		ExpiresIn    int    `json:"expires_in"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&tr); err != nil {
-		return fmt.Errorf("decode youtube refresh response: %w", err)
-	}
-	if tr.AccessToken == "" {
-		return errors.New("youtube token refresh returned an empty access token")
-	}
-
-	newRefresh := tr.RefreshToken
-	if newRefresh == "" {
-		newRefresh = cred.RefreshToken // Google does not reissue the refresh token on refresh
-	}
-	newExpiry := time.Now().Add(time.Duration(tr.ExpiresIn) * time.Second)
-
-	encAccess, err := s.cipher.EncryptString(tr.AccessToken)
+	encAccess, err := s.cipher.EncryptString(refreshed.AccessToken)
 	if err != nil {
 		return fmt.Errorf("encrypt refreshed access token: %w", err)
 	}
@@ -260,8 +226,139 @@ func (s *YouTubeSource) Refresh(ctx context.Context, cred *YouTubeCredential) er
 		return fmt.Errorf("persist refreshed youtube token: %w", err)
 	}
 
-	cred.AccessToken = tr.AccessToken
+	cred.AccessToken = refreshed.AccessToken
 	cred.RefreshToken = newRefresh
 	cred.ExpiresAt = newExpiry
 	return nil
+}
+
+// ErrOwnerChannelUnverified reports that a user cannot be shown to control a channel.
+//
+// The owner-reach anchor (ADR-0048): a delegated moderator may only act on a channel the overlay
+// owner demonstrably controls, and delegation never exceeds what the owner could do themselves.
+//
+// It lives here, in the shared package, so that every platform's anchor returns the SAME sentinel —
+// moderation-service/tokens aliases it, exactly as it aliases ErrNoCredential. A per-package copy
+// would compare unequal under errors.Is, and the dispatcher would then report an unanchored owner as
+// a platform error instead of the actionable `owner_channel_unverified`.
+var ErrOwnerChannelUnverified = errors.New("tokens: user cannot be shown to control this channel")
+
+// OwnerYouTubeAnchor reports whether a user controls a YouTube channel, or ErrOwnerChannelUnverified.
+//
+// It returns no id, unlike the Twitch and Kick anchors: a YouTube write is addressed by the live
+// broadcast's liveChatId (resolved from the channel), so there is no broadcaster id to carry. This
+// is a pure gate.
+//
+// It deliberately does NOT reuse Resolve's fallback to the channel-agnostic `users` row. That row
+// belongs to a YouTube-login account and says nothing about WHICH channel — matched against any
+// channel id it would "verify" control of channels the user merely added as a read-only source, so
+// as an anchor it would assert exactly what it cannot see. Only the per-channel
+// youtube_oauth_tokens row is evidence, and it is good evidence: it exists because Google issued a
+// token for that channel's own account.
+//
+// Like the other anchors it proves control only — no scope predicate, no token read.
+func (s *YouTubeSource) OwnerYouTubeAnchor(ctx context.Context, ownerUserID, channelID string) error {
+	const query = `SELECT 1 FROM youtube_oauth_tokens WHERE user_id = $1 AND channel_id = $2 LIMIT 1`
+	var one int
+	err := s.db.QueryRow(ctx, query, ownerUserID, channelID).Scan(&one)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrOwnerChannelUnverified
+	}
+	if err != nil {
+		return fmt.Errorf("resolve owner youtube anchor: %w", err)
+	}
+	return nil
+}
+
+// Refreshed is one successful Google refresh-grant response, normalized.
+type Refreshed struct {
+	AccessToken  string
+	RefreshToken string
+	ExpiresAt    time.Time
+}
+
+// Refresher performs the Google OAuth refresh grant.
+//
+// Exported because the delegated-moderator credential store (moderation-service) needs the same
+// exchange against a different table: the grant is identical, only the row written back differs,
+// and a second copy would let the two drift.
+type Refresher struct {
+	httpClient   *http.Client
+	clientID     string
+	clientSecret string
+	tokenURL     string
+}
+
+// Refresher returns a refresher configured like this source (same app credentials and token URL,
+// so a test seam set with WithTokenURL applies to both).
+func (s *YouTubeSource) Refresher() *Refresher {
+	return &Refresher{
+		httpClient:   s.httpClient,
+		clientID:     s.clientID,
+		clientSecret: s.clientSecret,
+		tokenURL:     s.tokenURL,
+	}
+}
+
+// NewRefresher builds a standalone Google refresher. tokenURL may be empty to use Google's.
+func NewRefresher(clientID, clientSecret, tokenURL string) *Refresher {
+	if tokenURL == "" {
+		tokenURL = defaultGoogleTokenURL
+	}
+	return &Refresher{
+		httpClient:   &http.Client{Timeout: 10 * time.Second},
+		clientID:     clientID,
+		clientSecret: clientSecret,
+		tokenURL:     tokenURL,
+	}
+}
+
+// Exchange trades a refresh token for a fresh access token. Google does not reissue the refresh
+// token, so a response that omits it keeps the caller's — dropping it would end the credential's
+// life at the next expiry.
+func (r *Refresher) Exchange(ctx context.Context, refreshToken string) (Refreshed, error) {
+	form := url.Values{
+		"client_id":     {r.clientID},
+		"client_secret": {r.clientSecret},
+		"grant_type":    {"refresh_token"},
+		"refresh_token": {refreshToken},
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, r.tokenURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return Refreshed{}, fmt.Errorf("build youtube refresh request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := r.httpClient.Do(req)
+	if err != nil {
+		return Refreshed{}, fmt.Errorf("youtube token refresh request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return Refreshed{}, fmt.Errorf("youtube token refresh returned %s: %s",
+			strconv.Itoa(resp.StatusCode), string(snippet))
+	}
+
+	var tr struct {
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+		ExpiresIn    int    `json:"expires_in"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&tr); err != nil {
+		return Refreshed{}, fmt.Errorf("decode youtube refresh response: %w", err)
+	}
+	if tr.AccessToken == "" {
+		return Refreshed{}, errors.New("youtube token refresh returned an empty access token")
+	}
+
+	rotated := tr.RefreshToken
+	if rotated == "" {
+		rotated = refreshToken
+	}
+	return Refreshed{
+		AccessToken:  tr.AccessToken,
+		RefreshToken: rotated,
+		ExpiresAt:    time.Now().Add(time.Duration(tr.ExpiresIn) * time.Second),
+	}, nil
 }

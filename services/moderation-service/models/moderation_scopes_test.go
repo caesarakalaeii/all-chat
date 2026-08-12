@@ -108,6 +108,36 @@ func TestRequiredKickScope(t *testing.T) {
 	assert.Equal(t, "", RequiredKickScope(Action("bogus")))
 }
 
+// YouTube's single force-ssl scope covers both supported actions, because timeout and ban are the
+// same liveChatBans.insert call with a different ban type.
+func TestActionsForYouTubeScopes(t *testing.T) {
+	assert.Empty(t, ActionsForYouTubeScopes(nil))
+	assert.Empty(t, ActionsForYouTubeScopes([]string{"https://www.googleapis.com/auth/youtube.readonly"}),
+		"the listener's readonly scope grants no moderation")
+	assert.Equal(t,
+		[]Action{ActionTimeout, ActionBan},
+		ActionsForYouTubeScopes([]string{ScopeYouTubeModeration}))
+}
+
+func TestRequiredYouTubeScope(t *testing.T) {
+	assert.Equal(t, ScopeYouTubeModeration, RequiredYouTubeScope(ActionTimeout))
+	assert.Equal(t, ScopeYouTubeModeration, RequiredYouTubeScope(ActionBan))
+	assert.Equal(t, "", RequiredYouTubeScope(ActionDelete))
+	assert.Equal(t, "", RequiredYouTubeScope(ActionUnban))
+}
+
+// Delete and unban are absent from YouTube for lack of an ID, not for lack of a scope — so no scope
+// may ever produce them, and the capability must not offer a control whose call cannot be built.
+// (delete needs a Data API message id where production holds InnerTube renderer ids; unban needs the
+// ban resource id returned by insert, which nothing persists.)
+func TestYouTubeNeverOffersDeleteOrUnban(t *testing.T) {
+	for _, a := range ActionsForYouTubeScopes([]string{ScopeYouTubeModeration}) {
+		assert.True(t, SupportsAction("youtube", a), "scope-derived action %q must be supported", a)
+	}
+	assert.False(t, SupportsAction("youtube", ActionDelete))
+	assert.False(t, SupportsAction("youtube", ActionUnban))
+}
+
 func TestActionsForDiscordPermissions(t *testing.T) {
 	tests := []struct {
 		name  string
