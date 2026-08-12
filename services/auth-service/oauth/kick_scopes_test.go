@@ -17,6 +17,9 @@
 package oauth
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -76,4 +79,58 @@ func TestGetAuthURLWithScopesPKCE(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 1, count, "a scope present in both base and extra must appear once")
+}
+
+// The Kick token exchange must surface the granted scope where ExtractGrantedScopes reads it.
+//
+// This was a live bug rather than a hypothetical: the response field was parsed and dropped, so
+// every Kick grant was stored with an empty granted_scopes and Kick moderation could never be
+// enabled — the consent completed, the capability endpoint still said missing_scope, and the
+// dispatcher's pre-check refused every action. A refresh grant never widens scopes, so nothing
+// downstream could repair it.
+func TestKickExchangeCarriesTheGrantedScope(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, r.ParseForm())
+		assert.Equal(t, "authorization_code", r.Form.Get("grant_type"))
+		assert.Equal(t, "verifier-123", r.Form.Get("code_verifier"), "PKCE verifier must be sent")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"access_token":"acc","refresh_token":"ref","expires_in":3600,
+			"token_type":"Bearer","scope":"user:read moderation:ban"
+		}`))
+	}))
+	defer srv.Close()
+
+	o := NewKickOAuth("cid", "secret", "http://localhost/cb")
+	o.tokenURL = srv.URL
+
+	token, err := o.ExchangeCodeWithPKCE(context.Background(), "code-1", "verifier-123")
+	require.NoError(t, err)
+	assert.Equal(t, "acc", token.AccessToken)
+	assert.Equal(t, []string{"user:read", "moderation:ban"}, ExtractGrantedScopes(token),
+		"the granted scopes must survive the exchange, or no Kick grant is ever recorded")
+}
+
+// A response without a scope field must not fabricate one: granted_scopes is a record of what
+// Kick confirmed, and inventing the requested set would claim a grant we cannot prove. The
+// visible consequence (missing_scope) is the correct outcome.
+func TestKickExchangeWithoutScopeRecordsNothing(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"acc","refresh_token":"ref","expires_in":3600}`))
+	}))
+	defer srv.Close()
+
+	o := NewKickOAuth("cid", "secret", "http://localhost/cb")
+	o.tokenURL = srv.URL
+
+	token, err := o.ExchangeCodeWithPKCE(context.Background(), "code-1", "v")
+	require.NoError(t, err)
+	assert.Empty(t, ExtractGrantedScopes(token))
+}
+
+// The seam must default to the real endpoint — a zero tokenURL would silently POST to a relative
+// path and fail every exchange.
+func TestKickOAuthDefaultsToTheRealTokenEndpoint(t *testing.T) {
+	assert.Equal(t, kickTokenURL, NewKickOAuth("cid", "secret", "http://localhost/cb").tokenURL)
 }

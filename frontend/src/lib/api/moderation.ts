@@ -427,7 +427,7 @@ export const moderationApi = {
    * (Twitch/Kick moderation scopes are role-based, so one consent serves every
    * streamer who delegated that platform), no base login scopes on the screen, and
    * the credential lands in the moderator's own store rather than touching their
-   * login grant. Twitch is the only platform wired today; the others answer 400.
+   * login grant. Twitch and Kick are wired; YouTube answers 400 until its leg lands.
    */
   async getModConsentUrl(platform: DelegatablePlatform, actions: ModerationAction[]) {
     const res = await apiClient.get<ConsentUrlResponse>(

@@ -39,6 +39,9 @@ type KickOAuth struct {
 	clientSecret string
 	redirectURL  string
 	client       *http.Client
+	// tokenURL is Kick's token endpoint, overridable as a test seam (a test can point the
+	// exchange at a stub server). Defaults to kickTokenURL; there is a test pinning that.
+	tokenURL string
 }
 
 // Kick OAuth endpoints
@@ -55,6 +58,7 @@ func NewKickOAuth(clientID, clientSecret, redirectURL string) *KickOAuth {
 		clientSecret: clientSecret,
 		redirectURL:  redirectURL,
 		client:       &http.Client{Timeout: 10 * time.Second},
+		tokenURL:     kickTokenURL,
 	}
 }
 
@@ -158,6 +162,46 @@ func (k *KickOAuth) GetAuthURLWithScopesPKCE(state string, extra []string) (auth
 	return kickAuthURL + "?" + params.Encode(), codeVerifier
 }
 
+// GetModConsentAuthURLPKCE builds the consent URL for a delegated moderator granting their own
+// Kick moderation scopes (ADR-0048), and returns the PKCE verifier the caller must stash.
+//
+// Kick's counterpart to TwitchOAuth.GetModConsentAuthURL, with one deliberate difference: it does
+// request `user:read`. That is not a login bundle — it is the identity read the callback needs to
+// know WHICH Kick account just consented, so the credential can be attributed to it. Twitch's base
+// scopes (channel points, subscriptions, bits, followers) are what a volunteer must not be asked
+// for; a single identity scope is the minimum this flow can work with at all.
+//
+// Returns "" when no moderation scopes are requested: a consent screen granting nothing would only
+// fail later, at the first moderation call, as a confusing missing-scope error.
+func (k *KickOAuth) GetModConsentAuthURLPKCE(state string, scopes []string) (authURL string, codeVerifier string) {
+	seen := make(map[string]bool)
+	minimal := make([]string, 0, len(scopes)+1)
+	for _, s := range scopes {
+		if s != "" && !seen[s] {
+			seen[s] = true
+			minimal = append(minimal, s)
+		}
+	}
+	if len(minimal) == 0 {
+		return "", ""
+	}
+	if !seen["user:read"] {
+		minimal = append(minimal, "user:read")
+	}
+
+	codeVerifier = generateCodeVerifier()
+	params := url.Values{}
+	params.Set("client_id", k.clientID)
+	params.Set("response_type", "code")
+	params.Set("redirect_uri", k.redirectURL)
+	params.Set("state", state)
+	params.Set("scope", strings.Join(minimal, " "))
+	params.Set("code_challenge", generateCodeChallenge(codeVerifier))
+	params.Set("code_challenge_method", "S256")
+
+	return kickAuthURL + "?" + params.Encode(), codeVerifier
+}
+
 // GetAuthURLWithPKCE generates the OAuth authorization URL and returns both URL and code verifier
 // The caller must store the code verifier to use it during token exchange
 func (k *KickOAuth) GetAuthURLWithPKCE(state string) (authURL string, codeVerifier string) {
@@ -200,7 +244,7 @@ func (k *KickOAuth) ExchangeCodeWithPKCE(ctx context.Context, code string, codeV
 	data.Set("redirect_uri", k.redirectURL)
 	data.Set("code_verifier", codeVerifier)
 
-	req, err := http.NewRequestWithContext(ctx, "POST", kickTokenURL, strings.NewReader(data.Encode()))
+	req, err := http.NewRequestWithContext(ctx, "POST", k.tokenURL, strings.NewReader(data.Encode()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -236,6 +280,19 @@ func (k *KickOAuth) ExchangeCodeWithPKCE(ctx context.Context, code string, codeV
 		RefreshToken: result.RefreshToken,
 		TokenType:    result.TokenType,
 		Expiry:       time.Now().Add(time.Duration(result.ExpiresIn) * time.Second),
+	}
+
+	// Carry the granted scope through where ExtractGrantedScopes looks for it.
+	//
+	// This response field was parsed and then dropped, which made every Kick grant land with an
+	// EMPTY granted_scopes: the moderation re-consent appeared to succeed while the capability
+	// endpoint kept reporting missing_scope and the dispatcher's pre-check refused every Kick
+	// action. Nothing downstream could recover it, because a refresh grant deliberately never
+	// widens scopes. The `oauth2.Token` construction is hand-rolled here (Kick's OAuth 2.1 + PKCE
+	// flow does not go through oauth2.Config.Exchange, which would have populated Extra itself),
+	// so the field has to be attached explicitly.
+	if result.Scope != "" {
+		token = token.WithExtra(map[string]interface{}{"scope": result.Scope})
 	}
 
 	return token, nil

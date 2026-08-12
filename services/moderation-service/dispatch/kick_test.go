@@ -34,14 +34,27 @@ type fakeKickTokens struct {
 	resolveErr error
 	refreshErr error
 	refreshes  int
+	resolves   int
 	onRefresh  func(*tokens.KickCredential)
+	anchor     string // the broadcaster id the owner-reach anchor resolves
+	anchorErr  error
+	anchorFor  []string // the (owner, channel) pairs the anchor was asked about
 }
 
 func (f *fakeKickTokens) Resolve(context.Context, string, string) (*tokens.KickCredential, error) {
+	f.resolves++
 	if f.resolveErr != nil {
 		return nil, f.resolveErr
 	}
 	return f.cred, nil
+}
+
+func (f *fakeKickTokens) OwnerKickAnchor(_ context.Context, ownerUserID, channelID string) (string, error) {
+	f.anchorFor = append(f.anchorFor, ownerUserID+"|"+channelID)
+	if f.anchorErr != nil {
+		return "", f.anchorErr
+	}
+	return f.anchor, nil
 }
 
 func (f *fakeKickTokens) Refresh(_ context.Context, cred *tokens.KickCredential) error {
@@ -205,11 +218,11 @@ func TestKickDispatch_ForbiddenIsReauthWithScope(t *testing.T) {
 	assert.Equal(t, []string{models.ScopeKickModeration}, res.MissingScopes)
 }
 
-// Kick's delegated leg is not built (ADR-0048 gates each independently). The refusal is explicit
-// rather than relying on the caller-keyed credential lookup happening to find nothing: any future
-// change to credential selection would otherwise become a silent privilege escalation.
-func TestKick_DelegatedActionIsRefused(t *testing.T) {
-	tok := &fakeKickTokens{cred: kickCredWith(models.ScopeKickModeration)}
+// A deployment with no moderator credential store must refuse delegated actions rather than fall
+// back to whatever credential the dispatcher would otherwise reach for (ADR-0048). The refusal is
+// the invariant, not an oversight — so it is pinned even though production now wires the store.
+func TestKick_DelegatedActionIsRefusedWithoutAModSource(t *testing.T) {
+	tok := &fakeKickTokens{cred: kickCredWith(models.ScopeKickModeration), anchor: "555"}
 	api := &fakeKickAPI{}
 	d := NewKick(tok, api, zap.NewNop())
 
@@ -219,4 +232,21 @@ func TestKick_DelegatedActionIsRefused(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, models.DispatchDelegationUnsupported, res.Outcome)
 	assert.Zero(t, api.calls, "no platform call, and no credential resolution either")
+	assert.Zero(t, tok.resolves)
+}
+
+// An owner's persistent 401 keeps the old answer: a broadcaster is always a moderator of their own
+// channel, so "unauthorized" there really is about the credential. (Its delegated counterpart is
+// deliberately different — see the delegated tests.)
+func TestKickDispatch_OwnerUnauthorizedAfterRefreshIsReauth(t *testing.T) {
+	api := &fakeKickAPI{results: []error{clients.ErrKickUnauthorized, clients.ErrKickUnauthorized}}
+	src := &fakeKickTokens{cred: kickCredWith(models.ScopeKickModeration)}
+	d := NewKick(src, api, zap.NewNop())
+
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionBan,
+		models.DispatchRequest{Platform: "kick", ChannelID: "c", TargetUserID: "42"})
+
+	require.NoError(t, err)
+	assert.Equal(t, models.DispatchReauthRequired, res.Outcome)
+	assert.Equal(t, "unauthorized after refresh", res.PlatformStatus)
 }
