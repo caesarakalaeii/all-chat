@@ -54,6 +54,9 @@ type EventSettings struct {
 	EnableTikTokGifts   bool `json:"enable_tiktok_gifts" db:"enable_tiktok_gifts"`
 	EnableTikTokFollows bool `json:"enable_tiktok_follows" db:"enable_tiktok_follows"`
 	EnableTikTokShares  bool `json:"enable_tiktok_shares" db:"enable_tiktok_shares"`
+	// Coin chests (TikTok's treasure boxes) arrive on the ENVELOPE message; they fire once
+	// per viewer drop, hence a dedicated toggle alongside likes/gifts/follows/shares.
+	EnableTikTokTreasureChests bool `json:"enable_tiktok_treasure_chests" db:"enable_tiktok_treasure_chests"`
 
 	// System Events
 	EnableTokenWarnings bool `json:"enable_token_warnings" db:"enable_token_warnings"`
