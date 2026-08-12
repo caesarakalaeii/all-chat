@@ -244,5 +244,58 @@ body {
 }
 
 /* ============================================================
+   EVENTS - SOFT CELEBRATION CARDS
+   ============================================================
+
+   Events keep the same rounded pastel cloud and dark-plum ink; only the
+   border and title colour say "something happened". The platform default
+   would drop a gold-glowing, hard-edged card into the pastel set.
+   Tokens: AUTHORING-EVENTS.md
+   ============================================================ */
+
+.event-message {
+  --event-scale: 1;
+  --event-min-height: 0;
+  --event-radius: 24px;
+  --event-animation: none;
+  --event-icon-animation: none;
+  --event-icon-filter: drop-shadow(0 2px 4px rgba(255, 182, 193, 0.6));
+  --event-icon-size: 1.6rem;
+  --event-decor: none;
+
+  --event-title-font: 'Nunito', sans-serif;
+  --event-title-size: 14px;
+  --event-title-transform: none;
+  --event-title-spacing: 0.02em;
+  --event-title-color: #7b5ea7;
+  --event-title-shadow: none;
+  --event-value-size: 18px;
+  --event-value-color: #ff6fa5;
+  --event-value-shadow: none;
+  --event-text-size: 15px;
+  --event-text-color: #42356b;
+  --event-meta-color: rgba(123, 94, 167, 0.75);
+  --event-indent: 2.4rem;
+
+  --event-accent-subscription: #c8a2ff;
+  --event-accent-bits: #8fd3ff;
+  --event-accent-raid: #ffb26b;
+  --event-accent-super-chat: #ffd76b;
+  --event-accent-channel-points: #8fd3ff;
+  --event-accent-gift: #ff8fbf;
+  --event-accent-follow: #8fd3ff;
+  --event-accent-like: #ff8fbf;
+  --event-accent-member: #9fe6bd;
+}
+
+/* Soft border in the type colour instead of a hard accent bar */
+.space-y-3 > div.event-message {
+  border: 3px solid var(--event-accent-color, rgba(255, 182, 193, 0.8)) !important;
+  box-shadow:
+    0 8px 32px rgba(255, 182, 193, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8) !important;
+}
+
+/* ============================================================
    END OF PASTEL KAWAII THEME
    ============================================================ */

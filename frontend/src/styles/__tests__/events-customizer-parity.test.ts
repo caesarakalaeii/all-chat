@@ -129,6 +129,52 @@ describe('events.css visual-customizer scope parity', () => {
     expect(scopedFloor?.length).toBe(2)
   })
 
+  /**
+   * The bubble-forcing block uses `!important` inside a cascade layer, which
+   * beats a theme's unlayered `!important` — nothing a theme author writes can
+   * override it. While it matched `.event-message` it pinned every event to the
+   * chat bubble's border/padding: the tier borders never rendered, and themes
+   * had no way to restyle the event card. Events take those values as defaults
+   * (via `--event-*` in marketplace-themes) where a theme can still win.
+   */
+  it('excludes events from the unbeatable bubble-forcing rules', () => {
+    const forcing = CSS.match(/\.overlay-(preview|live)-body > div[^{]*\{/g) ?? []
+    expect(forcing.length).toBe(2)
+    for (const rule of forcing) {
+      expect(rule, `${rule} must not force chat-bubble chrome onto event rows`).toContain(
+        ':not(.event-message)'
+      )
+    }
+  })
+
+  /**
+   * The whole point of the token layer: a theme sets `--event-*` instead of
+   * hunting down and `!important`-ing every rule. If a default gets hardcoded
+   * back into a rule, themed overlays silently regress to the gold glowing card.
+   */
+  it('drives the event card chrome through --event-* tokens', () => {
+    const eventBase = CSS.match(/\n {2}\.event-message \{[\s\S]*?\n {2}\}/)?.[0] ?? ''
+    expect(eventBase).not.toBe('')
+    for (const token of [
+      '--event-min-height',
+      '--event-padding',
+      '--event-radius',
+      '--event-border-width',
+      '--event-bg',
+      '--event-glow',
+      '--event-scale',
+      '--event-animation',
+    ]) {
+      expect(eventBase, `.event-message should read ${token}`).toContain(`var(${token}`)
+    }
+  })
+
+  /** Structure follows the customizer so an unthemed event matches the overlay. */
+  it('defaults event sizing to the chat-bubble customizer values', () => {
+    expect(CSS).toContain('var(--event-padding, var(--chat-bubble-padding')
+    expect(CSS).toContain('var(--event-radius, var(--chat-bubble-border-radius')
+  })
+
   it('lets plain-text messages use the unfloored line-height', () => {
     const baseLineHeight = CSS.match(
       /line-height:\s*calc\(var\(--chat-line-height, 1\.5\) \* 1em\)\s*!important/g
@@ -166,5 +212,32 @@ describe('overlay event-renderer parity', () => {
   it('keeps the event renderer in one place — no inline event-title switch in either route', () => {
     expect(live, 'live overlay must not re-define getEventTitle').not.toContain('getEventTitle')
     expect(preview, 'preview/embed must not re-define getEventTitle').not.toContain('getEventTitle')
+  })
+
+  /**
+   * Event chrome is theme-owned, so its size/colour/indent must live in
+   * events.css where a theme can reach it — not in unlayered Tailwind utilities
+   * that a theme can only fight with `!important`. This is what made an event
+   * pop up in default styling on top of a themed overlay.
+   */
+  it('leaves event size/colour/indent to events.css, not Tailwind utilities', () => {
+    // Comments stripped: the file explains this rule by naming the utilities it
+    // no longer uses, and that prose must not trip the guard.
+    const renderer = read('../../components/overlay/EventContent.tsx').replace(
+      /\/\*[\s\S]*?\*\//g,
+      ''
+    )
+    for (const utility of [
+      'text-4xl',
+      'text-yellow-300',
+      'text-slate-200',
+      'text-slate-400',
+      'ml-14',
+    ]) {
+      expect(
+        renderer,
+        `EventContent should not hardcode "${utility}" — express it as an --event-* token in events.css`
+      ).not.toContain(utility)
+    }
   })
 })
