@@ -705,13 +705,19 @@ func (h *Handler) execute(c *gin.Context, cl caller, action models.Action, dreq 
 		return
 	case models.DispatchOwnerUnverified:
 		// Delegation never exceeds what the owner could do themselves. Only the owner can fix
-		// this, so the copy names them and gives the moderator nothing to attempt.
+		// this, so a moderator is given nothing to attempt.
+		//
+		// The owner can reach this too — the anchor gates their own path on YouTube, where
+		// credential resolution is not channel-scoped — and there the delegation wording would be
+		// nonsense to someone moderating alone. Same code, same audit row, copy addressed to
+		// whoever is actually reading it.
 		e.Outcome = audit.OutcomeOwnerUnverified
 		h.record(ctx, e)
-		c.JSON(http.StatusForbidden, gin.H{
-			"error": "this streamer's " + dreq.Platform + " account is not connected, so nothing can be delegated on this channel",
-			"code":  codeOwnerUnverified,
-		})
+		msg := "your " + dreq.Platform + " account isn't connected for this channel, so it can't be moderated from here"
+		if actor.IsModerator() {
+			msg = "this streamer's " + dreq.Platform + " account is not connected, so nothing can be delegated on this channel"
+		}
+		c.JSON(http.StatusForbidden, gin.H{"error": msg, "code": codeOwnerUnverified})
 		return
 	case models.DispatchNotPlatformModerator:
 		// The platform refused, not All-Chat. Pointing this at a re-consent screen would loop a

@@ -505,9 +505,12 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
           // not a fault. The per-source banner already offers the button; this names the reason.
           return isModerator ? `Connect your own ${platform} account to moderate here` : null
         case 'owner_channel_unverified':
-          // Only the streamer can fix this, so the copy stops at the cause rather than offering a
-          // button that would do nothing.
-          return `This streamer's ${platform} account isn't connected, so nothing can be moderated here`
+          // For a moderator, only the streamer can fix this, so the copy stops at the cause rather
+          // than offering a button that would do nothing. An owner can hit it too (the anchor gates
+          // their own path on YouTube), and there it is theirs to fix by reconnecting the account.
+          return isModerator
+            ? `This streamer's ${platform} account isn't connected, so nothing can be moderated here`
+            : `Your ${platform} account isn't connected for this channel — reconnect it to moderate here`
         case 'delegation_unsupported':
           return `Moderators can't act on ${platform} yet — ask the streamer to handle this one`
         case 'target_not_actionable':

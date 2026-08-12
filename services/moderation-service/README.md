@@ -166,7 +166,7 @@ moderator additionally needs a Discord **account link** (`GET /api/v1/auth/disco
 which grants All-Chat no scopes and stores no token: it only records which Discord account they are, so
 their own server permissions can be checked. See "The Discord leg" below.
 
-## Delegated writes (ADR-0048, Twitch + Kick + Discord)
+## Delegated writes (ADR-0048, all four platforms)
 
 An owner action and a delegated action differ in exactly one place — which credential performs the
 call and against whose channel — and the dispatcher makes that difference explicit rather than
@@ -209,6 +209,19 @@ empirical unknown), so a 401 that survives a **successful** refresh is also trea
 moderator" on the delegated path — the token is seconds old and its scope was pre-checked, so
 credential validity is not a live explanation. An owner keeps the plain re-consent answer, because a
 broadcaster is always a moderator of their own channel.
+
+**On YouTube the anchor gates the owner path too**, and it is the one platform that needs that.
+`YouTubeSource.Resolve` falls back to the channel-agnostic `users` row of a YouTube-login account,
+which matches *any* channel id — so without the anchor an owner could aim moderation at a channel
+they merely added as a read-only source. YouTube would refuse it, but All-Chat would have asked.
+`OwnerYouTubeAnchor` therefore accepts only the per-channel `youtube_oauth_tokens` row, which exists
+because Google issued a token for that channel's own account, and it returns no id at all: a YouTube
+write is addressed by the broadcast's liveChatId, so the anchor is a pure gate. Measured before
+enabling: **406 of 406** YouTube sources in production are anchored.
+
+YouTube also carries no moderator field in its request — the token is the whole claim of who is
+acting — so `platform_actor_id` there records the acting Google account for attribution rather than a
+value that was transmitted (see migration 085).
 
 Every write records five identities in `moderation_actions`: who acted, in what role, for whom,
 **whose credential acted** (`credential_user_id` — the machine-checkable proof no fallback
@@ -288,15 +301,22 @@ no redeploy. Locally, non-premium users can either set `users.is_premium=true` o
   listing and role-aware `capabilities`; per-platform leg enforcement; the **Twitch leg** — a
   delegated moderator's Helix write now runs on their own credential (see Delegated writes below) —
   and the **Discord leg**, which works differently on purpose (see below).
-  **The YouTube leg is not built**: a delegated YouTube action refuses with
-  `delegation_unsupported` rather than falling through to whatever credential the dispatcher would
-  otherwise reach for.
+  All four platform legs are now built; the refusal path (`delegation_unsupported`) remains for a
+  deployment where a platform's moderator credential store is not wired, so a delegated action can
+  never fall through to whatever credential the dispatcher would otherwise reach for.
 - **The Kick leg (done).** `tokens.ModKickSource` (the moderator's own credential) +
   `KickSource.OwnerKickAnchor` (the owner's `broadcaster_user_id`), and a PKCE mod-consent flow in
   auth-service. Fixing one thing was a prerequisite: Kick's token exchange parsed the granted
   `scope` and threw it away, so **every** Kick grant — owner grants included — was stored with an
   empty `granted_scopes`, which made the capability endpoint report `missing_scope` forever and the
   dispatcher refuse every Kick action.
+- **The YouTube leg (done).** `tokens.ModYouTubeSource` (the moderator's own force-ssl credential) +
+  `YouTubeSource.OwnerYouTubeAnchor`, and a YouTube mod-consent flow that asks for force-ssl plus the
+  Google identity read and nothing else — notably **not** `youtube.readonly`, which exists so the
+  listener can poll a streamer's own chat and has no business on a volunteer's consent screen. The
+  consent needed no channel resolution at all (the open question in ADR-0048's empirical list):
+  the callback only skips channel lookup for non-add-source states, and the credential is attributed
+  by Google account id.
 - **YouTube write path: timeout added (done).** YouTube was permanent-ban-only, which ADR-0048 called
   a moderation-safety problem — the only tool available was the most severe one. A timeout is a
   *temporary* ban on the same `liveChatBans.insert` endpoint, so it needed no new scope and costs the

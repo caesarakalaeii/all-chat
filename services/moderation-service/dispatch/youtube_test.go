@@ -35,14 +35,23 @@ type fakeYTTokens struct {
 	resolveErr error
 	refreshErr error
 	refreshes  int
+	resolves   int
 	onRefresh  func(*tokens.YouTubeCredential)
+	anchorErr  error
+	anchorFor  []string // the (owner, channel) pairs the anchor was asked about
 }
 
 func (f *fakeYTTokens) Resolve(context.Context, string, string) (*tokens.YouTubeCredential, error) {
+	f.resolves++
 	if f.resolveErr != nil {
 		return nil, f.resolveErr
 	}
 	return f.cred, nil
+}
+
+func (f *fakeYTTokens) OwnerYouTubeAnchor(_ context.Context, ownerUserID, channelID string) error {
+	f.anchorFor = append(f.anchorFor, ownerUserID+"|"+channelID)
+	return f.anchorErr
 }
 
 func (f *fakeYTTokens) Refresh(_ context.Context, cred *tokens.YouTubeCredential) error {

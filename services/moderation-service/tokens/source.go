@@ -221,7 +221,12 @@ func (s *TwitchSource) Refresh(ctx context.Context, cred *TwitchCredential) erro
 // only** — never that the owner holds a moderation scope, a live token or premium. Requiring any
 // of those would deny delegation to exactly the streamer who delegates *because* they do not
 // moderate themselves.
-var ErrOwnerChannelUnverified = errors.New("tokens: overlay owner cannot be shown to control this channel")
+//
+// Aliased from shared/youtubetoken (like ErrNoCredential) rather than declared here, because the
+// YouTube anchor lives in that package: two separate sentinels would compare unequal under
+// errors.Is, and the dispatcher would report an unanchored owner as a 502 platform error instead of
+// the actionable owner_channel_unverified. The Twitch and Kick anchors below return this same value.
+var ErrOwnerChannelUnverified = youtubetoken.ErrOwnerChannelUnverified
 
 // ownerAnchorQuery mirrors resolveQuery's UNION and ADR-0016 preference, minus the two things the
 // anchor must not care about: it selects no token material and applies no scope predicate.

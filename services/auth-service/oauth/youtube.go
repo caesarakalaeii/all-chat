@@ -138,6 +138,48 @@ func (y *YouTubeOAuth) GetAuthURLWithScopes(state string, extra []string) string
 	)
 }
 
+// YouTubeIdentityScope is Google's profile read, the minimum needed to know WHICH account just
+// consented. The callback resolves the moderator's identity from Google's userinfo endpoint, and
+// without it the credential could not be attributed to anyone.
+const YouTubeIdentityScope = "https://www.googleapis.com/auth/userinfo.profile"
+
+// GetModConsentAuthURL builds the consent URL for a delegated moderator granting their own YouTube
+// moderation scope (ADR-0048).
+//
+// Unlike GetAuthURLWithScopes it does NOT prepend the base login scopes: `youtube.readonly` exists
+// so youtube-listener can poll a streamer's OWN live chat, and asking a volunteer for read access to
+// their channel — to do unpaid work on someone else's — is an ADR-0012 scope-minimisation regression.
+// It is not needed here either: nothing in the moderation path reads the moderator's own channel.
+//
+// prompt=consent is required so an already-connected Google account is genuinely re-prompted for
+// force-ssl (and so a refresh token is reissued); access_type=offline keeps that refresh token,
+// without which the credential would die at the first expiry and the moderator would have to
+// re-consent every hour.
+//
+// Returns "" when no moderation scopes are requested: a consent screen granting nothing would only
+// fail later, at the first moderation call, as a confusing missing-scope error.
+func (y *YouTubeOAuth) GetModConsentAuthURL(state string, scopes []string) string {
+	seen := make(map[string]bool)
+	minimal := make([]string, 0, len(scopes)+1)
+	for _, s := range scopes {
+		if s != "" && !seen[s] {
+			seen[s] = true
+			minimal = append(minimal, s)
+		}
+	}
+	if len(minimal) == 0 {
+		return ""
+	}
+	if !seen[YouTubeIdentityScope] {
+		minimal = append(minimal, YouTubeIdentityScope)
+	}
+	return y.config.AuthCodeURL(state,
+		oauth2.AccessTypeOffline,
+		oauth2.SetAuthURLParam("prompt", "consent"),
+		oauth2.SetAuthURLParam("scope", strings.Join(minimal, " ")),
+	)
+}
+
 // ExchangeCode exchanges authorization code for tokens
 func (y *YouTubeOAuth) ExchangeCode(ctx context.Context, code string) (*oauth2.Token, error) {
 	token, err := y.config.Exchange(ctx, code)
