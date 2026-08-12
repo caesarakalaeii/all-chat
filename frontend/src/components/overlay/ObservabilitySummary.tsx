@@ -43,6 +43,7 @@ const EVENT_TOGGLES: Array<{ key: keyof EventSettings; label: string }> = [
   { key: 'enable_tiktok_gifts', label: 'TikTok Gifts' },
   { key: 'enable_tiktok_follows', label: 'TikTok Follows' },
   { key: 'enable_tiktok_shares', label: 'TikTok Shares' },
+  { key: 'enable_tiktok_treasure_chests', label: 'TikTok Coin Chests' },
   { key: 'enable_token_warnings', label: 'Token Warnings' },
 ]
 

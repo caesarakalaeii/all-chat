@@ -249,6 +249,16 @@ func classifyTikTokEvent(eventType string, value *models.EventValue) (tier strin
 		// Shares are medium value
 		return "medium", 15
 
+	case "treasure_chest":
+		// Coin chests: tier based on coin count, same thresholds as gifts
+		if value != nil && value.Amount >= 1000 {
+			return "high", 35 // 1000+ coins
+		} else if value != nil && value.Amount >= 100 {
+			return "medium", 20 // 100-999 coins
+		} else {
+			return "low", 10 // <100 coins
+		}
+
 	default:
 		return "medium", 15
 	}

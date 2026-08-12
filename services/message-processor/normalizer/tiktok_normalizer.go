@@ -207,6 +207,22 @@ func (n *TikTokNormalizer) NormalizeEvent(raw *models.RawChatMessage, overlayID 
 			Currency:    "share",
 			DisplayText: "Shared stream",
 		}
+
+	case "treasure_chest":
+		coins := 0
+		if c, ok := raw.EventData["coins"].(int); ok {
+			coins = c
+		} else if c, ok := raw.EventData["coins"].(float64); ok {
+			coins = int(c)
+		}
+
+		// can_open (how many viewers may claim the chest) rides along in EventInfo.Metadata,
+		// which is raw.EventData verbatim - no dedicated EventValue field for it.
+		eventValue = &models.EventValue{
+			Amount:      float64(coins),
+			Currency:    "coins",
+			DisplayText: fmt.Sprintf("%d coins", coins),
+		}
 	}
 
 	// Classify event tier and duration
