@@ -79,7 +79,8 @@ export function ModerationControls({
 
   // When a source can't be moderated at all, keep a disabled affordance (carrying the
   // reason tooltip) for hover feedback. When it can, render only the controls whose
-  // actions are actually granted — so a ban-only platform (Kick/YouTube) shows no delete
+  // actions are actually granted — so a ban-only source (YouTube, or a Kick credential
+  // holding only the ban scope) shows no delete
   // button, and a platform whose bot/credential lacks per-user permissions shows no
   // per-user menu, rather than a dead control. (Discord reports whatever its bot's guild
   // permissions allow — delete and/or timeout/ban/unban.)

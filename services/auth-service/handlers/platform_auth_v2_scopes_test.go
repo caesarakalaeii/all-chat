@@ -83,6 +83,29 @@ func TestKickModerationReconsentUnionIsNeverADowngrade(t *testing.T) {
 		"dropping the kick moderation grant on a plain re-login must be caught as a downgrade")
 }
 
+// Kick's delete scope is granted separately from its ban scope, so it needs its own entry
+// in the downgrade guard: a plain re-login (or a consent for the ban scope alone) must not
+// silently drop it, which would disable delete until the streamer noticed and re-consented.
+func TestKickDeleteScopeIsPreserved(t *testing.T) {
+	const deleteScope = "moderation:chat_message:manage"
+	assert.Equal(t, []string{deleteScope}, oauth.KickModerationScopesForActions([]string{"delete"}))
+
+	assert.True(t, wouldDowngradeScopes([]string{"user:read", deleteScope}, []string{"user:read"}),
+		"a plain re-login must not drop the kick delete grant")
+	assert.True(t,
+		wouldDowngradeScopes(
+			[]string{"user:read", deleteScope, "moderation:ban"},
+			[]string{"user:read", "moderation:ban"},
+		),
+		"consenting for ban alone must not drop an existing delete grant")
+
+	// And the union the re-consent actually requests is an upgrade for both scopes.
+	existing := []string{"user:read", "moderation:ban"}
+	merged := unionScopes(existing, oauth.KickModerationScopesForActions([]string{"delete", "timeout", "ban", "unban"}))
+	assert.False(t, wouldDowngradeScopes(existing, merged))
+	assert.Subset(t, merged, []string{deleteScope, "moderation:ban"})
+}
+
 func TestSplitActions(t *testing.T) {
 	assert.Equal(t, []string{"delete", "ban"}, splitActions(" delete , ban "))
 	assert.Equal(t, []string{"delete"}, splitActions("delete"))

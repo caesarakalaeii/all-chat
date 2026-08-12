@@ -135,7 +135,7 @@ Admin **impersonation** is allowed but always attributed: the action runs as the
 | Platform | Actions | Status |
 |---|---|---|
 | Twitch | delete, timeout, ban, unban | **live** — real Helix calls via the broadcaster's own token (scope-gated) |
-| Kick | timeout, ban, unban | **live** — real Kick API via the broadcaster's own token (`moderation:ban` scope-gated); no single-message delete |
+| Kick | delete, timeout, ban, unban | **live** — real Kick API via the broadcaster's own token. Two independent scopes: `moderation:ban` (timeout/ban/unban) and `moderation:chat_message:manage` (delete). A streamer who consented before delete existed holds only the first, so their capability legitimately reports no delete until they re-consent |
 | Discord | delete, timeout, ban, unban | **live** — bot REST (delete `messages`, member `communication_disabled_until`/`bans`); each action gated by the bot's effective guild permission |
 | YouTube | ban | **live** — `liveChatBans.insert` via the broadcaster's own token (`force-ssl` scope-gated); ban-only (unban needs the ban resource id, deferred); liveChatId from the listener's Redis cache; quota-accounted (ADR-0006) |
 | TikTok | — | unsupported (no moderation API) — reported `unsupported_platform` |
@@ -151,8 +151,8 @@ Moderation OAuth scopes are **opt-in and least-privilege**: requested only via a
 flow (`GET /api/v1/auth/{twitch,kick,youtube}/moderation/:overlay_id?actions=…` on the auth-service), per
 platform/account, minimised to the enabled actions and unioned with the existing grant so the new token
 is always a superset. Twitch splits delete (`moderator:manage:chat_messages`) from ban/timeout/unban
-(`moderator:manage:banned_users`); Kick gates ban/timeout/unban behind one scope (`moderation:ban`);
-YouTube re-adds `youtube.force-ssl` (dropped at login per ADR-0012) for ban.
+(`moderator:manage:banned_users`); Kick splits them the same way (`moderation:chat_message:manage` vs
+`moderation:ban`); YouTube re-adds `youtube.force-ssl` (dropped at login per ADR-0012) for ban.
 `granted_scopes` is the source of truth; the capabilities endpoint reports `missing_scope` until they
 are granted, and the dispatcher pre-checks scopes before any platform call. **Discord is the
 exception**: its authority is a shared bot token (a service credential), not a per-user OAuth grant, so
@@ -165,7 +165,7 @@ moderator additionally needs a Discord **account link** (`GET /api/v1/auth/disco
 which grants All-Chat no scopes and stores no token: it only records which Discord account they are, so
 their own server permissions can be checked. See "The Discord leg" below.
 
-## Delegated writes (ADR-0048, Twitch + Discord)
+## Delegated writes (ADR-0048, Twitch + Kick + Discord)
 
 An owner action and a delegated action differ in exactly one place — which credential performs the
 call and against whose channel — and the dispatcher makes that difference explicit rather than
@@ -173,26 +173,41 @@ inferring it from the caller's id:
 
 | | Owner | Delegated moderator |
 |---|---|---|
-| Token | the owner's broadcaster credential (`users` / `twitch_oauth_tokens`) | the moderator's own credential (`mod_oauth_credentials`) |
+| Token | the owner's broadcaster credential (`users` / `twitch_oauth_tokens` / `kick_oauth_tokens`) | the moderator's own credential (`mod_oauth_credentials`) |
 | `broadcaster_id` | their own, from that credential | the **owner-reach anchor** |
-| `moderator_id` | the same id — a streamer is their own moderator | the moderator's `platform_user_id` |
+| `moderator_id` (Twitch) | the same id — a streamer is their own moderator | the moderator's `platform_user_id` |
 | Scope pre-check | the owner's `granted_scopes` | the **moderator's** `granted_scopes` |
 
 There is **no fallback** between them. A moderator who has not consented gets `422 connect_required`
 — consent is deferred to first use, so that is the expected first click on a fresh grant — and never
 a call made with the streamer's token.
 
-The **owner-reach anchor** (`tokens.TwitchSource.OwnerTwitchAnchor`) is what stops delegation from
-exceeding what the owner could do themselves: it resolves the numeric broadcaster id from a
-credential row whose login equals the source's `channel_id`. It applies **no scope predicate and
-reads no token** — requiring the owner to hold a moderation scope would deny delegation to exactly
-the streamer who delegates *because* they do not moderate themselves. When it cannot be proven the
-action is refused with `owner_channel_unverified`, and the copy names the streamer: only they can
-fix it.
+The **owner-reach anchor** (`tokens.TwitchSource.OwnerTwitchAnchor`, `tokens.KickSource.OwnerKickAnchor`)
+is what stops delegation from exceeding what the owner could do themselves: it resolves the numeric
+broadcaster id from a credential row whose login/slug equals the source's `channel_id`. It applies
+**no scope predicate and reads no token** — requiring the owner to hold a moderation scope would deny
+delegation to exactly the streamer who delegates *because* they do not moderate themselves. When it
+cannot be proven the action is refused with `owner_channel_unverified`, and the copy names the
+streamer: only they can fix it.
 
-Twitch itself is the authority on whether the moderator may act. Helix re-checks on every call that
-`moderator_id` is the token's own user and that they moderate `broadcaster_id`; a 403 surfaces as a
-re-consent prompt rather than anything All-Chat cached.
+**On Kick the anchor carries more weight than on Twitch.** Kick's moderation endpoints have no
+moderator field — the acting identity is implied by the bearer token — so `broadcaster_user_id` is
+the *only* id in the request. Resolving it the way an owner action does (from the acting user's own
+credential) would not fail loudly; it would quietly moderate the moderator's own channel. The anchor
+is therefore the single source of that id, and it gates delete too, where its value goes unused
+(Kick addresses the message directly) but the question it answers still has to be asked.
+
+The platform itself is the authority on whether the moderator may act. Helix re-checks on every call
+that `moderator_id` is the token's own user and that they moderate `broadcaster_id`; Kick re-checks
+the token holder's moderator status on the channel. A 403 on the delegated path is therefore
+reported as `not_moderator_on_platform` (the streamer must mod them in the platform's own tools),
+never as a re-consent that cannot fix it.
+
+One Kick-specific wrinkle: its 401-vs-403 mapping is undocumented (ADR-0048 lists it as an
+empirical unknown), so a 401 that survives a **successful** refresh is also treated as "not a
+moderator" on the delegated path — the token is seconds old and its scope was pre-checked, so
+credential validity is not a live explanation. An owner keeps the plain re-consent answer, because a
+broadcaster is always a moderator of their own channel.
 
 Every write records five identities in `moderation_actions`: who acted, in what role, for whom,
 **whose credential acted** (`credential_user_id` — the machine-checkable proof no fallback
@@ -244,7 +259,8 @@ no redeploy. Locally, non-premium users can either set `users.is_premium=true` o
   platforms without a client yet. **Scope-gated: inert until a streamer opts in.** Also **cohort-gated**
   behind the `moderation` feature gate (see Rollout above).
 - **Phase 2 (done): Kick + Discord.** Kick mirrors the Twitch pattern (broadcaster's own token,
-  `moderation:ban` scope, opt-in re-consent; ban/timeout/unban — Kick has no single-message delete).
+  `moderation:ban` scope, opt-in re-consent; ban/timeout/unban — believed at the time to be Kick's
+  whole moderation surface; single-message delete was added later, see the Kick delete entry below).
   Discord shipped delete-only via a shared bot token (no per-user OAuth). To make deletions reflect on the
   OBS overlay for non-Twitch platforms (whose listeners don't populate the msgid registry), the delete
   command now threads the internal `target_uuid` through the `message_deletion` event and the
@@ -270,9 +286,21 @@ no redeploy. Locally, non-premium users can either set `users.is_premium=true` o
   listing and role-aware `capabilities`; per-platform leg enforcement; the **Twitch leg** — a
   delegated moderator's Helix write now runs on their own credential (see Delegated writes below) —
   and the **Discord leg**, which works differently on purpose (see below).
-  **Kick and YouTube legs are not built**: a delegated action on those refuses with
+  **The YouTube leg is not built**: a delegated YouTube action refuses with
   `delegation_unsupported` rather than falling through to whatever credential the dispatcher would
   otherwise reach for.
+- **The Kick leg (done).** `tokens.ModKickSource` (the moderator's own credential) +
+  `KickSource.OwnerKickAnchor` (the owner's `broadcaster_user_id`), and a PKCE mod-consent flow in
+  auth-service. Fixing one thing was a prerequisite: Kick's token exchange parsed the granted
+  `scope` and threw it away, so **every** Kick grant — owner grants included — was stored with an
+  empty `granted_scopes`, which made the capability endpoint report `missing_scope` forever and the
+  dispatcher refuse every Kick action.
+- **Kick single-message delete (done).** Deliberately its own change, not part of the delegation
+  work: it is an owner-facing capability correction, so it must not be coupled to a feature that
+  might be rolled back. Kick does expose `DELETE /public/v1/chat/{message_id}`, behind a second
+  scope (`moderation:chat_message:manage`) — the repo had recorded the endpoint as nonexistent. The
+  message id is Kick's own message UUID, which is already what All-Chat uses as the message id, so
+  the delete path needed no new plumbing through the pipeline.
 
 ## Layout
 

@@ -31,10 +31,14 @@ import (
 type capturedRequest struct {
 	method string
 	path   string
-	query  map[string]string
-	auth   string
-	client string
-	body   map[string]any
+	// escapedPath is the still-encoded request target. Asserting on it is the only way to
+	// see whether an id interpolated into a path was escaped: r.URL.Path has already been
+	// decoded, so a smuggled %2F is indistinguishable from a real path separator there.
+	escapedPath string
+	query       map[string]string
+	auth        string
+	client      string
+	body        map[string]any
 }
 
 // newTestClient returns a TwitchClient pointed at a server that records the request

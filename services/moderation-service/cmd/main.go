@@ -150,8 +150,8 @@ func main() {
 		log.Info("Twitch moderation enabled (real Helix calls, owner + delegated moderator)")
 	}
 
-	// Kick (timeout/ban/unban; no single-message delete) uses the broadcaster's own
-	// OAuth token, so it needs the cipher AND the Kick app credentials (refresh grant).
+	// Kick (delete/timeout/ban/unban, across two scopes) uses the acting human's own OAuth
+	// token, so it needs the cipher AND the Kick app credentials (refresh grant).
 	switch {
 	case cipherErr != nil:
 		// The cipher warning already fired in the Twitch block; Kick also stays dry-run.
@@ -159,11 +159,16 @@ func main() {
 		log.Warn("KICK_CLIENT_ID/KICK_CLIENT_SECRET not set; Kick moderation runs in dry-run")
 	default:
 		kickSource := tokens.NewKickSource(dbPool, cipher, cfg.KickClientID, cfg.KickClientSecret)
-		dispatchers["kick"] = dispatch.NewKick(kickSource, clients.NewKickClient(), log)
+		kickDispatcher := dispatch.NewKick(kickSource, clients.NewKickClient(), log)
+		// Delegated moderation (ADR-0048), same invariant as Twitch: the moderator's own
+		// credential from mod_oauth_credentials, and the owner's channel from the anchor. Without
+		// this the dispatcher refuses delegated Kick actions outright.
+		kickDispatcher.SetModSource(tokens.NewModKickSource(dbPool, cipher, cfg.KickClientID, cfg.KickClientSecret))
+		dispatchers["kick"] = kickDispatcher
 		kickScopes := tokens.NewKickScopeChecker(kickSource)
 		scopeCheckers["kick"] = kickScopes
 		sendCheckers["kick"] = kickScopes
-		log.Info("Kick moderation enabled (real Kick API calls)")
+		log.Info("Kick moderation enabled (delete/timeout/ban/unban, owner + delegated moderator)")
 	}
 
 	// YouTube (ban-only) uses the broadcaster's own token (cipher + Google OAuth creds);

@@ -140,10 +140,12 @@ func TestCapabilities_PlatformNotDelegatedReadsAsNotDelegated(t *testing.T) {
 // platform at all, and must read the same way.
 func TestCapabilities_ActionsUnsupportedByPlatformReadAsNotDelegated(t *testing.T) {
 	auth := &fakeAuthorizer{
-		// Kick has no single-message delete, so a delete-only grant delegates nothing there.
-		access:    moderatorAccess([]string{"delete"}, []string{"kick"}),
-		sources:   []repository.Source{{Platform: "kick", ChannelID: "kickstreamer", ChannelName: "KickStreamer"}},
-		modScopes: map[string][]string{"kick": {models.ScopeKickModeration}},
+		// YouTube has no single-message delete (its live-chat delete keys on a Data API
+		// message id All-Chat does not hold), so a delete-only grant delegates nothing there
+		// — even though the moderator has consented for YouTube.
+		access:    moderatorAccess([]string{"delete"}, []string{"youtube"}),
+		sources:   []repository.Source{{Platform: "youtube", ChannelID: "UCstreamer", ChannelName: "YTStreamer"}},
+		modScopes: map[string][]string{"youtube": {models.ScopeYouTubeModeration}},
 	}
 
 	caps := modCaps(t, auth)
