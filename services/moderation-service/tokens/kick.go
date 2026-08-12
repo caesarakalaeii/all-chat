@@ -159,47 +159,16 @@ func (s *KickSource) Refresh(ctx context.Context, cred *KickCredential) error {
 		return errors.New("tokens: no kick refresh token available")
 	}
 
-	form := url.Values{
-		"client_id":     {s.clientID},
-		"client_secret": {s.clientSecret},
-		"grant_type":    {"refresh_token"},
-		"refresh_token": {cred.RefreshToken},
+	refresher := &kickRefresher{
+		httpClient: s.httpClient, clientID: s.clientID, clientSecret: s.clientSecret, tokenURL: s.tokenURL,
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.tokenURL, strings.NewReader(form.Encode()))
+	refreshed, err := refresher.exchange(ctx, cred.RefreshToken)
 	if err != nil {
-		return fmt.Errorf("build kick refresh request: %w", err)
+		return err
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	newRefresh, newExpiry := refreshed.refreshToken, refreshed.expiresAt
 
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("kick token refresh request: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return fmt.Errorf("kick token refresh returned %s: %s", strconv.Itoa(resp.StatusCode), string(snippet))
-	}
-
-	var tr struct {
-		AccessToken  string `json:"access_token"`
-		RefreshToken string `json:"refresh_token"`
-		ExpiresIn    int    `json:"expires_in"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&tr); err != nil {
-		return fmt.Errorf("decode kick refresh response: %w", err)
-	}
-	if tr.AccessToken == "" {
-		return errors.New("kick token refresh returned an empty access token")
-	}
-
-	newRefresh := tr.RefreshToken
-	if newRefresh == "" {
-		newRefresh = cred.RefreshToken // Kick may not rotate the refresh token
-	}
-	newExpiry := time.Now().Add(time.Duration(tr.ExpiresIn) * time.Second)
-
-	encAccess, err := s.cipher.EncryptString(tr.AccessToken)
+	encAccess, err := s.cipher.EncryptString(refreshed.accessToken)
 	if err != nil {
 		return fmt.Errorf("encrypt refreshed access token: %w", err)
 	}
@@ -224,8 +193,125 @@ func (s *KickSource) Refresh(ctx context.Context, cred *KickCredential) error {
 		return fmt.Errorf("persist refreshed kick token: %w", err)
 	}
 
-	cred.AccessToken = tr.AccessToken
+	cred.AccessToken = refreshed.accessToken
 	cred.RefreshToken = newRefresh
 	cred.ExpiresAt = newExpiry
 	return nil
+}
+
+// kickOwnerAnchorQuery mirrors kickResolveQuery's UNION and its preference order, minus the two
+// things the anchor must not care about: it selects no token material and applies no scope
+// predicate. The kick_user_id NOT NULL requirement is not one of those — without the numeric id
+// there is no broadcaster_user_id to return, so a legacy listener row anchors nothing.
+const kickOwnerAnchorQuery = `
+	SELECT broadcaster_id
+	FROM (
+		SELECT u.kick_id AS broadcaster_id, 1 AS pri
+		FROM users u
+		WHERE u.id = $1
+		  AND u.auth_provider = 'kick'
+		  AND LOWER(u.username) = LOWER($2)
+		  AND u.kick_id IS NOT NULL
+		UNION ALL
+		SELECT k.kick_user_id AS broadcaster_id, 2 AS pri
+		FROM kick_oauth_tokens k
+		WHERE k.user_id = $1
+		  AND LOWER(k.channel_id) = LOWER($2)
+		  AND k.kick_user_id IS NOT NULL
+	) c
+	ORDER BY c.pri ASC
+	LIMIT 1`
+
+// OwnerKickAnchor returns the numeric Kick broadcaster id for a channel the overlay owner
+// controls, or ErrOwnerChannelUnverified (ADR-0048's owner-reach anchor).
+//
+// This is the ONLY legitimate source of `broadcaster_user_id` on a delegated Kick write. Kick's
+// moderation endpoints carry no moderator field — the acting identity is implied by the token —
+// so the broadcaster id is the single id in the request, and taking it from the moderator's own
+// credential (which is what resolving by the caller does) would point the call at the
+// moderator's channel instead of the streamer's.
+//
+// Like the Twitch anchor it proves control only: no scope predicate, no token read.
+func (s *KickSource) OwnerKickAnchor(ctx context.Context, ownerUserID, channelID string) (string, error) {
+	var broadcasterID string
+	err := s.db.QueryRow(ctx, kickOwnerAnchorQuery, ownerUserID, channelID).Scan(&broadcasterID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrOwnerChannelUnverified
+	}
+	if err != nil {
+		return "", fmt.Errorf("resolve owner kick anchor: %w", err)
+	}
+	if broadcasterID == "" {
+		return "", ErrOwnerChannelUnverified
+	}
+	return broadcasterID, nil
+}
+
+// kickRefresher performs the Kick OAuth 2.1 refresh grant. Shared by the broadcaster and the
+// delegated-moderator credential sources: the exchange is identical, only the row it is written
+// back to differs, and duplicating it would let the two drift.
+type kickRefresher struct {
+	httpClient   *http.Client
+	clientID     string
+	clientSecret string
+	tokenURL     string
+}
+
+func newKickRefresher(clientID, clientSecret string) *kickRefresher {
+	return &kickRefresher{
+		httpClient:   &http.Client{Timeout: 10 * time.Second},
+		clientID:     clientID,
+		clientSecret: clientSecret,
+		tokenURL:     defaultKickTokenURL,
+	}
+}
+
+// exchange trades a refresh token for a fresh access token. A response that omits the refresh
+// token keeps the caller's existing one — Kick does not always rotate it, and dropping it would
+// end the credential's life at the next expiry.
+func (r *kickRefresher) exchange(ctx context.Context, refreshToken string) (refreshedToken, error) {
+	form := url.Values{
+		"client_id":     {r.clientID},
+		"client_secret": {r.clientSecret},
+		"grant_type":    {"refresh_token"},
+		"refresh_token": {refreshToken},
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, r.tokenURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return refreshedToken{}, fmt.Errorf("build kick refresh request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := r.httpClient.Do(req)
+	if err != nil {
+		return refreshedToken{}, fmt.Errorf("kick token refresh request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return refreshedToken{}, fmt.Errorf("kick token refresh returned %s: %s",
+			strconv.Itoa(resp.StatusCode), string(snippet))
+	}
+
+	var tr struct {
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+		ExpiresIn    int    `json:"expires_in"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&tr); err != nil {
+		return refreshedToken{}, fmt.Errorf("decode kick refresh response: %w", err)
+	}
+	if tr.AccessToken == "" {
+		return refreshedToken{}, errors.New("kick token refresh returned an empty access token")
+	}
+
+	rotated := tr.RefreshToken
+	if rotated == "" {
+		rotated = refreshToken
+	}
+	return refreshedToken{
+		accessToken:  tr.AccessToken,
+		refreshToken: rotated,
+		expiresAt:    time.Now().Add(time.Duration(tr.ExpiresIn) * time.Second),
+	}, nil
 }

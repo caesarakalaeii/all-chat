@@ -318,8 +318,8 @@ export function OnboardingChecklist({
                   <span className="font-medium text-text">Moderate from your overlay</span>
                   <p className="text-xs text-text-sub">
                     Delete, timeout, ban and unban from the Monitor View button at the top of the
-                    editor. Full controls on Twitch and Discord; Kick has no single-message delete;
-                    YouTube is ban-only. (Premium)
+                    editor. Full controls on Twitch, Kick and Discord; YouTube is ban-only.
+                    (Premium)
                   </p>
                 </li>
                 <li>

@@ -44,7 +44,7 @@ const features: PremiumFeature[] = [
     icon: ShieldCheck,
     title: 'Moderate from your overlay',
     description:
-      'Moderate straight from the monitor view — no second dashboard. Delete, timeout, ban and unban on Twitch and Discord; timeout, ban and unban on Kick; ban on YouTube. (TikTok has no moderation API.)',
+      'Moderate straight from the monitor view — no second dashboard. Delete, timeout, ban and unban on Twitch, Kick and Discord; ban on YouTube. (TikTok has no moderation API.)',
   },
   {
     icon: Users,

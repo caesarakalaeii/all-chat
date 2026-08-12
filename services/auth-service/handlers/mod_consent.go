@@ -78,16 +78,6 @@ func (h *PlatformAuthHandlerV2) HandleModConsent(platform oauth.Platform) gin.Ha
 		// grant — the credential lands in its own table, so there is nothing to preserve and
 		// no downgrade guard to satisfy.
 		actions := splitActions(c.Query("actions"))
-		twitchProvider, isTwitch := provider.(*oauth.TwitchOAuth)
-		if !isTwitch {
-			// Each platform leg is independently gated (ADR-0048). Kick needs a PKCE variant
-			// of the minimal-scope builder; YouTube additionally needs the moderator's own
-			// channel id resolved before a credential can be attributed.
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": fmt.Sprintf("delegated moderation for %s is not available yet", platform),
-			})
-			return
-		}
 
 		// Only the four moderation actions are delegatable. The shared mapper also accepts
 		// "engagement", which maps to channel:read:polls / channel:read:predictions — scopes on
@@ -102,10 +92,20 @@ func (h *PlatformAuthHandlerV2) HandleModConsent(platform oauth.Platform) gin.Ha
 			return
 		}
 
-		modScopes := oauth.ModerationScopesForActions(delegatable)
-		if len(modScopes) == 0 {
+		modScopes, legLanded := modConsentScopes(provider, delegatable)
+		if !legLanded {
+			// Each platform leg is independently gated (ADR-0048). YouTube additionally needs the
+			// moderator's own channel id resolved before a credential can be attributed.
 			c.JSON(http.StatusBadRequest, gin.H{
-				"error": "no valid moderation actions; expected ?actions=delete,timeout,ban,unban",
+				"error": fmt.Sprintf("delegated moderation for %s is not available yet", platform),
+			})
+			return
+		}
+		if len(modScopes) == 0 {
+			// Every requested action was delegatable but none maps to a scope on this platform
+			// (YouTube has no single-message delete, for instance).
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": fmt.Sprintf("none of those actions can be delegated on %s", platform),
 			})
 			return
 		}
@@ -130,10 +130,22 @@ func (h *PlatformAuthHandlerV2) HandleModConsent(platform oauth.Platform) gin.Ha
 			return
 		}
 
-		authURL := twitchProvider.GetModConsentAuthURL(stateStr, modScopes)
+		authURL, codeVerifier := modConsentAuthURL(provider, stateStr, modScopes)
 		if authURL == "" {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to build consent URL"})
 			return
+		}
+
+		// Kick is OAuth 2.1 and mandates PKCE, so its verifier is stashed under the key the
+		// shared callback's exchange reads (GetDel, single use). Stored BEFORE the state: the
+		// callback needs both, and a state without a verifier would fail the exchange.
+		if codeVerifier != "" {
+			verifierKey := fmt.Sprintf("oauth_verifier:%s:%s", platform, csrfToken)
+			if err := h.redis.Set(c.Request.Context(), verifierKey, codeVerifier, 30*time.Minute).Err(); err != nil {
+				h.logger.Error("Failed to store mod-consent PKCE verifier", zap.Error(err))
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+				return
+			}
 		}
 
 		stateKey := fmt.Sprintf("oauth_state:%s:%s", platform, csrfToken)
@@ -149,6 +161,36 @@ func (h *PlatformAuthHandlerV2) HandleModConsent(platform oauth.Platform) gin.Ha
 			zap.Strings("mod_scopes", modScopes),
 		)
 		c.JSON(http.StatusOK, gin.H{"auth_url": authURL})
+	}
+}
+
+// modConsentScopes maps the delegated actions to the platform scopes a moderator's consent must
+// request, and reports whether this platform's delegation leg exists at all.
+//
+// The two answers are separate on purpose: "this platform has no leg yet" and "these actions map
+// to nothing here" are different states with different copy, and conflating them told a Kick
+// moderator their platform was unsupported when the real problem was the action they picked.
+func modConsentScopes(provider oauth.OAuthProvider, delegatable []string) (scopes []string, legLanded bool) {
+	switch provider.(type) {
+	case *oauth.TwitchOAuth:
+		return oauth.ModerationScopesForActions(delegatable), true
+	case *oauth.KickOAuth:
+		return oauth.KickModerationScopesForActions(delegatable), true
+	default:
+		return nil, false
+	}
+}
+
+// modConsentAuthURL builds the platform's consent URL, returning a PKCE verifier for platforms
+// that require one (Kick) and an empty verifier for those that do not.
+func modConsentAuthURL(provider oauth.OAuthProvider, state string, modScopes []string) (authURL, codeVerifier string) {
+	switch p := provider.(type) {
+	case *oauth.TwitchOAuth:
+		return p.GetModConsentAuthURL(state, modScopes), ""
+	case *oauth.KickOAuth:
+		return p.GetModConsentAuthURLPKCE(state, modScopes)
+	default:
+		return "", ""
 	}
 }
 

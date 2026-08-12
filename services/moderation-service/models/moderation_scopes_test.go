@@ -76,19 +76,36 @@ func TestActionsForKickScopes(t *testing.T) {
 		ActionsForKickScopes([]string{"user:read", ScopeKickModeration}))
 }
 
+// Kick splits moderation across two scopes, so each must grant only its own actions. A
+// streamer who consented before delete existed holds moderation:ban alone, and must keep
+// timeout/ban/unban without silently gaining a delete their token cannot perform.
+func TestActionsForKickScopes_TheTwoScopesAreIndependent(t *testing.T) {
+	assert.Equal(t,
+		[]Action{ActionDelete},
+		ActionsForKickScopes([]string{ScopeKickChatMessageManage}),
+		"the message scope grants delete alone")
+	assert.NotContains(t,
+		ActionsForKickScopes([]string{ScopeKickModeration}), ActionDelete,
+		"the ban scope must never grant delete")
+	assert.ElementsMatch(t,
+		[]Action{ActionDelete, ActionTimeout, ActionBan, ActionUnban},
+		ActionsForKickScopes([]string{ScopeKickModeration, ScopeKickChatMessageManage}),
+		"both scopes together grant the full Kick set")
+}
+
 func TestActionsForKickScopes_NeverExceedsPlatformSupport(t *testing.T) {
-	for _, a := range ActionsForKickScopes([]string{ScopeKickModeration}) {
+	for _, a := range ActionsForKickScopes([]string{ScopeKickModeration, ScopeKickChatMessageManage}) {
 		assert.True(t, SupportsAction("kick", a), "scope-derived action %q must be a supported kick action", a)
 	}
-	// Kick has no single-message delete, so the scope must never grant it.
-	assert.NotContains(t, ActionsForKickScopes([]string{ScopeKickModeration}), ActionDelete)
 }
 
 func TestRequiredKickScope(t *testing.T) {
 	assert.Equal(t, ScopeKickModeration, RequiredKickScope(ActionTimeout))
 	assert.Equal(t, ScopeKickModeration, RequiredKickScope(ActionBan))
 	assert.Equal(t, ScopeKickModeration, RequiredKickScope(ActionUnban))
-	assert.Equal(t, "", RequiredKickScope(ActionDelete), "Kick does not support single-message delete")
+	assert.Equal(t, ScopeKickChatMessageManage, RequiredKickScope(ActionDelete),
+		"delete is gated behind its own Kick scope, not the ban scope")
+	assert.Equal(t, "", RequiredKickScope(Action("bogus")))
 }
 
 func TestActionsForDiscordPermissions(t *testing.T) {

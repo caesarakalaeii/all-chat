@@ -17,6 +17,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -164,21 +165,76 @@ func TestHandleModConsent_DropsNonDelegatableActionsFromAMix(t *testing.T) {
 	}
 }
 
-// Each platform leg is independently gated. A platform whose leg has not landed must say so
-// rather than issue a consent screen that cannot be completed.
-func TestHandleModConsent_UnlandedPlatformIsRefused(t *testing.T) {
+// --- Kick ------------------------------------------------------------------
+//
+// Kick's leg differs from Twitch's in two visible ways: PKCE is mandatory, and the consent screen
+// legitimately carries `user:read` — the identity read that tells the callback which Kick account
+// consented, without which the credential cannot be attributed to anyone.
+
+func TestHandleModConsent_KickRequestsIdentityPlusTheDelegatedScopes(t *testing.T) {
 	h := modConsentTestHandler(t)
 
 	w := startModConsent(t, h, oauth.PlatformKick, "mod-user-1", "ban")
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	scopes := strings.Fields(authURLFrom(t, w).Query().Get("scope"))
+	assert.ElementsMatch(t, []string{"moderation:ban", "user:read"}, scopes)
+	assert.NotContains(t, scopes, oauth.KickSendScope,
+		"a moderator must not be granted chat-send in v1")
+}
+
+// Kick grants delete separately from ban, so a delete-only delegation must ask for the message
+// scope alone — asking for both would over-request on a volunteer's screen.
+func TestHandleModConsent_KickDeleteAsksForTheMessageScope(t *testing.T) {
+	h := modConsentTestHandler(t)
+
+	w := startModConsent(t, h, oauth.PlatformKick, "mod-user-1", "delete")
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	scopes := strings.Fields(authURLFrom(t, w).Query().Get("scope"))
+	assert.ElementsMatch(t, []string{"moderation:chat_message:manage", "user:read"}, scopes)
+}
+
+// Without the stashed verifier the callback's token exchange fails, so the consent screen would
+// send the moderator on a round trip that could never complete.
+func TestHandleModConsent_KickStashesThePKCEVerifier(t *testing.T) {
+	h := modConsentTestHandler(t)
+
+	w := startModConsent(t, h, oauth.PlatformKick, "mod-user-1", "ban")
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	u := authURLFrom(t, w)
+	assert.Equal(t, "S256", u.Query().Get("code_challenge_method"), "Kick requires PKCE")
+	assert.NotEmpty(t, u.Query().Get("code_challenge"))
+
+	state, err := oauth.DecodeOAuthState(u.Query().Get("state"))
+	require.NoError(t, err)
+	assert.True(t, state.IsModConsent())
+
+	verifier, err := h.redis.Get(context.Background(),
+		"oauth_verifier:kick:"+state.CSRFToken).Result()
+	require.NoError(t, err, "the callback reads the verifier under this exact key")
+	assert.NotEmpty(t, verifier)
+}
+
+// A platform whose leg has not landed must say so rather than issue a consent screen that cannot
+// be completed. YouTube is that platform until its write path is finished.
+func TestHandleModConsent_UnlandedPlatformIsRefused(t *testing.T) {
+	h := modConsentTestHandler(t)
+	h.providers[oauth.PlatformYouTube] = oauth.NewYouTubeOAuth("yt-id", "yt-secret", "https://allch.at/cb")
+
+	w := startModConsent(t, h, oauth.PlatformYouTube, "mod-user-1", "ban")
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 	assert.Contains(t, w.Body.String(), "not available yet")
 }
 
+// A platform with no provider configured at all is a different refusal from an unlanded leg.
 func TestHandleModConsent_UnknownPlatformIsRefused(t *testing.T) {
 	h := modConsentTestHandler(t)
 
 	w := startModConsent(t, h, oauth.PlatformYouTube, "mod-user-1", "ban")
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "not supported")
 }

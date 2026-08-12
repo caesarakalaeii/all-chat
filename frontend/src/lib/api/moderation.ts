@@ -162,8 +162,13 @@ export function buildDeleteRequest(item: ViewItem): DeleteMessageRequest {
   // The platform delete API needs the platform-native message id, not our internal
   // UUID (Twitch Helix wants the IRC/EventSub `Tags["id"]`). The Twitch normalizer
   // preserves it at metadata.twitch_message_id on every live message; target_msg_id
-  // only appears on deletion-echo events. Fall back to the internal id as a last
-  // resort (e.g. a platform whose native id isn't yet threaded through).
+  // only appears on deletion-echo events.
+  //
+  // The `item.id` fallback is load-bearing rather than a last resort on two platforms:
+  // Discord and Kick carry the platform's own id AS the message id (the snowflake and
+  // the Kick message UUID respectively), so it is already the native id there. That is
+  // what makes Kick's delete — DELETE /public/v1/chat/{message_id} — work off this
+  // builder unchanged.
   const nativeId =
     (item.metadata?.twitch_message_id as string | undefined) ??
     (item.metadata?.target_msg_id as string | undefined) ??
@@ -257,9 +262,10 @@ export const moderationApi = {
   },
 
   /**
-   * Fetch the Kick OAuth re-consent URL to enable moderation. Kick gates ban/timeout/
-   * unban behind a single scope (moderation:ban) and has no single-message delete, so
-   * the requested actions are timeout/ban/unban (ADR-0017, least privilege).
+   * Fetch the Kick OAuth re-consent URL to enable moderation. Kick splits moderation
+   * across two scopes — `moderation:ban` for timeout/ban/unban and
+   * `moderation:chat_message:manage` for single-message delete — and auth-service asks
+   * for exactly the scopes the requested actions need (ADR-0017, least privilege).
    */
   async getKickConsentUrl(overlayId: string, actions: ModerationAction[]): Promise<string> {
     const res = await apiClient.get<ConsentUrlResponse>(
@@ -421,7 +427,7 @@ export const moderationApi = {
    * (Twitch/Kick moderation scopes are role-based, so one consent serves every
    * streamer who delegated that platform), no base login scopes on the screen, and
    * the credential lands in the moderator's own store rather than touching their
-   * login grant. Twitch is the only platform wired today; the others answer 400.
+   * login grant. Twitch and Kick are wired; YouTube answers 400 until its leg lands.
    */
   async getModConsentUrl(platform: DelegatablePlatform, actions: ModerationAction[]) {
     const res = await apiClient.get<ConsentUrlResponse>(

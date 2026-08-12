@@ -221,7 +221,10 @@ describe('ModerationControls', () => {
     expect(banned).not.toBeNull()
   })
 
-  it('Kick: no single-message delete; the per-user menu offers timeout/ban/unban', () => {
+  // Kick grants delete under a second scope (moderation:chat_message:manage), so a
+  // streamer who consented before it existed holds ban-only. The controls follow the
+  // capability, so that credential must simply show no delete button.
+  it('Kick: a ban-scope-only source offers timeout/ban/unban and no delete', () => {
     const item = makeItem('kick')
     const cap: SourceCapability = {
       platform: 'kick',
@@ -249,7 +252,7 @@ describe('ModerationControls', () => {
       />
     )
 
-    // Kick has no single-message delete API → the delete button must not render.
+    // No delete in the capability → the delete button must not render.
     expect(screen.queryByLabelText('Delete message')).not.toBeInTheDocument()
     fireEvent.click(screen.getByLabelText('Moderate user'))
     fireEvent.click(screen.getByText('Ban user'))
@@ -258,6 +261,43 @@ describe('ModerationControls', () => {
       channel_id: 'chan-1',
       target_user_id: 'user-1',
       target_username: 'Spammer',
+    })
+  })
+
+  // Kick's message id IS our message id, so the delete builder's `item.id` branch is the
+  // native id here rather than a fallback. Pinning it: if the Kick normalizer ever starts
+  // minting its own UUIDs, this breaks instead of silently sending an id Kick rejects.
+  it('Kick: delete sends the Kick message UUID as the native id', () => {
+    const item: ViewItem = { ...makeItem('kick'), id: 'kick-msg-uuid-7', metadata: {} }
+    const cap: SourceCapability = {
+      platform: 'kick',
+      channel_id: 'chan-1',
+      channel_name: 'chan',
+      moderatable: true,
+      actions: ['delete', 'timeout', 'ban', 'unban'],
+    }
+    const onDelete = (it: ViewItem) => {
+      void moderationApi.deleteMessage('overlay-1', buildDeleteRequest(it))
+    }
+    render(
+      <ModerationControls
+        item={item}
+        capability={cap}
+        onDelete={onDelete}
+        onTimeout={noop}
+        onBan={noop}
+        onUnban={noop}
+      />
+    )
+
+    const deleteBtn = screen.getByLabelText('Delete message')
+    expect(deleteBtn).toBeEnabled()
+    fireEvent.click(deleteBtn)
+    expect(moderationApi.deleteMessage).toHaveBeenCalledWith('overlay-1', {
+      platform: 'kick',
+      channel_id: 'chan-1',
+      native_message_id: 'kick-msg-uuid-7',
+      target_uuid: 'kick-msg-uuid-7',
     })
   })
 

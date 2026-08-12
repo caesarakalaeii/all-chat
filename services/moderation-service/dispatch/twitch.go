@@ -49,8 +49,9 @@ type twitchTokenSource interface {
 	OwnerTwitchAnchor(ctx context.Context, ownerUserID, channelID string) (string, error)
 }
 
-// modTokenSource resolves and refreshes a delegated moderator's OWN Twitch credential.
-// *tokens.ModTwitchSource satisfies it.
+// modTokenSource resolves and refreshes a delegated moderator's OWN credential for one platform.
+// *tokens.ModTwitchSource and *tokens.ModKickSource satisfy it — the shape is platform-agnostic
+// because the credential is keyed on the moderator alone, never on a channel.
 type modTokenSource interface {
 	Resolve(ctx context.Context, userID string) (*tokens.ModCredential, error)
 	Refresh(ctx context.Context, userID string, cred *tokens.ModCredential) error

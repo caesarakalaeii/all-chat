@@ -24,14 +24,19 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 )
 
 // Kick moderation uses the broadcaster's own OAuth token (OAuth 2.1) against the
-// public Kick API. Kick exposes ban / timeout / unban but no single-message delete,
-// so this client has no DeleteMessage. The bans endpoint takes numeric ids and a
-// timeout duration in MINUTES (our pipeline carries seconds), so the client converts.
+// public Kick API: ban / timeout / unban on the bans endpoint, plus single-message
+// delete. The bans endpoint takes numeric ids and a timeout duration in MINUTES (our
+// pipeline carries seconds), so the client converts.
+//
+// Delete is gated behind a SECOND scope (moderation:chat_message:manage) and addresses
+// the message by path segment rather than by body field, which is why it does not go
+// through `do`'s shared body shape.
 //
 // The Kick public API is young (GA May 2025): bodies are logged defensively by the
 // caller on unexpected statuses, and the broadcaster/user id JSON type (integer per
@@ -75,6 +80,20 @@ func (k *KickClient) TimeoutUser(ctx context.Context, token, broadcasterID, targ
 // BanUser permanently bans a user. POST /moderation/bans without a duration.
 func (k *KickClient) BanUser(ctx context.Context, token, broadcasterID, targetUserID, reason string) error {
 	return k.ban(ctx, token, broadcasterID, targetUserID, nil, reason)
+}
+
+// DeleteMessage removes a single chat message.
+// DELETE /chat/{message_id} — scope moderation:chat_message:manage.
+//
+// The message id is a Kick message UUID, which arrives from the chat pipeline and is
+// therefore not trusted to be path-safe: it is escaped so it cannot leave its own segment
+// and address a different endpoint. An empty id is refused outright rather than sent, since
+// DELETE /chat/ is a different (and unintended) request.
+func (k *KickClient) DeleteMessage(ctx context.Context, token, messageID string) error {
+	if messageID == "" {
+		return errors.New("kick: empty message id")
+	}
+	return k.do(ctx, http.MethodDelete, "/chat/"+url.PathEscape(messageID), token, nil)
 }
 
 // UnbanUser lifts a ban or timeout. DELETE /moderation/bans.

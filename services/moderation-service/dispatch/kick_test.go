@@ -34,14 +34,27 @@ type fakeKickTokens struct {
 	resolveErr error
 	refreshErr error
 	refreshes  int
+	resolves   int
 	onRefresh  func(*tokens.KickCredential)
+	anchor     string // the broadcaster id the owner-reach anchor resolves
+	anchorErr  error
+	anchorFor  []string // the (owner, channel) pairs the anchor was asked about
 }
 
 func (f *fakeKickTokens) Resolve(context.Context, string, string) (*tokens.KickCredential, error) {
+	f.resolves++
 	if f.resolveErr != nil {
 		return nil, f.resolveErr
 	}
 	return f.cred, nil
+}
+
+func (f *fakeKickTokens) OwnerKickAnchor(_ context.Context, ownerUserID, channelID string) (string, error) {
+	f.anchorFor = append(f.anchorFor, ownerUserID+"|"+channelID)
+	if f.anchorErr != nil {
+		return "", f.anchorErr
+	}
+	return f.anchor, nil
 }
 
 func (f *fakeKickTokens) Refresh(_ context.Context, cred *tokens.KickCredential) error {
@@ -63,6 +76,7 @@ type fakeKickAPI struct {
 	broadcaster string
 	target      string
 	duration    int
+	messageID   string
 }
 
 func (f *fakeKickAPI) next(token, broadcaster string) error {
@@ -87,6 +101,13 @@ func (f *fakeKickAPI) BanUser(_ context.Context, token, b, target, _ string) err
 func (f *fakeKickAPI) UnbanUser(_ context.Context, token, b, target string) error {
 	f.method, f.target = "unban", target
 	return f.next(token, b)
+}
+
+// Delete addresses the message directly, so unlike every other Kick call it is handed no
+// broadcaster id at all.
+func (f *fakeKickAPI) DeleteMessage(_ context.Context, token, messageID string) error {
+	f.method, f.messageID = "delete", messageID
+	return f.next(token, "")
 }
 
 func kickCredWith(scopes ...string) *tokens.KickCredential {
@@ -149,6 +170,31 @@ func TestKickDispatch_TimeoutThreadsDuration(t *testing.T) {
 	assert.Equal(t, 600, api.duration, "duration (seconds) is threaded to the client, which converts to minutes")
 }
 
+func TestKickDispatch_DeletePerformed(t *testing.T) {
+	api := &fakeKickAPI{results: []error{nil}}
+	d := NewKick(&fakeKickTokens{cred: kickCredWith(models.ScopeKickChatMessageManage)}, api, zap.NewNop())
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionDelete,
+		models.DispatchRequest{Platform: "kick", ChannelID: "c", NativeMessageID: "kick-msg-1"})
+	require.NoError(t, err)
+	assert.Equal(t, models.DispatchPerformed, res.Outcome)
+	assert.Equal(t, "delete", api.method)
+	assert.Equal(t, "kick-msg-1", api.messageID)
+}
+
+// The two Kick scopes are granted independently, so the ban scope must not open delete.
+// Every streamer who consented before delete existed holds exactly this credential.
+func TestKickDispatch_BanScopeAloneDoesNotAuthorizeDelete(t *testing.T) {
+	api := &fakeKickAPI{}
+	d := NewKick(&fakeKickTokens{cred: kickCredWith(models.ScopeKickModeration)}, api, zap.NewNop())
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionDelete,
+		models.DispatchRequest{Platform: "kick", ChannelID: "c", NativeMessageID: "kick-msg-1"})
+	require.NoError(t, err)
+	assert.Equal(t, models.DispatchReauthRequired, res.Outcome)
+	assert.Equal(t, []string{models.ScopeKickChatMessageManage}, res.MissingScopes,
+		"the prompt must name the message scope, not the ban scope the token already has")
+	assert.Zero(t, api.calls)
+}
+
 func TestKickDispatch_UnauthorizedRefreshesAndRetries(t *testing.T) {
 	api := &fakeKickAPI{results: []error{clients.ErrKickUnauthorized, nil}}
 	src := &fakeKickTokens{
@@ -172,11 +218,11 @@ func TestKickDispatch_ForbiddenIsReauthWithScope(t *testing.T) {
 	assert.Equal(t, []string{models.ScopeKickModeration}, res.MissingScopes)
 }
 
-// Kick's delegated leg is not built (ADR-0048 gates each independently). The refusal is explicit
-// rather than relying on the caller-keyed credential lookup happening to find nothing: any future
-// change to credential selection would otherwise become a silent privilege escalation.
-func TestKick_DelegatedActionIsRefused(t *testing.T) {
-	tok := &fakeKickTokens{cred: kickCredWith(models.ScopeKickModeration)}
+// A deployment with no moderator credential store must refuse delegated actions rather than fall
+// back to whatever credential the dispatcher would otherwise reach for (ADR-0048). The refusal is
+// the invariant, not an oversight — so it is pinned even though production now wires the store.
+func TestKick_DelegatedActionIsRefusedWithoutAModSource(t *testing.T) {
+	tok := &fakeKickTokens{cred: kickCredWith(models.ScopeKickModeration), anchor: "555"}
 	api := &fakeKickAPI{}
 	d := NewKick(tok, api, zap.NewNop())
 
@@ -186,4 +232,21 @@ func TestKick_DelegatedActionIsRefused(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, models.DispatchDelegationUnsupported, res.Outcome)
 	assert.Zero(t, api.calls, "no platform call, and no credential resolution either")
+	assert.Zero(t, tok.resolves)
+}
+
+// An owner's persistent 401 keeps the old answer: a broadcaster is always a moderator of their own
+// channel, so "unauthorized" there really is about the credential. (Its delegated counterpart is
+// deliberately different — see the delegated tests.)
+func TestKickDispatch_OwnerUnauthorizedAfterRefreshIsReauth(t *testing.T) {
+	api := &fakeKickAPI{results: []error{clients.ErrKickUnauthorized, clients.ErrKickUnauthorized}}
+	src := &fakeKickTokens{cred: kickCredWith(models.ScopeKickModeration)}
+	d := NewKick(src, api, zap.NewNop())
+
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionBan,
+		models.DispatchRequest{Platform: "kick", ChannelID: "c", TargetUserID: "42"})
+
+	require.NoError(t, err)
+	assert.Equal(t, models.DispatchReauthRequired, res.Outcome)
+	assert.Equal(t, "unauthorized after refresh", res.PlatformStatus)
 }

@@ -20,11 +20,17 @@
  * Moderation-capability copy honesty gate.
  *
  * The moderation-service (ADR-0017) does NOT support the same actions on every
- * platform: Twitch + Discord do delete/timeout/ban/unban, Kick has no
- * single-message delete, YouTube is ban-only, TikTok is unsupported. Marketing
- * and docs copy previously claimed a blanket "delete, timeout and ban across
- * Twitch, YouTube, Kick and Discord", which is false. This test locks the copy
- * so that overstatement cannot silently return.
+ * platform: Twitch, Kick and Discord do delete/timeout/ban/unban, YouTube is
+ * ban-only, TikTok is unsupported. Marketing and docs copy previously claimed a
+ * blanket "delete, timeout and ban across Twitch, YouTube, Kick and Discord",
+ * which is false. This test locks the copy so that overstatement cannot silently
+ * return.
+ *
+ * It also guards the opposite failure, which is what actually happened next:
+ * Kick's single-message delete DOES exist (`moderation:chat_message:manage`,
+ * ADR-0048), so copy claiming Kick cannot delete is now an UNDERstatement, and
+ * three surfaces carried it. Honesty runs both ways — a capability the product
+ * has and denies is as wrong as one it claims and lacks.
  *
  * Source of truth: services/moderation-service/README.md capability matrix.
  * Parses source as text (repo convention, see token-contrast.test.ts).
@@ -40,7 +46,7 @@ describe('moderation copy is honest per-platform (ADR-0017)', () => {
   const upgrade = read('upgrade/page.tsx')
   const onboarding = readFileSync(
     join(__dirname, '..', '..', 'components', 'onboarding', 'OnboardingChecklist.tsx'),
-    'utf-8',
+    'utf-8'
   )
   const docs = read('docs/page.tsx')
 
@@ -55,9 +61,18 @@ describe('moderation copy is honest per-platform (ADR-0017)', () => {
     expect(upgrade).toMatch(/TikTok has no moderation API/i)
   })
 
-  it('the docs page spells out the real Kick and YouTube limits', () => {
-    expect(docs).toMatch(/Kick does timeout,\s+ban and unban/)
-    expect(docs).toMatch(/no single-message\s+delete/)
-    expect(docs).toMatch(/YouTube is ban-only/)
+  it('the docs page spells out the real per-platform limits', () => {
+    expect(docs).toMatch(/Twitch, Kick and Discord do delete, timeout, ban and unban/)
+    expect(docs).toMatch(/YouTube is\s+ban-only/)
+    expect(docs).toMatch(/TikTok has no\s+moderation API/)
+  })
+
+  // Kick's single-message delete exists (ADR-0048). No surface may keep saying otherwise —
+  // understating a capability sends streamers to a competitor for something All-Chat does.
+  it('no surface still claims Kick cannot delete single messages', () => {
+    for (const src of [upgrade, onboarding, docs]) {
+      expect(src).not.toMatch(/Kick has no single-message/)
+      expect(src).not.toMatch(/Kick does timeout/)
+    }
   })
 })
