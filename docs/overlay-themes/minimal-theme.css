@@ -122,11 +122,54 @@ body {
 }
 
 /* ============================================================
-   EVENTS - DISPLAY AS NORMAL MESSAGES
+   EVENTS - ONE INLINE LINE, LIKE EVERY OTHER MESSAGE
+   ============================================================
+
+   This theme's whole premise is "username: message" on one line, so an event
+   collapses to "username: ⭐ New Subscriber! x5" instead of the platform
+   default's glowing card. Structure comes from the `--event-*` tokens
+   (see AUTHORING-EVENTS.md); the display rules below then run the whole
+   event block inline.
+
+   The previous version hid the title, icon, value AND metadata and showed
+   only the event's message text — but most events (gift subs, raids, follows)
+   carry no message text at all, so they rendered as a bare "username:" with
+   nothing after it. Keeping a compact title + value is what makes the line
+   mean something.
    ============================================================ */
 
-/* Remove all event-specific styling to make them look like regular chat */
 .event-message {
+  --event-scale: 1;
+  --event-min-height: 0;
+  --event-bg: transparent;
+  --event-border-width: 0;
+  --event-accent-width: 0;
+  --event-glow: none;
+  --event-animation: none;
+  --event-icon-animation: none;
+  --event-icon-filter: none;
+  --event-decor: none;
+  --event-backdrop-blur: 0px;
+  --event-padding: 0;
+  --event-radius: 0;
+  --event-indent: 0;
+
+  --event-icon-size: 1em;
+  --event-title-font: var(--chat-font-family, 'Roboto', Arial, sans-serif);
+  --event-title-size: var(--chat-font-size, 16px);
+  --event-title-weight: 700;
+  --event-title-transform: none;
+  --event-title-spacing: 0;
+  --event-title-color: var(--chat-message-color, #ffffff);
+  --event-title-shadow: none;
+  --event-value-size: var(--chat-font-size, 16px);
+  --event-value-weight: 700;
+  --event-value-color: var(--chat-message-color, #ffffff);
+  --event-value-shadow: none;
+  --event-text-size: var(--chat-font-size, 16px);
+  --event-meta-size: var(--chat-font-size, 16px);
+  --event-meta-color: var(--chat-message-color, #ffffff);
+
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
@@ -138,54 +181,45 @@ body {
   border-radius: 0 !important;
 }
 
-/* Hide event icons, titles, values, and metadata - show only the message text */
-.event-icon {
-  display: none !important;
-}
-
-.event-title {
-  display: none !important;
-}
-
-.event-user {
-  display: none !important;
-}
-
-.event-value {
-  display: none !important;
-}
-
-.event-metadata {
-  display: none !important;
-}
-
-/* Hide the entire event header container to prevent duplicate usernames */
-.event-content > div:first-child {
-  display: none !important;
-}
-
-/* Make event message text display inline like regular messages */
+/* Run the whole event block inline so it flows after "username: ".
+   `.event-content > div` is listed last and matches the same elements as the
+   individual rules, so ordering here is what actually decides the layout —
+   the old file hid `.event-metadata` above this rule and the generic one
+   silently won, leaking a stray "5 gifts" onto the line. */
+.event-content,
+.event-content > div,
+.event-content > div > div,
+.event-icon,
+.event-title,
+.event-value,
+.event-metadata,
 .event-message-text {
   display: inline !important;
-  color: var(--chat-message-color, #ffffff) !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Spacing between the inline parts, without adding wrapper elements */
+.event-title::after,
+.event-icon::after {
+  content: ' ' !important;
+}
+.event-value::before,
+.event-metadata::before {
+  content: ' ' !important;
+}
+
+/* Event text and title share the chat outline so they read on any background */
+.event-title,
+.event-value,
+.event-metadata,
+.event-message-text {
   font-family: var(--chat-font-family, 'Roboto', Arial, sans-serif) !important;
-  font-size: var(--chat-font-size, 16px) !important;
-  font-weight: var(--chat-font-weight, 400) !important;
   /* Crisp readability outline via layered text-shadow (ADR-0044) — replaces the
      -webkit-text-stroke that eroded thin glyph strokes and chunked corners at 3px. */
   text-shadow:
     -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000,
     -2px 0 0 #000, 2px 0 0 #000, 0 -2px 0 #000, 0 2px 0 #000 !important;
-  margin-left: 0 !important;
-}
-
-/* Event content container - make it inline */
-.event-content {
-  display: inline !important;
-}
-
-.event-content > div {
-  display: inline !important;
 }
 
 /* ============================================================

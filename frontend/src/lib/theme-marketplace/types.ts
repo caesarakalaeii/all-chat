@@ -20,6 +20,8 @@
  * Theme Marketplace Type Definitions
  */
 
+import type { Badge, Emote, EventInfo } from '@/lib/types/message'
+
 export interface ThemeMetadata {
   name: string
   description: string
@@ -41,6 +43,13 @@ export interface ThemeCacheData {
   themes: Theme[]
 }
 
+/**
+ * A sample message for theme previews.
+ *
+ * Field types mirror `ChatMessage` (badges, emotes, metadata, event) so a
+ * preview message can be handed straight to the real overlay renderers — the
+ * preview shows what the overlay shows, including events.
+ */
 export interface ChatMessagePreview {
   id: string
   overlay_id: string
@@ -52,22 +61,15 @@ export interface ChatMessagePreview {
     username: string
     display_name: string
     avatar_url: string
-    badges: Array<{
-      name: string
-      version: string
-      icon_url: string
-    }>
+    badges: Badge[]
     color: string
   }
   message: {
     text: string
-    emotes: Array<{
-      code: string
-      provider: string
-      url: string
-      positions: number[][]
-    }>
+    emotes: Emote[]
   }
   timestamp: string
-  metadata: Record<string, any>
+  metadata: Record<string, unknown>
+  /** Present for events (subs, raids, redemptions) — absent for regular chat. */
+  event?: EventInfo
 }

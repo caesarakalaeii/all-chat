@@ -31,6 +31,11 @@ import type { ChatMessagePreview } from './types'
  * name colours (purple, blue, green, pink, gold) so previews showcase that every
  * chatter keeps their own name colour — a core promise (and the reason themes
  * must not override username colours; gradient names are a premium feature).
+ *
+ * One entry is an EVENT (a gifted sub), not chat. Events used to be invisible in
+ * every preview surface, so a theme could look perfect in the marketplace card
+ * and then have a gold glowing card drop into the live overlay. Previewing an
+ * event alongside chat is what makes that mismatch visible before it ships.
  */
 export const SAMPLE_PREVIEW_MESSAGES: ChatMessagePreview[] = [
   {
@@ -149,5 +154,36 @@ export const SAMPLE_PREVIEW_MESSAGES: ChatMessagePreview[] = [
     },
     timestamp: new Date().toISOString(),
     metadata: {},
+  },
+  {
+    id: 'preview-6',
+    overlay_id: 'preview',
+    platform: 'twitch',
+    channel_id: 'preview',
+    channel_name: 'Preview',
+    user: {
+      id: 'user-6',
+      username: 'lumenwave',
+      display_name: 'LumenWave',
+      avatar_url: 'https://i.pravatar.cc/100?img=12',
+      badges: [],
+      color: '#C084FC',
+    },
+    message: {
+      text: '',
+      emotes: [],
+    },
+    timestamp: new Date().toISOString(),
+    metadata: {},
+    // Medium tier: the most common event a viewer actually sees, so it's the
+    // right one to hold every theme's event styling to.
+    event: {
+      type: 'gift_subscription',
+      tier: 'medium',
+      value: { amount: 5, currency: 'USD', display_text: 'x5' },
+      duration: 8,
+      is_update: false,
+      metadata: { gift_count: 5 },
+    },
   },
 ]

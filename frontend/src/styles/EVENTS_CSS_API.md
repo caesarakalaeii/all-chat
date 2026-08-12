@@ -20,13 +20,24 @@ The following class names are part of the public API. They must not be renamed o
 
 These classes are applied to every event message element:
 
-| Class            | Applied to      | Description                                                 |
-| ---------------- | --------------- | ----------------------------------------------------------- |
-| `.event-message` | Root element    | Every platform event (subscription, raid, Super Chat, etc.) |
-| `.event-content` | Content wrapper | Inner content area of the event                             |
-| `.event-icon`    | Icon element    | Event type icon (e.g., heart, star, sword)                  |
-| `.event-title`   | Title element   | Bold uppercase event label (e.g., "NEW SUBSCRIBER")         |
-| `.event-value`   | Value element   | Monetary or numeric value (e.g., "$50.00", "x1000 bits")    |
+| Class                         | Applied to      | Description                                                 |
+| ----------------------------- | --------------- | ----------------------------------------------------------- |
+| `.event-message`              | Root element    | Every platform event (subscription, raid, Super Chat, etc.) |
+| `.event-content`              | Content wrapper | Inner content area of the event                             |
+| `.event-icon`                 | Icon element    | Event type icon (e.g., heart, star, sword)                  |
+| `.event-title`                | Title element   | Bold uppercase event label (e.g., "NEW SUBSCRIBER")         |
+| `.event-value`                | Value element   | Monetary or numeric value (e.g., "$50.00", "x1000 bits")    |
+| `.event-message-text`         | Text element    | The chatter's own message, when the event carries one       |
+| `.event-message-attachments`  | Media wrapper   | GIFs/uploads attached to that message                       |
+| `.event-metadata`             | Footer element  | Numeric summary ("5 gifts", "1,234 viewers")                |
+| `.event-warning-message`      | Notice body     | System notices only (token expiry, missing permission)      |
+
+The chatter's name is **not** inside the event content: an event row carries the
+same header as a chat row, so the name is the ordinary `.chat-username`. Style it
+once and it covers chat and events alike. `.event-user` is a retired hook — the
+element no longer exists (it duplicated the header name, could not render a
+premium gradient name, and made every theme style two username elements). Rules
+targeting it are harmless no-ops.
 
 ### Tier Classes
 
@@ -82,6 +93,31 @@ These `data-platform` attribute selectors are also part of the frozen public API
 
 ---
 
+## Custom Properties (`--event-*`)
+
+Every default event visual is expressed as a `--event-*` custom property whose
+fallback is this file's own value. Themes re-skin events by **setting tokens**
+rather than re-declaring rules, which is what makes a theme's events match the
+rest of the theme instead of falling back to the gold-glowing default card.
+
+Token names are part of this frozen API and follow the same change policy as the
+class names. The full table, tier/type breakdown and the copy-paste "flatten
+events into chat rows" recipe live in **`docs/overlay-themes/AUTHORING-EVENTS.md`**.
+
+Structure tokens default to the corresponding `--chat-*` customizer value
+(`--event-padding` → `--chat-bubble-padding`, `--event-radius` →
+`--chat-bubble-border-radius`, `--event-backdrop-blur` → `--chat-backdrop-blur`),
+so an event follows the overlay's configured look with no theme CSS at all.
+
+Note that `.event-message` is deliberately **excluded** from the
+`@layer visual-customizer` bubble rules that force `border`/`padding`/`radius`
+with `!important`. Those rules are unbeatable by theme CSS (a layered
+`!important` outranks an unlayered one), so while they matched events they
+erased the tier borders and left theme authors with no way in. Events get the
+same values as *defaults* instead.
+
+---
+
 ## Cascade Layer Architecture
 
 `events.css` rules live inside `@layer marketplace-themes`. The full cascade layer order is:
@@ -100,6 +136,22 @@ Higher layers in this list win over lower layers at equal specificity:
 | `base`               | Lowest   | Browser normalization, CSS reset |
 
 This means `events.css` rules already win over `design-system` rules without needing `!important`. Theme authors writing overrides should place their CSS in `@layer user-overrides` for the highest cascade priority — no `!important` needed.
+
+**The layer order is inverted for `!important` declarations.** Per the cascade
+spec, important declarations in an *earlier* layer beat later ones, and
+*unlayered* important declarations rank below every layered one. Consequences
+worth knowing:
+
+- Unlayered theme CSS (what every bundled theme writes, `!important` included)
+  beats the normal-weight rules in `marketplace-themes` — which is why setting
+  `--event-*` tokens or overriding event rules works without ceremony.
+- Unlayered theme CSS **cannot** beat an `!important` rule inside
+  `@layer visual-customizer`. That is why event rows are excluded from the
+  bubble-forcing block there: an inescapable rule is the wrong tool for
+  something themes are supposed to restyle.
+- Putting a rule in `@layer user-overrides` raises its priority for normal
+  declarations and *lowers* it for `!important` ones. Pick one or the other, not
+  both.
 
 ---
 

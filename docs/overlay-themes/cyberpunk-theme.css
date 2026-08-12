@@ -217,5 +217,52 @@ body {
 }
 
 /* ============================================================
+   EVENTS - PRIORITY TRANSMISSIONS
+   ============================================================
+
+   Same hard-edged black panel and acid-yellow chrome as a chat line, with
+   the type accent in the theme's palette. Without this the platform default
+   drops a gold, rounded, bounce-in card into an overlay that has no round
+   corners anywhere. Tokens: AUTHORING-EVENTS.md
+   ============================================================ */
+
+.event-message {
+  --event-scale: 1;
+  --event-min-height: 0;
+  --event-radius: 0;
+  --event-animation: none;
+  --event-icon-animation: none;
+  --event-icon-filter: drop-shadow(0 0 6px rgba(255, 237, 78, 0.6));
+  --event-icon-size: 1.4rem;
+  --event-decor: none;
+
+  --event-title-font: 'Share Tech Mono', monospace;
+  --event-title-size: 15px;
+  --event-title-spacing: 0.14em;
+  --event-title-color: #ffed4e;
+  --event-title-shadow: 0 0 10px rgba(255, 237, 78, 0.5);
+  --event-value-size: 18px;
+  --event-value-color: #ff003c; /* cyber red, the theme's alert colour */
+  --event-value-shadow: 0 0 10px rgba(255, 0, 60, 0.5);
+  --event-text-size: 15px;
+  --event-meta-color: rgba(255, 237, 78, 0.65);
+  --event-indent: 2.2rem;
+
+  --event-accent-subscription: #ffed4e;
+  --event-accent-bits: #00fff2;
+  --event-accent-raid: #ff003c;
+  --event-accent-super-chat: #ffed4e;
+  --event-accent-channel-points: #00fff2;
+  --event-accent-gift: #ff00d4;
+  --event-accent-follow: #00fff2;
+  --event-accent-like: #ff003c;
+  --event-accent-member: #a6ff00;
+}
+
+.space-y-3 > div.event-message {
+  border-left: 6px solid var(--event-accent-color, #ffed4e) !important;
+}
+
+/* ============================================================
    END OF CYBERPUNK THEME
    ============================================================ */
