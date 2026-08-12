@@ -20,11 +20,12 @@
  * Moderation-capability copy honesty gate.
  *
  * The moderation-service (ADR-0017) does NOT support the same actions on every
- * platform: Twitch, Kick and Discord do delete/timeout/ban/unban, YouTube is
- * ban-only, TikTok is unsupported. Marketing and docs copy previously claimed a
- * blanket "delete, timeout and ban across Twitch, YouTube, Kick and Discord",
- * which is false. This test locks the copy so that overstatement cannot silently
- * return.
+ * platform: Twitch, Kick and Discord do delete/timeout/ban/unban, YouTube does
+ * timeout and ban (no delete, no unban — neither has a usable id there, see
+ * moderation-service/clients/youtube.go), TikTok is unsupported. Marketing and
+ * docs copy previously claimed a blanket "delete, timeout and ban across Twitch,
+ * YouTube, Kick and Discord", which is false. This test locks the copy so that
+ * overstatement cannot silently return.
  *
  * It also guards the opposite failure, which is what actually happened next:
  * Kick's single-message delete DOES exist (`moderation:chat_message:manage`,
@@ -56,15 +57,24 @@ describe('moderation copy is honest per-platform (ADR-0017)', () => {
     }
   })
 
-  it('the upgrade page states YouTube is ban-only and TikTok is unsupported', () => {
-    expect(upgrade).toMatch(/ban on YouTube/i)
+  it('the upgrade page names YouTube’s narrower set and TikTok as unsupported', () => {
+    expect(upgrade).toMatch(/timeout and ban on YouTube/i)
     expect(upgrade).toMatch(/TikTok has no moderation API/i)
   })
 
   it('the docs page spells out the real per-platform limits', () => {
     expect(docs).toMatch(/Twitch, Kick and Discord do delete, timeout, ban and unban/)
-    expect(docs).toMatch(/YouTube is\s+ban-only/)
+    expect(docs).toMatch(/YouTube does\s+timeout and ban/)
     expect(docs).toMatch(/TikTok has no\s+moderation API/)
+  })
+
+  // YouTube gained timeout, so nothing may still call it ban-only — and no surface may promise
+  // delete or unban there, which remain impossible for want of a usable id.
+  it('no surface calls YouTube ban-only, or promises delete/unban there', () => {
+    for (const src of [upgrade, onboarding, docs]) {
+      expect(src).not.toMatch(/YouTube is\s+ban-only/)
+      expect(src).not.toMatch(/delete[^.]{0,40}on YouTube/)
+    }
   })
 
   // Kick's single-message delete exists (ADR-0048). No surface may keep saying otherwise —

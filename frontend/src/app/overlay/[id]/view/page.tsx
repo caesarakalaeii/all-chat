@@ -288,7 +288,8 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
   // consent URL (auth-service requests only the minimal moderation scopes for the actions
   // the platform supports) and redirects to it: Twitch and Kick grant all four actions
   // (Kick across two scopes — delete is a separate grant from ban/timeout/unban, so a
-  // streamer who consented before delete existed re-consents here); YouTube is ban-only. Discord
+  // streamer who consented before delete existed re-consents here); YouTube does timeout and ban.
+  // Discord
   // is different — its moderation authority is a guild-level BOT permission, so "enabling"
   // it is a bot RE-INVITE with the elevated permissions, not an OAuth re-consent.
   const enableModeration = useCallback(
@@ -304,7 +305,9 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         } else if (platform === 'kick') {
           url = await moderationApi.getKickConsentUrl(id, ['delete', 'timeout', 'ban', 'unban'])
         } else if (platform === 'youtube') {
-          url = await moderationApi.getYouTubeConsentUrl(id, ['ban'])
+          // Timeout and ban share one scope (force-ssl); delete and unban are unavailable on
+          // YouTube for want of a usable id, so asking for them would request nothing extra.
+          url = await moderationApi.getYouTubeConsentUrl(id, ['timeout', 'ban'])
         }
         if (url) window.location.href = url
       } catch {
@@ -369,9 +372,9 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
       try {
         let url: string | null = null
         if (platform === 'kick') {
-          url = await moderationApi.getKickConsentUrl(id, ['timeout', 'ban', 'unban'])
+          url = await moderationApi.getKickConsentUrl(id, ['delete', 'timeout', 'ban', 'unban'])
         } else if (platform === 'youtube') {
-          url = await moderationApi.getYouTubeConsentUrl(id, ['ban'])
+          url = await moderationApi.getYouTubeConsentUrl(id, ['timeout', 'ban'])
         } else {
           url = await moderationApi.getTwitchConsentUrl(id, ['delete', 'timeout', 'ban', 'unban'])
         }
@@ -507,6 +510,10 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
           return `This streamer's ${platform} account isn't connected, so nothing can be moderated here`
         case 'delegation_unsupported':
           return `Moderators can't act on ${platform} yet — ask the streamer to handle this one`
+        case 'target_not_actionable':
+          // Not about the caller at all — the platform protects this person from everyone, so there
+          // is no CTA to offer either role.
+          return `${platform} won't let anyone moderate this person — they're the channel owner or another moderator`
         // Discord's five. The shared bot performs every write there, so All-Chat's own check is
         // the only authority and these codes carry the entire explanation — which makes naming
         // the right person to ask the whole job of this copy.

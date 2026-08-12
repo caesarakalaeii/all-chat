@@ -137,7 +137,7 @@ Admin **impersonation** is allowed but always attributed: the action runs as the
 | Twitch | delete, timeout, ban, unban | **live** — real Helix calls via the broadcaster's own token (scope-gated) |
 | Kick | delete, timeout, ban, unban | **live** — real Kick API via the broadcaster's own token. Two independent scopes: `moderation:ban` (timeout/ban/unban) and `moderation:chat_message:manage` (delete). A streamer who consented before delete existed holds only the first, so their capability legitimately reports no delete until they re-consent |
 | Discord | delete, timeout, ban, unban | **live** — bot REST (delete `messages`, member `communication_disabled_until`/`bans`); each action gated by the bot's effective guild permission |
-| YouTube | ban | **live** — `liveChatBans.insert` via the broadcaster's own token (`force-ssl` scope-gated); ban-only (unban needs the ban resource id, deferred); liveChatId from the listener's Redis cache; quota-accounted (ADR-0006) |
+| YouTube | timeout, ban | **live** — `liveChatBans.insert` via the acting human's own token (`force-ssl` scope-gated); a timeout is a *temporary* ban on the same endpoint, so one scope covers both. liveChatId from the listener's Redis cache; quota-accounted (ADR-0006). **Delete and unban are absent for want of a usable id, not a scope**: delete keys on a Data API message id while production ingests InnerTube renderer ids, and unban keys on the ban resource id `insert` returns, which nothing persists and no list endpoint can recover |
 | TikTok | — | unsupported (no moderation API) — reported `unsupported_platform` |
 
 The broadcaster credential is resolved for both primary-login and **linked** (non-primary-login) accounts:
@@ -152,7 +152,8 @@ flow (`GET /api/v1/auth/{twitch,kick,youtube}/moderation/:overlay_id?actions=…
 platform/account, minimised to the enabled actions and unioned with the existing grant so the new token
 is always a superset. Twitch splits delete (`moderator:manage:chat_messages`) from ban/timeout/unban
 (`moderator:manage:banned_users`); Kick splits them the same way (`moderation:chat_message:manage` vs
-`moderation:ban`); YouTube re-adds `youtube.force-ssl` (dropped at login per ADR-0012) for ban.
+`moderation:ban`); YouTube re-adds `youtube.force-ssl` (dropped at login per ADR-0012) for timeout
+and ban, which share that one scope.
 `granted_scopes` is the source of truth; the capabilities endpoint reports `missing_scope` until they
 are granted, and the dispatcher pre-checks scopes before any platform call. **Discord is the
 exception**: its authority is a shared bot token (a service credential), not a per-user OAuth grant, so
@@ -265,7 +266,8 @@ no redeploy. Locally, non-premium users can either set `users.is_premium=true` o
   OBS overlay for non-Twitch platforms (whose listeners don't populate the msgid registry), the delete
   command now threads the internal `target_uuid` through the `message_deletion` event and the
   message-processor trusts it, skipping the Twitch-only registry lookup.
-- **Phase 3 (done): YouTube** (ban-only). `tokens/youtube.go` resolves the YT-login broadcaster's
+- **Phase 3 (done): YouTube** (ban-only at the time; timeout added later, see the YouTube write-path
+  entry below). `tokens/youtube.go` resolves the YT-login broadcaster's
   credential; `clients/youtube.go` calls `liveChatBans.insert` and resolves the liveChatId from the
   youtube-listener's Redis stream-state cache (no quota-costly `search.list`); `quota/` reserves the
   50-unit ban against the shared `youtube_quota_usage` counter (ADR-0006, reserve→confirm/rollback). The
@@ -295,6 +297,14 @@ no redeploy. Locally, non-premium users can either set `users.is_premium=true` o
   `scope` and threw it away, so **every** Kick grant — owner grants included — was stored with an
   empty `granted_scopes`, which made the capability endpoint report `missing_scope` forever and the
   dispatcher refuse every Kick action.
+- **YouTube write path: timeout added (done).** YouTube was permanent-ban-only, which ADR-0048 called
+  a moderation-safety problem — the only tool available was the most severe one. A timeout is a
+  *temporary* ban on the same `liveChatBans.insert` endpoint, so it needed no new scope and costs the
+  same quota. The same change stopped conflating the three meanings of a YouTube **403**: a quota
+  refusal and "this target cannot be banned" (the chat owner and other moderators are protected) are
+  no longer reported as "re-consent", which could never have fixed either.
+  **Delete and unban remain unavailable, for want of a usable id rather than a scope** — see the
+  capability table above. Both are recorded in ADR-0048's empirical list; neither is a small fix.
 - **Kick single-message delete (done).** Deliberately its own change, not part of the delegation
   work: it is an owner-facing capability correction, so it must not be coupled to a feature that
   might be rolled back. Kick does expose `DELETE /public/v1/chat/{message_id}`, behind a second

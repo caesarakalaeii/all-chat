@@ -89,9 +89,14 @@ func (y *YouTubeOAuth) GetAuthURL(state string) string {
 
 // youtubeModerationScopeByAction maps a moderation action to the Google OAuth scope it
 // requires. force-ssl was dropped from login (ADR-0012) and is re-added ONLY through the
-// opt-in moderation re-consent flow (ADR-0017). YouTube moderation is ban-only in v1.
+// opt-in moderation re-consent flow (ADR-0017).
+//
+// One scope covers both supported actions: timeout and ban are the same liveChatBans.insert call
+// with a different ban type. Delete and unban are absent because YouTube offers no usable id for
+// them (see moderation-service/clients/youtube.go), not because they need another scope.
 var youtubeModerationScopeByAction = map[string]string{
-	"ban": "https://www.googleapis.com/auth/youtube.force-ssl",
+	"timeout": "https://www.googleapis.com/auth/youtube.force-ssl",
+	"ban":     "https://www.googleapis.com/auth/youtube.force-ssl",
 }
 
 // YouTubeModerationScopesForActions returns the deduped, minimal set of YouTube scopes

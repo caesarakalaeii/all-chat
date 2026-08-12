@@ -35,9 +35,11 @@ type youtubeTokenSource interface {
 	Refresh(ctx context.Context, cred *tokens.YouTubeCredential) error
 }
 
-// youtubeAPI is the subset of clients.YouTubeClient the dispatcher calls.
+// youtubeAPI is the subset of clients.YouTubeClient the dispatcher calls. Both actions are the same
+// liveChatBans.insert endpoint — YouTube models a timeout as a temporary ban.
 type youtubeAPI interface {
 	BanUser(ctx context.Context, token, liveChatID, bannedChannelID string) error
+	TimeoutUser(ctx context.Context, token, liveChatID, bannedChannelID string, durationSeconds int) error
 }
 
 // liveChatResolver resolves a channel's active liveChatId (Redis stream-state cache).
@@ -80,7 +82,8 @@ func (d *YouTube) Dispatch(ctx context.Context, actor models.Actor, action model
 	if actor.IsModerator() {
 		return models.DispatchResult{Outcome: models.DispatchDelegationUnsupported}, nil
 	}
-	if action != models.ActionBan {
+	if action != models.ActionBan && action != models.ActionTimeout {
+		// Delete and unban are unsupported for lack of a usable id, not a scope — see clients/youtube.go.
 		return models.DispatchResult{}, fmt.Errorf("dispatch: unsupported youtube action %q", action)
 	}
 
@@ -122,22 +125,34 @@ func (d *YouTube) Dispatch(ctx context.Context, actor models.Actor, action model
 		return models.DispatchResult{}, errors.New("youtube daily quota exhausted; ban not attempted")
 	}
 
-	err = d.api.BanUser(ctx, cred.AccessToken, liveChatID, req.TargetUserID)
+	err = d.call(ctx, action, cred.AccessToken, liveChatID, req)
 	if errors.Is(err, clients.ErrYouTubeUnauthorized) {
 		if rerr := d.tokens.Refresh(ctx, cred); rerr != nil {
 			d.logger.Warn("reactive youtube token refresh failed", zap.String("channel_id", req.ChannelID), zap.Error(rerr))
 			d.rollback(ctx)
 			return models.DispatchResult{Outcome: models.DispatchReauthRequired, PlatformStatus: "token refresh failed"}, nil
 		}
-		err = d.api.BanUser(ctx, cred.AccessToken, liveChatID, req.TargetUserID)
+		err = d.call(ctx, action, cred.AccessToken, liveChatID, req)
 	}
 
 	switch {
 	case err == nil:
 		if cerr := d.quota.Confirm(ctx, quota.QuotaCostBan); cerr != nil {
-			d.logger.Warn("failed to confirm youtube quota after successful ban", zap.Error(cerr))
+			d.logger.Warn("failed to confirm youtube quota after successful moderation", zap.Error(cerr))
 		}
 		return models.DispatchResult{Outcome: models.DispatchPerformed}, nil
+	case errors.Is(err, clients.ErrYouTubeBanNotAllowed):
+		// YouTube protects the chat owner and other moderators. Nobody can perform this, so it is
+		// neither a re-consent nor a credential problem — naming the target is the only useful thing
+		// to say about it.
+		d.rollback(ctx)
+		return models.DispatchResult{Outcome: models.DispatchTargetNotActionable, PlatformStatus: "target cannot be banned"}, nil
+	case errors.Is(err, clients.ErrYouTubeQuotaExceeded):
+		// Google's own quota refusal, which arrives as a 403 like a permission failure. Surfaced as
+		// a platform error: nothing the streamer holds is wrong, and telling them to re-consent
+		// would send them somewhere that cannot help.
+		d.rollback(ctx)
+		return models.DispatchResult{}, fmt.Errorf("youtube moderation refused for quota reasons: %w", err)
 	case errors.Is(err, clients.ErrYouTubeForbidden):
 		d.rollback(ctx)
 		missing := []string{}
@@ -151,6 +166,19 @@ func (d *YouTube) Dispatch(ctx context.Context, actor models.Actor, action model
 	default:
 		d.rollback(ctx)
 		return models.DispatchResult{}, err
+	}
+}
+
+// call routes an action to the matching liveChatBans insert. Both cost the same quota, because both
+// are the same endpoint.
+func (d *YouTube) call(ctx context.Context, action models.Action, token, liveChatID string, req models.DispatchRequest) error {
+	switch action {
+	case models.ActionTimeout:
+		return d.api.TimeoutUser(ctx, token, liveChatID, req.TargetUserID, req.DurationSeconds)
+	case models.ActionBan:
+		return d.api.BanUser(ctx, token, liveChatID, req.TargetUserID)
+	default:
+		return fmt.Errorf("dispatch: unsupported youtube action %q", action)
 	}
 }
 

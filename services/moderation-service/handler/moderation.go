@@ -197,6 +197,10 @@ const (
 	// codeBotMissingPermission: the bot was never invited with the permission, so nobody can
 	// borrow it. Cleared by re-inviting the bot — never by an OAuth re-consent.
 	codeBotMissingPermission = "bot_missing_permission"
+	// codeTargetNotActionable: the platform refused this action against this TARGET, whoever asked
+	// (YouTube protects the chat owner and other moderators). Nobody can clear it, which is why it
+	// is not a re-consent and not a 502: the action was understood and declined.
+	codeTargetNotActionable = "target_not_actionable"
 )
 
 // unauthorizedDenials counts refusals of callers who hold no role on the overlay.
@@ -770,6 +774,17 @@ func (h *Handler) execute(c *gin.Context, cl caller, action models.Action, dreq 
 		c.JSON(http.StatusForbidden, gin.H{
 			"error": "the All-Chat bot wasn't given this permission — ask the streamer to re-invite it with moderation permissions",
 			"code":  codeBotMissingPermission,
+		})
+		return
+	case models.DispatchTargetNotActionable:
+		// The platform declined this target for everyone. Naming that is the whole remedy: there is
+		// nothing to reconnect and nobody to ask.
+		e.Outcome = audit.OutcomeTargetNotActionable
+		e.PlatformStatus = res.PlatformStatus
+		h.record(ctx, e)
+		c.JSON(http.StatusUnprocessableEntity, gin.H{
+			"error": dreq.Platform + " won't let anyone moderate this person — they're the channel owner or another moderator",
+			"code":  codeTargetNotActionable,
 		})
 		return
 	case models.DispatchReauthRequired:

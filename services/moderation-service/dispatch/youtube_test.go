@@ -62,9 +62,11 @@ type fakeYTAPI struct {
 	tokensSeen []string
 	liveChat   string
 	banned     string
+	method     string
+	duration   int
 }
 
-func (f *fakeYTAPI) BanUser(_ context.Context, token, liveChatID, bannedChannelID string) error {
+func (f *fakeYTAPI) next(token, liveChatID, bannedChannelID string) error {
 	f.tokensSeen = append(f.tokensSeen, token)
 	f.liveChat, f.banned = liveChatID, bannedChannelID
 	var err error
@@ -73,6 +75,16 @@ func (f *fakeYTAPI) BanUser(_ context.Context, token, liveChatID, bannedChannelI
 	}
 	f.calls++
 	return err
+}
+
+func (f *fakeYTAPI) BanUser(_ context.Context, token, liveChatID, bannedChannelID string) error {
+	f.method = "ban"
+	return f.next(token, liveChatID, bannedChannelID)
+}
+
+func (f *fakeYTAPI) TimeoutUser(_ context.Context, token, liveChatID, bannedChannelID string, durationSeconds int) error {
+	f.method, f.duration = "timeout", durationSeconds
+	return f.next(token, liveChatID, bannedChannelID)
 }
 
 type fakeLiveChat struct {
@@ -166,6 +178,69 @@ func TestYouTubeDispatch_BanPerformedConfirmsQuota(t *testing.T) {
 	assert.Equal(t, "UCbanned", api.banned)
 	assert.Equal(t, 1, q.confirms)
 	assert.Zero(t, q.rollbacks)
+}
+
+// Timeout is the same endpoint with a duration, so the duration must reach the client — a dropped
+// duration would silently become a permanent ban.
+func TestYouTubeDispatch_TimeoutThreadsDuration(t *testing.T) {
+	api, q := &fakeYTAPI{results: []error{nil}}, &fakeQuota{reserveOK: true}
+	d := newYT(&fakeYTTokens{cred: ytCredWith(models.ScopeYouTubeModeration)}, api, fakeLiveChat{id: "lc-1"}, q)
+
+	req := banReq()
+	req.DurationSeconds = 600
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionTimeout, req)
+
+	require.NoError(t, err)
+	assert.Equal(t, models.DispatchPerformed, res.Outcome)
+	assert.Equal(t, "timeout", api.method)
+	assert.Equal(t, 600, api.duration)
+	assert.Equal(t, 1, q.confirms, "a timeout costs the same as a ban: same endpoint")
+}
+
+// Delete and unban have no usable id on YouTube, so asking for them is a caller bug, not a refusal
+// to report — and it must cost no quota.
+func TestYouTubeDispatch_UnsupportedActionsError(t *testing.T) {
+	for _, action := range []models.Action{models.ActionDelete, models.ActionUnban} {
+		api, q := &fakeYTAPI{}, &fakeQuota{reserveOK: true}
+		d := newYT(&fakeYTTokens{cred: ytCredWith(models.ScopeYouTubeModeration)}, api, fakeLiveChat{id: "lc"}, q)
+
+		_, err := d.Dispatch(context.Background(), owner("u1"), action, banReq())
+
+		require.Error(t, err, "action %q", action)
+		assert.Zero(t, api.calls)
+		assert.Zero(t, q.reserves)
+	}
+}
+
+// A quota refusal from Google is not a permission problem. Reported as one it would send a streamer
+// round a re-consent that cannot help, so it surfaces as a platform error — and the reservation is
+// released, since the call never happened.
+func TestYouTubeDispatch_QuotaRefusalIsNotAReauthPrompt(t *testing.T) {
+	api := &fakeYTAPI{results: []error{clients.ErrYouTubeQuotaExceeded}}
+	q := &fakeQuota{reserveOK: true}
+	d := newYT(&fakeYTTokens{cred: ytCredWith(models.ScopeYouTubeModeration)}, api, fakeLiveChat{id: "lc"}, q)
+
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionBan, banReq())
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, clients.ErrYouTubeQuotaExceeded)
+	assert.NotEqual(t, models.DispatchReauthRequired, res.Outcome)
+	assert.Equal(t, 1, q.rollbacks)
+}
+
+// YouTube protects the chat owner and other moderators. That is about the target, not the caller, so
+// it must not read as "your credential is wrong".
+func TestYouTubeDispatch_UnbannableTargetIsItsOwnOutcome(t *testing.T) {
+	api := &fakeYTAPI{results: []error{clients.ErrYouTubeBanNotAllowed}}
+	q := &fakeQuota{reserveOK: true}
+	d := newYT(&fakeYTTokens{cred: ytCredWith(models.ScopeYouTubeModeration)}, api, fakeLiveChat{id: "lc"}, q)
+
+	res, err := d.Dispatch(context.Background(), owner("u1"), models.ActionBan, banReq())
+
+	require.NoError(t, err)
+	assert.Equal(t, models.DispatchTargetNotActionable, res.Outcome)
+	assert.Empty(t, res.MissingScopes, "no scope would change this")
+	assert.Equal(t, 1, q.rollbacks)
 }
 
 func TestYouTubeDispatch_UnauthorizedRefreshesAndRetries(t *testing.T) {
