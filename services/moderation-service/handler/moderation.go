@@ -197,6 +197,10 @@ const (
 	// codeBotMissingPermission: the bot was never invited with the permission, so nobody can
 	// borrow it. Cleared by re-inviting the bot — never by an OAuth re-consent.
 	codeBotMissingPermission = "bot_missing_permission"
+	// codeTargetNotActionable: the platform refused this action against this TARGET, whoever asked
+	// (YouTube protects the chat owner and other moderators). Nobody can clear it, which is why it
+	// is not a re-consent and not a 502: the action was understood and declined.
+	codeTargetNotActionable = "target_not_actionable"
 )
 
 // unauthorizedDenials counts refusals of callers who hold no role on the overlay.
@@ -701,13 +705,19 @@ func (h *Handler) execute(c *gin.Context, cl caller, action models.Action, dreq 
 		return
 	case models.DispatchOwnerUnverified:
 		// Delegation never exceeds what the owner could do themselves. Only the owner can fix
-		// this, so the copy names them and gives the moderator nothing to attempt.
+		// this, so a moderator is given nothing to attempt.
+		//
+		// The owner can reach this too — the anchor gates their own path on YouTube, where
+		// credential resolution is not channel-scoped — and there the delegation wording would be
+		// nonsense to someone moderating alone. Same code, same audit row, copy addressed to
+		// whoever is actually reading it.
 		e.Outcome = audit.OutcomeOwnerUnverified
 		h.record(ctx, e)
-		c.JSON(http.StatusForbidden, gin.H{
-			"error": "this streamer's " + dreq.Platform + " account is not connected, so nothing can be delegated on this channel",
-			"code":  codeOwnerUnverified,
-		})
+		msg := "your " + dreq.Platform + " account isn't connected for this channel, so it can't be moderated from here"
+		if actor.IsModerator() {
+			msg = "this streamer's " + dreq.Platform + " account is not connected, so nothing can be delegated on this channel"
+		}
+		c.JSON(http.StatusForbidden, gin.H{"error": msg, "code": codeOwnerUnverified})
 		return
 	case models.DispatchNotPlatformModerator:
 		// The platform refused, not All-Chat. Pointing this at a re-consent screen would loop a
@@ -770,6 +780,17 @@ func (h *Handler) execute(c *gin.Context, cl caller, action models.Action, dreq 
 		c.JSON(http.StatusForbidden, gin.H{
 			"error": "the All-Chat bot wasn't given this permission — ask the streamer to re-invite it with moderation permissions",
 			"code":  codeBotMissingPermission,
+		})
+		return
+	case models.DispatchTargetNotActionable:
+		// The platform declined this target for everyone. Naming that is the whole remedy: there is
+		// nothing to reconnect and nobody to ask.
+		e.Outcome = audit.OutcomeTargetNotActionable
+		e.PlatformStatus = res.PlatformStatus
+		h.record(ctx, e)
+		c.JSON(http.StatusUnprocessableEntity, gin.H{
+			"error": dreq.Platform + " won't let anyone moderate this person — they're the channel owner or another moderator",
+			"code":  codeTargetNotActionable,
 		})
 		return
 	case models.DispatchReauthRequired:

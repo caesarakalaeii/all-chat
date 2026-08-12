@@ -89,9 +89,14 @@ func (y *YouTubeOAuth) GetAuthURL(state string) string {
 
 // youtubeModerationScopeByAction maps a moderation action to the Google OAuth scope it
 // requires. force-ssl was dropped from login (ADR-0012) and is re-added ONLY through the
-// opt-in moderation re-consent flow (ADR-0017). YouTube moderation is ban-only in v1.
+// opt-in moderation re-consent flow (ADR-0017).
+//
+// One scope covers both supported actions: timeout and ban are the same liveChatBans.insert call
+// with a different ban type. Delete and unban are absent because YouTube offers no usable id for
+// them (see moderation-service/clients/youtube.go), not because they need another scope.
 var youtubeModerationScopeByAction = map[string]string{
-	"ban": "https://www.googleapis.com/auth/youtube.force-ssl",
+	"timeout": "https://www.googleapis.com/auth/youtube.force-ssl",
+	"ban":     "https://www.googleapis.com/auth/youtube.force-ssl",
 }
 
 // YouTubeModerationScopesForActions returns the deduped, minimal set of YouTube scopes
@@ -130,6 +135,48 @@ func (y *YouTubeOAuth) GetAuthURLWithScopes(state string, extra []string) string
 		oauth2.AccessTypeOffline,
 		oauth2.SetAuthURLParam("prompt", "consent"),
 		oauth2.SetAuthURLParam("scope", strings.Join(scopes, " ")),
+	)
+}
+
+// YouTubeIdentityScope is Google's profile read, the minimum needed to know WHICH account just
+// consented. The callback resolves the moderator's identity from Google's userinfo endpoint, and
+// without it the credential could not be attributed to anyone.
+const YouTubeIdentityScope = "https://www.googleapis.com/auth/userinfo.profile"
+
+// GetModConsentAuthURL builds the consent URL for a delegated moderator granting their own YouTube
+// moderation scope (ADR-0048).
+//
+// Unlike GetAuthURLWithScopes it does NOT prepend the base login scopes: `youtube.readonly` exists
+// so youtube-listener can poll a streamer's OWN live chat, and asking a volunteer for read access to
+// their channel — to do unpaid work on someone else's — is an ADR-0012 scope-minimisation regression.
+// It is not needed here either: nothing in the moderation path reads the moderator's own channel.
+//
+// prompt=consent is required so an already-connected Google account is genuinely re-prompted for
+// force-ssl (and so a refresh token is reissued); access_type=offline keeps that refresh token,
+// without which the credential would die at the first expiry and the moderator would have to
+// re-consent every hour.
+//
+// Returns "" when no moderation scopes are requested: a consent screen granting nothing would only
+// fail later, at the first moderation call, as a confusing missing-scope error.
+func (y *YouTubeOAuth) GetModConsentAuthURL(state string, scopes []string) string {
+	seen := make(map[string]bool)
+	minimal := make([]string, 0, len(scopes)+1)
+	for _, s := range scopes {
+		if s != "" && !seen[s] {
+			seen[s] = true
+			minimal = append(minimal, s)
+		}
+	}
+	if len(minimal) == 0 {
+		return ""
+	}
+	if !seen[YouTubeIdentityScope] {
+		minimal = append(minimal, YouTubeIdentityScope)
+	}
+	return y.config.AuthCodeURL(state,
+		oauth2.AccessTypeOffline,
+		oauth2.SetAuthURLParam("prompt", "consent"),
+		oauth2.SetAuthURLParam("scope", strings.Join(minimal, " ")),
 	)
 }
 

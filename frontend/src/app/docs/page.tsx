@@ -312,8 +312,8 @@ export default function DocsPage() {
                 With <strong>Moderation controls</strong> on in the monitor, hover a message to{' '}
                 <strong>Delete</strong> it, or open a chatter to <strong>Timeout</strong>,{' '}
                 <strong>Ban</strong> or <strong>Unban</strong> them — applied on the source
-                platform: Twitch, Kick and Discord do delete, timeout, ban and unban; YouTube is
-                ban-only; TikTok has no moderation API.
+                platform: Twitch, Kick and Discord do delete, timeout, ban and unban; YouTube does
+                timeout and ban; TikTok has no moderation API.
               </p>
               <p>
                 The first time, use <strong>Enable moderation &amp; chat sending</strong> to grant
