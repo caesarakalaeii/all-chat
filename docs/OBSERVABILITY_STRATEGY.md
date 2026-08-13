@@ -863,6 +863,32 @@ How long overlays are actively viewed/used.
 
 ---
 
+#### Gauge: `allchat_active_users`
+Distinct streamers who actually used an overlay within a rolling window — the
+DAU/WAU/MAU of real product usage, as opposed to sign-ups.
+
+**Labels**:
+- `window`: `24h`, `7d`, `30d`
+
+**Emitted by**: auth-service, polled from the database by the sampler in
+`services/auth-service/usage/` every `USAGE_SAMPLE_INTERVAL_SECONDS` (default
+120). Every replica reports the same fleet-wide value, so aggregate with
+`max(...)`, never `sum(...)`.
+
+**Calculation**: distinct non-banned owners of an overlay whose
+`overlays.last_connected_at` (bumped by api-gateway on demand-bearing WebSocket
+attach and on each ~2min heartbeat tick) falls inside the window, excluding
+overlays that were created but never opened. Definition lives in
+`services/auth-service/repository/usage_repository.go`, shared with the admin
+dashboard's active-user tiles.
+
+**Graphed by**: *All-Chat: User Growth & Actual Usage* (dashboard uid
+`allchat-user-growth`), provisioned from the GitOps repo at
+`caesar-deployment: apps/platform/allchat-monitoring/`. See
+`deployments/k8s/monitoring/grafana-dashboards/README.md`.
+
+---
+
 ### 9.2 Platform Usage
 
 #### Counter: `allchat_messages_by_platform_total`
