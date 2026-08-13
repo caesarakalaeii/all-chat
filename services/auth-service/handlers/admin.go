@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/auth-service/models"
+	"github.com/caesar/all-chat/services/auth-service/repository"
 	"github.com/caesar/all-chat/shared/auth"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -438,11 +439,10 @@ func (h *AdminHandler) GetDashboardStats(c *gin.Context) {
 		ActiveOverlays int            `json:"active_overlays"`
 		TotalSources   map[string]int `json:"total_sources"`
 		// Active users: distinct non-banned owners of an overlay whose WebSocket
-		// connection was seen within the window. overlays.last_connected_at is
-		// heartbeat-refreshed (~2min) while an overlay is live, so it is the
-		// truest signal of real product usage. Logins are not separately tracked
-		// (users.updated_at is polluted by the daily automated token refresh),
-		// which is why overlay connections define activity here.
+		// connection was seen within the window. The definition lives in
+		// repository.UsageRepository, shared with the Prometheus usage sampler
+		// that publishes allchat_active_users{window=...}, so this snapshot and
+		// the Grafana growth graph can never disagree.
 		ActiveUsers24h int `json:"active_users_24h"`
 		ActiveUsers7d  int `json:"active_users_7d"`
 		ActiveUsers30d int `json:"active_users_30d"`
@@ -486,21 +486,14 @@ func (h *AdminHandler) GetDashboardStats(c *gin.Context) {
 		}
 	}
 
-	// Active users (rolling windows): distinct owners of a recently-connected
-	// overlay, excluding banned users. Computed in one round trip via FILTER;
-	// the outer 30d bound keeps the scan to the window that feeds every bucket.
-	err = h.db.QueryRow(c.Request.Context(), `
-		SELECT
-			COUNT(DISTINCT o.user_id) FILTER (WHERE o.last_connected_at >= NOW() - INTERVAL '24 hours'),
-			COUNT(DISTINCT o.user_id) FILTER (WHERE o.last_connected_at >= NOW() - INTERVAL '7 days'),
-			COUNT(DISTINCT o.user_id) FILTER (WHERE o.last_connected_at >= NOW() - INTERVAL '30 days')
-		FROM overlays o
-		JOIN users u ON u.id = o.user_id
-		WHERE u.is_banned = false
-		  AND o.last_connected_at >= NOW() - INTERVAL '30 days'
-	`).Scan(&stats.ActiveUsers24h, &stats.ActiveUsers7d, &stats.ActiveUsers30d)
+	// Active users (rolling windows), via the shared usage definition.
+	activeUsers, err := repository.NewUsageRepository(h.db).ActiveUserCounts(c.Request.Context())
 	if err != nil {
 		h.logger.Error("Failed to count active users", zap.Error(err))
+	} else {
+		stats.ActiveUsers24h = activeUsers.Day
+		stats.ActiveUsers7d = activeUsers.Week
+		stats.ActiveUsers30d = activeUsers.Month
 	}
 
 	c.JSON(http.StatusOK, stats)
