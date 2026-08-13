@@ -91,12 +91,13 @@ body {
    PLATFORM ICON & BADGES - INLINE HORIZONTAL LAYOUT (FIXED)
    ============================================================ */
 
-/* Header container - FLEX layout to keep everything inline horizontally */
+/* Header container - plain inline so the username shares the same text baseline
+   as the message. Using inline-flex here would blockify the username into a
+   flex item, breaking baseline alignment with the surrounding inline text.
+   The icon and badges below stay horizontal on their own (inline-flex +
+   vertical-align), and their spacing comes from margin-right, not a flex gap. */
 .flex.items-center.gap-2 {
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 4px !important;
-  flex-wrap: nowrap !important;
+  display: inline !important;
 }
 
 /* Platform badge (icon) - inline with proper sizing */
