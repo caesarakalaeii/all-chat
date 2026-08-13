@@ -82,6 +82,7 @@ func setupStatsTestDB(t *testing.T) (*pgxpool.Pool, func()) {
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 			is_active BOOLEAN NOT NULL DEFAULT TRUE,
+			created_at TIMESTAMP DEFAULT NOW(),
 			last_connected_at TIMESTAMP NOT NULL DEFAULT NOW()
 		);
 		CREATE TABLE IF NOT EXISTS overlay_chat_sources (
@@ -113,20 +114,35 @@ func insertUser(t *testing.T, pool *pgxpool.Pool, banned bool) string {
 }
 
 // insertOverlay creates an overlay for userID whose last_connected_at is `ago`
-// before now.
+// before now. created_at is set well before that, since activity requires a
+// last_connected_at that was actually bumped after the row was created.
 func insertOverlay(t *testing.T, pool *pgxpool.Pool, userID string, ago time.Duration) {
 	t.Helper()
 	_, err := pool.Exec(context.Background(),
-		`INSERT INTO overlays (user_id, last_connected_at) VALUES ($1, NOW() - $2::interval)`,
+		`INSERT INTO overlays (user_id, created_at, last_connected_at)
+		 VALUES ($1, NOW() - INTERVAL '90 days', NOW() - $2::interval)`,
 		userID, ago.String())
 	if err != nil {
 		t.Fatalf("insert overlay: %v", err)
 	}
 }
 
+// insertNeverOpenedOverlay creates an overlay the way overlay-manager does, with
+// no timestamps given, so created_at and last_connected_at both land on the
+// statement's NOW() and the overlay reads as "created but never opened".
+func insertNeverOpenedOverlay(t *testing.T, pool *pgxpool.Pool, userID string) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(),
+		`INSERT INTO overlays (user_id) VALUES ($1)`, userID); err != nil {
+		t.Fatalf("insert never-opened overlay: %v", err)
+	}
+}
+
 // TestGetDashboardStats_ActiveUsers verifies the rolling-window active-user
-// counts: an active user is a distinct non-banned owner of an overlay whose
-// last_connected_at falls inside the 24h / 7d / 30d window.
+// counts: an active user is a distinct non-banned owner of an overlay that was
+// genuinely connected inside the 24h / 7d / 30d window. Creating an overlay is
+// not usage, so an overlay whose last_connected_at was never bumped past its
+// created_at does not count.
 func TestGetDashboardStats_ActiveUsers(t *testing.T) {
 	pool, cleanup := setupStatsTestDB(t)
 	defer cleanup()
@@ -156,6 +172,10 @@ func TestGetDashboardStats_ActiveUsers(t *testing.T) {
 	insertOverlay(t, pool, u6, 2*time.Hour)
 	insertOverlay(t, pool, u6, 5*time.Hour)
 
+	// u7: signed up and created an overlay but never opened it -> not usage
+	u7 := insertUser(t, pool, false)
+	insertNeverOpenedOverlay(t, pool, u7)
+
 	handler := &AdminHandler{db: pool, logger: zap.NewNop()}
 
 	gin.SetMode(gin.TestMode)
@@ -180,8 +200,8 @@ func TestGetDashboardStats_ActiveUsers(t *testing.T) {
 		t.Fatalf("decode response: %v (%s)", err, w.Body.String())
 	}
 
-	if stats.TotalUsers != 6 {
-		t.Errorf("total_users = %d, want 6", stats.TotalUsers)
+	if stats.TotalUsers != 7 {
+		t.Errorf("total_users = %d, want 7", stats.TotalUsers)
 	}
 	if stats.BannedUsers != 1 {
 		t.Errorf("banned_users = %d, want 1", stats.BannedUsers)

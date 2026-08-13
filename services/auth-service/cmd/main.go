@@ -32,6 +32,7 @@ import (
 	"github.com/caesar/all-chat/services/auth-service/handlers"
 	"github.com/caesar/all-chat/services/auth-service/oauth"
 	"github.com/caesar/all-chat/services/auth-service/repository"
+	"github.com/caesar/all-chat/services/auth-service/usage"
 	sharedAuth "github.com/caesar/all-chat/shared/auth"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/encryption"
@@ -268,6 +269,17 @@ func main() {
 		businessMetrics.InitTotalUsersByPlatform(counts)
 		log.Info("Seeded allchat_total_users_by_platform from database", zap.Any("counts", counts))
 	}
+
+	// Publish allchat_active_users{window=24h|7d|30d} — the DAU/WAU/MAU of real
+	// overlay usage (sign-up counters say nothing about whether an overlay was
+	// ever opened). Sampled from the database on a ticker; see package usage.
+	usageRepo := repository.NewUsageRepository(db)
+	usageSampler := usage.NewSampler(usageRepo, businessMetrics, log,
+		time.Duration(getEnvAsIntOrDefault("USAGE_SAMPLE_INTERVAL_SECONDS", int(usage.DefaultInterval.Seconds())))*time.Second)
+	usageCtx, stopUsageSampler := context.WithCancel(context.Background())
+	defer stopUsageSampler()
+	go usageSampler.Run(usageCtx)
+
 	healthHandler := handlers.NewHealthHandler(db, redisClient)
 	// audit #20: impersonation tokens are short-lived (default 2h), independent of
 	// the 24h session JWT, so a leaked impersonation token has a small window.

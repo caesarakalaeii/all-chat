@@ -86,6 +86,10 @@ LOG_LEVEL=info  # debug, info, warn, error
 OTEL_ENABLED=false
 OTEL_EXPORTER_OTLP_ENDPOINT=localhost:4317
 
+# Usage metrics: how often the active-user windows behind
+# allchat_active_users{window=...} are re-sampled from the database
+USAGE_SAMPLE_INTERVAL_SECONDS=120
+
 # Application
 APP_VERSION=dev
 ENVIRONMENT=development
@@ -248,6 +252,26 @@ GET /health/ready
 # Prometheus metrics
 GET /metrics
 ```
+
+Besides the HTTP/OAuth metrics, auth-service owns the platform's user-growth
+series:
+
+| Metric | Type | Meaning |
+|--------|------|---------|
+| `allchat_user_registrations_total{platform}` | counter | New streamer sign-ups |
+| `allchat_viewer_registrations_total{platform}` | counter | New viewer sign-ups |
+| `allchat_total_users_by_platform{platform}` | gauge | Cumulative sign-ups, seeded from the DB at startup |
+| `allchat_active_users{window="24h"\|"7d"\|"30d"}` | gauge | DAU/WAU/MAU of **actual overlay usage** |
+
+`allchat_active_users` is polled from the database by the sampler in `usage/`
+(every `USAGE_SAMPLE_INTERVAL_SECONDS`) rather than incremented in-process:
+"streamers who used an overlay in the last 24h" is a fleet-wide property of a
+window that outlives any pod. The definition of "active" lives in
+`repository/usage_repository.go` and is shared with the admin dashboard's
+active-user tiles. Graphed by the *All-Chat: User Growth & Actual Usage* dashboard
+(provisioned from the GitOps repo, see
+`deployments/k8s/monitoring/grafana-dashboards/README.md`); each replica reports
+the same fleet-wide value, so queries must use `max(...)`, never `sum(...)`.
 
 ---
 

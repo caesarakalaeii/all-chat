@@ -29,6 +29,21 @@ import (
 // user signed up since the last pod restart.
 var knownPlatforms = []string{"twitch", "youtube", "kick"}
 
+// Rolling windows exported as the `window` label of allchat_active_users —
+// the DAU / WAU / MAU of real overlay usage. Windows are rolling (last 24h,
+// last 7d, last 30d), not calendar buckets, so the series is meaningful at
+// every scrape instead of only at day boundaries.
+const (
+	ActiveUserWindowDay   = "24h"
+	ActiveUserWindowWeek  = "7d"
+	ActiveUserWindowMonth = "30d"
+)
+
+// activeUserWindows lists the label values allchat_active_users is pre-initialised
+// with, so the three series exist in /metrics from the first scrape rather than
+// appearing only once the first sample lands.
+var activeUserWindows = []string{ActiveUserWindowDay, ActiveUserWindowWeek, ActiveUserWindowMonth}
+
 // BusinessMetrics provides business-level metrics for the platform
 type BusinessMetrics struct {
 	// User Growth
@@ -44,7 +59,11 @@ type BusinessMetrics struct {
 	OverlaySessionDuration *prometheus.HistogramVec
 
 	// Platform Usage
-	MessagesByPlatform        *prometheus.CounterVec
+	MessagesByPlatform *prometheus.CounterVec
+	// ActiveUsers is the DAU/WAU/MAU of actual overlay usage, labelled by rolling
+	// window. Sampled from the database (see the auth-service usage sampler)
+	// rather than incremented in-process, because activity is a property of the
+	// fleet over time, not of a single pod's lifetime.
 	ActiveUsers               *prometheus.GaugeVec
 	ConnectedPlatformsPerUser *prometheus.GaugeVec
 
@@ -84,6 +103,13 @@ func newBusinessMetricsWithRegistry(reg prometheus.Registerer) *BusinessMetrics 
 		},
 		[]string{"platform"},
 	)
+	activeUsers := factory.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "allchat_active_users",
+			Help: "Distinct streamers who actually used an overlay within the rolling window (window=24h/7d/30d, i.e. DAU/WAU/MAU), sampled from the database",
+		},
+		[]string{"window"},
+	)
 
 	// Pre-initialise known label combinations so the metrics are always
 	// present in /metrics, even before any sign-up happens in the current
@@ -92,6 +118,9 @@ func newBusinessMetricsWithRegistry(reg prometheus.Registerer) *BusinessMetrics 
 		userRegs.WithLabelValues(p)
 		viewerRegs.WithLabelValues(p)
 		totalUsers.WithLabelValues(p)
+	}
+	for _, w := range activeUserWindows {
+		activeUsers.WithLabelValues(w)
 	}
 
 	return &BusinessMetrics{
@@ -127,13 +156,7 @@ func newBusinessMetricsWithRegistry(reg prometheus.Registerer) *BusinessMetrics 
 			},
 			[]string{"platform"},
 		),
-		ActiveUsers: factory.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Name: "allchat_active_users_total",
-				Help: "Number of users with active sessions",
-			},
-			[]string{},
-		),
+		ActiveUsers: activeUsers,
 		ConnectedPlatformsPerUser: factory.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Name: "allchat_connected_platforms_per_user",
@@ -191,9 +214,10 @@ func (m *BusinessMetrics) RecordMessageByPlatform(platform string) {
 	m.MessagesByPlatform.WithLabelValues(platform).Inc()
 }
 
-// SetActiveUsers sets the number of active users
-func (m *BusinessMetrics) SetActiveUsers(count int) {
-	m.ActiveUsers.WithLabelValues().Set(float64(count))
+// SetActiveUsers sets the number of distinct streamers who used an overlay within
+// the given rolling window (one of the ActiveUserWindow* constants).
+func (m *BusinessMetrics) SetActiveUsers(window string, count int) {
+	m.ActiveUsers.WithLabelValues(window).Set(float64(count))
 }
 
 // SetActiveSourcesTotal sets the total active sources for a platform
