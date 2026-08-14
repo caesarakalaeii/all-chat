@@ -57,6 +57,10 @@ export class PrometheusMetrics {
   private usernamesAtRisk: Gauge<string>;
   private autoRecoveryTotal: Counter<string>;
 
+  // Wire-format visibility
+  private wireMessages: Counter<string>;
+  private envelopeFrames: Counter<string>;
+
   constructor(logger: Logger) {
     this.logger = logger;
     this.registry = new Registry();
@@ -170,7 +174,40 @@ export class PrometheusMetrics {
       registers: [this.registry]
     });
 
+    // Wire-format visibility. TikTok's unofficial protocol drifts without notice and the
+    // connector drops any frame whose method is missing from its schema *silently* (see
+    // `hasProtoName` in tiktok-live-connector), so a renamed message looks exactly like a
+    // message that was never sent. PR #539's empty-comment breakage and the coin chest never
+    // surfacing both had that shape. Counting methods as they arrive turns "TikTok stopped
+    // sending X" and "the library can no longer decode X" into two distinguishable states.
+    // Cardinality is bounded: `method` is a proto type name from a fixed schema, never user input.
+    this.wireMessages = new Counter({
+      name: 'tiktok_wire_messages_total',
+      help: 'Decoded TikTok wire messages by protobuf method name',
+      labelNames: ['method'],
+      registers: [this.registry]
+    });
+
+    // Envelope frames get their own outcome counter because the ENVELOPE message multiplexes
+    // several products and is filtered down to coin chests, so "no chest appeared" has several
+    // distinct causes that must be told apart without redeploying at debug level.
+    this.envelopeFrames = new Counter({
+      name: 'tiktok_envelope_frames_total',
+      help: 'ENVELOPE frames by outcome (published, or the reason it was not)',
+      labelNames: ['outcome'], // published, super_fan_box, not_a_drop, no_chest_payload, duplicate, error
+      registers: [this.registry]
+    });
+
     this.logger.info('Prometheus metrics initialized');
+  }
+
+  // Wire-format visibility methods
+  recordWireMessage(method: string): void {
+    this.wireMessages.inc({ method });
+  }
+
+  recordEnvelopeFrame(outcome: string): void {
+    this.envelopeFrames.inc({ outcome });
   }
 
   // Heartbeat monitoring methods
