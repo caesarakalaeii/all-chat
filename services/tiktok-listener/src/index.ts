@@ -897,10 +897,20 @@ class TikTokListenerService {
       // Cast to EventEmitter for lifecycle events not in ClientEventMap
       const emitter = connection as unknown as EventEmitter;
 
-      // Record every frame the connector managed to decode, keyed by its protobuf method name.
-      // This is the only way to tell "TikTok did not send it" apart from "the library could not
-      // decode it": deserializeMessage skips unknown methods without emitting anything, so a
-      // drifted message name is indistinguishable from silence at the handler level.
+      // Record every frame the connector managed to decode, keyed by its protobuf method name,
+      // giving a baseline of what TikTok actually sends on a working connection.
+      //
+      // Note the limit, because it is easy to over-read this metric: `decodedData` fires only for
+      // frames that decoded. deserializeMessage skips a method missing from its schema with a bare
+      // `continue`, and a method that throws while decoding is dropped too (its decodeError is set,
+      // then the caller skips anything without decodedData). So an absent method here means one of
+      // three things — TikTok stopped sending it, TikTok renamed it, or it no longer decodes — and
+      // this metric alone does not separate them. The only hook that does is the connector's
+      // DEBUG_DESERIALIZE_XD env var, which console.logs unknown method names.
+      //
+      // What it does buy: if WebcastEnvelopeMessage never appears while chests are visibly dropped
+      // in the room, the envelope is definitively not reaching us in decodable form, which is the
+      // question that took a prod investigation to answer the first time.
       emitter.on('decodedData', (method: string) => {
         this.metrics.recordWireMessage(method);
       });

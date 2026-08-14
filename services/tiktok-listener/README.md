@@ -255,17 +255,29 @@ sum by (outcome) (tiktok_envelope_frames_total)
 announcing no chest — these must not render), `duplicate`, or `error`.
 
 **If there is no log line and no counter movement at all, the frame never reached the service.**
-Distinguish "TikTok did not send it" from "the library could not decode it" with:
+Check what TikTok is actually sending with:
 
 ```promql
-# Every protobuf message TikTok actually sent, by wire name
+# Every protobuf message that decoded, by wire name
 sum by (method) (tiktok_wire_messages_total)
 ```
 
-`tiktok-live-connector` drops frames whose method is absent from its schema *silently*, so a
-renamed message is otherwise indistinguishable from silence. If `WebcastEnvelopeMessage` is
-missing from that metric while chests are visibly dropping in the stream, the unofficial protocol
-has drifted and `tiktok-live-connector` needs bumping (as in PR #539).
+If `WebcastEnvelopeMessage` is missing from that metric while chests are visibly dropping in the
+stream, the envelope is not reaching us in decodable form.
+
+**That narrows it to three causes without separating them**, because this metric counts only frames
+that decoded: TikTok stopped sending the message, TikTok renamed it, or it no longer decodes.
+`tiktok-live-connector` skips a method absent from its schema *silently*, and drops one that throws
+while decoding, so neither leaves a trace. To name an unknown method you need the connector's
+`DEBUG_DESERIALIZE_XD` env var, which `console.log`s the method plus a base64 payload for every
+frame it cannot place. That is noisy and unstructured, so treat it as a deliberate short-lived
+investigation rather than something to leave enabled.
+
+A renamed or undecodable message means the unofficial protocol has drifted and the library needs
+bumping (as in PR #539). Note that as of 2026-08-14 no envelope frame was observed in ~75
+room-minutes across eight live rooms, including one with 61 gifts, so the leading theory is instead
+that TikTok does not push envelopes to **unauthenticated** connections, which is how this service
+connects.
 
 ## Migration Path (Future)
 
