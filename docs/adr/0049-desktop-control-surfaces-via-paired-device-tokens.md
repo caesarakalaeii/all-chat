@@ -12,6 +12,13 @@ Two questions had to be answered before this is worth planning, and the first is
 
 **Is the Stream Deck platform open, and does it cost us anything?** No cost. Elgato's SDK is free, plugin development is free, and publishing a free plugin to the Elgato Marketplace is free. A plugin is ordinary local software: a Node.js backend for logic plus an optional Chromium-rendered settings panel, talking to the Stream Deck app over a local WebSocket, on Windows 10+ and macOS 10.15+. Nothing about it requires a commercial relationship with Elgato.
 
+The hardware is not only driven by Elgato's software, and that materially affects reach. Elgato's own app does not run on Linux at all, so a Linux streamer with Stream Deck hardware uses one of two GPL-3.0 third-party apps instead, and they differ in exactly the way that matters here:
+
+- **OpenDeck** (Rust) explicitly "supports plugins made for the original Stream Deck SDK", and runs on Linux, Windows and macOS. A plugin built once against Elgato's SDK is therefore expected to work under OpenDeck as well, including on Linux, at no extra build cost. It additionally offers its own OpenAction API, which we would not need.
+- **StreamController** (Python, Linux-first) uses its **own** plugin format and does **not** load Elgato plugins. Supporting it means a second, separate plugin against its Python API (`PluginBase`, `ActionCore`, `BackendBase`), submitted through its own review process.
+
+So "does this support StreamController too?" has a two-part answer, and the split falls exactly along the seam this ADR draws. The pairing mechanism and every endpoint are front-end agnostic and are reused verbatim by both. The plugin is not portable between them.
+
 **The remaining question is authentication, and it is the whole of the work.** The actions themselves need no new backend at all. Every endpoint a first version would call already exists and is already exposed through the API gateway:
 
 | Button | Existing endpoint |
@@ -33,7 +40,7 @@ Elgato's own documentation is explicit that plugins must not ship secrets: "It i
 - **Least privilege (ADR-0012), extended to devices.** A button that sends chat messages should not carry a token that can also delete the streamer's overlays or read their billing.
 - **Revocation must be believable and self-service.** A streamer who sells or loses a laptop must be able to cut it off from the dashboard, without rotating anything else.
 - **Reuse the gates we already have.** Poll creation is already premium-gated by `requireEngagementPremium`; chat send already requires the advanced-controls consent grant. A device token must not become a way around either.
-- **Generalise beyond Elgato.** Touch Portal, a stream-side CLI, and a phone remote are the same problem. Deciding this per-vendor would mean deciding it repeatedly.
+- **Generalise beyond Elgato.** OpenDeck, StreamController, Touch Portal, a stream-side CLI and a phone remote are all the same problem. Deciding this per-vendor would mean deciding it repeatedly, and one of those vendors (StreamController) cannot run the Elgato plugin at all, so a vendor-shaped decision would strand it.
 
 ## Considered Options
 
@@ -72,7 +79,15 @@ The plugin requests a pairing code from All-Chat and displays it. The streamer, 
 
 **Rationale**: the plugin's problem is not "prove which Twitch account this is", which options 2 and 3 both over-solve, but "let a specific device act for a specific streamer, narrowly, for a long time, revocably". A pairing code puts the one step that requires trust (a human confirming, in the dashboard, that this device may act for them) in the one place where we already have a trustworthy session, and leaves the plugin holding a credential that is useless for anything except the buttons it was paired for. Options 1 and 3 both hand out credentials far broader than the task and rely on streamers handling secrets carefully on camera. Option 4 is attractive precisely until the streamer closes the tab, which is the thing they asked to stop worrying about.
 
-The decision is deliberately framed around **device tokens, not Stream Deck**. The Elgato plugin is the first consumer; Touch Portal and a stream-side CLI are the same mechanism with a different front end, and nothing in the backend should mention Elgato.
+The decision is deliberately framed around **device tokens, not Stream Deck**. The Elgato plugin is the first consumer; OpenDeck, StreamController, Touch Portal and a stream-side CLI are the same mechanism with a different front end, and nothing in the backend should mention Elgato.
+
+### Which front ends v1 covers
+
+- **Elgato Stream Deck app** (Windows, macOS): the plugin we build.
+- **OpenDeck** (Linux, Windows, macOS): expected to work from the *same* plugin, since it loads original Stream Deck SDK plugins. This is the cheapest Linux coverage available and should be verified during the spike rather than assumed, because "supports plugins made for the original SDK" is a compatibility claim we have not tested against our own plugin.
+- **StreamController** (Linux): **not** covered by v1. It needs its own Python plugin, which is a small, additive piece of work once the pairing flow exists, and is worth doing on demand rather than up front. Nothing about the backend has to change for it.
+
+Note that both Linux apps are GPL-3.0. Our plugin is a separate distributable that talks to them over their documented plugin interfaces, and All-Chat is already AGPL-3.0, so this is not expected to raise a licence conflict, but a StreamController plugin in particular should be reviewed on that point before publishing since it is loaded into a GPL-3.0 process.
 
 ### Scope of a device token
 
@@ -112,10 +127,11 @@ Per CLAUDE.md, shipping this is not done until three things are true, and they a
 
 Suggested order, so that each step is independently useful:
 
-1. **Spike first, decide nothing.** Build the plugin against a hand-issued token and wire two buttons (start poll, send message). This validates the button ergonomics, which is the part most likely to be wrong, before any backend commitment. Option 4's local bridge is an acceptable shortcut for this spike only.
+1. **Spike first, decide nothing.** Build the plugin against a hand-issued token and wire two buttons (start poll, send message). This validates the button ergonomics, which is the part most likely to be wrong, before any backend commitment. Option 4's local bridge is an acceptable shortcut for this spike only. **Load the same spike plugin in OpenDeck** while it is cheap to change, since that single check decides whether Linux costs nothing or costs a second plugin.
 2. **Device pairing backend**: table, `POST` to request a code, `POST` to approve it from an authenticated dashboard session, device-token recognition in the gateway's auth middleware, scope enforcement, revocation endpoint.
 3. **Dashboard UI**: approve a code, name a device, list paired devices with last-used, revoke.
 4. **Plugin actions** against the real flow, published to the Marketplace as a free plugin.
 5. **Release requirements** above.
+6. **StreamController plugin** (Python), only if Linux users ask for it and OpenDeck has not already covered them.
 
 Prior art to follow rather than reinvent: `shared/middleware/premium.go` for gate enforcement shape, and `tokens/source.go` for how credentials are already resolved per user.
