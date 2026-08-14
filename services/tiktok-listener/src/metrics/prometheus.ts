@@ -174,12 +174,18 @@ export class PrometheusMetrics {
       registers: [this.registry]
     });
 
-    // Wire-format visibility. TikTok's unofficial protocol drifts without notice and the
-    // connector drops any frame whose method is missing from its schema *silently* (see
-    // `hasProtoName` in tiktok-live-connector), so a renamed message looks exactly like a
-    // message that was never sent. PR #539's empty-comment breakage and the coin chest never
-    // surfacing both had that shape. Counting methods as they arrive turns "TikTok stopped
-    // sending X" and "the library can no longer decode X" into two distinguishable states.
+    // Wire-format visibility. TikTok's unofficial protocol drifts without notice and the connector
+    // drops any frame whose method is missing from its schema *silently* (see `hasProtoName` in
+    // tiktok-live-connector), so a renamed message looks exactly like a message that was never
+    // sent. PR #539's empty-comment breakage and the coin chest never surfacing both had that
+    // shape, and neither was visible from our side at all.
+    //
+    // This counts only what *decoded*, so read it as a baseline of what TikTok sends rather than as
+    // a diagnosis: a method missing from it may have been dropped by TikTok, renamed, or broken in
+    // decode, and those three are not separable here (the connector's DEBUG_DESERIALIZE_XD env var
+    // is the only hook that names an unknown method). Its value is the negative result — proving a
+    // message is not arriving in decodable form, which previously took a prod investigation.
+    //
     // Cardinality is bounded: `method` is a proto type name from a fixed schema, never user input.
     this.wireMessages = new Counter({
       name: 'tiktok_wire_messages_total',
