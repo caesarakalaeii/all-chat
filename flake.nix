@@ -14,8 +14,12 @@
 
   outputs =
     # `...` rather than a closed { self, nixpkgs }: adding a second input later
-    # would otherwise fail with "called with unexpected argument 'self'".
-    { nixpkgs, ... }:
+    # would otherwise fail with "called with unexpected argument '<name>'".
+    #
+    # `self` is destructured because rootPreamble needs to name this flake's own
+    # source -- the tree nix has already copied into the store -- as the last
+    # resort when the caller is standing outside any checkout of this repo.
+    { self, nixpkgs, ... }:
     let
       lib = nixpkgs.lib;
 
@@ -150,9 +154,13 @@
       # what `dev-test` actually runs.
       #
       # `text` is bash under `set -euo pipefail`, shellcheck'd at BUILD time.
-      # Rules: always a quoted "$@", anchor state at $REPO_ROOT, and pass the
-      # batch/non-interactive flag to anything that could prompt -- there is no
-      # tty under `nix run`, so a prompt hangs until the agent's timeout. That
+      # Rules: always a quoted "$@"; anchor EVERY path at $REPO_ROOT (see the
+      # resolver below -- no bare `.`, no bare relative path, and no `pwd`
+      # fallback, so a verb reads and writes the same tree no matter where it
+      # was invoked from, and only paths the caller passes explicitly may be
+      # cwd-relative); and pass the batch/non-interactive flag to anything that
+      # could prompt -- there is no tty under `nix run`, so a prompt hangs
+      # until the agent's timeout. That
       # last rule is why the frontend suite below is invoked as
       # `vitest --run` and NOT via `npm test`: frontend/package.json maps `test`
       # to bare `vitest`, which is WATCH mode and never returns.
@@ -170,10 +178,11 @@
       #     frontend-quality.yml is workflow_dispatch-only because of
       #     pre-existing lint debt, and `gofmt`/prettier drift already exists in
       #     the tree. `dev-lint` therefore gates on the a11y ESLint config,
-      #     which IS a required check on main, and `dev-fmt` is Go-only and
-      #     defaults to the CURRENT DIRECTORY so it cannot silently reformat a
-      #     hundred untouched files into someone's PR. Frontend formatting stays
-      #     `npm run format` inside frontend/, as CONTRIBUTING.md says.
+      #     which IS a required check on main, and `dev-fmt` is Go-only: it
+      #     rewrites the repo's Go trees, and the ~100 pre-existing drifted
+      #     files come with it unless you hand it a narrower path. Frontend
+      #     formatting stays `npm run format` inside frontend/, as
+      #     CONTRIBUTING.md says.
       commands =
         pkgs:
         let
@@ -203,7 +212,9 @@
           eachGoModule = cmd: ''
             cd "$REPO_ROOT"
             dev_failures=""
+            dev_modules=0
             while IFS= read -r gomod; do
+              dev_modules=$((dev_modules + 1))
               mod="''${gomod%/go.mod}"
               # services/auth-service/shared/tracing is a go.mod + go.sum with
               # no .go file anywhere under it (a leftover module path that CI
@@ -220,6 +231,15 @@
               fi
             done < <(find services shared -type f -name go.mod \
               -not -path "*/node_modules/*" -not -path "*/vendor/*" | sort)
+            # Belt and braces behind the root resolution above: a walk that
+            # inspected NOTHING must never fall through to devReport and exit 0.
+            # That green -- 20 modules' worth of go vet reported as a pass
+            # without a single file read -- is what the old `|| pwd` produced,
+            # and it is the one outcome an agent cannot detect from the outside.
+            if [ "$dev_modules" -eq 0 ]; then
+              echo "no Go module found under $REPO_ROOT/{services,shared} -- refusing to report success" >&2
+              exit 1
+            fi
           '';
 
           # Every Node leg is guarded on the exact binary it is about to run,
@@ -236,7 +256,7 @@
               if [ -x "$REPO_ROOT/$1/node_modules/.bin/$2" ]; then
                 return 0
               fi
-              echo "SKIPPED $1: $2 is not installed -- run 'dev-setup' (needs network)" >&2
+              echo "SKIPPED $1: $2 is not installed under $REPO_ROOT -- run 'dev-setup' (needs network)" >&2
               return 1
             }
             note_failure() {
@@ -259,6 +279,9 @@
           setup = {
             description = "(network) go mod download every Go module, npm ci every Node project";
             text = ''
+              # npm ci writes node_modules INTO the tree, so a snapshot root is
+              # a dead end -- say so once here instead of failing four times.
+              dev_require_checkout
               ${eachGoModule "go mod download"}
               ${nodeLeg}
               for proj in frontend services/discord-bot services/support-bot services/tiktok-listener; do
@@ -345,15 +368,39 @@
           };
 
           fmt = {
-            description = "gofmt -w the given Go paths (default: the current directory)";
+            description = "gofmt -l -w the given Go paths (default: services/ shared/ test/ in the repo)";
             text = ''
-              # Defaults to the CURRENT DIRECTORY, not $REPO_ROOT: gofmt drift
-              # already exists across the tree, and a repo-wide rewrite would
-              # drop a hundred untouched files into an unrelated PR.
-              if [ "$#" -eq 0 ]; then
-                gofmt -l -w .
-              else
+              # -w REWRITES files, so this is the verb that must not be allowed
+              # to guess: from the read-only snapshot there is nothing
+              # legitimate to write to.
+              dev_require_checkout
+              if [ "$#" -gt 0 ]; then
+                # Explicit arguments are forwarded exactly as given, so they
+                # resolve against the caller's cwd the way gofmt's own
+                # arguments do. That is the one place cwd SHOULD matter: the
+                # caller named the target.
                 gofmt -l -w "$@"
+              else
+                # The default is the repo, never the cwd. It used to be `.`,
+                # which meant `nix run /path/to/all-chat#fmt` from anywhere
+                # rewrote whatever tree the caller stood in -- verified against
+                # a scratch directory outside the repo, whose .go file came
+                # back reformatted.
+                #
+                # These three directories are named individually rather than
+                # handing gofmt "$REPO_ROOT", because a walk from the root also
+                # descends into frontend/node_modules -- which ships a vendored
+                # .go file of its own -- and into whatever build output a
+                # contributor is carrying. `git ls-files '*.go'` reaches only
+                # services/, shared/ and test/ today.
+                #
+                # This IS a repo-wide rewrite, and the tree carries ~100
+                # gofmt-drifted files that predate this flake, so an
+                # argument-less run is a large diff on purpose. -l names every
+                # file it rewrote; scope it with a path
+                # (`dev-fmt services/api-gateway`) when that diff does not
+                # belong in your PR.
+                gofmt -l -w "$REPO_ROOT/services" "$REPO_ROOT/shared" "$REPO_ROOT/test"
               fi
             '';
           };
@@ -361,6 +408,9 @@
           run = {
             description = "start the Next.js dev server on :3000 (backend: `make frontend-dev`)";
             text = ''
+              # `next dev` writes .next/ into the tree and needs an installed
+              # node_modules, neither of which a snapshot root can offer.
+              dev_require_checkout
               if [ ! -x "$REPO_ROOT/frontend/node_modules/.bin/next" ]; then
                 echo "frontend is not installed -- run 'dev-setup' (needs network) first" >&2
                 exit 1
@@ -392,13 +442,81 @@
           export LD_LIBRARY_PATH="${lib.makeLibraryPath (nativeLibs pkgs)}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
         '';
 
-      # Every command gets $REPO_ROOT. `nix run` and `nix develop` both start in
-      # whatever directory they were invoked from, so bare relative paths
-      # silently fork a second environment as soon as an agent works from a
-      # subdirectory -- and in this repo agents live in services/<svc>/.
+      # Every command gets $REPO_ROOT, and every verb below anchors on it.
+      # `nix run` and `nix develop` both start in whatever directory they were
+      # invoked from, so a bare relative path (or a bare `.`) does not mean "this
+      # repo", it means "whatever tree the caller happened to stand in".
+      #
+      # The `|| pwd` this preamble used to end in was exactly that bug, and both
+      # halves of it were reproduced, not theorised:
+      #   * `nix run /path/to/all-chat#fmt` from an unrelated directory resolved
+      #     REPO_ROOT to that directory and `gofmt -l -w .` REWROTE the files in
+      #     it. A verb that mutates a tree it was never pointed at is the worst
+      #     failure mode in this file.
+      #   * `nix run /path/to/all-chat#lint` from the same place walked zero Go
+      #     modules (`find services shared` printed "No such file or directory"
+      #     into the void), skipped the Node leg and exited 0. The flake-URL form
+      #     is precisely what CI and a cold agent use, so the surface that lies
+      #     was the surface everything automated hits.
+      #
+      # Resolution order. A candidate only counts if it carries what the verbs
+      # walk -- services/, shared/ and go.work.sum -- so the root can never be
+      # some unrelated git repo that merely happens to be the cwd:
+      #   1. the git top level of the caller's cwd, so the WORKING TREE wins and
+      #      uncommitted edits are what gets linted and formatted;
+      #   2. $REPO_ROOT from the environment: the dev shell exports it, so a
+      #      wrapper run from /tmp inside that shell still means that checkout,
+      #      and `REPO_ROOT=/path/to/all-chat nix run <url>#fmt` is the escape
+      #      hatch when there is no checkout at the cwd at all;
+      #   3. this flake's own source, which nix has already copied into the
+      #      store. It is a complete tracked-file snapshot of the very flake ref
+      #      the caller named, so the read-only verbs (build, test, lint) behave
+      #      identically from anywhere instead of inspecting nothing. It is also
+      #      read-only, which dev_require_checkout below turns into a clear
+      #      refusal for the verbs that write.
+      # There is no fourth tier: never `pwd`, never `.`.
       rootPreamble = ''
-        REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+        dev_is_repo_root() {
+          [ -n "''${1:-}" ] && [ -d "$1/services" ] && [ -d "$1/shared" ] && [ -f "$1/go.work.sum" ]
+        }
+        dev_repo_root() {
+          local top
+          top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+          if dev_is_repo_root "$top"; then
+            printf '%s\n' "$top"
+          elif dev_is_repo_root "''${REPO_ROOT:-}"; then
+            printf '%s\n' "$REPO_ROOT"
+          elif dev_is_repo_root "${self}"; then
+            # Loud, because the caller has to know WHICH tree was inspected --
+            # a snapshot cannot contain gitignored state (node_modules above
+            # all), so the Node legs will report SKIPPED here.
+            echo "note: no all-chat checkout at or above $PWD -- using this flake's own source, ${self} (read-only)" >&2
+            printf '%s\n' "${self}"
+          else
+            echo "cannot locate an all-chat checkout: neither $PWD, nor \$REPO_ROOT, nor ${self} has services/, shared/ and go.work.sum" >&2
+            return 1
+          fi
+        }
+        # Command substitution in an assignment carries its own exit status, so
+        # `set -e` aborts the verb here if nothing resolved. Nothing downstream
+        # has to re-check.
+        REPO_ROOT="$(dev_repo_root)"
         export REPO_ROOT
+
+        # Called first by every verb that WRITES into the tree (setup, fmt,
+        # run). Tier 3 above is a store path, and store paths are read-only by
+        # design: refuse with an actionable message instead of burying the
+        # caller in "permission denied" from twenty different tools. Only ever
+        # invoked from a wrapper's command text, never interactively.
+        dev_require_checkout() {
+          case "$REPO_ROOT" in
+            ${builtins.storeDir}/*)
+              echo "this verb writes to the tree, and REPO_ROOT is the read-only flake source ($REPO_ROOT)." >&2
+              echo "run it from inside an all-chat checkout, or name one: REPO_ROOT=/path/to/all-chat <this command>" >&2
+              exit 1
+              ;;
+          esac
+        }
       '';
 
       # One derivation per command, reused by both `apps` and the dev shell, so
