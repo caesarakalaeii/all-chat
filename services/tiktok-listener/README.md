@@ -23,6 +23,7 @@ This service uses the **unofficial** [TikTok-Live-Connector](https://github.com/
 - ✅ **Message deduplication** (prevents replay on reconnect using native TikTok message IDs)
 - ✅ **Native timestamp preservation** (uses TikTok's original message timestamps)
 - ✅ Publishes to Redis Streams (`chat:raw`)
+- ✅ Audience events alongside chat: gifts, follows, shares, aggregated likes, and coin chests
 - ✅ Dynamic stream management (polls database for active channels)
 - ✅ Health check endpoints
 - ✅ Graceful shutdown handling
@@ -236,6 +237,35 @@ Error: Failed to connect to TikTok stream
 3. Service logs for errors
 4. User is actually live on TikTok
 5. Chat is enabled on the stream
+
+### A Coin Chest Did Not Appear
+
+Coin chests ("treasure boxes") ride on TikTok's `ENVELOPE` message, which multiplexes several
+unrelated products, so a chest that never surfaced has more than one possible cause. Every
+`ENVELOPE` frame is logged at `info` (`"Received ENVELOPE frame"`) with its decoded
+`business_type`, `display` and `coins`, and counted by outcome:
+
+```promql
+# Why envelope frames did not become chests
+sum by (outcome) (tiktok_envelope_frames_total)
+```
+
+`outcome` is one of `published`, `super_fan_box` (a Super Fan Box, not a chest), `not_a_drop`
+(the HIDE frame for a chest that expired or was fully claimed), `no_chest_payload` (an envelope
+announcing no chest — these must not render), `duplicate`, or `error`.
+
+**If there is no log line and no counter movement at all, the frame never reached the service.**
+Distinguish "TikTok did not send it" from "the library could not decode it" with:
+
+```promql
+# Every protobuf message TikTok actually sent, by wire name
+sum by (method) (tiktok_wire_messages_total)
+```
+
+`tiktok-live-connector` drops frames whose method is absent from its schema *silently*, so a
+renamed message is otherwise indistinguishable from silence. If `WebcastEnvelopeMessage` is
+missing from that metric while chests are visibly dropping in the stream, the unofficial protocol
+has drifted and `tiktok-live-connector` needs bumping (as in PR #539).
 
 ## Migration Path (Future)
 
