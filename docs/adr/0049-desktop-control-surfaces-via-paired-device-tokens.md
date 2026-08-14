@@ -83,11 +83,15 @@ The decision is deliberately framed around **device tokens, not Stream Deck**. T
 
 ### Which front ends v1 covers
 
-- **Elgato Stream Deck app** (Windows, macOS): the plugin we build.
-- **OpenDeck** (Linux, Windows, macOS): expected to work from the *same* plugin, since it loads original Stream Deck SDK plugins. This is the cheapest Linux coverage available and should be verified during the spike rather than assumed, because "supports plugins made for the original SDK" is a compatibility claim we have not tested against our own plugin.
-- **StreamController** (Linux): **not** covered by v1. It needs its own Python plugin, which is a small, additive piece of work once the pairing flow exists, and is worth doing on demand rather than up front. Nothing about the backend has to change for it.
+**Two plugins ship in v1**, because no single plugin format reaches all three apps:
 
-Note that both Linux apps are GPL-3.0. Our plugin is a separate distributable that talks to them over their documented plugin interfaces, and All-Chat is already AGPL-3.0, so this is not expected to raise a licence conflict, but a StreamController plugin in particular should be reviewed on that point before publishing since it is loaded into a GPL-3.0 process.
+- **StreamController** (Linux): a Python plugin (`PluginBase`, `ActionCore`, optional `BackendBase`, with `manifest.json`, `about.json` and `attribution.json`, submitted through its own process). **In v1, and the primary development target.** It is the de-facto default for Linux Stream Deck users, and decisively it is the surface the maintainer actually runs, so it is the only one that gets dogfooded daily rather than tested occasionally. Building against it first means the button ergonomics are validated by real use during a real stream instead of by a checklist.
+- **Elgato Stream Deck app** (Windows, macOS): a TypeScript/Node plugin against Elgato's SDK, published free to the Elgato Marketplace. In v1, because it is where most Stream Deck owners are.
+- **OpenDeck** (Linux, Windows, macOS): no third plugin. It loads plugins built for the original Stream Deck SDK, so it should free-ride on the Elgato plugin. Verify rather than assume during the spike, since that is a compatibility claim we have not tested against our own plugin, but it costs nothing to check and covers a third app if it holds.
+
+**The real cost of two plugins is drift, not effort.** Each is a thin HTTP client, so neither is large, but the *button set* now exists twice and will diverge unless it is defined once. Treat the action list (name, endpoint, payload, and what the button surfaces on failure) as the single source both implementations follow, with a keep-in-sync comment at both sites, exactly as `OnboardingChecklist.tsx` and `/upgrade` already do for the premium feature list. A button that exists on Linux but not Windows is a support burden that outlives the release.
+
+Because a Python plugin is loaded into a GPL-3.0 process (both StreamController and OpenDeck are GPL-3.0), the licence question is a **v1 gate rather than a later cleanup**. All-Chat is already AGPL-3.0 so no conflict is expected, but this must be settled before the first StreamController submission, not after.
 
 ### Scope of a device token
 
@@ -122,16 +126,19 @@ Per CLAUDE.md, shipping this is not done until three things are true, and they a
 - Rate limiting matters more than usual: a physical button invites mashing, and chat send in particular fans out to five platforms per press, where per-platform limits are the binding constraint.
 - Stream Deck's Node runtime is pinned by the installed Stream Deck version (20 or 24 depending on release), so the plugin's toolchain is not ours to choose.
 - Publishing to the Marketplace puts All-Chat's name on software running on machines we cannot debug, so plugin-side errors need to surface clearly rather than failing silently, which is the failure mode option 4 was rejected for.
+- **Two plugins in v1, in two languages, through two review processes.** Python for StreamController and TypeScript for Elgato, each with its own manifest, submission and release cadence. Neither is large, but the button set now exists twice, so it will drift unless a single action list governs both, and every future button is two pieces of work rather than one.
+- A GPL-3.0 host process for the Linux plugins makes the licence review a release gate rather than a follow-up.
 
 ## Implementation Notes
 
 Suggested order, so that each step is independently useful:
 
-1. **Spike first, decide nothing.** Build the plugin against a hand-issued token and wire two buttons (start poll, send message). This validates the button ergonomics, which is the part most likely to be wrong, before any backend commitment. Option 4's local bridge is an acceptable shortcut for this spike only. **Load the same spike plugin in OpenDeck** while it is cheap to change, since that single check decides whether Linux costs nothing or costs a second plugin.
+1. **Spike first, decide nothing.** Build a **StreamController** plugin against a hand-issued token and wire two buttons (start poll, send message). StreamController first specifically because it can be dogfooded on a real stream immediately, which is the only cheap way to find out that the button ergonomics are wrong. Option 4's local bridge is an acceptable shortcut for this spike only.
 2. **Device pairing backend**: table, `POST` to request a code, `POST` to approve it from an authenticated dashboard session, device-token recognition in the gateway's auth middleware, scope enforcement, revocation endpoint.
 3. **Dashboard UI**: approve a code, name a device, list paired devices with last-used, revoke.
-4. **Plugin actions** against the real flow, published to the Marketplace as a free plugin.
-5. **Release requirements** above.
-6. **StreamController plugin** (Python), only if Linux users ask for it and OpenDeck has not already covered them.
+4. **Pin the action list** (name, endpoint, payload, failure surface) as the contract both plugins implement, before the second one is written.
+5. **StreamController plugin** against the real pairing flow, submitted with its `manifest.json` / `about.json` / `attribution.json`. Settle the GPL-3.0 question before submitting.
+6. **Elgato SDK plugin** implementing the same action list, published free to the Elgato Marketplace, and loaded once in **OpenDeck** to confirm the third app comes free.
+7. **Release requirements** above.
 
 Prior art to follow rather than reinvent: `shared/middleware/premium.go` for gate enforcement shape, and `tokens/source.go` for how credentials are already resolved per user.
