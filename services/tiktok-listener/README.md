@@ -274,10 +274,36 @@ frame it cannot place. That is noisy and unstructured, so treat it as a delibera
 investigation rather than something to leave enabled.
 
 A renamed or undecodable message means the unofficial protocol has drifted and the library needs
-bumping (as in PR #539). Note that as of 2026-08-14 no envelope frame was observed in ~75
-room-minutes across eight live rooms, including one with 61 gifts, so the leading theory is instead
-that TikTok does not push envelopes to **unauthenticated** connections, which is how this service
-connects.
+bumping (as in PR #539). **For coin chests specifically, that has been tested and ruled out.** On
+2026-08-14, `DEBUG_DESERIALIZE_XD` on two live rooms showed TikTok does send methods the library
+cannot decode (`WebcastLinkScreenChangeMessage`, `RoomMessage`,
+`WebcastUpdateShareRevenueNoticeMessage`, `WebcastAnchorToolModificationMessage`,
+`WebcastGiftGalleryMessage`, `WebcastPrivilegeAdvanceMessage`), so the check works, and **none of
+them resembles an envelope**. The chest is not arriving under a different name; it is not arriving.
+No envelope frame appeared in ~75 room-minutes across eight live rooms, one with 61 gifts.
+
+### Dead ends, so they are not re-investigated
+
+- **`room_auth` capability flags are not a signal.** `fetchRoomInfo()` is unauthenticated and
+  returns `data.room_auth.GoldenEnvelope` and `data.room_auth.anchor_level_permission.treasure_box`,
+  which look like exactly the per-room switch you want. They are not: for anonymous fetches **all 30
+  `anchor_level_permission` entries read 0**, including `share` for a room that sent us 62 social
+  frames in the same window. The map is uniformly zeroed, so a `0` says nothing about the feature.
+  Do not gate UI or listener behaviour on it.
+- **Polling the gift catalogue is not free.** `fetchAvailableGifts()` returns *"This endpoint
+  requires a Business plan"* from the Euler Stream sign server on our tier.
+- **Bumping `tiktok-live-connector` will not fix it**, per the ruled-out drift above, and 2.4.3
+  relicenses to a modified AGPL restricting hosted SaaS use. See the note in PR #695.
+
+The leading remaining theory is that TikTok pushes envelopes only to **authenticated** sessions
+(this service connects anonymously; the library does support `session` + `authenticateWs`, though it
+forwards the session cookie to the sign server, which is a credential decision, not a config
+change). Chests being region or creator-tier gated, and simply absent from every room sampled, is
+not excluded either.
+
+Probe caveat: cap concurrent probe connections at ~5. Twelve at once exhausts the Euler Stream
+free-tier sign limit, which surfaces as the connector throwing on `Cannot read properties of
+undefined (reading 'retry-after')` rather than a clean 429.
 
 ## Migration Path (Future)
 
