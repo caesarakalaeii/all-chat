@@ -36,6 +36,7 @@ Elgato's own documentation is explicit that plugins must not ship secrets: "It i
 
 - **The plugin is a public, untrusted client.** It is distributed to strangers' machines. It must never hold a client secret, and compromising one installation must not compromise the streamer's platform credentials.
 - **Pair once, work for months.** A control surface that needs re-authorising mid-stream, or every 24 hours, is worse than no control surface. This rules out handing over an ordinary JWT.
+- **Install must be as close to one click as the platform allows.** This is a convenience feature competing against the streamer's existing habit of using the dashboard, so setup friction is not a minor UX detail, it decides adoption. The extension's one-click login is the bar to match, and anything that asks the streamer to copy, paste or transcribe a value starts below it.
 - **Do not re-implement platform OAuth in the plugin.** Our OAuth client relationships (Twitch, Google, Kick) live in auth-service with server-side registered redirect URIs. Dragging a desktop client into those flows means registering loopback redirects with three providers and inheriting each provider's rules about them, for no gain.
 - **Least privilege (ADR-0012), extended to devices.** A button that sends chat messages should not carry a token that can also delete the streamer's overlays or read their billing.
 - **Revocation must be believable and self-service.** A streamer who sells or loses a laptop must be able to cut it off from the dashboard, without rotating anything else.
@@ -71,13 +72,32 @@ The plugin runs a `127.0.0.1` WebSocket server; the monitor view connects to it 
 The plugin requests a pairing code from All-Chat and displays it. The streamer, already logged into the dashboard, enters that code (or follows a deep link) and confirms which overlay the device controls. The backend binds the code to their user and returns a long-lived, narrowly-scoped **device token** which the plugin stores locally.
 
 - ✅ Pros: no secret ships in the plugin; no platform OAuth involvement; the credential is minted for one device with one scope set and one overlay, so it is genuinely least-privilege; it is listable and individually revocable in the dashboard; it works headless, across machines, and for any future control surface; and the human confirmation step happens in a context where we already know who the streamer is.
-- ❌ Cons: it is the only option with real backend work: a table, a pairing endpoint pair, a token type in the auth middleware, and dashboard UI to approve and revoke. Pairing codes must be short-lived and rate-limited or they become guessable.
+- ❌ Cons: **the streamer has to type a code.** That is friction on the one step where friction is least affordable, the first thirty seconds of using the thing. It also needs a table, a pairing endpoint pair, a token type in the auth middleware, and dashboard UI. Pairing codes must be short-lived and rate-limited or they become guessable.
+
+### 6. Loopback redirect from All-Chat, PKCE-protected, exchanged for a device token
+
+The install flow the extension has, adapted to a desktop process. The plugin binds an ephemeral port on `127.0.0.1` and opens the system browser at All-Chat with that loopback address as the redirect target. The streamer, normally already logged in, sees one approve screen (which overlay, which actions, name this device), clicks Approve, and All-Chat redirects to the loopback with a one-time code that the plugin exchanges, with its PKCE verifier, for the device token. **Nothing is typed and nothing is pasted.**
+
+Note what is different from option 2: here **All-Chat is the authorization server**, so the loopback redirect is registered with *us*. The platform login (Twitch, Google, Kick) is untouched and happens, if at all, exactly as it does today, in the browser, before the approve screen.
+
+- ✅ Pros: the easiest install available short of no install, and the closest desktop analogue to the extension's existing one-click flow; still no secret in the plugin, because PKCE replaces the client secret (RFC 8252, OAuth 2.0 for Native Apps); mints the same scoped, revocable device token as option 5, so it is a delivery mechanism rather than a different credential; the approve screen is a natural place to show scope and overlay, which a typed code has to do somewhere anyway.
+- ❌ Cons: **loopback only works when the browser and the plugin are on the same machine**, which is not universal: streamers run a Stream Deck against a second PC or a headless capture box. It also assumes the plugin host permits binding a port. And the redirect validation is security-critical: it needs a strict server-side rule of its own rather than reuse of the user-facing redirect allowlist.
 
 ## Decision Outcome
 
-**Chosen: option 5, a device pairing code exchanged for a long-lived scoped device token.** Option 4 is explicitly recommended as the shape of a throwaway spike (see Implementation Notes), not as something to ship.
+**Chosen: option 6 as the primary flow, falling back to option 5's pairing code when loopback cannot work.** Both mint the identical scoped device token, so this is one credential with two delivery paths, not two designs. Option 4 is explicitly recommended as the shape of a throwaway spike (see Implementation Notes), not as something to ship.
 
-**Rationale**: the plugin's problem is not "prove which Twitch account this is", which options 2 and 3 both over-solve, but "let a specific device act for a specific streamer, narrowly, for a long time, revocably". A pairing code puts the one step that requires trust (a human confirming, in the dashboard, that this device may act for them) in the one place where we already have a trustworthy session, and leaves the plugin holding a credential that is useless for anything except the buttons it was paired for. Options 1 and 3 both hand out credentials far broader than the task and rely on streamers handling secrets carefully on camera. Option 4 is attractive precisely until the streamer closes the tab, which is the thing they asked to stop worrying about.
+**Rationale**: the plugin's problem is not "prove which Twitch account this is", which options 2 and 3 both over-solve, but "let a specific device act for a specific streamer, narrowly, for a long time, revocably". Options 5 and 6 answer that identically and differ only in how the streamer gets the token into the plugin, which makes install friction the deciding factor. A loopback redirect is the one option where the streamer clicks Approve once and is finished, and it is the same shape of flow they already know from the extension. The pairing code survives as a fallback rather than being discarded, because loopback has a real and not-rare failure mode (a control surface on a different machine from the browser) and a typed code is the only thing that crosses a host boundary. Options 1 and 3 both hand out credentials far broader than the task and rely on streamers handling secrets carefully on camera. Option 4 is attractive precisely until the streamer closes the tab, which is the thing they asked to stop worrying about.
+
+### Redirect validation is its own rule, deliberately
+
+The loopback redirect must be validated by a dedicated server-side check: scheme exactly `http`, host exactly `127.0.0.1` or `[::1]`, any port, one fixed path. Three specifics matter:
+
+- **Never accept `localhost` as the host.** It resolves through DNS and can be pointed elsewhere; the literal addresses cannot.
+- **Any port must be allowed**, because the plugin cannot reserve one in advance and a fixed port collides. This is what RFC 8252 expects of the authorization server, and it is only safe because the host is pinned.
+- **Do not route this through `isAllowedExternalRedirect`.** That guard exists for user-facing navigation, and it already had to be fixed once for backslash normalisation (audit M1). A redirect that hands over a credential deserves a narrow rule that cannot be widened by an unrelated change to the general one.
+
+The code itself is one-time, short-TTL, and bound to the PKCE challenge, so an intercepted redirect on a shared machine is not replayable.
 
 The decision is deliberately framed around **device tokens, not Stream Deck**. The Elgato plugin is the first consumer; OpenDeck, StreamController, Touch Portal and a stream-side CLI are the same mechanism with a different front end, and nothing in the backend should mention Elgato.
 
@@ -122,7 +142,9 @@ Per CLAUDE.md, shipping this is not done until three things are true, and they a
 
 **Negative / risks**
 
-- New long-lived credential type, which is new attack surface and needs to be in scope for the next security review, including the pairing-code brute-force bound.
+- New long-lived credential type, which is new attack surface and needs to be in scope for the next security review, covering the pairing-code brute-force bound, the loopback redirect validator, and the one-time-code replay window.
+- Two linking paths mean two paths to keep correct. The fallback will be used rarely, which is exactly why it will rot silently unless it is tested deliberately rather than only when someone reports it.
+- Loopback binds a listening socket on the streamer's machine, briefly, during linking. It should bind to `127.0.0.1` only (never `0.0.0.0`) and close as soon as the code arrives or a short timeout expires.
 - Rate limiting matters more than usual: a physical button invites mashing, and chat send in particular fans out to five platforms per press, where per-platform limits are the binding constraint.
 - Stream Deck's Node runtime is pinned by the installed Stream Deck version (20 or 24 depending on release), so the plugin's toolchain is not ours to choose.
 - Publishing to the Marketplace puts All-Chat's name on software running on machines we cannot debug, so plugin-side errors need to surface clearly rather than failing silently, which is the failure mode option 4 was rejected for.
@@ -134,8 +156,8 @@ Per CLAUDE.md, shipping this is not done until three things are true, and they a
 Suggested order, so that each step is independently useful:
 
 1. **Spike first, decide nothing.** Build a **StreamController** plugin against a hand-issued token and wire two buttons (start poll, send message). StreamController first specifically because it can be dogfooded on a real stream immediately, which is the only cheap way to find out that the button ergonomics are wrong. Option 4's local bridge is an acceptable shortcut for this spike only.
-2. **Device pairing backend**: table, `POST` to request a code, `POST` to approve it from an authenticated dashboard session, device-token recognition in the gateway's auth middleware, scope enforcement, revocation endpoint.
-3. **Dashboard UI**: approve a code, name a device, list paired devices with last-used, revoke.
+2. **Device linking backend**: table; the loopback authorize endpoint plus the one-time-code exchange with PKCE verification; the dedicated loopback redirect validator described above; the pairing-code fallback pair; device-token recognition in the gateway's auth middleware; scope enforcement; revocation endpoint.
+3. **Dashboard UI**: the approve screen (overlay, actions, device name) that both flows land on, plus a paired-devices list with last-used and revoke.
 4. **Pin the action list** (name, endpoint, payload, failure surface) as the contract both plugins implement, before the second one is written.
 5. **StreamController plugin** against the real pairing flow, submitted with its `manifest.json` / `about.json` / `attribution.json`. Settle the GPL-3.0 question before submitting.
 6. **Elgato SDK plugin** implementing the same action list, published free to the Elgato Marketplace, and loaded once in **OpenDeck** to confirm the third app comes free.
