@@ -475,6 +475,14 @@
       #      read-only, which dev_require_checkout below turns into a clear
       #      refusal for the verbs that write.
       # There is no fourth tier: never `pwd`, never `.`.
+      #
+      # Naming ${self} costs one thing, stated so nobody has to discover it:
+      # every wrapper now embeds that store path, so editing ANY tracked file
+      # changes the source hash and the six wrappers are rebuilt (shellcheck and
+      # all) on the next `nix run` or `nix develop`. Measured at ~4 s for a whole
+      # shell entry, against a `nix run` that already copies the tree into the
+      # store on every invocation. A verb that silently operates on the wrong
+      # tree is not worth four seconds.
       rootPreamble = ''
         dev_is_repo_root() {
           [ -n "''${1:-}" ] && [ -d "$1/services" ] && [ -d "$1/shared" ] && [ -f "$1/go.work.sum" ]
