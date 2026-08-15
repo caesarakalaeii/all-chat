@@ -461,9 +461,16 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
                       desc: 'Stream shares to other platforms',
                     },
                     {
+                      // Honest description rather than a promise. TikTok has not been observed
+                      // delivering the ENVELOPE frame a coin chest rides on: no chest reached us
+                      // across ~75 minutes of monitoring eight live rooms, one of them with 61
+                      // gifts, and no undecodable message resembling an envelope appeared either.
+                      // The cause is upstream and still unknown, so the toggle stays (it works the
+                      // moment a frame does arrive) but must not claim a feature we have never once
+                      // delivered. Drop the caveat once a chest is confirmed end to end.
                       key: 'enable_tiktok_treasure_chests',
                       label: 'Coin Chests',
-                      desc: 'Treasure boxes of coins dropped by viewers',
+                      desc: 'Treasure boxes of coins dropped by viewers. Best effort: TikTok does not reliably send these to third-party tools, so they may not appear.',
                     },
                   ].map(({ key, label, desc }) => (
                     <EventToggle
