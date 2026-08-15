@@ -156,3 +156,10 @@ docs/marketing/
 .claude/scheduled_tasks.lock
 package-lock.artillery.json
 post-save.yml
+
+# Nix (flake.nix / flake.lock ARE tracked; these are local build artifacts)
+# `result` is the symlink `nix build` drops in the cwd; `.direnv/` is where
+# direnv caches the dev shell if a contributor adds their own .envrc.
+result
+result-*
+.direnv/
