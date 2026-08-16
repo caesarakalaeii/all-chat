@@ -262,6 +262,25 @@ function SettingsContent() {
           </div>
         </Card>
 
+        {/* API tokens section — personal access tokens for the Stream Deck and
+            StreamController plugins. Linked from here because a token page nobody
+            can find is a token page nobody revokes. */}
+        <Card className="p-6">
+          <h2 className="mb-4 text-lg font-semibold text-text">API tokens</h2>
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-sm text-text-sub">
+              Create and revoke the personal access tokens the Stream Deck and StreamController
+              plugins sign in with.
+            </p>
+            <Link
+              href="/settings/api-tokens"
+              className="inline-flex shrink-0 items-center justify-center rounded-lg border border-border px-4 py-2 text-sm text-text transition-colors hover:bg-surface-2"
+            >
+              Manage tokens
+            </Link>
+          </div>
+        </Card>
+
         {/* Ambassador section (ADR-0041) — only for ambassadors; opt in/out of the
             public homepage showcase. */}
         {user.is_ambassador && <AmbassadorSettingsCard />}
