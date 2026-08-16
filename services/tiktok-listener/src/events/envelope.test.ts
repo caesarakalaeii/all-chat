@@ -16,7 +16,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   hasTikTokChestPayload,
@@ -61,6 +61,22 @@ describe('isTikTokCoinChest', () => {
     );
   });
 
+  // The connector emits SUPER_FAN_BOX first and then falls through to ENVELOPE for the same
+  // frame, so the superfanbox display key rides along on genuine chests too. Ruling the frame out
+  // on that key dropped real drops, and the viewer never saw them: businessType decides.
+  it('accepts a real chest frame carrying the ttlive_superfanbox display key', () => {
+    const frame = chestFrame({
+      common: { msgId: 'm1', displayText: { key: 'pm_mt_ttlive_superfanbox_join' } },
+      envelopeInfo: { businessType: 1, diamondCount: 20 }
+    });
+    expect(isTikTokCoinChest(frame)).toBe(true);
+  });
+
+  it('accepts a plain chest with no display text at all', () => {
+    const frame = chestFrame({ common: { msgId: 'm2' } });
+    expect(isTikTokCoinChest(frame)).toBe(true);
+  });
+
   it('rejects a Super Fan Box by display-text key even when the business type is absent', () => {
     const frame = chestFrame({
       common: { displayText: { key: 'pm_mt_ttlive_superfanbox_join' } },
@@ -92,6 +108,44 @@ describe('isTikTokCoinChest', () => {
   // "not a chest" would silently disable the whole feature rather than lose one event.
   it('treats an omitted business type as a possible chest', () => {
     expect(isTikTokCoinChest(chestFrame({ envelopeInfo: { diamondCount: 20 } }))).toBe(true);
+  });
+
+  // A known non-chest business type is authoritative as well, so the missing display key does not
+  // rescue it.
+  it('rejects a known non-chest business type carrying no display key', () => {
+    expect(isTikTokCoinChest(chestFrame({ envelopeInfo: { businessType: 19, diamondCount: 20 } }))).toBe(
+      false
+    );
+  });
+});
+
+describe('TIKTOK_ENVELOPE_TRACE', () => {
+  afterEach(() => {
+    delete process.env.TIKTOK_ENVELOPE_TRACE;
+    vi.restoreAllMocks();
+  });
+
+  it('logs nothing per frame while unset', () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    isTikTokCoinChest(chestFrame());
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it('logs the decision inputs and the result once enabled', () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    process.env.TIKTOK_ENVELOPE_TRACE = '1';
+
+    const frame = chestFrame({
+      common: { msgId: 'm3', displayText: { key: 'pm_mt_ttlive_superfanbox_join' } },
+      envelopeInfo: { businessType: 1, diamondCount: 20 }
+    });
+    expect(isTikTokCoinChest(frame)).toBe(true);
+
+    expect(log).toHaveBeenCalledTimes(1);
+    const entry = JSON.parse(log.mock.calls[0][0] as string);
+    expect(entry.business_type).toBe(1);
+    expect(entry.display_text_key).toBe('pm_mt_ttlive_superfanbox_join');
+    expect(entry.is_coin_chest).toBe(true);
   });
 });
 
