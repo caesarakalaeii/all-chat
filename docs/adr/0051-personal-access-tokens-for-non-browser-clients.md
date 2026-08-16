@@ -77,7 +77,9 @@ The resolver is injected by a package-level setter (`SetAPITokenResolver`, mirro
 
 Create, list and revoke all refuse a PAT-authenticated request, and refuse an impersonating admin. A leaked token therefore cannot mint more tokens, cannot revoke the owner's ability to lock it out, and an admin acting as a user cannot walk away with a credential that outlives the impersonation session (which would defeat ADR-0017's attributability).
 
-The PAT branch is taken *before* the JWT logout blacklist check, because that key is `blacklist:<raw-token>` — routing a PAT through it would write the plaintext secret into a Redis command. PAT revocation is a column read live on every request instead, so it takes effect within one request and there is no cache to invalidate.
+The PAT branch is taken *before* the JWT logout blacklist check, because that key is `blacklist:<raw-token>` — routing a PAT through it would write the plaintext secret into a Redis command. PAT revocation is a column read live on every request instead, so it takes effect within one request and there is no cache to invalidate. For the same reason `/logout` refuses a PAT-authenticated request rather than blacklisting one: it would store the secret and accomplish nothing. `CookieToBearer` also refuses to promote an `allchat_pat_` value out of the `access_token` cookie — the cookie is the browser-session channel, and a planted one would make a victim's browser act as the attacker's account for no legitimate gain.
+
+**Admin surfaces are session-only too.** `AdminOnly()` refuses a PAT even when the token belongs to an admin, enforced in that one function rather than per admin route group. A token minted for a Stream Deck button has scopes covering chat and engagement writes; ADR-0049's least-privilege clause says such a credential is "rejected on any route outside" its scope, and user bans, impersonation and feature-gate flips are emphatically outside it.
 
 ## Consequences
 

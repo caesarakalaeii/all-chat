@@ -182,9 +182,26 @@ func JWTAuthWithRevocation(kc *auth.KeyChain, rdb redis.UniversalClient) gin.Han
 }
 
 // AdminOnly middleware checks if the authenticated user has admin role
-// Must be used after JWTAuth middleware
+// Must be used after JWTAuth middleware.
+//
+// Admin surfaces are SESSION-ONLY: a personal access token is refused here even when it
+// belongs to an admin (ADR-0050). A PAT's scopes cover chat and engagement writes, and
+// ADR-0049's least-privilege clause says a device credential is "rejected on any route
+// outside" its scope — so a token minted for a Stream Deck button must not also reach
+// user bans, impersonation or feature-gate flips. This is enforced in one place rather
+// than per admin route group, and holds in services that never wire a resolver too
+// (where a PAT cannot authenticate at all).
 func AdminOnly() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if c.GetString(CtxAuthMethod) == AuthMethodAPIToken {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error":   "Session required",
+				"message": "Admin actions require a signed-in session, not a personal access token.",
+			})
+			c.Abort()
+			return
+		}
+
 		// Get roles from context (set by JWTAuth middleware)
 		rolesInterface, exists := c.Get("roles")
 		if !exists {
