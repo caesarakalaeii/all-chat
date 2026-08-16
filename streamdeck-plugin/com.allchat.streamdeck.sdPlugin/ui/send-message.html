@@ -1,0 +1,60 @@
+<!doctype html>
+<html>
+	<head>
+		<meta charset="utf-8" />
+		<title>All-Chat — Send Chat Message</title>
+		<script src="https://sdpi-components.dev/releases/v4/sdpi-components.js"></script>
+	</head>
+	<body>
+		<sdpi-item label="Message">
+			<sdpi-textarea
+				setting="message"
+				rows="3"
+				maxlength="500"
+				placeholder="The message this key sends"
+			></sdpi-textarea>
+		</sdpi-item>
+
+		<sdpi-item label="Platform">
+			<sdpi-select setting="platform" default="all">
+				<option value="all">All connected platforms</option>
+				<option value="twitch">Twitch</option>
+				<option value="youtube">YouTube</option>
+				<option value="kick">Kick</option>
+				<option value="tiktok">TikTok</option>
+			</sdpi-select>
+		</sdpi-item>
+
+		<hr />
+
+		<!--
+			The personal access token. All-Chat tokens start with "allchat_pat_";
+			mint one at https://allch.at/settings/api-tokens. It is stored by Stream
+			Deck with this key's settings and is never written to the plugin log.
+		-->
+		<sdpi-item label="Access token">
+			<sdpi-password setting="apiToken" placeholder="allchat_pat_…"></sdpi-password>
+		</sdpi-item>
+
+		<sdpi-item label="Server">
+			<sdpi-textfield
+				setting="baseUrl"
+				placeholder="https://allch.at"
+			></sdpi-textfield>
+		</sdpi-item>
+
+		<details>
+			<summary>Help</summary>
+			<p>
+				Mint a personal access token at
+				<a href="https://allch.at/settings/api-tokens">allch.at/settings/api-tokens</a>
+				and paste the whole string, including the <code>allchat_pat_</code> prefix.
+			</p>
+			<p>
+				Leave <b>Server</b> empty unless you self-host All-Chat; it defaults to
+				<code>https://allch.at</code>.
+			</p>
+			<p>Sending chat messages is free on every All-Chat account.</p>
+		</details>
+	</body>
+</html>
