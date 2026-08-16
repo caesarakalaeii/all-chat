@@ -185,7 +185,7 @@ func JWTAuthWithRevocation(kc *auth.KeyChain, rdb redis.UniversalClient) gin.Han
 // Must be used after JWTAuth middleware.
 //
 // Admin surfaces are SESSION-ONLY: a personal access token is refused here even when it
-// belongs to an admin (ADR-0050). A PAT's scopes cover chat and engagement writes, and
+// belongs to an admin (ADR-0051). A PAT's scopes cover chat and engagement writes, and
 // ADR-0049's least-privilege clause says a device credential is "rejected on any route
 // outside" its scope — so a token minted for a Stream Deck button must not also reach
 // user bans, impersonation or feature-gate flips. This is enforced in one place rather

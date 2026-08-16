@@ -28,7 +28,7 @@ import (
 // (non-browser clients / old builds), it takes precedence (backward compat).
 // This is the cookie-boundary normalization for H3.
 //
-// A personal access token (ADR-0050) is deliberately NOT promoted from the cookie.
+// A personal access token (ADR-0051) is deliberately NOT promoted from the cookie.
 // The cookie is the browser-session channel; a PAT is a header credential for
 // non-browser clients, which never set cookies. Promoting one would mean an attacker
 // who can plant a cookie in a victim's browser (a forced-login / session-fixation

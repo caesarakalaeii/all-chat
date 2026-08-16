@@ -294,7 +294,7 @@ func requireSelf(c *gin.Context) (string, bool) {
 //
 // This is the session-only guard for destructive or whole-account surfaces. A PAT is a
 // long-lived credential with no 24h expiry backstop, intended to be pasted into a
-// desktop plugin (and, per ADR-0050, plausibly typed on camera). Its scopes bound what
+// desktop plugin (and, per ADR-0051, plausibly typed on camera). Its scopes bound what
 // it may DO — chat:write, engagement:write — so any surface that ignores scopes and
 // acts on the whole account must refuse it outright, otherwise a leaked chat token
 // silently becomes an account-destruction or full-PII-disclosure credential.
