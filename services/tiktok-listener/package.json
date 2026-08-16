@@ -8,6 +8,7 @@
     "start": "node dist/index.js",
     "dev": "ts-node-esm src/index.ts",
     "build": "tsc",
+    "postinstall": "node scripts/ensure-rolldown-binding.mjs || true",
     "test": "node scripts/run-tests.mjs"
   },
   "keywords": [
