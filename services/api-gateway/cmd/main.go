@@ -126,6 +126,17 @@ func main() {
 
 	log.Info("Connected to PostgreSQL")
 
+	// Personal access tokens (migration 086): a Bearer starting with `allchat_pat_` is
+	// resolved against api_tokens rather than parsed as a JWT, so the Stream Deck /
+	// StreamController desktop plugins can authenticate here without a browser session.
+	//
+	// Wiring this at the gateway is necessary but NOT sufficient: copyHeaders in
+	// handlers/proxy.go forwards the client's Authorization header verbatim and every
+	// backend re-validates independently, so auth-service and engagement-service each
+	// wire their own resolver too. Authentication only — the premium gates and
+	// ownership checks downstream are untouched.
+	sharedmiddleware.SetAPITokenResolver(sharedmiddleware.NewPgxAPITokenResolver(db))
+
 	// Connect to Redis (for WebSocket Pub/Sub), retrying with backoff so a
 	// transient Redis outage (e.g. the pod being rescheduled onto another node)
 	// does not crash-loop this service. The retry is cancelled on shutdown
@@ -663,7 +674,20 @@ func main() {
 
 		// Streamer chat send (monitor view sends using the streamer's own OAuth
 		// tokens) -> auth-service POST /chat/send.
-		protectedAPI.POST("/auth/chat/send", proxyHandler.ForwardRequest)
+		// A PAT needs chat:write here as well as at auth-service. The gateway check is
+		// defense in depth (the backend enforces it independently, since a client can
+		// reach it directly inside the cluster) and turns an unscoped token into a 403 at
+		// the edge instead of a hop later. Browser sessions pass through untouched.
+		protectedAPI.POST("/auth/chat/send",
+			sharedmiddleware.RequireAPITokenScope(sharedmiddleware.ScopeChatWrite),
+			proxyHandler.ForwardRequest)
+
+		// Personal access token management (-> auth-service /me/api-tokens). Session-only
+		// by design: auth-service refuses a PAT-authenticated request, so a leaked token
+		// cannot mint more tokens or revoke the owner's.
+		protectedAPI.POST("/auth/me/api-tokens", proxyHandler.ForwardRequest)
+		protectedAPI.GET("/auth/me/api-tokens", proxyHandler.ForwardRequest)
+		protectedAPI.DELETE("/auth/me/api-tokens/:id", proxyHandler.ForwardRequest)
 
 		// Discord guild management
 		protectedAPI.GET("/auth/discord/connect", proxyHandler.ForwardRequest)
@@ -794,12 +818,18 @@ func main() {
 		// JWTAuth accepts both user and viewer tokens; engagement-service enforces which
 		// each route needs (owner ownership check vs viewer_id) and verifies authorization
 		// itself. Owner management:
-		protectedAPI.POST("/engagement/overlays/:id/polls", proxyHandler.ForwardRequest)
-		protectedAPI.POST("/engagement/overlays/:id/polls/:pollId/close", proxyHandler.ForwardRequest)
-		protectedAPI.POST("/engagement/overlays/:id/predictions", proxyHandler.ForwardRequest)
-		protectedAPI.POST("/engagement/overlays/:id/predictions/:pid/lock", proxyHandler.ForwardRequest)
-		protectedAPI.POST("/engagement/overlays/:id/predictions/:pid/resolve", proxyHandler.ForwardRequest)
-		protectedAPI.POST("/engagement/overlays/:id/predictions/:pid/cancel", proxyHandler.ForwardRequest)
+		//
+		// The engagement writes carry RequireAPITokenScope(engagement:write) for PATs.
+		// It is ADDITIVE: engagement-service still applies RequirePremium to opening a
+		// poll/prediction, so a PAT is subject to exactly the same premium gate a browser
+		// session is — scopes narrow a token, they never bypass a gate.
+		requireEngagementScope := sharedmiddleware.RequireAPITokenScope(sharedmiddleware.ScopeEngagementWrite)
+		protectedAPI.POST("/engagement/overlays/:id/polls", requireEngagementScope, proxyHandler.ForwardRequest)
+		protectedAPI.POST("/engagement/overlays/:id/polls/:pollId/close", requireEngagementScope, proxyHandler.ForwardRequest)
+		protectedAPI.POST("/engagement/overlays/:id/predictions", requireEngagementScope, proxyHandler.ForwardRequest)
+		protectedAPI.POST("/engagement/overlays/:id/predictions/:pid/lock", requireEngagementScope, proxyHandler.ForwardRequest)
+		protectedAPI.POST("/engagement/overlays/:id/predictions/:pid/resolve", requireEngagementScope, proxyHandler.ForwardRequest)
+		protectedAPI.POST("/engagement/overlays/:id/predictions/:pid/cancel", requireEngagementScope, proxyHandler.ForwardRequest)
 		protectedAPI.GET("/engagement/overlays/:id/points/config", proxyHandler.ForwardRequest)
 		protectedAPI.PUT("/engagement/overlays/:id/points/config", proxyHandler.ForwardRequest)
 		// Viewer participation (web page / extension):
