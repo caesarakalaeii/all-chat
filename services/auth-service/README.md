@@ -284,6 +284,11 @@ Things that are deliberate rather than incidental:
   request (403), so a leaked token can neither mint more tokens nor revoke the owner's.
   They also refuse an admin impersonation session, which would otherwise be able to
   mint a credential outliving the impersonation.
+- **A ban cuts a token off immediately.** The resolver requires `users.is_banned = FALSE`
+  on every request — stricter than a session JWT, whose 24 h expiry is its own backstop.
+  A PAT has none by default, so without this a banned account would keep acting through a
+  pre-ban token indefinitely.
+- **Admin routes are session-only**: `AdminOnly()` refuses a PAT even for an admin.
 - **Cap**: 20 live tokens per user (revoking one frees a slot).
 - Every end-user-facing service wires the resolver at startup
   (`middleware.SetAPITokenResolver`), because api-gateway forwards the client's
