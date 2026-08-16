@@ -24,69 +24,83 @@
  * replaces the old hand-rolled fixed-position flyout with its own mousedown
  * listener) containing the visual picker plus a hex text input, so the color
  * is settable without dragging (WCAG 2.5.7) and by exact value.
+ *
+ * Every color carries its own opacity: the row slider writes the alpha channel
+ * into the hex value (`#rrggbbaa`, ADR-0050) rather than into a sibling
+ * `*Opacity` setting, so themes reading `var(--chat-*-color)` honour it.
  */
 
 import React from 'react'
 import { HexColorPicker, HexColorInput } from 'react-colorful'
 import { Popover } from '@/components/ui/popover'
+import { alphaFromHex, hexWithAlpha, normalizeHex, stripAlpha } from '@/lib/utils/hex-alpha'
 
 export interface ColorPickerControlProps {
   label: string
   value: string
   onChange: (hex: string) => void
-  showOpacity?: boolean
-  opacity?: string
-  onOpacityChange?: (opacity: string) => void
 }
 
 export function ColorPickerControl({
   label,
   value,
   onChange,
-  showOpacity,
-  opacity,
-  onOpacityChange,
 }: ColorPickerControlProps): React.ReactElement {
-  const opacityValue =
-    showOpacity && opacity !== undefined ? Math.round(parseFloat(opacity) * 100) : 100
+  const alpha = alphaFromHex(value)
+  const opacityPercent = Math.round(alpha * 100)
+
+  // The saturation/hue picker only speaks 6-digit hex; keep the current alpha.
+  const handleColorChange = (hex: string): void => {
+    onChange(hexWithAlpha(hex, alpha))
+  }
+
+  // Typed hex wins when it spells out its own alpha (#rgba / #rrggbbaa),
+  // otherwise the slider's opacity is preserved.
+  const handleHexInput = (hex: string): void => {
+    const normalized = normalizeHex(hex)
+    onChange(
+      normalized !== undefined && normalized.length === 9 ? normalized : hexWithAlpha(hex, alpha)
+    )
+  }
 
   return (
     <div className="flex items-center gap-2">
       <span className="w-28 shrink-0 text-sm text-text-sub">{label}</span>
 
       <Popover.Root>
-        <Popover.Trigger
-          data-testid="color-swatch"
-          className="h-7 w-10 rounded border border-border focus-visible:ring-2 focus-visible:ring-twitch focus-visible:ring-offset-2 focus-visible:ring-offset-surface focus-visible:outline-none"
-          style={{ backgroundColor: value }}
-          aria-label={`Pick color for ${label}`}
-        />
+        {/* Checkerboard sits behind the swatch so a translucent color reads as translucent */}
+        <div className="alpha-checkerboard h-7 w-10 shrink-0 rounded">
+          <Popover.Trigger
+            data-testid="color-swatch"
+            className="h-full w-full rounded border border-border focus-visible:ring-2 focus-visible:ring-twitch focus-visible:ring-offset-2 focus-visible:ring-offset-surface focus-visible:outline-none"
+            style={{ backgroundColor: value }}
+            aria-label={`Pick color for ${label}`}
+          />
+        </div>
         <Popover.Content className="space-y-2">
           <Popover.Title className="sr-only">{`Color for ${label}`}</Popover.Title>
-          <HexColorPicker color={value} onChange={onChange} />
+          <HexColorPicker color={stripAlpha(value)} onChange={handleColorChange} />
           <HexColorInput
             color={value}
-            onChange={onChange}
+            onChange={handleHexInput}
             prefixed
+            alpha
             aria-label={`Hex value for ${label}`}
             className="w-full rounded border border-border bg-bg px-2 py-1.5 font-mono text-sm text-text focus-visible:ring-1 focus-visible:ring-border focus-visible:outline-none"
           />
         </Popover.Content>
       </Popover.Root>
 
-      {/* Opacity slider — only when showOpacity is true and callbacks are provided */}
-      {showOpacity && opacity !== undefined && onOpacityChange && (
-        <input
-          type="range"
-          min={0}
-          max={100}
-          step={1}
-          value={opacityValue}
-          onChange={(e) => onOpacityChange(String(Number(e.target.value) / 100))}
-          className="flex-1 accent-current"
-          aria-label={`${label} opacity`}
-        />
-      )}
+      <input
+        type="range"
+        min={0}
+        max={100}
+        step={1}
+        value={opacityPercent}
+        onChange={(e) => onChange(hexWithAlpha(value, Number(e.target.value) / 100))}
+        className="flex-1 accent-current"
+        aria-label={`${label} opacity`}
+      />
     </div>
   )
 }
