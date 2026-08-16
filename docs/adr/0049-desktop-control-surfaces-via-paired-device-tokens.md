@@ -164,3 +164,13 @@ Suggested order, so that each step is independently useful:
 7. **Release requirements** above.
 
 Prior art to follow rather than reinvent: `shared/middleware/premium.go` for gate enforcement shape, and `tokens/source.go` for how credentials are already resolved per user.
+
+#### The hand-issued token of step 1, as built (amendment, 2026-08-16)
+
+Step 1's "hand-issued token" shipped as **ADR-0051, personal access tokens** (`Authorization: Bearer allchat_pat_<secret>`, table `api_tokens`, migration 086). Three things about that are worth stating here so this ADR is not read as unimplemented:
+
+- **Nothing in this ADR is superseded.** The loopback-plus-PKCE delivery, the dedicated redirect validator, the pairing-code fallback and the per-overlay binding of a device token all remain the decision for the published plugins. A PAT is the credential the spike needs, plus the only thing that works where loopback cannot reach at all — a headless capture box, a second PC, a CLI.
+- **The paste objection stands.** It is bounded, not answered: a PAT is scoped (`chat:write`, `engagement:write`), listed with `last_used_at`, and revocable in one click. What this ADR rejected was pasting as the *only* mechanism for a mass-market published plugin, and that is unchanged.
+- **The resolver seam is shared.** Device-token recognition (step 2's "token type in the auth middleware") is already built as `middleware.SetAPITokenResolver` + `APITokenResolver`, wired in auth-service, api-gateway **and** engagement-service — gateway-only wiring is inert, because `copyHeaders` forwards `Authorization` verbatim and every backend re-validates independently. A device token becomes another row shape behind that interface rather than a second auth path.
+
+The scope clause above ("does not satisfy the premium gate on its own") is implemented literally and tested: `RequireAPITokenScope` sits beside `RequirePremium` on the round-start routes, never in place of it, so a correctly scoped token belonging to a non-premium owner is still 403'd by `requireEngagementPremium`.
