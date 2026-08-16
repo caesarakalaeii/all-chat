@@ -24,7 +24,7 @@
     "format:check": "prettier --check .",
     "format": "prettier --write .",
     "analyze": "ANALYZE=true npm run build",
-    "postinstall": "node scripts/fix-native-bindings.mjs",
+    "postinstall": "test -f scripts/fix-native-bindings.mjs && node scripts/fix-native-bindings.mjs || true",
     "prepare": "husky || true"
   },
   "dependencies": {
