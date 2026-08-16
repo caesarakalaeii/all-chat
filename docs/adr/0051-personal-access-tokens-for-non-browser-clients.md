@@ -85,6 +85,10 @@ The PAT branch is taken *before* the JWT logout blacklist check, because that ke
 
 **Admin surfaces are session-only too.** `AdminOnly()` refuses a PAT even when the token belongs to an admin, enforced in that one function rather than per admin route group. A token minted for a Stream Deck button has scopes covering chat and engagement writes; ADR-0049's least-privilege clause says such a credential is "rejected on any route outside" its scope, and user bans, impersonation and feature-gate flips are emphatically outside it.
 
+**So are whole-account surfaces.** `DELETE /me` (account deletion, which cascades every overlay) and `GET /me/data-export` (a full PII dump) both refuse a PAT via `RefuseAPIToken`. These are the surfaces where scopes are the *wrong* instrument: there is no scope that should unlock irreversible account destruction, so the answer is refusal at any scope rather than a new `account:delete` scope nobody should ever mint. Without this, the least-privilege claim at the top of this ADR — that a chat-send credential does not carry overlay deletion — would be false, since deletion cascades overlays. The guard runs *before* any mutation or read, so a refusal changes nothing and discloses nothing.
+
+The general rule: **scopes bound what a PAT may do on surfaces it should reach; `RefuseAPIToken` marks the surfaces no PAT should reach at all.** Both are strictly additive to the existing authorization checks — neither ever replaces a premium gate or an ownership check.
+
 ## Consequences
 
 **Positive**

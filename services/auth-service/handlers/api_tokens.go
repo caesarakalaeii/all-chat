@@ -31,6 +31,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -282,14 +283,34 @@ func requireSelf(c *gin.Context) (string, bool) {
 		})
 		return "", false
 	}
-	if c.GetString(middleware.CtxAuthMethod) == middleware.AuthMethodAPIToken {
-		c.JSON(http.StatusForbidden, gin.H{
-			"error":   "Session required",
-			"message": "Personal access tokens can only be managed from a signed-in session, not with a token.",
-		})
+	if !RefuseAPIToken(c, "Personal access tokens can only be managed from a signed-in session, not with a token.") {
 		return "", false
 	}
 	return userID, true
+}
+
+// RefuseAPIToken rejects a request that authenticated with a personal access token,
+// reporting true when the caller may proceed.
+//
+// This is the session-only guard for destructive or whole-account surfaces. A PAT is a
+// long-lived credential with no 24h expiry backstop, intended to be pasted into a
+// desktop plugin (and, per ADR-0050, plausibly typed on camera). Its scopes bound what
+// it may DO — chat:write, engagement:write — so any surface that ignores scopes and
+// acts on the whole account must refuse it outright, otherwise a leaked chat token
+// silently becomes an account-destruction or full-PII-disclosure credential.
+//
+// Scope enforcement (RequireAPITokenScope) is the tool for surfaces a PAT SHOULD reach.
+// This is the tool for surfaces no PAT should reach at any scope. Both are additive to,
+// never a replacement for, the existing authorization checks on the route.
+func RefuseAPIToken(c *gin.Context, message string) bool {
+	if c.GetString(middleware.CtxAuthMethod) != middleware.AuthMethodAPIToken {
+		return true
+	}
+	c.JSON(http.StatusForbidden, gin.H{
+		"error":   "Session required",
+		"message": message,
+	})
+	return false
 }
 
 // normalizeAPITokenScopes trims, de-duplicates and validates a requested scope set
@@ -319,6 +340,15 @@ func normalizeAPITokenScopes(requested []string) ([]string, error) {
 
 // allowedAPITokenScopeList renders the allowlist for the 400 body, so a client can
 // discover the valid scopes without reading the source.
+//
+// Derived from allowedAPITokenScopes rather than hand-written, so there is ONE source
+// of truth: a hand-maintained copy could drift and advertise a scope validation
+// rejects (or hide one it accepts). Sorted for a stable, testable response.
 func allowedAPITokenScopeList() []string {
-	return []string{middleware.ScopeChatWrite, middleware.ScopeEngagementWrite}
+	scopes := make([]string, 0, len(allowedAPITokenScopes))
+	for scope := range allowedAPITokenScopes {
+		scopes = append(scopes, scope)
+	}
+	sort.Strings(scopes)
+	return scopes
 }

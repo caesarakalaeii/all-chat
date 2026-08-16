@@ -830,8 +830,12 @@ func main() {
 		protectedAPI.POST("/engagement/overlays/:id/predictions/:pid/lock", requireEngagementScope, proxyHandler.ForwardRequest)
 		protectedAPI.POST("/engagement/overlays/:id/predictions/:pid/resolve", requireEngagementScope, proxyHandler.ForwardRequest)
 		protectedAPI.POST("/engagement/overlays/:id/predictions/:pid/cancel", requireEngagementScope, proxyHandler.ForwardRequest)
+		// The GET is a read and stays ungated; the PUT is a write, so it carries the same
+		// scope as the engagement writes above — matching what engagement-service enforces
+		// on this route, so the edge and the backend agree rather than differing for no
+		// stated reason. The backend remains the authority either way.
 		protectedAPI.GET("/engagement/overlays/:id/points/config", proxyHandler.ForwardRequest)
-		protectedAPI.PUT("/engagement/overlays/:id/points/config", proxyHandler.ForwardRequest)
+		protectedAPI.PUT("/engagement/overlays/:id/points/config", requireEngagementScope, proxyHandler.ForwardRequest)
 		// Viewer participation (web page / extension):
 		protectedAPI.POST("/engagement/overlays/:id/polls/:pollId/vote", proxyHandler.ForwardRequest)
 		protectedAPI.POST("/engagement/overlays/:id/predictions/:pid/wager", proxyHandler.ForwardRequest)
