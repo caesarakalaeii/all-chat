@@ -1,0 +1,82 @@
+<!doctype html>
+<html>
+	<head>
+		<meta charset="utf-8" />
+		<title>All-Chat — Poll Control</title>
+		<script src="https://sdpi-components.dev/releases/v4/sdpi-components.js"></script>
+	</head>
+	<body>
+		<!--
+			Mode picks which route this key calls. "Start a poll" is the premium-gated
+			one: on a free account the server answers 403 and the key reports that as
+			"requires premium" rather than as a failure. "Close" is free by design.
+		-->
+		<sdpi-item label="Mode">
+			<sdpi-select setting="mode" default="start">
+				<option value="start">Start a poll (All-Chat premium)</option>
+				<option value="close">Close the live poll (free)</option>
+			</sdpi-select>
+		</sdpi-item>
+
+		<sdpi-item label="Overlay ID">
+			<sdpi-textfield
+				setting="overlayId"
+				placeholder="UUID from your All-Chat dashboard"
+			></sdpi-textfield>
+		</sdpi-item>
+
+		<hr />
+		<h4>Start settings</h4>
+
+		<sdpi-item label="Question">
+			<sdpi-textfield setting="question" placeholder="What should I play next?"></sdpi-textfield>
+		</sdpi-item>
+
+		<sdpi-item label="Options">
+			<sdpi-textarea
+				setting="options"
+				rows="5"
+				placeholder="One per line — between 2 and 5"
+			></sdpi-textarea>
+		</sdpi-item>
+
+		<sdpi-item label="Duration (s)">
+			<sdpi-textfield setting="durationSeconds" placeholder="0 = until closed"></sdpi-textfield>
+		</sdpi-item>
+
+		<hr />
+		<h4>Close settings</h4>
+
+		<sdpi-item label="Poll ID">
+			<sdpi-textfield
+				setting="pollId"
+				placeholder="Leave blank to close whichever poll is live"
+			></sdpi-textfield>
+		</sdpi-item>
+
+		<hr />
+
+		<sdpi-item label="Access token">
+			<sdpi-password setting="apiToken" placeholder="allchat_pat_…"></sdpi-password>
+		</sdpi-item>
+
+		<sdpi-item label="Server">
+			<sdpi-textfield setting="baseUrl" placeholder="https://allch.at"></sdpi-textfield>
+		</sdpi-item>
+
+		<details>
+			<summary>Help</summary>
+			<p>
+				Mint a personal access token at
+				<a href="https://allch.at/settings/api-tokens">allch.at/settings/api-tokens</a>
+				and paste the whole string, including the <code>allchat_pat_</code> prefix.
+			</p>
+			<p>
+				<b>Starting</b> a poll needs All-Chat premium. On a free account this key
+				will tell you so and point at
+				<a href="https://allch.at">allch.at</a> — that is expected, not a bug.
+				<b>Closing</b> a poll is free, so a "close" key always works.
+			</p>
+		</details>
+	</body>
+</html>

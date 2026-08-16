@@ -1,0 +1,26 @@
+{
+  "name": "allchat-streamdeck-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Elgato Stream Deck plugin for All-Chat: send chat messages and drive polls / predictions from hardware keys.",
+  "license": "AGPL-3.0-or-later",
+  "engines": {
+    "node": ">=20.5.1"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json --watch",
+    "lint": "eslint . && tsc -p tsconfig.json --noEmit",
+    "clean": "rm -rf com.allchat.streamdeck.sdPlugin/bin"
+  },
+  "//dependencies": "The build toolchain sits in dependencies rather than devDependencies on purpose. This package is private and never published, and CI runs with NODE_ENV=production, under which npm ci omits dev dependencies and npm run build would fail with 'tsc: not found'. Nothing listed here ships to a user: the distributable is the .sdPlugin folder, which contains only the compiled bin/ and the manifest.",
+  "dependencies": {
+    "@elgato/streamdeck": "2.1.1",
+    "@eslint/js": "^9.39.4",
+    "@types/node": "^22.10.2",
+    "eslint": "^9.39.4",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.0"
+  }
+}

@@ -1,0 +1,94 @@
+<!doctype html>
+<html>
+	<head>
+		<meta charset="utf-8" />
+		<title>All-Chat — Prediction Control</title>
+		<script src="https://sdpi-components.dev/releases/v4/sdpi-components.js"></script>
+	</head>
+	<body>
+		<!--
+			As with polls: "Start" is the premium-gated route and answers 403 on a free
+			account, which the key reports as "requires premium". Lock, resolve and
+			cancel are deliberately free so a round can always be finished or refunded.
+		-->
+		<sdpi-item label="Mode">
+			<sdpi-select setting="mode" default="start">
+				<option value="start">Start a prediction (All-Chat premium)</option>
+				<option value="lock">Lock — stop taking wagers (free)</option>
+				<option value="resolve">Resolve — pay out the winner (free)</option>
+				<option value="cancel">Cancel — refund everyone (free)</option>
+			</sdpi-select>
+		</sdpi-item>
+
+		<sdpi-item label="Overlay ID">
+			<sdpi-textfield
+				setting="overlayId"
+				placeholder="UUID from your All-Chat dashboard"
+			></sdpi-textfield>
+		</sdpi-item>
+
+		<hr />
+		<h4>Start settings</h4>
+
+		<sdpi-item label="Title">
+			<sdpi-textfield setting="title" placeholder="Do I clear this level?"></sdpi-textfield>
+		</sdpi-item>
+
+		<sdpi-item label="Outcomes">
+			<sdpi-textarea
+				setting="outcomes"
+				rows="5"
+				placeholder="One per line — between 2 and 10"
+			></sdpi-textarea>
+		</sdpi-item>
+
+		<sdpi-item label="Auto-lock (s)">
+			<sdpi-textfield setting="autoLockSeconds" placeholder="0 = until locked"></sdpi-textfield>
+		</sdpi-item>
+
+		<hr />
+		<h4>Lock / resolve / cancel settings</h4>
+
+		<sdpi-item label="Prediction ID">
+			<sdpi-textfield
+				setting="predictionId"
+				placeholder="Leave blank to act on whichever prediction is live"
+			></sdpi-textfield>
+		</sdpi-item>
+
+		<sdpi-item label="Winning outcome ID">
+			<sdpi-textfield
+				setting="winningOutcomeId"
+				placeholder="Required by Resolve — the outcome's UUID"
+			></sdpi-textfield>
+		</sdpi-item>
+
+		<hr />
+
+		<sdpi-item label="Access token">
+			<sdpi-password setting="apiToken" placeholder="allchat_pat_…"></sdpi-password>
+		</sdpi-item>
+
+		<sdpi-item label="Server">
+			<sdpi-textfield setting="baseUrl" placeholder="https://allch.at"></sdpi-textfield>
+		</sdpi-item>
+
+		<details>
+			<summary>Help</summary>
+			<p>
+				Mint a personal access token at
+				<a href="https://allch.at/settings/api-tokens">allch.at/settings/api-tokens</a>
+				and paste the whole string, including the <code>allchat_pat_</code> prefix.
+			</p>
+			<p>
+				<b>Starting</b> a prediction needs All-Chat premium; on a free account this
+				key says so and points at <a href="https://allch.at">allch.at</a>. Lock,
+				resolve and cancel are free and always work.
+			</p>
+			<p>
+				<b>Resolve</b> takes the winning outcome's <em>id</em>, not its label — copy
+				it from the prediction in your dashboard.
+			</p>
+		</details>
+	</body>
+</html>

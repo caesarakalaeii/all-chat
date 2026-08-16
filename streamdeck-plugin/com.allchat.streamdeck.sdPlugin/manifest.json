@@ -1,0 +1,69 @@
+{
+	"$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
+	"Name": "All-Chat",
+	"Version": "0.1.0.0",
+	"Author": "caesarakalaeii",
+	"Description": "Drive your All-Chat account from hardware keys: send chat messages, and start or close polls and predictions. Free plugin; starting polls and predictions needs All-Chat premium.",
+	"Category": "All-Chat",
+	"CategoryIcon": "imgs/plugin/category-icon",
+	"Icon": "imgs/plugin/marketplace",
+	"URL": "https://allch.at",
+	"SDKVersion": 2,
+	"Software": {
+		"MinimumVersion": "6.5"
+	},
+	"OS": [
+		{ "Platform": "mac", "MinimumVersion": "10.15" },
+		{ "Platform": "windows", "MinimumVersion": "10" }
+	],
+	"Nodejs": {
+		"Version": "20",
+		"Debug": "enabled"
+	},
+	"CodePath": "bin/plugin.js",
+	"Actions": [
+		{
+			"Name": "Send Chat Message",
+			"UUID": "com.allchat.streamdeck.send-message",
+			"Icon": "imgs/actions/send-message/icon",
+			"Tooltip": "Send a preset message to your chat via All-Chat.",
+			"PropertyInspectorPath": "ui/send-message.html",
+			"Controllers": ["Keypad"],
+			"States": [
+				{
+					"Image": "imgs/actions/send-message/key",
+					"TitleAlignment": "middle"
+				}
+			]
+		},
+		{
+			"Name": "Poll Control",
+			"UUID": "com.allchat.streamdeck.poll-control",
+			"Icon": "imgs/actions/poll-control/icon",
+			"Tooltip": "Start a poll (All-Chat premium) or close the live one (free).",
+			"PropertyInspectorPath": "ui/poll-control.html",
+			"Controllers": ["Keypad"],
+			"States": [
+				{
+					"Image": "imgs/actions/poll-control/key",
+					"TitleAlignment": "middle"
+				}
+			]
+		},
+		{
+			"Name": "Prediction Control",
+			"UUID": "com.allchat.streamdeck.prediction-control",
+			"Icon": "imgs/actions/prediction-control/icon",
+			"Tooltip": "Start a prediction (All-Chat premium), or lock, resolve or cancel one (free).",
+			"PropertyInspectorPath": "ui/prediction-control.html",
+			"Controllers": ["Keypad"],
+			"States": [
+				{
+					"Image": "imgs/actions/prediction-control/key",
+					"TitleAlignment": "middle"
+				}
+			]
+		}
+	],
+	"UUID": "com.allchat.streamdeck"
+}
