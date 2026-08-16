@@ -203,7 +203,7 @@ func TestAuthHandlerLogout(t *testing.T) {
 		}
 	})
 
-	// A personal access token (ADR-0050) is not a session. Blacklisting one would write the
+	// A personal access token (ADR-0051) is not a session. Blacklisting one would write the
 	// plaintext secret into Redis under "blacklist:<raw-token>" AND achieve nothing, because
 	// the PAT path never consults the blacklist — revocation is api_tokens.revoked_at, read
 	// live. So logout refuses it rather than pretending to have logged something out.

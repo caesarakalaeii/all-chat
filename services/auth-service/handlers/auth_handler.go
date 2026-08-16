@@ -901,7 +901,7 @@ func generateRandomString(length int) (string, error) {
 // It reads X-Access-Token (forwarded by the gateway's AuthCookieForward, since the raw
 // Cookie is stripped by L17) and falls back to the Authorization bearer.
 //
-// A personal access token (ADR-0050) is deliberately excluded. The blacklist key is
+// A personal access token (ADR-0051) is deliberately excluded. The blacklist key is
 // "blacklist:<raw-token>", so blacklisting a PAT would write the plaintext secret into
 // Redis — and it would achieve nothing anyway, because the PAT branch in
 // shared/middleware never consults the blacklist: PAT revocation is api_tokens.revoked_at,

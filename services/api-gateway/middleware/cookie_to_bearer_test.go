@@ -76,7 +76,7 @@ func TestCookieToBearer_NoCookieNoHeader(t *testing.T) {
 
 // A personal access token is a header credential for non-browser clients, so it is
 // never promoted from the cookie: a planted cookie would otherwise make a victim's
-// browser act as the attacker's account (ADR-0050).
+// browser act as the attacker's account (ADR-0051).
 func TestCookieToBearer_IgnoresPersonalAccessTokenCookie(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	var gotAuth string

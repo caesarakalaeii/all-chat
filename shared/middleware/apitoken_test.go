@@ -382,7 +382,7 @@ func TestAPITokenScopes_NotAPIToken(t *testing.T) {
 }
 
 // Admin surfaces are session-only: an admin's PAT is refused by AdminOnly even though
-// its roles include "admin" (ADR-0050 / ADR-0049 least privilege). A token minted for a
+// its roles include "admin" (ADR-0051 / ADR-0049 least privilege). A token minted for a
 // Stream Deck button must not reach user bans or feature-gate flips.
 func TestAPIToken_AdminOnlyRefusesPAT(t *testing.T) {
 	const token = APITokenPrefix + "admin-pat"
