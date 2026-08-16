@@ -94,6 +94,24 @@ func JWTAuthWithRevocation(kc *auth.KeyChain, rdb redis.UniversalClient) gin.Han
 			return
 		}
 
+		// Personal access token path (Stream Deck / StreamController desktop plugins).
+		// A bearer carrying the allchat_pat_ prefix is a PAT, never a JWT: it is hashed
+		// and looked up in api_tokens, and on success populates the SAME context identity
+		// the JWT branch below sets, so downstream handlers need no changes.
+		//
+		// The branch is taken BEFORE the logout blacklist check on purpose: that key is
+		// "blacklist:<raw-token>", so routing a PAT through it would write the plaintext
+		// token into a Redis command. PAT revocation is a column on the token row and is
+		// read live by the resolver, so nothing is lost by skipping the JWT blacklist.
+		//
+		// Anything that is not a PAT falls through completely unchanged.
+		if IsAPIToken(tokenString) {
+			if authenticateAPIToken(c, tokenString) {
+				c.Next()
+			}
+			return
+		}
+
 		// Check logout blacklist (audit H2). Skip when no Redis client is wired.
 		if rdb != nil {
 			blacklisted, err := rdb.Exists(c.Request.Context(), "blacklist:"+tokenString).Result()
@@ -127,6 +145,7 @@ func JWTAuthWithRevocation(kc *auth.KeyChain, rdb redis.UniversalClient) gin.Han
 			c.Set("is_viewer", viewerClaims.IsViewer)
 			c.Set("is_premium", viewerClaims.IsPremium)
 			c.Set("is_admin", viewerClaims.IsAdmin)
+			c.Set(CtxAuthMethod, AuthMethodJWT)
 			c.Next()
 			return
 		}
@@ -146,6 +165,10 @@ func JWTAuthWithRevocation(kc *auth.KeyChain, rdb redis.UniversalClient) gin.Han
 			// real admin in their audit log while the action runs as the target user.
 			c.Set("impersonated_by", claims.ImpersonatedBy)
 			c.Set("impersonated_user", claims.ImpersonatedUser)
+			// Marks the request as session-authenticated so RequireAPITokenScope knows
+			// this identity is not scope-limited (a browser session is authorized by the
+			// surrounding gates, exactly as before).
+			c.Set(CtxAuthMethod, AuthMethodJWT)
 			c.Next()
 			return
 		}
