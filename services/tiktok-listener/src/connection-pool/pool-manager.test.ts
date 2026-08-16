@@ -28,13 +28,37 @@
  *
  * The upstream connector is replaced with an in-memory EventEmitter fake, so the suite runs
  * offline and deterministically: no sign server, no WebSocket, no timers.
+ *
+ * WHICH CONNECTOR EVENT THE POOL CARRIES — read before adding tests here. The pool registers
+ * exactly ONE inbound handler, `WebcastEvent.CHAT` (pool-manager.ts:298). It does NOT listen to
+ * `WebcastEvent.ENVELOPE`; the ENVELOPE/treasure-chest path lives on a separate, non-pooled
+ * connection in index.ts:893. So the ENVELOPE-shaped frames below are pushed down the CHAT
+ * channel on purpose: what is under test is that the pool forwards its inbound frame as opaque
+ * cargo, never reading a field, whatever shape that frame happens to have. An envelope-shaped
+ * object is simply the most relevant cargo, because the sibling chest-detection work sends
+ * frames of that shape through this fan-out once they reach a pooled path.
+ *
+ * Consequently the inbound event name is HARDCODED as `INBOUND_EVENT` rather than discovered
+ * from the emitter's live listener registry. Discovery would make the suite blind to a change
+ * in WHICH connector events the pool forwards: swapping CHAT for GIFT, or accidentally
+ * registering two handlers and delivering every frame twice, would both stay green.
+ * `pins the pool's inbound wiring` below asserts the registered set explicitly.
  */
 
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-/** Lifecycle events the pool listens to; everything else it wires is its inbound message path. */
-const LIFECYCLE_EVENTS = new Set(['connected', 'disconnected', 'error']);
+/** Lifecycle events the pool listens to, as distinct from its inbound message path. */
+const LIFECYCLE_EVENTS = ['connected', 'disconnected', 'error'] as const;
+
+/**
+ * The connector event the pool forwards to subscribers — `WebcastEvent.CHAT`.
+ *
+ * Hardcoded deliberately. See the module docblock: resolving this from the emitter would let a
+ * change in the pool's wiring slip through unnoticed, which is the exact regression class this
+ * suite exists to catch.
+ */
+const INBOUND_EVENT = 'chat';
 
 /**
  * Stand-in for `TikTokLiveConnection`. Behaves like the real one where the pool touches it
@@ -63,23 +87,13 @@ class FakeTikTokLiveConnection extends EventEmitter {
   }
 
   /**
-   * Push a frame down whatever event(s) the pool registered as its inbound message path.
+   * Push one frame down the pool's inbound message path, exactly once.
    *
-   * Resolved from the live listener registry rather than hardcoded, so the test drives the
-   * seam the pool actually wired instead of asserting a particular connector event name.
+   * Emits on the hardcoded `INBOUND_EVENT` so the assertions downstream can use literal call
+   * counts, which in turn makes a duplicate-delivery regression visible.
    */
-  pushInboundFrame(frame: unknown): number {
-    const inbound = this.eventNames()
-      .map(name => String(name))
-      .filter(name => !LIFECYCLE_EVENTS.has(name));
-
-    expect(inbound.length, 'pool registered no inbound message handler').toBeGreaterThan(0);
-
-    for (const name of inbound) {
-      this.emit(name, frame);
-    }
-
-    return inbound.length;
+  pushInboundFrame(frame: unknown): void {
+    this.emit(INBOUND_EVENT, frame);
   }
 }
 
@@ -148,6 +162,30 @@ function upstream(): FakeTikTokLiveConnection {
 }
 
 describe('ConnectionPoolManager fan-out', () => {
+  it("pins the pool's inbound wiring to exactly one connector event", async () => {
+    await pool.subscribe(USERNAME, 'overlay-a', { overlayId: 'overlay-a', onMessage: vi.fn() });
+
+    const registered = upstream()
+      .eventNames()
+      .map(name => String(name));
+    const inbound = registered.filter(
+      name => !(LIFECYCLE_EVENTS as readonly string[]).includes(name)
+    );
+
+    // Exactly one inbound handler: two would fan every frame out twice, zero would drop the
+    // stream entirely. Both are silent failures without this assertion.
+    expect(inbound).toEqual([INBOUND_EVENT]);
+    expect(registered).toEqual([INBOUND_EVENT, ...LIFECYCLE_EVENTS]);
+
+    // The pool carries CHAT only. An ENVELOPE frame arriving at this connection reaches nobody,
+    // because the chest path is wired on a separate connection in index.ts:893 — recorded here
+    // so the sibling chest-detection work is not misled into thinking the pool covers it.
+    const seen = vi.fn();
+    await pool.subscribe(USERNAME, 'overlay-b', { overlayId: 'overlay-b', onMessage: seen });
+    upstream().emit('envelope', envelopeFrame());
+    expect(seen).not.toHaveBeenCalled();
+  });
+
   it('fans out an accepted ENVELOPE frame to subscribers', async () => {
     const overlayA = vi.fn();
     const overlayB = vi.fn();
@@ -162,10 +200,10 @@ describe('ConnectionPoolManager fan-out', () => {
     expect(pool.getSubscriberCount(USERNAME)).toBe(3);
 
     const frame = envelopeFrame();
-    const inboundEvents = upstream().pushInboundFrame(frame);
+    upstream().pushInboundFrame(frame);
 
     for (const onMessage of [overlayA, overlayB, overlayC]) {
-      expect(onMessage).toHaveBeenCalledTimes(inboundEvents);
+      expect(onMessage).toHaveBeenCalledTimes(1);
       // The RAW frame, by identity: the pool forwards, it does not build a payload.
       expect(onMessage.mock.calls[0][0]).toBe(frame);
       expect(onMessage.mock.calls[0][0]).toEqual(envelopeFrame());
@@ -213,8 +251,8 @@ describe('ConnectionPoolManager fan-out', () => {
     });
 
     const first = envelopeFrame();
-    const inboundEvents = upstream().pushInboundFrame(first);
-    expect(leaving).toHaveBeenCalledTimes(inboundEvents);
+    upstream().pushInboundFrame(first);
+    expect(leaving).toHaveBeenCalledTimes(1);
 
     pool.unsubscribe(USERNAME, 'overlay-leaving');
     expect(pool.getSubscriberCount(USERNAME)).toBe(1);
@@ -225,9 +263,9 @@ describe('ConnectionPoolManager fan-out', () => {
     upstream().pushInboundFrame(second);
 
     // The departed overlay saw only the pre-unsubscribe frame; the connection stays up for the rest.
-    expect(leaving).toHaveBeenCalledTimes(inboundEvents);
+    expect(leaving).toHaveBeenCalledTimes(1);
     expect(leaving).not.toHaveBeenCalledWith(second);
-    expect(staying).toHaveBeenCalledTimes(inboundEvents * 2);
+    expect(staying).toHaveBeenCalledTimes(2);
     expect(staying).toHaveBeenLastCalledWith(second);
     expect(upstream().disconnectCalls).toBe(0);
   });
