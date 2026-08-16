@@ -65,6 +65,9 @@ export const MESSAGE_ANIMATION_CLASS: Record<MessageAnimation, string> = {
  *
  * Property mapping: camelCase field → --chat-* or --platform-* CSS variable
  * See visual-settings-to-css.ts for the authoritative mapping.
+ *
+ * Colors are hex and carry their own opacity in an alpha channel when they are
+ * not fully opaque (`#rrggbbaa`, ADR-0050) — see lib/utils/hex-alpha.ts.
  */
 export interface VisualSettings {
   // Typography
@@ -89,9 +92,11 @@ export interface VisualSettings {
 
   // Background & Bubbles
   overlayBgColor?: string       // --chat-overlay-bg-color
+  /** @deprecated Opacity now rides in overlayBgColor's alpha channel (ADR-0050); still read for settings saved before that. */
   overlayBgOpacity?: string     // --chat-overlay-bg-opacity
   overlayPadding?: string       // --chat-overlay-padding
   bubbleBgColor?: string        // --chat-bubble-bg-color
+  /** @deprecated Opacity now rides in bubbleBgColor's alpha channel (ADR-0050); still read for settings saved before that. */
   bubbleBgOpacity?: string      // --chat-bubble-bg-opacity
   bubbleBorderRadius?: string   // --chat-bubble-border-radius
   bubbleBorderWidth?: string    // --chat-bubble-border-width

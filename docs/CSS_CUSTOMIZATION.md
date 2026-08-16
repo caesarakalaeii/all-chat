@@ -194,7 +194,7 @@ Every chat message follows this structure:
 |---------|-------------|----------------|-------|
 | **Main container** | `.min-h-screen` | Full viewport height, 16px padding | Root element |
 | **Message list** | `.space-y-3` | 12px vertical spacing between messages | Container for all messages |
-| **Message card** | `.space-y-3 > div` | `bg-gray-900/90 backdrop-blur-sm rounded-lg p-3 shadow-lg` | **PRIMARY CUSTOMIZATION TARGET** |
+| **Message card** | `.chat-message` (or `.space-y-3 > div`) | `bg-slate-900/90 backdrop-blur-sm rounded-lg p-3 shadow-lg` | **PRIMARY CUSTOMIZATION TARGET**. `.chat-message` hits regular chat bubbles only; `.space-y-3 > div` also catches event messages |
 | **Avatar container** | `.flex-shrink-0` | Flexbox, no shrinking | Contains avatar image or initials |
 | **Avatar image** | `.w-10.h-10.rounded-full` | 40x40px, circular | User avatar |
 | **Avatar fallback** | `.w-10.h-10.rounded-full.bg-gray-700` | Circular div with initials | Shown when no avatar |
@@ -252,6 +252,27 @@ Every chat message follows this structure:
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
 }
 ```
+
+**Fully transparent bubbles** (text only, no plate behind it):
+
+```css
+.chat-message {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+```
+
+`.chat-message` is the stable class on every regular chat bubble; events use
+`.event-message` and keep their own styling. If your theme also blurs behind the
+bubble, add `backdrop-filter: none !important;`.
+
+> No CSS needed for this one: **Editor → Background → Bubble background** has an
+> opacity slider, and every color picker in the appearance panels has one. Drag it
+> to 0 for transparent bubbles. The opacity is stored in the color itself as an
+> 8-digit hex (`#rrggbbaa`, [ADR-0050](./adr/0050-color-opacity-in-the-color-value.md)),
+> which is why it also applies when a theme sets the background from
+> `var(--chat-bubble-bg-color)`.
 
 ### 2. Add/Modify Borders
 

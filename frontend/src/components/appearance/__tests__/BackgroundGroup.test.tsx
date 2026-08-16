@@ -61,15 +61,38 @@ describe('BackgroundGroup', () => {
     expect(swatches.length).toBeGreaterThanOrEqual(1)
   })
 
-  it('onChange called with overlayBgOpacity patch as decimal string', () => {
+  it('writes opacity into the color as an alpha channel and drops the legacy field', () => {
     const onChange = vi.fn()
     render(<BackgroundGroup visualSettings={defaultSettings} onChange={onChange} />)
-    // Opacity slider present (input[type=range])
-    const sliders = document.querySelectorAll('input[type="range"]')
-    expect(sliders.length).toBeGreaterThan(0)
-    // Fire change on first opacity slider (overlayBgOpacity)
-    fireEvent.change(sliders[0], { target: { value: '50' } })
-    expect(onChange).toHaveBeenCalledWith({ overlayBgOpacity: '0.5' })
+
+    fireEvent.change(screen.getByLabelText('Overlay background opacity'), {
+      target: { value: '50' },
+    })
+    expect(onChange).toHaveBeenCalledWith({
+      overlayBgColor: '#00000080',
+      overlayBgOpacity: undefined,
+    })
+  })
+
+  it('folds a legacy *BgOpacity setting into the slider position', () => {
+    const onChange = vi.fn()
+    render(
+      <BackgroundGroup
+        visualSettings={{ bubbleBgColor: '#1a1a2e', bubbleBgOpacity: '0.5' }}
+        onChange={onChange}
+      />
+    )
+    expect(
+      (screen.getByLabelText('Bubble background opacity') as HTMLInputElement).value
+    ).toBe('50')
+  })
+
+  it('offers an opacity slider for the border color too', () => {
+    const onChange = vi.fn()
+    render(<BackgroundGroup visualSettings={defaultSettings} onChange={onChange} />)
+
+    fireEvent.change(screen.getByLabelText('Border color opacity'), { target: { value: '0' } })
+    expect(onChange).toHaveBeenCalledWith({ bubbleBorderColor: '#33333300' })
   })
 
   it('onChange called with backdropBlur patch with px suffix', () => {
@@ -77,7 +100,7 @@ describe('BackgroundGroup', () => {
     render(<BackgroundGroup visualSettings={defaultSettings} onChange={onChange} />)
     // Backdrop blur slider is the last range input — SliderControl renders them
     const rangeSliders = document.querySelectorAll('input[type="range"]')
-    // 2 opacity sliders + 5 slider controls = 7 range inputs total
+    // 3 opacity sliders + 5 slider controls = 8 range inputs total
     // Backdrop blur is the last SliderControl
     const lastSlider = rangeSliders[rangeSliders.length - 1]
     fireEvent.change(lastSlider, { target: { value: '10' } })

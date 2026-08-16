@@ -21,6 +21,7 @@
 
 import React from 'react'
 import type { VisualSettings } from '@/lib/types/visual-settings'
+import { withLegacyOpacity } from '@/lib/utils/hex-alpha'
 import { ColorPickerControl } from './ColorPickerControl'
 import { SliderControl } from './SliderControl'
 import { AdvancedDisclosure } from '@/components/editor/AdvancedDisclosure'
@@ -33,26 +34,28 @@ export interface BackgroundGroupProps {
 export function BackgroundGroup({ visualSettings, onChange }: BackgroundGroupProps): React.ReactElement {
   return (
     <div className="space-y-3">
-      {/* Overlay background */}
+      {/* Overlay background — opacity rides in the color's alpha channel; the
+          legacy sibling *BgOpacity setting is folded in on read and cleared on
+          write, so a saved value is never dimmed twice (ADR-0050). */}
       <p className="text-xs font-medium text-text-sub uppercase tracking-wide">Overlay background</p>
       <ColorPickerControl
         label="Overlay background"
-        value={visualSettings.overlayBgColor ?? '#000000'}
-        onChange={(hex) => onChange({ overlayBgColor: hex })}
-        showOpacity
-        opacity={visualSettings.overlayBgOpacity ?? '0.7'}
-        onOpacityChange={(op) => onChange({ overlayBgOpacity: op })}
+        value={withLegacyOpacity(
+          visualSettings.overlayBgColor ?? '#000000',
+          visualSettings.overlayBgOpacity ?? '0.7'
+        )}
+        onChange={(hex) => onChange({ overlayBgColor: hex, overlayBgOpacity: undefined })}
       />
 
       {/* Bubble background */}
       <p className="text-xs font-medium text-text-sub uppercase tracking-wide">Bubble background</p>
       <ColorPickerControl
         label="Bubble background"
-        value={visualSettings.bubbleBgColor ?? '#1a1a2e'}
-        onChange={(hex) => onChange({ bubbleBgColor: hex })}
-        showOpacity
-        opacity={visualSettings.bubbleBgOpacity ?? '0.85'}
-        onOpacityChange={(op) => onChange({ bubbleBgOpacity: op })}
+        value={withLegacyOpacity(
+          visualSettings.bubbleBgColor ?? '#1a1a2e',
+          visualSettings.bubbleBgOpacity ?? '0.85'
+        )}
+        onChange={(hex) => onChange({ bubbleBgColor: hex, bubbleBgOpacity: undefined })}
       />
 
       {/* Border color */}

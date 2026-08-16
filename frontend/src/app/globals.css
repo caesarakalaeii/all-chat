@@ -502,3 +502,22 @@ span.font-semibold.text-sm.username-gradient {
     background-color: color-mix(in oklab, var(--color-twitch) 12%, transparent);
   }
 }
+
+/* Transparency checkerboard behind color swatches (ADR-0050): colors carry an
+   alpha channel, and a translucent swatch on a flat surface just looks like a
+   different color. Purely decorative — the swatch button paints on top. */
+.alpha-checkerboard {
+  --alpha-checkerboard-tile: color-mix(in oklab, var(--color-text) 22%, transparent);
+  background-color: var(--color-surface);
+  background-image:
+    linear-gradient(45deg, var(--alpha-checkerboard-tile) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--alpha-checkerboard-tile) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--alpha-checkerboard-tile) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--alpha-checkerboard-tile) 75%);
+  background-size: 8px 8px;
+  background-position:
+    0 0,
+    0 4px,
+    4px -4px,
+    -4px 0;
+}
