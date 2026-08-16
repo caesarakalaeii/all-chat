@@ -274,7 +274,7 @@ func setupMigrationTestDB(t *testing.T) (*pgxpool.Pool, func()) {
 		Started:          true,
 	})
 	if err != nil {
-		t.Fatalf("Failed to start container: %v", err)
+		t.Skipf("cannot start postgres testcontainer (docker unavailable?): %v", err)
 	}
 
 	host, err := container.Host(ctx)
