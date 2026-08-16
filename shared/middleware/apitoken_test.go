@@ -380,3 +380,46 @@ func TestAPITokenScopes_NotAPIToken(t *testing.T) {
 		t.Fatalf("expected ok=false for a JWT-authenticated context")
 	}
 }
+
+// Admin surfaces are session-only: an admin's PAT is refused by AdminOnly even though
+// its roles include "admin" (ADR-0050 / ADR-0049 least privilege). A token minted for a
+// Stream Deck button must not reach user bans or feature-gate flips.
+func TestAPIToken_AdminOnlyRefusesPAT(t *testing.T) {
+	const token = APITokenPrefix + "admin-pat"
+	wireResolver(t, newFakeResolver(t, map[string]fakeTokenRow{
+		token: {id: "tok-9", userID: "admin-1", username: "adminuser",
+			isAdmin: true, scopes: []string{ScopeChatWrite, ScopeEngagementWrite}},
+	}))
+
+	gin.SetMode(gin.TestMode)
+	kc := auth.NewKeyChain(
+		map[string][]byte{"v1": []byte("test-secret-v1")},
+		[]byte("test-secret"),
+		"v1",
+	)
+	router := gin.New()
+	router.Use(JWTAuth(kc))
+	router.GET("/admin/users", AdminOnly(), func(c *gin.Context) { c.Status(http.StatusOK) })
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/users", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for an admin PAT on an admin route, got %d: %s", resp.Code, resp.Body.String())
+	}
+
+	// An admin session JWT still passes, unchanged.
+	jwtToken, err := auth.GenerateJWT("admin-1", "twitch-1", "adminuser", "test-secret", true)
+	if err != nil {
+		t.Fatalf("failed to generate admin token: %v", err)
+	}
+	req = httptest.NewRequest(http.MethodGet, "/admin/users", nil)
+	req.Header.Set("Authorization", "Bearer "+jwtToken)
+	resp = httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("an admin session JWT must still reach admin routes, got %d: %s", resp.Code, resp.Body.String())
+	}
+}
