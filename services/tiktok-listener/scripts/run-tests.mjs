@@ -26,21 +26,18 @@
  *    export a TMPDIR they never create (e.g. TMPDIR=/build under a read-only /), and every
  *    suite then fails with EACCES/ENOENT.
  *
- * 2. The rolldown native binding (vitest 4 bundles rolldown). npm picks the binding from
- *    the *OS* libc: on Alpine, `ldd` reports musl, so it installs the musl build. When
- *    `node` itself is glibc-linked (e.g. supplied by Nix on an Alpine host), loading that
- *    binding dies with "invalid ELF header". The gnu binding is already an optional
- *    dependency in the lockfile at the same version, so we fetch that package into
- *    node_modules and point napi-rs at it via NAPI_RS_NATIVE_LIBRARY_PATH. (`npm install`
- *    refuses it outright with "notsup Actual libc: musl"; `npm pack` bypasses that gate
- *    without touching the lockfile.)
+ * 2. The rolldown native binding (vitest 4 bundles rolldown), repaired by
+ *    ./ensure-rolldown-binding.mjs — which `npm ci` already runs as postinstall, so this is
+ *    normally a second no-op. See that file for what the fault is and why it is repaired
+ *    there rather than here: `npx vitest run <file>` has to work on its own too.
  */
 
 import { spawnSync } from 'node:child_process';
-import { accessSync, constants, existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
-import { createRequire } from 'node:module';
+import { accessSync, constants, mkdirSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+
+import { ensureRolldownBinding } from './ensure-rolldown-binding.mjs';
 
 function isUsable(dir) {
   try {
@@ -49,18 +46,6 @@ function isUsable(dir) {
     return true;
   } catch {
     return false;
-  }
-}
-
-/**
- * Returns the libc this Node binary is actually linked against, which is not necessarily
- * the one the surrounding OS advertises. Node reports a glibc version only for glibc builds.
- */
-function runtimeLibc() {
-  try {
-    return process.report.getReport().header.glibcVersionRuntime ? 'glibc' : 'musl';
-  } catch {
-    return null;
   }
 }
 
@@ -77,43 +62,16 @@ if (!isUsable(configured)) {
 }
 
 // Only intervene when the binding npm chose cannot serve this runtime.
-if (!env.NAPI_RS_NATIVE_LIBRARY_PATH && runtimeLibc() === 'glibc') {
-  const modules = join(import.meta.dirname, '..', 'node_modules');
-  const destination = join(modules, '@rolldown', 'binding-linux-x64-gnu');
-  const gnuBinding = join(destination, 'rolldown-binding.linux-x64-gnu.node');
-  const muslInstalled = existsSync(join(modules, '@rolldown', 'binding-linux-x64-musl'));
-
-  if (muslInstalled && !existsSync(gnuBinding)) {
-    // Match the rolldown that is actually installed, so the ABI lines up.
-    const { version } = createRequire(import.meta.url)('rolldown/package.json');
-    const spec = `@rolldown/binding-linux-x64-gnu@${version}`;
-    console.warn(`[test] node is glibc-linked but the musl rolldown binding was installed; fetching ${spec}.`);
-
-    const scratch = mkdtempSync(join(modules, '.rolldown-gnu-'));
-    const packed = spawnSync('npm', ['pack', spec, '--pack-destination', scratch], {
-      stdio: 'inherit',
-      shell: process.platform === 'win32'
-    });
-
-    if (packed.status === 0) {
-      mkdirSync(destination, { recursive: true });
-      spawnSync(
-        'tar',
-        [
-          'xzf',
-          join(scratch, `rolldown-binding-linux-x64-gnu-${version}.tgz`),
-          '-C',
-          destination,
-          '--strip-components=1'
-        ],
-        { stdio: 'inherit' }
-      );
-    }
-    rmSync(scratch, { recursive: true, force: true });
+if (!env.NAPI_RS_NATIVE_LIBRARY_PATH) {
+  let repaired = null;
+  try {
+    repaired = ensureRolldownBinding();
+  } catch (error) {
+    console.warn(`[test] rolldown binding repair skipped: ${error.message}`);
   }
 
-  if (muslInstalled && existsSync(gnuBinding)) {
-    env.NAPI_RS_NATIVE_LIBRARY_PATH = gnuBinding;
+  if (repaired) {
+    env.NAPI_RS_NATIVE_LIBRARY_PATH = repaired;
   }
 }
 
