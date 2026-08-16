@@ -18,45 +18,49 @@
 
 import type { CSSProperties } from 'react'
 import type { VisualSettings } from '@/lib/types/visual-settings'
+import { normalizeHex } from '@/lib/utils/hex-alpha'
 
 /**
  * Background / shadow / max-width customizer settings that can't be driven by a
  * blanket CSS rule:
  *
- * - Background colors combine a hex (`*BgColor`) with a 0–1 opacity (`*BgOpacity`)
- *   into a single `rgba()`. A layered `!important` CSS rule for these would clobber
- *   the per-variant Tailwind defaults (normal `bg-slate-900/90`, shared-chat
- *   `bg-purple-900/40`, transparent overlay). Applying them as inline styles *only
- *   when set* leaves those defaults intact when the user hasn't configured them.
+ * - Background colors resolve to a single `rgba()`. The opacity rides in the
+ *   color itself as an 8-digit hex (ADR-0050); the legacy sibling `*BgOpacity`
+ *   field is still honoured for settings saved before that. A layered
+ *   `!important` CSS rule for these would clobber the per-variant Tailwind
+ *   defaults (normal `bg-slate-900/90`, shared-chat `bg-purple-900/40`,
+ *   transparent overlay). Applying them as inline styles *only when set* leaves
+ *   those defaults intact when the user hasn't configured them.
  *
  * Returned objects are empty when nothing is configured, so spreading them is a
  * no-op and the existing Tailwind classes win.
  */
 
 /**
- * Combine a hex color (`#rgb` or `#rrggbb`) with a 0–1 opacity string into an
- * `rgba()` string. Returns undefined when the hex is missing/invalid so callers
- * fall back to their default styling.
+ * Resolve a hex color (`#rgb`, `#rgba`, `#rrggbb` or `#rrggbbaa`) to an
+ * `rgba()` string. An alpha channel on the color wins; `opacity` (a legacy
+ * "0"–"1" string) applies only to colors without one. Returns undefined when
+ * the hex is missing/invalid so callers fall back to their default styling.
  */
 export function hexToRgba(hex?: string, opacity?: string): string | undefined {
   if (!hex) return undefined
-  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(hex.trim())
-  if (!m) return undefined
-  let h = m[1]
-  if (h.length === 3) {
-    h = h
-      .split('')
-      .map((c) => c + c)
-      .join('')
+  const normalized = normalizeHex(hex)
+  if (normalized === undefined) return undefined
+
+  const r = parseInt(normalized.slice(1, 3), 16)
+  const g = parseInt(normalized.slice(3, 5), 16)
+  const b = parseInt(normalized.slice(5, 7), 16)
+
+  let a: number
+  if (normalized.length === 9) {
+    a = parseInt(normalized.slice(7, 9), 16) / 255
+  } else {
+    const parsed = opacity !== undefined && opacity !== '' ? Number(opacity) : 1
+    a = Number.isFinite(parsed) ? Math.min(1, Math.max(0, parsed)) : 1
   }
-  const r = parseInt(h.slice(0, 2), 16)
-  const g = parseInt(h.slice(2, 4), 16)
-  const b = parseInt(h.slice(4, 6), 16)
 
-  const parsed = opacity !== undefined && opacity !== '' ? Number(opacity) : 1
-  const a = Number.isFinite(parsed) ? Math.min(1, Math.max(0, parsed)) : 1
-
-  return `rgba(${r}, ${g}, ${b}, ${a})`
+  // Round so an 8-bit alpha channel reads as 0.502, not 0.5019607843137255.
+  return `rgba(${r}, ${g}, ${b}, ${Math.round(a * 1000) / 1000})`
 }
 
 /** Inline style for the overlay container (background fill + max width). */
