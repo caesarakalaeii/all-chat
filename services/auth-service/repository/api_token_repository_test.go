@@ -214,6 +214,36 @@ func TestResolveAPIToken_ExpiredTokenIsRejected(t *testing.T) {
 	}
 }
 
+// A ban must actually cut the account off. A ban blocks login, and an already-issued JWT
+// is backstopped by its 24 h expiry — a PAT has no such backstop, so the resolver checks
+// users.is_banned on every request rather than trusting issuance-time state.
+func TestResolveAPIToken_BannedOwnerIsRejected(t *testing.T) {
+	repo, pool, userID, cleanup := apiTokenTestRepo(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	plaintext, hash, err := middleware.GenerateAPIToken()
+	if err != nil {
+		t.Fatalf("GenerateAPIToken: %v", err)
+	}
+	if _, err := repo.CreateAPIToken(ctx, userID, "deck", hash, []string{middleware.ScopeChatWrite}, nil); err != nil {
+		t.Fatalf("CreateAPIToken: %v", err)
+	}
+
+	resolver := middleware.NewPgxAPITokenResolver(pool)
+	if _, err := resolver.ResolveAPIToken(ctx, middleware.HashAPIToken(plaintext)); err != nil {
+		t.Fatalf("the token must resolve before the ban: %v", err)
+	}
+
+	if _, err := pool.Exec(ctx,
+		`UPDATE users SET is_banned = TRUE, banned_at = NOW() WHERE id = $1`, userID); err != nil {
+		t.Fatalf("banning the user: %v", err)
+	}
+	if _, err := resolver.ResolveAPIToken(ctx, middleware.HashAPIToken(plaintext)); !errors.Is(err, middleware.ErrAPITokenNotFound) {
+		t.Fatalf("expected ErrAPITokenNotFound once the owner is banned, got %v", err)
+	}
+}
+
 func TestListAPITokensByUser_NeverExposesTheDigest(t *testing.T) {
 	repo, _, userID, cleanup := apiTokenTestRepo(t)
 	defer cleanup()

@@ -320,11 +320,17 @@ func NewPgxAPITokenResolver(db *pgxpool.Pool) APITokenResolver {
 // resolved identity carries the same fields as a JWT.
 //
 // Validity is decided entirely in SQL, in one round trip on the request path:
-//   - revoked_at IS NULL         — revocation takes effect within one request
+//   - revoked_at IS NULL          — revocation takes effect within one request
 //   - expires_at IS NULL OR > now — NULL means "until revoked" (migration 086)
+//   - the owner is not banned     — see below
 //
-// Unknown, revoked and expired all yield zero rows, so the caller cannot tell them
-// apart and neither can a client.
+// The ban predicate makes a PAT strictly stricter than a session JWT, deliberately. A
+// ban blocks LOGIN (no new JWT is issued, migration 015), and an already-issued JWT is
+// backstopped by its 24-hour expiry. A PAT has no such backstop: without this clause a
+// banned account would keep acting through a token issued before the ban, indefinitely.
+//
+// Unknown, revoked, expired and banned all yield zero rows, so the caller cannot tell
+// them apart and neither can a client.
 const resolveAPITokenSQL = `
 	SELECT t.id::text,
 	       t.user_id::text,
@@ -336,7 +342,8 @@ const resolveAPITokenSQL = `
 	  JOIN users u ON u.id = t.user_id
 	 WHERE t.token_hash = $1
 	   AND t.revoked_at IS NULL
-	   AND (t.expires_at IS NULL OR t.expires_at > NOW())`
+	   AND (t.expires_at IS NULL OR t.expires_at > NOW())
+	   AND u.is_banned = FALSE`
 
 // touchAPITokenSQL records last_used_at. Deliberately a separate, best-effort
 // statement: it is telemetry, and a write failure (read-only replica, lock wait)

@@ -73,6 +73,10 @@ A session JWT passes through the scope middleware untouched — it is not scope-
 
 The resolver is injected by a package-level setter (`SetAPITokenResolver`, mirroring the existing `SetLogger`) and called at startup in **auth-service, api-gateway and engagement-service**. Gateway-only wiring would be inert: `copyHeaders` forwards the header verbatim, so engagement-service's `JWTAuthWithRevocation` would reject every PAT as a malformed JWT and every plugin poll/prediction action would 401.
 
+### A ban cuts a PAT off, unlike a JWT
+
+The resolver requires `users.is_banned = FALSE` on every request. This makes a PAT strictly stricter than a session JWT, deliberately: a ban blocks *login* (migration 015), and an already-issued JWT is backstopped by its 24-hour expiry, but a PAT defaults to no expiry at all. Without the predicate a banned account would keep acting through a token minted before the ban, indefinitely — which would make the ban button a lie for exactly the users most likely to have automated access.
+
 ### Token management is a session-only surface
 
 Create, list and revoke all refuse a PAT-authenticated request, and refuse an impersonating admin. A leaked token therefore cannot mint more tokens, cannot revoke the owner's ability to lock it out, and an admin acting as a user cannot walk away with a credential that outlives the impersonation session (which would defeat ADR-0017's attributability).
