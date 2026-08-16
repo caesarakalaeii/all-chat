@@ -28,12 +28,60 @@ import (
 
 	"github.com/caesar/all-chat/shared/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/wait"
 )
+
+// setupAPITokenTestDB starts a PostgreSQL container with no pre-created schema, so the
+// real migration set owns the database. Unlike setupMigrationTestDB it SKIPS rather than
+// fails when no container runtime is available (the precedent is
+// setupViewerRepoTestDB), because these tests assert on migration 086's constraints and
+// a machine without Docker cannot say anything about them either way.
+func setupAPITokenTestDB(t *testing.T) (*pgxpool.Pool, func()) {
+	t.Helper()
+	ctx := context.Background()
+
+	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: testcontainers.ContainerRequest{
+			Image:        "postgres:16-alpine",
+			ExposedPorts: []string{"5432/tcp"},
+			Env: map[string]string{
+				"POSTGRES_USER":     "testuser",
+				"POSTGRES_PASSWORD": "testpass",
+				"POSTGRES_DB":       "testdb",
+			},
+			WaitingFor: wait.ForLog("database system is ready to accept connections").
+				WithOccurrence(2).
+				WithStartupTimeout(60 * time.Second),
+		},
+		Started: true,
+	})
+	if err != nil {
+		t.Skipf("cannot start postgres testcontainer (docker unavailable?): %v", err)
+	}
+
+	host, err := container.Host(ctx)
+	if err != nil {
+		t.Fatalf("container host: %v", err)
+	}
+	port, err := container.MappedPort(ctx, "5432")
+	if err != nil {
+		t.Fatalf("container port: %v", err)
+	}
+	pool, err := pgxpool.New(ctx, "postgres://testuser:testpass@"+host+":"+port.Port()+"/testdb?sslmode=disable")
+	if err != nil {
+		t.Fatalf("connection pool: %v", err)
+	}
+	return pool, func() {
+		pool.Close()
+		_ = container.Terminate(ctx)
+	}
+}
 
 // apiTokenTestRepo builds an APITokenRepository over a migrated database plus one user.
 func apiTokenTestRepo(t *testing.T) (*APITokenRepository, *pgxpool.Pool, string, func()) {
 	t.Helper()
-	pool, cleanup := setupMigrationTestDB(t)
+	pool, cleanup := setupAPITokenTestDB(t)
 	runMigrations(t, pool, loadUpMigrations(t))
 
 	var userID string
