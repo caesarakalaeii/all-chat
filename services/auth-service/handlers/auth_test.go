@@ -20,6 +20,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/caesar/all-chat/services/auth-service/oauth"
 	"github.com/caesar/all-chat/services/auth-service/repository"
 	"github.com/caesar/all-chat/shared/auth"
+	sharedmiddleware "github.com/caesar/all-chat/shared/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap/zaptest"
@@ -198,6 +200,31 @@ func TestAuthHandlerLogout(t *testing.T) {
 		}
 		if mr.Exists(rtKey) {
 			t.Error("the refresh token family entry must be gone, or logout is reversible")
+		}
+	})
+
+	// A personal access token (ADR-0051) is not a session. Blacklisting one would write the
+	// plaintext secret into Redis under "blacklist:<raw-token>" AND achieve nothing, because
+	// the PAT path never consults the blacklist — revocation is api_tokens.revoked_at, read
+	// live. So logout refuses it rather than pretending to have logged something out.
+	t.Run("a personal access token is neither blacklisted nor accepted", func(t *testing.T) {
+		handler, mr := newLogoutHandler(t)
+		router := gin.New()
+		router.POST("/auth/logout", handler.HandleLogout)
+
+		const pat = sharedmiddleware.APITokenPrefix + "do-not-blacklist-me"
+		req := httptest.NewRequest(http.MethodPost, "/auth/logout", nil)
+		req.Header.Set("Authorization", "Bearer "+pat)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		if w.Code != http.StatusUnauthorized {
+			t.Errorf("status = %d, want 401 for a PAT-authenticated logout", w.Code)
+		}
+		for _, key := range mr.Keys() {
+			if strings.Contains(key, pat) {
+				t.Fatalf("the plaintext token reached Redis as key %q", key)
+			}
 		}
 	})
 

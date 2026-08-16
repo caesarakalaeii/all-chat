@@ -170,6 +170,15 @@ func main() {
 
 	log.Info("Connected to PostgreSQL")
 
+	// Personal access tokens (migration 086): a Bearer starting with `allchat_pat_` is
+	// hashed and resolved against api_tokens instead of being parsed as a JWT, so the
+	// Stream Deck / StreamController desktop plugins can authenticate without a browser
+	// session. Wired here in EVERY end-user-facing service, not only at the gateway:
+	// api-gateway forwards the client's Authorization header verbatim and each backend
+	// re-validates independently, so a service without a resolver would 401 every PAT.
+	// Authentication only — premium gates and ownership checks are untouched.
+	middleware.SetAPITokenResolver(middleware.NewPgxAPITokenResolver(db))
+
 	// Connect to Redis, retrying with backoff so a transient Redis outage
 	// (e.g. the pod being rescheduled onto another node) does not crash-loop
 	// this service. The retry is cancelled on shutdown signals so SIGTERM still
@@ -291,6 +300,9 @@ func main() {
 	adminViewerHandler := handlers.NewAdminViewerHandler(log, viewerRepo)
 	adminCosmeticsHandler := handlers.NewAdminCosmeticsHandler(log, db)
 	riscHandler := handlers.NewRISCHandler(log, db)
+	// Personal access token management (create/list/revoke). The plaintext token is
+	// returned exactly once, by the create endpoint, and is never retrievable again.
+	apiTokenHandler := handlers.NewAPITokenHandler(repository.NewAPITokenRepository(db), log)
 
 	// Set Gin mode
 	if logLevel == "debug" {
@@ -393,12 +405,24 @@ func main() {
 		protected.GET("/me", legacyAuthHandler.HandleGetMe)
 		protected.GET("/me/data-export", legacyAuthHandler.HandleDataExport)
 		protected.PATCH("/me/onboarding", legacyAuthHandler.HandleUpdateOnboarding)
+
+		// Personal access tokens for non-browser clients. Session-only by design (the
+		// handler refuses a PAT-authenticated request): a leaked token must not be able
+		// to mint more tokens or revoke the victim's, and the plaintext is shown once.
+		protected.POST("/me/api-tokens", apiTokenHandler.HandleCreateAPIToken)
+		protected.GET("/me/api-tokens", apiTokenHandler.HandleListAPITokens)
+		protected.DELETE("/me/api-tokens/:id", apiTokenHandler.HandleRevokeAPIToken)
 		protected.POST("/logout", legacyAuthHandler.HandleLogout)
 		protected.POST("/stop-impersonation", legacyAuthHandler.HandleStopImpersonation)
 		protected.DELETE("/me", legacyAuthHandler.HandleDeleteAccount)
 
 		// Streamer chat send (uses streamer's own OAuth tokens)
-		protected.POST("/chat/send", chatSendHandler.HandleStreamerSendMessage)
+		// A PAT may send chat only with the chat:write scope. RequireAPITokenScope is
+		// additive: a browser session passes through untouched (it is not scope-limited),
+		// so this cannot change behaviour for the existing web client.
+		protected.POST("/chat/send",
+			middleware.RequireAPITokenScope(middleware.ScopeChatWrite),
+			chatSendHandler.HandleStreamerSendMessage)
 
 		// Add-source routes (require JWT for account linking)
 		protected.GET("/twitch/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformTwitch))

@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/caesar/all-chat/shared/auth"
+	sharedmiddleware "github.com/caesar/all-chat/shared/middleware"
 	"github.com/gin-gonic/gin"
 )
 
@@ -70,5 +71,24 @@ func TestCookieToBearer_NoCookieNoHeader(t *testing.T) {
 	r.ServeHTTP(w, req)
 	if gotAuth != "" {
 		t.Errorf("Authorization should be empty, got %q", gotAuth)
+	}
+}
+
+// A personal access token is a header credential for non-browser clients, so it is
+// never promoted from the cookie: a planted cookie would otherwise make a victim's
+// browser act as the attacker's account (ADR-0051).
+func TestCookieToBearer_IgnoresPersonalAccessTokenCookie(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	var gotAuth string
+	r := gin.New()
+	r.Use(CookieToBearer())
+	r.GET("/x", func(c *gin.Context) { gotAuth = c.GetHeader("Authorization"); c.Status(200) })
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/x", nil)
+	req.AddCookie(&http.Cookie{Name: auth.CookieAccessToken, Value: sharedmiddleware.APITokenPrefix + "planted"})
+	r.ServeHTTP(w, req)
+	if gotAuth != "" {
+		t.Errorf("a PAT cookie was promoted to a Bearer header: %q", gotAuth)
 	}
 }

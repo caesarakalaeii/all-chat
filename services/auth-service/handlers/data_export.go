@@ -135,7 +135,19 @@ func (h *AuthHandler) HandleDataExport(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
-	uid := userID.(string)
+	uid, ok := userID.(string)
+	if !ok || uid == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	// The export is a full PII dump (identities, overlays, viewers, guilds, messages,
+	// delegations). A personal access token's scopes cover chat and engagement writes,
+	// never bulk disclosure of the account, so this surface is session-only.
+	if !RefuseAPIToken(c, "Exporting your data requires a signed-in session, not a personal access token.") {
+		return
+	}
+
 	ctx := c.Request.Context()
 
 	user, err := h.userRepo.GetByID(ctx, uid)

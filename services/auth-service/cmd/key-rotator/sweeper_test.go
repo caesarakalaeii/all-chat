@@ -166,7 +166,9 @@ func setupTestDB(t *testing.T) (*pgxpool.Pool, func()) {
 		ContainerRequest: req,
 		Started:          true,
 	})
-	require.NoError(t, err, "start postgres container")
+	if err != nil {
+		t.Skipf("cannot start postgres testcontainer (docker unavailable?): %v", err)
+	}
 
 	host, err := container.Host(ctx)
 	require.NoError(t, err)

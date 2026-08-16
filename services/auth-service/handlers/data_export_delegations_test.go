@@ -188,7 +188,7 @@ func setupDelegationExportDB(t *testing.T) (*pgxpool.Pool, func()) {
 		ContainerRequest: req, Started: true,
 	})
 	if err != nil {
-		t.Fatalf("start postgres: %v", err)
+		t.Skipf("cannot start postgres testcontainer (docker unavailable?): %v", err)
 	}
 	host, err := container.Host(ctx)
 	if err != nil {
