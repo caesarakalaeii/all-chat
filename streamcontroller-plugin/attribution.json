@@ -1,0 +1,21 @@
+{
+  "Icons": {
+    "name": "No third-party icons",
+    "note": "This plugin ships no bundled artwork. Keys render text labels via StreamController's own drawing API, so there is nothing to attribute here yet. If icons are added later, list each one with its source, author, licence and URL before submission.",
+    "license": "n/a",
+    "url": ""
+  },
+  "Code": {
+    "name": "Python standard library only",
+    "note": "No vendored or third-party Python code. The plugin imports StreamController's own PluginBase / ActionBase / ActionHolder at runtime, which are provided by the host application and not redistributed here. See requirements.txt.",
+    "license": "n/a",
+    "url": ""
+  },
+  "Host": {
+    "name": "StreamController",
+    "author": "Core447",
+    "license": "GPL-3.0",
+    "url": "https://github.com/StreamController/StreamController",
+    "note": "This plugin is loaded into StreamController's GPL-3.0 process. All-Chat is AGPL-3.0-or-later, and ADR-0049 records the compatibility question as a RELEASE GATE that must be settled before the first submission to StreamController's plugin store, not afterwards. No conflict is expected (AGPL-3.0 and GPL-3.0 are compatible in this direction under section 13), but it has not been formally signed off."
+  }
+}

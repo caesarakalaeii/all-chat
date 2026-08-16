@@ -1,0 +1,15 @@
+{
+  "id": "com_allchat_streamcontroller",
+  "name": "All-Chat",
+  "version": "0.1.0",
+  "app-version": "1.5.0-beta.8",
+  "minimum-app-version": "1.5.0-beta.8",
+  "github": "https://github.com/caesarakalaeii/all-chat",
+  "descriptions": {
+    "en_US": "Drive an All-Chat account from Stream Deck keys on Linux: send a preset chat message to every connected platform at once, and start, close, lock, resolve or cancel polls and predictions. Starting a poll or prediction needs All-Chat premium; every other action is free."
+  },
+  "short-descriptions": {
+    "en_US": "Send chat messages and run polls and predictions from your Stream Deck."
+  },
+  "tags": ["chat", "streaming", "twitch", "youtube", "polls", "predictions"]
+}

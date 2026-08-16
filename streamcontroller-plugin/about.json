@@ -1,0 +1,11 @@
+{
+  "id": "com_allchat_streamcontroller",
+  "name": "All-Chat",
+  "author": "caesarakalaeii",
+  "version": "0.1.0",
+  "repository": "https://github.com/caesarakalaeii/all-chat",
+  "website": "https://allch.at",
+  "license": "AGPL-3.0-or-later",
+  "copyright": "Copyright (C) All-Chat contributors",
+  "description": "Stream Deck keys for All-Chat: chat send, poll control and prediction control over the All-Chat HTTP API, authenticated with a personal access token."
+}

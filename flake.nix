@@ -73,6 +73,19 @@
         # the version its package-lock.json pins.
         pkgs.typescript
 
+        # ---- Python 3: streamcontroller-plugin/ ----
+        # StreamController (the Linux Stream Deck app) has a PYTHON plugin API
+        # -- `PluginBase` / `ActionBase` -- unlike Elgato's Node SDK, so the two
+        # plugins in this repo are in two languages by necessity (ADR-0049).
+        # streamcontroller-plugin/ is standard-library-only on purpose, so this
+        # is a bare interpreter with no package set: it is here so
+        # `python3 -m compileall -q streamcontroller-plugin` (the syntax gate
+        # that stands in for a build, since the real host is only present on a
+        # streamer's Linux desktop) can run at the prompt and in CI.
+        # NOT python3xxPackages.* -- the plugin imports nothing off PyPI, and
+        # its requirements.txt exists to record exactly that.
+        pkgs.python3
+
         # ---- clients for the local infrastructure the repo talks to ----
         # psql + pg_isready: the Makefile's `migrate` target,
         # scripts/run-migrations.sh, scripts/seed-test-data.sh and
