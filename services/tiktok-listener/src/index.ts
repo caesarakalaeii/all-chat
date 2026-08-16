@@ -64,7 +64,7 @@ import {
   isTikTokCoinChest,
   isTikTokEnvelopeDrop,
   type TikTokEnvelopeData
-} from './envelope.js';
+} from './events/envelope.js';
 
 // Environment variables
 const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
