@@ -836,6 +836,13 @@ func (h *AuthHandler) HandleDeleteAccount(c *gin.Context) {
 		return
 	}
 
+	// Account deletion is session-only. A personal access token is scoped to chat and
+	// engagement writes; it must never be able to irreversibly delete the account and
+	// cascade every overlay. Checked before any mutation so a refusal changes nothing.
+	if !RefuseAPIToken(c, "Deleting your account requires a signed-in session, not a personal access token.") {
+		return
+	}
+
 	if err := h.userRepo.Delete(c.Request.Context(), userID); err != nil {
 		if errors.Is(err, repository.ErrUserNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
