@@ -24,7 +24,7 @@
  * branch of the handler is a silent return, so they are exactly the logic that needs tests.
  */
 
-import type { AvatarImageModel } from './avatar.js';
+import type { AvatarImageModel } from '../avatar.js';
 
 // Localized display string attached to a message. `key` is a stable template id
 // (e.g. `pm_mt_ttlive_superfanbox_join`) — the connector itself probes it to tell
