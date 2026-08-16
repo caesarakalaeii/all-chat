@@ -481,13 +481,10 @@ func (h *ViewerAuthHandler) HandleLogout(c *gin.Context) {
 	// write failure must not fail the logout. The token arrives via X-Access-Token
 	// (gateway AuthCookieForward) or the Authorization bearer header (viewer
 	// tokens live in localStorage and are sent as a bearer).
-	token := c.GetHeader("X-Access-Token")
-	if token == "" {
-		if ah := c.GetHeader("Authorization"); strings.HasPrefix(ah, "Bearer ") {
-			token = strings.TrimPrefix(ah, "Bearer ")
-		}
-	}
-	if token != "" {
+	// Never a personal access token (ADR-0050): the blacklist key embeds the raw token,
+	// and the PAT path does not consult the blacklist anyway. See
+	// blacklistableSessionToken in auth_handler.go.
+	if token := blacklistableSessionToken(c); token != "" {
 		if err := h.redis.Set(c.Request.Context(), "blacklist:"+token, "1", h.jwtExpiry).Err(); err != nil {
 			h.logger.Warn("Failed to blacklist viewer token on logout", zap.Error(err))
 		}

@@ -18,6 +18,7 @@ package middleware
 
 import (
 	"github.com/caesar/all-chat/shared/auth"
+	sharedmiddleware "github.com/caesar/all-chat/shared/middleware"
 	"github.com/gin-gonic/gin"
 )
 
@@ -26,10 +27,19 @@ import (
 // (unchanged) validates it. If an Authorization header is already present
 // (non-browser clients / old builds), it takes precedence (backward compat).
 // This is the cookie-boundary normalization for H3.
+//
+// A personal access token (ADR-0050) is deliberately NOT promoted from the cookie.
+// The cookie is the browser-session channel; a PAT is a header credential for
+// non-browser clients, which never set cookies. Promoting one would mean an attacker
+// who can plant a cookie in a victim's browser (a forced-login / session-fixation
+// shaped bug) could make the victim's browser act as the ATTACKER's account, which is
+// a confusing-deputy problem for no legitimate use case. PATs therefore only ever
+// arrive in an explicit Authorization header.
 func CookieToBearer() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if c.GetHeader("Authorization") == "" {
-			if tok, err := c.Cookie(auth.CookieAccessToken); err == nil && tok != "" {
+			if tok, err := c.Cookie(auth.CookieAccessToken); err == nil && tok != "" &&
+				!sharedmiddleware.IsAPIToken(tok) {
 				c.Request.Header.Set("Authorization", "Bearer "+tok)
 			}
 		}
