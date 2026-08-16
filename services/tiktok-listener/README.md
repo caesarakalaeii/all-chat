@@ -95,6 +95,10 @@ POLL_INTERVAL_MS=30000   # Poll for active streams every 30 seconds
 TIKTOK_DEDUP_TTL_MS=300000           # Keep dedup cache for 5 minutes (default)
 TIKTOK_DEDUP_CLEANUP_INTERVAL_MS=60000  # Cleanup interval: 1 minute (default)
 TIKTOK_DEDUP_MAX_CACHE_SIZE=10000    # Max messages in dedup cache (default)
+
+# Coin chest (ENVELOPE) classification tracing — unset by default
+TIKTOK_ENVELOPE_TRACE=                # Set to any value to log businessType, the display-text
+                                      # key and the resulting chest/not-a-chest decision per frame
 ```
 
 ## Development

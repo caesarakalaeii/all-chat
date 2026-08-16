@@ -70,24 +70,62 @@ export const TIKTOK_ENVELOPE_COIN_BUSINESS_TYPES = new Set<number>([
   2 // BUSINESS_TYPE_PLATFORM_DIAMOND — TikTok drops one into the room
 ]);
 
+const TIKTOK_SUPER_FAN_BOX_DISPLAY_KEY_MARKER = 'ttlive_superfanbox';
+
+/**
+ * Emits one line per classified frame when TIKTOK_ENVELOPE_TRACE is set, so a
+ * "my chest never appeared" report can be answered from the logs instead of a
+ * redeploy-and-guess loop. Read from the environment on every call rather than
+ * captured at import, so enabling it needs no rebuild of the module graph — and
+ * so it stays completely silent, per frame, while unset (the default).
+ */
+function traceCoinChestDecision(
+  businessType: number,
+  displayKey: string | undefined,
+  result: boolean
+): void {
+  if (!process.env.TIKTOK_ENVELOPE_TRACE) {
+    return;
+  }
+
+  console.log(
+    JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'debug',
+      service: 'tiktok-listener',
+      message: 'Classified ENVELOPE frame',
+      business_type: businessType,
+      display_text_key: displayKey ?? null,
+      is_coin_chest: result
+    })
+  );
+}
+
 /**
  * Tells a coin chest apart from the other envelope products.
  *
- * `businessType` is the authoritative signal, but it decodes to UNKNOWN when
- * TikTok omits it on the wire; treating UNKNOWN as "not a chest" would silently
- * emit nothing for the whole feature, so it falls back to the same display-text
- * probe the connector uses to spot a Super Fan Box.
+ * `businessType` is the authoritative signal and it decides on its own whenever
+ * TikTok sends it: a diamond-bearing type is a chest even if the frame also
+ * carries a Super Fan Box display key, because the connector's dispatcher emits
+ * SUPER_FAN_BOX and then falls through to ENVELOPE for the *same* frame, so that
+ * key rides along on genuine chests. Only when businessType is absent — it
+ * decodes to UNKNOWN then, and treating UNKNOWN as "not a chest" would silently
+ * emit nothing for the whole feature — does the display-text probe the connector
+ * uses to spot a Super Fan Box get to rule the frame out.
  */
 export function isTikTokCoinChest(data: TikTokEnvelopeData): boolean {
-  if (data.common?.displayText?.key?.toLowerCase().includes('ttlive_superfanbox')) {
-    return false;
+  const displayKey = data.common?.displayText?.key;
+  const businessType = data.envelopeInfo?.businessType ?? TIKTOK_ENVELOPE_BUSINESS_TYPE_UNKNOWN;
+
+  let result: boolean;
+  if (businessType !== TIKTOK_ENVELOPE_BUSINESS_TYPE_UNKNOWN) {
+    result = TIKTOK_ENVELOPE_COIN_BUSINESS_TYPES.has(businessType);
+  } else {
+    result = !displayKey?.toLowerCase().includes(TIKTOK_SUPER_FAN_BOX_DISPLAY_KEY_MARKER);
   }
 
-  const businessType = data.envelopeInfo?.businessType ?? TIKTOK_ENVELOPE_BUSINESS_TYPE_UNKNOWN;
-  return (
-    businessType === TIKTOK_ENVELOPE_BUSINESS_TYPE_UNKNOWN ||
-    TIKTOK_ENVELOPE_COIN_BUSINESS_TYPES.has(businessType)
-  );
+  traceCoinChestDecision(businessType, displayKey, result);
+  return result;
 }
 
 // `EnvelopeDisplay` values. The ENVELOPE message doubles as a remove
