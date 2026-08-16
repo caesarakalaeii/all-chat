@@ -84,6 +84,17 @@ func main() {
 	defer dbPool.Close()
 	log.Info("Connected to PostgreSQL")
 
+	// Personal access tokens (migration 086). This wiring is NOT optional here even
+	// though api-gateway wires one too: the gateway's copyHeaders forwards the client's
+	// Authorization header verbatim and this service re-validates independently, so
+	// without a resolver JWTAuthWithRevocation below would reject every `allchat_pat_`
+	// bearer as a malformed JWT and the desktop plugins' poll/prediction actions would
+	// all 401.
+	//
+	// Authentication only: a resolved PAT lands the same user_id a session JWT would, so
+	// the RequirePremium gate on opening a round applies to it identically.
+	middleware.SetAPITokenResolver(middleware.NewPgxAPITokenResolver(dbPool))
+
 	redisClient := redis.NewClient(&redis.Options{
 		Addr:     fmt.Sprintf("%s:%s", getEnv("REDIS_HOST", "localhost"), getEnv("REDIS_PORT", "6379")),
 		Password: getEnv("REDIS_PASSWORD", ""),
@@ -207,14 +218,23 @@ func main() {
 	// here (defense in depth — the dashboard also hides the control). Managing an
 	// already-open round (close/lock/resolve/cancel) and the earn config are NOT gated.
 	requireEngagementPremium := middleware.RequirePremium(dbPool, gateCache, featuregates.GateEngagement, log)
-	auth.POST("/overlays/:id/polls", requireEngagementPremium, h.CreatePoll)
-	auth.POST("/overlays/:id/polls/:pollId/close", h.ClosePoll)
-	auth.POST("/overlays/:id/predictions", requireEngagementPremium, h.CreatePrediction)
-	auth.POST("/overlays/:id/predictions/:pid/lock", h.LockPrediction)
-	auth.POST("/overlays/:id/predictions/:pid/resolve", h.ResolvePrediction)
-	auth.POST("/overlays/:id/predictions/:pid/cancel", h.CancelPrediction)
+	// Scope check for personal access tokens (desktop plugins). It is ADDITIVE and sits
+	// BESIDE requireEngagementPremium, never in place of it: a PAT must clear exactly
+	// the same premium gate a browser session does, so starting a round stays
+	// premium-only and close/lock/resolve/cancel stay deliberately ungated (see above).
+	// Scopes only narrow a token; they never authorize anything the session could not do.
+	// A browser session passes through untouched — it is not scope-limited.
+	requireEngagementScope := middleware.RequireAPITokenScope(middleware.ScopeEngagementWrite)
+	auth.POST("/overlays/:id/polls", requireEngagementScope, requireEngagementPremium, h.CreatePoll)
+	auth.POST("/overlays/:id/polls/:pollId/close", requireEngagementScope, h.ClosePoll)
+	auth.POST("/overlays/:id/predictions", requireEngagementScope, requireEngagementPremium, h.CreatePrediction)
+	auth.POST("/overlays/:id/predictions/:pid/lock", requireEngagementScope, h.LockPrediction)
+	auth.POST("/overlays/:id/predictions/:pid/resolve", requireEngagementScope, h.ResolvePrediction)
+	auth.POST("/overlays/:id/predictions/:pid/cancel", requireEngagementScope, h.CancelPrediction)
 	auth.GET("/overlays/:id/points/config", h.GetConfig)
-	auth.PUT("/overlays/:id/points/config", h.PutConfig)
+	// Write to the earn config needs the same scope; the read does not (a token that can
+	// authenticate may look at the overlay's own config).
+	auth.PUT("/overlays/:id/points/config", requireEngagementScope, h.PutConfig)
 
 	// Viewer participation (web page / extension).
 	auth.POST("/overlays/:id/polls/:pollId/vote", h.WebVote)

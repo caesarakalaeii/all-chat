@@ -35,6 +35,7 @@ import (
 	"github.com/caesar/all-chat/services/auth-service/repository"
 	"github.com/caesar/all-chat/shared/auth"
 	"github.com/caesar/all-chat/shared/metrics"
+	sharedmiddleware "github.com/caesar/all-chat/shared/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -792,14 +793,9 @@ func (h *AuthHandler) HandleGetMe(c *gin.Context) {
 // HandleLogout logs out the user
 func (h *AuthHandler) HandleLogout(c *gin.Context) {
 	// Read token from X-Access-Token (gateway AuthCookieForward) or
-	// Authorization (backward compat).
-	token := c.GetHeader("X-Access-Token")
-	if token == "" {
-		authHeader := c.GetHeader("Authorization")
-		if strings.HasPrefix(authHeader, "Bearer ") {
-			token = strings.TrimPrefix(authHeader, "Bearer ")
-		}
-	}
+	// Authorization (backward compat). A personal access token is not a session and is
+	// never blacklisted here — see blacklistableSessionToken.
+	token := blacklistableSessionToken(c)
 	if token == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
@@ -840,6 +836,13 @@ func (h *AuthHandler) HandleDeleteAccount(c *gin.Context) {
 		return
 	}
 
+	// Account deletion is session-only. A personal access token is scoped to chat and
+	// engagement writes; it must never be able to irreversibly delete the account and
+	// cascade every overlay. Checked before any mutation so a refusal changes nothing.
+	if !RefuseAPIToken(c, "Deleting your account requires a signed-in session, not a personal access token.") {
+		return
+	}
+
 	if err := h.userRepo.Delete(c.Request.Context(), userID); err != nil {
 		if errors.Is(err, repository.ErrUserNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
@@ -854,16 +857,10 @@ func (h *AuthHandler) HandleDeleteAccount(c *gin.Context) {
 		return
 	}
 
-	// Best-effort blacklist of the token used for this request. Prefer the
-	// X-Access-Token header forwarded by the gateway AuthCookieForward middleware
-	// (raw Cookie stripped by L17); fall back to the Authorization header.
-	token := c.GetHeader("X-Access-Token")
-	if token == "" {
-		authHeader := c.GetHeader("Authorization")
-		if strings.HasPrefix(authHeader, "Bearer ") {
-			token = strings.TrimPrefix(authHeader, "Bearer ")
-		}
-	}
+	// Best-effort blacklist of the session token used for this request (never a
+	// personal access token — see blacklistableSessionToken). The account row is gone,
+	// so its api_tokens rows went with it via ON DELETE CASCADE (migration 086).
+	token := blacklistableSessionToken(c)
 	if token != "" {
 		if err := h.redis.Set(c.Request.Context(), "blacklist:"+token, "1", h.jwtExpiry).Err(); err != nil {
 			h.logger.Warn("Failed to blacklist token after account deletion",
@@ -896,6 +893,30 @@ func generateRandomString(length int) (string, error) {
 		return "", fmt.Errorf("failed to generate random bytes: %w", err)
 	}
 	return base64.URLEncoding.EncodeToString(bytes)[:length], nil
+}
+
+// blacklistableSessionToken returns the raw session token to blacklist, or "" when
+// there is nothing blacklistable.
+//
+// It reads X-Access-Token (forwarded by the gateway's AuthCookieForward, since the raw
+// Cookie is stripped by L17) and falls back to the Authorization bearer.
+//
+// A personal access token (ADR-0051) is deliberately excluded. The blacklist key is
+// "blacklist:<raw-token>", so blacklisting a PAT would write the plaintext secret into
+// Redis — and it would achieve nothing anyway, because the PAT branch in
+// shared/middleware never consults the blacklist: PAT revocation is api_tokens.revoked_at,
+// read live on every request. Revoking a PAT is DELETE /me/api-tokens/:id, not logout.
+func blacklistableSessionToken(c *gin.Context) string {
+	token := c.GetHeader("X-Access-Token")
+	if token == "" {
+		if ah := c.GetHeader("Authorization"); strings.HasPrefix(ah, "Bearer ") {
+			token = strings.TrimPrefix(ah, "Bearer ")
+		}
+	}
+	if sharedmiddleware.IsAPIToken(token) {
+		return ""
+	}
+	return token
 }
 
 // refreshTokenHash returns a hex-encoded SHA-256 hash of the refresh token for

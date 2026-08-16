@@ -98,6 +98,26 @@ func TestProxyHandler_ForwardRequest(t *testing.T) {
 			},
 		},
 		{
+			// The reason every backend must wire its own PAT resolver: the gateway does
+			// not translate a personal access token into anything else, it forwards the
+			// client's Authorization header byte-for-byte and each service re-validates
+			// independently. A service without middleware.SetAPITokenResolver would see
+			// `allchat_pat_…` and reject it as a malformed JWT.
+			name:          "personal access token bearer is forwarded verbatim",
+			requestPath:   "/api/v1/auth/me/api-tokens",
+			requestMethod: http.MethodGet,
+			requestHeaders: map[string]string{
+				"Authorization": "Bearer allchat_pat_forwarded-unchanged",
+			},
+			backendHandler: func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, "Bearer allchat_pat_forwarded-unchanged", r.Header.Get("Authorization"))
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte(`{"tokens":[]}`))
+			},
+			expectedStatus: http.StatusOK,
+			expectedBody:   `{"tokens":[]}`,
+		},
+		{
 			name:          "query parameters are preserved",
 			requestPath:   "/api/v1/overlays?limit=10&offset=20",
 			requestMethod: http.MethodGet,

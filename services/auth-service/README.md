@@ -236,6 +236,64 @@ Body: { "completed": true }
 → Returns: { "onboarding_completed_at": "2026-07-17T12:00:00Z" }
 ```
 
+### Personal Access Tokens (ADR-0051)
+
+Long-lived bearer credentials for clients that are not a browser — the Stream Deck /
+StreamController desktop plugins, a CLI, a phone remote. Presented as
+`Authorization: Bearer allchat_pat_<secret>` and resolved by `shared/middleware`
+against `api_tokens` (migration 086) instead of being parsed as a JWT.
+
+**The plaintext token is returned exactly once**, by the create call. Only its SHA-256
+is stored (`token_hash BYTEA`, the same convention as `invite_token_hash` in migration
+080), so it cannot be retrieved, re-shown or recovered afterwards — by anyone, including
+us. If it is lost, revoke it and create another.
+
+```bash
+# Create a token. The `token` field of this response is the only time the plaintext
+# exists outside the client. Scopes are a closed set: chat:write, engagement:write.
+# expires_at is optional; omit it (or send null) for "valid until revoked".
+POST /api/v1/auth/me/api-tokens
+Authorization: Bearer <jwt-token>          # session only — a PAT may not manage PATs
+Body: { "name": "Stream Deck (studio PC)",
+        "scopes": ["engagement:write"],
+        "expires_at": null }
+→ 201 { "id": "uuid", "name": "...", "scopes": [...], "created_at": "...",
+         "token": "allchat_pat_..." }
+
+# List metadata only — never the token or its hash.
+GET /api/v1/auth/me/api-tokens
+Authorization: Bearer <jwt-token>
+→ 200 { "tokens": [ { "id": "uuid", "name": "...", "scopes": [...],
+                      "created_at": "...", "last_used_at": "...",
+                      "expires_at": null, "revoked_at": null } ] }
+
+# Revoke. Takes effect within one request (the resolver reads revoked_at live).
+DELETE /api/v1/auth/me/api-tokens/:id
+Authorization: Bearer <jwt-token>
+→ 200 { "token": { "id": "uuid", "revoked_at": "..." } }
+```
+
+Things that are deliberate rather than incidental:
+
+- **Authentication only.** A resolved PAT populates the same request identity a session
+  JWT does, so every ownership check and premium gate applies unchanged. Scopes narrow
+  what a token may do and are enforced *in addition to* those gates — e.g. a PAT with
+  `engagement:write` belonging to a non-premium user is still refused by
+  `RequirePremium` when it tries to open a poll.
+- **Management is session-only.** All three calls above refuse a PAT-authenticated
+  request (403), so a leaked token can neither mint more tokens nor revoke the owner's.
+  They also refuse an admin impersonation session, which would otherwise be able to
+  mint a credential outliving the impersonation.
+- **A ban cuts a token off immediately.** The resolver requires `users.is_banned = FALSE`
+  on every request — stricter than a session JWT, whose 24 h expiry is its own backstop.
+  A PAT has none by default, so without this a banned account would keep acting through a
+  pre-ban token indefinitely.
+- **Admin routes are session-only**: `AdminOnly()` refuses a PAT even for an admin.
+- **Cap**: 20 live tokens per user (revoking one frees a slot).
+- Every end-user-facing service wires the resolver at startup
+  (`middleware.SetAPITokenResolver`), because api-gateway forwards the client's
+  `Authorization` header verbatim and each backend re-validates independently.
+
 ### Health Checks
 
 ```bash
