@@ -1,0 +1,31 @@
+# All-Chat StreamController plugin — runtime dependencies.
+#
+# THIS FILE IS INTENTIONALLY EMPTY OF PACKAGES.
+#
+# A StreamController plugin is imported into the host application's own Python
+# process. Anything listed here has to be satisfiable in that interpreter, on a
+# user's desktop, alongside whatever the host and every other installed plugin
+# already pulled in — so each dependency is a chance to break an app we do not
+# control. The plugin therefore uses the standard library only:
+#
+#   urllib.request  — the HTTP client (allchat/client.py)
+#   json            — request and response bodies
+#   urllib.parse    — percent-encoding IDs into paths
+#
+# `requests` would be the obvious dependency and is deliberately not used: it
+# would buy connection pooling and a nicer API for six small JSON calls, at the
+# cost of a version constraint inside somebody else's process.
+#
+# The plugin also imports StreamController's own `PluginBase`, `ActionBase` and
+# `ActionHolder`. Those are NOT installable from PyPI — the host injects its
+# `src` package on sys.path when it loads a plugin — so they cannot be pinned
+# here. `actions/host.py` imports them defensively and falls back to stand-ins,
+# which is what lets the tests and `python3 -m compileall` run in CI.
+#
+# Minimum interpreter: Python 3.11, matching what StreamController ships
+# against. The sources use `from __future__ import annotations` and PEP 604
+# unions in annotations only, so nothing here requires a newer runtime.
+#
+# If a dependency ever becomes genuinely necessary, pin it exactly (`==`) rather
+# than with a range, for the same reason: reproducibility inside a process we
+# are a guest in.
