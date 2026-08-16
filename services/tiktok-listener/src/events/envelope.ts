@@ -64,8 +64,8 @@ export interface TikTokEnvelopeData {
 // so the coin chest has to be picked out by business type. Only the two
 // diamond-bearing variants are chests; the rest (portals, merch drops, shells,
 // fan-club boxes, Super Fan Box) must not surface as one.
-const TIKTOK_ENVELOPE_BUSINESS_TYPE_UNKNOWN = 0;
-const TIKTOK_ENVELOPE_COIN_BUSINESS_TYPES = new Set<number>([
+export const TIKTOK_ENVELOPE_BUSINESS_TYPE_UNKNOWN = 0;
+export const TIKTOK_ENVELOPE_COIN_BUSINESS_TYPES = new Set<number>([
   1, // BUSINESS_TYPE_USER_DIAMOND — a viewer drops a chest
   2 // BUSINESS_TYPE_PLATFORM_DIAMOND — TikTok drops one into the room
 ]);
