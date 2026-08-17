@@ -99,6 +99,63 @@ TIKTOK_DEDUP_MAX_CACHE_SIZE=10000    # Max messages in dedup cache (default)
 # Coin chest (ENVELOPE) classification tracing — unset by default
 TIKTOK_ENVELOPE_TRACE=                # Set to any value to log businessType, the display-text
                                       # key and the resulting chest/not-a-chest decision per frame
+
+# WebSocket signing / Euler Stream retirement (see ADR-0052)
+TIKTOK_DISABLE_EULER_FALLBACKS=true   # Skip Euler's leg of the room-id and is-live composites
+TIKTOK_SIGNER_MODE=euler              # euler | shadow | self
+TIKTOK_SELF_SIGN_FALLBACK=true        # Under `self`, fall back to Euler when our signer fails
+TIKTOK_SIGNER_URL=                    # Empty = sign in-process; a URL points at a sign service
+TIKTOK_EXTENDED_GIFT_INFO=            # Defaults on only under `self` (see below)
+SIGN_API_KEY=                         # Euler Stream API key; empty means the free tier
+```
+
+### WebSocket signing
+
+`tiktok-live-connector` cannot open a TikTok LIVE WebSocket without a signed URL, and by default
+it gets that signature from **Euler Stream**. Their free tier caps how many rooms we can hold
+concurrently and paywalls the gift list, so we are working to sign for ourselves. See
+[ADR-0052](../../docs/adr/0052-retiring-euler-stream-for-tiktok-signing.md) for the full
+rationale and the trade-off involved.
+
+There are **two independent levers**, deliberately separate because they carry very different
+risk:
+
+**`TIKTOK_DISABLE_EULER_FALLBACKS`** (default `true`, safe). Room ID and is-live are resolved by
+composites that try TikTok directly — HTML scrape, then the API endpoint — and reach for Euler
+only when both have already failed. Turning that last leg off reduces free-tier consumption
+immediately and cannot lose a capability.
+
+**`TIKTOK_SIGNER_MODE`** (default `euler`, risky). The signature has no direct-to-TikTok route in
+the library, so this is the part we have to build:
+
+| Mode | Who signs the connection | Purpose |
+|---|---|---|
+| `euler` | Euler Stream | Unchanged behaviour. Our code is not on the connect path. |
+| `shadow` | Euler | Our signer runs in parallel against the same room; its outcome is recorded and discarded. Cannot change connection behaviour. |
+| `self` | Us | Euler catches failures while `TIKTOK_SELF_SIGN_FALLBACK` is on. |
+
+Walk them in that order. `shadow` exists so the success rate of our own signer can be measured
+against Euler's, on live rooms, before anything depends on it — after cutover, a TikTok change to
+the signing algorithm takes TikTok ingest down until we fix it, where today it is Euler's problem.
+
+Until the signer itself is implemented, `shadow` and `self` log a warning and fall back to Euler,
+so the flag can be set ahead of the code.
+
+`TIKTOK_EXTENDED_GIFT_INFO` defaults on **only** under `self`, because the direct `gift/list/`
+route must itself be signed — enabling it any earlier just reinstates Euler's Business-plan error
+on every connect.
+
+Signature outcomes are exported as `tiktok_sign_attempts_total{signer,outcome,reason,load_bearing}`
+and `tiktok_sign_duration_seconds`. Filter to `load_bearing="true"` for real availability, and to
+`load_bearing="false"` for the shadow experiment:
+
+```promql
+# Our signer's success rate on live rooms, before we trust it
+sum(rate(tiktok_sign_attempts_total{signer="self",outcome="success",load_bearing="false"}[1h]))
+  / sum(rate(tiktok_sign_attempts_total{signer="self",load_bearing="false"}[1h]))
+
+# Are we still hitting Euler's free-tier ceiling?
+sum(rate(tiktok_sign_attempts_total{reason="rate_limit"}[5m]))
 ```
 
 ## Development
@@ -210,8 +267,15 @@ When the service restarts or reconnects, TikTok may replay recent messages. The 
 2. **No Authentication**: Library doesn't require OAuth (connects anonymously)
 3. **Username-Based**: Requires TikTok username, not live stream ID
 4. **Limited Metadata**: Some data (like stream_id) not available via unofficial library
-5. **Rate Limits**: Unknown rate limits from TikTok's side
+5. **Rate Limits**: Unknown rate limits from TikTok's side. Separately, the **Euler Stream** sign
+   service imposes its own ceiling: twelve concurrent connection attempts exhausted the free tier
+   on 2026-08-14, and the connector does not surface that cleanly — it throws
+   `Cannot read properties of undefined (reading 'retry-after')` while reading the 429. See
+   ADR-0052 and the "WebSocket signing" section above.
 6. **Connection Stability**: May experience disconnections during long streams
+7. **Gift Enrichment Off By Default**: `enableExtendedGiftInfo` is disabled because Euler
+   paywalls `fetchAvailableGifts()` behind a Business plan. It turns on automatically under
+   `TIKTOK_SIGNER_MODE=self`.
 
 ## Troubleshooting
 
