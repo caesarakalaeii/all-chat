@@ -37,7 +37,14 @@
 import { initTracing, shutdownTracing } from './tracing.js';
 initTracing();
 
-import { TikTokLiveConnection, WebcastEvent } from 'tiktok-live-connector';
+import {
+  IsLiveRouteConfig,
+  RoomIdRouteConfig,
+  RouteConfig,
+  SignConfig,
+  TikTokLiveConnection,
+  WebcastEvent
+} from 'tiktok-live-connector';
 import { createClient, RedisClientType } from 'redis';
 import { Pool } from 'pg';
 import { randomUUID } from 'crypto';
@@ -58,6 +65,11 @@ import { LeadershipCoordinator } from './coordination/leadership.js';
 
 // Import demand subscriber (Phase 5)
 import { DemandSubscriber, DemandSource } from './demand/subscriber.js';
+
+// Euler Stream retirement (issue #698)
+import { loadSignConfiguration } from './sign/config.js';
+import { installSignConfiguration } from './sign/installer.js';
+import { EulerSigner } from './sign/euler.js';
 import { pickAvatarUrl, tiktokAvatarUrl } from './avatar.js';
 import {
   hasTikTokChestPayload,
@@ -111,6 +123,10 @@ const MAX_REQUEST_BODY_BYTES = parseInt(process.env.MAX_REQUEST_BODY_BYTES || '6
 const TIKTOK_DEDUP_TTL_MS = parseInt(process.env.TIKTOK_DEDUP_TTL_MS || '300000'); // 5 minutes
 const TIKTOK_DEDUP_CLEANUP_INTERVAL_MS = parseInt(process.env.TIKTOK_DEDUP_CLEANUP_INTERVAL_MS || '60000'); // 1 minute
 const TIKTOK_DEDUP_MAX_CACHE_SIZE = parseInt(process.env.TIKTOK_DEDUP_MAX_CACHE_SIZE || '10000');
+
+// Euler Stream retirement configuration (issue #698). Read once at module load so every
+// connection site agrees on it.
+const SIGN_CONFIG = loadSignConfiguration();
 
 // Import logger interface
 import { Logger } from './types/logger.js';
@@ -375,6 +391,30 @@ class TikTokListenerService {
 
     // Initialize Prometheus metrics
     this.metrics = new PrometheusMetrics(logger);
+
+    // Apply the Euler Stream retirement configuration to the connector's global route registry
+    // (issue #698). Must happen before any TikTokLiveConnection is constructed, because the
+    // connector reads these module-level singletons at connect time and caches its Euler client.
+    //
+    // By default this only switches the room-id and is-live composites off Euler's fallback leg,
+    // which is free of risk: those composites try TikTok directly first and reach for Euler only
+    // when both direct routes have already failed. Signing stays with Euler unless
+    // TIKTOK_SIGNER_MODE says otherwise.
+    installSignConfiguration(
+      {
+        routeConfig: RouteConfig,
+        roomIdRouteConfig: RoomIdRouteConfig,
+        isLiveRouteConfig: IsLiveRouteConfig,
+        signConfig: SignConfig
+      },
+      SIGN_CONFIG,
+      // No self signer yet: the webcast signature spike (step 1 of #698's sequence) has not
+      // landed. Until it does, `shadow` and `self` degrade to Euler with a warning rather than
+      // failing to start, so the flag can be set ahead of the implementation.
+      { euler: new EulerSigner(RouteConfig.fetchSignedWebSocketFromProvider as never) },
+      this.metrics,
+      logger
+    );
 
     // Initialize heartbeat monitor
     this.heartbeatMonitor = new HeartbeatMonitor(
@@ -866,7 +906,11 @@ class TikTokListenerService {
 
       const connection = new TikTokLiveConnection(username, {
         processInitialData: false, // Don't process historical messages
-        enableExtendedGiftInfo: false
+        // Gift enrichment needs the room's gift list, which Euler paywalls behind a Business
+        // plan. The library's direct `fetchRoomGiftsRoute` asks TikTok instead, but that request
+        // must itself be signed — so this only becomes viable once we sign for ourselves, and
+        // loadSignConfiguration defaults it on exactly then.
+        enableExtendedGiftInfo: SIGN_CONFIG.enableExtendedGiftInfo
       });
 
       // Set up event handlers

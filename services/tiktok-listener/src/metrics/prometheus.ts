@@ -61,6 +61,10 @@ export class PrometheusMetrics {
   private wireMessages: Counter<string>;
   private envelopeFrames: Counter<string>;
 
+  // WebSocket signature provenance (issue #698: retiring Euler Stream)
+  private signAttempts: Counter<string>;
+  private signDuration: Histogram<string>;
+
   constructor(logger: Logger) {
     this.logger = logger;
     this.registry = new Registry();
@@ -204,7 +208,71 @@ export class PrometheusMetrics {
       registers: [this.registry]
     });
 
+    // Signature attempts, by who signed and how it went.
+    //
+    // This is the metric that decides whether #698 can be finished. Retiring Euler Stream trades
+    // a cost ceiling for an on-call burden: after cutover, a TikTok change to the signing
+    // algorithm takes TikTok ingest fully down, where today it is Euler's problem. That trade is
+    // only defensible if we can see our own success rate before committing, which is why shadow
+    // mode records the `self` signer's outcome for connections it is not actually serving.
+    //
+    // `load_bearing` is what separates the two readings. Filtered to `true`, this is availability
+    // — did the connection get signed at all. Filtered to `false`, it is the shadow experiment:
+    // how our signer would have done, on live rooms, with nothing riding on it.
+    //
+    // Cardinality is bounded on every label: `signer` is one of a handful of composed names,
+    // `outcome` is success/failure, and `reason` comes from classifySignatureFailure's fixed set
+    // rather than from raw error text.
+    this.signAttempts = new Counter({
+      name: 'tiktok_sign_attempts_total',
+      help: 'WebSocket signature attempts by signer, outcome and failure reason',
+      labelNames: ['signer', 'outcome', 'reason', 'load_bearing'],
+      registers: [this.registry]
+    });
+
+    // Signing latency matters independently of success rate: Euler is a network round trip to a
+    // third party, and an in-process signer should be markedly faster. If it is not, that is a
+    // sign we have reimplemented the round trip rather than removed it.
+    this.signDuration = new Histogram({
+      name: 'tiktok_sign_duration_seconds',
+      help: 'Time taken to obtain a signed WebSocket handshake, by signer and outcome',
+      labelNames: ['signer', 'outcome'],
+      buckets: [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10],
+      registers: [this.registry]
+    });
+
     this.logger.info('Prometheus metrics initialized');
+  }
+
+  /**
+   * Record one WebSocket signature attempt.
+   *
+   * Implements the `SignObserver` interface from `../sign/shadow.js` structurally, so the sign
+   * layer can report into Prometheus without importing it.
+   *
+   * @param attempt Which signer ran, how it went, how long it took, and whether the result was
+   *                actually used to connect.
+   */
+  recordSignAttempt(attempt: {
+    signer: string;
+    outcome: 'success' | 'failure';
+    reason?: string;
+    durationMs: number;
+    loadBearing: boolean;
+  }): void {
+    this.signAttempts.inc({
+      signer: attempt.signer,
+      outcome: attempt.outcome,
+      // Always present, so the series does not change shape between success and failure — an
+      // absent label and an empty one are different series to Prometheus.
+      reason: attempt.reason ?? 'none',
+      load_bearing: String(attempt.loadBearing)
+    });
+
+    this.signDuration.observe(
+      { signer: attempt.signer, outcome: attempt.outcome },
+      attempt.durationMs / 1000
+    );
   }
 
   // Wire-format visibility methods
