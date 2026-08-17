@@ -635,7 +635,15 @@ func (m *Manager) clearGaveUpForDemandChanges(prev, demanded map[string]bool) {
 }
 
 // subscribeToPlatformEvents subscribes to cross-platform events for an overlay
-// and signals backoff reset when other platforms go live
+// and signals backoff reset when other platforms go live.
+//
+// KNOWN LEAK, do not "fix" it by cancelling on success: this goroutine only exits
+// on ctx.Done(), and the paths in discoveryLoop that start a poller deliberately
+// return *without* cancelling, because startPoller passes that same context to
+// poller.Start — cancelling it would kill the live poller and stop message
+// delivery. So a successful discovery leaves one subscriber goroutine and one
+// Redis subscription behind for the process lifetime. Closing it properly means
+// decoupling the poller's context from the discovery context first.
 func (m *Manager) subscribeToPlatformEvents(ctx context.Context, state *DiscoveryState) {
 	defer m.wg.Done()
 
