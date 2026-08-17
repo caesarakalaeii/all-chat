@@ -48,6 +48,34 @@ everything it asks Euler for:
 
 Only the signature genuinely requires solving something hard.
 
+#### How hard, concretely
+
+Read against the bundled source (`dist/lib-YL2P_UWg.js`, 2.4.0) so the estimate
+is not a guess:
+
+- **Euler does not just sign a URL for the WebSocket seam. It performs the
+  request.** `fetchSignedWebSocketFromEulerRoute` calls
+  `apiClient.rooms.fetchWebcastURL(...)` with `responseType: 'arraybuffer'` and
+  returns `deserializeMessage('ProtoMessageFetchResult', ...)` over the *response
+  body*, plus `x-set-tt-cookie` and `x-room-id` response headers. So their server
+  signs **and** executes TikTok's `/im/fetch/`, then hands back the decoded
+  protobuf and the cookies TikTok set. A self-signer must therefore reproduce the
+  whole exchange — build the signed `/im/fetch/` URL, issue it, and surface the
+  `Set-Cookie` content — not merely compute a token. `SignResult` already has
+  this shape, which is why the seam is right.
+- **The signing primitives are nowhere in the library.** `X-Bogus`, `X-Gnarly`
+  and `msToken` each appear exactly twice in the bundle, and both occurrences are
+  in `fetchWebcastSignatureFromEulerRoute`, which *strips* them from a URL before
+  asking Euler to re-add them. There is no generator to copy or adapt: the
+  algorithms live entirely on Euler's server. The strings `/im/fetch` and
+  `webcast/im/fetch` do not occur at all.
+
+That is the real cost of step 1: implementing TikTok's undocumented parameter
+signing from scratch, against a target that churns, with no reference
+implementation in our dependency tree. It is a reverse-engineering project, not
+an integration task — which is why the seam, the measurement and the fallback
+were built first and left switched off.
+
 ### No fork is required
 
 The library exposes module-level **mutable** configuration objects that between
