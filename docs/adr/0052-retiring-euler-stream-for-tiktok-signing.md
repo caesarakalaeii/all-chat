@@ -181,18 +181,38 @@ run seconds later is not a comparison.
 
 ### Licence
 
-`tiktok-live-connector` carries a modified AGPL whose §19 withdraws its
-additional permission for anything powering a *"commercial, closed-source, or
-hosted SaaS platform, including but not limited to a WebSocket relay service,
-data-scraping API, or managed hosting solution offered to third parties"*, and
-whose §21 excepts Euler Stream Inc. and TikFinity / STV GmbH **by name**.
+The issue describes `tiktok-live-connector` as carrying a modified AGPL whose
+§19 withdraws its additional permission for anything powering a *"commercial,
+closed-source, or hosted SaaS platform, including but not limited to a WebSocket
+relay service, data-scraping API, or managed hosting solution offered to third
+parties"*, with §21 excepting Euler Stream Inc. and TikFinity / STV GmbH by
+name.
 
-All-Chat is AGPL-3.0 and this work is for our own ingest, which appears to be
-fine. But the author has a direct commercial interest in the service being
-replaced, so **§19–21 must be read properly before any of this is published as a
-reusable sign service or offered to third parties.** That review is a
-precondition of extracting the sign service beyond our own deployment, not of
-signing for ourselves.
+**That is not the licence of the version we actually depend on.** Checked
+2026-08-17 against the installed tree: `tiktok-live-connector@2.4.0` ships a
+plain **MIT** licence (`node_modules/tiktok-live-connector/LICENSE`, 21 lines,
+"MIT License / Copyright (c) 2026 zerodytrash"), and `package-lock.json`
+records `"license": "MIT"` for the pinned resolution. There is no §19, no §21
+and no SaaS carve-out in the text we are bound by.
+
+So the licence risk as stated in the issue does not apply to the code we ship
+today, and it is **not** a precondition of the signing work. Two caveats keep it
+from being a non-issue entirely:
+
+- **The relicence is real, just not ours yet.** It lands in **2.4.3** (already
+  recorded in this service's README, from PR #695). We depend on the range
+  `^2.4.0`, so a routine lockfile refresh would pull 2.4.3+ and the modified
+  AGPL with it, silently. If the §19 SaaS restriction matters to us, the
+  dependency should be **pinned to `2.4.0`** rather than left on a caret range,
+  and the shipped `LICENSE` re-read on any deliberate bump.
+- The author has a direct commercial interest in the service being replaced.
+  That is a reason to expect upstream churn around the signing seams — and a
+  reason a future version may restrict precisely this use — not a constraint on
+  2.4.0.
+
+MIT also *removes* the obstacle to extracting a reusable sign service, which the
+AGPL reading would have blocked. Any such extraction should still re-verify the
+licence of the version in the lockfile at that time.
 
 ## Alternatives considered
 
