@@ -125,6 +125,18 @@ composites that try TikTok directly — HTML scrape, then the API endpoint — a
 only when both have already failed. Turning that last leg off reduces free-tier consumption
 immediately and cannot lose a capability.
 
+This one is verified end to end against live TikTok, not just asserted:
+
+```bash
+TIKTOK_LIVE_TESTS=1 npx vitest run src/sign/euler-free.live.test.ts
+```
+
+`src/sign/euler-free.live.test.ts` sets the skip flags and then points
+`SignConfig.basePath` at a **closed port**, so any surviving Euler dependency fails loudly
+instead of quietly working. It resolves room IDs for three accounts and answers is-live with
+Euler black-holed. It is opt-in and skipped by default: CI must not depend on tiktok.com being
+reachable, or a TikTok outage reads as our regression.
+
 **`TIKTOK_SIGNER_MODE`** (default `euler`, risky). The signature has no direct-to-TikTok route in
 the library, so this is the part we have to build:
 

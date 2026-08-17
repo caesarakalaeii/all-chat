@@ -6,8 +6,19 @@ Proposed — steps 3–4 implemented behind flags; step 1 (the signature itself)
 started, and scoped at two seams rather than one (see "There are two Euler
 signing seams").
 
+Step 4 (lever 1) is **verified live**, not merely implemented:
+`src/sign/euler-free.live.test.ts` resolves room IDs for three accounts and
+answers is-live with `SignConfig.basePath` pointed at a closed port, so Euler
+demonstrably is not on that path. Opt-in via `TIKTOK_LIVE_TESTS=1`.
+
 Neither acceptance criterion of the issue — the connection-rate ceiling and gift
-enrichment — is met yet; both depend on that unstarted work.
+enrichment — is met yet; both depend on the unstarted signing work. The ceiling
+is unchanged because it is a *sign* limit, and every connect still signs through
+Euler; lever 1 reduces free-tier calls but does not raise the concurrent-room
+ceiling.
+
+The licence obstacle the issue describes does **not** apply to the version we
+pin (see "Licence"): 2.4.0 is MIT.
 
 ## Context
 
