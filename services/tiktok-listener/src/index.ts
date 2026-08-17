@@ -906,10 +906,12 @@ class TikTokListenerService {
 
       const connection = new TikTokLiveConnection(username, {
         processInitialData: false, // Don't process historical messages
-        // Gift enrichment needs the room's gift list, which Euler paywalls behind a Business
-        // plan. The library's direct `fetchRoomGiftsRoute` asks TikTok instead, but that request
-        // must itself be signed — so this only becomes viable once we sign for ourselves, and
-        // loadSignConfiguration defaults it on exactly then.
+        // Gift enrichment fetches the room's gift list. The library already asks TikTok directly
+        // for it (`fetchRoomGiftsRoute` -> `webcast/gift/list/`), but that request is signed, and
+        // signing an HTTP URL goes through Euler's `fetchWebcastSignatureFromProvider` — which is
+        // the call Euler paywalls, not the gift data itself. So this only becomes viable once we
+        // sign for ourselves, and loadSignConfiguration defaults it on exactly then.
+        // See ADR-0052, "There are two Euler signing seams".
         enableExtendedGiftInfo: SIGN_CONFIG.enableExtendedGiftInfo
       });
 

@@ -2,7 +2,12 @@
 
 ## Status
 
-Proposed — steps 3–4 implemented behind flags; step 1 (the signature itself) not started.
+Proposed — steps 3–4 implemented behind flags; step 1 (the signature itself) not
+started, and scoped at two seams rather than one (see "There are two Euler
+signing seams").
+
+Neither acceptance criterion of the issue — the connection-rate ceiling and gift
+enrichment — is met yet; both depend on that unstarted work.
 
 ## Context
 
@@ -54,7 +59,9 @@ them cover every Euler call site. Its own documentation invites the substitution
 
 Concretely:
 
-- `RouteConfig.fetchSignedWebSocketFromProvider` — the signature itself.
+- `RouteConfig.fetchSignedWebSocketFromProvider` — the WebSocket signature.
+- `RouteConfig.fetchWebcastSignatureFromProvider` — a **second, distinct**
+  signing seam, described below.
 - `RoomIdRouteConfig.skipFetchRoomIdFromEulerRoute` and the identically named
   field on `IsLiveRouteConfig` — the Euler leg of the two composites.
 - `SignConfig.basePath` — where the Euler SDK points, and also what the
@@ -62,6 +69,38 @@ Concretely:
 
 So we can repoint the connector at our own implementation without forking it,
 and without vendoring a patched copy we would then have to maintain.
+
+### There are two Euler signing seams, not one
+
+The issue's table implies a single signing dependency. Reading the connector's
+bundled source shows **two**, and a cutover that overrides only the first leaves
+Euler on the critical path for gifts:
+
+| Seam | Used for | Reached via |
+|---|---|---|
+| `fetchSignedWebSocketFromProvider` | the webcast WebSocket handshake | connect |
+| `fetchWebcastSignatureFromProvider` | signing an arbitrary **HTTP** URL | `WebcastHttpClient.request({ signRequest: true })` |
+
+The second matters because of gift enrichment. `fetchAvailableGifts()` resolves
+to `RouteConfig.fetchRoomGifts`, which already defaults to the *direct* route
+`fetchRoomGiftsRoute` — it calls TikTok's `webcast/gift/list/` itself and never
+touches Euler's gift endpoint. But it passes `signRequest: true`, so the request
+is signed through `fetchWebcastSignatureFromProvider`, i.e. through Euler.
+
+So the Business-plan error is *not* because the library asks Euler for the gift
+list. It is because Euler must sign the URL of our own direct request. That is
+why `TIKTOK_EXTENDED_GIFT_INFO` is gated on signing for ourselves rather than
+being independently switchable, and why implementing only the WebSocket
+signature would not unblock the gift-enrichment acceptance criterion.
+
+### Which routes actually still reach Euler
+
+Of the routes the connector genuinely invokes, only the two signature seams are
+Euler-bound. `RouteConfig.fetchRoomInfo` and `RouteConfig.fetchRoomGifts`
+**already default to the direct-to-TikTok routes**, so the room-info row of the
+issue's table needs no work: its "alternative" is the existing default. The
+`fetchRoomIdFromProvider` / `fetchRoomInfoFromProvider` Euler routes are only
+reachable as the composites' last leg, which lever 1 disables.
 
 ## Decision
 
@@ -134,6 +173,11 @@ run seconds later is not a comparison.
 - Until the signer exists, `shadow` and `self` degrade to Euler with a warning.
   The install report deliberately reports the **effective** state, not the
   requested one, so a dashboard cannot show Euler retired while it is not.
+- The signing work is **two** implementations, not one: the WebSocket handshake
+  and the generic HTTP URL signer behind
+  `fetchWebcastSignatureFromProvider`. `WebcastSigner` covers only the first.
+  Fully retiring Euler — and unblocking gift enrichment specifically — needs the
+  second as well, and it is not yet designed.
 
 ### Licence
 

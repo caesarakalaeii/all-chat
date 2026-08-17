@@ -92,9 +92,17 @@ export interface SignConfiguration {
   /**
    * Ask TikTok for the room's gift list during connect, so gift events carry `extendedGiftInfo`.
    *
-   * This was off because Euler paywalls `fetchAvailableGifts()` behind a Business plan. The
-   * library's `fetchRoomGiftsRoute` goes direct to TikTok's `gift/list/` instead — but that
-   * request has to be signed, so this only becomes free of Euler once `signerMode` is `self`.
+   * This was off because `fetchAvailableGifts()` fails with "requires a Business plan".
+   *
+   * Worth being precise about why, because the obvious reading is wrong. The connector does not
+   * ask Euler for the gift list: `RouteConfig.fetchRoomGifts` already defaults to
+   * `fetchRoomGiftsRoute`, which calls TikTok's `webcast/gift/list/` directly. But it passes
+   * `signRequest: true`, and signing an arbitrary HTTP URL goes through
+   * `RouteConfig.fetchWebcastSignatureFromProvider` — a *second* Euler seam, separate from the
+   * WebSocket one. Euler paywalls that signing call, not the gift data.
+   *
+   * So this cannot be switched on independently, and implementing only the WebSocket signature
+   * will not unblock it: that needs the URL signer too. Hence the gate on `signerMode === 'self'`.
    */
   enableExtendedGiftInfo: boolean;
 

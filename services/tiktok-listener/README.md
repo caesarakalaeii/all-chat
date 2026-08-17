@@ -141,9 +141,12 @@ the signing algorithm takes TikTok ingest down until we fix it, where today it i
 Until the signer itself is implemented, `shadow` and `self` log a warning and fall back to Euler,
 so the flag can be set ahead of the code.
 
-`TIKTOK_EXTENDED_GIFT_INFO` defaults on **only** under `self`, because the direct `gift/list/`
-route must itself be signed — enabling it any earlier just reinstates Euler's Business-plan error
-on every connect.
+`TIKTOK_EXTENDED_GIFT_INFO` defaults on **only** under `self`. The reason is narrower than it
+looks: the library already fetches the gift list from TikTok directly (`gift/list/`), but that
+request is signed, and signing an HTTP URL goes through a *second* Euler seam
+(`fetchWebcastSignatureFromProvider`). Euler paywalls the signing call, not the gift data.
+Enabling this any earlier just reinstates the Business-plan error on every connect — and note that
+implementing only the WebSocket signature will not unblock it either.
 
 Signature outcomes are exported as `tiktok_sign_attempts_total{signer,outcome,reason,load_bearing}`
 and `tiktok_sign_duration_seconds`. Filter to `load_bearing="true"` for real availability, and to
@@ -273,9 +276,10 @@ When the service restarts or reconnects, TikTok may replay recent messages. The 
    `Cannot read properties of undefined (reading 'retry-after')` while reading the 429. See
    ADR-0052 and the "WebSocket signing" section above.
 6. **Connection Stability**: May experience disconnections during long streams
-7. **Gift Enrichment Off By Default**: `enableExtendedGiftInfo` is disabled because Euler
-   paywalls `fetchAvailableGifts()` behind a Business plan. It turns on automatically under
-   `TIKTOK_SIGNER_MODE=self`.
+7. **Gift Enrichment Off By Default**: `enableExtendedGiftInfo` is disabled because
+   `fetchAvailableGifts()` fails with "requires a Business plan" — Euler paywalls the *URL
+   signing* the direct `gift/list/` request needs, not the gift data. It turns on automatically
+   under `TIKTOK_SIGNER_MODE=self`.
 
 ## Troubleshooting
 
