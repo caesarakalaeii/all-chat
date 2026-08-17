@@ -157,7 +157,13 @@ export function classifySignatureFailure(error: unknown): string {
   // undefined, so an exhausted free tier can surface as this TypeError rather than as
   // SignatureRateLimitError. Observed on 2026-08-14 and called out in #698; without this arm the
   // single most important failure mode lands in `unknown`.
-  if (message.includes("reading 'retry-after'")) return 'rate_limit';
+  //
+  // Matched on the property name alone rather than on V8's full wording, because that wording is
+  // not stable: the same fault reads "Cannot read properties of undefined (reading 'retry-after')"
+  // on current V8 and "Cannot read property 'retry-after' of undefined" on older ones. Tying the
+  // rate-limit signal to one engine's phrasing would make it silently stop working on a runtime
+  // upgrade, which is the worst possible time to lose it.
+  if (message.includes('retry-after') && message.includes('undefined')) return 'rate_limit';
 
   if (message.includes('rate limit') || message.includes('too many')) return 'rate_limit';
   if (message.includes('business plan') || message.includes('premium')) return 'paywall';
