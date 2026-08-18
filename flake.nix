@@ -688,7 +688,18 @@
         # unconditionally and cannot inspect the inherited value, which would
         # stomp exactly those legitimate callers.
         if [ ! -d "''${TMPDIR:-/tmp}" ]; then
-          export TMPDIR=/tmp TMP=/tmp TEMP=/tmp TEMPDIR=/tmp
+          # Recreate the missing directory before falling back, when that is
+          # possible. This matters for a caller that entered the environment
+          # WITHOUT running this hook -- the harness does exactly that, and a
+          # later bare `go build` then reads the poisoned TMPDIR straight from
+          # its own environment, where no exec of ours can reach it. Recreating
+          # the path fixes that invocation too, and is a no-op when the parent
+          # of the stale path is not writable.
+          mkdir -p "$TMPDIR" 2>/dev/null || true
+
+          if [ ! -d "''${TMPDIR:-/tmp}" ]; then
+            export TMPDIR=/tmp TMP=/tmp TEMP=/tmp TEMPDIR=/tmp
+          fi
         fi
 
         SRC_ROOT=${lib.escapeShellArg "${self}"}
