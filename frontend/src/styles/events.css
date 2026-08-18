@@ -552,6 +552,18 @@
     font-size: var(--chat-username-font-size, 0.875rem) !important;
   }
 
+  /* ── Line-box strut (inline-layout themes) ─────────────────────────────
+     A theme like Minimal lays the row out inline ("username: message"), so the
+     whole row is ONE line box inside this block container. A line box can never
+     be shorter than its container's strut, and the strut takes its line-height
+     from Tailwind's preflight (1.5) — which used to leave Line Height one-way:
+     it could loosen rows but never tighten them. Driving the strut from the same
+     variable makes the control symmetric. The 1.5 fallback is preflight's own
+     value, so an *unset* Line Height renders exactly as before. */
+  .overlay-preview-body .min-w-0.flex-1 {
+    line-height: var(--chat-line-height, 1.5) !important;
+  }
+
   /* ── Message text ──────────────────────────────────────────────────── */
   .overlay-preview-body .break-words {
     font-size: var(--chat-font-size, 1rem) !important;
@@ -687,6 +699,18 @@
     font-family: var(--chat-username-font-family, inherit) !important;
     font-weight: var(--chat-username-font-weight, 600) !important;
     font-size: var(--chat-username-font-size, 0.875rem) !important;
+  }
+
+  /* ── Line-box strut (inline-layout themes) ─────────────────────────────
+     A theme like Minimal lays the row out inline ("username: message"), so the
+     whole row is ONE line box inside this block container. A line box can never
+     be shorter than its container's strut, and the strut takes its line-height
+     from Tailwind's preflight (1.5) — which used to leave Line Height one-way:
+     it could loosen rows but never tighten them. Driving the strut from the same
+     variable makes the control symmetric. The 1.5 fallback is preflight's own
+     value, so an *unset* Line Height renders exactly as before. */
+  .overlay-live-body .min-w-0.flex-1 {
+    line-height: var(--chat-line-height, 1.5) !important;
   }
 
   /* ── Message text ──────────────────────────────────────────────────── */
