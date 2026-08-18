@@ -18,7 +18,9 @@ package poller
 
 import (
 	"context"
+	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -28,6 +30,28 @@ import (
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/innertube"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/metrics"
 )
+
+// testMetrics returns a process-wide InnerTubeMetrics. NewInnerTubeMetrics
+// registers with the default promauto registry, so a second call panics with a
+// duplicate-collector error — which is exactly what `go test -count=2` does.
+var (
+	testMetricsOnce sync.Once
+	testMetricsInst *metrics.InnerTubeMetrics
+)
+
+func testMetrics() *metrics.InnerTubeMetrics {
+	testMetricsOnce.Do(func() { testMetricsInst = metrics.NewInnerTubeMetrics() })
+	return testMetricsInst
+}
+
+// uniqueChannelID mints a channel_id no other run has used. The counters live
+// in a process-wide registry, so a fixed label would carry over between
+// repeated runs (`go test -count=2`) and make the assertions below meaningless.
+var uniqueSeq atomic.Int64
+
+func uniqueChannelID() string {
+	return fmt.Sprintf("test-channel-%d", uniqueSeq.Add(1))
+}
 
 // liveResponse builds a get_live_chat response that carries a continuation (so
 // the poller does not treat it as offline) and the given number of chat
@@ -72,8 +96,9 @@ func (r *countingRefresher) GetInitialContinuation(context.Context, string, stri
 // and nothing else. Turning it into a metric is what makes the difference
 // between a five-second diagnosis and an investigation.
 func TestPollerCountsZeroActionPollsAndRefreshes(t *testing.T) {
-	m := metrics.NewInnerTubeMetrics()
+	m := testMetrics()
 	refresher := &countingRefresher{}
+	channelID := uniqueChannelID()
 
 	client := &MockClient{
 		responses: []*innertube.LiveChatResponse{
@@ -84,7 +109,7 @@ func TestPollerCountsZeroActionPollsAndRefreshes(t *testing.T) {
 		continuations: []string{"t1", "t2", "t3"},
 	}
 
-	p := NewPoller(client, "initial", "test-channel-zero-actions", zap.NewNop(), &PollerOptions{
+	p := NewPoller(client, "initial", channelID, zap.NewNop(), &PollerOptions{
 		Interval: time.Millisecond,
 		// Refresh after two consecutive empty polls instead of the production
 		// 150, so the recovery path is reachable inside a unit test.
@@ -100,15 +125,15 @@ func TestPollerCountsZeroActionPollsAndRefreshes(t *testing.T) {
 		t.Fatalf("Start: %v", err)
 	}
 	waitFor(t, func() bool {
-		return testutil.ToFloat64(m.ContinuationRefreshes.WithLabelValues(metrics.ServiceLabel, "test-channel-zero-actions")) >= 1
+		return testutil.ToFloat64(m.ContinuationRefreshes.WithLabelValues(metrics.ServiceLabel, channelID)) >= 1
 	})
 	p.Stop()
 
-	zero := testutil.ToFloat64(m.ZeroActionPolls.WithLabelValues(metrics.ServiceLabel, "test-channel-zero-actions"))
+	zero := testutil.ToFloat64(m.ZeroActionPolls.WithLabelValues(metrics.ServiceLabel, channelID))
 	if zero < 2 {
 		t.Errorf("zero-action polls = %v, want >= 2", zero)
 	}
-	refreshes := testutil.ToFloat64(m.ContinuationRefreshes.WithLabelValues(metrics.ServiceLabel, "test-channel-zero-actions"))
+	refreshes := testutil.ToFloat64(m.ContinuationRefreshes.WithLabelValues(metrics.ServiceLabel, channelID))
 	if refreshes < 1 {
 		t.Errorf("continuation refreshes = %v, want >= 1", refreshes)
 	}
@@ -135,7 +160,7 @@ func TestPollObserverFiresOnEmptyPolls(t *testing.T) {
 		continuations: []string{"t1", "t2"},
 	}
 
-	p := NewPoller(client, "initial", "test-channel-observer", zap.NewNop(), &PollerOptions{
+	p := NewPoller(client, "initial", uniqueChannelID(), zap.NewNop(), &PollerOptions{
 		Interval: time.Millisecond,
 		PollObserver: func(actionCount, messageCount int) {
 			mu.Lock()

@@ -72,7 +72,47 @@ directly — `get_live_chat` rejects it with HTTP 400.
 | `REDIS_HOST` | No | `localhost` | Redis hostname |
 | `REDIS_PORT` | No | `6379` | Redis port |
 | `HTTP_PORT` | No | `8080` | HTTP server port for health checks |
+| `YOUTUBE_CANARY_ENABLED` | No | `false` | Run the capture canary (see below). |
+| `YOUTUBE_CANARY_CHANNELS` | When enabled | - | Comma-separated `channelID:videoID` pairs. The video ID is mandatory: an unpinned canary would go through stream selection and can land on a chat-less simulcast. |
+| `YOUTUBE_CANARY_POLL_INTERVAL` | No | `2s` | Floor between canary `get_live_chat` calls; YouTube's own recommended timeout wins when longer. |
+| `YOUTUBE_CANARY_REDISCOVER_INTERVAL` | No | `10m` | How long a canary target that is not polling waits before retrying / re-pinning. |
 | `YOUTUBE_API_KEY` | No | - | YouTube **Data API** key. When set, the listener resolves each live stream's official `activeLiveChatId` (one `videos.list` call, 1 quota unit per stream) and publishes it to the `youtube:stream:state` cache so auth-service (streamer chat send) and moderation-service can target the chat. Unset ⇒ cache disabled; sends fall back to the unreliable `search.list` path. See ADR-0025. |
+
+### Capture canary
+
+An idle live chat and a broken continuation token are **the same response**:
+HTTP 200 with zero actions. Nothing inside the response distinguishes them, so
+"the listener captured nothing" can only be turned into "the listener is blind"
+against a stream where chat is known to be flowing.
+
+The canary (`canary/`) does exactly that. It treats the configured channels as
+permanently demanded — no `overlays` row, no chat source, no WebSocket client —
+and runs them through the same `GetInitialContinuation` and poll path as
+production traffic, because that is where the continuation bug above lived. A
+canary with its own shortcut would have been green throughout that outage.
+
+It **counts the messages and drops them**. Nothing is published to `chat:raw`,
+so message-processor throughput, emote enrichment, the
+`AllChatPlatformMessagesEmpty` ratio and the DAU/WAU/MAU aggregates never see
+canary volume. The blind spot the canary covers is *capture*; Redis publish, the
+processor and the gateway each have their own alerts.
+
+Operational notes:
+
+- Runs on the leader only, via the same `LeadershipCoordinator` used for real
+  streams (lease ID `canary:<videoID>`). Every replica polling would multiply
+  our YouTube request rate for no extra signal.
+- Video IDs are **pinned**. 24/7 channels run several concurrent streams and
+  browse order routinely puts a near-empty simulcast first (#473). The canary
+  re-pins itself (`most_viewers`) once a pinned stream ends, or after three
+  consecutive failures on a pin that never worked.
+- Configure **two** channels. A single canary going members-only or into slow
+  mode would page us for someone else's moderation settings.
+- Metrics: `youtube_innertube_canary_polls_total` (liveness of the detector
+  itself) and `youtube_innertube_canary_messages_total` (the capture signal),
+  both labelled `service, channel_id, video_id`. The alerts that read them are
+  `YouTubeInnerTubeCapturingNothing` (critical) and `YouTubeInnerTubeCanaryDown`
+  (warning) in caesar-deployment.
 
 ## Running Locally
 
@@ -323,6 +363,53 @@ sum by (channel_id) (increase(youtube_listener_discovery_gave_up_total{namespace
 ```
 Repeated give-ups for one channel while its overlay stays connected point at either a
 chronically-offline source or leaked loops aging out.
+
+### Continuation Health
+
+A poll that returns HTTP 200 with zero chat actions is ambiguous by construction:
+idle chat and a stale continuation token look identical. These two counters are
+what make the ambiguity legible, and their absence is why the token bug above
+took an investigation rather than a glance.
+
+**Zero-action polls per channel:**
+```promql
+sum by (channel_id) (rate(youtube_listener_zero_action_polls_total{namespace="allchat"}[5m]))
+```
+High on a quiet channel is normal. High on a channel that is *known* to be busy
+is the capture failure.
+
+**Continuation refreshes per channel:**
+```promql
+sum by (channel_id) (rate(youtube_listener_continuation_refreshes_total{namespace="allchat"}[15m]))
+```
+One refresh is recovery working as designed (150 consecutive empty polls, ~5min).
+A rate that never settles means the poller keeps losing its anchor: look at the
+continuation path, not at the streamers.
+
+### Capture Canary
+
+**Is the detector alive?** (see `YouTubeInnerTubeCanaryDown`)
+```promql
+sum(rate(youtube_innertube_canary_polls_total[10m]))
+```
+Zero means the canary is not polling, and while that holds the capture alert
+cannot fire at all.
+
+**Is capture working?** (see `YouTubeInnerTubeCapturingNothing`)
+```promql
+sum(rate(youtube_innertube_canary_messages_total[10m]))
+```
+Near zero *while polls continue* means the listener is blind. Per canary channel:
+```promql
+sum by (channel_id, video_id) (rate(youtube_innertube_canary_messages_total[10m]))
+```
+One channel at zero and the other flowing is a moderation change on that channel
+(members-only, slow mode), not our bug — which is why two canaries are configured.
+
+> **Label caution**: `service="youtube-listener-innertube-canary"` on *every*
+> metric here is the Argo Rollouts canary-deployment label, and predates the
+> capture canary. It says nothing about whether a sample came from the capture
+> canary; the `youtube_innertube_canary_*` metric names do.
 
 ### Error Breakdown by Type
 

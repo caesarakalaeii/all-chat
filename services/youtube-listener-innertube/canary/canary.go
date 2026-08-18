@@ -147,17 +147,34 @@ func (c *Canary) supervise(ctx context.Context, t Target) {
 	// stops working — see rediscover.
 	pinnedVideoID := t.VideoID
 
+	// consecutiveFailures lets a pin that is merely *wrong* — a video ID that
+	// was never live, or one that has long since been archived — recover the
+	// same way an ended stream does. Without it a typo'd pin leaves the canary
+	// dark forever, with YouTubeInnerTubeCanaryDown as the only symptom and no
+	// path back up short of an edit.
+	consecutiveFailures := 0
+	const repinAfterFailures = 3
+
 	for {
 		if ctx.Err() != nil {
 			return
 		}
 
 		target := Target{ChannelID: t.ChannelID, VideoID: pinnedVideoID}
-		ended := c.pollOnce(ctx, target)
+		err := c.pollOnce(ctx, target)
+		if err == nil {
+			consecutiveFailures = 0
+		} else {
+			consecutiveFailures++
+		}
 
-		if ended != nil && isStreamEnded(ended) {
-			if newID := c.rediscover(ctx, t); newID != "" {
+		if err != nil && (isStreamEnded(err) || consecutiveFailures >= repinAfterFailures) {
+			// Compare against the CURRENT pin, not the configured one: after a
+			// re-pin, `t.VideoID` is stale and would make every subsequent
+			// rediscovery look like a change.
+			if newID := c.rediscover(ctx, target); newID != "" {
 				pinnedVideoID = newID
+				consecutiveFailures = 0
 				// Re-pinned: retry immediately rather than sitting out the
 				// backoff, so a canary channel restarting its stream costs us
 				// minutes of blindness, not tens of minutes.

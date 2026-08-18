@@ -19,7 +19,9 @@ package canary
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -129,6 +131,27 @@ func (f *fakeRunner) ranTargets() []Target {
 	return append([]Target(nil), f.runs...)
 }
 
+// testMetrics returns a process-wide InnerTubeMetrics. NewInnerTubeMetrics
+// registers with the default promauto registry, so calling it twice panics with
+// a duplicate-collector error — which is what `go test -count=2` would do.
+var (
+	testMetricsOnce sync.Once
+	testMetricsInst *metrics.InnerTubeMetrics
+)
+
+func testMetrics() *metrics.InnerTubeMetrics {
+	testMetricsOnce.Do(func() { testMetricsInst = metrics.NewInnerTubeMetrics() })
+	return testMetricsInst
+}
+
+// uniqueID mints a label value no other run has used, so counter assertions
+// stay absolute instead of having to reason about carry-over.
+var uniqueSeq atomic.Int64
+
+func uniqueID(prefix string) string {
+	return fmt.Sprintf("UC%s%d", prefix, uniqueSeq.Add(1))
+}
+
 func newTestCanary(cfg Config, src ContinuationSource, runner pollerRunner) *Canary {
 	return &Canary{
 		cfg:    cfg,
@@ -159,19 +182,22 @@ func TestStartIsNoOpWhenDisabled(t *testing.T) {
 // state it exists to report, and YouTubeInnerTubeCanaryDown would fire instead
 // of YouTubeInnerTubeCapturingNothing.
 func TestObserverCountsPollsIncludingEmptyOnes(t *testing.T) {
-	m := metrics.NewInnerTubeMetrics()
+	m := testMetrics()
 	c := &Canary{logger: zap.NewNop(), metrics: m}
-	obs := c.observer(Target{"UCchan", "vid"})
+	// Unique label values: counters live in a process-wide registry and would
+	// otherwise carry over between repeated runs (`go test -count=2`).
+	channelID := uniqueID("chan")
+	obs := c.observer(Target{channelID, "vid"})
 
 	obs(0, 0) // an empty poll: still a poll
 	obs(5, 3) // three captured messages
 	obs(2, 0) // actions that parsed to nothing
 
-	polls := testutil.ToFloat64(m.CanaryPolls.WithLabelValues(metrics.ServiceLabel, "UCchan", "vid"))
+	polls := testutil.ToFloat64(m.CanaryPolls.WithLabelValues(metrics.ServiceLabel, channelID, "vid"))
 	if polls != 3 {
 		t.Errorf("canary polls = %v, want 3", polls)
 	}
-	messages := testutil.ToFloat64(m.CanaryMessages.WithLabelValues(metrics.ServiceLabel, "UCchan", "vid"))
+	messages := testutil.ToFloat64(m.CanaryMessages.WithLabelValues(metrics.ServiceLabel, channelID, "vid"))
 	if messages != 3 {
 		t.Errorf("canary messages = %v, want 3", messages)
 	}
@@ -339,6 +365,58 @@ func TestSuperviseRepinsAfterStreamEnd(t *testing.T) {
 	ran := runner.ranTargets()
 	if len(ran) < 2 || ran[0].VideoID != "oldvid" || ran[1].VideoID != "newvid" {
 		t.Fatalf("runs = %v, want oldvid then newvid", ran)
+	}
+}
+
+// A pin that is simply wrong — never live, or long since archived — must not
+// leave the canary dark forever. It fails the continuation fetch rather than
+// reporting a stream end, so the supervisor needs a second route to re-pinning.
+func TestSuperviseRepinsAfterRepeatedFailures(t *testing.T) {
+	src := &fakeSource{err: errors.New("unexpected status code from next API: 404")}
+	runner := &fakeRunner{started: make(chan struct{}, 4)}
+	disc := &fakeDiscoverer{videoID: "newvid"}
+	c := newTestCanary(Config{
+		Enabled:            true,
+		Targets:            []Target{{"UCchan", "badvid"}},
+		RediscoverInterval: time.Millisecond,
+	}, src, runner)
+	c.discoverer = disc
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		c.supervise(ctx, Target{"UCchan", "badvid"})
+	}()
+
+	deadline := time.After(2 * time.Second)
+	for {
+		disc.mu.Lock()
+		calls := disc.calls
+		disc.mu.Unlock()
+		if calls > 0 {
+			break
+		}
+		select {
+		case <-deadline:
+			cancel()
+			t.Fatal("a permanently failing pin never triggered rediscovery")
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+	cancel()
+	<-done
+
+	// The re-pinned video must be what gets attempted next.
+	calls := src.calls()
+	var sawNew bool
+	for _, call := range calls {
+		if call.VideoID == "newvid" {
+			sawNew = true
+		}
+	}
+	if !sawNew {
+		t.Errorf("continuation attempts = %v, want one for the re-pinned newvid", calls)
 	}
 }
 
