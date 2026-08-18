@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/message-processor/registry"
+	"github.com/caesar/all-chat/services/youtube-listener-innertube/canary"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/deletion"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/handlers"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/innertube"
@@ -216,6 +217,31 @@ func main() {
 		logger.Fatal("Failed to start stream manager", zap.Error(err))
 	}
 
+	// 6.5. Canary poller.
+	//
+	// Polls channels that are live 24/7 with continuously busy chat, through the
+	// same GetInitialContinuation + poll path as production traffic, counts what
+	// it captured and then drops it. It exists because an idle chat and a broken
+	// continuation token are both HTTP 200 with zero actions, so "we captured
+	// nothing" can only be turned into "we are blind" by a stream where chat is
+	// known to be flowing. Nothing reaches chat:raw from here, so no downstream
+	// service and no aggregate metric sees canary traffic.
+	canaryCtx, cancelCanary := context.WithCancel(ctx)
+	defer cancelCanary()
+
+	canaryCfg, err := canary.ParseConfig(listener.Env)
+	if err != nil {
+		logger.Fatal("Invalid canary configuration", zap.Error(err))
+	}
+	canaryPoller := canary.New(canaryCfg, logger, canary.Options{
+		Source:     discovery,
+		Discoverer: discovery,
+		Leader:     ll.LeadershipCoordinator(),
+		Metrics:    innertubeMetrics,
+		Client:     innertubeClient,
+	})
+	canaryPoller.Start(canaryCtx)
+
 	// Demand-driven activation (Phase 5)
 	// Leadership-only listeners don't call base.Start so the SDK demand loop
 	// doesn't run automatically. Subscribe directly to source:demand here.
@@ -347,6 +373,11 @@ func main() {
 	<-quit
 
 	logger.Info("Shutting down service...")
+
+	// Stop the canary first: it holds leadership leases of its own, and its
+	// polls are pure overhead once we are draining.
+	cancelCanary()
+	canaryPoller.Wait()
 
 	// Create shutdown context with 25s timeout (Kubernetes sends SIGKILL at 30s)
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 25*time.Second)

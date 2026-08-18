@@ -1,0 +1,375 @@
+// This file is part of All-Chat.
+// Copyright (C) 2026 caesarakalaeii
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+package canary
+
+import (
+	"context"
+	"errors"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/prometheus/client_golang/prometheus/testutil"
+	"go.uber.org/zap"
+
+	"github.com/caesar/all-chat/services/youtube-listener-innertube/metrics"
+	"github.com/caesar/all-chat/services/youtube-listener-innertube/poller"
+)
+
+type fakeSource struct {
+	mu   sync.Mutex
+	err  error
+	got  []Target
+	cont string
+}
+
+func (f *fakeSource) GetInitialContinuation(_ context.Context, videoID, channelID string) (string, string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.got = append(f.got, Target{ChannelID: channelID, VideoID: videoID})
+	if f.err != nil {
+		return "", "", f.err
+	}
+	return f.cont, "visitor", nil
+}
+
+func (f *fakeSource) calls() []Target {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]Target(nil), f.got...)
+}
+
+type fakeDiscoverer struct {
+	videoID string
+	err     error
+	calls   int
+	mu      sync.Mutex
+}
+
+func (f *fakeDiscoverer) DiscoverLiveStream(_ context.Context, _, _, _ string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls++
+	return f.videoID, f.err
+}
+
+type fakeLeader struct {
+	isLeader bool
+	err      error
+	released []string
+	mu       sync.Mutex
+}
+
+func (f *fakeLeader) EnsureLeadership(_ context.Context, _ string, _ func()) (bool, error) {
+	return f.isLeader, f.err
+}
+
+func (f *fakeLeader) Release(streamID string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.released = append(f.released, streamID)
+}
+
+func (f *fakeLeader) releasedIDs() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.released...)
+}
+
+// fakeRunner reports a fixed poll shape, then returns err. observed records the
+// (actions, messages) tuples it fed the observer, which is how the tests assert
+// that a zero-message poll is still counted as a poll.
+type fakeRunner struct {
+	actions  int
+	messages int
+	err      error
+
+	mu      sync.Mutex
+	runs    []Target
+	started chan struct{}
+}
+
+func (f *fakeRunner) Run(ctx context.Context, t Target, _, _ string, observe poller.PollObserver) error {
+	f.mu.Lock()
+	f.runs = append(f.runs, t)
+	f.mu.Unlock()
+	if f.started != nil {
+		select {
+		case f.started <- struct{}{}:
+		default:
+		}
+	}
+	if observe != nil {
+		observe(f.actions, f.messages)
+	}
+	if f.err != nil {
+		return f.err
+	}
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func (f *fakeRunner) ranTargets() []Target {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]Target(nil), f.runs...)
+}
+
+func newTestCanary(cfg Config, src ContinuationSource, runner pollerRunner) *Canary {
+	return &Canary{
+		cfg:    cfg,
+		source: src,
+		runner: runner,
+		logger: zap.NewNop(),
+	}
+}
+
+func TestStartIsNoOpWhenDisabled(t *testing.T) {
+	src := &fakeSource{cont: "tok"}
+	runner := &fakeRunner{}
+	c := newTestCanary(Config{Enabled: false, Targets: []Target{{"UCchan", "vid"}}}, src, runner)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c.Start(ctx)
+	c.Wait()
+
+	if got := len(src.calls()); got != 0 {
+		t.Errorf("disabled canary made %d continuation calls, want 0", got)
+	}
+}
+
+// The blind spot is capture, so the canary must count a poll even when that
+// poll captured nothing — that zero is the entire signal the alert reads. A
+// canary that only counted productive polls would go silent in exactly the
+// state it exists to report, and YouTubeInnerTubeCanaryDown would fire instead
+// of YouTubeInnerTubeCapturingNothing.
+func TestObserverCountsPollsIncludingEmptyOnes(t *testing.T) {
+	m := metrics.NewInnerTubeMetrics()
+	c := &Canary{logger: zap.NewNop(), metrics: m}
+	obs := c.observer(Target{"UCchan", "vid"})
+
+	obs(0, 0) // an empty poll: still a poll
+	obs(5, 3) // three captured messages
+	obs(2, 0) // actions that parsed to nothing
+
+	polls := testutil.ToFloat64(m.CanaryPolls.WithLabelValues(metrics.ServiceLabel, "UCchan", "vid"))
+	if polls != 3 {
+		t.Errorf("canary polls = %v, want 3", polls)
+	}
+	messages := testutil.ToFloat64(m.CanaryMessages.WithLabelValues(metrics.ServiceLabel, "UCchan", "vid"))
+	if messages != 3 {
+		t.Errorf("canary messages = %v, want 3", messages)
+	}
+}
+
+// A Canary built without metrics must not panic: a detector that takes the
+// process down is worse than no detector.
+func TestObserverToleratesNilMetrics(t *testing.T) {
+	c := &Canary{logger: zap.NewNop()}
+	c.observer(Target{"UCchan", "vid"})(0, 0)
+}
+
+func TestPollOnceSkipsWhenNotLeader(t *testing.T) {
+	src := &fakeSource{cont: "tok"}
+	runner := &fakeRunner{}
+	c := newTestCanary(Config{Enabled: true}, src, runner)
+	c.leader = &fakeLeader{isLeader: false}
+
+	if err := c.pollOnce(context.Background(), Target{"UCchan", "vid"}); err != nil {
+		t.Fatalf("pollOnce: %v", err)
+	}
+	if got := len(src.calls()); got != 0 {
+		t.Errorf("non-leader fetched %d continuations, want 0 — every replica polling would multiply our YouTube rate", got)
+	}
+	if got := len(runner.ranTargets()); got != 0 {
+		t.Errorf("non-leader ran %d pollers, want 0", got)
+	}
+}
+
+func TestPollOnceReleasesLeadershipWhenThePollEnds(t *testing.T) {
+	src := &fakeSource{cont: "tok"}
+	runner := &fakeRunner{err: errors.New("boom")}
+	leader := &fakeLeader{isLeader: true}
+	c := newTestCanary(Config{Enabled: true}, src, runner)
+	c.leader = leader
+
+	_ = c.pollOnce(context.Background(), Target{"UCchan", "vid"})
+
+	released := leader.releasedIDs()
+	if len(released) != 1 || released[0] != "canary:vid" {
+		t.Errorf("released = %v, want [canary:vid]", released)
+	}
+}
+
+func TestPollOnceUsesTheProductionContinuationPath(t *testing.T) {
+	src := &fakeSource{cont: "tok"}
+	runner := &fakeRunner{err: errors.New("stop")}
+	c := newTestCanary(Config{Enabled: true}, src, runner)
+
+	_ = c.pollOnce(context.Background(), Target{"UCchan", "vid"})
+
+	calls := src.calls()
+	if len(calls) != 1 || calls[0].VideoID != "vid" || calls[0].ChannelID != "UCchan" {
+		t.Fatalf("GetInitialContinuation calls = %v, want one for UCchan/vid", calls)
+	}
+	ran := runner.ranTargets()
+	if len(ran) != 1 || ran[0].VideoID != "vid" {
+		t.Fatalf("poller runs = %v, want one for vid", ran)
+	}
+}
+
+func TestPollOnceDoesNotPollWhenContinuationFails(t *testing.T) {
+	src := &fakeSource{err: errors.New("429 rate limited")}
+	runner := &fakeRunner{}
+	c := newTestCanary(Config{Enabled: true}, src, runner)
+
+	if err := c.pollOnce(context.Background(), Target{"UCchan", "vid"}); err == nil {
+		t.Fatal("pollOnce returned nil, want the continuation error")
+	}
+	if got := len(runner.ranTargets()); got != 0 {
+		t.Errorf("ran %d pollers without a continuation, want 0", got)
+	}
+}
+
+// A transient failure must never un-pin the canary: re-pinning on a 429 is how
+// a canary drifts onto a chat-less simulcast and starts lying.
+func TestRediscoverKeepsPinOnFailure(t *testing.T) {
+	c := newTestCanary(Config{Enabled: true}, &fakeSource{}, &fakeRunner{})
+	c.discoverer = &fakeDiscoverer{err: errors.New("429")}
+
+	if got := c.rediscover(context.Background(), Target{"UCchan", "vid"}); got != "" {
+		t.Errorf("rediscover = %q, want \"\" (keep the pin)", got)
+	}
+}
+
+func TestRediscoverRepinsWhenAStreamEnded(t *testing.T) {
+	c := newTestCanary(Config{Enabled: true}, &fakeSource{}, &fakeRunner{})
+	c.discoverer = &fakeDiscoverer{videoID: "newvid"}
+
+	if got := c.rediscover(context.Background(), Target{"UCchan", "oldvid"}); got != "newvid" {
+		t.Errorf("rediscover = %q, want newvid", got)
+	}
+}
+
+func TestRediscoverIgnoresAnUnchangedVideo(t *testing.T) {
+	c := newTestCanary(Config{Enabled: true}, &fakeSource{}, &fakeRunner{})
+	c.discoverer = &fakeDiscoverer{videoID: "vid"}
+
+	if got := c.rediscover(context.Background(), Target{"UCchan", "vid"}); got != "" {
+		t.Errorf("rediscover = %q, want \"\" for an unchanged pin", got)
+	}
+}
+
+func TestIsStreamEnded(t *testing.T) {
+	cases := map[string]bool{
+		"stream may have ended (no liveChatRenderer)": true,
+		"isReplay is true":                            true,
+		"no live chat for this video":                 true,
+		"429 Too Many Requests":                       false,
+		"dial tcp: i/o timeout":                       false,
+	}
+	for msg, want := range cases {
+		if got := isStreamEnded(errors.New(msg)); got != want {
+			t.Errorf("isStreamEnded(%q) = %v, want %v", msg, got, want)
+		}
+	}
+	if isStreamEnded(nil) {
+		t.Error("isStreamEnded(nil) = true, want false")
+	}
+	// The sentinel the real runner returns must be recognised, otherwise a
+	// canary whose stream ended never re-pins and stays dark forever.
+	if !isStreamEnded(errStreamEnded) {
+		t.Error("errStreamEnded not recognised as a stream end")
+	}
+}
+
+// The supervisor must keep a target alive across restarts, and must re-pin
+// (without waiting out the backoff) when the pinned video has ended.
+func TestSuperviseRepinsAfterStreamEnd(t *testing.T) {
+	src := &fakeSource{cont: "tok"}
+	runner := &fakeRunner{err: errStreamEnded, started: make(chan struct{}, 4)}
+	c := newTestCanary(Config{
+		Enabled:            true,
+		Targets:            []Target{{"UCchan", "oldvid"}},
+		RediscoverInterval: time.Hour, // must not be reached on the re-pin path
+	}, src, runner)
+	c.discoverer = &fakeDiscoverer{videoID: "newvid"}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		c.supervise(ctx, Target{"UCchan", "oldvid"})
+	}()
+
+	// Two runs: the ended pin, then the re-pinned video. If the supervisor had
+	// fallen through to the hour-long backoff instead, this would time out.
+	deadline := time.After(2 * time.Second)
+	for i := 0; i < 2; i++ {
+		select {
+		case <-runner.started:
+		case <-deadline:
+			t.Fatalf("only %d poller runs before the deadline, want 2", i)
+		}
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("supervise did not exit on context cancellation")
+	}
+
+	ran := runner.ranTargets()
+	if len(ran) < 2 || ran[0].VideoID != "oldvid" || ran[1].VideoID != "newvid" {
+		t.Fatalf("runs = %v, want oldvid then newvid", ran)
+	}
+}
+
+func TestSuperviseStopsOnContextCancel(t *testing.T) {
+	src := &fakeSource{err: errors.New("429")}
+	c := newTestCanary(Config{
+		Enabled:            true,
+		Targets:            []Target{{"UCchan", "vid"}},
+		RediscoverInterval: 10 * time.Millisecond,
+	}, src, &fakeRunner{})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		c.supervise(ctx, Target{"UCchan", "vid"})
+	}()
+	time.Sleep(30 * time.Millisecond)
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("supervise ignored context cancellation")
+	}
+}
+
+func TestSleepCtxReturnsFalseOnCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if sleepCtx(ctx, time.Hour) {
+		t.Error("sleepCtx returned true on a cancelled context")
+	}
+}

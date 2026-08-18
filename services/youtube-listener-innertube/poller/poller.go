@@ -44,6 +44,14 @@ type ContinuationRefresher interface {
 // MessageCallback is called with parsed messages after each successful poll
 type MessageCallback func(messages []*innertube.RawChatMessage)
 
+// PollObserver is called once per successful poll (HTTP 200 with a usable
+// continuation), with the number of chat actions the response carried and the
+// number of messages that parsed out of them. It fires even when both are zero
+// — that is the case the canary exists to measure — and it fires before the
+// message callback, so an observer that counts and a callback that publishes
+// cannot disagree about a poll.
+type PollObserver func(actionCount, messageCount int)
+
 // Poller manages the continuation-based polling loop for InnerTube live chat
 //
 // Architecture:
@@ -71,6 +79,7 @@ type Poller struct {
 	logger          *zap.Logger
 	logLevel        string // "debug" or "info"
 	messageCallback MessageCallback
+	pollObserver    PollObserver
 	metrics         *metrics.InnerTubeMetrics
 	refresher       ContinuationRefresher // Optional: re-fetches continuation when stale
 
@@ -121,6 +130,11 @@ type PollerOptions struct {
 	// ZeroActionThreshold is the number of consecutive zero-action polls before
 	// attempting a continuation refresh (default: 150, ~5 minutes at 2s interval).
 	ZeroActionThreshold int
+
+	// PollObserver, when set, is called after every successful poll with the
+	// action and message counts. Used by the canary poller, which counts
+	// messages and then drops them instead of publishing.
+	PollObserver PollObserver
 
 	// EmptyContThreshold is the number of consecutive empty-continuation responses
 	// before declaring the stream offline. On each attempt the poller first tries to
@@ -190,6 +204,7 @@ func NewPoller(
 		logger:              logger,
 		logLevel:            logLevel,
 		metrics:             opts.Metrics,
+		pollObserver:        opts.PollObserver,
 		refresher:           opts.Refresher,
 		zeroActionThreshold: zeroActionThreshold,
 		emptyContThreshold:  emptyContThreshold,
@@ -431,11 +446,24 @@ func (p *Poller) poll() {
 	p.state.UpdatePollTime()
 	p.backoff.Reset()
 
+	// Report the poll before anything else can return early: a poll that
+	// happened must be counted even if it carried nothing, since "polling but
+	// capturing nothing" is exactly the state we are trying to observe.
+	if p.pollObserver != nil {
+		p.pollObserver(len(actions), len(messages))
+	}
+
 	// Track consecutive zero-action polls and refresh continuation if stale
 	if len(actions) == 0 {
 		p.zeroActionCount++
+		if p.metrics != nil {
+			p.metrics.ZeroActionPolls.WithLabelValues(metrics.ServiceLabel, p.channelID).Inc()
+		}
 		if p.refresher != nil && p.videoID != "" && p.zeroActionCount >= p.zeroActionThreshold {
 			p.zeroActionCount = 0
+			if p.metrics != nil {
+				p.metrics.ContinuationRefreshes.WithLabelValues(metrics.ServiceLabel, p.channelID).Inc()
+			}
 			p.logger.Info("Continuation appears stale, refreshing from YouTube /next API",
 				zap.String("channel_id", p.channelID),
 				zap.String("video_id", p.videoID),
