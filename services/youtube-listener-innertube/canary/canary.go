@@ -18,6 +18,7 @@ package canary
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"time"
@@ -180,9 +181,17 @@ func (c *Canary) supervise(ctx context.Context, t Target) {
 
 		target := Target{ChannelID: t.ChannelID, VideoID: pinnedVideoID}
 		err := c.pollOnce(ctx, target)
-		if err == nil {
+		switch {
+		case err == nil:
 			consecutiveFailures = 0
-		} else {
+		case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+			// Not evidence about the pin. A cancelled session means either
+			// shutdown or a lease handover — pollOnce cancels its own context
+			// when leadership is lost — and the video is very probably fine.
+			// Counting these would let three routine handovers re-pin a
+			// working canary, and most_viewers could land on a different
+			// stream, so the repin heuristic stays aimed at genuinely bad pins.
+		default:
 			consecutiveFailures++
 		}
 

@@ -74,7 +74,7 @@ directly — `get_live_chat` rejects it with HTTP 400.
 | `HTTP_PORT` | No | `8080` | HTTP server port for health checks |
 | `YOUTUBE_CANARY_ENABLED` | No | `false` | Run the capture canary (see below). |
 | `YOUTUBE_CANARY_CHANNELS` | When enabled | - | Comma-separated `channelID:videoID` pairs. The video ID is mandatory: an unpinned canary would go through stream selection and can land on a chat-less simulcast. |
-| `YOUTUBE_CANARY_POLL_INTERVAL` | No | `2s` | Floor between canary `get_live_chat` calls; YouTube's own recommended timeout wins when longer. |
+| `YOUTUBE_CANARY_POLL_INTERVAL` | No | `2s` | Floor between canary `get_live_chat` calls; YouTube's own recommended timeout wins when longer. Unlike production, the canary sleeps this interval after *every* poll (`AlwaysSleep`), so it is a real rate floor — production skips the sleep after a non-empty poll to keep viewer latency low, which on a busy canary channel would mean never sleeping at all. |
 | `YOUTUBE_CANARY_REDISCOVER_INTERVAL` | No | `10m` | How long a canary target that is not polling waits before retrying / re-pinning. |
 | `YOUTUBE_API_KEY` | No | - | YouTube **Data API** key. When set, the listener resolves each live stream's official `activeLiveChatId` (one `videos.list` call, 1 quota unit per stream) and publishes it to the `youtube:stream:state` cache so auth-service (streamer chat send) and moderation-service can target the chat. Unset ⇒ cache disabled; sends fall back to the unreliable `search.list` path. See ADR-0025. |
 
@@ -99,9 +99,16 @@ processor and the gateway each have their own alerts.
 
 Operational notes:
 
-- Runs on the leader only, via the same `LeadershipCoordinator` used for real
-  streams (lease ID `canary:<videoID>`). Every replica polling would multiply
-  our YouTube request rate for no extra signal.
+- Runs on the leader only (lease ID `canary:<videoID>`). Every replica polling
+  would multiply our YouTube request rate for no extra signal.
+- Leadership uses a **separate** coordinator — `SidecarCoordinator("youtube-canary")`,
+  not the one the stream manager uses. This is deliberate and load-bearing:
+  `Rebalance` derives `maxPerPod` from the production source count the caller
+  passes, but compares it against the coordinator's *total* lease count. Canary
+  leases in that coordinator would make every pod look over-subscribed, and
+  since the shed list is sorted and `canary:` sorts ahead of most video IDs, the
+  leases released would be **users' streams**. Do not "simplify" the canary back
+  onto the production coordinator; a test pins this.
 - Video IDs are **pinned**. 24/7 channels run several concurrent streams and
   browse order routinely puts a near-empty simulcast first (#473). The canary
   re-pins itself (`most_viewers`) once a pinned stream ends, or after three

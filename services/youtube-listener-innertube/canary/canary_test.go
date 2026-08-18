@@ -479,6 +479,60 @@ func TestSuperviseRepinsAfterStreamEnd(t *testing.T) {
 // A pin that is simply wrong — never live, or long since archived — must not
 // leave the canary dark forever. It fails the continuation fetch rather than
 // reporting a stream end, so the supervisor needs a second route to re-pinning.
+// A lost lease cancels the poll session's context, so the runner returns
+// context.Canceled. That is a handover between replicas, not evidence that the
+// pinned video is bad — but it used to be counted as a pin failure, so three
+// routine handovers in a row would re-pin a perfectly healthy canary, and
+// most_viewers could well land on a different stream. The repin heuristic must
+// stay aimed at pins that genuinely do not work.
+func TestSuperviseDoesNotRepinOnLeaseHandover(t *testing.T) {
+	src := &fakeSource{cont: "tok"}
+	// Exactly what a lease handover produces: pollOnce cancels its derived
+	// context, and the runner surfaces the cancellation.
+	runner := &fakeRunner{err: context.Canceled, started: make(chan struct{}, 16)}
+	disc := &fakeDiscoverer{videoID: "newvid"}
+	c := newTestCanary(Config{
+		Enabled:            true,
+		Targets:            []Target{{"UCchan", "goodvid"}},
+		RediscoverInterval: time.Millisecond,
+	}, src, runner)
+	c.discoverer = disc
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		c.supervise(ctx, Target{"UCchan", "goodvid"})
+	}()
+
+	// Well past the three failures that would trigger a re-pin.
+	for i := 0; i < 8; i++ {
+		select {
+		case <-runner.started:
+		case <-time.After(2 * time.Second):
+			cancel()
+			<-done
+			t.Fatal("supervise stopped retrying after cancelled sessions")
+		}
+	}
+	cancel()
+	<-done
+
+	disc.mu.Lock()
+	calls := disc.calls
+	disc.mu.Unlock()
+	if calls != 0 {
+		t.Errorf("rediscovery ran %d time(s) after lease handovers, want 0 — "+
+			"handovers are not evidence the pin is bad, and re-pinning can move "+
+			"a healthy canary to a different stream", calls)
+	}
+	for _, call := range src.calls() {
+		if call.VideoID != "goodvid" {
+			t.Errorf("canary moved off its pin to %q after a handover", call.VideoID)
+		}
+	}
+}
+
 func TestSuperviseRepinsAfterRepeatedFailures(t *testing.T) {
 	src := &fakeSource{err: errors.New("unexpected status code from next API: 404")}
 	runner := &fakeRunner{started: make(chan struct{}, 4)}
