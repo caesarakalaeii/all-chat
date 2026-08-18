@@ -61,6 +61,27 @@ body {
   -moz-osx-font-smoothing: grayscale !important;
 }
 
+/* ============================================================
+   THEME INTENT
+   ============================================================
+
+   This is a no-bubble theme: messages are bare text on the stream, with no
+   container, no rounding and no backdrop blur. Those are properties the
+   visual customizer also owns, and its rules are `!important` inside a cascade
+   layer — which outranks the `!important` declarations below. Declaring the
+   intent as `--theme-*` is what makes "the theme wants zero" win over the
+   platform default while an explicit customizer setting still wins over both.
+   ============================================================ */
+
+:root {
+  --theme-bubble-padding: 0;
+  --theme-bubble-border-radius: 0;
+  --theme-bubble-border-width: 0;
+  --theme-backdrop-blur: 0px;
+  /* Tighter than the platform's 0.75rem — this theme is about density. */
+  --theme-message-gap: 8px;
+}
+
 /* Main container - transparent and minimal */
 .min-h-screen {
   background: var(--chat-overlay-bg-color, transparent) !important;

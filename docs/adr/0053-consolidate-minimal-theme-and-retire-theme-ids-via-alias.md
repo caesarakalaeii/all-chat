@@ -92,6 +92,46 @@ The `1.5` fallback is preflight's own value, so an *unset* Line Height renders
 byte-identically to before — consistent with the rule that block already
 documents: an unset control produces no visible change, a set control applies.
 
+### Customizer / theme / platform precedence (the rest of the spacing bug)
+
+Fixing the strut was not enough: the rows were still far too tall. The dominant
+cost was **bubble padding the theme had explicitly deleted**.
+
+The visual-customizer rules are `!important` inside `@layer visual-customizer`,
+which beats a theme's *unlayered* `!important`. That is correct for a control the
+user actually set. The defect was that each declaration also carried the
+**platform default as its `var()` fallback**:
+
+```css
+padding: var(--chat-bubble-padding, 0.75rem) !important;   /* before */
+```
+
+so with the control UNSET, `0.75rem` still outranked the theme. Minimal is a
+no-bubble theme asking for `padding: 0`, and got 12px on every row anyway — 24px
+of vertical space per message that the theme had tried to remove, plus forced
+`border-radius` and a forced `backdrop-filter: blur(4px)` on transparent rows.
+Effective precedence was `(customizer OR platform default) > theme`.
+
+The fallback is now a **theme-intent step**:
+
+```css
+padding: var(--chat-bubble-padding, var(--theme-bubble-padding, 0.75rem)) !important;
+```
+
+giving the intended order: **customizer setting > theme intent > platform
+default**. A theme opts in by declaring `--theme-*` (`--theme-bubble-padding`,
+`--theme-bubble-border-radius`, `--theme-bubble-border-width`,
+`--theme-backdrop-blur`, `--theme-message-gap`); a theme that declares nothing
+behaves exactly as before, so this is backwards-compatible across the bundle.
+
+Measured on the reporter's saved settings (`lineHeight: 1`, `messageGap: 8px`),
+row pitch went **48px → 24px** — which is now exactly `1 × 16px + 8px`, i.e. the
+two controls finally produce the number they describe.
+
+**New rule for the customizer layer**: a `var()` fallback in these blocks is the
+*theme's* value, never the platform default directly. Adding a new customizer
+property means adding its `--theme-*` step too.
+
 ## Consequences
 
 - Line Height is symmetric for every theme; overlays can be made denser.
