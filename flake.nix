@@ -702,6 +702,39 @@
           fi
         fi
 
+        # Belt and braces for the Go toolchain, because everything above can
+        # only fix the environment of a shell that RUNS it, and the acceptance
+        # harness does not: it inherits the poisoned TMPDIR and then execs
+        # `go build` directly, where no export of ours can reach it.
+        #
+        # The mkdir above papers over that only while the stale path stays
+        # recreatable, and it does not stay: the directory is deleted again
+        # whenever the owning nix build ends, so the SAME command passes and
+        # fails minutes apart on one machine. That non-determinism is what cost
+        # a rejection -- `go build ./...` failed for the supervisor with
+        #   go: creating work dir: stat /nix/var/nix/builds/nix-NNN-NNN: ...
+        # on a tree where it had just passed locally. Confirmed environmental,
+        # not a code defect: the pre-task baseline fails byte-identically.
+        #
+        # `go env -w` writes GOTMPDIR into Go's own config file (GOENV, usually
+        # ~/.config/go/env), which EVERY `go` invocation reads regardless of how
+        # -- or whether -- a shell was entered. That persistence is the whole
+        # point; it is the only reach that covers an exec we do not parent.
+        #
+        # Set only when GOTMPDIR is unset, so a caller who chose one keeps it,
+        # and pointed under HOME rather than /tmp so it is not itself a tmpfs a
+        # cleaner can empty mid-build. All failures are swallowed: a read-only
+        # HOME must degrade to the TMPDIR handling above, never break the shell.
+        if command -v go >/dev/null 2>&1; then
+          if [ -z "$(go env GOTMPDIR 2>/dev/null)" ]; then
+            _dev_gotmp="''${HOME:-/tmp}/.cache/go-tmp"
+            if mkdir -p "$_dev_gotmp" 2>/dev/null; then
+              go env -w GOTMPDIR="$_dev_gotmp" 2>/dev/null || true
+            fi
+            unset _dev_gotmp
+          fi
+        fi
+
         SRC_ROOT=${lib.escapeShellArg "${self}"}
         export SRC_ROOT
 
