@@ -317,7 +317,7 @@ func (m *Manager) startAsyncDiscovery(channelID, overlayID string, opts Discover
 		} else {
 			// Poller started from cache — release the discovery reservation we
 			// took above and stop, no discovery loop needed.
-			m.cleanupDiscoveryState(channelID)
+			m.cleanupDiscoveryState(state)
 			cancel()
 			return
 		}
@@ -358,6 +358,14 @@ const maxDiscoveryDuration = 1 * time.Hour
 func (m *Manager) discoveryLoop(ctx context.Context, state *DiscoveryState) {
 	defer m.wg.Done()
 
+	// Track concurrent loops per channel so a leak is visible directly rather than
+	// having to be inferred from the scrape rate. Every exit path below runs this
+	// defer, so the gauge returns to 0 when the last loop for the channel stops.
+	if m.metrics != nil {
+		m.metrics.DiscoveryLoopsActive.WithLabelValues(metrics.ServiceLabel, state.ChannelID).Inc()
+		defer m.metrics.DiscoveryLoopsActive.WithLabelValues(metrics.ServiceLabel, state.ChannelID).Dec()
+	}
+
 	// Exponential backoff capped at 1 minute. Keep polling indefinitely until a stream is
 	// discovered or the source is deactivated.
 	backoffSequence := []time.Duration{
@@ -375,9 +383,26 @@ func (m *Manager) discoveryLoop(ctx context.Context, state *DiscoveryState) {
 				zap.String("channel_id", state.ChannelID),
 				zap.Int("attempts", state.Attempts),
 			)
-			m.cleanupDiscoveryState(state.ChannelID)
+			m.cleanupDiscoveryState(state)
 			return
 		default:
+		}
+
+		// Defence in depth against orphaned loops: if we no longer hold the
+		// reservation, another loop owns this channel and we must stop. An orphan is
+		// invisible to reconcileDemand (which can only cancel states still in
+		// m.discovering), so nothing else would ever stop it before the give-up cap.
+		// Cancelling our own context here is safe: every path that starts a poller
+		// returns from this loop immediately, so no poller is bound to this context
+		// at the top of an iteration — only the cross-platform event subscriber is,
+		// and that must shut down with us.
+		if !m.ownsDiscovery(state) {
+			m.logger.Info("Discovery reservation lost to another loop, exiting",
+				zap.String("channel_id", state.ChannelID),
+				zap.Int("attempts", state.Attempts),
+			)
+			state.CancelFunc()
+			return
 		}
 
 		// Hard wall-clock cap: stop polling YouTube once we've spent
@@ -431,7 +456,7 @@ func (m *Manager) discoveryLoop(ctx context.Context, state *DiscoveryState) {
 					}
 				}
 				if started > 0 {
-					m.cleanupDiscoveryState(state.ChannelID)
+					m.cleanupDiscoveryState(state)
 					return
 				}
 				// All pollers failed (leadership held etc.) — fall through to backoff
@@ -466,7 +491,7 @@ func (m *Manager) discoveryLoop(ctx context.Context, state *DiscoveryState) {
 							zap.String("channel_id", state.ChannelID),
 							zap.String("video_id", videoID),
 						)
-						m.cleanupDiscoveryState(state.ChannelID)
+						m.cleanupDiscoveryState(state)
 						return
 					}
 					m.logger.Error("Failed to start poller after discovery, will retry",
@@ -477,7 +502,7 @@ func (m *Manager) discoveryLoop(ctx context.Context, state *DiscoveryState) {
 					discoveryErr = err
 					// Fall through to backoff and retry the whole discovery+poller process
 				} else {
-					m.cleanupDiscoveryState(state.ChannelID)
+					m.cleanupDiscoveryState(state)
 					return
 				}
 			} else {
@@ -514,7 +539,7 @@ func (m *Manager) discoveryLoop(ctx context.Context, state *DiscoveryState) {
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			m.cleanupDiscoveryState(state.ChannelID)
+			m.cleanupDiscoveryState(state)
 			return
 		case <-state.ResetBackoffChan:
 			// Cross-platform trigger: another platform went live, retry immediately.
@@ -567,7 +592,7 @@ func (m *Manager) giveUpDiscovery(state *DiscoveryState) {
 	// Mark gave-up first, then drop the in-progress reservation, so there is no
 	// window in which the channel looks idle to a concurrent periodic sync.
 	m.markDiscoveryGaveUp(state.ChannelID)
-	m.cleanupDiscoveryState(state.ChannelID)
+	m.cleanupDiscoveryState(state)
 
 	// Stop the cross-platform subscription goroutine for this discovery.
 	if state.CancelFunc != nil {
@@ -610,7 +635,15 @@ func (m *Manager) clearGaveUpForDemandChanges(prev, demanded map[string]bool) {
 }
 
 // subscribeToPlatformEvents subscribes to cross-platform events for an overlay
-// and signals backoff reset when other platforms go live
+// and signals backoff reset when other platforms go live.
+//
+// KNOWN LEAK, do not "fix" it by cancelling on success: this goroutine only exits
+// on ctx.Done(), and the paths in discoveryLoop that start a poller deliberately
+// return *without* cancelling, because startPoller passes that same context to
+// poller.Start — cancelling it would kill the live poller and stop message
+// delivery. So a successful discovery leaves one subscriber goroutine and one
+// Redis subscription behind for the process lifetime. Closing it properly means
+// decoupling the poller's context from the discovery context first.
 func (m *Manager) subscribeToPlatformEvents(ctx context.Context, state *DiscoveryState) {
 	defer m.wg.Done()
 
@@ -1150,12 +1183,38 @@ func (m *Manager) handleLeadershipLoss(ctx context.Context, videoID string) {
 	}
 }
 
-// cleanupDiscoveryState removes discovery state after completion or cancellation
-func (m *Manager) cleanupDiscoveryState(channelID string) {
+// cleanupDiscoveryState releases the m.discovering reservation held by state,
+// after completion or cancellation.
+//
+// The identity check is load-bearing. A discovery loop routinely outlives its own
+// reservation: reconcileDemand cancels the context and drops the map entry
+// immediately, but the goroutine only observes ctx.Done() on its next iteration —
+// potentially seconds later, mid-HTTP-request. If demand returns inside that
+// window a fresh loop reserves the slot, and a key-only delete from the dying loop
+// would evict the *new* owner. The channel then looks idle to the 30s periodic
+// sync, which spawns yet another loop while the evicted one is still running.
+// Loops accumulate, and none of them can be stopped by reconcileDemand any more
+// (it only cancels states still present in m.discovering), so each keeps scraping
+// YouTube every 60s until maxDiscoveryDuration. Observed in production as 6 loops
+// started per pod per hour for a single offline channel, tripping
+// AllChatYouTubeDiscoveryRetryStorm.
+func (m *Manager) cleanupDiscoveryState(state *DiscoveryState) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	delete(m.discovering, channelID)
+	if current, exists := m.discovering[state.ChannelID]; exists && current == state {
+		delete(m.discovering, state.ChannelID)
+	}
+}
+
+// ownsDiscovery reports whether state still holds the m.discovering reservation for
+// its channel. A loop that has lost the reservation must stop: another loop owns
+// the channel now, and continuing would multiply the YouTube poll rate.
+func (m *Manager) ownsDiscovery(state *DiscoveryState) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	return m.discovering[state.ChannelID] == state
 }
 
 // periodicSync periodically syncs active sources (fallback for PostgreSQL LISTEN)

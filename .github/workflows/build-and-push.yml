@@ -299,7 +299,13 @@ jobs:
           - twitch-listener
           - twitch-eventsub-listener
           - youtube-listener
+          # The InnerTube listener is the YouTube path that actually runs in
+          # production (the quota-based youtube-listener above is not deployed), so
+          # it must be tested here. It was missing from this matrix while its
+          # undeployed sibling was covered.
+          - youtube-listener-innertube
           - youtube-quota-monitor
+          - kick-listener
           - message-processor
           - share-service
           - source-manager
@@ -308,6 +314,9 @@ jobs:
           - payment-service
           - engagement-service
           - discord-listener
+          # Every Go service under services/ belongs here. tiktok-listener is
+          # deliberately absent: it is a Node service and has no go.mod. Verify with:
+          #   for d in services/*/; do [ -f "$d/go.mod" ] && basename "$d"; done
 
     steps:
       - uses: actions/checkout@v7

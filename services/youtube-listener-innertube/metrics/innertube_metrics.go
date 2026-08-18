@@ -49,12 +49,22 @@ type InnerTubeMetrics struct {
 	DeletionBufferOverflows *prometheus.CounterVec // labels: service, channel_id
 
 	// Discovery attempt tracking - for abuse / runaway-loop detection.
-	// A high rate(...) per channel means we are scraping YouTube far more often
-	// than the intended ~1/min cadence (duplicate loops, reset storms, etc.) and
-	// is the signal to alert on. DiscoveryGaveUp counts channels parked after
+	// A high rate(...) means we are scraping YouTube far more often than the
+	// intended ~1/min cadence (duplicate loops, reset storms, etc.). Reason about it
+	// per instance — max by (channel_id), not sum: discovery is not leader-gated, so
+	// a fleet-wide sum scales with replica count and any threshold over it drifts on
+	// every scale-up. DiscoveryGaveUp counts channels parked after
 	// maxDiscoveryDuration so we can see chronically-offline sources.
 	DiscoveryAttempts *prometheus.CounterVec // labels: service, channel_id
 	DiscoveryGaveUp   *prometheus.CounterVec // labels: service, channel_id
+
+	// Concurrent discovery loops per channel. The invariant is at most 1 per
+	// channel per instance — a loop reserves m.discovering[channelID] before it
+	// starts. Anything above 1 is a leaked loop, which multiplies our YouTube
+	// scrape rate and cannot be cancelled through the normal demand path. This is
+	// the direct signal for that; DiscoveryAttempts only shows it indirectly, as a
+	// rate that has to be reasoned about against replica count and backoff phase.
+	DiscoveryLoopsActive *prometheus.GaugeVec // labels: service, channel_id
 }
 
 // NewInnerTubeMetrics creates and registers InnerTube Prometheus metrics
@@ -143,6 +153,13 @@ func NewInnerTubeMetrics() *InnerTubeMetrics {
 			},
 			[]string{"service", "channel_id"},
 		),
+		DiscoveryLoopsActive: promauto.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "youtube_listener_discovery_loops_active",
+				Help: "Currently-running stream-discovery loops per channel on this instance. Must never exceed 1; >1 means a leaked loop is double-scraping YouTube.",
+			},
+			[]string{"service", "channel_id"},
+		),
 	}
 }
 
@@ -161,8 +178,8 @@ const (
 
 // ReconnectionReasons define standardized reason labels for reconnection tracking
 const (
-	ReconnectionReasonError    = "error"     // Reconnection after transient error
-	ReconnectionReasonOffline  = "offline"   // Reconnection after stream went offline
-	ReconnectionReasonBackoff  = "backoff"   // Reconnection after backoff period
+	ReconnectionReasonError       = "error"       // Reconnection after transient error
+	ReconnectionReasonOffline     = "offline"     // Reconnection after stream went offline
+	ReconnectionReasonBackoff     = "backoff"     // Reconnection after backoff period
 	ReconnectionReasonRediscovery = "rediscovery" // Reconnection after stream rediscovery
 )
