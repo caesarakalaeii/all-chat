@@ -464,7 +464,7 @@
   }
   /* space-y-* uses margin-top on siblings — override message gap */
   .overlay-preview-body > * + * {
-    margin-top: var(--chat-message-gap, 0.75rem) !important;
+    margin-top: var(--chat-message-gap, var(--theme-message-gap, 0.75rem)) !important;
   }
 
   /* ── Message bubble ─────────────────────────────────────────────────────
@@ -474,13 +474,27 @@
      border/padding, erasing the tier borders AND leaving theme authors with no
      way to restyle them. Events get the same values as a *default* instead,
      via `--event-*` in the marketplace-themes layer, where a theme can win. */
+  /* Each fallback is a `--theme-*` step, not the platform default directly, so the
+     precedence reads: customizer setting > THEME intent > platform default. These
+     rules are `!important` inside a layer, which beats a theme's unlayered
+     `!important` — correct for a control the user actually set, but it also used
+     to let the platform default outrank a theme when the control was UNSET. A
+     no-bubble theme asking for `padding: 0` still got 12px on every row. A theme
+     states its intent by declaring the `--theme-*` variable; themes that declare
+     nothing are unaffected. */
   .overlay-preview-body > div:not(.event-message) {
-    border-radius: var(--chat-bubble-border-radius, 0.5rem) !important;
-    border-width: var(--chat-bubble-border-width, 0px) !important;
-    border-color: var(--chat-bubble-border-color, transparent) !important;
+    border-radius: var(
+      --chat-bubble-border-radius,
+      var(--theme-bubble-border-radius, 0.5rem)
+    ) !important;
+    border-width: var(--chat-bubble-border-width, var(--theme-bubble-border-width, 0px)) !important;
+    border-color: var(
+      --chat-bubble-border-color,
+      var(--theme-bubble-border-color, transparent)
+    ) !important;
     border-style: solid !important;
-    padding: var(--chat-bubble-padding, 0.75rem) !important;
-    backdrop-filter: blur(var(--chat-backdrop-blur, 0px)) !important;
+    padding: var(--chat-bubble-padding, var(--theme-bubble-padding, 0.75rem)) !important;
+    backdrop-filter: blur(var(--chat-backdrop-blur, var(--theme-backdrop-blur, 0px))) !important;
   }
 
   /* ── Avatar ────────────────────────────────────────────────────────── */
@@ -631,18 +645,32 @@
 @layer visual-customizer {
   /* ── Message spacing (space-y-3 → message gap) ─────────────────────── */
   .overlay-live-body > * + * {
-    margin-top: var(--chat-message-gap, 0.75rem) !important;
+    margin-top: var(--chat-message-gap, var(--theme-message-gap, 0.75rem)) !important;
   }
 
   /* ── Message bubble ─────────────────────────────────────────────────────
      `:not(.event-message)` for the same reason as the preview block above. */
+  /* Each fallback is a `--theme-*` step, not the platform default directly, so the
+     precedence reads: customizer setting > THEME intent > platform default. These
+     rules are `!important` inside a layer, which beats a theme's unlayered
+     `!important` — correct for a control the user actually set, but it also used
+     to let the platform default outrank a theme when the control was UNSET. A
+     no-bubble theme asking for `padding: 0` still got 12px on every row. A theme
+     states its intent by declaring the `--theme-*` variable; themes that declare
+     nothing are unaffected. */
   .overlay-live-body > div:not(.event-message) {
-    border-radius: var(--chat-bubble-border-radius, 0.5rem) !important;
-    border-width: var(--chat-bubble-border-width, 0px) !important;
-    border-color: var(--chat-bubble-border-color, transparent) !important;
+    border-radius: var(
+      --chat-bubble-border-radius,
+      var(--theme-bubble-border-radius, 0.5rem)
+    ) !important;
+    border-width: var(--chat-bubble-border-width, var(--theme-bubble-border-width, 0px)) !important;
+    border-color: var(
+      --chat-bubble-border-color,
+      var(--theme-bubble-border-color, transparent)
+    ) !important;
     border-style: solid !important;
-    padding: var(--chat-bubble-padding, 0.75rem) !important;
-    backdrop-filter: blur(var(--chat-backdrop-blur, 4px)) !important;
+    padding: var(--chat-bubble-padding, var(--theme-bubble-padding, 0.75rem)) !important;
+    backdrop-filter: blur(var(--chat-backdrop-blur, var(--theme-backdrop-blur, 4px))) !important;
   }
 
   /* ── Avatar ────────────────────────────────────────────────────────── */
