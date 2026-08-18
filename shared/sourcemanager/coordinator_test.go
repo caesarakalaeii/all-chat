@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -305,4 +306,84 @@ func TestRebalance_StabilizationWindow(t *testing.T) {
 
 func streamName(i int) string {
 	return fmt.Sprintf("stream-%03d", i)
+}
+
+// TestRebalance_SidecarLeasesMustNotShedProductionStreams pins the reason a
+// background lease (a canary poller, say) belongs in its own coordinator.
+//
+// Rebalance derives maxPerPod from the totalStreams the caller passes, but
+// compares it against the coordinator's *total* lease count. A caller that
+// counts only production sources — as the stream manager does, passing
+// len(sources) — therefore under-states the budget by exactly the number of
+// background leases held, and Rebalance sheds real user streams to close a gap
+// that does not exist.
+//
+// Sorting makes it worse rather than random: releases go in alphabetical order
+// and "canary:" sorts ahead of most YouTube video IDs, so the background leases
+// are the ones kept and the user's streams are the ones dropped.
+//
+// The control is the same pod with the same production load and no canary
+// leases, so the only variable is where the canary leases live.
+func TestRebalance_SidecarLeasesMustNotShedProductionStreams(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	ctx := context.Background()
+
+	// Four production streams, one peer: this pod is entitled to keep them all.
+	production := []string{"dQw4w9WgXcQ", "jNQXAC9IVRw", "kAbc123defg", "mXyz987hijk"}
+	canaries := []string{"canary:aaa111", "canary:bbb222"}
+
+	claimAll := func(c *LeadershipCoordinator, ids []string) {
+		t.Helper()
+		for _, id := range ids {
+			ok, err := c.EnsureLeadership(ctx, id, nil)
+			require.NoError(t, err)
+			require.True(t, ok)
+		}
+	}
+
+	// Control: no canary leases at all. Nothing should be shed.
+	control := NewLeadershipCoordinator("youtube", newFakeClient(1), 5*time.Second, logger)
+	control.stabilizationPeriod = 0
+	claimAll(control, production)
+	released, err := control.Rebalance(ctx, len(production))
+	require.NoError(t, err)
+	require.Empty(t, released,
+		"control: a pod within its budget must not shed anything")
+
+	// The bug: canary leases in the production coordinator. Same production
+	// load, same peer count, same totalStreams — yet real streams get shed.
+	shared := NewLeadershipCoordinator("youtube", newFakeClient(1), 5*time.Second, logger)
+	shared.stabilizationPeriod = 0
+	claimAll(shared, production)
+	claimAll(shared, canaries)
+
+	released, err = shared.Rebalance(ctx, len(production))
+	require.NoError(t, err)
+
+	shedProduction := []string{}
+	for _, id := range released {
+		if !strings.HasPrefix(id, "canary:") {
+			shedProduction = append(shedProduction, id)
+		}
+	}
+	require.NotEmpty(t, shedProduction,
+		"expected the shared-coordinator arrangement to shed production streams; "+
+			"if this no longer holds, Rebalance's accounting changed and this test needs rewriting")
+
+	// The fix: the sidecar coordinates under its own platform, so its leases are
+	// invisible here and the production budget is computed against production
+	// leases alone — restoring the control's behaviour.
+	isolated := NewLeadershipCoordinator("youtube", newFakeClient(1), 5*time.Second, logger)
+	isolated.stabilizationPeriod = 0
+	sidecar := NewLeadershipCoordinator("youtube-canary", newFakeClient(1), 5*time.Second, logger)
+	sidecar.stabilizationPeriod = 0
+	claimAll(isolated, production)
+	claimAll(sidecar, canaries)
+
+	released, err = isolated.Rebalance(ctx, len(production))
+	require.NoError(t, err)
+	assert.Empty(t, released, "isolated coordinator must not shed production streams")
+	assert.Equal(t, len(production), isolated.LeaseCount())
+	assert.Equal(t, len(canaries), sidecar.LeaseCount(),
+		"canary leases must survive independently")
 }

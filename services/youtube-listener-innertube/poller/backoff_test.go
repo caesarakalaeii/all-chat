@@ -28,6 +28,21 @@ import (
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/innertube"
 )
 
+// The first backoff interval is InitialInterval=2s with RandomizationFactor=0.5,
+// so backoff/v4 draws it uniformly from [1s, 3s]. 3s is therefore a value the
+// policy legitimately returns, not a bound it stays under: asserting
+// `elapsed <= 3s` leaves the test only as much slack as the scheduler needs to
+// wake the goroutine, and it fails whenever the package is run under parallel
+// load. Measured over 200 samples the draw reached 2.983s, i.e. 17ms of margin.
+//
+// firstBackoffMax adds headroom for that wakeup delay while staying far below
+// the 4s second interval, so a backoff that fails to wait, or that skips
+// straight to the next step, is still caught.
+const (
+	firstBackoffMin = 1 * time.Second
+	firstBackoffMax = 3*time.Second + 500*time.Millisecond
+)
+
 func TestNewBackoff(t *testing.T) {
 	logger := zap.NewNop()
 	b := NewBackoff(logger)
@@ -103,7 +118,7 @@ func TestBackoff_Wait_TransientError(t *testing.T) {
 	elapsed := time.Since(start)
 
 	// Should wait approximately 2s (allow jitter: 1s - 3s for backoff/v4)
-	if elapsed < 1*time.Second || elapsed > 3*time.Second {
+	if elapsed < firstBackoffMin || elapsed > firstBackoffMax {
 		t.Errorf("Wait took %v, expected ~2s (1s-3s with jitter)", elapsed)
 	}
 
@@ -159,7 +174,7 @@ func TestBackoff_Wait_UnknownError(t *testing.T) {
 	elapsed := time.Since(start)
 
 	// Unknown errors are transient, so should backoff ~2s
-	if elapsed < 1*time.Second || elapsed > 3*time.Second {
+	if elapsed < firstBackoffMin || elapsed > firstBackoffMax {
 		t.Errorf("Wait took %v for unknown error, expected ~2s backoff (transient)", elapsed)
 	}
 
@@ -188,12 +203,22 @@ func TestBackoff_Reset(t *testing.T) {
 	_ = b.Wait(ctx, transientErr)
 	secondDuration := time.Since(start)
 
-	// Second duration should be longer than first (exponential progression).
-	// Use a lenient check: second should be at least as long as first, not a strict
-	// 1.5x multiple, because jitter means two independent samples from adjacent
-	// intervals can overlap.
-	if secondDuration < firstDuration {
-		t.Errorf("Second backoff (%v) not longer than first (%v)", secondDuration, firstDuration)
+	// Second duration should reflect exponential progression. Comparing the two
+	// samples directly is NOT a valid assertion: RandomizationFactor is 0.5, so the
+	// first interval is drawn from [1s, 3s] and the second from [2s, 6s]. Those
+	// ranges overlap, and a high first draw against a low second one makes
+	// `second < first` fire on a perfectly healthy backoff -- measured at roughly
+	// 3 failures in 40 runs on an unmodified tree.
+	//
+	// Assert against the second interval's own floor instead. With the 2.0
+	// multiplier the second interval is 4s jittered by 0.5, i.e. [2s, 6s], so 2s is
+	// a hard lower bound. Without exponential progression it would still be the 2s
+	// base, i.e. [1s, 3s]. The floor below sits above that broken range's midpoint,
+	// so it separates the two: verified to pass 40/40 as written and to fail when
+	// Multiplier is forced to 1.0.
+	if secondDuration < 2*time.Second {
+		t.Errorf("Second backoff (%v) too short, expected >=2s from the 4s jittered interval [2s,6s] (first was %v)",
+			secondDuration, firstDuration)
 	}
 
 	// Reset backoff
@@ -286,7 +311,7 @@ func TestBackoff_AllTransientErrorTypes(t *testing.T) {
 		elapsed := time.Since(start)
 
 		// Should wait ~2s (first backoff, allow jitter)
-		if elapsed < 1*time.Second || elapsed > 3*time.Second {
+		if elapsed < firstBackoffMin || elapsed > firstBackoffMax {
 			t.Errorf("Wait for %v took %v, expected ~2s (1s-3s with jitter)", err, elapsed)
 		}
 

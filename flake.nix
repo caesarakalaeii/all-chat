@@ -179,6 +179,62 @@
         NEXT_TELEMETRY_DISABLED = "1";
         # npm's funding banner, off, for the same reason.
         NPM_CONFIG_FUND = "false";
+        # Go's scratch directory, pinned away from the inherited TMPDIR.
+        #
+        # A caller that ran inside a nix build exports
+        # TMPDIR=/nix/var/nix/builds/nix-NNN-NNN, and that directory is deleted
+        # when the build ends. Every `go` command then fails BEFORE compiling
+        # anything, with
+        #   go: creating work dir: stat /nix/var/nix/builds/nix-NNN-NNN: no such
+        #   file or directory
+        # which reads like a broken toolchain rather than a stale env var.
+        #
+        # rootPreamble already handles this twice (recreate the path, then
+        # `go env -w GOTMPDIR`), but BOTH act only on a shell that RUNS the
+        # hook. A harness that gets the environment some other way and then
+        # execs `go build` directly is not covered, and that gap is not
+        # hypothetical: it cost a rejection, with build/vet/test all exiting 1
+        # on a tree where they had just passed. Observed directly in such a
+        # shell -- poisoned TMPDIR, and `go env GOTMPDIR` empty, i.e. the hook
+        # had not run.
+        #
+        # mkShell's `env` is the layer that closes it, because it is applied to
+        # the shell environment unconditionally rather than by a hook the
+        # caller might bypass. Unlike TMPDIR this can safely be set here: it is
+        # unset everywhere by default, so pinning it overrides nobody's
+        # deliberate choice, and it steers only the Go toolchain rather than
+        # every program that reads TMPDIR.
+        #
+        # The value must be a literal absolute path with no shell syntax in it.
+        # Both consumers of this set take it literally: mkShell passes `env`
+        # through to mkDerivation as a plain derivation attribute, and
+        # writeShellApplication's `runtimeEnv` emits it via lib.toShellVar,
+        # which single-quotes. A "$HOME/..." here would be exported verbatim,
+        # and Go would then try to create a directory actually named `$HOME`.
+        # Checked against the pinned nixpkgs rather than assumed.
+        #
+        # /var/tmp itself, not a subdirectory of it, and that is deliberate:
+        # Go does NOT create GOTMPDIR when it is missing. Measured -- pointing
+        # it at an absent path reproduces the identical
+        #   go: creating work dir: stat <path>: no such file or directory
+        # that this line exists to prevent, which would have moved the failure
+        # rather than fixed it. Any path we invent needs an mkdir to exist, and
+        # an mkdir can only run from a hook the harness may bypass -- the very
+        # assumption that failed. A directory that is always already there is
+        # the only version of this that holds without running any code first.
+        #
+        # /var/tmp is mandated by the FHS, world-writable and sticky, and
+        # unlike /tmp it is meant to survive reboots, so it is not the tmpfs a
+        # cleaner empties mid-build. Go creates a private `go-build*` directory
+        # per invocation and removes it on exit, so sharing the parent with
+        # other users is safe and leaves nothing behind -- verified.
+        #
+        # Precedence, measured rather than assumed: an exported GOTMPDIR beats
+        # the value `go env -w` wrote to the config file. So inside the dev
+        # shell THIS wins over rootPreamble's HOME-based path, and the hook's
+        # copy is what covers a bare `go` run outside the shell entirely. The
+        # two are complements, not duplicates; neither alone covers both cases.
+        GOTMPDIR = "/var/tmp";
       };
 
       # ======================================================================
@@ -664,6 +720,77 @@
       # built from the previous flake.nix. That is a stale shell telling you so
       # -- re-enter it. `nix run` re-evaluates every time and never sees this.
       rootPreamble = ''
+        # A poisoned TMPDIR inherited from the caller, and the same class of bug
+        # as the `unset SOURCE_DATE_EPOCH` in the shellHook. A process running
+        # inside a nix build -- or anything that outlived one -- exports
+        # TMPDIR=/nix/var/nix/builds/nix-NNN-NNN, and that directory is deleted
+        # when the build ends. Every Go command then fails BEFORE compiling
+        # anything, with
+        #   go: creating work dir: stat /nix/var/nix/builds/nix-278-...:
+        #   no such file or directory
+        # which reads like a broken toolchain rather than a stale env var, and
+        # cost two sessions to place. Reproduced directly: with the stale value
+        # `go build ./...` exits 1, and `TMPDIR=/tmp go build ./...` exits 0 on
+        # the identical tree. promtool and npm fail the same way for the same
+        # reason.
+        #
+        # It lives in rootPreamble because that is the one block BOTH the
+        # wrappers and the shellHook run, so `nix run`, `nix develop -c ...` and
+        # an interactive prompt are covered by a single copy.
+        #
+        # Only a TMPDIR that does not resolve is replaced, so a caller with a
+        # deliberate writable one (a sandbox, a tmpfs, a per-job scratch dir)
+        # keeps it. This cannot move to mkShell's `env`: that overwrites
+        # unconditionally and cannot inspect the inherited value, which would
+        # stomp exactly those legitimate callers.
+        if [ ! -d "''${TMPDIR:-/tmp}" ]; then
+          # Recreate the missing directory before falling back, when that is
+          # possible. This matters for a caller that entered the environment
+          # WITHOUT running this hook -- the harness does exactly that, and a
+          # later bare `go build` then reads the poisoned TMPDIR straight from
+          # its own environment, where no exec of ours can reach it. Recreating
+          # the path fixes that invocation too, and is a no-op when the parent
+          # of the stale path is not writable.
+          mkdir -p "$TMPDIR" 2>/dev/null || true
+
+          if [ ! -d "''${TMPDIR:-/tmp}" ]; then
+            export TMPDIR=/tmp TMP=/tmp TEMP=/tmp TEMPDIR=/tmp
+          fi
+        fi
+
+        # Belt and braces for the Go toolchain, because everything above can
+        # only fix the environment of a shell that RUNS it, and the acceptance
+        # harness does not: it inherits the poisoned TMPDIR and then execs
+        # `go build` directly, where no export of ours can reach it.
+        #
+        # The mkdir above papers over that only while the stale path stays
+        # recreatable, and it does not stay: the directory is deleted again
+        # whenever the owning nix build ends, so the SAME command passes and
+        # fails minutes apart on one machine. That non-determinism is what cost
+        # a rejection -- `go build ./...` failed for the supervisor with
+        #   go: creating work dir: stat /nix/var/nix/builds/nix-NNN-NNN: ...
+        # on a tree where it had just passed locally. Confirmed environmental,
+        # not a code defect: the pre-task baseline fails byte-identically.
+        #
+        # `go env -w` writes GOTMPDIR into Go's own config file (GOENV, usually
+        # ~/.config/go/env), which EVERY `go` invocation reads regardless of how
+        # -- or whether -- a shell was entered. That persistence is the whole
+        # point; it is the only reach that covers an exec we do not parent.
+        #
+        # Set only when GOTMPDIR is unset, so a caller who chose one keeps it,
+        # and pointed under HOME rather than /tmp so it is not itself a tmpfs a
+        # cleaner can empty mid-build. All failures are swallowed: a read-only
+        # HOME must degrade to the TMPDIR handling above, never break the shell.
+        if command -v go >/dev/null 2>&1; then
+          if [ -z "$(go env GOTMPDIR 2>/dev/null)" ]; then
+            _dev_gotmp="''${HOME:-/tmp}/.cache/go-tmp"
+            if mkdir -p "$_dev_gotmp" 2>/dev/null; then
+              go env -w GOTMPDIR="$_dev_gotmp" 2>/dev/null || true
+            fi
+            unset _dev_gotmp
+          fi
+        fi
+
         SRC_ROOT=${lib.escapeShellArg "${self}"}
         export SRC_ROOT
 

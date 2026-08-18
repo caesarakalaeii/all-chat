@@ -154,6 +154,29 @@ func (ll *LeadershipListener) SMClient() *sourcemanager.Client {
 	return ll.smClient
 }
 
+// SidecarCoordinator returns an additional coordinator that shares this
+// listener's source-manager client but coordinates under its own platform, so
+// its leases are invisible to the main coordinator.
+//
+// Use it for background work that needs single-instance election but is not a
+// user-facing stream — a canary poller, for example. Keeping such leases out of
+// the main coordinator matters because Rebalance caps a pod at
+// ceil(totalStreams/peerCount) leases and compares that against the coordinator's
+// *total* lease count. A lease the caller never counts in totalStreams therefore
+// makes the pod look over-subscribed and sheds a real stream instead.
+//
+// Returns nil when leadership is disabled (SOURCE_MANAGER_SECRET absent), matching
+// LeadershipCoordinator; all coordinator methods are nil-safe.
+//
+// Each call constructs a new coordinator, so callers should hold on to the result
+// and Stop it themselves rather than calling this repeatedly.
+func (ll *LeadershipListener) SidecarCoordinator(platform string) *sourcemanager.LeadershipCoordinator {
+	if ll.smClient == nil {
+		return nil
+	}
+	return sourcemanager.NewLeadershipCoordinator(platform, ll.smClient, 5*time.Second, ll.logger)
+}
+
 // SetDisableDemandFiltering configures whether the demand subscriber loop is skipped.
 // Must be called before Start. When true, all platform sources are treated as in-demand.
 func (ll *LeadershipListener) SetDisableDemandFiltering(v bool) {

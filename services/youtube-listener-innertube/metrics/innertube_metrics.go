@@ -65,6 +65,28 @@ type InnerTubeMetrics struct {
 	// the direct signal for that; DiscoveryAttempts only shows it indirectly, as a
 	// rate that has to be reasoned about against replica count and backoff phase.
 	DiscoveryLoopsActive *prometheus.GaugeVec // labels: service, channel_id
+
+	// Continuation health. A get_live_chat poll that returns HTTP 200 with zero
+	// actions is indistinguishable from an idle chat at the response level, so
+	// neither of these is an error signal on its own — they are the diagnostics
+	// that were missing when the hand-rolled continuation token broke (#575) and
+	// the only evidence was a log line. ZeroActionPolls counts every such poll;
+	// ContinuationRefreshes counts the recoveries the poller attempts once
+	// ZeroActionThreshold consecutive zero-action polls have accumulated (~5min
+	// at the 2s floor). A channel whose refresh rate is persistently non-zero is
+	// re-anchoring over and over: the continuation path is broken, not the chat.
+	ZeroActionPolls       *prometheus.CounterVec // labels: service, channel_id
+	ContinuationRefreshes *prometheus.CounterVec // labels: service, channel_id
+
+	// Canary poller. A channel we know is always live and always busy, polled
+	// through the exact same continuation path as production traffic but never
+	// published downstream (see the canary package). CanaryPolls is the
+	// liveness of the detector itself — zero means the canary is dead and the
+	// silence of CanaryMessages proves nothing. CanaryMessages is the actual
+	// capture signal: it going to ~zero while polls continue means the listener
+	// is blind, with no statistical assumption about the user base.
+	CanaryPolls    *prometheus.CounterVec // labels: service, channel_id, video_id
+	CanaryMessages *prometheus.CounterVec // labels: service, channel_id, video_id
 }
 
 // NewInnerTubeMetrics creates and registers InnerTube Prometheus metrics
@@ -159,6 +181,38 @@ func NewInnerTubeMetrics() *InnerTubeMetrics {
 				Help: "Currently-running stream-discovery loops per channel on this instance. Must never exceed 1; >1 means a leaked loop is double-scraping YouTube.",
 			},
 			[]string{"service", "channel_id"},
+		),
+
+		// Continuation-health metrics
+		ZeroActionPolls: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "youtube_listener_zero_action_polls_total",
+				Help: "Total get_live_chat polls that returned HTTP 200 with zero chat actions. Idle chat and a broken continuation token look identical here; compare against youtube_listener_continuation_refreshes_total and the canary.",
+			},
+			[]string{"service", "channel_id"},
+		),
+		ContinuationRefreshes: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "youtube_listener_continuation_refreshes_total",
+				Help: "Total continuation-token refreshes triggered by consecutive zero-action polls (stale-continuation recovery). A sustained non-zero rate means the poller keeps losing its anchor.",
+			},
+			[]string{"service", "channel_id"},
+		),
+
+		// Canary metrics
+		CanaryPolls: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "youtube_innertube_canary_polls_total",
+				Help: "Total canary get_live_chat polls. This is the liveness of the capture detector itself: zero means the canary is down and youtube_innertube_canary_messages_total proves nothing.",
+			},
+			[]string{"service", "channel_id", "video_id"},
+		),
+		CanaryMessages: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "youtube_innertube_canary_messages_total",
+				Help: "Total chat messages captured from canary channels and then dropped (never published to chat:raw). Near-zero while canary polls continue means the listener is blind.",
+			},
+			[]string{"service", "channel_id", "video_id"},
 		),
 	}
 }

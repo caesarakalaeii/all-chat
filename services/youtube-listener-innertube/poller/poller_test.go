@@ -29,14 +29,42 @@ import (
 
 // MockClient implements a mock InnerTube client for testing
 type MockClient struct {
-	responses      []*innertube.LiveChatResponse
-	errors         []error
-	callCount      int
-	continuations  []string
-	pollIntervals  []time.Duration
+	responses     []*innertube.LiveChatResponse
+	errors        []error
+	callCount     int
+	continuations []string
+	pollIntervals []time.Duration
+
+	// calls is signalled once per GetLiveChatReplay call, so a test can wait
+	// for the Nth call instead of sleeping for however long it is expected to
+	// take. Buffered well past any test's call count so the poller goroutine
+	// never blocks on a receiver that has already stopped listening.
+	calls chan struct{}
+}
+
+// waitForCalls blocks until the mock has been called n times, or fails the
+// test once limit expires. It replaces "sleep and hope": the retry it waits on
+// is scheduled on a jittered backoff, so any fixed sleep is either flaky or
+// slower than it needs to be.
+func (m *MockClient) waitForCalls(t *testing.T, n int, limit time.Duration) {
+	t.Helper()
+	deadline := time.After(limit)
+	for i := 0; i < n; i++ {
+		select {
+		case <-m.calls:
+		case <-deadline:
+			t.Fatalf("only %d of %d expected calls arrived within %v", i, n, limit)
+		}
+	}
 }
 
 func (m *MockClient) GetLiveChatReplay(ctx context.Context, continuation string, visitorData string) (*innertube.LiveChatResponse, error) {
+	if m.calls != nil {
+		select {
+		case m.calls <- struct{}{}:
+		default:
+		}
+	}
 	if m.callCount >= len(m.responses) {
 		// Return last error repeatedly if out of responses
 		if len(m.errors) > 0 {
@@ -216,6 +244,7 @@ func TestPoller_TransientError(t *testing.T) {
 			"",
 			"token-after-error",
 		},
+		calls: make(chan struct{}, 64),
 	}
 	opts := &PollerOptions{
 		Interval: 100 * time.Millisecond,
@@ -223,7 +252,7 @@ func TestPoller_TransientError(t *testing.T) {
 	}
 	p := NewPoller(client, "initial-token", "test-channel", logger, opts)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	err := p.Start(ctx)
@@ -231,8 +260,12 @@ func TestPoller_TransientError(t *testing.T) {
 		t.Fatalf("Start failed: %v", err)
 	}
 
-	// Wait for backoff (first transient error should trigger ~2s backoff)
-	time.Sleep(3 * time.Second)
+	// The retry is scheduled on a jittered backoff, nominally ~2s but drawn
+	// from a range whose upper end exceeds any sleep this test would want to
+	// hardcode. Waiting for the call itself is both exact and faster: a fixed
+	// 3s sleep failed here roughly 2 runs in 15 under package-level load, and
+	// it did so at the pre-existing baseline too.
+	client.waitForCalls(t, 2, 20*time.Second)
 
 	// Stop poller
 	p.Stop()
@@ -240,11 +273,6 @@ func TestPoller_TransientError(t *testing.T) {
 	// Should be active after recovering from transient error
 	if p.state.GetState() != StateActive {
 		t.Errorf("state = %v, want active (recovered from transient error)", p.state.GetState())
-	}
-
-	// Should have retried after backoff
-	if client.callCount < 2 {
-		t.Errorf("callCount = %d, want >= 2 (initial + retry)", client.callCount)
 	}
 }
 
