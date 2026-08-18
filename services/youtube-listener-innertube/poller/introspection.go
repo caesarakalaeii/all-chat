@@ -1,4 +1,8 @@
-// Package poller — collaborator accessors for tests in other packages.
+// Package poller — read-only introspection of a Poller's collaborators.
+//
+// This is ordinary (non-_test) code because it is used from another package's
+// tests, which the _test.go suffix would not permit. It adds no behaviour: four
+// nil checks, no setters.
 //
 // These exist so the canary package can assert the invariant its whole design
 // rests on: the poller it builds has no Publisher, no Repository and no
