@@ -27,6 +27,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/metrics"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/poller"
@@ -449,5 +450,31 @@ func TestSleepCtxReturnsFalseOnCancel(t *testing.T) {
 	cancel()
 	if sleepCtx(ctx, time.Hour) {
 		t.Error("sleepCtx returned true on a cancelled context")
+	}
+}
+
+// The correlated-channel warning must survive the wiring check: it reports a
+// property of the configuration, and an operator whose canary is both
+// misconfigured and unwired should hear about both, not just the second. This
+// ordering regressed once already.
+func TestStartWarnsOnCorrelatedChannels(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		targets []Target
+		wantLog bool
+	}{
+		{"same channel warns", []Target{{"UCaaa", "v1"}, {"UCaaa", "v2"}}, true},
+		{"distinct channels stay silent", []Target{{"UCaaa", "v1"}, {"UCbbb", "v2"}}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			core, logs := observer.New(zap.WarnLevel)
+			// Deliberately unwired Options: the warning is about config, so it
+			// must not be gated behind having a client and a source.
+			c := New(Config{Enabled: true, Targets: tc.targets}, zap.New(core), Options{})
+			c.Start(t.Context())
+			if got := logs.FilterMessageSnippet("share a channel").Len() > 0; got != tc.wantLog {
+				t.Fatalf("correlated-channel warning logged = %v, want %v", got, tc.wantLog)
+			}
+		})
 	}
 }

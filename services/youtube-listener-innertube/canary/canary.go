@@ -114,6 +114,24 @@ func (c *Canary) Start(ctx context.Context) {
 		c.logger.Info("YouTube InnerTube canary disabled")
 		return
 	}
+	// Reported before the wiring check below, because this is a property of the
+	// configuration alone: the operator should hear about a non-redundant
+	// canary whether or not the process got as far as wiring one up.
+	//
+	// Chat settings are a channel-wide property, so canaries that share a
+	// channel share the failure they are meant to survive: one members-only or
+	// slow-mode switch takes every pin on that channel to zero at once and
+	// pages us at critical. This is a misconfiguration rather than an invalid
+	// one — the canary still works, it is just not redundant — so say so loudly
+	// and keep running instead of refusing to start a working detector.
+	if dupes := c.cfg.CorrelatedChannels(); len(dupes) > 0 {
+		c.logger.Warn("Canary targets share a channel, so they are not independent; "+
+			"a single members-only or slow-mode change would silence them together. "+
+			"Pin the canaries on separate 24/7 channels.",
+			zap.Strings("shared_channel_ids", dupes),
+		)
+	}
+
 	if c.source == nil || c.runner == nil {
 		c.logger.Warn("YouTube InnerTube canary enabled but not wired (no continuation source or client); not starting")
 		return

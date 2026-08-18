@@ -38,6 +38,7 @@ package canary
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -76,6 +77,29 @@ type Config struct {
 	// deliberately slow: the canary is a detector, not a user-facing stream,
 	// and hammering YouTube to re-pin it would be its own incident.
 	RediscoverInterval time.Duration
+}
+
+// CorrelatedChannels returns the channel IDs that more than one target is
+// pinned to, sorted, or nil when every target sits on its own channel.
+//
+// Two pins on one channel look like redundancy but are not: members-only and
+// slow mode are channel-wide settings, so a single moderation decision silences
+// every stream that channel owns simultaneously. That is precisely the event
+// the second canary exists to survive, which is why the configuration is worth
+// reporting even though it is not an error.
+func (c Config) CorrelatedChannels() []string {
+	counts := make(map[string]int, len(c.Targets))
+	for _, t := range c.Targets {
+		counts[t.ChannelID]++
+	}
+	var shared []string
+	for channelID, n := range counts {
+		if n > 1 {
+			shared = append(shared, channelID)
+		}
+	}
+	sort.Strings(shared)
+	return shared
 }
 
 // Defaults applied by ParseConfig when the corresponding env var is unset.

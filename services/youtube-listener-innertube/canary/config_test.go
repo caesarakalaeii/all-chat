@@ -156,3 +156,49 @@ func TestParseConfigRejectsBadDurations(t *testing.T) {
 		}
 	}
 }
+
+// Chat settings are channel-wide, so two pins on one channel are not redundant
+// against the moderation change that the second canary exists to survive.
+// Reported rather than rejected: such a canary still detects a blind listener,
+// it just has a correlated failure the operator should know about.
+func TestCorrelatedChannels(t *testing.T) {
+	tests := []struct {
+		name    string
+		targets []Target
+		want    []string
+	}{
+		{
+			name:    "distinct channels are independent",
+			targets: []Target{{"UCaaa", "v1"}, {"UCbbb", "v2"}},
+			want:    nil,
+		},
+		{
+			name:    "two pins on one channel are correlated",
+			targets: []Target{{"UCaaa", "v1"}, {"UCaaa", "v2"}},
+			want:    []string{"UCaaa"},
+		},
+		{
+			name:    "reported once per channel, sorted, not once per pin",
+			targets: []Target{{"UCbbb", "v1"}, {"UCaaa", "v2"}, {"UCbbb", "v3"}, {"UCbbb", "v4"}, {"UCaaa", "v5"}},
+			want:    []string{"UCaaa", "UCbbb"},
+		},
+		{
+			name:    "a single target cannot be correlated with itself",
+			targets: []Target{{"UCaaa", "v1"}},
+			want:    nil,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := Config{Targets: tc.targets}.CorrelatedChannels()
+			if len(got) != len(tc.want) {
+				t.Fatalf("CorrelatedChannels() = %v, want %v", got, tc.want)
+			}
+			for i := range tc.want {
+				if got[i] != tc.want[i] {
+					t.Fatalf("CorrelatedChannels() = %v, want %v", got, tc.want)
+				}
+			}
+		})
+	}
+}
