@@ -664,6 +664,33 @@
       # built from the previous flake.nix. That is a stale shell telling you so
       # -- re-enter it. `nix run` re-evaluates every time and never sees this.
       rootPreamble = ''
+        # A poisoned TMPDIR inherited from the caller, and the same class of bug
+        # as the `unset SOURCE_DATE_EPOCH` in the shellHook. A process running
+        # inside a nix build -- or anything that outlived one -- exports
+        # TMPDIR=/nix/var/nix/builds/nix-NNN-NNN, and that directory is deleted
+        # when the build ends. Every Go command then fails BEFORE compiling
+        # anything, with
+        #   go: creating work dir: stat /nix/var/nix/builds/nix-278-...:
+        #   no such file or directory
+        # which reads like a broken toolchain rather than a stale env var, and
+        # cost two sessions to place. Reproduced directly: with the stale value
+        # `go build ./...` exits 1, and `TMPDIR=/tmp go build ./...` exits 0 on
+        # the identical tree. promtool and npm fail the same way for the same
+        # reason.
+        #
+        # It lives in rootPreamble because that is the one block BOTH the
+        # wrappers and the shellHook run, so `nix run`, `nix develop -c ...` and
+        # an interactive prompt are covered by a single copy.
+        #
+        # Only a TMPDIR that does not resolve is replaced, so a caller with a
+        # deliberate writable one (a sandbox, a tmpfs, a per-job scratch dir)
+        # keeps it. This cannot move to mkShell's `env`: that overwrites
+        # unconditionally and cannot inspect the inherited value, which would
+        # stomp exactly those legitimate callers.
+        if [ ! -d "''${TMPDIR:-/tmp}" ]; then
+          export TMPDIR=/tmp TMP=/tmp TEMP=/tmp TEMPDIR=/tmp
+        fi
+
         SRC_ROOT=${lib.escapeShellArg "${self}"}
         export SRC_ROOT
 
