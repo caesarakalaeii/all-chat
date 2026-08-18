@@ -69,8 +69,8 @@ const RESOLVED: ResolvedTheme[] = SHOWCASE.flatMap((entry) => {
   return theme ? [{ ...entry, theme }] : []
 })
 
-/** Total shipped themes advertised in the caption (excludes the hidden alias). */
-const BUILTIN_COUNT = getBundledThemes().filter((t) => t.id !== 'minimal-theme-fixed').length
+/** Total shipped themes advertised in the caption. */
+const BUILTIN_COUNT = getBundledThemes().length
 
 /** Two short messages across two platforms — enough to show the look, never enough to scroll. */
 const SHOWCASE_MESSAGES = SAMPLE_PREVIEW_MESSAGES.slice(0, 2)

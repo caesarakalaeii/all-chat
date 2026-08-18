@@ -39,6 +39,32 @@ Custom CSS themes for your All-Chat overlays in OBS. These themes allow you to c
 
 ## Available Themes
 
+### Minimal Clean (`minimal-theme.css`) ⭐ MOST USED
+
+The flagship minimal look: everything on **one line**, no bubbles, no avatars.
+
+**Features:**
+- Inline layout: `[icon] [badges] username: message`
+- Colourful usernames with a smooth black readability outline
+- Transparent background, no message containers
+- Events render inline too, as `username: ⭐ New Subscriber! x5`
+- Platform status indicators hidden by default (re-enable with the
+  "Platform indicators" toggle in Appearance)
+
+**Required Settings:**
+- Platform Badge Style: **"Icon (logo)"** (a text badge is hidden by this theme)
+
+**Preview:**
+```
+[🎮] [💎] Username: Hello from Twitch chat!
+```
+
+> **Consolidated in 2026-08.** This theme absorbed the old
+> "Minimal Clean Theme (Fixed Platform & Badges)" (`minimal-theme-fixed`), which
+> was a bugfix fork that shipped beside it instead of replacing it. Overlays still
+> configured with the old id resolve here automatically — see
+> [ADR-0053](../adr/0053-consolidate-minimal-theme-and-retire-theme-ids-via-alias.md).
+
 ### Minimal Icon Theme (`minimal-icon-theme.css`) ⭐ NEW
 
 Clean, modern theme showcasing the new **[ICON] [BADGES] USERNAME** layout!

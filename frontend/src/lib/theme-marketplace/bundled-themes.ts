@@ -34,9 +34,31 @@ export function getBundledThemes(): Theme[] {
   return BUNDLED_THEMES
 }
 
+/**
+ * Retired theme ids that must keep resolving (ADR-0053).
+ *
+ * A bundled theme id is stored in `overlay_configs.theme_id`, so deleting a
+ * theme file would leave every overlay on that id with NO theme CSS at all.
+ * Retiring one therefore means aliasing it, not removing it: the alias keeps
+ * already-configured overlays rendering while the id disappears from the picker.
+ * A migration rewrites the stored ids; the alias is what covers rows written
+ * before it ran (and any client still holding the old id).
+ */
+export const THEME_ALIASES: Readonly<Record<string, string>> = {
+  // Was a bugfix fork of minimal-theme that shipped alongside it instead of
+  // replacing it; the two drifted into near-duplicates and were consolidated.
+  'minimal-theme-fixed': 'minimal-theme',
+}
+
+/** Resolve a possibly-retired theme id to the id that is actually bundled. */
+export function resolveThemeId(id: string): string {
+  return THEME_ALIASES[id] ?? id
+}
+
 /** Look up a single bundled theme by id (e.g. "modern-dark-theme"). */
 export function getBundledTheme(id: string): Theme | undefined {
-  return BUNDLED_THEMES.find((t) => t.id === id)
+  const resolved = resolveThemeId(id)
+  return BUNDLED_THEMES.find((t) => t.id === resolved)
 }
 
 export { BUNDLED_THEMES }

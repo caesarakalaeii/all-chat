@@ -1,19 +1,26 @@
 /* Visual Settings: uses CSS custom properties for live customization */
 /**
- * Theme Name: Minimal Clean Theme
- * Description: Inline layout with colorful usernames, no backgrounds or avatars
+ * Theme Name: Minimal Clean
+ * Description: Inline layout with platform icon, badges and colorful usernames on one line
  * Tags: minimal, clean, inline, simple
  * Author: All-Chat Team
- * Version: 1.0.1
- * Updated: 2026-05-28
+ * Version: 2.0.0
+ * Updated: 2026-08-18
  */
 
 /* ============================================================
    MINIMAL THEME for All-Chat Overlay
    ============================================================
 
+   This is THE Minimal Clean theme. It absorbed the former
+   "Minimal Clean Theme (Fixed Platform & Badges)" (`minimal-theme-fixed`), which
+   was a bugfix fork that should have replaced this file instead of shipping
+   beside it — the two had drifted into near-duplicates with different bugs. The
+   old id still resolves here (see bundled-themes.ts THEME_ALIASES + ADR-0053).
+
    A clean, minimal design featuring:
-   - Inline layout: "username: message" on same line
+   - Inline layout: "[icon] [badges] username: message" on same line
+   - Platform icon and user badges inline before the username
    - Colorful usernames with black outline
    - White Roboto font with black outline for messages
    - No message container backgrounds
@@ -218,30 +225,36 @@ body {
   /* Crisp readability outline via layered text-shadow (ADR-0044) — replaces the
      -webkit-text-stroke that eroded thin glyph strokes and chunked corners at 3px. */
   text-shadow:
-    -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000,
-    -2px 0 0 #000, 2px 0 0 #000, 0 -2px 0 #000, 0 2px 0 #000 !important;
+    2px 0 0 #000, 1.73px 1px 0 #000, 1px 1.73px 0 #000,
+    0 2px 0 #000, -1px 1.73px 0 #000, -1.73px 1px 0 #000,
+    -2px 0 0 #000, -1.73px -1px 0 #000, -1px -1.73px 0 #000,
+    0 -2px 0 #000, 1px -1.73px 0 #000, 1.73px -1px 0 #000 !important;
 }
 
 /* ============================================================
    HIDE PLATFORM INDICATOR
    ============================================================ */
 
-/* Hide platform badges (TWITCH, YOUTUBE, KICK, TIKTOK) */
-.text-xs.font-semibold.uppercase {
+/* Hide the TEXT platform badge (TWITCH, YOUTUBE, …) — this theme shows the icon
+   instead. Targeted by its own classes rather than `.text-xs.font-semibold.uppercase`,
+   which also matched the "Shared Chat" indicator and silently hid it. */
+.platform-badge.platform-badge-text {
   display: none !important;
 }
 
-/* Hide platform-specific color classes */
-.text-purple-400,
-.text-red-400,
-.text-green-400,
-.text-gray-400 {
+/* Hide platform-specific text colour classes. The `:not()` guard keeps the rule
+   off badge images, which carry the same utility classes. */
+.text-purple-400:not(.flex.gap-1 img),
+.text-red-400:not(.flex.gap-1 img),
+.text-green-400:not(.flex.gap-1 img),
+.text-gray-400:not(.flex.gap-1 img) {
   display: none !important;
 }
 
-/* Hide platform status indicators (floating icons in top-right) */
+/* Platform status indicators (floating icons in top-right): hidden by default to
+   keep the overlay minimal, but the customizer toggle still wins when it is set. */
 .platform-status-indicators {
-  display: none !important;
+  display: var(--chat-show-platform-indicators, none) !important;
 }
 
 /* ============================================================
@@ -263,8 +276,10 @@ body {
      -webkit-text-stroke eroded thin glyph strokes; a layered shadow sits behind
      the fill and keeps corners clean. */
   text-shadow:
-    -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000,
-    -2px 0 0 #000, 2px 0 0 #000, 0 -2px 0 #000, 0 2px 0 #000 !important;
+    2px 0 0 #000, 1.73px 1px 0 #000, 1px 1.73px 0 #000,
+    0 2px 0 #000, -1px 1.73px 0 #000, -1.73px 1px 0 #000,
+    -2px 0 0 #000, -1.73px -1px 0 #000, -1px -1.73px 0 #000,
+    0 -2px 0 #000, 1px -1.73px 0 #000, 1.73px -1px 0 #000 !important;
   /* Colors are preserved from backend (dynamic per user) */
 }
 
@@ -308,8 +323,10 @@ body {
   white-space: pre-wrap !important;
   /* Crisp readability outline via layered text-shadow (see username block). */
   text-shadow:
-    -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000,
-    -2px 0 0 #000, 2px 0 0 #000, 0 -2px 0 #000, 0 2px 0 #000 !important;
+    2px 0 0 #000, 1.73px 1px 0 #000, 1px 1.73px 0 #000,
+    0 2px 0 #000, -1px 1.73px 0 #000, -1.73px 1px 0 #000,
+    -2px 0 0 #000, -1.73px -1px 0 #000, -1px -1.73px 0 #000,
+    0 -2px 0 #000, 1px -1.73px 0 #000, 1.73px -1px 0 #000 !important;
   margin: 0 !important;
   padding: 0 !important;
   background: transparent !important;
