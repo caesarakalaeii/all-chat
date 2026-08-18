@@ -188,12 +188,22 @@ func TestBackoff_Reset(t *testing.T) {
 	_ = b.Wait(ctx, transientErr)
 	secondDuration := time.Since(start)
 
-	// Second duration should be longer than first (exponential progression).
-	// Use a lenient check: second should be at least as long as first, not a strict
-	// 1.5x multiple, because jitter means two independent samples from adjacent
-	// intervals can overlap.
-	if secondDuration < firstDuration {
-		t.Errorf("Second backoff (%v) not longer than first (%v)", secondDuration, firstDuration)
+	// Second duration should reflect exponential progression. Comparing the two
+	// samples directly is NOT a valid assertion: RandomizationFactor is 0.5, so the
+	// first interval is drawn from [1s, 3s] and the second from [2s, 6s]. Those
+	// ranges overlap, and a high first draw against a low second one makes
+	// `second < first` fire on a perfectly healthy backoff -- measured at roughly
+	// 3 failures in 40 runs on an unmodified tree.
+	//
+	// Assert against the second interval's own floor instead. With the 2.0
+	// multiplier the second interval is 4s jittered by 0.5, i.e. [2s, 6s], so 2s is
+	// a hard lower bound. Without exponential progression it would still be the 2s
+	// base, i.e. [1s, 3s]. The floor below sits above that broken range's midpoint,
+	// so it separates the two: verified to pass 40/40 as written and to fail when
+	// Multiplier is forced to 1.0.
+	if secondDuration < 2*time.Second {
+		t.Errorf("Second backoff (%v) too short, expected >=2s from the 4s jittered interval [2s,6s] (first was %v)",
+			secondDuration, firstDuration)
 	}
 
 	// Reset backoff
