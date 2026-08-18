@@ -270,7 +270,7 @@ See "Running Locally" section above for end-to-end validation.
 
 ## Metrics
 
-InnerTube listener exposes Prometheus metrics on `/metrics` endpoint (port 8086).
+InnerTube listener exposes Prometheus metrics on `/metrics` (port 8080, `HTTP_PORT`).
 
 ### Per-Channel Message Rate
 
@@ -292,6 +292,37 @@ ignoring(channel_id) (
   rate(youtube_listener_messages_published_total{service="youtube-listener-innertube-canary"}[5m]) > 0
 )
 ```
+
+### Stream Discovery
+
+Discovery polls YouTube for a channel's live stream until it finds one, backing off
+to a 60s cadence and giving up after 1h of fruitless polling. It is **not**
+leader-gated (only poller startup is), so every instance runs its own loop for a
+demanded channel — always reason per pod, never over a fleet-wide `sum()`.
+
+**Concurrent loops per channel (invariant: ≤ 1 per instance):**
+```promql
+max by (channel_id) (youtube_listener_discovery_loops_active{namespace="allchat"})
+```
+Anything above 1 is a leaked loop: it scrapes YouTube on its own cadence and is
+unreachable by demand-loss cancellation (which only cancels the loop holding the
+`m.discovering` reservation), so it survives until the 1h give-up cap. Alerted on as
+`AllChatYouTubeDiscoveryLoopLeak`.
+
+**Discovery poll rate on the busiest instance (healthy: ≈0.017/sec = 1/min):**
+```promql
+max by (channel_id) (rate(youtube_listener_discovery_attempts_total{namespace="allchat"}[5m]))
+```
+Alerted on as `AllChatYouTubeDiscoveryRetryStorm`. A fresh loop briefly reaches
+≈0.027/sec during its 10s/20s/30s aggressive phase; sustained values above that mean
+duplicate loops or something forcing constant rediscovery.
+
+**Channels parked after 1h of fruitless polling:**
+```promql
+sum by (channel_id) (increase(youtube_listener_discovery_gave_up_total{namespace="allchat"}[6h]))
+```
+Repeated give-ups for one channel while its overlay stays connected point at either a
+chronically-offline source or leaked loops aging out.
 
 ### Error Breakdown by Type
 

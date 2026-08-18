@@ -361,6 +361,7 @@ func TestManager_OnOverlayDisconnected_StopsPoller(t *testing.T) {
 //   - markDiscoveryGaveUp parks a channel,
 //   - a demand change (newly demanded OR demand lost) clears the marker,
 //   - a channel that stays continuously demanded keeps its marker.
+//
 // Pure in-memory logic — no Redis required.
 func TestManager_DiscoveryGiveUp_RefreshOnDemandChange(t *testing.T) {
 	manager := &Manager{
@@ -393,4 +394,100 @@ func TestManager_DiscoveryGiveUp_RefreshOnDemandChange(t *testing.T) {
 	manager.clearGaveUpForDemandChanges(map[string]bool{}, map[string]bool{parked: true})
 	assert.False(t, manager.hasDiscoveryGivenUp(parked),
 		"re-asserted demand clears the give-up marker so discovery can resume")
+}
+
+// TestManager_CleanupDiscoveryState_KeepsNewerReservation reproduces the loop leak
+// that tripped AllChatYouTubeDiscoveryRetryStorm in production: a discovery loop
+// can outlive its own reservation, and its late cleanup must not evict the loop
+// that replaced it. Pure in-memory logic — no Redis required.
+func TestManager_CleanupDiscoveryState_KeepsNewerReservation(t *testing.T) {
+	manager := &Manager{
+		logger:      zap.NewNop(),
+		discovering: make(map[string]*DiscoveryState),
+	}
+
+	const channelID = "UCleakrepro"
+
+	// A discovery loop is running and holds the reservation.
+	stale := &DiscoveryState{ChannelID: channelID, CancelFunc: func() {}}
+	manager.discovering[channelID] = stale
+
+	// Demand is lost: reconcileDemand cancels the context and drops the reservation
+	// immediately, while the goroutine is still mid-attempt.
+	delete(manager.discovering, channelID)
+
+	// Demand returns before the cancelled goroutine notices, so a fresh loop
+	// reserves the slot and starts polling.
+	fresh := &DiscoveryState{ChannelID: channelID, CancelFunc: func() {}}
+	manager.discovering[channelID] = fresh
+
+	// Only now does the cancelled goroutine reach its cleanup.
+	manager.cleanupDiscoveryState(stale)
+
+	current, exists := manager.discovering[channelID]
+	assert.True(t, exists,
+		"stale cleanup must leave the channel reserved, else periodic sync spawns another loop")
+	assert.Same(t, fresh, current, "stale cleanup must not evict the newer discovery state")
+}
+
+// TestManager_CleanupDiscoveryState_ReleasesOwnReservation verifies the identity
+// check does not break the normal path: the loop that owns the reservation still
+// releases it, so a later sync can rediscover the channel.
+func TestManager_CleanupDiscoveryState_ReleasesOwnReservation(t *testing.T) {
+	manager := &Manager{
+		logger:      zap.NewNop(),
+		discovering: make(map[string]*DiscoveryState),
+	}
+
+	const channelID = "UCowner"
+	owner := &DiscoveryState{ChannelID: channelID, CancelFunc: func() {}}
+	manager.discovering[channelID] = owner
+
+	manager.cleanupDiscoveryState(owner)
+
+	_, exists := manager.discovering[channelID]
+	assert.False(t, exists, "the reservation holder must release its own slot")
+}
+
+// TestManager_DiscoveryLoop_ExitsWhenReservationLost covers the orphan case:
+// a loop that no longer owns its channel is unreachable by reconcileDemand (that
+// only cancels states still in m.discovering), so the loop must notice and stop
+// itself rather than scrape YouTube until the 1h give-up cap.
+func TestManager_DiscoveryLoop_ExitsWhenReservationLost(t *testing.T) {
+	manager := &Manager{
+		logger:      zap.NewNop(),
+		discovering: make(map[string]*DiscoveryState),
+	}
+
+	const channelID = "UCorphan"
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	orphan := &DiscoveryState{
+		ChannelID:        channelID,
+		StartedAt:        time.Now(),
+		CancelFunc:       cancel,
+		ResetBackoffChan: make(chan struct{}, 1),
+	}
+	owner := &DiscoveryState{ChannelID: channelID, CancelFunc: func() {}}
+	manager.discovering[channelID] = owner
+
+	manager.wg.Add(1)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		manager.discoveryLoop(ctx, orphan)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("orphaned discovery loop did not exit; it would keep polling YouTube until the give-up cap")
+	}
+
+	assert.Same(t, owner, manager.discovering[channelID],
+		"the orphan must not touch the current owner's reservation")
+	assert.Error(t, ctx.Err(),
+		"the orphan must cancel its own context so its cross-platform subscriber shuts down")
 }
