@@ -80,12 +80,13 @@ type Poller struct {
 	logLevel        string // "debug" or "info"
 	messageCallback MessageCallback
 	pollObserver    PollObserver
+	alwaysSleep     bool
 	metrics         *metrics.InnerTubeMetrics
 	refresher       ContinuationRefresher // Optional: re-fetches continuation when stale
 
 	// Stale-continuation detection: refresh after this many consecutive zero-action polls
-	zeroActionCount      int
-	zeroActionThreshold  int
+	zeroActionCount     int
+	zeroActionThreshold int
 
 	// Empty-continuation detection: attempt refresh before declaring offline
 	emptyContCount     int
@@ -135,6 +136,20 @@ type PollerOptions struct {
 	// action and message counts. Used by the canary poller, which counts
 	// messages and then drops them instead of publishing.
 	PollObserver PollObserver
+
+	// AlwaysSleep makes the loop wait the full interval after every poll,
+	// including polls that returned messages. Production leaves this false: a
+	// non-empty poll re-polls immediately so viewers see chat without an
+	// artificial delay.
+	//
+	// The canary sets it true. It is pinned by design to channels whose chat is
+	// continuously busy, so without this it would never sleep at all and would
+	// issue several requests per second per target against the same 429 budget
+	// as production capture — for a detector that only needs to know whether
+	// capture works, not to keep up with the chat. It also keeps Interval an
+	// actual rate floor, which the aggregate backstop alert's threshold
+	// reasoning depends on.
+	AlwaysSleep bool
 
 	// EmptyContThreshold is the number of consecutive empty-continuation responses
 	// before declaring the stream offline. On each attempt the poller first tries to
@@ -205,6 +220,7 @@ func NewPoller(
 		logLevel:            logLevel,
 		metrics:             opts.Metrics,
 		pollObserver:        opts.PollObserver,
+		alwaysSleep:         opts.AlwaysSleep,
 		refresher:           opts.Refresher,
 		zeroActionThreshold: zeroActionThreshold,
 		emptyContThreshold:  emptyContThreshold,
@@ -215,11 +231,11 @@ func NewPoller(
 // Start begins the polling loop in a background goroutine
 //
 // The loop:
-//   1. Waits for interval ticker
-//   2. Calls InnerTube API with current continuation token
-//   3. Parses messages and updates continuation
-//   4. Handles errors (transient → backoff, fatal → stop)
-//   5. Repeats until context is cancelled
+//  1. Waits for interval ticker
+//  2. Calls InnerTube API with current continuation token
+//  3. Parses messages and updates continuation
+//  4. Handles errors (transient → backoff, fatal → stop)
+//  5. Repeats until context is cancelled
 //
 // Returns immediately. Call Stop() to gracefully shut down.
 func (p *Poller) Start(ctx context.Context) error {
@@ -520,7 +536,10 @@ func (p *Poller) poll() {
 	// re-poll immediately so the next batch is fetched without an artificial delay.
 	// This reduces average viewer latency from ~(interval/2) to near zero on
 	// active streams, while still backing off on quiet/idle channels.
-	if len(messages) == 0 {
+	//
+	// alwaysSleep opts out of that: see PollerOptions.AlwaysSleep. The canary
+	// wants a rate floor more than it wants latency.
+	if p.alwaysSleep || len(messages) == 0 {
 		p.sleep(sleepDuration)
 	}
 }

@@ -357,27 +357,7 @@ type realRunner struct {
 }
 
 func (r *realRunner) Run(ctx context.Context, t Target, continuation, visitorData string, observe poller.PollObserver) error {
-	refresher, _ := r.source.(poller.ContinuationRefresher)
-
-	p := poller.NewPoller(
-		r.client,
-		continuation,
-		t.ChannelID,
-		r.logger.With(zap.String("component", "canary")),
-		&poller.PollerOptions{
-			Interval:     r.interval,
-			VideoID:      t.VideoID,
-			VisitorData:  visitorData,
-			Refresher:    refresher,
-			PollObserver: observe,
-			// No Metrics: the canary must not move
-			// youtube_listener_zero_action_polls_total or the other
-			// production counters, or the aggregate backstop alert would be
-			// measuring the canary instead of the users.
-			// No Repository / Publisher: nothing about a canary belongs in
-			// stream state or on chat:raw.
-		},
-	)
+	p := r.newPoller(t, continuation, visitorData, observe)
 
 	if err := p.Start(ctx); err != nil {
 		return err
@@ -392,6 +372,42 @@ func (r *realRunner) Run(ctx context.Context, t Target, continuation, visitorDat
 		p.Stop()
 		return ctx.Err()
 	}
+}
+
+// newPoller builds the canary's poller. Split out from Run so a test can assert
+// the collaborator invariant — no Publisher, no Repository, no Metrics —
+// without starting a polling loop. That invariant is the entire design and it
+// otherwise lived only in the struct literal below and the comment beside it.
+func (r *realRunner) newPoller(t Target, continuation, visitorData string, observe poller.PollObserver) *poller.Poller {
+	refresher, _ := r.source.(poller.ContinuationRefresher)
+
+	return poller.NewPoller(
+		r.client,
+		continuation,
+		t.ChannelID,
+		r.logger.With(zap.String("component", "canary")),
+		&poller.PollerOptions{
+			Interval:     r.interval,
+			VideoID:      t.VideoID,
+			VisitorData:  visitorData,
+			Refresher:    refresher,
+			PollObserver: observe,
+			// Always sleep the interval, unlike production. The canary is
+			// pinned to channels whose chat is continuously busy, and the
+			// production loop skips its sleep whenever a poll returned
+			// messages — so without this the canary would never sleep and
+			// would spend several requests per second per target out of the
+			// same 429 budget as real capture. It only needs to know that
+			// capture works; it does not need to keep up with the chat.
+			AlwaysSleep: true,
+			// No Metrics: the canary must not move
+			// youtube_listener_zero_action_polls_total or the other
+			// production counters, or the aggregate backstop alert would be
+			// measuring the canary instead of the users.
+			// No Repository / Publisher: nothing about a canary belongs in
+			// stream state or on chat:raw.
+		},
+	)
 }
 
 // errStreamEnded marks a poller that exited on its own. It is matched by

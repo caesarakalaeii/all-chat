@@ -259,6 +259,58 @@ func seriesExists(t *testing.T, metricName, channelID string) bool {
 	return false
 }
 
+// realRunner is where the design's central invariant actually lives: the canary
+// counts messages and then DROPS them. That property comes from omitting
+// collaborators rather than from a mode flag, so it is invisible to every test
+// that fakes pollerRunner — an edit adding Publisher: or Metrics: to that struct
+// literal would push a busy 24/7 channel's chat onto chat:raw, or move the
+// production counters the aggregate backstop alert selects on, with nothing
+// failing. This pins it.
+func TestRealRunnerBuildsAPollerThatCannotPublishOrPolluteMetrics(t *testing.T) {
+	r := &realRunner{
+		client:   nil, // never polled: we only inspect how the poller was built
+		source:   &fakeSource{cont: "tok"},
+		interval: 2 * time.Second,
+		logger:   zap.NewNop(),
+	}
+
+	p := r.newPoller(Target{"UCchan", "vid"}, "tok", "visitor", func(int, int) {})
+
+	if p.HasPublisher() {
+		t.Error("canary poller has a Publisher: canary traffic would reach the lifecycle stream")
+	}
+	if p.HasRepository() {
+		t.Error("canary poller has a Repository: the canary would write stream state for a stream nobody demanded")
+	}
+	if p.HasMetrics() {
+		t.Error("canary poller has Metrics: canary polls would move the production counters " +
+			"(youtube_listener_zero_action_polls_total and friends), so the aggregate backstop " +
+			"alert would be measuring the canary instead of the users")
+	}
+}
+
+// Production skips its sleep after any poll that returned messages, to keep
+// viewer latency near zero. The canary is pinned by design to channels whose
+// chat is continuously busy, so inheriting that would mean it never sleeps:
+// several requests per second per target, out of the same 429 budget as real
+// capture, for a detector that only needs to know whether capture works. It
+// would also stop the configured interval being a rate floor, which the
+// aggregate backstop alert's threshold reasoning relies on.
+func TestRealRunnerPollerAlwaysSleepsSoTheIntervalIsARateFloor(t *testing.T) {
+	r := &realRunner{
+		source:   &fakeSource{cont: "tok"},
+		interval: 2 * time.Second,
+		logger:   zap.NewNop(),
+	}
+
+	p := r.newPoller(Target{"UCchan", "vid"}, "tok", "", func(int, int) {})
+
+	if !p.AlwaysSleeps() {
+		t.Error("canary poller re-polls immediately after a non-empty poll; on a busy canary channel " +
+			"that is several req/s per target, not one per interval")
+	}
+}
+
 // A Canary built without metrics must not panic: a detector that takes the
 // process down is worse than no detector.
 func TestObserverToleratesNilMetrics(t *testing.T) {
