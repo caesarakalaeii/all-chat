@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -202,6 +203,60 @@ func TestObserverCountsPollsIncludingEmptyOnes(t *testing.T) {
 	if messages != 3 {
 		t.Errorf("canary messages = %v, want 3", messages)
 	}
+}
+
+// The alert reads `canary_polls > 0 and canary_messages ~= 0`, and a CounterVec
+// child does not exist until WithLabelValues touches it. So a canary that has
+// never captured a message must still EXPORT the messages series at zero —
+// otherwise the `and` has an empty right-hand side and
+// YouTubeInnerTubeCapturingNothing cannot fire in precisely the case it was
+// rewritten to catch: blind from process start, a bad continuation shipped or a
+// pod restarted while capture was already broken.
+//
+// This asserts on the gathered registry rather than testutil.ToFloat64, because
+// ToFloat64 calls WithLabelValues and would itself create the child, reporting 0
+// for a series Prometheus would never have scraped.
+func TestObserverExportsMessagesSeriesBeforeAnyMessageIsCaptured(t *testing.T) {
+	m := testMetrics()
+	channelID := uniqueID("blind")
+	c := &Canary{logger: zap.NewNop(), metrics: m}
+
+	// Only empty polls: the listener is blind and has captured nothing, ever.
+	obs := c.observer(Target{channelID, "vid"})
+	obs(0, 0)
+	obs(0, 0)
+
+	if !seriesExists(t, "youtube_innertube_canary_messages_total", channelID) {
+		t.Error("youtube_innertube_canary_messages_total is absent after empty polls; " +
+			"the critical alert's `and` would evaluate to an empty vector and never fire")
+	}
+	if !seriesExists(t, "youtube_innertube_canary_polls_total", channelID) {
+		t.Error("youtube_innertube_canary_polls_total is absent; the canary looks dead while it is polling")
+	}
+}
+
+// seriesExists reports whether the default gatherer would expose a sample of
+// metricName carrying channelID — i.e. whether Prometheus would actually scrape
+// it, as opposed to whether we can conjure it by asking for it.
+func seriesExists(t *testing.T, metricName, channelID string) bool {
+	t.Helper()
+	families, err := prometheus.DefaultGatherer.Gather()
+	if err != nil {
+		t.Fatalf("gather: %v", err)
+	}
+	for _, fam := range families {
+		if fam.GetName() != metricName {
+			continue
+		}
+		for _, metric := range fam.GetMetric() {
+			for _, label := range metric.GetLabel() {
+				if label.GetName() == "channel_id" && label.GetValue() == channelID {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // A Canary built without metrics must not panic: a detector that takes the

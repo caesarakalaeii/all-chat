@@ -273,10 +273,17 @@ func (c *Canary) observer(t Target) poller.PollObserver {
 			return
 		}
 		c.metrics.CanaryPolls.WithLabelValues(metrics.ServiceLabel, t.ChannelID, t.VideoID).Inc()
-		if messageCount > 0 {
-			c.metrics.CanaryMessages.WithLabelValues(metrics.ServiceLabel, t.ChannelID, t.VideoID).
-				Add(float64(messageCount))
-		}
+		// Add unconditionally, including Add(0). A CounterVec child does not
+		// exist until WithLabelValues touches it, so guarding this on
+		// messageCount > 0 would mean a canary that has NEVER captured a
+		// message exports no youtube_innertube_canary_messages_total series at
+		// all. That is exactly the blind-from-startup case — a broken
+		// continuation shipped, or any pod restart while capture is broken —
+		// and it would make `canary_polls > 0 and canary_messages ≈ 0` an
+		// empty vector, so YouTubeInnerTubeCapturingNothing could not fire in
+		// the one situation it was rewritten to catch.
+		c.metrics.CanaryMessages.WithLabelValues(metrics.ServiceLabel, t.ChannelID, t.VideoID).
+			Add(float64(messageCount))
 	}
 }
 
