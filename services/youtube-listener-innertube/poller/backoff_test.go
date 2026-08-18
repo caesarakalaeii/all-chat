@@ -28,6 +28,21 @@ import (
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/innertube"
 )
 
+// The first backoff interval is InitialInterval=2s with RandomizationFactor=0.5,
+// so backoff/v4 draws it uniformly from [1s, 3s]. 3s is therefore a value the
+// policy legitimately returns, not a bound it stays under: asserting
+// `elapsed <= 3s` leaves the test only as much slack as the scheduler needs to
+// wake the goroutine, and it fails whenever the package is run under parallel
+// load. Measured over 200 samples the draw reached 2.983s, i.e. 17ms of margin.
+//
+// firstBackoffMax adds headroom for that wakeup delay while staying far below
+// the 4s second interval, so a backoff that fails to wait, or that skips
+// straight to the next step, is still caught.
+const (
+	firstBackoffMin = 1 * time.Second
+	firstBackoffMax = 3*time.Second + 500*time.Millisecond
+)
+
 func TestNewBackoff(t *testing.T) {
 	logger := zap.NewNop()
 	b := NewBackoff(logger)
@@ -103,7 +118,7 @@ func TestBackoff_Wait_TransientError(t *testing.T) {
 	elapsed := time.Since(start)
 
 	// Should wait approximately 2s (allow jitter: 1s - 3s for backoff/v4)
-	if elapsed < 1*time.Second || elapsed > 3*time.Second {
+	if elapsed < firstBackoffMin || elapsed > firstBackoffMax {
 		t.Errorf("Wait took %v, expected ~2s (1s-3s with jitter)", elapsed)
 	}
 
@@ -159,7 +174,7 @@ func TestBackoff_Wait_UnknownError(t *testing.T) {
 	elapsed := time.Since(start)
 
 	// Unknown errors are transient, so should backoff ~2s
-	if elapsed < 1*time.Second || elapsed > 3*time.Second {
+	if elapsed < firstBackoffMin || elapsed > firstBackoffMax {
 		t.Errorf("Wait took %v for unknown error, expected ~2s backoff (transient)", elapsed)
 	}
 
@@ -296,7 +311,7 @@ func TestBackoff_AllTransientErrorTypes(t *testing.T) {
 		elapsed := time.Since(start)
 
 		// Should wait ~2s (first backoff, allow jitter)
-		if elapsed < 1*time.Second || elapsed > 3*time.Second {
+		if elapsed < firstBackoffMin || elapsed > firstBackoffMax {
 			t.Errorf("Wait for %v took %v, expected ~2s (1s-3s with jitter)", err, elapsed)
 		}
 
