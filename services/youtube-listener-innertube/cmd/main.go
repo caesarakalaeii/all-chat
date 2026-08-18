@@ -233,10 +233,20 @@ func main() {
 	if err != nil {
 		logger.Fatal("Invalid canary configuration", zap.Error(err))
 	}
+	// A coordinator of its own, deliberately not the production one. Rebalance
+	// caps a pod at ceil(totalStreams/peerCount) leases and compares that against
+	// the coordinator's total lease count, while the stream manager passes only
+	// the production source count as totalStreams. Canary leases sharing that
+	// coordinator would make every pod look permanently over-subscribed and shed
+	// a real user's stream to make room — a canary meant to detect outages would
+	// be causing them.
+	canaryLeader := ll.SidecarCoordinator("youtube-canary")
+	defer canaryLeader.Stop()
+
 	canaryPoller := canary.New(canaryCfg, logger, canary.Options{
 		Source:     discovery,
 		Discoverer: discovery,
-		Leader:     ll.LeadershipCoordinator(),
+		Leader:     canaryLeader,
 		Metrics:    innertubeMetrics,
 		Client:     innertubeClient,
 	})

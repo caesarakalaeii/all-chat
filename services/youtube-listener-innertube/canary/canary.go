@@ -212,12 +212,20 @@ func (c *Canary) supervise(ctx context.Context, t Target) {
 func (c *Canary) pollOnce(ctx context.Context, t Target) error {
 	streamID := "canary:" + t.VideoID
 
+	// Cancelled when the lease is lost, so this replica stops polling a target
+	// another replica has taken over. Without it the poll session would run to
+	// the end of the stream regardless, letting two replicas poll the same
+	// continuation and double-count both canary counters.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	if c.leader != nil {
 		isLeader, err := c.leader.EnsureLeadership(ctx, streamID, func() {
-			c.logger.Info("Canary lost leadership",
+			c.logger.Info("Canary lost leadership, stopping poll session",
 				zap.String("channel_id", t.ChannelID),
 				zap.String("video_id", t.VideoID),
 			)
+			cancel()
 		})
 		if err != nil {
 			c.logger.Warn("Canary leadership claim failed",

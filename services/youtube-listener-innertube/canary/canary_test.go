@@ -478,3 +478,91 @@ func TestStartWarnsOnCorrelatedChannels(t *testing.T) {
 		})
 	}
 }
+
+// callbackLeader hands the lost-leadership callback back to the test so it can
+// simulate the coordinator dropping the lease mid-session.
+type callbackLeader struct {
+	mu   sync.Mutex
+	lost func()
+	got  chan struct{}
+}
+
+func (l *callbackLeader) EnsureLeadership(_ context.Context, _ string, lostCallback func()) (bool, error) {
+	l.mu.Lock()
+	l.lost = lostCallback
+	l.mu.Unlock()
+	if l.got != nil {
+		select {
+		case l.got <- struct{}{}:
+		default:
+		}
+	}
+	return true, nil
+}
+
+func (l *callbackLeader) Release(string) {}
+
+func (l *callbackLeader) fireLost() {
+	l.mu.Lock()
+	cb := l.lost
+	l.mu.Unlock()
+	if cb != nil {
+		cb()
+	}
+}
+
+// TestCanary_LostLeadershipStopsPolling asserts that losing the lease ends the
+// poll session rather than merely logging.
+//
+// The lease can be dropped underneath a live session — a failed heartbeat
+// renewal, or the coordinator shedding it during a rebalance. If the session
+// kept running, this replica would go on polling a target another replica has
+// since claimed: two replicas on the same continuation, double the YouTube
+// request rate, and both canary counters incremented twice per poll, which is
+// exactly the duplication the leadership gate exists to prevent.
+func TestCanary_LostLeadershipStopsPolling(t *testing.T) {
+	leader := &callbackLeader{got: make(chan struct{}, 1)}
+	runner := &fakeRunner{started: make(chan struct{}, 1)}
+
+	c := New(Config{
+		Enabled:            true,
+		Targets:            []Target{{ChannelID: "UCtest", VideoID: "vid123"}},
+		PollInterval:       time.Hour,
+		RediscoverInterval: time.Hour,
+	}, zap.NewNop(), Options{
+		Source:  &fakeSource{cont: "cont"},
+		Leader:  leader,
+		Metrics: testMetrics(),
+	})
+	c.runner = runner
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() { done <- c.pollOnce(ctx, Target{ChannelID: "UCtest", VideoID: "vid123"}) }()
+
+	// Wait until the session is actually polling before dropping the lease,
+	// otherwise the test could pass by racing ahead of the poll entirely.
+	select {
+	case <-runner.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("poll session never started")
+	}
+
+	leader.fireLost()
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("losing the lease must cancel the poll session, got %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("poll session kept running after leadership was lost")
+	}
+
+	// The parent context is still live: only the lease loss stopped the session.
+	if ctx.Err() != nil {
+		t.Fatalf("parent context should still be live, got %v", ctx.Err())
+	}
+}
