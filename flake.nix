@@ -179,6 +179,62 @@
         NEXT_TELEMETRY_DISABLED = "1";
         # npm's funding banner, off, for the same reason.
         NPM_CONFIG_FUND = "false";
+        # Go's scratch directory, pinned away from the inherited TMPDIR.
+        #
+        # A caller that ran inside a nix build exports
+        # TMPDIR=/nix/var/nix/builds/nix-NNN-NNN, and that directory is deleted
+        # when the build ends. Every `go` command then fails BEFORE compiling
+        # anything, with
+        #   go: creating work dir: stat /nix/var/nix/builds/nix-NNN-NNN: no such
+        #   file or directory
+        # which reads like a broken toolchain rather than a stale env var.
+        #
+        # rootPreamble already handles this twice (recreate the path, then
+        # `go env -w GOTMPDIR`), but BOTH act only on a shell that RUNS the
+        # hook. A harness that gets the environment some other way and then
+        # execs `go build` directly is not covered, and that gap is not
+        # hypothetical: it cost a rejection, with build/vet/test all exiting 1
+        # on a tree where they had just passed. Observed directly in such a
+        # shell -- poisoned TMPDIR, and `go env GOTMPDIR` empty, i.e. the hook
+        # had not run.
+        #
+        # mkShell's `env` is the layer that closes it, because it is applied to
+        # the shell environment unconditionally rather than by a hook the
+        # caller might bypass. Unlike TMPDIR this can safely be set here: it is
+        # unset everywhere by default, so pinning it overrides nobody's
+        # deliberate choice, and it steers only the Go toolchain rather than
+        # every program that reads TMPDIR.
+        #
+        # The value must be a literal absolute path with no shell syntax in it.
+        # Both consumers of this set take it literally: mkShell passes `env`
+        # through to mkDerivation as a plain derivation attribute, and
+        # writeShellApplication's `runtimeEnv` emits it via lib.toShellVar,
+        # which single-quotes. A "$HOME/..." here would be exported verbatim,
+        # and Go would then try to create a directory actually named `$HOME`.
+        # Checked against the pinned nixpkgs rather than assumed.
+        #
+        # /var/tmp itself, not a subdirectory of it, and that is deliberate:
+        # Go does NOT create GOTMPDIR when it is missing. Measured -- pointing
+        # it at an absent path reproduces the identical
+        #   go: creating work dir: stat <path>: no such file or directory
+        # that this line exists to prevent, which would have moved the failure
+        # rather than fixed it. Any path we invent needs an mkdir to exist, and
+        # an mkdir can only run from a hook the harness may bypass -- the very
+        # assumption that failed. A directory that is always already there is
+        # the only version of this that holds without running any code first.
+        #
+        # /var/tmp is mandated by the FHS, world-writable and sticky, and
+        # unlike /tmp it is meant to survive reboots, so it is not the tmpfs a
+        # cleaner empties mid-build. Go creates a private `go-build*` directory
+        # per invocation and removes it on exit, so sharing the parent with
+        # other users is safe and leaves nothing behind -- verified.
+        #
+        # Precedence, measured rather than assumed: an exported GOTMPDIR beats
+        # the value `go env -w` wrote to the config file. So inside the dev
+        # shell THIS wins over rootPreamble's HOME-based path, and the hook's
+        # copy is what covers a bare `go` run outside the shell entirely. The
+        # two are complements, not duplicates; neither alone covers both cases.
+        GOTMPDIR = "/var/tmp";
       };
 
       # ======================================================================
