@@ -545,8 +545,24 @@ export default function DocsPage() {
                     kind: 'attribute',
                     targets: 'Messages from a specific user.',
                   },
+                  {
+                    selector: '[data-feed-anchor="top|bottom"]',
+                    kind: 'attribute',
+                    targets:
+                      'The overlay wrapper, carrying the Feed Anchor setting. Read it to adapt; don’t override the wrapper’s flex-direction or the list’s margin-top, which are what move the feed.',
+                  },
                 ]}
               />
+              <p>
+                <strong>Feed Anchor</strong> (Messages settings) decides which <em>edge</em> the
+                feed rests on — anchor it to the bottom and new messages push the older ones upward,
+                with the blank space collecting at the top. <strong>Invert Message Order</strong> is
+                a separate setting for a separate axis: it only changes which{' '}
+                <em>end of the list</em> is newest. All four combinations work.
+              </p>
+              <Pre lang="css">{`/* Fade the far end of the feed, whichever end that is */
+[data-feed-anchor="top"]    .overlay-live-body > div:last-child  { opacity: 0.6; }
+[data-feed-anchor="bottom"] .overlay-live-body > div:first-child { opacity: 0.6; }`}</Pre>
               <p>Example — give each platform its own accent stripe:</p>
               <Pre lang="css">{`.chat-message[data-platform="twitch"]  { border-left: 4px solid #9146FF; }
 .chat-message[data-platform="youtube"] { border-left: 4px solid #FF0000; }

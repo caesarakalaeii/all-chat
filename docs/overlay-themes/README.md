@@ -246,6 +246,45 @@ Want to create a custom theme? Here's a quick overview. **For detailed documenta
 
 Based on the current overlay implementation (`frontend/src/app/overlay/[id]/page.tsx`):
 
+#### Feed Layout (user preferences, not theme-owned)
+
+Two **independent** display settings decide how the feed is laid out. They are
+user preferences, so a theme should read them and adapt rather than hardcode
+around them.
+
+| Setting                                 | Values          | Default | What it moves                                                                                                               |
+| --------------------------------------- | --------------- | ------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `display_settings.feed_anchor`          | `top`, `bottom` | `top`   | Which **edge of the canvas** the stack rests on, so where blank space accumulates and which way a short feed grows.         |
+| `display_settings.invert_message_order` | `false`, `true` | `false` | Which **end of the list** holds the newest message. Presentation only — messages are always appended to the end internally. |
+
+All four combinations are valid. `feed_anchor: bottom` with the order NOT
+inverted is the Twitch-like arrangement: newest at the bottom, older messages
+pushed upward, blank space at the top.
+
+The live overlay wrapper and the editor preview root both carry a stable hook:
+
+- `[data-feed-anchor="top"]` — feed glued to the top edge, grows downward
+- `[data-feed-anchor="bottom"]` — feed glued to the bottom edge, grows upward
+
+```css
+/* Fade the far end of the feed, whichever end that happens to be */
+[data-feed-anchor="top"] .overlay-live-body > div:last-child {
+  opacity: 0.6;
+}
+[data-feed-anchor="bottom"] .overlay-live-body > div:first-child {
+  opacity: 0.6;
+}
+```
+
+**Do not** set `margin-top`, `justify-content` or `flex-direction` on the
+wrapper or on `.overlay-live-body` itself. Bottom anchoring is implemented as a
+flex-column wrapper plus `margin-top: auto` on `.overlay-live-body`, and
+overriding either one re-pins the feed to the edge the user did not choose.
+Styling the list's _children_ is fine and is unaffected.
+
+Unlike the visual-customizer properties, this is structural layout rather than a
+`--theme-*` variable, so there is no theme-intent fallback step to declare.
+
 #### Message Container
 - `.space-y-3 > div` - Individual message wrapper
 - `.bg-gray-900/90` - Default dark background
