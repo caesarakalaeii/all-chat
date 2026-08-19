@@ -551,6 +551,38 @@ These settings are configured via the All-Chat dashboard **Display Settings** pa
 | **Animation** | slide/fade/none | slide | Message entrance animation |
 | **Platform Badge Position** | before/after | before | Show platform badge before or after username |
 | **Platform Badge Style** | text/icon | text | Display platform as text label or icon |
+| **Feed Anchor** (`feed_anchor`) | top/bottom | top | Which **edge of the canvas** the feed rests on |
+| **Invert Message Order** (`invert_message_order`) | true/false | false | Which **end of the list** holds the newest message |
+
+### Feed Anchor vs Invert Message Order
+
+These two are independent, and it is worth being precise about which one you
+want, because they sound alike and do different things.
+
+- **Feed Anchor** moves the whole stack to the top or bottom edge. It decides
+  where blank space collects, and therefore which way a feed that has not filled
+  the canvas grows. `bottom` gives the Twitch-like behaviour: messages start at
+  the bottom and each new one pushes the older ones upward.
+- **Invert Message Order** does not move the stack at all. It reverses the
+  reading order so the newest message is listed first.
+
+All four combinations are valid. Once the feed is taller than the canvas the
+anchor stops mattering — the overlay scrolls to keep the newest message in view
+in every mode, exactly as it always has.
+
+The overlay wrapper carries the current mode as a stable attribute, so a theme
+can react to it:
+
+```css
+/* Fade the far end of the feed, whichever end that happens to be */
+[data-feed-anchor="top"]    .overlay-live-body > div:last-child  { opacity: 0.6; }
+[data-feed-anchor="bottom"] .overlay-live-body > div:first-child { opacity: 0.6; }
+```
+
+Bottom anchoring is a flex-column wrapper plus `margin-top: auto` on
+`.overlay-live-body`. Do not override the wrapper's `flex-direction` or the
+list's `margin-top` — that re-pins the feed to the edge the user did not pick.
+Styling the list's children is unaffected.
 
 ### Override Display Settings with CSS
 

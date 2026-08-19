@@ -39,7 +39,7 @@
 'use client'
 
 import Image from 'next/image'
-import { use, useEffect, useState, useRef, useCallback } from 'react'
+import { use, useEffect, useMemo, useState, useRef, useCallback } from 'react'
 import clsx from 'clsx'
 import { toastManager } from '@/lib/toast'
 import type { ChatMessage, EventTier, DeletionMetadata } from '@/lib/types/message'
@@ -52,6 +52,14 @@ import { getBundledTheme } from '@/lib/theme-marketplace/bundled-themes'
 import { rewriteThemeFontImports } from '@/lib/theme-marketplace/font-proxy'
 import { chatBubbleStyle, overlayContainerStyle } from '@/lib/utils/visual-inline-styles'
 import { isDisplayVisible } from '@/lib/utils/displayVisibility'
+import {
+  DEFAULT_FEED_ANCHOR,
+  orderMessages,
+  parseFeedAnchor,
+  resolveFeedAnchorLayout,
+  shouldAutoScroll,
+  type FeedAnchor,
+} from '@/lib/utils/feedAnchor'
 import {
   isMessageAnimation,
   MESSAGE_ANIMATION_CLASS,
@@ -154,6 +162,10 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   const [showTimestamps, setShowTimestamps] = useState(true)
   const [showUsername, setShowUsername] = useState(true)
   const [invertMessageOrder, setInvertMessageOrder] = useState(false)
+  // Which canvas edge the stack rests on. Orthogonal to invertMessageOrder:
+  // that picks which end of the LIST is newest, this picks which EDGE the list
+  // is glued to. Defaults to 'top', matching every overlay saved before #728.
+  const [feedAnchor, setFeedAnchor] = useState<FeedAnchor>(DEFAULT_FEED_ANCHOR)
   const [showPronouns, setShowPronouns] = useState(true) // D-07: default on
   const [pronounPosition, setPronounPosition] = useState<'before' | 'after'>('after') // default after
   const [pronounColor, setPronounColor] = useState('#7B68EE') // default medium slate blue
@@ -195,6 +207,14 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   const ttsFallbackToastShownRef = useRef(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  // The message list element, so the auto-scroll effect can tell whether the
+  // feed actually overflows its canvas before deciding to scroll it.
+  const feedBodyRef = useRef<HTMLDivElement>(null)
+  // Single source of truth for the two orthogonal feed-layout axes.
+  const feedLayout = useMemo(
+    () => resolveFeedAnchorLayout(feedAnchor, invertMessageOrder),
+    [feedAnchor, invertMessageOrder]
+  )
   // Keep a ref so the stream callbacks always see the latest value without
   // maxMessages needing to be a dependency.
   const maxMessagesRef = useRef<number>(50)
@@ -334,6 +354,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
       setShowPlatformBadge(display.show_platform_badge)
     }
     setInvertMessageOrder(display.invert_message_order === true)
+    setFeedAnchor(parseFeedAnchor(display.feed_anchor))
 
     // Phase 9: Pronoun settings from display_settings
     if (typeof display.show_pronouns === 'boolean') {
@@ -502,10 +523,18 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [config, id, handleTTSFallback])
 
-  // Auto-scroll to bottom when new messages arrive
+  // Auto-scroll to bottom when new messages arrive.
+  //
+  // A bottom-anchored feed that has not yet filled the canvas is already
+  // resting against the edge the newest message is on, so scrolling it is a
+  // no-op at best. Once it overflows, the `mt-auto` has collapsed to 0 and the
+  // feed is a plain scrolling list again — so scroll, exactly as before.
   useEffect(() => {
+    const body = feedBodyRef.current
+    const overflows = body != null && body.getBoundingClientRect().height > window.innerHeight
+    if (!shouldAutoScroll(feedLayout, overflows)) return
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+  }, [messages, feedLayout])
 
   // Auto-remove old messages based on duration (if fade is enabled)
   // Events have tier-based durations, chat uses configured duration
@@ -634,7 +663,19 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   }
 
   return (
-    <div className="min-h-screen w-full bg-transparent p-4">
+    /*
+     * feedAnchor 'bottom' makes this wrapper a flex column so the message
+     * list's `mt-auto` has free space to absorb. The list must stay its only
+     * IN-FLOW child for that to hold: the <style> blocks below are
+     * `display: none` per the UA stylesheet and PlatformStatusIndicators
+     * defaults to variant='fixed' (position: fixed), so neither becomes a flex
+     * item. Adding an in-flow sibling here would split the free space and
+     * un-anchor the feed.
+     */
+    <div
+      className={clsx('min-h-screen w-full bg-transparent p-4', feedLayout.wrapperClass)}
+      data-feed-anchor={feedLayout.dataAnchor}
+    >
       {/* Hide scrollbars and ensure transparent background */}
       <style
         dangerouslySetInnerHTML={{
@@ -679,12 +720,22 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
 
       {/* text-shadow inherits to every text node below; the var is injected by
           visualSettingsToCss and gradient usernames force it off locally */}
+      {/* `mt-auto` (feedAnchor 'bottom') sits on the list itself, never on its
+          children: `.overlay-live-body > * + *` in events.css and
+          `.scroll-anchor` in globals.css are both `!important` and would win. */}
       <div
-        className={clsx('overlay-live-body space-y-3', messageAnimation && 'msg-anim-container')}
+        ref={feedBodyRef}
+        className={clsx(
+          'overlay-live-body space-y-3',
+          feedLayout.bodyClass,
+          messageAnimation && 'msg-anim-container'
+        )}
         style={{ textShadow: 'var(--chat-text-shadow, none)', ...containerStyle }}
       >
-        {invertMessageOrder && <div ref={messagesEndRef} className="scroll-anchor" />}
-        {(invertMessageOrder ? [...messages].reverse() : messages).map((message, index) => {
+        {feedLayout.sentinelPosition === 'start' && (
+          <div ref={messagesEndRef} className="scroll-anchor" />
+        )}
+        {orderMessages(messages, invertMessageOrder).map((message, index) => {
           const isSharedChat = message.metadata?.is_shared_chat === true
           const isEvent = message.event != null
           const eventTierClass = isEvent ? `event-tier-${message.event?.tier}` : ''
@@ -919,7 +970,9 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
             </div>
           )
         })}
-        {!invertMessageOrder && <div ref={messagesEndRef} className="scroll-anchor" />}
+        {feedLayout.sentinelPosition === 'end' && (
+          <div ref={messagesEndRef} className="scroll-anchor" />
+        )}
       </div>
     </div>
   )
