@@ -26,6 +26,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// ChatReplay.Truncated is the buffer-side half of the `replay_truncated` field
+// clients read off the connected frame. The tests below pin the conditions
+// under which it is set; models/ws_message_test.go pins the wire encoding.
+
 // A watermark older than the oldest surviving entry means messages between the
 // two existed and are gone. That is the case the flag exists to surface: the
 // client would otherwise receive a short replay and believe it was caught up.

@@ -77,7 +77,9 @@ type ChatReplay struct {
 
 	// Truncated is true when sinceMs predates the oldest entry the buffer
 	// still holds — meaning messages between the client's watermark and the
-	// start of the buffer existed and are gone.
+	// start of the buffer existed and are gone. It reaches clients as
+	// `replay_truncated` on the connected frame (models.ConnectedData /
+	// models.ViewerConnectedData).
 	//
 	// It is always false for sinceMs <= 0 ("replay everything"): a caller
 	// asking for the whole buffer is making no claim about what it already
