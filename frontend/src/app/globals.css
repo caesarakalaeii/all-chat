@@ -221,6 +221,28 @@
   overflow-x: clip;
 }
 
+/* DIRECTION OF ENTRY — the stack grows at whichever end the newest message
+   lands on, so a vertical entry animation has to come in from THAT edge. With
+   `invert_message_order` the newest row is the FIRST child, and an unflipped
+   `translateY(110%)` makes it crawl out from underneath its neighbour instead
+   of dropping in from the free space above.
+
+   `data-feed-order` is written on the overlay wrapper from the ORDER axis alone
+   (lib/utils/feedAnchor.ts — the ANCHOR axis moves the whole stack and does not
+   change which end grows). Only the three direction-dependent presets read
+   these; `fly-left`/`fly-right`/`fly-spring`/`swoosh` are horizontal and
+   `soft-focus` is a pure scale, so all five are already order-agnostic.
+
+   Parameterising the keyframes — rather than adding
+   `[data-feed-order='newest-first'] .msg-anim-*` overrides — is deliberate: it
+   keeps every `.msg-anim-*` rule a single unlayered class selector, so the
+   documented "themes and custom CSS can override these" contract still holds at
+   equal specificity. */
+[data-feed-order='newest-first'] {
+  --msg-enter-dir: -1;
+  --msg-enter-origin: 0%;
+}
+
 .msg-anim-fly-left {
   animation: msg-anim-fly-left 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
@@ -246,7 +268,7 @@
 }
 
 .msg-anim-pop {
-  transform-origin: 18% 100%;
+  transform-origin: 18% var(--msg-enter-origin, 100%);
   animation: msg-anim-pop 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 @keyframes msg-anim-pop {
@@ -258,19 +280,19 @@
   animation: msg-anim-bounce 600ms linear both;
 }
 @keyframes msg-anim-bounce {
-  0%   { opacity: 0; transform: translateY(110%); }
-  55%  { opacity: 1; transform: translateY(-7%); }
-  75%  { transform: translateY(4%); }
-  90%  { transform: translateY(-2%); }
+  0%   { opacity: 0; transform: translateY(calc(110% * var(--msg-enter-dir, 1))); }
+  55%  { opacity: 1; transform: translateY(calc(-7% * var(--msg-enter-dir, 1))); }
+  75%  { transform: translateY(calc(4% * var(--msg-enter-dir, 1))); }
+  90%  { transform: translateY(calc(-2% * var(--msg-enter-dir, 1))); }
   100% { transform: none; }
 }
 
 .msg-anim-flip {
-  transform-origin: 50% 100%;
+  transform-origin: 50% var(--msg-enter-origin, 100%);
   animation: msg-anim-flip 500ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 @keyframes msg-anim-flip {
-  from { opacity: 0; transform: perspective(600px) rotateX(-75deg); }
+  from { opacity: 0; transform: perspective(600px) rotateX(calc(-75deg * var(--msg-enter-dir, 1))); }
   to   { opacity: 1; transform: perspective(600px) rotateX(0deg); }
 }
 
@@ -313,7 +335,15 @@
 
 /* Scroll anchor — invisible sentinel div used for auto-scrolling in overlay pages.
    Must never be styled by theme CSS. Use a higher-specificity selector so this
-   overrides broad theme rules like `.space-y-3 > div { ... !important }`. */
+   overrides broad theme rules like `.space-y-3 > div { ... !important }`.
+
+   SCOPE LIMIT: these are UNLAYERED `!important` declarations, which lose to an
+   `!important` declaration inside a cascade layer (CSS Cascade 5 reverses layer
+   order for important declarations, and ranks unlayered last). So this block
+   holds the line against theme/marketplace CSS, but NOT against
+   `@layer visual-customizer` in events.css — that one has to exclude
+   `.scroll-anchor` by selector, and does. Anything new that styles overlay rows
+   from inside a layer must exclude it too, or the sentinel grows a box again. */
 .space-y-3 > div.scroll-anchor,
 .scroll-anchor {
   display: block !important;

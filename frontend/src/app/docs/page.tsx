@@ -551,6 +551,12 @@ export default function DocsPage() {
                     targets:
                       'The overlay wrapper, carrying the Feed Anchor setting. Read it to adapt; don’t override the wrapper’s flex-direction or the list’s margin-top, which are what move the feed.',
                   },
+                  {
+                    selector: '[data-feed-order="newest-last|newest-first"]',
+                    kind: 'attribute',
+                    targets:
+                      'The overlay wrapper, carrying the Invert Message Order setting. It also flips --msg-enter-dir and --msg-enter-origin, so entry animations come in from the end the newest message lands on.',
+                  },
                 ]}
               />
               <p>
@@ -562,7 +568,13 @@ export default function DocsPage() {
               </p>
               <Pre lang="css">{`/* Fade the far end of the feed, whichever end that is */
 [data-feed-anchor="top"]    .overlay-live-body > div:last-child  { opacity: 0.6; }
-[data-feed-anchor="bottom"] .overlay-live-body > div:first-child { opacity: 0.6; }`}</Pre>
+[data-feed-anchor="bottom"] .overlay-live-body > div:first-child { opacity: 0.6; }
+
+/* Custom entry animation that flips with Invert Message Order */
+@keyframes my-entry {
+  from { opacity: 0; transform: translateY(calc(40px * var(--msg-enter-dir, 1))); }
+  to   { opacity: 1; transform: none; }
+}`}</Pre>
               <p>Example — give each platform its own accent stripe:</p>
               <Pre lang="css">{`.chat-message[data-platform="twitch"]  { border-left: 4px solid #9146FF; }
 .chat-message[data-platform="youtube"] { border-left: 4px solid #FF0000; }

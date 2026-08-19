@@ -207,6 +207,8 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   const ttsFallbackToastShownRef = useRef(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  // The full-canvas wrapper. Measured (layout height) by the auto-scroll effect.
+  const feedWrapperRef = useRef<HTMLDivElement>(null)
   // Single source of truth for the two orthogonal feed-layout axes.
   const feedLayout = useMemo(
     () => resolveFeedAnchorLayout(feedAnchor, invertMessageOrder),
@@ -255,17 +257,28 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
     soundPlayerRef.current?.play()
     // Phase 13: speak the message via TTS (D-41, D-42 — independent of sound; both fire on non-filtered)
     ttsPlayerRef.current?.speak(message)
-    setMessages((prev) => [...prev, message].slice(-maxMessagesRef.current))
+    setMessages((prev) =>
+      // Ignore a redelivery of a message already on screen. The render key is
+      // `message.id`, so a duplicate id would be a duplicate React key (and the
+      // deletion path already assumes ids are unique — it removes every row
+      // matching `target_uuid`). A WebSocket reconnect that replays the tail is
+      // the realistic source.
+      prev.some((m) => m.id === message.id)
+        ? prev
+        : [...prev, message].slice(-maxMessagesRef.current)
+    )
   }, [])
 
   const onMessageUpdate = useCallback((updatedMessage: ChatMessage) => {
     setMessages((prev) => {
-      // Find existing message by aggregation_id (TikTok like aggregates)
+      // Find existing message by aggregation_id (TikTok like aggregates), then
+      // by id — an update that carries a live row's id has to REPLACE that row.
+      // Appending it would put the same id on screen twice, and the render key
+      // is the id (see onChat).
       const aggregationId = updatedMessage.event?.aggregation_id
-      if (!aggregationId) {
-        return [...prev, updatedMessage].slice(-maxMessagesRef.current)
-      }
-      const index = prev.findIndex((m) => m.event?.aggregation_id === aggregationId)
+      const index = aggregationId
+        ? prev.findIndex((m) => m.event?.aggregation_id === aggregationId)
+        : prev.findIndex((m) => m.id === updatedMessage.id)
       if (index === -1) {
         // Original message already faded away, treat as new
         return [...prev, updatedMessage].slice(-maxMessagesRef.current)
@@ -522,22 +535,36 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
 
   // Auto-scroll to bottom when new messages arrive.
   //
-  // A bottom-anchored feed that has not yet filled the canvas is already
-  // resting against the edge the newest message is on, so scrolling it is a
-  // no-op at best. Once it overflows, the `mt-auto` has collapsed to 0 and the
-  // feed is a plain scrolling list again — so scroll, exactly as before.
+  // A short bottom-anchored feed has nothing to scroll, so skip the call. Once
+  // it overflows, the `mt-auto` has collapsed to 0 and the feed is a plain
+  // scrolling list again — so scroll, exactly as before.
   useEffect(() => {
     // "Overflows" has to mean "the page scrolls", which is why this measures the
-    // document rather than the list. The wrapper is `min-h-screen p-4`, so the
-    // canvas the list actually gets is the viewport MINUS 32px of padding, and
-    // the wrapper's own box grows with the list once it passes that. Comparing
-    // the list's height against a bare `window.innerHeight` therefore reported
-    // "no overflow" for a band of ~32px in which the page did scroll — and a
+    // wrapper and not the list. The wrapper is `min-h-screen p-4`, so the canvas
+    // the list actually gets is the viewport MINUS 32px of padding, and the
+    // wrapper's own box grows with the list once it passes that. Comparing the
+    // list's height against a bare `window.innerHeight` therefore reported "no
+    // overflow" for a band of ~32px in which the page did scroll — and a
     // bottom-anchored feed then skipped the scroll and let `body`'s
     // `overflow: hidden` clip the newest row until the next message arrived.
-    const overflows = document.documentElement.scrollHeight > window.innerHeight
+    //
+    // `offsetHeight` (LAYOUT height), not `documentElement.scrollHeight`
+    // (SCROLLABLE height): an entry animation translates the new row outside the
+    // list — `msg-anim-bounce` starts at `translateY(110%)`, the default
+    // `slide-in-from-bottom-2` at 8px — and transformed descendants count toward
+    // scrollable overflow. On a bottom-anchored feed, whose list ends flush with
+    // the canvas, that briefly made a feed that fits report an overflow, so this
+    // effect smooth-scrolled the page and let it snap back when the animation
+    // ended: a visible jitter on every single message. Layout height ignores
+    // transforms, which is exactly the question being asked here.
+    const wrapper = feedWrapperRef.current
+    const overflows = wrapper != null && wrapper.offsetHeight > window.innerHeight
     if (!shouldAutoScroll(feedLayout, overflows)) return
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    // `block: 'nearest'` (as on the embed preview) scrolls the minimum needed to
+    // reveal the sentinel instead of always slamming it to the viewport's top
+    // edge, which keeps a transient mid-animation measurement from moving a feed
+    // that is already showing its newest row.
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }, [messages, feedLayout])
 
   // Auto-remove old messages based on duration (if fade is enabled)
@@ -677,8 +704,10 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
      * un-anchor the feed.
      */
     <div
+      ref={feedWrapperRef}
       className={clsx('min-h-screen w-full bg-transparent p-4', feedLayout.wrapperClass)}
       data-feed-anchor={feedLayout.dataAnchor}
+      data-feed-order={feedLayout.dataOrder}
     >
       {/* Hide scrollbars and ensure transparent background */}
       <style
@@ -725,8 +754,8 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
       {/* text-shadow inherits to every text node below; the var is injected by
           visualSettingsToCss and gradient usernames force it off locally */}
       {/* `mt-auto` (feedAnchor 'bottom') sits on the list itself, never on its
-          children: `.overlay-live-body > * + *` in events.css and
-          `.scroll-anchor` in globals.css are both `!important` and would win. */}
+          children: `.overlay-live-body > * + *` in events.css is `!important`
+          inside a cascade layer and would beat any child-level rule. */}
       <div
         className={clsx(
           'overlay-live-body space-y-3',
@@ -738,15 +767,22 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
         {feedLayout.sentinelPosition === 'start' && (
           <div ref={messagesEndRef} className="scroll-anchor" />
         )}
-        {orderMessages(messages, invertMessageOrder).map((message, index) => {
+        {orderMessages(messages, invertMessageOrder).map((message) => {
           const isSharedChat = message.metadata?.is_shared_chat === true
           const isEvent = message.event != null
           const eventTierClass = isEvent ? `event-tier-${message.event?.tier}` : ''
           const eventTypeClass = isEvent ? `event-type-${message.event?.type}` : ''
 
           return (
+            /* The key must be POSITION-INDEPENDENT. It used to be
+               `${message.id}-${index}`, and every path that shifts an index —
+               `invert_message_order` (a prepend moves every row), the
+               `max_messages` cap, the fade timer's `slice(1)` — changed every
+               key at once, so React unmounted and remounted the whole feed and
+               every row replayed its entry animation on every new message.
+               `onChat` keeps ids unique, which is what makes the bare id safe. */
             <div
-              key={`${message.id}-${index}`}
+              key={message.id}
               data-message-id={message.id}
               data-platform={message.platform}
               data-event-type={isEvent ? message.event?.type : undefined}
@@ -758,7 +794,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                       'chat-message rounded-lg p-3 shadow-lg backdrop-blur-sm',
                       messageAnimation
                         ? MESSAGE_ANIMATION_CLASS[messageAnimation]
-                        : 'animate-in duration-300 slide-in-from-bottom-2',
+                        : feedLayout.defaultEntryAnimationClass,
                       isSharedChat
                         ? 'border-2 border-purple-500/50 bg-purple-900/40'
                         : 'bg-slate-900/90',
