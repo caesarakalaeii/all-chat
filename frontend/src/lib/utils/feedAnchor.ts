@@ -153,6 +153,14 @@ export function resolveFeedAnchorLayout(
  * and stay testable. When the content overflows, every mode scrolls: the
  * bottom-anchored auto margin has collapsed to `0` and the feed is once again a
  * plain scrolling list whose newest row must be brought into view.
+ *
+ * @param contentOverflows must mean "the feed no longer fits the canvas it is
+ *   anchored in", i.e. the SCROLL CONTAINER overflows — not merely "the list is
+ *   taller than the viewport". Those differ by the wrapper's padding, and on the
+ *   live overlay (`min-h-screen p-4`) getting it wrong left a ~32px band where
+ *   a bottom-anchored feed clipped its newest row instead of scrolling to it.
+ *   Measure the document (live overlay) or the scroll container's
+ *   `scrollHeight > clientHeight` (embed preview, where the list itself scrolls).
  */
 export function shouldAutoScroll(layout: FeedAnchorLayout, contentOverflows: boolean): boolean {
   return contentOverflows || layout.autoScrollWhenShort

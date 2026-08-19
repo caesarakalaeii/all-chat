@@ -207,9 +207,6 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   const ttsFallbackToastShownRef = useRef(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  // The message list element, so the auto-scroll effect can tell whether the
-  // feed actually overflows its canvas before deciding to scroll it.
-  const feedBodyRef = useRef<HTMLDivElement>(null)
   // Single source of truth for the two orthogonal feed-layout axes.
   const feedLayout = useMemo(
     () => resolveFeedAnchorLayout(feedAnchor, invertMessageOrder),
@@ -530,8 +527,15 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   // no-op at best. Once it overflows, the `mt-auto` has collapsed to 0 and the
   // feed is a plain scrolling list again — so scroll, exactly as before.
   useEffect(() => {
-    const body = feedBodyRef.current
-    const overflows = body != null && body.getBoundingClientRect().height > window.innerHeight
+    // "Overflows" has to mean "the page scrolls", which is why this measures the
+    // document rather than the list. The wrapper is `min-h-screen p-4`, so the
+    // canvas the list actually gets is the viewport MINUS 32px of padding, and
+    // the wrapper's own box grows with the list once it passes that. Comparing
+    // the list's height against a bare `window.innerHeight` therefore reported
+    // "no overflow" for a band of ~32px in which the page did scroll — and a
+    // bottom-anchored feed then skipped the scroll and let `body`'s
+    // `overflow: hidden` clip the newest row until the next message arrived.
+    const overflows = document.documentElement.scrollHeight > window.innerHeight
     if (!shouldAutoScroll(feedLayout, overflows)) return
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, feedLayout])
@@ -724,7 +728,6 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
           children: `.overlay-live-body > * + *` in events.css and
           `.scroll-anchor` in globals.css are both `!important` and would win. */}
       <div
-        ref={feedBodyRef}
         className={clsx(
           'overlay-live-body space-y-3',
           feedLayout.bodyClass,
