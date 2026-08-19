@@ -94,7 +94,7 @@ func (c *CommandConsumer) Run(ctx context.Context) {
 			Consumer: c.consumerName,
 			Streams:  []string{mpmodels.StreamEngagementCommands, ">"},
 			Count:    64,
-			Block:    5000, // ms
+			Block:    readBlockTime,
 		}).Result()
 		if err != nil {
 			if ctx.Err() != nil || errors.Is(err, redis.Nil) {

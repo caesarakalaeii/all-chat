@@ -42,6 +42,15 @@ const (
 	// entries orphaned before this pod started). Sweeping more often than MinIdle is
 	// fine — only entries idle past MinIdle are actually reclaimed.
 	pelDrainInterval = 60 * time.Second
+	// readBlockTime is how long an XReadGroup call blocks server-side waiting for new
+	// entries. It MUST be a time.Duration, not a bare integer: go-redis emits
+	// int64(Block/time.Millisecond), so a bare 5000 is 5000ns and truncates to
+	// "BLOCK 0" — block forever — while the same 5000ns is fed to setReadTimeout and
+	// becomes a 5000ns+10s socket deadline. Redis then waits indefinitely and the
+	// client gives up at ~10s, logging an i/o timeout on every idle read. With a real
+	// 5s the server returns an empty result well inside the 15s deadline. Matches
+	// message-processor's ReadBlockTime.
+	readBlockTime = 5 * time.Second
 )
 
 // isNoGroup reports whether err is a Redis NOGROUP error: the stream's consumer group
