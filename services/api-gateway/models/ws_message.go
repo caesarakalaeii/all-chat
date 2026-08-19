@@ -117,11 +117,26 @@ type ErrorData struct {
 type ConnectedData struct {
 	OverlayID string `json:"overlay_id"`
 	Message   string `json:"message"`
+
+	// ReplayTruncated reports that the client's ?since= watermark predates the
+	// oldest message still in the replay buffer, so the burst that follows this
+	// frame is known to be short. See ChatReplay.Truncated in the replay package.
+	//
+	// omitempty is deliberate and load-bearing: an older gateway omits the field
+	// entirely, and clients must resolve absent to false, so old-client /
+	// new-gateway and new-client / old-gateway both behave exactly as before.
+	// The name is a cross-surface contract; do not rename one end of it.
+	ReplayTruncated bool `json:"replay_truncated,omitempty"`
 }
 
 // ViewerConnectedData is sent when a viewer successfully connects (no overlay_id exposed)
 type ViewerConnectedData struct {
 	Message string `json:"message"`
+
+	// ReplayTruncated: see ConnectedData.ReplayTruncated. Viewers are the
+	// clients most likely to see it — the viewer path requires an explicit
+	// ?since=, so a stale watermark is the normal failure mode there.
+	ReplayTruncated bool `json:"replay_truncated,omitempty"`
 }
 
 // PlatformStatusData represents connection status for a platform
@@ -171,24 +186,29 @@ func NewError(code, message string) *WSMessage {
 	}
 }
 
-// NewConnected creates a new connected WebSocket message
-func NewConnected(overlayID string) *WSMessage {
+// NewConnected creates a new connected WebSocket message.
+// replayTruncated warns the client that the replay burst following this frame
+// does not reach back as far as its ?since= watermark asked for.
+func NewConnected(overlayID string, replayTruncated bool) *WSMessage {
 	return &WSMessage{
 		Type: WSMessageTypeConnected,
 		Data: ConnectedData{
-			OverlayID: overlayID,
-			Message:   "Connected to overlay stream",
+			OverlayID:       overlayID,
+			Message:         "Connected to overlay stream",
+			ReplayTruncated: replayTruncated,
 		},
 		Timestamp: time.Now().UTC(),
 	}
 }
 
-// NewViewerConnected creates a new connected message for viewers (no overlay_id)
-func NewViewerConnected() *WSMessage {
+// NewViewerConnected creates a new connected message for viewers (no overlay_id).
+// See NewConnected for replayTruncated.
+func NewViewerConnected(replayTruncated bool) *WSMessage {
 	return &WSMessage{
 		Type: WSMessageTypeConnected,
 		Data: ViewerConnectedData{
-			Message: "Connected to chat stream",
+			Message:         "Connected to chat stream",
+			ReplayTruncated: replayTruncated,
 		},
 		Timestamp: time.Now().UTC(),
 	}

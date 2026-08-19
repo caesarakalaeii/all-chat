@@ -55,9 +55,35 @@ type ChatReplayBuffer interface {
 	// message UUID published by message-processor).
 	AddOnce(ctx context.Context, overlayID, messageID string, payload []byte, ts time.Time) (bool, error)
 
-	// GetSince returns all buffered envelopes with timestamp > sinceMs.
+	// GetSince returns all buffered envelopes with timestamp > sinceMs, plus
+	// whether the requested watermark predates what the buffer still holds.
 	// Pass 0 to fetch the entire buffer.
-	GetSince(ctx context.Context, overlayID string, sinceMs int64) ([][]byte, error)
+	GetSince(ctx context.Context, overlayID string, sinceMs int64) (ChatReplay, error)
+}
+
+// ChatReplay is the result of a GetSince query: the envelopes to send, and
+// whether the answer is known to be incomplete.
+//
+// Truncated exists because the buffer is bounded twice over — by TTL (a sliding
+// window, default 5 minutes) and by MaxEntries (default 500, oldest dropped on
+// overflow). A client away for ten minutes, or one whose overlay took 500+
+// messages during a thirty-second gap, would otherwise receive a silently
+// short replay and believe it was caught up. Reporting the shortfall is the
+// whole point: it is deliberately *not* fixed by widening the window.
+type ChatReplay struct {
+	// Messages are the buffered envelopes with timestamp > sinceMs, in
+	// chronological order.
+	Messages [][]byte
+
+	// Truncated is true when sinceMs predates the oldest entry the buffer
+	// still holds — meaning messages between the client's watermark and the
+	// start of the buffer existed and are gone.
+	//
+	// It is always false for sinceMs <= 0 ("replay everything"): a caller
+	// asking for the whole buffer is making no claim about what it already
+	// saw, so there is no gap to report against. It is also false for an
+	// empty buffer, where there is no oldest entry to be older than.
+	Truncated bool
 }
 
 // RedisChatReplayBuffer is the production implementation backed by Redis.
@@ -147,9 +173,10 @@ func (b *RedisChatReplayBuffer) Add(ctx context.Context, overlayID string, paylo
 	return err
 }
 
-// GetSince returns all members with score > sinceMs, in chronological order.
+// GetSince returns all members with score > sinceMs, in chronological order,
+// and reports whether sinceMs predates the oldest entry still buffered.
 // Strips the disambiguator suffix added in Add before returning to the caller.
-func (b *RedisChatReplayBuffer) GetSince(ctx context.Context, overlayID string, sinceMs int64) ([][]byte, error) {
+func (b *RedisChatReplayBuffer) GetSince(ctx context.Context, overlayID string, sinceMs int64) (ChatReplay, error) {
 	key := chatKey(overlayID)
 
 	min := "-inf"
@@ -159,15 +186,17 @@ func (b *RedisChatReplayBuffer) GetSince(ctx context.Context, overlayID string, 
 		min = fmt.Sprintf("(%d", sinceMs)
 	}
 
+	truncated := b.isTruncated(ctx, key, sinceMs)
+
 	results, err := b.client.ZRangeByScore(ctx, key, &redis.ZRangeBy{
 		Min: min,
 		Max: "+inf",
 	}).Result()
 	if err == redis.Nil {
-		return nil, nil
+		return ChatReplay{}, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to query chat replay buffer: %w", err)
+		return ChatReplay{}, fmt.Errorf("failed to query chat replay buffer: %w", err)
 	}
 
 	out := make([][]byte, 0, len(results))
@@ -180,7 +209,38 @@ func (b *RedisChatReplayBuffer) GetSince(ctx context.Context, overlayID string, 
 			out = append(out, []byte(raw))
 		}
 	}
-	return out, nil
+	return ChatReplay{Messages: out, Truncated: truncated}, nil
+}
+
+// isTruncated reports whether a client asking for messages after sinceMs is
+// asking for something the buffer has already evicted.
+//
+// The check is one ZRANGE of a single element: read the lowest score in the
+// sorted set and compare. If the oldest entry we still hold is *newer* than the
+// client's watermark, everything between the two was dropped by the TTL or the
+// MaxEntries cap and the replay we are about to send is short.
+//
+// A watermark of 0 or less means "replay everything" — the caller is claiming
+// nothing about what it already saw, so nothing can be missing relative to it.
+// An empty buffer is likewise not truncated: there is no oldest entry.
+//
+// A Redis failure here is not fatal to the replay. Falling back to "not
+// truncated" matches the pre-existing behaviour exactly, and the alternative —
+// failing a reconnect because a diagnostic hint could not be computed — trades
+// a missing warning for actual message loss.
+func (b *RedisChatReplayBuffer) isTruncated(ctx context.Context, key string, sinceMs int64) bool {
+	if sinceMs <= 0 {
+		return false
+	}
+
+	oldest, err := b.client.ZRangeWithScores(ctx, key, 0, 0).Result()
+	if err != nil || len(oldest) == 0 {
+		// redis.Nil, a transport error, or an empty buffer: no gap to report.
+		return false
+	}
+
+	// Scores are ms-precision UnixMilli values written by Add.
+	return int64(oldest[0].Score) > sinceMs
 }
 
 // indexOfByte returns the index of the first occurrence of b in s, or -1.

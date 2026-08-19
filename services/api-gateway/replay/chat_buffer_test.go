@@ -40,12 +40,12 @@ func TestChatReplayBuffer_AddAndReplayAll(t *testing.T) {
 		require.NoError(t, buf.Add(ctx, overlayID, payload, t0.Add(time.Duration(i)*time.Second)))
 	}
 
-	got, err := buf.GetSince(ctx, overlayID, 0)
+	replayed, err := buf.GetSince(ctx, overlayID, 0)
 	require.NoError(t, err)
-	require.Len(t, got, 3)
-	assert.Contains(t, string(got[0]), `"id":"msg-0"`)
-	assert.Contains(t, string(got[1]), `"id":"msg-1"`)
-	assert.Contains(t, string(got[2]), `"id":"msg-2"`)
+	require.Len(t, replayed.Messages, 3)
+	assert.Contains(t, string(replayed.Messages[0]), `"id":"msg-0"`)
+	assert.Contains(t, string(replayed.Messages[1]), `"id":"msg-1"`)
+	assert.Contains(t, string(replayed.Messages[2]), `"id":"msg-2"`)
 }
 
 func TestChatReplayBuffer_GetSinceFiltersOlder(t *testing.T) {
@@ -64,9 +64,9 @@ func TestChatReplayBuffer_GetSinceFiltersOlder(t *testing.T) {
 
 	// Ask for messages strictly after the second message's timestamp (i=1).
 	since := t0.Add(1 * time.Second).UnixMilli()
-	got, err := buf.GetSince(ctx, overlayID, since)
+	replayed, err := buf.GetSince(ctx, overlayID, since)
 	require.NoError(t, err)
-	require.Len(t, got, 3, "should return msgs 2,3,4 — exclusive lower bound drops msg 1")
+	require.Len(t, replayed.Messages, 3, "should return msgs 2,3,4 — exclusive lower bound drops msg 1")
 }
 
 func TestChatReplayBuffer_DuplicateMillisecondsBothPreserved(t *testing.T) {
@@ -82,9 +82,9 @@ func TestChatReplayBuffer_DuplicateMillisecondsBothPreserved(t *testing.T) {
 	require.NoError(t, buf.Add(ctx, overlayID, []byte(`{"id":"a"}`), base))
 	require.NoError(t, buf.Add(ctx, overlayID, []byte(`{"id":"b"}`), base.Add(500*time.Nanosecond)))
 
-	got, err := buf.GetSince(ctx, overlayID, 0)
+	replayed, err := buf.GetSince(ctx, overlayID, 0)
 	require.NoError(t, err)
-	assert.Len(t, got, 2, "both messages at the same ms should be preserved via nanosecond suffix")
+	assert.Len(t, replayed.Messages, 2, "both messages at the same ms should be preserved via nanosecond suffix")
 }
 
 func TestChatReplayBuffer_TrimsToMaxEntries(t *testing.T) {
@@ -102,12 +102,12 @@ func TestChatReplayBuffer_TrimsToMaxEntries(t *testing.T) {
 		require.NoError(t, buf.Add(ctx, overlayID, payload, t0.Add(time.Duration(i)*time.Second)))
 	}
 
-	got, err := buf.GetSince(ctx, overlayID, 0)
+	replayed, err := buf.GetSince(ctx, overlayID, 0)
 	require.NoError(t, err)
-	require.Len(t, got, cap, "buffer must trim to MaxEntries")
+	require.Len(t, replayed.Messages, cap, "buffer must trim to MaxEntries")
 	// Most recent should remain (ids 7, 8, 9).
-	assert.Contains(t, string(got[0]), `"id":"7"`)
-	assert.Contains(t, string(got[2]), `"id":"9"`)
+	assert.Contains(t, string(replayed.Messages[0]), `"id":"7"`)
+	assert.Contains(t, string(replayed.Messages[2]), `"id":"9"`)
 }
 
 func TestChatReplayBuffer_EmptyOverlayReturnsNil(t *testing.T) {
@@ -117,9 +117,9 @@ func TestChatReplayBuffer_EmptyOverlayReturnsNil(t *testing.T) {
 	buf := NewRedisChatReplayBuffer(client, 5*time.Minute, 500)
 	ctx := context.Background()
 
-	got, err := buf.GetSince(ctx, "no-such-overlay", 0)
+	replayed, err := buf.GetSince(ctx, "no-such-overlay", 0)
 	require.NoError(t, err)
-	assert.Empty(t, got)
+	assert.Empty(t, replayed.Messages)
 }
 
 func TestChatReplayBuffer_AddOnceSuppressesDuplicates(t *testing.T) {
@@ -143,9 +143,9 @@ func TestChatReplayBuffer_AddOnceSuppressesDuplicates(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, added)
 
-	got, err := buf.GetSince(ctx, overlayID, 0)
+	replayed, err := buf.GetSince(ctx, overlayID, 0)
 	require.NoError(t, err)
-	require.Len(t, got, 1, "duplicate id must only produce one buffer entry")
+	require.Len(t, replayed.Messages, 1, "duplicate id must only produce one buffer entry")
 }
 
 func TestChatReplayBuffer_AddOnceEmptyIDFallsBack(t *testing.T) {
@@ -167,7 +167,7 @@ func TestChatReplayBuffer_AddOnceEmptyIDFallsBack(t *testing.T) {
 	require.NoError(t, err2)
 	require.True(t, added2)
 
-	got, err := buf.GetSince(ctx, overlayID, 0)
+	replayed, err := buf.GetSince(ctx, overlayID, 0)
 	require.NoError(t, err)
-	require.Len(t, got, 2)
+	require.Len(t, replayed.Messages, 2)
 }

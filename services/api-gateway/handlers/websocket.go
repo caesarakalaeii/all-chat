@@ -348,9 +348,33 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 	wsCtx := context.Background()
 	wsConn.Start(wsCtx)
 
+	// Fetch the replay window BEFORE the connected frame is sent. The connected
+	// frame carries replay_truncated, which is only knowable once the buffer has
+	// been queried — and the warning has to reach the client before (or at least
+	// with) the burst it describes, not after it. Sending stays in the original
+	// order: connected, status snapshot, then the replayed payloads.
+	//
+	// Clients can pass ?since=<ms-epoch> to skip messages they already saw
+	// (useful for resilient reconnect logic on the client side). A missing or
+	// malformed value means 0, i.e. replay the entire buffer — the owner path is
+	// deliberately permissive here, unlike the viewer path.
+	var chatReplay replay.ChatReplay
+	sinceMs := parseSinceQuery(c.Query("since"))
+	if h.chatReplayBuffer != nil {
+		fetched, err := h.chatReplayBuffer.GetSince(context.Background(), overlayID, sinceMs)
+		if err != nil {
+			h.logger.Warn("Failed to fetch chat replay buffer",
+				zap.String("overlay_id", overlayID),
+				zap.Error(err),
+			)
+		} else {
+			chatReplay = fetched
+		}
+	}
+
 	// Send connected message. The burst uses SendBlocking (backpressure) rather
 	// than Send (drop-and-close) so a large replay can't tear down the socket.
-	connectedMsg := models.NewConnected(overlayID)
+	connectedMsg := models.NewConnected(overlayID, chatReplay.Truncated)
 	connectedJSON, _ := connectedMsg.ToJSON()
 	wsConn.SendBlocking(connectedJSON)
 
@@ -375,28 +399,19 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 		}
 	}
 
-	// Replay any chat messages buffered while no WebSocket was connected.
-	// Clients can pass ?since=<ms-epoch> to skip messages they already saw
-	// (useful for resilient reconnect logic on the client side).
-	if h.chatReplayBuffer != nil {
-		sinceMs := parseSinceQuery(c.Query("since"))
-		replayed, err := h.chatReplayBuffer.GetSince(context.Background(), overlayID, sinceMs)
-		if err != nil {
-			h.logger.Warn("Failed to fetch chat replay buffer",
-				zap.String("overlay_id", overlayID),
-				zap.Error(err),
-			)
-		} else if len(replayed) > 0 {
-			h.logger.Info("Replaying buffered messages to reconnected client",
-				zap.String("overlay_id", overlayID),
-				zap.String("user_id", userID),
-				zap.Int("message_count", len(replayed)),
-				zap.Int64("since_ms", sinceMs),
-			)
-			for _, payload := range replayed {
-				if !wsConn.SendBlocking(payload) {
-					break // client gone or too slow; stop replaying
-				}
+	// Send the chat messages buffered while no WebSocket was connected, fetched
+	// above.
+	if len(chatReplay.Messages) > 0 {
+		h.logger.Info("Replaying buffered messages to reconnected client",
+			zap.String("overlay_id", overlayID),
+			zap.String("user_id", userID),
+			zap.Int("message_count", len(chatReplay.Messages)),
+			zap.Int64("since_ms", sinceMs),
+			zap.Bool("replay_truncated", chatReplay.Truncated),
+		)
+		for _, payload := range chatReplay.Messages {
+			if !wsConn.SendBlocking(payload) {
+				break // client gone or too slow; stop replaying
 			}
 		}
 	}
