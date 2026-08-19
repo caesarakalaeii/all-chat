@@ -82,6 +82,20 @@ export interface FeedAnchorLayout {
    */
   bodyClass: string
   /**
+   * Body classes for a surface where the LIST ITSELF is the scroll container
+   * (the editor's embed preview: `overlay-preview-body ... overflow-y-auto`),
+   * rather than the page.
+   *
+   * Such a container is normally `h-full`, which would fill the flex line and
+   * leave the auto margin nothing to resolve against. Bottom anchoring swaps
+   * that for `max-h-full`, so the list shrinks to its content and gets pushed
+   * to the bottom edge — and once the content is taller than the frame the cap
+   * bites, the auto margin collapses to `0`, and `overflow-y-auto` scrolls
+   * exactly as it does today. `justify-end` would instead make the overflowing
+   * start edge unreachable, which is why it is not used.
+   */
+  scrollBodyClass: string
+  /**
    * Stable theme hook: the value for `data-feed-anchor` on the wrapper, so a
    * theme can react to the mode instead of fighting it. Always emitted (never
    * `undefined`) so `[data-feed-anchor='top']` is a usable selector too.
@@ -124,6 +138,7 @@ export function resolveFeedAnchorLayout(
     anchor,
     wrapperClass: bottom ? 'flex flex-col' : '',
     bodyClass: bottom ? 'mt-auto' : '',
+    scrollBodyClass: bottom ? 'mt-auto max-h-full' : 'h-full',
     dataAnchor: anchor,
     newestAtEnd: !invertMessageOrder,
     sentinelPosition: invertMessageOrder ? 'start' : 'end',

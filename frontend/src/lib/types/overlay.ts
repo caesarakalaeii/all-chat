@@ -140,6 +140,13 @@ export interface DisplaySettings {
   animation?: 'slide' | 'fade' | 'none'
   disable_message_fade?: boolean
   invert_message_order?: boolean
+  /**
+   * Which edge of the OBS canvas the feed rests on, i.e. where blank space
+   * accumulates and therefore which way a short feed grows. Orthogonal to
+   * `invert_message_order`, which only decides which END OF THE LIST holds the
+   * newest message. Absent must resolve to 'top' — see `lib/utils/feedAnchor`.
+   */
+  feed_anchor?: 'top' | 'bottom'
   show_platform_badge?: boolean
   platform_badge_position?: 'before' | 'after'
   platform_badge_style?: 'text' | 'icon'

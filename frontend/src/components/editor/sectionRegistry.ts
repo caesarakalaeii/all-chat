@@ -320,10 +320,18 @@ export const EDITOR_SECTIONS: EditorSection[] = [
         keywords: 'keep permanent stay forever',
         anchorId: 'disableFade',
       },
+      // 'bottom' and 'direction' deliberately do NOT live here: searching
+      // "bottom" used to land on this order toggle, which does the opposite of
+      // anchoring the feed. Those keywords belong to Feed Anchor below (#728).
       {
         label: 'Invert Message Order',
-        keywords: 'newest top reverse direction bottom',
+        keywords: 'newest first reverse order sequence list',
         anchorId: 'invertOrder',
+      },
+      {
+        label: 'Feed Anchor',
+        keywords: 'bottom anchor upward grow start position align edge direction top',
+        anchorId: 'feedAnchor',
       },
       {
         label: 'Entry Animation',

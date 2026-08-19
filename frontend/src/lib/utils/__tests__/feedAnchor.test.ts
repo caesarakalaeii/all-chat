@@ -60,6 +60,7 @@ describe('resolveFeedAnchorLayout — all four combinations', () => {
     expect(l.anchor).toBe('top')
     expect(l.wrapperClass).toBe('')
     expect(l.bodyClass).toBe('')
+    expect(l.scrollBodyClass).toBe('h-full')
     expect(l.dataAnchor).toBe('top')
     expect(l.newestAtEnd).toBe(true)
     expect(l.sentinelPosition).toBe('end')
@@ -81,6 +82,10 @@ describe('resolveFeedAnchorLayout — all four combinations', () => {
     expect(l.wrapperClass).toContain('flex')
     expect(l.wrapperClass).toContain('flex-col')
     expect(l.bodyClass).toBe('mt-auto')
+    // The scroll container must NOT keep `h-full`: it would fill the flex line
+    // and leave the auto margin nothing to resolve against.
+    expect(l.scrollBodyClass).toBe('mt-auto max-h-full')
+    expect(l.scrollBodyClass).not.toContain('h-full ')
     expect(l.dataAnchor).toBe('bottom')
     expect(l.newestAtEnd).toBe(true)
     expect(l.sentinelPosition).toBe('end')
@@ -102,6 +107,8 @@ describe('resolveFeedAnchorLayout — all four combinations', () => {
       expect(l.wrapperClass).not.toContain('justify-end')
       expect(l.wrapperClass).not.toContain('flex-col-reverse')
       expect(l.bodyClass).not.toContain('justify-end')
+      expect(l.scrollBodyClass).not.toContain('justify-end')
+      expect(l.scrollBodyClass).not.toContain('reverse')
     }
   })
 
@@ -123,6 +130,7 @@ describe('resolveFeedAnchorLayout — all four combinations', () => {
       // Order must not perturb the anchor's layout output…
       expect(plain.wrapperClass).toBe(inverted.wrapperClass)
       expect(plain.bodyClass).toBe(inverted.bodyClass)
+      expect(plain.scrollBodyClass).toBe(inverted.scrollBodyClass)
       // …and the anchor must not perturb the order's output.
       expect(plain.newestAtEnd).toBe(true)
       expect(inverted.newestAtEnd).toBe(false)
