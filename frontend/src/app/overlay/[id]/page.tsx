@@ -663,6 +663,15 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   }
 
   return (
+    /*
+     * feedAnchor 'bottom' makes this wrapper a flex column so the message
+     * list's `mt-auto` has free space to absorb. The list must stay its only
+     * IN-FLOW child for that to hold: the <style> blocks below are
+     * `display: none` per the UA stylesheet and PlatformStatusIndicators
+     * defaults to variant='fixed' (position: fixed), so neither becomes a flex
+     * item. Adding an in-flow sibling here would split the free space and
+     * un-anchor the feed.
+     */
     <div
       className={clsx('min-h-screen w-full bg-transparent p-4', feedLayout.wrapperClass)}
       data-feed-anchor={feedLayout.dataAnchor}

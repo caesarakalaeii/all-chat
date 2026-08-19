@@ -683,6 +683,8 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
         />
       )}
 
+      {/* Flex column under feedAnchor 'bottom'; the list below must remain its
+          only in-flow child, or the free space the `mt-auto` absorbs is split. */}
       <div
         id="overlay-preview-root"
         className={clsx(

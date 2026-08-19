@@ -99,7 +99,8 @@ interface Box {
   bodyBottom: number
   wrapperTop: number
   wrapperBottom: number
-  firstRowTop: number
+  /** Top of the list's FIRST CHILD, whatever it is (sentinel or a row). */
+  firstChildTop: number
   sentinelMarginTop: string
 }
 
@@ -114,7 +115,9 @@ async function measure(page: import('@playwright/test').Page): Promise<Box> {
       bodyBottom: +body.bottom.toFixed(1),
       wrapperTop: +wrapper.top.toFixed(1),
       wrapperBottom: +wrapper.bottom.toFixed(1),
-      firstRowTop: +q('[data-row]').getBoundingClientRect().top.toFixed(1),
+      firstChildTop: +(q('[data-body]').firstElementChild as HTMLElement)
+        .getBoundingClientRect()
+        .top.toFixed(1),
       sentinelMarginTop: sentinel ? getComputedStyle(sentinel).marginTop : 'none',
     }
   })
@@ -169,10 +172,18 @@ test.describe('feed anchor — live overlay', () => {
     }) => {
       await page.setContent(liveFixture('bottom', invert, 2))
       const m = await measure(page)
-      // The auto margin is on the list, so the sentinel keeps its forced 0 and
-      // the first row still sits flush with the list's own content box.
-      if (m.sentinelMarginTop !== 'none') expect(m.sentinelMarginTop).toBe('0px')
-      expect(m.firstRowTop).toBeCloseTo(m.bodyTop, 0)
+      // The auto margin is on the LIST, so no child rule had to be beaten and
+      // the first child still sits flush with the list's own content box. This
+      // is the assertion that would fail for the `:first-child { margin-top:
+      // auto }` variant: `.scroll-anchor`'s `margin: 0 !important` (globals.css)
+      // and `.overlay-live-body > * + *` (events.css, layered !important) both
+      // outrank a child-level rule.
+      expect(m.firstChildTop).toBeCloseTo(m.bodyTop, 0)
+      if (invert) {
+        // Inverted puts the sentinel first, where globals.css pins it to 0 and
+        // the sibling rule does not reach it.
+        expect(m.sentinelMarginTop).toBe('0px')
+      }
     })
   }
 })
