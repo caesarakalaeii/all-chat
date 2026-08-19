@@ -214,6 +214,35 @@ describe('classifyEnvelope', () => {
     expect(classifyEnvelope({}).kind).toBe('ignore')
   })
 
+  it('reads replay_truncated off the connected frame', () => {
+    const res = classifyEnvelope({
+      type: 'connected',
+      data: { overlay_id: 'ov1', message: 'Connected', replay_truncated: true },
+    })
+    expect(res.kind).toBe('connected')
+    if (res.kind === 'connected') expect(res.replayTruncated).toBe(true)
+  })
+
+  // A gateway that predates the flag omits it entirely. Absent must resolve to
+  // false so an old gateway and a new client behave exactly as they did before.
+  it('resolves an absent replay_truncated to false', () => {
+    for (const data of [
+      { overlay_id: 'ov1', message: 'Connected' },
+      { message: 'Connected to chat stream' },
+      undefined,
+      null,
+    ]) {
+      const res = classifyEnvelope({ type: 'connected', data } as never)
+      expect(res.kind).toBe('connected')
+      if (res.kind === 'connected') expect(res.replayTruncated).toBe(false)
+    }
+  })
+
+  it('does not treat a truthy non-boolean replay_truncated as a warning', () => {
+    const res = classifyEnvelope({ type: 'connected', data: { replay_truncated: 'yes' } } as never)
+    if (res.kind === 'connected') expect(res.replayTruncated).toBe(false)
+  })
+
   it('classifies replay_response as replay with the deletion array', () => {
     const res = classifyEnvelope({ type: 'replay_response', data: [{ deletion_type: 'clear' }] })
     expect(res.kind).toBe('replay')

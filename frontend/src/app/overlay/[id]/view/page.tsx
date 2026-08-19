@@ -84,6 +84,7 @@ import {
   type ModEntry,
   type ViewItem,
 } from '@/lib/utils/overlayViewModel'
+import { OFFLINE_THRESHOLD } from '@/lib/utils/connectionStatusLabel'
 import { createSoundPlayer, type SoundPlayer, type SoundSettings } from '@/lib/utils/soundPlayer'
 
 import {
@@ -182,12 +183,19 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
     )
   }, [])
 
-  const { config, sources, activeChannels, channelStatuses, connectionStatus, reconnectAttempts } =
-    useOverlayStream(id, {
-      onChat,
-      onMessageUpdate,
-      onDeletion,
-    })
+  const {
+    config,
+    sources,
+    activeChannels,
+    channelStatuses,
+    connectionStatus,
+    reconnectAttempts,
+    replayTruncated,
+  } = useOverlayStream(id, {
+    onChat,
+    onMessageUpdate,
+    onDeletion,
+  })
 
   // Fetch per-overlay event toggles (degrades gracefully if disabled — setState
   // happens in a promise callback, so this is not a synchronous set-state-in-effect).
@@ -770,6 +778,32 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
           </Link>
         </div>
       </header>
+
+      {/* Sustained-reconnect reassurance. The badge escalates to red at four
+          consecutive failures (~13s), which a redeploy routinely outlasts. The
+          badge has room for two words; this is where the sentence goes, and it
+          exists because the intuitive response to a red badge — close the
+          overlay and reopen it — discards the watermark and causes exactly the
+          loss the badge is warning about. Monitor only: the OBS overlay is a
+          chat feed on a live stream, not a diagnostics surface. */}
+      {connectionStatus === 'reconnecting' && reconnectAttempts >= OFFLINE_THRESHOLD && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-xs text-text-sub">
+          <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
+          Still reconnecting — this recovers on its own, and messages sent meanwhile replay when
+          the connection returns. Closing this page is what loses them.
+        </div>
+      )}
+
+      {/* Truncated-replay notice: the gateway told us our watermark predates its
+          buffer, so part of the gap is unrecoverable. Sticky, because the hole
+          it describes stays in the feed above. */}
+      {replayTruncated && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-xs text-text-sub">
+          <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
+          Some earlier messages may be missing — the disconnection outlasted the replay buffer, so
+          the oldest part of the gap could not be recovered.
+        </div>
+      )}
 
       {/* No-role notice: viewing is allowed, moderation is not. Says nothing about the
           overlay itself — the payload behind it is identical for an overlay that does not

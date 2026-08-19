@@ -57,7 +57,10 @@ import {
 } from '@/lib/utils/overlayStreamCore'
 import type { SourceInfo } from '@/components/PlatformStatusIndicators'
 
-export type ConnectionStatus = 'connecting' | 'open' | 'reconnecting'
+// Single definition, owned by the badge's pure label helper so the two cannot
+// drift; re-exported here because this hook is where consumers expect it.
+export type { ConnectionStatus } from '@/lib/utils/connectionStatusLabel'
+import type { ConnectionStatus } from '@/lib/utils/connectionStatusLabel'
 
 export interface UseOverlayStreamOptions {
   /**
@@ -96,6 +99,15 @@ export interface UseOverlayStreamResult {
   channelStatuses: Map<string, PlatformStatus>
   connectionStatus: ConnectionStatus
   reconnectAttempts: number
+  /**
+   * The most recent reconnect asked for messages since a watermark the gateway
+   * no longer holds, so some messages from the gap are gone for good. Sticky
+   * for the session: it describes a hole in the feed the moderator is looking
+   * at, which a later clean reconnect does not fill in.
+   *
+   * Always `false` against a gateway that predates the `replay_truncated` flag.
+   */
+  replayTruncated: boolean
 }
 
 const SEEN_ID_CAPACITY = 1024
@@ -113,6 +125,7 @@ export function useOverlayStream(
   const [reconnectAttempts, setReconnectAttempts] = useState(0)
   const [forceReconnect, setForceReconnect] = useState(0)
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting')
+  const [replayTruncated, setReplayTruncated] = useState(false)
 
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -398,6 +411,11 @@ export function useOverlayStream(
             return
           }
 
+          case 'connected':
+            // Latch, never clear: a gap already in the feed stays a gap.
+            if (classified.replayTruncated) setReplayTruncated(true)
+            return
+
           case 'ignore':
             return
         }
@@ -468,5 +486,6 @@ export function useOverlayStream(
     channelStatuses: platformState.channelStatuses,
     connectionStatus,
     reconnectAttempts,
+    replayTruncated,
   }
 }
