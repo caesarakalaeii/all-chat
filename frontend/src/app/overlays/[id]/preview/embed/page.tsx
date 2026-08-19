@@ -693,6 +693,7 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
           useCustomCss && 'overlay-preview'
         )}
         data-feed-anchor={feedLayout.dataAnchor}
+        data-feed-order={feedLayout.dataOrder}
       >
         <div
           ref={feedBodyRef}
@@ -757,7 +758,7 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                             // editor preview is a faithful pick-and-compare
                             messageAnimation
                               ? MESSAGE_ANIMATION_CLASS[messageAnimation]
-                              : 'animate-in duration-300 slide-in-from-bottom-2'
+                              : feedLayout.defaultEntryAnimationClass
                           )
                     }
                     style={isEvent ? undefined : bubbleStyle}

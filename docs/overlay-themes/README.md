@@ -261,10 +261,13 @@ All four combinations are valid. `feed_anchor: bottom` with the order NOT
 inverted is the Twitch-like arrangement: newest at the bottom, older messages
 pushed upward, blank space at the top.
 
-The live overlay wrapper and the editor preview root both carry a stable hook:
+The live overlay wrapper and the editor preview root both carry one stable hook
+per axis:
 
 - `[data-feed-anchor="top"]` — feed glued to the top edge, grows downward
 - `[data-feed-anchor="bottom"]` — feed glued to the bottom edge, grows upward
+- `[data-feed-order="newest-last"]` — normal reading order
+- `[data-feed-order="newest-first"]` — Invert Message Order is on
 
 ```css
 /* Fade the far end of the feed, whichever end that happens to be */
@@ -275,6 +278,35 @@ The live overlay wrapper and the editor preview root both carry a stable hook:
   opacity: 0.6;
 }
 ```
+
+A new message lands at whichever end `data-feed-order` names, so vertical entry
+animations have to enter from that side. The attribute sets two inherited custom
+properties the built-in `.msg-anim-*` presets read — `--msg-enter-dir` (`1`, or
+`-1` when newest-first) and `--msg-enter-origin` (`100%`, or `0%`). Custom
+keyframes can read them and flip for free:
+
+```css
+@keyframes my-entry {
+  from {
+    opacity: 0;
+    transform: translateY(calc(40px * var(--msg-enter-dir, 1)));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+```
+
+Overriding a `.msg-anim-*` rule outright still works — they are single unlayered
+class selectors, and these properties do not raise their specificity.
+
+**Exclude `.scroll-anchor`** from any rule that styles overlay rows. It is the
+invisible auto-scroll sentinel rendered next to the newest message and must stay
+a zero-box element; a rule that catches it turns it into dead space glued to the
+newest message, which a bottom-anchored feed shows as a gap on the edge it was
+supposed to rest on. The bundled High Contrast theme shows the pattern:
+`.space-y-3 > div:not(.scroll-anchor)`.
 
 **Do not** set `margin-top`, `justify-content` or `flex-direction` on the
 wrapper or on `.overlay-live-body` itself. Bottom anchoring is implemented as a

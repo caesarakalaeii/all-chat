@@ -15,9 +15,19 @@ import { resolveFeedAnchorLayout, type FeedAnchor } from '../../src/lib/utils/fe
  * The technique under test is deliberately narrow: a flex-column WRAPPER plus
  * `margin-top: auto` on `.overlay-live-body` itself. The margin must not land
  * on the list's children, because `.overlay-live-body > * + *` (events.css,
- * `@layer visual-customizer`) and `.scroll-anchor` (globals.css) are both
- * `!important` and would win. So this drives the REAL events.css and the REAL
- * globals.css read from source rather than restating them.
+ * `@layer visual-customizer`) is `!important` inside a layer and would win. So
+ * this drives the REAL events.css and the REAL globals.css read from source
+ * rather than restating them.
+ *
+ * `.scroll-anchor` (globals.css) does NOT also win there, as this file once
+ * claimed: for IMPORTANT declarations the cascade reverses layer order and ranks
+ * unlayered styles LAST, so the layered rule outranked the sentinel's own guard
+ * and dressed it as a chat bubble. events.css now excludes it by selector; the
+ * sentinel's geometry is asserted in overlay-feed-order.spec.ts, against the
+ * real page.
+ *
+ * Everything here is static geometry. The dynamic half of the feature — what
+ * happens as messages ARRIVE — lives in overlay-feed-order.spec.ts.
  */
 
 const REPO = join(__dirname, '..', '..', '..')
@@ -175,13 +185,12 @@ test.describe('feed anchor — live overlay', () => {
       // The auto margin is on the LIST, so no child rule had to be beaten and
       // the first child still sits flush with the list's own content box. This
       // is the assertion that would fail for the `:first-child { margin-top:
-      // auto }` variant: `.scroll-anchor`'s `margin: 0 !important` (globals.css)
-      // and `.overlay-live-body > * + *` (events.css, layered !important) both
-      // outrank a child-level rule.
+      // auto }` variant: `.overlay-live-body > * + *` (events.css, layered
+      // !important) outranks a child-level rule.
       expect(m.firstChildTop).toBeCloseTo(m.bodyTop, 0)
       if (invert) {
-        // Inverted puts the sentinel first, where globals.css pins it to 0 and
-        // the sibling rule does not reach it.
+        // Inverted puts the sentinel first, and events.css excludes it from the
+        // sibling gap rule, so nothing pushes the stack off the anchored edge.
         expect(m.sentinelMarginTop).toBe('0px')
       }
     })
