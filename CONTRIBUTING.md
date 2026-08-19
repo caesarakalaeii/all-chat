@@ -81,6 +81,49 @@ and refresh logic.
 
 ---
 
+## Filing an Agent Task
+
+Some issues are written to be picked up and implemented by an autonomous agent
+(Caterpillar) rather than by a person. Use the **Agent task** issue template
+(`.github/ISSUE_TEMPLATE/agent_task.md`); it carries the full contract as
+comments, so you do not have to remember it.
+
+The two things that make an issue claimable:
+
+1. **A fenced `agent` block** in the body, listing the repos and the acceptance
+   commands. Without it the issue is rejected with a comment, because a task
+   with no machine-checkable acceptance criteria can never be marked done.
+   ````
+   ```agent
+   repos:
+     - caesarakalaeii/all-chat
+   acceptance:
+     - "cd services/foo && go test -short ./..."
+   ```
+   ````
+2. **The `agent` label**, added *last*. Intake polls frequently, so an issue
+   that carries the label before you have finished writing it can be claimed
+   mid-edit.
+
+Labels Caterpillar manages on its own: `agent-wip` (a runner holds the task)
+and `needs-human` (the agent parked on a question and is waiting on you).
+
+Two rules worth internalising before writing one:
+
+- **Acceptance commands must fail on today's code.** The supervisor runs them,
+  not the agent, and a gate that already passes proves nothing. Verify each one
+  locally, in both directions, before you add the label. Equally, never gate on
+  something that is *already red* on `main` — that makes the task unsatisfiable
+  no matter what the agent does.
+- **Verify every file:line and every premise you cite.** A stale line number
+  sends the agent to the wrong place. A refuted premise makes it implement a fix
+  for a problem that does not exist. If part of a report turns out to be wrong,
+  or already fixed, say so in the issue in as many words.
+
+See #724 and #728 for worked examples.
+
+---
+
 ## Pull Request Process
 
 ### Before Submitting
