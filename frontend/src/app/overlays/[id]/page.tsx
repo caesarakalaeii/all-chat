@@ -75,6 +75,7 @@ import { visualSettingsToCss } from '@/lib/utils/visual-settings-to-css'
 import { useNotificationSocket } from '@/hooks/useNotificationSocket'
 import { parseCssToVisualSettings } from '@/lib/utils/theme-css-parser'
 import { getBundledTheme } from '@/lib/theme-marketplace/bundled-themes'
+import { DEFAULT_FEED_ANCHOR, parseFeedAnchor, type FeedAnchor } from '@/lib/utils/feedAnchor'
 import { isCustomCssForked } from '@/lib/utils/custom-css'
 import type { CssIssue } from '@/lib/utils/custom-css'
 import { computeThemeCssDiff, reconstructEditorCss } from '@/lib/utils/theme-css-diff'
@@ -1646,10 +1647,13 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
 
   // --- Customization state ---
   const entryAnimationSelectId = useId()
+  const feedAnchorSelectId = useId()
   const [maxMessages, setMaxMessages] = useState(50)
   const [messageDuration, setMessageDuration] = useState(15)
   const [disableMessageFade, setDisableMessageFade] = useState(false)
   const [invertMessageOrder, setInvertMessageOrder] = useState(false)
+  // Which canvas edge the feed rests on — orthogonal to invertMessageOrder.
+  const [feedAnchor, setFeedAnchor] = useState<FeedAnchor>(DEFAULT_FEED_ANCHOR)
   const [enable7tv, setEnable7tv] = useState(true)
   const [enableBttv, setEnableBttv] = useState(true)
   const [enableFfz, setEnableFfz] = useState(true)
@@ -2233,6 +2237,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           if (typeof display.disable_message_fade === 'boolean')
             setDisableMessageFade(display.disable_message_fade)
           setInvertMessageOrder(display.invert_message_order === true)
+          setFeedAnchor(parseFeedAnchor(display.feed_anchor))
 
           if (typeof config.enable_7tv === 'boolean') setEnable7tv(config.enable_7tv)
           if (typeof config.enable_bttv === 'boolean') setEnableBttv(config.enable_bttv)
@@ -2785,6 +2790,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           max_messages: maxMessages,
           disable_message_fade: disableMessageFade,
           invert_message_order: invertMessageOrder,
+          feed_anchor: feedAnchor,
           platform_badge_position: visualSettings.platformBadgePosition ?? 'before',
           platform_badge_style: visualSettings.platformBadgeStyle ?? 'text',
           show_platform_badge: visualSettings.showPlatformBadge !== 'none',
@@ -3402,6 +3408,32 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                         </p>
                       </div>
 
+                      {/* Feed Anchor — which canvas EDGE the stack rests on.
+                          Deliberately adjacent to Invert Message Order, which
+                          controls the other axis (which END OF THE LIST is
+                          newest). Conflating the two is what made #728. */}
+                      <div data-setting-anchor="feedAnchor">
+                        <label
+                          htmlFor={feedAnchorSelectId}
+                          className="mb-1 block text-xs text-text-sub"
+                        >
+                          Feed Anchor
+                        </label>
+                        <select
+                          id={feedAnchorSelectId}
+                          value={feedAnchor}
+                          onChange={(e) => setFeedAnchor(parseFeedAnchor(e.target.value))}
+                          className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-xs text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                        >
+                          <option value="top">Top edge — feed grows downward</option>
+                          <option value="bottom">Bottom edge — feed grows upward</option>
+                        </select>
+                        <p className="mt-1 text-xs text-text-sub">
+                          Which edge of the overlay the feed sits on when it is not full. Anchor it
+                          to the bottom and each new message pushes the older ones up.
+                        </p>
+                      </div>
+
                       {/* Invert message order */}
                       <div data-setting-anchor="invertOrder">
                         <label className="flex items-center gap-2 text-xs text-text-sub">
@@ -3414,7 +3446,8 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           Invert Message Order
                         </label>
                         <p className="mt-1 ml-5 text-xs text-text-sub">
-                          Show newest messages at the top instead of the bottom
+                          Reverses the reading order so the newest message is listed first. This is
+                          the order only — use Feed Anchor to move the feed to the other edge.
                         </p>
                       </div>
 

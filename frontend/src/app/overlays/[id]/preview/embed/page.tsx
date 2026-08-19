@@ -56,6 +56,14 @@ import { UserAvatar } from '@/components/UserAvatar'
 import { PremiumBadge } from '@/components/PremiumBadge'
 import { EventContent } from '@/components/overlay/EventContent'
 import { MessageAttachments } from '@/components/overlay/MessageAttachments'
+import {
+  DEFAULT_FEED_ANCHOR,
+  orderMessages,
+  parseFeedAnchor,
+  resolveFeedAnchorLayout,
+  shouldAutoScroll,
+  type FeedAnchor,
+} from '@/lib/utils/feedAnchor'
 import { shouldFilterMessage } from '@/lib/utils/filterMessage'
 import { useTrackOnce } from '@/hooks/useTrackOnce'
 import type { FilterSettings } from '@/lib/types/overlay'
@@ -187,6 +195,12 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
   const [showPlatformBadge, setShowPlatformBadge] = useState(true)
   // Entry animation for new chat bubbles; null keeps the default fade + slide-up
   const [messageAnimation, setMessageAnimation] = useState<MessageAnimation | null>(null)
+  // Feed layout, mirroring the live overlay so the preview is a faithful
+  // pick-and-compare. Display settings only arrive on load (the editor sends no
+  // DISPLAY_SETTINGS_UPDATE postMessage), so a save + iframe reload is needed
+  // to see a change here — same as max_messages and invert order.
+  const [invertMessageOrder, setInvertMessageOrder] = useState(false)
+  const [feedAnchor, setFeedAnchor] = useState<FeedAnchor>(DEFAULT_FEED_ANCHOR)
 
   // Phase 11: Filter settings state
   const [filterSettings, setFilterSettings] = useState<FilterSettings>({})
@@ -245,6 +259,22 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
 
   const wsClientRef = useRef<WebSocketClient | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const feedBodyRef = useRef<HTMLDivElement>(null)
+
+  const feedLayout = useMemo(
+    () => resolveFeedAnchorLayout(feedAnchor, invertMessageOrder),
+    [feedAnchor, invertMessageOrder]
+  )
+
+  // Auto-scroll to the newest message. The preview never did this at all: the
+  // ref was attached but scrollIntoView was never called, so the newest message
+  // silently fell out of frame once the list overflowed.
+  useEffect(() => {
+    const body = feedBodyRef.current
+    const overflows = body != null && body.scrollHeight > body.clientHeight
+    if (!shouldAutoScroll(feedLayout, overflows)) return
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [messages, feedLayout])
 
   const scopedPreviewCss = useMemo(() => {
     if (!useCustomCss || !customCss.trim()) {
@@ -388,6 +418,8 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
         const display = config.display_settings || {}
 
         if (typeof display.max_messages === 'number') setMaxMessages(display.max_messages)
+        setInvertMessageOrder(display.invert_message_order === true)
+        setFeedAnchor(parseFeedAnchor(display.feed_anchor))
         if (typeof display.font_size === 'number') setFontSize(display.font_size)
         if (
           display.platform_badge_position === 'before' ||
@@ -651,16 +683,25 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
         />
       )}
 
+      {/* Flex column under feedAnchor 'bottom'; the list below must remain its
+          only in-flow child, or the free space the `mt-auto` absorbs is split. */}
       <div
         id="overlay-preview-root"
         className={clsx(
           'overlay-preview-root relative h-screen overflow-hidden',
+          feedLayout.wrapperClass,
           useCustomCss && 'overlay-preview'
         )}
+        data-feed-anchor={feedLayout.dataAnchor}
       >
         <div
+          ref={feedBodyRef}
           className={clsx(
-            'overlay-preview-body h-full space-y-3 overflow-y-auto p-4',
+            'overlay-preview-body space-y-3 overflow-y-auto p-4',
+            // `h-full` (top) / `mt-auto max-h-full` (bottom) — see feedAnchor.
+            // The empty state centres itself in the frame, so it keeps the full
+            // height in either mode; there is nothing to anchor yet.
+            messages.length === 0 ? 'h-full' : feedLayout.scrollBodyClass,
             messageAnimation && 'msg-anim-container'
           )}
           style={{
@@ -694,7 +735,10 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
             </div>
           ) : (
             <>
-              {messages.map((message) => {
+              {feedLayout.sentinelPosition === 'start' && (
+                <div ref={messagesEndRef} className="scroll-anchor" />
+              )}
+              {orderMessages(messages, invertMessageOrder).map((message) => {
                 const isEvent = message.event != null
                 const eventTierClass = isEvent ? `event-tier-${message.event?.tier}` : ''
                 const eventTypeClass = isEvent ? `event-type-${message.event?.type}` : ''
@@ -913,7 +957,9 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                   </div>
                 )
               })}
-              <div ref={messagesEndRef} />
+              {feedLayout.sentinelPosition === 'end' && (
+                <div ref={messagesEndRef} className="scroll-anchor" />
+              )}
             </>
           )}
         </div>
