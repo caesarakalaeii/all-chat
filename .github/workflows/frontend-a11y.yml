@@ -18,6 +18,14 @@ name: Frontend A11y Gate
 # Ratchets (may only shrink, never grow):
 #   - frontend/eslint.a11y.suppressions.json  (jsx-a11y strict baseline)
 #   - frontend/tests/e2e/a11y-baseline.json   (axe smoke baseline)
+#
+# EVERY job sets `timeout-minutes`. Without it a job inherits GitHub's 6-hour
+# default, and on 2026-08-19 both Chromium jobs hung on the Playwright install
+# for ~4 hours on PR #729. A hang is worse than a failure here: the required
+# contexts never report, so the PR sits "Expected"/blocked with no signal, and
+# several agent sessions were burnt re-verifying a branch that was already
+# correct. The install steps are additionally retried under a per-attempt cap,
+# because that step normally takes ~40s but has been seen taking 11 minutes.
 
 on:
   pull_request:
@@ -28,6 +36,8 @@ jobs:
   # without running the full suite on backend-only PRs.
   changes:
     runs-on: ubuntu-latest
+    # Observed ~15-30s. Only a checkout plus a paths-filter.
+    timeout-minutes: 10
     outputs:
       frontend: ${{ steps.filter.outputs.frontend }}
     steps:
@@ -48,6 +58,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
+    # Observed ~30-40s. No browser involved.
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: frontend
@@ -77,6 +89,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
+    # Observed ~1.5min end to end. Headroom is almost entirely for the install
+    # step's retries below; anything past this is a stall, not slow work.
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: frontend
@@ -92,8 +107,23 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Retried under a per-attempt cap: normally ~40s, but a stalled mirror has
+      # produced an 11-minute run and a ~4-hour hang. Retrying beats waiting a
+      # stall out, and beats reporting a red required check that looks like a
+      # code defect. 5m is many times the normal duration, so a tripped cap
+      # means stuck, not slow.
       - name: Install Playwright Chromium (vitest browser provider)
-        run: npx playwright install --with-deps chromium
+        timeout-minutes: 16
+        run: |
+          for attempt in 1 2 3; do
+            if timeout --kill-after=30s 5m npx playwright install --with-deps chromium; then
+              exit 0
+            fi
+            echo "::warning::Chromium install attempt $attempt stalled or failed; retrying"
+            sleep 10
+          done
+          echo "::error::Chromium install failed after 3 attempts"
+          exit 1
 
       - name: Storybook a11y tests (axe violations = error)
         run: npx vitest --project storybook --run
@@ -103,6 +133,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
+    # Observed ~1.5-3.5min end to end. As above, the headroom is for the
+    # install step's retries rather than for the smoke run itself.
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: frontend
@@ -118,8 +151,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Same bounded retry as a11y-storybook; this is the job that hung for ~4
+      # hours on PR #729 and the one that logged the 11-minute install.
       - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+        timeout-minutes: 16
+        run: |
+          for attempt in 1 2 3; do
+            if timeout --kill-after=30s 5m npx playwright install --with-deps chromium; then
+              exit 0
+            fi
+            echo "::warning::Chromium install attempt $attempt stalled or failed; retrying"
+            sleep 10
+          done
+          echo "::error::Chromium install failed after 3 attempts"
+          exit 1
 
       - name: Axe smoke over app pages
         run: npx playwright test a11y --project=chromium
