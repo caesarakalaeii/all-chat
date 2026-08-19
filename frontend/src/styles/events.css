@@ -462,9 +462,36 @@
     padding: var(--chat-overlay-padding, 1rem) !important;
     gap: var(--chat-message-gap, 0.75rem) !important;
   }
-  /* space-y-* uses margin-top on siblings — override message gap */
-  .overlay-preview-body > * + * {
+  /* `.scroll-anchor` is excluded everywhere in this block. It is the invisible
+     auto-scroll sentinel the overlay pages render next to the newest message,
+     and globals.css declares it `height/padding/margin: 0 !important` — but
+     that rule is UNLAYERED, and for IMPORTANT declarations a cascade layer
+     outranks unlayered styles, so this block used to win and dress the sentinel
+     as a chat bubble: 12px of padding on a "zero-height" div plus a message
+     gap, i.e. ~36px of dead space glued to the newest message. Invisible while
+     the feed was always top-anchored and scrolled, very visible once
+     `feed_anchor: 'bottom'` parks the stack on an edge (#729) — and it moves to
+     the TOP of the stack when `invert_message_order` puts the sentinel first. */
+
+  /* space-y-* uses margin-top on siblings — override message gap.
+     Both halves skip the sentinel: it must not take a gap of its own, and the
+     message that FOLLOWS it (the newest one, when the order is inverted) must
+     not be treated as a second child and pushed away from the edge. */
+  .overlay-preview-body > *:not(.scroll-anchor) + *:not(.scroll-anchor) {
     margin-top: var(--chat-message-gap, var(--theme-message-gap, 0.75rem)) !important;
+  }
+
+  /* `space-y-*` applies its gap as margin-BOTTOM on every child except the
+     last, and the sentinel is a real child — so whenever it trails the list
+     (i.e. the order is NOT inverted) the newest message keeps a trailing gap
+     and a bottom-anchored feed floats that far off the edge it was told to sit
+     on. The gap BETWEEN rows is already applied as margin-top just above, so
+     dropping this one is pure removal of dead space, including for a theme that
+     styles the gap as margin-bottom itself.
+     `:has()` is already used further down this file; on an engine without it
+     the rule simply does not match and the old trailing gap comes back. */
+  .overlay-preview-body > *:has(+ .scroll-anchor) {
+    margin-bottom: 0 !important;
   }
 
   /* ── Message bubble ─────────────────────────────────────────────────────
@@ -482,7 +509,7 @@
      no-bubble theme asking for `padding: 0` still got 12px on every row. A theme
      states its intent by declaring the `--theme-*` variable; themes that declare
      nothing are unaffected. */
-  .overlay-preview-body > div:not(.event-message) {
+  .overlay-preview-body > div:not(.event-message):not(.scroll-anchor) {
     border-radius: var(
       --chat-bubble-border-radius,
       var(--theme-bubble-border-radius, 0.5rem)
@@ -643,9 +670,34 @@
  * new customizer properties.
  */
 @layer visual-customizer {
-  /* ── Message spacing (space-y-3 → message gap) ─────────────────────── */
-  .overlay-live-body > * + * {
+  /* `.scroll-anchor` is excluded everywhere in this block. It is the invisible
+     auto-scroll sentinel the overlay pages render next to the newest message,
+     and globals.css declares it `height/padding/margin: 0 !important` — but
+     that rule is UNLAYERED, and for IMPORTANT declarations a cascade layer
+     outranks unlayered styles, so this block used to win and dress the sentinel
+     as a chat bubble: 12px of padding on a "zero-height" div plus a message
+     gap, i.e. ~36px of dead space glued to the newest message. Invisible while
+     the feed was always top-anchored and scrolled, very visible once
+     `feed_anchor: 'bottom'` parks the stack on an edge (#729) — and it moves to
+     the TOP of the stack when `invert_message_order` puts the sentinel first. */
+
+  /* ── Message spacing (space-y-3 → message gap) ─────────────────────────
+     Both halves skip the sentinel — see the preview block above. */
+  .overlay-live-body > *:not(.scroll-anchor) + *:not(.scroll-anchor) {
     margin-top: var(--chat-message-gap, var(--theme-message-gap, 0.75rem)) !important;
+  }
+
+  /* `space-y-*` applies its gap as margin-BOTTOM on every child except the
+     last, and the sentinel is a real child — so whenever it trails the list
+     (i.e. the order is NOT inverted) the newest message keeps a trailing gap
+     and a bottom-anchored feed floats that far off the edge it was told to sit
+     on. The gap BETWEEN rows is already applied as margin-top just above, so
+     dropping this one is pure removal of dead space, including for a theme that
+     styles the gap as margin-bottom itself.
+     `:has()` is already used further down this file; on an engine without it
+     the rule simply does not match and the old trailing gap comes back. */
+  .overlay-live-body > *:has(+ .scroll-anchor) {
+    margin-bottom: 0 !important;
   }
 
   /* ── Message bubble ─────────────────────────────────────────────────────
@@ -658,7 +710,7 @@
      no-bubble theme asking for `padding: 0` still got 12px on every row. A theme
      states its intent by declaring the `--theme-*` variable; themes that declare
      nothing are unaffected. */
-  .overlay-live-body > div:not(.event-message) {
+  .overlay-live-body > div:not(.event-message):not(.scroll-anchor) {
     border-radius: var(
       --chat-bubble-border-radius,
       var(--theme-bubble-border-radius, 0.5rem)

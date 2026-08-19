@@ -570,19 +570,64 @@ All four combinations are valid. Once the feed is taller than the canvas the
 anchor stops mattering — the overlay scrolls to keep the newest message in view
 in every mode, exactly as it always has.
 
-The overlay wrapper carries the current mode as a stable attribute, so a theme
-can react to it:
+The overlay wrapper carries **both** axes as stable attributes, so a theme can
+react to either without having to guess:
+
+| Attribute | Values | Reflects |
+|-----------|--------|----------|
+| `data-feed-anchor` | `top` / `bottom` | which canvas edge the stack rests on |
+| `data-feed-order` | `newest-last` / `newest-first` | which end of the list is newest (`newest-first` = Invert Message Order is on) |
 
 ```css
 /* Fade the far end of the feed, whichever end that happens to be */
 [data-feed-anchor="top"]    .overlay-live-body > div:last-child  { opacity: 0.6; }
 [data-feed-anchor="bottom"] .overlay-live-body > div:first-child { opacity: 0.6; }
+
+/* Or key off the reading order instead */
+[data-feed-order="newest-first"] .overlay-live-body > div:first-child { font-weight: 600; }
 ```
 
 Bottom anchoring is a flex-column wrapper plus `margin-top: auto` on
 `.overlay-live-body`. Do not override the wrapper's `flex-direction` or the
 list's `margin-top` — that re-pins the feed to the edge the user did not pick.
 Styling the list's children is unaffected.
+
+#### Entry animations follow the order
+
+A new message lands at whichever end of the list is newest, so a vertical entry
+animation has to come in from that side. `data-feed-order` drives two inherited
+custom properties that the built-in `.msg-anim-*` presets read:
+
+| Property | `newest-last` (default) | `newest-first` |
+|----------|------------------------|----------------|
+| `--msg-enter-dir` | `1` (unset; enters from below) | `-1` (enters from above) |
+| `--msg-enter-origin` | `100%` (unset; hinges on its bottom edge) | `0%` (hinges on its top edge) |
+
+Custom keyframes are welcome to read them so they flip too:
+
+```css
+@keyframes my-entry {
+  from { opacity: 0; transform: translateY(calc(40px * var(--msg-enter-dir, 1))); }
+  to   { opacity: 1; transform: none; }
+}
+```
+
+Overriding a `.msg-anim-*` rule outright still works — they are single unlayered
+class selectors, and these properties never raise their specificity.
+
+#### `.scroll-anchor` is not yours to style
+
+The list contains one invisible sentinel, `.scroll-anchor`, next to the newest
+message; the overlay scrolls to it. It must stay a zero-box element. Exclude it
+from any rule that styles overlay rows — the bundled High Contrast theme shows
+the pattern:
+
+```css
+.space-y-3 > div:not(.scroll-anchor) { /* … */ }
+```
+
+A rule that catches it gives the sentinel a real box, which shows up as dead
+space glued to the newest message (very visible on a bottom-anchored feed).
 
 ### Override Display Settings with CSS
 
