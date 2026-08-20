@@ -18,24 +18,18 @@
 
 import clsx from 'clsx'
 
+import { connectionStatusDisplay } from '@/lib/utils/connectionStatusLabel'
+
 import type { ConnectionStatus } from '@/hooks/useOverlayStream'
-
-const STATUS_META: Record<ConnectionStatus, { label: string; dot: string }> = {
-  open: { label: 'Live', dot: 'bg-kick' },
-  connecting: { label: 'Connecting', dot: 'bg-amber-400' },
-  reconnecting: { label: 'Reconnecting', dot: 'bg-amber-400' },
-}
-
-// After this many consecutive failed reconnects the link is treated as a real
-// outage ("Offline", red) rather than a transient blip ("Reconnecting", amber),
-// so the streamer can tell a momentary hiccup from a connection that's actually
-// down. With the exponential backoff this is roughly ~13s of failing retries.
-const OFFLINE_THRESHOLD = 4
 
 /**
  * Static (no-animation) connection-state pill for the view header. Reflects the
  * live socket state from useOverlayStream; `attempts` lets a sustained
- * reconnect loop surface as a distinct "Offline" state.
+ * reconnect loop escalate the dot from amber to red.
+ *
+ * All copy and colour lives in `connectionStatusLabel`, which is a pure
+ * function so the wording can be covered by the node-environment `unit` vitest
+ * project. This component is the render, nothing else.
  */
 export function ConnectionBadge({
   status,
@@ -44,12 +38,7 @@ export function ConnectionBadge({
   status: ConnectionStatus
   attempts?: number
 }) {
-  const offline = status === 'reconnecting' && attempts >= OFFLINE_THRESHOLD
-  const meta = offline ? { label: 'Offline', dot: 'bg-red-500' } : STATUS_META[status]
-  const title =
-    status === 'reconnecting' && attempts > 0
-      ? `${meta.label} — ${attempts} failed attempt${attempts === 1 ? '' : 's'}`
-      : meta.label
+  const { label, dot, title } = connectionStatusDisplay(status, attempts)
 
   return (
     <span
@@ -58,8 +47,8 @@ export function ConnectionBadge({
       aria-live="polite"
       title={title}
     >
-      <span className={clsx('h-2 w-2 rounded-full', meta.dot)} aria-hidden />
-      {meta.label}
+      <span className={clsx('h-2 w-2 rounded-full', dot)} aria-hidden />
+      {label}
     </span>
   )
 }

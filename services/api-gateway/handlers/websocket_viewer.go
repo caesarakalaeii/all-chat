@@ -223,38 +223,52 @@ func (h *ViewerWebSocketHandler) HandleViewerChatConnection(c *gin.Context) {
 	wsCtx := context.Background()
 	wsConn.Start(wsCtx)
 
-	// Send connected message (without overlay_id for security). The burst uses
-	// SendBlocking (backpressure) rather than Send (drop-and-close).
-	connectedMsg := models.NewViewerConnected()
-	connectedJSON, _ := connectedMsg.ToJSON()
-	wsConn.SendBlocking(connectedJSON)
-
-	// Replay messages buffered since the viewer's last-seen timestamp.
+	// Fetch the replay window for the viewer's last-seen timestamp BEFORE the
+	// connected frame goes out: that frame carries replay_truncated, which is
+	// only knowable once the buffer has been queried, and the warning must not
+	// trail the burst it describes.
+	//
 	// For viewers we *require* an explicit ?since= — first-time viewers should
 	// not receive a flood of 5 minutes of chat history they never saw before.
 	// A reconnecting viewer client provides since=<last-msg-ms> to recover the
 	// gap. The owner-handler replays everything by default; this is intentionally
 	// stricter for public-facing viewer connections.
-	if h.chatReplayBuffer != nil {
-		if sinceMs := parseSinceQuery(c.Query("since")); sinceMs > 0 {
-			replayed, err := h.chatReplayBuffer.GetSince(context.Background(), overlayID, sinceMs)
-			if err != nil {
-				h.logger.Warn("Failed to fetch chat replay buffer",
-					zap.String("overlay_id", overlayID),
-					zap.Error(err),
-				)
-			} else if len(replayed) > 0 {
-				h.logger.Info("Replaying buffered messages to reconnected viewer",
-					zap.String("overlay_id", overlayID),
-					zap.String("viewer_id", viewerID),
-					zap.Int("message_count", len(replayed)),
-					zap.Int64("since_ms", sinceMs),
-				)
-				for _, payload := range replayed {
-					if !wsConn.SendBlocking(payload) {
-						break // viewer gone or too slow; stop replaying
-					}
-				}
+	//
+	// Because of that requirement, viewers are precisely the clients whose
+	// watermark can be stale — away long enough for the TTL to roll past it, or
+	// on an overlay busy enough to blow the entry cap during the gap — so
+	// replay_truncated matters most here.
+	var chatReplay replay.ChatReplay
+	sinceMs := parseSinceQuery(c.Query("since"))
+	if h.chatReplayBuffer != nil && sinceMs > 0 {
+		fetched, err := h.chatReplayBuffer.GetSince(context.Background(), overlayID, sinceMs)
+		if err != nil {
+			h.logger.Warn("Failed to fetch chat replay buffer",
+				zap.String("overlay_id", overlayID),
+				zap.Error(err),
+			)
+		} else {
+			chatReplay = fetched
+		}
+	}
+
+	// Send connected message (without overlay_id for security). The burst uses
+	// SendBlocking (backpressure) rather than Send (drop-and-close).
+	connectedMsg := models.NewViewerConnected(chatReplay.Truncated)
+	connectedJSON, _ := connectedMsg.ToJSON()
+	wsConn.SendBlocking(connectedJSON)
+
+	if len(chatReplay.Messages) > 0 {
+		h.logger.Info("Replaying buffered messages to reconnected viewer",
+			zap.String("overlay_id", overlayID),
+			zap.String("viewer_id", viewerID),
+			zap.Int("message_count", len(chatReplay.Messages)),
+			zap.Int64("since_ms", sinceMs),
+			zap.Bool("replay_truncated", chatReplay.Truncated),
+		)
+		for _, payload := range chatReplay.Messages {
+			if !wsConn.SendBlocking(payload) {
+				break // viewer gone or too slow; stop replaying
 			}
 		}
 	}

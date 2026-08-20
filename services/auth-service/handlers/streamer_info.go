@@ -64,6 +64,60 @@ type StreamerInfoResponse struct {
 	Username    string         `json:"username"`
 	DisplayName string         `json:"display_name,omitempty"`
 	Platforms   []PlatformInfo `json:"platforms"`
+
+	// ViewerPublic reports whether a viewer WebSocket connection to this
+	// streamer would be accepted — i.e. whether the api-gateway's
+	// GetPublicOverlayByUsername would resolve an overlay for them.
+	//
+	// Why this exists: the gateway rejects a non-public streamer *before* the
+	// WebSocket upgrade, so the browser only ever sees close code 1006 with an
+	// empty reason — indistinguishable from DNS failure, a cold-start proxy or
+	// a gateway rolling mid-connect. Clients used to guess from "1006 on the
+	// first attempt", which silenced them on any transient blip. This flag lets
+	// them ask the question over HTTP instead and only stop retrying on an
+	// explicit false.
+	//
+	// It reveals nothing the viewer would not learn a moment later by
+	// attempting the connection, and in particular exposes neither the overlay
+	// ID nor anything that triggers listener polling, so the constraint in the
+	// note above is preserved.
+	//
+	// Name is a cross-repo contract (all-chat-extension reads `viewer_public`);
+	// deliberately not `omitempty` so `false` is always on the wire.
+	ViewerPublic bool `json:"viewer_public"`
+}
+
+// viewerPublicQuery mirrors the api-gateway's GetPublicOverlayByUsername
+// (services/api-gateway/subscription/repository.go) predicate exactly, so the
+// flag this handler reports and the decision the gateway actually makes on a
+// viewer WebSocket upgrade cannot disagree. It selects existence only — the
+// overlay ID never leaves the database.
+const viewerPublicQuery = `
+	SELECT EXISTS (
+		SELECT 1
+		FROM overlays o
+		JOIN users u ON o.user_id = u.id
+		WHERE u.id = $1
+		  AND o.is_active = true
+		  AND o.is_public_for_viewers = true
+		  AND u.is_banned = false
+	)
+`
+
+// hasPublicOverlay answers "would the gateway accept a viewer connection for
+// this user?". A query failure resolves to false rather than failing the whole
+// request: the platform list is the primary payload, and a client that reads a
+// missing/false flag from a degraded response must treat it as a transport
+// failure and keep retrying (never as a policy "stop").
+func (h *StreamerInfoHandler) hasPublicOverlay(ctx context.Context, userID string) bool {
+	var viewerPublic bool
+	if err := h.db.QueryRow(ctx, viewerPublicQuery, userID).Scan(&viewerPublic); err != nil {
+		h.log.Warn("Failed to resolve viewer_public flag; reporting false",
+			zap.Error(err),
+			zap.String("user_id", userID))
+		return false
+	}
+	return viewerPublic
 }
 
 // HandleGetStreamerInfo returns information about a streamer and their active platforms
@@ -176,9 +230,10 @@ func (h *StreamerInfoHandler) HandleGetStreamerInfo(c *gin.Context) {
 
 	// Return response (overlay_id intentionally excluded for security)
 	response := StreamerInfoResponse{
-		Username:    user.Username,
-		DisplayName: user.Username,
-		Platforms:   platforms,
+		Username:     user.Username,
+		DisplayName:  user.Username,
+		Platforms:    platforms,
+		ViewerPublic: h.hasPublicOverlay(ctx, user.ID),
 	}
 
 	c.JSON(http.StatusOK, response)
