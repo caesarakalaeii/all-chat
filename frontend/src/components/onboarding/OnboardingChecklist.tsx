@@ -377,6 +377,13 @@ export function OnboardingChecklist({
                   </p>
                 </li>
                 <li>
+                  <span className="font-medium text-text">Differently-coloured bubbles</span>
+                  <p className="text-xs text-text-sub">
+                    Give each platform its own bubble colour, or cycle a palette down the feed,
+                    under Bubble colors in Appearance. Free.
+                  </p>
+                </li>
+                <li>
                   <span className="font-medium text-text">Viewer flairs</span>
                   <p className="text-xs text-text-sub">
                     Premium cosmetics for chatters, like animated name gradients, under Flairs in

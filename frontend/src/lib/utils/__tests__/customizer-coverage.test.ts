@@ -194,6 +194,40 @@ describe('visual customizer property coverage', () => {
     expect('--customizer-bubble-bg-set').not.toMatch(/^--(chat|platform)-/)
   })
 
+  /**
+   * The bubble-fill settings are emitted as rules only, never as `:root`
+   * variables. Adding them to PROPERTY_MAP would put them in theme-css-parser's
+   * reverse map, and a theme's `var()` fallback would then be read back as a
+   * streamer choice — the same trap that keeps "Bubble background" cooperative.
+   * A palette is also a list, which has no single-custom-property form.
+   */
+  it('keeps the bubble-fill settings out of the parsed variable namespace', () => {
+    const mapped = new Set(PROPERTY_MAP.map(([field]) => field))
+    for (const field of [
+      'bubblePalette',
+      'twitchBubbleBg',
+      'youtubeBubbleBg',
+      'kickBubbleBg',
+      'tiktokBubbleBg',
+      'discordBubbleBg',
+    ] as const) {
+      expect(mapped.has(field), `${field} must not be in PROPERTY_MAP`).toBe(false)
+    }
+  })
+
+  /**
+   * `data-bubble-slot` is assigned from arrival order by BubbleSlotTracker, so a
+   * theme keying off it would be styling "the 3rd message ever seen", not a
+   * position. Per-row rhythm belongs on `nth-child` (see the Sticky Notes note in
+   * the theme README).
+   */
+  it('keeps the palette slot attribute out of theme CSS', () => {
+    const users = BUNDLED_THEMES.filter((theme) => theme.css.includes('data-bubble-slot')).map(
+      (theme) => theme.id
+    )
+    expect(users).toEqual([])
+  })
+
   it('forces the three settings that had no consumer', () => {
     for (const field of [
       'textShadow',

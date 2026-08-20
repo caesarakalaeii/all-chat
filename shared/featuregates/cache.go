@@ -67,6 +67,17 @@ const (
 	// paid capability. Flip to is_premium=false to graduate to all users. Viewer
 	// participation and points earning are NOT gated by this.
 	GateEngagement = "engagement"
+
+	// GateBubbleColors is the feature key for differently-coloured chat bubbles:
+	// a fill per platform, and/or a palette cycled down the feed.
+	//
+	// Seeded is_premium=FALSE — unlike every other key here, this one ships OPEN.
+	// It is pure client-side CSS: no bandwidth, no platform quota, no send path,
+	// no abuse surface, and telling Twitch from YouTube at a glance serves the
+	// multistream promise that is the product's reason to exist. The gate exists
+	// so it can be turned into an upsell from the admin UI without a deploy
+	// (CLAUDE.md "Shipping a Feature"), not because it is one today.
+	GateBubbleColors = "bubble_colors"
 )
 
 // FeatureGate represents a single row from the feature_gates table.

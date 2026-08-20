@@ -37,17 +37,60 @@ type SevenTVResolver interface {
 	Resolve(ctx context.Context, input string) (clients.ResolvedSet, error)
 }
 
+// BubbleColorsGate answers whether differently-coloured chat bubbles are open for
+// a user (ADR-0008, gate key `bubble_colors`). Mirrors moderation-service's
+// moderationGate: when the gate row is not premium everyone is in, otherwise only
+// premium users are.
+//
+// It cannot be shared/middleware.RequirePremium: that aborts the whole request,
+// and this route saves the entire overlay config (theme, filters, fonts, …). Only
+// a handful of visual_settings keys are gated, so the check has to be per-field.
+type BubbleColorsGate interface {
+	BubbleColorsEnabled(ctx context.Context, userID string) (bool, error)
+}
+
+// bubbleColorSettings are the visual_settings keys the `bubble_colors` gate owns.
+// Names match the frontend's VisualSettings fields (lib/types/visual-settings.ts);
+// the emitted CSS lives in lib/utils/visual-settings-to-css.ts.
+var bubbleColorSettings = []string{
+	"bubblePalette",
+	"twitchBubbleBg",
+	"youtubeBubbleBg",
+	"kickBubbleBg",
+	"tiktokBubbleBg",
+	"discordBubbleBg",
+}
+
 // ConfigHandler manages overlay configuration routes.
 type ConfigHandler struct {
 	repo            OverlayConfigRepository
 	overlays        OverlayRepository
 	sources         SourceRepository
 	seventvResolver SevenTVResolver
+	// bubbleColors may be nil, which means open — the same fail-open default
+	// moderation-service's OpenGate provides, so a service wired without a gate
+	// cache (or a test) behaves as the gate's seeded state does.
+	bubbleColors BubbleColorsGate
 }
 
 // NewConfigHandler returns a ConfigHandler.
-func NewConfigHandler(repo OverlayConfigRepository, overlays OverlayRepository, sources SourceRepository, seventvResolver SevenTVResolver) *ConfigHandler {
-	return &ConfigHandler{repo: repo, overlays: overlays, sources: sources, seventvResolver: seventvResolver}
+func NewConfigHandler(repo OverlayConfigRepository, overlays OverlayRepository, sources SourceRepository, seventvResolver SevenTVResolver, bubbleColors BubbleColorsGate) *ConfigHandler {
+	return &ConfigHandler{repo: repo, overlays: overlays, sources: sources, seventvResolver: seventvResolver, bubbleColors: bubbleColors}
+}
+
+// bubbleColorsLocked reports whether the requester may NOT configure bubble
+// colours. A gate-lookup error locks the controls: showing an editable control
+// whose value the save path will drop is the failure mode this whole feature was
+// built to avoid.
+func (h *ConfigHandler) bubbleColorsLocked(ctx context.Context, userID string) bool {
+	if h.bubbleColors == nil {
+		return false
+	}
+	enabled, err := h.bubbleColors.BubbleColorsEnabled(ctx, userID)
+	if err != nil {
+		return true
+	}
+	return !enabled
 }
 
 // HandleGetConfig returns the configuration for an overlay owned by the requester.
@@ -75,7 +118,16 @@ func (h *ConfigHandler) HandleGetConfig(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, config)
+	// Embedded pointer flattens into the same JSON object, so the response shape
+	// is unchanged apart from one added field. Resolved per request and never
+	// persisted; the unauthenticated HandleGetPublicConfig does not carry it.
+	c.JSON(http.StatusOK, struct {
+		*models.OverlayConfig
+		BubbleColorsLocked bool `json:"bubble_colors_locked"`
+	}{
+		OverlayConfig:      config,
+		BubbleColorsLocked: h.bubbleColorsLocked(c.Request.Context(), userID.(string)),
+	})
 }
 
 // HandleUpdateConfig updates the overlay configuration for the owner.
@@ -139,6 +191,19 @@ func (h *ConfigHandler) HandleUpdateConfig(c *gin.Context) {
 		config.CustomCSS = *req.CustomCSS
 	}
 	if req.VisualSettings != nil {
+		// Gated keys are carried over from the stored config rather than rejected:
+		// this route saves everything, so failing the request would block unrelated
+		// edits, and overwriting with the incoming values would let a locked user
+		// set them. Carrying over also means an unrelated save never silently wipes
+		// colours configured while the gate was open.
+		if h.bubbleColorsLocked(c.Request.Context(), userID.(string)) {
+			for _, key := range bubbleColorSettings {
+				delete(req.VisualSettings, key)
+				if stored, ok := config.VisualSettings[key]; ok {
+					req.VisualSettings[key] = stored
+				}
+			}
+		}
 		config.VisualSettings = req.VisualSettings
 	}
 	if req.ThemeID != nil {

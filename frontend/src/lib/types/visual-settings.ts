@@ -111,6 +111,27 @@ export interface VisualSettings {
   backdropBlur?: string         // --chat-backdrop-blur
   maxWidth?: string             // --chat-max-width
 
+  /**
+   * Differently-coloured bubbles (premium). Two independent axes:
+   *
+   * - `bubblePalette` — 2 to MAX_BUBBLE_PALETTE fills cycled down the feed,
+   *   keyed on the `data-bubble-slot` the overlay surfaces write per row.
+   * - `<platform>BubbleBg` — pins one platform's rows to a fill, and wins over
+   *   the palette on those rows.
+   *
+   * Neither is in PROPERTY_MAP. A palette is a list, not a single custom
+   * property, and keeping both out of the map also keeps theme-css-parser from
+   * back-filling them out of a theme — so a set value here is always the
+   * streamer's own choice and is safe to enforce over theme CSS. See
+   * bubbleFillRules in visual-settings-to-css.
+   */
+  bubblePalette?: string[]
+  twitchBubbleBg?: string
+  youtubeBubbleBg?: string
+  kickBubbleBg?: string
+  tiktokBubbleBg?: string
+  discordBubbleBg?: string
+
   // Visibility toggles ('inline' | 'none' for inline elements; 'block' | 'none' for block)
   showAvatars?: 'inline' | 'none'        // --chat-show-avatars
   showBadges?: 'inline' | 'none'         // --chat-show-badges

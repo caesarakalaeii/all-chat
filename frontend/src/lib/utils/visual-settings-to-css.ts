@@ -207,13 +207,87 @@ export const OVERRIDDEN_FIELDS: ReadonlySet<keyof VisualSettings> = new Set(
   OVERRIDE_RULES.map((rule) => rule.field)
 )
 
+/**
+ * Longest bubble palette the editor offers and the emitter renders. Bounded
+ * because each entry costs a rule per surface, and because a rhythm the eye can
+ * follow needs a short cycle — beyond half a dozen it just reads as noise.
+ */
+export const MAX_BUBBLE_PALETTE = 6
+
+/** Per-row attribute the overlay surfaces write for the palette to key on. */
+export const BUBBLE_SLOT_ATTR = 'data-bubble-slot'
+
+/** VisualSettings field → the `data-platform` value whose bubble it fills. */
+const BUBBLE_TINT_PLATFORMS: ReadonlyArray<[keyof VisualSettings, string]> = [
+  ['twitchBubbleBg', 'twitch'],
+  ['youtubeBubbleBg', 'youtube'],
+  ['kickBubbleBg', 'kick'],
+  ['tiktokBubbleBg', 'tiktok'],
+  ['discordBubbleBg', 'discord'],
+]
+
+/**
+ * The palette actually in effect: entries that are usable CSS colours, clamped
+ * to MAX_BUBBLE_PALETTE, and only if at least two survive (one colour is the
+ * plain "Bubble background" setting, not a cycle).
+ *
+ * Exported because the overlay surfaces need the same length to compute
+ * `data-bubble-slot`; deriving it twice would drift.
+ */
+export function resolveBubblePalette(settings: Partial<VisualSettings>): string[] {
+  const palette = (settings.bubblePalette ?? [])
+    .filter((color) => typeof color === 'string' && color !== '' && hasBalancedParens(color))
+    .slice(0, MAX_BUBBLE_PALETTE)
+  return palette.length >= 2 ? palette : []
+}
+
+/**
+ * Differently-coloured bubbles: a palette cycled down the feed, plus per-platform
+ * fills that win over it.
+ *
+ * Emitted as `!important` rules inside the cascade layer for the same reason as
+ * OVERRIDE_RULES — a theme's own `background: … !important` on the row would
+ * otherwise beat them — and, like those, only when configured, so an unset
+ * control leaves the theme's fill alone.
+ *
+ * Order matters and is the precedence rule: palette first, platform second. Both
+ * selectors are one class plus one attribute, so specificity ties and the later
+ * rule wins. That is what makes "a platform tint overrides the palette on that
+ * platform's rows" true without any `:not()` gymnastics.
+ */
+function bubbleFillRules(settings: Partial<VisualSettings>): string[] {
+  const blocks: string[] = []
+
+  const rule = (predicate: string, color: string): string =>
+    [
+      FEED_SCOPES.map((scope) => `  ${scope} > div${predicate}:not(.event-message)`).join(',\n') +
+        ' {',
+      `    background-color: ${color} !important;`,
+      '  }',
+    ].join('\n')
+
+  // `.scroll-anchor` needs no exclusion here: the sentinel carries neither a
+  // slot attribute nor a platform, so no predicate below can match it.
+  resolveBubblePalette(settings).forEach((color, slot) => {
+    blocks.push(rule(`[${BUBBLE_SLOT_ATTR}='${slot}']`, color))
+  })
+
+  for (const [field, platform] of BUBBLE_TINT_PLATFORMS) {
+    const color = settings[field]
+    if (typeof color !== 'string' || color === '' || !hasBalancedParens(color)) continue
+    blocks.push(rule(`[data-platform='${platform}']`, color))
+  }
+
+  return blocks
+}
+
 /** Renders the set OVERRIDE_RULES as CSS rule blocks; empty when none apply. */
 function overrideRules(settings: Partial<VisualSettings>): string[] {
   const blocks: string[] = []
 
   for (const { field, targets, properties } of OVERRIDE_RULES) {
     const value = settings[field]
-    if (value === undefined || value === '') continue
+    if (typeof value !== 'string' || value === '') continue
     if (!hasBalancedParens(value)) continue
 
     const selectors = FEED_SCOPES.flatMap((scope) =>
@@ -244,7 +318,7 @@ export function visualSettingsToCss(settings: Partial<VisualSettings>): string {
 
   for (const [field, cssVar] of PROPERTY_MAP) {
     const value = settings[field]
-    if (value === undefined) continue
+    if (typeof value !== 'string') continue
     if (!hasBalancedParens(value)) continue
     declarations.push(`    ${cssVar}: ${value};`)
   }
@@ -259,7 +333,7 @@ export function visualSettingsToCss(settings: Partial<VisualSettings>): string {
   if (declarations.length > 0) {
     blocks.push(['  :root {', ...declarations, '  }'].join('\n'))
   }
-  blocks.push(...overrideRules(settings))
+  blocks.push(...overrideRules(settings), ...bubbleFillRules(settings))
 
   if (blocks.length === 0) {
     return ''
