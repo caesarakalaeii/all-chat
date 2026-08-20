@@ -246,9 +246,22 @@ export function platformStatusReducer(
 // Envelope classification
 // ---------------------------------------------------------------------------
 
+/** `data` of the gateway's `connected` welcome frame. */
+export interface ConnectedData {
+  overlay_id?: string
+  message?: string
+  /**
+   * Set by the gateway when the `?since=` watermark we sent predates the
+   * oldest message still in the replay buffer, i.e. the burst that follows
+   * this frame is known to be short. Older gateways omit it entirely, which is
+   * why `classifyEnvelope` resolves absent to `false`.
+   */
+  replay_truncated?: boolean
+}
+
 export interface WsEnvelope {
   type?: string
-  data?: ChatMessage | PlatformStatus | DeletionMetadata[] | null
+  data?: ChatMessage | PlatformStatus | DeletionMetadata[] | ConnectedData | null
   timestamp?: string
   error?: string
 }
@@ -259,6 +272,7 @@ export type EnvelopeClassification =
   | { kind: 'chat'; message: ChatMessage }
   | { kind: 'update'; message: ChatMessage }
   | { kind: 'status'; status: PlatformStatus }
+  | { kind: 'connected'; replayTruncated: boolean }
   | { kind: 'ignore' }
 
 /**
@@ -270,6 +284,12 @@ export function classifyEnvelope(envelope: WsEnvelope | null | undefined): Envel
   if (!envelope || typeof envelope.type !== 'string') return { kind: 'ignore' }
 
   switch (envelope.type) {
+    case 'connected': {
+      // Absent must resolve to false: a gateway that predates the flag omits
+      // it, and an unwarned client must behave exactly as it does today.
+      const data = envelope.data as ConnectedData | undefined
+      return { kind: 'connected', replayTruncated: data?.replay_truncated === true }
+    }
     case 'replay_response':
       return {
         kind: 'replay',
