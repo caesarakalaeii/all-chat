@@ -1,3 +1,6 @@
 node_modules/
 com.allchat.streamdeck.sdPlugin/bin/
 *.streamDeckPlugin
+# Packaging output (`npm ci && npm run build && npx @elgato/cli pack … --output dist`),
+# produced locally and by .github/workflows/plugins.yml.
+dist/

@@ -13,6 +13,9 @@
  * A typical premium streamer binds four keys to this action, one per mode. A
  * free account binds three: the start key will keep telling them, informatively,
  * what it would unlock.
+ *
+ * KEEP IN SYNC with `streamcontroller-plugin/actions/prediction_control.py`
+ * (ADR-0049).
  */
 
 import { action, type KeyDownEvent } from "@elgato/streamdeck";

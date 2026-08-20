@@ -229,6 +229,23 @@ a future refactor cannot quietly turn the feature's only advertisement into a
 generic error, nor start telling mis-scoped users to buy something that will not
 help them.
 
+### Packaging
+
+`.github/workflows/plugins.yml` runs the two commands above on every PR that
+touches this directory, validates `manifest.json` / `about.json` /
+`attribution.json` (including that the two versions and ids agree, and that the
+licence is still `AGPL-3.0-or-later`), and uploads an installable zip as a run
+artifact. Unzip it into the plugins directory named under
+[Install](#install) to test a branch.
+
+The zip is a staged **allowlist**, not the whole directory: `main.py`, the three
+JSON files, `requirements.txt`, `README.md`, `actions/` and `allchat/`. `tests/`
+is deliberately left out — it is mock plumbing that a user's StreamController
+would import-scan for nothing.
+
+Not submitted to the StreamController plugin store yet; see
+[Before submitting to StreamController's plugin store](#before-submitting-to-streamcontrollers-plugin-store).
+
 ### Layout
 
 ```

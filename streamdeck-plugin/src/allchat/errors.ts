@@ -18,6 +18,10 @@
  *   not to look like a broken button.
  *
  * Neither path ever puts the token in a message or a log line.
+ *
+ * KEEP IN SYNC with `streamcontroller-plugin/allchat/errors.py` (ADR-0049). The
+ * 401-vs-403 split is the part that must not drift: one says "re-paste your
+ * token", the other says "this is premium", and swapping them costs money.
  */
 
 import { UPGRADE_URL, ACCOUNT_TOKENS_URL } from "./settings.js";

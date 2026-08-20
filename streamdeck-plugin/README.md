@@ -33,7 +33,7 @@ the server working correctly, not the plugin failing. The plugin treats that 403
 as its own distinct state: the key shows Stream Deck's alert and the plugin log
 carries a specific message explaining that starting polls and predictions is a
 premium feature, that the close/lock/resolve/cancel keys still work, and that you
-can upgrade at <https://allch.at>. It is never reported as a generic
+can upgrade at <https://allch.at/upgrade>. It is never reported as a generic
 "request failed".
 
 The asymmetry is intentional in the product: if you started a round while
@@ -86,6 +86,30 @@ instead use `streamdeck link com.allchat.streamdeck.sdPlugin`, then
 > rather than `devDependencies` on purpose: this package is private and never
 > published, and CI runs with `NODE_ENV=production`, where `npm ci` drops dev
 > dependencies and the build would fail with `tsc: not found`.
+
+### Packaging
+
+`.github/workflows/plugins.yml` lints, builds, validates the manifest and packs
+this plugin on every PR that touches it, and uploads the resulting
+`com.allchat.streamdeck.streamDeckPlugin` as a run artifact. That artifact is
+how a reviewer installs a branch on real hardware without a local toolchain:
+download it from the run page, unzip, double-click.
+
+The same two commands work locally, with the Elgato CLI pinned to the version CI
+uses:
+
+```bash
+npx --yes @elgato/cli@1.9.0 validate com.allchat.streamdeck.sdPlugin
+npx --yes @elgato/cli@1.9.0 pack com.allchat.streamdeck.sdPlugin --output dist
+```
+
+> **Gotcha:** the Elgato CLI **rewrites `manifest.json` in place**, reformatting
+> it and stripping the trailing newline. That is invisible in CI (the checkout is
+> thrown away) but shows up as an unrelated diff locally, so
+> `git checkout com.allchat.streamdeck.sdPlugin/manifest.json` after packing.
+
+The plugin is not published to the Elgato Marketplace yet; the artifact is the
+only distribution today.
 
 ---
 

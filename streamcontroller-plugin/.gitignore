@@ -1,2 +1,5 @@
 __pycache__/
 *.py[cod]
+# Packaging output (the staged plugin folder and its zip), produced by
+# .github/workflows/plugins.yml and reproducible locally with the same steps.
+dist/
