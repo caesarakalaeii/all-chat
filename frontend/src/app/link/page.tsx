@@ -183,10 +183,18 @@ function ApproveForm({
   pending,
   userCode,
   overlays,
+  state,
 }: {
   pending: PendingLink
   userCode: string | null
   overlays: Overlay[]
+  /**
+   * The plugin's `state` value, forwarded from the URL the plugin opened. We do
+   * not interpret it — it is the plugin's own CSRF check on its own loopback
+   * listener, so all this page does is carry it through to the callback, which
+   * echoes it into the redirect.
+   */
+  state: string | null
 }) {
   const router = useRouter()
   // Default to the only overlay when there is exactly one: the common case is a
@@ -229,7 +237,10 @@ function ApproveForm({
         // The loopback flow: hand the browser to the server-side callback, which
         // re-validates the STORED redirect and emits the Location header itself.
         // The browser never chooses where the one-time code goes.
-        window.location.assign(approved.redirect_to)
+        const target = state
+          ? `${approved.redirect_to}&state=${encodeURIComponent(state)}`
+          : approved.redirect_to
+        window.location.assign(target)
         return
       }
       // The code flow: the plugin is polling and will pick the token up itself.
@@ -399,6 +410,7 @@ function ApproveForm({
 function LinkDeviceContent() {
   const searchParams = useSearchParams()
   const requestId = searchParams.get('request_id')
+  const state = searchParams.get('state')
 
   const [pending, setPending] = useState<PendingLink | null>(null)
   const [userCode, setUserCode] = useState<string | null>(null)
@@ -453,7 +465,12 @@ function LinkDeviceContent() {
             <span className="sr-only">Loading link request</span>
           </div>
         ) : pending ? (
-          <ApproveForm pending={pending} userCode={userCode} overlays={overlays} />
+          <ApproveForm
+            pending={pending}
+            userCode={userCode}
+            overlays={overlays}
+            state={state}
+          />
         ) : (
           <CodeEntry
             initialError={loadError}

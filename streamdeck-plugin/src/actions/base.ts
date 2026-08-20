@@ -16,9 +16,13 @@
  * the token anywhere.
  */
 
-import streamDeck, { SingletonAction, type KeyAction, type DialAction } from "@elgato/streamdeck";
+import streamDeck, {
+	SingletonAction,
+	type DialAction,
+	type KeyAction,
+	type SendToPluginEvent,
+} from "@elgato/streamdeck";
 
-import { looksLikePat } from "../allchat/client.js";
 import {
 	AllChatError,
 	malformedTokenMessage,
@@ -27,10 +31,18 @@ import {
 	unauthorizedMessage,
 } from "../allchat/errors.js";
 import {
+	ACCOUNT_DEVICES_URL,
+	looksLikeToken,
 	resolveBaseUrl,
 	resolveToken,
 	type ConnectionSettings,
 } from "../allchat/settings.js";
+import {
+	linkViaCode,
+	linkViaLoopback,
+	loopbackAvailable,
+	type LinkResult,
+} from "../allchat/linking.js";
 
 /**
  * The settings constraint `SingletonAction` imposes, restated locally.
@@ -70,18 +82,131 @@ export abstract class AllChatAction<
 	 * Resolves the connection for a key, or throws a classified
 	 * {@link AllChatError} when the key is not configured yet.
 	 *
-	 * The token is only inspected for its `allchat_pat_` prefix — the plugin
-	 * cannot and must not try to validate the secret; only the server can.
+	 * The token is only inspected for its prefix (`allchat_dev_` from linking or
+	 * `allchat_pat_` from a paste) — the plugin cannot and must not try to validate
+	 * the secret; only the server can.
 	 */
 	protected connection(settings: T | undefined): ActionContext {
 		const token = resolveToken(settings);
 		if (!token) {
 			throw new AllChatError("no-token", missingTokenMessage());
 		}
-		if (!looksLikePat(token)) {
+		if (!looksLikeToken(token)) {
 			throw new AllChatError("malformed-token", malformedTokenMessage());
 		}
 		return { baseUrl: resolveBaseUrl(settings), token };
+	}
+
+
+	/**
+	 * Handles the property inspector's "Link with All-Chat" button (ADR-0049).
+	 *
+	 * This is the install flow the whole feature exists for: the streamer presses
+	 * one button, their browser opens an approve screen, and this key ends up with
+	 * a credential nobody typed or pasted. The pasted-token field stays right
+	 * beside it, because a loopback redirect cannot reach a headless capture box or
+	 * a second PC.
+	 *
+	 * The fallback is chosen HERE, not left to the user to diagnose: if a loopback
+	 * port cannot be bound or a browser cannot be opened, this switches to the
+	 * pairing code and tells the property inspector what to display. Asking a
+	 * streamer to work out why the primary path failed is exactly the friction
+	 * ADR-0049 says decides adoption.
+	 *
+	 * Nothing here logs the credential. `report` sends progress to the property
+	 * inspector, and the only thing that ever carries the token is the settings
+	 * write at the end.
+	 */
+	override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, T>): Promise<void> {
+		const payload = ev.payload;
+		if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+			return;
+		}
+		if ((payload as JsonBag)["event"] !== "link") {
+			return;
+		}
+
+		const settings = await ev.action.getSettings();
+		const baseUrl = resolveBaseUrl(settings);
+		const deviceName = this.deviceName();
+
+		const report = (status: string, detail: string, userCode?: string): void => {
+			// Only delivered while the property inspector is visible, which is exactly
+			// when it matters: the streamer is looking at the Link button.
+			void streamDeck.ui.sendToPropertyInspector({
+				event: "link-status",
+				status,
+				detail,
+				...(userCode === undefined ? {} : { userCode }),
+			});
+		};
+
+		try {
+			let result: LinkResult;
+			if (await loopbackAvailable()) {
+				report("pending", "Approve this device in the browser window that just opened.");
+				result = await linkViaLoopback(baseUrl, deviceName);
+			} else {
+				result = await this.linkWithCode(baseUrl, deviceName, report);
+			}
+			// The ONE write of the credential. It goes into Stream Deck's settings
+			// store for this key and nowhere else — not a log line, not the property
+			// inspector, not an error message.
+			await ev.action.setSettings({ ...settings, apiToken: result.token } as T);
+			logger.info(
+				`${this.label}: linked device ${result.deviceId} to overlay ${result.overlayId} ` +
+					`with scopes [${result.scopes.join(", ")}]`,
+			);
+			report(
+				"linked",
+				`Linked. Revoke this device any time at ${ACCOUNT_DEVICES_URL}.`,
+			);
+		} catch (error) {
+			if (error instanceof AllChatError && error.kind === "network") {
+				// A blocked port or an unopenable browser is the second-machine case,
+				// not a fault. Try the typed code before giving up.
+				try {
+					const result = await this.linkWithCode(baseUrl, deviceName, report);
+					await ev.action.setSettings({ ...settings, apiToken: result.token } as T);
+					report("linked", `Linked. Revoke this device any time at ${ACCOUNT_DEVICES_URL}.`);
+					return;
+				} catch (fallbackError) {
+					const reason =
+						fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+					logger.error(`${this.label}: linking failed — ${reason}`);
+					report("failed", reason);
+					return;
+				}
+			}
+			const reason = error instanceof Error ? error.message : String(error);
+			logger.error(`${this.label}: linking failed — ${reason}`);
+			report("failed", reason);
+		}
+	}
+
+	/** Runs the pairing-code fallback, surfacing the code for the user to type. */
+	private async linkWithCode(
+		baseUrl: string,
+		deviceName: string,
+		report: (status: string, detail: string, userCode?: string) => void,
+	): Promise<LinkResult> {
+		const pending = await linkViaCode(baseUrl, deviceName);
+		report(
+			"code",
+			`Open ${pending.verificationUri} on any device you are signed in on and enter this code.`,
+			pending.userCode,
+		);
+		return pending.completion;
+	}
+
+	/**
+	 * The self-reported name this plugin gives itself when linking.
+	 *
+	 * Self-reported means untrusted: the approve screen labels it as such, so this
+	 * only has to be recognisable, not authoritative.
+	 */
+	protected deviceName(): string {
+		return `Stream Deck — ${this.label}`;
 	}
 
 	/**

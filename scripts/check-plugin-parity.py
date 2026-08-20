@@ -45,6 +45,8 @@ TS_API = TS / "src" / "allchat" / "api.ts"
 PY_API = PY / "allchat" / "api.py"
 TS_SETTINGS = TS / "src" / "allchat" / "settings.ts"
 PY_SETTINGS = PY / "allchat" / "settings.py"
+TS_LINKING = TS / "src" / "allchat" / "linking.ts"
+PY_LINKING = PY / "allchat" / "linking.py"
 
 # ---------------------------------------------------------------------------
 # 1. The action list. THIS is the contract ADR-0049 asks for: adding a button
@@ -80,9 +82,42 @@ SHARED_CONSTANTS: tuple[tuple[Path, Path, str], ...] = (
     (TS_API, PY_API, "CHAT_SEND_PATH"),
     (TS_SETTINGS, PY_SETTINGS, "DEFAULT_BASE_URL"),
     (TS_SETTINGS, PY_SETTINGS, "ACCOUNT_TOKENS_URL"),
+    (TS_SETTINGS, PY_SETTINGS, "ACCOUNT_DEVICES_URL"),
     (TS_SETTINGS, PY_SETTINGS, "UPGRADE_URL"),
     (TS_SETTINGS, PY_SETTINGS, "PAT_PREFIX"),
+    # Device linking (ADR-0049 steps 2-3). These five are a wire contract with
+    # auth-service, not a preference: the two paths are routes the gateway mounts,
+    # LOOPBACK_PATH is the single path the server's redirect validator accepts, and
+    # LOOPBACK_HOST is the literal address it pins. A plugin that disagreed with the
+    # other on any of them would fail to link on one platform only, which is the
+    # exact failure mode this script exists to catch.
+    (TS_SETTINGS, PY_SETTINGS, "DEVICE_PREFIX"),
+    (TS_SETTINGS, PY_SETTINGS, "LINK_START_PATH"),
+    (TS_SETTINGS, PY_SETTINGS, "LINK_EXCHANGE_PATH"),
+    (TS_SETTINGS, PY_SETTINGS, "LOOPBACK_PATH"),
+    (TS_SETTINGS, PY_SETTINGS, "LOOPBACK_HOST"),
 )
+
+# ---------------------------------------------------------------------------
+# 2b. Linking parameters that must not drift.
+#
+#     The two plugins run the same state machine against the same server, so a
+#     timeout or a scope set that differs between them means one platform gives up
+#     while the other is still waiting, or one asks for a permission the other does
+#     not. Compared as NUMBERS/LISTS rather than strings, because the two languages
+#     spell them differently (`180_000` ms vs `180.0` s, an array vs a tuple).
+# ---------------------------------------------------------------------------
+LINKING_TIMEOUTS: tuple[tuple[str, str, float], ...] = (
+    # (TS name in ms, Python name in seconds, expected seconds)
+    ("LOOPBACK_TIMEOUT_MS", "LOOPBACK_TIMEOUT_SECONDS", 180.0),
+    ("CODE_FLOW_TIMEOUT_MS", "CODE_FLOW_TIMEOUT_SECONDS", 600.0),
+    ("REQUEST_TIMEOUT_MS", "REQUEST_TIMEOUT_SECONDS", 15.0),
+)
+
+#: Scopes both plugins request at link time. The streamer narrows this on the
+#: approve screen; asking for different sets per platform would mean the same button
+#: works on Windows and 403s on Linux.
+LINKING_SCOPES: tuple[str, ...] = ("chat:write", "engagement:write")
 
 # ---------------------------------------------------------------------------
 # 3. Keep-in-sync pointers, e.g.
@@ -233,9 +268,74 @@ def check_sync_pointers() -> None:
                 )
 
 
+def check_linking() -> None:
+    """Both plugins must implement the same linking flow with the same numbers.
+
+    ADR-0049 flags the pairing-code fallback as the path that will rot, because it
+    is used rarely. Half of "rot" is drift: a timeout that was tuned on one plugin
+    and not the other, or a scope set that grew on one side. Both are invisible in
+    review and only show up as "linking works on my machine".
+    """
+    ts_src = strip_ts_comments(read(TS_LINKING))
+    py_src = strip_py_comments(read(PY_LINKING))
+
+    for ts_name, py_name, expected_seconds in LINKING_TIMEOUTS:
+        ts_match = re.search(rf"^const {ts_name}\s*=\s*([0-9_]+)", ts_src, re.MULTILINE)
+        py_match = re.search(rf"^{py_name}\s*=\s*([0-9_.]+)", py_src, re.MULTILINE)
+        if not ts_match:
+            fail(f"{TS_LINKING.relative_to(REPO)} does not define `{ts_name}`")
+        if not py_match:
+            fail(f"{PY_LINKING.relative_to(REPO)} does not define `{py_name}`")
+        if not ts_match or not py_match:
+            continue
+        ts_seconds = float(ts_match.group(1).replace("_", "")) / 1000.0
+        py_seconds = float(py_match.group(1).replace("_", ""))
+        if ts_seconds != expected_seconds or py_seconds != expected_seconds:
+            fail(
+                f"linking timeout drift: {ts_name}={ts_seconds}s, {py_name}={py_seconds}s, "
+                f"expected {expected_seconds}s on both. Change both plugins and the expectation "
+                f"here in one commit."
+            )
+
+    # The requested scope set, spelled as an array on one side and a tuple on the
+    # other. Compared as a set of quoted strings so formatting differences do not
+    # register as drift.
+    ts_scopes = set(
+        re.findall(r'"([a-z]+:[a-z]+)"', _scope_literal(ts_src, "REQUESTED_SCOPES"))
+    )
+    py_scopes = set(
+        re.findall(r'"([a-z]+:[a-z]+)"', _scope_literal(py_src, "REQUESTED_SCOPES"))
+    )
+    if ts_scopes != set(LINKING_SCOPES) or py_scopes != set(LINKING_SCOPES):
+        fail(
+            f"REQUESTED_SCOPES differ: {TS_LINKING.relative_to(REPO)} has {sorted(ts_scopes)}, "
+            f"{PY_LINKING.relative_to(REPO)} has {sorted(py_scopes)}, expected "
+            f"{sorted(LINKING_SCOPES)} on both."
+        )
+
+    # The loopback listener must never bind the wildcard address. This is a security
+    # property, not a style one: 0.0.0.0 would expose the listener to the local
+    # network for the duration of linking, and the point of a loopback redirect is
+    # that the credential cannot leave the machine.
+    for path, src in ((TS_LINKING, ts_src), (PY_LINKING, py_src)):
+        if "0.0.0.0" in src:
+            fail(
+                f"{path.relative_to(REPO)} mentions 0.0.0.0. The loopback listener must bind "
+                f"127.0.0.1 ONLY (ADR-0049): the wildcard address is reachable from the local "
+                f"network while linking is in progress."
+            )
+
+
+def _scope_literal(src: str, name: str) -> str:
+    """Returns the bracketed/parenthesised literal assigned to `name`, or ""."""
+    match = re.search(rf"{name}\s*[:=][^=]*?[\[(](.*?)[\])]", src, re.DOTALL)
+    return match.group(1) if match else ""
+
+
 def main() -> int:
     check_action_list()
     check_constants()
+    check_linking()
     check_sync_pointers()
 
     if errors:
@@ -251,7 +351,8 @@ def main() -> int:
 
     print(
         f"Desktop plugin parity OK: {len(ACTIONS)} actions, "
-        f"{len(SHARED_CONSTANTS)} shared constants, pointers mutual."
+        f"{len(SHARED_CONSTANTS)} shared constants, {len(LINKING_TIMEOUTS)} linking "
+        f"timeouts, pointers mutual."
     )
     return 0
 

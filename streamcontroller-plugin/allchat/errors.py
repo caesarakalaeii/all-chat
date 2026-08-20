@@ -58,7 +58,7 @@ from .settings import (
 
 #: No token configured on the action at all.
 NO_TOKEN = "no-token"
-#: Token present but not of the ``allchat_pat_…`` shape.
+#: Credential present but neither the ``allchat_dev_…`` nor ``allchat_pat_…`` shape.
 MALFORMED_TOKEN = "malformed-token"
 #: A required setting (overlay id, message, ...) is missing.
 NOT_CONFIGURED = "not-configured"
@@ -66,7 +66,7 @@ NOT_CONFIGURED = "not-configured"
 UNAUTHORIZED = "unauthorized"
 #: HTTP 403 on a premium-gated route. EXPECTED on a free account, not a bug.
 REQUIRES_PREMIUM = "requires-premium"
-#: HTTP 403 because the PAT lacks a scope. Premium is NOT the fix.
+#: HTTP 403 because the credential lacks a scope. Premium is NOT the fix.
 INSUFFICIENT_SCOPE = "insufficient-scope"
 #: HTTP 403 where neither premium nor scope is the explanation.
 FORBIDDEN = "forbidden"
@@ -167,28 +167,32 @@ def insufficient_scope_message(required: str) -> str:
 
 
 def unauthorized_message() -> str:
-    """The message shown when the server rejects the token with 401."""
+    """The message shown when the server rejects the credential with 401."""
     return (
-        f"All-Chat rejected the personal access token (HTTP 401): it is expired, revoked "
-        f"or mistyped. Mint a fresh token at {ACCOUNT_TOKENS_URL} and re-paste it into "
-        f"this key's settings. (The token itself is never logged.)"
+        f"All-Chat rejected this action's credential (HTTP 401): it is expired, revoked "
+        f"or mistyped. If this action was linked, press Link with All-Chat again -- a "
+        f"paired device lapses if it goes unused. If you pasted a token, mint a fresh one "
+        f"at {ACCOUNT_TOKENS_URL}. (The credential itself is never logged.)"
     )
 
 
 def missing_token_message() -> str:
-    """The message shown when no token has been pasted onto the action yet."""
+    """The message shown when the action has no credential yet."""
     return (
-        f"No All-Chat personal access token configured for this key. Create one at "
-        f"{ACCOUNT_TOKENS_URL} and paste it into the key's settings."
+        f"This action is not connected to All-Chat yet. Press \"Link with All-Chat\" in "
+        f"its settings -- your browser opens an approve screen and nothing needs to be "
+        f"copied. On a second machine or a headless host, paste a personal access token "
+        f"from {ACCOUNT_TOKENS_URL} instead."
     )
 
 
 def malformed_token_message() -> str:
-    """The message shown when the pasted string is not a PAT."""
+    """The message shown when the configured string is not an All-Chat credential."""
     return (
-        f"The value in this key's token field is not an All-Chat personal access token "
-        f"(they start with \"allchat_pat_\"). Mint one at {ACCOUNT_TOKENS_URL} and paste "
-        f"the whole string, including the prefix."
+        f"The value in this action's token field is not an All-Chat credential. A linked "
+        f"device token starts with \"allchat_dev_\" and a pasted personal access token with "
+        f"\"allchat_pat_\". Press \"Link with All-Chat\", or mint a token at "
+        f"{ACCOUNT_TOKENS_URL} and paste the whole string including the prefix."
     )
 
 
