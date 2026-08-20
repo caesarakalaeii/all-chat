@@ -308,9 +308,16 @@ func (h *DeviceHandler) HandleApproveDevice(c *gin.Context) {
 		Scopes:     granted,
 	}
 	if approved.Flow == repository.FlowLoopback {
-		// The dashboard navigates here; the server-side callback validates the stored
+		// The dashboard navigates here; the server-side callback validates the STORED
 		// redirect again and builds the Location header itself, so the browser never
-		// chooses where the code goes.
+		// chooses where the code goes — it only chooses whether to go.
+		//
+		// The plaintext authorization code rides in this URL, and that is inherent to a
+		// redirect-delivered code rather than a shortcut: OAuth's authorization code does
+		// exactly the same. What bounds it is that the code is one-time, expires in five
+		// minutes, is useless without the PKCE verifier the plugin never sent anywhere,
+		// and is revoked-on-replay. It is also never stored in plaintext — only its
+		// digest reached the database a moment ago.
 		resp.RedirectTo = "/api/v1/auth/device/link/callback?request_id=" +
 			url.QueryEscape(approved.ID) + "&code=" + url.QueryEscape(authCode)
 	} else {
