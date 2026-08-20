@@ -17,7 +17,11 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { visualSettingsToCss } from '../visual-settings-to-css'
+import {
+  MAX_BUBBLE_PALETTE,
+  resolveBubblePalette,
+  visualSettingsToCss,
+} from '../visual-settings-to-css'
 import type { VisualSettings } from '@/lib/types/visual-settings'
 
 describe('visualSettingsToCss', () => {
@@ -68,6 +72,14 @@ describe('visualSettingsToCss', () => {
       bubbleBorderColor: '#333333',
       bubblePadding: '12px',
       bubbleShadow: 'none',
+      // Differently-coloured bubbles: emitted as rules, never as --chat-* vars,
+      // so they must not move the custom-property count asserted below.
+      bubblePalette: ['#111111', '#222222'],
+      twitchBubbleBg: '#2a1b3d',
+      youtubeBubbleBg: '#3d1b1b',
+      kickBubbleBg: '#1b3d22',
+      tiktokBubbleBg: '#1b333d',
+      discordBubbleBg: '#22253d',
       messageGap: '8px',
       backdropBlur: '0px',
       maxWidth: '100%',
@@ -214,5 +226,86 @@ describe('visualSettingsToCss forced overrides', () => {
     })
     expect(result).not.toContain('text-shadow')
     expect(result).toContain('--chat-message-color: #ffffff;')
+  })
+})
+
+/**
+ * Differently-coloured bubbles. A palette is a list rather than a single value,
+ * so it can only ever be delivered as rules — keyed on the per-row
+ * `data-bubble-slot` the overlay surfaces write, because :nth-child shifts as
+ * the feed prunes.
+ */
+describe('visualSettingsToCss bubble fills', () => {
+  it('emits one rule per palette entry, on both surfaces', () => {
+    const result = visualSettingsToCss({ bubblePalette: ['#111111', '#222222', '#333333'] })
+
+    for (const scope of ['.overlay-live-body', '.overlay-preview-body']) {
+      for (const slot of [0, 1, 2]) {
+        expect(result).toContain(`${scope} > div[data-bubble-slot='${slot}']:not(.event-message)`)
+      }
+    }
+    expect(result).toContain('background-color: #333333 !important;')
+    expect(result).not.toContain("data-bubble-slot='3'")
+  })
+
+  it('ignores a palette that cannot cycle', () => {
+    // One colour is just "Bubble background" — cycling needs at least two.
+    expect(visualSettingsToCss({ bubblePalette: ['#111111'] })).toBe('')
+    expect(visualSettingsToCss({ bubblePalette: [] })).toBe('')
+    expect(resolveBubblePalette({ bubblePalette: ['#111111'] })).toEqual([])
+  })
+
+  it('clamps the palette to MAX_BUBBLE_PALETTE', () => {
+    const tooMany = Array.from({ length: MAX_BUBBLE_PALETTE + 3 }, (_, i) => `#00000${i}`)
+    expect(resolveBubblePalette({ bubblePalette: tooMany })).toHaveLength(MAX_BUBBLE_PALETTE)
+    expect(visualSettingsToCss({ bubblePalette: tooMany })).not.toContain(
+      `data-bubble-slot='${MAX_BUBBLE_PALETTE}'`
+    )
+  })
+
+  it('drops unusable palette entries rather than emitting broken CSS', () => {
+    expect(
+      resolveBubblePalette({ bubblePalette: ['#111111', 'rgba(0, 0, 0, 0.5', '#222222'] })
+    ).toEqual(['#111111', '#222222'])
+  })
+
+  it('fills a platform bubble on both surfaces', () => {
+    const result = visualSettingsToCss({ twitchBubbleBg: '#2a1b3d' })
+
+    expect(result).toContain(".overlay-live-body > div[data-platform='twitch']:not(.event-message)")
+    expect(result).toContain(
+      ".overlay-preview-body > div[data-platform='twitch']:not(.event-message)"
+    )
+    expect(result).toContain('background-color: #2a1b3d !important;')
+    expect(result).not.toContain("data-platform='youtube'")
+  })
+
+  /**
+   * The precedence rule. Both selectors are one class + one attribute, so
+   * specificity ties and source order decides — the platform rule has to come
+   * after every palette rule.
+   */
+  it('puts platform fills after the palette so they win on those rows', () => {
+    const result = visualSettingsToCss({
+      bubblePalette: ['#111111', '#222222'],
+      twitchBubbleBg: '#2a1b3d',
+    })
+
+    const lastSlot = result.lastIndexOf('data-bubble-slot')
+    const firstPlatform = result.indexOf("data-platform='twitch'")
+    expect(lastSlot).toBeGreaterThan(-1)
+    expect(firstPlatform).toBeGreaterThan(lastSlot)
+  })
+
+  it('never paints an event card', () => {
+    const result = visualSettingsToCss({
+      bubblePalette: ['#111111', '#222222'],
+      discordBubbleBg: '#22253d',
+    })
+    const rules = result.split('\n').filter((line) => line.includes('> div['))
+    expect(rules.length).toBeGreaterThan(0)
+    for (const rule of rules) {
+      expect(rule).toContain(':not(.event-message)')
+    }
   })
 })

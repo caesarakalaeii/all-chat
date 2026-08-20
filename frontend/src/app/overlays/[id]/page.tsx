@@ -98,6 +98,7 @@ import { StatusBadge } from '@/app/dashboard/shares/components/StatusBadge'
 import { RevocationConfirmModal } from '@/app/dashboard/shares/components/RevocationConfirmModal'
 import { cn } from '@/lib/utils'
 import { TypographyGroup } from '@/components/appearance/TypographyGroup'
+import { BubbleColorsGroup } from '@/components/appearance/BubbleColorsGroup'
 import { ColorsGroup } from '@/components/appearance/ColorsGroup'
 import { BackgroundGroup } from '@/components/appearance/BackgroundGroup'
 import { VisibilityGroup } from '@/components/appearance/VisibilityGroup'
@@ -1930,6 +1931,9 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           showPlatformBadge: settings.showPlatformBadge,
           showPlatformIndicators: settings.showPlatformIndicators,
           messageAnimation: settings.messageAnimation,
+          // The palette's CSS rules key on a per-row attribute the preview has
+          // to render itself, so it needs the list, not just the CSS.
+          bubblePalette: settings.bubblePalette,
         },
       },
       '*'
@@ -3177,6 +3181,13 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                     <BackgroundGroup
                       visualSettings={visualSettings}
                       onChange={handleVisualSettingsChange}
+                    />
+                  )}
+                  {activeSection === 'bubble-colors' && (
+                    <BubbleColorsGroup
+                      visualSettings={visualSettings}
+                      onChange={handleVisualSettingsChange}
+                      isPremium={user?.is_premium ?? false}
                     />
                   )}
                   {activeSection === 'visibility' && (

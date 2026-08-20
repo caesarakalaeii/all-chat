@@ -387,6 +387,17 @@ Sticky Notes is the worked example. Neo-Brutalist and Trading Card keep their
 per-row variety on the shadow and the foil border respectively, which are
 colour-independent and need none of this.
 
+Separately, the streamer can set **differently-coloured bubbles** (Appearance →
+Bubble colors): a fill per platform, and/or a palette cycled down the feed. Those
+are enforced like the table above, as `!important` rules on
+`[data-platform='<p>']` and `[data-bubble-slot='<n>']` rows, so they replace your
+bubble fill when configured and emit nothing when not. Events are never painted.
+
+Do not key any theme rule off `data-bubble-slot`. It is assigned from **arrival
+order**, not position, so that a row keeps its colour as the feed scrolls — a
+theme reading it would be styling "the 3rd message ever seen". Use `nth-child`
+for positional rhythm; a unit test enforces this.
+
 #### Message Container
 - `.space-y-3 > div` - Individual message wrapper
 - `.bg-gray-900/90` - Default dark background

@@ -47,7 +47,17 @@ import { renderMessageContent } from '@/lib/renderMessage'
 import PlatformStatusIndicators from '@/components/PlatformStatusIndicators'
 import { useOverlayStream } from '@/hooks/useOverlayStream'
 import { buildGradientCSS } from '@/lib/utils/gradient'
-import { visualSettingsToCss } from '@/lib/utils/visual-settings-to-css'
+import {
+  BUBBLE_SLOT_ATTR,
+  resolveBubblePalette,
+  visualSettingsToCss,
+} from '@/lib/utils/visual-settings-to-css'
+import {
+  admitBubbleSlot,
+  bubbleSlot,
+  EMPTY_BUBBLE_SLOTS,
+  type BubbleSlotState,
+} from '@/lib/utils/bubbleSlot'
 import { getBundledTheme } from '@/lib/theme-marketplace/bundled-themes'
 import { rewriteThemeFontImports } from '@/lib/theme-marketplace/font-proxy'
 import { chatBubbleStyle, overlayContainerStyle } from '@/lib/utils/visual-inline-styles'
@@ -206,6 +216,11 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   })
   const ttsFallbackToastShownRef = useRef(false)
 
+  // Bubble palette: 2+ fills cycled down the feed, and the per-row slot that
+  // decides which one a row gets. Empty palette ⇒ no slot attribute is written.
+  const [bubblePalette, setBubblePalette] = useState<string[]>([])
+  const [bubbleSlots, setBubbleSlots] = useState<BubbleSlotState>(EMPTY_BUBBLE_SLOTS)
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
   // The full-canvas wrapper. Measured (layout height) by the auto-scroll effect.
   const feedWrapperRef = useRef<HTMLDivElement>(null)
@@ -222,6 +237,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   useEffect(() => {
     filterSettingsRef.current = filterSettings
   }, [filterSettings])
+
 
   // Phase 12: Destroy sound player on unmount
   useEffect(() => {
@@ -257,6 +273,9 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
     soundPlayerRef.current?.play()
     // Phase 13: speak the message via TTS (D-41, D-42 — independent of sound; both fire on non-filtered)
     ttsPlayerRef.current?.speak(message)
+    // Arrival order for the bubble palette (idempotent per id, so a
+    // double-invoked updater cannot burn a number).
+    setBubbleSlots((prev) => admitBubbleSlot(prev, message.id, maxMessagesRef.current * 2))
     setMessages((prev) =>
       // Ignore a redelivery of a message already on screen. The render key is
       // `message.id`, so a duplicate id would be a duplicate React key (and the
@@ -270,6 +289,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   }, [])
 
   const onMessageUpdate = useCallback((updatedMessage: ChatMessage) => {
+    setBubbleSlots((prev) => admitBubbleSlot(prev, updatedMessage.id, maxMessagesRef.current * 2))
     setMessages((prev) => {
       // Find existing message by aggregation_id (TikTok like aggregates), then
       // by id — an update that carries a live row's id has to REPLACE that row.
@@ -392,6 +412,8 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
       // Background fills / shadow / max-width (see state decl).
       setContainerStyle(overlayContainerStyle(vs))
       setBubbleStyle(chatBubbleStyle(vs))
+      // Unconditional: clearing the palette has to drop the slot attributes too.
+      setBubblePalette(resolveBubblePalette(vs))
       for (const key of ['fontFamily', 'usernameFontFamily', 'timestampFontFamily'] as const) {
         if (typeof vs[key] === 'string') ensureGoogleFontLoaded(vs[key]!)
       }
@@ -794,6 +816,14 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
               data-platform={message.platform}
               data-event-type={isEvent ? message.event?.type : undefined}
               data-username={message.user?.username}
+              {...{
+                // Which palette fill this row takes. Keyed on arrival order, not
+                // position, so a row keeps its colour as the feed scrolls (see
+                // BubbleSlotTracker). Events keep their own themed chrome.
+                [BUBBLE_SLOT_ATTR]: isEvent
+                  ? undefined
+                  : bubbleSlot(bubbleSlots, message.id, bubblePalette.length),
+              }}
               className={clsx(
                 isEvent
                   ? ['event-message', eventTierClass, eventTypeClass]
