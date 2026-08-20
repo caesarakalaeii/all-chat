@@ -7,5 +7,5 @@
   "website": "https://allch.at",
   "license": "AGPL-3.0-or-later",
   "copyright": "Copyright (C) All-Chat contributors",
-  "description": "Stream Deck keys for All-Chat: chat send, poll control and prediction control over the All-Chat HTTP API, authenticated with a personal access token."
+  "description": "Stream Deck keys for All-Chat: chat send, poll control and prediction control over the All-Chat HTTP API, authenticated with a paired device token (one-click Link, ADR-0049) or a pasted personal access token."
 }

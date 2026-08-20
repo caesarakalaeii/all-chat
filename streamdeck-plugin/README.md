@@ -33,7 +33,7 @@ the server working correctly, not the plugin failing. The plugin treats that 403
 as its own distinct state: the key shows Stream Deck's alert and the plugin log
 carries a specific message explaining that starting polls and predictions is a
 premium feature, that the close/lock/resolve/cancel keys still work, and that you
-can upgrade at <https://allch.at>. It is never reported as a generic
+can upgrade at <https://allch.at/upgrade>. It is never reported as a generic
 "request failed".
 
 The asymmetry is intentional in the product: if you started a round while
@@ -87,13 +87,77 @@ instead use `streamdeck link com.allchat.streamdeck.sdPlugin`, then
 > published, and CI runs with `NODE_ENV=production`, where `npm ci` drops dev
 > dependencies and the build would fail with `tsc: not found`.
 
+### Packaging
+
+`.github/workflows/plugins.yml` lints, builds, validates the manifest and packs
+this plugin on every PR that touches it, and uploads the resulting
+`com.allchat.streamdeck.streamDeckPlugin` as a run artifact. That artifact is
+how a reviewer installs a branch on real hardware without a local toolchain:
+download it from the run page, unzip, double-click.
+
+The same two commands work locally, with the Elgato CLI pinned to the version CI
+uses:
+
+```bash
+npx --yes @elgato/cli@1.9.0 validate com.allchat.streamdeck.sdPlugin
+npx --yes @elgato/cli@1.9.0 pack com.allchat.streamdeck.sdPlugin --output dist
+```
+
+> **Gotcha:** the Elgato CLI **rewrites `manifest.json` in place**, reformatting
+> it and stripping the trailing newline. That is invisible in CI (the checkout is
+> thrown away) but shows up as an unrelated diff locally, so
+> `git checkout com.allchat.streamdeck.sdPlugin/manifest.json` after packing.
+
+The plugin is not published to the Elgato Marketplace yet; the artifact is the
+only distribution today.
+
 ---
 
-## Where to mint a token
+## Connecting a key to your account
 
-The plugin authenticates with an All-Chat **personal access token**, not a
-browser login — a desktop app has no browser session to borrow, which is exactly
-why these tokens exist (see ADR-0051).
+There are two routes, and the first is the one almost everyone should take.
+
+### Link (recommended)
+
+Drop an All-Chat action onto a key, open the property inspector, and press
+**Link with All-Chat**.
+
+The plugin binds a short-lived listener on `127.0.0.1` — never `0.0.0.0` —
+generates a PKCE challenge, and opens your browser at an approve screen. You pick
+which overlay this key may drive, confirm what it may do, and press Approve;
+All-Chat redirects to the local listener with a one-time code, the plugin trades
+that code plus its PKCE verifier for a **device token**, and the socket closes.
+Nothing is typed and nothing is pasted, which is the point: a secret you never
+see cannot be read aloud on stream or caught by the camera. See ADR-0049.
+
+A linked device differs from a pasted token in three ways that matter:
+
+- **It is bound to one overlay**, chosen when you approved it. A request for any
+  other overlay is refused, so a compromised deck cannot reach the rest of your
+  account.
+- **It expires if unused** — 90 days, pushed forward on every request, so a deck
+  in daily service never lapses while one on a PC you sold does.
+- **You never handle the secret.** It goes machine-to-machine.
+
+Manage and revoke paired devices at <https://allch.at/settings/devices>.
+Revocation takes effect on that device's next request.
+
+#### If a pairing code appears instead
+
+Linking needs the plugin and your browser on the **same** machine. When they are
+not — a deck driving a second PC, a locked-down host where no port can be bound,
+no desktop session to open a browser in — the plugin falls back on its own and
+shows an eight-character code like `KRPT-8W4M`. Open <https://allch.at/link> on
+any device you are signed in on, type the code, approve. The plugin is polling
+and finishes by itself.
+
+The code lives ten minutes and tolerates five wrong attempts. Its alphabet has no
+`0`/`O` or `1`/`I`/`l` in it, because you are going to read it off a screen.
+
+### Paste a personal access token (for a machine linking cannot reach)
+
+Still supported, and the right answer for a headless capture box or a PC you only
+reach over SSH.
 
 1. Sign in at <https://allch.at>.
 2. Go to **Settings → API tokens**
@@ -104,19 +168,25 @@ why these tokens exist (see ADR-0051).
    plaintext is shown exactly once and cannot be recovered. If you lose it,
    revoke it and mint another.
 5. Paste the whole string, including the `allchat_pat_` prefix, into the
-   **Access token** field of each key's property inspector.
+   **Pasted token** field of each key's property inspector.
 
-Every request then carries `Authorization: Bearer allchat_pat_…`.
+Unlike a linked device, a pasted token is **not** overlay-bound and has **no**
+expiry unless you set one — which is why it works where linking cannot, and why
+linking is the better choice when it is available.
 
-### Token handling
+Either way, every request carries `Authorization: Bearer <credential>`; the
+server switches on the prefix (`allchat_dev_` or `allchat_pat_`).
 
-- The token is stored by Stream Deck alongside the key's other settings.
+### Credential handling
+
+- The credential is stored by Stream Deck alongside the key's other settings.
 - **The plugin never logs it.** It goes into one HTTP header; it is not written
   to the plugin log, not put in a URL, and not echoed into any error message.
-- If a diagnostic ever needs to tell two configured keys apart, it prints
-  `allchat_pat_…` plus the last four characters, never the secret.
-- A token cannot delete your account, export your data, or reach any admin
-  surface — those refuse personal access tokens outright.
+- If a diagnostic needs to tell two configured keys apart, it prints only the
+  prefix — `allchat_dev_…` or `allchat_pat_…` — so a log line says which *kind*
+  of credential is configured without disclosing any of it.
+- Neither kind can delete your account, export your data, mint more credentials,
+  or reach any admin surface — those refuse both outright.
 
 ### Self-hosting
 
@@ -204,6 +274,7 @@ streamdeck-plugin/
 │       ├── api.ts                    the routes, and which are premium-gated
 │       ├── client.ts                 HTTP, bearer auth, status classification
 │       ├── errors.ts                 the error taxonomy and its messages
+│       ├── linking.ts                PKCE loopback + pairing-code fallback
 │       └── settings.ts               per-key settings and their normalisation
 └── com.allchat.streamdeck.sdPlugin/  the installable plugin
     ├── manifest.json
@@ -215,6 +286,11 @@ streamdeck-plugin/
 `src/allchat/api.ts` is the single place recording which routes the server gates;
 `src/allchat/errors.ts` is the single place deciding what the user is told. If
 the premium boundary ever moves, those two files are what change.
+
+`src/allchat/linking.ts` is the counterpart of
+`streamcontroller-plugin/allchat/linking.py`, and the two are compared by
+`scripts/check-plugin-parity.py`: the wire constants, the three timeouts, the
+requested scope set, and the rule that neither may ever bind `0.0.0.0`.
 
 ---
 

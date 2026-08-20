@@ -4,6 +4,10 @@
  *
  * The property inspector writes these verbatim into Stream Deck's per-action
  * settings store, so every field is optional: a freshly dropped key has `{}`.
+ *
+ * KEEP IN SYNC with `streamcontroller-plugin/allchat/settings.py` (ADR-0049).
+ * The constants below are user-visible on both plugins and are compared by
+ * `scripts/check-plugin-parity.py`.
  */
 
 /**
@@ -16,8 +20,20 @@ export const DEFAULT_BASE_URL = "https://allch.at";
 /** Where a user mints a personal access token, and where they upgrade. */
 export const ACCOUNT_TOKENS_URL = `${DEFAULT_BASE_URL}/settings/api-tokens`;
 
-/** Page advertised when the server reports the premium engagement gate. */
-export const UPGRADE_URL = `${DEFAULT_BASE_URL}`;
+/**
+ * Where a user sees and revokes their paired control surfaces. This is the page
+ * to point at once linking has succeeded — it is where the credential this plugin
+ * now holds can be cut off.
+ */
+export const ACCOUNT_DEVICES_URL = `${DEFAULT_BASE_URL}/settings/devices`;
+
+/**
+ * Page advertised when the server reports the premium engagement gate. This is
+ * `/upgrade`, not the homepage: a user who just pressed a key and was told they
+ * need premium should land on the page that explains it, and the
+ * StreamController plugin has always pointed there.
+ */
+export const UPGRADE_URL = `${DEFAULT_BASE_URL}/upgrade`;
 
 /**
  * Every All-Chat personal access token carries this prefix; the server routes a
@@ -27,9 +43,47 @@ export const UPGRADE_URL = `${DEFAULT_BASE_URL}`;
  */
 export const PAT_PREFIX = "allchat_pat_";
 
+/**
+ * Prefix of a PAIRED-DEVICE token (ADR-0049), the credential the Link flow
+ * produces. Deliberately a different prefix from {@link PAT_PREFIX} rather than a
+ * flag inside the same namespace: the server switches on the prefix, secret
+ * scanners can tell the two apart, and a support log line says which credential a
+ * streamer is using without disclosing either.
+ */
+export const DEVICE_PREFIX = "allchat_dev_";
+
+/** Opens a device-link request. Unauthenticated: this plugin has no credential yet. */
+export const LINK_START_PATH = "/api/v1/auth/device/link/start";
+
+/** Trades an approved link for the device token. Answers 428 while still pending. */
+export const LINK_EXCHANGE_PATH = "/api/v1/auth/device/link/exchange";
+
+/**
+ * The ONE path the loopback listener serves, and the only path the server accepts
+ * in a redirect_uri. Fixed on both sides so the listener has one route and the
+ * server's validator has one string to compare — see
+ * `services/auth-service/handlers/loopback_redirect.go`.
+ */
+export const LOOPBACK_PATH = "/allchat/device-callback";
+
+/**
+ * The loopback host. `127.0.0.1` ONLY, never `0.0.0.0` and never `localhost`:
+ * binding the wildcard address would expose the listener to the local network
+ * during linking, and `localhost` is a DNS name the server refuses precisely
+ * because it can be pointed elsewhere.
+ */
+export const LOOPBACK_HOST = "127.0.0.1";
+
 /** Settings shared by all three action types. */
 export type ConnectionSettings = {
-	/** Personal access token, `allchat_pat_…`. Stored by Stream Deck, never logged. */
+	/**
+	 * The credential this key authenticates with: either a paired-device token
+	 * (`allchat_dev_…`, written by the Link flow) or a personal access token
+	 * (`allchat_pat_…`, pasted by the user for a headless box or a second PC).
+	 * Stored by Stream Deck, never logged. The field name is historical — it
+	 * predates device tokens, and renaming it would silently unconfigure every
+	 * existing key.
+	 */
 	apiToken?: string;
 	/** Base URL override for self-hosters. Blank means {@link DEFAULT_BASE_URL}. */
 	baseUrl?: string;
@@ -97,6 +151,36 @@ export function resolveBaseUrl(settings: ConnectionSettings | undefined): string
 /** Resolves the token for a key, trimmed. Empty string when unset. */
 export function resolveToken(settings: ConnectionSettings | undefined): string {
 	return settings?.apiToken?.trim() ?? "";
+}
+
+/**
+ * True when `token` has the shape of EITHER All-Chat credential.
+ *
+ * A prefix test only. It catches the common paste error (a session JWT, a
+ * truncated copy) before a pointless round-trip; it says nothing about whether
+ * the token is valid, revoked, expired or in scope, all of which only the server
+ * knows. Both prefixes are accepted because both are legitimate here: a device
+ * token arrives from the Link flow, a PAT from the user.
+ */
+export function looksLikeToken(token: string): boolean {
+	return looksLikeDeviceToken(token) || looksLikePat(token);
+}
+
+/**
+ * True when `token` is specifically a paired-device token (from linking).
+ *
+ * Counterpart of `looks_like_device_token` in
+ * `streamcontroller-plugin/allchat/settings.py`. The narrow pair exists so a
+ * message can name the right remedy: a device token is re-linked, a pasted token
+ * is re-pasted.
+ */
+export function looksLikeDeviceToken(token: string): boolean {
+	return token.startsWith(DEVICE_PREFIX) && token.length > DEVICE_PREFIX.length;
+}
+
+/** True when `token` is specifically a personal access token (pasted). */
+export function looksLikePat(token: string): boolean {
+	return token.startsWith(PAT_PREFIX) && token.length > PAT_PREFIX.length;
 }
 
 /**

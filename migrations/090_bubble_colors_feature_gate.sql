@@ -1,5 +1,5 @@
--- All-Chat Migration 088: Bubble colors feature gate
--- Migration: 088
+-- All-Chat Migration 090: Bubble colors feature gate
+-- Migration: 090
 --
 -- Registers the 'bubble_colors' feature gate (ADR-0008) for differently-coloured
 -- chat bubbles: a fill per platform, and/or a palette cycled down the feed.

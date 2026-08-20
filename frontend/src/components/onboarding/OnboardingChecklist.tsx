@@ -378,6 +378,12 @@ export function OnboardingChecklist({
                 </li>
                 <li>
                   <span className="font-medium text-text">Differently-coloured bubbles</span>
+                  {/* Listed here but NOT in app/upgrade/page.tsx, for the same reason as
+                      Stream Deck buttons below: that list is specifically the PREMIUM
+                      tour, and the bubble_colors gate is seeded free (migration 090)
+                      because it is pure client-side CSS — no bandwidth, quota or send
+                      path. If the gate is ever flipped to premium, move this entry into
+                      the /upgrade list and keep the two in sync per the note above. */}
                   <p className="text-xs text-text-sub">
                     Give each platform its own bubble colour, or cycle a palette down the feed,
                     under Bubble colors in Appearance. Free.
@@ -388,6 +394,35 @@ export function OnboardingChecklist({
                   <p className="text-xs text-text-sub">
                     Premium cosmetics for chatters, like animated name gradients, under Flairs in
                     the navigation.
+                  </p>
+                </li>
+                <li>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium text-text">Stream Deck buttons</span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        trackEvent('cta_click', {
+                          cta: 'paired_devices',
+                          location: 'onboarding-extras',
+                        })
+                        router.push('/settings/devices')
+                      }}
+                    >
+                      Show me
+                    </Button>
+                  </div>
+                  {/* Deliberately listed here rather than in app/upgrade/page.tsx: that
+                      list is specifically the PREMIUM feature tour, and the
+                      desktop_control_surfaces gate is seeded free (migration 089) because
+                      the shipped plugin docs say both plugins are free. If the gate is ever
+                      flipped to premium, move this entry into the /upgrade list and keep the
+                      two in sync per the note above. */}
+                  <p className="text-xs text-text-sub">
+                    Drive polls, predictions and canned messages from a physical button. Link a
+                    Stream Deck or StreamController under Paired devices — nothing to copy or paste.
+                    Starting a poll or prediction is still Premium.
                   </p>
                 </li>
               </ul>

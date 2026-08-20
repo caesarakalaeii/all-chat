@@ -18,6 +18,10 @@
  *   not to look like a broken button.
  *
  * Neither path ever puts the token in a message or a log line.
+ *
+ * KEEP IN SYNC with `streamcontroller-plugin/allchat/errors.py` (ADR-0049). The
+ * 401-vs-403 split is the part that must not drift: one says "re-paste your
+ * token", the other says "this is premium", and swapping them costs money.
  */
 
 import { UPGRADE_URL, ACCOUNT_TOKENS_URL } from "./settings.js";
@@ -90,25 +94,29 @@ export function premiumGateMessage(what: "poll" | "prediction"): string {
 /** The message shown/logged when the server rejects the token with 401. */
 export function unauthorizedMessage(): string {
 	return (
-		`All-Chat rejected the personal access token (HTTP 401). It is expired, revoked ` +
-		`or mistyped. Mint a fresh token at ${ACCOUNT_TOKENS_URL} and paste it into this ` +
-		`key's settings. (The token itself is never logged.)`
+		`All-Chat rejected this key's credential (HTTP 401). It is expired, revoked or ` +
+		`mistyped. If this key was linked, press "Link with All-Chat" again — a paired ` +
+		`device lapses if it goes unused. If you pasted a token, mint a fresh one at ` +
+		`${ACCOUNT_TOKENS_URL}. (The credential itself is never logged.)`
 	);
 }
 
-/** The message shown/logged when no token has been pasted onto the key yet. */
+/** The message shown/logged when the key has no credential yet. */
 export function missingTokenMessage(): string {
 	return (
-		`No All-Chat personal access token configured for this key. Create one at ` +
-		`${ACCOUNT_TOKENS_URL} and paste it into the key's settings.`
+		`This key is not connected to All-Chat yet. Press "Link with All-Chat" in its ` +
+		`settings — your browser opens an approve screen and nothing needs to be copied. ` +
+		`On a second machine or a headless host, paste a personal access token from ` +
+		`${ACCOUNT_TOKENS_URL} instead.`
 	);
 }
 
-/** The message shown/logged when the pasted string is not a PAT. */
+/** The message shown/logged when the configured string is not an All-Chat credential. */
 export function malformedTokenMessage(): string {
 	return (
-		`The value in this key's token field is not an All-Chat personal access token ` +
-		`(they start with "allchat_pat_"). Mint one at ${ACCOUNT_TOKENS_URL} and paste ` +
-		`the whole string, including the prefix.`
+		`The value in this key's token field is not an All-Chat credential. A linked ` +
+		`device token starts with "allchat_dev_" and a pasted personal access token with ` +
+		`"allchat_pat_". Press "Link with All-Chat", or mint a token at ` +
+		`${ACCOUNT_TOKENS_URL} and paste the whole string including the prefix.`
 	);
 }

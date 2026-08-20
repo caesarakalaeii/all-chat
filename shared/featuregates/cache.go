@@ -68,15 +68,26 @@ const (
 	// participation and points earning are NOT gated by this.
 	GateEngagement = "engagement"
 
+	// GateDesktopControlSurfaces is the feature key for pairing a desktop control surface
+	// (Stream Deck / StreamController) with a device token — ADR-0049 release requirement 1.
+	// Mounted by auth-service on POST /me/devices/approve ONLY: gating the pairing step keeps
+	// enforcement in one place and leaves the per-action gates (GateEngagement on starting a
+	// round) untouched, so a paired device still clears exactly the gates a browser session
+	// does. Seeded is_premium=false (migration 089) because three shipped documents state both
+	// plugins are free; flip it with the feature-gate admin endpoint, no redeploy. The pasted
+	// personal-access-token path (ADR-0051) predates this gate and is not covered by it.
+	GateDesktopControlSurfaces = "desktop_control_surfaces"
+
 	// GateBubbleColors is the feature key for differently-coloured chat bubbles:
 	// a fill per platform, and/or a palette cycled down the feed.
 	//
-	// Seeded is_premium=FALSE — unlike every other key here, this one ships OPEN.
-	// It is pure client-side CSS: no bandwidth, no platform quota, no send path,
-	// no abuse surface, and telling Twitch from YouTube at a glance serves the
-	// multistream promise that is the product's reason to exist. The gate exists
-	// so it can be turned into an upsell from the admin UI without a deploy
-	// (CLAUDE.md "Shipping a Feature"), not because it is one today.
+	// Seeded is_premium=FALSE (migration 090), the second key here to ship OPEN
+	// alongside GateDesktopControlSurfaces. It is pure client-side CSS: no
+	// bandwidth, no platform quota, no send path, no abuse surface, and telling
+	// Twitch from YouTube at a glance serves the multistream promise that is the
+	// product's reason to exist. The gate exists so it can be turned into an
+	// upsell from the admin UI without a deploy (CLAUDE.md "Shipping a Feature"),
+	// not because it is one today.
 	GateBubbleColors = "bubble_colors"
 )
 

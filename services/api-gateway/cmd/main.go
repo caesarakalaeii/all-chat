@@ -135,7 +135,15 @@ func main() {
 	// backend re-validates independently, so auth-service and engagement-service each
 	// wire their own resolver too. Authentication only — the premium gates and
 	// ownership checks downstream are untouched.
-	sharedmiddleware.SetAPITokenResolver(sharedmiddleware.NewPgxAPITokenResolver(db))
+	// Paired device tokens (migration 088, ADR-0049) travel the SAME seam: the dispatcher
+	// hands each digest to the resolver that owns its table, so `allchat_dev_` and
+	// `allchat_pat_` are one authentication path with two row shapes rather than two paths.
+	// A device token additionally carries an overlay binding, enforced by
+	// middleware.RequireDeviceTokenOverlay on overlay-keyed routes.
+	sharedmiddleware.SetAPITokenResolver(sharedmiddleware.NewTokenResolverDispatch(
+		sharedmiddleware.NewPgxAPITokenResolver(db),
+		sharedmiddleware.NewPgxDeviceTokenResolver(db),
+	))
 
 	// Connect to Redis (for WebSocket Pub/Sub), retrying with backoff so a
 	// transient Redis outage (e.g. the pod being rescheduled onto another node)
@@ -554,6 +562,26 @@ func main() {
 		// client sends a JSON {code} body; the proxy passes Set-Cookie back).
 		publicAPI.POST("/auth/exchange", authRateLimiter.MiddlewareScoped("exchange"), proxyHandler.ForwardRequest)
 
+		// Device linking for desktop control surfaces (ADR-0049, -> auth-service
+		// /device/link/*). Unauthenticated by necessity: the caller is a freshly installed
+		// plugin holding no credential, which is the problem the flow solves.
+		//
+		// The rate limit lives HERE rather than in auth-service, for two reasons. It is
+		// where unauthenticated traffic arrives, and auth-service does not depend on
+		// shared/ratelimit at all — that module is not published, so consuming it there
+		// would mean a new require plus a `replace => ../../shared/ratelimit` directive for
+		// a limiter this service already has.
+		//
+		// Its own scope buckets, not the login/exchange ones: a streamer linking a plugin
+		// must not be able to exhaust the interactive login budget for everyone behind the
+		// same NAT, and vice versa. This limit is defence in depth — the actual brute-force
+		// bound for a typed pairing code is device_link_requests.attempts (5 per request,
+		// checked and incremented in SQL in auth-service).
+		publicAPI.POST("/auth/device/link/start",
+			authRateLimiter.MiddlewareScoped("device_link_start"), proxyHandler.ForwardRequest)
+		publicAPI.POST("/auth/device/link/exchange",
+			authRateLimiter.MiddlewareScoped("device_link_exchange"), proxyHandler.ForwardRequest)
+
 		// Platform-specific OAuth routes.
 		//
 		// login/callback are genuinely public (no token yet). add-source and the
@@ -688,6 +716,23 @@ func main() {
 		protectedAPI.POST("/auth/me/api-tokens", proxyHandler.ForwardRequest)
 		protectedAPI.GET("/auth/me/api-tokens", proxyHandler.ForwardRequest)
 		protectedAPI.DELETE("/auth/me/api-tokens/:id", proxyHandler.ForwardRequest)
+
+		// Paired devices for desktop control surfaces (-> auth-service /me/devices*,
+		// ADR-0049). Session-only by design: auth-service refuses a token-authenticated
+		// request, so a leaked device token cannot mint more devices or revoke the owner's.
+		// The premium gate on approve is enforced in auth-service, where the feature-gate
+		// cache lives.
+		protectedAPI.GET("/auth/me/devices", proxyHandler.ForwardRequest)
+		protectedAPI.GET("/auth/me/devices/pending", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/auth/me/devices/approve", proxyHandler.ForwardRequest)
+		protectedAPI.DELETE("/auth/me/devices/:id", proxyHandler.ForwardRequest)
+
+		// The loopback landing. It is reached by top-level browser NAVIGATION, not by XHR,
+		// so the only credential present is the cookie — which is exactly what the group's
+		// CookieToBearer promotes into an Authorization header before JWT validation. It
+		// needs a session because auth-service confirms the streamer arriving here is the
+		// one who approved the request before it emits a Location carrying the code.
+		protectedAPI.GET("/auth/device/link/callback", proxyHandler.ForwardRequest)
 
 		// Discord guild management
 		protectedAPI.GET("/auth/discord/connect", proxyHandler.ForwardRequest)
