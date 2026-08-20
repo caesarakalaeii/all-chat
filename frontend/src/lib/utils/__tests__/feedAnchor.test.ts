@@ -114,8 +114,9 @@ describe('resolveFeedAnchorLayout — all four combinations', () => {
 
   it('puts the auto margin on the list, never on its children', () => {
     // `.overlay-live-body > * + * { margin-top: ... !important }` in events.css
-    // and `.scroll-anchor { margin: 0 !important }` in globals.css would both
-    // beat a child-level rule, so the margin must live on the body element.
+    // beats a child-level rule, so the margin must live on the body element.
+    // (`.scroll-anchor` in globals.css is unlayered, so it does NOT win against
+    // that rule — events.css excludes the sentinel by selector instead.)
     for (const { anchor, invert } of COMBOS) {
       const l = resolveFeedAnchorLayout(anchor, invert)
       expect(l.wrapperClass).not.toContain('mt-auto')
@@ -134,12 +135,46 @@ describe('resolveFeedAnchorLayout — all four combinations', () => {
       // …and the anchor must not perturb the order's output.
       expect(plain.newestAtEnd).toBe(true)
       expect(inverted.newestAtEnd).toBe(false)
+      expect(plain.dataOrder).toBe('newest-last')
+      expect(inverted.dataOrder).toBe('newest-first')
+      expect(plain.defaultEntryAnimationClass).not.toBe(inverted.defaultEntryAnimationClass)
     }
   })
 
   it('always emits a data hook so themes can select on either mode', () => {
     for (const { anchor, invert } of COMBOS) {
       expect(resolveFeedAnchorLayout(anchor, invert).dataAnchor).toBe(anchor)
+    }
+  })
+
+  it('exposes the ORDER axis as its own data hook, independent of the anchor', () => {
+    for (const { anchor, invert } of COMBOS) {
+      const l = resolveFeedAnchorLayout(anchor, invert)
+      expect(l.dataOrder).toBe(invert ? 'newest-first' : 'newest-last')
+      // Same hook for both anchors — direction of entry follows the ORDER only.
+      expect(l.dataOrder).toBe(
+        resolveFeedAnchorLayout(anchor === 'top' ? 'bottom' : 'top', invert).dataOrder
+      )
+    }
+  })
+
+  it('flips the fallback entry animation to match the end the newest row lands on', () => {
+    // The bubble enters at the END of the stack normally and at its START when
+    // the order is inverted; a `slide-in-from-bottom` there slides the new row
+    // out from UNDER its neighbour instead of in from the free edge.
+    for (const anchor of ['top', 'bottom'] as const) {
+      expect(resolveFeedAnchorLayout(anchor, false).defaultEntryAnimationClass).toContain(
+        'slide-in-from-bottom-2'
+      )
+      expect(resolveFeedAnchorLayout(anchor, true).defaultEntryAnimationClass).toContain(
+        'slide-in-from-top-2'
+      )
+      // Duration/engine class is unchanged in both directions.
+      for (const invert of [false, true]) {
+        expect(resolveFeedAnchorLayout(anchor, invert).defaultEntryAnimationClass).toContain(
+          'animate-in duration-300'
+        )
+      }
     }
   })
 

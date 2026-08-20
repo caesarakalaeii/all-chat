@@ -87,7 +87,7 @@ func (c *NativeConsumer) Run(ctx context.Context) {
 			Consumer: c.consumerName,
 			Streams:  []string{mpmodels.StreamEngagementTwitchNative, ">"},
 			Count:    32,
-			Block:    5000, // ms
+			Block:    readBlockTime,
 		}).Result()
 		if err != nil {
 			if ctx.Err() != nil || errors.Is(err, redis.Nil) {
