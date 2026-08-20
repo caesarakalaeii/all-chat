@@ -1,0 +1,228 @@
+name: Desktop Plugins
+
+# Build, test, parity-check and PACKAGE the two desktop control surfaces from
+# ADR-0049: `streamdeck-plugin/` (TypeScript, Elgato SDK, Windows + macOS) and
+# `streamcontroller-plugin/` (Python, StreamController, Linux).
+#
+# Why this workflow exists at all, given both plugins are thin HTTP clients:
+#
+#   1. NOTHING ELSE COMPILES THEM. build-and-push.yml builds service images and
+#      the frontend; neither plugin is a service, has a Dockerfile or appears in
+#      any other workflow, so until now a TypeScript error or a broken Python
+#      import could land on main unnoticed. The Python plugin already ships 46
+#      unit tests that nothing was running.
+#   2. PACKAGING IS THE DELIVERABLE. A plugin is not useful as source. Every run
+#      uploads the two installable artifacts — a signed-shape `.streamDeckPlugin`
+#      for the Elgato app and a zip of the StreamController plugin folder — so a
+#      PR can be installed and tested on real hardware from the run page,
+#      without a local Node toolchain.
+#   3. DRIFT IS THE STATED RISK. ADR-0049: "the button set now exists twice and
+#      will diverge unless it is defined once." The parity job runs the pinned
+#      action list in scripts/check-plugin-parity.py against both plugins.
+#
+# Structure follows frontend-a11y.yml deliberately: an intra-workflow "skip
+# shim" (a `changes` job plus per-job `if:`) rather than a top-level `paths:`
+# filter, because a workflow skipped by `paths:` never reports its contexts and
+# a required check would leave PRs permanently "Expected"/blocked (ADR-0033).
+# These jobs are NOT required checks today, but they are shaped so they can be
+# made required without that trap.
+#
+# EVERY job sets timeout-minutes. Without it a job inherits GitHub's 6-hour
+# default, and on 2026-08-19 two hung installs sat for ~4 hours on PR #729 (see
+# PR #731). A hang is worse than a failure: there is no signal to act on.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    # Observed ~15-30s. A checkout plus a paths-filter.
+    timeout-minutes: 10
+    outputs:
+      streamdeck: ${{ steps.filter.outputs.streamdeck }}
+      streamcontroller: ${{ steps.filter.outputs.streamcontroller }}
+      parity: ${{ steps.filter.outputs.parity }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            streamdeck:
+              - 'streamdeck-plugin/**'
+              - '.github/workflows/plugins.yml'
+            streamcontroller:
+              - 'streamcontroller-plugin/**'
+              - '.github/workflows/plugins.yml'
+            parity:
+              - 'streamdeck-plugin/**'
+              - 'streamcontroller-plugin/**'
+              - 'scripts/check-plugin-parity.py'
+              - '.github/workflows/plugins.yml'
+
+  streamdeck:
+    name: Elgato plugin (lint, build, package)
+    needs: changes
+    if: needs.changes.outputs.streamdeck == 'true'
+    runs-on: ubuntu-latest
+    # Observed ~1min end to end locally (npm ci ~5s, build ~3s, pack ~15s).
+    # The headroom is for a slow npm mirror; past this it is stuck, not slow.
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: streamdeck-plugin
+    steps:
+      - uses: actions/checkout@v7
+
+      # Node 22 matches the flake dev shell (pkgs.nodejs_22) and the frontend
+      # workflows. It is NOT the runtime: the Stream Deck app supplies its own
+      # Node (manifest.json pins Nodejs.Version "20"), so this is build-only and
+      # package.json's `engines` floor of 20.5.1 is what actually constrains us.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: streamdeck-plugin/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # ESLint plus `tsc --noEmit`. The plugin has no unit tests of its own; the
+      # equivalent assertions live in the Python plugin's suite, and the parity
+      # job below is what stops the two from meaning different things.
+      - name: Lint and type-check
+        run: npm run lint
+
+      - name: Build (tsc -> com.allchat.streamdeck.sdPlugin/bin)
+        run: npm run build
+
+      # The .sdPlugin folder IS the plugin, so an empty bin/ is a silent
+      # non-build: tsc can succeed having emitted nothing if the config drifts.
+      - name: Assert the compiled entrypoint exists
+        run: test -s com.allchat.streamdeck.sdPlugin/bin/plugin.js
+
+      # Elgato's own manifest validator. Pinned to an exact version rather than
+      # @latest: this is a network fetch on every run and an unpinned tool that
+      # tightens a rule would turn every unrelated PR red. `pack` validates too,
+      # but running it separately makes a manifest failure legible as such.
+      - name: Validate manifest (Elgato CLI)
+        run: npx --yes @elgato/cli@1.9.0 validate com.allchat.streamdeck.sdPlugin
+
+      - name: Package (.streamDeckPlugin)
+        run: npx --yes @elgato/cli@1.9.0 pack com.allchat.streamdeck.sdPlugin --output dist
+
+      # Downloadable from the run page: unzip, double-click, and the Stream Deck
+      # app installs it. This is how a reviewer tests a PR on real hardware.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: allchat-streamdeck-plugin
+          path: streamdeck-plugin/dist/*.streamDeckPlugin
+          if-no-files-found: error
+
+  streamcontroller:
+    name: StreamController plugin (tests, package)
+    needs: changes
+    if: needs.changes.outputs.streamcontroller == 'true'
+    runs-on: ubuntu-latest
+    # Observed <10s. The suite is 46 stdlib-only unit tests with a stubbed
+    # urlopen; nothing here touches the network.
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: streamcontroller-plugin
+    steps:
+      - uses: actions/checkout@v7
+
+      # 3.11 is the FLOOR (requirements.txt: "Minimum interpreter: Python 3.11,
+      # matching what StreamController ships against"), and the floor is what
+      # needs testing — a newer interpreter would hide a 3.11 syntax break in a
+      # plugin that runs inside somebody else's process.
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      # No `pip install`: requirements.txt is deliberately empty of packages, and
+      # keeping the CI environment bare is what proves that claim stays true.
+      - name: Syntax gate (compileall)
+        run: python3 -m compileall -q .
+
+      - name: Unit tests
+        run: python3 -m unittest discover -s tests -t .
+
+      # The three JSON files are the plugin's whole contract with the
+      # StreamController store. A trailing comma in one of them is invisible in
+      # review and fatal at load time, and the two versions drifting apart is
+      # the store's most common submission rejection.
+      - name: Validate plugin metadata
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, sys
+
+          manifest = json.loads(pathlib.Path("manifest.json").read_text())
+          about = json.loads(pathlib.Path("about.json").read_text())
+          json.loads(pathlib.Path("attribution.json").read_text())
+
+          problems = []
+          if manifest["version"] != about["version"]:
+              problems.append(
+                  f'manifest.json version {manifest["version"]!r} != about.json version {about["version"]!r}'
+              )
+          if manifest["id"] != about["id"]:
+              problems.append(f'manifest.json id {manifest["id"]!r} != about.json id {about["id"]!r}')
+          if about.get("license") != "AGPL-3.0-or-later":
+              problems.append(
+                  "about.json must declare AGPL-3.0-or-later: ADR-0049 makes the licence question a "
+                  "release gate, because this plugin is loaded into StreamController's GPL-3.0 process"
+              )
+          if problems:
+              print("\n".join(f"  - {p}" for p in problems), file=sys.stderr)
+              sys.exit(1)
+          print(f'StreamController metadata OK (version {manifest["version"]})')
+          PY
+
+      # Staged copy rather than a zip-with-exclusions, so what ships is an
+      # explicit allowlist. tests/ is left out on purpose: it is 46 files of
+      # mock plumbing that a user's StreamController would import-scan for no
+      # reason. Everything listed here is something the host actually loads.
+      - name: Package (zip)
+        run: |
+          version=$(python3 -c "import json;print(json.load(open('manifest.json'))['version'])")
+          staged="dist/com_allchat_streamcontroller"
+          mkdir -p "$staged"
+          cp -r main.py manifest.json about.json attribution.json requirements.txt README.md actions allchat "$staged/"
+          find "$staged" -name '__pycache__' -type d -prune -exec rm -rf {} +
+          (cd dist && zip -qr "allchat-streamcontroller-plugin-${version}.zip" com_allchat_streamcontroller)
+          ls -la dist
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: allchat-streamcontroller-plugin
+          path: streamcontroller-plugin/dist/*.zip
+          if-no-files-found: error
+
+  parity:
+    name: Plugin parity (ADR-0049 action list)
+    needs: changes
+    if: needs.changes.outputs.parity == 'true'
+    runs-on: ubuntu-latest
+    # Observed <1s. Pure text analysis of six source files.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      # Fails when a button, a user-visible constant or a keep-in-sync pointer
+      # exists on one plugin and not the other. See the script's docstring for
+      # what is pinned and why each check is there.
+      - name: Action list, shared constants and sync pointers
+        run: python3 scripts/check-plugin-parity.py

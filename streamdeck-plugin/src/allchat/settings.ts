@@ -4,6 +4,10 @@
  *
  * The property inspector writes these verbatim into Stream Deck's per-action
  * settings store, so every field is optional: a freshly dropped key has `{}`.
+ *
+ * KEEP IN SYNC with `streamcontroller-plugin/allchat/settings.py` (ADR-0049).
+ * The constants below are user-visible on both plugins and are compared by
+ * `scripts/check-plugin-parity.py`.
  */
 
 /**
@@ -16,8 +20,13 @@ export const DEFAULT_BASE_URL = "https://allch.at";
 /** Where a user mints a personal access token, and where they upgrade. */
 export const ACCOUNT_TOKENS_URL = `${DEFAULT_BASE_URL}/settings/api-tokens`;
 
-/** Page advertised when the server reports the premium engagement gate. */
-export const UPGRADE_URL = `${DEFAULT_BASE_URL}`;
+/**
+ * Page advertised when the server reports the premium engagement gate. This is
+ * `/upgrade`, not the homepage: a user who just pressed a key and was told they
+ * need premium should land on the page that explains it, and the
+ * StreamController plugin has always pointed there.
+ */
+export const UPGRADE_URL = `${DEFAULT_BASE_URL}/upgrade`;
 
 /**
  * Every All-Chat personal access token carries this prefix; the server routes a

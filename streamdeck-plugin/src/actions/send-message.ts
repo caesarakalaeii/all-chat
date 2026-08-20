@@ -4,6 +4,8 @@
  * Route: `POST /api/v1/auth/chat/send`, authenticated with the key's personal
  * access token. This action is **not** premium-gated; it works on every account
  * that has a connected platform.
+ *
+ * KEEP IN SYNC with `streamcontroller-plugin/actions/send_message.py` (ADR-0049).
  */
 
 import { action, type KeyDownEvent } from "@elgato/streamdeck";

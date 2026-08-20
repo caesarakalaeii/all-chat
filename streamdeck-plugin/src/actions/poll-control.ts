@@ -12,6 +12,8 @@
  * - `close` → `POST /api/v1/engagement/overlays/:id/polls/:pollId/close`.
  *   Deliberately free, so a streamer who started a poll while premium (or via
  *   the web app) can always end it.
+ *
+ * KEEP IN SYNC with `streamcontroller-plugin/actions/poll_control.py` (ADR-0049).
  */
 
 import { action, type KeyDownEvent } from "@elgato/streamdeck";
