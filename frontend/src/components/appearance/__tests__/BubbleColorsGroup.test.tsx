@@ -30,12 +30,10 @@ afterEach(() => {
 
 const renderGroup = (
   visualSettings: Partial<VisualSettings>,
-  isPremium = true
+  locked = false
 ): { onChange: ReturnType<typeof vi.fn> } => {
   const onChange = vi.fn()
-  render(
-    <BubbleColorsGroup visualSettings={visualSettings} onChange={onChange} isPremium={isPremium} />
-  )
+  render(<BubbleColorsGroup visualSettings={visualSettings} onChange={onChange} locked={locked} />)
   return { onChange }
 }
 
@@ -87,8 +85,22 @@ describe('BubbleColorsGroup', () => {
     expect(screen.getByText(/add a second to start cycling/i)).toBeDefined()
   })
 
-  it('locks every control behind premium and says so', () => {
-    renderGroup({ bubblePalette: ['#111111', '#222222'] }, false)
+  /** The gate ships open, so nothing should mention Premium by default. */
+  it('is free by default, with no upsell', () => {
+    renderGroup({ bubblePalette: ['#111111', '#222222'] })
+
+    expect(screen.queryByText(/premium/i)).toBeNull()
+    expect(screen.getByLabelText(/remove colour 1/i)).toHaveProperty('disabled', false)
+    expect(screen.getByText(/add colour/i)).toHaveProperty('disabled', false)
+  })
+
+  /**
+   * `locked` comes from the server-resolved `bubble_colors_locked` flag, so
+   * flipping the gate to premium in the admin UI locks the controls with no
+   * deploy — and the controls must actually go dead, not just look it.
+   */
+  it('locks every control and shows the upsell when the gate is closed', () => {
+    renderGroup({ bubblePalette: ['#111111', '#222222'] }, true)
 
     // The notice interleaves an upsell link, so match the paragraph's full text.
     expect(screen.getByText(/different bubble colours per platform/i)).toBeDefined()

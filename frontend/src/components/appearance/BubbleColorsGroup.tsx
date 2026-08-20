@@ -19,7 +19,7 @@
  */
 
 /**
- * Differently-coloured chat bubbles (premium), on two independent axes:
+ * Differently-coloured chat bubbles, on two independent axes:
  *
  * - Per platform — Twitch rows one fill, YouTube another. Useful for
  *   multistreamers who want to tell sources apart at a glance.
@@ -27,6 +27,11 @@
  *
  * A platform fill wins over the palette on that platform's rows; the emitted CSS
  * encodes that by source order (see bubbleFillRules).
+ *
+ * Free to use. `locked` comes from the server-resolved `bubble_colors_locked`
+ * flag on the overlay config rather than from `user.is_premium`, so flipping the
+ * `bubble_colors` gate to premium in the admin UI locks these controls with no
+ * deploy — and until someone does, nothing here mentions Premium.
  */
 
 import React from 'react'
@@ -51,13 +56,14 @@ const PLATFORMS: ReadonlyArray<{ field: keyof VisualSettings; label: string; sam
 export interface BubbleColorsGroupProps {
   visualSettings: Partial<VisualSettings>
   onChange: (patch: Partial<VisualSettings>) => void
-  isPremium: boolean
+  /** Server-resolved `bubble_colors_locked`; the gate ships open, so normally false. */
+  locked?: boolean
 }
 
 export function BubbleColorsGroup({
   visualSettings,
   onChange,
-  isPremium,
+  locked = false,
 }: BubbleColorsGroupProps): React.ReactElement {
   const palette = visualSettings.bubblePalette ?? []
 
@@ -69,7 +75,7 @@ export function BubbleColorsGroup({
 
   return (
     <div className="space-y-5">
-      {!isPremium && (
+      {locked && (
         <div className="flex items-start gap-2 rounded-lg border border-border bg-surface p-3">
           <PremiumBadge />
           <p className="text-sm text-text-sub">
@@ -79,7 +85,7 @@ export function BubbleColorsGroup({
         </div>
       )}
 
-      <fieldset disabled={!isPremium} className="space-y-5 disabled:opacity-50">
+      <fieldset disabled={locked} className="space-y-5 disabled:opacity-50">
         <div className="space-y-3">
           <div>
             <h3 className="text-sm font-medium text-text">Per platform</h3>
@@ -99,7 +105,7 @@ export function BubbleColorsGroup({
                 <button
                   type="button"
                   aria-label={`Reset ${platform.label} bubble colour`}
-                  disabled={!isPremium}
+                  disabled={locked}
                   onClick={() => onChange({ [platform.field]: undefined })}
                   className="rounded p-1 text-text-dim transition-colors hover:text-text disabled:cursor-not-allowed"
                 >
@@ -131,7 +137,7 @@ export function BubbleColorsGroup({
               <button
                 type="button"
                 aria-label={`Remove colour ${index + 1}`}
-                disabled={!isPremium}
+                disabled={locked}
                 onClick={() => writePalette(palette.filter((_, i) => i !== index))}
                 className="rounded p-1 text-text-dim transition-colors hover:text-text disabled:cursor-not-allowed"
               >
@@ -143,7 +149,7 @@ export function BubbleColorsGroup({
           {palette.length < MAX_BUBBLE_PALETTE && (
             <button
               type="button"
-              disabled={!isPremium}
+              disabled={locked}
               onClick={() => writePalette([...palette, NEW_SWATCH])}
               className="hover:bg-surface-alt flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text transition-colors disabled:cursor-not-allowed"
             >

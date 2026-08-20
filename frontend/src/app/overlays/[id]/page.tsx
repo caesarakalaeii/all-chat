@@ -1804,6 +1804,10 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
 
   // --- Visual appearance settings state ---
   const [visualSettings, setVisualSettings] = useState<Partial<VisualSettings>>({})
+  // Server-resolved `bubble_colors` gate (ADR-0008). Ships open, so this stays
+  // false unless the gate is flipped to premium in the admin UI — at which point
+  // the controls lock without a deploy.
+  const [bubbleColorsLocked, setBubbleColorsLocked] = useState(false)
   const [iframeVisibilityDefaults, setIframeVisibilityDefaults] = useState<Partial<VisualSettings>>(
     {}
   )
@@ -2275,6 +2279,8 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           }
 
           const savedCss = config.custom_css || ''
+          setBubbleColorsLocked(config.bubble_colors_locked === true)
+
           const tid = typeof config.theme_id === 'string' ? config.theme_id : ''
           setThemeId(tid)
           // Resolve the bundled theme CSS for this overlay: preloaded into the
@@ -3187,7 +3193,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                     <BubbleColorsGroup
                       visualSettings={visualSettings}
                       onChange={handleVisualSettingsChange}
-                      isPremium={user?.is_premium ?? false}
+                      locked={bubbleColorsLocked}
                     />
                   )}
                   {activeSection === 'visibility' && (

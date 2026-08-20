@@ -16,16 +16,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import {
-  Check,
-  MessagesSquare,
-  Palette,
-  Radio,
-  ShieldCheck,
-  Sparkles,
-  Users,
-  Volume2,
-} from 'lucide-react'
+import { Check, MessagesSquare, Radio, ShieldCheck, Sparkles, Users, Volume2 } from 'lucide-react'
 import Link from 'next/link'
 import { AppNav } from '@/components/AppNav'
 import { Card } from '@/components/ui/card'
@@ -35,7 +26,7 @@ import { PATREON_JOIN_URL } from '@/lib/constants'
 export const metadata = {
   title: 'Upgrade to Premium | All-Chat',
   description:
-    'Back All-Chat on Patreon to unlock premium features: moderate from your overlay, ElevenLabs TTS, YouTube stream selection, shared chat, differently-coloured bubbles, and viewer flairs.',
+    'Back All-Chat on Patreon to unlock premium features: moderate from your overlay, ElevenLabs TTS, YouTube stream selection, shared chat, and viewer flairs.',
   alternates: { canonical: '/upgrade' },
 }
 
@@ -77,12 +68,6 @@ const features: PremiumFeature[] = [
     icon: MessagesSquare,
     title: 'Shared chat',
     description: 'Combine several channels into one shared conversation across your overlays.',
-  },
-  {
-    icon: Palette,
-    title: 'Differently-coloured bubbles',
-    description:
-      'Give each platform its own bubble colour so you can tell sources apart at a glance, or cycle a palette of up to six colours down the feed.',
   },
   {
     icon: Sparkles,

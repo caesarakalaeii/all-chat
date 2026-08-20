@@ -380,7 +380,7 @@ export function OnboardingChecklist({
                   <span className="font-medium text-text">Differently-coloured bubbles</span>
                   <p className="text-xs text-text-sub">
                     Give each platform its own bubble colour, or cycle a palette down the feed,
-                    under Bubble colors in Appearance. (Premium)
+                    under Bubble colors in Appearance. Free.
                   </p>
                 </li>
                 <li>
