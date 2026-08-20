@@ -30,7 +30,10 @@ body {
    rounded, glowing), which is the exact opposite of brutalist. */
 .chat-message,
 .event-message {
-  background: #ffffff !important;
+  /* The slab takes the customizer's "Bubble background" when set. The per-card
+     variety below lives on the hard offset shadow, not the fill, so it survives
+     a chosen colour untouched. */
+  background: var(--chat-bubble-bg-color, #ffffff) !important;
   border: 3px solid #000000 !important;
   border-radius: 4px !important;
   box-shadow: 6px 6px 0 #000000 !important;

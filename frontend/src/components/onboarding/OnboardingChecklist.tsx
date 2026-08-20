@@ -377,6 +377,19 @@ export function OnboardingChecklist({
                   </p>
                 </li>
                 <li>
+                  <span className="font-medium text-text">Differently-coloured bubbles</span>
+                  {/* Listed here but NOT in app/upgrade/page.tsx, for the same reason as
+                      Stream Deck buttons below: that list is specifically the PREMIUM
+                      tour, and the bubble_colors gate is seeded free (migration 090)
+                      because it is pure client-side CSS — no bandwidth, quota or send
+                      path. If the gate is ever flipped to premium, move this entry into
+                      the /upgrade list and keep the two in sync per the note above. */}
+                  <p className="text-xs text-text-sub">
+                    Give each platform its own bubble colour, or cycle a palette down the feed,
+                    under Bubble colors in Appearance. Free.
+                  </p>
+                </li>
+                <li>
                   <span className="font-medium text-text">Viewer flairs</span>
                   <p className="text-xs text-text-sub">
                     Premium cosmetics for chatters, like animated name gradients, under Flairs in

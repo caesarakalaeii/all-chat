@@ -1110,7 +1110,7 @@ func TestPublicConfigHidesTTSKey(t *testing.T) {
 	cfgRepo := &stubConfigRepo{cfg: cfg}
 	overlays := &stubOverlayRepo{owned: true}
 	sources := &stubSourceRepo{}
-	ch := NewConfigHandler(cfgRepo, overlays, sources, nil)
+	ch := NewConfigHandler(cfgRepo, overlays, sources, nil, nil)
 
 	r := gin.New()
 	r.GET("/public/:id/config", ch.HandleGetPublicConfig)

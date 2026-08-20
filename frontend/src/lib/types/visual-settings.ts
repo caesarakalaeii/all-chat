@@ -76,7 +76,10 @@ export interface VisualSettings {
   lineHeight?: string         // --chat-line-height
   letterSpacing?: string      // --chat-letter-spacing
   fontSize?: string           // --chat-font-size
-  textShadow?: string         // --chat-text-shadow (inherited from the overlay container)
+  // --chat-text-shadow. Inherits from the overlay container, and is additionally
+  // forced on the message/username/timestamp nodes — bundled themes declare
+  // `text-shadow: … !important` there. See OVERRIDE_RULES in visual-settings-to-css.
+  textShadow?: string
 
   // Colors
   messageColor?: string       // --chat-message-color
@@ -102,10 +105,32 @@ export interface VisualSettings {
   bubbleBorderWidth?: string    // --chat-bubble-border-width
   bubbleBorderColor?: string    // --chat-bubble-border-color
   bubblePadding?: string        // --chat-bubble-padding
-  bubbleShadow?: string         // --chat-bubble-shadow
+  // --chat-bubble-shadow; forced on chat rows for the same reason as textShadow.
+  bubbleShadow?: string
   messageGap?: string           // --chat-message-gap
   backdropBlur?: string         // --chat-backdrop-blur
   maxWidth?: string             // --chat-max-width
+
+  /**
+   * Differently-coloured bubbles (premium). Two independent axes:
+   *
+   * - `bubblePalette` — 2 to MAX_BUBBLE_PALETTE fills cycled down the feed,
+   *   keyed on the `data-bubble-slot` the overlay surfaces write per row.
+   * - `<platform>BubbleBg` — pins one platform's rows to a fill, and wins over
+   *   the palette on those rows.
+   *
+   * Neither is in PROPERTY_MAP. A palette is a list, not a single custom
+   * property, and keeping both out of the map also keeps theme-css-parser from
+   * back-filling them out of a theme — so a set value here is always the
+   * streamer's own choice and is safe to enforce over theme CSS. See
+   * bubbleFillRules in visual-settings-to-css.
+   */
+  bubblePalette?: string[]
+  twitchBubbleBg?: string
+  youtubeBubbleBg?: string
+  kickBubbleBg?: string
+  tiktokBubbleBg?: string
+  discordBubbleBg?: string
 
   // Visibility toggles ('inline' | 'none' for inline elements; 'block' | 'none' for block)
   showAvatars?: 'inline' | 'none'        // --chat-show-avatars
@@ -124,17 +149,21 @@ export interface VisualSettings {
   // applied as a .msg-anim-* class on the chat bubble)
   messageAnimation?: MessageAnimation
 
-  // Phase 9: Pronoun display
-  showPronouns?: 'inline' | 'none'      // --chat-show-pronouns
-  pronounPosition?: 'before' | 'after'  // not CSS-driven, stored for persistence
-  pronounColor?: string                 // not CSS-driven, stored for persistence
+  // Phase 9: Pronoun display — all three are read into React state and applied
+  // by conditional render / inline style. None is in PROPERTY_MAP, so no
+  // `--chat-show-pronouns` variable is ever emitted; do not write CSS against one.
+  showPronouns?: 'inline' | 'none'
+  pronounPosition?: 'before' | 'after'
+  pronounColor?: string
 
   // Sizing
   avatarSize?: string   // --chat-avatar-size
   badgeSize?: string    // --chat-badge-size
   emoteScale?: string   // --chat-emote-scale
 
-  // Platform accent colors
+  // Platform accent colors. No stylesheet consumes these variables and no theme
+  // reads them, so they are delivered as forced `color`/`fill` rules on that
+  // platform's chat badge (OVERRIDE_RULES in visual-settings-to-css).
   twitchAccent?: string    // --platform-twitch-accent
   youtubeAccent?: string   // --platform-youtube-accent
   kickAccent?: string      // --platform-kick-accent

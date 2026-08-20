@@ -77,6 +77,18 @@ const (
 	// plugins are free; flip it with the feature-gate admin endpoint, no redeploy. The pasted
 	// personal-access-token path (ADR-0051) predates this gate and is not covered by it.
 	GateDesktopControlSurfaces = "desktop_control_surfaces"
+
+	// GateBubbleColors is the feature key for differently-coloured chat bubbles:
+	// a fill per platform, and/or a palette cycled down the feed.
+	//
+	// Seeded is_premium=FALSE (migration 090), the second key here to ship OPEN
+	// alongside GateDesktopControlSurfaces. It is pure client-side CSS: no
+	// bandwidth, no platform quota, no send path, no abuse surface, and telling
+	// Twitch from YouTube at a glance serves the multistream promise that is the
+	// product's reason to exist. The gate exists so it can be turned into an
+	// upsell from the admin UI without a deploy (CLAUDE.md "Shipping a Feature"),
+	// not because it is one today.
+	GateBubbleColors = "bubble_colors"
 )
 
 // FeatureGate represents a single row from the feature_gates table.

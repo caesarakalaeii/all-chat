@@ -42,7 +42,17 @@ import { buildGradientCSS } from '@/lib/utils/gradient'
 import { renderMessageContent } from '@/lib/renderMessage'
 import { resolveTwitchBadgeIcons } from '@/lib/twitchBadges'
 import { sortMessageBadges } from '@/lib/badgeOrder'
-import { visualSettingsToCss } from '@/lib/utils/visual-settings-to-css'
+import {
+  BUBBLE_SLOT_ATTR,
+  resolveBubblePalette,
+  visualSettingsToCss,
+} from '@/lib/utils/visual-settings-to-css'
+import {
+  admitBubbleSlot,
+  bubbleSlot,
+  EMPTY_BUBBLE_SLOTS,
+  type BubbleSlotState,
+} from '@/lib/utils/bubbleSlot'
 import {
   isMessageAnimation,
   MESSAGE_ANIMATION_CLASS,
@@ -190,6 +200,11 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
   // visual-inline-styles); keeps this preview in sync with the live overlay.
   const [containerStyle, setContainerStyle] = useState<React.CSSProperties>({})
   const [bubbleStyle, setBubbleStyle] = useState<React.CSSProperties>({})
+  // Bubble palette: 2+ fills cycled down the feed. Arrives on load from
+  // visual_settings and live via VISUAL_SETTINGS_UPDATE (the CSS alone is not
+  // enough — the per-row slot attribute has to be written in React).
+  const [bubblePalette, setBubblePalette] = useState<string[]>([])
+  const [bubbleSlots, setBubbleSlots] = useState<BubbleSlotState>(EMPTY_BUBBLE_SLOTS)
   const [platformBadgePosition, setPlatformBadgePosition] = useState<'before' | 'after'>('before')
   const [platformBadgeStyle, setPlatformBadgeStyle] = useState<'text' | 'icon'>('text')
   const [showPlatformBadge, setShowPlatformBadge] = useState(true)
@@ -319,6 +334,8 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
         }
         // Unconditional so switching back to the default clears the class live
         setMessageAnimation(isMessageAnimation(s.messageAnimation) ? s.messageAnimation : null)
+        // Same reason: emptying the palette has to drop the slot attributes too
+        setBubblePalette(resolveBubblePalette({ bubblePalette: s.bubblePalette }))
         return
       }
       // Live custom/theme CSS from the editor (theme apply, or typing in the
@@ -451,6 +468,7 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
         setVisualSettingsCss(vcCss)
         setContainerStyle(overlayContainerStyle(vs))
         setBubbleStyle(chatBubbleStyle(vs))
+        setBubblePalette(resolveBubblePalette(vs))
         // Apply non-CSS visual settings
         if (vs.showPlatformBadge !== undefined) {
           setShowPlatformBadge(vs.showPlatformBadge !== 'none')
@@ -614,6 +632,8 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
       // Phase 13: speak the message via TTS (D-41, D-42 — independent of sound; both fire on non-filtered)
       ttsPlayerRef.current?.speak(message)
 
+      // Arrival order for the bubble palette (idempotent per id)
+      setBubbleSlots((prev) => admitBubbleSlot(prev, message.id, maxMessages * 2))
       setMessages((prev) => [...prev, message].slice(-maxMessages))
     })
 
@@ -633,6 +653,7 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMessages((prev) => (prev.length > maxMessages ? prev.slice(-maxMessages) : prev))
   }, [maxMessages])
+
 
   // Phase 12: Destroy sound player on unmount
   useEffect(() => {
@@ -708,8 +729,13 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
           style={{
             scrollbarWidth: 'thin',
             scrollbarColor: '#374151 transparent',
-            // text-shadow inherits to every text node below; the var arrives
-            // via VISUAL_CSS_UPDATE (live) or the saved visual_settings (load)
+            // text-shadow inherits to every text node below, reaching nodes no
+            // rule names (pronoun pill, shared-chat tag, event body). It does
+            // NOT make the setting stick — a normal inline style loses to the
+            // `text-shadow: … !important` every bundled theme declares on the
+            // message text. That is the job of the `!important` rule
+            // visualSettingsToCss emits in `@layer visual-customizer`. The var
+            // arrives via VISUAL_CSS_UPDATE (live) or visual_settings (load).
             textShadow: 'var(--chat-text-shadow, none)',
             ...containerStyle,
           }}
@@ -749,6 +775,12 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                     key={message.id}
                     data-platform={message.platform}
                     data-event-type={isEvent ? message.event?.type : undefined}
+                    {...{
+                      // See the live overlay: keyed on arrival order, not position.
+                      [BUBBLE_SLOT_ATTR]: isEvent
+                        ? undefined
+                        : bubbleSlot(bubbleSlots, message.id, bubblePalette.length),
+                    }}
                     className={
                       isEvent
                         ? clsx('event-message', eventTierClass, eventTypeClass)
