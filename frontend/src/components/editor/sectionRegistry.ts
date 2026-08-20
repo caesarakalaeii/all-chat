@@ -40,6 +40,7 @@ export type EditorSectionId =
   | 'typography'
   | 'colors'
   | 'background'
+  | 'bubble-colors'
   | 'visibility'
   | 'sizing'
   | 'platform-colors'
@@ -212,6 +213,22 @@ export const EDITOR_SECTIONS: EditorSection[] = [
       { label: 'Padding', keywords: 'spacing inside' },
       { label: 'Message gap', keywords: 'spacing between distance' },
       { label: 'Backdrop blur', keywords: 'glass frosted' },
+    ],
+  },
+  {
+    id: 'bubble-colors',
+    group: 'appearance',
+    title: 'Bubble Colors',
+    navLabel: 'Bubble colors',
+    description: 'A different bubble fill per platform, or a palette cycled down the feed.',
+    keywords: 'premium multicolour multicolor alternating rotate cycle rainbow per platform',
+    entries: [
+      { label: 'Twitch bubble', keywords: 'platform fill purple' },
+      { label: 'YouTube bubble', keywords: 'platform fill red' },
+      { label: 'Kick bubble', keywords: 'platform fill green' },
+      { label: 'TikTok bubble', keywords: 'platform fill cyan' },
+      { label: 'Discord bubble', keywords: 'platform fill blurple' },
+      { label: 'Palette', keywords: 'cycle alternate rotate colours colors' },
     ],
   },
   {

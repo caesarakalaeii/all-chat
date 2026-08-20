@@ -55,6 +55,15 @@ export interface OverlayConfig {
    * propagate on deploy; custom_css is only the user's raw overrides.
    */
   theme_id?: string
+  /**
+   * Resolved per request by overlay-manager, never persisted: true when the
+   * `bubble_colors` feature gate (ADR-0008) is closed for this user, so the
+   * editor locks those controls instead of offering a setting the save path
+   * would drop. Ships false — the gate exists to make the feature flippable
+   * from the admin UI without a deploy, not because it is an upsell today.
+   * Absent on the unauthenticated public overlay-config route.
+   */
+  bubble_colors_locked?: boolean
   created_at: string
   updated_at: string
 }
@@ -220,12 +229,7 @@ export interface ChatSource {
 }
 
 export type StreamSelectionStrategy =
-  | 'first_found'
-  | 'most_viewers'
-  | 'fewest_viewers'
-  | 'title_match'
-  | 'title_match_all'
-  | 'all'
+  'first_found' | 'most_viewers' | 'fewest_viewers' | 'title_match' | 'title_match_all' | 'all'
 
 export interface YouTubeSourceConfig {
   stream_select?: StreamSelectionStrategy

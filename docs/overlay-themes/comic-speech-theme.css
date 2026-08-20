@@ -51,11 +51,14 @@ body {
   box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.25) !important;
 }
 
-/* Content → the speech balloon */
+/* Content → the speech balloon.
+   The balloon is the visible bubble here (the row itself is transparent), so it
+   is what the customizer's "Bubble background" has to paint. The event balloon
+   keeps its own sunburst fill below. */
 .chat-message .min-w-0.flex-1,
 .event-message .min-w-0.flex-1 {
   position: relative !important;
-  background-color: #ffffff !important;
+  background-color: var(--chat-bubble-bg-color, #ffffff) !important;
   background-image: radial-gradient(rgba(0, 0, 0, 0.06) 1.2px, transparent 1.2px) !important;
   background-size: 9px 9px !important;
   border: 3px solid #000000 !important;

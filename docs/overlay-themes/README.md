@@ -317,6 +317,87 @@ Styling the list's _children_ is fine and is unaffected.
 Unlike the visual-customizer properties, this is structural layout rather than a
 `--theme-*` variable, so there is no theme-intent fallback step to declare.
 
+#### Customizer settings a theme cannot override
+
+Most `--chat-*` properties are cooperative: read the variable with your own value
+as the fallback (`font-size: var(--chat-font-size, 15px)`) and the user's control
+wins when they set it, your look wins when they don't.
+
+These are **not** cooperative. When the user sets one, the app emits an
+`!important` rule inside `@layer visual-customizer`, which beats an unlayered
+`!important` — nothing a theme writes can win against it:
+
+| Setting                     | Properties forced | On                                                                   |
+| --------------------------- | ----------------- | -------------------------------------------------------------------- |
+| Text Shadow                 | `text-shadow`     | `.break-words`, `.chat-username`, `.text-xs.text-slate-500`          |
+| Bubble shadow               | `box-shadow`      | chat rows (`> div`, excluding `.event-message` and `.scroll-anchor`) |
+| Platform accent (each of 5) | `color`, `fill`   | `[data-platform='<p>'] .platform-badge` and the badge SVG's shapes   |
+
+Nothing is emitted when the control is unset, so an unconfigured overlay still
+renders your theme exactly as written. Two consequences for theme authors:
+
+- A hardcoded `text-shadow: … !important` on message text is fine as a default,
+  but expect it to be replaced the moment the user picks a Text Shadow preset.
+- **Never** declare or read `--chat-text-shadow`, `--chat-bubble-shadow` or
+  `--platform-*-accent`. The theme-CSS parser back-fills the editor's fields from
+  a theme's declarations _and_ from its `var()` fallbacks, so mentioning one of
+  these would make your default indistinguishable from a user choice, and then
+  unbeatable. A unit test fails if a bundled theme does.
+
+#### Bubble background, and per-row colour variety
+
+`--chat-bubble-bg-color` is cooperative, so **read it on whatever element you
+paint as the bubble** — not necessarily the row. Comic Speech paints the balloon
+on `.min-w-0.flex-1` and Trading Card paints the card face inside a two-layer
+`padding-box` / `border-box` background; both read the variable there. A unit
+test fails if a bundled theme paints a bubble without reading it. The only
+exemptions are themes with no bubble at all (Minimal, Noita Minimal).
+
+If your theme varies the bubble colour **per row**, two extra rules apply:
+
+1. Put the per-row colour in a **nested** fallback,
+   `var(--chat-bubble-bg-color, var(--my-paper, …))`, and set `--my-paper` in the
+   `nth-child` rules. A bare fallback gets read back into the editor's field as
+   if the streamer had chosen it, which collapses your palette to one colour.
+   A nested `var()` reads as unbalanced to that parser, which is its signal to
+   skip. Keep the pattern out of your comments too: the parser does not strip
+   them.
+2. Move the row-to-row rhythm off the colour axis for the case where the
+   streamer _has_ picked one colour. `--customizer-bubble-bg-set` is `1` only
+   then (absent otherwise), so multiplying a per-row wash by it costs nothing
+   when unset:
+
+```css
+.chat-message {
+  --paper: #fff8c4;
+  --shade: 0;
+  background-color: var(--chat-bubble-bg-color, var(--paper, #fff8c4)) !important;
+  background-image: linear-gradient(
+    rgba(0, 0, 0, calc(0.075 * var(--shade) * var(--customizer-bubble-bg-set, 0))),
+    rgba(0, 0, 0, calc(0.075 * var(--shade) * var(--customizer-bubble-bg-set, 0)))
+  ) !important;
+}
+.space-y-3 > div:nth-child(even) {
+  --paper: #cfe8ff;
+  --shade: 1;
+}
+```
+
+Sticky Notes is the worked example. Neo-Brutalist and Trading Card keep their
+per-row variety on the shadow and the foil border respectively, which are
+colour-independent and need none of this.
+
+Separately, the streamer can set **differently-coloured bubbles** (Appearance →
+Bubble colors): a fill per platform, and/or a palette cycled down the feed. Those
+are enforced like the table above, as `!important` rules on
+`[data-platform='<p>']` and `[data-bubble-slot='<n>']` rows, so they replace your
+bubble fill when configured and emit nothing when not. Events are never painted.
+
+Do not key any theme rule off `data-bubble-slot`. It is assigned from **arrival
+order**, not position, so that a row keeps its colour as the feed scrolls — a
+theme reading it would be styling "the 3rd message ever seen". Use `nth-child`
+for positional rhythm; a unit test enforces this.
+
 #### Message Container
 - `.space-y-3 > div` - Individual message wrapper
 - `.bg-gray-900/90` - Default dark background

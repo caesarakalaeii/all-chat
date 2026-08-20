@@ -41,6 +41,7 @@ import (
 	sharedRedis "github.com/caesar/all-chat/shared/redis"
 	"github.com/caesar/all-chat/shared/tracing"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -213,7 +214,7 @@ func main() {
 	mpClient := clients.NewMessageProcessorClient(config.MessageProcessorURL, config.MessageProcessorAPIKey, tracingEnabled, log)
 	overlayHandler := handlers.NewOverlayHandler(overlayRepo, sourceRepo, configRepo)
 	seventvResolver := clients.NewSevenTVResolver(log)
-	configHandler := handlers.NewConfigHandler(configRepo, overlayRepo, sourceRepo, seventvResolver)
+	configHandler := handlers.NewConfigHandler(configRepo, overlayRepo, sourceRepo, seventvResolver, bubbleColorsGate{gates: gateCache, db: dbPool})
 	sourcesHandler := handlers.NewSourcesHandler(sourceRepo, overlayRepo, dbPool, log, redisClient, bm, tokenCipher)
 
 	// Discord source guard (ADR-0048): a Discord source is acted on by the SHARED bot, so
@@ -408,6 +409,27 @@ func main() {
 }
 
 // Config holds application configuration
+// bubbleColorsGate combines the feature-gate cache with the per-user premium
+// lookup for the `bubble_colors` key (ADR-0008), mirroring moderation-service's
+// moderationGate so the read flag on GET /overlays/:id/config and the field
+// filter on PUT agree on cohort membership.
+//
+// The key ships is_premium=false, so this short-circuits to true without touching
+// the database; it only costs a query once the gate is flipped to premium.
+type bubbleColorsGate struct {
+	gates *featuregates.FeatureGateCache
+	db    *pgxpool.Pool
+}
+
+func (g bubbleColorsGate) BubbleColorsEnabled(ctx context.Context, userID string) (bool, error) {
+	if g.gates == nil || !g.gates.IsPremium(featuregates.GateBubbleColors) {
+		return true, nil
+	}
+	var isPremium bool
+	err := g.db.QueryRow(ctx, "SELECT is_premium FROM users WHERE id = $1", userID).Scan(&isPremium)
+	return isPremium, err
+}
+
 type Config struct {
 	Port                   string
 	GinMode                string

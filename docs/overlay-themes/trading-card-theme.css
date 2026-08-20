@@ -32,8 +32,20 @@ body {
   --foil: linear-gradient(135deg, #ff6ec4, #7873f5, #4ade80, #ffd166, #ff6ec4);
   position: relative !important;
   overflow: hidden !important;
+  /* The card FACE is the visible bubble, so it takes the customizer's "Bubble
+     background". Both gradient stops read the same variable: unset, they keep
+     the theme's two-tone 165° bevel; set, they collapse to a flat fill of the
+     chosen colour. Driving it through the stops rather than a `background-color`
+     longhand keeps the `padding-box` / `border-box` two-layer clip that draws
+     the foil border intact. The per-card variety is the foil (`--foil` below),
+     not the face, so it survives a chosen colour untouched. */
   background:
-    linear-gradient(165deg, rgba(28, 30, 52, 0.97), rgba(12, 13, 24, 0.97)) padding-box,
+    linear-gradient(
+        165deg,
+        var(--chat-bubble-bg-color, rgba(28, 30, 52, 0.97)),
+        var(--chat-bubble-bg-color, rgba(12, 13, 24, 0.97))
+      )
+      padding-box,
     var(--foil) border-box !important;
   background-size:
     100% 100%,
