@@ -22,7 +22,8 @@ import { describe, expect, it } from 'vitest'
 
 import { BUNDLED_THEMES } from '@/lib/theme-marketplace/bundled-themes.generated'
 import type { VisualSettings } from '@/lib/types/visual-settings'
-import { OVERRIDDEN_FIELDS, PROPERTY_MAP } from '../visual-settings-to-css'
+import { parseCssToVisualSettings } from '../theme-css-parser'
+import { OVERRIDDEN_FIELDS, PROPERTY_MAP, visualSettingsToCss } from '../visual-settings-to-css'
 
 /**
  * Regression guard for the "the UI setting does nothing" class of bug.
@@ -130,6 +131,67 @@ describe('visual customizer property coverage', () => {
         `the theme, and the theme's own value would then be unbeatable. Either ` +
         `drop the theme's reference or drop the field from OVERRIDE_RULES.`
     ).toEqual([])
+  })
+
+  /**
+   * The cooperative half of the contract. "Bubble background" is deliberately
+   * NOT forced (a theme's own `var()` fallback is read back into the field, so a
+   * set value is not necessarily a user choice), which only works if themes
+   * actually read the variable on whatever element they paint as the bubble.
+   * Four did not, so the control was inert on them: Sticky Notes and
+   * Neo-Brutalist hardcoded the row fill, Comic Speech painted the balloon on
+   * the content wrapper, Trading Card painted the card face gradient.
+   */
+  const NO_BUBBLE_THEMES = new Set([
+    // Inline, one-line layouts: there is no bubble to colour on either, so the
+    // control is correctly inapplicable rather than broken.
+    'minimal-theme',
+    'noita-minimal-theme',
+  ])
+
+  it('lets every theme with a bubble read --chat-bubble-bg-color', () => {
+    const ignoring = BUNDLED_THEMES.filter(
+      (theme) =>
+        !NO_BUBBLE_THEMES.has(theme.id) && !theme.css.includes('--chat-bubble-bg-color')
+    ).map((theme) => theme.id)
+
+    expect(
+      ignoring,
+      `These themes paint a bubble but never read --chat-bubble-bg-color, so the ` +
+        `"Bubble background" control does nothing while they are active. Read the ` +
+        `variable on whichever element is the visible bubble, or add the theme to ` +
+        `NO_BUBBLE_THEMES if it genuinely has none.`
+    ).toEqual([])
+  })
+
+  /**
+   * Sticky Notes gives each note a different paper, so it must express the
+   * per-note colour as a NESTED fallback (`var(--chat-bubble-bg-color,
+   * var(--note-paper, …))`). A flat fallback would be read back into the field
+   * by theme-css-parser, which both collapses the three papers to one and trips
+   * the `--customizer-bubble-bg-set` flag, switching on a shading wash the
+   * streamer never asked for.
+   */
+  it('does not read a per-row paper colour back in as a user choice', () => {
+    const sticky = BUNDLED_THEMES.find((theme) => theme.id === 'sticky-notes-theme')
+    expect(sticky, 'sticky-notes-theme should be bundled').toBeDefined()
+    expect(parseCssToVisualSettings(sticky!.css).bubbleBgColor).toBeUndefined()
+  })
+
+  /**
+   * The flag exists so a per-row-coloured theme can tell "the streamer picked a
+   * colour" from "I got my own fallback". It must stay outside the
+   * `--chat-*`/`--platform-*` namespace theme-css-parser reverse-maps, or a
+   * theme reading it would warn as an unknown variable and be parsed as a value.
+   */
+  it('emits the bubble-bg presence flag only when the colour is set', () => {
+    expect(visualSettingsToCss({ bubbleBgColor: '#ffd6e7' })).toContain(
+      '--customizer-bubble-bg-set: 1;'
+    )
+    expect(visualSettingsToCss({ bubbleBgOpacity: '0.5' })).not.toContain(
+      '--customizer-bubble-bg-set'
+    )
+    expect('--customizer-bubble-bg-set').not.toMatch(/^--(chat|platform)-/)
   })
 
   it('forces the three settings that had no consumer', () => {

@@ -27,11 +27,37 @@ body {
 
 /* Paper note — tilted, soft shadow. Alternate tilt + paper color for rhythm.
    Events are notes too: a sub is a note in a different paper colour, not the
-   platform default's gold glowing card pinned to a corkboard of paper. */
+   platform default's gold glowing card pinned to a corkboard of paper.
+
+   The paper colour is the customizer's "Bubble background" when the streamer
+   picks one, and the theme's own three papers when they don't. Because picking
+   ONE colour would flatten the note-to-note rhythm this theme is built on, the
+   rhythm moves off the hue axis onto `--note-shade`: a per-note darkening wash
+   layered over the paper. It is multiplied by `--customizer-bubble-bg-set`,
+   which the app emits only when the colour was actually set — so it resolves to
+   0 on an unconfigured overlay and the three papers render exactly as before.
+
+   Two things here are load-bearing:
+   - The per-note paper goes in a NESTED fallback (`--note-paper`), never as a
+     bare hex fallback on the customizer variable itself. theme-css-parser reads
+     a theme's fallbacks back into the editor's fields (comments included — it
+     does not strip them, so do not spell such a pattern out here either), and a
+     bare fallback would be adopted as if the streamer had chosen that paper:
+     the palette collapses to one colour and the wash switches on, unasked. A
+     nested `var()` leaves the fallback unbalanced to that parser, which is its
+     documented signal to skip.
+   - `background-color` / `background-image` stay split. A `background`
+     shorthand in a later rule would drop the wash layer. */
 .chat-message,
 .event-message {
+  --note-paper: #fff8c4;
+  --note-shade: 0;
   position: relative !important;
-  background: #fff8c4 !important;
+  background-color: var(--chat-bubble-bg-color, var(--note-paper, #fff8c4)) !important;
+  background-image: linear-gradient(
+    rgba(0, 0, 0, calc(0.075 * var(--note-shade) * var(--customizer-bubble-bg-set, 0))),
+    rgba(0, 0, 0, calc(0.075 * var(--note-shade) * var(--customizer-bubble-bg-set, 0)))
+  ) !important;
   border: none !important;
   border-radius: 2px !important;
   padding: 16px 16px 12px !important;
@@ -39,11 +65,13 @@ body {
   transform: rotate(-1.6deg) !important;
 }
 .space-y-3 > div:nth-child(even) {
+  --note-paper: #cfe8ff;
+  --note-shade: 1;
   transform: rotate(1.4deg) !important;
-  background: #cfe8ff !important;
 }
 .space-y-3 > div:nth-child(3n) {
-  background: #d7f0c2 !important;
+  --note-paper: #d7f0c2;
+  --note-shade: 2;
 }
 
 /* Washi tape strip */

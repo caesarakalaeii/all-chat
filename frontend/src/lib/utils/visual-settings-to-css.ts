@@ -87,6 +87,25 @@ export const PROPERTY_MAP: ReadonlyArray<[keyof VisualSettings, string]> = [
 ]
 
 /**
+ * Presence flags: emitted as `1` when the paired field is set, absent otherwise.
+ *
+ * A theme reading `var(--chat-bubble-bg-color, <own colour>)` cannot tell which
+ * branch it got, and a theme whose look varies the bubble colour PER ROW needs
+ * to know. Sticky Notes gives every note a different paper; the moment the user
+ * picks one colour that variety has to move somewhere else, so the theme
+ * multiplies a per-note shading wash by this flag — absent (`0`) leaves its own
+ * three papers pixel-identical, `1` restores the note-to-note rhythm on top of
+ * the user's colour.
+ *
+ * Deliberately NOT `--chat-*`/`--platform-*` prefixed: theme-css-parser
+ * reverse-maps those out of a theme's `var()` usages, so a flag under that
+ * prefix would warn as an unknown variable and be read back as a setting.
+ */
+const PRESENCE_FLAGS: ReadonlyArray<[keyof VisualSettings, string]> = [
+  ['bubbleBgColor', '--customizer-bubble-bg-set'],
+]
+
+/**
  * Values with unbalanced parentheses are partial extractions of complex CSS
  * functions (e.g. a truncated `linear-gradient`) and corrupt every declaration
  * that follows them in the block.
@@ -228,6 +247,12 @@ export function visualSettingsToCss(settings: Partial<VisualSettings>): string {
     if (value === undefined) continue
     if (!hasBalancedParens(value)) continue
     declarations.push(`    ${cssVar}: ${value};`)
+  }
+
+  for (const [field, cssVar] of PRESENCE_FLAGS) {
+    const value = settings[field]
+    if (value === undefined || value === '') continue
+    declarations.push(`    ${cssVar}: 1;`)
   }
 
   const blocks: string[] = []

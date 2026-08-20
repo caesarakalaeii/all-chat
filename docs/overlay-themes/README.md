@@ -344,6 +344,49 @@ renders your theme exactly as written. Two consequences for theme authors:
   these would make your default indistinguishable from a user choice, and then
   unbeatable. A unit test fails if a bundled theme does.
 
+#### Bubble background, and per-row colour variety
+
+`--chat-bubble-bg-color` is cooperative, so **read it on whatever element you
+paint as the bubble** — not necessarily the row. Comic Speech paints the balloon
+on `.min-w-0.flex-1` and Trading Card paints the card face inside a two-layer
+`padding-box` / `border-box` background; both read the variable there. A unit
+test fails if a bundled theme paints a bubble without reading it. The only
+exemptions are themes with no bubble at all (Minimal, Noita Minimal).
+
+If your theme varies the bubble colour **per row**, two extra rules apply:
+
+1. Put the per-row colour in a **nested** fallback,
+   `var(--chat-bubble-bg-color, var(--my-paper, …))`, and set `--my-paper` in the
+   `nth-child` rules. A bare fallback gets read back into the editor's field as
+   if the streamer had chosen it, which collapses your palette to one colour.
+   A nested `var()` reads as unbalanced to that parser, which is its signal to
+   skip. Keep the pattern out of your comments too: the parser does not strip
+   them.
+2. Move the row-to-row rhythm off the colour axis for the case where the
+   streamer _has_ picked one colour. `--customizer-bubble-bg-set` is `1` only
+   then (absent otherwise), so multiplying a per-row wash by it costs nothing
+   when unset:
+
+```css
+.chat-message {
+  --paper: #fff8c4;
+  --shade: 0;
+  background-color: var(--chat-bubble-bg-color, var(--paper, #fff8c4)) !important;
+  background-image: linear-gradient(
+    rgba(0, 0, 0, calc(0.075 * var(--shade) * var(--customizer-bubble-bg-set, 0))),
+    rgba(0, 0, 0, calc(0.075 * var(--shade) * var(--customizer-bubble-bg-set, 0)))
+  ) !important;
+}
+.space-y-3 > div:nth-child(even) {
+  --paper: #cfe8ff;
+  --shade: 1;
+}
+```
+
+Sticky Notes is the worked example. Neo-Brutalist and Trading Card keep their
+per-row variety on the shadow and the foil border respectively, which are
+colour-independent and need none of this.
+
 #### Message Container
 - `.space-y-3 > div` - Individual message wrapper
 - `.bg-gray-900/90` - Default dark background
