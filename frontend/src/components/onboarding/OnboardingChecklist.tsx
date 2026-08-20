@@ -383,6 +383,35 @@ export function OnboardingChecklist({
                     the navigation.
                   </p>
                 </li>
+                <li>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium text-text">Stream Deck buttons</span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        trackEvent('cta_click', {
+                          cta: 'paired_devices',
+                          location: 'onboarding-extras',
+                        })
+                        router.push('/settings/devices')
+                      }}
+                    >
+                      Show me
+                    </Button>
+                  </div>
+                  {/* Deliberately listed here rather than in app/upgrade/page.tsx: that
+                      list is specifically the PREMIUM feature tour, and the
+                      desktop_control_surfaces gate is seeded free (migration 089) because
+                      the shipped plugin docs say both plugins are free. If the gate is ever
+                      flipped to premium, move this entry into the /upgrade list and keep the
+                      two in sync per the note above. */}
+                  <p className="text-xs text-text-sub">
+                    Drive polls, predictions and canned messages from a physical button. Link a
+                    Stream Deck or StreamController under Paired devices — nothing to copy or paste.
+                    Starting a poll or prediction is still Premium.
+                  </p>
+                </li>
               </ul>
               <p className="mt-2 text-xs text-text-sub">
                 <a

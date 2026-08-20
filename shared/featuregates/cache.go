@@ -67,6 +67,16 @@ const (
 	// paid capability. Flip to is_premium=false to graduate to all users. Viewer
 	// participation and points earning are NOT gated by this.
 	GateEngagement = "engagement"
+
+	// GateDesktopControlSurfaces is the feature key for pairing a desktop control surface
+	// (Stream Deck / StreamController) with a device token — ADR-0049 release requirement 1.
+	// Mounted by auth-service on POST /me/devices/approve ONLY: gating the pairing step keeps
+	// enforcement in one place and leaves the per-action gates (GateEngagement on starting a
+	// round) untouched, so a paired device still clears exactly the gates a browser session
+	// does. Seeded is_premium=false (migration 089) because three shipped documents state both
+	// plugins are free; flip it with the feature-gate admin endpoint, no redeploy. The pasted
+	// personal-access-token path (ADR-0051) predates this gate and is not covered by it.
+	GateDesktopControlSurfaces = "desktop_control_surfaces"
 )
 
 // FeatureGate represents a single row from the feature_gates table.

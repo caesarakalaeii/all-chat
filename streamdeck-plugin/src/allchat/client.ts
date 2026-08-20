@@ -20,13 +20,13 @@
  */
 
 import { AllChatError } from "./errors.js";
-import { PAT_PREFIX } from "./settings.js";
+import { DEVICE_PREFIX, PAT_PREFIX } from "./settings.js";
 
 /** Options for a single All-Chat request. */
 export type RequestOptions = {
 	/** Base URL, already trimmed of trailing slashes. */
 	baseUrl: string;
-	/** Personal access token, `allchat_pat_…`. */
+	/** The key's credential: `allchat_dev_…` (linked) or `allchat_pat_…` (pasted). */
 	token: string;
 	/** Path below the base URL, starting with a slash, e.g. `/api/v1/…`. */
 	path: string;
@@ -46,21 +46,22 @@ export type RequestOptions = {
 const DEFAULT_TIMEOUT_MS = 10_000;
 
 /**
- * Renders a token safely for diagnostics: the `allchat_pat_` prefix plus the
- * last four characters. Never the secret. Used only when a log line genuinely
- * needs to distinguish two configured keys.
+ * Renders a credential safely for diagnostics: its public prefix and nothing
+ * else. Never the secret, and never a suffix of it — a tail is still secret
+ * material. It is used to say WHICH KIND of credential a key holds, a linked
+ * device token or a pasted personal access token, because that changes the advice
+ * when something goes wrong.
  */
 export function redact(token: string): string {
 	if (!token) {
 		return "<none>";
 	}
-	const tail = token.slice(-4);
-	return `${PAT_PREFIX}…${tail}`;
-}
-
-/** True when the string has the shape of an All-Chat personal access token. */
-export function looksLikePat(token: string): boolean {
-	return token.startsWith(PAT_PREFIX) && token.length > PAT_PREFIX.length;
+	for (const prefix of [DEVICE_PREFIX, PAT_PREFIX]) {
+		if (token.startsWith(prefix) && token.length > prefix.length) {
+			return `${prefix}…`;
+		}
+	}
+	return "<not an All-Chat token>";
 }
 
 /**

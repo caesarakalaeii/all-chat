@@ -56,8 +56,36 @@
 
 		<hr />
 
-		<sdpi-item label="Access token">
-			<sdpi-password setting="apiToken" placeholder="allchat_pat_…"></sdpi-password>
+		<h4>Connect this key to All-Chat</h4>
+
+		<!--
+			Device linking (ADR-0049). "Link with All-Chat" is the primary install
+			path: the plugin binds a port on 127.0.0.1, opens your browser at an
+			approve screen, and receives the credential directly. Nothing is typed
+			and nothing is pasted, which is the whole point — a secret that never
+			appears on screen cannot be read aloud or leaked on camera.
+
+			If the port cannot be bound or no browser can be opened (a Stream Deck
+			driving a second PC, a headless host), the plugin switches to a pairing
+			code and shows it below. The pasted-token field further down stays
+			supported for exactly that case.
+		-->
+		<sdpi-item label="Linking">
+			<button id="allchat-link">Link with All-Chat</button>
+		</sdpi-item>
+
+		<sdpi-item label="Status">
+			<!-- aria-live so a screen reader announces the pairing code and the
+			     outcome without the user having to hunt for it. -->
+			<span id="allchat-link-status" role="status" aria-live="polite"
+				>Not linked yet.</span
+			>
+		</sdpi-item>
+
+		<h4>Or paste a token instead</h4>
+
+		<sdpi-item label="Pasted token">
+			<sdpi-password setting="apiToken" placeholder="allchat_pat_… (only if not linking)"></sdpi-password>
 		</sdpi-item>
 
 		<sdpi-item label="Server">
@@ -67,9 +95,25 @@
 		<details>
 			<summary>Help</summary>
 			<p>
-				Mint a personal access token at
+				<b>Link with All-Chat</b> is the normal way to connect this key: press it,
+				approve the device in the browser window that opens, and nothing needs to
+				be copied. The credential is bound to the one overlay you pick, and you
+				can revoke it at
+				<a href="https://allch.at/settings/devices">allch.at/settings/devices</a>.
+			</p>
+			<p>
+				If linking cannot work here — a Stream Deck driving a second PC, a
+				headless capture box, no browser on this machine — the plugin shows an
+				eight-character pairing code instead. Enter it at
+				<a href="https://allch.at/link">allch.at/link</a> on any device you are
+				signed in on.
+			</p>
+			<p>
+				<b>Or paste a token</b>: mint a personal access token at
 				<a href="https://allch.at/settings/api-tokens">allch.at/settings/api-tokens</a>
 				and paste the whole string, including the <code>allchat_pat_</code> prefix.
+				This stays supported and is the right choice for a machine linking cannot
+				reach.
 			</p>
 			<p>
 				<b>Starting</b> a poll needs All-Chat premium. On a free account this key
@@ -78,5 +122,37 @@
 				<b>Closing</b> a poll is free, so a "close" key always works.
 			</p>
 		</details>
+
+		<script>
+			/*
+				The Link button's only job is to ask the plugin to run the flow and to
+				render what comes back. It never sees a credential: the plugin writes
+				the device token straight into this key's settings, so there is nothing
+				here to display, copy or leak.
+			*/
+			const linkButton = document.getElementById("allchat-link");
+			const linkStatus = document.getElementById("allchat-link-status");
+
+			linkButton.addEventListener("click", () => {
+				linkStatus.textContent = "Starting…";
+				SDPIComponents.streamDeckClient.send("sendToPlugin", { event: "link" });
+			});
+
+			SDPIComponents.streamDeckClient.didReceivePropertyInspectorMessage.subscribe(
+				(message) => {
+					const payload = message?.payload;
+					if (!payload || payload.event !== "link-status") {
+						return;
+					}
+					if (payload.status === "code" && payload.userCode) {
+						linkStatus.textContent =
+							`Enter this code at allch.at/link: ${payload.userCode}. ` +
+							(payload.detail ?? "");
+						return;
+					}
+					linkStatus.textContent = payload.detail ?? payload.status ?? "";
+				},
+			);
+		</script>
 	</body>
 </html>

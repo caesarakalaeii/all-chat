@@ -32,18 +32,25 @@ reads one out of settings.
 
 from __future__ import annotations
 
+import threading
 from typing import Any, Mapping
 
 from allchat import errors
 from allchat.api import Connection
 from allchat.errors import AllChatError
+# Imported as a MODULE, not as names: the two flows are patched wholesale in the
+# tests, and `from ... import link_via_loopback` would bind the original function
+# into this namespace where a patch cannot reach it.
+from allchat import linking
+from allchat.linking import LinkResult
 from allchat.settings import (
-    looks_like_pat,
+    ACCOUNT_DEVICES_URL,
+    looks_like_token,
     resolve_base_url,
     resolve_token,
 )
 
-from .host import ActionBase
+from .host import GTK_AVAILABLE, ActionBase, Adw, Gtk
 
 #: Key states an action can be in. ``PREMIUM`` exists so that "you need premium"
 #: is never rendered with the same affordance as "something broke": the premium
@@ -89,14 +96,17 @@ class ConfigurationError(AllChatError):
 def connection_from(settings: Mapping[str, Any] | None) -> Connection:
     """Builds a :class:`Connection` from an action's settings.
 
-    Raises :class:`ConfigurationError` when the token is absent or is not a PAT,
-    which catches the two commonest setup mistakes before a pointless round-trip.
-    The token is read here and passed straight to the client; it is never logged.
+    Raises :class:`ConfigurationError` when the credential is absent or is neither
+    an All-Chat credential shape, which catches the two commonest setup mistakes
+    before a pointless round-trip. Either kind is accepted: a paired-device token
+    (``allchat_dev_...``, written by the Link flow) or a personal access token
+    (``allchat_pat_...``, pasted for a headless box or a second machine). The token
+    is read here and passed straight to the client; it is never logged.
     """
     token = resolve_token(settings)
     if not token:
         raise ConfigurationError(errors.missing_token_message(), errors.NO_TOKEN)
-    if not looks_like_pat(token):
+    if not looks_like_token(token):
         raise ConfigurationError(errors.malformed_token_message(), errors.MALFORMED_TOKEN)
     return Connection(base_url=resolve_base_url(settings), token=token)
 
@@ -138,6 +148,158 @@ class AllChatActionBase(ActionBase):
     def on_key_down(self) -> None:
         """Called by the host when the physical key is pressed."""
         self.run_action()
+
+
+    # -- settings UI --------------------------------------------------------
+
+    def get_config_rows(self) -> list[Any]:
+        """Builds the action's settings rows, including the Link affordance.
+
+        StreamController calls this to render an action's settings pane. GTK only
+        exists inside the host, so the whole thing degrades to an empty list
+        elsewhere -- which is what lets this module be imported by
+        ``compileall`` and the unit tests on a machine with no GTK.
+
+        The row order is the install order: Link first, because it is the path
+        almost everyone should take, and the pasted token after it, labelled as the
+        fallback it is.
+        """
+        if not GTK_AVAILABLE:
+            return []
+        return [self._build_link_row()]
+
+    def _build_link_row(self) -> Any:  # pragma: no cover - requires GTK
+        """One ActionRow with a button and a status subtitle.
+
+        The status subtitle is where the pairing code appears when the loopback path
+        cannot be used. It never shows a credential: the token goes from
+        :meth:`start_linking` into this action's settings and nowhere else.
+        """
+        row = Adw.ActionRow(
+            title="Link with All-Chat",
+            subtitle="Approve this device in your browser. Nothing to copy or paste.",
+        )
+        button = Gtk.Button(label="Link", valign=Gtk.Align.CENTER)
+
+        def on_status(status: str, detail: str, user_code: str = "") -> None:
+            if status == "code" and user_code:
+                row.set_subtitle(f"Enter this code at allch.at/link: {user_code}. {detail}")
+            else:
+                row.set_subtitle(detail or status)
+
+        def on_clicked(_button: Any) -> None:
+            button.set_sensitive(False)
+            row.set_subtitle("Starting\u2026")
+            # Off the GTK main thread: linking blocks on a browser round trip and on
+            # a polling loop, and doing that on the UI thread would freeze the whole
+            # settings window for up to three minutes.
+            def work() -> None:
+                try:
+                    self.start_linking(on_status)
+                except AllChatError as exc:
+                    on_status("failed", exc.message)
+                except Exception as exc:  # noqa: BLE001
+                    on_status("failed", f"Linking failed: {type(exc).__name__}: {exc}")
+                finally:
+                    button.set_sensitive(True)
+
+            threading.Thread(target=work, daemon=True).start()
+
+        button.connect("clicked", on_clicked)
+        row.add_suffix(button)
+        row.set_activatable_widget(button)
+        return row
+
+    # -- device linking (ADR-0049) ------------------------------------------
+
+    def start_linking(self, on_status: Any = None) -> LinkResult:
+        """Runs the device-link flow and stores the resulting credential.
+
+        This is the install flow the whole feature exists for: the streamer presses
+        one button, their browser opens an approve screen, and this action ends up
+        with a credential nobody typed or pasted. The pasted-token field stays right
+        beside it in the settings UI, because a loopback redirect cannot reach a
+        headless capture box or a second machine.
+
+        The fallback is chosen HERE rather than left to the user to diagnose. If a
+        loopback port cannot be bound or no browser can be opened, this switches to
+        the pairing code and reports it through ``on_status`` so the UI can show it.
+        Asking a streamer to work out why the primary path failed is exactly the
+        friction ADR-0049 says decides adoption.
+
+        ``on_status(status, detail, user_code)`` is called with progress. It never
+        receives the credential -- the only place the token goes is the settings
+        write at the end, and that write is the sole reason this method exists on the
+        action rather than in :mod:`allchat.linking`.
+
+        Raises :class:`~allchat.errors.AllChatError` when both paths fail.
+        """
+
+        def report(status: str, detail: str, user_code: str = "") -> None:
+            if on_status is not None:
+                try:
+                    on_status(status, detail, user_code)
+                except Exception:  # pragma: no cover - a UI callback must not break linking
+                    pass
+
+        settings = dict(self.get_settings_safe())
+        base_url = resolve_base_url(settings)
+        device_name = self.device_name()
+
+        try:
+            if linking.loopback_available():
+                report(
+                    "pending",
+                    "Approve this device in the browser window that just opened.",
+                )
+                result = linking.link_via_loopback(base_url, device_name)
+            else:
+                result = self._link_with_code(base_url, device_name, report)
+        except AllChatError as exc:
+            if exc.kind != errors.NETWORK:
+                report("failed", exc.message)
+                raise
+            # A blocked port or an unopenable browser is the second-machine case, not
+            # a fault. Try the typed code before giving up.
+            result = self._link_with_code(base_url, device_name, report)
+
+        # The ONE write of the credential. It goes into this action's settings and
+        # nowhere else -- not a log line, not the status callback, not an exception.
+        settings["api_token"] = result.token
+        try:
+            self.set_settings(settings)
+        except Exception as exc:  # pragma: no cover - depends on host internals
+            raise AllChatError(
+                errors.NOT_CONFIGURED,
+                f"Linked, but this action's settings could not be saved ({exc}). "
+                "Try linking again.",
+            ) from exc
+
+        self.log_info(
+            f"Linked device {result.device_id} to overlay {result.overlay_id} "
+            f"with scopes [{', '.join(result.scopes)}]"
+        )
+        report("linked", f"Linked. Revoke this device any time at {ACCOUNT_DEVICES_URL}.")
+        return result
+
+    def _link_with_code(self, base_url: str, device_name: str, report: Any) -> LinkResult:
+        """Runs the pairing-code fallback, surfacing the code for the user to type."""
+        pending = linking.link_via_code(base_url, device_name)
+        report(
+            "code",
+            f"Open {pending.verification_uri} on any device you are signed in on and "
+            f"enter this code.",
+            pending.user_code,
+        )
+        return pending.await_completion()
+
+    def device_name(self) -> str:
+        """The self-reported name this plugin gives itself when linking.
+
+        Self-reported means untrusted: the approve screen labels it as such, so this
+        only has to be recognisable, not authoritative.
+        """
+        return f"StreamController \u2014 {self.ACTION_NAME}"
 
     # -- plumbing -----------------------------------------------------------
 

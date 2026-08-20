@@ -36,6 +36,7 @@ import (
 	sharedAuth "github.com/caesar/all-chat/shared/auth"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/encryption"
+	"github.com/caesar/all-chat/shared/featuregates"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/caesar/all-chat/shared/middleware"
@@ -177,7 +178,15 @@ func main() {
 	// api-gateway forwards the client's Authorization header verbatim and each backend
 	// re-validates independently, so a service without a resolver would 401 every PAT.
 	// Authentication only — premium gates and ownership checks are untouched.
-	middleware.SetAPITokenResolver(middleware.NewPgxAPITokenResolver(db))
+	// Paired device tokens (migration 088, ADR-0049) travel the SAME seam: the dispatcher
+	// hands each digest to the resolver that owns its table, so `allchat_dev_` and
+	// `allchat_pat_` are one authentication path with two row shapes rather than two paths.
+	// A device token additionally carries an overlay binding, enforced by
+	// middleware.RequireDeviceTokenOverlay on overlay-keyed routes.
+	middleware.SetAPITokenResolver(middleware.NewTokenResolverDispatch(
+		middleware.NewPgxAPITokenResolver(db),
+		middleware.NewPgxDeviceTokenResolver(db),
+	))
 
 	// Connect to Redis, retrying with backoff so a transient Redis outage
 	// (e.g. the pod being rescheduled onto another node) does not crash-loop
@@ -304,6 +313,28 @@ func main() {
 	// returned exactly once, by the create endpoint, and is never retrievable again.
 	apiTokenHandler := handlers.NewAPITokenHandler(repository.NewAPITokenRepository(db), log)
 
+	// Device linking for desktop control surfaces (ADR-0049). Two handlers over one
+	// repository: the unauthenticated pair a plugin drives (start / exchange) plus the
+	// loopback callback, and the session-only dashboard surface (approve / list / revoke).
+	// The device token's plaintext is returned exactly once, by the exchange endpoint, to
+	// the PLUGIN — it never reaches a browser and the dashboard never renders it.
+	deviceRepo := repository.NewDeviceTokenRepository(db)
+	deviceLinkHandler := handlers.NewDeviceLinkHandler(deviceRepo, frontendURL, log)
+	deviceHandler := handlers.NewDeviceHandler(deviceRepo, deviceRepo, log)
+
+	// Feature-gate cache (ADR-0008), needed here for GateDesktopControlSurfaces on the
+	// device approve route. Refreshed from the feature_gates table via Pub/Sub + a 60s
+	// ticker, so there are zero DB hits at request time. It fails CLOSED (an unknown key
+	// reads as premium-required), which is the right direction for a pairing endpoint: a
+	// cache that could not load leaves linking premium-only rather than ungated.
+	gateCache := featuregates.NewFeatureGateCache(db, redisClient, log)
+	gateCtx, stopGateCache := context.WithCancel(context.Background())
+	defer stopGateCache()
+	if err := gateCache.Start(gateCtx); err != nil {
+		log.Warn("feature-gate cache start failed; device pairing stays premium-gated (fail-closed)",
+			zap.Error(err))
+	}
+
 	// Set Gin mode
 	if logLevel == "debug" {
 		gin.SetMode(gin.DebugMode)
@@ -381,6 +412,20 @@ func main() {
 	// Streamer auth code exchange (single-use code → token payload, audit M1)
 	router.POST("/exchange", legacyAuthHandler.HandleStreamerTokenExchange)
 
+	// Device linking for desktop control surfaces (ADR-0049 steps 2-3). These two are
+	// deliberately UNAUTHENTICATED: the caller is a freshly installed plugin that holds
+	// no credential of any kind, which is the problem being solved. Neither creates
+	// anything of value on its own — a link request with no user_id cannot authenticate
+	// anything, and it becomes a credential only when a signed-in streamer approves it on
+	// a page showing exactly what is being granted.
+	//
+	// Rate limiting for both lives at the API GATEWAY, not here: api-gateway already
+	// constructs a shared/ratelimit limiter, while auth-service does not depend on that
+	// module at all (it is a separate Go module and would need a require plus a replace
+	// directive). The edge is also where unauthenticated traffic arrives.
+	router.POST("/device/link/start", deviceLinkHandler.HandleStartDeviceLink)
+	router.POST("/device/link/exchange", deviceLinkHandler.HandleExchangeDeviceLink)
+
 	// Viewer auth routes (separate from streamer auth)
 	router.GET("/viewer/twitch/login", viewerAuthHandler.HandleTwitchLogin)
 	router.GET("/viewer/twitch/callback", viewerAuthHandler.HandleTwitchCallback)
@@ -412,6 +457,27 @@ func main() {
 		protected.POST("/me/api-tokens", apiTokenHandler.HandleCreateAPIToken)
 		protected.GET("/me/api-tokens", apiTokenHandler.HandleListAPITokens)
 		protected.DELETE("/me/api-tokens/:id", apiTokenHandler.HandleRevokeAPIToken)
+
+		// Paired devices for desktop control surfaces (ADR-0049). Session-only by design
+		// (the handlers refuse a token-authenticated request): a device token must not be
+		// able to mint more devices or revoke the victim's ability to lock it out.
+		//
+		// The premium gate sits on APPROVE alone, per ADR-0049: gating the pairing step
+		// keeps enforcement in one place and leaves the per-action gates untouched, so a
+		// paired device still clears exactly the gates a browser session does. Seeded free
+		// (migration 089) because the shipped plugin docs say both plugins are free; the
+		// toggle is there to be flipped from the admin endpoint without a deploy.
+		protected.GET("/me/devices", deviceHandler.HandleListDevices)
+		protected.GET("/me/devices/pending", deviceHandler.HandleGetPendingLink)
+		protected.POST("/me/devices/approve",
+			middleware.RequirePremium(db, gateCache, featuregates.GateDesktopControlSurfaces, log),
+			deviceHandler.HandleApproveDevice)
+		protected.DELETE("/me/devices/:id", deviceHandler.HandleRevokeDevice)
+
+		// The loopback landing. Session-only because it hands the one-time authorization
+		// code to the plugin's listener, and the Location header is built server-side from
+		// the STORED redirect so the browser never chooses where a credential goes.
+		protected.GET("/device/link/callback", deviceLinkHandler.HandleDeviceLinkCallback)
 		protected.POST("/logout", legacyAuthHandler.HandleLogout)
 		protected.POST("/stop-impersonation", legacyAuthHandler.HandleStopImpersonation)
 		protected.DELETE("/me", legacyAuthHandler.HandleDeleteAccount)

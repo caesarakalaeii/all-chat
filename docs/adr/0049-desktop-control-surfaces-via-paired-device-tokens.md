@@ -1,7 +1,7 @@
 # ADR-0049: Stream Deck and Desktop Control Surfaces via Paired Device Tokens
 
 **Date**: 2026-08-14
-**Status**: Proposed
+**Status**: Accepted
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -174,3 +174,29 @@ Step 1's "hand-issued token" shipped as **ADR-0051, personal access tokens** (`A
 - **The resolver seam is shared.** Device-token recognition (step 2's "token type in the auth middleware") is already built as `middleware.SetAPITokenResolver` + `APITokenResolver`, wired in auth-service, api-gateway **and** engagement-service — gateway-only wiring is inert, because `copyHeaders` forwards `Authorization` verbatim and every backend re-validates independently. A device token becomes another row shape behind that interface rather than a second auth path.
 
 The scope clause above ("does not satisfy the premium gate on its own") is implemented literally and tested: `RequireAPITokenScope` sits beside `RequirePremium` on the round-start routes, never in place of it, so a correctly scoped token belonging to a non-premium owner is still 403'd by `requireEngagementPremium`.
+
+#### Steps 2, 3, 5-linking and 6-linking, as built (amendment, 2026-08-20)
+
+The decision above is now built (issue #737). Status moves from Proposed to **Accepted**. What shipped, and where it differs from the plan:
+
+**As decided, no deviation.**
+
+- **Credential**: `Authorization: Bearer allchat_dev_<secret>`, 256 bits from `crypto/rand`, base64url unpadded — the same shape `middleware.GenerateAPIToken` produces, with a different prefix so a `switch` on prefix stays unambiguous and a secret scanner can tell the two apart. Stored as SHA-256 only (`device_tokens.token_hash BYTEA NOT NULL UNIQUE`, migration 088). 90-day lifetime, slid forward on use under the same one-write-per-minute throttle as `touchAPITokenSQL`.
+- **The resolver seam held.** `IsAPIToken` recognises both prefixes, `APITokenIdentity` gained `Kind` and `OverlayID`, and `NewTokenResolverDispatch` hands each digest to the resolver that owns its table. There is one authentication path with two row shapes, as ADR-0051 predicted, not a second path. Wired in all three of auth-service, api-gateway and engagement-service, for the same reason PATs are.
+- **The redirect validator is its own rule** (`services/auth-service/handlers/loopback_redirect.go`): scheme exactly `http`, host exactly `127.0.0.1` or `[::1]`, any port, one fixed path (`/allchat/device-callback`), and userinfo, query, fragment and anything needing normalisation all refused. It does not call the general redirect guard. `http://localhost:1234/...` being rejected has its own test whose failure message explains that a DNS name can be pointed elsewhere and what leaks if it is accepted.
+- **PKCE is S256 only.** `plain` is refused outright at the endpoint rather than merely discouraged: a plain challenge *is* the verifier, so supporting it would remove the whole property PKCE provides for a public client.
+- **The one-time code is one-time by construction.** `ConsumeAuthCode` is a single UPDATE whose guard and effect happen together, so the code is burnt whether or not the exchange then succeeds, and two concurrent exchanges cannot both win. A replay is a 400 **and** revokes the token the first exchange minted — a reused code means the code leaked, so the credential it produced is no longer trustworthy either. Losing a working pairing is the correct outcome; re-linking costs one click.
+- **Both delivery paths share one table and one state machine** (`device_link_requests`), one approve screen (`/link`) and one exchange endpoint. The pairing code is 8 characters from a 32-symbol alphabet with no `0`/`O` or `1`/`I`/`L`, displayed `XXXX-XXXX`, hashed at rest, 10-minute TTL, **5 attempts** per request checked and incremented in SQL. That counter is the brute-force bound; the gateway rate limit is defence in depth.
+- **Rate limiting is at the gateway**, in its own scope buckets, on the two unauthenticated routes. auth-service does not depend on `shared/ratelimit` at all — it is a separate, unpublished Go module needing a `require` plus a `replace` — and the edge is where unauthenticated traffic arrives anyway.
+- **Both plugins link.** Each binds an ephemeral port on `127.0.0.1` only (the parity gate now fails if either module so much as mentions `0.0.0.0`), opens the system browser, and closes the socket the moment the code arrives or the timeout expires. `scripts/check-plugin-parity.py` grew a linking section covering the five wire constants, the three timeouts (compared across units), the requested scope set and the wildcard-address rule.
+
+**Deviations and judgement calls, stated rather than buried.**
+
+1. **The overlay binding narrows the engagement routes and nothing else.** `POST /api/v1/auth/chat/send` has no overlay dimension — it fans out to the account's connected platforms — so there is no id for `RequireDeviceTokenOverlay` to compare and mounting it there would be theatre. On that route the *scope set* is what limits a device: a compromised control surface granted `chat:write` can send chat as the account. This is said in the middleware comment, in the migration's column comment, and in the approve screen's own copy, in preference to implying a stronger guarantee than exists.
+2. **The `desktop_control_surfaces` gate is seeded `is_premium = FALSE`** (migration 089). Three shipped documents — `docs/guides/streamdeck.md` and both plugin READMEs — state that both plugins are free and that only *starting* a poll or prediction is premium. Seeding this gate premium would have silently made the good install flow premium and contradicted all three. Seeding it free satisfies this ADR's release requirement (the toggle exists and can be flipped from the admin endpoint with no deploy) while leaving the product as advertised. The gate is mounted on `POST /me/devices/approve` only, as decided.
+3. **The onboarding entry went in the general first-run list, not `/upgrade`.** Release requirement 2 asks for both, but the `/upgrade` list is specifically the *premium* feature tour, and with the gate seeded free an entry there would advertise a paywall that does not exist. The entry lives in `OnboardingChecklist.tsx`'s "Optional: go further" with a code comment saying to move it into the premium list if the gate is ever flipped. Maintainer's call to overrule.
+4. **The pairing-code flow does not attribute a blind wrong guess to a row.** `user_code_hash` is a digest, so a code that matches nothing cannot be attributed to a request, and incrementing every live row would let one wrong guess kill somebody else's pairing. The per-request counter therefore bounds an attacker who already holds a request id — the case that matters — and a blind guess is bounded by the gateway limit instead.
+5. **The `state` parameter round-trips through the dashboard.** The plugin generates it, the approve screen carries it through to the callback without interpreting it, and the plugin compares it. The server never reads it: it is the plugin's own CSRF check on its own listener.
+6. **Session-only surfaces**, matching the PAT policy exactly: `/me/devices*` and the loopback callback all refuse a token-authenticated request and an impersonating admin. A device token cannot mint devices or revoke the owner's, so a compromised control surface is not a self-renewing foothold.
+
+**Still open**, and deliberately out of scope for #737: Elgato Marketplace and StreamController store submission, the AGPL-3.0-in-GPL-3.0 sign-off this ADR makes a release gate, OpenDeck compatibility verification, and the Patreon post (release requirement 3, which happens after deploy).
