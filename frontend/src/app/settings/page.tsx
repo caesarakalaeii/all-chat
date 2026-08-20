@@ -262,15 +262,36 @@ function SettingsContent() {
           </div>
         </Card>
 
+        {/* Paired devices (ADR-0049) — the primary way a Stream Deck or
+            StreamController is connected: linking starts in the plugin, is approved at
+            /link, and nothing is ever copied or pasted. Listed ABOVE the token card
+            because this is the path a streamer should reach for first. */}
+        <Card className="p-6">
+          <h2 className="mb-4 text-lg font-semibold text-text">Paired devices</h2>
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-sm text-text-sub">
+              See and revoke the Stream Deck and StreamController control surfaces linked to your
+              account. Each one is locked to a single overlay.
+            </p>
+            <Link
+              href="/settings/devices"
+              className="inline-flex shrink-0 items-center justify-center rounded-lg border border-border px-4 py-2 text-sm text-text transition-colors hover:bg-surface-2"
+            >
+              Manage devices
+            </Link>
+          </div>
+        </Card>
+
         {/* API tokens section — personal access tokens for the Stream Deck and
             StreamController plugins. Linked from here because a token page nobody
-            can find is a token page nobody revokes. */}
+            can find is a token page nobody revokes. Still the supported path for a
+            headless box or a second PC, which a loopback redirect cannot reach. */}
         <Card className="p-6">
           <h2 className="mb-4 text-lg font-semibold text-text">API tokens</h2>
           <div className="flex items-center justify-between gap-4">
             <p className="text-sm text-text-sub">
-              Create and revoke the personal access tokens the Stream Deck and StreamController
-              plugins sign in with.
+              Create and revoke personal access tokens. Use these where linking cannot reach — a
+              headless capture box, a second PC, or a script.
             </p>
             <Link
               href="/settings/api-tokens"

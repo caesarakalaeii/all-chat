@@ -118,11 +118,51 @@ You do **not** need to `pip install` anything.
 
 ---
 
-## Where to mint a token
+## Connecting an action to your account
 
-The plugin authenticates with an All-Chat **personal access token** (PAT) — a
-long-lived, scoped, individually revocable credential, introduced in ADR-0051.
-It is not your session cookie and not a JWT.
+Two routes, and the first is the one almost everyone should take.
+
+### Link (recommended)
+
+Add an All-Chat action, open its settings, and press **Link**.
+
+The plugin binds a short-lived listener on `127.0.0.1` — never `0.0.0.0` —
+generates a PKCE S256 challenge, and opens your browser at an approve screen. You
+pick which overlay this action may drive, confirm what it may do, and press
+Approve; All-Chat redirects to the local listener with a one-time code, the plugin
+trades that code plus its PKCE verifier for a **device token**, and the socket
+closes immediately. Nothing is typed and nothing is pasted, which is the point: a
+secret you never see cannot be read aloud on stream or caught by the camera. See
+ADR-0049.
+
+A linked device differs from a pasted token in three ways that matter:
+
+- **It is bound to one overlay**, chosen when you approved it. A request for any
+  other overlay is refused server-side, so a compromised deck cannot reach the
+  rest of your account.
+- **It expires if unused** — 90 days, pushed forward on every request, so a deck
+  in daily service never lapses while one on a machine you stopped using does.
+- **You never handle the secret.** It goes machine-to-machine.
+
+Manage and revoke paired devices at <https://allch.at/settings/devices>.
+Revocation takes effect on that device's next request.
+
+#### If a pairing code appears instead
+
+Linking needs the plugin and your browser on the **same** machine. When they are
+not — a deck driving a second PC, a Flatpak sandbox that will not let a port be
+bound, a headless host — the plugin falls back on its own and shows an
+eight-character code like `KRPT-8W4M`. Open <https://allch.at/link> on any device
+you are signed in on, type the code, approve. The plugin is polling and finishes
+by itself.
+
+The code lives ten minutes and tolerates five wrong attempts. Its alphabet has no
+`0`/`O` or `1`/`I`/`l` in it, because you are going to read it off a screen.
+
+### Paste a personal access token (for a machine linking cannot reach)
+
+Still supported, and the right answer for a headless capture box or a machine you
+only reach over SSH.
 
 1. Sign in at <https://allch.at>.
 2. Go to **Settings → API tokens** (<https://allch.at/settings/api-tokens>).
@@ -133,21 +173,27 @@ It is not your session cookie and not a JWT.
      actions.
 4. Copy the token. It starts with **`allchat_pat_`** and **is shown once** — only
    a SHA-256 of it is stored server-side, so it cannot be shown again.
-5. Paste it into the **API token** field of each All-Chat key.
+5. Paste it into the **API token** field of each All-Chat action.
 
 Lost it, or pasted it on stream by accident? Revoke it on the same page and mint
 a replacement; nothing else about your account is affected.
 
-### Token handling in this plugin
+Unlike a linked device, a pasted token is **not** overlay-bound and has **no**
+expiry unless you set one — which is why it works where linking cannot, and why
+linking is the better choice when it is available.
 
-- The token is sent only as `Authorization: Bearer allchat_pat_…`. It is never
-  placed in a URL and never written to a log line — there is a test that asserts
-  this for every failure path.
-- It is stored by StreamController in that key's settings, per key, so one deck
-  can drive two accounts.
-- The plugin checks the `allchat_pat_` prefix locally, purely to catch a pasted
-  session JWT before a pointless round-trip. Only the server can say whether a
-  token is actually valid.
+### Credential handling in this plugin
+
+- The credential is sent only as `Authorization: Bearer <credential>`, and the
+  server switches on the prefix (`allchat_dev_` from linking, `allchat_pat_` from
+  a paste). It is never placed in a URL and never written to a log line — there is
+  a test that asserts this for every failure path, and the loopback listener's
+  request logging is silenced because the request line carries the one-time code.
+- It is stored by StreamController in that action's settings, per action, so one
+  deck can drive two accounts.
+- The plugin checks the prefix locally, purely to catch a pasted session JWT
+  before a pointless round-trip. Only the server can say whether a credential is
+  actually valid, in scope, or revoked.
 - Grant the narrowest scopes that work. A chat-send key does not need
   `engagement:write`.
 
@@ -155,8 +201,8 @@ a replacement; nothing else about your account is affected.
 
 ## The actions
 
-All three share two settings: **API token**, and an optional **Base URL** for
-self-hosters (blank means `https://allch.at`, which is the production host,
+All three share the same connection settings: **Link** (or a pasted **API
+token**), and an optional **Base URL** for self-hosters (blank means `https://allch.at`, which is the production host,
 confirmed as `FRONTEND_URL` in `deployments/k8s/base/configmap.yaml`).
 
 ### Send chat message
@@ -259,6 +305,7 @@ streamcontroller-plugin/
 │   ├── settings.py          #   defaults, validation, redaction
 │   ├── errors.py            #   error taxonomy, incl. the three-way 403 split
 │   ├── client.py            #   the one urllib request function
+│   ├── linking.py           #   PKCE loopback + pairing-code fallback (ADR-0049)
 │   └── api.py               #   endpoints, with the premium flag beside each path
 ├── actions/
 │   ├── host.py              #   real host classes, or offline stand-ins
@@ -271,6 +318,11 @@ streamcontroller-plugin/
 
 `allchat/` deliberately imports nothing from StreamController, so the interesting
 logic is testable in isolation.
+
+`allchat/linking.py` is the counterpart of
+`streamdeck-plugin/src/allchat/linking.ts`, and the two are compared by
+`scripts/check-plugin-parity.py`: the wire constants, the three timeouts, the
+requested scope set, and the rule that neither may ever bind `0.0.0.0`.
 
 ### Before submitting to StreamController's plugin store
 
@@ -286,12 +338,16 @@ off — see `attribution.json`. Settle it before the first submission.
 | Key shows        | Meaning                                                                    |
 | ---------------- | -------------------------------------------------------------------------- |
 | **⭐ Premium**    | Expected on a free account when starting a poll/prediction. Everything else still works. Upgrade at <https://allch.at/upgrade>. |
-| **⚠ Error**, log says *token scope* | The token lacks `chat:write` or `engagement:write`. Mint a new one; upgrading will not help. |
-| **⚠ Error**, log says *HTTP 401*    | Token expired, revoked or mistyped. Mint a fresh one and re-paste it. |
+| **⚠ Error**, log says *token scope* | The credential lacks `chat:write` or `engagement:write`. Link again and grant it, or mint a new token; upgrading will not help. |
+| **⚠ Error**, log says *HTTP 401*    | Credential expired, revoked or mistyped. A linked device lapses after 90 days unused — press **Link** again. A pasted token gets re-minted. |
+| **⚠ Error**, *device not paired with this overlay* | A linked device is bound to the overlay you approved it against, and a request for another is refused. Revoke it at <https://allch.at/settings/devices> and link again. |
 | **⚠ Error**, log says *HTTP 404*    | Wrong overlay ID, or the round already ended.             |
 | **⚠ Error**, log says *HTTP 409*    | There is already an active poll/prediction on that overlay. |
 | **⚠ Error**, log says *HTTP 429*    | Rate limited — a chat send fans out to every platform, and per-platform limits bind fastest. Press more slowly. |
 | **⚠ Error**, *could not reach*      | Network, DNS or TLS. Check the Base URL if you self-host.  |
+| **Link** shows a pairing code       | Expected: the plugin could not bind a local port or open a browser. Enter the code at <https://allch.at/link>. |
+| **Link** fails outright             | Neither path worked — a sandbox with no networking to `127.0.0.1` and no browser. Paste a personal access token instead. |
 
 The plugin's messages appear in StreamController's log. None of them ever
-contains your token.
+contains your credential — at most its public prefix, so a log line can say which
+*kind* is configured.

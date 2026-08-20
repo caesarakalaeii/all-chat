@@ -73,16 +73,34 @@ const (
 // logs can distinguish a desktop plugin from a browser session.
 const (
 	// CtxAuthMethod is "api_token" for PAT-authenticated requests and "jwt" for the
-	// session path.
+	// session path. A device token (ADR-0049) also sets "api_token": it travels the
+	// same resolver seam, so every existing session-only guard (AdminOnly,
+	// RefuseAPIToken) covers it without change. Use CtxTokenKind to tell the two apart.
 	CtxAuthMethod = "auth_method"
-	// CtxAPITokenID is the api_tokens.id of the presented token (never the token).
+	// CtxAPITokenID is the api_tokens.id (or device_tokens.id) of the presented token,
+	// never the token.
 	CtxAPITokenID = "api_token_id"
 	// CtxAPITokenScopes is []string of the token's granted scopes.
 	CtxAPITokenScopes = "api_token_scopes"
+	// CtxTokenKind is TokenKindPAT or TokenKindDevice for token-authenticated requests,
+	// and unset for a browser session. It exists so a route can apply a rule that only
+	// makes sense for one row shape (RequireDeviceTokenOverlay) without duplicating the
+	// authentication path.
+	CtxTokenKind = "token_kind"
+	// CtxDeviceOverlayID is the overlay a device token is bound to (device_tokens.
+	// overlay_id). Empty for a PAT, which is user-scoped, and for a session.
+	CtxDeviceOverlayID = "device_overlay_id"
 
 	// AuthMethodAPIToken / AuthMethodJWT are the two values of CtxAuthMethod.
 	AuthMethodAPIToken = "api_token"
 	AuthMethodJWT      = "jwt"
+
+	// TokenKindPAT is a personal access token (api_tokens, ADR-0051): user-scoped,
+	// pasted by a human, optional expiry.
+	TokenKindPAT = "pat"
+	// TokenKindDevice is a paired device token (device_tokens, ADR-0049): bound to one
+	// overlay, never typed by a human, mandatory sliding expiry.
+	TokenKindDevice = "device"
 )
 
 // ErrAPITokenNotFound is returned by an APITokenResolver when the digest matches no
@@ -104,6 +122,14 @@ type APITokenIdentity struct {
 	Roles []string
 	// Scopes is api_tokens.scopes.
 	Scopes []string
+	// Kind is TokenKindPAT or TokenKindDevice — which row shape resolved. Empty is
+	// treated as TokenKindPAT so a resolver written before ADR-0049 keeps behaving
+	// exactly as it did.
+	Kind string
+	// OverlayID is the overlay a device token is bound to (device_tokens.overlay_id).
+	// Always empty for a PAT: ADR-0051 tokens are user-scoped, which is the residual
+	// risk ADR-0049's per-overlay binding exists to remove.
+	OverlayID string
 }
 
 // APITokenResolver resolves a SHA-256 token digest to the identity it authenticates.
@@ -158,11 +184,23 @@ func apiTokenResolverOrNil() APITokenResolver {
 	return apiTokenResolver
 }
 
-// IsAPIToken reports whether a Bearer value is a personal access token rather than a
-// JWT. It is a prefix test only: a value that looks like a PAT is never parsed as a
-// JWT, and a value that does not is never looked up in api_tokens.
+// IsAPIToken reports whether a Bearer value is one of our opaque token credentials —
+// a personal access token (`allchat_pat_`) or a paired device token (`allchat_dev_`) —
+// rather than a JWT.
+//
+// BOTH prefixes belong here, and this is load-bearing rather than tidy. Every caller
+// of this function is asking "is this an opaque token, so keep it away from the JWT
+// machinery?": shared/middleware/auth.go routes it to the resolver instead of the JWT
+// parser and the logout blacklist, CookieToBearer refuses to promote it out of a
+// cookie, and blacklistableSessionToken keeps its plaintext out of a Redis key. A
+// device token that failed this test would fall through to the JWT parser and 401 in
+// every service.
+//
+// It is a prefix test only: a value that looks like one of our tokens is never parsed
+// as a JWT, and a value that does not is never looked up in a token table.
 func IsAPIToken(bearer string) bool {
-	return strings.HasPrefix(bearer, APITokenPrefix)
+	return strings.HasPrefix(bearer, APITokenPrefix) ||
+		strings.HasPrefix(bearer, DeviceTokenPrefix)
 }
 
 // HashAPIToken returns the SHA-256 digest stored in api_tokens.token_hash. The whole
@@ -240,14 +278,23 @@ func authenticateAPIToken(c *gin.Context, bearer string) bool {
 	c.Set("impersonated_by", "")
 	c.Set("impersonated_user", "")
 
-	// PAT-specific extras, used by RequireAPITokenScope and by audit logging.
+	// Token-specific extras, used by RequireAPITokenScope, RequireDeviceTokenOverlay and
+	// audit logging.
 	scopes := identity.Scopes
 	if scopes == nil {
 		scopes = []string{}
 	}
+	kind := identity.Kind
+	if kind == "" {
+		// A resolver that predates ADR-0049 (or a test one) reports no kind. Default to
+		// PAT, which is the shape those resolvers return, so nothing changes for them.
+		kind = TokenKindPAT
+	}
 	c.Set(CtxAuthMethod, AuthMethodAPIToken)
 	c.Set(CtxAPITokenID, identity.TokenID)
 	c.Set(CtxAPITokenScopes, scopes)
+	c.Set(CtxTokenKind, kind)
+	c.Set(CtxDeviceOverlayID, identity.OverlayID)
 	return true
 }
 

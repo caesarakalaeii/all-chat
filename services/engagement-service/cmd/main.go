@@ -93,7 +93,15 @@ func main() {
 	//
 	// Authentication only: a resolved PAT lands the same user_id a session JWT would, so
 	// the RequirePremium gate on opening a round applies to it identically.
-	middleware.SetAPITokenResolver(middleware.NewPgxAPITokenResolver(dbPool))
+	// Paired device tokens (migration 088, ADR-0049) travel the SAME seam: the dispatcher
+	// hands each digest to the resolver that owns its table, so `allchat_dev_` and
+	// `allchat_pat_` are one authentication path with two row shapes rather than two paths.
+	// A device token additionally carries an overlay binding, enforced by
+	// middleware.RequireDeviceTokenOverlay on overlay-keyed routes.
+	middleware.SetAPITokenResolver(middleware.NewTokenResolverDispatch(
+		middleware.NewPgxAPITokenResolver(dbPool),
+		middleware.NewPgxDeviceTokenResolver(dbPool),
+	))
 
 	redisClient := redis.NewClient(&redis.Options{
 		Addr:     fmt.Sprintf("%s:%s", getEnv("REDIS_HOST", "localhost"), getEnv("REDIS_PORT", "6379")),
@@ -225,16 +233,29 @@ func main() {
 	// Scopes only narrow a token; they never authorize anything the session could not do.
 	// A browser session passes through untouched — it is not scope-limited.
 	requireEngagementScope := middleware.RequireAPITokenScope(middleware.ScopeEngagementWrite)
-	auth.POST("/overlays/:id/polls", requireEngagementScope, requireEngagementPremium, h.CreatePoll)
-	auth.POST("/overlays/:id/polls/:pollId/close", requireEngagementScope, h.ClosePoll)
-	auth.POST("/overlays/:id/predictions", requireEngagementScope, requireEngagementPremium, h.CreatePrediction)
-	auth.POST("/overlays/:id/predictions/:pid/lock", requireEngagementScope, h.LockPrediction)
-	auth.POST("/overlays/:id/predictions/:pid/resolve", requireEngagementScope, h.ResolvePrediction)
-	auth.POST("/overlays/:id/predictions/:pid/cancel", requireEngagementScope, h.CancelPrediction)
-	auth.GET("/overlays/:id/points/config", h.GetConfig)
+	// Per-overlay binding for PAIRED DEVICES (ADR-0049). A device token is bound at pairing
+	// time to one overlay, so a compromised Stream Deck cannot drive a different one — the
+	// property a PAT structurally cannot have, since ADR-0051 tokens are user-scoped.
+	//
+	// It sits BESIDE requireEngagementScope and requireEngagementPremium, never in place of
+	// either: the three narrow independently (which credential, what it may do, whether the
+	// owner is premium) and dropping any one of them would be a hole. A browser session and a
+	// PAT pass through untouched — a streamer may drive any overlay they own.
+	//
+	// Note the honest limit: this narrows overlay-keyed routes only. POST /api/v1/auth/chat/send
+	// in auth-service has no overlay dimension (it fans out to the account's connected
+	// platforms), so there the SCOPE SET is what limits a device, not the binding.
+	requireDeviceOverlay := middleware.RequireDeviceTokenOverlay("id")
+	auth.POST("/overlays/:id/polls", requireEngagementScope, requireDeviceOverlay, requireEngagementPremium, h.CreatePoll)
+	auth.POST("/overlays/:id/polls/:pollId/close", requireEngagementScope, requireDeviceOverlay, h.ClosePoll)
+	auth.POST("/overlays/:id/predictions", requireEngagementScope, requireDeviceOverlay, requireEngagementPremium, h.CreatePrediction)
+	auth.POST("/overlays/:id/predictions/:pid/lock", requireEngagementScope, requireDeviceOverlay, h.LockPrediction)
+	auth.POST("/overlays/:id/predictions/:pid/resolve", requireEngagementScope, requireDeviceOverlay, h.ResolvePrediction)
+	auth.POST("/overlays/:id/predictions/:pid/cancel", requireEngagementScope, requireDeviceOverlay, h.CancelPrediction)
+	auth.GET("/overlays/:id/points/config", requireDeviceOverlay, h.GetConfig)
 	// Write to the earn config needs the same scope; the read does not (a token that can
 	// authenticate may look at the overlay's own config).
-	auth.PUT("/overlays/:id/points/config", requireEngagementScope, h.PutConfig)
+	auth.PUT("/overlays/:id/points/config", requireEngagementScope, requireDeviceOverlay, h.PutConfig)
 
 	// Viewer participation (web page / extension).
 	auth.POST("/overlays/:id/polls/:pollId/vote", h.WebVote)

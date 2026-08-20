@@ -120,4 +120,31 @@ except Exception:  # noqa: BLE001 - any import failure means "not in the host"
             print(f"[all-chat] ERROR {message}")
 
 
-__all__ = ["ActionBase", "ActionHolder", "PluginBase", "HOST_AVAILABLE"]
+# GTK/libadwaita, used only to build the "Link with All-Chat" settings row.
+# StreamController is a GTK4 application, so these are present at runtime inside the
+# host and absent everywhere else -- CI, a contributor's laptop, `compileall`. The
+# import is therefore guarded exactly like the host classes above, and every caller
+# checks :data:`GTK_AVAILABLE` first rather than relying on an exception.
+try:  # pragma: no cover - GTK is absent in CI
+    import gi  # type: ignore
+
+    gi.require_version("Gtk", "4.0")
+    gi.require_version("Adw", "1")
+    from gi.repository import Adw, Gtk  # type: ignore
+
+    GTK_AVAILABLE = True
+except Exception:  # noqa: BLE001 - any import failure means "no GTK here"
+    GTK_AVAILABLE = False
+    Adw = None  # type: ignore[assignment]
+    Gtk = None  # type: ignore[assignment]
+
+
+__all__ = [
+    "ActionBase",
+    "ActionHolder",
+    "PluginBase",
+    "HOST_AVAILABLE",
+    "GTK_AVAILABLE",
+    "Adw",
+    "Gtk",
+]
