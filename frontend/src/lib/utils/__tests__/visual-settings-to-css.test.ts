@@ -151,3 +151,68 @@ describe('visualSettingsToCss', () => {
     )
   })
 })
+
+/**
+ * A `--chat-*` variable that nothing consumes paints nothing, and the inline
+ * styles that used to carry these three settings lose to the `!important`
+ * declarations bundled themes use. So they are also emitted as `!important`
+ * rules inside the cascade layer — but only when the user actually set them.
+ */
+describe('visualSettingsToCss forced overrides', () => {
+  const OUTLINE = '1px 1px 0 #000, -1px 1px 0 #000'
+
+  it('forces text-shadow on the text nodes themes restyle, on both surfaces', () => {
+    const result = visualSettingsToCss({ textShadow: OUTLINE })
+
+    for (const scope of ['.overlay-live-body', '.overlay-preview-body']) {
+      for (const node of ['.break-words', '.chat-username', '.text-xs.text-slate-500']) {
+        expect(result).toContain(`${scope} ${node}`)
+      }
+    }
+    expect(result).toContain(`text-shadow: ${OUTLINE} !important;`)
+  })
+
+  it('forces box-shadow on chat rows only — never events, never the sentinel', () => {
+    const result = visualSettingsToCss({ bubbleShadow: '0 2px 6px rgba(0, 0, 0, 0.5)' })
+
+    expect(result).toContain('.overlay-live-body > div:not(.event-message):not(.scroll-anchor)')
+    expect(result).toContain('.overlay-preview-body > div:not(.event-message):not(.scroll-anchor)')
+    expect(result).toContain('box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5) !important;')
+  })
+
+  it('recolours a platform badge via both color and the SVG shape fill', () => {
+    const result = visualSettingsToCss({ twitchAccent: '#9146ff' })
+
+    expect(result).toContain(".overlay-live-body [data-platform='twitch'] .platform-badge,")
+    expect(result).toContain(".overlay-preview-body [data-platform='twitch'] .platform-badge {")
+    expect(result).toContain(".overlay-live-body [data-platform='twitch'] .platform-badge svg *")
+    expect(result).toContain('color: #9146ff !important;')
+    expect(result).toContain('fill: #9146ff !important;')
+    // Only the platform that was set
+    expect(result).not.toContain("data-platform='youtube'")
+  })
+
+  it('emits no forced rule for an unset setting, leaving the theme alone', () => {
+    const result = visualSettingsToCss({ fontFamily: 'Inter' })
+
+    expect(result).not.toContain('!important')
+    expect(result).not.toContain('.overlay-live-body')
+  })
+
+  it('stays inside the cascade layer', () => {
+    const result = visualSettingsToCss({ textShadow: OUTLINE })
+    expect(result.trim()).toMatch(/^@layer visual-customizer \{/)
+    expect(result.trim()).toMatch(/\}$/)
+    // one layer block only — the vars and the forced rules share it
+    expect((result.match(/@layer/g) ?? []).length).toBe(1)
+  })
+
+  it('skips a value with unbalanced parens instead of corrupting the block', () => {
+    const result = visualSettingsToCss({
+      textShadow: '0 1px 2px rgba(0, 0, 0, 0.9',
+      messageColor: '#ffffff',
+    })
+    expect(result).not.toContain('text-shadow')
+    expect(result).toContain('--chat-message-color: #ffffff;')
+  })
+})

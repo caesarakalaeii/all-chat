@@ -87,11 +87,138 @@ export const PROPERTY_MAP: ReadonlyArray<[keyof VisualSettings, string]> = [
 ]
 
 /**
+ * Values with unbalanced parentheses are partial extractions of complex CSS
+ * functions (e.g. a truncated `linear-gradient`) and corrupt every declaration
+ * that follows them in the block.
+ */
+function hasBalancedParens(value: string): boolean {
+  return (value.match(/\(/g) ?? []).length === (value.match(/\)/g) ?? []).length
+}
+
+/** Feed-body scope hook, one per overlay surface (live OBS page + editor preview). */
+const FEED_SCOPES = ['.overlay-live-body', '.overlay-preview-body'] as const
+
+/**
+ * A chat row. Events are excluded (their chrome is theme-owned through the
+ * `--event-*` tokens) and so is `.scroll-anchor`, the invisible auto-scroll
+ * sentinel — an `!important` declaration inside a cascade layer outranks the
+ * unlayered `!important` reset globals.css gives it, so anything styling rows
+ * from inside a layer has to skip it by selector or the sentinel grows a box.
+ */
+const CHAT_ROW = '> div:not(.event-message):not(.scroll-anchor)'
+
+/**
+ * The text nodes bundled themes restyle. A `text-shadow` on the feed body does
+ * inherit down to these, but inheritance loses to any direct declaration — and
+ * every bundled theme has one.
+ */
+const TEXT_NODES = ['.break-words', '.chat-username', '.text-xs.text-slate-500'] as const
+
+/** VisualSettings field → the `data-platform` value whose badge it recolours. */
+const ACCENT_PLATFORMS: ReadonlyArray<[keyof VisualSettings, string]> = [
+  ['twitchAccent', 'twitch'],
+  ['youtubeAccent', 'youtube'],
+  ['kickAccent', 'kick'],
+  ['tiktokAccent', 'tiktok'],
+  ['discordAccent', 'discord'],
+]
+
+interface OverrideRule {
+  field: keyof VisualSettings
+  /** Selector suffixes, appended to each feed scope. `''` targets the scope itself. */
+  targets: readonly string[]
+  /** CSS properties to set to the field's value. */
+  properties: readonly string[]
+}
+
+/**
+ * Customizer properties delivered as an `!important` rule instead of a bare
+ * custom property on `:root`.
+ *
+ * A `--chat-*` variable only reaches the pixels if SOMETHING consumes it —
+ * a rule in events.css, or a `var()` in the active theme. These properties have
+ * neither, so the overlay pages applied them as plain inline styles: the
+ * weakest declaration in the cascade. Every bundled theme declares
+ * `text-shadow` / `box-shadow` with `!important`, and an `!important`
+ * declaration beats a normal inline style, so the controls were inert on every
+ * themed overlay — the Text Shadow control (Soft / Strong / **Outline**) did
+ * nothing, and the whole Platform Colors section did nothing anywhere because
+ * `--platform-*-accent` had no consumer at all.
+ *
+ * These rules are `!important` inside `@layer visual-customizer`, which beats a
+ * theme's unlayered `!important` (CSS Cascade 5 reverses layer order for
+ * important declarations and ranks unlayered last) — the same mechanism
+ * events.css already uses for every other customizer property.
+ *
+ * They are emitted ONLY when the field is set, and that is what makes forcing
+ * them safe: no bundled theme declares or reads any of these variables, so a
+ * value here can only have come from the user, and an unset control emits
+ * nothing and leaves the theme's own look untouched.
+ *
+ * Do NOT extend this table to a variable that themes DO read
+ * (`--chat-bubble-bg-color`, `--chat-font-size`, `--chat-overlay-bg-color`, …).
+ * theme-css-parser back-fills those fields from the theme's own `var()`
+ * fallbacks, so "set" there does not mean "the user chose it", and forcing it
+ * would pin every overlay to its theme's default. customizer-coverage.test.ts
+ * guards both halves of this invariant.
+ */
+const OVERRIDE_RULES: readonly OverrideRule[] = [
+  { field: 'textShadow', targets: TEXT_NODES, properties: ['text-shadow'] },
+  { field: 'bubbleShadow', targets: [CHAT_ROW], properties: ['box-shadow'] },
+  // The text badge takes `color`. The icon badge is an inline SVG whose brand
+  // colour sits in a `fill` presentation attribute on the shape itself — lower
+  // priority than any CSS declaration, but only reachable by targeting the
+  // shape, not the wrapping <svg>.
+  ...ACCENT_PLATFORMS.flatMap(([field, platform]): OverrideRule[] => [
+    {
+      field,
+      targets: [`[data-platform='${platform}'] .platform-badge`],
+      properties: ['color'],
+    },
+    {
+      field,
+      targets: [`[data-platform='${platform}'] .platform-badge svg *`],
+      properties: ['fill'],
+    },
+  ]),
+]
+
+/** Field names this module forces with an `!important` rule (see OVERRIDE_RULES). */
+export const OVERRIDDEN_FIELDS: ReadonlySet<keyof VisualSettings> = new Set(
+  OVERRIDE_RULES.map((rule) => rule.field)
+)
+
+/** Renders the set OVERRIDE_RULES as CSS rule blocks; empty when none apply. */
+function overrideRules(settings: Partial<VisualSettings>): string[] {
+  const blocks: string[] = []
+
+  for (const { field, targets, properties } of OVERRIDE_RULES) {
+    const value = settings[field]
+    if (value === undefined || value === '') continue
+    if (!hasBalancedParens(value)) continue
+
+    const selectors = FEED_SCOPES.flatMap((scope) =>
+      targets.map((target) => (target === '' ? scope : `${scope} ${target}`))
+    )
+    blocks.push(
+      [
+        selectors.map((selector) => `  ${selector}`).join(',\n') + ' {',
+        ...properties.map((property) => `    ${property}: ${value} !important;`),
+        '  }',
+      ].join('\n')
+    )
+  }
+
+  return blocks
+}
+
+/**
  * Converts a VisualSettings object to a @layer visual-customizer CSS string.
  *
  * - Empty or all-undefined input → returns ""
  * - Only set (non-undefined) properties are emitted
- * - Output is placed inside @layer visual-customizer { :root { ... } }
+ * - Output is placed inside @layer visual-customizer { ... }, holding a `:root`
+ *   block of custom properties plus the OVERRIDE_RULES that apply
  */
 export function visualSettingsToCss(settings: Partial<VisualSettings>): string {
   const declarations: string[] = []
@@ -99,23 +226,19 @@ export function visualSettingsToCss(settings: Partial<VisualSettings>): string {
   for (const [field, cssVar] of PROPERTY_MAP) {
     const value = settings[field]
     if (value === undefined) continue
-    // Skip values with unbalanced parentheses — partial extractions of complex CSS
-    // functions (e.g. linear-gradient) corrupt subsequent :root declarations
-    const opens = (value.match(/\(/g) ?? []).length
-    const closes = (value.match(/\)/g) ?? []).length
-    if (opens !== closes) continue
+    if (!hasBalancedParens(value)) continue
     declarations.push(`    ${cssVar}: ${value};`)
   }
 
-  if (declarations.length === 0) {
+  const blocks: string[] = []
+  if (declarations.length > 0) {
+    blocks.push(['  :root {', ...declarations, '  }'].join('\n'))
+  }
+  blocks.push(...overrideRules(settings))
+
+  if (blocks.length === 0) {
     return ''
   }
 
-  return [
-    '@layer visual-customizer {',
-    '  :root {',
-    ...declarations,
-    '  }',
-    '}',
-  ].join('\n')
+  return ['@layer visual-customizer {', blocks.join('\n\n'), '}'].join('\n')
 }

@@ -317,6 +317,33 @@ Styling the list's _children_ is fine and is unaffected.
 Unlike the visual-customizer properties, this is structural layout rather than a
 `--theme-*` variable, so there is no theme-intent fallback step to declare.
 
+#### Customizer settings a theme cannot override
+
+Most `--chat-*` properties are cooperative: read the variable with your own value
+as the fallback (`font-size: var(--chat-font-size, 15px)`) and the user's control
+wins when they set it, your look wins when they don't.
+
+These are **not** cooperative. When the user sets one, the app emits an
+`!important` rule inside `@layer visual-customizer`, which beats an unlayered
+`!important` — nothing a theme writes can win against it:
+
+| Setting                     | Properties forced | On                                                                   |
+| --------------------------- | ----------------- | -------------------------------------------------------------------- |
+| Text Shadow                 | `text-shadow`     | `.break-words`, `.chat-username`, `.text-xs.text-slate-500`          |
+| Bubble shadow               | `box-shadow`      | chat rows (`> div`, excluding `.event-message` and `.scroll-anchor`) |
+| Platform accent (each of 5) | `color`, `fill`   | `[data-platform='<p>'] .platform-badge` and the badge SVG's shapes   |
+
+Nothing is emitted when the control is unset, so an unconfigured overlay still
+renders your theme exactly as written. Two consequences for theme authors:
+
+- A hardcoded `text-shadow: … !important` on message text is fine as a default,
+  but expect it to be replaced the moment the user picks a Text Shadow preset.
+- **Never** declare or read `--chat-text-shadow`, `--chat-bubble-shadow` or
+  `--platform-*-accent`. The theme-CSS parser back-fills the editor's fields from
+  a theme's declarations _and_ from its `var()` fallbacks, so mentioning one of
+  these would make your default indistinguishable from a user choice, and then
+  unbeatable. A unit test fails if a bundled theme does.
+
 #### Message Container
 - `.space-y-3 > div` - Individual message wrapper
 - `.bg-gray-900/90` - Default dark background

@@ -751,8 +751,15 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
         />
       )}
 
-      {/* text-shadow inherits to every text node below; the var is injected by
-          visualSettingsToCss and gradient usernames force it off locally */}
+      {/* text-shadow inherits to every text node below, which is how the setting
+          reaches nodes no rule names (pronoun pill, shared-chat tag, event body).
+          It is NOT what makes the setting stick: this is a normal inline style,
+          and every bundled theme declares `text-shadow: … !important` on the
+          message text, which beats it. The authoritative delivery is the
+          `!important` rule visualSettingsToCss emits inside
+          `@layer visual-customizer` (see OVERRIDE_RULES). Gradient usernames
+          force the shadow off locally with an important inline style, which
+          outranks both. */}
       {/* `mt-auto` (feedAnchor 'bottom') sits on the list itself, never on its
           children: `.overlay-live-body > * + *` in events.css is `!important`
           inside a cascade layer and would beat any child-level rule. */}

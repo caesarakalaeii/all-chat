@@ -708,8 +708,13 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
           style={{
             scrollbarWidth: 'thin',
             scrollbarColor: '#374151 transparent',
-            // text-shadow inherits to every text node below; the var arrives
-            // via VISUAL_CSS_UPDATE (live) or the saved visual_settings (load)
+            // text-shadow inherits to every text node below, reaching nodes no
+            // rule names (pronoun pill, shared-chat tag, event body). It does
+            // NOT make the setting stick — a normal inline style loses to the
+            // `text-shadow: … !important` every bundled theme declares on the
+            // message text. That is the job of the `!important` rule
+            // visualSettingsToCss emits in `@layer visual-customizer`. The var
+            // arrives via VISUAL_CSS_UPDATE (live) or visual_settings (load).
             textShadow: 'var(--chat-text-shadow, none)',
             ...containerStyle,
           }}
