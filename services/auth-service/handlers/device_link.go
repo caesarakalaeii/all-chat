@@ -114,7 +114,7 @@ type deviceLinkStore interface {
 	GetPendingLinkRequest(ctx context.Context, id string) (*repository.LinkRequest, error)
 	FindPendingByUserCode(ctx context.Context, userCodeHash []byte) (*repository.LinkRequest, error)
 	RegisterFailedAttempt(ctx context.Context, id string) (bool, error)
-	ConsumeAuthCode(ctx context.Context, id string, authCodeHash []byte) (*repository.LinkRequest, error)
+	ConsumeAuthCode(ctx context.Context, id string, claimHash []byte) (*repository.LinkRequest, error)
 	CreateDeviceToken(ctx context.Context, userID, overlayID, name string, tokenHash []byte,
 		scopes []string, lifetime time.Duration, linkRequestID string) (*repository.DeviceToken, error)
 	RevokeDeviceTokenByID(ctx context.Context, deviceID string) error

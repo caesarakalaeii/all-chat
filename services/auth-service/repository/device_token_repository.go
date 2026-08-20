@@ -295,6 +295,14 @@ func (r *DeviceTokenRepository) FindPendingByUserCode(ctx context.Context, userC
 	return req, nil
 }
 
+// registerFailedAttemptSQL is the brute-force bound, named so a test can assert that it
+// is still checked and incremented in ONE statement rather than read-then-written.
+const registerFailedAttemptSQL = `
+	UPDATE device_link_requests
+	   SET attempts = attempts + 1
+	 WHERE id = $1 AND consumed_at IS NULL
+	RETURNING attempts`
+
 // RegisterFailedAttempt increments the per-request failure counter in SQL and reports
 // whether the request is now dead.
 //
@@ -304,11 +312,7 @@ func (r *DeviceTokenRepository) FindPendingByUserCode(ctx context.Context, userC
 // predicate, so there is one rule for "dead" rather than two.
 func (r *DeviceTokenRepository) RegisterFailedAttempt(ctx context.Context, id string) (dead bool, err error) {
 	var attempts int
-	err = r.db.QueryRow(ctx, `
-		UPDATE device_link_requests
-		   SET attempts = attempts + 1
-		 WHERE id = $1 AND consumed_at IS NULL
-		RETURNING attempts`, id).Scan(&attempts)
+	err = r.db.QueryRow(ctx, registerFailedAttemptSQL, id).Scan(&attempts)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return true, nil
 	}
@@ -380,6 +384,22 @@ func (r *DeviceTokenRepository) DenyLinkRequest(ctx context.Context, id string) 
 	return nil
 }
 
+// consumeAuthCodeSQL is the claim statement, named so a test can assert its guards
+// without a database (see device_token_repository_test.go). Callers append
+// linkRequestColumns.
+const consumeAuthCodeSQL = `
+	UPDATE device_link_requests
+	   SET consumed_at = NOW(),
+	       auth_code_hash = NULL
+	 WHERE id = $1
+	   AND consumed_at IS NULL
+	   AND approved_at IS NOT NULL
+	   AND (
+	         (flow = $3 AND auth_code_hash = $2 AND auth_code_expires_at > NOW())
+	      OR (flow = $4 AND user_code_hash = $2 AND expires_at > NOW())
+	       )
+	RETURNING `
+
 // ConsumeAuthCode claims the one-time authorization code, atomically.
 //
 // This is the single most delicate statement in the feature, so its properties are
@@ -395,21 +415,26 @@ func (r *DeviceTokenRepository) DenyLinkRequest(ctx context.Context, id string) 
 //     caller can tell "already used" from "never existed" and revoke the token the
 //     first exchange minted.
 //
+// EITHER DIGEST CLAIMS THE ROW, and that is what keeps the two delivery paths on one
+// state machine rather than two:
+//
+//   - loopback: the plugin presents the one-time authorization code it received over
+//     the redirect, so `claimHash` is its digest and matches auth_code_hash.
+//   - code flow: there is no redirect and therefore no second secret to deliver. The
+//     plugin presents the pairing code it displayed, whose digest is already in
+//     user_code_hash, and the streamer's approval is what authorises the claim.
+//
+// Both are single-use for the same reason: consumed_at is stamped by this statement,
+// and a consumed row is terminal whichever digest claimed it. The auth code is also
+// cleared, so a loopback code cannot be replayed even against a row that was somehow
+// approved twice.
+//
 // Returns the request when the claim succeeded. ErrLinkRequestReplayed (with the minted
 // token id) when the row exists but was already consumed. ErrLinkRequestPending when the
 // row exists and has not been approved. ErrLinkRequestNotFound otherwise.
-func (r *DeviceTokenRepository) ConsumeAuthCode(ctx context.Context, id string, authCodeHash []byte) (*LinkRequest, error) {
-	row := r.db.QueryRow(ctx, `
-		UPDATE device_link_requests
-		   SET consumed_at = NOW(),
-		       auth_code_hash = NULL
-		 WHERE id = $1
-		   AND auth_code_hash = $2
-		   AND consumed_at IS NULL
-		   AND approved_at IS NOT NULL
-		   AND auth_code_expires_at > NOW()
-		RETURNING `+linkRequestColumns,
-		id, authCodeHash)
+func (r *DeviceTokenRepository) ConsumeAuthCode(ctx context.Context, id string, claimHash []byte) (*LinkRequest, error) {
+	row := r.db.QueryRow(ctx, consumeAuthCodeSQL+linkRequestColumns,
+		id, claimHash, FlowLoopback, FlowCode)
 	req, err := scanLinkRequest(row)
 	if err == nil {
 		return req, nil
