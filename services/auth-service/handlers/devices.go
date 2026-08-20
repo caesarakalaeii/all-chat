@@ -99,11 +99,14 @@ type approveDeviceRequest struct {
 	// a different machine and there is no request id in the URL.
 	UserCode string `json:"user_code"`
 	// OverlayID is the overlay this device will be bound to — the whole reason the
-	// approve screen exists. Required: there is no "any overlay" device token.
-	OverlayID string `json:"overlay_id" binding:"required"`
+	// approve screen exists. Required on the approve path (there is no "any overlay"
+	// device token) but NOT declared `binding:"required"`, because Deny needs neither an
+	// overlay nor a scope set and should not have to invent them; both are validated
+	// below, after the deny branch.
+	OverlayID string `json:"overlay_id"`
 	// Scopes is what the streamer actually grants, which may be narrower than the
 	// plugin requested.
-	Scopes []string `json:"scopes" binding:"required"`
+	Scopes []string `json:"scopes"`
 	// DeviceName lets the streamer rename the device at approval time. The plugin's
 	// self-reported name is the default; a streamer who does not trust it can replace it.
 	DeviceName string `json:"device_name"`
