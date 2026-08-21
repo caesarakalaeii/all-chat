@@ -172,6 +172,17 @@ describe('useCreditRollThemeMarketplace favorites', () => {
     await waitFor(() => expect(second.result.current.favorites).toEqual(['apple']))
   })
 
+  it('leaves stored favorites untouched when the reader never toggles one', async () => {
+    localStorage.setItem(FAVORITES_KEY, JSON.stringify(['zebra']))
+    mockFetchThemes.mockResolvedValue([theme('apple')])
+
+    const { result, unmount } = renderHook(() => useCreditRollThemeMarketplace())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    unmount()
+
+    expect(JSON.parse(localStorage.getItem(FAVORITES_KEY) ?? 'null')).toEqual(['zebra'])
+  })
+
   it('toggling a favorite off clears it from storage', async () => {
     localStorage.setItem(FAVORITES_KEY, JSON.stringify(['apple']))
     mockFetchThemes.mockResolvedValue([theme('apple')])
