@@ -20,6 +20,14 @@ import type { ChatMessage } from '../types/message'
 import type { FilterSettings } from '../types/overlay'
 
 /**
+ * Message bodies posted by YouTube's free "Say hi!" button on vertical live
+ * streams. Only the confirmed English literal is listed: the button's text is
+ * localised, but an unverified translation here would never match anything, so
+ * users cover other locales through FilterSettings.say_hi_extra_phrases.
+ */
+export const SAY_HI_PHRASES = ['said hi'] as const
+
+/**
  * shouldFilterMessage returns true if the given message should be hidden from
  * the overlay based on the provided FilterSettings.
  *
@@ -31,6 +39,7 @@ import type { FilterSettings } from '../types/overlay'
  *   D-03: regex keyword match (case-insensitive) against message text
  *   D-05: hide bot commands — messages starting with "!"
  *   D-06: minimum message length (0 = disabled)
+ *   YouTube "Say hi!" button messages (opt-in, YouTube only, whole-text match)
  */
 export function shouldFilterMessage(
   message: ChatMessage,
@@ -69,6 +78,19 @@ export function shouldFilterMessage(
   // D-06: minimum message length (0 = disabled)
   if (settings.min_message_length && settings.min_message_length > 0) {
     if (text.length < settings.min_message_length) return true
+  }
+
+  // YouTube "Say hi!" button: the whole body is the phrase, so an exact match
+  // only — a substring test would also hide "my friend said hi to you".
+  if (settings.hide_youtube_say_hi && message.platform === 'youtube') {
+    const normalized = text.trim().toLowerCase()
+    const phrases: readonly string[] = [
+      ...SAY_HI_PHRASES,
+      ...(settings.say_hi_extra_phrases ?? [])
+        .map((p) => p.trim().toLowerCase())
+        .filter((p) => p !== ''),
+    ]
+    if (phrases.includes(normalized)) return true
   }
 
   return false
