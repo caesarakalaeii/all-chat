@@ -96,14 +96,14 @@ describe('TypographyGroup', () => {
   // source because the risk being guarded is an edit that changes the emitted
   // class list (an ESLint disable comment landing inside the className
   // expression, say) without touching the literal.
-  it('stacks the portalled font-weight dropdown with z-[200]', () => {
+  it('stacks the portalled font-weight dropdown with z-200', () => {
     const onChange = vi.fn()
     render(<TypographyGroup visualSettings={defaultSettings} onChange={onChange} />)
     fireEvent.click(screen.getByLabelText(/font weight/i))
     const popup = screen.getByRole('listbox')
     const positioner = popup.closest('[class*="z-"]')
     expect(positioner).not.toBeNull()
-    expect(positioner!.className.split(/\s+/)).toContain('z-[200]')
+    expect(positioner!.className.split(/\s+/)).toContain('z-200')
   })
 
   it.todo('onChange called with fontFamily patch when font selection changes')

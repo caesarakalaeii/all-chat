@@ -129,7 +129,7 @@ export function TypographyGroup({
             </Select.Icon>
           </Select.Trigger>
           <Select.Portal>
-            <Select.Positioner className="z-[200]">
+            <Select.Positioner className="z-200">
               <Select.Popup className="rounded border border-border bg-surface py-1 shadow-lg">
                 <Select.List>
                   {FONT_WEIGHT_OPTIONS.map((opt) => (

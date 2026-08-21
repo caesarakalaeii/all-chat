@@ -136,7 +136,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             their <main> id="main-content" tabIndex={-1}. */}
         <a
           href="#main-content"
-          className="sr-only z-[100] rounded-md border border-border-md bg-surface-2 px-4 py-2 text-sm font-medium text-text focus-visible:not-sr-only focus-visible:fixed focus-visible:top-4 focus-visible:left-4 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+          className="sr-only z-100 rounded-md border border-border-md bg-surface-2 px-4 py-2 text-sm font-medium text-text focus-visible:not-sr-only focus-visible:fixed focus-visible:top-4 focus-visible:left-4 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
         >
           Skip to main content
         </a>
