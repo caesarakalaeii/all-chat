@@ -79,28 +79,34 @@ function SettingsContent() {
     }
   }
 
-  async function fetchGuilds() {
-    try {
-      const data = await getGuilds()
-      setGuilds(data)
-    } catch {
-      // silently ignore — user may not have Discord connected
-    } finally {
-      setGuildsLoading(false)
+  // Keyed on the just-connected marker for the same reason as the identity read below: every
+  // setState happens in a promise callback, so the effect itself never setStates. The server-
+  // connect callback lands on /settings?discord=connected, the effect below strips the marker,
+  // and the resulting key flip re-reads the list with the newly connected server in it.
+  const justConnected = searchParams.get('discord') === 'connected'
+  useEffect(() => {
+    let cancelled = false
+    getGuilds()
+      .then((data) => {
+        if (!cancelled) setGuilds(data)
+      })
+      .catch(() => {
+        // Silently ignored — the user may simply have no Discord connection, which is not an
+        // error worth a toast. The empty-state copy below covers it.
+      })
+      .finally(() => {
+        if (!cancelled) setGuildsLoading(false)
+      })
+    return () => {
+      cancelled = true
     }
-  }
+  }, [justConnected])
 
   useEffect(() => {
-    fetchGuilds()
-  }, [])
-
-  useEffect(() => {
-    if (searchParams.get('discord') === 'connected') {
-      toastManager.add({ title: 'Discord server connected!', type: 'success' })
-      router.replace('/settings')
-      fetchGuilds()
-    }
-  }, [searchParams])
+    if (!justConnected) return
+    toastManager.add({ title: 'Discord server connected!', type: 'success' })
+    router.replace('/settings')
+  }, [justConnected, router])
 
   // The account link is fetched separately from the guilds: a user can have servers connected and
   // no link, or the reverse, and conflating them would hide whichever is missing.
