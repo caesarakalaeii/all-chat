@@ -988,3 +988,98 @@ describe('TTSGroup', () => {
     }
   })
 })
+
+/**
+ * Three elements in this panel pick their Tailwind utilities from a condition.
+ * These tests read the rendered `class` attribute on both branches of each
+ * condition, so the exact set of utilities is pinned and not merely the
+ * presence of the element.
+ */
+describe('TTSGroup - conditional class attributes', () => {
+  it('the first sub-section header has no top rule; a later one does', () => {
+    renderTTSGroup({ displaySettings: baseSettings({ tts_provider: 'browser' }) })
+
+    // VOICE is rendered with `first`, so it must not carry the separator.
+    const firstHeader = screen.getByText('VOICE').parentElement!
+    const firstClasses = firstHeader.className.split(/\s+/)
+    expect(firstClasses).toContain('flex')
+    expect(firstClasses).toContain('items-center')
+    expect(firstClasses).toContain('gap-2')
+    expect(firstClasses).not.toContain('border-t')
+    expect(firstClasses).not.toContain('pt-4')
+    expect(firstClasses).not.toContain('mt-4')
+
+    const laterClasses = screen.getByText('THROTTLING').parentElement!.className.split(/\s+/)
+    expect(laterClasses).toContain('flex')
+    expect(laterClasses).toContain('items-center')
+    expect(laterClasses).toContain('gap-2')
+    expect(laterClasses).toContain('border-t')
+    expect(laterClasses).toContain('border-border')
+    expect(laterClasses).toContain('pt-4')
+    expect(laterClasses).toContain('mt-4')
+  })
+
+  it('the Remove-key button turns red once armed', async () => {
+    renderTTSGroup({
+      displaySettings: baseSettings({ tts_provider: 'elevenlabs' }),
+      isPremium: true,
+      hasElevenLabsConfig: true,
+      onRemoveKey: vi.fn().mockResolvedValue(undefined),
+    })
+
+    const unarmed = screen.getByRole('button', { name: /^Remove key$/ })
+    const unarmedClasses = unarmed.className.split(/\s+/)
+    expect(unarmedClasses).toContain('rounded-lg')
+    expect(unarmedClasses).toContain('border')
+    expect(unarmedClasses).toContain('border-border')
+    expect(unarmedClasses).toContain('bg-surface')
+    expect(unarmedClasses).toContain('text-text-sub')
+    expect(unarmedClasses).not.toContain('border-red-500')
+
+    fireEvent.click(unarmed)
+
+    const armed = await screen.findByRole('button', { name: /^Confirm remove$/ })
+    const armedClasses = armed.className.split(/\s+/)
+    expect(armedClasses).toContain('rounded-lg')
+    expect(armedClasses).toContain('border')
+    expect(armedClasses).toContain('border-red-500')
+    expect(armedClasses).toContain('bg-red-500/10')
+    expect(armedClasses).toContain('text-red-400')
+    expect(armedClasses).not.toContain('border-border')
+    expect(armedClasses).not.toContain('bg-surface')
+    expect(armedClasses).not.toContain('text-text-sub')
+  })
+
+  it('the Advanced block is a positioning context only for non-premium users', () => {
+    // `relative` is what anchors the absolutely-positioned premium overlay, so
+    // it must appear for a non-premium user and must not for a premium one.
+    const { container: nonPremium } = renderTTSGroup({
+      displaySettings: baseSettings({ tts_provider: 'elevenlabs' }),
+      isPremium: false,
+    })
+    const nonPremiumClasses = advancedBlock(nonPremium).className.split(/\s+/)
+    expect(nonPremiumClasses).toContain('space-y-3')
+    expect(nonPremiumClasses).toContain('relative')
+
+    cleanup()
+
+    const { container: premium } = renderTTSGroup({
+      displaySettings: baseSettings({ tts_provider: 'elevenlabs' }),
+      isPremium: true,
+    })
+    const premiumClasses = advancedBlock(premium).className.split(/\s+/)
+    expect(premiumClasses).toContain('space-y-3')
+    expect(premiumClasses).not.toContain('relative')
+  })
+})
+
+/** The block of ElevenLabs controls rendered right after its section header. */
+function advancedBlock(container: HTMLElement): HTMLElement {
+  const header = Array.from(container.querySelectorAll('span')).find(
+    (span) => span.textContent === 'ADVANCED (ELEVENLABS)'
+  )
+  expect(header).toBeTruthy()
+  const block = header!.parentElement!.nextElementSibling as HTMLElement | null
+  expect(block).toBeTruthy()
+  return block!
+}
