@@ -131,6 +131,22 @@ describe('AdminCosmeticsPage', () => {
     expect(callsTo(FLAIRS_ENDPOINT)).toBe(1)
   })
 
+  it('replaces the loading skeletons with the catalogue once it arrives', async () => {
+    mockGet.mockResolvedValue({
+      frames: [
+        { id: 'f-1', name: 'Gold Ring', image_url: 'https://example.com/g.png', is_premium: true },
+      ],
+      flairs: [],
+    })
+
+    render(<AdminCosmeticsPage />)
+
+    expect(document.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(0)
+
+    expect(await screen.findByText('Gold Ring')).toBeInTheDocument()
+    expect(document.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(0)
+  })
+
   it('redirects a non-admin to the dashboard without fetching the catalogue', async () => {
     currentAuthState = { user: buildUser({ is_admin: false }) }
 
