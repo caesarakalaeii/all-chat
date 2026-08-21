@@ -41,6 +41,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toastManager } from '@/lib/toast'
+import { cn } from '@/lib/utils'
 
 interface CatalogEntry {
   id: string
@@ -173,11 +174,12 @@ export default function AdminCosmeticsPage() {
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 text-sm font-medium capitalize transition-colors ${
+              className={cn(
+                'px-4 py-2 text-sm font-medium capitalize transition-colors',
                 activeTab === tab
                   ? 'border-primary border-b-2 text-text'
                   : 'text-text-sub hover:text-text'
-              }`}
+              )}
             >
               {tab}
             </button>

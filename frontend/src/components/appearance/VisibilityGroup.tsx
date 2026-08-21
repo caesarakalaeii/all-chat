@@ -19,6 +19,7 @@
  */
 
 import React from 'react'
+import { cn } from '@/lib/utils'
 import type { VisualSettings } from '@/lib/types/visual-settings'
 import { ToggleSwitch } from './ToggleSwitch'
 import { ColorPickerControl } from './ColorPickerControl'
@@ -167,7 +168,10 @@ export function VisibilityGroup({
           onChange={(next) => onChange({ showPlatformBadge: next ? 'inline' : 'none' })}
         />
         <div
-          className={`mt-2 space-y-2 pl-2 ${!platformBadgeVisible ? 'pointer-events-none opacity-40' : ''}`}
+          className={cn(
+            'mt-2 space-y-2 pl-2',
+            !platformBadgeVisible && 'pointer-events-none opacity-40'
+          )}
         >
           <div>
             <p className="mb-1 text-xs text-text-sub">Position</p>
@@ -209,7 +213,10 @@ export function VisibilityGroup({
           onChange={(next) => onChange({ showPronouns: next ? 'inline' : 'none' })}
         />
         <div
-          className={`mt-2 space-y-2 pl-2 ${!pronounsVisible ? 'pointer-events-none opacity-40' : ''}`}
+          className={cn(
+            'mt-2 space-y-2 pl-2',
+            !pronounsVisible && 'pointer-events-none opacity-40'
+          )}
         >
           <div>
             <p className="mb-1 text-xs text-text-sub">Position</p>
