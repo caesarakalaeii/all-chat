@@ -27,6 +27,7 @@ import { PremiumBadge } from '@/components/PremiumBadge'
 import { PremiumUpsellLink } from '@/components/PremiumUpsellLink'
 import { AlertDialog } from '@/components/ui/alert-dialog'
 import { useBrowserVoices } from '@/lib/hooks/useBrowserVoices'
+import { cn } from '@/lib/utils'
 import type { DisplaySettings } from '@/lib/types/overlay'
 
 /**
@@ -99,9 +100,8 @@ interface SubHeaderProps {
 }
 
 function SubSectionHeader({ label, first }: SubHeaderProps): React.ReactElement {
-  const border = first ? '' : 'border-t border-border pt-4 mt-4'
   return (
-    <div className={`flex items-center gap-2 ${border}`}>
+    <div className={cn('flex items-center gap-2', !first && 'mt-4 border-t border-border pt-4')}>
       <span className="text-xs font-semibold tracking-wide text-text-dim uppercase">{label}</span>
     </div>
   )
@@ -397,11 +397,12 @@ function ApiKeyInput({
               void handleRemoveClick()
             }}
             disabled={disabled || removing}
-            className={`hover:bg-surface-alt rounded-lg border px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-50 ${
+            className={cn(
+              'hover:bg-surface-alt rounded-lg border px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-50',
               removeArmed
                 ? 'border-red-500 bg-red-500/10 text-red-400'
                 : 'border-border bg-surface text-text-sub'
-            }`}
+            )}
           >
             {removing ? 'Removing…' : removeArmed ? 'Confirm remove' : 'Remove key'}
           </button>
@@ -683,7 +684,7 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
     provider === 'elevenlabs' ? (
       <>
         <SubSectionHeader label="ADVANCED (ELEVENLABS)" />
-        <div className={`space-y-3 ${!isPremium ? 'relative' : ''}`}>
+        <div className={cn('space-y-3', !isPremium && 'relative')}>
           {!isPremium && (
             <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-surface/80">
               <div className="flex flex-col items-center gap-2 text-center">
