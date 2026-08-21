@@ -23,7 +23,9 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import type { VisualSettings } from '@/lib/types/visual-settings'
 import { ColorsGroup } from '../ColorsGroup'
 
-afterEach(() => { cleanup() })
+afterEach(() => {
+  cleanup()
+})
 
 describe('ColorsGroup', () => {
   const defaultSettings: Partial<VisualSettings> = {}

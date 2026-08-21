@@ -18,7 +18,6 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 import React from 'react'
 import { ToggleSwitch } from './ToggleSwitch'
 import { SliderControl } from './SliderControl'
@@ -42,7 +41,12 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
-export function SoundGroup({ displaySettings, onChange, isPremium, onPreview }: SoundGroupProps): React.ReactElement {
+export function SoundGroup({
+  displaySettings,
+  onChange,
+  isPremium,
+  onPreview,
+}: SoundGroupProps): React.ReactElement {
   const enabled = displaySettings.notification_sound_enabled ?? false
   const preset = displaySettings.notification_sound_preset ?? 'chime'
   const volume = displaySettings.notification_sound_volume ?? 0.5
@@ -98,7 +102,7 @@ export function SoundGroup({ displaySettings, onChange, isPremium, onPreview }: 
             <button
               type="button"
               onClick={onPreview}
-              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text hover:bg-surface-alt"
+              className="hover:bg-surface-alt rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text"
             >
               Test sound
             </button>

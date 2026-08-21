@@ -30,141 +30,137 @@ export const size = {
 export const contentType = 'image/png'
 
 export default async function Image() {
-  const barlowFontData = await readFile(
-    join(process.cwd(), 'public', 'fonts', 'Barlow-Bold.ttf'),
-  )
+  const barlowFontData = await readFile(join(process.cwd(), 'public', 'fonts', 'Barlow-Bold.ttf'))
 
   return new ImageResponse(
-    (
+    <div
+      style={{
+        background: '#0f0f13',
+        width: '100%',
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontFamily: 'Barlow, sans-serif',
+        padding: '60px',
+      }}
+    >
+      {/* Title */}
       <div
         style={{
-          background: '#0f0f13',
-          width: '100%',
-          height: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontFamily: 'Barlow, sans-serif',
-          padding: '60px',
+          fontSize: 96,
+          fontWeight: 800,
+          color: '#ffffff',
+          letterSpacing: '-2px',
+          marginBottom: '16px',
+          lineHeight: 1,
         }}
       >
-        {/* Title */}
+        All-Chat
+      </div>
+
+      {/* Subtitle */}
+      <div
+        style={{
+          fontSize: 32,
+          fontWeight: 500,
+          color: '#a1a1aa',
+          marginBottom: '52px',
+          letterSpacing: '0.5px',
+        }}
+      >
+        Every chat. One overlay.
+      </div>
+
+      {/* Platform badges */}
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'row',
+          gap: '16px',
+          marginBottom: '28px',
+        }}
+      >
         <div
           style={{
-            fontSize: 96,
-            fontWeight: 800,
+            background: '#9146FF',
             color: '#ffffff',
-            letterSpacing: '-2px',
-            marginBottom: '16px',
-            lineHeight: 1,
-          }}
-        >
-          All-Chat
-        </div>
-
-        {/* Subtitle */}
-        <div
-          style={{
-            fontSize: 32,
-            fontWeight: 500,
-            color: '#a1a1aa',
-            marginBottom: '52px',
+            fontSize: 24,
+            fontWeight: 700,
+            padding: '10px 28px',
+            borderRadius: '9999px',
             letterSpacing: '0.5px',
           }}
         >
-          Every chat. One overlay.
+          Twitch
         </div>
-
-        {/* Platform badges */}
         <div
           style={{
-            display: 'flex',
-            flexDirection: 'row',
-            gap: '16px',
-            marginBottom: '28px',
-          }}
-        >
-          <div
-            style={{
-              background: '#9146FF',
-              color: '#ffffff',
-              fontSize: 24,
-              fontWeight: 700,
-              padding: '10px 28px',
-              borderRadius: '9999px',
-              letterSpacing: '0.5px',
-            }}
-          >
-            Twitch
-          </div>
-          <div
-            style={{
-              background: '#FF0000',
-              color: '#ffffff',
-              fontSize: 24,
-              fontWeight: 700,
-              padding: '10px 28px',
-              borderRadius: '9999px',
-              letterSpacing: '0.5px',
-            }}
-          >
-            YouTube
-          </div>
-          <div
-            style={{
-              background: '#53FC18',
-              color: '#0f0f13',
-              fontSize: 24,
-              fontWeight: 700,
-              padding: '10px 28px',
-              borderRadius: '9999px',
-              letterSpacing: '0.5px',
-            }}
-          >
-            Kick
-          </div>
-          <div
-            style={{
-              background: '#FE2C55',
-              color: '#ffffff',
-              fontSize: 24,
-              fontWeight: 700,
-              padding: '10px 28px',
-              borderRadius: '9999px',
-              letterSpacing: '0.5px',
-            }}
-          >
-            TikTok
-          </div>
-        </div>
-
-        {/* Emote providers */}
-        <div
-          style={{
-            fontSize: 20,
-            fontWeight: 500,
-            color: '#71717a',
-            marginBottom: '48px',
+            background: '#FF0000',
+            color: '#ffffff',
+            fontSize: 24,
+            fontWeight: 700,
+            padding: '10px 28px',
+            borderRadius: '9999px',
             letterSpacing: '0.5px',
           }}
         >
-          7TV + BTTV + FFZ Emotes
+          YouTube
         </div>
-
-        {/* Bottom tagline */}
         <div
           style={{
-            fontSize: 28,
-            fontWeight: 600,
-            color: '#e4e4e7',
+            background: '#53FC18',
+            color: '#0f0f13',
+            fontSize: 24,
+            fontWeight: 700,
+            padding: '10px 28px',
+            borderRadius: '9999px',
             letterSpacing: '0.5px',
           }}
         >
-          One overlay. Every chat. All platforms.
+          Kick
+        </div>
+        <div
+          style={{
+            background: '#FE2C55',
+            color: '#ffffff',
+            fontSize: 24,
+            fontWeight: 700,
+            padding: '10px 28px',
+            borderRadius: '9999px',
+            letterSpacing: '0.5px',
+          }}
+        >
+          TikTok
         </div>
       </div>
-    ),
+
+      {/* Emote providers */}
+      <div
+        style={{
+          fontSize: 20,
+          fontWeight: 500,
+          color: '#71717a',
+          marginBottom: '48px',
+          letterSpacing: '0.5px',
+        }}
+      >
+        7TV + BTTV + FFZ Emotes
+      </div>
+
+      {/* Bottom tagline */}
+      <div
+        style={{
+          fontSize: 28,
+          fontWeight: 600,
+          color: '#e4e4e7',
+          letterSpacing: '0.5px',
+        }}
+      >
+        One overlay. Every chat. All platforms.
+      </div>
+    </div>,
     {
       ...size,
       fonts: [
@@ -175,6 +171,6 @@ export default async function Image() {
           weight: 700,
         },
       ],
-    },
+    }
   )
 }

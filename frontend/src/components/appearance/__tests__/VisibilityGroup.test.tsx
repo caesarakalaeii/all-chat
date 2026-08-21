@@ -23,7 +23,9 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import type { VisualSettings } from '@/lib/types/visual-settings'
 import { VisibilityGroup } from '../VisibilityGroup'
 
-afterEach(() => { cleanup() })
+afterEach(() => {
+  cleanup()
+})
 
 describe('VisibilityGroup - Pronoun Controls', () => {
   it('renders "Show pronouns" toggle', () => {
@@ -122,12 +124,7 @@ describe('VisibilityGroup', () => {
 
   it('clicking an ON switch calls onChange with none (showAvatars ON→OFF)', () => {
     const onChange = vi.fn()
-    render(
-      <VisibilityGroup
-        visualSettings={{ showAvatars: 'inline' }}
-        onChange={onChange}
-      />
-    )
+    render(<VisibilityGroup visualSettings={{ showAvatars: 'inline' }} onChange={onChange} />)
     const switches = screen.getAllByRole('switch')
     fireEvent.click(switches[0])
     expect(onChange).toHaveBeenCalledWith({ showAvatars: 'none' })
@@ -135,12 +132,7 @@ describe('VisibilityGroup', () => {
 
   it('clicking an OFF switch calls onChange with inline (showAvatars OFF→ON)', () => {
     const onChange = vi.fn()
-    render(
-      <VisibilityGroup
-        visualSettings={{ showAvatars: 'none' }}
-        onChange={onChange}
-      />
-    )
+    render(<VisibilityGroup visualSettings={{ showAvatars: 'none' }} onChange={onChange} />)
     const switches = screen.getAllByRole('switch')
     fireEvent.click(switches[0])
     expect(onChange).toHaveBeenCalledWith({ showAvatars: 'inline' })
@@ -148,12 +140,7 @@ describe('VisibilityGroup', () => {
 
   it('showTimestamps emits "block" (not "inline") when switching to ON', () => {
     const onChange = vi.fn()
-    render(
-      <VisibilityGroup
-        visualSettings={{ showTimestamps: 'none' }}
-        onChange={onChange}
-      />
-    )
+    render(<VisibilityGroup visualSettings={{ showTimestamps: 'none' }} onChange={onChange} />)
     const switches = screen.getAllByRole('switch')
     // showTimestamps is the 3rd row (index 2)
     fireEvent.click(switches[2])

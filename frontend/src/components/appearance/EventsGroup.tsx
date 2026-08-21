@@ -18,7 +18,6 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 import React from 'react'
 import type { VisualSettings } from '@/lib/types/visual-settings'
 import { ToggleSwitch } from './ToggleSwitch'
@@ -34,11 +33,15 @@ const EVENT_ROWS: Array<{
   showField: keyof VisualSettings
   sizeField: keyof VisualSettings
 }> = [
-  { label: 'Super Chat',      showField: 'showSuperChat',      sizeField: 'superChatSizeModifier' },
-  { label: 'Subscriptions',   showField: 'showSubscriptions',  sizeField: 'subscriptionSizeModifier' },
-  { label: 'Raids',           showField: 'showRaids',          sizeField: 'raidSizeModifier' },
-  { label: 'Bits',            showField: 'showBits',           sizeField: 'bitsSizeModifier' },
-  { label: 'Membership Gift', showField: 'showMembershipGift', sizeField: 'membershipGiftSizeModifier' },
+  { label: 'Super Chat', showField: 'showSuperChat', sizeField: 'superChatSizeModifier' },
+  { label: 'Subscriptions', showField: 'showSubscriptions', sizeField: 'subscriptionSizeModifier' },
+  { label: 'Raids', showField: 'showRaids', sizeField: 'raidSizeModifier' },
+  { label: 'Bits', showField: 'showBits', sizeField: 'bitsSizeModifier' },
+  {
+    label: 'Membership Gift',
+    showField: 'showMembershipGift',
+    sizeField: 'membershipGiftSizeModifier',
+  },
 ]
 
 export function EventsGroup({ visualSettings, onChange }: EventsGroupProps): React.ReactElement {

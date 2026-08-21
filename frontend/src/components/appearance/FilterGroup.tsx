@@ -18,7 +18,6 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 import React, { useState } from 'react'
 import { X } from 'lucide-react'
 import { ToggleSwitch } from './ToggleSwitch'
@@ -32,11 +31,24 @@ export interface FilterGroupProps {
 }
 
 const COMMON_BOTS = [
-  'nightbot', 'streamelements', 'moobot', 'fossabot', 'soundalerts',
-  'streamlabs', 'stay_hydrated_bot', 'serybot', 'wizebot', 'botisimo',
+  'nightbot',
+  'streamelements',
+  'moobot',
+  'fossabot',
+  'soundalerts',
+  'streamlabs',
+  'stay_hydrated_bot',
+  'serybot',
+  'wizebot',
+  'botisimo',
 ]
 
-function TagInput({ tags, onAdd, onRemove, placeholder }: {
+function TagInput({
+  tags,
+  onAdd,
+  onRemove,
+  placeholder,
+}: {
   tags: string[]
   onAdd: (tag: string) => void
   onRemove: (tag: string) => void
@@ -60,8 +72,11 @@ function TagInput({ tags, onAdd, onRemove, placeholder }: {
 
   return (
     <div className="flex flex-wrap gap-1 rounded-lg border border-border bg-surface p-2">
-      {tags.map(tag => (
-        <span key={tag} className="flex items-center gap-1 rounded bg-surface-alt px-2 py-0.5 text-xs text-text">
+      {tags.map((tag) => (
+        <span
+          key={tag}
+          className="bg-surface-alt flex items-center gap-1 rounded px-2 py-0.5 text-xs text-text"
+        >
           {tag}
           <button type="button" onClick={() => onRemove(tag)} aria-label={`Remove ${tag}`}>
             <X className="h-3 w-3" />
@@ -69,9 +84,12 @@ function TagInput({ tags, onAdd, onRemove, placeholder }: {
         </span>
       ))}
       <input
-        className="min-w-[120px] flex-1 bg-transparent text-xs text-text outline-none placeholder:text-text-dim"
+        className={
+          // eslint-disable-next-line tailwindcss/no-unnecessary-arbitrary-value -- px is intentional here: this is a fixed-size caret floor for the tag input, sized against the customiser panel rather than the 12px label text beside it, sized to the layout it sits in rather than to the reading text, so it must not grow with the root font size the way the suggested rem-relative utility would
+          'min-w-[120px] flex-1 bg-transparent text-xs text-text outline-none placeholder:text-text-dim'
+        }
         value={draft}
-        onChange={e => setDraft(e.target.value)}
+        onChange={(e) => setDraft(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
       />
@@ -84,18 +102,18 @@ export function FilterGroup({ filterSettings, onChange }: FilterGroupProps): Rea
     onChange({ banned_users: [...(filterSettings.banned_users ?? []), username] })
   }
   function handleRemoveUser(username: string) {
-    onChange({ banned_users: (filterSettings.banned_users ?? []).filter(u => u !== username) })
+    onChange({ banned_users: (filterSettings.banned_users ?? []).filter((u) => u !== username) })
   }
   function handleAddWord(word: string) {
     onChange({ banned_words: [...(filterSettings.banned_words ?? []), word] })
   }
   function handleRemoveWord(word: string) {
-    onChange({ banned_words: (filterSettings.banned_words ?? []).filter(w => w !== word) })
+    onChange({ banned_words: (filterSettings.banned_words ?? []).filter((w) => w !== word) })
   }
 
   function handleAddCommonBots() {
-    const existing = new Set((filterSettings.banned_users ?? []).map(u => u.toLowerCase()))
-    const toAdd = COMMON_BOTS.filter(bot => !existing.has(bot))
+    const existing = new Set((filterSettings.banned_users ?? []).map((u) => u.toLowerCase()))
+    const toAdd = COMMON_BOTS.filter((bot) => !existing.has(bot))
     if (toAdd.length > 0) {
       onChange({ banned_users: [...(filterSettings.banned_users ?? []), ...toAdd] })
     }

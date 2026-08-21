@@ -82,7 +82,7 @@ export const WATCHDOG_INTERVAL_MS = 5000
 export function isConnectionStale(
   lastActivityMs: number,
   nowMs: number,
-  timeoutMs: number = LIVENESS_TIMEOUT_MS,
+  timeoutMs: number = LIVENESS_TIMEOUT_MS
 ): boolean {
   if (lastActivityMs <= 0) return false
   return nowMs - lastActivityMs > timeoutMs
@@ -205,7 +205,7 @@ export interface PlatformStatusState {
 export function platformStatusReducer(
   state: PlatformStatusState,
   statusData: PlatformStatus,
-  configuredSources: ReadonlyMap<string, unknown>,
+  configuredSources: ReadonlyMap<string, unknown>
 ): PlatformStatusState {
   const channelId = statusData.channel_id || statusData.platform
   const isConfigured = configuredSources.size === 0 || configuredSources.has(channelId)

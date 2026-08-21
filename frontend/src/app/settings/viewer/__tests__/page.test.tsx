@@ -73,9 +73,15 @@ function stubLocalStorage(initialValues: Record<string, string> = {}) {
   const store: Record<string, string> = { ...initialValues }
   vi.stubGlobal('localStorage', {
     getItem: (key: string) => store[key] ?? null,
-    setItem: (key: string, value: string) => { store[key] = value },
-    removeItem: (key: string) => { delete store[key] },
-    clear: () => { Object.keys(store).forEach(k => delete store[k]) },
+    setItem: (key: string, value: string) => {
+      store[key] = value
+    },
+    removeItem: (key: string) => {
+      delete store[key]
+    },
+    clear: () => {
+      Object.keys(store).forEach((k) => delete store[k])
+    },
   })
 }
 
@@ -354,10 +360,11 @@ describe('Viewer Settings Page — Viewer Identity section', () => {
     // Verify that fetch was called and the URL included link_viewer_id
     await waitFor(() => {
       const calls = mockFetch.mock.calls
-      const connectCall = calls.find((args) =>
-        typeof args[0] === 'string' &&
-        args[0].includes('/api/v1/auth/viewer/') &&
-        args[0].includes('link_viewer_id=' + viewerID)
+      const connectCall = calls.find(
+        (args) =>
+          typeof args[0] === 'string' &&
+          args[0].includes('/api/v1/auth/viewer/') &&
+          args[0].includes('link_viewer_id=' + viewerID)
       )
       expect(connectCall).toBeDefined()
     })
@@ -443,14 +450,25 @@ describe('Viewer Settings Page — Viewer Identity section', () => {
     stubLocalStorage({ viewer_jwt_token: jwt })
 
     mockFetch.mockImplementation((url: string, opts?: RequestInit) => {
-      if (typeof url === 'string' && url.includes('/linked-platforms') && (!opts || opts.method !== 'DELETE')) {
+      if (
+        typeof url === 'string' &&
+        url.includes('/linked-platforms') &&
+        (!opts || opts.method !== 'DELETE')
+      ) {
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve({ platforms: ['twitch', 'youtube'] }),
         })
       }
-      if (typeof url === 'string' && url.includes('/linked-platforms/youtube') && opts?.method === 'DELETE') {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({ message: 'Platform unlinked successfully' }) })
+      if (
+        typeof url === 'string' &&
+        url.includes('/linked-platforms/youtube') &&
+        opts?.method === 'DELETE'
+      ) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ message: 'Platform unlinked successfully' }),
+        })
       }
       return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
     })
@@ -468,10 +486,11 @@ describe('Viewer Settings Page — Viewer Identity section', () => {
 
     await waitFor(() => {
       const calls = mockFetch.mock.calls
-      const deleteCall = calls.find((args) =>
-        typeof args[0] === 'string' &&
-        args[0].includes('/linked-platforms/youtube') &&
-        (args[1] as RequestInit)?.method === 'DELETE'
+      const deleteCall = calls.find(
+        (args) =>
+          typeof args[0] === 'string' &&
+          args[0].includes('/linked-platforms/youtube') &&
+          (args[1] as RequestInit)?.method === 'DELETE'
       )
       expect(deleteCall).toBeDefined()
     })

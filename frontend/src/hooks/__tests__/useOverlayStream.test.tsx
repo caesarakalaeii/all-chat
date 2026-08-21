@@ -28,7 +28,9 @@ import {
   WATCHDOG_INTERVAL_MS,
 } from '@/lib/utils/overlayStreamCore'
 
-vi.mock('@/lib/twitchBadges', () => ({ resolveTwitchBadgeIcons: vi.fn(async (m: ChatMessage) => m) }))
+vi.mock('@/lib/twitchBadges', () => ({
+  resolveTwitchBadgeIcons: vi.fn(async (m: ChatMessage) => m),
+}))
 vi.mock('@/lib/badgeOrder', () => ({ sortMessageBadges: vi.fn((m: ChatMessage) => m) }))
 
 // --- Mock WebSocket -------------------------------------------------------
@@ -116,7 +118,10 @@ beforeEach(() => {
   vi.stubGlobal('WebSocket', MockWebSocket as unknown as typeof WebSocket)
   vi.stubGlobal(
     'fetch',
-    vi.fn(async () => ({ ok: true, json: async () => ({ sources: [] }) })) as unknown as typeof fetch,
+    vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ sources: [] }),
+    })) as unknown as typeof fetch
   )
   vi.stubGlobal('localStorage', makeLocalStorageMock())
 })
@@ -206,14 +211,15 @@ describe('useOverlayStream — message routing', () => {
     await act(async () => {
       latest().simulateMessage({
         type: 'replay_response',
-        data: [
-          { deletion_type: 'single', target_uuid: 'a' },
-          { deletion_type: 'clear' },
-        ],
+        data: [{ deletion_type: 'single', target_uuid: 'a' }, { deletion_type: 'clear' }],
       })
     })
     expect(onDeletion).toHaveBeenCalledTimes(2)
-    expect(onDeletion).toHaveBeenNthCalledWith(1, { deletion_type: 'single', target_uuid: 'a' }, 'replay')
+    expect(onDeletion).toHaveBeenNthCalledWith(
+      1,
+      { deletion_type: 'single', target_uuid: 'a' },
+      'replay'
+    )
     expect(onDeletion).toHaveBeenNthCalledWith(2, { deletion_type: 'clear' }, 'replay')
     expect(onChat).not.toHaveBeenCalled()
   })
@@ -260,7 +266,10 @@ describe('useOverlayStream — message routing', () => {
     const onChat = vi.fn()
     renderHook(() => useOverlayStream('o1', { onChat }))
     await act(async () => {
-      latest().simulateMessage({ type: 'chat_message', data: chat('m1', '2026-05-30T10:00:05.000Z') })
+      latest().simulateMessage({
+        type: 'chat_message',
+        data: chat('m1', '2026-05-30T10:00:05.000Z'),
+      })
     })
     await waitFor(() => expect(onChat).toHaveBeenCalled())
     expect(localStorage.getItem('ws_last_seen_o1')).toBe(String(Date.UTC(2026, 4, 30, 10, 0, 5)))

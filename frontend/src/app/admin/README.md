@@ -28,17 +28,20 @@ the two can never drift.
 ## Pages
 
 ### Dashboard home (`/admin`)
+
 Platform stats (users, banned, active overlays, sources) as clickable cards that
 deep-link into filtered lists, DAU/WAU/MAU active-user counts, a per-platform
 source breakdown, and the nav grid.
 
 ### Search (`/admin/search`, ADR-0035)
+
 One box that resolves a query across users, overlays, sources, and viewers and
 deep-links each hit into the addressable views. Users/overlays/sources are
 federated on the client over the admin list endpoints; viewers use the
 server-side `?q=` search.
 
 ### Users (`/admin/users`)
+
 List with avatar, platform badges, and status; search by username/display
 name/id/platform id; filter tabs (all/active/banned/premium/beta). Detail panel:
 impersonate, grant/revoke premium (optionally time-limited, ADR-0027),
@@ -47,17 +50,20 @@ to the admin overlay detail, with a secondary link to the live overlay) plus a
 "view this user's sources" link.
 
 ### Overlays (`/admin/overlays`)
+
 List with live-connection status (and a "status unavailable" notice when the
 connection endpoint can't be read). Detail panel resolves the **owner** to a
 linked `@username` (not a bare UUID) and lists connected sources with channel
 links.
 
 ### Sources (`/admin/sources`)
+
 Every source across all overlays, filterable by platform/status and searchable
 by channel/overlay/owner. Each channel resolves to its public platform page via
 `ChannelLink`; each row links to its overlay and to its owning user.
 
 ### Viewers (`/admin/viewers`, ADR-0034)
+
 Server-side search, platform/status/premium filters, and pagination with a
 correct full-dataset total. Each row shows the avatar, platform badge, platform
 user id, and a link to the viewer's platform profile. An **Activity** dialog
@@ -66,6 +72,7 @@ streamers/overlays the viewer chats in) from the per-session aggregate over
 `viewer_message_history`. Ban/unban and grant/revoke premium are inline.
 
 ### Cosmetics / Features / Maintenance
+
 `/admin/cosmetics` manages the avatar-frame and flair catalog; `/admin/features`
 manages premium feature gates (ADR-0008); `/admin/maintenance` toggles
 maintenance mode.

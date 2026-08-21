@@ -151,8 +151,7 @@ describe('visual customizer property coverage', () => {
 
   it('lets every theme with a bubble read --chat-bubble-bg-color', () => {
     const ignoring = BUNDLED_THEMES.filter(
-      (theme) =>
-        !NO_BUBBLE_THEMES.has(theme.id) && !theme.css.includes('--chat-bubble-bg-color')
+      (theme) => !NO_BUBBLE_THEMES.has(theme.id) && !theme.css.includes('--chat-bubble-bg-color')
     ).map((theme) => theme.id)
 
     expect(

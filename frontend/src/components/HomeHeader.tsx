@@ -47,6 +47,7 @@ export function HomeHeader() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-nav-bg backdrop-blur-[20px]">
+      {/* eslint-disable-next-line tailwindcss/no-unnecessary-arbitrary-value -- 60px must stay a literal pixel height: SplitView and overlays/[id]/page.tsx hard-code h-[calc(100vh-60px)] against these navs, and globals.css documents "AppNav h-60px" for its scroll-padding-top. The suggested h-15 is calc(var(--spacing) * 15) = 3.75rem, so it only equals 60px at the default root font size; anywhere else the navs and those calc() consumers disagree and the content pane overflows or leaves a gap */}
       <div className="mx-auto flex h-[60px] max-w-5xl items-center justify-between px-4 sm:px-6">
         {/* Logo → home */}
         <Link
@@ -70,7 +71,13 @@ export function HomeHeader() {
           {loading ? (
             /* Reserve the action width so the button doesn't pop in once auth
                resolves. Cosmetic only — rendering it server-side costs nothing. */
-            <span className="inline-block h-8 w-[104px]" aria-hidden="true" />
+            <span
+              className={
+                // eslint-disable-next-line tailwindcss/no-unnecessary-arbitrary-value -- 104px is the measured width of the button this spacer stands in for, so it must not scale independently of that button; the suggested w-26 is rem-relative and would reintroduce the layout shift the spacer exists to prevent
+                'inline-block h-8 w-[104px]'
+              }
+              aria-hidden="true"
+            />
           ) : user ? (
             <Link
               href="/dashboard"

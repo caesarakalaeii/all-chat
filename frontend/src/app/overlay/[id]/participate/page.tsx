@@ -59,7 +59,11 @@ function isUnauthorized(err: unknown): boolean {
 // wagerRejectionCopy maps the server's machine reason for a rejected wager to human
 // copy (L-U2), so a failure surfaces something actionable instead of the opaque
 // "wager not accepted". Reasons: repository/predictions.go WagerResult.Reason.
-function wagerRejectionCopy(reason: string | undefined, pointsName: string, balance: number): string | null {
+function wagerRejectionCopy(
+  reason: string | undefined,
+  pointsName: string,
+  balance: number
+): string | null {
   switch (reason) {
     case 'not_found':
       return 'This prediction is no longer available.'
@@ -103,7 +107,10 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
 
   // fetchPublic / fetchPrivate return their data so refresh() can apply everything in
   // ONE state update — avoiding the multi-commit flicker of separate async chains (N1).
-  const fetchPublic = useCallback(async (): Promise<{ poll: Poll | null; prediction: Prediction | null } | null> => {
+  const fetchPublic = useCallback(async (): Promise<{
+    poll: Poll | null
+    prediction: Prediction | null
+  } | null> => {
     try {
       const [pRes, prRes] = await Promise.all([
         fetch(`/api/v1/engagement/overlays/${id}/active-poll`, { cache: 'no-store' }),
@@ -150,7 +157,10 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
         // new round, so the "your prediction settled" reveal isn't skipped (P3-11). Same
         // round still live → no banner. Cleared unconditionally otherwise.
         if (wageredRoundRef.current && wageredRoundRef.current.id !== pub.prediction.id) {
-          setSettled({ outcomeLabel: wageredRoundRef.current.outcomeLabel, amount: wageredRoundRef.current.amount })
+          setSettled({
+            outcomeLabel: wageredRoundRef.current.outcomeLabel,
+            amount: wageredRoundRef.current.amount,
+          })
           wageredRoundRef.current = null
         } else {
           setSettled(null)
@@ -158,11 +168,18 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
         if (eng?.wager_outcome_id) {
           const o = pub.prediction.outcomes.find((x) => x.id === eng.wager_outcome_id)
           if (o) {
-            wageredRoundRef.current = { id: pub.prediction.id, outcomeLabel: o.label, amount: eng.wager_amount ?? 0 }
+            wageredRoundRef.current = {
+              id: pub.prediction.id,
+              outcomeLabel: o.label,
+              amount: eng.wager_amount ?? 0,
+            }
           }
         }
       } else if (wageredRoundRef.current) {
-        setSettled({ outcomeLabel: wageredRoundRef.current.outcomeLabel, amount: wageredRoundRef.current.amount })
+        setSettled({
+          outcomeLabel: wageredRoundRef.current.outcomeLabel,
+          amount: wageredRoundRef.current.amount,
+        })
         wageredRoundRef.current = null
       }
     }
@@ -271,7 +288,9 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
       const balance = engagement?.balance ?? 0
       if (amount > balance) {
         // Pre-empt the server 'insufficient' with a clearer, local message (L-U3).
-        setNotice(`Not enough ${engagement?.points_name ?? 'Points'} — you have ${balance.toLocaleString()}.`)
+        setNotice(
+          `Not enough ${engagement?.points_name ?? 'Points'} — you have ${balance.toLocaleString()}.`
+        )
         return
       }
       setBusy(true)
@@ -287,7 +306,11 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
           setAuthed(false) // L-U10
           return
         }
-        const copy = wagerRejectionCopy(apiErrorReason(err), engagement?.points_name ?? 'Points', engagement?.balance ?? 0)
+        const copy = wagerRejectionCopy(
+          apiErrorReason(err),
+          engagement?.points_name ?? 'Points',
+          engagement?.balance ?? 0
+        )
         setNotice(copy ?? (err instanceof Error ? err.message : 'Wager failed'))
       } finally {
         setBusy(false)
@@ -297,7 +320,15 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
   )
 
   if (authed === null) {
-    return <main id="main-content" tabIndex={-1} className="mx-auto max-w-md p-6 text-center text-text-sub">Loading…</main>
+    return (
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="mx-auto max-w-md p-6 text-center text-text-sub"
+      >
+        Loading…
+      </main>
+    )
   }
 
   if (!authed) {
@@ -318,8 +349,8 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
         </div>
         {/* N2: TikTok/Discord have no web login — point those viewers at chat commands. */}
         <p className="text-sm text-text-sub">
-          Watching on TikTok or Discord? Take part with the on-screen chat commands — web login isn&apos;t
-          available for those platforms yet.
+          Watching on TikTok or Discord? Take part with the on-screen chat commands — web login
+          isn&apos;t available for those platforms yet.
         </p>
       </main>
     )
@@ -363,8 +394,8 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
 
       {settled && (
         <p role="status" className="rounded-md bg-surface-2 px-3 py-2 text-sm text-text">
-          Your prediction on “{settled.outcomeLabel}” settled — you wagered {settled.amount.toLocaleString()}{' '}
-          {pointsName}. Check your balance above.
+          Your prediction on “{settled.outcomeLabel}” settled — you wagered{' '}
+          {settled.amount.toLocaleString()} {pointsName}. Check your balance above.
         </p>
       )}
 
@@ -374,7 +405,9 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
             <span aria-hidden="true">📊</span> {poll.question}
           </h2>
           {pollNative && (
-            <p className="text-sm text-text-sub">This poll runs on Twitch — vote in Twitch chat or the Twitch app.</p>
+            <p className="text-sm text-text-sub">
+              This poll runs on Twitch — vote in Twitch chat or the Twitch app.
+            </p>
           )}
           {poll.options.map((o) => {
             const pct = pollTotal > 0 ? Math.round((o.votes / pollTotal) * 100) : 0
@@ -391,7 +424,10 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
                   (busy || pollNative) && 'opacity-60'
                 )}
               >
-                <span className="absolute inset-y-0 left-0 bg-purple-500/15" style={{ width: `${pct}%` }} />
+                <span
+                  className="absolute inset-y-0 left-0 bg-purple-500/15"
+                  style={{ width: `${pct}%` }}
+                />
                 <span className="relative font-medium">
                   {o.idx}. {o.label}
                   {mine && (
@@ -402,7 +438,7 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
                     </>
                   )}
                 </span>
-                <span className="relative text-sm tabular-nums text-text">
+                <span className="relative text-sm text-text tabular-nums">
                   {pct}% ({o.votes.toLocaleString()})
                 </span>
               </button>
@@ -421,7 +457,9 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
               </span>
             )}
           </h2>
-          {predNative && <p className="text-sm text-text-sub">This prediction runs on Twitch channel points.</p>}
+          {predNative && (
+            <p className="text-sm text-text-sub">This prediction runs on Twitch channel points.</p>
+          )}
           {!alreadyWagered && predOpen && !predNative && (
             <div className="space-y-1">
               <div className="flex items-center justify-between text-xs text-text-sub">
@@ -438,8 +476,8 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
               </div>
               {balance <= 0 && (
                 <p className="text-xs text-text-sub">
-                  You have no {pointsName} yet. Earn them by keeping this page open and by supporting the
-                  stream (subs, bits, donations, gifts), then come back to wager.
+                  You have no {pointsName} yet. Earn them by keeping this page open and by
+                  supporting the stream (subs, bits, donations, gifts), then come back to wager.
                 </p>
               )}
               <label htmlFor="wager-amount" className="sr-only">
@@ -483,23 +521,32 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
                   disabled && 'opacity-60'
                 )}
               >
-                <span className="absolute inset-y-0 left-0 bg-sky-500/15" style={{ width: `${pct}%` }} />
+                <span
+                  className="absolute inset-y-0 left-0 bg-sky-500/15"
+                  style={{ width: `${pct}%` }}
+                />
                 <span className="relative font-medium">
                   {o.idx}. {o.label}
                   {mine && ` · your wager: ${(engagement?.wager_amount ?? 0).toLocaleString()}`}
                 </span>
-                <span className="relative text-sm tabular-nums text-text">
+                <span className="relative text-sm text-text tabular-nums">
                   {o.total_points.toLocaleString()} · {pct}%
                 </span>
               </button>
             )
           })}
-          {alreadyWagered && <p className="text-sm text-text-sub">You&apos;ve locked in your wager for this round.</p>}
+          {alreadyWagered && (
+            <p className="text-sm text-text-sub">
+              You&apos;ve locked in your wager for this round.
+            </p>
+          )}
         </section>
       )}
 
       {!poll && !prediction && (
-        <p className="text-center text-text-sub">No active poll or prediction right now. Hang tight!</p>
+        <p className="text-center text-text-sub">
+          No active poll or prediction right now. Hang tight!
+        </p>
       )}
     </main>
   )

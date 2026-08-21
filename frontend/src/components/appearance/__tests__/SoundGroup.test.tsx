@@ -24,7 +24,9 @@ import { SoundGroup } from '../SoundGroup'
 import type { SoundGroupProps } from '../SoundGroup'
 import type { DisplaySettings } from '@/lib/types/overlay'
 
-afterEach(() => { cleanup() })
+afterEach(() => {
+  cleanup()
+})
 
 function renderSoundGroup(overrides: Partial<SoundGroupProps> = {}) {
   const defaultProps: SoundGroupProps = {
@@ -91,10 +93,19 @@ describe('SoundGroup', () => {
   })
 
   it('renders Volume slider with value from displaySettings', () => {
-    renderSoundGroup({ displaySettings: { notification_sound_enabled: true, notification_sound_preset: 'chime', notification_sound_volume: 0.7, notification_sound_cooldown: 500 } })
+    renderSoundGroup({
+      displaySettings: {
+        notification_sound_enabled: true,
+        notification_sound_preset: 'chime',
+        notification_sound_volume: 0.7,
+        notification_sound_cooldown: 500,
+      },
+    })
     expect(screen.getByText('Volume')).toBeDefined()
     const sliders = screen.getAllByRole('slider')
-    const volumeSlider = sliders.find(s => s.getAttribute('min') === '0' && s.getAttribute('max') === '1')
+    const volumeSlider = sliders.find(
+      (s) => s.getAttribute('min') === '0' && s.getAttribute('max') === '1'
+    )
     expect(volumeSlider).toBeDefined()
     expect(volumeSlider!.getAttribute('value')).toBe('0.7')
   })
@@ -102,16 +113,27 @@ describe('SoundGroup', () => {
   it('moving volume slider calls onChange with { notification_sound_volume: 0.7 }', () => {
     const { onChange } = renderSoundGroup()
     const sliders = screen.getAllByRole('slider')
-    const volumeSlider = sliders.find(s => s.getAttribute('min') === '0' && s.getAttribute('max') === '1')!
+    const volumeSlider = sliders.find(
+      (s) => s.getAttribute('min') === '0' && s.getAttribute('max') === '1'
+    )!
     fireEvent.change(volumeSlider, { target: { value: '0.7' } })
     expect(onChange).toHaveBeenCalledWith({ notification_sound_volume: 0.7 })
   })
 
   it('renders Cooldown slider with value from displaySettings', () => {
-    renderSoundGroup({ displaySettings: { notification_sound_enabled: true, notification_sound_preset: 'chime', notification_sound_volume: 0.5, notification_sound_cooldown: 1000 } })
+    renderSoundGroup({
+      displaySettings: {
+        notification_sound_enabled: true,
+        notification_sound_preset: 'chime',
+        notification_sound_volume: 0.5,
+        notification_sound_cooldown: 1000,
+      },
+    })
     expect(screen.getByText('Cooldown')).toBeDefined()
     const sliders = screen.getAllByRole('slider')
-    const cooldownSlider = sliders.find(s => s.getAttribute('min') === '100' && s.getAttribute('max') === '5000')
+    const cooldownSlider = sliders.find(
+      (s) => s.getAttribute('min') === '100' && s.getAttribute('max') === '5000'
+    )
     expect(cooldownSlider).toBeDefined()
     expect(cooldownSlider!.getAttribute('value')).toBe('1000')
   })
@@ -119,7 +141,9 @@ describe('SoundGroup', () => {
   it('moving cooldown slider calls onChange with { notification_sound_cooldown: 1000 }', () => {
     const { onChange } = renderSoundGroup()
     const sliders = screen.getAllByRole('slider')
-    const cooldownSlider = sliders.find(s => s.getAttribute('min') === '100' && s.getAttribute('max') === '5000')!
+    const cooldownSlider = sliders.find(
+      (s) => s.getAttribute('min') === '100' && s.getAttribute('max') === '5000'
+    )!
     fireEvent.change(cooldownSlider, { target: { value: '1000' } })
     expect(onChange).toHaveBeenCalledWith({ notification_sound_cooldown: 1000 })
   })
@@ -145,7 +169,9 @@ describe('SoundGroup', () => {
     const { onChange } = renderSoundGroup({ isPremium: true })
     const input = screen.getByLabelText('Custom sound URL')
     fireEvent.change(input, { target: { value: 'https://example.com/sound.mp3' } })
-    expect(onChange).toHaveBeenCalledWith({ notification_sound_url: 'https://example.com/sound.mp3' })
+    expect(onChange).toHaveBeenCalledWith({
+      notification_sound_url: 'https://example.com/sound.mp3',
+    })
   })
 
   it('sound controls (preset, volume, cooldown) are hidden when notification_sound_enabled is false', () => {

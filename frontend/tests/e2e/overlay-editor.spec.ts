@@ -138,9 +138,7 @@ test.describe('Overlay Editor Page', () => {
     // Check sources are displayed
     await expect(page.locator('text=xQc')).toBeVisible()
     await expect(page.locator('text=Test YouTube Channel')).toBeVisible()
-    await expect(
-      page.locator('[data-slot="platform-badge"][data-platform="twitch"]')
-    ).toBeVisible()
+    await expect(page.locator('[data-slot="platform-badge"][data-platform="twitch"]')).toBeVisible()
     await expect(
       page.locator('[data-slot="platform-badge"][data-platform="youtube"]')
     ).toBeVisible()

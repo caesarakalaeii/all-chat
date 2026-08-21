@@ -140,7 +140,9 @@ describe('makeSeenIdCache', () => {
 describe('parseNameGradientGuard', () => {
   it('converts a JSON string to a NameGradient object', () => {
     const gradient: NameGradient = { type: 'linear', colors: ['#9146ff', '#00b5ad'], angle: 90 }
-    const user: { name_gradient?: NameGradient | string } = { name_gradient: JSON.stringify(gradient) }
+    const user: { name_gradient?: NameGradient | string } = {
+      name_gradient: JSON.stringify(gradient),
+    }
     parseNameGradientGuard(user)
     expect(typeof user.name_gradient).toBe('object')
     expect((user.name_gradient as NameGradient).colors).toEqual(['#9146ff', '#00b5ad'])
@@ -166,12 +168,20 @@ describe('platformStatusReducer', () => {
   const sources = new Map<string, unknown>([['c1', {}]])
 
   it('accepts any status while configured sources is empty (config not loaded yet)', () => {
-    const next = platformStatusReducer(empty, status({ channel_id: 'unknown', status: 'connected' }), new Map())
+    const next = platformStatusReducer(
+      empty,
+      status({ channel_id: 'unknown', status: 'connected' }),
+      new Map()
+    )
     expect(next.activeChannels.has('unknown')).toBe(true)
   })
 
   it('rejects status for a channel not configured once sources are known', () => {
-    const next = platformStatusReducer(empty, status({ channel_id: 'nope', status: 'connected' }), sources)
+    const next = platformStatusReducer(
+      empty,
+      status({ channel_id: 'nope', status: 'connected' }),
+      sources
+    )
     expect(next).toBe(empty) // same reference — ignored
   })
 
@@ -203,7 +213,11 @@ describe('platformStatusReducer', () => {
   })
 
   it('falls back to platform as the channel key when channel_id is empty', () => {
-    const next = platformStatusReducer(empty, status({ channel_id: '', platform: 'kick', status: 'connected' }), new Map())
+    const next = platformStatusReducer(
+      empty,
+      status({ channel_id: '', platform: 'kick', status: 'connected' }),
+      new Map()
+    )
     expect(next.activeChannels.has('kick')).toBe(true)
   })
 })
@@ -252,7 +266,16 @@ describe('classifyEnvelope', () => {
   it('detects message_deletion before regular chat', () => {
     const env = {
       type: 'chat_message',
-      data: { ...chat('m1'), event: { type: 'message_deletion', tier: 'low', duration: 0, is_update: false, metadata: { deletion_type: 'single', target_uuid: 'm0' } } },
+      data: {
+        ...chat('m1'),
+        event: {
+          type: 'message_deletion',
+          tier: 'low',
+          duration: 0,
+          is_update: false,
+          metadata: { deletion_type: 'single', target_uuid: 'm0' },
+        },
+      },
     } as never
     const res = classifyEnvelope(env)
     expect(res.kind).toBe('deletion')

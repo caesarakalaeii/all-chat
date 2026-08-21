@@ -53,9 +53,7 @@ export const authApi = {
    * Admin impersonates a user. Server sets an impersonated-user access cookie.
    * Returns the impersonated user (no token — cookie is httpOnly).
    */
-  async impersonate(
-    targetUserId: string
-  ): Promise<{
+  async impersonate(targetUserId: string): Promise<{
     user: { id: string; username: string; display_name?: string }
     impersonating: boolean
   }> {

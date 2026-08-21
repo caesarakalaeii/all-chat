@@ -26,7 +26,11 @@ import { trackEvent, type AnalyticsEvent, type EventData } from '@/lib/analytics
  * rerenders and survives React StrictMode's dev double-invoke, so it replaces the
  * hand-rolled `useRef(false)` guards these one-shot events would otherwise need.
  */
-export function useTrackOnce(event: AnalyticsEvent, data?: EventData, enabled: boolean = true): void {
+export function useTrackOnce(
+  event: AnalyticsEvent,
+  data?: EventData,
+  enabled: boolean = true
+): void {
   const firedRef = useRef(false)
   useEffect(() => {
     if (firedRef.current || !enabled) return

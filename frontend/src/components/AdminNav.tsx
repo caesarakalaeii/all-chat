@@ -18,7 +18,6 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { InfinityLogo } from '@/components/InfinityLogo'
@@ -52,7 +51,12 @@ export function AdminNav() {
   }
 
   return (
-    <nav className="sticky top-0 z-50 flex h-[60px] items-center border-b border-border bg-nav-bg px-8 backdrop-blur-[20px]">
+    <nav
+      className={
+        // eslint-disable-next-line tailwindcss/no-unnecessary-arbitrary-value -- 60px must stay a literal pixel height: SplitView and overlays/[id]/page.tsx hard-code h-[calc(100vh-60px)] against these navs, and globals.css documents "AppNav h-60px" for its scroll-padding-top. The suggested h-15 is calc(var(--spacing) * 15) = 3.75rem, so it only equals 60px at the default root font size; anywhere else the navs and those calc() consumers disagree and the content pane overflows or leaves a gap
+        'sticky top-0 z-50 flex h-[60px] items-center border-b border-border bg-nav-bg px-8 backdrop-blur-[20px]'
+      }
+    >
       <Link
         href="/dashboard"
         className="mr-6 flex items-center gap-2.5 rounded-sm focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"

@@ -20,17 +20,17 @@ The following class names are part of the public API. They must not be renamed o
 
 These classes are applied to every event message element:
 
-| Class                         | Applied to      | Description                                                 |
-| ----------------------------- | --------------- | ----------------------------------------------------------- |
-| `.event-message`              | Root element    | Every platform event (subscription, raid, Super Chat, etc.) |
-| `.event-content`              | Content wrapper | Inner content area of the event                             |
-| `.event-icon`                 | Icon element    | Event type icon (e.g., heart, star, sword)                  |
-| `.event-title`                | Title element   | Bold uppercase event label (e.g., "NEW SUBSCRIBER")         |
-| `.event-value`                | Value element   | Monetary or numeric value (e.g., "$50.00", "x1000 bits")    |
-| `.event-message-text`         | Text element    | The chatter's own message, when the event carries one       |
-| `.event-message-attachments`  | Media wrapper   | GIFs/uploads attached to that message                       |
-| `.event-metadata`             | Footer element  | Numeric summary ("5 gifts", "1,234 viewers")                |
-| `.event-warning-message`      | Notice body     | System notices only (token expiry, missing permission)      |
+| Class                        | Applied to      | Description                                                 |
+| ---------------------------- | --------------- | ----------------------------------------------------------- |
+| `.event-message`             | Root element    | Every platform event (subscription, raid, Super Chat, etc.) |
+| `.event-content`             | Content wrapper | Inner content area of the event                             |
+| `.event-icon`                | Icon element    | Event type icon (e.g., heart, star, sword)                  |
+| `.event-title`               | Title element   | Bold uppercase event label (e.g., "NEW SUBSCRIBER")         |
+| `.event-value`               | Value element   | Monetary or numeric value (e.g., "$50.00", "x1000 bits")    |
+| `.event-message-text`        | Text element    | The chatter's own message, when the event carries one       |
+| `.event-message-attachments` | Media wrapper   | GIFs/uploads attached to that message                       |
+| `.event-metadata`            | Footer element  | Numeric summary ("5 gifts", "1,234 viewers")                |
+| `.event-warning-message`     | Notice body     | System notices only (token expiry, missing permission)      |
 
 The chatter's name is **not** inside the event content: an event row carries the
 same header as a chat row, so the name is the ordinary `.chat-username`. Style it
@@ -76,7 +76,7 @@ Applied alongside `.event-message` to identify the specific event type:
 | `.event-type-gift_paid_upgrade`        | Gifted sub continued as paid                        |
 | `.event-type-prime_paid_upgrade`       | Prime sub continued as paid                         |
 | `.event-type-pay_it_forward`           | Gift recipient gifting onward                       |
-| `.event-type-twitch_notice`            | Twitch chat notice with no first-class mapping yet   |
+| `.event-type-twitch_notice`            | Twitch chat notice with no first-class mapping yet  |
 | `.event-type-token_expiration_warning` | Platform OAuth token about to expire (system event) |
 
 ### Attribute Selectors
@@ -114,7 +114,7 @@ Note that `.event-message` is deliberately **excluded** from the
 with `!important`. Those rules are unbeatable by theme CSS (a layered
 `!important` outranks an unlayered one), so while they matched events they
 erased the tier borders and left theme authors with no way in. Events get the
-same values as *defaults* instead.
+same values as _defaults_ instead.
 
 ---
 
@@ -138,8 +138,8 @@ Higher layers in this list win over lower layers at equal specificity:
 This means `events.css` rules already win over `design-system` rules without needing `!important`. Theme authors writing overrides should place their CSS in `@layer user-overrides` for the highest cascade priority — no `!important` needed.
 
 **The layer order is inverted for `!important` declarations.** Per the cascade
-spec, important declarations in an *earlier* layer beat later ones, and
-*unlayered* important declarations rank below every layered one. Consequences
+spec, important declarations in an _earlier_ layer beat later ones, and
+_unlayered_ important declarations rank below every layered one. Consequences
 worth knowing:
 
 - Unlayered theme CSS (what every bundled theme writes, `!important` included)
@@ -150,7 +150,7 @@ worth knowing:
   bubble-forcing block there: an inescapable rule is the wrong tool for
   something themes are supposed to restyle.
 - Putting a rule in `@layer user-overrides` raises its priority for normal
-  declarations and *lowers* it for `!important` ones. Pick one or the other, not
+  declarations and _lowers_ it for `!important` ones. Pick one or the other, not
   both.
 
 ---

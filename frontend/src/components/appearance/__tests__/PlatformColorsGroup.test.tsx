@@ -23,7 +23,9 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import type { VisualSettings } from '@/lib/types/visual-settings'
 import { PlatformColorsGroup } from '../PlatformColorsGroup'
 
-afterEach(() => { cleanup() })
+afterEach(() => {
+  cleanup()
+})
 
 describe('PlatformColorsGroup', () => {
   it('renders 5 platform labels', () => {

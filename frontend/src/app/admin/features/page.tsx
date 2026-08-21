@@ -192,7 +192,10 @@ export default function AdminFeaturesPage() {
               return (
                 <div
                   key={gate.feature_key}
-                  className="flex min-h-[44px] items-center gap-4 px-4 py-3"
+                  className={
+                    // eslint-disable-next-line tailwindcss/no-unnecessary-arbitrary-value -- 44px is the WCAG 2.5.8 minimum target size, a fixed physical dimension; the suggested min-h-11 is rem-relative and drops below 44px at any reduced root font size
+                    'flex min-h-[44px] items-center gap-4 px-4 py-3'
+                  }
                 >
                   {/* Feature key + description */}
                   <div className="min-w-0 flex-1">
@@ -221,6 +224,7 @@ export default function AdminFeaturesPage() {
                       onClick={() => setConfirm({ gate, dimension: 'premium' })}
                       disabled={premiumBusy}
                       className={cn(
+                        // eslint-disable-next-line tailwindcss/no-unnecessary-arbitrary-value -- the 28x52px track and its 44px tap target are fixed physical dimensions: 44px is the WCAG 2.5.8 minimum, and the knob inside travels a hard-coded translate-x-[26px]. h-7/min-h-11/w-13 are rem-relative, so at any non-default root font size the track would resize while the knob's travel would not, and the knob would stop short of or overshoot the far end
                         'relative inline-flex h-[28px] min-h-[44px] w-[52px] items-center rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none',
                         gate.is_premium ? 'bg-amber-500/20' : 'bg-green-500/20',
                         premiumBusy ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
@@ -229,6 +233,7 @@ export default function AdminFeaturesPage() {
                       <span
                         className={cn(
                           'inline-block h-5 w-5 rounded-full bg-white transition-transform',
+                          // eslint-disable-next-line tailwindcss/no-unnecessary-arbitrary-value -- paired with the translate-x-[26px] on the same line, which has no non-arbitrary equivalent and is therefore not flagged. translate-x-1 is rem-relative while its partner stays 26px, so at any non-default root font size the knob's two rest positions would no longer be symmetric within the fixed 52px track
                           gate.is_premium ? 'translate-x-[26px]' : 'translate-x-[4px]'
                         )}
                       />
@@ -254,6 +259,7 @@ export default function AdminFeaturesPage() {
                       onClick={() => setConfirm({ gate, dimension: 'early_access' })}
                       disabled={earlyAccessBusy}
                       className={cn(
+                        // eslint-disable-next-line tailwindcss/no-unnecessary-arbitrary-value -- the 28x52px track and its 44px tap target are fixed physical dimensions: 44px is the WCAG 2.5.8 minimum, and the knob inside travels a hard-coded translate-x-[26px]. h-7/min-h-11/w-13 are rem-relative, so at any non-default root font size the track would resize while the knob's travel would not, and the knob would stop short of or overshoot the far end
                         'relative inline-flex h-[28px] min-h-[44px] w-[52px] items-center rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none',
                         gate.early_access ? 'bg-violet-500/20' : 'bg-badge-bg',
                         earlyAccessBusy ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
@@ -262,6 +268,7 @@ export default function AdminFeaturesPage() {
                       <span
                         className={cn(
                           'inline-block h-5 w-5 rounded-full bg-white transition-transform',
+                          // eslint-disable-next-line tailwindcss/no-unnecessary-arbitrary-value -- paired with the translate-x-[26px] on the same line, which has no non-arbitrary equivalent and is therefore not flagged. translate-x-1 is rem-relative while its partner stays 26px, so at any non-default root font size the knob's two rest positions would no longer be symmetric within the fixed 52px track
                           gate.early_access ? 'translate-x-[26px]' : 'translate-x-[4px]'
                         )}
                       />

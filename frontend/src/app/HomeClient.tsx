@@ -188,6 +188,7 @@ export default function HomeClient() {
       {/* ------------------------------------------------------------------ */}
       <section className="relative flex flex-col items-center px-4 pt-16 pb-16 text-center">
         {/* Noise overlay — SVG feTurbulence at opacity 0.03 */}
+        {/* eslint-disable-next-line tailwindcss/no-unnecessary-arbitrary-value -- the bare-decimal opacity utility the plugin suggests matches nothing in Tailwind v4 and emits no CSS at all, so taking the fix would delete this noise wash outright rather than restate it. See src/__tests__/no-broken-tailwind-utilities.test.ts */}
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 opacity-[0.03]">
           <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
             <filter id="noise">

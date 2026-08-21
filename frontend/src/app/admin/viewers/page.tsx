@@ -201,7 +201,9 @@ export default function AdminViewersPage() {
     setActivity(null)
     setActivityLoading(true)
     try {
-      const data = await apiClient.get<ViewerActivity>(`/api/v1/admin/viewers/${viewer.id}/activity`)
+      const data = await apiClient.get<ViewerActivity>(
+        `/api/v1/admin/viewers/${viewer.id}/activity`
+      )
       setActivity(data)
     } catch (error) {
       console.error('Failed to fetch viewer activity:', error)
@@ -654,7 +656,7 @@ export default function AdminViewersPage() {
                           <div className="min-w-0">
                             <Link
                               href={`/admin/users?user=${s.streamer_user_id}`}
-                              className="text-sm font-medium text-primary hover:underline"
+                              className="text-primary text-sm font-medium hover:underline"
                             >
                               {s.streamer_username ? `@${s.streamer_username}` : 'View streamer'}
                             </Link>

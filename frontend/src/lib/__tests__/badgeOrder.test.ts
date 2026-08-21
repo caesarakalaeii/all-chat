@@ -44,7 +44,11 @@ describe('sortBadges', () => {
   })
 
   it('combined: [allchat, allchat-premium, vip] order from arbitrary input', () => {
-    const result = sortBadges([makeBadge('vip'), makeBadge('allchat-premium'), makeBadge('allchat')])
+    const result = sortBadges([
+      makeBadge('vip'),
+      makeBadge('allchat-premium'),
+      makeBadge('allchat'),
+    ])
     expect(result.map((b) => b.name)).toEqual(['allchat', 'allchat-premium', 'vip'])
   })
 })

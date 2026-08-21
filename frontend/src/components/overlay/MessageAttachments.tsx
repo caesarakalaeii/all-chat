@@ -153,7 +153,7 @@ function AttachmentItem({
         className={clsx(
           'absolute rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white',
           revealed
-            ? 'right-1 top-1 min-h-6 min-w-6 bg-black/60 px-2 py-1 text-xs text-white'
+            ? 'top-1 right-1 min-h-6 min-w-6 bg-black/60 px-2 py-1 text-xs text-white'
             : 'inset-0 flex items-center justify-center bg-black/40 text-sm font-medium text-white'
         )}
       >
@@ -202,7 +202,7 @@ function AnimatedGifControl({
         type="button"
         onClick={() => setHidden((value) => !value)}
         aria-pressed={!hidden}
-        className="absolute right-1 top-1 min-h-6 min-w-6 rounded bg-black/60 px-2 py-1 text-xs text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+        className="absolute top-1 right-1 min-h-6 min-w-6 rounded bg-black/60 px-2 py-1 text-xs text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
       >
         {hidden ? 'Show GIF' : 'Hide GIF'}
       </button>

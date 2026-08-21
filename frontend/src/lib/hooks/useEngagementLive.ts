@@ -63,9 +63,10 @@ export function useEngagementLive(
     // rather than storm the gateway. The anonymous participate socket bounds via the
     // viewerParticipant default (8); OBS display widgets pass an explicit bound (8) while
     // staying viewerParticipant=false. maxReconnectAttempts=0 means unlimited.
-    const client = maxReconnectAttempts > 0
-      ? new WebSocketClient({ maxReconnectAttempts })
-      : new WebSocketClient()
+    const client =
+      maxReconnectAttempts > 0
+        ? new WebSocketClient({ maxReconnectAttempts })
+        : new WebSocketClient()
     const unsubscribe = client.onEngagementUpdate((kind) => cbRef.current(kind))
     // engagementOnly=true: this socket only wants poll/prediction signals — it must not
     // render chat or touch the shared chat replay watermark. viewerParticipant gates the

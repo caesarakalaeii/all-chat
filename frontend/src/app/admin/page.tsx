@@ -18,7 +18,6 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { Users, LayoutGrid, Radio, Eye, Ban, Activity } from 'lucide-react'

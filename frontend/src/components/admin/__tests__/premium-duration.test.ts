@@ -41,6 +41,9 @@ describe('customDaysToSeconds (ADR-0027 time-limited grant duration)', () => {
   })
 
   it('rounds fractional days to whole seconds', () => {
-    expect(customDaysToSeconds('1.5')).toEqual({ seconds: Math.round(1.5 * DAY_SECONDS), valid: true })
+    expect(customDaysToSeconds('1.5')).toEqual({
+      seconds: Math.round(1.5 * DAY_SECONDS),
+      valid: true,
+    })
   })
 })

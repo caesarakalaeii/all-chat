@@ -18,7 +18,6 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 import { cva, type VariantProps } from 'class-variance-authority'
 
 import { cn } from '@/lib/utils'
@@ -26,6 +25,7 @@ import { cn } from '@/lib/utils'
 const cardVariants = cva('rounded-xl border border-border bg-surface text-text transition-all', {
   variants: {
     interactive: {
+      // eslint-disable-next-line tailwindcss/no-unnecessary-arbitrary-value -- the bare-decimal scale utility the plugin suggests matches nothing in Tailwind v4 and emits no CSS at all, so taking the fix would delete this hover lift outright rather than restate it. See src/__tests__/no-broken-tailwind-utilities.test.ts
       true: 'hover:scale-[1.02] hover:shadow-lg cursor-pointer',
       false: '',
     },

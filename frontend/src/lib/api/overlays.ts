@@ -128,7 +128,9 @@ export const overlaysApi = {
    * emote-set descriptor without persisting. Used to give the user pre-save feedback.
    */
   async resolveSevenTV(id: string, input: string): Promise<SevenTVResolvedSet> {
-    return apiClient.post<SevenTVResolvedSet>(`/api/v1/overlays/${id}/config/seventv/resolve`, { input })
+    return apiClient.post<SevenTVResolvedSet>(`/api/v1/overlays/${id}/config/seventv/resolve`, {
+      input,
+    })
   },
 
   /**
@@ -149,7 +151,11 @@ export const overlaysApi = {
   /**
    * Update a chat source's config (generic — works for any platform config)
    */
-  async updateSourceConfig(overlayId: string, sourceId: string, config: Record<string, unknown>): Promise<void> {
+  async updateSourceConfig(
+    overlayId: string,
+    sourceId: string,
+    config: Record<string, unknown>
+  ): Promise<void> {
     await apiClient.patch(`/api/v1/overlays/${overlayId}/sources/${sourceId}`, { config })
   },
 
@@ -216,10 +222,10 @@ export const overlaysApi = {
    * The plaintext key is sent once; it is AES-GCM encrypted server-side and never returned.
    */
   async saveTTSKey(overlayId: string, apiKey: string, voiceId: string): Promise<void> {
-    await apiClient.post<{ status: string }>(
-      `/api/v1/overlays/${overlayId}/tts-config`,
-      { api_key: apiKey, voice_id: voiceId },
-    )
+    await apiClient.post<{ status: string }>(`/api/v1/overlays/${overlayId}/tts-config`, {
+      api_key: apiKey,
+      voice_id: voiceId,
+    })
   },
 
   /**
@@ -231,7 +237,7 @@ export const overlaysApi = {
   async saveTTSVoice(overlayId: string, voiceId: string): Promise<void> {
     await apiClient.patch<{ status: string; voice_id: string }>(
       `/api/v1/overlays/${overlayId}/tts-config/voice`,
-      { voice_id: voiceId },
+      { voice_id: voiceId }
     )
   },
 
@@ -251,7 +257,7 @@ export const overlaysApi = {
   async rotateTTSToken(overlayId: string): Promise<{ obsUrl: string }> {
     const resp = await apiClient.post<{ obs_url: string }>(
       `/api/v1/overlays/${overlayId}/tts-config/rotate-token`,
-      {},
+      {}
     )
     if (typeof resp?.obs_url !== 'string' || resp.obs_url === '') {
       throw new Error('rotate-token returned an invalid response shape')
@@ -267,7 +273,7 @@ export const overlaysApi = {
    */
   async getTTSVoices(overlayId: string): Promise<ElevenLabsVoice[]> {
     const resp = await apiClient.get<{ voices?: ElevenLabsVoice[] } | ElevenLabsVoice[]>(
-      `/api/v1/overlays/${overlayId}/tts-voices`,
+      `/api/v1/overlays/${overlayId}/tts-voices`
     )
     if (Array.isArray(resp)) return resp
     if (resp && Array.isArray(resp.voices)) return resp.voices
@@ -284,7 +290,7 @@ export const overlaysApi = {
   async previewTTSVoices(overlayId: string, apiKey: string): Promise<ElevenLabsVoice[]> {
     const resp = await apiClient.post<{ voices?: ElevenLabsVoice[] } | ElevenLabsVoice[]>(
       `/api/v1/overlays/${overlayId}/tts-voices/preview`,
-      { api_key: apiKey },
+      { api_key: apiKey }
     )
     if (Array.isArray(resp)) return resp
     if (resp && Array.isArray(resp.voices)) return resp.voices
@@ -328,8 +334,7 @@ export const overlaysApi = {
       const limitHeader = r.headers.get('x-characters-limit')
       const charactersRemaining =
         remainingHeader !== null && remainingHeader !== '' ? Number(remainingHeader) : NaN
-      const charactersLimit =
-        limitHeader !== null && limitHeader !== '' ? Number(limitHeader) : NaN
+      const charactersLimit = limitHeader !== null && limitHeader !== '' ? Number(limitHeader) : NaN
       const audioBlob = await r.blob()
       return {
         ok: true,
@@ -347,8 +352,6 @@ export const overlaysApi = {
    * Backend: GET /api/v1/overlays/:id/tts-config.
    */
   async getTTSConfig(overlayId: string): Promise<TTSConfigMetadata> {
-    return apiClient.get<TTSConfigMetadata>(
-      `/api/v1/overlays/${overlayId}/tts-config`,
-    )
+    return apiClient.get<TTSConfigMetadata>(`/api/v1/overlays/${overlayId}/tts-config`)
   },
 }

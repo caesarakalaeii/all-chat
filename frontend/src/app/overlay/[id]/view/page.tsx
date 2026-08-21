@@ -789,8 +789,8 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
       {connectionStatus === 'reconnecting' && reconnectAttempts >= OFFLINE_THRESHOLD && (
         <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-xs text-text-sub">
           <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
-          Still reconnecting — this recovers on its own, and messages sent meanwhile replay when
-          the connection returns. Closing this page is what loses them.
+          Still reconnecting — this recovers on its own, and messages sent meanwhile replay when the
+          connection returns. Closing this page is what loses them.
         </div>
       )}
 

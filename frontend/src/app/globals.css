@@ -247,24 +247,38 @@
   animation: msg-anim-fly-left 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 @keyframes msg-anim-fly-left {
-  from { transform: translateX(-115%); }
-  to   { transform: none; }
+  from {
+    transform: translateX(-115%);
+  }
+  to {
+    transform: none;
+  }
 }
 
 .msg-anim-fly-right {
   animation: msg-anim-fly-right 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 @keyframes msg-anim-fly-right {
-  from { transform: translateX(115%); }
-  to   { transform: none; }
+  from {
+    transform: translateX(115%);
+  }
+  to {
+    transform: none;
+  }
 }
 
 .msg-anim-fly-spring {
   animation: msg-anim-fly-spring 550ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 @keyframes msg-anim-fly-spring {
-  from { opacity: 0; transform: translateX(-70%); }
-  to   { opacity: 1; transform: none; }
+  from {
+    opacity: 0;
+    transform: translateX(-70%);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .msg-anim-pop {
@@ -272,19 +286,37 @@
   animation: msg-anim-pop 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 @keyframes msg-anim-pop {
-  from { opacity: 0; transform: scale(0.5); }
-  to   { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .msg-anim-bounce {
   animation: msg-anim-bounce 600ms linear both;
 }
 @keyframes msg-anim-bounce {
-  0%   { opacity: 0; transform: translateY(calc(110% * var(--msg-enter-dir, 1))); }
-  55%  { opacity: 1; transform: translateY(calc(-7% * var(--msg-enter-dir, 1))); }
-  75%  { transform: translateY(calc(4% * var(--msg-enter-dir, 1))); }
-  90%  { transform: translateY(calc(-2% * var(--msg-enter-dir, 1))); }
-  100% { transform: none; }
+  0% {
+    opacity: 0;
+    transform: translateY(calc(110% * var(--msg-enter-dir, 1)));
+  }
+  55% {
+    opacity: 1;
+    transform: translateY(calc(-7% * var(--msg-enter-dir, 1)));
+  }
+  75% {
+    transform: translateY(calc(4% * var(--msg-enter-dir, 1)));
+  }
+  90% {
+    transform: translateY(calc(-2% * var(--msg-enter-dir, 1)));
+  }
+  100% {
+    transform: none;
+  }
 }
 
 .msg-anim-flip {
@@ -292,25 +324,49 @@
   animation: msg-anim-flip 500ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 @keyframes msg-anim-flip {
-  from { opacity: 0; transform: perspective(600px) rotateX(calc(-75deg * var(--msg-enter-dir, 1))); }
-  to   { opacity: 1; transform: perspective(600px) rotateX(0deg); }
+  from {
+    opacity: 0;
+    transform: perspective(600px) rotateX(calc(-75deg * var(--msg-enter-dir, 1)));
+  }
+  to {
+    opacity: 1;
+    transform: perspective(600px) rotateX(0deg);
+  }
 }
 
 .msg-anim-swoosh {
   animation: msg-anim-swoosh 450ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 @keyframes msg-anim-swoosh {
-  0%   { opacity: 0; transform: translateX(-45%) skewX(8deg); filter: blur(6px); }
-  60%  { opacity: 1; transform: translateX(2%) skewX(-2deg); filter: blur(0); }
-  100% { transform: none; }
+  0% {
+    opacity: 0;
+    transform: translateX(-45%) skewX(8deg);
+    filter: blur(6px);
+  }
+  60% {
+    opacity: 1;
+    transform: translateX(2%) skewX(-2deg);
+    filter: blur(0);
+  }
+  100% {
+    transform: none;
+  }
 }
 
 .msg-anim-soft-focus {
   animation: msg-anim-soft-focus 400ms cubic-bezier(0, 0, 0.2, 1) both;
 }
 @keyframes msg-anim-soft-focus {
-  from { opacity: 0; transform: scale(0.96); filter: blur(12px); }
-  to   { opacity: 1; transform: none; filter: blur(0); }
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+    filter: blur(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
+  }
 }
 
 /* ============================================================

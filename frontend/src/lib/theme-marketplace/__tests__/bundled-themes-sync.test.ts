@@ -42,7 +42,10 @@ describe('bundled themes are in sync with docs/overlay-themes', () => {
   it.each(sourceFiles)('%s CSS matches the committed bundle', (filename) => {
     const expected = readFileSync(`${THEMES_DIR}/${filename}`, 'utf8')
     const bundled = BUNDLED_THEMES.find((t) => t.filename === filename)
-    expect(bundled, `theme ${filename} missing from bundle — run npm run generate:themes`).toBeDefined()
+    expect(
+      bundled,
+      `theme ${filename} missing from bundle — run npm run generate:themes`
+    ).toBeDefined()
     expect(bundled!.css, `theme ${filename} is stale — run npm run generate:themes`).toBe(expected)
   })
 })

@@ -18,7 +18,6 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 import React from 'react'
 import { RotateCcw } from 'lucide-react'
 import type { VisualSettings } from '@/lib/types/visual-settings'
@@ -30,14 +29,17 @@ export interface PlatformColorsGroupProps {
 }
 
 const PLATFORMS: Array<{ field: keyof VisualSettings; label: string; brandDefault: string }> = [
-  { field: 'twitchAccent',  label: 'Twitch',  brandDefault: '#9147FF' },
+  { field: 'twitchAccent', label: 'Twitch', brandDefault: '#9147FF' },
   { field: 'youtubeAccent', label: 'YouTube', brandDefault: '#FF0000' },
-  { field: 'kickAccent',    label: 'Kick',    brandDefault: '#53FC18' },
-  { field: 'tiktokAccent',  label: 'TikTok',  brandDefault: '#000000' },
+  { field: 'kickAccent', label: 'Kick', brandDefault: '#53FC18' },
+  { field: 'tiktokAccent', label: 'TikTok', brandDefault: '#000000' },
   { field: 'discordAccent', label: 'Discord', brandDefault: '#5865F2' },
 ]
 
-export function PlatformColorsGroup({ visualSettings, onChange }: PlatformColorsGroupProps): React.ReactElement {
+export function PlatformColorsGroup({
+  visualSettings,
+  onChange,
+}: PlatformColorsGroupProps): React.ReactElement {
   return (
     <div className="space-y-3">
       {PLATFORMS.map((p) => {
@@ -53,7 +55,7 @@ export function PlatformColorsGroup({ visualSettings, onChange }: PlatformColors
               type="button"
               aria-label={`Reset ${p.label} accent`}
               onClick={() => onChange({ [p.field]: undefined })}
-              className="rounded p-1 text-text-dim hover:text-text transition-colors"
+              className="rounded p-1 text-text-dim transition-colors hover:text-text"
             >
               <RotateCcw className="h-3 w-3" />
             </button>

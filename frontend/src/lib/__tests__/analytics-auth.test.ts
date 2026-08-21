@@ -69,7 +69,9 @@ describe('resolveSigninPlatform', () => {
   })
 
   it('normalizes a non-known auth_provider (e.g. "google") via *_id inference', () => {
-    expect(resolveSigninPlatform({ auth_provider: 'google', google_id: 'g1' }, null)).toBe('youtube')
+    expect(resolveSigninPlatform({ auth_provider: 'google', google_id: 'g1' }, null)).toBe(
+      'youtube'
+    )
   })
 
   it('returns "unknown" for a multi-linked account with no stash/known auth_provider', () => {
@@ -79,9 +81,9 @@ describe('resolveSigninPlatform', () => {
 
   it('a valid stash or known auth_provider still resolves a multi-linked account', () => {
     expect(resolveSigninPlatform({ twitch_id: 't1', google_id: 'g1' }, 'kick')).toBe('kick')
-    expect(resolveSigninPlatform({ auth_provider: 'youtube', twitch_id: 't1', google_id: 'g1' }, null)).toBe(
-      'youtube'
-    )
+    expect(
+      resolveSigninPlatform({ auth_provider: 'youtube', twitch_id: 't1', google_id: 'g1' }, null)
+    ).toBe('youtube')
   })
 
   it('returns "unknown" when nothing is attributable', () => {

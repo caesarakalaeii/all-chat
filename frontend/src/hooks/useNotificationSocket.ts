@@ -59,7 +59,7 @@ export interface NotificationEnvelope {
 export function useNotificationSocket(
   id: string | null | undefined,
   token: string | null | undefined,
-  onEnvelope: (envelope: NotificationEnvelope) => void,
+  onEnvelope: (envelope: NotificationEnvelope) => void
 ): void {
   const onEnvelopeRef = useRef(onEnvelope)
   useEffect(() => {

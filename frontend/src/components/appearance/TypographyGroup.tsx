@@ -129,7 +129,7 @@ export function TypographyGroup({
             </Select.Icon>
           </Select.Trigger>
           <Select.Portal>
-            <Select.Positioner className="z-[200]">
+            <Select.Positioner className="z-200">
               <Select.Popup className="rounded border border-border bg-surface py-1 shadow-lg">
                 <Select.List>
                   {FONT_WEIGHT_OPTIONS.map((opt) => (
@@ -220,7 +220,9 @@ export function TypographyGroup({
         <select
           id={`${fieldId}-text-shadow`}
           value={visualSettings.textShadow ?? ''}
-          onChange={(e) => onChange({ textShadow: e.target.value === '' ? undefined : e.target.value })}
+          onChange={(e) =>
+            onChange({ textShadow: e.target.value === '' ? undefined : e.target.value })
+          }
           className="rounded border border-border bg-bg px-2 py-1.5 text-sm text-text focus-visible:ring-1 focus-visible:ring-border focus-visible:outline-none"
         >
           {TEXT_SHADOW_PRESETS.map((preset) => (

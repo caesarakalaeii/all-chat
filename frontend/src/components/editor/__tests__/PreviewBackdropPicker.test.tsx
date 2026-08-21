@@ -64,9 +64,7 @@ describe('PreviewBackdropPicker', () => {
       screen.getByRole('button', { name: 'Preview on chroma green' }).getAttribute('aria-pressed')
     ).toBe('true')
     expect(
-      screen
-        .getByRole('button', { name: 'Preview on app background' })
-        .getAttribute('aria-pressed')
+      screen.getByRole('button', { name: 'Preview on app background' }).getAttribute('aria-pressed')
     ).toBe('false')
   })
 })

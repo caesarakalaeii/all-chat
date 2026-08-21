@@ -23,7 +23,9 @@ import { render, screen, cleanup, fireEvent } from '@testing-library/react'
 import type { VisualSettings } from '@/lib/types/visual-settings'
 import { TypographyGroup } from '../TypographyGroup'
 
-afterEach(() => { cleanup() })
+afterEach(() => {
+  cleanup()
+})
 
 describe('TypographyGroup', () => {
   const defaultSettings: Partial<VisualSettings> = {}
@@ -86,6 +88,22 @@ describe('TypographyGroup', () => {
     const select = screen.getByLabelText(/text shadow/i) as HTMLSelectElement
     expect(select.value).toBe('2px 2px 0 #ff00ff')
     expect(screen.getByText('Custom')).toBeDefined()
+  })
+
+  // The font-weight dropdown is portalled, so it must out-stack the overlay
+  // customiser's own layers. That is what the z-index utility on the positioner
+  // buys, and it is asserted on the rendered class attribute rather than the
+  // source because the risk being guarded is an edit that changes the emitted
+  // class list (an ESLint disable comment landing inside the className
+  // expression, say) without touching the literal.
+  it('stacks the portalled font-weight dropdown with z-200', () => {
+    const onChange = vi.fn()
+    render(<TypographyGroup visualSettings={defaultSettings} onChange={onChange} />)
+    fireEvent.click(screen.getByLabelText(/font weight/i))
+    const popup = screen.getByRole('listbox')
+    const positioner = popup.closest('[class*="z-"]')
+    expect(positioner).not.toBeNull()
+    expect(positioner!.className.split(/\s+/)).toContain('z-200')
   })
 
   it.todo('onChange called with fontFamily patch when font selection changes')

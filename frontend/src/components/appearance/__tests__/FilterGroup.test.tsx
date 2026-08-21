@@ -23,7 +23,9 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import { FilterGroup } from '../FilterGroup'
 import type { FilterSettings } from '@/lib/types/overlay'
 
-afterEach(() => { cleanup() })
+afterEach(() => {
+  cleanup()
+})
 
 describe('FilterGroup', () => {
   it('renders "Blocked usernames" label and an input with placeholder "Type username, press Enter"', () => {
@@ -56,6 +58,24 @@ describe('FilterGroup', () => {
     const onChange = vi.fn()
     render(<FilterGroup filterSettings={{}} onChange={onChange} />)
     expect(screen.getByText('Add common bots')).toBeDefined()
+  })
+
+  // The tag inputs keep a fixed 120px floor so a long tag list cannot squeeze the
+  // caret out of sight. It must stay an arbitrary px value: the rem-relative
+  // min-w-30 the Tailwind plugin suggests would grow with the user's font size and
+  // push the input onto its own row inside the fixed-width customiser panel.
+  // Asserted on the rendered class attribute, because the risk being guarded is an
+  // edit that changes the emitted class list without touching the source literal.
+  it('floors the tag inputs at min-w-[120px] so the caret stays visible', () => {
+    const onChange = vi.fn()
+    render(<FilterGroup filterSettings={{}} onChange={onChange} />)
+    for (const placeholder of [
+      'Type username, press Enter',
+      'Type keyword or regex, press Enter',
+    ]) {
+      const input = screen.getByPlaceholderText(placeholder)
+      expect(input.className.split(/\s+/)).toContain('min-w-[120px]')
+    }
   })
 
   it('typing "nightbot" + pressing Enter calls onChange with banned_users containing "nightbot"', () => {

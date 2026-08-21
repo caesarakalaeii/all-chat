@@ -18,7 +18,6 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 import { ReactNode } from 'react'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 

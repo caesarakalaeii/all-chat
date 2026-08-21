@@ -36,9 +36,9 @@ export function shouldRenderPronounPill(
   showPronouns: boolean,
   pronouns: string | undefined,
   position: 'before' | 'after',
-  targetPosition: 'before' | 'after',
+  targetPosition: 'before' | 'after'
 ): boolean {
-  return showPronouns && pronouns !== undefined && pronouns !== '' && position === targetPosition;
+  return showPronouns && pronouns !== undefined && pronouns !== '' && position === targetPosition
 }
 
 /**
@@ -49,16 +49,16 @@ export function shouldRenderPronounPill(
  */
 export function getPronounPillProps(
   pronouns: string,
-  color: string,
+  color: string
 ): {
-  text: string;
-  className: string;
-  style: { backgroundColor: string };
+  text: string
+  className: string
+  style: { backgroundColor: string }
 } {
   return {
     text: pronouns,
     className:
       'inline-flex items-center rounded-full px-2 py-1 text-[11px] font-semibold leading-none text-white',
     style: { backgroundColor: color },
-  };
+  }
 }

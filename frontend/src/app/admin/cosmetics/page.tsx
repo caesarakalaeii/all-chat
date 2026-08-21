@@ -29,153 +29,153 @@
  * Route: /admin/cosmetics
  */
 
-'use client';
+'use client'
 
-import { useEffect, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuthStore } from '@/lib/stores/auth-store';
-import { apiClient } from '@/lib/api/client';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
-import { toastManager } from '@/lib/toast';
+import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
+import { useAuthStore } from '@/lib/stores/auth-store'
+import { apiClient } from '@/lib/api/client'
+import { Card } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
+import { toastManager } from '@/lib/toast'
 
 interface CatalogEntry {
-  id: string;
-  name: string;
-  image_url: string;
-  is_premium: boolean;
+  id: string
+  name: string
+  image_url: string
+  is_premium: boolean
 }
 
 interface CatalogListResponse {
-  frames?: CatalogEntry[];
-  flairs?: CatalogEntry[];
+  frames?: CatalogEntry[]
+  flairs?: CatalogEntry[]
 }
 
 export default function AdminCosmeticsPage() {
-  const router = useRouter();
-  const { user } = useAuthStore();
+  const router = useRouter()
+  const { user } = useAuthStore()
 
-  const [activeTab, setActiveTab] = useState<'frames' | 'flairs'>('frames');
-  const [frames, setFrames] = useState<CatalogEntry[]>([]);
-  const [flairs, setFlairs] = useState<CatalogEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'frames' | 'flairs'>('frames')
+  const [frames, setFrames] = useState<CatalogEntry[]>([])
+  const [flairs, setFlairs] = useState<CatalogEntry[]>([])
+  const [loading, setLoading] = useState(true)
 
   // Add form state
-  const [addName, setAddName] = useState('');
-  const [addImageUrl, setAddImageUrl] = useState('');
-  const [addPreviewUrl, setAddPreviewUrl] = useState('');
-  const [addIsPremium, setAddIsPremium] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [addName, setAddName] = useState('')
+  const [addImageUrl, setAddImageUrl] = useState('')
+  const [addPreviewUrl, setAddPreviewUrl] = useState('')
+  const [addIsPremium, setAddIsPremium] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
     if (!user?.is_admin) {
-      router.push('/dashboard');
-      return;
+      router.push('/dashboard')
+      return
     }
-    fetchAll();
-  }, [user, router]);
+    fetchAll()
+  }, [user, router])
 
   const fetchFrames = useCallback(async () => {
     try {
-      const response = await apiClient.get<CatalogListResponse>('/api/v1/admin/cosmetics/frames');
-      setFrames(response.frames ?? []);
+      const response = await apiClient.get<CatalogListResponse>('/api/v1/admin/cosmetics/frames')
+      setFrames(response.frames ?? [])
     } catch {
-      toastManager.add({ title: 'Failed to load frames', type: 'error' });
+      toastManager.add({ title: 'Failed to load frames', type: 'error' })
     }
-  }, []);
+  }, [])
 
   const fetchFlairs = useCallback(async () => {
     try {
-      const response = await apiClient.get<CatalogListResponse>('/api/v1/admin/cosmetics/flairs');
-      setFlairs(response.flairs ?? []);
+      const response = await apiClient.get<CatalogListResponse>('/api/v1/admin/cosmetics/flairs')
+      setFlairs(response.flairs ?? [])
     } catch {
-      toastManager.add({ title: 'Failed to load flairs', type: 'error' });
+      toastManager.add({ title: 'Failed to load flairs', type: 'error' })
     }
-  }, []);
+  }, [])
 
   const fetchAll = async () => {
-    setLoading(true);
+    setLoading(true)
     try {
-      await Promise.all([fetchFrames(), fetchFlairs()]);
+      await Promise.all([fetchFrames(), fetchFlairs()])
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   const handleDelete = async (id: string) => {
     try {
       if (activeTab === 'frames') {
-        await apiClient.delete(`/api/v1/admin/cosmetics/frames/${id}`);
-        toastManager.add({ title: 'Frame deleted', type: 'success' });
-        await fetchFrames();
+        await apiClient.delete(`/api/v1/admin/cosmetics/frames/${id}`)
+        toastManager.add({ title: 'Frame deleted', type: 'success' })
+        await fetchFrames()
       } else {
-        await apiClient.delete(`/api/v1/admin/cosmetics/flairs/${id}`);
-        toastManager.add({ title: 'Flair deleted', type: 'success' });
-        await fetchFlairs();
+        await apiClient.delete(`/api/v1/admin/cosmetics/flairs/${id}`)
+        toastManager.add({ title: 'Flair deleted', type: 'success' })
+        await fetchFlairs()
       }
     } catch {
-      toastManager.add({ title: 'Delete failed', type: 'error' });
+      toastManager.add({ title: 'Delete failed', type: 'error' })
     }
-  };
+  }
 
   const handleAdd = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!addName.trim() || !addImageUrl.trim()) return;
+    e.preventDefault()
+    if (!addName.trim() || !addImageUrl.trim()) return
 
-    setSubmitting(true);
+    setSubmitting(true)
     try {
       if (activeTab === 'frames') {
         await apiClient.post('/api/v1/admin/cosmetics/frames', {
           name: addName.trim(),
           image_url: addImageUrl.trim(),
           is_premium: addIsPremium,
-        });
-        toastManager.add({ title: 'Frame added', type: 'success' });
-        await fetchFrames();
+        })
+        toastManager.add({ title: 'Frame added', type: 'success' })
+        await fetchFrames()
       } else {
         await apiClient.post('/api/v1/admin/cosmetics/flairs', {
           name: addName.trim(),
           image_url: addImageUrl.trim(),
           is_premium: addIsPremium,
-        });
-        toastManager.add({ title: 'Flair added', type: 'success' });
-        await fetchFlairs();
+        })
+        toastManager.add({ title: 'Flair added', type: 'success' })
+        await fetchFlairs()
       }
       // Clear form
-      setAddName('');
-      setAddImageUrl('');
-      setAddPreviewUrl('');
-      setAddIsPremium(false);
+      setAddName('')
+      setAddImageUrl('')
+      setAddPreviewUrl('')
+      setAddIsPremium(false)
     } catch {
-      toastManager.add({ title: 'Add failed', type: 'error' });
+      toastManager.add({ title: 'Add failed', type: 'error' })
     } finally {
-      setSubmitting(false);
+      setSubmitting(false)
     }
-  };
+  }
 
-  const currentEntries = activeTab === 'frames' ? frames : flairs;
-  const itemLabel = activeTab === 'frames' ? 'Frame' : 'Flair';
+  const currentEntries = activeTab === 'frames' ? frames : flairs
+  const itemLabel = activeTab === 'frames' ? 'Frame' : 'Flair'
 
   return (
     <div className="min-h-screen bg-bg">
-      <div className="max-w-4xl mx-auto px-4 py-8">
+      <div className="mx-auto max-w-4xl px-4 py-8">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-text">Cosmetics Catalog</h1>
           <p className="mt-1 text-sm text-text-sub">Manage avatar frames and flairs</p>
         </div>
 
         {/* Tab bar */}
-        <div className="flex border-b border-border mb-6">
+        <div className="mb-6 flex border-b border-border">
           {(['frames', 'flairs'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`px-4 py-2 text-sm font-medium capitalize transition-colors ${
                 activeTab === tab
-                  ? 'border-b-2 border-primary text-text'
+                  ? 'border-primary border-b-2 text-text'
                   : 'text-text-sub hover:text-text'
               }`}
             >
@@ -186,15 +186,15 @@ export default function AdminCosmeticsPage() {
 
         {/* Entry list */}
         {loading ? (
-          <Card className="p-6 space-y-3 mb-6">
+          <Card className="mb-6 space-y-3 p-6">
             {Array.from({ length: 4 }).map((_, i) => (
               <Skeleton key={i} className="h-16 w-full rounded-lg" />
             ))}
           </Card>
         ) : (
-          <Card className="overflow-hidden mb-6">
+          <Card className="mb-6 overflow-hidden">
             {currentEntries.length === 0 ? (
-              <div className="px-4 py-8 text-center text-text-sub text-sm">
+              <div className="px-4 py-8 text-center text-sm text-text-sub">
                 No {itemLabel.toLowerCase()}s in catalog yet
               </div>
             ) : (
@@ -202,22 +202,20 @@ export default function AdminCosmeticsPage() {
                 {currentEntries.map((entry) => (
                   <div key={entry.id} className="flex items-center gap-3 px-4 py-3">
                     {/* Thumbnail */}
-                    <div className="w-16 h-16 flex-shrink-0 rounded bg-surface-2 flex items-center justify-center overflow-hidden">
+                    <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded bg-surface-2">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={entry.image_url}
                         alt={entry.name}
-                        className="w-16 h-16 object-contain"
+                        className="h-16 w-16 object-contain"
                       />
                     </div>
 
                     {/* Name and premium badge */}
-                    <div className="flex-1 min-w-0">
+                    <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-text truncate">{entry.name}</span>
-                        {entry.is_premium && (
-                          <Badge className="text-xs">Premium</Badge>
-                        )}
+                        <span className="truncate text-sm font-medium text-text">{entry.name}</span>
+                        {entry.is_premium && <Badge className="text-xs">Premium</Badge>}
                       </div>
                     </div>
 
@@ -226,7 +224,7 @@ export default function AdminCosmeticsPage() {
                       variant="ghost"
                       size="sm"
                       onClick={() => handleDelete(entry.id)}
-                      className="text-text-sub hover:text-destructive"
+                      className="hover:text-destructive text-text-sub"
                       aria-label={`Delete ${entry.name}`}
                     >
                       ×
@@ -240,10 +238,10 @@ export default function AdminCosmeticsPage() {
 
         {/* Add form */}
         <Card className="p-6">
-          <h2 className="text-base font-semibold text-text mb-4">Add {itemLabel}</h2>
+          <h2 className="mb-4 text-base font-semibold text-text">Add {itemLabel}</h2>
           <form onSubmit={handleAdd} className="space-y-4">
             <div>
-              <label className="block text-xs text-text-sub mb-1" htmlFor="add-name">
+              <label className="mb-1 block text-xs text-text-sub" htmlFor="add-name">
                 Name
               </label>
               <Input
@@ -256,7 +254,7 @@ export default function AdminCosmeticsPage() {
             </div>
 
             <div>
-              <label className="block text-xs text-text-sub mb-1" htmlFor="add-image-url">
+              <label className="mb-1 block text-xs text-text-sub" htmlFor="add-image-url">
                 Image URL
               </label>
               <div className="flex items-center gap-3">
@@ -270,12 +268,12 @@ export default function AdminCosmeticsPage() {
                   className="flex-1"
                 />
                 {addPreviewUrl && (
-                  <div className="w-16 h-16 flex-shrink-0 rounded bg-surface-2 flex items-center justify-center overflow-hidden">
+                  <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded bg-surface-2">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={addPreviewUrl}
                       alt="Preview"
-                      className="w-16 h-16 object-contain rounded"
+                      className="h-16 w-16 rounded object-contain"
                     />
                   </div>
                 )}
@@ -302,5 +300,5 @@ export default function AdminCosmeticsPage() {
         </Card>
       </div>
     </div>
-  );
+  )
 }

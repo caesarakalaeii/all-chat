@@ -18,7 +18,6 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Trash2, Plus, Wrench } from 'lucide-react'
@@ -27,12 +26,7 @@ import { maintenanceApi } from '@/lib/api/maintenance'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import {
-  DialogRoot,
-  DialogContent,
-  DialogTitle,
-  DialogDescription,
-} from '@/components/ui/dialog'
+import { DialogRoot, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { toastManager } from '@/lib/toast'
 import { cn } from '@/lib/utils'
 import type { MaintenanceWindow, CreateMaintenanceRequest } from '@/lib/types/maintenance'
@@ -180,21 +174,23 @@ export default function AdminMaintenancePage() {
               const active = isActive(mw)
               return (
                 <div key={mw.id} className="flex items-start gap-4 px-4 py-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-medium text-sm text-text">{mw.title}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-medium text-text">{mw.title}</span>
                       <span
                         className={cn(
-                          'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-bold border',
+                          'inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-bold',
                           active
-                            ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                            : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                            ? 'border-amber-500/20 bg-amber-500/10 text-amber-400'
+                            : 'border-blue-500/20 bg-blue-500/10 text-blue-400'
                         )}
                       >
                         {active ? 'Active' : 'Upcoming'}
                       </span>
                     </div>
-                    <p className="mt-0.5 text-xs text-text-sub">{formatRange(mw.starts_at, mw.ends_at)}</p>
+                    <p className="mt-0.5 text-xs text-text-sub">
+                      {formatRange(mw.starts_at, mw.ends_at)}
+                    </p>
                     {mw.description && (
                       <p className="mt-1 text-sm text-text-sub">{mw.description}</p>
                     )}
@@ -204,7 +200,7 @@ export default function AdminMaintenancePage() {
                     size="icon"
                     onClick={() => handleDelete(mw.id)}
                     aria-label={`Delete ${mw.title}`}
-                    className="shrink-0 text-text-dim hover:text-destructive"
+                    className="hover:text-destructive shrink-0 text-text-dim"
                   >
                     <Trash2 className="size-4" />
                   </Button>
@@ -236,7 +232,7 @@ export default function AdminMaintenancePage() {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g. Database maintenance"
-                className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text placeholder:text-text-dim focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-twitch"
+                className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
               />
             </div>
             <div>
@@ -252,7 +248,7 @@ export default function AdminMaintenancePage() {
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Optional details about the maintenance"
-                className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text placeholder:text-text-dim focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-twitch"
+                className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -269,14 +265,11 @@ export default function AdminMaintenancePage() {
                   required
                   value={startsAt}
                   onChange={(e) => setStartsAt(e.target.value)}
-                  className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-twitch"
+                  className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
                 />
               </div>
               <div>
-                <label
-                  className="mb-1 block text-sm font-medium text-text"
-                  htmlFor="maint-ends-at"
-                >
+                <label className="mb-1 block text-sm font-medium text-text" htmlFor="maint-ends-at">
                   Ends at <span className="text-destructive">*</span>
                 </label>
                 <input
@@ -285,7 +278,7 @@ export default function AdminMaintenancePage() {
                   required
                   value={endsAt}
                   onChange={(e) => setEndsAt(e.target.value)}
-                  className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-twitch"
+                  className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
                 />
               </div>
             </div>

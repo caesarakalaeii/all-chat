@@ -39,6 +39,7 @@ function ToastPreview({
   return (
     <div
       className={cn(
+        // eslint-disable-next-line tailwindcss/no-unnecessary-arbitrary-value -- px is intentional here: this is a fixed-size toast width, mirroring ui/toast.tsx so the story matches the real component, sized to the layout it sits in rather than to the reading text, so it must not grow with the root font size the way the suggested rem-relative utility would
         'min-w-[280px] rounded-xl border border-border bg-surface-2 px-4 py-3 shadow-xl',
         'border-l-4',
         borderClass

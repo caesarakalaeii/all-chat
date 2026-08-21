@@ -106,13 +106,13 @@ export function createSoundPlayer(initialSettings: SoundSettings): SoundPlayer {
 
   function updateSettings(newSettings: SoundSettings): void {
     settings = { ...newSettings }
-    pool.forEach(el => {
+    pool.forEach((el) => {
       el.volume = settings.volume
     })
   }
 
   function destroy(): void {
-    pool.forEach(el => {
+    pool.forEach((el) => {
       el.pause()
       el.src = ''
     })

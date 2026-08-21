@@ -35,10 +35,9 @@ describe('startAddSourceReflow', () => {
 
   it('returns "added" on the short-circuit (existing credentials reused)', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify({ source_added: 'twitch', reused_existing_credentials: true }),
-        { status: 200 }
-      )
+      new Response(JSON.stringify({ source_added: 'twitch', reused_existing_credentials: true }), {
+        status: 200,
+      })
     )
     const result = await startAddSourceReflow('/api/v1/auth/twitch/add-source/o1')
     expect(result).toEqual({ kind: 'added' })

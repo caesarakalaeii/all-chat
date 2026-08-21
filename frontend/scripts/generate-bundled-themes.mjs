@@ -35,7 +35,14 @@ import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const THEMES_DIR = join(__dirname, '..', '..', 'docs', 'overlay-themes')
-const OUT_FILE = join(__dirname, '..', 'src', 'lib', 'theme-marketplace', 'bundled-themes.generated.ts')
+const OUT_FILE = join(
+  __dirname,
+  '..',
+  'src',
+  'lib',
+  'theme-marketplace',
+  'bundled-themes.generated.ts'
+)
 
 /** Mirror of metadata-parser.ts parseThemeMetadata (kept in sync intentionally). */
 function filenameToTitle(filename) {
@@ -48,7 +55,11 @@ function filenameToTitle(filename) {
 function parseThemeMetadata(css, filename) {
   const match = css.match(/\/\*\*\s*([\s\S]*?)\s*\*\//)
   if (!match) {
-    return { name: filenameToTitle(filename), description: 'No description available', tags: ['uncategorized'] }
+    return {
+      name: filenameToTitle(filename),
+      description: 'No description available',
+      tags: ['uncategorized'],
+    }
   }
   const header = match[1]
   const extract = (field) => {

@@ -124,7 +124,12 @@ import dynamic from 'next/dynamic'
 const MonacoCSSEditor = dynamic(() => import('@/components/MonacoCSSEditor'), {
   ssr: false,
   loading: () => (
-    <div className="flex h-[300px] items-center justify-center rounded-lg border border-border bg-surface-2">
+    <div
+      className={
+        // eslint-disable-next-line tailwindcss/no-unnecessary-arbitrary-value -- px is intentional here: this is a fixed-size loading placeholder, matched to the Monaco editor it is replaced by, sized to the layout it sits in rather than to the reading text, so it must not grow with the root font size the way the suggested rem-relative utility would
+        'flex h-[300px] items-center justify-center rounded-lg border border-border bg-surface-2'
+      }
+    >
       <div className="text-sm text-text-sub">Loading editor...</div>
     </div>
   ),
@@ -774,6 +779,7 @@ function SourceListSkeleton() {
   return (
     <div className="space-y-3">
       {[0, 1].map((i) => (
+        // eslint-disable-next-line tailwindcss/no-unnecessary-arbitrary-value -- the skeleton stands in for a 60px-tall source row and must match that literal height; the suggested h-15 is rem-relative while the row it replaces is not, so the placeholder would jump as the real content swaps in
         <Skeleton key={i} className="h-[60px] w-full rounded-xl" />
       ))}
     </div>

@@ -209,8 +209,16 @@ ws.run_forever()`}</Pre>
               <FieldTable
                 rows={[
                   { name: 'type', type: 'string', desc: 'Message type (see below).' },
-                  { name: 'data', type: 'object', desc: 'Payload; shape depends on type. Omitted for ping/pong.' },
-                  { name: 'timestamp', type: 'string', desc: 'RFC 3339 timestamp of when the gateway sent the frame.' },
+                  {
+                    name: 'data',
+                    type: 'object',
+                    desc: 'Payload; shape depends on type. Omitted for ping/pong.',
+                  },
+                  {
+                    name: 'timestamp',
+                    type: 'string',
+                    desc: 'RFC 3339 timestamp of when the gateway sent the frame.',
+                  },
                 ]}
               />
               <p>
@@ -218,11 +226,31 @@ ws.run_forever()`}</Pre>
               </p>
               <FieldTable
                 rows={[
-                  { name: 'chat_message', type: '', desc: 'A chat message or a platform event. data is the unified message object.' },
-                  { name: 'message_update', type: '', desc: 'An update to a previously sent message (e.g. TikTok like aggregates). Same data shape as chat_message.' },
-                  { name: 'connected', type: '', desc: 'Sent once on connect: { overlay_id, message }.' },
-                  { name: 'platform_status', type: '', desc: 'Connection status of a source platform.' },
-                  { name: 'ping', type: '', desc: 'Heartbeat from the server. Reply with { "type": "pong" }.' },
+                  {
+                    name: 'chat_message',
+                    type: '',
+                    desc: 'A chat message or a platform event. data is the unified message object.',
+                  },
+                  {
+                    name: 'message_update',
+                    type: '',
+                    desc: 'An update to a previously sent message (e.g. TikTok like aggregates). Same data shape as chat_message.',
+                  },
+                  {
+                    name: 'connected',
+                    type: '',
+                    desc: 'Sent once on connect: { overlay_id, message }.',
+                  },
+                  {
+                    name: 'platform_status',
+                    type: '',
+                    desc: 'Connection status of a source platform.',
+                  },
+                  {
+                    name: 'ping',
+                    type: '',
+                    desc: 'Heartbeat from the server. Reply with { "type": "pong" }.',
+                  },
                   { name: 'error', type: '', desc: 'Error notice: { code, message }.' },
                 ]}
               />
@@ -238,15 +266,35 @@ ws.run_forever()`}</Pre>
               <FieldTable
                 rows={[
                   { name: 'id', type: 'string', desc: 'Unique message ID.' },
-                  { name: 'overlay_id', type: 'string', desc: 'Overlay this message was delivered to.' },
-                  { name: 'platform', type: 'string', desc: '"twitch" | "youtube" | "kick" | "tiktok" | "discord".' },
+                  {
+                    name: 'overlay_id',
+                    type: 'string',
+                    desc: 'Overlay this message was delivered to.',
+                  },
+                  {
+                    name: 'platform',
+                    type: 'string',
+                    desc: '"twitch" | "youtube" | "kick" | "tiktok" | "discord".',
+                  },
                   { name: 'channel_id', type: 'string', desc: 'Platform channel identifier.' },
                   { name: 'channel_name', type: 'string', desc: 'Human-readable channel name.' },
                   { name: 'user', type: 'object', desc: 'Author info (see below).' },
-                  { name: 'message', type: 'object', desc: '{ text, emotes[], attachments[]? } (see below).' },
+                  {
+                    name: 'message',
+                    type: 'object',
+                    desc: '{ text, emotes[], attachments[]? } (see below).',
+                  },
                   { name: 'timestamp', type: 'string', desc: 'RFC 3339 message time (UTC).' },
-                  { name: 'metadata', type: 'object', desc: 'Free-form, platform-specific extras.' },
-                  { name: 'event', type: 'object?', desc: 'Present only when the message is a platform event (see Events). Absent for normal chat.' },
+                  {
+                    name: 'metadata',
+                    type: 'object',
+                    desc: 'Free-form, platform-specific extras.',
+                  },
+                  {
+                    name: 'event',
+                    type: 'object?',
+                    desc: 'Present only when the message is a platform event (see Events). Absent for normal chat.',
+                  },
                 ]}
               />
 
@@ -258,41 +306,90 @@ ws.run_forever()`}</Pre>
                   { name: 'display_name', type: 'string', desc: 'Display name.' },
                   { name: 'color', type: 'string?', desc: 'Name color, hex (e.g. "#FF0000").' },
                   { name: 'badges', type: 'Badge[]', desc: 'Author badges (see below).' },
-                  { name: 'avatar_url', type: 'string?', desc: 'Profile image URL when available.' },
+                  {
+                    name: 'avatar_url',
+                    type: 'string?',
+                    desc: 'Profile image URL when available.',
+                  },
                   { name: 'pronouns', type: 'string?', desc: 'e.g. "she/her" when known.' },
-                  { name: 'name_gradient', type: 'string?', desc: 'Optional gradient descriptor (JSON string).' },
-                  { name: 'source_badges / source_user_id', type: '?', desc: 'Origin-channel identity for shared-chat messages.' },
-                  { name: 'avatar_frame_url / avatar_flair_url', type: 'string?', desc: 'Cosmetic frame/flair when set.' },
+                  {
+                    name: 'name_gradient',
+                    type: 'string?',
+                    desc: 'Optional gradient descriptor (JSON string).',
+                  },
+                  {
+                    name: 'source_badges / source_user_id',
+                    type: '?',
+                    desc: 'Origin-channel identity for shared-chat messages.',
+                  },
+                  {
+                    name: 'avatar_frame_url / avatar_flair_url',
+                    type: 'string?',
+                    desc: 'Cosmetic frame/flair when set.',
+                  },
                 ]}
               />
 
               <h3>message, emotes, and attachments</h3>
               <p>
                 <Code>message</Code> is{' '}
-                <Code>{`{ "text": string, "emotes": Emote[], "attachments"?: Attachment[] }`}</Code>. Each{' '}
-                <Code>Emote</Code>:
+                <Code>{`{ "text": string, "emotes": Emote[], "attachments"?: Attachment[] }`}</Code>
+                . Each <Code>Emote</Code>:
               </p>
               <FieldTable
                 rows={[
                   { name: 'code', type: 'string', desc: 'Emote text token, e.g. "Kappa".' },
-                  { name: 'provider', type: 'string', desc: '"twitch" | "7tv" | "bttv" | "ffz" | "discord" | platform.' },
+                  {
+                    name: 'provider',
+                    type: 'string',
+                    desc: '"twitch" | "7tv" | "bttv" | "ffz" | "discord" | platform.',
+                  },
                   { name: 'url', type: 'string', desc: 'CDN image URL.' },
-                  { name: 'positions', type: 'int[][]', desc: 'Array of [start, end] index pairs into text where the emote occurs.' },
+                  {
+                    name: 'positions',
+                    type: 'int[][]',
+                    desc: 'Array of [start, end] index pairs into text where the emote occurs.',
+                  },
                 ]}
               />
               <p>
-                <Code>attachments</Code> is present only when a message carries media (Discord image/GIF/video
-                uploads and Tenor/Giphy link previews today). Each <Code>Attachment</Code>:
+                <Code>attachments</Code> is present only when a message carries media (Discord
+                image/GIF/video uploads and Tenor/Giphy link previews today). Each{' '}
+                <Code>Attachment</Code>:
               </p>
               <FieldTable
                 rows={[
-                  { name: 'type', type: 'string', desc: '"image" or "video". GIFs are images that animate.' },
+                  {
+                    name: 'type',
+                    type: 'string',
+                    desc: '"image" or "video". GIFs are images that animate.',
+                  },
                   { name: 'url', type: 'string', desc: 'Media URL.' },
-                  { name: 'content_type', type: 'string?', desc: 'MIME type, e.g. "image/gif", "video/mp4".' },
-                  { name: 'width / height', type: 'int?', desc: 'Intrinsic pixel dimensions when known.' },
-                  { name: 'thumb_url', type: 'string?', desc: 'Poster frame for videos when available.' },
-                  { name: 'spoiler', type: 'bool?', desc: 'True when the sender marked the media a spoiler.' },
-                  { name: 'filename', type: 'string?', desc: 'Original filename (used for alt text).' },
+                  {
+                    name: 'content_type',
+                    type: 'string?',
+                    desc: 'MIME type, e.g. "image/gif", "video/mp4".',
+                  },
+                  {
+                    name: 'width / height',
+                    type: 'int?',
+                    desc: 'Intrinsic pixel dimensions when known.',
+                  },
+                  {
+                    name: 'thumb_url',
+                    type: 'string?',
+                    desc: 'Poster frame for videos when available.',
+                  },
+                  {
+                    name: 'spoiler',
+                    type: 'bool?',
+                    desc: 'True when the sender marked the media a spoiler.',
+                  },
+                  {
+                    name: 'filename',
+                    type: 'string?',
+                    desc: 'Original filename (used for alt text).',
+                  },
                 ]}
               />
               <p>
@@ -333,18 +430,38 @@ ws.run_forever()`}</Pre>
             <section id="events">
               <h2>Events</h2>
               <p>
-                Platform events (subs, bits, raids, donations, …) arrive as <Code>chat_message</Code>{' '}
-                frames whose <Code>data</Code> includes an <Code>event</Code> object. Normal chat has
-                no <Code>event</Code> field.
+                Platform events (subs, bits, raids, donations, …) arrive as{' '}
+                <Code>chat_message</Code> frames whose <Code>data</Code> includes an{' '}
+                <Code>event</Code> object. Normal chat has no <Code>event</Code> field.
               </p>
               <FieldTable
                 rows={[
                   { name: 'type', type: 'string', desc: 'Event type (see list below).' },
-                  { name: 'tier', type: 'string', desc: 'Relative prominence: "high" | "medium" | "low".' },
-                  { name: 'value', type: 'object?', desc: '{ amount: number, currency: string, display_text: string } — e.g. amount 250, currency "bits", display_text "250 bits".' },
-                  { name: 'duration', type: 'int', desc: 'Suggested on-screen display time, seconds.' },
-                  { name: 'is_update', type: 'bool', desc: 'true when this updates a prior event (e.g. TikTok like aggregates, delivered as message_update).' },
-                  { name: 'aggregation_id', type: 'string?', desc: 'Groups successive updates of the same aggregate.' },
+                  {
+                    name: 'tier',
+                    type: 'string',
+                    desc: 'Relative prominence: "high" | "medium" | "low".',
+                  },
+                  {
+                    name: 'value',
+                    type: 'object?',
+                    desc: '{ amount: number, currency: string, display_text: string } — e.g. amount 250, currency "bits", display_text "250 bits".',
+                  },
+                  {
+                    name: 'duration',
+                    type: 'int',
+                    desc: 'Suggested on-screen display time, seconds.',
+                  },
+                  {
+                    name: 'is_update',
+                    type: 'bool',
+                    desc: 'true when this updates a prior event (e.g. TikTok like aggregates, delivered as message_update).',
+                  },
+                  {
+                    name: 'aggregation_id',
+                    type: 'string?',
+                    desc: 'Groups successive updates of the same aggregate.',
+                  },
                   { name: 'metadata', type: 'object?', desc: 'Event-specific raw fields.' },
                 ]}
               />
@@ -354,9 +471,8 @@ ws.run_forever()`}</Pre>
                   <strong className="text-twitch">Twitch</strong>: <Code>subscription</Code>,{' '}
                   <Code>resubscription</Code>, <Code>gift_subscription</Code>,{' '}
                   <Code>mystery_gift</Code>, <Code>bits</Code>, <Code>raid</Code>,{' '}
-                  <Code>channel_points</Code>, <Code>watch_streak</Code>,{' '}
-                  <Code>announcement</Code>, <Code>bits_badge_tier</Code>,{' '}
-                  <Code>unraid</Code>, <Code>modiversary</Code>,{' '}
+                  <Code>channel_points</Code>, <Code>watch_streak</Code>, <Code>announcement</Code>,{' '}
+                  <Code>bits_badge_tier</Code>, <Code>unraid</Code>, <Code>modiversary</Code>,{' '}
                   <Code>charity_donation</Code>, <Code>gift_paid_upgrade</Code>,{' '}
                   <Code>prime_paid_upgrade</Code>, <Code>pay_it_forward</Code>,{' '}
                   <Code>twitch_notice</Code>, <Code>message_deletion</Code>
@@ -410,9 +526,21 @@ ws.run_forever()`}</Pre>
                   { name: 'platform', type: 'string', desc: 'Source platform.' },
                   { name: 'channel_id', type: 'string', desc: 'Source channel.' },
                   { name: 'channel_name', type: 'string?', desc: 'Human-readable channel name.' },
-                  { name: 'status', type: 'string', desc: '"connected" | "reconnecting" | "offline" | "quota_exceeded".' },
-                  { name: 'next_retry_at', type: 'string?', desc: 'RFC 3339 time of the next reconnect attempt, when applicable.' },
-                  { name: 'error_message', type: 'string?', desc: 'Human-readable detail when degraded.' },
+                  {
+                    name: 'status',
+                    type: 'string',
+                    desc: '"connected" | "reconnecting" | "offline" | "quota_exceeded".',
+                  },
+                  {
+                    name: 'next_retry_at',
+                    type: 'string?',
+                    desc: 'RFC 3339 time of the next reconnect attempt, when applicable.',
+                  },
+                  {
+                    name: 'error_message',
+                    type: 'string?',
+                    desc: 'Human-readable detail when degraded.',
+                  },
                 ]}
               />
             </section>

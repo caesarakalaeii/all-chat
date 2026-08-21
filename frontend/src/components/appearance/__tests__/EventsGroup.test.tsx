@@ -22,7 +22,9 @@ import React from 'react'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import { EventsGroup } from '../EventsGroup'
 
-afterEach(() => { cleanup() })
+afterEach(() => {
+  cleanup()
+})
 
 describe('EventsGroup', () => {
   it('renders 5 event type labels', () => {

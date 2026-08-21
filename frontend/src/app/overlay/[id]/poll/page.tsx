@@ -41,7 +41,9 @@ export default function PollOverlayPage({ params }: { params: Promise<{ id: stri
 
   const fetchPoll = useCallback(async () => {
     try {
-      const res = await fetch(`/api/v1/engagement/overlays/${id}/active-poll`, { cache: 'no-store' })
+      const res = await fetch(`/api/v1/engagement/overlays/${id}/active-poll`, {
+        cache: 'no-store',
+      })
       if (res.status === 404) {
         setPoll(null)
         return
@@ -65,9 +67,13 @@ export default function PollOverlayPage({ params }: { params: Promise<{ id: stri
 
   // Near-real-time refresh: refetch immediately on a poll_update WS frame instead of
   // waiting for the next 2s tick (L-D1). The interval above remains the fallback.
-  useEngagementLive(id, (kind) => {
-    if (kind === 'poll') void fetchPoll()
-  }, { maxReconnectAttempts: 8 })
+  useEngagementLive(
+    id,
+    (kind) => {
+      if (kind === 'poll') void fetchPoll()
+    },
+    { maxReconnectAttempts: 8 }
+  )
 
   // 1s ticker so the "remaining" countdown updates smoothly between fetches.
   useEffect(() => {
@@ -80,14 +86,17 @@ export default function PollOverlayPage({ params }: { params: Promise<{ id: stri
   if (!poll || (poll.state !== 'ACTIVE' && poll.state !== 'CLOSED')) return null
 
   const total = poll.options.reduce((sum, o) => sum + o.votes, 0)
-  const remaining = poll.ends_at ? Math.max(0, Math.floor((new Date(poll.ends_at).getTime() - now) / 1000)) : null
+  const remaining = poll.ends_at
+    ? Math.max(0, Math.floor((new Date(poll.ends_at).getTime() - now) / 1000))
+    : null
   const isClosed = poll.state === 'CLOSED'
   // Winning option(s) — highlighted with a TEXT label, not colour alone, so it reads for
   // colourblind viewers (mirrors the prediction widget's RESOLVED "Winner" branch). When the
   // top vote count is NOT unique it's a tie: label every tied option "Tie" rather than
   // arbitrarily crowning the first max option (P3-12).
   const maxVotes = poll.options.reduce((max, o) => Math.max(max, o.votes), 0)
-  const topOptions = isClosed && maxVotes > 0 ? poll.options.filter((o) => o.votes === maxVotes) : []
+  const topOptions =
+    isClosed && maxVotes > 0 ? poll.options.filter((o) => o.votes === maxVotes) : []
   const isTie = topOptions.length > 1
 
   return (
@@ -97,7 +106,7 @@ export default function PollOverlayPage({ params }: { params: Promise<{ id: stri
           <span aria-hidden>📊</span>
           <span className="min-w-0 flex-1 truncate">{poll.question}</span>
           {isClosed && (
-            <span className="shrink-0 rounded bg-white/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide">
+            <span className="shrink-0 rounded bg-white/20 px-1.5 py-0.5 text-[10px] font-bold tracking-wide uppercase">
               Final
             </span>
           )}
@@ -120,11 +129,13 @@ export default function PollOverlayPage({ params }: { params: Promise<{ id: stri
                 />
                 <div className="relative flex h-full items-center justify-between px-3 text-sm font-semibold">
                   <span className="flex min-w-0 items-center gap-1.5">
-                    <span className="truncate">{o.idx}. {o.label}</span>
+                    <span className="truncate">
+                      {o.idx}. {o.label}
+                    </span>
                     {/* Winner/Tie conveyed by a labelled pill (not colour alone) so it has
                         an accessible name and reads for colourblind viewers. */}
                     {isTop && (
-                      <span className="shrink-0 rounded bg-yellow-400 px-1.5 py-0.5 text-[10px] font-bold uppercase text-black">
+                      <span className="shrink-0 rounded bg-yellow-400 px-1.5 py-0.5 text-[10px] font-bold text-black uppercase">
                         {isTie ? 'Tie' : 'Winner'}
                       </span>
                     )}
