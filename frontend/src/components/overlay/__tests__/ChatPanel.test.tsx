@@ -70,9 +70,14 @@ function scrollTo(container: HTMLElement, scrollTop: number) {
   fireEvent.scroll(el)
 }
 
-/** Scroll away from the live edge: up in newest-last mode, down in newest-first. */
+/** Scroll to the top: away from the live edge in the default newest-last order. */
 function scrollUp(container: HTMLElement) {
   scrollTo(container, 0)
+}
+
+/** The rendered row elements, in DOM order. */
+function rowElements(container: HTMLElement): Element[] {
+  return [...(container.querySelector('.overflow-y-auto') as HTMLElement).children]
 }
 
 /** The rendered message texts, in DOM order. */
@@ -269,5 +274,63 @@ describe('ChatPanel pause-on-scroll', () => {
 
     rerender(<ChatPanel items={items} prefs={newestFirstPrefs} />)
     expect(screen.queryByText(/Chat paused/)).not.toBeInTheDocument()
+  })
+
+  it('stays live when the order pref is toggled back to the paused order', () => {
+    const first = [item('1', 'hello'), item('2', 'world')]
+    const { container, rerender } = render(<ChatPanel items={first} />)
+
+    scrollUp(container)
+    expect(screen.getByRole('button', { name: /Chat paused/ })).toBeInTheDocument()
+
+    rerender(<ChatPanel items={first} prefs={newestFirstPrefs} />)
+    const grown = [...first, item('3', 'incoming')]
+    rerender(<ChatPanel items={grown} prefs={newestFirstPrefs} />)
+    // Back to the order the discarded snapshot was taken under: the reader never
+    // scrolled away again, so chat must still be live.
+    rerender(<ChatPanel items={grown} />)
+
+    expect(screen.queryByText(/Chat paused/)).not.toBeInTheDocument()
+    expect(screen.getByText('incoming')).toBeInTheDocument()
+  })
+
+  it('puts the paused pill at the bottom with a down arrow in newest-last mode', () => {
+    const { container } = render(<ChatPanel items={[item('1', 'hello')]} />)
+    scrollUp(container)
+
+    const pill = screen.getByRole('button', { name: /Chat paused/ })
+    expect(pill.className).toContain('bottom-3')
+    expect(pill.className).not.toContain('top-3')
+    expect(pill.querySelector('.lucide-arrow-down')).not.toBeNull()
+  })
+
+  it('puts the paused pill at the top with an up arrow in newest-first mode', () => {
+    const { container } = render(
+      <ChatPanel items={[item('1', 'hello')]} prefs={newestFirstPrefs} />
+    )
+    scrollTo(container, 900)
+
+    const pill = screen.getByRole('button', { name: /Chat paused/ })
+    expect(pill.className).toContain('top-3')
+    expect(pill.className).not.toContain('bottom-3')
+    expect(pill.querySelector('.lucide-arrow-up')).not.toBeNull()
+  })
+})
+
+describe('ChatPanel row identity', () => {
+  it('keeps the same DOM nodes for existing rows when a message arrives newest-first', () => {
+    const first = [item('1', 'oldest'), item('2', 'middle')]
+    const { container, rerender } = render(<ChatPanel items={first} prefs={newestFirstPrefs} />)
+    const before = rowElements(container)
+    expect(before).toHaveLength(2)
+
+    // On screen this is a prepend, so index-based keys would shift for every row
+    // and React would remount the whole buffer.
+    rerender(<ChatPanel items={[...first, item('3', 'newest')]} prefs={newestFirstPrefs} />)
+    const after = rowElements(container)
+
+    expect(after).toHaveLength(3)
+    expect(after[1]).toBe(before[0])
+    expect(after[2]).toBe(before[1])
   })
 })
