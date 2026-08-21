@@ -113,6 +113,21 @@ export function ViewSettingsBar({ prefs, onChange, onTestActivitySound }: ViewSe
 
           <div className="mt-3 border-t border-border pt-3">
             <p className="mb-2 text-[10px] font-semibold tracking-wide text-text-dim uppercase">
+              Chat order
+            </p>
+            <ToggleSwitch
+              label="Newest messages first"
+              checked={prefs.newestFirst}
+              onChange={(checked) => onChange({ ...prefs, newestFirst: checked })}
+            />
+            <p className="mt-2.5 text-xs text-text-dim">
+              Puts the newest message at the top of the Chat panel, so you can read chat without
+              looking down. Only affects this browser.
+            </p>
+          </div>
+
+          <div className="mt-3 border-t border-border pt-3">
+            <p className="mb-2 text-[10px] font-semibold tracking-wide text-text-dim uppercase">
               Activity sound
             </p>
             <ToggleSwitch
@@ -136,7 +151,8 @@ export function ViewSettingsBar({ prefs, onChange, onTestActivitySound }: ViewSe
                     onChange={(e) =>
                       onChange({
                         ...prefs,
-                        activitySoundPreset: e.target.value as MonitorViewPrefs['activitySoundPreset'],
+                        activitySoundPreset: e.target
+                          .value as MonitorViewPrefs['activitySoundPreset'],
                       })
                     }
                     className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text"

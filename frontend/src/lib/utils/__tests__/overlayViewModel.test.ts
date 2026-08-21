@@ -20,10 +20,12 @@ import { describe, it, expect } from 'vitest'
 import type { ChatMessage, DeletionMetadata, EventType } from '@/lib/types/message'
 import {
   applyModerationMark,
+  chatRowKeys,
   countNewItems,
   deletionKind,
   isAudienceEvent,
   isDeletionTarget,
+  isPinnedToLiveEdge,
   matchesUserFilter,
   mergeByAgg,
   partitionItems,
@@ -33,7 +35,10 @@ import {
   type ViewItem,
 } from '@/lib/utils/overlayViewModel'
 
-function item(id: string, opts: { userId?: string; eventType?: EventType; aggId?: string } = {}): ViewItem {
+function item(
+  id: string,
+  opts: { userId?: string; eventType?: EventType; aggId?: string } = {}
+): ViewItem {
   const base: ViewItem = {
     id,
     overlay_id: 'o1',
@@ -122,14 +127,26 @@ describe('deletionKind / toModEntry', () => {
   })
 
   it('maps batch with positive duration to timeout, carrying duration + username', () => {
-    const meta: DeletionMetadata = { deletion_type: 'batch', target_user_id: 'u9', target_username: 'spammer', ban_duration: 600 }
+    const meta: DeletionMetadata = {
+      deletion_type: 'batch',
+      target_user_id: 'u9',
+      target_username: 'spammer',
+      ban_duration: 600,
+    }
     expect(deletionKind(meta)).toBe('timeout')
     const e = toModEntry(meta, 'live', 1)
-    expect(e).toMatchObject({ kind: 'timeout', username: 'spammer', targetUserId: 'u9', banDuration: 600 })
+    expect(e).toMatchObject({
+      kind: 'timeout',
+      username: 'spammer',
+      targetUserId: 'u9',
+      banDuration: 600,
+    })
   })
 
   it('maps batch with zero/absent duration to ban', () => {
-    expect(deletionKind({ deletion_type: 'batch', target_user_id: 'u9', ban_duration: 0 })).toBe('ban')
+    expect(deletionKind({ deletion_type: 'batch', target_user_id: 'u9', ban_duration: 0 })).toBe(
+      'ban'
+    )
     expect(deletionKind({ deletion_type: 'batch', target_user_id: 'u9' })).toBe('ban')
   })
 
@@ -142,13 +159,25 @@ describe('deletionKind / toModEntry', () => {
 describe('isDeletionTarget', () => {
   it('single matches by message uuid', () => {
     expect(isDeletionTarget(item('m1'), { deletion_type: 'single', target_uuid: 'm1' })).toBe(true)
-    expect(isDeletionTarget(item('m1'), { deletion_type: 'single', target_uuid: 'other' })).toBe(false)
+    expect(isDeletionTarget(item('m1'), { deletion_type: 'single', target_uuid: 'other' })).toBe(
+      false
+    )
     expect(isDeletionTarget(item('m1'), { deletion_type: 'single' })).toBe(false)
   })
 
   it('batch matches by user id', () => {
-    expect(isDeletionTarget(item('m1', { userId: 'u5' }), { deletion_type: 'batch', target_user_id: 'u5' })).toBe(true)
-    expect(isDeletionTarget(item('m1', { userId: 'u5' }), { deletion_type: 'batch', target_user_id: 'u6' })).toBe(false)
+    expect(
+      isDeletionTarget(item('m1', { userId: 'u5' }), {
+        deletion_type: 'batch',
+        target_user_id: 'u5',
+      })
+    ).toBe(true)
+    expect(
+      isDeletionTarget(item('m1', { userId: 'u5' }), {
+        deletion_type: 'batch',
+        target_user_id: 'u6',
+      })
+    ).toBe(false)
   })
 
   it('clear matches every item', () => {
@@ -166,8 +195,16 @@ describe('applyModerationMark', () => {
   })
 
   it('marks all messages from a banned user', () => {
-    const items = [item('m1', { userId: 'ua' }), item('m2', { userId: 'ub' }), item('m3', { userId: 'ua' })]
-    const next = applyModerationMark(items, { deletion_type: 'batch', target_user_id: 'ua', ban_duration: 0 })
+    const items = [
+      item('m1', { userId: 'ua' }),
+      item('m2', { userId: 'ub' }),
+      item('m3', { userId: 'ua' }),
+    ]
+    const next = applyModerationMark(items, {
+      deletion_type: 'batch',
+      target_user_id: 'ua',
+      ban_duration: 0,
+    })
     expect(next[0]._moderated?.kind).toBe('ban')
     expect(next[1]._moderated).toBeUndefined()
     expect(next[2]._moderated?.kind).toBe('ban')
@@ -212,8 +249,72 @@ describe('shouldAutoScroll', () => {
   })
 
   it('respects a custom threshold', () => {
-    expect(shouldAutoScroll({ scrollHeight: 1000, scrollTop: 800, clientHeight: 100 }, 100)).toBe(true)
-    expect(shouldAutoScroll({ scrollHeight: 1000, scrollTop: 800, clientHeight: 100 }, 50)).toBe(false)
+    expect(shouldAutoScroll({ scrollHeight: 1000, scrollTop: 800, clientHeight: 100 }, 100)).toBe(
+      true
+    )
+    expect(shouldAutoScroll({ scrollHeight: 1000, scrollTop: 800, clientHeight: 100 }, 50)).toBe(
+      false
+    )
+  })
+})
+
+describe('isPinnedToLiveEdge', () => {
+  it('newest-last: pinned at the bottom, not pinned when scrolled up', () => {
+    expect(
+      isPinnedToLiveEdge({ scrollHeight: 1000, scrollTop: 980, clientHeight: 20 }, false)
+    ).toBe(true)
+    expect(
+      isPinnedToLiveEdge({ scrollHeight: 1000, scrollTop: 500, clientHeight: 200 }, false)
+    ).toBe(false)
+  })
+
+  it('newest-first: pinned at the top, not pinned when scrolled down', () => {
+    expect(isPinnedToLiveEdge({ scrollHeight: 1000, scrollTop: 0, clientHeight: 200 }, true)).toBe(
+      true
+    )
+    expect(isPinnedToLiveEdge({ scrollHeight: 1000, scrollTop: 39, clientHeight: 200 }, true)).toBe(
+      true
+    )
+    expect(
+      isPinnedToLiveEdge({ scrollHeight: 1000, scrollTop: 500, clientHeight: 200 }, true)
+    ).toBe(false)
+    // The bottom edge is the FAR edge in this mode, so it is not pinned there.
+    expect(
+      isPinnedToLiveEdge({ scrollHeight: 1000, scrollTop: 800, clientHeight: 200 }, true)
+    ).toBe(false)
+  })
+
+  it('respects a custom threshold in both modes', () => {
+    expect(
+      isPinnedToLiveEdge({ scrollHeight: 1000, scrollTop: 800, clientHeight: 100 }, false, 100)
+    ).toBe(true)
+    expect(
+      isPinnedToLiveEdge({ scrollHeight: 1000, scrollTop: 800, clientHeight: 100 }, false, 50)
+    ).toBe(false)
+    expect(
+      isPinnedToLiveEdge({ scrollHeight: 1000, scrollTop: 80, clientHeight: 100 }, true, 100)
+    ).toBe(true)
+    expect(
+      isPinnedToLiveEdge({ scrollHeight: 1000, scrollTop: 80, clientHeight: 100 }, true, 50)
+    ).toBe(false)
+  })
+})
+
+describe('chatRowKeys', () => {
+  it('distinguishes repeats of the same id by occurrence', () => {
+    expect(chatRowKeys([item('a'), item('b'), item('a')])).toEqual(['a#0', 'b#0', 'a#1'])
+  })
+
+  it('keeps a row\u2019s key when another item is appended or prepended', () => {
+    const middle = [item('a'), item('b')]
+    const before = chatRowKeys(middle)
+    expect(chatRowKeys([...middle, item('c')]).slice(0, 2)).toEqual(before)
+    expect(chatRowKeys([item('z'), ...middle]).slice(1)).toEqual(before)
+  })
+
+  it('returns one key per item', () => {
+    expect(chatRowKeys([])).toEqual([])
+    expect(chatRowKeys([item('a'), item('b'), item('c')])).toHaveLength(3)
   })
 })
 

@@ -38,11 +38,29 @@ function setup(overrides: Partial<MonitorViewPrefs> = {}, onTest?: () => void) {
   return { onChange, onTestActivitySound }
 }
 
+describe('ViewSettingsBar chat order', () => {
+  it('renders the newest-first switch reflecting the pref', () => {
+    setup({ newestFirst: false })
+    expect(screen.getByRole('switch', { name: 'Newest messages first' })).not.toBeChecked()
+    cleanup()
+    setup({ newestFirst: true })
+    expect(screen.getByRole('switch', { name: 'Newest messages first' })).toBeChecked()
+  })
+
+  it('clicking the switch calls onChange with newestFirst: true', () => {
+    const { onChange } = setup({ newestFirst: false })
+    fireEvent.click(screen.getByRole('switch', { name: 'Newest messages first' }))
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ newestFirst: true }))
+  })
+})
+
 describe('ViewSettingsBar activity sound', () => {
   it('renders the activity-sound toggle and the separation note', () => {
     setup()
     expect(screen.getByRole('switch', { name: 'Sound on new activity' })).toBeInTheDocument()
-    expect(screen.getByText(/separate from your overlay's on-stream notification sounds/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/separate from your overlay's on-stream notification sounds/i)
+    ).toBeInTheDocument()
   })
 
   it('enabling the toggle calls onChange with activitySoundEnabled: true', () => {
