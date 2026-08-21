@@ -76,5 +76,9 @@ export function useEngagementLive(
       unsubscribe()
       client.disconnect()
     }
-  }, [overlayId, viewerParticipant])
+    // maxReconnectAttempts is a number, so React compares it by value: every call
+    // site passes a literal (or nothing), which keeps it stable across renders and
+    // leaves this effect mount-only. Listing it is what makes a future change to a
+    // caller's bound actually rebuild the socket instead of being ignored.
+  }, [overlayId, viewerParticipant, maxReconnectAttempts])
 }

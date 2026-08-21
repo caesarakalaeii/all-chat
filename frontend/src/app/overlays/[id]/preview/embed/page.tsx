@@ -425,7 +425,11 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
     return () => {
       window.removeEventListener('message', handleMessage)
     }
-  }, [])
+    // handleTTSFallback is a useCallback with no dependencies, so it is stable for
+    // the lifetime of this component and listing it keeps the effect mount-only.
+    // That matters: re-running it would re-post EMBED_READY and make the editor
+    // replay its whole settings handshake.
+  }, [handleTTSFallback])
 
   // Load overlay config (H3 cookie auth: same-origin cookie + CookieToBearer).
   useEffect(() => {

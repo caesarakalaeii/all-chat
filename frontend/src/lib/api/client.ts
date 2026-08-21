@@ -156,6 +156,11 @@ class ApiClient {
         // caller drive navigation instead — init() catches and sets user:null, and
         // ProtectedRoute pushes '/' via the SPA router when user is null (audit #1).
         if (typeof window !== 'undefined' && !endpoint.startsWith('/api/v1/auth/me')) {
+          // A full reload is required, not a router.push(): the session is dead, so every
+          // store, cached response and in-flight request belonging to it must be dropped,
+          // and a soft navigation keeps all of them alive. This module is not a component
+          // either, so the rule's suggested hooks are not available here.
+          // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- full reload required to clear all client state after session invalidation
           window.location.href = '/'
         }
         throw new ApiError(401, errorValue || 'Unauthorized', {
