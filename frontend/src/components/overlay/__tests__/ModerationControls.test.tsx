@@ -21,8 +21,10 @@ import '@testing-library/jest-dom/vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { ChatPanel } from '@/components/overlay/ChatPanel'
 import { ModerationControls } from '@/components/overlay/ModerationControls'
 import { buildDeleteRequest, moderationApi } from '@/lib/api/moderation'
+import { TIMEOUT_PRESETS } from '@/lib/types/moderation'
 import type { SourceCapability } from '@/lib/types/moderation'
 import type { ViewItem } from '@/lib/utils/overlayViewModel'
 
@@ -40,6 +42,18 @@ vi.mock('@/lib/api/moderation', async (importOriginal) => {
     },
   }
 })
+
+// jsdom may lack window.matchMedia; useReducedMotion (mounted via
+// MessageAttachments in every ChatPanel row) calls it. Static non-matching stub.
+if (typeof window.matchMedia !== 'function') {
+  window.matchMedia = (query: string) =>
+    ({
+      matches: false,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }) as unknown as MediaQueryList
+}
 
 afterEach(() => {
   cleanup()
@@ -361,5 +375,94 @@ describe('ModerationControls', () => {
     const deleteBtn = screen.getByLabelText('Delete message')
     expect(deleteBtn).toBeDisabled()
     expect(deleteBtn).toHaveAttribute('title', 'Grant moderation permissions to enable mod actions')
+  })
+})
+
+describe('ModerationControls per-user menu', () => {
+  it('opens on trigger click and shows the timeout presets, ban and unban', () => {
+    render(
+      <ModerationControls
+        item={makeItem('twitch')}
+        capability={twitchCap}
+        onDelete={noop}
+        onTimeout={noop}
+        onBan={noop}
+        onUnban={noop}
+      />
+    )
+
+    expect(screen.queryByRole('button', { name: 'Ban user' })).toBeNull()
+    fireEvent.click(screen.getByLabelText('Moderate user'))
+
+    expect(screen.getByText('Timeout')).toBeInTheDocument()
+    for (const preset of TIMEOUT_PRESETS) {
+      expect(screen.getByRole('button', { name: preset.label })).toBeInTheDocument()
+    }
+    expect(screen.getByRole('button', { name: 'Ban user' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Unban user' })).toBeInTheDocument()
+  })
+
+  it('calls onBan once with the item and closes the popup', () => {
+    const item = makeItem('twitch')
+    const onBan = vi.fn()
+    render(
+      <ModerationControls
+        item={item}
+        capability={twitchCap}
+        onDelete={noop}
+        onTimeout={noop}
+        onBan={onBan}
+        onUnban={noop}
+      />
+    )
+
+    fireEvent.click(screen.getByLabelText('Moderate user'))
+    fireEvent.click(screen.getByRole('button', { name: 'Ban user' }))
+
+    expect(onBan).toHaveBeenCalledTimes(1)
+    expect(onBan).toHaveBeenCalledWith(item)
+    expect(screen.queryByRole('button', { name: 'Ban user' })).toBeNull()
+  })
+
+  it('closes on Escape', () => {
+    render(
+      <ModerationControls
+        item={makeItem('twitch')}
+        capability={twitchCap}
+        onDelete={noop}
+        onTimeout={noop}
+        onBan={noop}
+        onUnban={noop}
+      />
+    )
+
+    fireEvent.click(screen.getByLabelText('Moderate user'))
+    const banBtn = screen.getByRole('button', { name: 'Ban user' })
+    fireEvent.keyDown(banBtn, { key: 'Escape' })
+
+    expect(screen.queryByRole('button', { name: 'Ban user' })).toBeNull()
+  })
+
+  // Regression: the menu used to be an absolutely-positioned child of the chat row, so
+  // ChatPanel's `overflow-y-auto` scroll container clipped it. On the newest row (nothing
+  // below it) the ban button was unreachable — the streamer could not ban that viewer at
+  // all. The popup must therefore live outside the scroll container, via the portal.
+  it("renders the popup outside ChatPanel's scroll container so it cannot be clipped", () => {
+    const items = [makeItem('twitch'), { ...makeItem('twitch'), id: 'msg-uuid-2' }]
+    const { container } = render(
+      <ChatPanel
+        items={items}
+        capabilities={new Map([['chan-1', twitchCap]])}
+        moderation={{ onDelete: noop, onTimeout: noop, onBan: noop, onUnban: noop }}
+      />
+    )
+
+    const triggers = screen.getAllByLabelText('Moderate user')
+    fireEvent.click(triggers[triggers.length - 1])
+
+    const banBtn = screen.getByRole('button', { name: 'Ban user' })
+    const scrollEl = container.querySelector('.overflow-y-auto')!
+    expect(document.body.contains(banBtn)).toBe(true)
+    expect(scrollEl.contains(banBtn)).toBe(false)
   })
 })
