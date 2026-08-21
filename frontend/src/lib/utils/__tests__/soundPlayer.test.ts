@@ -145,9 +145,7 @@ describe('createSoundPlayer', () => {
     const player = createSoundPlayer(settings)
     player.play()
     // At least one audio instance should have src set to customUrl
-    const usedInstance = mockAudioInstances.find(
-      i => i.src === 'https://example.com/mysound.mp3'
-    )
+    const usedInstance = mockAudioInstances.find((i) => i.src === 'https://example.com/mysound.mp3')
     expect(usedInstance).toBeDefined()
   })
 
@@ -161,7 +159,7 @@ describe('createSoundPlayer', () => {
     }
     const player = createSoundPlayer(settings)
     player.play()
-    const usedInstance = mockAudioInstances.find(i => i.src === '/sounds/ping.mp3')
+    const usedInstance = mockAudioInstances.find((i) => i.src === '/sounds/ping.mp3')
     expect(usedInstance).toBeDefined()
   })
 
@@ -180,7 +178,7 @@ describe('createSoundPlayer', () => {
 
     player.updateSettings({ ...settings, volume: 0.9 })
     // All pool elements should have volume updated
-    mockAudioInstances.slice(0, instancesBefore).forEach(i => {
+    mockAudioInstances.slice(0, instancesBefore).forEach((i) => {
       expect(i.volume).toBe(0.9)
     })
   })
@@ -196,7 +194,7 @@ describe('createSoundPlayer', () => {
     const player = createSoundPlayer(settings)
     const poolInstances = [...mockAudioInstances]
     player.destroy()
-    poolInstances.forEach(i => {
+    poolInstances.forEach((i) => {
       expect(mockPause).toHaveBeenCalled()
       expect(i.src).toBe('')
     })
@@ -248,9 +246,7 @@ describe('createSoundPlayer', () => {
     player.play()
 
     // Find the instance that was used (has customUrl as src)
-    const usedInstance = mockAudioInstances.find(
-      i => i.src === 'https://example.com/broken.mp3'
-    )
+    const usedInstance = mockAudioInstances.find((i) => i.src === 'https://example.com/broken.mp3')
     expect(usedInstance).toBeDefined()
 
     // Trigger onerror

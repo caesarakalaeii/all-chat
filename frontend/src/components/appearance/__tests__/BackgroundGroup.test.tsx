@@ -23,7 +23,9 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import type { VisualSettings } from '@/lib/types/visual-settings'
 import { BackgroundGroup } from '../BackgroundGroup'
 
-afterEach(() => { cleanup() })
+afterEach(() => {
+  cleanup()
+})
 
 describe('BackgroundGroup', () => {
   const defaultSettings: Partial<VisualSettings> = {}
@@ -82,9 +84,9 @@ describe('BackgroundGroup', () => {
         onChange={onChange}
       />
     )
-    expect(
-      (screen.getByLabelText('Bubble background opacity') as HTMLInputElement).value
-    ).toBe('50')
+    expect((screen.getByLabelText('Bubble background opacity') as HTMLInputElement).value).toBe(
+      '50'
+    )
   })
 
   it('offers an opacity slider for the border color too', () => {

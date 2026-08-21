@@ -18,7 +18,6 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 import { useState } from 'react'
 
 export interface UserAvatarProps {
@@ -49,13 +48,13 @@ export function UserAvatar({ avatarUrl, frameUrl, flairUrl, size, displayName }:
         <img
           src={avatarUrl}
           alt={displayName ?? 'Avatar'}
-          className="w-full h-full rounded-full object-cover"
+          className="h-full w-full rounded-full object-cover"
           referrerPolicy="no-referrer"
           onError={() => setFailedUrl(avatarUrl ?? null)}
         />
       ) : (
         <div
-          className="w-full h-full rounded-full bg-surface-2 flex items-center justify-center text-text-sub font-medium"
+          className="flex h-full w-full items-center justify-center rounded-full bg-surface-2 font-medium text-text-sub"
           style={{ fontSize: Math.round(size * 0.4) }}
           aria-label={displayName ?? 'Avatar'}
         >
@@ -70,7 +69,7 @@ export function UserAvatar({ avatarUrl, frameUrl, flairUrl, size, displayName }:
           src={frameUrl}
           alt=""
           aria-hidden="true"
-          className="absolute pointer-events-none"
+          className="pointer-events-none absolute"
           style={{
             width: frameSize,
             height: frameSize,
@@ -89,7 +88,7 @@ export function UserAvatar({ avatarUrl, frameUrl, flairUrl, size, displayName }:
           src={flairUrl}
           alt=""
           aria-hidden="true"
-          className="absolute bottom-0 right-0 pointer-events-none"
+          className="pointer-events-none absolute right-0 bottom-0"
           style={{ width: flairSize, height: flairSize, zIndex: 10 }}
         />
       )}

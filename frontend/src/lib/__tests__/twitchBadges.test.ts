@@ -46,7 +46,9 @@ const MOCK_GLOBAL_BADGE_RESPONSE = {
   },
 }
 
-function makeTwitchMessage(badges: { name: string; version: string; icon_url: string }[]): ChatMessage {
+function makeTwitchMessage(
+  badges: { name: string; version: string; icon_url: string }[]
+): ChatMessage {
   return {
     id: 'test-id',
     overlay_id: 'overlay-1',
@@ -68,10 +70,13 @@ function makeTwitchMessage(badges: { name: string; version: string; icon_url: st
 describe('resolveTwitchBadgeIcons', () => {
   beforeEach(() => {
     vi.resetModules()
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(MOCK_GLOBAL_BADGE_RESPONSE),
-    }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(MOCK_GLOBAL_BADGE_RESPONSE),
+      })
+    )
   })
 
   afterEach(() => {
@@ -95,9 +100,7 @@ describe('resolveTwitchBadgeIcons', () => {
   it('does not overwrite AllChat allchat badge icon_url with Twitch API data', async () => {
     const { resolveTwitchBadgeIcons } = await import('../twitchBadges')
 
-    const message = makeTwitchMessage([
-      { name: 'allchat', version: '1', icon_url: '' },
-    ])
+    const message = makeTwitchMessage([{ name: 'allchat', version: '1', icon_url: '' }])
 
     const result = await resolveTwitchBadgeIcons(message)
 
@@ -109,9 +112,7 @@ describe('resolveTwitchBadgeIcons', () => {
   it('does not overwrite AllChat premium badge icon_url with Twitch API data', async () => {
     const { resolveTwitchBadgeIcons } = await import('../twitchBadges')
 
-    const message = makeTwitchMessage([
-      { name: 'allchat-premium', version: '1', icon_url: '' },
-    ])
+    const message = makeTwitchMessage([{ name: 'allchat-premium', version: '1', icon_url: '' }])
 
     const result = await resolveTwitchBadgeIcons(message)
 
@@ -124,9 +125,7 @@ describe('resolveTwitchBadgeIcons', () => {
   it('resolves Twitch Prime Gaming badge (premium) normally', async () => {
     const { resolveTwitchBadgeIcons } = await import('../twitchBadges')
 
-    const message = makeTwitchMessage([
-      { name: 'premium', version: '1', icon_url: '' },
-    ])
+    const message = makeTwitchMessage([{ name: 'premium', version: '1', icon_url: '' }])
 
     const result = await resolveTwitchBadgeIcons(message)
 
@@ -139,9 +138,7 @@ describe('resolveTwitchBadgeIcons', () => {
   it('still resolves regular Twitch badges (e.g. moderator) normally', async () => {
     const { resolveTwitchBadgeIcons } = await import('../twitchBadges')
 
-    const message = makeTwitchMessage([
-      { name: 'moderator', version: '1', icon_url: '' },
-    ])
+    const message = makeTwitchMessage([{ name: 'moderator', version: '1', icon_url: '' }])
 
     const result = await resolveTwitchBadgeIcons(message)
 

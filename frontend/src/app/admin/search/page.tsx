@@ -194,7 +194,11 @@ export default function AdminSearchPage() {
                   href={`/admin/users?user=${u.id}`}
                   className="flex items-center gap-3 rounded-lg border border-border p-3 transition-colors hover:bg-surface-2"
                 >
-                  <UserAvatar avatarUrl={u.profile_image_url} displayName={u.display_name} size={32} />
+                  <UserAvatar
+                    avatarUrl={u.profile_image_url}
+                    displayName={u.display_name}
+                    size={32}
+                  />
                   <div className="min-w-0">
                     <div className="truncate text-sm font-medium text-text">{u.display_name}</div>
                     <div className="truncate text-xs text-text-sub">@{u.username}</div>
@@ -230,7 +234,9 @@ export default function AdminSearchPage() {
                       {o.owner_username ? `@${o.owner_username}` : o.user_id.slice(0, 8)}
                     </div>
                   </div>
-                  <span className="shrink-0 text-xs text-text-dim">{o.sources_count ?? 0} sources</span>
+                  <span className="shrink-0 text-xs text-text-dim">
+                    {o.sources_count ?? 0} sources
+                  </span>
                 </Link>
               ))}
             </ResultGroup>

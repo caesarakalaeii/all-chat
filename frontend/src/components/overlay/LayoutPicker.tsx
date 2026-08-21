@@ -62,9 +62,7 @@ export function LayoutPicker({ layout, onChange }: LayoutPickerProps) {
             onClick={() => onChange(value)}
             className={clsx(
               'flex items-center rounded-md px-1.5 py-1 transition-colors focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none',
-              active
-                ? 'bg-surface-2 text-text'
-                : 'text-text-sub hover:text-text',
+              active ? 'bg-surface-2 text-text' : 'text-text-sub hover:text-text'
             )}
           >
             <Icon className="h-3.5 w-3.5" />

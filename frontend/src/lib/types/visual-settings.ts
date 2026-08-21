@@ -37,9 +37,7 @@ export const MESSAGE_ANIMATIONS = [
 export type MessageAnimation = (typeof MESSAGE_ANIMATIONS)[number]
 
 export function isMessageAnimation(value: unknown): value is MessageAnimation {
-  return (
-    typeof value === 'string' && (MESSAGE_ANIMATIONS as readonly string[]).includes(value)
-  )
+  return typeof value === 'string' && (MESSAGE_ANIMATIONS as readonly string[]).includes(value)
 }
 
 /**
@@ -71,45 +69,45 @@ export const MESSAGE_ANIMATION_CLASS: Record<MessageAnimation, string> = {
  */
 export interface VisualSettings {
   // Typography
-  fontFamily?: string         // --chat-font-family
-  fontWeight?: string         // --chat-font-weight
-  lineHeight?: string         // --chat-line-height
-  letterSpacing?: string      // --chat-letter-spacing
-  fontSize?: string           // --chat-font-size
+  fontFamily?: string // --chat-font-family
+  fontWeight?: string // --chat-font-weight
+  lineHeight?: string // --chat-line-height
+  letterSpacing?: string // --chat-letter-spacing
+  fontSize?: string // --chat-font-size
   // --chat-text-shadow. Inherits from the overlay container, and is additionally
   // forced on the message/username/timestamp nodes — bundled themes declare
   // `text-shadow: … !important` there. See OVERRIDE_RULES in visual-settings-to-css.
   textShadow?: string
 
   // Colors
-  messageColor?: string       // --chat-message-color
-  usernameColor?: string      // --chat-username-color
-  timestampColor?: string     // --chat-timestamp-color
+  messageColor?: string // --chat-message-color
+  usernameColor?: string // --chat-username-color
+  timestampColor?: string // --chat-timestamp-color
 
   // Username typography
   usernameFontFamily?: string // --chat-username-font-family
   timestampFontFamily?: string // --chat-timestamp-font-family
   usernameFontWeight?: string // --chat-username-font-weight
-  usernameFontSize?: string   // --chat-username-font-size
-  timestampFontSize?: string  // --chat-timestamp-font-size
+  usernameFontSize?: string // --chat-username-font-size
+  timestampFontSize?: string // --chat-timestamp-font-size
 
   // Background & Bubbles
-  overlayBgColor?: string       // --chat-overlay-bg-color
+  overlayBgColor?: string // --chat-overlay-bg-color
   /** @deprecated Opacity now rides in overlayBgColor's alpha channel (ADR-0050); still read for settings saved before that. */
-  overlayBgOpacity?: string     // --chat-overlay-bg-opacity
-  overlayPadding?: string       // --chat-overlay-padding
-  bubbleBgColor?: string        // --chat-bubble-bg-color
+  overlayBgOpacity?: string // --chat-overlay-bg-opacity
+  overlayPadding?: string // --chat-overlay-padding
+  bubbleBgColor?: string // --chat-bubble-bg-color
   /** @deprecated Opacity now rides in bubbleBgColor's alpha channel (ADR-0050); still read for settings saved before that. */
-  bubbleBgOpacity?: string      // --chat-bubble-bg-opacity
-  bubbleBorderRadius?: string   // --chat-bubble-border-radius
-  bubbleBorderWidth?: string    // --chat-bubble-border-width
-  bubbleBorderColor?: string    // --chat-bubble-border-color
-  bubblePadding?: string        // --chat-bubble-padding
+  bubbleBgOpacity?: string // --chat-bubble-bg-opacity
+  bubbleBorderRadius?: string // --chat-bubble-border-radius
+  bubbleBorderWidth?: string // --chat-bubble-border-width
+  bubbleBorderColor?: string // --chat-bubble-border-color
+  bubblePadding?: string // --chat-bubble-padding
   // --chat-bubble-shadow; forced on chat rows for the same reason as textShadow.
   bubbleShadow?: string
-  messageGap?: string           // --chat-message-gap
-  backdropBlur?: string         // --chat-backdrop-blur
-  maxWidth?: string             // --chat-max-width
+  messageGap?: string // --chat-message-gap
+  backdropBlur?: string // --chat-backdrop-blur
+  maxWidth?: string // --chat-max-width
 
   /**
    * Differently-coloured bubbles (premium). Two independent axes:
@@ -133,13 +131,13 @@ export interface VisualSettings {
   discordBubbleBg?: string
 
   // Visibility toggles ('inline' | 'none' for inline elements; 'block' | 'none' for block)
-  showAvatars?: 'inline' | 'none'        // --chat-show-avatars
-  showBadges?: 'inline' | 'none'         // --chat-show-badges
-  showTimestamps?: 'block' | 'none'      // --chat-show-timestamps
-  showPlatformBadge?: 'inline' | 'none'  // --chat-show-platform-badge
-  showPlatformIndicators?: 'block' | 'none'  // --chat-show-platform-indicators
-  showEmotes?: 'inline' | 'none'         // --chat-show-emotes
-  showUsername?: 'inline' | 'none'       // --chat-show-username
+  showAvatars?: 'inline' | 'none' // --chat-show-avatars
+  showBadges?: 'inline' | 'none' // --chat-show-badges
+  showTimestamps?: 'block' | 'none' // --chat-show-timestamps
+  showPlatformBadge?: 'inline' | 'none' // --chat-show-platform-badge
+  showPlatformIndicators?: 'block' | 'none' // --chat-show-platform-indicators
+  showEmotes?: 'inline' | 'none' // --chat-show-emotes
+  showUsername?: 'inline' | 'none' // --chat-show-username
 
   // Platform badge options (not CSS-driven, stored for settings persistence)
   platformBadgePosition?: 'before' | 'after'
@@ -157,30 +155,30 @@ export interface VisualSettings {
   pronounColor?: string
 
   // Sizing
-  avatarSize?: string   // --chat-avatar-size
-  badgeSize?: string    // --chat-badge-size
-  emoteScale?: string   // --chat-emote-scale
+  avatarSize?: string // --chat-avatar-size
+  badgeSize?: string // --chat-badge-size
+  emoteScale?: string // --chat-emote-scale
 
   // Platform accent colors. No stylesheet consumes these variables and no theme
   // reads them, so they are delivered as forced `color`/`fill` rules on that
   // platform's chat badge (OVERRIDE_RULES in visual-settings-to-css).
-  twitchAccent?: string    // --platform-twitch-accent
-  youtubeAccent?: string   // --platform-youtube-accent
-  kickAccent?: string      // --platform-kick-accent
-  tiktokAccent?: string    // --platform-tiktok-accent
-  discordAccent?: string   // --platform-discord-accent
+  twitchAccent?: string // --platform-twitch-accent
+  youtubeAccent?: string // --platform-youtube-accent
+  kickAccent?: string // --platform-kick-accent
+  tiktokAccent?: string // --platform-tiktok-accent
+  discordAccent?: string // --platform-discord-accent
 
   // Event visibility
-  showSuperChat?: 'block' | 'none'       // --chat-show-super-chat
-  showSubscriptions?: 'block' | 'none'   // --chat-show-subscriptions
-  showRaids?: 'block' | 'none'           // --chat-show-raids
-  showBits?: 'block' | 'none'            // --chat-show-bits
-  showMembershipGift?: 'block' | 'none'  // --chat-show-membership-gift
+  showSuperChat?: 'block' | 'none' // --chat-show-super-chat
+  showSubscriptions?: 'block' | 'none' // --chat-show-subscriptions
+  showRaids?: 'block' | 'none' // --chat-show-raids
+  showBits?: 'block' | 'none' // --chat-show-bits
+  showMembershipGift?: 'block' | 'none' // --chat-show-membership-gift
 
   // Event size modifiers
-  superChatSizeModifier?: string       // --chat-super-chat-size-modifier
-  subscriptionSizeModifier?: string    // --chat-subscription-size-modifier
-  raidSizeModifier?: string            // --chat-raid-size-modifier
-  bitsSizeModifier?: string            // --chat-bits-size-modifier
-  membershipGiftSizeModifier?: string  // --chat-membership-gift-size-modifier
+  superChatSizeModifier?: string // --chat-super-chat-size-modifier
+  subscriptionSizeModifier?: string // --chat-subscription-size-modifier
+  raidSizeModifier?: string // --chat-raid-size-modifier
+  bitsSizeModifier?: string // --chat-bits-size-modifier
+  membershipGiftSizeModifier?: string // --chat-membership-gift-size-modifier
 }

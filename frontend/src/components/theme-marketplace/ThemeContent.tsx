@@ -18,7 +18,6 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 import React from 'react'
 import ThemeCard from './ThemeCard'
 import ThemeFilters from './ThemeFilters'
@@ -99,12 +98,20 @@ export function ThemeContent({ onApply, isAdmin = false }: ThemeContentProps): R
             </p>
             {isAdmin && (
               <button
-                onClick={() => { clearCache(); refreshThemes() }}
-                className="flex items-center gap-1 rounded px-2 py-1 text-xs text-text-dim transition-colors hover:bg-subtle hover:text-text"
+                onClick={() => {
+                  clearCache()
+                  refreshThemes()
+                }}
+                className="hover:bg-subtle flex items-center gap-1 rounded px-2 py-1 text-xs text-text-dim transition-colors hover:text-text"
                 title="Force refresh themes from GitHub (Admin)"
               >
                 <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
                 </svg>
                 Sync
               </button>

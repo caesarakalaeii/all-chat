@@ -229,7 +229,9 @@ describe('D-25..D-30 formatContent', () => {
   // Test 4 — D-25 username prefix
   it('adds "display_name says:" prefix when tts_read_username=true', async () => {
     const p = createTTSPlayer({ ...defaultSettings, read_username: true })
-    p.speak(makeMessage({ user: { id: 'u1', username: 'alice', display_name: 'Alice', badges: [] } }))
+    p.speak(
+      makeMessage({ user: { id: 'u1', username: 'alice', display_name: 'Alice', badges: [] } })
+    )
     await flushMicrotasks()
     expect(lastUtterance?.text).toBe('Alice says: hello world')
   })
@@ -259,11 +261,14 @@ describe('D-25..D-30 formatContent', () => {
               code: 'Kappa',
               provider: 'twitch',
               url: 'https://example/kappa.png',
-              positions: [[6, 10], [18, 22]],
+              positions: [
+                [6, 10],
+                [18, 22],
+              ],
             },
           ],
         },
-      }),
+      })
     )
     await flushMicrotasks()
     // "hello " + (Kappa stripped) + "world " + (Kappa stripped)
@@ -284,7 +289,7 @@ describe('D-25..D-30 formatContent', () => {
             { code: 'LUL', provider: 'twitch', url: 'x', positions: [[6, 8]] },
           ],
         },
-      }),
+      })
     )
     await flushMicrotasks()
     expect(mockSpeak).not.toHaveBeenCalled()
@@ -396,7 +401,7 @@ describe('D-31 priority events', () => {
           is_update: false,
           metadata: { viewers: 42 },
         },
-      }),
+      })
     )
     await flushMicrotasks()
     expect(lastUtterance?.text).toBe('Alice raided with 42 viewers')
@@ -415,7 +420,7 @@ describe('D-31 priority events', () => {
           is_update: false,
           metadata: { bits: 100 },
         },
-      }),
+      })
     )
     await flushMicrotasks()
     expect(lastUtterance?.text).toBe('Alice cheered 100 bits: hype')
@@ -427,7 +432,7 @@ describe('D-31 priority events', () => {
     p.speak(
       makeEventMessage('super_chat', {
         message: { text: 'thanks!', emotes: [] },
-      }),
+      })
     )
     await flushMicrotasks()
     expect(lastUtterance?.text).toBe('Super chat from Alice: thanks!')
@@ -436,11 +441,19 @@ describe('D-31 priority events', () => {
   // PRIORITY_EVENTS export
   it('PRIORITY_EVENTS set contains the 11 D-31 event types', () => {
     const expected = [
-      'subscription', 'resubscription', 'gift_subscription', 'mystery_gift',
-      'bits', 'raid', 'super_chat', 'super_sticker',
-      'kick_subscription', 'kick_gift_subscription', 'kick_donation',
+      'subscription',
+      'resubscription',
+      'gift_subscription',
+      'mystery_gift',
+      'bits',
+      'raid',
+      'super_chat',
+      'super_sticker',
+      'kick_subscription',
+      'kick_gift_subscription',
+      'kick_donation',
     ]
-    expected.forEach(t => expect(PRIORITY_EVENTS.has(t)).toBe(true))
+    expected.forEach((t) => expect(PRIORITY_EVENTS.has(t)).toBe(true))
     expect(PRIORITY_EVENTS.size).toBe(11)
   })
 })
@@ -489,11 +502,17 @@ describe('D-36 token bucket', () => {
   // Test 19
   it('3rd non-priority in same minute is dropped (bucket size 2)', async () => {
     const p = createTTSPlayer({ ...defaultSettings, messages_per_minute: 2 })
-    p.speak(makeMessage({ id: 'm1', user: { id: '1', username: 'a', display_name: 'A', badges: [] } }))
+    p.speak(
+      makeMessage({ id: 'm1', user: { id: '1', username: 'a', display_name: 'A', badges: [] } })
+    )
     await flushMicrotasks()
-    p.speak(makeMessage({ id: 'm2', user: { id: '2', username: 'b', display_name: 'B', badges: [] } }))
+    p.speak(
+      makeMessage({ id: 'm2', user: { id: '2', username: 'b', display_name: 'B', badges: [] } })
+    )
     await flushMicrotasks()
-    p.speak(makeMessage({ id: 'm3', user: { id: '3', username: 'c', display_name: 'C', badges: [] } }))
+    p.speak(
+      makeMessage({ id: 'm3', user: { id: '3', username: 'c', display_name: 'C', badges: [] } })
+    )
     await flushMicrotasks()
     expect(mockSpeak).toHaveBeenCalledTimes(2)
   })
@@ -502,18 +521,24 @@ describe('D-36 token bucket', () => {
   it('bucket refills after 60s elapsed', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     const p = createTTSPlayer({ ...defaultSettings, messages_per_minute: 1 })
-    p.speak(makeMessage({ id: 'm1', user: { id: '1', username: 'a', display_name: 'A', badges: [] } }))
+    p.speak(
+      makeMessage({ id: 'm1', user: { id: '1', username: 'a', display_name: 'A', badges: [] } })
+    )
     await flushMicrotasks()
     expect(mockSpeak).toHaveBeenCalledTimes(1)
 
     // Second immediately — bucket empty
-    p.speak(makeMessage({ id: 'm2', user: { id: '2', username: 'b', display_name: 'B', badges: [] } }))
+    p.speak(
+      makeMessage({ id: 'm2', user: { id: '2', username: 'b', display_name: 'B', badges: [] } })
+    )
     await flushMicrotasks()
     expect(mockSpeak).toHaveBeenCalledTimes(1)
 
     // Advance 61s — bucket refills
     vi.advanceTimersByTime(61_000)
-    p.speak(makeMessage({ id: 'm3', user: { id: '3', username: 'c', display_name: 'C', badges: [] } }))
+    p.speak(
+      makeMessage({ id: 'm3', user: { id: '3', username: 'c', display_name: 'C', badges: [] } })
+    )
     await flushMicrotasks()
     expect(mockSpeak).toHaveBeenCalledTimes(2)
   })
@@ -534,15 +559,21 @@ describe('D-33 queue overflow', () => {
   it('non-priority message is dropped when queue is full', async () => {
     autoResolveOnEnd = false // make the first speak() hang
     const p = createTTSPlayer({ ...defaultSettings, max_queue: 1, messages_per_minute: 100 })
-    p.speak(makeMessage({ id: 'm1', user: { id: '1', username: 'a', display_name: 'A', badges: [] } }))
+    p.speak(
+      makeMessage({ id: 'm1', user: { id: '1', username: 'a', display_name: 'A', badges: [] } })
+    )
     await flushMicrotasks()
     // First utterance is speaking (hung). Subsequent are queued.
     // Queue slot 1 is free (the speaking message is out of queue already).
     // A second message enters queue — queue = [m2], max_queue=1
-    p.speak(makeMessage({ id: 'm2', user: { id: '2', username: 'b', display_name: 'B', badges: [] } }))
+    p.speak(
+      makeMessage({ id: 'm2', user: { id: '2', username: 'b', display_name: 'B', badges: [] } })
+    )
     await flushMicrotasks()
     // Third non-priority enters when queue=[m2] and max_queue=1 → drop
-    p.speak(makeMessage({ id: 'm3', user: { id: '3', username: 'c', display_name: 'C', badges: [] } }))
+    p.speak(
+      makeMessage({ id: 'm3', user: { id: '3', username: 'c', display_name: 'C', badges: [] } })
+    )
     await flushMicrotasks()
 
     // Only one speak called — the first (hung).
@@ -570,29 +601,37 @@ describe('D-33 queue overflow', () => {
     })
     // First — becomes the speaking one (hung).
     // Each message uses a unique text so we can track which ones spoke.
-    p.speak(makeMessage({
-      id: 'm1',
-      message: { text: 'first', emotes: [] },
-      user: { id: '1', username: 'a', display_name: 'A', badges: [] },
-    }))
+    p.speak(
+      makeMessage({
+        id: 'm1',
+        message: { text: 'first', emotes: [] },
+        user: { id: '1', username: 'a', display_name: 'A', badges: [] },
+      })
+    )
     await flushMicrotasks()
     // Second + third — queued, fills max_queue=2
-    p.speak(makeMessage({
-      id: 'm2',
-      message: { text: 'second', emotes: [] },
-      user: { id: '2', username: 'b', display_name: 'B', badges: [] },
-    }))
-    p.speak(makeMessage({
-      id: 'm3',
-      message: { text: 'third', emotes: [] },
-      user: { id: '3', username: 'c', display_name: 'C', badges: [] },
-    }))
+    p.speak(
+      makeMessage({
+        id: 'm2',
+        message: { text: 'second', emotes: [] },
+        user: { id: '2', username: 'b', display_name: 'B', badges: [] },
+      })
+    )
+    p.speak(
+      makeMessage({
+        id: 'm3',
+        message: { text: 'third', emotes: [] },
+        user: { id: '3', username: 'c', display_name: 'C', badges: [] },
+      })
+    )
     await flushMicrotasks()
     // Now queue = [m2, m3], all non-priority. A priority arrives.
-    p.speak(makeEventMessage('subscription', {
-      id: 'mp',
-      user: { id: 'p', username: 'premium', display_name: 'P', badges: [] },
-    }))
+    p.speak(
+      makeEventMessage('subscription', {
+        id: 'mp',
+        user: { id: 'p', username: 'premium', display_name: 'P', badges: [] },
+      })
+    )
     await flushMicrotasks()
     // After priority: queue = [m3, mp] (m2 evicted as oldest non-priority).
     // Release the speaking m1 → m3 speaks, then mp.
@@ -603,7 +642,7 @@ describe('D-33 queue overflow', () => {
       lastUtterance?.onend?.()
       await flushMicrotasks()
     }
-    const allTexts = mockSpeak.mock.calls.map(c => (c[0] as MockUtterance).text)
+    const allTexts = mockSpeak.mock.calls.map((c) => (c[0] as MockUtterance).text)
     // m1 spoke (hung initially, released)
     expect(allTexts).toContain('first')
     // m3 spoke (priority evicted m2, not m3)
@@ -628,10 +667,27 @@ describe('D-34 FIFO', () => {
       messages_per_minute: 100,
       user_cooldown_seconds: 0,
     })
-    p.speak(makeMessage({ id: 'm1', message: { text: 'first', emotes: [] }, user: { id: '1', username: 'a', display_name: 'A', badges: [] } }))
+    p.speak(
+      makeMessage({
+        id: 'm1',
+        message: { text: 'first', emotes: [] },
+        user: { id: '1', username: 'a', display_name: 'A', badges: [] },
+      })
+    )
     await flushMicrotasks()
-    p.speak(makeEventMessage('subscription', { id: 'mp', user: { id: 'p', username: 'p', display_name: 'P', badges: [] } }))
-    p.speak(makeMessage({ id: 'm2', message: { text: 'third', emotes: [] }, user: { id: '2', username: 'b', display_name: 'B', badges: [] } }))
+    p.speak(
+      makeEventMessage('subscription', {
+        id: 'mp',
+        user: { id: 'p', username: 'p', display_name: 'P', badges: [] },
+      })
+    )
+    p.speak(
+      makeMessage({
+        id: 'm2',
+        message: { text: 'third', emotes: [] },
+        user: { id: '2', username: 'b', display_name: 'B', badges: [] },
+      })
+    )
     await flushMicrotasks()
 
     // Drain the queue manually
@@ -640,7 +696,7 @@ describe('D-34 FIFO', () => {
       lastUtterance?.onend?.()
       await flushMicrotasks()
     }
-    const texts = mockSpeak.mock.calls.map(c => (c[0] as MockUtterance).text)
+    const texts = mockSpeak.mock.calls.map((c) => (c[0] as MockUtterance).text)
     expect(texts[0]).toBe('first')
     expect(texts[1]).toBe('New subscription from P')
     expect(texts[2]).toBe('third')
@@ -671,19 +727,22 @@ describe('D-38 session fallback (ElevenLabs)', () => {
         ok: true,
         status: 200,
         blob: () => Promise.resolve(new Blob()),
-      } as unknown as Response),
+      } as unknown as Response)
     )
     vi.stubGlobal('fetch', mockFetch)
-    vi.stubGlobal('Audio', class MockAudio {
-      src = ''
-      volume = 1
-      onended: (() => void) | null = null
-      onerror: (() => void) | null = null
-      play() {
-        Promise.resolve().then(() => this.onended?.())
-        return Promise.resolve()
+    vi.stubGlobal(
+      'Audio',
+      class MockAudio {
+        src = ''
+        volume = 1
+        onended: (() => void) | null = null
+        onerror: (() => void) | null = null
+        play() {
+          Promise.resolve().then(() => this.onended?.())
+          return Promise.resolve()
+        }
       }
-    })
+    )
     vi.stubGlobal('URL', {
       createObjectURL: vi.fn(() => 'blob:mock'),
       revokeObjectURL: vi.fn(),
@@ -725,7 +784,7 @@ describe('D-38 session fallback (ElevenLabs)', () => {
         ok: false,
         status: 401,
         blob: () => Promise.resolve(new Blob()),
-      } as unknown as Response),
+      } as unknown as Response)
     )
     vi.stubGlobal('fetch', mockFetch)
     const onFallback = vi.fn()
@@ -737,7 +796,7 @@ describe('D-38 session fallback (ElevenLabs)', () => {
         ttsToken: 't',
         voiceId: 'v',
       },
-      onFallback,
+      onFallback
     )
     p.speak(makeMessage())
     await flushMicrotasks()
@@ -747,7 +806,9 @@ describe('D-38 session fallback (ElevenLabs)', () => {
     expect(onFallback).toHaveBeenCalledTimes(1)
 
     // Second speak — onFallback should NOT be called again; Web Speech path used
-    p.speak(makeMessage({ id: 'm2', user: { id: '2', username: 'b', display_name: 'B', badges: [] } }))
+    p.speak(
+      makeMessage({ id: 'm2', user: { id: '2', username: 'b', display_name: 'B', badges: [] } })
+    )
     await flushMicrotasks()
     expect(onFallback).toHaveBeenCalledTimes(1)
   })
@@ -759,13 +820,19 @@ describe('D-38 session fallback (ElevenLabs)', () => {
         ok: false,
         status: 429,
         blob: () => Promise.resolve(new Blob()),
-      } as unknown as Response),
+      } as unknown as Response)
     )
     vi.stubGlobal('fetch', mockFetch)
     const onFallback = vi.fn()
     const p = createTTSPlayer(
-      { ...defaultSettings, provider: 'elevenlabs', ttsEndpoint: '/x', ttsToken: 't', voiceId: 'v' },
-      onFallback,
+      {
+        ...defaultSettings,
+        provider: 'elevenlabs',
+        ttsEndpoint: '/x',
+        ttsToken: 't',
+        voiceId: 'v',
+      },
+      onFallback
     )
     p.speak(makeMessage())
     await flushMicrotasks()
@@ -780,13 +847,19 @@ describe('D-38 session fallback (ElevenLabs)', () => {
         ok: false,
         status: 500,
         blob: () => Promise.resolve(new Blob()),
-      } as unknown as Response),
+      } as unknown as Response)
     )
     vi.stubGlobal('fetch', mockFetch)
     const onFallback = vi.fn()
     const p = createTTSPlayer(
-      { ...defaultSettings, provider: 'elevenlabs', ttsEndpoint: '/x', ttsToken: 't', voiceId: 'v' },
-      onFallback,
+      {
+        ...defaultSettings,
+        provider: 'elevenlabs',
+        ttsEndpoint: '/x',
+        ttsToken: 't',
+        voiceId: 'v',
+      },
+      onFallback
     )
     p.speak(makeMessage())
     await flushMicrotasks()
@@ -800,8 +873,14 @@ describe('D-38 session fallback (ElevenLabs)', () => {
     vi.stubGlobal('fetch', mockFetch)
     const onFallback = vi.fn()
     const p = createTTSPlayer(
-      { ...defaultSettings, provider: 'elevenlabs', ttsEndpoint: '/x', ttsToken: 't', voiceId: 'v' },
-      onFallback,
+      {
+        ...defaultSettings,
+        provider: 'elevenlabs',
+        ttsEndpoint: '/x',
+        ttsToken: 't',
+        voiceId: 'v',
+      },
+      onFallback
     )
     p.speak(makeMessage())
     await flushMicrotasks()
@@ -816,13 +895,19 @@ describe('D-38 session fallback (ElevenLabs)', () => {
         ok: false,
         status: 400,
         blob: () => Promise.resolve(new Blob()),
-      } as unknown as Response),
+      } as unknown as Response)
     )
     vi.stubGlobal('fetch', mockFetch)
     const onFallback = vi.fn()
     const p = createTTSPlayer(
-      { ...defaultSettings, provider: 'elevenlabs', ttsEndpoint: '/x', ttsToken: 't', voiceId: 'v' },
-      onFallback,
+      {
+        ...defaultSettings,
+        provider: 'elevenlabs',
+        ttsEndpoint: '/x',
+        ttsToken: 't',
+        voiceId: 'v',
+      },
+      onFallback
     )
     p.speak(makeMessage())
     await flushMicrotasks()
@@ -887,11 +972,15 @@ describe('destroy + updateSettings', () => {
   it('updateSettings merges new settings (bucket size updates)', async () => {
     // Make sure the new messages_per_minute is respected on the next speaks
     const p = createTTSPlayer({ ...defaultSettings, messages_per_minute: 1 })
-    p.speak(makeMessage({ id: 'a', user: { id: 'a', username: 'a', display_name: 'A', badges: [] } }))
+    p.speak(
+      makeMessage({ id: 'a', user: { id: 'a', username: 'a', display_name: 'A', badges: [] } })
+    )
     await flushMicrotasks()
     expect(mockSpeak).toHaveBeenCalledTimes(1)
     // Bucket empty
-    p.speak(makeMessage({ id: 'b', user: { id: 'b', username: 'b', display_name: 'B', badges: [] } }))
+    p.speak(
+      makeMessage({ id: 'b', user: { id: 'b', username: 'b', display_name: 'B', badges: [] } })
+    )
     await flushMicrotasks()
     expect(mockSpeak).toHaveBeenCalledTimes(1)
 

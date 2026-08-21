@@ -31,7 +31,10 @@ import { BUNDLED_THEMES, getBundledTheme, THEME_ALIASES } from '../bundled-theme
 describe('retired theme ids', () => {
   it('every alias target is a real bundled theme', () => {
     for (const [from, to] of Object.entries(THEME_ALIASES)) {
-      expect(BUNDLED_THEMES.find((t) => t.id === to), `${from} -> ${to}`).toBeDefined()
+      expect(
+        BUNDLED_THEMES.find((t) => t.id === to),
+        `${from} -> ${to}`
+      ).toBeDefined()
     }
   })
 
@@ -39,7 +42,10 @@ describe('retired theme ids', () => {
     // If both existed, the picker would offer a theme that silently renders as
     // another one.
     for (const from of Object.keys(THEME_ALIASES)) {
-      expect(BUNDLED_THEMES.find((t) => t.id === from), from).toBeUndefined()
+      expect(
+        BUNDLED_THEMES.find((t) => t.id === from),
+        from
+      ).toBeUndefined()
     }
   })
 

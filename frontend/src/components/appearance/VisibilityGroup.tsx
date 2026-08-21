@@ -18,7 +18,6 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 import React from 'react'
 import type { VisualSettings } from '@/lib/types/visual-settings'
 import { ToggleSwitch } from './ToggleSwitch'
@@ -72,7 +71,10 @@ function RadioGroup<T extends string>({
   return (
     <div className="flex gap-4">
       {options.map((opt) => (
-        <label key={opt.value} className="flex cursor-pointer items-center gap-1.5 text-xs text-text-sub">
+        <label
+          key={opt.value}
+          className="flex cursor-pointer items-center gap-1.5 text-xs text-text-sub"
+        >
           <input
             type="radio"
             name={name}
@@ -104,15 +106,25 @@ const PRONOUN_POSITION_OPTIONS: ReadonlyArray<RadioOption<'before' | 'after'>> =
   { value: 'after', label: 'After username' },
 ]
 
-export function VisibilityGroup({ visualSettings, onChange, visibilityDefaults = {} }: VisibilityGroupProps): React.ReactElement {
+export function VisibilityGroup({
+  visualSettings,
+  onChange,
+  visibilityDefaults = {},
+}: VisibilityGroupProps): React.ReactElement {
   const platformBadgeVisible = isVisible(
     (visualSettings as Record<string, DisplayValue | undefined>)['showPlatformBadge'],
-    isVisible((visibilityDefaults as Record<string, DisplayValue | undefined>)['showPlatformBadge'], true),
+    isVisible(
+      (visibilityDefaults as Record<string, DisplayValue | undefined>)['showPlatformBadge'],
+      true
+    )
   )
 
   const platformIndicatorsVisible = isVisible(
     (visualSettings as Record<string, DisplayValue | undefined>)['showPlatformIndicators'],
-    isVisible((visibilityDefaults as Record<string, DisplayValue | undefined>)['showPlatformIndicators'], true),
+    isVisible(
+      (visibilityDefaults as Record<string, DisplayValue | undefined>)['showPlatformIndicators'],
+      true
+    )
   )
 
   const badgePosition = visualSettings.platformBadgePosition ?? 'before'
@@ -120,7 +132,10 @@ export function VisibilityGroup({ visualSettings, onChange, visibilityDefaults =
 
   const pronounsVisible = isVisible(
     (visualSettings as Record<string, DisplayValue | undefined>)['showPronouns'],
-    isVisible((visibilityDefaults as Record<string, DisplayValue | undefined>)['showPronouns'], true),
+    isVisible(
+      (visibilityDefaults as Record<string, DisplayValue | undefined>)['showPronouns'],
+      true
+    )
   )
   const pronounPosition = visualSettings.pronounPosition ?? 'after'
   const pronounColor = visualSettings.pronounColor ?? '#7B68EE'
@@ -151,7 +166,9 @@ export function VisibilityGroup({ visualSettings, onChange, visibilityDefaults =
           checked={platformBadgeVisible}
           onChange={(next) => onChange({ showPlatformBadge: next ? 'inline' : 'none' })}
         />
-        <div className={`mt-2 space-y-2 pl-2 ${!platformBadgeVisible ? 'pointer-events-none opacity-40' : ''}`}>
+        <div
+          className={`mt-2 space-y-2 pl-2 ${!platformBadgeVisible ? 'pointer-events-none opacity-40' : ''}`}
+        >
           <div>
             <p className="mb-1 text-xs text-text-sub">Position</p>
             <RadioGroup
@@ -191,7 +208,9 @@ export function VisibilityGroup({ visualSettings, onChange, visibilityDefaults =
           checked={pronounsVisible}
           onChange={(next) => onChange({ showPronouns: next ? 'inline' : 'none' })}
         />
-        <div className={`mt-2 space-y-2 pl-2 ${!pronounsVisible ? 'pointer-events-none opacity-40' : ''}`}>
+        <div
+          className={`mt-2 space-y-2 pl-2 ${!pronounsVisible ? 'pointer-events-none opacity-40' : ''}`}
+        >
           <div>
             <p className="mb-1 text-xs text-text-sub">Position</p>
             <RadioGroup

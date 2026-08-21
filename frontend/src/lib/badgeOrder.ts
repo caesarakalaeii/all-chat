@@ -27,8 +27,8 @@ const BADGE_GROUP_ORDER: Record<BadgeGroup, number> = {
 }
 
 const ROLE_PRIORITIES: Record<string, number> = {
-  allchat: -2,  // Phase 31: sorts before all platform role badges
-  'allchat-premium': -1,  // Phase 31: sorts before moderator/vip/broadcaster
+  allchat: -2, // Phase 31: sorts before all platform role badges
+  'allchat-premium': -1, // Phase 31: sorts before moderator/vip/broadcaster
   moderator: 0,
   mod: 0,
   vip: 1,

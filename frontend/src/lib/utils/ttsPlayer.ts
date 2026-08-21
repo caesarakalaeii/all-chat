@@ -120,10 +120,7 @@ function eventNumber(msg: ChatMessage, key: string): number {
  * @param initialSettings - initial TTSSettings (usually loaded from display_settings)
  * @param onFallback - called once per session when ElevenLabs first fails (D-38)
  */
-export function createTTSPlayer(
-  initialSettings: TTSSettings,
-  onFallback?: () => void,
-): TTSPlayer {
+export function createTTSPlayer(initialSettings: TTSSettings, onFallback?: () => void): TTSPlayer {
   let settings: TTSSettings = { ...initialSettings }
   const queue: QueueItem[] = []
   const cooldowns = new Map<string, number>()
@@ -169,8 +166,12 @@ export function createTTSPlayer(
     const ranges: Array<[number, number]> = []
     for (const e of emotes) {
       for (const pos of e.positions ?? []) {
-        if (Array.isArray(pos) && pos.length === 2 &&
-            typeof pos[0] === 'number' && typeof pos[1] === 'number') {
+        if (
+          Array.isArray(pos) &&
+          pos.length === 2 &&
+          typeof pos[0] === 'number' &&
+          typeof pos[1] === 'number'
+        ) {
           ranges.push([pos[0], pos[1]])
         }
       }
@@ -200,9 +201,7 @@ export function createTTSPlayer(
   function formatContent(msg: ChatMessage): string | null {
     const eventType = msg.event?.type as EventType | undefined
     const display = msg.user?.display_name || msg.user?.username || 'Someone'
-    const platformPrefix = settings.read_platform
-      ? `${capitalizePlatform(msg.platform)}: `
-      : ''
+    const platformPrefix = settings.read_platform ? `${capitalizePlatform(msg.platform)}: ` : ''
     const rawText = msg.message?.text ?? ''
 
     if (eventType && PRIORITY_EVENTS.has(eventType)) {
@@ -384,7 +383,7 @@ export function createTTSPlayer(
         u.voice = match
       } else if (settings.voice_uri) {
         console.warn(
-          `[TTS] Voice '${settings.voice_uri}' not available in this browser — using default (D-28)`,
+          `[TTS] Voice '${settings.voice_uri}' not available in this browser — using default (D-28)`
         )
       }
       u.onend = (): void => resolve()
