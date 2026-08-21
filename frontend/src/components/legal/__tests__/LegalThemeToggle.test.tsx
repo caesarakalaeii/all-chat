@@ -19,7 +19,7 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { LegalThemeToggle } from '@/components/legal/LegalThemeToggle'
 
@@ -41,6 +41,7 @@ beforeEach(() => localStorage.clear())
 afterEach(() => {
   cleanup()
   document.body.innerHTML = ''
+  vi.restoreAllMocks()
 })
 
 describe('LegalThemeToggle', () => {
@@ -70,6 +71,18 @@ describe('LegalThemeToggle', () => {
     expect(wrapper).toHaveClass('legal-light')
     expect(localStorage.getItem(STORAGE_KEY)).toBe('true')
     expect(screen.getByRole('button', { name: 'Switch to dark mode' })).toBeInTheDocument()
+  })
+
+  it('renders dark and does not throw when localStorage is unavailable', () => {
+    const blocked = () => {
+      throw new Error('SecurityError: storage is disabled')
+    }
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(blocked)
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(blocked)
+
+    const wrapper = renderInWrapper()
+    expect(screen.getByRole('button', { name: 'Switch to light mode' })).toBeInTheDocument()
+    expect(wrapper).not.toHaveClass('legal-light')
   })
 
   it('clicking again unlights the wrapper and writes the preference back', () => {
