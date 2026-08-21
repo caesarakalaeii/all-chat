@@ -1824,19 +1824,17 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   // --- Iframe ref for live preview communication ---
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
 
-  // --- Latest-value ref for visualSettings (avoids stale closure in handleIframeReady) ---
+  // --- Latest-value ref for visualSettings (avoids stale closure in the
+  // preview handshakes); kept current by the mirroring effect below. ---
   const visualSettingsRef = useRef<Partial<VisualSettings>>({})
-  visualSettingsRef.current = visualSettings
 
   // --- Filter settings state (Phase 11) ---
   const [filterSettings, setFilterSettings] = useState<FilterSettings>({})
   const filterSettingsRef = useRef<FilterSettings>({})
-  filterSettingsRef.current = filterSettings
 
   // --- Sound settings state (Phase 12) ---
   const [soundSettings, setSoundSettings] = useState<Partial<DisplaySettings>>({})
   const soundSettingsRef = useRef<Partial<DisplaySettings>>({})
-  soundSettingsRef.current = soundSettings
 
   // --- TTS settings state (Phase 13 — Plans 01 & 03) ---
   // `ttsSettings` holds the tts_* fields that live in display_settings (persisted
@@ -1845,7 +1843,6 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   // and voice_id are NEVER in display_settings.
   const [ttsSettings, setTtsSettings] = useState<Partial<DisplaySettings>>({})
   const ttsSettingsRef = useRef<Partial<DisplaySettings>>({})
-  ttsSettingsRef.current = ttsSettings
   const [hasElevenLabsConfig, setHasElevenLabsConfig] = useState(false)
   const [obsUrl, setObsUrl] = useState<string | undefined>(undefined)
   // Persisted ElevenLabs voice_id (Issue #276). Lives outside display_settings
@@ -1874,6 +1871,27 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   const [isCloning, setIsCloning] = useState(false)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
   const [isResetting, setIsResetting] = useState(false)
+
+  // Mirror the four settings slices into the refs the preview handshakes read.
+  //
+  // The two handshake paths — `handleIframeReady` (handed to the preview iframe
+  // as a ref callback) and the `EMBED_READY` listener — must post the settings
+  // the user has NOW, but neither may take the settings as a dependency: a new
+  // `handleIframeReady` identity makes React re-attach the iframe ref, which
+  // re-runs the getComputedStyle probe and its setState on every keystroke, and
+  // a new listener identity re-binds the window handler just as often.
+  //
+  // The mirroring happens in an effect rather than during render because a
+  // render may be discarded or replayed under concurrent rendering, so writing
+  // a ref there can publish a value that was never committed. Both readers run
+  // from events after commit, so the one-commit lag this introduces is not
+  // observable to them.
+  useEffect(() => {
+    visualSettingsRef.current = visualSettings
+    filterSettingsRef.current = filterSettings
+    soundSettingsRef.current = soundSettings
+    ttsSettingsRef.current = ttsSettings
+  }, [visualSettings, filterSettings, soundSettings, ttsSettings])
 
   // --- sendFilterSettingsToIframe: post filter settings to the embed iframe (Phase 11) ---
   const sendFilterSettingsToIframe = useCallback((settings: FilterSettings) => {
