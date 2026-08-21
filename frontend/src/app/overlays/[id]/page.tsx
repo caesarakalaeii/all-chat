@@ -676,12 +676,16 @@ function RelayPanel({
   const [relayEnabled, setRelayEnabled] = useState(discordConfig.relay_enabled ?? false)
   const [relayChannelId, setRelayChannelId] = useState<string>(discordConfig.relay_channel_id ?? '')
   const [channels, setChannels] = useState<ChannelCategory[]>([])
-  const [channelsLoading, setChannelsLoading] = useState(false)
+  // Starts true rather than being flipped from the effect body: setState in an effect body is a
+  // build error (`react-hooks/set-state-in-effect`), and the channel list is always in flight on
+  // the first render anyway. This is safe only because guild_id cannot change under a mounted
+  // panel — the panel is rendered per source, inside `<div key={source.id}>`, and a source's
+  // guild_id is fixed — so the effect runs exactly once and never has to re-arm the skeleton.
+  const [channelsLoading, setChannelsLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const relayChannelSelectId = useId()
 
   useEffect(() => {
-    setChannelsLoading(true)
     getGuildChannels(discordConfig.guild_id)
       .then((res) => setChannels(res.categories))
       .catch(() => setChannels([]))
