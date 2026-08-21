@@ -16,16 +16,16 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import type { CSSProperties } from 'react';
-import { NameGradient } from '@/lib/types/message';
-import { buildGradientCSS } from '@/lib/utils/gradient';
-import { resolveUsernameColor, type UsernameColorUser } from '@/lib/utils/usernameColor';
+import type { CSSProperties } from 'react'
+import { NameGradient } from '@/lib/types/message'
+import { buildGradientCSS } from '@/lib/utils/gradient'
+import { resolveUsernameColor, type UsernameColorUser } from '@/lib/utils/usernameColor'
 
 /**
  * User info subset needed to compute username span rendering props.
  */
 export interface UsernameSpanUser extends UsernameColorUser {
-  name_gradient?: NameGradient;
+  name_gradient?: NameGradient
 }
 
 /**
@@ -36,18 +36,18 @@ export interface UsernameSpanUser extends UsernameColorUser {
  * When name_gradient is absent, falls back to inline color style.
  */
 export function getUsernameSpanProps(user: UsernameSpanUser): {
-  className: string;
-  style: CSSProperties;
+  className: string
+  style: CSSProperties
 } {
   if (user.name_gradient) {
     return {
       className: 'font-semibold text-sm bg-clip-text text-transparent',
       style: { backgroundImage: buildGradientCSS(user.name_gradient) },
-    };
+    }
   }
   return {
     className: 'font-semibold text-sm',
     // Shared resolver so this can't drift from the overlay render sites (ADR-0047).
     style: { color: resolveUsernameColor(user) },
-  };
+  }
 }

@@ -18,7 +18,6 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 import { cva, type VariantProps } from 'class-variance-authority'
 
 import { cn } from '@/lib/utils'

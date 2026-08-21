@@ -27,9 +27,8 @@ vi.mock('@/lib/api/client', () => ({
 }))
 
 // Import after mock setup
-const { getGuilds, getGuildChannels, disconnectGuild, updateSourceConfig } = await import(
-  '@/lib/api/discord'
-)
+const { getGuilds, getGuildChannels, disconnectGuild, updateSourceConfig } =
+  await import('@/lib/api/discord')
 
 describe('discord API module', () => {
   beforeEach(() => {

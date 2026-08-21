@@ -16,7 +16,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { NameGradient } from '@/lib/types/message';
+import { NameGradient } from '@/lib/types/message'
 
 /**
  * Hex color allow-list for gradient stops (L31 defense-in-depth). Accepts
@@ -24,15 +24,15 @@ import { NameGradient } from '@/lib/types/message';
  * rejected so attacker-controlled gradient stops cannot break out of the
  * CSS `linear-gradient()` value and inject arbitrary styles.
  */
-const GRADIENT_COLOR_RE = /^#[0-9a-fA-F]{3,8}$/;
+const GRADIENT_COLOR_RE = /^#[0-9a-fA-F]{3,8}$/
 
 function isValidGradient(g: NameGradient): boolean {
-  if (!g || g.type !== 'linear') return false;
-  if (!Array.isArray(g.colors) || g.colors.length === 0) return false;
-  if (!g.colors.every((c) => typeof c === 'string' && GRADIENT_COLOR_RE.test(c))) return false;
+  if (!g || g.type !== 'linear') return false
+  if (!Array.isArray(g.colors) || g.colors.length === 0) return false
+  if (!g.colors.every((c) => typeof c === 'string' && GRADIENT_COLOR_RE.test(c))) return false
   // angle must be a finite number; NaN/Infinity would render as "NaNdeg".
-  if (typeof g.angle !== 'number' || !Number.isFinite(g.angle)) return false;
-  return true;
+  if (typeof g.angle !== 'number' || !Number.isFinite(g.angle)) return false
+  return true
 }
 
 /**
@@ -46,8 +46,8 @@ function isValidGradient(g: NameGradient): boolean {
  * // => "linear-gradient(90deg, #ff0000, #0000ff)"
  */
 export function buildGradientCSS(g: NameGradient): string {
-  if (!isValidGradient(g)) return '';
+  if (!isValidGradient(g)) return ''
   // angle clamped to [0, 360) to normalize; colors already validated as hex.
-  const angle = ((g.angle % 360) + 360) % 360;
-  return `linear-gradient(${angle}deg, ${g.colors.join(', ')})`;
+  const angle = ((g.angle % 360) + 360) % 360
+  return `linear-gradient(${angle}deg, ${g.colors.join(', ')})`
 }

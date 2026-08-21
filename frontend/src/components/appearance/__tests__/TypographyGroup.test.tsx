@@ -23,7 +23,9 @@ import { render, screen, cleanup, fireEvent } from '@testing-library/react'
 import type { VisualSettings } from '@/lib/types/visual-settings'
 import { TypographyGroup } from '../TypographyGroup'
 
-afterEach(() => { cleanup() })
+afterEach(() => {
+  cleanup()
+})
 
 describe('TypographyGroup', () => {
   const defaultSettings: Partial<VisualSettings> = {}

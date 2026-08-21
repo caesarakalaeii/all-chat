@@ -18,7 +18,6 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 import { Input as InputPrimitive } from '@base-ui/react/input'
 import { cva, type VariantProps } from 'class-variance-authority'
 

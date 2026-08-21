@@ -18,7 +18,6 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 import { Dialog as DialogPrimitive } from '@base-ui/react/dialog'
 import { X } from 'lucide-react'
 import { cva, type VariantProps } from 'class-variance-authority'

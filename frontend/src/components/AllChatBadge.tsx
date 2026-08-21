@@ -18,12 +18,11 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 import { InfinityLogo } from '@/components/InfinityLogo'
 
 export function AllChatBadge({ size = 18, title }: { size?: number; title?: string }) {
   return (
-    <span title={title} aria-label="All-Chat badge" className="inline-flex items-center shrink-0">
+    <span title={title} aria-label="All-Chat badge" className="inline-flex shrink-0 items-center">
       <InfinityLogo size={size} />
     </span>
   )

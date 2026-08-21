@@ -145,7 +145,10 @@ test.describe('Overlay Observability View — connection resilience', () => {
     await expect(page.locator('.connection-status')).toContainText('Live')
   })
 
-  test('recovers from a silent half-open socket via the watchdog', async ({ page, browserName }) => {
+  test('recovers from a silent half-open socket via the watchdog', async ({
+    page,
+    browserName,
+  }) => {
     // The watchdog's real-timer window is ~45s; run it only on the engines that
     // matter most (Chromium + Firefox — Firefox being LibreWolf's engine) to
     // keep the slow path off the mobile/webkit matrix.

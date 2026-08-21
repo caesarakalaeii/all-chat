@@ -21,7 +21,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import React from 'react'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 
-afterEach(() => { cleanup() })
+afterEach(() => {
+  cleanup()
+})
 
 // Mock useThemeMarketplace hook
 vi.mock('@/hooks/useThemeMarketplace', () => ({
@@ -30,7 +32,13 @@ vi.mock('@/hooks/useThemeMarketplace', () => ({
 
 // Mock ThemeFilters to keep tests lightweight
 vi.mock('../ThemeFilters', () => ({
-  default: ({ searchQuery, onSearchChange }: { searchQuery: string; onSearchChange: (q: string) => void }) => (
+  default: ({
+    searchQuery,
+    onSearchChange,
+  }: {
+    searchQuery: string
+    onSearchChange: (q: string) => void
+  }) => (
     <div data-testid="theme-filters">
       <input
         role="searchbox"

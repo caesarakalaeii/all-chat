@@ -127,7 +127,10 @@ describe('reconstructEditorCss', () => {
 
   it('reflects a theme update on reload for a rule the user did not touch', async () => {
     // User changed only the username colour.
-    const { stored } = await computeThemeCssDiff(THEME, THEME.replace('color: red;', 'color: gold;'))
+    const { stored } = await computeThemeCssDiff(
+      THEME,
+      THEME.replace('color: red;', 'color: gold;')
+    )
     // We later ship a theme fix: message text becomes offwhite.
     const updatedTheme = THEME.replace('color: white;', 'color: offwhite;')
     const r = await reconstructEditorCss(updatedTheme, stored)

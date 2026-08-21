@@ -18,7 +18,6 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { InfinityLogo } from '@/components/InfinityLogo'

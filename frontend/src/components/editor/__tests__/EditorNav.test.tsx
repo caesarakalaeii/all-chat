@@ -34,9 +34,7 @@ describe('EditorNav', () => {
       expect(screen.getAllByText(group.label).length).toBeGreaterThan(0)
     }
     for (const section of EDITOR_SECTIONS) {
-      expect(
-        screen.getByRole('button', { name: section.navLabel ?? section.title })
-      ).toBeDefined()
+      expect(screen.getByRole('button', { name: section.navLabel ?? section.title })).toBeDefined()
     }
   })
 

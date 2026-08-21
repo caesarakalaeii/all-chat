@@ -43,12 +43,8 @@ test.describe('editor settings navigation', () => {
     )
     await page.route('**/api/v1/auth/me', (route) => route.fulfill(json(USER)))
     await page.route(`**/api/v1/overlays/${OVERLAY.id}`, (route) => route.fulfill(json(OVERLAY)))
-    await page.route(`**/api/v1/overlays/${OVERLAY.id}/sources`, (route) =>
-      route.fulfill(json([]))
-    )
-    await page.route(`**/api/v1/overlays/${OVERLAY.id}/config`, (route) =>
-      route.fulfill(json({}))
-    )
+    await page.route(`**/api/v1/overlays/${OVERLAY.id}/sources`, (route) => route.fulfill(json([])))
+    await page.route(`**/api/v1/overlays/${OVERLAY.id}/config`, (route) => route.fulfill(json({})))
     await page.goto(`/overlays/${OVERLAY.id}`)
     await expect(page.getByText(OVERLAY.name)).toBeVisible({ timeout: 20_000 })
   })

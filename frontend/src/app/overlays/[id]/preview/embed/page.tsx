@@ -654,7 +654,6 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
     setMessages((prev) => (prev.length > maxMessages ? prev.slice(-maxMessages) : prev))
   }, [maxMessages])
 
-
   // Phase 12: Destroy sound player on unmount
   useEffect(() => {
     return () => {

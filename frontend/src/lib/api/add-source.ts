@@ -33,9 +33,7 @@ interface AddSourceResponse {
 
 /** Discriminated outcome of an add-source / moderation reflow. */
 export type AddSourceReflowResult =
-  | { kind: 'redirect'; authUrl: string }
-  | { kind: 'added' }
-  | { kind: 'error'; message: string }
+  { kind: 'redirect'; authUrl: string } | { kind: 'added' } | { kind: 'error'; message: string }
 
 /**
  * Starts an add-source / moderation re-consent reflow against the given auth
@@ -47,9 +45,7 @@ export type AddSourceReflowResult =
  * is renewed instead of failing with "Authorization header required". A raw
  * fetch would skip that interceptor and dead-end on an expired session.
  */
-export async function startAddSourceReflow(
-  endpoint: string
-): Promise<AddSourceReflowResult> {
+export async function startAddSourceReflow(endpoint: string): Promise<AddSourceReflowResult> {
   try {
     const data = await apiClient.get<AddSourceResponse>(endpoint)
     if (data.auth_url) {
@@ -62,8 +58,7 @@ export async function startAddSourceReflow(
     return { kind: 'error', message: 'Unexpected response from the server.' }
   } catch (err) {
     if (err instanceof ApiError) {
-      const serverError =
-        typeof err.data?.error === 'string' ? err.data.error : undefined
+      const serverError = typeof err.data?.error === 'string' ? err.data.error : undefined
       return { kind: 'error', message: serverError ?? err.message }
     }
     return { kind: 'error', message: 'Please try again.' }

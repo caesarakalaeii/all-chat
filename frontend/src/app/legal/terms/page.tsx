@@ -70,8 +70,8 @@ export default function TermsOfServicePage() {
             if you suspect compromise
           </li>
           <li>
-            Comply with the terms of Twitch, YouTube, TikTok, Kick, Discord, and any other
-            connected platform
+            Comply with the terms of Twitch, YouTube, TikTok, Kick, Discord, and any other connected
+            platform
           </li>
         </ul>
       </section>
@@ -127,8 +127,8 @@ export default function TermsOfServicePage() {
           , which explains what we collect, how it is used, and your rights under the DSGVO. For
           transparency: All-Chat measures aggregate usage with{' '}
           <strong className="text-text">self-hosted, cookieless analytics</strong> (Umami) that set
-          nothing on your device and store no personal identifier &ndash; see Section&nbsp;5.6 of the
-          Privacy Policy.
+          nothing on your device and store no personal identifier &ndash; see Section&nbsp;5.6 of
+          the Privacy Policy.
         </p>
       </section>
 
