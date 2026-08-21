@@ -32,6 +32,7 @@ function ToastList() {
           key={toast.id}
           toast={toast}
           className={cn(
+            // eslint-disable-next-line tailwindcss/no-unnecessary-arbitrary-value -- px is intentional here: this is a fixed-size toast width, sized against the viewport corner it is pinned to, sized to the layout it sits in rather than to the reading text, so it must not grow with the root font size the way the suggested rem-relative utility would
             'min-w-[280px] rounded-xl border border-border bg-surface-2 px-4 py-3 shadow-xl',
             'animate-fade-in border-l-4',
             toast.type === 'success' && 'border-l-kick',

@@ -45,7 +45,12 @@ export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
   } | null>(null)
 
   return (
-    <Card className="p-4 shadow-lg transition-all duration-200 hover:scale-[1.02] hover:shadow-xl">
+    <Card
+      className={
+        // eslint-disable-next-line tailwindcss/no-unnecessary-arbitrary-value -- the bare-decimal scale utility the plugin suggests matches nothing in Tailwind v4 and emits no CSS at all, so taking the fix would delete this hover lift outright rather than restate it. See src/__tests__/no-broken-tailwind-utilities.test.ts
+        'p-4 shadow-lg transition-all duration-200 hover:scale-[1.02] hover:shadow-xl'
+      }
+    >
       {/* User info */}
       <div className="mb-3 flex items-center">
         {request.sender && (

@@ -48,7 +48,12 @@ import type { Overlay, CreditRollConfig } from '@/lib/types/overlay'
 const MonacoCSSEditor = dynamic(() => import('@/components/MonacoCSSEditor'), {
   ssr: false,
   loading: () => (
-    <div className="flex h-[400px] items-center justify-center rounded-lg border border-border bg-bg">
+    <div
+      className={
+        // eslint-disable-next-line tailwindcss/no-unnecessary-arbitrary-value -- px is intentional here: this is a fixed-size loading placeholder, matched to the Monaco editor it is replaced by, sized to the layout it sits in rather than to the reading text, so it must not grow with the root font size the way the suggested rem-relative utility would
+        'flex h-[400px] items-center justify-center rounded-lg border border-border bg-bg'
+      }
+    >
       <div className="text-sm text-text-dim">Loading editor...</div>
     </div>
   ),

@@ -84,7 +84,10 @@ function TagInput({
         </span>
       ))}
       <input
-        className="min-w-[120px] flex-1 bg-transparent text-xs text-text outline-none placeholder:text-text-dim"
+        className={
+          // eslint-disable-next-line tailwindcss/no-unnecessary-arbitrary-value -- px is intentional here: this is a fixed-size caret floor for the tag input, sized against the customiser panel rather than the 12px label text beside it, sized to the layout it sits in rather than to the reading text, so it must not grow with the root font size the way the suggested rem-relative utility would
+          'min-w-[120px] flex-1 bg-transparent text-xs text-text outline-none placeholder:text-text-dim'
+        }
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={handleKeyDown}

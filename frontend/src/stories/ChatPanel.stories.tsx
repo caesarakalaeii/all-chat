@@ -72,7 +72,12 @@ const meta = {
   tags: ['autodocs'],
   decorators: [
     (Story) => (
-      <div className="h-[480px] w-[560px] overflow-hidden rounded-lg border border-border bg-bg">
+      <div
+        className={
+          // eslint-disable-next-line tailwindcss/no-unnecessary-arbitrary-value -- px is intentional here: this is a fixed-size story viewport, chosen so the panel renders at a stable size for the visual snapshots, sized to the layout it sits in rather than to the reading text, so it must not grow with the root font size the way the suggested rem-relative utility would
+          'h-[480px] w-[560px] overflow-hidden rounded-lg border border-border bg-bg'
+        }
+      >
         <Story />
       </div>
     ),

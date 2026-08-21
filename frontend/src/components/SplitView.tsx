@@ -166,7 +166,10 @@ export function SplitView({
       {/* Preview panel */}
       <div
         data-testid="preview-panel"
-        className="relative min-h-[300px] flex-1 overflow-hidden bg-bg md:min-h-0"
+        className={
+          // eslint-disable-next-line tailwindcss/no-unnecessary-arbitrary-value -- px is intentional here: this is a fixed-size floor for the stacked mobile preview pane, sized against the h-[calc(100vh-60px)] split it lives in, sized to the layout it sits in rather than to the reading text, so it must not grow with the root font size the way the suggested rem-relative utility would
+          'relative min-h-[300px] flex-1 overflow-hidden bg-bg md:min-h-0'
+        }
         style={previewBg !== null ? { backgroundColor: previewBg } : undefined}
       >
         <PreviewBackdropPicker value={previewBg} onChange={handlePreviewBgChange} />
