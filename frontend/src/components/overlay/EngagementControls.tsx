@@ -385,11 +385,17 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
   // Reset the winner selection and armed confirmations when the ACTIVE round identity changes
   // underneath us (e.g. a fast LOCKED round A -> LOCKED round B handoff via refresh()). Otherwise
   // a winnerId from the previous round keeps Resolve enabled and would post a foreign outcome id.
-  useEffect(() => {
+  //
+  // Done during render, not in an effect: an effect would be one setState per state and a whole
+  // extra committed render with the stale winner still armed, which is what
+  // react-hooks/set-state-in-effect is about. React re-runs this render before painting.
+  const [armedRoundId, setArmedRoundId] = useState(prediction?.id)
+  if (prediction?.id !== armedRoundId) {
+    setArmedRoundId(prediction?.id)
     setWinnerId('')
     setConfirmResolve(false)
     setConfirmCancel(false)
-  }, [prediction?.id])
+  }
 
   // --- Render ----------------------------------------------------------------
 

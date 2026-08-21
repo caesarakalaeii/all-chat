@@ -20,26 +20,48 @@
 
 import { useEffect, useState } from 'react'
 
+import { useHydrated } from '@/hooks/useHydrated'
+
 const STORAGE_KEY = 'legal-light-mode'
 
+function storedLight(): boolean {
+  try {
+    return localStorage.getItem(STORAGE_KEY) === 'true'
+  } catch {
+    // Storage blocked (private mode, embedded webview) — dark is the default.
+    return false
+  }
+}
+
 export function LegalThemeToggle() {
-  const [light, setLight] = useState(false)
+  const hydrated = useHydrated()
+  // null until the reader picks a side in this session, at which point their
+  // choice wins over what is stored.
+  const [chosenLight, setChosenLight] = useState<boolean | null>(null)
+
+  // The stored preference is only consulted after hydration: the server has no
+  // localStorage, so reading it any earlier would render markup the client then
+  // has to contradict. Deriving it here rather than copying it into state keeps
+  // the read out of an effect (react-hooks/set-state-in-effect).
+  const light = hydrated && (chosenLight ?? storedLight())
 
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored === 'true') setLight(true)
-  }, [])
-
-  useEffect(() => {
+    // Skip the pre-hydration pass: `light` is still the server's `false` there, and
+    // writing it back would erase the stored preference before it is ever read.
+    if (!hydrated) return
     const wrapper = document.getElementById('legal-wrapper')
     if (!wrapper) return
     wrapper.classList.toggle('legal-light', light)
-    localStorage.setItem(STORAGE_KEY, String(light))
-  }, [light])
+    try {
+      localStorage.setItem(STORAGE_KEY, String(light))
+    } catch {
+      // Storage blocked — the toggle still works, it just will not be remembered.
+    }
+  }, [hydrated, light])
 
   return (
     <button
-      onClick={() => setLight((v) => !v)}
+      onClick={() => setChosenLight(!light)}
       className="flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-sub transition-colors hover:border-border-md hover:text-text"
       aria-label={light ? 'Switch to dark mode' : 'Switch to light mode'}
     >
