@@ -24,6 +24,12 @@
  * to the overlay's `visual_settings` (which drive the public OBS overlay). They
  * only affect this view in this browser. Mirrors the `THEME_KEY` pattern in
  * `view/page.tsx`.
+ *
+ * `newestFirst` is the one pref here that reorders content rather than dressing
+ * it: off, the Chat panel is newest-at-the-bottom like Twitch; on, it is
+ * newest-at-the-top so chat can be read without looking down. Both orders are
+ * pinned to the edge the newest message is on — see `isPinnedToLiveEdge` in
+ * `@/lib/utils/overlayViewModel`.
  */
 
 import { PRESET_NAMES, type PresetName } from '@/lib/utils/soundPlayer'
@@ -48,6 +54,18 @@ export interface MonitorViewPrefs {
   activitySoundVolume: number
   /** Which built-in sound to play. Reuses the overlay sound presets. */
   activitySoundPreset: PresetName
+  /**
+   * Put the newest chat message at the TOP of the monitor's Chat panel, with
+   * older messages scrolling away downward, instead of the Twitch-like newest-
+   * at-the-bottom order. Requested so a streamer can read chat with their head
+   * up rather than looking at the bottom of the panel.
+   *
+   * This is the same ORDER axis as the public overlay's
+   * `display_settings.invert_message_order`, but a separate, view-local
+   * setting: it changes only this browser's monitor and never the on-stream
+   * overlay. Off by default so no existing moderator's view flips under them.
+   */
+  newestFirst: boolean
 }
 
 export const VIEW_PREFS_KEY = 'overlay-view-prefs'
@@ -62,6 +80,7 @@ export const DEFAULT_VIEW_PREFS: MonitorViewPrefs = {
   activitySoundEnabled: false,
   activitySoundVolume: 0.5,
   activitySoundPreset: 'ping',
+  newestFirst: false,
 }
 
 /**
@@ -81,10 +100,18 @@ export function loadViewPrefs(): MonitorViewPrefs {
     if (!PRESET_NAMES.includes(merged.activitySoundPreset)) {
       merged.activitySoundPreset = DEFAULT_VIEW_PREFS.activitySoundPreset
     }
-    if (typeof merged.activitySoundVolume !== 'number' || !Number.isFinite(merged.activitySoundVolume)) {
+    if (
+      typeof merged.activitySoundVolume !== 'number' ||
+      !Number.isFinite(merged.activitySoundVolume)
+    ) {
       merged.activitySoundVolume = DEFAULT_VIEW_PREFS.activitySoundVolume
     } else {
       merged.activitySoundVolume = Math.min(1, Math.max(0, merged.activitySoundVolume))
+    }
+    // The order drives which edge the panel pins to; a truthy non-boolean here
+    // would make the pin edge and the render order disagree.
+    if (typeof merged.newestFirst !== 'boolean') {
+      merged.newestFirst = DEFAULT_VIEW_PREFS.newestFirst
     }
     return merged
   } catch {

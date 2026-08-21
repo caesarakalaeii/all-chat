@@ -22,6 +22,7 @@ import { render, screen, cleanup, fireEvent } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { ChatPanel } from '@/components/overlay/ChatPanel'
+import { DEFAULT_VIEW_PREFS } from '@/app/overlay/[id]/view/viewPrefs'
 import type { ViewItem } from '@/lib/utils/overlayViewModel'
 
 // jsdom may lack window.matchMedia; useReducedMotion (mounted via
@@ -60,13 +61,33 @@ function item(
   }
 }
 
-/** Make the panel's scroll container report a scrolled-up viewport, then scroll. */
-function scrollUp(container: HTMLElement) {
+/** Make the panel's scroll container report a viewport at `scrollTop`, then scroll. */
+function scrollTo(container: HTMLElement, scrollTop: number) {
   const el = container.querySelector('.overflow-y-auto') as HTMLElement
   Object.defineProperty(el, 'scrollHeight', { value: 1000, configurable: true })
   Object.defineProperty(el, 'clientHeight', { value: 100, configurable: true })
-  el.scrollTop = 0
+  el.scrollTop = scrollTop
   fireEvent.scroll(el)
+}
+
+/** Scroll to the top: away from the live edge in the default newest-last order. */
+function scrollUp(container: HTMLElement) {
+  scrollTo(container, 0)
+}
+
+/** The rendered row elements, in DOM order. */
+function rowElements(container: HTMLElement): Element[] {
+  return [...(container.querySelector('.overflow-y-auto') as HTMLElement).children]
+}
+
+/** The rendered message texts, in DOM order. */
+function renderedTexts(container: HTMLElement, texts: string[]): string[] {
+  const found = [...container.querySelectorAll('.overflow-y-auto *')].flatMap((el) =>
+    texts.includes(el.textContent ?? '') && el.children.length === 0
+      ? [el.textContent as string]
+      : []
+  )
+  return found
 }
 
 describe('ChatPanel', () => {
@@ -154,6 +175,53 @@ describe('ChatPanel 1:1 user filter', () => {
   })
 })
 
+const newestFirstPrefs = { ...DEFAULT_VIEW_PREFS, newestFirst: true }
+
+describe('ChatPanel chat order', () => {
+  const items = [item('1', 'oldest'), item('2', 'newest')]
+
+  it('renders newest last by default', () => {
+    const { container } = render(<ChatPanel items={items} />)
+    expect(renderedTexts(container, ['oldest', 'newest'])).toEqual(['oldest', 'newest'])
+  })
+
+  it('renders newest first when the pref is on', () => {
+    const { container } = render(<ChatPanel items={items} prefs={newestFirstPrefs} />)
+    expect(renderedTexts(container, ['oldest', 'newest'])).toEqual(['newest', 'oldest'])
+  })
+
+  it('keeps the 1:1 username filter working in newest-first mode', () => {
+    const alice = { id: 'ua', username: 'alice' }
+    const bob = { id: 'ub', username: 'bob' }
+    render(
+      <ChatPanel
+        items={[
+          item('1', 'hi there', undefined, alice),
+          item('2', 'spam spam', undefined, bob),
+          item('3', 'question?', undefined, alice),
+        ]}
+        prefs={newestFirstPrefs}
+      />
+    )
+    fireEvent.click(screen.getAllByRole('button', { name: 'alice' })[0])
+    expect(screen.getByText('hi there')).toBeInTheDocument()
+    expect(screen.getByText('question?')).toBeInTheDocument()
+    expect(screen.queryByText('spam spam')).not.toBeInTheDocument()
+    expect(screen.getByText('2 of 3')).toBeInTheDocument()
+  })
+
+  it('still tags a moderated message in newest-first mode', () => {
+    render(
+      <ChatPanel
+        items={[item('1', 'spam', { kind: 'timeout', banDuration: 600 })]}
+        prefs={newestFirstPrefs}
+      />
+    )
+    expect(screen.getByText('spam')).toBeInTheDocument()
+    expect(screen.getByText(/timed out/i)).toBeInTheDocument()
+  })
+})
+
 describe('ChatPanel pause-on-scroll', () => {
   it('freezes the feed while scrolled up and resumes via the paused pill', () => {
     const first = [item('1', 'hello'), item('2', 'world')]
@@ -170,5 +238,99 @@ describe('ChatPanel pause-on-scroll', () => {
     fireEvent.click(screen.getByRole('button', { name: /Chat paused/ }))
     expect(screen.getByText('newest')).toBeInTheDocument()
     expect(screen.queryByText(/Chat paused/)).not.toBeInTheDocument()
+  })
+
+  it('newest-first: pauses when scrolled DOWN away from the top edge and resumes', () => {
+    const first = [item('1', 'hello'), item('2', 'world')]
+    const { container, rerender } = render(<ChatPanel items={first} prefs={newestFirstPrefs} />)
+
+    // The live edge is the TOP in this mode, so scrolling down is scrolling away.
+    scrollTo(container, 900)
+    expect(screen.getByRole('button', { name: /Chat paused/ })).toBeInTheDocument()
+
+    rerender(<ChatPanel items={[...first, item('3', 'incoming')]} prefs={newestFirstPrefs} />)
+    expect(screen.queryByText('incoming')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Chat paused · 1 new/ })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /Chat paused/ }))
+    expect(screen.getByText('incoming')).toBeInTheDocument()
+    expect(screen.queryByText(/Chat paused/)).not.toBeInTheDocument()
+  })
+
+  it('newest-first: staying at the top edge does not pause', () => {
+    const { container } = render(
+      <ChatPanel items={[item('1', 'hello')]} prefs={newestFirstPrefs} />
+    )
+    scrollTo(container, 0)
+    expect(screen.queryByText(/Chat paused/)).not.toBeInTheDocument()
+  })
+
+  it('resumes live when the order pref is toggled while scrolled away', () => {
+    const items = [item('1', 'hello'), item('2', 'world')]
+    const { container, rerender } = render(<ChatPanel items={items} />)
+
+    scrollUp(container)
+    expect(screen.getByRole('button', { name: /Chat paused/ })).toBeInTheDocument()
+
+    rerender(<ChatPanel items={items} prefs={newestFirstPrefs} />)
+    expect(screen.queryByText(/Chat paused/)).not.toBeInTheDocument()
+  })
+
+  it('stays live when the order pref is toggled back to the paused order', () => {
+    const first = [item('1', 'hello'), item('2', 'world')]
+    const { container, rerender } = render(<ChatPanel items={first} />)
+
+    scrollUp(container)
+    expect(screen.getByRole('button', { name: /Chat paused/ })).toBeInTheDocument()
+
+    rerender(<ChatPanel items={first} prefs={newestFirstPrefs} />)
+    const grown = [...first, item('3', 'incoming')]
+    rerender(<ChatPanel items={grown} prefs={newestFirstPrefs} />)
+    // Back to the order the discarded snapshot was taken under: the reader never
+    // scrolled away again, so chat must still be live.
+    rerender(<ChatPanel items={grown} />)
+
+    expect(screen.queryByText(/Chat paused/)).not.toBeInTheDocument()
+    expect(screen.getByText('incoming')).toBeInTheDocument()
+  })
+
+  it('puts the paused pill at the bottom with a down arrow in newest-last mode', () => {
+    const { container } = render(<ChatPanel items={[item('1', 'hello')]} />)
+    scrollUp(container)
+
+    const pill = screen.getByRole('button', { name: /Chat paused/ })
+    expect(pill.className).toContain('bottom-3')
+    expect(pill.className).not.toContain('top-3')
+    expect(pill.querySelector('.lucide-arrow-down')).not.toBeNull()
+  })
+
+  it('puts the paused pill at the top with an up arrow in newest-first mode', () => {
+    const { container } = render(
+      <ChatPanel items={[item('1', 'hello')]} prefs={newestFirstPrefs} />
+    )
+    scrollTo(container, 900)
+
+    const pill = screen.getByRole('button', { name: /Chat paused/ })
+    expect(pill.className).toContain('top-3')
+    expect(pill.className).not.toContain('bottom-3')
+    expect(pill.querySelector('.lucide-arrow-up')).not.toBeNull()
+  })
+})
+
+describe('ChatPanel row identity', () => {
+  it('keeps the same DOM nodes for existing rows when a message arrives newest-first', () => {
+    const first = [item('1', 'oldest'), item('2', 'middle')]
+    const { container, rerender } = render(<ChatPanel items={first} prefs={newestFirstPrefs} />)
+    const before = rowElements(container)
+    expect(before).toHaveLength(2)
+
+    // On screen this is a prepend, so index-based keys would shift for every row
+    // and React would remount the whole buffer.
+    rerender(<ChatPanel items={[...first, item('3', 'newest')]} prefs={newestFirstPrefs} />)
+    const after = rowElements(container)
+
+    expect(after).toHaveLength(3)
+    expect(after[1]).toBe(before[0])
+    expect(after[2]).toBe(before[1])
   })
 })

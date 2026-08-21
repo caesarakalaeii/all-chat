@@ -62,6 +62,8 @@ describe('viewPrefs', () => {
     expect(displayToggles.every((k) => DEFAULT_VIEW_PREFS[k] === true)).toBe(true)
     // …but the activity sound is opt-in, so the dashboard is silent by default.
     expect(DEFAULT_VIEW_PREFS.activitySoundEnabled).toBe(false)
+    // …and so is the inverted chat order, so nobody's view flips under them.
+    expect(DEFAULT_VIEW_PREFS.newestFirst).toBe(false)
   })
 
   it('merges a partial stored payload over the defaults', () => {
@@ -86,12 +88,31 @@ describe('viewPrefs', () => {
   it('preserves valid stored activity-sound settings', () => {
     localStorage.setItem(
       VIEW_PREFS_KEY,
-      JSON.stringify({ activitySoundEnabled: true, activitySoundVolume: 0.25, activitySoundPreset: 'pop' })
+      JSON.stringify({
+        activitySoundEnabled: true,
+        activitySoundVolume: 0.25,
+        activitySoundPreset: 'pop',
+      })
     )
     const prefs = loadViewPrefs()
     expect(prefs.activitySoundEnabled).toBe(true)
     expect(prefs.activitySoundVolume).toBe(0.25)
     expect(prefs.activitySoundPreset).toBe('pop')
+  })
+
+  it('gives an older payload (no newestFirst key) the newest-last default', () => {
+    localStorage.setItem(VIEW_PREFS_KEY, JSON.stringify({ showAvatars: false }))
+    expect(loadViewPrefs().newestFirst).toBe(false)
+  })
+
+  it('resolves a non-boolean stored newestFirst to the default', () => {
+    localStorage.setItem(VIEW_PREFS_KEY, JSON.stringify({ newestFirst: 'yes' }))
+    expect(loadViewPrefs().newestFirst).toBe(false)
+  })
+
+  it('round-trips newestFirst: true through save → load', () => {
+    saveViewPrefs({ ...DEFAULT_VIEW_PREFS, newestFirst: true })
+    expect(loadViewPrefs().newestFirst).toBe(true)
   })
 
   it('sanitizes an unknown preset back to the default', () => {
@@ -129,6 +150,7 @@ describe('viewPrefs', () => {
       activitySoundEnabled: true,
       activitySoundVolume: 0.8,
       activitySoundPreset: 'chime',
+      newestFirst: true,
     }
     saveViewPrefs(custom)
     expect(loadViewPrefs()).toEqual(custom)

@@ -205,6 +205,47 @@ export function shouldAutoScroll(
 }
 
 /**
+ * Whether the viewport still sits on the LIVE EDGE — the edge the newest
+ * message arrives at — and so should keep following new content.
+ *
+ * Which edge that is depends on the render order: the bottom when the newest
+ * message is last (`shouldAutoScroll`, the Twitch-like default), the top when
+ * the monitor's `newestFirst` pref inverts it. Getting this wrong is not merely
+ * cosmetic: it makes the panel pause exactly when the reader is watching live
+ * chat and follow exactly when they are reading scrollback.
+ */
+export function isPinnedToLiveEdge(
+  metrics: { scrollHeight: number; scrollTop: number; clientHeight: number },
+  newestFirst: boolean,
+  threshold = 40
+): boolean {
+  return newestFirst ? metrics.scrollTop <= threshold : shouldAutoScroll(metrics, threshold)
+}
+
+/**
+ * React keys for a chat list, one per item, that do not depend on render order.
+ *
+ * Keying by position in the RENDERED list is fine while the newest message is
+ * appended at the end, but under `newestFirst` every arrival is a prepend, so
+ * every position shifts and React remounts the whole (500-row) buffer on every
+ * single message. Keys are therefore derived from the CHRONOLOGICAL array and
+ * read back per rendered row.
+ *
+ * `${id}#${occurrence}` rather than the id alone because ids are not guaranteed
+ * unique in the buffer (a replayed message can arrive again live). Counting
+ * occurrences keeps a row's key stable as items are appended or prepended; only
+ * the trimmed head of the buffer loses its keys, which is what we want.
+ */
+export function chatRowKeys(items: ViewItem[]): string[] {
+  const seen = new Map<string, number>()
+  return items.map((item) => {
+    const occurrence = seen.get(item.id) ?? 0
+    seen.set(item.id, occurrence + 1)
+    return `${item.id}#${occurrence}`
+  })
+}
+
+/**
  * One platform identity of a chatter, used to narrow the chat panel to a 1:1
  * conversation. Keyed per platform: the same person on Twitch and Kick is two
  * identities, which is what moderation and replies operate on too.
