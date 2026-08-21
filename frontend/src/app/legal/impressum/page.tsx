@@ -51,8 +51,9 @@ export default function ImpressumPage() {
           </p>
           <p className="text-sm text-text-dim">
             If you are the operator: mount a ConfigMap containing your Impressum HTML to{' '}
-            <code className="rounded bg-surface-2 px-1.5 py-0.5 text-xs">{IMPRESSUM_PATH}</code>{' '}
-            or set the <code className="rounded bg-surface-2 px-1.5 py-0.5 text-xs">IMPRESSUM_FILE_PATH</code>{' '}
+            <code className="rounded bg-surface-2 px-1.5 py-0.5 text-xs">{IMPRESSUM_PATH}</code> or
+            set the{' '}
+            <code className="rounded bg-surface-2 px-1.5 py-0.5 text-xs">IMPRESSUM_FILE_PATH</code>{' '}
             environment variable. See the deployment documentation for details.
           </p>
         </section>

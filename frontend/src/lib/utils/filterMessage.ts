@@ -43,10 +43,12 @@ export function shouldFilterMessage(
   const text = message.message?.text ?? ''
 
   // D-04: exact case-insensitive username match
-  if (settings.banned_users?.some(u => {
-    const lower = u.toLowerCase()
-    return lower === username || lower === displayName
-  })) {
+  if (
+    settings.banned_users?.some((u) => {
+      const lower = u.toLowerCase()
+      return lower === username || lower === displayName
+    })
+  ) {
     return true
   }
 

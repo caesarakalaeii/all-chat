@@ -238,7 +238,6 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
     filterSettingsRef.current = filterSettings
   }, [filterSettings])
 
-
   // Phase 12: Destroy sound player on unmount
   useEffect(() => {
     return () => {

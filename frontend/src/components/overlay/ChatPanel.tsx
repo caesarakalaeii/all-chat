@@ -69,7 +69,12 @@ export function ChatPanel({ items, prefs, capabilities, moderation }: ChatPanelP
     [items, userFilter]
   )
   const visible = useMemo(
-    () => (paused ? (userFilter ? paused.filter((m) => matchesUserFilter(m, userFilter)) : paused) : live),
+    () =>
+      paused
+        ? userFilter
+          ? paused.filter((m) => matchesUserFilter(m, userFilter))
+          : paused
+        : live,
     [paused, userFilter, live]
   )
   const newCount = paused ? countNewItems(visible, live) : 0

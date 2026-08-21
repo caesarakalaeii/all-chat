@@ -21,7 +21,9 @@ import { shouldFilterMessage } from '../filterMessage'
 import type { ChatMessage } from '@/lib/types/message'
 import type { FilterSettings } from '@/lib/types/overlay'
 
-function makeMsg(overrides: { username?: string; display_name?: string; text?: string } = {}): ChatMessage {
+function makeMsg(
+  overrides: { username?: string; display_name?: string; text?: string } = {}
+): ChatMessage {
   return {
     id: '1',
     overlay_id: 'ov1',
@@ -126,7 +128,12 @@ describe('shouldFilterMessage', () => {
 
   // Edge case: missing user/message fields
   it('handles missing user/message gracefully without crashing', () => {
-    const settings: FilterSettings = { banned_users: ['bot'], banned_words: ['spam'], hide_commands: true, min_message_length: 3 }
+    const settings: FilterSettings = {
+      banned_users: ['bot'],
+      banned_words: ['spam'],
+      hide_commands: true,
+      min_message_length: 3,
+    }
     const broken = {
       id: '1',
       overlay_id: 'ov1',

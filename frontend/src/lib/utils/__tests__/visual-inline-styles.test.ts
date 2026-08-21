@@ -17,11 +17,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import {
-  chatBubbleStyle,
-  hexToRgba,
-  overlayContainerStyle,
-} from '../visual-inline-styles'
+import { chatBubbleStyle, hexToRgba, overlayContainerStyle } from '../visual-inline-styles'
 
 describe('hexToRgba', () => {
   it('combines a 6-digit hex with a 0–1 opacity', () => {
@@ -68,9 +64,9 @@ describe('overlayContainerStyle', () => {
   })
 
   it('emits background + max width only for set values', () => {
-    expect(
-      overlayContainerStyle({ overlayBgColor: '#000000', overlayBgOpacity: '0.7' })
-    ).toEqual({ backgroundColor: 'rgba(0, 0, 0, 0.7)' })
+    expect(overlayContainerStyle({ overlayBgColor: '#000000', overlayBgOpacity: '0.7' })).toEqual({
+      backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    })
     expect(overlayContainerStyle({ maxWidth: '600px' })).toEqual({ maxWidth: '600px' })
   })
 })
@@ -87,9 +83,9 @@ describe('chatBubbleStyle', () => {
   })
 
   it('emits background + shadow only for set values', () => {
-    expect(
-      chatBubbleStyle({ bubbleBgColor: '#1a1a2e', bubbleBgOpacity: '0.85' })
-    ).toEqual({ backgroundColor: 'rgba(26, 26, 46, 0.85)' })
+    expect(chatBubbleStyle({ bubbleBgColor: '#1a1a2e', bubbleBgOpacity: '0.85' })).toEqual({
+      backgroundColor: 'rgba(26, 26, 46, 0.85)',
+    })
     expect(chatBubbleStyle({ bubbleShadow: '0 0 8px red' })).toEqual({
       boxShadow: '0 0 8px red',
     })

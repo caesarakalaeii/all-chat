@@ -23,7 +23,9 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import { FilterGroup } from '../FilterGroup'
 import type { FilterSettings } from '@/lib/types/overlay'
 
-afterEach(() => { cleanup() })
+afterEach(() => {
+  cleanup()
+})
 
 describe('FilterGroup', () => {
   it('renders "Blocked usernames" label and an input with placeholder "Type username, press Enter"', () => {

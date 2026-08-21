@@ -172,7 +172,10 @@ describe('WebSocketClient — liveness & resilient reconnect', () => {
     expect(latest().url).not.toContain('?since=')
 
     // A chat_message on the engagement-only socket must be ignored — no watermark write.
-    latest().simulateMessage({ type: 'chat_message', data: { id: 'm1', timestamp: '2026-01-01T00:00:00.000Z' } })
+    latest().simulateMessage({
+      type: 'chat_message',
+      data: { id: 'm1', timestamp: '2026-01-01T00:00:00.000Z' },
+    })
     expect(localStorage.getItem('ws_last_seen_o1')).toBeNull()
 
     // Trigger a reconnect: server closes the socket, backoff timer fires.
@@ -183,7 +186,10 @@ describe('WebSocketClient — liveness & resilient reconnect', () => {
     // still leaves the watermark untouched (the bug downgraded it to a full chat socket).
     latest().simulateOpen()
     expect(latest().url).not.toContain('?since=')
-    latest().simulateMessage({ type: 'chat_message', data: { id: 'm2', timestamp: '2026-01-02T00:00:00.000Z' } })
+    latest().simulateMessage({
+      type: 'chat_message',
+      data: { id: 'm2', timestamp: '2026-01-02T00:00:00.000Z' },
+    })
     expect(localStorage.getItem('ws_last_seen_o1')).toBeNull()
 
     client.disconnect()
@@ -194,8 +200,13 @@ describe('WebSocketClient — liveness & resilient reconnect', () => {
     const client = new WebSocketClient()
     client.connect('o1', 'tok')
     latest().simulateOpen()
-    latest().simulateMessage({ type: 'chat_message', data: { id: 'm1', timestamp: '2026-01-01T00:00:00.000Z' } })
-    expect(localStorage.getItem('ws_last_seen_o1')).toBe(String(Date.parse('2026-01-01T00:00:00.000Z')))
+    latest().simulateMessage({
+      type: 'chat_message',
+      data: { id: 'm1', timestamp: '2026-01-01T00:00:00.000Z' },
+    })
+    expect(localStorage.getItem('ws_last_seen_o1')).toBe(
+      String(Date.parse('2026-01-01T00:00:00.000Z'))
+    )
     client.disconnect()
   })
 

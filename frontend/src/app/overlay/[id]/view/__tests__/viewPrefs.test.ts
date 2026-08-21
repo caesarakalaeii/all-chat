@@ -86,7 +86,11 @@ describe('viewPrefs', () => {
   it('preserves valid stored activity-sound settings', () => {
     localStorage.setItem(
       VIEW_PREFS_KEY,
-      JSON.stringify({ activitySoundEnabled: true, activitySoundVolume: 0.25, activitySoundPreset: 'pop' })
+      JSON.stringify({
+        activitySoundEnabled: true,
+        activitySoundVolume: 0.25,
+        activitySoundPreset: 'pop',
+      })
     )
     const prefs = loadViewPrefs()
     expect(prefs.activitySoundEnabled).toBe(true)

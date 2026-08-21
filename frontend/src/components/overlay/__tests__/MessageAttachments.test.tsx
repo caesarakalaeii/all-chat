@@ -80,7 +80,9 @@ describe('MessageAttachments', () => {
   it('falls back to a descriptive alt for GIFs without a filename', () => {
     render(
       <MessageAttachments
-        message={makeMessage([{ type: 'image', url: 'https://x/a.gif', content_type: 'image/gif' }])}
+        message={makeMessage([
+          { type: 'image', url: 'https://x/a.gif', content_type: 'image/gif' },
+        ])}
       />
     )
     expect(screen.getByAltText('Shared GIF')).toBeTruthy()
@@ -88,9 +90,7 @@ describe('MessageAttachments', () => {
 
   it('renders a video with an accessible label', () => {
     render(
-      <MessageAttachments
-        message={makeMessage([{ type: 'video', url: 'https://x/clip.mp4' }])}
-      />
+      <MessageAttachments message={makeMessage([{ type: 'video', url: 'https://x/clip.mp4' }])} />
     )
     const video = screen.getByLabelText('Shared video clip')
     expect(video.tagName).toBe('VIDEO')

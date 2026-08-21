@@ -60,7 +60,11 @@ describe('preloadOverlayEmotes', () => {
     )
 
     expect(count).toBe(3)
-    expect(loaded.sort()).toEqual(['https://cdn/a.webp', 'https://cdn/b.webp', 'https://cdn/c.webp'])
+    expect(loaded.sort()).toEqual([
+      'https://cdn/a.webp',
+      'https://cdn/b.webp',
+      'https://cdn/c.webp',
+    ])
   })
 
   it('deduplicates URLs shared across channels', async () => {

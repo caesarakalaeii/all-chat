@@ -18,7 +18,6 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 import { Toast as ToastPrimitive } from '@base-ui/react/toast'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'

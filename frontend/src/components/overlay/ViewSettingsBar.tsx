@@ -136,7 +136,8 @@ export function ViewSettingsBar({ prefs, onChange, onTestActivitySound }: ViewSe
                     onChange={(e) =>
                       onChange({
                         ...prefs,
-                        activitySoundPreset: e.target.value as MonitorViewPrefs['activitySoundPreset'],
+                        activitySoundPreset: e.target
+                          .value as MonitorViewPrefs['activitySoundPreset'],
                       })
                     }
                     className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text"

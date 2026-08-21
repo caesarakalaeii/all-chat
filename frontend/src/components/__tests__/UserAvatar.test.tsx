@@ -36,45 +36,35 @@ import { UserAvatar } from '../UserAvatar'
 
 describe('UserAvatar', () => {
   it('renders frame img when frameUrl is provided', () => {
-    const { container } = render(
-      <UserAvatar size={40} frameUrl="https://example.com/frame.png" />
-    )
+    const { container } = render(<UserAvatar size={40} frameUrl="https://example.com/frame.png" />)
     const imgs = container.querySelectorAll('img')
     const frameImg = Array.from(imgs).find((img) => img.src.includes('frame.png'))
     expect(frameImg).toBeDefined()
   })
 
   it('does not render frame img when frameUrl is empty', () => {
-    const { container } = render(
-      <UserAvatar size={40} frameUrl="" />
-    )
+    const { container } = render(<UserAvatar size={40} frameUrl="" />)
     const imgs = container.querySelectorAll('img')
     const frameImg = Array.from(imgs).find((img) => img.src.includes('frame'))
     expect(frameImg).toBeUndefined()
   })
 
   it('does not render frame img when frameUrl is undefined', () => {
-    const { container } = render(
-      <UserAvatar size={40} />
-    )
+    const { container } = render(<UserAvatar size={40} />)
     // Only avatar img should be absent (no avatarUrl), no frame imgs
     const imgs = container.querySelectorAll('img')
     expect(imgs.length).toBe(0)
   })
 
   it('renders flair img when flairUrl is provided', () => {
-    const { container } = render(
-      <UserAvatar size={40} flairUrl="https://example.com/flair.png" />
-    )
+    const { container } = render(<UserAvatar size={40} flairUrl="https://example.com/flair.png" />)
     const imgs = container.querySelectorAll('img')
     const flairImg = Array.from(imgs).find((img) => img.src.includes('flair.png'))
     expect(flairImg).toBeDefined()
   })
 
   it('does not render flair img when flairUrl is undefined', () => {
-    const { container } = render(
-      <UserAvatar size={40} />
-    )
+    const { container } = render(<UserAvatar size={40} />)
     const imgs = container.querySelectorAll('img')
     expect(imgs.length).toBe(0)
   })
@@ -89,9 +79,7 @@ describe('UserAvatar', () => {
   })
 
   it('renders fallback initials when avatarUrl is absent', () => {
-    const { getByText } = render(
-      <UserAvatar size={40} displayName="Alice" />
-    )
+    const { getByText } = render(<UserAvatar size={40} displayName="Alice" />)
     expect(getByText('A')).toBeDefined()
   })
 
@@ -112,7 +100,11 @@ describe('UserAvatar', () => {
 
   it('sets referrerPolicy=no-referrer so cross-origin CDN avatars can load', () => {
     const { container } = render(
-      <UserAvatar size={40} avatarUrl="https://p16-sign.tiktokcdn.com/avatar.jpeg" displayName="Bob" />
+      <UserAvatar
+        size={40}
+        avatarUrl="https://p16-sign.tiktokcdn.com/avatar.jpeg"
+        displayName="Bob"
+      />
     )
     const img = container.querySelector('img')
     expect(img).not.toBeNull()
@@ -120,17 +112,13 @@ describe('UserAvatar', () => {
   })
 
   it('renders ? fallback when avatarUrl and displayName both absent', () => {
-    const { getAllByText } = render(
-      <UserAvatar size={40} />
-    )
+    const { getAllByText } = render(<UserAvatar size={40} />)
     const matches = getAllByText('?')
     expect(matches.length).toBeGreaterThan(0)
   })
 
   it('frame img has 1.4x size', () => {
-    const { container } = render(
-      <UserAvatar size={40} frameUrl="https://example.com/frame.png" />
-    )
+    const { container } = render(<UserAvatar size={40} frameUrl="https://example.com/frame.png" />)
     const imgs = container.querySelectorAll('img')
     const frameImg = Array.from(imgs).find((img) => img.src.includes('frame.png'))
     expect(frameImg).toBeDefined()
@@ -139,9 +127,7 @@ describe('UserAvatar', () => {
   })
 
   it('flair img has 0.4x size at bottom-right', () => {
-    const { container } = render(
-      <UserAvatar size={40} flairUrl="https://example.com/flair.png" />
-    )
+    const { container } = render(<UserAvatar size={40} flairUrl="https://example.com/flair.png" />)
     const imgs = container.querySelectorAll('img')
     const flairImg = Array.from(imgs).find((img) => img.src.includes('flair.png'))
     expect(flairImg).toBeDefined()

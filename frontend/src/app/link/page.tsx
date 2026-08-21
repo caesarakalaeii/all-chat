@@ -465,12 +465,7 @@ function LinkDeviceContent() {
             <span className="sr-only">Loading link request</span>
           </div>
         ) : pending ? (
-          <ApproveForm
-            pending={pending}
-            userCode={userCode}
-            overlays={overlays}
-            state={state}
-          />
+          <ApproveForm pending={pending} userCode={userCode} overlays={overlays} state={state} />
         ) : (
           <CodeEntry
             initialError={loadError}

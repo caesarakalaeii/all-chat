@@ -41,7 +41,9 @@ export default function PredictionOverlayPage({ params }: { params: Promise<{ id
 
   const fetchPrediction = useCallback(async () => {
     try {
-      const res = await fetch(`/api/v1/engagement/overlays/${id}/active-prediction`, { cache: 'no-store' })
+      const res = await fetch(`/api/v1/engagement/overlays/${id}/active-prediction`, {
+        cache: 'no-store',
+      })
       if (res.status === 404) {
         setPrediction(null)
         return
@@ -65,20 +67,33 @@ export default function PredictionOverlayPage({ params }: { params: Promise<{ id
 
   // Near-real-time refresh on a prediction_update WS frame (L-D1); the 2s interval
   // above remains the fallback / source of truth.
-  useEngagementLive(id, (kind) => {
-    if (kind === 'prediction') void fetchPrediction()
-  }, { maxReconnectAttempts: 8 })
+  useEngagementLive(
+    id,
+    (kind) => {
+      if (kind === 'prediction') void fetchPrediction()
+    },
+    { maxReconnectAttempts: 8 }
+  )
 
   // A backend grace window briefly serves a recently-resolved round after it ends, so the
   // final RESOLVED tally shows before the widget hides itself; once the grace window lapses
   // /active stops returning it and this hides.
-  if (!prediction || (prediction.state !== 'ACTIVE' && prediction.state !== 'LOCKED' && prediction.state !== 'RESOLVED')) {
+  if (
+    !prediction ||
+    (prediction.state !== 'ACTIVE' &&
+      prediction.state !== 'LOCKED' &&
+      prediction.state !== 'RESOLVED')
+  ) {
     return null
   }
 
   const totalPool = prediction.outcomes.reduce((sum, o) => sum + o.total_points, 0)
   const stateBadge =
-    prediction.state === 'LOCKED' ? '🔒 LOCKED' : prediction.state === 'RESOLVED' ? '🏆 RESOLVED' : 'OPEN'
+    prediction.state === 'LOCKED'
+      ? '🔒 LOCKED'
+      : prediction.state === 'RESOLVED'
+        ? '🏆 RESOLVED'
+        : 'OPEN'
 
   return (
     <div className="min-h-screen bg-transparent p-4">
@@ -90,23 +105,32 @@ export default function PredictionOverlayPage({ params }: { params: Promise<{ id
         <div className="space-y-2">
           {prediction.outcomes.map((o, i) => {
             const pct = totalPool > 0 ? Math.round((o.total_points / totalPool) * 100) : 0
-            const isWinner = prediction.state === 'RESOLVED' && prediction.winning_outcome_id === o.id
+            const isWinner =
+              prediction.state === 'RESOLVED' && prediction.winning_outcome_id === o.id
             return (
               <div
                 key={o.id}
-                className={clsx('relative h-9 overflow-hidden rounded-md bg-white/15', isWinner && 'ring-2 ring-yellow-400')}
+                className={clsx(
+                  'relative h-9 overflow-hidden rounded-md bg-white/15',
+                  isWinner && 'ring-2 ring-yellow-400'
+                )}
               >
                 <div
-                  className={clsx('absolute inset-y-0 left-0 transition-[width] duration-500', OUTCOME_COLORS[i % OUTCOME_COLORS.length])}
+                  className={clsx(
+                    'absolute inset-y-0 left-0 transition-[width] duration-500',
+                    OUTCOME_COLORS[i % OUTCOME_COLORS.length]
+                  )}
                   style={{ width: `${pct}%` }}
                 />
                 <div className="relative flex h-full items-center justify-between px-3 text-sm font-semibold">
                   <span className="flex min-w-0 items-center gap-1.5">
-                    <span className="truncate">{o.idx}. {o.label}</span>
+                    <span className="truncate">
+                      {o.idx}. {o.label}
+                    </span>
                     {/* Winner conveyed by a labelled pill (not colour/emoji alone) so it
                         has an accessible name and reads for colourblind viewers (L-A1). */}
                     {isWinner && (
-                      <span className="shrink-0 rounded bg-yellow-400 px-1.5 py-0.5 text-[10px] font-bold uppercase text-black">
+                      <span className="shrink-0 rounded bg-yellow-400 px-1.5 py-0.5 text-[10px] font-bold text-black uppercase">
                         Winner
                       </span>
                     )}
@@ -120,7 +144,10 @@ export default function PredictionOverlayPage({ params }: { params: Promise<{ id
           })}
         </div>
         <div className="mt-3 flex items-center justify-between text-sm text-white/80">
-          <span className="tabular-nums">{totalPool.toLocaleString()} pts wagered · {prediction.outcomes.reduce((s, o) => s + o.entrants, 0)} players</span>
+          <span className="tabular-nums">
+            {totalPool.toLocaleString()} pts wagered ·{' '}
+            {prediction.outcomes.reduce((s, o) => s + o.entrants, 0)} players
+          </span>
           <span className="font-semibold">{stateBadge}</span>
         </div>
       </div>

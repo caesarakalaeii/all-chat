@@ -122,7 +122,12 @@ export class WebSocketClient {
   /**
    * Connect to WebSocket for a specific overlay
    */
-  connect(overlayId: string, token?: string | null, engagementOnly = false, viewerParticipant = false) {
+  connect(
+    overlayId: string,
+    token?: string | null,
+    engagementOnly = false,
+    viewerParticipant = false
+  ) {
     this.overlayId = overlayId
     this.token = token ?? ''
     this.engagementOnly = engagementOnly
@@ -202,7 +207,9 @@ export class WebSocketClient {
           const tsMs = Date.parse(chat.timestamp)
           if (Number.isFinite(tsMs) && tsMs > this.lastSeenTimestamp) {
             this.lastSeenTimestamp = tsMs
-            try { localStorage.setItem(storageKey, String(tsMs)) } catch {}
+            try {
+              localStorage.setItem(storageKey, String(tsMs))
+            } catch {}
           }
           this.messageCallbacks.forEach((cb) => cb(chat))
         } else if (wsMessage.type === 'ping') {
@@ -305,7 +312,9 @@ export class WebSocketClient {
     }
     this.clearLivenessTimers()
     const delay = computeBackoffDelay(this.reconnectAttempts)
-    console.log(`[WebSocket] Reconnecting in ${Math.round(delay)}ms (attempt ${this.reconnectAttempts + 1})`)
+    console.log(
+      `[WebSocket] Reconnecting in ${Math.round(delay)}ms (attempt ${this.reconnectAttempts + 1})`
+    )
     this.reconnectTimeout = setTimeout(() => {
       this.reconnectTimeout = null
       this.reconnectAttempts++
@@ -370,6 +379,8 @@ export class WebSocketClient {
    * exactly the stale-indicator bug, so prolonged silence reads as disconnected.
    */
   isConnected(): boolean {
-    return this.ws?.readyState === WebSocket.OPEN && !isConnectionStale(this.lastActivity, Date.now())
+    return (
+      this.ws?.readyState === WebSocket.OPEN && !isConnectionStale(this.lastActivity, Date.now())
+    )
   }
 }

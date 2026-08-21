@@ -74,10 +74,10 @@ export type AnalyticsEvent =
   // Outbound & CTA
   | 'outbound_click'
   | 'cta_click'
-  // NOTE: a `capacity_limit_hit` event lived here but was never fired — no
-  // user-facing overlay/source cap exists in the product (verified 2026-07-27:
-  // neither HandleCreateOverlay nor HandleAddSource enforces a count). Re-add it
-  // if a cap is ever introduced, wired to the real error at its enforcement site.
+// NOTE: a `capacity_limit_hit` event lived here but was never fired — no
+// user-facing overlay/source cap exists in the product (verified 2026-07-27:
+// neither HandleCreateOverlay nor HandleAddSource enforces a count). Re-add it
+// if a cap is ever introduced, wired to the real error at its enforcement site.
 
 /** Umami only accepts flat primitive values in event data. */
 export type EventData = Record<string, string | number | boolean>

@@ -81,7 +81,10 @@ export function loadViewPrefs(): MonitorViewPrefs {
     if (!PRESET_NAMES.includes(merged.activitySoundPreset)) {
       merged.activitySoundPreset = DEFAULT_VIEW_PREFS.activitySoundPreset
     }
-    if (typeof merged.activitySoundVolume !== 'number' || !Number.isFinite(merged.activitySoundVolume)) {
+    if (
+      typeof merged.activitySoundVolume !== 'number' ||
+      !Number.isFinite(merged.activitySoundVolume)
+    ) {
       merged.activitySoundVolume = DEFAULT_VIEW_PREFS.activitySoundVolume
     } else {
       merged.activitySoundVolume = Math.min(1, Math.max(0, merged.activitySoundVolume))

@@ -42,7 +42,9 @@ describe('ViewSettingsBar activity sound', () => {
   it('renders the activity-sound toggle and the separation note', () => {
     setup()
     expect(screen.getByRole('switch', { name: 'Sound on new activity' })).toBeInTheDocument()
-    expect(screen.getByText(/separate from your overlay's on-stream notification sounds/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/separate from your overlay's on-stream notification sounds/i)
+    ).toBeInTheDocument()
   })
 
   it('enabling the toggle calls onChange with activitySoundEnabled: true', () => {

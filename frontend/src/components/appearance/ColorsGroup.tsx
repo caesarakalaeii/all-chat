@@ -18,7 +18,6 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 import React from 'react'
 import type { VisualSettings } from '@/lib/types/visual-settings'
 import { ColorPickerControl } from './ColorPickerControl'

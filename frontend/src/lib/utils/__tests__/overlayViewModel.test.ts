@@ -33,7 +33,10 @@ import {
   type ViewItem,
 } from '@/lib/utils/overlayViewModel'
 
-function item(id: string, opts: { userId?: string; eventType?: EventType; aggId?: string } = {}): ViewItem {
+function item(
+  id: string,
+  opts: { userId?: string; eventType?: EventType; aggId?: string } = {}
+): ViewItem {
   const base: ViewItem = {
     id,
     overlay_id: 'o1',
@@ -122,14 +125,26 @@ describe('deletionKind / toModEntry', () => {
   })
 
   it('maps batch with positive duration to timeout, carrying duration + username', () => {
-    const meta: DeletionMetadata = { deletion_type: 'batch', target_user_id: 'u9', target_username: 'spammer', ban_duration: 600 }
+    const meta: DeletionMetadata = {
+      deletion_type: 'batch',
+      target_user_id: 'u9',
+      target_username: 'spammer',
+      ban_duration: 600,
+    }
     expect(deletionKind(meta)).toBe('timeout')
     const e = toModEntry(meta, 'live', 1)
-    expect(e).toMatchObject({ kind: 'timeout', username: 'spammer', targetUserId: 'u9', banDuration: 600 })
+    expect(e).toMatchObject({
+      kind: 'timeout',
+      username: 'spammer',
+      targetUserId: 'u9',
+      banDuration: 600,
+    })
   })
 
   it('maps batch with zero/absent duration to ban', () => {
-    expect(deletionKind({ deletion_type: 'batch', target_user_id: 'u9', ban_duration: 0 })).toBe('ban')
+    expect(deletionKind({ deletion_type: 'batch', target_user_id: 'u9', ban_duration: 0 })).toBe(
+      'ban'
+    )
     expect(deletionKind({ deletion_type: 'batch', target_user_id: 'u9' })).toBe('ban')
   })
 
@@ -142,13 +157,25 @@ describe('deletionKind / toModEntry', () => {
 describe('isDeletionTarget', () => {
   it('single matches by message uuid', () => {
     expect(isDeletionTarget(item('m1'), { deletion_type: 'single', target_uuid: 'm1' })).toBe(true)
-    expect(isDeletionTarget(item('m1'), { deletion_type: 'single', target_uuid: 'other' })).toBe(false)
+    expect(isDeletionTarget(item('m1'), { deletion_type: 'single', target_uuid: 'other' })).toBe(
+      false
+    )
     expect(isDeletionTarget(item('m1'), { deletion_type: 'single' })).toBe(false)
   })
 
   it('batch matches by user id', () => {
-    expect(isDeletionTarget(item('m1', { userId: 'u5' }), { deletion_type: 'batch', target_user_id: 'u5' })).toBe(true)
-    expect(isDeletionTarget(item('m1', { userId: 'u5' }), { deletion_type: 'batch', target_user_id: 'u6' })).toBe(false)
+    expect(
+      isDeletionTarget(item('m1', { userId: 'u5' }), {
+        deletion_type: 'batch',
+        target_user_id: 'u5',
+      })
+    ).toBe(true)
+    expect(
+      isDeletionTarget(item('m1', { userId: 'u5' }), {
+        deletion_type: 'batch',
+        target_user_id: 'u6',
+      })
+    ).toBe(false)
   })
 
   it('clear matches every item', () => {
@@ -166,8 +193,16 @@ describe('applyModerationMark', () => {
   })
 
   it('marks all messages from a banned user', () => {
-    const items = [item('m1', { userId: 'ua' }), item('m2', { userId: 'ub' }), item('m3', { userId: 'ua' })]
-    const next = applyModerationMark(items, { deletion_type: 'batch', target_user_id: 'ua', ban_duration: 0 })
+    const items = [
+      item('m1', { userId: 'ua' }),
+      item('m2', { userId: 'ub' }),
+      item('m3', { userId: 'ua' }),
+    ]
+    const next = applyModerationMark(items, {
+      deletion_type: 'batch',
+      target_user_id: 'ua',
+      ban_duration: 0,
+    })
     expect(next[0]._moderated?.kind).toBe('ban')
     expect(next[1]._moderated).toBeUndefined()
     expect(next[2]._moderated?.kind).toBe('ban')
@@ -212,8 +247,12 @@ describe('shouldAutoScroll', () => {
   })
 
   it('respects a custom threshold', () => {
-    expect(shouldAutoScroll({ scrollHeight: 1000, scrollTop: 800, clientHeight: 100 }, 100)).toBe(true)
-    expect(shouldAutoScroll({ scrollHeight: 1000, scrollTop: 800, clientHeight: 100 }, 50)).toBe(false)
+    expect(shouldAutoScroll({ scrollHeight: 1000, scrollTop: 800, clientHeight: 100 }, 100)).toBe(
+      true
+    )
+    expect(shouldAutoScroll({ scrollHeight: 1000, scrollTop: 800, clientHeight: 100 }, 50)).toBe(
+      false
+    )
   })
 })
 
