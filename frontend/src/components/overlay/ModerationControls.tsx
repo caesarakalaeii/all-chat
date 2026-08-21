@@ -20,8 +20,8 @@
 
 import clsx from 'clsx'
 import { Ban, Clock, ShieldOff, Trash2 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
 
+import { Popover } from '@/components/ui/popover'
 import { MODERATABLE_PLATFORMS, TIMEOUT_PRESETS } from '@/lib/types/moderation'
 import type { SourceCapability } from '@/lib/types/moderation'
 import type { ViewItem } from '@/lib/utils/overlayViewModel'
@@ -41,6 +41,13 @@ export interface ModerationControlsProps {
  * button reveals on row hover (the parent row owns the `group` class); a small
  * popover offers timeout presets, ban and unban.
  *
+ * The per-user menu is a ui/popover, so it is portaled to `document.body` and
+ * positioned by Base UI. It has to be: as an absolutely-positioned child of the
+ * row it was clipped by ChatPanel's `overflow-y-auto` scroll container, and
+ * since it only ever opened downward, the newest row's menu had no room at all
+ * — the ban action for the viewer who just spoke was unreachable. z-index does
+ * not help with clipping; leaving the scroll container is the fix.
+ *
  * Affordances follow the source's capability: a platform with no moderation API
  * (e.g. TikTok) or a source missing the required scope renders every control
  * disabled with an explanatory tooltip. Individual actions are further gated by
@@ -55,20 +62,6 @@ export function ModerationControls({
   onBan,
   onUnban,
 }: ModerationControlsProps) {
-  const [open, setOpen] = useState(false)
-  const containerRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [open])
-
   const platformSupported = MODERATABLE_PLATFORMS.has(item.platform)
   // A source is actionable only when its platform has a mod API, the viewer owns
   // the overlay (capability present) and the backend reports it moderatable.
@@ -106,16 +99,8 @@ export function ModerationControls({
                 ? "The All-Chat bot wasn't given this Discord permission — ask the streamer to re-invite it"
                 : 'Moderation is unavailable for this source'
 
-  const closeAfter = (fn: () => void) => () => {
-    fn()
-    setOpen(false)
-  }
-
   return (
-    <div
-      ref={containerRef}
-      className="relative ml-1 inline-flex shrink-0 items-center gap-1 align-text-bottom"
-    >
+    <div className="ml-1 inline-flex shrink-0 items-center gap-1 align-text-bottom">
       {/* Delete — revealed on row hover. Hidden for moderatable sources that don't
           support single-message delete (Kick/YouTube). */}
       {showDelete && (
@@ -139,69 +124,83 @@ export function ModerationControls({
       {/* Per-user actions trigger. Hidden for moderatable sources with no per-user
           action granted (e.g. a Discord bot invited without ban/timeout permissions). */}
       {showUserActions && (
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          disabled={disabled}
-          aria-expanded={open}
-          title={disabled ? disabledReason : 'Moderate user'}
-          aria-label="Moderate user"
-          className={clsx(
-            'rounded p-0.5 opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none',
-            disabled
-              ? 'cursor-not-allowed text-text-dim/50'
-              : 'text-text-dim hover:bg-surface-2 hover:text-text'
-          )}
-        >
-          <Clock className="h-3.5 w-3.5" />
-        </button>
-      )}
-
-      {open && !disabled && (
-        <div className="absolute top-full right-0 z-50 mt-1 w-44 rounded-lg border border-border bg-surface p-2 shadow-lg">
-          {can('timeout') && (
-            <div className="mb-1">
-              <p className="mb-1 px-1 text-[10px] font-semibold tracking-wide text-text-dim uppercase">
-                Timeout
-              </p>
-              <div className="flex gap-1">
-                {TIMEOUT_PRESETS.map((preset) => (
-                  <button
-                    key={preset.seconds}
-                    type="button"
-                    onClick={closeAfter(() => onTimeout(item, preset.seconds))}
-                    className="flex flex-1 items-center justify-center gap-1 rounded border border-border px-1.5 py-1 text-xs font-medium text-text-sub transition-colors hover:border-border-md hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
-                  >
-                    <Clock className="h-3 w-3" />
-                    {preset.label}
-                  </button>
-                ))}
+        <Popover.Root>
+          <Popover.Trigger
+            render={
+              <button
+                type="button"
+                disabled={disabled}
+                title={disabled ? disabledReason : 'Moderate user'}
+                aria-label="Moderate user"
+                className={clsx(
+                  'rounded p-0.5 opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none',
+                  disabled
+                    ? 'cursor-not-allowed text-text-dim/50'
+                    : 'text-text-dim hover:bg-surface-2 hover:text-text'
+                )}
+              >
+                <Clock className="h-3.5 w-3.5" />
+              </button>
+            }
+          />
+          <Popover.Content className="w-44 border-border bg-surface p-2">
+            <Popover.Title className="sr-only">Moderate user</Popover.Title>
+            {can('timeout') && (
+              <div className="mb-1">
+                <p className="mb-1 px-1 text-[10px] font-semibold tracking-wide text-text-dim uppercase">
+                  Timeout
+                </p>
+                <div className="flex gap-1">
+                  {TIMEOUT_PRESETS.map((preset) => (
+                    <Popover.Close
+                      key={preset.seconds}
+                      render={
+                        <button
+                          type="button"
+                          onClick={() => onTimeout(item, preset.seconds)}
+                          className="flex flex-1 items-center justify-center gap-1 rounded border border-border px-1.5 py-1 text-xs font-medium text-text-sub transition-colors hover:border-border-md hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                        >
+                          <Clock className="h-3 w-3" />
+                          {preset.label}
+                        </button>
+                      }
+                    />
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {can('ban') && (
-            <button
-              type="button"
-              onClick={closeAfter(() => onBan(item))}
-              className="flex w-full items-center gap-2 rounded border border-red-500/20 bg-red-500/10 px-2 py-1.5 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/20 focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:outline-none"
-            >
-              <Ban className="h-3.5 w-3.5" />
-              Ban user
-            </button>
-          )}
+            {can('ban') && (
+              <Popover.Close
+                render={
+                  <button
+                    type="button"
+                    onClick={() => onBan(item)}
+                    className="flex w-full items-center gap-2 rounded border border-red-500/20 bg-red-500/10 px-2 py-1.5 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/20 focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:outline-none"
+                  >
+                    <Ban className="h-3.5 w-3.5" />
+                    Ban user
+                  </button>
+                }
+              />
+            )}
 
-          {can('unban') && (
-            <button
-              type="button"
-              onClick={closeAfter(() => onUnban(item))}
-              className="mt-1 flex w-full items-center gap-2 rounded border border-border px-2 py-1.5 text-xs font-medium text-text-sub transition-colors hover:border-border-md hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
-            >
-              <ShieldOff className="h-3.5 w-3.5" />
-              Unban user
-            </button>
-          )}
-        </div>
+            {can('unban') && (
+              <Popover.Close
+                render={
+                  <button
+                    type="button"
+                    onClick={() => onUnban(item)}
+                    className="mt-1 flex w-full items-center gap-2 rounded border border-border px-2 py-1.5 text-xs font-medium text-text-sub transition-colors hover:border-border-md hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                  >
+                    <ShieldOff className="h-3.5 w-3.5" />
+                    Unban user
+                  </button>
+                }
+              />
+            )}
+          </Popover.Content>
+        </Popover.Root>
       )}
     </div>
   )
