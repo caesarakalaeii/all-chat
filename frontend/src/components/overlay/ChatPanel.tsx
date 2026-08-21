@@ -18,16 +18,19 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { ArrowDown, Filter, X } from 'lucide-react'
+import clsx from 'clsx'
+import { ArrowDown, ArrowUp, Filter, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { ChatRow, type ChatRowModeration } from '@/components/overlay/ChatRow'
-import type { MonitorViewPrefs } from '@/app/overlay/[id]/view/viewPrefs'
+import { DEFAULT_VIEW_PREFS, type MonitorViewPrefs } from '@/app/overlay/[id]/view/viewPrefs'
 import type { SourceCapability } from '@/lib/types/moderation'
+import { orderMessages } from '@/lib/utils/feedAnchor'
 import {
+  chatRowKeys,
   countNewItems,
+  isPinnedToLiveEdge,
   matchesUserFilter,
-  shouldAutoScroll,
   userFilterFor,
   type UserFilter,
   type ViewItem,
@@ -47,57 +50,104 @@ interface ChatPanelProps {
 }
 
 /**
- * Scrollable live-chat panel with Twitch-style pin-to-bottom: auto-scrolls to
- * the newest message unless the user has scrolled up to read history. Scrolling
- * up pauses the feed on a frozen snapshot — without the freeze, a fast chat
- * keeps trimming the capped buffer from the top and scrollback slides out from
- * under the reader. A "Chat paused" pill (with a count of new messages) resumes.
+ * Scrollable live-chat panel with Twitch-style pin-to-the-live-edge:
+ * auto-scrolls to the newest message unless the user has scrolled away to read
+ * history. Scrolling away pauses the feed on a frozen snapshot — without the
+ * freeze, a fast chat keeps trimming the capped buffer and scrollback slides out
+ * from under the reader. A "Chat paused" pill (with a count of new messages)
+ * resumes.
+ *
+ * Two orders, chosen by `prefs.newestFirst`:
+ *  - off (default): newest message at the BOTTOM, older ones above it, live
+ *    edge at the bottom — the Twitch arrangement.
+ *  - on: newest message at the TOP, older ones scrolling away downward, live
+ *    edge at the top. For reading chat without looking down mid-stream.
+ * Everything that depends on "where is the newest message" follows from that:
+ * the pin edge, the auto-scroll target, and the side the paused pill sits on.
  *
  * Clicking a username narrows the panel to that platform identity (a 1:1
  * conversation view for fast chats); a filter bar shows who is selected and
  * clears it. No smooth-scroll (instant, professional).
  */
 export function ChatPanel({ items, prefs, capabilities, moderation }: ChatPanelProps) {
+  const newestFirst = (prefs ?? DEFAULT_VIEW_PREFS).newestFirst
   const scrollRef = useRef<HTMLDivElement>(null)
   const pinnedRef = useRef(true)
   // Frozen scrollback snapshot while the user reads history; null = live feed.
-  const [paused, setPaused] = useState<ViewItem[] | null>(null)
+  // It records the order it was taken under, because flipping the order moves
+  // the live edge to the opposite side of the panel and would strand the reader
+  // at what is now an arbitrary offset.
+  const [pause, setPause] = useState<{ snapshot: ViewItem[]; newestFirst: boolean } | null>(null)
   const [userFilter, setUserFilter] = useState<UserFilter | null>(null)
+
+  // A snapshot from the other order is stale: the flip resumes live, and the
+  // auto-scroll effect below jumps to the new edge. Derived rather than reset in
+  // an effect so the flip renders live chat immediately, without a cascade.
+  const paused = pause && pause.newestFirst === newestFirst ? pause.snapshot : null
 
   const live = useMemo(
     () => (userFilter ? items.filter((m) => matchesUserFilter(m, userFilter)) : items),
     [items, userFilter]
   )
   const visible = useMemo(
-    () => (paused ? (userFilter ? paused.filter((m) => matchesUserFilter(m, userFilter)) : paused) : live),
+    () =>
+      paused
+        ? userFilter
+          ? paused.filter((m) => matchesUserFilter(m, userFilter))
+          : paused
+        : live,
     [paused, userFilter, live]
   )
   const newCount = paused ? countNewItems(visible, live) : 0
+  // Rows in render order, each carrying the key it got from the CHRONOLOGICAL
+  // list: under newestFirst every arrival is a prepend, so an index-based key
+  // would change for every row on every message and remount the whole buffer.
+  //
+  // The ORDER axis is shared with the OBS overlay's
+  // `display_settings.invert_message_order` — same pure helper, so the two
+  // surfaces cannot drift on what "newest first" means.
+  const rows = useMemo(() => {
+    const keys = chatRowKeys(visible)
+    return orderMessages(
+      visible.map((item, i) => ({ item, key: keys[i] })),
+      newestFirst
+    )
+  }, [visible, newestFirst])
 
   const handleScroll = () => {
     const el = scrollRef.current
     if (!el) return
-    const pinned = shouldAutoScroll({
-      scrollHeight: el.scrollHeight,
-      scrollTop: el.scrollTop,
-      clientHeight: el.clientHeight,
-    })
+    const pinned = isPinnedToLiveEdge(
+      {
+        scrollHeight: el.scrollHeight,
+        scrollTop: el.scrollTop,
+        clientHeight: el.clientHeight,
+      },
+      newestFirst
+    )
     if (pinned === pinnedRef.current) return
     pinnedRef.current = pinned
-    // Scrolling up freezes what is rendered; scrolling back to the bottom resumes.
-    setPaused(pinned ? null : items)
+    // Scrolling away from the live edge freezes what is rendered; scrolling back
+    // to it resumes.
+    setPause(pinned ? null : { snapshot: items, newestFirst })
   }
+
+  // The flip discards the snapshot (see `paused` above); re-pin to match, so the
+  // effect below scrolls to the new live edge.
+  useEffect(() => {
+    pinnedRef.current = true
+  }, [newestFirst])
 
   useEffect(() => {
     const el = scrollRef.current
-    if (el && pinnedRef.current) el.scrollTop = el.scrollHeight
-  }, [visible])
+    if (el && pinnedRef.current) el.scrollTop = newestFirst ? 0 : el.scrollHeight
+  }, [visible, newestFirst])
 
   const resumeLive = () => {
     pinnedRef.current = true
-    setPaused(null)
+    setPause(null)
     const el = scrollRef.current
-    if (el) el.scrollTop = el.scrollHeight
+    if (el) el.scrollTop = newestFirst ? 0 : el.scrollHeight
   }
 
   // Toggle the 1:1 filter to the clicked chatter (click the name again to clear)
@@ -145,9 +195,9 @@ export function ChatPanel({ items, prefs, capabilities, moderation }: ChatPanelP
             {userFilter ? `No messages from ${userFilter.label} yet.` : 'No chat messages yet.'}
           </p>
         ) : (
-          visible.map((item, i) => (
+          rows.map(({ item, key }) => (
             <ChatRow
-              key={`${item.id}-${i}`}
+              key={key}
               item={item}
               prefs={prefs}
               onUserClick={handleUserClick}
@@ -163,9 +213,17 @@ export function ChatPanel({ items, prefs, capabilities, moderation }: ChatPanelP
       {paused && (
         <button
           onClick={resumeLive}
-          className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-border-md bg-surface px-3 py-1.5 text-xs font-medium text-text shadow-lg hover:bg-surface-2 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+          className={clsx(
+            'absolute left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-border-md bg-surface px-3 py-1.5 text-xs font-medium text-text shadow-lg hover:bg-surface-2 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none',
+            // The pill belongs next to the live edge it scrolls back to.
+            newestFirst ? 'top-3' : 'bottom-3'
+          )}
         >
-          <ArrowDown className="h-3.5 w-3.5" />
+          {newestFirst ? (
+            <ArrowUp className="h-3.5 w-3.5" />
+          ) : (
+            <ArrowDown className="h-3.5 w-3.5" />
+          )}
           {newCount > 0 ? `Chat paused · ${newCount} new` : 'Chat paused'}
         </button>
       )}
