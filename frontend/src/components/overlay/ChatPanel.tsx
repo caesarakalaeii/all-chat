@@ -41,7 +41,7 @@ export type ChatPanelModeration = Omit<ChatRowModeration, 'capability'>
 
 interface ChatPanelProps {
   items: ViewItem[]
-  /** View-local display prefs; omitted = all-on (existing callers stay unchanged). */
+  /** View-local display prefs; omitted = `DEFAULT_VIEW_PREFS` (existing callers stay unchanged). */
   prefs?: MonitorViewPrefs
   /** Per-source moderation capability, keyed by channel_id. */
   capabilities?: Map<string, SourceCapability>
@@ -74,16 +74,23 @@ export function ChatPanel({ items, prefs, capabilities, moderation }: ChatPanelP
   const scrollRef = useRef<HTMLDivElement>(null)
   const pinnedRef = useRef(true)
   // Frozen scrollback snapshot while the user reads history; null = live feed.
-  // It records the order it was taken under, because flipping the order moves
-  // the live edge to the opposite side of the panel and would strand the reader
-  // at what is now an arbitrary offset.
-  const [pause, setPause] = useState<{ snapshot: ViewItem[]; newestFirst: boolean } | null>(null)
+  const [paused, setPaused] = useState<ViewItem[] | null>(null)
   const [userFilter, setUserFilter] = useState<UserFilter | null>(null)
 
-  // A snapshot from the other order is stale: the flip resumes live, and the
-  // auto-scroll effect below jumps to the new edge. Derived rather than reset in
-  // an effect so the flip renders live chat immediately, without a cascade.
-  const paused = pause && pause.newestFirst === newestFirst ? pause.snapshot : null
+  // Flipping the order moves the live edge to the opposite side of the panel, so
+  // a snapshot taken under the old order would strand the reader at what is now
+  // an arbitrary offset: discard it and resume live (the effect below scrolls to
+  // the new edge). The discard has to be one-way. Masking a kept snapshot by
+  // comparing orders instead looks equivalent but is not — flipping back
+  // re-matches and resurrects it, re-freezing chat with a pill the reader never
+  // asked for. This is React's adjust-state-when-a-prop-changes pattern; it
+  // cannot be an effect or a render-time ref write, because eslint's
+  // `react-hooks/set-state-in-effect` and `react-hooks/refs` forbid both.
+  const [orderShown, setOrderShown] = useState(newestFirst)
+  if (orderShown !== newestFirst) {
+    setOrderShown(newestFirst)
+    setPaused(null)
+  }
 
   const live = useMemo(
     () => (userFilter ? items.filter((m) => matchesUserFilter(m, userFilter)) : items),
@@ -102,6 +109,8 @@ export function ChatPanel({ items, prefs, capabilities, moderation }: ChatPanelP
   // Rows in render order, each carrying the key it got from the CHRONOLOGICAL
   // list: under newestFirst every arrival is a prepend, so an index-based key
   // would change for every row on every message and remount the whole buffer.
+  // Keying before ordering is load-bearing, not stylistic — the row-identity
+  // test in ChatPanel.test.tsx fails if these two lines are swapped.
   //
   // The ORDER axis is shared with the OBS overlay's
   // `display_settings.invert_message_order` — same pure helper, so the two
@@ -129,11 +138,11 @@ export function ChatPanel({ items, prefs, capabilities, moderation }: ChatPanelP
     pinnedRef.current = pinned
     // Scrolling away from the live edge freezes what is rendered; scrolling back
     // to it resumes.
-    setPause(pinned ? null : { snapshot: items, newestFirst })
+    setPaused(pinned ? null : items)
   }
 
-  // The flip discards the snapshot (see `paused` above); re-pin to match, so the
-  // effect below scrolls to the new live edge.
+  // The flip discards the snapshot (see `orderShown` above); re-pin to match, so
+  // the effect below scrolls to the new live edge.
   useEffect(() => {
     pinnedRef.current = true
   }, [newestFirst])
@@ -145,7 +154,7 @@ export function ChatPanel({ items, prefs, capabilities, moderation }: ChatPanelP
 
   const resumeLive = () => {
     pinnedRef.current = true
-    setPause(null)
+    setPaused(null)
     const el = scrollRef.current
     if (el) el.scrollTop = newestFirst ? 0 : el.scrollHeight
   }
