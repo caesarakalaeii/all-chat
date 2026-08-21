@@ -30,7 +30,7 @@
  * from Settings), minimizable, fully keyboard operable.
  */
 
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Check, ChevronDown, ChevronUp, Clipboard, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -131,15 +131,19 @@ export function OnboardingChecklist({
     }
   }, [status, steps, reportStepCompleted])
 
-  const [viewedStep, setViewedStep] = useState<OnboardingStepId | null>(null)
+  // The last step reported as viewed, so re-renders that do not change the active step
+  // stay silent. A ref rather than state: nothing renders from it, and setting state here
+  // would be a cascading render for no visible change
+  // (react-hooks/set-state-in-effect).
+  const reportedViewRef = useRef<OnboardingStepId | null>(null)
   useEffect(() => {
-    if (status !== 'active' || !activeStep || activeStep.id === viewedStep) return
-    setViewedStep(activeStep.id)
+    if (status !== 'active' || !activeStep || activeStep.id === reportedViewRef.current) return
+    reportedViewRef.current = activeStep.id
     trackEvent('onboarding_step_viewed', {
       step: activeStep.id,
       index: STEP_INDEX[activeStep.id],
     })
-  }, [status, activeStep, viewedStep])
+  }, [status, activeStep])
 
   if (status !== 'active') return null
 
