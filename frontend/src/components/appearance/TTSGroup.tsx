@@ -517,12 +517,33 @@ function ElevenLabsVoicePicker({
   typedApiKey,
   disabled,
 }: ElevenLabsVoicePickerProps): React.ReactElement {
-  const [voices, setVoices] = useState<ElevenLabsVoice[] | null>(null)
+  // A fingerprint of the key the loader would send: '__saved__' for the saved
+  // key, `typed:<key>` for a typed one, and '' when there is nothing long enough
+  // to be worth a round-trip. Both the result and the "already asked" guard are
+  // keyed on it, so a key change invalidates the previous answer by comparison
+  // instead of by an effect resetting state — which is a build error
+  // (`react-hooks/set-state-in-effect`). Whose voices these are is a fact about
+  // this render, not something to remember and then forget.
+  const keyFingerprint = hasSavedKey
+    ? '__saved__'
+    : typedApiKey.trim().length >= 8
+      ? `typed:${typedApiKey.trim()}`
+      : ''
+
+  const [result, setResult] = useState<{
+    fingerprint: string
+    voices: ElevenLabsVoice[] | null
+    failed: boolean
+  } | null>(null)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(false)
-  // Track which key fingerprint produced the current voices list so re-renders
-  // with the same value skip the network call.
-  const lastKeyRef = useRef<string>('')
+  // Which fingerprint the loader has already been called for, so a re-render
+  // that changes nothing the loader cares about skips the network call.
+  const askedForRef = useRef<string>('')
+
+  const current = result?.fingerprint === keyFingerprint ? result : null
+  const voices = current?.voices ?? null
+  const error = current?.failed ?? false
+  const showLoading = keyFingerprint !== '' && loading
 
   // Auto-load voices whenever the input that drives the loader changes:
   //   - hasSavedKey=true → load once via GET /tts-voices
@@ -535,16 +556,15 @@ function ElevenLabsVoicePicker({
       loader: () => Promise<ElevenLabsVoice[]>,
       fingerprint: string
     ): Promise<void> {
-      if (lastKeyRef.current === fingerprint) return
-      lastKeyRef.current = fingerprint
+      if (askedForRef.current === fingerprint) return
+      askedForRef.current = fingerprint
       setLoading(true)
-      setError(false)
       try {
         const list = await loader()
-        if (!cancelled) setVoices(list)
+        if (!cancelled) setResult({ fingerprint, voices: list, failed: false })
       } catch (e) {
         if (!cancelled) {
-          setError(true)
+          setResult({ fingerprint, voices: null, failed: true })
           // Surface the backend's specific message (e.g. ElevenLabs
           // missing_permissions text naming the missing scope) instead of a
           // generic "Could not load voices." Falls back to the generic copy
@@ -560,25 +580,24 @@ function ElevenLabsVoicePicker({
       }
     }
 
-    if (hasSavedKey && onFetchVoices) {
-      void run(onFetchVoices, '__saved__')
-    } else if (!hasSavedKey && onPreviewVoices && typedApiKey.trim().length >= 8) {
+    if (keyFingerprint === '') {
+      // Not enough input yet. The picker is already empty by derivation; all that
+      // is left is to forget what we asked for, so re-typing the same key loads
+      // again instead of being skipped as a repeat.
+      askedForRef.current = ''
+    } else if (hasSavedKey && onFetchVoices) {
+      void run(onFetchVoices, keyFingerprint)
+    } else if (!hasSavedKey && onPreviewVoices) {
       // Debounce so we don't hammer ElevenLabs while the user is still typing.
       timer = setTimeout(() => {
-        void run(() => onPreviewVoices(typedApiKey.trim()), `typed:${typedApiKey.trim()}`)
+        void run(() => onPreviewVoices(typedApiKey.trim()), keyFingerprint)
       }, 500)
-    } else if (!hasSavedKey) {
-      // Not enough input yet — keep the picker empty + reset cache so a future
-      // edit re-triggers the loader.
-      lastKeyRef.current = ''
-      setVoices(null)
-      setError(false)
     }
     return () => {
       cancelled = true
       if (timer) clearTimeout(timer)
     }
-  }, [hasSavedKey, onFetchVoices, onPreviewVoices, typedApiKey])
+  }, [hasSavedKey, keyFingerprint, onFetchVoices, onPreviewVoices, typedApiKey])
 
   // Auto-select the first voice when the list loads and the user hasn't
   // already chosen one. Without this, Save fails with "Pick a voice before
@@ -603,14 +622,14 @@ function ElevenLabsVoicePicker({
         disabled={disabled}
         className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {loading && <option value="">Loading voices…</option>}
+        {showLoading && <option value="">Loading voices…</option>}
         {error && <option value="">Could not load voices</option>}
-        {!loading && !error && voices === null && (
+        {!showLoading && !error && voices === null && (
           <option value="">
             {hasSavedKey ? 'Voices will load shortly…' : 'Enter your API key above to load voices.'}
           </option>
         )}
-        {!loading && !error && voices !== null && voices.length === 0 && (
+        {!showLoading && !error && voices !== null && voices.length === 0 && (
           <option value="">No voices available</option>
         )}
         {voices?.map((v) => (
@@ -645,27 +664,25 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
   // Advanced block — ElevenLabs voice selection state. Held locally because
   // the chosen voice is sent with the Save-key call, NOT persisted to
   // display_settings (ElevenLabs voice_id lives in overlay_tts_configs).
-  // Initialised from savedVoiceId (Issue #276) so the persisted selection is
-  // shown on load instead of the auto-pick-first-voice fallback.
-  const [pickedVoiceId, setPickedVoiceId] = useState<string>(() => props.savedVoiceId ?? '')
+  //
+  // Only the user's own choice is stored; the effective selection is derived
+  // below, falling back to savedVoiceId (Issue #276) so the persisted voice is
+  // shown on load instead of the auto-pick-first-voice fallback. Deriving is
+  // what lets savedVoiceId still land when it arrives after mount — the page
+  // renders this component first and only then resolves getTTSConfig — without
+  // an effect copying the prop into state, which is a build error
+  // (`react-hooks/set-state-in-effect`).
+  //
+  // The empty string means "the user has not chosen", which is why the local
+  // choice wins whenever it is non-empty: a fresh savedVoiceId must not clobber
+  // a voice the user has picked but not yet saved.
+  const [userPickedVoiceId, setUserPickedVoiceId] = useState('')
+  const pickedVoiceId = userPickedVoiceId !== '' ? userPickedVoiceId : (props.savedVoiceId ?? '')
   // Lifted out of ApiKeyInput so the voice picker can react to the typed
   // (unsaved) key in real time and call the preview endpoint.
   const [advancedApiKey, setAdvancedApiKey] = useState('')
   // Saving state for the voice-only PATCH (Issue #276).
   const [savingVoice, setSavingVoice] = useState(false)
-
-  // Sync the picker when the parent provides a fresh savedVoiceId — for
-  // example, after the very first key save resolves and the page reads back
-  // meta.voice_id from getTTSConfig.
-  useEffect(() => {
-    if (props.savedVoiceId && pickedVoiceId === '') {
-      setPickedVoiceId(props.savedVoiceId)
-    }
-    // Intentionally only react to savedVoiceId changes; pickedVoiceId is the
-    // user's live selection and must not be clobbered after they pick a new
-    // voice but before they save it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.savedVoiceId])
 
   function handlePlatformToggle(platform: string): void {
     const current = d.tts_enabled_platforms ?? [...ALL_PLATFORMS]
@@ -710,7 +727,7 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
           />
           <ElevenLabsVoicePicker
             selected={pickedVoiceId}
-            onChange={setPickedVoiceId}
+            onChange={setUserPickedVoiceId}
             onFetchVoices={props.onFetchVoices}
             onPreviewVoices={props.onPreviewVoices}
             hasSavedKey={props.hasElevenLabsConfig}
