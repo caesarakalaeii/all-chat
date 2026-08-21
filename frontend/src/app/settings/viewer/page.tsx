@@ -967,15 +967,17 @@ function ViewerSettingsContent({ claims }: { claims: ViewerJWTClaims }) {
 export default function ViewerSettingsPage() {
   const [claims, setClaims] = useState<ViewerJWTClaims | null | undefined>(undefined)
 
+  // The `undefined` third state is the whole point of this guard, so none of the usual escapes
+  // from `react-hooks/set-state-in-effect` apply: deriving during render or a lazy useState
+  // initialiser would read localStorage on the server render too, and the mismatch with the first
+  // client render is exactly what the guard exists to avoid. There is no promise to move the
+  // setState into either — localStorage is synchronous. Same shape, same reason, as the one-time
+  // restore at src/app/overlay/[id]/view/page.tsx.
   useEffect(() => {
     if (typeof window === 'undefined') return
     const token = localStorage.getItem('viewer_jwt_token')
-    if (!token) {
-      setClaims(null)
-      return
-    }
-    const decoded = decodeViewerJWT(token)
-    setClaims(decoded)
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time restore from localStorage; a render-time read would break hydration
+    setClaims(token ? decodeViewerJWT(token) : null)
   }, [])
 
   // Still hydrating
