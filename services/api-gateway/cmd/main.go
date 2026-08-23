@@ -1026,7 +1026,6 @@ func main() {
 	log.Info("Server exited")
 }
 
-// getEnvOrDefault gets an environment variable or returns a default value
 // modActionEventType is the unified-message event type the message-processor
 // publishes for moderation and AutoMod events. It is the sole discriminator for
 // frames that may carry pre-moderation content, so it is named once here: the
@@ -1082,6 +1081,7 @@ func shouldBufferForReplay(msgType models.WSMessageType, overlayID, testStreamOv
 		msgType != models.WSMessageTypePredictionUpdate
 }
 
+// getEnvOrDefault gets an environment variable or returns a default value
 func getEnvOrDefault(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
