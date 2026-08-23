@@ -70,14 +70,6 @@ export default function AdminCosmeticsPage() {
   const [addIsPremium, setAddIsPremium] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
-  useEffect(() => {
-    if (!user?.is_admin) {
-      router.push('/dashboard')
-      return
-    }
-    fetchAll()
-  }, [user, router])
-
   const fetchFrames = useCallback(async () => {
     try {
       const response = await apiClient.get<CatalogListResponse>('/api/v1/admin/cosmetics/frames')
@@ -96,14 +88,27 @@ export default function AdminCosmeticsPage() {
     }
   }, [])
 
-  const fetchAll = async () => {
-    setLoading(true)
+  // Stable identity (both fetchers are dependency-free useCallbacks) so the
+  // guard effect below can depend on it without refetching every render.
+  //
+  // No `setLoading(true)` up front: `loading` already starts true, the mount
+  // effect is the only caller, and setting state synchronously from an effect
+  // is what react-hooks/set-state-in-effect flags.
+  const fetchAll = useCallback(async () => {
     try {
       await Promise.all([fetchFrames(), fetchFlairs()])
     } finally {
       setLoading(false)
     }
-  }
+  }, [fetchFrames, fetchFlairs])
+
+  useEffect(() => {
+    if (!user?.is_admin) {
+      router.push('/dashboard')
+      return
+    }
+    fetchAll()
+  }, [user, router, fetchAll])
 
   const handleDelete = async (id: string) => {
     try {
