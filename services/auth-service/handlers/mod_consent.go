@@ -263,8 +263,10 @@ func (h *PlatformAuthHandlerV2) redirectModConsent(c *gin.Context, platform oaut
 }
 
 // delegatableActions are the only actions a streamer can delegate, and therefore the only ones a
-// moderator's consent may request scopes for. Anything else — notably "engagement", which the
-// shared scope mapper accepts — is dropped rather than silently widening the consent screen.
+// moderator's consent may request scopes for. Anything else — notably "engagement" and
+// "modlog", which the shared scope mapper accepts — is dropped rather than silently widening
+// the consent screen. Both stay owner-only: polls and predictions belong to the channel owner,
+// and a volunteer must never be asked for AutoMod scopes on a channel they merely help with.
 var delegatableActions = map[string]bool{
 	"delete":  true,
 	"timeout": true,

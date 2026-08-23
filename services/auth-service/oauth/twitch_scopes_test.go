@@ -42,12 +42,50 @@ func TestModerationScopesForActions(t *testing.T) {
 		{"engagement requests both read scopes", []string{"engagement"}, []string{"channel:read:polls", "channel:read:predictions"}},
 		{"engagement + moderation unions", []string{"engagement", "delete", "ban"}, []string{"channel:read:polls", "channel:read:predictions", "moderator:manage:chat_messages", "moderator:manage:banned_users"}},
 		{"duplicate engagement dedupes", []string{"engagement", "engagement"}, []string{"channel:read:polls", "channel:read:predictions"}},
+		{"modlog requests the channel.moderate v2 reads plus automod manage", []string{"modlog"}, modlogScopes},
+		{
+			"modlog + delete unions and dedupes",
+			[]string{"delete", "modlog"},
+			append([]string{"moderator:manage:chat_messages"}, modlogScopes...),
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.ElementsMatch(t, tt.want, ModerationScopesForActions(tt.actions))
 		})
 	}
+}
+
+// modlogScopes is the scope set the "modlog" re-consent must request: the eight
+// moderator:read:* scopes channel.moderate v2 requires, plus moderator:manage:automod for
+// the AutoMod hold/update subscriptions.
+var modlogScopes = []string{
+	"moderator:read:blocked_terms",
+	"moderator:read:chat_settings",
+	"moderator:read:unban_requests",
+	"moderator:read:banned_users",
+	"moderator:read:chat_messages",
+	"moderator:read:warnings",
+	"moderator:read:moderators",
+	"moderator:read:vips",
+	"moderator:manage:automod",
+}
+
+// The declaration order is part of the contract: the consent screen lists scopes in the order
+// requested, so a reshuffle changes what the streamer reads on Twitch's page.
+func TestModlogScopesAreReturnedInDeclarationOrderWithoutDuplicates(t *testing.T) {
+	assert.Equal(t, modlogScopes, ModerationScopesForActions([]string{"modlog"}))
+	assert.Equal(t, modlogScopes, ModerationScopesForActions([]string{"modlog", "modlog"}),
+		"a repeated action must not duplicate its scopes")
+}
+
+// moderator:manage:automod looks wrong on a read-only feature and a future cleanup will try to
+// remove it. Twitch requires it to create an automod.message.hold subscription; there is no
+// read-only alternative, and without it the AutoMod panel has no events to show.
+func TestModlogKeepsAutomodManageBecauseTheHoldSubscriptionNeedsIt(t *testing.T) {
+	assert.Contains(t, ModerationScopesForActions([]string{"modlog"}), "moderator:manage:automod",
+		"automod.message.hold cannot be subscribed to without moderator:manage:automod, "+
+			"even though this feature only reads AutoMod events")
 }
 
 func TestGetAuthURLWithScopes(t *testing.T) {

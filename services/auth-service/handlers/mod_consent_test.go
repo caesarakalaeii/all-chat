@@ -165,6 +165,23 @@ func TestHandleModConsent_DropsNonDelegatableActionsFromAMix(t *testing.T) {
 	}
 }
 
+// "modlog" is the second owner-only action (after "engagement"): reading a channel's moderation
+// and AutoMod events is not delegated in this iteration, so a volunteer must never be shown a
+// consent screen asking for AutoMod scopes on a channel they merely help with.
+func TestHandleModConsent_DropsModlogFromAMix(t *testing.T) {
+	h := modConsentTestHandler(t)
+
+	w := startModConsent(t, h, oauth.PlatformTwitch, "mod-user-1", "delete,modlog")
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	scopes := strings.Fields(authURLFrom(t, w).Query().Get("scope"))
+	assert.Equal(t, []string{"moderator:manage:chat_messages"}, scopes)
+	for _, modlog := range oauth.ModerationScopesForActions([]string{"modlog"}) {
+		assert.NotContains(t, scopes, modlog,
+			"modlog scopes are not delegatable and must never reach a moderator's consent screen")
+	}
+}
+
 // --- Kick ------------------------------------------------------------------
 //
 // Kick's leg differs from Twitch's in two visible ways: PKCE is mandatory, and the consent screen
