@@ -351,19 +351,20 @@ func main() {
 		// browser sources, so these frames go only to verified owner sockets.
 		//
 		// A nil Event means the decode above failed or the frame carries no event,
-		// so this classification fails open. That is safe: it is the same decode
-		// the producer's format guarantees for the message_deletion check above,
-		// and a frame that does not parse cannot carry held_text any consumer
-		// would render.
-		isModFrame := unifiedMsg.Event != nil && isModerationFrame(unifiedMsg.Event.Type)
+		// so the event type is empty and this classification fails open. That is
+		// safe: it is the same decode the producer's format guarantees for the
+		// message_deletion check above, and a frame that does not parse cannot
+		// carry held_text any consumer would render.
+		eventType := ""
+		if unifiedMsg.Event != nil {
+			eventType = unifiedMsg.Event.Type
+		}
+		filter := overlayBroadcastFilter(eventType, msgType)
 
 		// Broadcast wrapped message to all live connections in this overlay.
 		// Engagement-only sockets (participate tabs) receive only poll/prediction
 		// update frames, never chat (#5).
-		count := wsManager.BroadcastToOverlayFiltered(overlayID, wsJSON, wsconn.BroadcastFilter{
-			EngagementFrame: msgType == models.WSMessageTypePollUpdate || msgType == models.WSMessageTypePredictionUpdate,
-			OwnerOnly:       isModFrame,
-		})
+		count := wsManager.BroadcastToOverlayFiltered(overlayID, wsJSON, filter)
 		log.Debug("Broadcast message to overlay",
 			zap.String("overlay_id", overlayID),
 			zap.Int("connections", count),
@@ -380,7 +381,7 @@ func main() {
 		// messages keep flowing into the buffer while the client reconnects.
 		// AddOnce uses a stable per-message SETNX marker so multi-pod writes
 		// converge on a single buffer entry — no cross-pod duplicates.
-		if shouldBufferForReplay(msgType, overlayID, testStreamOverlayID, count, isModFrame) {
+		if shouldBufferForReplay(msgType, overlayID, testStreamOverlayID, count, filter.OwnerOnly) {
 			added, err := chatReplayBuffer.AddOnce(context.Background(), overlayID, unifiedMsg.ID, wsJSON, wsMsg.Timestamp)
 			if err != nil {
 				log.Warn("Failed to add message to chat replay buffer",
@@ -1039,6 +1040,23 @@ const modActionEventType = "mod_action"
 // written to the replay buffer.
 func isModerationFrame(eventType string) bool {
 	return eventType == modActionEventType
+}
+
+// overlayBroadcastFilter decides who may receive a frame published on the
+// overlay:{id} channel, from the frame's unified-message event type and the
+// envelope type the channel implies.
+//
+// Classification and routing live in one function on purpose: they are only
+// correct together. Recognising a mod_action frame and then broadcasting it
+// with OwnerOnly unset leaks the full text AutoMod withheld from chat to every
+// anonymous OBS browser source, and a test of the classification alone cannot
+// see that. Returning the filter the broadcaster consumes leaves the caller
+// nothing to get wrong.
+func overlayBroadcastFilter(eventType string, msgType models.WSMessageType) wsconn.BroadcastFilter {
+	return wsconn.BroadcastFilter{
+		EngagementFrame: msgType == models.WSMessageTypePollUpdate || msgType == models.WSMessageTypePredictionUpdate,
+		OwnerOnly:       isModerationFrame(eventType),
+	}
 }
 
 // shouldBufferForReplay reports whether a broadcast frame should be written to
