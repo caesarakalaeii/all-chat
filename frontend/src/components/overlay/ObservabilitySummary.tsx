@@ -166,6 +166,10 @@ export function ObservabilitySummary({
             <dt className="text-text-sub">Hide commands</dt>
             <dd className="text-text">{filter.hide_commands ? 'yes' : 'no'}</dd>
           </div>
+          <div className="flex justify-between gap-2">
+            <dt className="text-text-sub">Say hi filter</dt>
+            <dd className="text-text">{filter.hide_youtube_say_hi ? 'yes' : 'no'}</dd>
+          </div>
           <p className="pt-1 text-[10px] text-text-dim">
             Filters are shown for reference; this view displays all messages.
           </p>
