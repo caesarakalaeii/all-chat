@@ -50,6 +50,8 @@ func TestMapEventTypeToColumn_Twitch(t *testing.T) {
 		{"charity_donation", columnAlwaysEnabled},
 		{"modiversary", columnAlwaysEnabled},
 		{"twitch_notice", columnAlwaysEnabled},
+		// A moderator cannot switch off their own audit log, so mod_action is not toggleable.
+		{"mod_action", columnAlwaysEnabled},
 		{"unknown", ""},
 	}
 
@@ -143,7 +145,7 @@ func TestIsEventEnabled_AlwaysEnabledSentinelNeverQueries(t *testing.T) {
 	// A nil pool would panic if the sentinel fell through to the query, so this both asserts the
 	// short-circuit and proves no SQL is built for these types.
 	f := NewEventFilter(nil, zap.NewNop())
-	for _, eventType := range []string{"announcement", "charity_donation", "modiversary", "twitch_notice"} {
+	for _, eventType := range []string{"announcement", "charity_donation", "modiversary", "twitch_notice", "mod_action"} {
 		t.Run(eventType, func(t *testing.T) {
 			enabled, err := f.IsEventEnabled(context.Background(), "overlay-1", "twitch", eventType)
 			require.NoError(t, err)
