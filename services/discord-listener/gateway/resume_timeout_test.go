@@ -23,7 +23,7 @@ import (
 	"github.com/caesar/all-chat/services/discord-listener/gateway"
 )
 
-// TestAwaitClientMessage_FailsFastWhenNoHandshakeArrives pins the bound that keeps a
+// TestAwaitClientMessage_ReportsErrorWhenNoHandshakeArrives pins the bound that keeps a
 // broken handshake from becoming a ten-minute CI hang.
 //
 // WHY THIS EXISTS: fakeGatewayServer's handler has three silent `return` paths — a
@@ -37,25 +37,34 @@ import (
 // branch that touched only two files under services/twitch-eventsub-listener, which is
 // what established the hang as pre-existing rather than caused by any one change.
 //
-// awaitClientMessage converts that hang into a named failure in seconds. This test
-// drives the empty-channel path directly, because the race that empties it in
-// production is timing-dependent and does not reproduce on demand.
-func TestAwaitClientMessage_FailsFastWhenNoHandshakeArrives(t *testing.T) {
+// This test drives the empty-channel path directly, because the race that empties it
+// in production is timing-dependent and does not reproduce on demand.
+func TestAwaitClientMessage_ReportsErrorWhenNoHandshakeArrives(t *testing.T) {
 	neverFed := make(chan gateway.GatewayPayload, 1)
 
-	// A nested test keeps this assertion honest: awaitClientMessage reports the
-	// failure through *testing.T, so the only way to observe it without failing this
-	// test is to run it in a subtest whose outcome we then inspect.
 	start := time.Now()
-	ok := t.Run("inner", func(inner *testing.T) {
-		awaitClientMessage(inner, neverFed, 200*time.Millisecond)
-	})
+	_, err := awaitClientMessage(neverFed, 200*time.Millisecond)
 	elapsed := time.Since(start)
 
-	if ok {
-		t.Fatal("awaiting a client message on a channel nothing feeds must fail the test, not block")
+	if err == nil {
+		t.Fatal("an unfed handshake channel must be reported as an error, not treated as a received frame")
 	}
 	if elapsed > 5*time.Second {
-		t.Fatalf("wait took %s: it must fail fast rather than hang until the package timeout", elapsed)
+		t.Fatalf("the wait took %s: it must fail fast rather than burn Go's package timeout on CI", elapsed)
+	}
+}
+
+// TestAwaitClientMessage_ReturnsTheFrameWhenOneArrives is the positive half: the bound
+// must not swallow a frame that did arrive.
+func TestAwaitClientMessage_ReturnsTheFrameWhenOneArrives(t *testing.T) {
+	fed := make(chan gateway.GatewayPayload, 1)
+	fed <- gateway.GatewayPayload{Op: gateway.OpResume}
+
+	sent, err := awaitClientMessage(fed, 200*time.Millisecond)
+	if err != nil {
+		t.Fatalf("a frame was queued, so the wait must return it: %v", err)
+	}
+	if sent.Op != gateway.OpResume {
+		t.Fatalf("returned op = %d, want %d", sent.Op, gateway.OpResume)
 	}
 }

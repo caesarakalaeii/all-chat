@@ -19,10 +19,12 @@ package gateway_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/caesar/all-chat/services/discord-listener/gateway"
 	"github.com/gorilla/websocket"
@@ -103,6 +105,29 @@ func wsURLFromHTTP(url string) string {
 	return "ws" + strings.TrimPrefix(url, "http")
 }
 
+// handshakeTimeout bounds how long a test waits for the fake gateway to report the
+// client's first frame. Generous enough for a loaded CI runner, far below Go's 10-minute
+// package timeout.
+const handshakeTimeout = 10 * time.Second
+
+// awaitClientMessage returns the client's first frame, or an error if the fake gateway
+// never reports one within timeout.
+//
+// Every `return` inside fakeGatewayServer's handler leaves clientMsgCh empty, so a
+// receive without a bound turns a one-in-many handshake failure into a hang that burns
+// Go's whole package timeout and fails the job with no usable message. Returning an
+// error instead lets each caller fail with its own name attached.
+func awaitClientMessage(clientMsgCh chan gateway.GatewayPayload, timeout time.Duration) (gateway.GatewayPayload, error) {
+	select {
+	case sent := <-clientMsgCh:
+		return sent, nil
+	case <-time.After(timeout):
+		return gateway.GatewayPayload{}, fmt.Errorf(
+			"fake gateway reported no client frame within %s: the handshake did not complete, "+
+				"so the upgrade, the HELLO write or the read of the client's first frame failed", timeout)
+	}
+}
+
 // TestResumeWhenSessionExists verifies that Connect() sends op=6 RESUME (not op=2 IDENTIFY)
 // when the store already contains session_id and resume_gateway_url.
 func TestResumeWhenSessionExists(t *testing.T) {
@@ -132,7 +157,8 @@ func TestResumeWhenSessionExists(t *testing.T) {
 		_ = client.Connect(ctx)
 	}()
 
-	sent := <-clientMsgCh
+	sent, err := awaitClientMessage(clientMsgCh, handshakeTimeout)
+	require.NoError(t, err, "RESUME handshake never reached the fake gateway")
 	assert.Equal(t, gateway.OpResume, sent.Op, "expected op=6 RESUME when session exists, got op=%d", sent.Op)
 
 	var resumeData gateway.ResumeData
@@ -166,7 +192,8 @@ func TestIdentifyWhenNoSession(t *testing.T) {
 		_ = client.Connect(ctx)
 	}()
 
-	sent := <-clientMsgCh
+	sent, err := awaitClientMessage(clientMsgCh, handshakeTimeout)
+	require.NoError(t, err, "IDENTIFY handshake never reached the fake gateway")
 	assert.Equal(t, gateway.OpIdentify, sent.Op, "expected op=2 IDENTIFY when no session, got op=%d", sent.Op)
 }
 
