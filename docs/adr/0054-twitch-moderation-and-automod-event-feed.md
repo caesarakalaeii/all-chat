@@ -40,8 +40,8 @@ never had, and those are what make this a decision rather than a patch.
 - **Least privilege (ADR-0012), and honesty about where it is not achievable.** The
   scope set is wide and one of the scopes is a write scope for a read-only feature.
   That has to be stated plainly rather than smuggled through a consent screen.
-- **No new opt-in surface than necessary.** A streamer should grant once, not once
-  now and again when the next iteration lands.
+- **One consent, not two.** A streamer should grant once, not once now and again
+  when the next iteration lands.
 
 ## Decision Outcome
 
