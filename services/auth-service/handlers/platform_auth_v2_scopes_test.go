@@ -21,12 +21,15 @@ import (
 
 	"github.com/caesar/all-chat/services/auth-service/oauth"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const (
 	scopeChat = "user:read:chat"
 	scopeDel  = "moderator:manage:chat_messages"
 	scopeBan  = "moderator:manage:banned_users"
+
+	scopeAutomod = "moderator:manage:automod"
 )
 
 func TestWouldDowngradeScopes(t *testing.T) {
@@ -44,6 +47,8 @@ func TestWouldDowngradeScopes(t *testing.T) {
 		{"dropping a non-preservable scope is fine", []string{"bits:read"}, []string{}, false},
 		{"no stored scopes never downgrades", nil, nil, false},
 		{"adding mod scopes to a chat grant is an upgrade", []string{scopeChat}, []string{scopeChat, scopeDel, scopeBan}, false},
+		{"plain login over the automod grant is a downgrade", []string{scopeAutomod}, []string{"channel:read:subscriptions"}, true},
+		{"dropping a modlog read scope is a downgrade", []string{scopeChat, "moderator:read:warnings"}, []string{scopeChat}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -104,6 +109,27 @@ func TestKickDeleteScopeIsPreserved(t *testing.T) {
 	merged := unionScopes(existing, oauth.KickModerationScopesForActions([]string{"delete", "timeout", "ban", "unban"}))
 	assert.False(t, wouldDowngradeScopes(existing, merged))
 	assert.Subset(t, merged, []string{deleteScope, "moderation:ban"})
+}
+
+// The modlog re-consent grants nine scopes at once, and every one of them must survive a later
+// plain Twitch login: dropping any leaves channel.moderate or the AutoMod subscriptions
+// un-creatable, so the streamer's moderation log goes dark with no error to explain it.
+func TestModlogScopesAreAllPreserved(t *testing.T) {
+	modlogScopes := oauth.ModerationScopesForActions([]string{"modlog"})
+	require.Len(t, modlogScopes, 9, "modlog must map to the nine channel.moderate + AutoMod scopes")
+
+	for _, scope := range modlogScopes {
+		t.Run(scope, func(t *testing.T) {
+			assert.True(t, wouldDowngradeScopes([]string{scopeChat, scope}, []string{scopeChat}),
+				"a plain login dropping %s must be caught as a downgrade", scope)
+		})
+	}
+
+	// And the union the re-consent actually requests is an upgrade, never blocked by the guard.
+	existing := []string{scopeChat, "channel:read:subscriptions"}
+	merged := unionScopes(existing, modlogScopes)
+	assert.False(t, wouldDowngradeScopes(existing, merged))
+	assert.Subset(t, merged, modlogScopes)
 }
 
 func TestSplitActions(t *testing.T) {

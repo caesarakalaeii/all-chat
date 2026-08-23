@@ -390,7 +390,7 @@ func (h *PlatformAuthHandlerV2) HandleEnableModeration(platform oauth.Platform) 
 			return
 		}
 		if len(modScopes) == 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "no valid moderation actions; expected ?actions=delete,timeout,ban,unban,engagement"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "no valid moderation actions; expected ?actions=delete,timeout,ban,unban,engagement,modlog"})
 			return
 		}
 		// This opt-in is the unified "advanced controls" consent: a single re-consent
@@ -1271,6 +1271,15 @@ var preservableScopes = []string{
 	"moderation:chat_message:manage",                    // Kick delete grant — a SECOND, independently granted Kick scope
 	"chat:write",                                        // Kick chat-send grant (advanced-controls opt-in)
 	"https://www.googleapis.com/auth/youtube.force-ssl", // YouTube moderation grant (ADR-0017)
+	"moderator:read:blocked_terms",                      // Twitch moderation-log grant (mod + AutoMod event reading)
+	"moderator:read:chat_settings",                      // Twitch moderation-log grant
+	"moderator:read:unban_requests",                     // Twitch moderation-log grant
+	"moderator:read:banned_users",                       // Twitch moderation-log grant
+	"moderator:read:chat_messages",                      // Twitch moderation-log grant
+	"moderator:read:warnings",                           // Twitch moderation-log grant
+	"moderator:read:moderators",                         // Twitch moderation-log grant
+	"moderator:read:vips",                               // Twitch moderation-log grant
+	"moderator:manage:automod",                          // Twitch moderation-log grant — required by automod.message.hold
 }
 
 // wouldDowngradeScopes reports whether replacing existing with incoming would drop any
