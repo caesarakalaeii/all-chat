@@ -326,11 +326,12 @@ function ColorGradientCard({ claims }: { claims: ViewerJWTClaims }) {
       <div className="mb-4 flex border-b border-border">
         <button
           onClick={() => setActiveTab('solid')}
-          className={`px-4 py-2 text-sm font-medium transition-colors ${
+          className={cn(
+            'px-4 py-2 text-sm font-medium transition-colors',
             activeTab === 'solid'
               ? 'border-primary border-b-2 text-text'
               : 'text-text-sub hover:text-text'
-          }`}
+          )}
         >
           Solid Color
         </button>
@@ -339,11 +340,13 @@ function ColorGradientCard({ claims }: { claims: ViewerJWTClaims }) {
           onClick={() => {
             if (claims.is_premium) setActiveTab('gradient')
           }}
-          className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors ${
+          className={cn(
+            'flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors',
             activeTab === 'gradient'
               ? 'border-primary border-b-2 text-text'
-              : 'text-text-sub hover:text-text'
-          } ${!claims.is_premium ? 'cursor-not-allowed opacity-50' : ''}`}
+              : 'text-text-sub hover:text-text',
+            !claims.is_premium && 'cursor-not-allowed opacity-50'
+          )}
         >
           Gradient
           {!claims.is_premium && (
@@ -682,11 +685,13 @@ function AvatarCosmeticsCard({ claims }: { claims: ViewerJWTClaims }) {
               key={item.id ?? 'none-frame'}
               onClick={() => handleSelectFrame(item)}
               disabled={item.is_premium && !isPremium}
-              className={`relative rounded-lg border-2 p-1 transition-colors ${
+              className={cn(
+                'relative rounded-lg border-2 p-1 transition-colors',
                 selectedFrameId === item.id
                   ? 'border-twitch bg-surface-2'
-                  : 'border-border hover:border-text-sub'
-              } ${item.is_premium && !isPremium ? 'cursor-not-allowed opacity-50' : ''}`}
+                  : 'border-border hover:border-text-sub',
+                item.is_premium && !isPremium && 'cursor-not-allowed opacity-50'
+              )}
             >
               {item.image_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -718,11 +723,13 @@ function AvatarCosmeticsCard({ claims }: { claims: ViewerJWTClaims }) {
               key={item.id ?? 'none-flair'}
               onClick={() => handleSelectFlair(item)}
               disabled={item.is_premium && !isPremium}
-              className={`relative rounded-lg border-2 p-1 transition-colors ${
+              className={cn(
+                'relative rounded-lg border-2 p-1 transition-colors',
                 selectedFlairId === item.id
                   ? 'border-twitch bg-surface-2'
-                  : 'border-border hover:border-text-sub'
-              } ${item.is_premium && !isPremium ? 'cursor-not-allowed opacity-50' : ''}`}
+                  : 'border-border hover:border-text-sub',
+                item.is_premium && !isPremium && 'cursor-not-allowed opacity-50'
+              )}
             >
               {item.image_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -864,7 +871,7 @@ function LinkedPlatformsCard({ claims }: { claims: ViewerJWTClaims }) {
               className="flex items-center justify-between rounded-lg border border-border px-4 py-3"
             >
               <div className="flex items-center gap-3">
-                <span className={`h-3 w-3 rounded-full ${color}`} aria-hidden="true" />
+                <span className={cn('h-3 w-3 rounded-full', color)} aria-hidden="true" />
                 <span className="text-sm text-text">{label}</span>
               </div>
               {isConnected ? (
@@ -960,15 +967,17 @@ function ViewerSettingsContent({ claims }: { claims: ViewerJWTClaims }) {
 export default function ViewerSettingsPage() {
   const [claims, setClaims] = useState<ViewerJWTClaims | null | undefined>(undefined)
 
+  // The `undefined` third state is the whole point of this guard, so none of the usual escapes
+  // from `react-hooks/set-state-in-effect` apply: deriving during render or a lazy useState
+  // initialiser would read localStorage on the server render too, and the mismatch with the first
+  // client render is exactly what the guard exists to avoid. There is no promise to move the
+  // setState into either — localStorage is synchronous. Same shape, same reason, as the one-time
+  // restore at src/app/overlay/[id]/view/page.tsx.
   useEffect(() => {
     if (typeof window === 'undefined') return
     const token = localStorage.getItem('viewer_jwt_token')
-    if (!token) {
-      setClaims(null)
-      return
-    }
-    const decoded = decodeViewerJWT(token)
-    setClaims(decoded)
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time restore from localStorage; a render-time read would break hydration
+    setClaims(token ? decodeViewerJWT(token) : null)
   }, [])
 
   // Still hydrating

@@ -103,6 +103,74 @@ describe('VisibilityGroup - Pronoun Controls', () => {
   })
 })
 
+/**
+ * The two sub-option wrappers dim themselves when their parent toggle is off.
+ * These tests read the wrapper's `class` attribute directly, on both branches,
+ * so that the exact set of Tailwind utilities is pinned rather than just the
+ * presence of one of them.
+ */
+describe('VisibilityGroup - sub-option wrapper dimming', () => {
+  /**
+   * The sub-options wrapper is the element right after the section's
+   * ToggleSwitch, inside the div carrying the section's data-setting-anchor.
+   */
+  function subOptionsWrapper(container: HTMLElement, anchor: string): HTMLElement {
+    const section = container.querySelector(`[data-setting-anchor="${anchor}"]`)
+    expect(section).toBeTruthy()
+    const wrapper = section!.lastElementChild as HTMLElement | null
+    expect(wrapper).toBeTruthy()
+    return wrapper!
+  }
+
+  it('platform badge sub-options are dimmed and inert when showPlatformBadge is "none"', () => {
+    const { container } = render(
+      <VisibilityGroup visualSettings={{ showPlatformBadge: 'none' }} onChange={vi.fn()} />
+    )
+    const classes = subOptionsWrapper(container, 'showPlatformBadge').className.split(/\s+/)
+    expect(classes).toContain('mt-2')
+    expect(classes).toContain('space-y-2')
+    expect(classes).toContain('pl-2')
+    expect(classes).toContain('pointer-events-none')
+    expect(classes).toContain('opacity-40')
+  })
+
+  it('platform badge sub-options keep layout but drop the dimming when showPlatformBadge is "inline"', () => {
+    const { container } = render(
+      <VisibilityGroup visualSettings={{ showPlatformBadge: 'inline' }} onChange={vi.fn()} />
+    )
+    const classes = subOptionsWrapper(container, 'showPlatformBadge').className.split(/\s+/)
+    expect(classes).toContain('mt-2')
+    expect(classes).toContain('space-y-2')
+    expect(classes).toContain('pl-2')
+    expect(classes).not.toContain('pointer-events-none')
+    expect(classes).not.toContain('opacity-40')
+  })
+
+  it('pronoun sub-options are dimmed and inert when showPronouns is "none"', () => {
+    const { container } = render(
+      <VisibilityGroup visualSettings={{ showPronouns: 'none' }} onChange={vi.fn()} />
+    )
+    const classes = subOptionsWrapper(container, 'showPronouns').className.split(/\s+/)
+    expect(classes).toContain('mt-2')
+    expect(classes).toContain('space-y-2')
+    expect(classes).toContain('pl-2')
+    expect(classes).toContain('pointer-events-none')
+    expect(classes).toContain('opacity-40')
+  })
+
+  it('pronoun sub-options keep layout but drop the dimming when showPronouns is "inline"', () => {
+    const { container } = render(
+      <VisibilityGroup visualSettings={{ showPronouns: 'inline' }} onChange={vi.fn()} />
+    )
+    const classes = subOptionsWrapper(container, 'showPronouns').className.split(/\s+/)
+    expect(classes).toContain('mt-2')
+    expect(classes).toContain('space-y-2')
+    expect(classes).toContain('pl-2')
+    expect(classes).not.toContain('pointer-events-none')
+    expect(classes).not.toContain('opacity-40')
+  })
+})
+
 describe('VisibilityGroup', () => {
   it('renders 6 labels', () => {
     const onChange = vi.fn()

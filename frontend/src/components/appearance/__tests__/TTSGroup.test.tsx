@@ -146,6 +146,8 @@ type OnChangeFn = (patch: Partial<DisplaySettings>) => void
 function renderTTSGroup(overrides: Partial<TTSGroupProps> = {}): {
   onChange: ReturnType<typeof vi.fn> & OnChangeFn
   container: HTMLElement
+  /** Re-render with a different set of prop overrides, keeping the same onChange spy. */
+  rerenderWith: (next: Partial<TTSGroupProps>) => void
 } {
   const onChange = vi.fn() as ReturnType<typeof vi.fn> & OnChangeFn
   const defaults: TTSGroupProps = {
@@ -157,7 +159,12 @@ function renderTTSGroup(overrides: Partial<TTSGroupProps> = {}): {
     obsUrl: undefined,
   }
   const result = render(<TTSGroup {...defaults} {...overrides} onChange={onChange} />)
-  return { onChange, container: result.container }
+  return {
+    onChange,
+    container: result.container,
+    rerenderWith: (next) =>
+      result.rerender(<TTSGroup {...defaults} {...overrides} {...next} onChange={onChange} />),
+  }
 }
 
 describe('TTSGroup', () => {
@@ -868,6 +875,51 @@ describe('TTSGroup', () => {
     expect(onSaveKey).toHaveBeenCalledWith('sk-typed-key', 'v-first')
   })
 
+  // Test A19f: which key a loaded voice list belongs to. Shortening the typed key
+  // back below the 8-character threshold empties the picker — a list loaded from
+  // one key must never be shown as if it came from another — typing the same key
+  // again re-arms the loader, and typing a different key loads afresh.
+  it('A19f: the voice list follows the typed key — cleared when too short, reloaded when the key changes', async () => {
+    const onPreviewVoices = vi
+      .fn<(apiKey: string) => Promise<ElevenLabsVoice[]>>()
+      .mockImplementation(async (apiKey) => [
+        { voice_id: `v-${apiKey.slice(-1)}`, name: `Voice for ${apiKey.slice(-1)}` },
+      ])
+    renderTTSGroup({
+      displaySettings: baseSettings({ tts_provider: 'elevenlabs' }),
+      isPremium: true,
+      hasElevenLabsConfig: false,
+      onPreviewVoices,
+    })
+    const input = screen.getByLabelText(/ElevenLabs API key/i) as HTMLInputElement
+    fireEvent.change(input, { target: { value: 'sk-typed-a' } })
+    const select = await waitForVoiceOption('Voice for a')
+    expect(onPreviewVoices).toHaveBeenCalledTimes(1)
+
+    // Too short to be worth a round-trip: the picker must not keep showing the
+    // voices it loaded from the longer key.
+    fireEvent.change(input, { target: { value: 'sk' } })
+    await waitFor(() => {
+      expect(Array.from(select.options).map((o) => o.textContent)).toContain(
+        'Enter your API key above to load voices.'
+      )
+    })
+
+    // Same key again: the loader is re-armed, so the key is asked about a second
+    // time. The count is awaited rather than asserted outright because the option
+    // can reappear before the 500ms debounce elapses — that is what the loader
+    // being keyed on the key rather than reset by an effect buys.
+    fireEvent.change(input, { target: { value: 'sk-typed-a' } })
+    await waitForVoiceOption('Voice for a')
+    await waitFor(() => expect(onPreviewVoices).toHaveBeenCalledTimes(2), { timeout: 2000 })
+
+    // A different key is a different question, so it is asked too.
+    fireEvent.change(input, { target: { value: 'sk-typed-b' } })
+    await waitForVoiceOption('Voice for b')
+    await waitFor(() => expect(onPreviewVoices).toHaveBeenCalledTimes(3), { timeout: 2000 })
+    expect(onPreviewVoices).toHaveBeenLastCalledWith('sk-typed-b')
+  })
+
   // ---- Issue #276: Save-voice flow when key is already saved ----------------
 
   // The bug: once a key is saved, ApiKeyInput hides "Save key", and changing
@@ -970,6 +1022,86 @@ describe('TTSGroup', () => {
     })
   })
 
+  // 276-5: the parent learns the persisted voice_id asynchronously — the page
+  // renders TTSGroup first and only then resolves getTTSConfig — so a
+  // savedVoiceId that arrives after mount must still reach the picker.
+  //
+  // The prop is delivered while the selection is still empty, which is the real
+  // ordering: getTTSConfig resolves long before an ElevenLabs voices round-trip.
+  // The voice list is therefore held open until after the rerender, so the
+  // auto-pick-first-voice rule cannot claim the empty selection first — that
+  // interaction is A19e's and 276-3's business, not this test's.
+  it('276-5: a savedVoiceId that arrives after mount is reflected in the picker', async () => {
+    let deliverVoices: (list: ElevenLabsVoice[]) => void = () => {}
+    const onFetchVoices = vi.fn(
+      () =>
+        new Promise<ElevenLabsVoice[]>((resolve) => {
+          deliverVoices = resolve
+        })
+    )
+    const { rerenderWith } = renderTTSGroup({
+      displaySettings: baseSettings({ tts_provider: 'elevenlabs' }),
+      isPremium: true,
+      hasElevenLabsConfig: true,
+      savedVoiceId: undefined,
+      onFetchVoices,
+      onSaveVoice: vi.fn(),
+    })
+    const select = screen.getByLabelText(/ElevenLabs voice/i) as HTMLSelectElement
+    expect(select.value).toBe('')
+
+    await act(async () => {
+      rerenderWith({ savedVoiceId: 'v-late' })
+    })
+    await act(async () => {
+      deliverVoices([
+        { voice_id: 'v-first', name: 'First Voice' },
+        { voice_id: 'v-late', name: 'Late Voice' },
+      ])
+    })
+
+    await waitFor(() => expect(select.value).toBe('v-late'))
+    // And because the picker now matches what is persisted, there is nothing to save.
+    expect(screen.queryByRole('button', { name: /^Save voice/ })).toBeNull()
+  })
+
+  // 276-6: the Save-voice button's visibility rule, stated as a rule rather than
+  // as one path through it. It needs all four conditions; drop any one and the
+  // button either hides when the user has a real change to save or offers to
+  // save a selection that is already persisted.
+  it('276-6: Save voice needs a saved key, an onSaveVoice handler and a picker that differs from savedVoiceId', async () => {
+    const voices: ElevenLabsVoice[] = [
+      { voice_id: 'v-saved', name: 'Saved Voice' },
+      { voice_id: 'v-other', name: 'Other Voice' },
+    ]
+    const onFetchVoices = vi.fn().mockResolvedValue(voices)
+
+    // No onSaveVoice handler: the picker still changes, but there is nothing to call.
+    const { rerenderWith } = renderTTSGroup({
+      displaySettings: baseSettings({ tts_provider: 'elevenlabs' }),
+      isPremium: true,
+      hasElevenLabsConfig: true,
+      savedVoiceId: 'v-saved',
+      onFetchVoices,
+      onSaveVoice: undefined,
+    })
+    const select = await waitForVoiceOption('Other Voice')
+    fireEvent.change(select, { target: { value: 'v-other' } })
+    expect(screen.queryByRole('button', { name: /^Save voice/ })).toBeNull()
+
+    // Same divergent selection, now with a handler: the button appears.
+    await act(async () => {
+      rerenderWith({ onSaveVoice: vi.fn() })
+    })
+    expect(await screen.findByRole('button', { name: /^Save voice$/ })).toBeDefined()
+
+    // Selecting the persisted voice again hides it: nothing left to save.
+    fireEvent.change(select, { target: { value: 'v-saved' } })
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /^Save voice/ })).toBeNull()
+    })
+  })
+
   // Test A20: Non-premium user sees disabled inputs + PremiumBadge overlay + upgrade copy
   it('A20: non-premium user sees upgrade copy and disabled API-key input under the Advanced block', () => {
     renderTTSGroup({
@@ -988,3 +1120,98 @@ describe('TTSGroup', () => {
     }
   })
 })
+
+/**
+ * Three elements in this panel pick their Tailwind utilities from a condition.
+ * These tests read the rendered `class` attribute on both branches of each
+ * condition, so the exact set of utilities is pinned and not merely the
+ * presence of the element.
+ */
+describe('TTSGroup - conditional class attributes', () => {
+  it('the first sub-section header has no top rule; a later one does', () => {
+    renderTTSGroup({ displaySettings: baseSettings({ tts_provider: 'browser' }) })
+
+    // VOICE is rendered with `first`, so it must not carry the separator.
+    const firstHeader = screen.getByText('VOICE').parentElement!
+    const firstClasses = firstHeader.className.split(/\s+/)
+    expect(firstClasses).toContain('flex')
+    expect(firstClasses).toContain('items-center')
+    expect(firstClasses).toContain('gap-2')
+    expect(firstClasses).not.toContain('border-t')
+    expect(firstClasses).not.toContain('pt-4')
+    expect(firstClasses).not.toContain('mt-4')
+
+    const laterClasses = screen.getByText('THROTTLING').parentElement!.className.split(/\s+/)
+    expect(laterClasses).toContain('flex')
+    expect(laterClasses).toContain('items-center')
+    expect(laterClasses).toContain('gap-2')
+    expect(laterClasses).toContain('border-t')
+    expect(laterClasses).toContain('border-border')
+    expect(laterClasses).toContain('pt-4')
+    expect(laterClasses).toContain('mt-4')
+  })
+
+  it('the Remove-key button turns red once armed', async () => {
+    renderTTSGroup({
+      displaySettings: baseSettings({ tts_provider: 'elevenlabs' }),
+      isPremium: true,
+      hasElevenLabsConfig: true,
+      onRemoveKey: vi.fn().mockResolvedValue(undefined),
+    })
+
+    const unarmed = screen.getByRole('button', { name: /^Remove key$/ })
+    const unarmedClasses = unarmed.className.split(/\s+/)
+    expect(unarmedClasses).toContain('rounded-lg')
+    expect(unarmedClasses).toContain('border')
+    expect(unarmedClasses).toContain('border-border')
+    expect(unarmedClasses).toContain('bg-surface')
+    expect(unarmedClasses).toContain('text-text-sub')
+    expect(unarmedClasses).not.toContain('border-red-500')
+
+    fireEvent.click(unarmed)
+
+    const armed = await screen.findByRole('button', { name: /^Confirm remove$/ })
+    const armedClasses = armed.className.split(/\s+/)
+    expect(armedClasses).toContain('rounded-lg')
+    expect(armedClasses).toContain('border')
+    expect(armedClasses).toContain('border-red-500')
+    expect(armedClasses).toContain('bg-red-500/10')
+    expect(armedClasses).toContain('text-red-400')
+    expect(armedClasses).not.toContain('border-border')
+    expect(armedClasses).not.toContain('bg-surface')
+    expect(armedClasses).not.toContain('text-text-sub')
+  })
+
+  it('the Advanced block is a positioning context only for non-premium users', () => {
+    // `relative` is what anchors the absolutely-positioned premium overlay, so
+    // it must appear for a non-premium user and must not for a premium one.
+    const { container: nonPremium } = renderTTSGroup({
+      displaySettings: baseSettings({ tts_provider: 'elevenlabs' }),
+      isPremium: false,
+    })
+    const nonPremiumClasses = advancedBlock(nonPremium).className.split(/\s+/)
+    expect(nonPremiumClasses).toContain('space-y-3')
+    expect(nonPremiumClasses).toContain('relative')
+
+    cleanup()
+
+    const { container: premium } = renderTTSGroup({
+      displaySettings: baseSettings({ tts_provider: 'elevenlabs' }),
+      isPremium: true,
+    })
+    const premiumClasses = advancedBlock(premium).className.split(/\s+/)
+    expect(premiumClasses).toContain('space-y-3')
+    expect(premiumClasses).not.toContain('relative')
+  })
+})
+
+/** The block of ElevenLabs controls rendered right after its section header. */
+function advancedBlock(container: HTMLElement): HTMLElement {
+  const header = Array.from(container.querySelectorAll('span')).find(
+    (span) => span.textContent === 'ADVANCED (ELEVENLABS)'
+  )
+  expect(header).toBeTruthy()
+  const block = header!.parentElement!.nextElementSibling as HTMLElement | null
+  expect(block).toBeTruthy()
+  return block!
+}
