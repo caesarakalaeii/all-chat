@@ -266,6 +266,22 @@ export const moderationApi = {
   },
 
   /**
+   * Fetch the Twitch OAuth re-consent URL for the opt-in moderation log: the channel's
+   * `channel.moderate` actions plus AutoMod holds, rendered in the monitor's activity feed.
+   *
+   * Deliberately NOT part of `getTwitchConsentUrl`'s action list: `modlog` is a read of the
+   * channel's own moderation history, not an action a moderator can be delegated, and the
+   * scopes behind it (nine, including `moderator:manage:automod` — Twitch offers no
+   * read-only way to subscribe to AutoMod holds) are far wider than any single action needs.
+   */
+  async getTwitchModLogConsentUrl(overlayId: string): Promise<string> {
+    const res = await apiClient.get<ConsentUrlResponse>(
+      `/api/v1/auth/twitch/moderation/${overlayId}?actions=modlog`
+    )
+    return res.auth_url
+  },
+
+  /**
    * Fetch the Kick OAuth re-consent URL to enable moderation. Kick splits moderation
    * across two scopes — `moderation:ban` for timeout/ban/unban and
    * `moderation:chat_message:manage` for single-message delete — and auth-service asks

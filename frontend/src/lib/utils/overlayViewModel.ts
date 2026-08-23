@@ -32,7 +32,13 @@ export interface ViewItem extends ChatMessage {
   _moderated?: { kind: ModKind; banDuration?: number }
 }
 
-export type ModKind = 'delete' | 'timeout' | 'ban' | 'clear'
+/**
+ * How a moderation-log row renders. The first four are derived from deletions;
+ * `automod` covers an AutoMod hold and its later resolution, and `action` is the
+ * catch-all for every other `channel.moderate` action — including ones Twitch
+ * has not shipped yet, which must still produce a row.
+ */
+export type ModKind = 'delete' | 'timeout' | 'ban' | 'clear' | 'automod' | 'action'
 
 /** A moderation-log entry derived from a deletion. `id` is assigned by the consumer. */
 export interface ModEntryData {
@@ -43,6 +49,23 @@ export interface ModEntryData {
   banDuration?: number
   source: 'replay' | 'live'
   at: number
+  /**
+   * The raw `channel.moderate` action, verbatim from Twitch, or one of the two
+   * synthesized AutoMod actions (`automod_hold`, `automod_resolved`). Absent on
+   * deletion-derived entries, which carry no Twitch action name.
+   */
+  action?: string
+  /** Login of the moderator who acted. Absent for AutoMod holds and for deletions. */
+  moderator?: string
+  reason?: string
+  /** Join key between an AutoMod hold and the resolution that closes it. */
+  heldMessageId?: string
+  heldText?: string
+  automodCategory?: string
+  automodLevel?: number
+  resolution?: 'approved' | 'denied' | 'expired'
+  /** Login of whoever resolved a hold. Empty when the hold simply expired. */
+  resolvedBy?: string
   /**
    * Set on entries created optimistically by a moderator action in this view,
    * so the matching server-pushed deletion can be deduped and the entry can be
@@ -134,6 +157,97 @@ export function toModEntry(
     source,
     at,
   }
+}
+
+/** Read a string field off untyped WebSocket metadata, or undefined if absent/blank. */
+function metadataString(metadata: Record<string, unknown>, key: string): string | undefined {
+  const value = metadata[key]
+  return typeof value === 'string' && value !== '' ? value : undefined
+}
+
+/** Read a number field off untyped WebSocket metadata, or undefined if absent. */
+function metadataNumber(metadata: Record<string, unknown>, key: string): number | undefined {
+  const value = metadata[key]
+  return typeof value === 'number' ? value : undefined
+}
+
+/** How a `channel.moderate` action renders. Unknown actions fall through to 'action'. */
+function modActionKind(action: string): ModKind {
+  switch (action) {
+    case 'timeout':
+      return 'timeout'
+    case 'ban':
+      return 'ban'
+    case 'delete':
+      return 'delete'
+    case 'automod_hold':
+    case 'automod_resolved':
+      return 'automod'
+    default:
+      // Twitch adds actions over time (and All-Chat passes them through
+      // verbatim), so anything unrecognised must still render as a row.
+      return 'action'
+  }
+}
+
+/**
+ * Build a moderation-log entry from a `mod_action` event's metadata (a Twitch
+ * `channel.moderate` action, or one of the two AutoMod actions All-Chat
+ * synthesizes). Null only when there is no action name to render at all.
+ *
+ * Everything else is best-effort: fields Twitch omits for a given action (no
+ * target on `clear`, no moderator on an AutoMod hold) simply stay undefined and
+ * the row degrades to what is known.
+ */
+export function toModActionEntry(
+  metadata: Record<string, unknown>,
+  source: 'replay' | 'live',
+  at: number
+): ModEntryData | null {
+  const action = metadataString(metadata, 'action')
+  if (!action) return null
+  const resolution = metadataString(metadata, 'resolution')
+  return {
+    kind: modActionKind(action),
+    action,
+    username: metadataString(metadata, 'target_login'),
+    targetUserId: metadataString(metadata, 'target_user_id'),
+    banDuration: metadataNumber(metadata, 'ban_duration'),
+    moderator: metadataString(metadata, 'moderator_login'),
+    reason: metadataString(metadata, 'reason'),
+    heldMessageId: metadataString(metadata, 'held_message_id'),
+    heldText: metadataString(metadata, 'held_text'),
+    automodCategory: metadataString(metadata, 'automod_category'),
+    automodLevel: metadataNumber(metadata, 'automod_level'),
+    resolution:
+      resolution === 'approved' || resolution === 'denied' || resolution === 'expired'
+        ? resolution
+        : undefined,
+    resolvedBy: metadataString(metadata, 'resolved_by'),
+    source,
+    at,
+  }
+}
+
+/**
+ * Append a moderation entry, folding an AutoMod resolution into the hold it
+ * closes instead of adding a second row.
+ *
+ * A hold and its resolution are one event to a moderator: two rows would
+ * double-count them and make "how many are still waiting" unreadable. The
+ * hold keeps its original `at` so the row does not jump position when the
+ * resolution lands, possibly minutes later.
+ *
+ * Generic over the entry type so the view can merge its own rendered entries
+ * (`ModEntry`, which adds the render id) without losing that id.
+ */
+export function mergeAutoModResolution<T extends ModEntryData>(log: T[], entry: T): T[] {
+  if (entry.action !== 'automod_resolved' || !entry.heldMessageId) return [...log, entry]
+  const index = log.findIndex((held) => held.heldMessageId === entry.heldMessageId)
+  if (index === -1) return [...log, entry]
+  const next = [...log]
+  next[index] = { ...log[index], resolution: entry.resolution, resolvedBy: entry.resolvedBy }
+  return next
 }
 
 /**

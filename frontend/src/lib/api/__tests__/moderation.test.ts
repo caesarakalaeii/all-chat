@@ -171,9 +171,7 @@ describe('moderator-side endpoints', () => {
   it('requests the mod-log consent with actions=modlog', async () => {
     client.get.mockResolvedValue({ auth_url: 'https://id.twitch.tv/authorize?modlog' })
     const url = await moderationApi.getTwitchModLogConsentUrl('ov-1')
-    expect(client.get).toHaveBeenCalledWith(
-      '/api/v1/auth/twitch/moderation/ov-1?actions=modlog'
-    )
+    expect(client.get).toHaveBeenCalledWith('/api/v1/auth/twitch/moderation/ov-1?actions=modlog')
     expect(url).toBe('https://id.twitch.tv/authorize?modlog')
   })
 })

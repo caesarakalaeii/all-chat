@@ -99,9 +99,7 @@ describe('ActivityPanel', () => {
       source: 'live',
       at: Date.parse('2026-05-31T10:00:00.000Z'),
     }
-    const { unmount } = render(
-      <ActivityPanel events={[]} system={[]} moderationLog={[hold]} />
-    )
+    const { unmount } = render(<ActivityPanel events={[]} system={[]} moderationLog={[hold]} />)
     expect(screen.getByText(/something rude/)).toBeInTheDocument()
     expect(screen.getByText('held')).toBeInTheDocument()
     expect(screen.queryByText('denied')).not.toBeInTheDocument()
