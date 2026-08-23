@@ -87,7 +87,7 @@ func newFakeTwitchAPI(t *testing.T) (*SubscriptionManager, func() []capturedSubs
 // with only broadcaster_user_id is rejected by Twitch at creation time with a 400, so asserting the
 // exact key set is the whole point of this test — a silent drop of moderator_user_id would leave the
 // moderation log with no events and nothing but a 400 in a log line to explain it.
-func TestModerationSubscriptionsSendBothConditionKeys(t *testing.T) {
+func TestModerateSubscriptionsSendBothConditionKeys(t *testing.T) {
 	sm, captures := newFakeTwitchAPI(t)
 	ctx := context.Background()
 
