@@ -347,4 +347,38 @@ describe('AcceptModal — senderPlatform Kick disable', () => {
     const unlimitedRadio = screen.getByRole('radio', { name: /unlimited/i })
     expect(unlimitedRadio).toBeChecked()
   })
+
+  // The Kick default must reach the API, not just the radio: accepting without
+  // touching the form has to post 'unlimited' rather than the 'this_stream' the
+  // component starts from.
+  it('accepts a Kick share as unlimited', async () => {
+    vi.mocked(sharesApi.acceptRequest).mockResolvedValue({
+      share: { ...mockRequest, status: 'accepted' as const },
+      sender_overlay_id: 'overlay-789',
+    })
+
+    render(
+      <AcceptModal
+        request={mockRequest}
+        onClose={mockOnClose}
+        onAccepted={mockOnAccepted}
+        senderPlatform="kick"
+      />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('combobox')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Accept/i }))
+
+    await waitFor(() => {
+      expect(sharesApi.acceptRequest).toHaveBeenCalledWith(
+        'share-123',
+        'overlay-1',
+        'unlimited',
+        undefined
+      )
+    })
+  })
 })

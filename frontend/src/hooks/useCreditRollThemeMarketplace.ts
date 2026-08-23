@@ -22,13 +22,36 @@
  * Manages credit roll theme loading, caching, filtering, and favorites
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import type { Theme, ThemeCacheData } from '@/lib/theme-marketplace/types'
 import { fetchAllCreditRollThemes } from '@/lib/theme-marketplace/credit-roll-github-api'
+import { useHydrated } from '@/hooks/useHydrated'
 
 const CACHE_KEY = 'credit-roll-themes-marketplace'
 const FAVORITES_KEY = 'credit-roll-themes-favorites'
 const CACHE_TTL = 24 * 60 * 60 * 1000 // 24 hours
+
+function storedFavorites(): string[] {
+  try {
+    const stored = localStorage.getItem(FAVORITES_KEY)
+    return stored ? JSON.parse(stored) : []
+  } catch {
+    // Absent, blocked, or not JSON — start from no favorites.
+    return []
+  }
+}
+
+/** The cached theme list, or null if there is none or it has aged out. */
+function cachedThemes(): Theme[] | null {
+  try {
+    const cached = localStorage.getItem(CACHE_KEY)
+    if (!cached) return null
+    const data: ThemeCacheData = JSON.parse(cached)
+    return Date.now() - data.timestamp <= data.ttl ? data.themes : null
+  } catch {
+    return null
+  }
+}
 
 export function useCreditRollThemeMarketplace() {
   const [themes, setThemes] = useState<Theme[]>([])
@@ -36,66 +59,73 @@ export function useCreditRollThemeMarketplace() {
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedTags, setSelectedTags] = useState<string[]>([])
-  const [favorites, setFavorites] = useState<string[]>([])
+  // null until the reader stars or unstars something in this session, at which point
+  // their list wins over what is stored. Derived rather than copied out of localStorage
+  // by an effect (react-hooks/set-state-in-effect), and only consulted after hydration
+  // because the server has no localStorage to read.
+  const hydrated = useHydrated()
+  const [pickedFavorites, setPickedFavorites] = useState<string[] | null>(null)
+  // Memoised so it is a stable array identity: `toggleFavorite` closes over it.
+  const favorites = useMemo(
+    () => (hydrated ? (pickedFavorites ?? storedFavorites()) : []),
+    [hydrated, pickedFavorites]
+  )
 
-  // Load favorites from localStorage
-  useEffect(() => {
-    const stored = localStorage.getItem(FAVORITES_KEY)
-    if (stored) {
-      try {
-        setFavorites(JSON.parse(stored))
-      } catch {
-        setFavorites([])
-      }
-    }
-  }, [])
-
-  // Save favorites to localStorage
-  useEffect(() => {
-    localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites))
-  }, [favorites])
-
-  const loadThemes = useCallback(async (forceRefresh = false) => {
-    setLoading(true)
-    setError(null)
-
-    try {
-      if (!forceRefresh && typeof window !== 'undefined') {
-        const cached = localStorage.getItem(CACHE_KEY)
-        if (cached) {
-          const data: ThemeCacheData = JSON.parse(cached)
-          const now = Date.now()
-          if (now - data.timestamp <= data.ttl) {
-            setThemes(data.themes)
+  // A promise chain, not async/await, and the synchronous cache branch is deferred into a
+  // `.then` as well: `react-hooks/set-state-in-effect` follows this call from the effect
+  // below, so no setState may be reachable without first yielding. Every setState here is
+  // in a callback for that reason.
+  const loadThemes = useCallback(
+    (forceRefresh = false) =>
+      Promise.resolve()
+        .then(() => {
+          const cached = forceRefresh || typeof window === 'undefined' ? null : cachedThemes()
+          if (cached) {
+            setThemes(cached)
+            setError(null)
             setLoading(false)
             return
           }
-        }
-      }
-
-      const fetchedThemes = await fetchAllCreditRollThemes()
-      setThemes(fetchedThemes)
-
-      if (typeof window !== 'undefined') {
-        const cacheData: ThemeCacheData = {
-          timestamp: Date.now(),
-          ttl: CACHE_TTL,
-          themes: fetchedThemes,
-        }
-        localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData))
-      }
-    } catch (err) {
-      console.error('Failed to load credit roll themes:', err)
-      setError(err instanceof Error ? err.message : 'Failed to load themes')
-      setThemes([])
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+          setLoading(true)
+          setError(null)
+          return fetchAllCreditRollThemes().then((fetchedThemes) => {
+            setThemes(fetchedThemes)
+            setLoading(false)
+            const cacheData: ThemeCacheData = {
+              timestamp: Date.now(),
+              ttl: CACHE_TTL,
+              themes: fetchedThemes,
+            }
+            try {
+              localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData))
+            } catch {
+              // Storage full or blocked — every mount just refetches.
+            }
+          })
+        })
+        .catch((err) => {
+          console.error('Failed to load credit roll themes:', err)
+          setError(err instanceof Error ? err.message : 'Failed to load themes')
+          setThemes([])
+          setLoading(false)
+        }),
+    []
+  )
 
   useEffect(() => {
-    loadThemes()
+    void loadThemes()
   }, [loadThemes])
+
+  // Persist the reader's own list. Skipped until they touch it, so an unopened
+  // marketplace never writes an empty list over what is already stored.
+  useEffect(() => {
+    if (pickedFavorites === null) return
+    try {
+      localStorage.setItem(FAVORITES_KEY, JSON.stringify(pickedFavorites))
+    } catch {
+      // Storage blocked — favorites hold for this session only.
+    }
+  }, [pickedFavorites])
 
   const filteredThemes = themes.filter((theme) => {
     const matchesSearch =
@@ -123,11 +153,16 @@ export function useCreditRollThemeMarketplace() {
     setSelectedTags((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]))
   }, [])
 
-  const toggleFavorite = useCallback((themeId: string) => {
-    setFavorites((prev) =>
-      prev.includes(themeId) ? prev.filter((id) => id !== themeId) : [...prev, themeId]
-    )
-  }, [])
+  const toggleFavorite = useCallback(
+    (themeId: string) => {
+      // Starts from the currently shown list, which on the first toggle is the stored one.
+      const next = favorites.includes(themeId)
+        ? favorites.filter((id) => id !== themeId)
+        : [...favorites, themeId]
+      setPickedFavorites(next)
+    },
+    [favorites]
+  )
 
   const clearFilters = useCallback(() => {
     setSearchQuery('')

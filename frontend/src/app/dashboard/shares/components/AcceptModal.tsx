@@ -46,7 +46,7 @@ interface AcceptModalProps {
 export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: AcceptModalProps) {
   const [overlays, setOverlays] = useState<Overlay[]>([])
   const [selectedOverlay, setSelectedOverlay] = useState<string>('')
-  const [expiryOption, setExpiryOption] = useState<'this_stream' | 'custom' | 'unlimited'>(
+  const [pickedExpiry, setPickedExpiry] = useState<'this_stream' | 'custom' | 'unlimited'>(
     'this_stream'
   )
   const [customHours, setCustomHours] = useState<string>('24')
@@ -59,12 +59,11 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
   const [loadingOverlays, setLoadingOverlays] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // If Kick platform, switch to 'unlimited' since stream lifecycle detection is not supported
-  useEffect(() => {
-    if (isKickUser && expiryOption === 'this_stream') {
-      setExpiryOption('unlimited')
-    }
-  }, [isKickUser, expiryOption])
+  // Kick has no stream-lifecycle detection, so 'this stream' would never expire there.
+  // Substituted during render rather than written back into state from an effect
+  // (react-hooks/set-state-in-effect); the radio is disabled for Kick anyway, so the
+  // substitution is only ever applied to the initial default.
+  const expiryOption = isKickUser && pickedExpiry === 'this_stream' ? 'unlimited' : pickedExpiry
 
   // Fetch user's overlays on mount
   useEffect(() => {
@@ -215,7 +214,7 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
                     name="expiry"
                     value="this_stream"
                     checked={expiryOption === 'this_stream'}
-                    onChange={(e) => setExpiryOption(e.target.value as any)}
+                    onChange={(e) => setPickedExpiry(e.target.value as any)}
                     disabled={isKickUser}
                     className="mt-1 mr-2 accent-blue-500"
                   />
@@ -239,7 +238,7 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
                     name="expiry"
                     value="custom"
                     checked={expiryOption === 'custom'}
-                    onChange={(e) => setExpiryOption(e.target.value as any)}
+                    onChange={(e) => setPickedExpiry(e.target.value as any)}
                     className="mt-1 mr-2 accent-blue-500"
                   />
                   <div className="flex-1">
@@ -287,7 +286,7 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
                     name="expiry"
                     value="unlimited"
                     checked={expiryOption === 'unlimited'}
-                    onChange={(e) => setExpiryOption(e.target.value as any)}
+                    onChange={(e) => setPickedExpiry(e.target.value as any)}
                     className="mt-1 mr-2 accent-blue-500"
                   />
                   <span className="text-sm font-medium text-text">
