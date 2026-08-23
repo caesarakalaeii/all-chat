@@ -136,4 +136,32 @@ describe('ObservabilitySummary', () => {
     // banned_words has 3 entries
     expect(screen.getByText('3')).toBeInTheDocument()
   })
+
+  it('reports the say-hi filter as off when the overlay has not enabled it', () => {
+    render(
+      <ObservabilitySummary
+        config={config}
+        sources={sources}
+        activeChannels={new Set()}
+        eventSettings={null}
+        observedEventTypes={new Set()}
+      />
+    )
+    const row = screen.getByText('Say hi filter').parentElement
+    expect(row).toHaveTextContent('no')
+  })
+
+  it('reports the say-hi filter as on when the overlay has enabled it', () => {
+    render(
+      <ObservabilitySummary
+        config={{ ...config, filter_settings: { hide_youtube_say_hi: true } }}
+        sources={sources}
+        activeChannels={new Set()}
+        eventSettings={null}
+        observedEventTypes={new Set()}
+      />
+    )
+    const row = screen.getByText('Say hi filter').parentElement
+    expect(row).toHaveTextContent('yes')
+  })
 })

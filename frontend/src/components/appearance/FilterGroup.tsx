@@ -30,6 +30,12 @@ export interface FilterGroupProps {
   onChange: (patch: Partial<FilterSettings>) => void
 }
 
+/**
+ * Label of the say-hi toggle, exported because sectionRegistry must index the
+ * exact string this component renders or the editor search cannot find it.
+ */
+export const SAY_HI_TOGGLE_LABEL = 'Hide YouTube "said hi" greetings'
+
 const COMMON_BOTS = [
   'nightbot',
   'streamelements',
@@ -110,6 +116,14 @@ export function FilterGroup({ filterSettings, onChange }: FilterGroupProps): Rea
   function handleRemoveWord(word: string) {
     onChange({ banned_words: (filterSettings.banned_words ?? []).filter((w) => w !== word) })
   }
+  function handleAddSayHiPhrase(phrase: string) {
+    onChange({ say_hi_extra_phrases: [...(filterSettings.say_hi_extra_phrases ?? []), phrase] })
+  }
+  function handleRemoveSayHiPhrase(phrase: string) {
+    onChange({
+      say_hi_extra_phrases: (filterSettings.say_hi_extra_phrases ?? []).filter((p) => p !== phrase),
+    })
+  }
 
   function handleAddCommonBots() {
     const existing = new Set((filterSettings.banned_users ?? []).map((u) => u.toLowerCase()))
@@ -151,6 +165,33 @@ export function FilterGroup({ filterSettings, onChange }: FilterGroupProps): Rea
         checked={filterSettings.hide_commands ?? false}
         onChange={(checked) => onChange({ hide_commands: checked })}
       />
+      <div>
+        <ToggleSwitch
+          label={SAY_HI_TOGGLE_LABEL}
+          checked={filterSettings.hide_youtube_say_hi ?? false}
+          onChange={(checked) => onChange({ hide_youtube_say_hi: checked })}
+        />
+        <p className="mt-1 text-xs text-text-dim">
+          Only YouTube messages whose entire text is the greeting posted by the vertical-stream
+          &ldquo;Say hi!&rdquo; button. Hidden messages also make no sound and are not read by TTS.
+        </p>
+      </div>
+      {/* Only offered while the filter is on: the phrases do nothing on their own. */}
+      {(filterSettings.hide_youtube_say_hi ?? false) && (
+        <div>
+          <p className="mb-1 text-sm text-text-sub">Extra &ldquo;said hi&rdquo; phrases</p>
+          <TagInput
+            tags={filterSettings.say_hi_extra_phrases ?? []}
+            onAdd={handleAddSayHiPhrase}
+            onRemove={handleRemoveSayHiPhrase}
+            placeholder="Type phrase, press Enter"
+          />
+          <p className="mt-1 text-xs text-text-dim">
+            The button&rsquo;s text is localised, so add what it posts in your language — for
+            example the German phrase.
+          </p>
+        </div>
+      )}
       {/* Low-traffic fine-tuning lives behind Advanced (ADR-0042) */}
       <AdvancedDisclosure count={1}>
         <SliderControl

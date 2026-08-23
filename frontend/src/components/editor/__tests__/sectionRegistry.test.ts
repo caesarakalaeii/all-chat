@@ -23,6 +23,7 @@ import {
   searchSettings,
   type EditorSectionId,
 } from '../sectionRegistry'
+import { SAY_HI_TOGGLE_LABEL } from '@/components/appearance/FilterGroup'
 
 describe('EDITOR_SECTIONS registry', () => {
   it('has unique section ids', () => {
@@ -53,6 +54,14 @@ describe('EDITOR_SECTIONS registry', () => {
       }
       maxSeen = Math.max(maxSeen, idx)
     }
+  })
+
+  // The registry is hand-maintained and the search matches it, not the DOM, so a
+  // renamed control silently drops out of search. Pinning the label against the
+  // constant FilterGroup renders turns that drift into a failing test.
+  it('the filters section indexes the label FilterGroup renders for the say-hi toggle', () => {
+    const filters = EDITOR_SECTIONS.find((s) => s.id === 'filters')
+    expect(filters?.entries.map((e) => e.label)).toContain(SAY_HI_TOGGLE_LABEL)
   })
 
   it('the sections the onboarding guide spotlights exist', () => {

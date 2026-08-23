@@ -20,12 +20,14 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import React from 'react'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
-import { FilterGroup } from '../FilterGroup'
+import { FilterGroup, SAY_HI_TOGGLE_LABEL } from '../FilterGroup'
 import type { FilterSettings } from '@/lib/types/overlay'
 
 afterEach(() => {
   cleanup()
 })
+
+const SAY_HI_PHRASE_PLACEHOLDER = 'Type phrase, press Enter'
 
 describe('FilterGroup', () => {
   it('renders "Blocked usernames" label and an input with placeholder "Type username, press Enter"', () => {
@@ -117,7 +119,7 @@ describe('FilterGroup', () => {
   it('toggling hide_commands calls onChange with { hide_commands: true }', () => {
     const onChange = vi.fn()
     render(<FilterGroup filterSettings={{ hide_commands: false }} onChange={onChange} />)
-    const toggle = screen.getByRole('switch')
+    const toggle = screen.getByRole('switch', { name: 'Hide bot commands (!)' })
     fireEvent.click(toggle)
     expect(onChange).toHaveBeenCalledWith({ hide_commands: true })
   })
@@ -125,9 +127,56 @@ describe('FilterGroup', () => {
   it('toggling hide_commands OFF calls onChange with { hide_commands: false }', () => {
     const onChange = vi.fn()
     render(<FilterGroup filterSettings={{ hide_commands: true }} onChange={onChange} />)
-    const toggle = screen.getByRole('switch')
+    const toggle = screen.getByRole('switch', { name: 'Hide bot commands (!)' })
     fireEvent.click(toggle)
     expect(onChange).toHaveBeenCalledWith({ hide_commands: false })
+  })
+
+  it('renders the YouTube "said hi" toggle with its exact label', () => {
+    const onChange = vi.fn()
+    render(<FilterGroup filterSettings={{}} onChange={onChange} />)
+    expect(SAY_HI_TOGGLE_LABEL).toBe('Hide YouTube "said hi" greetings')
+    expect(screen.getByText(SAY_HI_TOGGLE_LABEL)).toBeDefined()
+  })
+
+  it('toggling the "said hi" switch calls onChange with { hide_youtube_say_hi: true }', () => {
+    const onChange = vi.fn()
+    render(<FilterGroup filterSettings={{ hide_youtube_say_hi: false }} onChange={onChange} />)
+    fireEvent.click(screen.getByRole('switch', { name: SAY_HI_TOGGLE_LABEL }))
+    expect(onChange).toHaveBeenCalledWith({ hide_youtube_say_hi: true })
+  })
+
+  it('hides the extra-phrases input while hide_youtube_say_hi is off', () => {
+    const onChange = vi.fn()
+    render(<FilterGroup filterSettings={{ hide_youtube_say_hi: false }} onChange={onChange} />)
+    expect(screen.queryByPlaceholderText(SAY_HI_PHRASE_PLACEHOLDER)).toBeNull()
+  })
+
+  it('shows the extra-phrases input while hide_youtube_say_hi is on', () => {
+    const onChange = vi.fn()
+    render(<FilterGroup filterSettings={{ hide_youtube_say_hi: true }} onChange={onChange} />)
+    expect(screen.getByPlaceholderText(SAY_HI_PHRASE_PLACEHOLDER)).toBeDefined()
+  })
+
+  it('typing a German greeting + Enter calls onChange with say_hi_extra_phrases', () => {
+    const onChange = vi.fn()
+    render(<FilterGroup filterSettings={{ hide_youtube_say_hi: true }} onChange={onChange} />)
+    const input = screen.getByPlaceholderText(SAY_HI_PHRASE_PLACEHOLDER)
+    fireEvent.change(input, { target: { value: 'hat hallo gesagt' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onChange).toHaveBeenCalledWith({ say_hi_extra_phrases: ['hat hallo gesagt'] })
+  })
+
+  it('removing the only extra phrase calls onChange with an empty say_hi_extra_phrases', () => {
+    const onChange = vi.fn()
+    const filterSettings: FilterSettings = {
+      hide_youtube_say_hi: true,
+      say_hi_extra_phrases: ['hat hallo gesagt'],
+    }
+    render(<FilterGroup filterSettings={filterSettings} onChange={onChange} />)
+    expect(screen.getByText('hat hallo gesagt')).toBeDefined()
+    fireEvent.click(screen.getByLabelText('Remove hat hallo gesagt'))
+    expect(onChange).toHaveBeenCalledWith({ say_hi_extra_phrases: [] })
   })
 
   it('changing min_message_length slider calls onChange with { min_message_length: value }', () => {
