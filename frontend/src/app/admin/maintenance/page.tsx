@@ -63,16 +63,21 @@ export default function AdminMaintenancePage() {
   const [startsAt, setStartsAt] = useState('')
   const [endsAt, setEndsAt] = useState('')
 
-  const fetchMaintenances = useCallback(async () => {
-    try {
-      const data = await maintenanceApi.list()
-      setMaintenances(data)
-    } catch {
-      toastManager.add({ title: 'Failed to load maintenance windows', type: 'error' })
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  // Every setState lives in a promise callback rather than after an `await`:
+  // `react-hooks/set-state-in-effect` follows the call from the effect below, and it
+  // cannot see that a `finally` block after a `catch` only runs post-await. Returns the
+  // promise so the create/delete handlers can still wait for the refreshed list.
+  const fetchMaintenances = useCallback(
+    () =>
+      maintenanceApi
+        .list()
+        .then(setMaintenances)
+        .catch(() => {
+          toastManager.add({ title: 'Failed to load maintenance windows', type: 'error' })
+        })
+        .finally(() => setLoading(false)),
+    []
+  )
 
   useEffect(() => {
     if (!user?.is_admin) {
