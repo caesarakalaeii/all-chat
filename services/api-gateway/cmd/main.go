@@ -345,10 +345,19 @@ func main() {
 			return
 		}
 
+		// Moderation/AutoMod frames carry pre-moderation content — an
+		// automod_hold frame's metadata holds the full text AutoMod withheld from
+		// chat, which no viewer ever saw. The overlay socket accepts anonymous OBS
+		// browser sources, so these frames go only to verified owner sockets.
+		isModFrame := unifiedMsg.Event != nil && unifiedMsg.Event.Type == "mod_action"
+
 		// Broadcast wrapped message to all live connections in this overlay.
 		// Engagement-only sockets (participate tabs) receive only poll/prediction
 		// update frames, never chat (#5).
-		count := wsManager.BroadcastToOverlayFiltered(overlayID, wsJSON, msgType == models.WSMessageTypePollUpdate || msgType == models.WSMessageTypePredictionUpdate)
+		count := wsManager.BroadcastToOverlayFiltered(overlayID, wsJSON, wsconn.BroadcastFilter{
+			EngagementFrame: msgType == models.WSMessageTypePollUpdate || msgType == models.WSMessageTypePredictionUpdate,
+			OwnerOnly:       isModFrame,
+		})
 		log.Debug("Broadcast message to overlay",
 			zap.String("overlay_id", overlayID),
 			zap.Int("connections", count),
@@ -365,7 +374,7 @@ func main() {
 		// messages keep flowing into the buffer while the client reconnects.
 		// AddOnce uses a stable per-message SETNX marker so multi-pod writes
 		// converge on a single buffer entry — no cross-pod duplicates.
-		if shouldBufferForReplay(msgType, overlayID, testStreamOverlayID, count) {
+		if shouldBufferForReplay(msgType, overlayID, testStreamOverlayID, count, isModFrame) {
 			added, err := chatReplayBuffer.AddOnce(context.Background(), overlayID, unifiedMsg.ID, wsJSON, wsMsg.Timestamp)
 			if err != nil {
 				log.Warn("Failed to add message to chat replay buffer",
@@ -1021,8 +1030,14 @@ func main() {
 // duplicate refetch signals on reconnect and evicting real chat history), and
 // they are ephemeral refetch signals that clients re-hydrate over HTTP on
 // reconnect. They must never enter the chat replay buffer.
-func shouldBufferForReplay(msgType models.WSMessageType, overlayID, testStreamOverlayID string, liveConnCount int) bool {
+//
+// Moderation/AutoMod frames are excluded for a security reason: the buffer is
+// replayed to EVERY socket on connect, including anonymous OBS ones, so
+// buffering a held message would leak the exact text the owner-only broadcast
+// just protected — and leak it later, out of context, which is worse.
+func shouldBufferForReplay(msgType models.WSMessageType, overlayID, testStreamOverlayID string, liveConnCount int, isModFrame bool) bool {
 	return liveConnCount == 0 &&
+		!isModFrame &&
 		overlayID != testStreamOverlayID &&
 		msgType != models.WSMessageTypePollUpdate &&
 		msgType != models.WSMessageTypePredictionUpdate
