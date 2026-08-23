@@ -8,7 +8,7 @@
 
 ## Context and Problem Statement
 
-All-Chat already reacted to Twitch moderation, but only to its *effects*. The
+All-Chat already reacted to Twitch moderation, but only to its _effects_. The
 `channel.chat.message_delete`, `channel.chat.clear_user_messages` and
 `channel.chat.clear` subscriptions tell the overlay that a message vanished, that a
 user's history was wiped, or that chat was emptied, and the monitor renders those as
@@ -192,7 +192,7 @@ screen can never request these scopes. ADR-0048 draws the line this respects: a
 volunteer acts with their **own** platform credential and is asked for the minimum
 their delegated actions need. Nine scopes over the broadcaster's channel — one of
 them a "manage" scope — is not that, and a volunteer must never be asked for AutoMod
-permissions on a channel they merely help with. The feed reads the *channel's* own
+permissions on a channel they merely help with. The feed reads the _channel's_ own
 moderation history, which is the owner's record, not an action a moderator can be
 handed.
 
@@ -238,7 +238,7 @@ the downgrade guard.
 
 - **Approve/Deny actions and the `POST /helix/moderation/automod/message` path.**
   Deferring is safe because `automod.message.update` already delivers the
-  resolution *and* the resolving actor. When Approve/Deny lands, the row it produces
+  resolution _and_ the resolving actor. When Approve/Deny lands, the row it produces
   is the row already rendered today, arriving through the same subscription with the
   same join key. It is an additive change — a button and one Helix call — not a
   rework of the feed, and the scope it needs is already granted.
@@ -279,14 +279,14 @@ the downgrade guard.
   after their channel is already tracked gets nothing until a leader change, a pod
   restart, or the channel being re-added. This is the pre-existing behaviour of the
   whole event-subscription layer (ADR-0030's known limitation), not new here, but it
-  is the first feature where a *user-initiated* grant is what the user is waiting on,
+  is the first feature where a _user-initiated_ grant is what the user is waiting on,
   so it is the first one where the delay is confusing rather than invisible.
 - A missing grant is silent by design: `isScopeError` classifies Twitch's 403 and the
   listener logs it at **Info** with a `scope_errors` count, not as an error. Correct
   — an ungranted opt-in is not a fault — but it means "I enabled it and see nothing"
   has no loud signal to search for. The troubleshooting section of
   `docs/features/twitch-moderation-events.md` exists for exactly this.
-- `mod_action` frames are the first delivery class the api-gateway must *withhold*
+- `mod_action` frames are the first delivery class the api-gateway must _withhold_
   from some sockets in a pool. Every future frame type now carries an implicit
   question ("who may see this?") that chat never posed.
 - `moderationSummary` sets `Text` on every mod frame and nothing renders it — the
