@@ -91,6 +91,7 @@ func (t *TwitchOAuth) GetAuthURLWithChatScopes(state string) string {
 // twitchModerationScopesByAction maps a moderation action to the Twitch OAuth scopes
 // it requires. Most actions need exactly one scope; "engagement" (Twitch-native poll +
 // prediction mirroring via EventSub, issue #523) needs read access to both resources.
+// "modlog" (reading a channel's moderation and AutoMod events) needs nine.
 // These scopes are requested ONLY through the dedicated opt-in re-consent flow and are
 // never bundled into login or add-source (ADR-0017, least privilege).
 var twitchModerationScopesByAction = map[string][]string{
@@ -99,6 +100,25 @@ var twitchModerationScopesByAction = map[string][]string{
 	"ban":        {"moderator:manage:banned_users"},
 	"unban":      {"moderator:manage:banned_users"},
 	"engagement": {"channel:read:polls", "channel:read:predictions"},
+	// The eight moderator:read:* scopes are what channel.moderate v2 requires; Twitch
+	// accepts the corresponding moderator:manage:* as a superset for some of them, but we
+	// request the narrow read form. The order is the order the consent screen shows.
+	"modlog": {
+		"moderator:read:blocked_terms",
+		"moderator:read:chat_settings",
+		"moderator:read:unban_requests",
+		"moderator:read:banned_users",
+		"moderator:read:chat_messages",
+		"moderator:read:warnings",
+		"moderator:read:moderators",
+		"moderator:read:vips",
+		// This iteration only READS AutoMod events: there is no Approve/Deny button and no
+		// POST /helix/moderation/automod/message call anywhere in this codebase. But Twitch
+		// requires moderator:manage:automod to create an automod.message.hold subscription
+		// and there is no read-only alternative. That is Twitch's scope design, not ours —
+		// dropping this scope silently leaves the AutoMod panel with no events to show.
+		"moderator:manage:automod",
+	},
 }
 
 // ModerationScopesForActions returns the deduped, minimal set of Twitch scopes the
