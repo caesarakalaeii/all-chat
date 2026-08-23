@@ -201,6 +201,63 @@ func (sm *SubscriptionManager) SubscribeToFollows(ctx context.Context, broadcast
 	return sm.subscribeWithCondition(ctx, "channel.follow", broadcasterID, token, "2", condition, cacheKey)
 }
 
+// Moderation-log subscriptions. THREE are needed, not one: channel.moderate v2 is the moderator
+// ACTION feed (ban/timeout/delete/warn/vip/blocked-term edits, each with the acting moderator's
+// identity), and its automod_terms action is a blocked-TERM-LIST edit, NOT a held message. Actual
+// AutoMod-held messages are delivered only by the separate automod.message.hold v2 subscription,
+// and their resolution (approved/denied/expired, plus who resolved it) only by
+// automod.message.update v2. Subscribing to channel.moderate alone would ship a mod log with the
+// word "automod" in the title and no held message in it.
+//
+// All three share one condition: broadcaster_user_id == moderator_user_id == the streamer, because
+// this iteration reads a channel's own moderation log for its owner (the streamer moderates their
+// own channel). Webhook transport uses the APP access token; Twitch validates the broadcaster's user
+// grant at subscription-creation time, which is why a missing modlog grant surfaces as a 4xx scope
+// error here rather than as a runtime failure later.
+
+// SubscribeToChannelModerate creates a channel.moderate v2 subscription — the moderator action feed.
+func (sm *SubscriptionManager) SubscribeToChannelModerate(ctx context.Context, broadcasterID string) (string, error) {
+	return sm.subscribeModeratorScoped(ctx, "channel.moderate", broadcasterID)
+}
+
+// SubscribeToAutoModMessageHold creates an automod.message.hold v2 subscription — the only feed that
+// carries a message AutoMod has held for review.
+func (sm *SubscriptionManager) SubscribeToAutoModMessageHold(ctx context.Context, broadcasterID string) (string, error) {
+	return sm.subscribeModeratorScoped(ctx, "automod.message.hold", broadcasterID)
+}
+
+// SubscribeToAutoModMessageUpdate creates an automod.message.update v2 subscription — the only feed
+// that carries how a held message was resolved.
+func (sm *SubscriptionManager) SubscribeToAutoModMessageUpdate(ctx context.Context, broadcasterID string) (string, error) {
+	return sm.subscribeModeratorScoped(ctx, "automod.message.update", broadcasterID)
+}
+
+// subscribeModeratorScoped creates a v2 moderation subscription whose condition is the
+// broadcaster/moderator pair described above. Cached under "broadcasterID:subType". A condition
+// carrying only broadcaster_user_id is rejected by Twitch with a 400, so both keys are always sent.
+func (sm *SubscriptionManager) subscribeModeratorScoped(ctx context.Context, subType, broadcasterID string) (string, error) {
+	cacheKey := broadcasterID + ":" + subType
+	sm.mu.RLock()
+	if subID, exists := sm.subscriptions[cacheKey]; exists {
+		sm.mu.RUnlock()
+		return subID, nil
+	}
+	sm.mu.RUnlock()
+
+	token, err := sm.getAccessToken(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to get app access token: %w", err)
+	}
+
+	// The streamer moderates their own channel — owner-only iteration.
+	condition := map[string]string{
+		"broadcaster_user_id": broadcasterID,
+		"moderator_user_id":   broadcasterID,
+	}
+
+	return sm.subscribeWithCondition(ctx, subType, broadcasterID, token, "2", condition, cacheKey)
+}
+
 // SubscribeToStreamOffline creates a subscription for stream offline events.
 // Requires only app access token (no user OAuth scope needed).
 func (sm *SubscriptionManager) SubscribeToStreamOffline(ctx context.Context, broadcasterID string) (string, error) {
