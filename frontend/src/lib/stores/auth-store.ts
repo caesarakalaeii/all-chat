@@ -73,6 +73,11 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     }
     set({ user: null, loading: false, isImpersonating: false, impersonatedUsername: null })
     if (typeof window !== 'undefined') {
+      // Clearing this store does not clear the others, the mounted component trees, or
+      // the overlay WebSockets opened for the signed-out user — a router.push() would
+      // leave the previous user's data on screen. This module is not a component either,
+      // so the rule's suggested hooks are not available here.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- full reload required to clear all client state on logout
       window.location.href = '/'
     }
   },
