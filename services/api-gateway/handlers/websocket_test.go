@@ -153,6 +153,24 @@ func TestOriginAllowedForWS_ExtensionWildcardCookieRejected(t *testing.T) {
 	}
 }
 
+// ownershipVerified is the conclusion of HandleOverlayConnection's auth chain:
+// a socket is an owner exactly when it presented a token that passed JWT
+// validation, the revocation blacklist and VerifyOverlayOwnership. The chain
+// itself is guard clauses that return early, so by the time the flag is set the
+// only remaining input is whether a token was present at all. Pinning it here
+// keeps the tokenless OBS path from ever being marked owner, which is the
+// difference between a private moderation log and broadcasting held AutoMod
+// text to every browser holding the overlay URL.
+func TestOwnershipVerified(t *testing.T) {
+	if !ownershipVerified("a-validated-jwt") {
+		t.Error("a socket whose token cleared validation, the blacklist and the ownership check must be an owner, got false (the streamer's moderation frames would never arrive)")
+	}
+
+	if ownershipVerified("") {
+		t.Error("the tokenless anonymous OBS path must never be marked owner, got true (an AutoMod held message would reach an OBS browser source)")
+	}
+}
+
 // applyOverlaySocketFlags carries the whole owner gate for the overlay socket:
 // if it stops propagating isOwner, moderation frames silently stop reaching the
 // streamer, and if it ever sets the flag without verified ownership, held

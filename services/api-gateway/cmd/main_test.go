@@ -4,7 +4,63 @@ import (
 	"testing"
 
 	"github.com/caesar/all-chat/services/api-gateway/models"
+	wsconn "github.com/caesar/all-chat/services/api-gateway/websocket"
 )
+
+// overlayBroadcastFilter decides, for every frame leaving the Redis pub/sub
+// callback, who may receive it. It is tested as one unit rather than as two
+// independent booleans because the classification and the routing are only
+// useful together: a caller that classifies a mod_action frame correctly and
+// then forwards it with OwnerOnly unset leaks held AutoMod text to every
+// anonymous OBS browser source, and no test of the classification alone would
+// notice.
+func TestOverlayBroadcastFilter(t *testing.T) {
+	tests := []struct {
+		name      string
+		eventType string
+		msgType   models.WSMessageType
+		want      wsconn.BroadcastFilter
+	}{
+		{
+			name:      "a mod_action frame is owner-only (held AutoMod text must not reach anonymous sockets)",
+			eventType: "mod_action",
+			msgType:   models.WSMessageTypeChatMessage,
+			want:      wsconn.BroadcastFilter{OwnerOnly: true},
+		},
+		{
+			name:      "an ordinary chat frame reaches every non-engagement socket",
+			eventType: "chat_message",
+			msgType:   models.WSMessageTypeChatMessage,
+			want:      wsconn.BroadcastFilter{},
+		},
+		{
+			name:      "a poll update is an engagement frame and stays public",
+			eventType: "",
+			msgType:   models.WSMessageTypePollUpdate,
+			want:      wsconn.BroadcastFilter{EngagementFrame: true},
+		},
+		{
+			name:      "a prediction update is an engagement frame and stays public",
+			eventType: "",
+			msgType:   models.WSMessageTypePredictionUpdate,
+			want:      wsconn.BroadcastFilter{EngagementFrame: true},
+		},
+		{
+			name:      "message_deletion is public and stays broadcastable",
+			eventType: "message_deletion",
+			msgType:   models.WSMessageTypeChatMessage,
+			want:      wsconn.BroadcastFilter{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := overlayBroadcastFilter(tt.eventType, tt.msgType); got != tt.want {
+				t.Errorf("overlayBroadcastFilter(%q, %q) = %+v, want %+v", tt.eventType, tt.msgType, got, tt.want)
+			}
+		})
+	}
+}
 
 func TestIsModerationFrame(t *testing.T) {
 	tests := []struct {
