@@ -377,6 +377,13 @@ export const EDITOR_SECTIONS: EditorSection[] = [
       { label: 'Blocked usernames', keywords: 'banned users block ignore mute bot' },
       { label: 'Blocked keywords', keywords: 'banned words filter profanity swear' },
       { label: 'Hide bot commands (!)', keywords: 'exclamation prefix commands nightbot' },
+      // Label duplicated from FilterGroup's SAY_HI_TOGGLE_LABEL rather than
+      // imported: this registry is plain data with no component imports, and
+      // sectionRegistry.test.ts fails if the two ever disagree.
+      {
+        label: 'Hide YouTube "said hi" greetings',
+        keywords: 'youtube vertical say hi greeting spam button shorts',
+      },
       { label: 'Min message length', keywords: 'short spam minimum characters' },
     ],
   },
