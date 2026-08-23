@@ -6,6 +6,43 @@ import (
 	"github.com/caesar/all-chat/services/api-gateway/models"
 )
 
+func TestIsModerationFrame(t *testing.T) {
+	tests := []struct {
+		name      string
+		eventType string
+		want      bool
+	}{
+		{
+			name:      "mod_action is the moderation frame type the message-processor publishes",
+			eventType: "mod_action",
+			want:      true,
+		},
+		{
+			name:      "an ordinary chat message is not a moderation frame",
+			eventType: "chat_message",
+			want:      false,
+		},
+		{
+			name:      "message_deletion is public and stays broadcastable",
+			eventType: "message_deletion",
+			want:      false,
+		},
+		{
+			name:      "an empty event type is not a moderation frame",
+			eventType: "",
+			want:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isModerationFrame(tt.eventType); got != tt.want {
+				t.Errorf("isModerationFrame(%q) = %v, want %v", tt.eventType, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestShouldBufferForReplay(t *testing.T) {
 	const testOverlayID = "test-ov"
 
