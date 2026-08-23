@@ -498,6 +498,12 @@ func (h *Handler) routeEvent(ctx context.Context, subscriptionType string, event
 		return h.handleCheer(ctx, eventData, messageID)
 	case "channel.follow":
 		return h.handleFollow(ctx, eventData)
+	case "channel.moderate":
+		return h.handleChannelModerate(ctx, eventData)
+	case "automod.message.hold":
+		return h.handleAutoModHold(ctx, eventData)
+	case "automod.message.update":
+		return h.handleAutoModUpdate(ctx, eventData)
 	case "stream.offline":
 		return h.handleStreamOffline(ctx, eventData)
 	case "stream.online":
@@ -1267,6 +1273,224 @@ func buildClearDeletion(e *eventsub.ChatClearEvent) *models.RawChatMessage {
 		EventData: map[string]interface{}{
 			"deletion_type": "clear",
 		},
+	}
+}
+
+// modActionEventType is the single event type carried by every moderation and AutoMod event. The
+// specific action lives in EventData["action"], which keeps the per-overlay event filter to one
+// entry and gives the frontend one string to match.
+const modActionEventType = "mod_action"
+
+// handleChannelModerate processes a channel.moderate event — any moderation action taken in the
+// channel, including WHO took it. That actor is the reason this subscription exists: the
+// channel.chat.* deletion events report what happened but never by whom.
+func (h *Handler) handleChannelModerate(ctx context.Context, eventData json.RawMessage) error {
+	var event eventsub.ChannelModerateEvent
+	if err := json.Unmarshal(eventData, &event); err != nil {
+		return fmt.Errorf("failed to unmarshal channel.moderate: %w", err)
+	}
+	return h.publisher.Publish(ctx, buildModerationAction(&event))
+}
+
+// buildModerationAction converts a channel.moderate event into a mod_action RawChatMessage.
+//
+// event.Action is passed through VERBATIM rather than matched against a whitelist: Twitch adds
+// actions over time, and an unknown one must reach the overlay as an unrecognised-but-visible row
+// instead of disappearing. Only the target details of the actions all-chat models are extracted;
+// an unmodelled action simply carries no target.
+func buildModerationAction(e *eventsub.ChannelModerateEvent) *models.RawChatMessage {
+	eventData := map[string]interface{}{
+		"action": e.Action,
+	}
+	if e.ModeratorUserID != "" {
+		eventData["moderator_id"] = e.ModeratorUserID
+	}
+	if e.ModeratorUserLogin != "" {
+		eventData["moderator_login"] = strings.ToLower(e.ModeratorUserLogin)
+	}
+
+	target, reason := moderationTarget(e)
+	targetUserID, targetLogin := "", ""
+	if target != nil {
+		targetUserID, targetLogin = target.UserID, strings.ToLower(target.UserLogin)
+		eventData["target_user_id"] = targetUserID
+		eventData["target_login"] = targetLogin
+	}
+	if reason != "" {
+		eventData["reason"] = reason
+	}
+	// channel.moderate sends an absolute expires_at; the frontend renders a duration.
+	timeoutDuration := 0
+	if e.Timeout != nil {
+		timeoutDuration = timeoutSeconds(e.Timeout.ExpiresAt)
+		eventData["ban_duration"] = timeoutDuration
+	}
+
+	return &models.RawChatMessage{
+		MessageID: uuid.New().String(),
+		Platform:  "twitch",
+		ChannelID: strings.ToLower(e.BroadcasterUserLogin),
+		UserID:    targetUserID,
+		Username:  targetLogin,
+		Text:      moderationSummary(e.Action, targetLogin, timeoutDuration),
+		Timestamp: time.Now().UTC(),
+		EventType: modActionEventType,
+		EventData: eventData,
+	}
+}
+
+// moderationTarget returns the user a channel.moderate action was taken against, and the reason the
+// action carried, from whichever sub-object is non-nil. Actions with no target (or none all-chat
+// models) yield a nil target.
+func moderationTarget(e *eventsub.ChannelModerateEvent) (*eventsub.ModerateUser, string) {
+	switch {
+	case e.Timeout != nil:
+		return &eventsub.ModerateUser{
+			UserID:    e.Timeout.UserID,
+			UserLogin: e.Timeout.UserLogin,
+			UserName:  e.Timeout.UserName,
+		}, e.Timeout.Reason
+	case e.Ban != nil:
+		return &eventsub.ModerateUser{
+			UserID:    e.Ban.UserID,
+			UserLogin: e.Ban.UserLogin,
+			UserName:  e.Ban.UserName,
+		}, e.Ban.Reason
+	case e.Warn != nil:
+		return &eventsub.ModerateUser{
+			UserID:    e.Warn.UserID,
+			UserLogin: e.Warn.UserLogin,
+			UserName:  e.Warn.UserName,
+		}, e.Warn.Reason
+	case e.Delete != nil:
+		return &eventsub.ModerateUser{
+			UserID:    e.Delete.UserID,
+			UserLogin: e.Delete.UserLogin,
+			UserName:  e.Delete.UserName,
+		}, ""
+	case e.Unban != nil:
+		return e.Unban, ""
+	case e.Untimeout != nil:
+		return e.Untimeout, ""
+	case e.Mod != nil:
+		return e.Mod, ""
+	case e.Unmod != nil:
+		return e.Unmod, ""
+	case e.VIP != nil:
+		return e.VIP, ""
+	case e.UnVIP != nil:
+		return e.UnVIP, ""
+	default:
+		return nil, ""
+	}
+}
+
+// timeoutSeconds converts a channel.moderate absolute expires_at into the remaining duration in
+// whole seconds, floored at 1 so a timeout that has all but elapsed by the time the webhook arrives
+// still reads as a timeout rather than as a zero-length (i.e. permanent-looking) one.
+func timeoutSeconds(expiresAt time.Time) int {
+	seconds := int(expiresAt.Sub(time.Now().UTC()).Round(time.Second).Seconds())
+	if seconds < 1 {
+		return 1
+	}
+	return seconds
+}
+
+// moderationSummary renders a short human-readable line for a moderation action. Nothing displays it
+// today — the frontend builds its own copy from the metadata — but every other handler sets Text and
+// an empty one trips the message-processor's empty-text metric. timeoutSeconds is 0 for anything but
+// a timeout.
+func moderationSummary(action, targetLogin string, timeoutSeconds int) string {
+	switch {
+	case targetLogin == "":
+		return fmt.Sprintf("Moderator action: %s", action)
+	case timeoutSeconds > 0:
+		return fmt.Sprintf("Timed out %s for %ds", targetLogin, timeoutSeconds)
+	default:
+		return fmt.Sprintf("Moderator action %s on %s", action, targetLogin)
+	}
+}
+
+// handleAutoModHold processes an automod.message.hold event (AutoMod withheld a message pending
+// review) into a mod_action carrying the held text and AutoMod's own verdict.
+func (h *Handler) handleAutoModHold(ctx context.Context, eventData json.RawMessage) error {
+	var event eventsub.AutoModMessageHoldEvent
+	if err := json.Unmarshal(eventData, &event); err != nil {
+		return fmt.Errorf("failed to unmarshal automod.message.hold: %w", err)
+	}
+	return h.publisher.Publish(ctx, buildAutoModHold(&event))
+}
+
+// buildAutoModHold converts an automod.message.hold event into a mod_action RawChatMessage.
+//
+// No moderator keys are set: AutoMod is not a person, and a placeholder there would later read as a
+// real moderator having acted. held_message_id is Twitch's id for the held message and is the join
+// key the resolving automod.message.update repeats.
+func buildAutoModHold(e *eventsub.AutoModMessageHoldEvent) *models.RawChatMessage {
+	return &models.RawChatMessage{
+		MessageID: uuid.New().String(),
+		Platform:  "twitch",
+		ChannelID: strings.ToLower(e.BroadcasterUserLogin),
+		UserID:    e.UserID,
+		Username:  strings.ToLower(e.UserLogin),
+		Text:      fmt.Sprintf("AutoMod held a message from %s", strings.ToLower(e.UserLogin)),
+		Timestamp: time.Now().UTC(),
+		EventType: modActionEventType,
+		EventData: map[string]interface{}{
+			"action":           "automod_hold",
+			"target_user_id":   e.UserID,
+			"target_login":     strings.ToLower(e.UserLogin),
+			"held_message_id":  e.MessageID,
+			"held_text":        e.Message.Text,
+			"automod_category": e.Category,
+			"automod_level":    e.Level,
+		},
+	}
+}
+
+// handleAutoModUpdate processes an automod.message.update event (a held message was approved, denied
+// or expired) into a mod_action the frontend pairs with the earlier hold.
+func (h *Handler) handleAutoModUpdate(ctx context.Context, eventData json.RawMessage) error {
+	var event eventsub.AutoModMessageUpdateEvent
+	if err := json.Unmarshal(eventData, &event); err != nil {
+		return fmt.Errorf("failed to unmarshal automod.message.update: %w", err)
+	}
+	return h.publisher.Publish(ctx, buildAutoModResolution(&event))
+}
+
+// buildAutoModResolution converts an automod.message.update event into a mod_action RawChatMessage.
+//
+// held_message_id must be byte-identical to the hold's, or the frontend cannot update the held row in
+// place and shows a stale hold forever. resolved_by is empty when the hold expired: nobody acted.
+func buildAutoModResolution(e *eventsub.AutoModMessageUpdateEvent) *models.RawChatMessage {
+	heldFromLogin := strings.ToLower(e.UserLogin)
+	moderatorLogin := strings.ToLower(e.ModeratorUserLogin)
+
+	eventData := map[string]interface{}{
+		"action":          "automod_resolved",
+		"target_user_id":  e.UserID,
+		"target_login":    heldFromLogin,
+		"held_message_id": e.MessageID,
+		"resolution":      e.Status,
+		"resolved_by":     moderatorLogin,
+	}
+	if e.ModeratorUserID != "" {
+		eventData["moderator_id"] = e.ModeratorUserID
+	}
+	if moderatorLogin != "" {
+		eventData["moderator_login"] = moderatorLogin
+	}
+
+	return &models.RawChatMessage{
+		MessageID: uuid.New().String(),
+		Platform:  "twitch",
+		ChannelID: strings.ToLower(e.BroadcasterUserLogin),
+		UserID:    e.UserID,
+		Username:  heldFromLogin,
+		Text:      fmt.Sprintf("AutoMod hold %s for %s", e.Status, heldFromLogin),
+		Timestamp: time.Now().UTC(),
+		EventType: modActionEventType,
+		EventData: eventData,
 	}
 }
 

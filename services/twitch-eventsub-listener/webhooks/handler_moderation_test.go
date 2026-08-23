@@ -138,12 +138,16 @@ func TestRouteEvent_ChannelModerateTimeout(t *testing.T) {
 		t.Errorf("reason = %v, want %q", data["reason"], "stop that")
 	}
 	// Twitch sends an absolute expires_at; the frontend renders a duration, so the handler converts.
-	duration, ok := data["ban_duration"].(int)
+	// EventData crossed the JSON wire, so the whole-number seconds arrive as a float64.
+	duration, ok := data["ban_duration"].(float64)
 	if !ok {
-		t.Fatalf("ban_duration = %#v, want an int number of seconds", data["ban_duration"])
+		t.Fatalf("ban_duration = %#v, want a JSON number of seconds", data["ban_duration"])
 	}
 	if duration <= 0 {
-		t.Errorf("ban_duration = %d, want a positive number of seconds", duration)
+		t.Errorf("ban_duration = %v, want a positive number of seconds", duration)
+	}
+	if duration != float64(int(duration)) {
+		t.Errorf("ban_duration = %v, want whole seconds", duration)
 	}
 }
 
@@ -182,8 +186,8 @@ func TestRouteEvent_AutoModHold(t *testing.T) {
 	if data["automod_category"] != "aggression" {
 		t.Errorf("automod_category = %v, want aggression", data["automod_category"])
 	}
-	if data["automod_level"] != 4 {
-		t.Errorf("automod_level = %#v, want int 4", data["automod_level"])
+	if data["automod_level"] != float64(4) {
+		t.Errorf("automod_level = %#v, want 4", data["automod_level"])
 	}
 	if data["held_message_id"] != heldMessageID {
 		t.Errorf("held_message_id = %v, want %q", data["held_message_id"], heldMessageID)

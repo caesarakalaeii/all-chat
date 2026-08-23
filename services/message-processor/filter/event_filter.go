@@ -138,6 +138,9 @@ func mapEventTypeToColumn(platform, eventType string) string {
 		case "announcement", "charity_donation", "modiversary", "twitch_notice":
 			// Chat notices that are not toggleable — see columnAlwaysEnabled.
 			return columnAlwaysEnabled
+		case "mod_action":
+			// A moderator's own audit log is not toggleable — see columnAlwaysEnabled.
+			return columnAlwaysEnabled
 		default:
 			// Unknown Twitch event, group under subs for now
 			if strings.Contains(normalized, "sub") || strings.Contains(normalized, "gift") {
