@@ -60,6 +60,11 @@ Welcome to the All-Chat documentation hub. This directory contains comprehensive
 - [CSS Customization Guide](./CSS_CUSTOMIZATION.md) - Complete CSS reference
 - [Overlay Themes Gallery](./overlay-themes/README.md) - Pre-built themes
 
+**Feature Guides** (`features/`):
+- [message-deletion.md](./features/message-deletion.md) - Cross-platform deletion sync
+- [twitch-moderation-events.md](./features/twitch-moderation-events.md) - Twitch moderator actions + AutoMod holds in the monitor
+- [passive-overlay-irl.md](./features/passive-overlay-irl.md) - Render-only overlay for IRL disconnect protection
+
 ---
 
 ### For Operators & DevOps
