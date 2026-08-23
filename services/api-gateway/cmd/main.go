@@ -349,7 +349,13 @@ func main() {
 		// automod_hold frame's metadata holds the full text AutoMod withheld from
 		// chat, which no viewer ever saw. The overlay socket accepts anonymous OBS
 		// browser sources, so these frames go only to verified owner sockets.
-		isModFrame := unifiedMsg.Event != nil && unifiedMsg.Event.Type == "mod_action"
+		//
+		// A nil Event means the decode above failed or the frame carries no event,
+		// so this classification fails open. That is safe: it is the same decode
+		// the producer's format guarantees for the message_deletion check above,
+		// and a frame that does not parse cannot carry held_text any consumer
+		// would render.
+		isModFrame := unifiedMsg.Event != nil && isModerationFrame(unifiedMsg.Event.Type)
 
 		// Broadcast wrapped message to all live connections in this overlay.
 		// Engagement-only sockets (participate tabs) receive only poll/prediction
@@ -1020,6 +1026,21 @@ func main() {
 }
 
 // getEnvOrDefault gets an environment variable or returns a default value
+// modActionEventType is the unified-message event type the message-processor
+// publishes for moderation and AutoMod events. It is the sole discriminator for
+// frames that may carry pre-moderation content, so it is named once here: the
+// string is a cross-service contract, and a typo on either side silently turns
+// the owner-only gate off.
+const modActionEventType = "mod_action"
+
+// isModerationFrame reports whether a unified-message event type identifies a
+// moderation/AutoMod frame. Such frames may carry the full text AutoMod withheld
+// from chat, so they are broadcast only to verified owner sockets and never
+// written to the replay buffer.
+func isModerationFrame(eventType string) bool {
+	return eventType == modActionEventType
+}
+
 // shouldBufferForReplay reports whether a broadcast frame should be written to
 // the chat replay buffer. Frames are buffered only when this pod has no live
 // connections for the overlay (so a reconnecting client can catch up) and the

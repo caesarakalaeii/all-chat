@@ -170,6 +170,24 @@ func NewWebSocketHandler(
 	return h
 }
 
+// applyOverlaySocketFlags records on the connection the two per-socket delivery
+// rules the broadcaster enforces: engagementOnly (poll/prediction frames only,
+// never chat) and isOwner (verified overlay ownership, the gate for frames
+// carrying pre-moderation content such as held AutoMod text).
+//
+// It exists as a separate function so both rules can be tested without a live
+// WebSocket upgrade — HandleOverlayConnection needs a real socket, a repo and a
+// JWT validator to reach, which previously left this wiring unpinned. isOwner
+// must be passed through unchanged: hard-coding it false takes the streamer's
+// moderation log dark, and hard-coding it true publishes held AutoMod text to
+// every anonymous OBS browser source.
+func applyOverlaySocketFlags(wsConn *wsconn.Connection, engagementOnly, isOwner bool) {
+	if engagementOnly {
+		wsConn.SetEngagementOnly(true)
+	}
+	wsConn.SetOwner(isOwner)
+}
+
 // HandleOverlayConnection handles WebSocket connection requests for overlays
 func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 	overlayID := c.Param("overlay_id")
@@ -297,10 +315,7 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 
 	// Create WebSocket connection wrapper
 	wsConn := wsconn.NewConnection(conn, overlayID, userID, h.replayBuffer, h.logger)
-	if engagementOnly {
-		wsConn.SetEngagementOnly(true)
-	}
-	wsConn.SetOwner(isOwner)
+	applyOverlaySocketFlags(wsConn, engagementOnly, isOwner)
 
 	// Activate all sources for this overlay (auto-activation on connect). Skipped for an
 	// anonymous viewer participate tab: it only consumes the poll/prediction broadcast and

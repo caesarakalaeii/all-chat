@@ -18,7 +18,6 @@ package websocket
 
 import (
 	"testing"
-	"time"
 
 	"go.uber.org/zap"
 )
@@ -39,14 +38,16 @@ func newPoolTestConnection(userID string) *Connection {
 	return NewConnection(nil, "ov", userID, nil, zap.NewNop())
 }
 
-// receivedFrame returns the frame queued on conn, or "" if none arrives
-// promptly.
+// receivedFrame returns the frame queued on conn, or "" if none was queued.
+// The read is non-blocking rather than timed: Send enqueues into the buffered
+// channel synchronously, so BroadcastFiltered has already delivered everything
+// it is going to by the time it returns.
 func receivedFrame(t *testing.T, conn *Connection) string {
 	t.Helper()
 	select {
 	case raw := <-conn.send:
 		return string(raw)
-	case <-time.After(100 * time.Millisecond):
+	default:
 		return ""
 	}
 }
