@@ -17,17 +17,22 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { shouldFilterMessage } from '../filterMessage'
+import { shouldFilterMessage, SAY_HI_PHRASES } from '../filterMessage'
 import type { ChatMessage } from '@/lib/types/message'
 import type { FilterSettings } from '@/lib/types/overlay'
 
 function makeMsg(
-  overrides: { username?: string; display_name?: string; text?: string } = {}
+  overrides: {
+    username?: string
+    display_name?: string
+    text?: string
+    platform?: ChatMessage['platform']
+  } = {}
 ): ChatMessage {
   return {
     id: '1',
     overlay_id: 'ov1',
-    platform: 'twitch',
+    platform: overrides.platform ?? 'twitch',
     channel_id: 'ch1',
     channel_name: 'test',
     user: {
@@ -146,5 +151,95 @@ describe('shouldFilterMessage', () => {
       metadata: {},
     }
     expect(() => shouldFilterMessage(broken, settings)).not.toThrow()
+  })
+
+  // hide_youtube_say_hi — YouTube's free "Say hi!" button posts a plain "said hi" message
+  it('returns true for a youtube "said hi" message when hide_youtube_say_hi is true', () => {
+    const settings: FilterSettings = { hide_youtube_say_hi: true }
+    expect(shouldFilterMessage(makeMsg({ platform: 'youtube', text: 'said hi' }), settings)).toBe(
+      true
+    )
+  })
+
+  it('returns true for a say-hi message with surrounding whitespace', () => {
+    const settings: FilterSettings = { hide_youtube_say_hi: true }
+    expect(
+      shouldFilterMessage(makeMsg({ platform: 'youtube', text: '  said hi  ' }), settings)
+    ).toBe(true)
+  })
+
+  it('returns true for a say-hi message in mixed case', () => {
+    const settings: FilterSettings = { hide_youtube_say_hi: true }
+    expect(shouldFilterMessage(makeMsg({ platform: 'youtube', text: 'Said Hi' }), settings)).toBe(
+      true
+    )
+  })
+
+  it('returns false for "said hi!" because trailing punctuation is not a built-in phrase', () => {
+    const settings: FilterSettings = { hide_youtube_say_hi: true }
+    expect(shouldFilterMessage(makeMsg({ platform: 'youtube', text: 'said hi!' }), settings)).toBe(
+      false
+    )
+  })
+
+  it('returns true for "said hi!" when it is listed in say_hi_extra_phrases', () => {
+    const settings: FilterSettings = {
+      hide_youtube_say_hi: true,
+      say_hi_extra_phrases: ['said hi!'],
+    }
+    expect(shouldFilterMessage(makeMsg({ platform: 'youtube', text: 'said hi!' }), settings)).toBe(
+      true
+    )
+  })
+
+  it('returns false when a say-hi phrase is only a substring of the message', () => {
+    const settings: FilterSettings = { hide_youtube_say_hi: true }
+    expect(
+      shouldFilterMessage(
+        makeMsg({ platform: 'youtube', text: 'my friend said hi to you' }),
+        settings
+      )
+    ).toBe(false)
+  })
+
+  it('returns false for a non-youtube "said hi" message even when the toggle is on', () => {
+    const settings: FilterSettings = { hide_youtube_say_hi: true }
+    expect(shouldFilterMessage(makeMsg({ platform: 'twitch', text: 'said hi' }), settings)).toBe(
+      false
+    )
+  })
+
+  it('returns false for a youtube "said hi" message when the toggle is absent', () => {
+    expect(shouldFilterMessage(makeMsg({ platform: 'youtube', text: 'said hi' }), {})).toBe(false)
+  })
+
+  it('returns false for a youtube "said hi" message when the toggle is false', () => {
+    const settings: FilterSettings = { hide_youtube_say_hi: false }
+    expect(shouldFilterMessage(makeMsg({ platform: 'youtube', text: 'said hi' }), settings)).toBe(
+      false
+    )
+  })
+
+  it('returns true for a localised say-hi phrase supplied via say_hi_extra_phrases', () => {
+    const settings: FilterSettings = {
+      hide_youtube_say_hi: true,
+      say_hi_extra_phrases: ['hat hallo gesagt'],
+    }
+    expect(
+      shouldFilterMessage(makeMsg({ platform: 'youtube', text: 'Hat Hallo gesagt' }), settings)
+    ).toBe(true)
+  })
+
+  it('ignores a whitespace-only say_hi_extra_phrases entry', () => {
+    const settings: FilterSettings = { hide_youtube_say_hi: true, say_hi_extra_phrases: ['   '] }
+    expect(shouldFilterMessage(makeMsg({ platform: 'youtube', text: '' }), settings)).toBe(false)
+    expect(shouldFilterMessage(makeMsg({ platform: 'youtube', text: 'anything' }), settings)).toBe(
+      false
+    )
+  })
+
+  it('ships exactly one built-in say-hi phrase', () => {
+    expect(SAY_HI_PHRASES).toHaveLength(1)
+    expect(SAY_HI_PHRASES).toContain('said hi')
   })
 })

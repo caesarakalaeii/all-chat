@@ -206,6 +206,16 @@ export interface FilterSettings {
   banned_users?: string[]
   min_message_length?: number
   hide_commands?: boolean
+  /**
+   * Drop the plain-text messages posted by YouTube's free "Say hi!" button on
+   * vertical live streams, whose body is literally "said hi".
+   */
+  hide_youtube_say_hi?: boolean
+  /**
+   * Extra literals treated as a YouTube "Say hi!" message, for locales where
+   * the button posts something other than the built-in English phrase.
+   */
+  say_hi_extra_phrases?: string[]
 }
 
 export interface ChatSource {
