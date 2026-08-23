@@ -352,6 +352,14 @@ func TestClassifyTwitchUnraidAndGenericNotice(t *testing.T) {
 	assert.Equal(t, 10, duration)
 }
 
+// A moderation action is for the moderator's own view, never an on-stream alert: duration 0 is how
+// "do not display" is said here.
+func TestClassifyTwitchModAction(t *testing.T) {
+	tier, duration := ClassifyEvent("twitch", "mod_action", nil)
+	assert.Equal(t, "low", tier)
+	assert.Equal(t, 0, duration)
+}
+
 func TestClassifyListenerDeprecationNotice(t *testing.T) {
 	tier, duration := ClassifyEvent("system", "listener_deprecation_notice", nil)
 	assert.Equal(t, "high", tier)

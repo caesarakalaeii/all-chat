@@ -124,6 +124,11 @@ func classifyTwitchEvent(eventType string, value *models.EventValue) (tier strin
 		// A notice type all-chat has no first-class mapping for yet; shown, but unobtrusively.
 		return "low", 10
 
+	case "mod_action":
+		// Moderation and AutoMod events belong in the moderator's view, never on the public OBS
+		// overlay: duration 0 is how "produce no alert" is said here.
+		return "low", 0
+
 	default:
 		return "medium", 15
 	}
