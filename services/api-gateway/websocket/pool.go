@@ -95,17 +95,37 @@ func (p *Pool) Broadcast(message []byte) int {
 	return successCount
 }
 
-// BroadcastFiltered sends to all connections but skips engagement-only connections when
-// the frame is NOT a poll/prediction update — so a participate tab never receives chat.
-// Returns the number of successful sends. For viewer connections, overlay_id is stripped.
-func (p *Pool) BroadcastFiltered(message []byte, engagementFrame bool) int {
+// BroadcastFilter selects which connections in a pool a frame may reach.
+// The zero value means "every connection except engagement-only ones", which is
+// the rule for ordinary chat.
+type BroadcastFilter struct {
+	// EngagementFrame marks a poll/prediction update, the only kind of frame an
+	// engagement-only socket accepts.
+	EngagementFrame bool
+
+	// OwnerOnly restricts the frame to sockets that proved overlay ownership.
+	// Set it for frames carrying pre-moderation content — an automod_hold frame
+	// contains the full text AutoMod withheld from chat, and the overlay socket
+	// accepts anonymous OBS browser sources.
+	OwnerOnly bool
+}
+
+// BroadcastFiltered sends to all connections the filter admits. Returns the number of
+// successful sends. For viewer connections, overlay_id is stripped.
+func (p *Pool) BroadcastFiltered(message []byte, filter BroadcastFilter) int {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
 	successCount := 0
 	for conn := range p.connections {
 		// Engagement-only sockets only ever receive poll/prediction updates.
-		if conn.IsEngagementOnly() && !engagementFrame {
+		if conn.IsEngagementOnly() && !filter.EngagementFrame {
+			continue
+		}
+
+		// Viewer sockets are a distinct public path and never prove ownership,
+		// so they are excluded from owner-only frames alongside anonymous ones.
+		if filter.OwnerOnly && (conn.IsViewer() || !conn.IsOwner()) {
 			continue
 		}
 
@@ -124,7 +144,8 @@ func (p *Pool) BroadcastFiltered(message []byte, engagementFrame bool) int {
 		zap.String("overlay_id", p.overlayID),
 		zap.Int("pool_size", len(p.connections)),
 		zap.Int("success_count", successCount),
-		zap.Bool("engagement_frame", engagementFrame),
+		zap.Bool("engagement_frame", filter.EngagementFrame),
+		zap.Bool("owner_only", filter.OwnerOnly),
 	)
 
 	return successCount

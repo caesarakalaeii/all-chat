@@ -170,6 +170,41 @@ func NewWebSocketHandler(
 	return h
 }
 
+// ownershipVerified reports whether an overlay socket proved ownership, given
+// the token it presented.
+//
+// It is only correct at the one point HandleOverlayConnection calls it: the end
+// of the auth chain, where a non-empty token has already cleared JWT
+// validation, the revocation blacklist and VerifyOverlayOwnership, since every
+// earlier failure returns. So the sole remaining question is whether a token
+// was presented at all — a tokenless socket is the anonymous OBS path.
+//
+// This is a function rather than a bare assignment so the conclusion can be
+// tested: HandleOverlayConnection needs a live WS upgrade, a repo and a JWT
+// validator to reach, which previously left the assignment feeding the owner
+// flag unpinned while the flag's consumers were all covered.
+func ownershipVerified(token string) bool {
+	return token != ""
+}
+
+// applyOverlaySocketFlags records on the connection the two per-socket delivery
+// rules the broadcaster enforces: engagementOnly (poll/prediction frames only,
+// never chat) and isOwner (verified overlay ownership, the gate for frames
+// carrying pre-moderation content such as held AutoMod text).
+//
+// It exists as a separate function so both rules can be tested without a live
+// WebSocket upgrade — HandleOverlayConnection needs a real socket, a repo and a
+// JWT validator to reach, which previously left this wiring unpinned. isOwner
+// must be passed through unchanged: hard-coding it false takes the streamer's
+// moderation log dark, and hard-coding it true publishes held AutoMod text to
+// every anonymous OBS browser source.
+func applyOverlaySocketFlags(wsConn *wsconn.Connection, engagementOnly, isOwner bool) {
+	if engagementOnly {
+		wsConn.SetEngagementOnly(true)
+	}
+	wsConn.SetOwner(isOwner)
+}
+
 // HandleOverlayConnection handles WebSocket connection requests for overlays
 func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 	overlayID := c.Param("overlay_id")
@@ -210,6 +245,13 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 	token, echoHeader := extractWSAuthToken(c.Request)
 	var userID string
 	var username string
+
+	// isOwner stays false for the anonymous OBS path. It is set only after the
+	// token has been validated, checked against the revocation blacklist and
+	// confirmed to own this overlay, and gates frames carrying pre-moderation
+	// content (held AutoMod text). Ownership is never inferred from userID:
+	// "obs" is a sentinel string, not an authorization decision.
+	isOwner := false
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
@@ -253,6 +295,8 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "you do not own this overlay"})
 			return
 		}
+
+		isOwner = ownershipVerified(token)
 	} else {
 		// No token provided (OBS mode) - use anonymous connection
 		userID = "obs"
@@ -288,9 +332,7 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 
 	// Create WebSocket connection wrapper
 	wsConn := wsconn.NewConnection(conn, overlayID, userID, h.replayBuffer, h.logger)
-	if engagementOnly {
-		wsConn.SetEngagementOnly(true)
-	}
+	applyOverlaySocketFlags(wsConn, engagementOnly, isOwner)
 
 	// Activate all sources for this overlay (auto-activation on connect). Skipped for an
 	// anonymous viewer participate tab: it only consumes the poll/prediction broadcast and

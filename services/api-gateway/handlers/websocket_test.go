@@ -20,6 +20,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	wsconn "github.com/caesar/all-chat/services/api-gateway/websocket"
 )
 
 func TestNotifyUser(t *testing.T) {
@@ -148,5 +150,56 @@ func TestOriginAllowedForWS_ExtensionWildcardCookieRejected(t *testing.T) {
 	monitor.AddCookie(&http.Cookie{Name: "access_token", Value: "owner-jwt"})
 	if !originAllowedForWS(allowed, firstParty, monitor) {
 		t.Error("want true (first-party monitor view + cookie), got false")
+	}
+}
+
+// ownershipVerified is the conclusion of HandleOverlayConnection's auth chain:
+// a socket is an owner exactly when it presented a token that passed JWT
+// validation, the revocation blacklist and VerifyOverlayOwnership. The chain
+// itself is guard clauses that return early, so by the time the flag is set the
+// only remaining input is whether a token was present at all. Pinning it here
+// keeps the tokenless OBS path from ever being marked owner, which is the
+// difference between a private moderation log and broadcasting held AutoMod
+// text to every browser holding the overlay URL.
+func TestOwnershipVerified(t *testing.T) {
+	if !ownershipVerified("a-validated-jwt") {
+		t.Error("a socket whose token cleared validation, the blacklist and the ownership check must be an owner, got false (the streamer's moderation frames would never arrive)")
+	}
+
+	if ownershipVerified("") {
+		t.Error("the tokenless anonymous OBS path must never be marked owner, got true (an AutoMod held message would reach an OBS browser source)")
+	}
+}
+
+// applyOverlaySocketFlags carries the whole owner gate for the overlay socket:
+// if it stops propagating isOwner, moderation frames silently stop reaching the
+// streamer, and if it ever sets the flag without verified ownership, held
+// AutoMod text reaches anonymous OBS sources. Both directions are pinned here
+// because HandleOverlayConnection itself needs a live WS upgrade to reach.
+func TestApplyOverlaySocketFlags_OwnerFlagTracksVerifiedOwnership(t *testing.T) {
+	owner := &wsconn.Connection{}
+	applyOverlaySocketFlags(owner, false, true)
+	if !owner.IsOwner() {
+		t.Error("a socket with verified overlay ownership must be marked owner, got IsOwner()=false (the streamer's moderation frames would never arrive)")
+	}
+	if owner.IsEngagementOnly() {
+		t.Error("engagementOnly=false must leave the socket receiving chat frames")
+	}
+
+	anonymous := &wsconn.Connection{}
+	applyOverlaySocketFlags(anonymous, false, false)
+	if anonymous.IsOwner() {
+		t.Error("an anonymous OBS socket must never be marked owner (an AutoMod held message would reach an OBS browser source)")
+	}
+}
+
+func TestApplyOverlaySocketFlags_EngagementOnlyIsIndependentOfOwnership(t *testing.T) {
+	ownerWidget := &wsconn.Connection{}
+	applyOverlaySocketFlags(ownerWidget, true, true)
+	if !ownerWidget.IsEngagementOnly() {
+		t.Error("engagementOnly=true must mark the socket engagement-only even for an owner")
+	}
+	if !ownerWidget.IsOwner() {
+		t.Error("engagementOnly must not clear the owner flag")
 	}
 }

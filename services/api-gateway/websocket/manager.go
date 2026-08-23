@@ -496,9 +496,10 @@ func (m *Manager) BroadcastToOverlay(overlayID string, message []byte) int {
 }
 
 // BroadcastToOverlayFiltered sends a message to all connections in an overlay
-// pool, skipping engagement-only connections when the frame is not a
-// poll/prediction update — so a participate tab never receives chat (#5).
-func (m *Manager) BroadcastToOverlayFiltered(overlayID string, message []byte, engagementFrame bool) int {
+// pool that the filter admits: engagement-only connections are skipped for
+// frames that are not poll/prediction updates, so a participate tab never
+// receives chat (#5), and owner-only frames reach nothing else.
+func (m *Manager) BroadcastToOverlayFiltered(overlayID string, message []byte, filter BroadcastFilter) int {
 	m.mu.RLock()
 	pool, exists := m.pools[overlayID]
 	m.mu.RUnlock()
@@ -507,7 +508,7 @@ func (m *Manager) BroadcastToOverlayFiltered(overlayID string, message []byte, e
 		return 0
 	}
 
-	return pool.BroadcastFiltered(message, engagementFrame)
+	return pool.BroadcastFiltered(message, filter)
 }
 
 // BroadcastToAll sends a message to all connected clients (all overlays)

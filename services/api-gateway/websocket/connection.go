@@ -61,8 +61,12 @@ type Connection struct {
 	// isEngagementOnly is true for poll/prediction-only sockets that must not
 	// receive chat/update frames — only poll/prediction updates (#5).
 	isEngagementOnly bool
-	authenticated    bool
-	onAuth           AuthCallback
+	// isOwner is true only when this socket presented a valid JWT AND was
+	// verified to own this overlay; the gate for frames carrying
+	// pre-moderation content.
+	isOwner       bool
+	authenticated bool
+	onAuth        AuthCallback
 }
 
 // NewConnection creates a new WebSocket connection for overlay owners
@@ -108,6 +112,18 @@ func (c *Connection) IsEngagementOnly() bool {
 // SetEngagementOnly marks this connection as poll/prediction-only (#5).
 func (c *Connection) SetEngagementOnly(v bool) {
 	c.isEngagementOnly = v
+}
+
+// IsOwner returns true only when this socket presented a valid JWT AND was
+// verified to own this overlay; the gate for frames carrying pre-moderation
+// content.
+func (c *Connection) IsOwner() bool {
+	return c.isOwner
+}
+
+// SetOwner records whether this socket proved ownership of the overlay.
+func (c *Connection) SetOwner(v bool) {
+	c.isOwner = v
 }
 
 // Start starts the read and write pumps for the connection
