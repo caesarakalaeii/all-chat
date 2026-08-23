@@ -114,3 +114,73 @@ func TestClose_UnblocksConnectWaitingOnRead(t *testing.T) {
 			"intermittent ten-minute hang in test (discord-listener).")
 	}
 }
+
+// TestConnect_ReturnsWhenContextCancelledDuringRead is the other half of the same
+// defect, on the path where the caller cancels the context instead of calling Close().
+//
+// Connect() checks ctx.Done() only between reads, so a cancellation that arrives while
+// it is parked in conn.ReadMessage() is not observed. Today the read happens to break
+// because gorilla ties the socket to the context passed to DialContext, but that is a
+// side effect of how the connection was dialled, not something Connect() guarantees.
+// The remaining rare hang after fixing Close() was exactly this path: a SIGQUIT dump
+// caught the second Connect() of TestGatewayClient_ReconnectAfterClose parked at
+// client_test.go:156, the `<-done2` after `cancel2()`, once in 200 package runs.
+//
+// Cancellation must stop the read loop on its own so the guarantee does not depend on
+// the dialer.
+func TestConnect_ReturnsWhenContextCancelledDuringRead(t *testing.T) {
+	upgrader := websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
+	connected := make(chan struct{}, 1)
+	releaseHandler := make(chan struct{})
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+
+		hello := gateway.GatewayPayload{Op: gateway.OpHello}
+		helloData, _ := json.Marshal(gateway.HelloData{HeartbeatInterval: 45000})
+		hello.D = json.RawMessage(helloData)
+		if err := conn.WriteJSON(hello); err != nil {
+			return
+		}
+		if _, _, err := conn.ReadMessage(); err != nil {
+			return
+		}
+		select {
+		case connected <- struct{}{}:
+		default:
+		}
+		<-releaseHandler
+	}))
+	defer srv.Close()
+	defer close(releaseHandler)
+
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http")
+	store := &MockRedis{store: make(map[string]string)}
+	log, _ := zap.NewDevelopment()
+	client := gateway.NewGatewayClient("tok", wsURL, store, log, nil, nil, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	connectReturned := make(chan error, 1)
+	go func() {
+		connectReturned <- client.Connect(ctx)
+	}()
+
+	select {
+	case <-connected:
+	case <-time.After(5 * time.Second):
+		t.Fatal("handshake did not complete, so the read-blocked state under test was never reached")
+	}
+
+	cancel()
+
+	select {
+	case <-connectReturned:
+	case <-time.After(5 * time.Second):
+		t.Fatal("cancelling the context did not make a read-blocked Connect() return: the read loop " +
+			"only checks ctx.Done() between reads, so the blocking ReadMessage stayed parked")
+	}
+}
