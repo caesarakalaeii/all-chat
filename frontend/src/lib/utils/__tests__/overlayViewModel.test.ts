@@ -27,10 +27,13 @@ import {
   isDeletionTarget,
   isPinnedToLiveEdge,
   matchesUserFilter,
+  mergeAutoModResolution,
   mergeByAgg,
   partitionItems,
   shouldAutoScroll,
+  toModActionEntry,
   toModEntry,
+  type ModEntryData,
   userFilterFor,
   type ViewItem,
 } from '@/lib/utils/overlayViewModel'
@@ -153,6 +156,122 @@ describe('deletionKind / toModEntry', () => {
   it('maps clear to clear', () => {
     expect(deletionKind({ deletion_type: 'clear' })).toBe('clear')
     expect(toModEntry({ deletion_type: 'clear' }, 'replay', 5).kind).toBe('clear')
+  })
+})
+
+describe('toModActionEntry', () => {
+  it('maps a timeout to the existing timeout kind, keeping the moderator and duration', () => {
+    const entry = toModActionEntry(
+      {
+        action: 'timeout',
+        moderator_login: 'modperson',
+        target_login: 'spammer',
+        ban_duration: 600,
+        reason: 'spam',
+      },
+      'live',
+      42
+    )
+    expect(entry).toMatchObject({
+      kind: 'timeout',
+      action: 'timeout',
+      moderator: 'modperson',
+      username: 'spammer',
+      banDuration: 600,
+      reason: 'spam',
+      source: 'live',
+      at: 42,
+    })
+  })
+
+  it('maps an AutoMod hold to the automod kind with no moderator (AutoMod has no human actor)', () => {
+    const entry = toModActionEntry(
+      {
+        action: 'automod_hold',
+        target_login: 'chatter',
+        held_message_id: 'm1',
+        held_text: 'something rude',
+        automod_category: 'profanity',
+        automod_level: 3,
+      },
+      'live',
+      7
+    )
+    expect(entry).toMatchObject({
+      kind: 'automod',
+      heldMessageId: 'm1',
+      heldText: 'something rude',
+      automodCategory: 'profanity',
+      automodLevel: 3,
+      username: 'chatter',
+    })
+    expect(entry?.moderator).toBeUndefined()
+  })
+
+  // Twitch adds channel.moderate actions over time. An action this build has never
+  // heard of must still reach the moderation log — dropping it would silently hide
+  // real moderation from the person watching the channel.
+  it('renders an unknown Twitch action as a generic entry instead of dropping it', () => {
+    const entry = toModActionEntry(
+      { action: 'some_future_action', moderator_login: 'modperson', target_login: 'someone' },
+      'live',
+      9
+    )
+    expect(entry).not.toBeNull()
+    expect(entry).toMatchObject({
+      kind: 'action',
+      action: 'some_future_action',
+      moderator: 'modperson',
+      username: 'someone',
+    })
+  })
+
+  it('returns null when the action is missing or not a string', () => {
+    expect(toModActionEntry({}, 'live', 1)).toBeNull()
+    expect(toModActionEntry({ action: 7 }, 'live', 1)).toBeNull()
+  })
+})
+
+describe('mergeAutoModResolution', () => {
+  const hold: ModEntryData = {
+    kind: 'automod',
+    action: 'automod_hold',
+    heldMessageId: 'm1',
+    heldText: 'something rude',
+    source: 'live',
+    at: 100,
+  }
+
+  it('folds a resolution into the hold it resolves, keeping its position', () => {
+    const resolution: ModEntryData = {
+      kind: 'automod',
+      action: 'automod_resolved',
+      heldMessageId: 'm1',
+      resolution: 'approved',
+      resolvedBy: 'modperson',
+      source: 'live',
+      at: 200,
+    }
+    const merged = mergeAutoModResolution([hold], resolution)
+    expect(merged).toHaveLength(1)
+    expect(merged[0]).toMatchObject({
+      heldMessageId: 'm1',
+      resolution: 'approved',
+      resolvedBy: 'modperson',
+      at: 100,
+    })
+  })
+
+  it('appends a resolution whose held message is not in the log', () => {
+    const orphan: ModEntryData = {
+      kind: 'automod',
+      action: 'automod_resolved',
+      heldMessageId: 'other',
+      resolution: 'denied',
+      source: 'live',
+      at: 200,
+    }
+    expect(mergeAutoModResolution([hold], orphan)).toHaveLength(2)
   })
 })
 

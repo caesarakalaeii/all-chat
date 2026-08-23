@@ -47,6 +47,9 @@ export type EventType =
   | 'prime_paid_upgrade'
   | 'pay_it_forward'
   | 'twitch_notice'
+  // Twitch moderation log (channel.moderate) and AutoMod holds
+  // (automod.message.hold / automod.message.update), carried as one event type.
+  | 'mod_action'
   // YouTube
   | 'super_chat'
   | 'super_sticker'

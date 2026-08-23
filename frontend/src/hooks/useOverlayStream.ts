@@ -84,6 +84,12 @@ export interface UseOverlayStreamOptions {
   onMessageUpdate?: (message: ChatMessage) => void
   /** A deletion to apply. `source` is 'replay' for reconnect-buffered deletions, 'live' otherwise. */
   onDeletion?: (deletion: DeletionMetadata, source: 'replay' | 'live') => void
+  /**
+   * A Twitch moderation-log or AutoMod frame (`channel.moderate`,
+   * `automod.message.hold`/`update`), passed through as raw metadata because the
+   * action set is open-ended — interpreting it is the consumer's job.
+   */
+  onModAction?: (metadata: Record<string, unknown>, source: 'replay' | 'live') => void
   /** Fired once per successful (re)connection. */
   onConnected?: () => void
 }
@@ -356,6 +362,14 @@ export function useOverlayStream(
             lastSeenTimestampRef.current = Date.now()
             persist(lastSeenTimestampRef.current)
             optsRef.current.onDeletion?.(classified.deletion, 'live')
+            return
+
+          case 'modAction':
+            // Like deletions, these carry no message timestamp of their own, so
+            // the watermark advances by wall-clock.
+            lastSeenTimestampRef.current = Date.now()
+            persist(lastSeenTimestampRef.current)
+            optsRef.current.onModAction?.(classified.metadata, 'live')
             return
 
           case 'chat': {

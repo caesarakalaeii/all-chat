@@ -269,6 +269,7 @@ export interface WsEnvelope {
 export type EnvelopeClassification =
   | { kind: 'replay'; deletions: DeletionMetadata[] }
   | { kind: 'deletion'; deletion: DeletionMetadata }
+  | { kind: 'modAction'; metadata: Record<string, unknown> }
   | { kind: 'chat'; message: ChatMessage }
   | { kind: 'update'; message: ChatMessage }
   | { kind: 'status'; status: PlatformStatus }
@@ -300,6 +301,11 @@ export function classifyEnvelope(envelope: WsEnvelope | null | undefined): Envel
       if (!data) return { kind: 'ignore' }
       if (data.event?.type === 'message_deletion') {
         return { kind: 'deletion', deletion: data.event.metadata as unknown as DeletionMetadata }
+      }
+      // Twitch moderation-log and AutoMod frames: an event, but never an item in
+      // the feed — the monitor renders them in its moderation log instead.
+      if (data.event?.type === 'mod_action') {
+        return { kind: 'modAction', metadata: data.event.metadata as Record<string, unknown> }
       }
       return { kind: 'chat', message: data }
     }

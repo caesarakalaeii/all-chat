@@ -78,8 +78,10 @@ import {
   applyModerationMark,
   deletionSignature,
   isAudienceEvent,
+  mergeAutoModResolution,
   mergeByAgg,
   partitionItems,
+  toModActionEntry,
   toModEntry,
   type ModEntry,
   type ViewItem,
@@ -183,6 +185,21 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
     )
   }, [])
 
+  // Twitch moderation-log / AutoMod frames. No optimistic dedup: unlike the
+  // deletion path, this client never produces a mod_action itself, so every
+  // frame here is news. An AutoMod resolution folds into the hold it closes
+  // rather than adding a row.
+  const onModAction = useCallback(
+    (metadata: Record<string, unknown>, source: 'replay' | 'live') => {
+      const entry = toModActionEntry(metadata, source, Date.now())
+      if (!entry) return
+      setModerationLog((prev) =>
+        mergeAutoModResolution(prev, { id: (modSeqRef.current += 1), ...entry }).slice(-MAX_MOD_LOG)
+      )
+    },
+    []
+  )
+
   const {
     config,
     sources,
@@ -195,6 +212,7 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
     onChat,
     onMessageUpdate,
     onDeletion,
+    onModAction,
   })
 
   // Fetch per-overlay event toggles (degrades gracefully if disabled — setState
@@ -327,6 +345,22 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
     },
     [id]
   )
+
+  // Opt-in for the Twitch moderation log (channel.moderate + AutoMod holds), which is a
+  // separate grant from the moderation write-path above: it reads the channel's own
+  // moderation history rather than acting on it, so a streamer who granted moderation
+  // before this existed still has to consent here. Owner-only — the scopes belong to the
+  // broadcaster credential, which is not a moderator's to re-consent.
+  const enableModLog = useCallback(async () => {
+    try {
+      window.location.href = await moderationApi.getTwitchModLogConsentUrl(id)
+    } catch {
+      toastManager.add({
+        title: 'Could not start Twitch consent. Please try again.',
+        type: 'error',
+      })
+    }
+  }, [id])
 
   // A delegated moderator connecting their OWN account for a platform (ADR-0048).
   //
@@ -472,6 +506,14 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
   // live). Shown only to the owner when the overlay carries a YouTube source.
   const hasYouTubeSource = useMemo(
     () => Array.from(sources.values()).some((s) => s.platform === 'youtube'),
+    [sources]
+  )
+
+  // Whether the mod-log opt-in is worth offering at all. Only Twitch produces these
+  // events, and capabilities carries no flag for the grant, so the CTA stays visible
+  // like the engagement-mirror one rather than pretending to know it is already given.
+  const hasTwitchSource = useMemo(
+    () => Array.from(sources.values()).some((s) => s.platform === 'twitch'),
     [sources]
   )
   const [rediscovering, setRediscovering] = useState(false)
@@ -927,6 +969,28 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
             )}
           </div>
         ))}
+
+      {/* Twitch moderation-log opt-in. The scope note is not padding: the consent screen
+          asks for moderator:manage:automod, which on a read-only feature looks like a
+          mistake and gets declined — Twitch requires it to create the AutoMod hold
+          subscription and offers no read-only alternative. */}
+      {isOwner && hasTwitchSource && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-xs text-text-sub">
+          <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
+          <span>
+            Show Twitch moderation actions and AutoMod holds in this activity feed. Twitch requires
+            an AutoMod &ldquo;manage&rdquo; permission to send us held messages at all — All-Chat
+            only reads them; there are no approve/deny buttons yet.
+          </span>
+          <button
+            type="button"
+            onClick={() => void enableModLog()}
+            className="font-medium text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+          >
+            Show moderation &amp; AutoMod events
+          </button>
+        </div>
+      )}
 
       {/* Re-auth prompt: a moderation action failed because the platform token can no
           longer perform it. The backend asked for re-consent; give the actor the CTA —

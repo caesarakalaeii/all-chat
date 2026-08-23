@@ -34,11 +34,17 @@ import type { SourceCapability } from '@/lib/types/moderation'
 import { buildGradientCSS } from '@/lib/utils/gradient'
 import type { ModKind, ViewItem } from '@/lib/utils/overlayViewModel'
 
+// Every ModKind needs a label, but only the deletion-derived four can reach a
+// row: `_moderated` is set solely by applyModerationMark, and a mod-log or
+// AutoMod frame marks no message. The last two are here for the type and read
+// as the neutral fallback if that ever changes.
 const MOD_LABEL: Record<ModKind, string> = {
   delete: 'deleted',
   timeout: 'timed out',
   ban: 'banned',
   clear: 'cleared',
+  automod: 'held by AutoMod',
+  action: 'moderated',
 }
 
 /** Moderation wiring passed down from the monitor page (omit to hide controls). */
