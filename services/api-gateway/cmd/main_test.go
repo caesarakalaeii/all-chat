@@ -14,6 +14,7 @@ func TestShouldBufferForReplay(t *testing.T) {
 		msgType       models.WSMessageType
 		overlayID     string
 		liveConnCount int
+		isModFrame    bool
 		want          bool
 	}{
 		{
@@ -58,14 +59,22 @@ func TestShouldBufferForReplay(t *testing.T) {
 			liveConnCount: 0,
 			want:          false,
 		},
+		{
+			name:          "mod frames are never replay-buffered (held AutoMod text must not reach anonymous sockets on connect)",
+			msgType:       models.WSMessageTypeChatMessage,
+			overlayID:     "ov",
+			liveConnCount: 0,
+			isModFrame:    true,
+			want:          false,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := shouldBufferForReplay(tt.msgType, tt.overlayID, testOverlayID, tt.liveConnCount)
+			got := shouldBufferForReplay(tt.msgType, tt.overlayID, testOverlayID, tt.liveConnCount, tt.isModFrame)
 			if got != tt.want {
-				t.Errorf("shouldBufferForReplay(%q, %q, %q, %d) = %v, want %v",
-					tt.msgType, tt.overlayID, testOverlayID, tt.liveConnCount, got, tt.want)
+				t.Errorf("shouldBufferForReplay(%q, %q, %q, %d, %v) = %v, want %v",
+					tt.msgType, tt.overlayID, testOverlayID, tt.liveConnCount, tt.isModFrame, got, tt.want)
 			}
 		})
 	}
