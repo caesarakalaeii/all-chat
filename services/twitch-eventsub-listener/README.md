@@ -39,6 +39,9 @@ The Twitch EventSub Listener connects to Twitch's EventSub WebSocket API to rece
 - ✅ `channel.chat.message` - **Chat reading** (demand-gated; see below)
 - ✅ `channel.chat.notification` - **Chat notices** (watch streaks, announcements, and other "events that appear in chat"; see below)
 - ✅ `channel.chat.message_delete` / `channel.chat.clear_user_messages` / `channel.chat.clear` - **Chat moderation** (single delete, user timeout/ban, full clear; see below)
+- ✅ `channel.moderate` (v2) - **Moderator actions** with the acting moderator's identity (ban, timeout, delete, warn, VIP/mod grants, blocked-term list edits; scope-gated, see below)
+- ✅ `automod.message.hold` (v2) - A chat message AutoMod held for review, with its text, category and severity level
+- ✅ `automod.message.update` (v2) - How a held message was resolved (`approved` / `denied` / `expired`) and by which moderator
 
 > Transport note: subscriptions use **webhook** transport (HTTP callback at `EVENTSUB_CALLBACK_URL`), not the EventSub WebSocket. Twitch verifies each subscription via a `webhook_callback_verification` challenge before it becomes `enabled`.
 
@@ -130,6 +133,31 @@ which displayed message to remove and buffers the deletion until it expires.
 
 > **Limitation:** `channel.chat.clear_user_messages` carries no duration, so a timeout is reported as
 > a ban (the messages are removed either way; only the moderation-log label differs). See ADR-0015.
+
+### Moderation Log (channel.moderate + AutoMod)
+
+**Three subscriptions, not one.** `channel.moderate` v2 is the moderator *action* feed, and its
+`automod_terms` action is an edit to a blocked/permitted **term list** — it carries no message. A
+message AutoMod actually held is delivered only by `automod.message.hold` v2, and its resolution
+only by `automod.message.update` v2. Subscribing to `channel.moderate` alone would produce a
+moderation log with the word "automod" in the title and no held message in it.
+
+All three use the condition `broadcaster_user_id == moderator_user_id == the streamer`: this
+iteration reads a channel's own log for its owner, who moderates their own channel. Twitch rejects
+a condition carrying only `broadcaster_user_id` with a 400.
+
+**Scope requirement.** The subscriptions are created with the app access token, but Twitch validates
+the *broadcaster's* grant at creation time, so a channel whose owner has not consented fails with a
+4xx scope error — logged at Info and counted as a scope error, not a failure. The grant is the nine
+scopes behind the owner's `?actions=modlog` re-consent (auth-service): the eight `moderator:read:*`
+scopes `channel.moderate` v2 requires, plus **`moderator:manage:automod`**. That last one looks
+wrong on a read-only feature and it is not an oversight: Twitch requires it to create an
+`automod.message.hold` subscription and offers no read-only alternative. This service only reads —
+there is no approve/deny call anywhere in it.
+
+Like every event subscription here, these are created once when a channel is first tracked, so a
+grant made afterwards takes effect on the next channel (re)sync — a leader change, pod restart, or
+the channel being re-added (ADR-0030 known limitation).
 
 ### Platform Status Indicators
 

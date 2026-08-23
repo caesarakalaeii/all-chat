@@ -448,6 +448,178 @@ type ChatClearEvent struct {
 	BroadcasterUserName  string `json:"broadcaster_user_name"`
 }
 
+// ChannelModerateEvent represents a moderator action taken in the channel.
+// subscription type: channel.moderate (v2)
+// Reference: https://dev.twitch.tv/docs/eventsub/eventsub-reference/#channel-moderate-event
+//
+// Action names the action taken and exactly one of the sub-objects below is populated, named after
+// it. Actions carrying no detail (e.g. "clear", "emoteonly") populate none. Every sub-object is a
+// POINTER so an absent one is nil rather than a zero value — a nil Ban on a timeout is what tells a
+// reader the action was not a permanent ban.
+//
+// Twitch adds actions over time, so an Action this build has never seen decodes with Action set and
+// every sub-object nil rather than failing: dropping the event would lose the recognised actions
+// arriving in the same feed. AutomodTerms is a blocked-TERM-LIST edit, NOT a held message; held
+// messages arrive only on automod.message.hold.
+type ChannelModerateEvent struct {
+	BroadcasterUserID    string `json:"broadcaster_user_id"`
+	BroadcasterUserLogin string `json:"broadcaster_user_login"`
+	BroadcasterUserName  string `json:"broadcaster_user_name"`
+	ModeratorUserID      string `json:"moderator_user_id"`
+	ModeratorUserLogin   string `json:"moderator_user_login"`
+	ModeratorUserName    string `json:"moderator_user_name"`
+
+	// Action is one of Twitch's moderation action names ("ban", "timeout", "delete", "warn",
+	// "vip", "automod_terms", ...) — treat an unrecognised value as "some action we don't render".
+	Action string `json:"action"`
+
+	Ban          *ModerateBan          `json:"ban,omitempty"`
+	Unban        *ModerateUser         `json:"unban,omitempty"`
+	Timeout      *ModerateTimeout      `json:"timeout,omitempty"`
+	Untimeout    *ModerateUser         `json:"untimeout,omitempty"`
+	Delete       *ModerateDelete       `json:"delete,omitempty"`
+	Warn         *ModerateWarn         `json:"warn,omitempty"`
+	AutomodTerms *ModerateAutomodTerms `json:"automod_terms,omitempty"`
+	Mod          *ModerateUser         `json:"mod,omitempty"`
+	Unmod        *ModerateUser         `json:"unmod,omitempty"`
+	VIP          *ModerateUser         `json:"vip,omitempty"`
+	UnVIP        *ModerateUser         `json:"unvip,omitempty"`
+	Raid         *ModerateRaid         `json:"raid,omitempty"`
+	Unraid       *ModerateUser         `json:"unraid,omitempty"`
+	Followers    *ModerateFollowers    `json:"followers,omitempty"`
+	Slow         *ModerateSlow         `json:"slow,omitempty"`
+	Shoutout     *ModerateUser         `json:"shoutout,omitempty"`
+}
+
+// ModerateUser is the payload shape shared by every channel.moderate action whose only detail is
+// the user it was applied to (unban, untimeout, mod, unmod, vip, unvip, unraid, shoutout).
+type ModerateUser struct {
+	UserID    string `json:"user_id"`
+	UserLogin string `json:"user_login"`
+	UserName  string `json:"user_name"`
+}
+
+// ModerateBan is the "ban" action payload. Reason may be empty (Twitch does not require one).
+type ModerateBan struct {
+	UserID    string `json:"user_id"`
+	UserLogin string `json:"user_login"`
+	UserName  string `json:"user_name"`
+	Reason    string `json:"reason"`
+}
+
+// ModerateTimeout is the "timeout" action payload. ExpiresAt is what distinguishes a timeout from a
+// ban; Twitch sends the expiry rather than a duration.
+type ModerateTimeout struct {
+	UserID    string    `json:"user_id"`
+	UserLogin string    `json:"user_login"`
+	UserName  string    `json:"user_name"`
+	Reason    string    `json:"reason"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// ModerateDelete is the "delete" action payload (a single message removed). It carries the removed
+// message's text, so the moderation log can show what was deleted without holding chat history.
+type ModerateDelete struct {
+	UserID      string `json:"user_id"`
+	UserLogin   string `json:"user_login"`
+	UserName    string `json:"user_name"`
+	MessageID   string `json:"message_id"`
+	MessageBody string `json:"message_body"`
+}
+
+// ModerateWarn is the "warn" action payload. ChatRulesCited lists the channel rules the moderator
+// selected; it is empty when the warning cited none.
+type ModerateWarn struct {
+	UserID         string   `json:"user_id"`
+	UserLogin      string   `json:"user_login"`
+	UserName       string   `json:"user_name"`
+	Reason         string   `json:"reason"`
+	ChatRulesCited []string `json:"chat_rules_cited"`
+}
+
+// ModerateAutomodTerms is the "automod_terms" action payload — an edit to a blocked/permitted TERM
+// LIST, not a held message. Action is "add"/"remove", List is "blocked"/"permitted", and FromAutomod
+// says whether AutoMod suggested the terms.
+type ModerateAutomodTerms struct {
+	Action      string   `json:"action"`
+	List        string   `json:"list"`
+	Terms       []string `json:"terms"`
+	FromAutomod bool     `json:"from_automod"`
+}
+
+// ModerateRaid is the "raid" action payload (the broadcaster raided another channel).
+type ModerateRaid struct {
+	UserID      string `json:"user_id"`
+	UserLogin   string `json:"user_login"`
+	UserName    string `json:"user_name"`
+	ViewerCount int    `json:"viewer_count"`
+}
+
+// ModerateFollowers is the "followers" action payload (followers-only chat mode).
+type ModerateFollowers struct {
+	FollowDurationMinutes int `json:"follow_duration_minutes"`
+}
+
+// ModerateSlow is the "slow" action payload (slow chat mode).
+type ModerateSlow struct {
+	WaitTimeSeconds int `json:"wait_time_seconds"`
+}
+
+// AutoModMessageHoldEvent represents a chat message AutoMod has held for review.
+// subscription type: automod.message.hold (v2)
+// Reference: https://dev.twitch.tv/docs/eventsub/eventsub-reference/#automod-message-hold-v2-event
+//
+// Held messages arrive ONLY here — channel.moderate's automod_terms action is a term-list edit and
+// carries no message. Category is the AutoMod category that tripped ("aggressive", "sexual", ...)
+// and Level its 1-4 severity.
+type AutoModMessageHoldEvent struct {
+	BroadcasterUserID    string         `json:"broadcaster_user_id"`
+	BroadcasterUserLogin string         `json:"broadcaster_user_login"`
+	BroadcasterUserName  string         `json:"broadcaster_user_name"`
+	UserID               string         `json:"user_id"`
+	UserLogin            string         `json:"user_login"`
+	UserName             string         `json:"user_name"`
+	MessageID            string         `json:"message_id"`
+	Message              AutoModMessage `json:"message"`
+	Category             string         `json:"category"`
+	Level                int            `json:"level"`
+	HeldAt               time.Time      `json:"held_at"`
+}
+
+// AutoModMessage is the held message body. Fragments are modelled loosely: nothing reads them yet,
+// and AutoMod's fragment shape differs from chat's (it carries automod term boundaries), so pinning
+// a struct now would be a guess.
+type AutoModMessage struct {
+	Text      string           `json:"text"`
+	Fragments []map[string]any `json:"fragments"`
+}
+
+// AutoModMessageUpdateEvent represents the resolution of a held message.
+// subscription type: automod.message.update (v2)
+// Reference: https://dev.twitch.tv/docs/eventsub/eventsub-reference/#automod-message-update-v2-event
+//
+// This is the ONLY delivery path for a hold's outcome. The moderator fields identify who resolved
+// it and are empty when Status is "expired" (nobody acted before the hold timed out).
+type AutoModMessageUpdateEvent struct {
+	BroadcasterUserID    string         `json:"broadcaster_user_id"`
+	BroadcasterUserLogin string         `json:"broadcaster_user_login"`
+	BroadcasterUserName  string         `json:"broadcaster_user_name"`
+	UserID               string         `json:"user_id"`
+	UserLogin            string         `json:"user_login"`
+	UserName             string         `json:"user_name"`
+	ModeratorUserID      string         `json:"moderator_user_id"`
+	ModeratorUserLogin   string         `json:"moderator_user_login"`
+	ModeratorUserName    string         `json:"moderator_user_name"`
+	MessageID            string         `json:"message_id"`
+	Message              AutoModMessage `json:"message"`
+	Category             string         `json:"category"`
+	Level                int            `json:"level"`
+	HeldAt               time.Time      `json:"held_at"`
+
+	// Status is "approved", "denied" or "expired".
+	Status string `json:"status"`
+}
+
 // SubscriptionInfo contains subscription metadata (used in webhook callbacks)
 type SubscriptionInfo struct {
 	ID        string                 `json:"id"`

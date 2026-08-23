@@ -401,6 +401,41 @@ func main() {
 				}
 			}
 
+			// Moderation log (channel.moderate + the two AutoMod message events). Opt-in: they
+			// need the broadcaster's mod-log grant (the eight moderator:read:* scopes plus
+			// moderator:manage:automod), so a scope error is expected and non-fatal — the channel
+			// simply has no moderation log until the owner runs the ?actions=modlog re-consent.
+			// Like every event sub here, these are created once when a channel is first tracked, so
+			// a grant made after tracking begins takes effect on the next channel (re)sync — a
+			// leader change, pod restart, or the channel being re-added (ADR-0030 known limitation).
+			for _, sub := range []struct {
+				name string
+				fn   func(context.Context, string) (string, error)
+			}{
+				{"channel.moderate", subscriptionMgr.SubscribeToChannelModerate},
+				{"automod.message.hold", subscriptionMgr.SubscribeToAutoModMessageHold},
+				{"automod.message.update", subscriptionMgr.SubscribeToAutoModMessageUpdate},
+			} {
+				if _, err := sub.fn(ctx, broadcasterID); err != nil {
+					if strings.Contains(err.Error(), "subscription already exists") {
+						successCount++
+					} else if isScopeError(err) {
+						log.Info("Moderation-log events require re-authentication with the mod-log scopes",
+							zap.String("broadcaster_id", broadcasterID),
+							zap.String("type", sub.name))
+						scopeErrorCount++
+					} else {
+						log.Warn("Failed to subscribe to moderation-log event",
+							zap.String("broadcaster_id", broadcasterID),
+							zap.String("type", sub.name),
+							zap.Error(err))
+						failCount++
+					}
+				} else {
+					successCount++
+				}
+			}
+
 			// Chat (channel.chat.message) is NOT created here — it is managed separately via
 			// the subscribe_chat/unsubscribe_chat actions, gated on chat scope AND live-overlay
 			// demand. Keeping it out of "subscribe" ensures the event subscriptions above are
