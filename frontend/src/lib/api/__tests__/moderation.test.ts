@@ -165,6 +165,17 @@ describe('moderator-side endpoints', () => {
     )
     expect(url).toBe('https://id.twitch.tv/authorize?x')
   })
+
+  // modlog is not a delegatable action, so it rides the owner's overlay-scoped consent
+  // endpoint with its own action name rather than joining the ModerationAction union.
+  it('requests the mod-log consent with actions=modlog', async () => {
+    client.get.mockResolvedValue({ auth_url: 'https://id.twitch.tv/authorize?modlog' })
+    const url = await moderationApi.getTwitchModLogConsentUrl('ov-1')
+    expect(client.get).toHaveBeenCalledWith(
+      '/api/v1/auth/twitch/moderation/ov-1?actions=modlog'
+    )
+    expect(url).toBe('https://id.twitch.tv/authorize?modlog')
+  })
 })
 
 // The three action-failure codes (ADR-0048) differ in WHO can fix them, which is the only reason

@@ -87,6 +87,55 @@ describe('ActivityPanel', () => {
     expect(screen.queryByText('Event')).not.toBeInTheDocument()
   })
 
+  it('distinguishes an unresolved AutoMod hold from a resolved one', () => {
+    const hold: ModEntry = {
+      id: 1,
+      kind: 'automod',
+      action: 'automod_hold',
+      username: 'chatter',
+      heldMessageId: 'm1',
+      heldText: 'something rude',
+      automodCategory: 'profanity',
+      source: 'live',
+      at: Date.parse('2026-05-31T10:00:00.000Z'),
+    }
+    const { unmount } = render(
+      <ActivityPanel events={[]} system={[]} moderationLog={[hold]} />
+    )
+    expect(screen.getByText(/something rude/)).toBeInTheDocument()
+    expect(screen.getByText('held')).toBeInTheDocument()
+    expect(screen.queryByText('denied')).not.toBeInTheDocument()
+    unmount()
+
+    render(
+      <ActivityPanel
+        events={[]}
+        system={[]}
+        moderationLog={[{ ...hold, resolution: 'denied', resolvedBy: 'modperson' }]}
+      />
+    )
+    expect(screen.getByText('denied')).toBeInTheDocument()
+    expect(screen.queryByText('held')).not.toBeInTheDocument()
+  })
+
+  // Who acted is the whole point of the mod-log: "Timed out spammer for 600s" with no
+  // name leaves the streamer unable to tell which moderator did it.
+  it('names the moderator who timed a user out', () => {
+    const mods: ModEntry[] = [
+      {
+        id: 1,
+        kind: 'timeout',
+        username: 'spammer',
+        moderator: 'modperson',
+        banDuration: 600,
+        source: 'live',
+        at: Date.now(),
+      },
+    ]
+    render(<ActivityPanel events={[]} system={[]} moderationLog={mods} />)
+    expect(screen.getByText(/modperson/)).toBeInTheDocument()
+  })
+
   it('renders system notices from the system bucket', () => {
     const system = [eventItem('s1', 'source_permission_error', '2026-05-31T10:01:00.000Z')]
     render(<ActivityPanel events={[]} system={system} moderationLog={[]} />)

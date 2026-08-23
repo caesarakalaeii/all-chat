@@ -282,6 +282,46 @@ describe('classifyEnvelope', () => {
     if (res.kind === 'deletion') expect(res.deletion.target_uuid).toBe('m0')
   })
 
+  it('classifies a mod_action event, leaving the deletion branch alone', () => {
+    const modAction = classifyEnvelope({
+      type: 'chat_message',
+      data: {
+        ...chat('m4'),
+        event: {
+          type: 'mod_action',
+          tier: 'low',
+          duration: 0,
+          is_update: false,
+          metadata: { action: 'ban', moderator_login: 'modperson', target_login: 'spammer' },
+        },
+      },
+    } as never)
+    expect(modAction.kind).toBe('modAction')
+    if (modAction.kind === 'modAction') {
+      expect(modAction.metadata).toEqual({
+        action: 'ban',
+        moderator_login: 'modperson',
+        target_login: 'spammer',
+      })
+    }
+
+    // Control: the pre-existing deletion branch must still win for its own type.
+    const deletion = classifyEnvelope({
+      type: 'chat_message',
+      data: {
+        ...chat('m5'),
+        event: {
+          type: 'message_deletion',
+          tier: 'low',
+          duration: 0,
+          is_update: false,
+          metadata: { deletion_type: 'single', target_uuid: 'm0' },
+        },
+      },
+    } as never)
+    expect(deletion.kind).toBe('deletion')
+  })
+
   it('classifies a regular chat message', () => {
     const res = classifyEnvelope({ type: 'chat_message', data: chat('m2') })
     expect(res.kind).toBe('chat')
