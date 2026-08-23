@@ -197,6 +197,20 @@ func (c *GatewayClient) Connect(ctx context.Context) error {
 
 	defer conn.Close()
 
+	// Close the socket when ctx is cancelled, so a cancellation that lands while the loop
+	// below is parked in the blocking conn.ReadMessage() still ends this call. The select
+	// at the top of the loop only runs between reads and cannot interrupt one. connCtx is
+	// cancelled by the deferred connCancel above, so this goroutine always exits with
+	// Connect(); the read then fails and the loop returns ctx.Err().
+	go func() {
+		<-connCtx.Done()
+		if err := conn.Close(); err != nil {
+			// Nothing to recover: the call is on its way out and the deferred
+			// conn.Close() above reports nothing either. Connect() returns the read error.
+			c.log.Debug("Closing Gateway socket on context cancellation failed", zap.Error(err))
+		}
+	}()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -401,12 +415,33 @@ func (c *GatewayClient) Connect(ctx context.Context) error {
 	}
 }
 
-// Close signals the connection loop to stop.
+// Close signals the connection loop to stop and closes the underlying socket.
+//
+// Closing the socket is what actually stops Connect(). The done channel is only
+// observed by the select at the top of the read loop, so a Connect() already parked in
+// the blocking conn.ReadMessage() cannot see it; closing the connection makes that read
+// fail immediately and the loop return. Without this, Close() only took effect if the
+// socket happened to break for another reason — normally cancellation of the context
+// given to DialContext — which left the leadership-loss reconnect path waiting on a
+// Connect() that never returned.
 func (c *GatewayClient) Close() {
+	c.mu.Lock()
 	select {
 	case <-c.done:
 	default:
 		close(c.done)
+	}
+	conn := c.conn
+	c.mu.Unlock()
+
+	// Closed outside the lock: writeJSON holds c.mu, so a heartbeat racing this call
+	// would deadlock if Close() held the lock while waiting on the socket.
+	if conn != nil {
+		// The connection is torn down regardless, so a close error has nothing to
+		// recover and no caller that can act on it; Connect() reports the read failure.
+		if err := conn.Close(); err != nil {
+			c.log.Debug("Closing Gateway socket failed", zap.Error(err))
+		}
 	}
 }
 
