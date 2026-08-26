@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/payment-service/entitlement"
+	"github.com/caesar/all-chat/services/payment-service/metrics"
 	"github.com/caesar/all-chat/services/payment-service/patreon"
 	"github.com/caesar/all-chat/services/payment-service/repository"
 	"go.uber.org/zap"
@@ -110,6 +111,7 @@ func (m *Manager) ProcessBatch(ctx context.Context) error {
 	}
 
 	var reconciled, failed int
+	statuses := make(map[string]int, len(tokens))
 	for _, t := range tokens {
 		accessToken := t.AccessToken
 
@@ -137,19 +139,29 @@ func (m *Manager) ProcessBatch(ctx context.Context) error {
 			continue
 		}
 
-		if _, _, applyErr := m.entitlement.Apply(ctx, snap, t.UserID, t.ViewerID, nil); applyErr != nil {
+		status, _, applyErr := m.entitlement.Apply(ctx, snap, t.UserID, t.ViewerID, nil)
+		if applyErr != nil {
 			m.logger.Error("Failed to apply reconciled membership",
 				subjectLabel(t), zap.Error(applyErr))
 			failed++
 			continue
 		}
+		statuses[status]++
 		reconciled++
 	}
+
+	// Publish the population tally, not just the pass's success count: a pass where
+	// every connection resolved cleanly to "not a patron" is indistinguishable from a
+	// healthy one in reconciled/failed terms, and that is exactly the shape a broken
+	// membership read takes.
+	metrics.ObserveReconcileStatuses(statuses)
+	metrics.ReconcileLastSuccess.SetToCurrentTime()
 
 	m.logger.Info("Reconcile batch complete",
 		zap.Int("reconciled", reconciled),
 		zap.Int("failed", failed),
-		zap.Int("total", len(tokens)))
+		zap.Int("total", len(tokens)),
+		zap.Int("active", statuses[patreon.StatusActive]))
 	return nil
 }
 
