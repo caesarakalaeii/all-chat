@@ -30,6 +30,7 @@ import {
   parseNameGradientGuard,
   platformStatusReducer,
   type PlatformStatusState,
+  sourceKey,
 } from '@/core/overlayStreamCore'
 
 function chat(id: string, ts = '2026-05-30T10:00:00.000Z'): ChatMessage {
@@ -218,7 +219,40 @@ describe('platformStatusReducer', () => {
       status({ channel_id: '', platform: 'kick', status: 'connected' }),
       new Map()
     )
-    expect(next.activeChannels.has('kick')).toBe(true)
+    expect(next.activeChannels.has('kick:')).toBe(true)
+  })
+
+  it('keeps two platforms that share one handle apart', () => {
+    // Same handle claimed on both platforms: keying by channel_id alone made
+    // TikTok's 'offline' clobber Twitch's 'connected'.
+    const shared = new Map<string, unknown>([
+      ['twitch:coolstreamer', {}],
+      ['tiktok:coolstreamer', {}],
+    ])
+    const live = platformStatusReducer(
+      empty,
+      status({ platform: 'twitch', channel_id: 'coolstreamer', status: 'connected' }),
+      shared
+    )
+    const next = platformStatusReducer(
+      live,
+      status({ platform: 'tiktok', channel_id: 'coolstreamer', status: 'offline' }),
+      shared
+    )
+    expect(next.activeChannels.has('twitch:coolstreamer')).toBe(true)
+    expect(next.activeChannels.has('tiktok:coolstreamer')).toBe(false)
+    expect(next.channelStatuses.get('twitch:coolstreamer')?.status).toBe('connected')
+    expect(next.channelStatuses.get('tiktok:coolstreamer')?.status).toBe('offline')
+  })
+})
+
+describe('sourceKey', () => {
+  it('joins platform and channel id with a colon, platform first', () => {
+    expect(sourceKey('twitch', 'coolstreamer')).toBe('twitch:coolstreamer')
+  })
+
+  it('distinguishes the same handle on two platforms', () => {
+    expect(sourceKey('twitch', 'coolstreamer')).not.toBe(sourceKey('tiktok', 'coolstreamer'))
   })
 })
 
