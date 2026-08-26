@@ -53,11 +53,16 @@ type MembershipSnapshot struct {
 	TierID           string
 
 	// UnmatchedMembers is how many member resources the identity response carried
-	// that could not be attributed to our campaign. It is 0 both on a successful
-	// match and for a genuine non-patron (who has no members at all); a non-zero
-	// value alongside an empty PatronStatus means we discarded real membership data
-	// and the resulting StatusNone is not trustworthy. Always 0 for webhook payloads,
-	// which carry their member directly.
+	// that could not be attributed EITHER WAY — i.e. they declared no campaign at
+	// all. A non-zero value alongside an empty PatronStatus means we discarded
+	// membership data we could not rule in or out, so the resulting StatusNone is not
+	// trustworthy.
+	//
+	// It stays 0 for a successful match, for a genuine non-patron (no members at
+	// all), and for a patron who backs some OTHER creator — that last case is an
+	// explicit, unambiguous negative and is both common and expected, so counting it
+	// would keep the signal permanently lit on healthy traffic. Always 0 for webhook
+	// payloads, which carry their member directly.
 	UnmatchedMembers int
 }
 
