@@ -1,0 +1,29 @@
+// Root type-check entry point, so `tsc --noEmit` works from the repo root and
+// not only from inside frontend/. It exists because tooling and CI invocations
+// of the form `npx --prefix frontend tsc --noEmit` still run tsc with the repo
+// root as the working directory -- `--prefix` selects npm's install directory,
+// not the compiler's project directory -- and without a tsconfig.json here tsc
+// prints its help text and exits 1.
+//
+// frontend/tsconfig.json remains the single source of truth for compiler
+// options; this file only re-roots the two path-bearing settings. Keep it that
+// way: options belong in the frontend config so the two cannot drift.
+{
+  "extends": "./frontend/tsconfig.json",
+  "compilerOptions": {
+    // Re-point the "@/*" alias, which the inherited config states relative to
+    // frontend/. Paths in an extended config resolve against the *extending*
+    // file, so it needs the frontend/ prefix here.
+    "paths": { "@/*": ["./frontend/src/*"] }
+  },
+  // Same file set as the frontend config, re-rooted. Listed explicitly rather
+  // than inherited for the same reason as "paths" above.
+  "include": [
+    "frontend/next-env.d.ts",
+    "frontend/**/*.ts",
+    "frontend/**/*.tsx",
+    "frontend/.next/types/**/*.ts",
+    "frontend/.next/dev/types/**/*.ts"
+  ],
+  "exclude": ["**/node_modules"]
+}

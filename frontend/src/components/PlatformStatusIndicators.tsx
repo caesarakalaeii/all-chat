@@ -42,6 +42,12 @@ export interface SourceInfo {
 }
 
 interface PlatformStatusIndicatorsProps {
+  /**
+   * All three collections are keyed alike, by `sourceKey()` from
+   * `@/core/overlayStreamCore` — a channel id alone collides between
+   * platforms. This component only ever joins them on that key, so it never
+   * has to build one.
+   */
   configuredSources: Map<string, SourceInfo>
   activeChannels: Set<string>
   channelStatuses: Map<string, PlatformStatus>
@@ -124,12 +130,12 @@ export default function PlatformStatusIndicators({
     const interval = setInterval(() => {
       const newCountdowns = new Map<string, number>()
 
-      channelStatuses.forEach((status, channelId) => {
+      channelStatuses.forEach((status, key) => {
         if (status.status === 'reconnecting' && status.next_retry_at) {
           const nextRetry = new Date(status.next_retry_at).getTime()
           const now = Date.now()
           const secondsRemaining = Math.max(0, Math.ceil((nextRetry - now) / 1000))
-          newCountdowns.set(channelId, secondsRemaining)
+          newCountdowns.set(key, secondsRemaining)
         }
       })
 
@@ -151,13 +157,13 @@ export default function PlatformStatusIndicators({
         variant === 'fixed' && 'fixed top-4 right-4 z-50'
       )}
     >
-      {entries.map(([channelId, source]) => {
+      {entries.map(([key, source]) => {
         const platformDef = platformIcons[source.platform]
         if (!platformDef) return null
 
-        const isActive = activeChannels.has(channelId)
-        const status = channelStatuses.get(channelId)
-        const countdown = countdowns.get(channelId)
+        const isActive = activeChannels.has(key)
+        const status = channelStatuses.get(key)
+        const countdown = countdowns.get(key)
         const Icon = platformDef.icon
         const platformLabel = platformDef.label
 
@@ -212,14 +218,14 @@ export default function PlatformStatusIndicators({
 
         return (
           <div
-            key={channelId}
+            key={key}
             className={clsx(
               'platform-indicator',
               'relative flex h-8 w-8 items-center justify-center rounded-md transition-all duration-300',
               statusClass
             )}
             data-platform={source.platform}
-            data-channel-id={channelId}
+            data-channel-id={source.channelId}
             title={tooltipText}
           >
             <Icon />

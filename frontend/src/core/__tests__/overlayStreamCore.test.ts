@@ -30,7 +30,8 @@ import {
   parseNameGradientGuard,
   platformStatusReducer,
   type PlatformStatusState,
-} from '@/lib/utils/overlayStreamCore'
+  sourceKey,
+} from '@/core/overlayStreamCore'
 
 function chat(id: string, ts = '2026-05-30T10:00:00.000Z'): ChatMessage {
   return {
@@ -165,7 +166,7 @@ describe('parseNameGradientGuard', () => {
 
 describe('platformStatusReducer', () => {
   const empty: PlatformStatusState = { activeChannels: new Set(), channelStatuses: new Map() }
-  const sources = new Map<string, unknown>([['c1', {}]])
+  const sources = new Map<string, unknown>([['twitch:c1', {}]])
 
   it('accepts any status while configured sources is empty (config not loaded yet)', () => {
     const next = platformStatusReducer(
@@ -173,7 +174,7 @@ describe('platformStatusReducer', () => {
       status({ channel_id: 'unknown', status: 'connected' }),
       new Map()
     )
-    expect(next.activeChannels.has('unknown')).toBe(true)
+    expect(next.activeChannels.has('twitch:unknown')).toBe(true)
   })
 
   it('rejects status for a channel not configured once sources are known', () => {
@@ -187,29 +188,29 @@ describe('platformStatusReducer', () => {
 
   it('adds connected channels to activeChannels', () => {
     const next = platformStatusReducer(empty, status({ status: 'connected' }), sources)
-    expect(next.activeChannels.has('c1')).toBe(true)
-    expect(next.channelStatuses.get('c1')?.status).toBe('connected')
+    expect(next.activeChannels.has('twitch:c1')).toBe(true)
+    expect(next.channelStatuses.get('twitch:c1')?.status).toBe('connected')
   })
 
   it('removes a channel from activeChannels when it goes offline', () => {
     const connected = platformStatusReducer(empty, status({ status: 'connected' }), sources)
     const offline = platformStatusReducer(connected, status({ status: 'offline' }), sources)
-    expect(offline.activeChannels.has('c1')).toBe(false)
-    expect(offline.channelStatuses.get('c1')?.status).toBe('offline')
+    expect(offline.activeChannels.has('twitch:c1')).toBe(false)
+    expect(offline.channelStatuses.get('twitch:c1')?.status).toBe('offline')
   })
 
   it('does not overwrite a connected status with reconnecting', () => {
     const connected = platformStatusReducer(empty, status({ status: 'connected' }), sources)
     const next = platformStatusReducer(connected, status({ status: 'reconnecting' }), sources)
-    expect(next.channelStatuses.get('c1')?.status).toBe('connected')
+    expect(next.channelStatuses.get('twitch:c1')?.status).toBe('connected')
     // activeChannels unchanged, channelStatuses unchanged -> same reference
     expect(next).toBe(connected)
   })
 
   it('reconnecting from a fresh channel records the status without activating it', () => {
     const next = platformStatusReducer(empty, status({ status: 'reconnecting' }), sources)
-    expect(next.channelStatuses.get('c1')?.status).toBe('reconnecting')
-    expect(next.activeChannels.has('c1')).toBe(false)
+    expect(next.channelStatuses.get('twitch:c1')?.status).toBe('reconnecting')
+    expect(next.activeChannels.has('twitch:c1')).toBe(false)
   })
 
   it('falls back to platform as the channel key when channel_id is empty', () => {
@@ -218,7 +219,40 @@ describe('platformStatusReducer', () => {
       status({ channel_id: '', platform: 'kick', status: 'connected' }),
       new Map()
     )
-    expect(next.activeChannels.has('kick')).toBe(true)
+    expect(next.activeChannels.has('kick:')).toBe(true)
+  })
+
+  it('keeps two platforms that share one handle apart', () => {
+    // Same handle claimed on both platforms: keying by channel_id alone made
+    // TikTok's 'offline' clobber Twitch's 'connected'.
+    const shared = new Map<string, unknown>([
+      ['twitch:coolstreamer', {}],
+      ['tiktok:coolstreamer', {}],
+    ])
+    const live = platformStatusReducer(
+      empty,
+      status({ platform: 'twitch', channel_id: 'coolstreamer', status: 'connected' }),
+      shared
+    )
+    const next = platformStatusReducer(
+      live,
+      status({ platform: 'tiktok', channel_id: 'coolstreamer', status: 'offline' }),
+      shared
+    )
+    expect(next.activeChannels.has('twitch:coolstreamer')).toBe(true)
+    expect(next.activeChannels.has('tiktok:coolstreamer')).toBe(false)
+    expect(next.channelStatuses.get('twitch:coolstreamer')?.status).toBe('connected')
+    expect(next.channelStatuses.get('tiktok:coolstreamer')?.status).toBe('offline')
+  })
+})
+
+describe('sourceKey', () => {
+  it('joins platform and channel id with a colon, platform first', () => {
+    expect(sourceKey('twitch', 'coolstreamer')).toBe('twitch:coolstreamer')
+  })
+
+  it('distinguishes the same handle on two platforms', () => {
+    expect(sourceKey('twitch', 'coolstreamer')).not.toBe(sourceKey('tiktok', 'coolstreamer'))
   })
 })
 
