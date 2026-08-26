@@ -144,9 +144,12 @@ func (o *OAuth) GetIdentityWithMembership(ctx context.Context, accessToken, camp
 // campaign owning the OAuth client, so there is nothing else it could be. Two or
 // more campaign-less members are ambiguous and are never guessed at.
 //
-// When nothing matches, the returned snapshot reports how many members it had to
-// discard via UnmatchedMembers, so a parse failure is distinguishable from a genuine
-// non-patron instead of both reading as StatusNone.
+// When nothing matches, UnmatchedMembers reports how many members we could not
+// attribute EITHER WAY, so a parse failure is distinguishable from a genuine
+// non-patron instead of both reading as StatusNone. A member that explicitly declares
+// some other campaign is not counted: that is a clean negative (the patron backs a
+// different creator, which is common and expected), and counting it would make the
+// signal fire constantly on healthy traffic.
 func parseIdentity(body []byte, campaignID string) (*MembershipSnapshot, error) {
 	var doc apiDocument
 	if err := json.Unmarshal(body, &doc); err != nil {
@@ -181,6 +184,6 @@ func parseIdentity(body []byte, campaignID string) (*MembershipSnapshot, error) 
 		return snap, nil
 	}
 
-	snap.UnmatchedMembers = len(members)
+	snap.UnmatchedMembers = len(campaignless)
 	return snap, nil
 }

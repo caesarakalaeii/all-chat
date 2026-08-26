@@ -165,9 +165,12 @@ func TestParseIdentity_MembershipToDifferentCampaign(t *testing.T) {
 	assert.Equal(t, "patreon-user-9", snap.PatreonUserID)
 	assert.Equal(t, "", snap.PatronStatus)
 	assert.Equal(t, StatusNone, SubscriptionStatusFor(*snap, 500))
-	// The member was attributable and genuinely wasn't ours, so this StatusNone is
-	// trustworthy — nothing was discarded.
-	assert.Equal(t, 1, snap.UnmatchedMembers)
+	// The member declared a campaign and it wasn't ours: an explicit, unambiguous
+	// negative, so nothing was discarded and this StatusNone is trustworthy.
+	// Counting it would light the PatreonUnmatchedMembersDiscarded alert permanently,
+	// since backing other creators is common — observed in production the day this
+	// shipped, on an account that backs another campaign.
+	assert.Zero(t, snap.UnmatchedMembers)
 }
 
 func TestParseIdentity_CampaignlessMemberIsTakenAsOurs(t *testing.T) {
@@ -236,6 +239,36 @@ func TestParseIdentity_AmbiguousCampaignlessMembersAreNotGuessed(t *testing.T) {
 	assert.Equal(t, "", snap.PatronStatus)
 	assert.Equal(t, StatusNone, SubscriptionStatusFor(*snap, 500))
 	assert.Equal(t, 2, snap.UnmatchedMembers)
+}
+
+func TestParseIdentity_OtherCampaignAlongsideOursStillMatches(t *testing.T) {
+	// Production showed the identity API CAN return a membership to a campaign that
+	// is not ours, so the presence of foreign members must not disturb matching ours
+	// or inflate the discard counter.
+	body := []byte(`{
+		"data": { "type": "user", "id": "patreon-user-9", "attributes": { "email": "fan@example.com" } },
+		"included": [
+			{
+				"type": "member",
+				"id": "member-other",
+				"attributes": { "patron_status": "active_patron", "currently_entitled_amount_cents": 1000 },
+				"relationships": { "campaign": { "data": { "type": "campaign", "id": "some-other-campaign" } } }
+			},
+			{
+				"type": "member",
+				"id": "member-ours",
+				"attributes": { "patron_status": "active_patron", "currently_entitled_amount_cents": 500 },
+				"relationships": { "campaign": { "data": { "type": "campaign", "id": "16269405" } } }
+			}
+		]
+	}`)
+
+	snap, err := parseIdentity(body, "16269405")
+	require.NoError(t, err)
+	assert.Equal(t, patronActive, snap.PatronStatus)
+	assert.Equal(t, 500, snap.EntitledCents)
+	assert.Equal(t, StatusActive, SubscriptionStatusFor(*snap, 500))
+	assert.Zero(t, snap.UnmatchedMembers)
 }
 
 func TestParseIdentity_NonPatronReportsNothingDiscarded(t *testing.T) {
