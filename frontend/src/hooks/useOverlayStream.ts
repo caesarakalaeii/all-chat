@@ -52,6 +52,7 @@ import {
   parseNameGradientGuard,
   platformStatusReducer,
   RECOVERY_REPLAY_COOLDOWN_MS,
+  sourceKey,
   WATCHDOG_INTERVAL_MS,
   type PlatformStatusState,
 } from '@/core/overlayStreamCore'
@@ -97,11 +98,15 @@ export interface UseOverlayStreamOptions {
 export interface UseOverlayStreamResult {
   /** Raw public config JSON (display/filter/visual/sources/emote set). null until first load. */
   config: PublicOverlayConfig | null
-  /** channel_id -> SourceInfo, from the overlay's configured sources. */
+  /**
+   * `sourceKey()` -> SourceInfo, from the overlay's configured sources. Keyed
+   * by platform AND channel id because a channel id alone collides between
+   * platforms — see `sourceKey`.
+   */
   sources: Map<string, SourceInfo>
-  /** channel_ids currently reporting 'connected'. */
+  /** `sourceKey()`s currently reporting 'connected'. */
   activeChannels: Set<string>
-  /** channel_id -> latest PlatformStatus. */
+  /** `sourceKey()` -> latest PlatformStatus. */
   channelStatuses: Map<string, PlatformStatus>
   connectionStatus: ConnectionStatus
   reconnectAttempts: number
@@ -150,7 +155,7 @@ export function useOverlayStream(
   // drop instead of escalating from wherever the last burst left off.
   const attemptsRef = useRef(0)
 
-  // Source-recovery self-heal: the last-seen platform_status per channel (tracked
+  // Source-recovery self-heal: the last-seen platform_status per source key (tracked
   // independently of render state, so we can spot a down->connected transition inside
   // onmessage), and the timestamp of the last recovery-triggered replay so a burst of
   // recoveries collapses into a single reconnect.
@@ -183,7 +188,7 @@ export function useOverlayStream(
         if (Array.isArray(data.sources)) {
           const next = new Map<string, SourceInfo>()
           data.sources.forEach((source) => {
-            next.set(source.channel_id, {
+            next.set(sourceKey(source.platform, source.channel_id), {
               platform: source.platform,
               channelId: source.channel_id,
               channelName: source.channel_name || source.channel_id,
@@ -404,10 +409,10 @@ export function useOverlayStream(
 
           case 'status': {
             const status = classified.status
-            const channelKey = status.channel_id || status.platform
-            const configured = sources.size === 0 || sources.has(channelKey)
-            const prevStatus = lastStatusRef.current.get(channelKey)
-            if (configured) lastStatusRef.current.set(channelKey, status.status)
+            const key = sourceKey(status.platform, status.channel_id)
+            const configured = sources.size === 0 || sources.has(key)
+            const prevStatus = lastStatusRef.current.get(key)
+            if (configured) lastStatusRef.current.set(key, status.status)
             setPlatformState((prev) => platformStatusReducer(prev, status, sources))
 
             // Self-heal: a configured source we saw go down has come back. The transport

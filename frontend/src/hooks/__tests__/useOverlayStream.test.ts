@@ -338,8 +338,8 @@ describe('useOverlayStream — message routing', () => {
         data: { platform: 'twitch', channel_id: 'c1', status: 'connected' },
       })
     })
-    await waitFor(() => expect(result.current.activeChannels.has('c1')).toBe(true))
-    expect(result.current.channelStatuses.get('c1')?.status).toBe('connected')
+    await waitFor(() => expect(result.current.activeChannels.has('twitch:c1')).toBe(true))
+    expect(result.current.channelStatuses.get('twitch:c1')?.status).toBe('connected')
   })
 
   it('self-heals: reconnects to replay when a source recovers from a down state, but not on initial connect', async () => {

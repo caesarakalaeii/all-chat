@@ -21,6 +21,7 @@ import clsx from 'clsx'
 
 import { PlatformGlyph } from '@/components/overlay/PlatformGlyph'
 import type { SourceInfo } from '@/components/PlatformStatusIndicators'
+import { sourceKey } from '@/core/overlayStreamCore'
 import type { EventSettings, PublicOverlayConfig } from '@/lib/types/overlay'
 
 const EVENT_TOGGLES: Array<{ key: keyof EventSettings; label: string }> = [
@@ -59,6 +60,7 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 interface ObservabilitySummaryProps {
   config: PublicOverlayConfig | null
   sources: Map<string, SourceInfo>
+  /** Keyed by `sourceKey()`, so look up with the platform as well as the id. */
   activeChannels: Set<string>
   eventSettings: EventSettings | null
   observedEventTypes: Set<string>
@@ -82,22 +84,24 @@ export function ObservabilitySummary({
           <p className="text-sm text-text-dim">No sources configured.</p>
         ) : (
           <ul className="space-y-1">
-            {sourceList.map((s) => (
-              <li key={s.channelId} className="flex items-center gap-2 text-sm text-text">
-                <PlatformGlyph platform={s.platform} className="h-4 w-4 shrink-0" />
-                <span className="min-w-0 flex-1 truncate">{s.channelName}</span>
-                <span
-                  className={clsx(
-                    'shrink-0 rounded px-1.5 text-[10px] font-semibold uppercase',
-                    activeChannels.has(s.channelId)
-                      ? 'bg-kick/15 text-kick'
-                      : 'bg-surface-2 text-text-dim'
-                  )}
-                >
-                  {activeChannels.has(s.channelId) ? 'live' : 'idle'}
-                </span>
-              </li>
-            ))}
+            {sourceList.map((s) => {
+              const key = sourceKey(s.platform, s.channelId)
+              const isLive = activeChannels.has(key)
+              return (
+                <li key={key} className="flex items-center gap-2 text-sm text-text">
+                  <PlatformGlyph platform={s.platform} className="h-4 w-4 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">{s.channelName}</span>
+                  <span
+                    className={clsx(
+                      'shrink-0 rounded px-1.5 text-[10px] font-semibold uppercase',
+                      isLive ? 'bg-kick/15 text-kick' : 'bg-surface-2 text-text-dim'
+                    )}
+                  >
+                    {isLive ? 'live' : 'idle'}
+                  </span>
+                </li>
+              )
+            })}
           </ul>
         )}
       </Card>
