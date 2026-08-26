@@ -121,6 +121,20 @@ Note this affects the identity API only. Webhook payloads carry their member in
 `data` with its relationships intact, so `ParseMemberEvent` needs no such handling —
 which is why a broken identity path can coexist with working webhooks.
 
+A member that declares some *other* campaign is a clean negative: patrons commonly back
+other creators, and the response does contain those memberships (observed in
+production, despite the docs implying that without the `identity.memberships` scope
+only our own campaign comes back — the account in question owns the OAuth client, so
+this may be specific to creator tokens). Such members are not counted as unattributed;
+only campaign-less ones are, or the signal would sit permanently lit.
+
+Residual risk worth knowing: the lone-campaign-less-member fallback assumes such a
+member must be ours. Since foreign memberships demonstrably can appear, that assumption
+rests on `memberships.campaign` being requested — if Patreon ever stops honoring it
+*and* the user backs exactly one other creator, we would grant premium wrongly. Kept
+deliberately, because the error direction is the safer one: wrongly revoking premium
+from a paying patron is what caused the outage this guards against.
+
 ## Configuration
 
 | Env | Required | Default | Notes |
@@ -150,7 +164,7 @@ exports its own correctness signals (`services/payment-service/metrics`):
 | Metric | Type | Meaning |
 |--------|------|---------|
 | `payment_patreon_connections{status}` | gauge | connections per resolved status, as of the last reconcile pass |
-| `payment_patreon_unmatched_members_total` | counter | members received but discarded as unattributable — should be 0 forever |
+| `payment_patreon_unmatched_members_total` | counter | members received that we could not attribute *either way* (they declared no campaign) — should be 0 forever |
 | `payment_patreon_reconcile_last_success_timestamp_seconds` | gauge | last completed pass; detects a dead reconcile goroutine, which a gauge alone cannot |
 
 Three alerts consume them, in `caesar-deployment/apps/platform/allchat-monitoring/`:
