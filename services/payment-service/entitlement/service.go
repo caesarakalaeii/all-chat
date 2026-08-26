@@ -24,6 +24,7 @@ package entitlement
 import (
 	"context"
 
+	"github.com/caesar/all-chat/services/payment-service/metrics"
 	"github.com/caesar/all-chat/services/payment-service/patreon"
 	"github.com/caesar/all-chat/services/payment-service/repository"
 	"github.com/caesar/all-chat/shared/premium"
@@ -64,6 +65,16 @@ func (s *Service) Apply(ctx context.Context, snap *patreon.MembershipSnapshot, u
 	}
 
 	status = patreon.SubscriptionStatusFor(*snap, threshold)
+
+	// A StatusNone we arrived at by discarding members is a read failure wearing the
+	// same clothes as a non-patron. Say so loudly: revoking premium is the one thing
+	// this path does that a user notices, and it must never happen quietly again.
+	if status == patreon.StatusNone && snap.UnmatchedMembers > 0 {
+		metrics.UnmatchedMembers.Add(float64(snap.UnmatchedMembers))
+		s.logger.Warn("Patreon identity returned membership(s) we could not attribute to our campaign; treating as no membership",
+			zap.String("patreon_user_id", snap.PatreonUserID),
+			zap.Int("unmatched_members", snap.UnmatchedMembers))
+	}
 
 	if err = s.subs.Upsert(ctx, repository.Subscription{
 		UserID:           userID,

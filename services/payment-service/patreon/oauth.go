@@ -99,7 +99,11 @@ func (o *OAuth) RefreshToken(ctx context.Context, refreshToken string) (*oauth2.
 // PatronStatus (which maps to StatusNone).
 func (o *OAuth) GetIdentityWithMembership(ctx context.Context, accessToken, campaignID string) (*MembershipSnapshot, error) {
 	q := url.Values{}
-	q.Set("include", "memberships.currently_entitled_tiers")
+	// memberships.campaign is load-bearing: Patreon serializes a relationship on an
+	// included resource only when that relationship path is itself requested, and
+	// parseIdentity attributes a member to us via exactly that relationship. Omitting
+	// it makes every member arrive campaign-less, which read as "not a patron".
+	q.Set("include", "memberships.currently_entitled_tiers,memberships.campaign")
 	q.Set("fields[member]", "patron_status,currently_entitled_amount_cents,last_charge_status,next_charge_date")
 	q.Set("fields[user]", "email,full_name")
 
@@ -132,6 +136,17 @@ func (o *OAuth) GetIdentityWithMembership(ctx context.Context, accessToken, camp
 
 // parseIdentity extracts the patron identity and their membership to campaignID
 // from an identity API document. data is the "user"; the member(s) are in included.
+//
+// A member that declares a campaign is matched against campaignID. If the document
+// carries exactly one member and it declares NO campaign, that member is taken as
+// ours: we request neither the identity.memberships scope (see identityScopes) nor
+// any other campaign, and Patreon then returns only the caller's membership to the
+// campaign owning the OAuth client, so there is nothing else it could be. Two or
+// more campaign-less members are ambiguous and are never guessed at.
+//
+// When nothing matches, the returned snapshot reports how many members it had to
+// discard via UnmatchedMembers, so a parse failure is distinguishable from a genuine
+// non-patron instead of both reading as StatusNone.
 func parseIdentity(body []byte, campaignID string) (*MembershipSnapshot, error) {
 	var doc apiDocument
 	if err := json.Unmarshal(body, &doc); err != nil {
@@ -143,19 +158,29 @@ func parseIdentity(body []byte, campaignID string) (*MembershipSnapshot, error) 
 		Email:         doc.Data.Attributes.Email,
 	}
 
+	var members, campaignless []apiResource
 	for _, inc := range doc.Included {
 		if inc.Type != "member" {
 			continue
 		}
-		if inc.Relationships.Campaign == nil || inc.Relationships.Campaign.Data == nil {
+		members = append(members, inc)
+
+		rel := inc.Relationships.Campaign
+		if rel == nil || rel.Data == nil {
+			campaignless = append(campaignless, inc)
 			continue
 		}
-		if inc.Relationships.Campaign.Data.ID != campaignID {
-			continue
+		if rel.Data.ID == campaignID {
+			memberToSnapshot(inc, snap)
+			return snap, nil
 		}
-		memberToSnapshot(inc, snap)
-		break
 	}
 
+	if len(members) == 1 && len(campaignless) == 1 {
+		memberToSnapshot(campaignless[0], snap)
+		return snap, nil
+	}
+
+	snap.UnmatchedMembers = len(members)
 	return snap, nil
 }

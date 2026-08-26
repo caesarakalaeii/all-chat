@@ -165,4 +165,89 @@ func TestParseIdentity_MembershipToDifferentCampaign(t *testing.T) {
 	assert.Equal(t, "patreon-user-9", snap.PatreonUserID)
 	assert.Equal(t, "", snap.PatronStatus)
 	assert.Equal(t, StatusNone, SubscriptionStatusFor(*snap, 500))
+	// The member was attributable and genuinely wasn't ours, so this StatusNone is
+	// trustworthy — nothing was discarded.
+	assert.Equal(t, 1, snap.UnmatchedMembers)
+}
+
+func TestParseIdentity_CampaignlessMemberIsTakenAsOurs(t *testing.T) {
+	// The shape Patreon actually returns when the include param does not request
+	// memberships.campaign: the member is present and active, but carries no campaign
+	// relationship to match on. This regressed every connected patron to StatusNone
+	// and, via the 6h reconcile, revoked their premium.
+	body := []byte(`{
+		"data": {
+			"type": "user",
+			"id": "205145299",
+			"attributes": { "email": "fan@example.com", "full_name": "A Fan" },
+			"relationships": {
+				"memberships": { "data": [ { "type": "member", "id": "member-1" } ] }
+			}
+		},
+		"included": [
+			{
+				"type": "member",
+				"id": "member-1",
+				"attributes": {
+					"patron_status": "active_patron",
+					"currently_entitled_amount_cents": 500
+				},
+				"relationships": {
+					"currently_entitled_tiers": { "data": [ { "type": "tier", "id": "28904026" } ] }
+				}
+			}
+		]
+	}`)
+
+	snap, err := parseIdentity(body, "16269405")
+	require.NoError(t, err)
+	assert.Equal(t, "205145299", snap.PatreonUserID)
+	assert.Equal(t, patronActive, snap.PatronStatus)
+	assert.Equal(t, 500, snap.EntitledCents)
+	assert.Equal(t, "28904026", snap.TierID)
+	assert.Equal(t, StatusActive, SubscriptionStatusFor(*snap, 500))
+	assert.Zero(t, snap.UnmatchedMembers)
+}
+
+func TestParseIdentity_AmbiguousCampaignlessMembersAreNotGuessed(t *testing.T) {
+	// Two campaign-less members (only reachable with the identity.memberships scope,
+	// which we don't request) can't be told apart, so we must not hand premium to
+	// someone for backing an unrelated creator.
+	body := []byte(`{
+		"data": { "type": "user", "id": "patreon-user-9", "attributes": { "email": "fan@example.com" } },
+		"included": [
+			{
+				"type": "member",
+				"id": "member-1",
+				"attributes": { "patron_status": "active_patron", "currently_entitled_amount_cents": 1000 },
+				"relationships": {}
+			},
+			{
+				"type": "member",
+				"id": "member-2",
+				"attributes": { "patron_status": "active_patron", "currently_entitled_amount_cents": 2000 },
+				"relationships": {}
+			}
+		]
+	}`)
+
+	snap, err := parseIdentity(body, "16269405")
+	require.NoError(t, err)
+	assert.Equal(t, "", snap.PatronStatus)
+	assert.Equal(t, StatusNone, SubscriptionStatusFor(*snap, 500))
+	assert.Equal(t, 2, snap.UnmatchedMembers)
+}
+
+func TestParseIdentity_NonPatronReportsNothingDiscarded(t *testing.T) {
+	// A genuine non-patron has no members at all. StatusNone here is correct, and
+	// UnmatchedMembers must stay 0 so it is distinguishable from a parse failure.
+	body := []byte(`{
+		"data": { "type": "user", "id": "patreon-user-9", "attributes": { "email": "fan@example.com" } },
+		"included": []
+	}`)
+
+	snap, err := parseIdentity(body, "16269405")
+	require.NoError(t, err)
+	assert.Equal(t, StatusNone, SubscriptionStatusFor(*snap, 500))
+	assert.Zero(t, snap.UnmatchedMembers)
 }
