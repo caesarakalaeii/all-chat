@@ -186,6 +186,9 @@ export function useOverlayStream(
         if (cancelled) return
         setConfig(data)
         if (Array.isArray(data.sources)) {
+          // Keyed `${platform}:${channel_id}` via sourceKey, never by the bare
+          // channel_id: the same handle on two platforms is common and would
+          // otherwise overwrite itself, dropping a source with no error.
           const next = new Map<string, SourceInfo>()
           data.sources.forEach((source) => {
             next.set(sourceKey(source.platform, source.channel_id), {

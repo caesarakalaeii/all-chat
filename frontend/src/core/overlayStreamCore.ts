@@ -47,8 +47,8 @@ import type {
  * distinct sources into one entry, which showed up as an overlay quietly
  * listing three sources instead of four with no error anywhere.
  *
- * The format is `platform:channelId` — platform first, single colon — and is
- * relied upon by consumers that reconstruct the key from a `SourceInfo`
+ * The format is `${platform}:${channel_id}` — platform first, single colon —
+ * and is relied upon by consumers that reconstruct the key from a `SourceInfo`
  * (`ObservabilitySummary`). Change it in one place or not at all.
  */
 export function sourceKey(platform: string, channelId: string): string {
