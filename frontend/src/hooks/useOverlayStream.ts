@@ -54,7 +54,7 @@ import {
   RECOVERY_REPLAY_COOLDOWN_MS,
   WATCHDOG_INTERVAL_MS,
   type PlatformStatusState,
-} from '@/lib/utils/overlayStreamCore'
+} from '@/core/overlayStreamCore'
 import type { SourceInfo } from '@/components/PlatformStatusIndicators'
 
 // Single definition, owned by the badge's pure label helper so the two cannot

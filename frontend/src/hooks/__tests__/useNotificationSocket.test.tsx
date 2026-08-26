@@ -21,7 +21,7 @@ import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useNotificationSocket } from '@/hooks/useNotificationSocket'
-import { HEARTBEAT_INTERVAL_MS, LIVENESS_TIMEOUT_MS } from '@/lib/utils/overlayStreamCore'
+import { HEARTBEAT_INTERVAL_MS, LIVENESS_TIMEOUT_MS } from '@/core/overlayStreamCore'
 
 // --- Mock WebSocket -------------------------------------------------------
 class MockWebSocket {

@@ -26,7 +26,7 @@ import {
   HEARTBEAT_INTERVAL_MS,
   LIVENESS_TIMEOUT_MS,
   WATCHDOG_INTERVAL_MS,
-} from '@/lib/utils/overlayStreamCore'
+} from '@/core/overlayStreamCore'
 
 vi.mock('@/lib/twitchBadges', () => ({
   resolveTwitchBadgeIcons: vi.fn(async (m: ChatMessage) => m),

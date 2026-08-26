@@ -20,7 +20,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { WebSocketClient } from '@/lib/api/websocket'
-import { LIVENESS_TIMEOUT_MS, WATCHDOG_INTERVAL_MS } from '@/lib/utils/overlayStreamCore'
+import { LIVENESS_TIMEOUT_MS, WATCHDOG_INTERVAL_MS } from '@/core/overlayStreamCore'
 
 class MockWebSocket {
   static OPEN = 1

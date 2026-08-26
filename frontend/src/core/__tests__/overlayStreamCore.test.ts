@@ -30,7 +30,7 @@ import {
   parseNameGradientGuard,
   platformStatusReducer,
   type PlatformStatusState,
-} from '@/lib/utils/overlayStreamCore'
+} from '@/core/overlayStreamCore'
 
 function chat(id: string, ts = '2026-05-30T10:00:00.000Z'): ChatMessage {
   return {

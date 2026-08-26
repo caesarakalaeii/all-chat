@@ -41,7 +41,7 @@ import {
   HEARTBEAT_INTERVAL_MS,
   isConnectionStale,
   WATCHDOG_INTERVAL_MS,
-} from '../utils/overlayStreamCore'
+} from '@/core/overlayStreamCore'
 
 // Automatically detect WebSocket URL based on page protocol
 // In production: wss://domain.com proxied to backend via Nginx
