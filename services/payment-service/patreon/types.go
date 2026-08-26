@@ -51,6 +51,14 @@ type MembershipSnapshot struct {
 	LastChargeStatus string
 	NextChargeDate   *time.Time
 	TierID           string
+
+	// UnmatchedMembers is how many member resources the identity response carried
+	// that could not be attributed to our campaign. It is 0 both on a successful
+	// match and for a genuine non-patron (who has no members at all); a non-zero
+	// value alongside an empty PatronStatus means we discarded real membership data
+	// and the resulting StatusNone is not trustworthy. Always 0 for webhook payloads,
+	// which carry their member directly.
+	UnmatchedMembers int
 }
 
 // SubscriptionStatusFor maps a membership snapshot to our subscription status.

@@ -106,6 +106,21 @@ keep no separate grace timer.
 | `former_patron` | `former` | no |
 | no membership to our campaign | `none` | no |
 
+### Reading a membership from the identity API
+
+Patreon serializes a relationship on an `included` resource **only when that
+relationship path is itself requested** via `include`. `parseIdentity` attributes a
+member to us by its `campaign` relationship, so `include` must carry
+`memberships.campaign` — without it every member arrives campaign-less, matches
+nothing, and a paying patron reads as `none`. Because `none` is also the honest answer
+for a non-patron, that failure is invisible: it silently revokes premium on the next
+reconcile pass. `MembershipSnapshot.UnmatchedMembers` exists to tell the two apart and
+is logged as a warning by `entitlement.Apply` whenever members had to be discarded.
+
+Note this affects the identity API only. Webhook payloads carry their member in
+`data` with its relationships intact, so `ParseMemberEvent` needs no such handling —
+which is why a broken identity path can coexist with working webhooks.
+
 ## Configuration
 
 | Env | Required | Default | Notes |
@@ -124,6 +139,25 @@ keep no separate grace timer.
 | `JWT_SECRET_V1` | yes | – | validates user JWTs |
 | `TOKEN_ENCRYPTION_KEY_V1` | yes | – | encrypts stored Patreon tokens |
 | `DATABASE_*`, `REDIS_*`, `FRONTEND_URL` | – | localhost | standard |
+
+## Metrics and alerting
+
+Entitlement is derived from a third party's response shape, so "the process is healthy"
+and "the answers are right" are independent properties. `up`, HTTP status and error
+rate all stay clean while every patron silently resolves to `none`, so this service
+exports its own correctness signals (`services/payment-service/metrics`):
+
+| Metric | Type | Meaning |
+|--------|------|---------|
+| `payment_patreon_connections{status}` | gauge | connections per resolved status, as of the last reconcile pass |
+| `payment_patreon_unmatched_members_total` | counter | members received but discarded as unattributable — should be 0 forever |
+| `payment_patreon_reconcile_last_success_timestamp_seconds` | gauge | last completed pass; detects a dead reconcile goroutine, which a gauge alone cannot |
+
+Three alerts consume them, in `caesar-deployment/apps/platform/allchat-monitoring/`:
+`PatreonEntitlementsAllUnresolved` (critical — connections exist and none are active),
+`PatreonUnmatchedMembersDiscarded` and `PatreonReconcileStalled` (both warning). The
+alerts reference the metric names as strings, so `metrics_test.go` pins them; renaming
+a metric without updating the alert would leave it unfirable.
 
 ## Deployment
 
