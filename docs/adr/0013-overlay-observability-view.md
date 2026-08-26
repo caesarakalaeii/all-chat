@@ -49,7 +49,7 @@ The only way to watch an overlay's chat was the OBS render route (`/overlay/[id]
 
 ## Implementation
 
-- **Frontend (new)**: `frontend/src/hooks/useOverlayStream.ts`; `frontend/src/lib/utils/overlayStreamCore.ts` + `overlayViewModel.ts` (pure helpers); `frontend/src/app/overlay/[id]/view/{layout,page}.tsx`; `frontend/src/components/ResizableSplit.tsx`; `frontend/src/components/overlay/{ChatPanel,ActivityPanel,ObservabilitySummary,ChatRow,CompactEvent,ConnectionBadge,OverlayViewThemeToggle,PlatformGlyph}.tsx`.
+- **Frontend (new)**: `frontend/src/hooks/useOverlayStream.ts`; `frontend/src/core/overlayStreamCore.ts` + `overlayViewModel.ts` (pure helpers); `frontend/src/app/overlay/[id]/view/{layout,page}.tsx`; `frontend/src/components/ResizableSplit.tsx`; `frontend/src/components/overlay/{ChatPanel,ActivityPanel,ObservabilitySummary,ChatRow,CompactEvent,ConnectionBadge,OverlayViewThemeToggle,PlatformGlyph}.tsx`.
 - **Frontend (modified)**: `frontend/src/app/overlay/[id]/page.tsx` (consume the hook, behavior-preserving); `frontend/src/components/PlatformStatusIndicators.tsx` (`variant` prop); `frontend/src/app/globals.css` (`.overlay-view` light/dark tokens); `frontend/src/lib/types/overlay.ts` (`PublicOverlayConfig`, `EventSettings`); `frontend/src/app/overlays/[id]/preview/page.tsx` ("Monitor view" link).
 - **Backend**: `services/api-gateway/cmd/main.go` — expose the existing, already-public `HandleGetPublicEventSettings` via `GET /overlays/public/:id/event-settings`.
 - **Tests**: pure-helper + hook (mock WebSocket) + view component unit tests; `frontend/tests/e2e/overlay-view.spec.ts` smoke test.
