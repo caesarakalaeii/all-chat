@@ -47,7 +47,13 @@ code; the gate lives in `services/engagement-service`.
 
 ## Install
 
-Requires Node 20.5.1 or newer and the Stream Deck app 6.5+.
+Requires Node 20.5.1 or newer and the Stream Deck app 6.9+.
+
+> The 6.9 floor comes from the Marketplace, not from anything the plugin does:
+> Elgato's distribution protection needs `SDKVersion: 3` and
+> `Software.MinimumVersion: "6.9"` in the manifest, and Maker Console refuses an
+> upload built against SDK 2. Nothing in `src/` uses a 6.9-only API, so the only
+> cost is dropping users still on 6.5 through 6.8.
 
 ```bash
 cd streamdeck-plugin
