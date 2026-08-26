@@ -34,6 +34,28 @@ import type {
 } from '@/lib/types/message'
 
 // ---------------------------------------------------------------------------
+// Source identity
+// ---------------------------------------------------------------------------
+
+/**
+ * The key that identifies one configured chat source across every map and set
+ * in the stream pipeline.
+ *
+ * A channel id alone is NOT unique: it is a per-platform handle, and streamers
+ * routinely claim the same name everywhere, so a Twitch username and a TikTok
+ * handle are frequently the identical string. Keying by it collapsed two
+ * distinct sources into one entry, which showed up as an overlay quietly
+ * listing three sources instead of four with no error anywhere.
+ *
+ * The format is `${platform}:${channel_id}` — platform first, single colon —
+ * and is relied upon by consumers that reconstruct the key from a `SourceInfo`
+ * (`ObservabilitySummary`). Change it in one place or not at all.
+ */
+export function sourceKey(platform: string, channelId: string): string {
+  return `${platform}:${channelId}`
+}
+
+// ---------------------------------------------------------------------------
 // Reconnect backoff
 // ---------------------------------------------------------------------------
 
@@ -188,6 +210,7 @@ export function isSourceRecovery(prevStatus: string | undefined, nextStatus: str
 // platform_status reducer
 // ---------------------------------------------------------------------------
 
+/** Both collections are keyed by `sourceKey()`, never by a bare channel id. */
 export interface PlatformStatusState {
   activeChannels: Set<string>
   channelStatuses: Map<string, PlatformStatus>
@@ -196,44 +219,47 @@ export interface PlatformStatusState {
 /**
  * Apply a platform_status update, mirroring the overlay page exactly:
  *  - Gate by configured sources: accept when the map is empty (config not yet
- *    loaded) or the channel is configured; otherwise ignore.
+ *    loaded) or the source is configured; otherwise ignore.
  *  - `connected` adds to activeChannels; `offline` removes from it.
  *  - Never overwrite a `connected` status with a `reconnecting` one.
  * Returns the SAME state reference when nothing changes, so React consumers can
  * skip re-renders.
+ *
+ * `configuredSources` must be keyed by `sourceKey()`, as `useOverlayStream`
+ * builds it.
  */
 export function platformStatusReducer(
   state: PlatformStatusState,
   statusData: PlatformStatus,
   configuredSources: ReadonlyMap<string, unknown>
 ): PlatformStatusState {
-  const channelId = statusData.channel_id || statusData.platform
-  const isConfigured = configuredSources.size === 0 || configuredSources.has(channelId)
+  const key = sourceKey(statusData.platform, statusData.channel_id)
+  const isConfigured = configuredSources.size === 0 || configuredSources.has(key)
   if (!isConfigured) return state
 
   let activeChannels = state.activeChannels
   if (statusData.status === 'connected') {
-    if (!activeChannels.has(channelId)) {
+    if (!activeChannels.has(key)) {
       activeChannels = new Set(activeChannels)
-      activeChannels.add(channelId)
+      activeChannels.add(key)
     }
   } else if (
     statusData.status === 'offline' ||
     statusData.status === 'error' ||
     statusData.status === 'paused'
   ) {
-    if (activeChannels.has(channelId)) {
+    if (activeChannels.has(key)) {
       activeChannels = new Set(activeChannels)
-      activeChannels.delete(channelId)
+      activeChannels.delete(key)
     }
   }
 
   let channelStatuses = state.channelStatuses
-  const existing = state.channelStatuses.get(channelId)
+  const existing = state.channelStatuses.get(key)
   // Don't overwrite connected with reconnecting from a different channel.
   if (!(existing?.status === 'connected' && statusData.status === 'reconnecting')) {
     channelStatuses = new Map(channelStatuses)
-    channelStatuses.set(channelId, statusData)
+    channelStatuses.set(key, statusData)
   }
 
   if (activeChannels === state.activeChannels && channelStatuses === state.channelStatuses) {

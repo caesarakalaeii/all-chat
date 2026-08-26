@@ -124,7 +124,7 @@ Every hop, with the file that owns it.
    buffer — that buffer is replayed to every socket on connect, anonymous ones
    included.
 8. **Client classification.** `classifyEnvelope`
-   (`frontend/src/lib/utils/overlayStreamCore.ts`) sees a `chat_message` envelope
+   (`frontend/src/core/overlayStreamCore.ts`) sees a `chat_message` envelope
    whose `data.event.type === 'mod_action'` and returns `{ kind: 'modAction' }` —
    never a feed item. `useOverlayStream`
    (`frontend/src/hooks/useOverlayStream.ts`) advances the replay watermark by

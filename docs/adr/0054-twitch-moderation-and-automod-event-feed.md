@@ -140,7 +140,7 @@ Two consequences follow, and both were the point:
   there is no per-overlay toggle, no migration, and no database round-trip. Five
   event types would have meant five entries and a decision about each.
 - The frontend matches **one** string. `classifyEnvelope`
-  (`frontend/src/lib/utils/overlayStreamCore.ts`) routes `mod_action` to the
+  (`frontend/src/core/overlayStreamCore.ts`) routes `mod_action` to the
   moderation log instead of the feed, and the api-gateway's owner-only gate keys on
   the same single string.
 

@@ -26,7 +26,7 @@ import {
   HEARTBEAT_INTERVAL_MS,
   LIVENESS_TIMEOUT_MS,
   WATCHDOG_INTERVAL_MS,
-} from '@/lib/utils/overlayStreamCore'
+} from '@/core/overlayStreamCore'
 
 vi.mock('@/lib/twitchBadges', () => ({
   resolveTwitchBadgeIcons: vi.fn(async (m: ChatMessage) => m),
@@ -203,6 +203,61 @@ describe('useOverlayStream — connection', () => {
   })
 })
 
+describe('useOverlayStream — configured sources', () => {
+  // A streamer who registered the same handle on two platforms (very common —
+  // people claim one name everywhere) used to lose one of them: the sources Map
+  // was keyed by bare channel_id, so the second platform's entry overwrote the
+  // first and the monitor silently showed N-1 sources.
+  const sameHandleOnTwoPlatforms = [
+    { platform: 'twitch', channel_id: 'coolstreamer', channel_name: 'CoolStreamer' },
+    { platform: 'tiktok', channel_id: 'coolstreamer', channel_name: 'coolstreamer' },
+  ]
+
+  const serveSources = (sources: unknown[]) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, json: async () => ({ sources }) })) as unknown as typeof fetch
+    )
+  }
+
+  it('keeps both sources when two platforms share one handle', async () => {
+    serveSources(sameHandleOnTwoPlatforms)
+    const { result } = renderHook(() => useOverlayStream('o1', {}))
+    await waitFor(() => expect(result.current.sources.size).toBe(2))
+    expect(result.current.sources.get('twitch:coolstreamer')?.channelName).toBe('CoolStreamer')
+    expect(result.current.sources.get('tiktok:coolstreamer')?.channelName).toBe('coolstreamer')
+  })
+
+  it('tracks live status per platform when two platforms share one handle', async () => {
+    serveSources(sameHandleOnTwoPlatforms)
+    const { result } = renderHook(() => useOverlayStream('o1', {}))
+    await waitFor(() => expect(result.current.sources.size).toBe(2))
+
+    await act(async () => {
+      latest().simulateMessage({
+        type: 'platform_status',
+        data: { platform: 'twitch', channel_id: 'coolstreamer', status: 'connected' },
+      })
+    })
+    await waitFor(() => expect(result.current.activeChannels.has('twitch:coolstreamer')).toBe(true))
+    // The TikTok source has said nothing, so it must still read as idle rather
+    // than inheriting Twitch's 'connected'.
+    expect(result.current.activeChannels.has('tiktok:coolstreamer')).toBe(false)
+
+    await act(async () => {
+      latest().simulateMessage({
+        type: 'platform_status',
+        data: { platform: 'tiktok', channel_id: 'coolstreamer', status: 'offline' },
+      })
+    })
+    await waitFor(() =>
+      expect(result.current.channelStatuses.get('tiktok:coolstreamer')?.status).toBe('offline')
+    )
+    // Twitch must not be dragged offline with it.
+    expect(result.current.activeChannels.has('twitch:coolstreamer')).toBe(true)
+  })
+})
+
 describe('useOverlayStream — message routing', () => {
   it('replays buffered deletions via onDeletion(source=replay) and never as chat', async () => {
     const onDeletion = vi.fn()
@@ -283,8 +338,8 @@ describe('useOverlayStream — message routing', () => {
         data: { platform: 'twitch', channel_id: 'c1', status: 'connected' },
       })
     })
-    await waitFor(() => expect(result.current.activeChannels.has('c1')).toBe(true))
-    expect(result.current.channelStatuses.get('c1')?.status).toBe('connected')
+    await waitFor(() => expect(result.current.activeChannels.has('twitch:c1')).toBe(true))
+    expect(result.current.channelStatuses.get('twitch:c1')?.status).toBe('connected')
   })
 
   it('self-heals: reconnects to replay when a source recovers from a down state, but not on initial connect', async () => {

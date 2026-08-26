@@ -88,6 +88,11 @@ frontend/public/monaco/
 frontend/AGENTS.md
 frontend/CLAUDE.md
 
+# Incremental type-check cache. The root tsconfig.json inherits
+# `incremental: true` from frontend/tsconfig.json, so `tsc --noEmit` at the repo
+# root drops one here (frontend/.gitignore already covers the frontend's own).
+*.tsbuildinfo
+
 # Node modules (for frontend)
 node_modules/
 /web/node_modules/

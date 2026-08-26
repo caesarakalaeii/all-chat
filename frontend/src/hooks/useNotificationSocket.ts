@@ -43,7 +43,7 @@ import {
   HEARTBEAT_INTERVAL_MS,
   isConnectionStale,
   WATCHDOG_INTERVAL_MS,
-} from '@/lib/utils/overlayStreamCore'
+} from '@/core/overlayStreamCore'
 
 export interface NotificationEnvelope {
   type?: string

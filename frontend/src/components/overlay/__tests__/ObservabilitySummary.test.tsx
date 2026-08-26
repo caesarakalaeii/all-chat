@@ -28,8 +28,8 @@ import type { EventSettings, PublicOverlayConfig } from '@/lib/types/overlay'
 afterEach(() => cleanup())
 
 const sources = new Map<string, SourceInfo>([
-  ['c1', { platform: 'twitch', channelId: 'c1', channelName: 'caesar' }],
-  ['c2', { platform: 'youtube', channelId: 'c2', channelName: 'caesarTube' }],
+  ['twitch:c1', { platform: 'twitch', channelId: 'c1', channelName: 'caesar' }],
+  ['youtube:c2', { platform: 'youtube', channelId: 'c2', channelName: 'caesarTube' }],
 ])
 
 const config: PublicOverlayConfig = {
@@ -79,7 +79,7 @@ describe('ObservabilitySummary', () => {
       <ObservabilitySummary
         config={config}
         sources={sources}
-        activeChannels={new Set(['c1'])}
+        activeChannels={new Set(['twitch:c1'])}
         eventSettings={eventSettings()}
         observedEventTypes={new Set()}
       />
@@ -88,6 +88,27 @@ describe('ObservabilitySummary', () => {
     expect(screen.getByText('caesarTube')).toBeInTheDocument()
     expect(screen.getByText('live')).toBeInTheDocument()
     expect(screen.getByText('idle')).toBeInTheDocument()
+  })
+
+  it('marks only the live platform when two sources share one handle', () => {
+    // Both entries carry channelId 'shared', so a lookup by channelId alone
+    // would report both as live off the single Twitch status.
+    const sameHandle = new Map<string, SourceInfo>([
+      ['twitch:shared', { platform: 'twitch', channelId: 'shared', channelName: 'on Twitch' }],
+      ['tiktok:shared', { platform: 'tiktok', channelId: 'shared', channelName: 'on TikTok' }],
+    ])
+    render(
+      <ObservabilitySummary
+        config={config}
+        sources={sameHandle}
+        activeChannels={new Set(['twitch:shared'])}
+        eventSettings={eventSettings()}
+        observedEventTypes={new Set()}
+      />
+    )
+    expect(screen.getByText('Sources (2)')).toBeInTheDocument()
+    expect(screen.getAllByText('live')).toHaveLength(1)
+    expect(screen.getAllByText('idle')).toHaveLength(1)
   })
 
   it('renders the full event-toggle list when event settings are available', () => {
