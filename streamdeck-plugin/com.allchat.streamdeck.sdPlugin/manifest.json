@@ -8,17 +8,16 @@
 	"CategoryIcon": "imgs/plugin/category-icon",
 	"Icon": "imgs/plugin/marketplace",
 	"URL": "https://allch.at",
-	"SDKVersion": 2,
+	"SDKVersion": 3,
 	"Software": {
-		"MinimumVersion": "6.5"
+		"MinimumVersion": "6.9"
 	},
 	"OS": [
 		{ "Platform": "mac", "MinimumVersion": "10.15" },
 		{ "Platform": "windows", "MinimumVersion": "10" }
 	],
 	"Nodejs": {
-		"Version": "20",
-		"Debug": "enabled"
+		"Version": "20"
 	},
 	"CodePath": "bin/plugin.js",
 	"Actions": [
