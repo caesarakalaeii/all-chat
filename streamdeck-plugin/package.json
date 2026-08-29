@@ -9,18 +9,22 @@
     "node": ">=20.5.1"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "watch": "tsc -p tsconfig.json --watch",
+    "build": "tsc -p tsconfig.json && node scripts/build.mjs",
+    "watch": "node scripts/build.mjs --watch",
     "lint": "eslint . && tsc -p tsconfig.json --noEmit",
-    "clean": "rm -rf com.allchat.streamdeck.sdPlugin/bin"
+    "clean": "rm -rf com.allchat.streamdeck.sdPlugin/bin",
+    "smoke": "node scripts/smoke.mjs"
   },
-  "//dependencies": "The build toolchain sits in dependencies rather than devDependencies on purpose. This package is private and never published, and CI runs with NODE_ENV=production, under which npm ci omits dev dependencies and npm run build would fail with 'tsc: not found'. Nothing listed here ships to a user: the distributable is the .sdPlugin folder, which contains only the compiled bin/ and the manifest.",
+  "//dependencies": "The build toolchain sits in dependencies rather than devDependencies on purpose. This package is private and never published, and CI runs with NODE_ENV=production, under which npm ci omits dev dependencies and npm run build would fail with 'tsc: not found'. Nothing listed here ships to a user as a package: the distributable is the .sdPlugin folder, which contains only the manifest and the single bundled bin/plugin.js. @elgato/streamdeck and its transitive deps are inlined into that bundle by scripts/build.mjs, because the .sdPlugin folder has no node_modules for a bare import to resolve against. ws is listed directly because scripts/smoke.mjs imports it to impersonate the Stream Deck host; it is a transitive dep of the SDK too, but the test must not rely on npm hoisting it.",
   "dependencies": {
     "@elgato/streamdeck": "2.1.1",
     "@eslint/js": "^9.39.4",
     "@types/node": "^22.10.2",
+    "esbuild": "^0.25.10",
     "eslint": "^9.39.4",
+    "globals": "^14.0.0",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.46.0"
+    "typescript-eslint": "^8.46.0",
+    "ws": "^8.19.0"
   }
 }
