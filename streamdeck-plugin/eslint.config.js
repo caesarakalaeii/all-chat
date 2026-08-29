@@ -3,6 +3,7 @@
 // plugins must log through `streamDeck.logger`, which writes to the plugin log)
 // and no unused code.
 import js from "@eslint/js";
+import globals from "globals";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
@@ -23,6 +24,15 @@ export default tseslint.config(
 			],
 			eqeqeq: ["error", "smart"],
 			"prefer-const": "error",
+		},
+	},
+	{
+		// Build and test tooling: plain Node scripts, not plugin code. They run
+		// in a terminal rather than inside the Stream Deck host, so `console` is
+		// the correct output channel here and the Node globals are in scope.
+		files: ["scripts/**/*.mjs", "eslint.config.js"],
+		languageOptions: {
+			globals: globals.node,
 		},
 	},
 );
