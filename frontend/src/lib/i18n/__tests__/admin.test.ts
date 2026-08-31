@@ -582,3 +582,219 @@ describe('admin viewers page copy', () => {
     expect(t('admin.viewers.premiumError')).toBe('Failed to update premium status')
   })
 })
+
+describe('admin users page copy', () => {
+  it('keeps the page header, load error and search field', () => {
+    expect(t('admin.users.heading')).toBe('Users')
+    expect(t('admin.users.intro')).toBe('Manage and view all users in the system')
+    expect(t('admin.users.loadError')).toBe('Failed to load users')
+    expect(t('admin.users.listHeading', { count: 84 })).toBe('All Users (84)')
+    expect(t('admin.users.searchPlaceholder')).toBe(
+      'Search by username, display name, or platform ID...'
+    )
+  })
+
+  it('keeps the six filter tabs and the "no setup" tooltip', () => {
+    // Each tab is one key with its count inside, not a label plus a parenthesised
+    // number the render site assembles.
+    expect(t('admin.users.tabAll', { count: 84 })).toBe('All (84)')
+    expect(t('admin.users.tabActive', { count: 80 })).toBe('Active (80)')
+    expect(t('admin.users.tabBanned', { count: 4 })).toBe('Banned (4)')
+    expect(t('admin.users.tabPremium', { count: 12 })).toBe('Premium (12)')
+    expect(t('admin.users.tabBeta', { count: 3 })).toBe('Beta (3)')
+    expect(t('admin.users.tabNoSetup', { count: 9 })).toBe('No setup (9)')
+    expect(t('admin.users.tabNoSetupTitle')).toBe(
+      'Signed up but never configured a chat source (0 overlays or 0 sources)'
+    )
+  })
+
+  it('keeps the row badges and the empty list state', () => {
+    expect(t('admin.users.badgeAmbassador')).toBe('AMBASSADOR')
+    expect(t('admin.users.badgeBeta')).toBe('BETA')
+    expect(t('admin.users.badgePremium')).toBe('PREMIUM')
+    expect(t('admin.users.badgeBanned')).toBe('BANNED')
+    expect(t('admin.users.badgeNoOverlay')).toBe('NO OVERLAY')
+    expect(t('admin.users.badgeNoSources')).toBe('NO SOURCES')
+    expect(t('admin.users.badgeNoSetupTitle')).toBe('Signed up but never configured a chat source')
+    expect(t('admin.users.rowJoined', { date: '13/07/2026' })).toBe('Joined 13/07/2026')
+    expect(t('admin.users.empty')).toBe('No users match your search or filter.')
+  })
+
+  it('keeps the detail panel field labels', () => {
+    expect(t('admin.users.detailId')).toBe('ID')
+    expect(t('admin.users.detailUsername')).toBe('Username')
+    expect(t('admin.users.detailDisplayName')).toBe('Display Name')
+    expect(t('admin.users.detailAuthProvider')).toBe('Auth Provider')
+    expect(t('admin.users.detailPlatforms')).toBe('Connected Platforms')
+    // The three platform rows read '<Platform>:'. The colon is punctuation a
+    // language may place differently, so it travels with the label.
+    expect(t('admin.users.platformIdTwitch')).toBe('Twitch:')
+    expect(t('admin.users.platformIdYouTube')).toBe('YouTube:')
+    expect(t('admin.users.platformIdKick')).toBe('Kick:')
+    expect(t('admin.users.selectPrompt')).toBe('Select a user to view details')
+  })
+
+  it('keeps the impersonation copy', () => {
+    expect(t('admin.users.viewAsButton', { username: 'kate' })).toBe('View as kate')
+    expect(t('admin.users.impersonateTitle', { username: 'kate' })).toBe(
+      'Impersonate \u201Ckate\u201D?'
+    )
+    expect(t('admin.users.impersonateBody')).toBe(
+      'This will replace your current session. You can return to admin by using the stored admin token.'
+    )
+    expect(t('admin.users.impersonateCancel')).toBe('Cancel')
+    expect(t('admin.users.impersonateConfirm')).toBe('Impersonate')
+    expect(t('admin.users.impersonateSwitching')).toBe('Switching...')
+    expect(t('admin.users.impersonateHint')).toBe('Temporarily act as this user to debug issues')
+    expect(t('admin.users.impersonateError')).toBe(
+      'Failed to start impersonation. Please try again.'
+    )
+  })
+
+  it('keeps the premium section copy', () => {
+    expect(t('admin.users.premiumActiveTitle')).toBe('Premium access active')
+    expect(t('admin.users.premiumActiveBody')).toBe(
+      'This user can create and accept share requests.'
+    )
+    expect(t('admin.users.premiumExpires', { timestamp: '13/07/2026, 08:48' })).toBe(
+      'Time-limited \u2014 expires 13/07/2026, 08:48'
+    )
+    expect(t('admin.users.revokePremiumButton')).toBe('Revoke Premium')
+    expect(t('admin.users.revokePremiumLabel', { username: 'kate' })).toBe(
+      'Revoke Premium for kate'
+    )
+    expect(t('admin.users.revokePremiumTitle', { username: 'kate' })).toBe(
+      'Revoke premium for \u201Ckate\u201D?'
+    )
+    expect(t('admin.users.revokePremiumBody')).toBe(
+      'They will no longer be able to create or accept share requests.'
+    )
+    expect(t('admin.users.grantPremiumButton')).toBe('Grant Premium')
+    expect(t('admin.users.grantPremiumLabel', { username: 'kate' })).toBe('Grant Premium to kate')
+    expect(t('admin.users.grantPremiumTitle', { username: 'kate' })).toBe(
+      'Grant premium to \u201Ckate\u201D?'
+    )
+    expect(t('admin.users.grantPremiumBody')).toBe(
+      'They will be able to create and accept chat overlay share requests.'
+    )
+  })
+
+  it('keeps the beta tester section copy', () => {
+    expect(t('admin.users.betaActiveTitle')).toBe('Beta tester')
+    expect(t('admin.users.betaActiveBody')).toBe('Has all premium features plus early-access ones.')
+    expect(t('admin.users.revokeBetaButton')).toBe('Revoke Beta Tester')
+    expect(t('admin.users.revokeBetaLabel', { username: 'kate' })).toBe(
+      'Revoke Beta Tester for kate'
+    )
+    expect(t('admin.users.revokeBetaTitle', { username: 'kate' })).toBe(
+      'Revoke beta tester for \u201Ckate\u201D?'
+    )
+    expect(t('admin.users.revokeBetaBody')).toBe(
+      'They lose early-access features. Premium then follows their subscription or any admin override.'
+    )
+    expect(t('admin.users.grantBetaButton')).toBe('Grant Beta Tester')
+    expect(t('admin.users.grantBetaLabel', { username: 'kate' })).toBe('Grant Beta Tester to kate')
+    expect(t('admin.users.grantBetaTitle', { username: 'kate' })).toBe(
+      'Grant beta tester to \u201Ckate\u201D?'
+    )
+    expect(t('admin.users.grantBetaBody')).toBe(
+      'They gain all premium features plus early-access ones. Use this to grandfather pre-monetization premium users.'
+    )
+  })
+
+  it('keeps the ambassador section copy', () => {
+    expect(t('admin.users.ambassadorActiveTitle')).toBe('Ambassador')
+    expect(t('admin.users.ambassadorActiveBody')).toBe(
+      'Has all premium plus early-access features. Appears on the homepage only after the streamer opts in from their settings.'
+    )
+    expect(t('admin.users.taglineLabel')).toBe('Showcase tagline')
+    expect(t('admin.users.taglineOptionalLabel')).toBe('Showcase tagline (optional)')
+    expect(t('admin.users.taglinePlaceholder')).toBe(
+      'e.g. Multistreams to Twitch, YouTube and Kick'
+    )
+    expect(t('admin.users.taglineFieldLabel')).toBe('Ambassador showcase tagline')
+    expect(t('admin.users.sortOrderLabel')).toBe('Display order (lower shows first)')
+    expect(t('admin.users.sortOrderFieldLabel')).toBe('Ambassador display order')
+    expect(t('admin.users.saveShowcaseButton')).toBe('Save showcase card')
+    expect(t('admin.users.saveShowcaseLabel', { username: 'kate' })).toBe(
+      'Save showcase card for kate'
+    )
+    expect(t('admin.users.revokeAmbassadorButton')).toBe('Revoke Ambassador')
+    expect(t('admin.users.revokeAmbassadorLabel', { username: 'kate' })).toBe(
+      'Revoke Ambassador for kate'
+    )
+    expect(t('admin.users.revokeAmbassadorTitle', { username: 'kate' })).toBe(
+      'Revoke ambassador for \u201Ckate\u201D?'
+    )
+    expect(t('admin.users.revokeAmbassadorBody')).toBe(
+      'They are removed from the homepage showcase and lose early-access features. Premium then follows their subscription or any admin override.'
+    )
+    expect(t('admin.users.grantAmbassadorButton')).toBe('Grant Ambassador')
+    expect(t('admin.users.grantAmbassadorLabel', { username: 'kate' })).toBe(
+      'Grant Ambassador to kate'
+    )
+  })
+
+  it('keeps the ban and unban section copy', () => {
+    expect(t('admin.users.bannedReason', { reason: 'spam' })).toBe('Banned: spam')
+    expect(t('admin.users.bannedOn', { timestamp: '13/07/2026, 08:48' })).toBe(
+      'Banned on 13/07/2026, 08:48'
+    )
+    expect(t('admin.users.unbanButton')).toBe('Unban User')
+    expect(t('admin.users.unbanLabel', { username: 'kate' })).toBe('Unban User kate')
+    expect(t('admin.users.unbanTitle', { username: 'kate' })).toBe('Unban \u201Ckate\u201D?')
+    expect(t('admin.users.unbanBody')).toBe('This will restore their access to the platform.')
+    expect(t('admin.users.unbanCancel')).toBe('Cancel')
+    expect(t('admin.users.banButton')).toBe('Ban User')
+    expect(t('admin.users.banLabel', { username: 'kate' })).toBe('Ban User kate')
+    expect(t('admin.users.banTitle', { username: 'kate' })).toBe('Ban \u201Ckate\u201D?')
+    expect(t('admin.users.banBody')).toBe('This will prevent the user from accessing the platform.')
+    // The asterisk marks the field required and is part of the visible label.
+    expect(t('admin.users.banReasonLabel')).toBe('Reason for ban *')
+    expect(t('admin.users.banReasonPlaceholder')).toBe('Spam, abuse, ToS violation, etc...')
+    expect(t('admin.users.banCancel')).toBe('Cancel')
+    expect(t('admin.users.banning')).toBe('Banning...')
+  })
+
+  it('keeps the overlays section copy', () => {
+    expect(t('admin.users.overlaysHeading', { count: 2 })).toBe('Overlays (2)')
+    expect(t('admin.users.overlaySourceCount', { count: 3 })).toBe('3 sources')
+    expect(t('admin.users.openOverlayLabel', { name: 'Main' })).toBe(
+      'Open the live Main overlay (opens in a new tab)'
+    )
+    expect(t('admin.users.overlaysEmpty')).toBe('No overlays yet')
+    // The apostrophe was a &rsquo; entity, so it is the typographic character.
+    expect(t('admin.users.viewSourcesLink')).toBe('View this user\u2019s sources')
+  })
+
+  it('keeps the shared saving label and the mutation toasts', () => {
+    // One 'Saving...' key: the premium, beta and ambassador buttons all showed
+    // the identical word while their request was in flight.
+    expect(t('admin.users.saving')).toBe('Saving...')
+    expect(t('admin.users.banSuccess', { username: 'kate' })).toBe('kate banned successfully')
+    expect(t('admin.users.banError')).toBe('Failed to ban user')
+    expect(t('admin.users.unbanSuccess', { username: 'kate' })).toBe('kate unbanned successfully')
+    expect(t('admin.users.unbanError')).toBe('Failed to unban user')
+    // Two whole sentences per role change: the render site interpolated only the
+    // username, but the rest of each sentence differs by more than one word.
+    expect(t('admin.users.premiumGranted', { username: 'kate' })).toBe(
+      'kate granted premium access'
+    )
+    expect(t('admin.users.premiumRemoved', { username: 'kate' })).toBe(
+      'kate premium access removed'
+    )
+    expect(t('admin.users.premiumError')).toBe('Failed to update premium status')
+    expect(t('admin.users.betaGranted', { username: 'kate' })).toBe('kate is now a beta tester')
+    expect(t('admin.users.betaRemoved', { username: 'kate' })).toBe(
+      'kate is no longer a beta tester'
+    )
+    expect(t('admin.users.betaError')).toBe('Failed to update beta-tester status')
+    expect(t('admin.users.ambassadorGranted', { username: 'kate' })).toBe(
+      'kate is now an ambassador'
+    )
+    expect(t('admin.users.ambassadorRemoved', { username: 'kate' })).toBe(
+      'kate is no longer an ambassador'
+    )
+    expect(t('admin.users.ambassadorError')).toBe('Failed to update ambassador status')
+  })
+})
