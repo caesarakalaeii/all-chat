@@ -743,3 +743,76 @@ describe('add-source form copy', () => {
     expect(t('overlayEditor.addSource.adminResolving')).toBe('Resolving\u2026')
   })
 })
+
+describe('editor page chrome copy', () => {
+  it('keeps the loading and not-found states', () => {
+    expect(t('overlayEditor.page.loadingEditor')).toBe('Loading editor...')
+    expect(t('overlayEditor.page.notFound')).toBe('Overlay not found')
+    expect(t('overlayEditor.page.returnToDashboard')).toBe('Return to Dashboard')
+  })
+
+  it('keeps the header actions', () => {
+    expect(t('overlayEditor.page.back')).toBe('Back')
+    expect(t('overlayEditor.page.monitorView')).toBe('Monitor View')
+    expect(t('overlayEditor.page.monitorViewTitle')).toBe(
+      'Open the readable chat & activity monitor in a new tab'
+    )
+    expect(t('overlayEditor.page.eventSettings')).toBe('Event Settings')
+    expect(t('overlayEditor.page.credits')).toBe('Credits')
+    expect(t('overlayEditor.page.clone')).toBe('Clone')
+    expect(t('overlayEditor.page.cloning')).toBe('Cloning\u2026')
+  })
+
+  it('keeps the OBS URL controls', () => {
+    expect(t('overlayEditor.page.copyObsUrl')).toBe('Copy OBS URL')
+    expect(t('overlayEditor.page.copiedObsUrl')).toBe('Copied!')
+    expect(t('overlayEditor.page.obsHelpTrigger')).toBe('How do I add this to OBS?')
+    expect(t('overlayEditor.page.obsHelpTitle')).toBe('Add the overlay to OBS')
+    expect(t('overlayEditor.page.shareOverlay')).toBe('Share Overlay')
+    expect(t('overlayEditor.page.resetToThemeDefaults')).toBe('Reset to theme defaults')
+  })
+
+  it('keeps the browser-extension card', () => {
+    expect(t('overlayEditor.page.extensionHeading')).toBe('Browser Extension Overlay')
+    expect(t('overlayEditor.page.extensionActive')).toBe('Active')
+    expect(t('overlayEditor.page.extensionActiveBody')).toBe(
+      'This overlay is shown to viewers via the browser extension at allch.at/c/caesarlp.'
+    )
+    expect(t('overlayEditor.page.extensionInactiveBody')).toBe(
+      'Set this as the overlay shown to viewers via the browser extension.'
+    )
+    expect(t('overlayEditor.page.extensionDeactivate')).toBe('Deactivate')
+    expect(t('overlayEditor.page.extensionSetActive')).toBe('Set Active')
+  })
+
+  it('keeps the premium-required dialog as whole sentences around their links', () => {
+    // Two element runs in one sentence (the upsell link) and one in the next
+    // (the Discord invite), so both go through interpolateElements rather than
+    // being split into JSX children either side of the anchor.
+    expect(
+      t('overlayEditor.page.premiumRequiredBody', { upgradeLink: 'Upgrade your account' })
+    ).toBe(
+      'Sharing your overlay is a premium feature. Upgrade your account to share your chat with other streamers.'
+    )
+    expect(t('overlayEditor.page.premiumRequiredTitle')).toBe('Premium Feature')
+    expect(t('overlayEditor.page.premiumUpgradeLink')).toBe('Upgrade your account')
+    expect(t('overlayEditor.page.questionsJoin', { discordLink: 'Discord community' })).toBe(
+      'Questions? Join our Discord community.'
+    )
+    expect(t('overlayEditor.page.discordCommunityLink')).toBe('Discord community')
+    expect(t('overlayEditor.page.close')).toBe('Close')
+    expect(t('overlayEditor.page.upgrade')).toBe('Upgrade')
+  })
+
+  it('keeps the share dialog naming the overlay', () => {
+    expect(t('overlayEditor.page.shareTitle')).toBe('Share Overlay')
+    expect(t('overlayEditor.page.shareBody', { emphasis: 'My Overlay' })).toBe(
+      "Enter the Twitch username of the person you want to share My Overlay with. They'll receive a request they can accept or decline."
+    )
+    expect(t('overlayEditor.page.shareRecipientLabel')).toBe('Twitch username')
+    expect(t('overlayEditor.page.shareRecipientPlaceholder')).toBe('e.g. somestreamer')
+    expect(t('overlayEditor.page.shareCancel')).toBe('Cancel')
+    expect(t('overlayEditor.page.shareSend')).toBe('Send Request')
+    expect(t('overlayEditor.page.shareSending')).toBe('Sending...')
+  })
+})
