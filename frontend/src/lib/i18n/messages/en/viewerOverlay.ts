@@ -319,6 +319,7 @@ export const viewerOverlay = {
   },
 
   chatSend: {
+    formLabel: 'Send a chat message',
     targetGroupLabel: 'Send to',
     sendToPlatform: 'Send to {platform}',
     enableSendingFor: 'Enable sending for {platform}',

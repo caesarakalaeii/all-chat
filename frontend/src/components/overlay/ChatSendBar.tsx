@@ -259,7 +259,7 @@ export function ChatSendBar({ sources, onEnable, onReauth }: ChatSendBarProps) {
     <form
       onSubmit={handleSubmit}
       className="flex flex-col gap-2 border-t border-border bg-surface px-4 py-2.5"
-      aria-label="Send a chat message"
+      aria-label={t('viewerOverlay.chatSend.formLabel')}
     >
       <div className="flex flex-wrap items-center gap-2">
         {/* Platform target pills */}

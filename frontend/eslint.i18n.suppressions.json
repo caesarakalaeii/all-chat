@@ -233,16 +233,6 @@
       "count": 8
     }
   },
-  "src/components/overlay/ChatSendBar.tsx": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "src/components/overlay/PlatformGlyph.tsx": {
-    "react/jsx-no-literals": {
-      "count": 1
-    }
-  },
   "src/components/ui/dialog.tsx": {
     "no-restricted-syntax": {
       "count": 1

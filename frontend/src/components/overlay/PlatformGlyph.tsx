@@ -65,7 +65,7 @@ function platformSvg(t: TFunction, platform: string, className: string): ReactEl
             textAnchor="middle"
             fontFamily="monospace"
           >
-            K
+            {KICK_GLYPH}
           </text>
         </svg>
       )
