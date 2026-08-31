@@ -602,7 +602,7 @@ export default function UsersPage() {
                                   </span>
                                 )}
                                 {user.is_premium && !user.is_beta_tester && !user.is_ambassador && (
-                                  <span className="inline-flex items-center rounded border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400">
+                                  <span className="inline-flex items-center rounded border border-premium/20 bg-premium/10 px-2 py-0.5 text-xs font-medium text-premium">
                                     {t('admin.users.badgePremium')}
                                   </span>
                                 )}
@@ -613,7 +613,7 @@ export default function UsersPage() {
                                 )}
                                 {user.sources_count === 0 && (
                                   <span
-                                    className="inline-flex items-center rounded border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400"
+                                    className="inline-flex items-center rounded border border-premium/20 bg-premium/10 px-2 py-0.5 text-xs font-medium text-premium"
                                     title={t('admin.users.badgeNoSetupTitle')}
                                   >
                                     {user.overlays_count === 0
@@ -828,15 +828,15 @@ export default function UsersPage() {
                 <div className="mt-6 border-t border-border pt-6">
                   {selectedUser.is_premium ? (
                     <>
-                      <div className="mb-3 rounded-lg border border-amber-500/20 bg-amber-500/10 p-3">
-                        <p className="text-sm font-medium text-amber-400">
+                      <div className="mb-3 rounded-lg border border-premium/20 bg-premium/10 p-3">
+                        <p className="text-sm font-medium text-premium">
                           {t('admin.users.premiumActiveTitle')}
                         </p>
-                        <p className="mt-1 text-xs text-amber-400/70">
+                        <p className="mt-1 text-xs text-premium/70">
                           {t('admin.users.premiumActiveBody')}
                         </p>
                         {selectedUser.premium_expires_at && (
-                          <p className="mt-1 text-xs font-medium text-amber-400/70">
+                          <p className="mt-1 text-xs font-medium text-premium/70">
                             {t('admin.users.premiumExpires', {
                               timestamp: formatTimestamp(new Date(selectedUser.premium_expires_at)),
                             })}
@@ -912,7 +912,7 @@ export default function UsersPage() {
                         render={
                           <Button
                             variant="outline"
-                            className="w-full border-amber-500/40 text-amber-400 hover:border-amber-500/60 hover:bg-amber-500/10"
+                            className="w-full border-premium/40 text-premium hover:border-premium/60 hover:bg-premium/10"
                             aria-label={t('admin.users.grantPremiumLabel', {
                               username: selectedUser.username,
                             })}

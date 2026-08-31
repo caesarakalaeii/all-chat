@@ -239,10 +239,12 @@ export function ChatPanel({ items, prefs, capabilities, moderation }: ChatPanelP
         )}
       </div>
       {paused && (
-        <button
+        <Button
           onClick={resumeLive}
+          variant="outline"
+          size="xs"
           className={clsx(
-            'absolute left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-border-md bg-surface px-3 py-1.5 text-xs font-medium text-text shadow-lg hover:bg-surface-2 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none',
+            'absolute left-1/2 -translate-x-1/2 rounded-full border-border-md shadow-lg',
             // The pill belongs next to the live edge it scrolls back to.
             newestFirst ? 'top-3' : 'bottom-3'
           )}
@@ -253,7 +255,7 @@ export function ChatPanel({ items, prefs, capabilities, moderation }: ChatPanelP
             <ArrowDown className="h-3.5 w-3.5" />
           )}
           {newCount > 0 ? `Chat paused · ${newCount} new` : 'Chat paused'}
-        </button>
+        </Button>
       )}
     </section>
   )

@@ -360,15 +360,11 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
         <p className="text-text-sub">{t('viewerOverlay.participate.loginBlurb')}</p>
         <div className="flex flex-col gap-2">
           {PLATFORMS.map((platform) => (
-            <button
-              key={platform}
-              onClick={() => void login(platform)}
-              className="rounded-lg bg-purple-600 px-4 py-2 font-semibold text-white hover:bg-purple-700"
-            >
+            <Button key={platform} onClick={() => void login(platform)} size="lg">
               {t('viewerOverlay.participate.loginWith', {
                 platform: t(`common.platforms.${platform}`),
               })}
-            </button>
+            </Button>
           ))}
         </div>
         {/* N2: TikTok/Discord have no web login — point those viewers at chat commands. */}
@@ -415,7 +411,7 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
       </p>
 
       {notice && (
-        <p role="alert" className="rounded-md bg-red-500/15 px-3 py-2 text-sm text-red-400">
+        <p role="alert" className="rounded-md bg-destructive/15 px-3 py-2 text-sm text-destructive">
           {notice}
         </p>
       )}
@@ -455,12 +451,12 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
                 }
                 className={clsx(
                   'relative flex w-full items-center justify-between overflow-hidden rounded-lg border px-3 py-2 text-left',
-                  mine ? 'border-purple-500' : 'border-border',
+                  mine ? 'border-primary' : 'border-border',
                   (busy || pollNative) && 'opacity-60'
                 )}
               >
                 <span
-                  className="absolute inset-y-0 left-0 bg-purple-500/15"
+                  className="absolute inset-y-0 left-0 bg-primary/15"
                   style={{ width: `${pct}%` }}
                 />
                 <span className="relative font-medium">
@@ -563,12 +559,12 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
                 title={title}
                 className={clsx(
                   'relative flex w-full items-center justify-between overflow-hidden rounded-lg border px-3 py-2 text-left',
-                  mine ? 'border-sky-500' : 'border-border',
+                  mine ? 'border-info' : 'border-border',
                   disabled && 'opacity-60'
                 )}
               >
                 <span
-                  className="absolute inset-y-0 left-0 bg-sky-500/15"
+                  className="absolute inset-y-0 left-0 bg-info/15"
                   style={{ width: `${pct}%` }}
                 />
                 <span className="relative font-medium">

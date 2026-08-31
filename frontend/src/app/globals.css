@@ -71,6 +71,17 @@
   --color-warning: oklch(0.8 0.15 80); /* #f0b135 */
   --color-info: oklch(0.75 0.13 240); /* #55b8f8 */
 
+  /* "Paid feature", NOT "caution" — premium badges, the upgrade pill, the
+     admin premium-duration chips. It earns its own token because it is the
+     single largest cluster of raw palette classes in the codebase (~45 uses of
+     amber-400/amber-500) and because `warning` already means something else.
+
+     Deliberately warmer than --color-warning (hue 65 vs 80): written as
+     amber-400 the two were nearly the same paint, so a "costs money" marker
+     and a "something may go wrong" marker were indistinguishable side by side.
+     Locked apart by src/app/__tests__/token-contrast.test.ts. */
+  --color-premium: oklch(0.82 0.14 65); /* #ffb059 */
+
   /* --------------------------------------------------
      TIER 2b: SHADCN COMPATIBILITY LAYER (ADR-0056)
 

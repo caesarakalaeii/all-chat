@@ -85,14 +85,16 @@ export default function ThemeCard({
         {/* Name and Favorite */}
         <div className="mb-2 flex items-start justify-between gap-2">
           <h3 className="flex-1 text-base leading-tight font-semibold text-text">{theme.name}</h3>
-          <button
+          <Button
             onClick={() => onToggleFavorite(theme.id)}
-            className="flex-shrink-0 text-xl transition-transform hover:scale-110"
+            variant="ghost"
+            size="icon-sm"
+            className="shrink-0 text-xl hover:scale-110"
             aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
             title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
           >
             {isFavorite ? '⭐' : '☆'}
-          </button>
+          </Button>
         </div>
 
         {/* Description */}

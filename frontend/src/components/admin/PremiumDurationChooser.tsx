@@ -105,8 +105,8 @@ export function PremiumDurationChooser({ onChange, disabled }: PremiumDurationCh
   const chipClass = (active: boolean) =>
     clsx(
       active
-        ? 'border-amber-400 bg-amber-400/10 text-amber-400'
-        : 'border-border text-text-sub hover:border-amber-500/40 hover:text-text'
+        ? 'border-premium bg-premium/10 text-premium'
+        : 'border-border text-text-sub hover:border-premium/40 hover:text-text'
     )
 
   return (

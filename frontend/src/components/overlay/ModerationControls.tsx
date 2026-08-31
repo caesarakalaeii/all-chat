@@ -111,21 +111,23 @@ export function ModerationControls({
       {/* Delete — revealed on row hover. Hidden for moderatable sources that don't
           support single-message delete (Kick/YouTube). */}
       {showDelete && (
-        <button
+        <Button
           type="button"
           onClick={() => onDelete(item)}
           disabled={!can('delete')}
           title={disabled ? disabledReason : t('viewerOverlay.moderationControls.deleteMessage')}
           aria-label={t('viewerOverlay.moderationControls.deleteMessage')}
+          variant="ghost"
+          size="icon-xs"
           className={clsx(
-            'rounded p-0.5 opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none',
+            'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
             can('delete')
-              ? 'text-text-dim hover:bg-red-500/10 hover:text-red-400'
-              : 'cursor-not-allowed text-text-dim/50'
+              ? 'text-text-dim hover:bg-destructive/10 hover:text-destructive'
+              : 'text-text-dim/50'
           )}
         >
           <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        </Button>
       )}
 
       {/* Per-user actions trigger. Hidden for moderatable sources with no per-user
@@ -134,20 +136,20 @@ export function ModerationControls({
         <Popover.Root>
           <Popover.Trigger
             render={
-              <button
+              <Button
                 type="button"
                 disabled={disabled}
                 title={disabled ? disabledReason : t('viewerOverlay.moderationControls.menuLabel')}
                 aria-label={t('viewerOverlay.moderationControls.menuLabel')}
+                variant="ghost"
+                size="icon-xs"
                 className={clsx(
-                  'rounded p-0.5 opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none',
-                  disabled
-                    ? 'cursor-not-allowed text-text-dim/50'
-                    : 'text-text-dim hover:bg-surface-2 hover:text-text'
+                  'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
+                  disabled ? 'text-text-dim/50' : 'text-text-dim'
                 )}
               >
                 <Clock className="h-3.5 w-3.5" />
-              </button>
+              </Button>
             }
           />
           <Popover.Content className="w-44 border-border bg-surface p-2">

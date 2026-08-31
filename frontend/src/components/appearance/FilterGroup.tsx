@@ -91,13 +91,15 @@ function TagInput({
           className="flex items-center gap-1 rounded bg-surface-2 px-2 py-0.5 text-xs text-text"
         >
           {tag}
-          <button
+          <Button
             type="button"
             onClick={() => onRemove(tag)}
             aria-label={t('overlayEditor.filters.removeTag', { tag })}
+            variant="ghost"
+            size="icon-xs"
           >
             <X className="h-3 w-3" />
-          </button>
+          </Button>
         </span>
       ))}
       <Input

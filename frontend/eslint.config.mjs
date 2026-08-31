@@ -150,20 +150,37 @@ export default defineConfig([
 
   // OBS render surfaces and theme previews.
   //
-  // Everything under src/app/overlay/** (plus the embed preview and the
-  // marketplace theme preview) is BROADCAST ART rendered inside OBS, not app
-  // chrome: user-themable, composited over arbitrary gameplay footage, and
-  // already carved out of the app's design guarantees elsewhere — see the
-  // scope note in src/app/__tests__/token-contrast.test.ts and the separate
-  // floor in tests/e2e/theme-contrast.spec.ts.
+  // These files are BROADCAST ART rendered inside OBS, not app chrome:
+  // user-themable, composited over arbitrary gameplay footage, and already
+  // carved out of the app's design guarantees elsewhere — see the scope note in
+  // src/app/__tests__/token-contrast.test.ts and the separate floor in
+  // tests/e2e/theme-contrast.spec.ts.
   //
   // The app's neutral tokens (bg / surface / text) describe the CHROME's
   // palette and are the wrong vocabulary for a credits roll or a chat bubble
   // that has to read over someone's stream. The other ENFORCE-03 rules
   // (no template classNames, focus-visible) still apply here.
+  //
+  // LISTED INDIVIDUALLY, not as `src/app/overlay/**`. ADR-0056 originally
+  // excluded the whole directory, which was wrong: only four of its six routes
+  // render into a browser source. `/overlay/[id]/view` is the streamer's
+  // MONITOR page (chat plus moderation controls) and `/overlay/[id]/participate`
+  // is a viewer-facing web page — both are ordinary app chrome that was being
+  // let out of the design system by an over-broad glob. Add a route here only
+  // if it actually renders transparent into OBS.
   {
     files: [
-      'src/app/overlay/**/*.tsx',
+      // `*` rather than the literal `[id]`: square brackets are a glob
+      // CHARACTER CLASS, so 'src/app/overlay/[id]/page.tsx' matches
+      // `overlay/i/page.tsx` and `overlay/d/page.tsx` and never the real
+      // route — an exclusion that silently excludes nothing. (Caught here by
+      // the rule firing on files it was meant to skip; there is one dynamic
+      // segment under overlay/, so `*` is exact.)
+      'src/app/overlay/*/page.tsx',
+      'src/app/overlay/*/credits/page.tsx',
+      'src/app/overlay/*/poll/page.tsx',
+      'src/app/overlay/*/prediction/page.tsx',
+      'src/components/overlay/EventContent.tsx',
       'src/app/overlays/**/preview/embed/*.tsx',
       'src/components/theme-marketplace/ThemePreview.tsx',
     ],

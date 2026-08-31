@@ -237,6 +237,7 @@ describe('status token contrast (WCAG 2.2 AA)', () => {
     '--color-success',
     '--color-warning',
     '--color-info',
+    '--color-premium',
   ] as const
 
   for (const status of STATUS_TOKENS) {
@@ -246,6 +247,15 @@ describe('status token contrast (WCAG 2.2 AA)', () => {
       })
     }
   }
+
+  it('--color-premium is visually distinct from --color-warning', () => {
+    // Both are golds, and before the token existed "premium" was written as
+    // amber-400 — which is very nearly the warning colour. Two tokens carrying
+    // different meanings must not resolve to the same paint, or a "paid
+    // feature" marker and a "something may go wrong" marker become
+    // indistinguishable wherever they sit near each other.
+    expect(token('--color-premium')).not.toEqual(token('--color-warning'))
+  })
 })
 
 describe('shadcn compatibility layer', () => {

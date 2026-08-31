@@ -324,7 +324,7 @@ export default function AdminViewersPage() {
         className={clsx(
           'inline-flex items-center rounded px-2 py-0.5 text-xs font-medium transition-colors',
           viewer.is_premium
-            ? 'bg-amber-400/10 text-amber-400 hover:bg-amber-400/20'
+            ? 'bg-premium/10 text-premium hover:bg-premium/20'
             : 'bg-surface-2 text-text-dim hover:bg-surface-2/80'
         )}
         onClick={() => {
@@ -756,7 +756,7 @@ export default function AdminViewersPage() {
             </Dialog.Description>
             {premiumDialogViewer.is_premium ? (
               premiumDialogViewer.premium_expires_at && (
-                <p className="mt-2 text-xs font-medium text-amber-400/80">
+                <p className="mt-2 text-xs font-medium text-premium/80">
                   {t('admin.viewers.premiumExpires', {
                     timestamp: formatTimestamp(new Date(premiumDialogViewer.premium_expires_at)),
                   })}

@@ -209,7 +209,7 @@ export default function AdminFeaturesPage() {
                       className={cn(
                         'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-bold',
                         gate.is_premium
-                          ? 'border-amber-500/20 bg-amber-500/10 text-amber-400'
+                          ? 'border-premium/20 bg-premium/10 text-premium'
                           : 'border-green-500/20 bg-green-500/10 text-green-400'
                       )}
                     >
@@ -228,7 +228,7 @@ export default function AdminFeaturesPage() {
                       className={cn(
                         // eslint-disable-next-line tailwindcss/no-unnecessary-arbitrary-value -- the 28x52px track and its 44px tap target are fixed physical dimensions: 44px is the WCAG 2.5.8 minimum, and the knob inside travels a hard-coded translate-x-[26px]. h-7/min-h-11/w-13 are rem-relative, so at any non-default root font size the track would resize while the knob's travel would not, and the knob would stop short of or overshoot the far end
                         'relative inline-flex h-[28px] min-h-[44px] w-[52px] items-center rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none',
-                        gate.is_premium ? 'bg-amber-500/20' : 'bg-green-500/20',
+                        gate.is_premium ? 'bg-premium/20' : 'bg-green-500/20',
                         premiumBusy ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
                       )}
                     >

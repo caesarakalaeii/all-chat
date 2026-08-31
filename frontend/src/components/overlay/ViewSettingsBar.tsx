@@ -78,21 +78,17 @@ export function ViewSettingsBar({ prefs, onChange, onTestActivitySound }: ViewSe
 
   return (
     <div className="relative" ref={containerRef}>
-      <button
+      <Button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-label={t('viewerOverlay.viewSettings.buttonLabel')}
-        className={clsx(
-          'flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none',
-          open
-            ? 'border-border-md bg-surface-2 text-text'
-            : 'border-border text-text-sub hover:border-border-md hover:text-text'
-        )}
+        variant="outline"
+        size="sm"
       >
         <Settings className="h-3.5 w-3.5" />
         {t('viewerOverlay.viewSettings.buttonText')}
-      </button>
+      </Button>
 
       {open && (
         <div className="absolute right-0 z-50 mt-2 w-64 rounded-lg border border-border bg-surface p-3 shadow-lg">

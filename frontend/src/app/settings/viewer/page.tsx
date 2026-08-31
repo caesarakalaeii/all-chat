@@ -339,7 +339,7 @@ function ColorGradientCard({ claims }: { claims: ViewerJWTClaims }) {
           <TabsTrigger value="gradient" disabled={!claims.is_premium}>
             {t('settings.viewer.gradientTab')}
             {!claims.is_premium && (
-              <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-xs text-amber-400">
+              <span className="rounded bg-premium/20 px-1.5 py-0.5 text-xs text-premium">
                 {t('settings.viewer.premiumPill')}
               </span>
             )}
@@ -690,7 +690,12 @@ function AvatarCosmeticsCard({ claims }: { claims: ViewerJWTClaims }) {
               onClick={() => handleSelectFrame(item)}
               disabled={item.is_premium && !isPremium}
               className={cn(
+                // A picker tile, deliberately not <Button>: the primitive is a
+                // fixed-height centred inline-flex row, so a two-line image+label
+                // tile would have to override h-auto/flex-col/border-2 and keep
+                // almost nothing. It still owes the user a focus ring.
                 'relative rounded-lg border-2 p-1 transition-colors',
+                'focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none',
                 selectedFrameId === item.id
                   ? 'border-twitch bg-surface-2'
                   : 'border-border hover:border-text-sub',
@@ -728,7 +733,12 @@ function AvatarCosmeticsCard({ claims }: { claims: ViewerJWTClaims }) {
               onClick={() => handleSelectFlair(item)}
               disabled={item.is_premium && !isPremium}
               className={cn(
+                // A picker tile, deliberately not <Button>: the primitive is a
+                // fixed-height centred inline-flex row, so a two-line image+label
+                // tile would have to override h-auto/flex-col/border-2 and keep
+                // almost nothing. It still owes the user a focus ring.
                 'relative rounded-lg border-2 p-1 transition-colors',
+                'focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none',
                 selectedFlairId === item.id
                   ? 'border-twitch bg-surface-2'
                   : 'border-border hover:border-text-sub',

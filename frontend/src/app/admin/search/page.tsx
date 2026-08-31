@@ -208,7 +208,7 @@ export default function AdminSearchPage() {
                   </div>
                   <div className="ml-auto flex gap-1">
                     {u.is_premium && (
-                      <span className="rounded bg-amber-400/10 px-2 py-0.5 text-xs font-medium text-amber-400">
+                      <span className="rounded bg-premium/10 px-2 py-0.5 text-xs font-medium text-premium">
                         {t('admin.search.badgePremium')}
                       </span>
                     )}

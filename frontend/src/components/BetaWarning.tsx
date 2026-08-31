@@ -110,12 +110,9 @@ export function BetaWarning({ platform, onCancel, onContinue }: BetaWarningProps
           <Button onClick={onCancel} variant="secondary" size="lg">
             {t('common.betaWarning.cancelButton')}
           </Button>
-          <button
-            onClick={onContinue}
-            className="rounded-lg bg-yellow-600 px-4 py-2 font-medium text-white transition-opacity hover:opacity-80"
-          >
+          <Button onClick={onContinue} size="lg">
             {t('common.betaWarning.continueButton')}
-          </button>
+          </Button>
         </div>
       </Dialog.Content>
     </Dialog.Root>
