@@ -970,3 +970,44 @@ describe('custom CSS section copy', () => {
     expect(t('overlayEditor.customCss.themeDocsLink')).toBe('theme docs')
   })
 })
+
+describe('testing and danger zone copy', () => {
+  it('keeps the mock message form fields', () => {
+    expect(t('overlayEditor.testing.platformLabel')).toBe('Platform')
+    expect(t('overlayEditor.testing.displayNameLabel')).toBe('Display Name')
+    expect(t('overlayEditor.testing.usernameLabel')).toBe('Username')
+    expect(t('overlayEditor.testing.avatarUrlLabel')).toBe('Avatar URL')
+    expect(t('overlayEditor.testing.avatarUrlPlaceholder')).toBe('https://...')
+    expect(t('overlayEditor.testing.nameColorLabel')).toBe('Name Color')
+    expect(t('overlayEditor.testing.messageLabel')).toBe('Message')
+    expect(t('overlayEditor.testing.messagePlaceholder')).toBe('Type something fun...')
+    expect(t('overlayEditor.testing.injectMessage')).toBe('Inject Message')
+    expect(t('overlayEditor.testing.sampleChat')).toBe('\u{1F4AC} Sample Chat')
+    expect(t('overlayEditor.testing.sampleEvents')).toBe('\u2B50 Sample Events')
+  })
+
+  it('keeps the danger zone explainer and its confirm dialog', () => {
+    expect(t('overlayEditor.dangerZone.explainer')).toBe(
+      'Reset your overlay ID to revoke any leaked OBS URLs. A new overlay with the same configuration will be created and you will be redirected to it. The old overlay and its URL will be permanently deleted.'
+    )
+    expect(t('overlayEditor.dangerZone.resetOverlayId')).toBe('Reset Overlay ID')
+    expect(t('overlayEditor.dangerZone.resetting')).toBe('Resetting\u2026')
+    expect(t('overlayEditor.dangerZone.confirmTitle')).toBe('Reset Overlay ID?')
+    expect(t('overlayEditor.dangerZone.confirmBody')).toBe(
+      'This will create a new overlay with a fresh ID and permanently delete this one. Any existing OBS URLs will stop working \u2014 update your browser source after the reset.'
+    )
+    expect(t('overlayEditor.dangerZone.cancel')).toBe('Cancel')
+    expect(t('overlayEditor.dangerZone.confirmReset')).toBe('Reset ID')
+  })
+
+  it('keeps the theme-apply confirm dialog and the save footer', () => {
+    expect(t('overlayEditor.page.applyThemeTitle')).toBe('Apply theme?')
+    expect(t('overlayEditor.page.applyThemeBody')).toBe(
+      'Loading this theme will reset your visual customizations. Continue?'
+    )
+    expect(t('overlayEditor.page.applyThemeCancel')).toBe('Cancel')
+    expect(t('overlayEditor.page.applyThemeContinue')).toBe('Continue')
+    expect(t('overlayEditor.page.saveConfiguration')).toBe('Save Configuration')
+    expect(t('overlayEditor.page.savingConfiguration')).toBe('Saving...')
+  })
+})
