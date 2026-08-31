@@ -30,6 +30,7 @@ import { toastManager } from '@/lib/toast'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { PremiumDurationChooser } from '@/components/admin/PremiumDurationChooser'
 import { UserAvatar } from '@/components/UserAvatar'
+import { useTranslations } from '@/lib/i18n'
 
 interface User {
   id: string
@@ -66,6 +67,7 @@ interface UserOverlay {
 export default function UsersPage() {
   const router = useRouter()
   const { startImpersonation } = useAuthStore()
+  const t = useTranslations()
   const [users, setUsers] = useState<User[]>([])
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [userOverlays, setUserOverlays] = useState<UserOverlay[]>([])
@@ -151,13 +153,13 @@ export default function UsersPage() {
         }
       } catch (err) {
         console.error('Failed to load users:', err)
-        setError('Failed to load users')
+        setError(t('admin.users.loadError'))
         setLoading(false)
       }
     }
 
     fetchUsers()
-  }, [])
+  }, [t])
 
   // Fetch overlays for selected user
   useEffect(() => {
@@ -212,7 +214,7 @@ export default function UsersPage() {
       router.push('/')
     } catch (err) {
       console.error('Failed to impersonate user:', err)
-      toastManager.add({ title: 'Failed to start impersonation. Please try again.', type: 'error' })
+      toastManager.add({ title: t('admin.users.impersonateError'), type: 'error' })
     } finally {
       setImpersonating(false)
       setImpersonateDialogUser(null)
@@ -236,10 +238,13 @@ export default function UsersPage() {
 
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to ban user')
+        throw new Error(errorData.error || t('admin.users.banError'))
       }
 
-      toastManager.add({ title: `${userToBan.username} banned successfully`, type: 'success' })
+      toastManager.add({
+        title: t('admin.users.banSuccess', { username: userToBan.username }),
+        type: 'success',
+      })
       setShowBanModal(false)
       setUserToBan(null)
       setBanReason('')
@@ -250,7 +255,7 @@ export default function UsersPage() {
         setSelectedUser(null)
       }
     } catch (err: any) {
-      toastManager.add({ title: err.message || 'Failed to ban user', type: 'error' })
+      toastManager.add({ title: err.message || t('admin.users.banError'), type: 'error' })
     } finally {
       setBanLoading(false)
     }
@@ -266,14 +271,17 @@ export default function UsersPage() {
 
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to unban user')
+        throw new Error(errorData.error || t('admin.users.unbanError'))
       }
 
-      toastManager.add({ title: `${username} unbanned successfully`, type: 'success' })
+      toastManager.add({
+        title: t('admin.users.unbanSuccess', { username }),
+        type: 'success',
+      })
       setUnbanDialogUser(null)
       await refetchUsers()
     } catch (err: any) {
-      toastManager.add({ title: err.message || 'Failed to unban user', type: 'error' })
+      toastManager.add({ title: err.message || t('admin.users.unbanError'), type: 'error' })
     }
   }
 
@@ -302,13 +310,13 @@ export default function UsersPage() {
 
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to update premium status')
+        throw new Error(errorData.error || t('admin.users.premiumError'))
       }
 
       toastManager.add({
         title: isPremium
-          ? `${username} granted premium access`
-          : `${username} premium access removed`,
+          ? t('admin.users.premiumGranted', { username })
+          : t('admin.users.premiumRemoved', { username }),
         type: 'success',
       })
       setPremiumDialogUser(null)
@@ -328,7 +336,7 @@ export default function UsersPage() {
         )
       }
     } catch (err: any) {
-      toastManager.add({ title: err.message || 'Failed to update premium status', type: 'error' })
+      toastManager.add({ title: err.message || t('admin.users.premiumError'), type: 'error' })
     } finally {
       setPremiumLoading(false)
     }
@@ -351,13 +359,13 @@ export default function UsersPage() {
 
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to update beta-tester status')
+        throw new Error(errorData.error || t('admin.users.betaError'))
       }
 
       toastManager.add({
         title: isBetaTester
-          ? `${username} is now a beta tester`
-          : `${username} is no longer a beta tester`,
+          ? t('admin.users.betaGranted', { username })
+          : t('admin.users.betaRemoved', { username }),
         type: 'success',
       })
       setBetaDialogUser(null)
@@ -374,7 +382,7 @@ export default function UsersPage() {
       }
     } catch (err: any) {
       toastManager.add({
-        title: err.message || 'Failed to update beta-tester status',
+        title: err.message || t('admin.users.betaError'),
         type: 'error',
       })
     } finally {
@@ -410,13 +418,13 @@ export default function UsersPage() {
       })
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to update ambassador status')
+        throw new Error(errorData.error || t('admin.users.ambassadorError'))
       }
 
       toastManager.add({
         title: isAmbassador
-          ? `${username} is now an ambassador`
-          : `${username} is no longer an ambassador`,
+          ? t('admin.users.ambassadorGranted', { username })
+          : t('admin.users.ambassadorRemoved', { username }),
         type: 'success',
       })
       setAmbassadorDialogUser(null)
@@ -431,7 +439,7 @@ export default function UsersPage() {
       }
     } catch (err: any) {
       toastManager.add({
-        title: err.message || 'Failed to update ambassador status',
+        title: err.message || t('admin.users.ambassadorError'),
         type: 'error',
       })
     } finally {
@@ -485,8 +493,8 @@ export default function UsersPage() {
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-text">Users</h1>
-        <p className="mt-1 text-sm text-text-sub">Manage and view all users in the system</p>
+        <h1 className="text-2xl font-bold text-text">{t('admin.users.heading')}</h1>
+        <p className="mt-1 text-sm text-text-sub">{t('admin.users.intro')}</p>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -501,13 +509,15 @@ export default function UsersPage() {
           ) : (
             <Card className="overflow-hidden">
               <div className="border-b border-border px-4 py-5">
-                <h3 className="text-base font-medium text-text">All Users ({users.length})</h3>
+                <h3 className="text-base font-medium text-text">
+                  {t('admin.users.listHeading', { count: users.length })}
+                </h3>
 
                 {/* Search Input */}
                 <div className="mt-4">
                   <input
                     type="text"
-                    placeholder="Search by username, display name, or platform ID..."
+                    placeholder={t('admin.users.searchPlaceholder')}
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="focus-visible:ring-ring w-full rounded-lg border border-border bg-surface-2 px-4 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none"
@@ -525,7 +535,7 @@ export default function UsersPage() {
                         : 'border-transparent text-text-sub hover:border-border hover:text-text'
                     )}
                   >
-                    All ({users.length})
+                    {t('admin.users.tabAll', { count: users.length })}
                   </button>
                   <button
                     onClick={() => setFilter('active')}
@@ -536,7 +546,7 @@ export default function UsersPage() {
                         : 'border-transparent text-text-sub hover:border-border hover:text-text'
                     )}
                   >
-                    Active ({activeCount})
+                    {t('admin.users.tabActive', { count: activeCount })}
                   </button>
                   <button
                     onClick={() => setFilter('banned')}
@@ -547,7 +557,7 @@ export default function UsersPage() {
                         : 'border-transparent text-text-sub hover:border-border hover:text-text'
                     )}
                   >
-                    Banned ({bannedCount})
+                    {t('admin.users.tabBanned', { count: bannedCount })}
                   </button>
                   <button
                     onClick={() => setFilter('premium')}
@@ -558,7 +568,7 @@ export default function UsersPage() {
                         : 'border-transparent text-text-sub hover:border-border hover:text-text'
                     )}
                   >
-                    Premium ({premiumCount})
+                    {t('admin.users.tabPremium', { count: premiumCount })}
                   </button>
                   <button
                     onClick={() => setFilter('beta')}
@@ -569,11 +579,11 @@ export default function UsersPage() {
                         : 'border-transparent text-text-sub hover:border-border hover:text-text'
                     )}
                   >
-                    Beta ({betaCount})
+                    {t('admin.users.tabBeta', { count: betaCount })}
                   </button>
                   <button
                     onClick={() => setFilter('unconfigured')}
-                    title="Signed up but never configured a chat source (0 overlays or 0 sources)"
+                    title={t('admin.users.tabNoSetupTitle')}
                     className={clsx(
                       'border-b-2 px-1 pb-2 text-sm font-medium transition-colors',
                       filter === 'unconfigured'
@@ -581,7 +591,7 @@ export default function UsersPage() {
                         : 'border-transparent text-text-sub hover:border-border hover:text-text'
                     )}
                   >
-                    No setup ({unconfiguredCount})
+                    {t('admin.users.tabNoSetup', { count: unconfiguredCount })}
                   </button>
                 </div>
               </div>
@@ -610,52 +620,56 @@ export default function UsersPage() {
                               <div className="ml-2 flex space-x-1">
                                 {user.is_ambassador && (
                                   <span className="inline-flex items-center rounded border border-sky-500/20 bg-sky-500/10 px-2 py-0.5 text-xs font-medium text-sky-400">
-                                    AMBASSADOR
+                                    {t('admin.users.badgeAmbassador')}
                                   </span>
                                 )}
                                 {user.is_beta_tester && !user.is_ambassador && (
                                   <span className="inline-flex items-center rounded border border-violet-500/20 bg-violet-500/10 px-2 py-0.5 text-xs font-medium text-violet-400">
-                                    BETA
+                                    {t('admin.users.badgeBeta')}
                                   </span>
                                 )}
                                 {user.is_premium && !user.is_beta_tester && !user.is_ambassador && (
                                   <span className="inline-flex items-center rounded border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400">
-                                    PREMIUM
+                                    {t('admin.users.badgePremium')}
                                   </span>
                                 )}
                                 {user.is_banned && (
                                   <span className="bg-destructive/10 text-destructive border-destructive/20 inline-flex items-center rounded border px-2 py-0.5 text-xs font-medium">
-                                    BANNED
+                                    {t('admin.users.badgeBanned')}
                                   </span>
                                 )}
                                 {user.sources_count === 0 && (
                                   <span
                                     className="inline-flex items-center rounded border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400"
-                                    title="Signed up but never configured a chat source"
+                                    title={t('admin.users.badgeNoSetupTitle')}
                                   >
-                                    {user.overlays_count === 0 ? 'NO OVERLAY' : 'NO SOURCES'}
+                                    {user.overlays_count === 0
+                                      ? t('admin.users.badgeNoOverlay')
+                                      : t('admin.users.badgeNoSources')}
                                   </span>
                                 )}
                                 {user.twitch_id && (
                                   <span className="inline-flex items-center rounded bg-badge-bg px-2 py-0.5 text-xs font-medium text-twitch">
-                                    Twitch
+                                    {t('common.platforms.twitch')}
                                   </span>
                                 )}
                                 {user.youtube_id && (
                                   <span className="inline-flex items-center rounded bg-badge-bg px-2 py-0.5 text-xs font-medium text-youtube">
-                                    YouTube
+                                    {t('common.platforms.youtube')}
                                   </span>
                                 )}
                                 {user.kick_id && (
                                   <span className="inline-flex items-center rounded bg-badge-bg px-2 py-0.5 text-xs font-medium text-kick">
-                                    Kick
+                                    {t('common.platforms.kick')}
                                   </span>
                                 )}
                               </div>
                             </div>
                             <p className="text-sm text-text-sub">@{user.username}</p>
                             <p className="mt-1 text-xs text-text-dim">
-                              Joined {new Date(user.created_at).toLocaleDateString()}
+                              {t('admin.users.rowJoined', {
+                                date: new Date(user.created_at).toLocaleDateString(),
+                              })}
                             </p>
                           </div>
                         </div>
@@ -681,7 +695,7 @@ export default function UsersPage() {
                 ))}
                 {displayUsers.length === 0 && (
                   <li className="px-4 py-10 text-center text-sm text-text-dim">
-                    No users match your search or filter.
+                    {t('admin.users.empty')}
                   </li>
                 )}
               </ul>
@@ -709,31 +723,43 @@ export default function UsersPage() {
               <div className="px-4 py-5">
                 <dl className="space-y-4">
                   <div>
-                    <dt className="text-sm font-medium text-text-sub">ID</dt>
+                    <dt className="text-sm font-medium text-text-sub">
+                      {t('admin.users.detailId')}
+                    </dt>
                     <dd className="mt-1 font-mono text-sm break-all text-text">
                       {selectedUser.id}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-sm font-medium text-text-sub">Username</dt>
+                    <dt className="text-sm font-medium text-text-sub">
+                      {t('admin.users.detailUsername')}
+                    </dt>
                     <dd className="mt-1 text-sm text-text">{selectedUser.username}</dd>
                   </div>
                   <div>
-                    <dt className="text-sm font-medium text-text-sub">Display Name</dt>
+                    <dt className="text-sm font-medium text-text-sub">
+                      {t('admin.users.detailDisplayName')}
+                    </dt>
                     <dd className="mt-1 text-sm text-text">{selectedUser.display_name}</dd>
                   </div>
                   <div>
-                    <dt className="text-sm font-medium text-text-sub">Auth Provider</dt>
+                    <dt className="text-sm font-medium text-text-sub">
+                      {t('admin.users.detailAuthProvider')}
+                    </dt>
                     <dd className="mt-1 text-sm text-text capitalize">
                       {selectedUser.auth_provider}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-sm font-medium text-text-sub">Connected Platforms</dt>
+                    <dt className="text-sm font-medium text-text-sub">
+                      {t('admin.users.detailPlatforms')}
+                    </dt>
                     <dd className="mt-2 space-y-1">
                       {selectedUser.twitch_id && (
                         <div className="flex items-center text-sm">
-                          <span className="font-medium text-twitch">Twitch:</span>
+                          <span className="font-medium text-twitch">
+                            {t('admin.users.platformIdTwitch')}
+                          </span>
                           <span className="ml-2 font-mono text-xs text-text-sub">
                             {selectedUser.twitch_id}
                           </span>
@@ -741,7 +767,9 @@ export default function UsersPage() {
                       )}
                       {selectedUser.youtube_id && (
                         <div className="flex items-center text-sm">
-                          <span className="font-medium text-youtube">YouTube:</span>
+                          <span className="font-medium text-youtube">
+                            {t('admin.users.platformIdYouTube')}
+                          </span>
                           <span className="ml-2 font-mono text-xs text-text-sub">
                             {selectedUser.youtube_id}
                           </span>
@@ -749,7 +777,9 @@ export default function UsersPage() {
                       )}
                       {selectedUser.kick_id && (
                         <div className="flex items-center text-sm">
-                          <span className="font-medium text-kick">Kick:</span>
+                          <span className="font-medium text-kick">
+                            {t('admin.users.platformIdKick')}
+                          </span>
                           <span className="ml-2 font-mono text-xs text-text-sub">
                             {selectedUser.kick_id}
                           </span>
@@ -789,32 +819,35 @@ export default function UsersPage() {
                               d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
                             />
                           </svg>
-                          View as {selectedUser.username}
+                          {t('admin.users.viewAsButton', { username: selectedUser.username })}
                         </Button>
                       }
                     />
                     <Dialog.Content showCloseButton={false}>
                       <Dialog.Title>
-                        Impersonate &ldquo;{selectedUser.username}&rdquo;?
+                        {t('admin.users.impersonateTitle', { username: selectedUser.username })}
                       </Dialog.Title>
-                      <Dialog.Description>
-                        This will replace your current session. You can return to admin by using the
-                        stored admin token.
-                      </Dialog.Description>
+                      <Dialog.Description>{t('admin.users.impersonateBody')}</Dialog.Description>
                       <div className="mt-6 flex justify-end gap-3">
-                        <Dialog.Close render={<Button variant="outline">Cancel</Button>} />
+                        <Dialog.Close
+                          render={
+                            <Button variant="outline">{t('admin.users.impersonateCancel')}</Button>
+                          }
+                        />
                         <Button
                           variant="default"
                           disabled={impersonating}
                           onClick={() => handleImpersonate(selectedUser.id)}
                         >
-                          {impersonating ? 'Switching...' : 'Impersonate'}
+                          {impersonating
+                            ? t('admin.users.impersonateSwitching')
+                            : t('admin.users.impersonateConfirm')}
                         </Button>
                       </div>
                     </Dialog.Content>
                   </Dialog.Root>
                   <p className="mt-2 text-center text-xs text-text-dim">
-                    Temporarily act as this user to debug issues
+                    {t('admin.users.impersonateHint')}
                   </p>
                 </div>
 
@@ -823,14 +856,17 @@ export default function UsersPage() {
                   {selectedUser.is_premium ? (
                     <>
                       <div className="mb-3 rounded-lg border border-amber-500/20 bg-amber-500/10 p-3">
-                        <p className="text-sm font-medium text-amber-400">Premium access active</p>
+                        <p className="text-sm font-medium text-amber-400">
+                          {t('admin.users.premiumActiveTitle')}
+                        </p>
                         <p className="mt-1 text-xs text-amber-400/70">
-                          This user can create and accept share requests.
+                          {t('admin.users.premiumActiveBody')}
                         </p>
                         {selectedUser.premium_expires_at && (
                           <p className="mt-1 text-xs font-medium text-amber-400/70">
-                            Time-limited &mdash; expires{' '}
-                            {new Date(selectedUser.premium_expires_at).toLocaleString()}
+                            {t('admin.users.premiumExpires', {
+                              timestamp: new Date(selectedUser.premium_expires_at).toLocaleString(),
+                            })}
                           </p>
                         )}
                       </div>
@@ -848,19 +884,23 @@ export default function UsersPage() {
                             <Button
                               variant="outline"
                               className="w-full"
-                              aria-label={`Revoke Premium for ${selectedUser.username}`}
+                              aria-label={t('admin.users.revokePremiumLabel', {
+                                username: selectedUser.username,
+                              })}
                               onClick={() => setPremiumDialogUser(selectedUser)}
                             >
-                              Revoke Premium
+                              {t('admin.users.revokePremiumButton')}
                             </Button>
                           }
                         />
                         <Dialog.Content showCloseButton={false}>
                           <Dialog.Title>
-                            Revoke premium for &ldquo;{selectedUser.username}&rdquo;?
+                            {t('admin.users.revokePremiumTitle', {
+                              username: selectedUser.username,
+                            })}
                           </Dialog.Title>
                           <Dialog.Description>
-                            They will no longer be able to create or accept share requests.
+                            {t('admin.users.revokePremiumBody')}
                           </Dialog.Description>
                           <div className="mt-6 flex justify-end gap-3">
                             <Dialog.Close
@@ -877,7 +917,9 @@ export default function UsersPage() {
                                 handleSetPremium(selectedUser.id, selectedUser.username, false)
                               }
                             >
-                              {premiumLoading ? 'Saving...' : 'Revoke Premium'}
+                              {premiumLoading
+                                ? t('admin.users.saving')
+                                : t('admin.users.revokePremiumButton')}
                             </Button>
                           </div>
                         </Dialog.Content>
@@ -898,7 +940,9 @@ export default function UsersPage() {
                           <Button
                             variant="outline"
                             className="w-full border-amber-500/40 text-amber-400 hover:border-amber-500/60 hover:bg-amber-500/10"
-                            aria-label={`Grant Premium to ${selectedUser.username}`}
+                            aria-label={t('admin.users.grantPremiumLabel', {
+                              username: selectedUser.username,
+                            })}
                             onClick={() => {
                               // Reset the duration selection to the default (Permanent)
                               // each time the grant dialog opens.
@@ -907,17 +951,15 @@ export default function UsersPage() {
                               setPremiumDialogUser(selectedUser)
                             }}
                           >
-                            Grant Premium
+                            {t('admin.users.grantPremiumButton')}
                           </Button>
                         }
                       />
                       <Dialog.Content showCloseButton={false}>
                         <Dialog.Title>
-                          Grant premium to &ldquo;{selectedUser.username}&rdquo;?
+                          {t('admin.users.grantPremiumTitle', { username: selectedUser.username })}
                         </Dialog.Title>
-                        <Dialog.Description>
-                          They will be able to create and accept chat overlay share requests.
-                        </Dialog.Description>
+                        <Dialog.Description>{t('admin.users.grantPremiumBody')}</Dialog.Description>
                         <PremiumDurationChooser
                           disabled={premiumLoading}
                           onChange={(seconds, valid) => {
@@ -945,7 +987,9 @@ export default function UsersPage() {
                               )
                             }
                           >
-                            {premiumLoading ? 'Saving...' : 'Grant Premium'}
+                            {premiumLoading
+                              ? t('admin.users.saving')
+                              : t('admin.users.grantPremiumButton')}
                           </Button>
                         </div>
                       </Dialog.Content>
@@ -958,9 +1002,11 @@ export default function UsersPage() {
                   {selectedUser.is_beta_tester ? (
                     <>
                       <div className="mb-3 rounded-lg border border-violet-500/20 bg-violet-500/10 p-3">
-                        <p className="text-sm font-medium text-violet-400">Beta tester</p>
+                        <p className="text-sm font-medium text-violet-400">
+                          {t('admin.users.betaActiveTitle')}
+                        </p>
                         <p className="mt-1 text-xs text-violet-400/70">
-                          Has all premium features plus early-access ones.
+                          {t('admin.users.betaActiveBody')}
                         </p>
                       </div>
                       <Dialog.Root
@@ -977,21 +1023,20 @@ export default function UsersPage() {
                             <Button
                               variant="outline"
                               className="w-full"
-                              aria-label={`Revoke Beta Tester for ${selectedUser.username}`}
+                              aria-label={t('admin.users.revokeBetaLabel', {
+                                username: selectedUser.username,
+                              })}
                               onClick={() => setBetaDialogUser(selectedUser)}
                             >
-                              Revoke Beta Tester
+                              {t('admin.users.revokeBetaButton')}
                             </Button>
                           }
                         />
                         <Dialog.Content showCloseButton={false}>
                           <Dialog.Title>
-                            Revoke beta tester for &ldquo;{selectedUser.username}&rdquo;?
+                            {t('admin.users.revokeBetaTitle', { username: selectedUser.username })}
                           </Dialog.Title>
-                          <Dialog.Description>
-                            They lose early-access features. Premium then follows their subscription
-                            or any admin override.
-                          </Dialog.Description>
+                          <Dialog.Description>{t('admin.users.revokeBetaBody')}</Dialog.Description>
                           <div className="mt-6 flex justify-end gap-3">
                             <Dialog.Close
                               render={
@@ -1007,7 +1052,9 @@ export default function UsersPage() {
                                 handleSetBetaTester(selectedUser.id, selectedUser.username, false)
                               }
                             >
-                              {betaLoading ? 'Saving...' : 'Revoke Beta Tester'}
+                              {betaLoading
+                                ? t('admin.users.saving')
+                                : t('admin.users.revokeBetaButton')}
                             </Button>
                           </div>
                         </Dialog.Content>
@@ -1028,21 +1075,20 @@ export default function UsersPage() {
                           <Button
                             variant="outline"
                             className="w-full border-violet-500/40 text-violet-400 hover:border-violet-500/60 hover:bg-violet-500/10"
-                            aria-label={`Grant Beta Tester to ${selectedUser.username}`}
+                            aria-label={t('admin.users.grantBetaLabel', {
+                              username: selectedUser.username,
+                            })}
                             onClick={() => setBetaDialogUser(selectedUser)}
                           >
-                            Grant Beta Tester
+                            {t('admin.users.grantBetaButton')}
                           </Button>
                         }
                       />
                       <Dialog.Content showCloseButton={false}>
                         <Dialog.Title>
-                          Grant beta tester to &ldquo;{selectedUser.username}&rdquo;?
+                          {t('admin.users.grantBetaTitle', { username: selectedUser.username })}
                         </Dialog.Title>
-                        <Dialog.Description>
-                          They gain all premium features plus early-access ones. Use this to
-                          grandfather pre-monetization premium users.
-                        </Dialog.Description>
+                        <Dialog.Description>{t('admin.users.grantBetaBody')}</Dialog.Description>
                         <div className="mt-6 flex justify-end gap-3">
                           <Dialog.Close
                             render={
@@ -1058,7 +1104,9 @@ export default function UsersPage() {
                               handleSetBetaTester(selectedUser.id, selectedUser.username, true)
                             }
                           >
-                            {betaLoading ? 'Saving...' : 'Grant Beta Tester'}
+                            {betaLoading
+                              ? t('admin.users.saving')
+                              : t('admin.users.grantBetaButton')}
                           </Button>
                         </div>
                       </Dialog.Content>
@@ -1071,36 +1119,39 @@ export default function UsersPage() {
                   {selectedUser.is_ambassador ? (
                     <>
                       <div className="mb-3 rounded-lg border border-sky-500/20 bg-sky-500/10 p-3">
-                        <p className="text-sm font-medium text-sky-400">Ambassador</p>
+                        <p className="text-sm font-medium text-sky-400">
+                          {t('admin.users.ambassadorActiveTitle')}
+                        </p>
                         <p className="mt-1 text-xs text-sky-400/70">
-                          Has all premium plus early-access features. Appears on the homepage only
-                          after the streamer opts in from their settings.
+                          {t('admin.users.ambassadorActiveBody')}
                         </p>
                       </div>
 
                       {/* Admin-curated showcase card */}
                       <div className="space-y-3">
                         <div>
-                          <p className="mb-1 text-xs font-medium text-text-sub">Showcase tagline</p>
+                          <p className="mb-1 text-xs font-medium text-text-sub">
+                            {t('admin.users.taglineLabel')}
+                          </p>
                           <input
                             type="text"
                             value={ambassadorTagline}
                             onChange={(e) => setAmbassadorTagline(e.target.value)}
                             maxLength={120}
-                            placeholder="e.g. Multistreams to Twitch, YouTube and Kick"
-                            aria-label="Ambassador showcase tagline"
+                            placeholder={t('admin.users.taglinePlaceholder')}
+                            aria-label={t('admin.users.taglineFieldLabel')}
                             className="focus-visible:ring-ring w-full rounded-lg border border-border bg-surface-2 px-4 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none"
                           />
                         </div>
                         <div>
                           <p className="mb-1 text-xs font-medium text-text-sub">
-                            Display order (lower shows first)
+                            {t('admin.users.sortOrderLabel')}
                           </p>
                           <input
                             type="number"
                             value={ambassadorSortOrder}
                             onChange={(e) => setAmbassadorSortOrder(e.target.value)}
-                            aria-label="Ambassador display order"
+                            aria-label={t('admin.users.sortOrderFieldLabel')}
                             className="focus-visible:ring-ring w-full rounded-lg border border-border bg-surface-2 px-4 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none"
                           />
                         </div>
@@ -1108,7 +1159,9 @@ export default function UsersPage() {
                           variant="outline"
                           className="w-full"
                           disabled={ambassadorLoading}
-                          aria-label={`Save showcase card for ${selectedUser.username}`}
+                          aria-label={t('admin.users.saveShowcaseLabel', {
+                            username: selectedUser.username,
+                          })}
                           onClick={() =>
                             handleSetAmbassador(selectedUser.id, selectedUser.username, true, {
                               tagline: ambassadorTagline,
@@ -1116,7 +1169,9 @@ export default function UsersPage() {
                             })
                           }
                         >
-                          {ambassadorLoading ? 'Saving...' : 'Save showcase card'}
+                          {ambassadorLoading
+                            ? t('admin.users.saving')
+                            : t('admin.users.saveShowcaseButton')}
                         </Button>
                       </div>
 
@@ -1131,20 +1186,23 @@ export default function UsersPage() {
                             <Button
                               variant="outline"
                               className="mt-3 w-full"
-                              aria-label={`Revoke Ambassador for ${selectedUser.username}`}
+                              aria-label={t('admin.users.revokeAmbassadorLabel', {
+                                username: selectedUser.username,
+                              })}
                               onClick={() => setAmbassadorDialogUser(selectedUser)}
                             >
-                              Revoke Ambassador
+                              {t('admin.users.revokeAmbassadorButton')}
                             </Button>
                           }
                         />
                         <Dialog.Content showCloseButton={false}>
                           <Dialog.Title>
-                            Revoke ambassador for &ldquo;{selectedUser.username}&rdquo;?
+                            {t('admin.users.revokeAmbassadorTitle', {
+                              username: selectedUser.username,
+                            })}
                           </Dialog.Title>
                           <Dialog.Description>
-                            They are removed from the homepage showcase and lose early-access
-                            features. Premium then follows their subscription or any admin override.
+                            {t('admin.users.revokeAmbassadorBody')}
                           </Dialog.Description>
                           <div className="mt-6 flex justify-end gap-3">
                             <Dialog.Close
@@ -1161,7 +1219,9 @@ export default function UsersPage() {
                                 handleSetAmbassador(selectedUser.id, selectedUser.username, false)
                               }
                             >
-                              {ambassadorLoading ? 'Saving...' : 'Revoke Ambassador'}
+                              {ambassadorLoading
+                                ? t('admin.users.saving')
+                                : t('admin.users.revokeAmbassadorButton')}
                             </Button>
                           </div>
                         </Dialog.Content>
@@ -1171,15 +1231,15 @@ export default function UsersPage() {
                     <div className="space-y-3">
                       <div>
                         <p className="mb-1 text-xs font-medium text-text-sub">
-                          Showcase tagline (optional)
+                          {t('admin.users.taglineOptionalLabel')}
                         </p>
                         <input
                           type="text"
                           value={ambassadorTagline}
                           onChange={(e) => setAmbassadorTagline(e.target.value)}
                           maxLength={120}
-                          placeholder="e.g. Multistreams to Twitch, YouTube and Kick"
-                          aria-label="Ambassador showcase tagline"
+                          placeholder={t('admin.users.taglinePlaceholder')}
+                          aria-label={t('admin.users.taglineFieldLabel')}
                           className="focus-visible:ring-ring w-full rounded-lg border border-border bg-surface-2 px-4 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none"
                         />
                       </div>
@@ -1187,7 +1247,9 @@ export default function UsersPage() {
                         variant="outline"
                         className="w-full border-sky-500/40 text-sky-400 hover:border-sky-500/60 hover:bg-sky-500/10"
                         disabled={ambassadorLoading}
-                        aria-label={`Grant Ambassador to ${selectedUser.username}`}
+                        aria-label={t('admin.users.grantAmbassadorLabel', {
+                          username: selectedUser.username,
+                        })}
                         onClick={() =>
                           handleSetAmbassador(selectedUser.id, selectedUser.username, true, {
                             tagline: ambassadorTagline,
@@ -1195,7 +1257,9 @@ export default function UsersPage() {
                           })
                         }
                       >
-                        {ambassadorLoading ? 'Saving...' : 'Grant Ambassador'}
+                        {ambassadorLoading
+                          ? t('admin.users.saving')
+                          : t('admin.users.grantAmbassadorButton')}
                       </Button>
                     </div>
                   )}
@@ -1207,11 +1271,15 @@ export default function UsersPage() {
                     <>
                       <div className="bg-destructive/10 border-destructive/20 mb-3 rounded-lg border p-3">
                         <p className="text-destructive text-sm font-medium">
-                          Banned: {selectedUser.banned_reason}
+                          {t('admin.users.bannedReason', {
+                            reason: selectedUser.banned_reason ?? '',
+                          })}
                         </p>
                         <p className="text-destructive/70 mt-1 text-xs">
                           {selectedUser.banned_at &&
-                            `Banned on ${new Date(selectedUser.banned_at).toLocaleString()}`}
+                            t('admin.users.bannedOn', {
+                              timestamp: new Date(selectedUser.banned_at).toLocaleString(),
+                            })}
                         </p>
                       </div>
                       {/* Unban — Dialog confirmation */}
@@ -1226,27 +1294,33 @@ export default function UsersPage() {
                             <Button
                               variant="outline"
                               className="w-full"
-                              aria-label={`Unban User ${selectedUser.username}`}
+                              aria-label={t('admin.users.unbanLabel', {
+                                username: selectedUser.username,
+                              })}
                               onClick={() => setUnbanDialogUser(selectedUser)}
                             >
-                              Unban User
+                              {t('admin.users.unbanButton')}
                             </Button>
                           }
                         />
                         <Dialog.Content showCloseButton={false}>
-                          <Dialog.Title>Unban &ldquo;{selectedUser.username}&rdquo;?</Dialog.Title>
-                          <Dialog.Description>
-                            This will restore their access to the platform.
-                          </Dialog.Description>
+                          <Dialog.Title>
+                            {t('admin.users.unbanTitle', { username: selectedUser.username })}
+                          </Dialog.Title>
+                          <Dialog.Description>{t('admin.users.unbanBody')}</Dialog.Description>
                           <div className="mt-6 flex justify-end gap-3">
-                            <Dialog.Close render={<Button variant="outline">Cancel</Button>} />
+                            <Dialog.Close
+                              render={
+                                <Button variant="outline">{t('admin.users.unbanCancel')}</Button>
+                              }
+                            />
                             <Button
                               variant="default"
                               onClick={() =>
                                 handleUnbanUser(selectedUser.id, selectedUser.username)
                               }
                             >
-                              Unban User
+                              {t('admin.users.unbanButton')}
                             </Button>
                           </div>
                         </Dialog.Content>
@@ -1256,21 +1330,23 @@ export default function UsersPage() {
                     <Button
                       variant="destructive"
                       className="w-full"
-                      aria-label={`Ban User ${selectedUser.username}`}
+                      aria-label={t('admin.users.banLabel', {
+                        username: selectedUser.username,
+                      })}
                       onClick={() => {
                         setUserToBan(selectedUser)
                         setBanReason('')
                         setShowBanModal(true)
                       }}
                     >
-                      Ban User
+                      {t('admin.users.banButton')}
                     </Button>
                   )}
                 </div>
 
                 <div className="mt-6 border-t border-border pt-6">
                   <h4 className="mb-2 text-sm font-medium text-text-sub">
-                    Overlays ({userOverlays.length})
+                    {t('admin.users.overlaysHeading', { count: userOverlays.length })}
                   </h4>
                   {userOverlays.length > 0 ? (
                     <ul className="space-y-2">
@@ -1288,7 +1364,9 @@ export default function UsersPage() {
                               {overlay.name}
                             </div>
                             <div className="text-xs text-text-sub">
-                              {overlay.sources_count} sources
+                              {t('admin.users.overlaySourceCount', {
+                                count: overlay.sources_count,
+                              })}
                             </div>
                           </Link>
                           {/* Secondary: open the live overlay in a new tab. */}
@@ -1296,7 +1374,7 @@ export default function UsersPage() {
                             href={`/overlay/${overlay.id}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            aria-label={`Open the live ${overlay.name} overlay (opens in a new tab)`}
+                            aria-label={t('admin.users.openOverlayLabel', { name: overlay.name })}
                             className="shrink-0 text-text-dim transition-colors hover:text-text"
                           >
                             <svg
@@ -1318,13 +1396,13 @@ export default function UsersPage() {
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-sm text-text-dim italic">No overlays yet</p>
+                    <p className="text-sm text-text-dim italic">{t('admin.users.overlaysEmpty')}</p>
                   )}
                   <Link
                     href={`/admin/sources?user=${selectedUser.id}`}
                     className="text-primary mt-3 inline-block text-xs font-medium hover:underline"
                   >
-                    View this user&rsquo;s sources
+                    {t('admin.users.viewSourcesLink')}
                   </Link>
                 </div>
               </div>
@@ -1345,7 +1423,7 @@ export default function UsersPage() {
                   d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
                 />
               </svg>
-              <p className="mt-2 text-sm text-text-sub">Select a user to view details</p>
+              <p className="mt-2 text-sm text-text-sub">{t('admin.users.selectPrompt')}</p>
             </Card>
           )}
         </div>
@@ -1363,13 +1441,13 @@ export default function UsersPage() {
         }}
       >
         <Dialog.Content showCloseButton={false}>
-          <Dialog.Title>Ban &ldquo;{userToBan?.username}&rdquo;?</Dialog.Title>
-          <Dialog.Description>
-            This will prevent the user from accessing the platform.
-          </Dialog.Description>
+          <Dialog.Title>
+            {t('admin.users.banTitle', { username: userToBan?.username ?? '' })}
+          </Dialog.Title>
+          <Dialog.Description>{t('admin.users.banBody')}</Dialog.Description>
           <div className="mt-4">
             <label htmlFor={banReasonId} className="mb-2 block text-sm font-medium text-text-sub">
-              Reason for ban *
+              {t('admin.users.banReasonLabel')}
             </label>
             <textarea
               id={banReasonId}
@@ -1377,14 +1455,14 @@ export default function UsersPage() {
               onChange={(e) => setBanReason(e.target.value)}
               className="focus-visible:ring-ring w-full resize-none rounded-lg border border-border bg-surface-2 px-3 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none"
               rows={3}
-              placeholder="Spam, abuse, ToS violation, etc..."
+              placeholder={t('admin.users.banReasonPlaceholder')}
             />
           </div>
           <div className="mt-6 flex justify-end gap-3">
             <Dialog.Close
               render={
                 <Button variant="outline" disabled={banLoading}>
-                  Cancel
+                  {t('admin.users.banCancel')}
                 </Button>
               }
             />
@@ -1393,7 +1471,7 @@ export default function UsersPage() {
               disabled={banLoading || !banReason.trim()}
               onClick={() => handleBanUser(banReason)}
             >
-              {banLoading ? 'Banning...' : 'Ban User'}
+              {banLoading ? t('admin.users.banning') : t('admin.users.banButton')}
             </Button>
           </div>
         </Dialog.Content>
