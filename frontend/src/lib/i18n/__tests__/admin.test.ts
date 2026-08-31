@@ -204,3 +204,49 @@ describe('admin feature gates copy', () => {
     expect(t('admin.features.dialogCancel')).toBe('No, keep as-is')
   })
 })
+
+describe('admin global search copy', () => {
+  it('keeps the page header and search field', () => {
+    expect(t('admin.search.heading')).toBe('Search')
+    expect(t('admin.search.intro')).toBe(
+      'Find any user, overlay, source, or viewer and jump straight to it'
+    )
+    expect(t('admin.search.inputPlaceholder')).toBe('Search users, overlays, sources, viewers...')
+    expect(t('admin.search.inputLabel')).toBe('Global admin search')
+  })
+
+  it('keeps the three result-list states', () => {
+    expect(t('admin.search.promptState')).toBe('Type at least one character to search.')
+    expect(t('admin.search.loadingState')).toBe('Searching...')
+    // The typographic quotes were &ldquo;/&rdquo; entities around a JSX
+    // expression, so they travel with the copy: a language that quotes with
+    // guillemets or corner brackets replaces the pair, and cannot if the render
+    // site holds one of each.
+    expect(t('admin.search.emptyState', { query: 'caesar' })).toBe(
+      'Nothing matches \u201Ccaesar\u201D.'
+    )
+  })
+
+  it('keeps the result group headings', () => {
+    expect(t('admin.search.groupUsers')).toBe('Users')
+    expect(t('admin.search.groupOverlays')).toBe('Overlays')
+    expect(t('admin.search.groupSources')).toBe('Sources')
+    expect(t('admin.search.groupViewers')).toBe('Viewers')
+    // Two count formats, whole rather than assembled: the truncated one reads
+    // "(showing 8 of 30)" and the exact one "(30)".
+    expect(t('admin.search.groupCountTruncated', { shown: 8, total: 30 })).toBe(
+      '(showing 8 of 30)'
+    )
+    expect(t('admin.search.groupCountExact', { total: 4 })).toBe('(4)')
+  })
+
+  it('keeps the result row labels', () => {
+    expect(t('admin.search.badgePremium')).toBe('Premium')
+    expect(t('admin.search.badgeBanned')).toBe('Banned')
+    // The bare word 'sources' followed a JSX count expression, and the 'in'
+    // preceded one. Both become whole phrases: a bare preposition or noun left
+    // at the render site cannot be reordered.
+    expect(t('admin.search.overlaySourceCount', { count: 3 })).toBe('3 sources')
+    expect(t('admin.search.sourceInOverlay', { overlay: 'Main overlay' })).toBe('in Main overlay')
+  })
+})
