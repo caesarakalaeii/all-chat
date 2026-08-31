@@ -83,3 +83,32 @@ describe('credit roll preview copy', () => {
     expect(t('overlayEditor.creditRollPreview.footerBody')).toBe('See you next stream!')
   })
 })
+
+describe('editor chrome copy', () => {
+  it('keeps the advanced disclosure count inside one key', () => {
+    // Was `Advanced ({count})` — a text node, an expression and a closing
+    // parenthesis. The parentheses are punctuation a language may drop.
+    expect(t('overlayEditor.nav.advancedCount', { count: 4 })).toBe('Advanced (4)')
+  })
+
+  it('keeps the editor navigation and preview labels', () => {
+    expect(t('overlayEditor.nav.settingsLabel')).toBe('Overlay settings')
+    expect(t('overlayEditor.previewBackdrop.heading')).toBe('Backdrop')
+    expect(t('overlayEditor.previewBackdrop.appBackground')).toBe('Preview on app background')
+    expect(t('overlayEditor.previewBackdrop.lightBackground')).toBe('Preview on light background')
+    expect(t('overlayEditor.previewBackdrop.chromaGreen')).toBe('Preview on chroma green')
+    expect(t('overlayEditor.previewBackdrop.customColor')).toBe('Custom preview background color')
+  })
+
+  it('keeps the settings search copy, typographic quotes included', () => {
+    expect(t('overlayEditor.settingsSearch.label')).toBe('Search settings')
+    expect(t('overlayEditor.settingsSearch.placeholder')).toBe(
+      'Search settings\u2026 (e.g. badge, fade, banned words)'
+    )
+    expect(t('overlayEditor.settingsSearch.clearLabel')).toBe('Clear search')
+    expect(t('overlayEditor.settingsSearch.resultsLabel')).toBe('Matching settings')
+    expect(t('overlayEditor.settingsSearch.noResults', { query: 'badge' })).toBe(
+      'No settings match \u201cbadge\u201d'
+    )
+  })
+})
