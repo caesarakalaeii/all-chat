@@ -22,6 +22,7 @@ import { useState, useEffect, useCallback, useId, useRef } from 'react'
 import Link from 'next/link'
 import { AppNav } from '@/components/AppNav'
 import { Card } from '@/components/ui/card'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { buildGradientCSS } from '@/lib/utils/gradient'
@@ -324,39 +325,27 @@ function ColorGradientCard({ claims }: { claims: ViewerJWTClaims }) {
       <p className="mb-4 text-sm text-text-sub">{t('settings.viewer.nameColorBody')}</p>
 
       {/* Tab bar */}
-      <div className="mb-4 flex border-b border-border">
-        <button
-          onClick={() => setActiveTab('solid')}
-          className={cn(
-            'px-4 py-2 text-sm font-medium transition-colors',
-            activeTab === 'solid'
-              ? 'border-b-2 border-primary text-text'
-              : 'text-text-sub hover:text-text'
-          )}
-        >
-          {t('settings.viewer.solidTab')}
-        </button>
-        <button
-          disabled={!claims.is_premium}
-          onClick={() => {
-            if (claims.is_premium) setActiveTab('gradient')
-          }}
-          className={cn(
-            'flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors',
-            activeTab === 'gradient'
-              ? 'border-b-2 border-primary text-text'
-              : 'text-text-sub hover:text-text',
-            !claims.is_premium && 'cursor-not-allowed opacity-50'
-          )}
-        >
-          {t('settings.viewer.gradientTab')}
-          {!claims.is_premium && (
-            <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-xs text-amber-400">
-              {t('settings.viewer.premiumPill')}
-            </span>
-          )}
-        </button>
-      </div>
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => setActiveTab(value as 'solid' | 'gradient')}
+        className="mb-4"
+      >
+        <TabsList variant="line" className="w-full justify-start border-b border-border">
+          <TabsTrigger value="solid">{t('settings.viewer.solidTab')}</TabsTrigger>
+          {/* Gating stays on `disabled` rather than on an onClick guard: the
+              trigger then reports aria-disabled and drops out of the tab list's
+              arrow-key order, instead of looking focusable and silently
+              refusing. */}
+          <TabsTrigger value="gradient" disabled={!claims.is_premium}>
+            {t('settings.viewer.gradientTab')}
+            {!claims.is_premium && (
+              <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-xs text-amber-400">
+                {t('settings.viewer.premiumPill')}
+              </span>
+            )}
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
 
       {!claims.is_premium && (
         <p className="mb-4 text-xs text-text-dim">

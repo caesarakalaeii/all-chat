@@ -116,7 +116,7 @@ describe('Viewer Settings Page — Viewer Identity section', () => {
       expect(screen.getAllByText('Viewer Identity').length).toBeGreaterThan(0)
     })
 
-    expect(screen.getByRole('button', { name: /Solid Color/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /Solid Color/i })).toBeInTheDocument()
   })
 
   it('Solid Color tab is active by default', async () => {
@@ -130,12 +130,14 @@ describe('Viewer Settings Page — Viewer Identity section', () => {
     render(<ViewerSettingsPage />)
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Solid Color/i })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: /Solid Color/i })).toBeInTheDocument()
     })
 
-    // Solid Color tab should have active styling (border-b-2 border-primary)
-    const solidTab = screen.getByRole('button', { name: /Solid Color/i })
-    expect(solidTab.className).toContain('border-b-2')
+    // Selection is asserted through ARIA rather than through the underline
+    // class: this is a real tablist now, so aria-selected is the contract and
+    // `border-b-2` was an implementation detail of the hand-rolled version.
+    const solidTab = screen.getByRole('tab', { name: /Solid Color/i })
+    expect(solidTab).toHaveAttribute('aria-selected', 'true')
   })
 
   it('Gradient tab is disabled for non-premium user', async () => {
@@ -150,11 +152,15 @@ describe('Viewer Settings Page — Viewer Identity section', () => {
     render(<ViewerSettingsPage />)
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Gradient/i })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: /Gradient/i })).toBeInTheDocument()
     })
 
-    const gradientTab = screen.getByRole('button', { name: /Gradient/i })
-    expect(gradientTab).toBeDisabled()
+    // Base UI marks a disabled tab with aria-disabled rather than the native
+    // `disabled` attribute, and that is the better behaviour here: a natively
+    // disabled button is skipped by screen readers entirely, so the user would
+    // never reach the "Premium" pill that explains why the tab is unavailable.
+    const gradientTab = screen.getByRole('tab', { name: /Gradient/i })
+    expect(gradientTab).toHaveAttribute('aria-disabled', 'true')
   })
 
   it('Gradient tab is enabled for premium user', async () => {
@@ -169,11 +175,11 @@ describe('Viewer Settings Page — Viewer Identity section', () => {
     render(<ViewerSettingsPage />)
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Gradient/i })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: /Gradient/i })).toBeInTheDocument()
     })
 
-    const gradientTab = screen.getByRole('button', { name: /Gradient/i })
-    expect(gradientTab).not.toBeDisabled()
+    const gradientTab = screen.getByRole('tab', { name: /Gradient/i })
+    expect(gradientTab).not.toHaveAttribute('aria-disabled', 'true')
   })
 
   it('Premium badge shown on gradient tab for non-premium', async () => {
@@ -188,7 +194,7 @@ describe('Viewer Settings Page — Viewer Identity section', () => {
     render(<ViewerSettingsPage />)
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Gradient/i })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: /Gradient/i })).toBeInTheDocument()
     })
 
     // "Premium" badge should be visible near the gradient tab
@@ -206,7 +212,7 @@ describe('Viewer Settings Page — Viewer Identity section', () => {
     render(<ViewerSettingsPage />)
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Solid Color/i })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: /Solid Color/i })).toBeInTheDocument()
     })
 
     // The preview section should contain the display name
@@ -226,7 +232,7 @@ describe('Viewer Settings Page — Viewer Identity section', () => {
     render(<ViewerSettingsPage />)
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Solid Color/i })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: /Solid Color/i })).toBeInTheDocument()
     })
 
     // Find the native color input (type="color") — the first one in the solid color tab
@@ -261,11 +267,11 @@ describe('Viewer Settings Page — Viewer Identity section', () => {
     render(<ViewerSettingsPage />)
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Gradient/i })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: /Gradient/i })).toBeInTheDocument()
     })
 
     // Switch to gradient tab
-    const gradientTab = screen.getByRole('button', { name: /Gradient/i })
+    const gradientTab = screen.getByRole('tab', { name: /Gradient/i })
     fireEvent.click(gradientTab)
 
     await waitFor(() => {
@@ -285,11 +291,11 @@ describe('Viewer Settings Page — Viewer Identity section', () => {
     render(<ViewerSettingsPage />)
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Gradient/i })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: /Gradient/i })).toBeInTheDocument()
     })
 
     // Switch to gradient tab
-    const gradientTab = screen.getByRole('button', { name: /Gradient/i })
+    const gradientTab = screen.getByRole('tab', { name: /Gradient/i })
     fireEvent.click(gradientTab)
 
     await waitFor(() => {
@@ -508,11 +514,11 @@ describe('Viewer Settings Page — Viewer Identity section', () => {
     render(<ViewerSettingsPage />)
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Gradient/i })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: /Gradient/i })).toBeInTheDocument()
     })
 
     // Switch to gradient tab
-    const gradientTab = screen.getByRole('button', { name: /Gradient/i })
+    const gradientTab = screen.getByRole('tab', { name: /Gradient/i })
     fireEvent.click(gradientTab)
 
     await waitFor(() => {

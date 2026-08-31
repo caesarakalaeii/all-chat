@@ -19,6 +19,7 @@
  */
 
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { useRef, useState, useCallback } from 'react'
 import { PreviewBackdropPicker } from '@/components/editor/PreviewBackdropPicker'
 import { useTranslations } from '@/lib/i18n'
@@ -45,9 +46,6 @@ const BUTTON_STEP = 10
 const KEY_STEP = 5
 
 /** 24px (WCAG 2.5.8) chevron buttons floating on the divider (mirrors ResizableSplit). */
-const STEP_BUTTON_CLASS =
-  'flex h-6 w-6 items-center justify-center rounded-md border border-border bg-surface text-text-sub shadow-sm hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none'
-
 const clampLeft = (pct: number) => Math.min(MAX_LEFT, Math.max(MIN_LEFT, pct))
 
 export function SplitView({
@@ -146,22 +144,24 @@ export function SplitView({
             2.5.7) — each click moves the split by 10%. Siblings of the slider
             (not children) because role=slider makes descendants presentational. */}
         <div className="absolute top-1/2 left-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 flex-col gap-1">
-          <button
+          <Button
             type="button"
             aria-label={t('common.splitPane.shrinkConfigLabel')}
             onClick={() => stepBy(-BUTTON_STEP)}
-            className={STEP_BUTTON_CLASS}
+            variant="outline"
+            size="icon-xs"
           >
             <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             aria-label={t('common.splitPane.growConfigLabel')}
             onClick={() => stepBy(BUTTON_STEP)}
-            className={STEP_BUTTON_CLASS}
+            variant="outline"
+            size="icon-xs"
           >
             <ChevronRight className="h-4 w-4" aria-hidden="true" />
-          </button>
+          </Button>
         </div>
       </div>
 

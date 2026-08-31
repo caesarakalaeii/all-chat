@@ -26,6 +26,7 @@ import { ShareRequestCard } from './components/ShareRequestCard'
 import { AddSourceModal } from './components/AddSourceModal'
 import { toastManager } from '@/lib/toast'
 import { useTranslations } from '@/lib/i18n'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 export default function ShareRequestsPage() {
   const t = useTranslations()
@@ -134,30 +135,20 @@ export default function ShareRequestsPage() {
       <h1 className="mb-6 text-2xl font-semibold text-text">{t('dashboard.shares.heading')}</h1>
 
       {/* Tab Filters */}
-      <div className="mb-6 flex space-x-4 border-b border-border">
-        <button
-          onClick={() => setFilter('pending')}
-          className={clsx(
-            'border-b-2 px-1 pb-2 text-sm font-medium transition-colors',
-            filter === 'pending'
-              ? 'border-blue-500 text-text'
-              : 'border-transparent text-text-sub hover:text-text'
-          )}
-        >
-          {t('dashboard.shares.tabPending', { count: pendingCount })}
-        </button>
-        <button
-          onClick={() => setFilter('history')}
-          className={clsx(
-            'border-b-2 px-1 pb-2 text-sm font-medium transition-colors',
-            filter === 'history'
-              ? 'border-blue-500 text-text'
-              : 'border-transparent text-text-sub hover:text-text'
-          )}
-        >
-          {t('dashboard.shares.tabHistory', { count: historyCount })}
-        </button>
-      </div>
+      <Tabs
+        value={filter}
+        onValueChange={(value) => setFilter(value as 'pending' | 'history')}
+        className="mb-6"
+      >
+        <TabsList variant="line" className="w-full justify-start border-b border-border">
+          <TabsTrigger value="pending">
+            {t('dashboard.shares.tabPending', { count: pendingCount })}
+          </TabsTrigger>
+          <TabsTrigger value="history">
+            {t('dashboard.shares.tabHistory', { count: historyCount })}
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
 
       {/* Loading state */}
       {loading && (

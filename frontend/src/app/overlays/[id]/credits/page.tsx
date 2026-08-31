@@ -42,6 +42,7 @@ import { overlaysApi } from '@/lib/api/overlays'
 import { trackEvent } from '@/lib/analytics'
 import { AppNav } from '@/components/AppNav'
 import { Card } from '@/components/ui/card'
+import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { Overlay, CreditRollConfig } from '@/lib/types/overlay'
@@ -340,20 +341,13 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
               </h2>
               <p className="mt-1 text-sm text-text-sub">{t('overlayEditor.credits.enableHint')}</p>
             </div>
-            <button
-              onClick={() => setConfig({ ...config, enabled: !config.enabled })}
-              className={clsx(
-                'relative inline-flex h-8 w-14 items-center rounded-full transition-colors',
-                config.enabled ? 'bg-kick' : 'bg-surface-2'
-              )}
+            <Switch.Root
+              checked={config.enabled}
+              onCheckedChange={(enabled) => setConfig({ ...config, enabled })}
+              aria-label={t('overlayEditor.credits.enableHeading')}
             >
-              <span
-                className={clsx(
-                  'inline-block h-6 w-6 transform rounded-full bg-white transition-transform',
-                  config.enabled ? 'translate-x-7' : 'translate-x-1'
-                )}
-              />
-            </button>
+              <Switch.Thumb />
+            </Switch.Root>
           </div>
         </Card>
 
@@ -555,20 +549,13 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                     {t('overlayEditor.credits.clipsHint')}
                   </p>
                 </div>
-                <button
-                  onClick={() => setConfig({ ...config, clips_enabled: !config.clips_enabled })}
-                  className={clsx(
-                    'relative inline-flex h-8 w-14 items-center rounded-full transition-colors',
-                    config.clips_enabled ? 'bg-kick' : 'bg-surface-2'
-                  )}
+                <Switch.Root
+                  checked={config.clips_enabled}
+                  onCheckedChange={(clips_enabled) => setConfig({ ...config, clips_enabled })}
+                  aria-label={t('overlayEditor.credits.clipsHeading')}
                 >
-                  <span
-                    className={clsx(
-                      'inline-block h-6 w-6 transform rounded-full bg-white transition-transform',
-                      config.clips_enabled ? 'translate-x-7' : 'translate-x-1'
-                    )}
-                  />
-                </button>
+                  <Switch.Thumb />
+                </Switch.Root>
               </div>
 
               {config.clips_enabled && (
