@@ -37,7 +37,7 @@ from typing import Any, Mapping
 
 from allchat import errors
 from allchat.api import Connection
-from allchat.errors import AllChatError
+from allchat.errors import AllChatError, link_failure_message
 # Imported as a MODULE, not as names: the two flows are patched wholesale in the
 # tests, and `from ... import link_via_loopback` would bind the original function
 # into this namespace where a patch cannot reach it.
@@ -196,10 +196,11 @@ class AllChatActionBase(ActionBase):
             def work() -> None:
                 try:
                     self.start_linking(on_status)
-                except AllChatError as exc:
-                    on_status("failed", exc.message)
                 except Exception as exc:  # noqa: BLE001
-                    on_status("failed", f"Linking failed: {type(exc).__name__}: {exc}")
+                    # One handler for both cases: link_failure_message decides what a
+                    # streamer should read, including for a non-AllChatError, where the
+                    # old branch showed the exception's class name.
+                    on_status("failed", link_failure_message(exc))
                 finally:
                     button.set_sensitive(True)
 

@@ -1,0 +1,176 @@
+/*
+	Page styling for the All-Chat property inspectors.
+
+	WHY THIS FILE EXISTS
+
+	sdpi-components styles its own custom elements and nothing else. Worse, it declares
+	its palette on `:host` INSIDE each component's shadow root:
+
+		:host { --window-bg-color:#2d2d2d; --font-color:#969696; --input-font-color:#d8d8d8; ... }
+
+	Custom properties inherit downwards, so those variables are visible inside a
+	component and to its light-DOM children, but NOT to the page around them. Nothing
+	sets a page-level colour at all, which left every native element we use (h4, p,
+	span, code, summary, a) on the browser default of black text over the Stream Deck
+	property inspector's dark panel: roughly 1.52:1 against #2d2d2d, where WCAG AA asks
+	for 4.5:1. Rendered, but not readable.
+
+	Two consequences worth spelling out, because both are easy to get wrong:
+
+	  * `body { color: var(--font-color) }` does NOT work. The variable is undefined at
+	    page scope, the declaration is invalid at computed-value time, and `color` then
+	    falls back to inheritance from the root element: black again. Any fix has to
+	    declare its own values rather than borrow the library's.
+	  * The BACKGROUND is set here as well as the foreground. Light text is only safe if
+	    we also own what is behind it, and the panel background is painted by the host
+	    app rather than by anything in this folder.
+
+	The values mirror sdpi-components' own palette so native text sits beside the
+	components without looking pasted in. The library ships no light theme (it contains
+	no prefers-color-scheme rule anywhere), so a single dark palette is the whole story
+	and a media query would be inventing a mode that does not exist.
+
+	Contrast against #2d2d2d, measured, all passing WCAG 2.2 AA for normal text:
+	  --allchat-fg        #d8d8d8   9.66:1
+	  --allchat-fg-muted  #969696   4.66:1
+	  --allchat-error     #ff8a8a   6.07:1
+	  --allchat-success   #81c995   7.03:1
+	  --allchat-link      #8ab4f8   6.53:1
+	  code / pairing code #ffffff  13.77:1
+
+	KEEP IN SYNC: loaded by send-message.html, poll-control.html and
+	prediction-control.html. It is one file precisely because ADR-0049 names drift
+	between duplicated surfaces as the standing risk in this folder.
+*/
+
+:root {
+	--allchat-bg: #2d2d2d;
+	--allchat-fg: #d8d8d8;
+	--allchat-fg-muted: #969696;
+	--allchat-error: #ff8a8a;
+	--allchat-success: #81c995;
+	--allchat-link: #8ab4f8;
+	--allchat-input-bg: #3d3d3d;
+}
+
+body {
+	background-color: var(--allchat-bg);
+	color: var(--allchat-fg);
+}
+
+/* The default UA link colour (#0000ee) is 1.47:1 here, so the help section's links to
+   allch.at were as unreadable as the prose around them. */
+a {
+	color: var(--allchat-link);
+}
+
+h4 {
+	color: var(--allchat-fg);
+}
+
+code {
+	color: #ffffff;
+}
+
+/* `summary` is the only affordance that opens the help section, so it reads as
+   interactive rather than as another line of body text. */
+summary {
+	color: var(--allchat-fg-muted);
+	cursor: pointer;
+}
+
+summary:hover {
+	color: var(--allchat-fg);
+}
+
+/*
+	The Link button. A native <button> does not inherit `color` (the UA stylesheet sets
+	`color: buttontext`), so it needs styling of its own regardless of the rules above,
+	and an unstyled one renders as a light OS-native button on a dark panel.
+
+	Sized and bordered like sdpi-components' own sdpi-button, but on the input
+	background rather than the window background so it reads as a control instead of a
+	rectangle of border.
+*/
+#allchat-link {
+	background-color: var(--allchat-input-bg);
+	color: var(--allchat-fg);
+	border: 1px solid var(--allchat-fg-muted);
+	border-radius: 3px;
+	padding: 6px 12px;
+	font: inherit;
+	cursor: pointer;
+}
+
+#allchat-link:not(:disabled):hover {
+	background-color: #464646;
+}
+
+/*
+	Disabled means "a link attempt is already running". 0.5 is sdpi-components'
+	--opacity-disabled, and the progress cursor says the wait is expected rather than
+	broken. Opacity alone would be a colour-only signal, so the cursor carries it too.
+*/
+#allchat-link:disabled {
+	opacity: 0.5;
+	cursor: progress;
+}
+
+/*
+	Link status.
+
+	Every state used to render as the same unstyled span, so "Linked." and a hard
+	failure were typographically identical and a user who glanced at the panel had no
+	way to tell that one of them needed action. The state is published by
+	allchat-link.js as a data-state attribute and styled here.
+*/
+/* Block, so it stacks under the button inside the same sdpi-item rather than sitting in
+   a separate labelled row. sdpi-item renders its slot into a plain block div, so this is
+   all the stacking needs. It used to be its own `sdpi-item label="Status"`, which read
+   as an independent setting instead of as feedback from the button above it. */
+#allchat-link-status {
+	display: block;
+	margin-top: 6px;
+	line-height: 1.4;
+}
+
+#allchat-link-status[data-state="idle"] {
+	color: var(--allchat-fg-muted);
+}
+
+#allchat-link-status[data-state="working"],
+#allchat-link-status[data-state="code"] {
+	color: var(--allchat-fg);
+}
+
+#allchat-link-status[data-state="linked"] {
+	color: var(--allchat-success);
+}
+
+#allchat-link-status[data-state="failed"] {
+	color: var(--allchat-error);
+}
+
+/* A marker as well as a colour, so the failure state is not signalled by hue alone
+   (WCAG 1.4.1). */
+#allchat-link-status[data-state="failed"]::before {
+	content: "⚠ ";
+}
+
+#allchat-link-status[data-state="linked"]::before {
+	content: "✓ ";
+}
+
+/*
+	The pairing code is the one thing on the page a user has to read off the screen and
+	retype, so it gets a line of its own, a monospace face and letter spacing. White
+	rather than --allchat-fg: it is the payload, not prose.
+*/
+.allchat-code {
+	display: block;
+	margin-top: 4px;
+	font-family: "Consolas", "Menlo", monospace;
+	font-size: 1.4em;
+	letter-spacing: 0.18em;
+	color: #ffffff;
+}

@@ -25,4 +25,24 @@ export default tseslint.config(
 			"prefer-const": "error",
 		},
 	},
+	{
+		// Property inspector scripts. These run in the Stream Deck app's embedded
+		// browser, not in the plugin's Node process, so they need browser globals plus
+		// the `SDPIComponents` global that sdpi-components.js installs.
+		//
+		// They are linted at all only because they were moved out of inline <script>
+		// blocks in the three HTML pages, where ESLint never saw them. The global list
+		// is enumerated rather than pulled in wholesale from `globals.browser`: a
+		// property inspector should be touching almost nothing, and a new name showing
+		// up here is worth noticing.
+		files: ["com.allchat.streamdeck.sdPlugin/ui/**/*.js"],
+		languageOptions: {
+			globals: {
+				document: "readonly",
+				setTimeout: "readonly",
+				clearTimeout: "readonly",
+				SDPIComponents: "readonly",
+			},
+		},
+	},
 );

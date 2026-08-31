@@ -28,8 +28,15 @@ package repository
 // handlers/device_link_test.go, which drive the whole flow over a fake store.
 
 import (
+	"context"
+	"crypto/sha256"
+	"os"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/caesar/all-chat/shared/middleware"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func TestConsumeAuthCodeSQL_IsOneAtomicStatementWithEveryGuard(t *testing.T) {
@@ -127,5 +134,157 @@ func TestNoProjectionSelectsADigest(t *testing.T) {
 					"scans into is what the endpoints serialise.", name, secret)
 			}
 		}
+	}
+}
+
+// TestTTLIntervalsAreNotStringConcatenated is the cheap half of the guard against the
+// bug that took device linking down completely: every POST /device/link/start answered
+// 500 with
+//
+//	failed to encode args[7]: unable to encode 600 into text format for text (OID 25):
+//	cannot find encode plan
+//
+// `NOW() + ($8 || ' seconds')::INTERVAL` looks harmless, but `||` has only a text
+// overload, so PostgreSQL infers $8 as text and pgx v5 will not encode an int64 into a
+// text parameter. The working form multiplies instead: `NOW() + $8 * INTERVAL '1 second'`
+// takes the numeric straight through.
+//
+// This runs without a database, which is the point — the DB-backed test below skips when
+// Docker is absent, and this class of break must not depend on Docker being present to
+// be noticed.
+func TestTTLIntervalsAreNotStringConcatenated(t *testing.T) {
+	raw, err := os.ReadFile("device_token_repository.go")
+	if err != nil {
+		t.Fatalf("failed to read the repository source: %v", err)
+	}
+	// Comments are stripped first, because the statements above are commented with the
+	// broken form as a warning — a naive scan would flag the documentation as the bug.
+	var code strings.Builder
+	for _, line := range strings.Split(string(raw), "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "//") {
+			continue
+		}
+		code.WriteString(line)
+		code.WriteString("\n")
+	}
+	source := code.String()
+
+	if strings.Contains(source, "|| ' seconds')") {
+		t.Error("a TTL is being concatenated into an INTERVAL again. `($n || ' seconds')::INTERVAL` " +
+			"types the parameter as text, and pgx v5 cannot encode an int64 into text — every call " +
+			"fails with a 500 (\"cannot find encode plan\"). Use `$n * INTERVAL '1 second'`.")
+	}
+	// Three statements take a TTL parameter — CreateLinkRequest, ApproveLinkRequest and
+	// CreateDeviceToken — and all three must use the multiplied form. Counted rather than
+	// matched literally so reindenting a query does not fail the test for no reason.
+	if got := strings.Count(source, "* INTERVAL '1 second'"); got != 3 {
+		t.Errorf("found %d multiplied TTL intervals, want 3 (CreateLinkRequest, "+
+			"ApproveLinkRequest, CreateDeviceToken). If a statement was added or removed, "+
+			"update this count — but every TTL parameter must still be multiplied, not "+
+			"concatenated.", got)
+	}
+}
+
+// TestDeviceLinkTTLsExecuteAgainstRealPostgres is the half that would actually have
+// caught the outage. Everything else in this file, and every test in
+// handlers/device_link_test.go, asserts against strings or a fake store — so all of them
+// stayed green while all three statements were unexecutable. A parameter-type mismatch
+// only exists once PostgreSQL is asked to plan the query, which means the only test that
+// can see it is one that runs it.
+//
+// It drives the real repository against the real migration set: open a link request,
+// approve it, mint the token. Each step asserts the expiry actually landed the configured
+// TTL in the future, because "the statement ran" and "the interval was computed from the
+// argument" are different claims and only the second one is useful.
+func TestDeviceLinkTTLsExecuteAgainstRealPostgres(t *testing.T) {
+	pool, cleanup := setupMigrationTestDB(t)
+	defer cleanup()
+	runMigrations(t, pool, loadUpMigrations(t))
+
+	ctx := context.Background()
+
+	// The two FK targets a device token needs: an owner and an overlay of theirs.
+	var userID string
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO users (twitch_id, auth_provider, username, display_name,
+		                   access_token, refresh_token, token_expires_at)
+		VALUES ('990001', 'twitch', 'interval_canary', 'Interval Canary',
+		        'access-token', 'refresh-token', NOW() + INTERVAL '4 hours')
+		RETURNING id::text`).Scan(&userID); err != nil {
+		t.Fatalf("failed to insert the owning user: %v", err)
+	}
+	var overlayID string
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO overlays (user_id, name) VALUES ($1, 'canary overlay')
+		RETURNING id::text`, userID).Scan(&overlayID); err != nil {
+		t.Fatalf("failed to insert the overlay: %v", err)
+	}
+
+	repo := NewDeviceTokenRepository(pool)
+
+	// 1. CreateLinkRequest — the statement behind POST /device/link/start, the one the
+	//    bug report was filed against.
+	req, err := repo.CreateLinkRequest(ctx, FlowLoopback, nil,
+		"a-pkce-challenge", "S256", "http://127.0.0.1:41234/callback",
+		"Stream Deck", []string{"chat:write", "engagement:write"}, LinkRequestTTL)
+	if err != nil {
+		t.Fatalf("CreateLinkRequest failed against a real PostgreSQL: %v\n\n"+
+			"This is the exact failure users saw as a stuck \"Starting…\" and a 500.", err)
+	}
+	assertTTLLanded(t, pool, "CreateLinkRequest", LinkRequestTTL,
+		`SELECT EXTRACT(EPOCH FROM
+		          ((expires_at AT TIME ZONE current_setting('TimeZone')) - NOW()))
+		   FROM device_link_requests WHERE id = $1`, req.ID)
+
+	// 2. ApproveLinkRequest — the streamer pressing Approve.
+	authCode := sha256.Sum256([]byte("an-auth-code"))
+	approved, err := repo.ApproveLinkRequest(ctx, req.ID, userID, overlayID,
+		[]string{"chat:write"}, "Stream Deck", authCode[:], AuthCodeTTL)
+	if err != nil {
+		t.Fatalf("ApproveLinkRequest failed against a real PostgreSQL: %v", err)
+	}
+	assertTTLLanded(t, pool, "ApproveLinkRequest", AuthCodeTTL,
+		`SELECT EXTRACT(EPOCH FROM
+		          ((auth_code_expires_at AT TIME ZONE current_setting('TimeZone')) - NOW()))
+		   FROM device_link_requests WHERE id = $1`, approved.ID)
+
+	// 3. CreateDeviceToken — minting the credential the plugin ends up holding, with the
+	//    lifetime the production caller passes.
+	tokenHash := sha256.Sum256([]byte("a-device-token"))
+	device, err := repo.CreateDeviceToken(ctx, userID, overlayID, "Stream Deck",
+		tokenHash[:], []string{"chat:write"}, middleware.DeviceTokenLifetime, req.ID)
+	if err != nil {
+		t.Fatalf("CreateDeviceToken failed against a real PostgreSQL: %v", err)
+	}
+	assertTTLLanded(t, pool, "CreateDeviceToken", middleware.DeviceTokenLifetime,
+		`SELECT EXTRACT(EPOCH FROM
+		          ((expires_at AT TIME ZONE current_setting('TimeZone')) - NOW()))
+		   FROM device_tokens WHERE id = $1`, device.ID)
+}
+
+// assertTTLLanded checks an expiry landed one TTL in the future rather than merely being
+// set: a statement that silently computed a zero interval would still have "worked".
+//
+// The remaining time is measured BY POSTGRESQL, not by comparing a scanned timestamp
+// against Go's clock. These columns are `timestamp without time zone` while NOW() is a
+// timestamptz, so on a server outside UTC the stored value is local wall-clock and pgx
+// hands it back as though it were UTC. Comparing that against Go's clock reports a
+// whole-hour error while the interval itself is perfectly correct, and a TTL spanning a
+// DST change (the 90-day one does) is off by the DST offset on top. Converting the column
+// back to an absolute instant with `AT TIME ZONE current_setting('TimeZone')` makes the
+// assertion exact on any server timezone rather than only on a UTC one.
+func assertTTLLanded(t *testing.T, pool *pgxpool.Pool, what string, ttl time.Duration, query, id string) {
+	t.Helper()
+	var seconds float64
+	if err := pool.QueryRow(context.Background(), query, id).Scan(&seconds); err != nil {
+		t.Fatalf("%s: failed to read back the expiry: %v", what, err)
+	}
+	got := time.Duration(seconds * float64(time.Second))
+	// Generous slack: the assertion is that the interval was derived from the argument at
+	// all, not that it is accurate to the millisecond.
+	const slack = 2 * time.Minute
+	if got < ttl-slack || got > ttl+slack {
+		t.Errorf("%s: expiry is %v away, want ~%v. The TTL argument is not reaching the "+
+			"interval.", what, got.Round(time.Second), ttl)
 	}
 }
