@@ -25,6 +25,7 @@ import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PlatformBadge } from '@/components/ui/badge'
 import { ChannelLink } from '@/components/ChannelLink'
+import { type TFunction, formatDate, formatTimestamp, useTranslations } from '@/lib/i18n'
 import { formatConnectedFor } from '@/lib/utils'
 
 // Connections open longer than this are highlighted so admins can spot overlays
@@ -61,7 +62,25 @@ interface OverlaySource {
   created_at: string
 }
 
+/**
+ * The owner link text: one of four whole sentences rather than a handle spliced
+ * together with an optional ' (Display Name)' tail. Takes the translator as its
+ * first argument because a plain module function cannot call a hook.
+ */
+function ownerLinkText(t: TFunction, overlay: Overlay): string {
+  const { owner_username: username, owner_display_name: displayName } = overlay
+  if (username) {
+    return displayName
+      ? t('admin.overlays.ownerHandleNamed', { username, displayName })
+      : t('admin.overlays.ownerHandle', { username })
+  }
+  return displayName
+    ? t('admin.overlays.ownerFallbackNamed', { displayName })
+    : t('admin.overlays.ownerFallback')
+}
+
 export default function OverlaysPage() {
+  const t = useTranslations()
   const [overlays, setOverlays] = useState<Overlay[]>([])
   const [selectedOverlay, setSelectedOverlay] = useState<Overlay | null>(null)
   const [sources, setSources] = useState<OverlaySource[]>([])
@@ -82,8 +101,8 @@ export default function OverlaysPage() {
   const detailRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 60_000)
-    return () => clearInterval(t)
+    const clockTick = setInterval(() => setNow(Date.now()), 60_000)
+    return () => clearInterval(clockTick)
   }, [])
 
   // Fetch all overlays
@@ -123,7 +142,7 @@ export default function OverlaysPage() {
         }
       } catch (err) {
         console.error('Failed to load overlays:', err)
-        setError('Failed to load overlays')
+        setError(t('admin.overlays.loadError'))
         setLoading(false)
       }
     }
@@ -159,7 +178,7 @@ export default function OverlaysPage() {
     fetchActiveOverlays()
     const interval = setInterval(fetchActiveOverlays, 30000)
     return () => clearInterval(interval)
-  }, [])
+  }, [t])
 
   // Fetch sources for selected overlay
   useEffect(() => {
@@ -233,7 +252,7 @@ export default function OverlaysPage() {
   // Connection status for the detail panel of the selected overlay.
   const selectedConnected = selectedOverlay ? activeOverlayIds.has(selectedOverlay.id) : false
   const selectedSince = selectedOverlay ? connectedSince.get(selectedOverlay.id) : undefined
-  const selectedConnectedFor = formatConnectedFor(selectedSince)
+  const selectedConnectedFor = formatConnectedFor(t, selectedSince)
   const selectedLongOpen =
     selectedConnected && !!selectedSince && now - Date.parse(selectedSince) >= LONG_OPEN_MS
 
@@ -250,16 +269,13 @@ export default function OverlaysPage() {
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-text">Overlays</h1>
-        <p className="mt-1 text-sm text-text-sub">
-          Manage overlays and their connected chat sources
-        </p>
+        <h1 className="text-2xl font-bold text-text">{t('admin.overlays.heading')}</h1>
+        <p className="mt-1 text-sm text-text-sub">{t('admin.overlays.intro')}</p>
       </div>
 
       {connectionStatusUnavailable && (
         <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-400">
-          Live connection status is currently unavailable, so overlays may show as &ldquo;not
-          connected&rdquo; even if they are live.
+          {t('admin.overlays.statusUnavailable')}
         </div>
       )}
 
@@ -276,15 +292,19 @@ export default function OverlaysPage() {
             <Card className="overflow-hidden">
               <div className="border-b border-border px-4 py-5">
                 <h3 className="text-base font-medium text-text">
-                  All Overlays ({filteredOverlays.length}
-                  {filteredOverlays.length !== overlays.length ? ` of ${overlays.length}` : ''})
+                  {filteredOverlays.length !== overlays.length
+                    ? t('admin.overlays.listHeadingFiltered', {
+                        shown: filteredOverlays.length,
+                        total: overlays.length,
+                      })
+                    : t('admin.overlays.listHeadingAll', { count: filteredOverlays.length })}
                 </h3>
 
                 {/* Search Input */}
                 <div className="mt-4 flex items-center gap-3">
                   <input
                     type="text"
-                    placeholder="Search by overlay name, ID, or owner..."
+                    placeholder={t('admin.overlays.searchPlaceholder')}
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="flex-1 rounded-lg border border-border bg-surface-2 px-4 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
@@ -304,7 +324,7 @@ export default function OverlaysPage() {
                       aria-hidden="true"
                       className="inline-block h-2 w-2 rounded-full bg-kick"
                     />
-                    Connected ({connectedCount})
+                    {t('admin.overlays.connectedFilter', { count: connectedCount })}
                   </button>
                 </div>
               </div>
@@ -312,7 +332,7 @@ export default function OverlaysPage() {
                 {orderedOverlays.map((overlay) => {
                   const isConnected = activeOverlayIds.has(overlay.id)
                   const since = connectedSince.get(overlay.id)
-                  const connectedFor = formatConnectedFor(since)
+                  const connectedFor = formatConnectedFor(t, since)
                   const isLongOpen =
                     isConnected && !!since && now - Date.parse(since) >= LONG_OPEN_MS
                   return (
@@ -342,19 +362,27 @@ export default function OverlaysPage() {
                                 )}
                                 title={
                                   since
-                                    ? `Connected since ${new Date(since).toLocaleString()}`
-                                    : 'Connected'
+                                    ? t('admin.overlays.dotConnectedSince', {
+                                        timestamp: formatTimestamp(new Date(since)),
+                                      })
+                                    : t('admin.overlays.dotConnected')
                                 }
                               />
                             )}
                             <p className="text-sm font-medium text-text">{overlay.name}</p>
                             <span className="ml-2 inline-flex items-center rounded bg-badge-bg px-2 py-0.5 text-xs font-medium text-text-sub">
-                              {overlay.sources_count || 0} sources
+                              {t('admin.overlays.rowSourceCount', {
+                                count: overlay.sources_count || 0,
+                              })}
                             </span>
                           </div>
-                          <p className="mt-1 font-mono text-xs text-text-sub">ID: {overlay.id}</p>
+                          <p className="mt-1 font-mono text-xs text-text-sub">
+                            {t('admin.overlays.rowIdPrefix', { id: overlay.id })}
+                          </p>
                           <p className="mt-1 text-xs text-text-dim">
-                            Created {new Date(overlay.created_at).toLocaleDateString()}
+                            {t('admin.overlays.rowCreated', {
+                              date: formatDate(new Date(overlay.created_at)),
+                            })}
                             {isConnected && (
                               <>
                                 {' · '}
@@ -364,7 +392,9 @@ export default function OverlaysPage() {
                                     isLongOpen ? 'text-amber-400' : 'text-kick'
                                   )}
                                 >
-                                  {connectedFor ? `Connected ${connectedFor}` : 'Connected'}
+                                  {connectedFor
+                                    ? t('admin.overlays.connectedFor', { duration: connectedFor })
+                                    : t('admin.overlays.connected')}
                                 </span>
                               </>
                             )}
@@ -375,7 +405,9 @@ export default function OverlaysPage() {
                             href={`/overlay/${overlay.id}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            aria-label={`Open overlay ${overlay.name} in a new tab`}
+                            aria-label={t('admin.overlays.openInNewTabLabel', {
+                              name: overlay.name,
+                            })}
                             className="relative text-sm text-text-sub transition-colors hover:text-text"
                             onClick={(e) => e.stopPropagation()}
                           >
@@ -416,8 +448,8 @@ export default function OverlaysPage() {
                 {orderedOverlays.length === 0 && (
                   <li className="px-4 py-10 text-center text-sm text-text-dim">
                     {overlays.length === 0
-                      ? 'No overlays found.'
-                      : 'No overlays match your search or filter.'}
+                      ? t('admin.overlays.emptyNone')
+                      : t('admin.overlays.emptyFiltered')}
                   </li>
                 )}
               </ul>
@@ -432,37 +464,40 @@ export default function OverlaysPage() {
               {/* Overlay Details */}
               <Card className="overflow-hidden">
                 <div className="border-b border-border px-4 py-5">
-                  <h3 className="text-base font-medium text-text">Overlay Details</h3>
+                  <h3 className="text-base font-medium text-text">
+                    {t('admin.overlays.detailHeading')}
+                  </h3>
                 </div>
                 <div className="px-4 py-5">
                   <dl className="space-y-4">
                     <div>
-                      <dt className="text-sm font-medium text-text-sub">Name</dt>
+                      <dt className="text-sm font-medium text-text-sub">
+                        {t('admin.overlays.detailName')}
+                      </dt>
                       <dd className="mt-1 text-sm text-text">{selectedOverlay.name}</dd>
                     </div>
                     <div>
-                      <dt className="text-sm font-medium text-text-sub">ID</dt>
+                      <dt className="text-sm font-medium text-text-sub">
+                        {t('admin.overlays.detailId')}
+                      </dt>
                       <dd className="mt-1 font-mono text-xs break-all text-text">
                         {selectedOverlay.id}
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-sm font-medium text-text-sub">Owner</dt>
+                      <dt className="text-sm font-medium text-text-sub">
+                        {t('admin.overlays.detailOwner')}
+                      </dt>
                       <dd className="mt-1 text-sm">
                         {selectedOverlay.user_id ? (
                           <Link
                             href={`/admin/users?user=${selectedOverlay.user_id}`}
                             className="text-primary hover:underline"
                           >
-                            {selectedOverlay.owner_username
-                              ? `@${selectedOverlay.owner_username}`
-                              : 'View user'}
-                            {selectedOverlay.owner_display_name
-                              ? ` (${selectedOverlay.owner_display_name})`
-                              : ''}
+                            {ownerLinkText(t, selectedOverlay)}
                           </Link>
                         ) : (
-                          <span className="text-text-dim">Unknown</span>
+                          <span className="text-text-dim">{t('admin.overlays.ownerUnknown')}</span>
                         )}
                       </dd>
                       <dd className="mt-1 font-mono text-xs break-all text-text-dim">
@@ -470,7 +505,9 @@ export default function OverlaysPage() {
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-sm font-medium text-text-sub">Connection</dt>
+                      <dt className="text-sm font-medium text-text-sub">
+                        {t('admin.overlays.detailConnection')}
+                      </dt>
                       <dd className="mt-1 text-sm">
                         {selectedConnected ? (
                           <span className="inline-flex items-center gap-1.5">
@@ -487,17 +524,21 @@ export default function OverlaysPage() {
                               )}
                             >
                               {selectedConnectedFor
-                                ? `Connected ${selectedConnectedFor}`
-                                : 'Connected'}
+                                ? t('admin.overlays.connectedFor', {
+                                    duration: selectedConnectedFor,
+                                  })
+                                : t('admin.overlays.connected')}
                             </span>
                           </span>
                         ) : (
-                          <span className="text-text-dim">Not connected</span>
+                          <span className="text-text-dim">{t('admin.overlays.notConnected')}</span>
                         )}
                       </dd>
                       {selectedConnected && selectedSince && (
                         <dd className="mt-1 text-xs text-text-dim">
-                          Since {new Date(selectedSince).toLocaleString()}
+                          {t('admin.overlays.connectedSinceRow', {
+                            timestamp: formatTimestamp(new Date(selectedSince)),
+                          })}
                         </dd>
                       )}
                     </div>
@@ -509,7 +550,7 @@ export default function OverlaysPage() {
               <Card className="overflow-hidden">
                 <div className="border-b border-border px-4 py-5">
                   <h3 className="text-base font-medium text-text">
-                    Connected Sources ({sources.length})
+                    {t('admin.overlays.sourcesHeading', { count: sources.length })}
                   </h3>
                 </div>
                 <div className="px-4 py-5">
@@ -528,11 +569,11 @@ export default function OverlaysPage() {
                                 <PlatformBadge platform={source.platform} size="sm" />
                                 {source.is_active ? (
                                   <span className="inline-flex items-center rounded bg-kick/10 px-2 py-0.5 text-xs font-medium text-kick">
-                                    Active
+                                    {t('admin.overlays.sourceActive')}
                                   </span>
                                 ) : (
                                   <span className="inline-flex items-center rounded bg-badge-bg px-2 py-0.5 text-xs font-medium text-text-dim">
-                                    Inactive
+                                    {t('admin.overlays.sourceInactive')}
                                   </span>
                                 )}
                               </div>
@@ -549,7 +590,9 @@ export default function OverlaysPage() {
                                 {source.channel_id}
                               </p>
                               <p className="mt-1 text-xs text-text-dim">
-                                Added {new Date(source.created_at).toLocaleDateString()}
+                                {t('admin.overlays.sourceAdded', {
+                                  date: formatDate(new Date(source.created_at)),
+                                })}
                               </p>
                             </div>
                           </div>
@@ -557,7 +600,9 @@ export default function OverlaysPage() {
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-sm text-text-dim italic">No sources connected</p>
+                    <p className="text-sm text-text-dim italic">
+                      {t('admin.overlays.sourcesEmpty')}
+                    </p>
                   )}
                 </div>
               </Card>
@@ -578,7 +623,7 @@ export default function OverlaysPage() {
                   d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
                 />
               </svg>
-              <p className="mt-2 text-sm text-text-sub">Select an overlay to view details</p>
+              <p className="mt-2 text-sm text-text-sub">{t('admin.overlays.selectPrompt')}</p>
             </Card>
           )}
         </div>

@@ -23,6 +23,7 @@ import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { useHydrated } from '@/hooks/useHydrated'
+import { useTranslations } from '@/lib/i18n'
 
 /**
  * Layout orientation for the split on desktop.
@@ -82,6 +83,7 @@ export function ResizableSplit({
   orientation = 'horizontal',
   reversed = false,
 }: ResizableSplitProps) {
+  const t = useTranslations()
   const hydrated = useHydrated()
   const containerRef = useRef<HTMLDivElement>(null)
   const [firstPct, setFirstPct] = useState(initial)
@@ -231,7 +233,7 @@ export function ResizableSplit({
       >
         <div
           role="slider"
-          aria-label="Resize panels"
+          aria-label={t('common.splitPane.resizeLabel')}
           aria-orientation={isVertical ? 'vertical' : 'horizontal'}
           aria-valuemin={min}
           aria-valuemax={max}

@@ -25,7 +25,8 @@ import type { LucideIcon } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PlatformBadge } from '@/components/ui/badge'
-import { ADMIN_LINKS } from '@/components/AdminSidebar'
+import { DESCRIBED_ADMIN_LINKS } from '@/components/AdminSidebar'
+import { formatNumber, useTranslations } from '@/lib/i18n'
 
 interface AdminStats {
   total_users: number
@@ -59,7 +60,7 @@ function StatCard({
       {value === undefined ? (
         <Skeleton className="h-8 w-16" />
       ) : (
-        <p className="text-3xl font-bold text-text">{value.toLocaleString()}</p>
+        <p className="text-3xl font-bold text-text">{formatNumber(value)}</p>
       )}
     </Card>
   )
@@ -73,6 +74,7 @@ function StatCard({
 }
 
 export default function AdminDashboard() {
+  const t = useTranslations()
   const [stats, setStats] = useState<AdminStats | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -106,30 +108,30 @@ export default function AdminDashboard() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-      <h1 className="mb-8 text-2xl font-bold text-text">Admin Dashboard</h1>
+      <h1 className="mb-8 text-2xl font-bold text-text">{t('admin.dashboard.heading')}</h1>
 
       {/* Stats grid */}
       <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard
-          label="Total Users"
+          label={t('admin.dashboard.totalUsers')}
           value={loading ? undefined : stats?.total_users}
           icon={Users}
           href="/admin/users"
         />
         <StatCard
-          label="Banned Users"
+          label={t('admin.dashboard.bannedUsers')}
           value={loading ? undefined : stats?.banned_users}
           icon={Ban}
           href="/admin/users?filter=banned"
         />
         <StatCard
-          label="Active Overlays"
+          label={t('admin.dashboard.activeOverlays')}
           value={loading ? undefined : stats?.active_overlays}
           icon={LayoutGrid}
           href="/admin/overlays?connected=true"
         />
         <StatCard
-          label="Total Sources"
+          label={t('admin.dashboard.totalSources')}
           value={loading ? undefined : totalSources}
           icon={Radio}
           href="/admin/sources"
@@ -139,24 +141,24 @@ export default function AdminDashboard() {
       {/* Active users */}
       <div className="mb-2 flex items-center gap-2">
         <Activity className="size-5 text-text-sub" aria-hidden="true" />
-        <h2 className="text-lg font-semibold text-text">Active users</h2>
+        <h2 className="text-lg font-semibold text-text">
+          {t('admin.dashboard.activeUsersHeading')}
+        </h2>
       </div>
-      <p className="mb-4 text-sm text-text-sub">
-        Distinct users with at least one overlay connected in the window (excludes banned users).
-      </p>
+      <p className="mb-4 text-sm text-text-sub">{t('admin.dashboard.activeUsersBody')}</p>
       <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard
-          label="Last 24 hours"
+          label={t('admin.dashboard.last24Hours')}
           value={loading ? undefined : stats?.active_users_24h}
           icon={Activity}
         />
         <StatCard
-          label="Last 7 days"
+          label={t('admin.dashboard.last7Days')}
           value={loading ? undefined : stats?.active_users_7d}
           icon={Activity}
         />
         <StatCard
-          label="Last 30 days"
+          label={t('admin.dashboard.last30Days')}
           value={loading ? undefined : stats?.active_users_30d}
           icon={Activity}
         />
@@ -165,7 +167,9 @@ export default function AdminDashboard() {
       {/* Sources by platform (the payload already carries the breakdown). */}
       {stats?.total_sources && Object.keys(stats.total_sources).length > 0 && (
         <>
-          <h2 className="mb-4 text-lg font-semibold text-text">Sources by platform</h2>
+          <h2 className="mb-4 text-lg font-semibold text-text">
+            {t('admin.dashboard.sourcesByPlatformHeading')}
+          </h2>
           <div className="mb-8 flex flex-wrap gap-2">
             {Object.entries(stats.total_sources)
               .sort((a, b) => b[1] - a[1])
@@ -176,7 +180,7 @@ export default function AdminDashboard() {
                   className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-1.5 transition-colors hover:bg-surface-2"
                 >
                   <PlatformBadge platform={platform} size="sm" />
-                  <span className="text-sm font-semibold text-text">{count.toLocaleString()}</span>
+                  <span className="text-sm font-semibold text-text">{formatNumber(count)}</span>
                 </Link>
               ))}
           </div>
@@ -184,10 +188,11 @@ export default function AdminDashboard() {
       )}
 
       {/* Navigation cards — generated from the same source as the sidebar rail so
-          the two can't drift. The Dashboard entry (exact) is the current page. */}
-      <h2 className="mb-4 text-lg font-semibold text-text">Manage</h2>
+          the two can't drift. The Dashboard entry is the current page and is
+          excluded by DESCRIBED_ADMIN_LINKS. */}
+      <h2 className="mb-4 text-lg font-semibold text-text">{t('admin.dashboard.manageHeading')}</h2>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {ADMIN_LINKS.filter((link) => !link.exact).map((link) => {
+        {DESCRIBED_ADMIN_LINKS.map((link) => {
           const Icon = link.icon
           return (
             <Link key={link.href} href={link.href}>
@@ -195,10 +200,12 @@ export default function AdminDashboard() {
                 <div className="flex items-center gap-3">
                   <Icon className="size-6 text-text-sub" aria-hidden="true" />
                   <div>
-                    <p className="text-sm font-medium text-text">{link.label}</p>
-                    {link.description && (
-                      <p className="text-xs text-text-sub">{link.description}</p>
-                    )}
+                    <p className="text-sm font-medium text-text">
+                      {t(`admin.nav.${link.messageStem}Label`)}
+                    </p>
+                    <p className="text-xs text-text-sub">
+                      {t(`admin.nav.${link.messageStem}Description`)}
+                    </p>
                   </div>
                 </div>
               </Card>

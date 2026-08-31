@@ -63,21 +63,39 @@ import { approveDevice, denyDevice, getPendingLink, type PendingLink } from '@/l
 import { overlaysApi } from '@/lib/api/overlays'
 import type { Overlay } from '@/lib/types/overlay'
 import { toastManager } from '@/lib/toast'
+import { useTranslations, type TFunction } from '@/lib/i18n'
+import { interpolateElements } from '@/lib/i18n/emphasise'
 
-const SCOPE_LABELS: Record<string, { title: string; description: string }> = {
-  'chat:write': {
-    title: 'Send chat messages',
-    description: 'Lets this device post messages to your connected chats.',
-  },
-  'engagement:write': {
-    title: 'Run polls and predictions',
-    description: 'Lets this device open, close, resolve and cancel polls and predictions.',
-  },
-}
+/**
+ * Scope string to its pair of `auth.link.scope*` leaves. `as const satisfies`
+ * rather than a plain annotation: an annotation widens the stems to string, and
+ * a typo would then resolve to a missing key at runtime instead of failing tsc.
+ */
+const SCOPE_MESSAGE_STEMS = {
+  'chat:write': 'ChatWrite',
+  'engagement:write': 'EngagementWrite',
+} as const satisfies Record<string, string>
 
-/** Human copy for an unknown scope string, so an unexpected value still renders. */
-function scopeLabel(scope: string): { title: string; description: string } {
-  return SCOPE_LABELS[scope] ?? { title: scope, description: 'Requested by this device.' }
+/**
+ * Human copy for a scope, so an unexpected value still renders. An unknown
+ * scope keeps its raw string as the title -- that is a protocol value, not
+ * copy -- and borrows a generic description.
+ *
+ * Takes `t` as its first argument because a module-scope function cannot call
+ * a hook.
+ */
+function scopeLabel(t: TFunction, scope: string): { title: string; description: string } {
+  // Read defensively. Indexing a plain object with an unvalidated scope string
+  // can resolve to an inherited Object prototype member, so the resolved value
+  // must be one of our own stems before it is used to build a message key.
+  const stem: unknown = SCOPE_MESSAGE_STEMS[scope as keyof typeof SCOPE_MESSAGE_STEMS]
+  if (stem !== 'ChatWrite' && stem !== 'EngagementWrite') {
+    return { title: scope, description: t('auth.link.scopeUnknownBody') }
+  }
+  return {
+    title: t(`auth.link.scope${stem}Title`),
+    description: t(`auth.link.scope${stem}Body`),
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -101,6 +119,7 @@ function CodeEntry({
   onFound: (pending: PendingLink, userCode: string) => void
   initialError: string | null
 }) {
+  const t = useTranslations()
   const [code, setCode] = useState('')
   const [error, setError] = useState<string | null>(initialError)
   const [checking, setChecking] = useState(false)
@@ -119,9 +138,7 @@ function CodeEntry({
       const pending = await getPendingLink({ userCode: normalized })
       onFound(pending, normalized)
     } catch {
-      setError(
-        'That code is not valid. Check the code your plugin is showing, or start linking again from the plugin.'
-      )
+      setError(t('auth.link.codeInvalid'))
     } finally {
       setChecking(false)
     }
@@ -129,15 +146,12 @@ function CodeEntry({
 
   return (
     <Card className="p-6">
-      <h2 className="text-lg font-semibold text-text">Enter the pairing code</h2>
-      <p className="mt-1 mb-4 text-sm text-text-sub">
-        Your plugin is showing an eight-character code. Type it here. This is the path for a control
-        surface on a different machine from this browser.
-      </p>
+      <h2 className="text-lg font-semibold text-text">{t('auth.link.codeTitle')}</h2>
+      <p className="mt-1 mb-4 text-sm text-text-sub">{t('auth.link.codeBody')}</p>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <Field.Root>
-          <Field.Label htmlFor={codeId}>Pairing code</Field.Label>
+          <Field.Label htmlFor={codeId}>{t('auth.link.codeLabel')}</Field.Label>
           <Field.Control
             render={
               <Input
@@ -147,7 +161,7 @@ function CodeEntry({
                 autoCapitalize="characters"
                 spellCheck={false}
                 maxLength={9}
-                placeholder="ABCD-EFGH"
+                placeholder={t('auth.link.codePlaceholder')}
                 aria-invalid={error !== null}
                 aria-describedby={error ? errorId : undefined}
                 onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
@@ -156,9 +170,7 @@ function CodeEntry({
               />
             }
           />
-          <Field.Description>
-            Case does not matter, and the dash is optional. Codes expire after ten minutes.
-          </Field.Description>
+          <Field.Description>{t('auth.link.codeHint')}</Field.Description>
         </Field.Root>
 
         {error && (
@@ -168,7 +180,7 @@ function CodeEntry({
         )}
 
         <Button type="submit" disabled={!canSubmit}>
-          {checking ? 'Checking…' : 'Continue'}
+          {checking ? t('auth.link.codeChecking') : t('auth.link.codeContinue')}
         </Button>
       </form>
     </Card>
@@ -196,6 +208,7 @@ function ApproveForm({
    */
   state: string | null
 }) {
+  const t = useTranslations()
   const router = useRouter()
   // Default to the only overlay when there is exactly one: the common case is a
   // streamer with a single overlay, and making them pick from a list of one is
@@ -245,15 +258,13 @@ function ApproveForm({
       }
       // The code flow: the plugin is polling and will pick the token up itself.
       toastManager.add({
-        title: 'Device approved',
-        description: 'Return to your plugin — it will finish linking on its own.',
+        title: t('auth.link.approvedTitle'),
+        description: t('auth.link.approvedBody'),
         type: 'success',
       })
       router.push('/settings/devices')
     } catch {
-      setError(
-        'Could not approve this device. The request may have expired — start linking again from the plugin.'
-      )
+      setError(t('auth.link.approveFailed'))
     } finally {
       setBusy(false)
     }
@@ -266,10 +277,10 @@ function ApproveForm({
         requestId: userCode ? undefined : pending.request_id,
         userCode: userCode ?? undefined,
       })
-      toastManager.add({ title: 'Device denied', type: 'success' })
+      toastManager.add({ title: t('auth.link.deniedTitle'), type: 'success' })
       router.push('/settings/devices')
     } catch {
-      setError('Could not deny this request. It will expire on its own within ten minutes.')
+      setError(t('auth.link.denyFailed'))
     } finally {
       setBusy(false)
     }
@@ -278,28 +289,23 @@ function ApproveForm({
   return (
     <form onSubmit={handleApprove} className="space-y-6">
       <Card className="p-6">
-        <h2 className="text-lg font-semibold text-text">A device wants to control your chat</h2>
+        <h2 className="text-lg font-semibold text-text">{t('auth.link.approveTitle')}</h2>
         <p className="mt-1 text-sm text-text-sub">
-          It says it is{' '}
-          <strong className="font-medium text-text">“{pending.device_name_self_reported}”</strong>.
-          That name is <em>self-reported by the plugin</em> — we have no way to verify it, so treat
-          it as a hint, not proof. If you did not just start linking a control surface, deny this.
+          {interpolateElements(
+            t('auth.link.approveBody', { name: pending.device_name_self_reported }),
+            { selfReported: <em>{t('auth.link.approveSelfReported')}</em> }
+          )}
         </p>
       </Card>
 
       <Card className="p-6">
         <fieldset>
           <legend className="text-sm font-medium text-text" id={overlayGroupId}>
-            Which overlay may it control?
+            {t('auth.link.overlayLegend')}
           </legend>
-          <p className="mt-1 mb-3 text-sm text-text-sub">
-            The device is locked to this overlay for as long as it stays paired. To move it, revoke
-            it and link it again.
-          </p>
+          <p className="mt-1 mb-3 text-sm text-text-sub">{t('auth.link.overlayBody')}</p>
           {overlays.length === 0 ? (
-            <p className="text-sm text-amber-400">
-              You have no overlays yet. Create one first, then link your device.
-            </p>
+            <p className="text-sm text-amber-400">{t('auth.link.overlayNone')}</p>
           ) : (
             <div className="space-y-2" role="radiogroup" aria-labelledby={overlayGroupId}>
               {overlays.map((overlay) => (
@@ -325,38 +331,31 @@ function ApproveForm({
 
       <Card className="p-6">
         <fieldset className="space-y-3">
-          <legend className="text-sm font-medium text-text">What may it do?</legend>
-          <p className="mb-1 text-sm text-text-sub">
-            The plugin asked for the items below. Turn off anything you do not want it to have — you
-            can grant less than it asked for, never more.
-          </p>
+          <legend className="text-sm font-medium text-text">{t('auth.link.scopeLegend')}</legend>
+          <p className="mb-1 text-sm text-text-sub">{t('auth.link.scopeBody')}</p>
           {pending.requested_scopes.map((scope) => (
             <Field.Root key={scope} className="flex-row items-start gap-3">
               <Switch.Root
                 checked={scopes.has(scope)}
                 onCheckedChange={(checked: boolean) => toggleScope(scope, checked)}
-                aria-label={scopeLabel(scope).title}
+                aria-label={scopeLabel(t, scope).title}
               >
                 <Switch.Thumb />
               </Switch.Root>
               <div className="flex flex-col gap-0.5">
-                <Field.Label className="cursor-pointer">{scopeLabel(scope).title}</Field.Label>
+                <Field.Label className="cursor-pointer">{scopeLabel(t, scope).title}</Field.Label>
                 <Field.Description className="text-xs">
-                  {scopeLabel(scope).description} <code className="text-text-dim">{scope}</code>
+                  {scopeLabel(t, scope).description} <code className="text-text-dim">{scope}</code>
                 </Field.Description>
               </div>
             </Field.Root>
           ))}
           {scopes.size === 0 && (
-            <p className="text-xs text-amber-400">
-              Pick at least one — a device with none can sign in but do nothing.
-            </p>
+            <p className="text-xs text-amber-400">{t('auth.link.scopeNone')}</p>
           )}
           {scopes.has('chat:write') && (
             <p className="rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs text-amber-200">
-              Worth knowing: sending chat is not per-overlay. It goes to every platform your account
-              has connected, so this permission is not narrowed by the overlay you picked above.
-              Only the poll and prediction actions are.
+              {t('auth.link.chatWriteCaveat')}
             </p>
           )}
         </fieldset>
@@ -364,24 +363,21 @@ function ApproveForm({
 
       <Card className="p-6">
         <Field.Root>
-          <Field.Label htmlFor={nameId}>Name this device</Field.Label>
+          <Field.Label htmlFor={nameId}>{t('auth.link.nameLabel')}</Field.Label>
           <Field.Control
             render={
               <Input
                 id={nameId}
                 value={deviceName}
                 maxLength={120}
-                placeholder="Stream Deck (studio PC)"
+                placeholder={t('auth.link.namePlaceholder')}
                 onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
                   setDeviceName(event.target.value)
                 }
               />
             }
           />
-          <Field.Description>
-            Shown in your paired-devices list, so you know what you are revoking later. Starts as
-            the plugin&apos;s own suggestion; change it to anything you like.
-          </Field.Description>
+          <Field.Description>{t('auth.link.nameHint')}</Field.Description>
         </Field.Root>
       </Card>
 
@@ -393,10 +389,10 @@ function ApproveForm({
 
       <div className="flex flex-wrap gap-3">
         <Button type="submit" disabled={!canApprove}>
-          {busy ? 'Approving…' : 'Approve this device'}
+          {busy ? t('auth.link.approving') : t('auth.link.approve')}
         </Button>
         <Button type="button" variant="outline" disabled={busy} onClick={() => void handleDeny()}>
-          Deny
+          {t('auth.link.deny')}
         </Button>
       </div>
     </form>
@@ -408,6 +404,7 @@ function ApproveForm({
 // ---------------------------------------------------------------------------
 
 function LinkDeviceContent() {
+  const t = useTranslations()
   const searchParams = useSearchParams()
   const requestId = searchParams.get('request_id')
   const state = searchParams.get('state')
@@ -423,38 +420,36 @@ function LinkDeviceContent() {
       try {
         setOverlays(await overlaysApi.list())
       } catch {
-        setLoadError('Could not load your overlays. Refresh the page to try again.')
+        setLoadError(t('auth.link.overlaysFailed'))
       }
       if (requestId) {
         try {
           setPending(await getPendingLink({ requestId }))
         } catch {
-          setLoadError(
-            'This link request has expired or was already used. Start linking again from the plugin.'
-          )
+          setLoadError(t('auth.link.requestExpired'))
         }
       }
       setLoading(false)
     })()
-  }, [requestId])
+  }, [requestId, t])
 
   return (
     <div className="min-h-screen bg-bg">
       <AppNav />
       <main id="main-content" tabIndex={-1} className="mx-auto max-w-2xl space-y-6 px-4 py-12">
         <div>
-          <h1 className="text-2xl font-bold text-text">Link a control surface</h1>
+          <h1 className="text-2xl font-bold text-text">{t('auth.link.title')}</h1>
           <p className="mt-1 text-sm text-text-sub">
-            Approve a Stream Deck, StreamController or other desktop control surface. Nothing is
-            copied or pasted — the credential goes straight to the plugin, and you can revoke it any
-            time from{' '}
-            <Link
-              href="/settings/devices"
-              className="font-medium text-twitch hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-twitch"
-            >
-              your paired devices
-            </Link>
-            .
+            {interpolateElements(t('auth.link.intro'), {
+              devices: (
+                <Link
+                  href="/settings/devices"
+                  className="font-medium text-twitch hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-twitch"
+                >
+                  {t('auth.link.introDevices')}
+                </Link>
+              ),
+            })}
           </p>
         </div>
 
@@ -462,7 +457,7 @@ function LinkDeviceContent() {
           <div className="space-y-3" role="status">
             <Skeleton className="h-24 w-full" />
             <Skeleton className="h-40 w-full" />
-            <span className="sr-only">Loading link request</span>
+            <span className="sr-only">{t('auth.link.loading')}</span>
           </div>
         ) : pending ? (
           <ApproveForm pending={pending} userCode={userCode} overlays={overlays} state={state} />

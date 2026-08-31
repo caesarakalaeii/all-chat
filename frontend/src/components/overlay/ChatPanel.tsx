@@ -24,6 +24,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { ChatRow, type ChatRowModeration } from '@/components/overlay/ChatRow'
 import { DEFAULT_VIEW_PREFS, type MonitorViewPrefs } from '@/app/overlay/[id]/view/viewPrefs'
+import { useTranslations } from '@/lib/i18n'
+import { emphasise } from '@/lib/i18n/emphasise'
 import type { SourceCapability } from '@/lib/types/moderation'
 import { orderMessages } from '@/lib/utils/feedAnchor'
 import {
@@ -70,6 +72,7 @@ interface ChatPanelProps {
  * clears it. No smooth-scroll (instant, professional).
  */
 export function ChatPanel({ items, prefs, capabilities, moderation }: ChatPanelProps) {
+  const t = useTranslations()
   const newestFirst = (prefs ?? DEFAULT_VIEW_PREFS).newestFirst
   const scrollRef = useRef<HTMLDivElement>(null)
   const pinnedRef = useRef(true)
@@ -176,17 +179,29 @@ export function ChatPanel({ items, prefs, capabilities, moderation }: ChatPanelP
   return (
     <section className="relative flex h-full min-h-0 flex-col bg-bg">
       <header className="flex items-center justify-between border-b border-border px-3 py-2">
-        <span className="text-xs font-semibold tracking-wide text-text-sub uppercase">Chat</span>
+        <span className="text-xs font-semibold tracking-wide text-text-sub uppercase">
+          {t('viewerOverlay.chatPanel.heading')}
+        </span>
         <span className="text-xs text-text-dim tabular-nums">
-          {userFilter ? `${live.length} of ${items.length}` : items.length}
+          {userFilter
+            ? t('viewerOverlay.chatPanel.filteredCount', {
+                shown: live.length,
+                total: items.length,
+              })
+            : items.length}
         </span>
       </header>
       {userFilter && (
         <div className="flex items-center gap-2 border-b border-border bg-surface-2 px-3 py-1.5 text-xs text-text-sub">
           <Filter className="h-3.5 w-3.5 shrink-0 text-text-dim" aria-hidden />
           <span className="min-w-0 truncate">
-            Showing only messages from{' '}
-            <span className="font-semibold text-text">{userFilter.label}</span>
+            {emphasise(
+              t('viewerOverlay.chatPanel.filteredBy', { user: userFilter.label }),
+              userFilter.label,
+              (run) => (
+                <span className="font-semibold text-text">{run}</span>
+              )
+            )}
           </span>
           <button
             type="button"
@@ -194,14 +209,16 @@ export function ChatPanel({ items, prefs, capabilities, moderation }: ChatPanelP
             className="ml-auto flex shrink-0 items-center gap-1 rounded font-medium text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
           >
             <X className="h-3.5 w-3.5" aria-hidden />
-            Show all chat
+            {t('viewerOverlay.chatPanel.showAll')}
           </button>
         </div>
       )}
       <div ref={scrollRef} onScroll={handleScroll} className="min-h-0 flex-1 overflow-y-auto">
         {visible.length === 0 ? (
           <p className="px-3 py-6 text-center text-sm text-text-dim">
-            {userFilter ? `No messages from ${userFilter.label} yet.` : 'No chat messages yet.'}
+            {userFilter
+              ? t('viewerOverlay.chatPanel.filteredEmpty', { user: userFilter.label })
+              : t('viewerOverlay.chatPanel.empty')}
           </p>
         ) : (
           rows.map(({ item, key }) => (

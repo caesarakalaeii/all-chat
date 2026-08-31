@@ -40,11 +40,25 @@ import { toastManager } from '@/lib/toast'
 import { ApiError } from '@/lib/api/client'
 import { engagementApi } from '@/lib/api/engagement'
 import { useEngagementLive } from '@/lib/hooks/useEngagementLive'
+import { type TFunction, formatNumber, formatTime, useTranslations } from '@/lib/i18n'
+import { interpolateElements } from '@/lib/i18n/emphasise'
 import type { Poll, Prediction } from '@/lib/types/engagement'
 
 const REFRESH_MS = 3000
 const MAX_POLL_OPTIONS = 5
 const MAX_PREDICTION_OUTCOMES = 10
+
+// Chat commands are protocol, not copy: the parser matches these bytes, so a
+// translation would stop the command working.
+const VOTE_COMMAND = '!vote 2'
+const VOTE_SHORTHAND = '2'
+const PREDICT_COMMAND = '!predict 1 500'
+// The unbounded-duration marker for the two optional seconds inputs. A symbol,
+// not a word, so it reads the same in every language.
+const NO_LIMIT_PLACEHOLDER = '∞'
+// Sits beside the outcome's own "Winning outcome" aria-label, which states in
+// words what the trophy shows.
+const WINNER_GLYPH = '🏆'
 
 const inputClass =
   'w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-xs text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none'
@@ -57,20 +71,26 @@ function errorMessage(err: unknown, fallback: string): string {
   return err instanceof ApiError ? err.message : fallback
 }
 
-/** Editable list of option/outcome labels for the create forms. */
+/**
+ * Editable list of option/outcome labels for the create forms.
+ *
+ * `noun` is the already-resolved list noun ('Option' / 'Outcome'); it names each
+ * numbered row and, lowercased, the add button.
+ */
 function LabelListEditor({
   labels,
   onChange,
   max,
-  placeholder,
+  noun,
   disabled,
 }: {
   labels: string[]
   onChange: (next: string[]) => void
   max: number
-  placeholder: string
+  noun: string
   disabled: boolean
 }) {
+  const t = useTranslations()
   return (
     <div className="space-y-1.5">
       {labels.map((label, i) => (
@@ -79,8 +99,11 @@ function LabelListEditor({
             type="text"
             value={label}
             onChange={(e) => onChange(labels.map((l, j) => (j === i ? e.target.value : l)))}
-            placeholder={`${placeholder} ${i + 1}`}
-            aria-label={`${placeholder} ${i + 1}`}
+            placeholder={t('viewerOverlay.engagement.labelListEntry', {
+              noun,
+              index: i + 1,
+            })}
+            aria-label={t('viewerOverlay.engagement.labelListEntry', { noun, index: i + 1 })}
             disabled={disabled}
             className={inputClass}
           />
@@ -89,7 +112,7 @@ function LabelListEditor({
               type="button"
               onClick={() => onChange(labels.filter((_, j) => j !== i))}
               disabled={disabled}
-              title="Remove"
+              title={t('viewerOverlay.engagement.labelListRemove')}
               className="rounded p-1 text-text-dim transition-colors hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
             >
               <X className="h-3.5 w-3.5" />
@@ -105,7 +128,7 @@ function LabelListEditor({
           className="flex items-center gap-1 text-xs text-text-sub transition-colors hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
         >
           <Plus className="h-3.5 w-3.5" />
-          Add {placeholder.toLowerCase()}
+          {t('viewerOverlay.engagement.labelListAdd', { noun: noun.toLowerCase() })}
         </button>
       )}
     </div>
@@ -155,15 +178,16 @@ function StateBadge({ state }: { state: string }) {
 }
 
 /** Origin marker for rounds mirrored from Twitch; sits next to the StateBadge. */
-function TwitchSourceBadge() {
+function TwitchSourceBadge({ t }: { t: TFunction }) {
   return (
     <span className="rounded border border-border bg-surface px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-text-sub uppercase">
-      Twitch
+      {t('viewerOverlay.engagement.twitchSourceBadge')}
     </span>
   )
 }
 
 export function EngagementControls({ overlayId }: { overlayId: string }) {
+  const t = useTranslations()
   const [poll, setPoll] = useState<Poll | null>(null)
   const [prediction, setPrediction] = useState<Prediction | null>(null)
   const [busy, setBusy] = useState(false)
@@ -259,7 +283,10 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
   const startPoll = () => {
     const labels = options.map((o) => o.trim()).filter(Boolean)
     if (!question.trim() || labels.length < 2) {
-      toastManager.add({ title: 'A poll needs a question and at least 2 options', type: 'error' })
+      toastManager.add({
+        title: t('viewerOverlay.engagement.pollIncompleteToast'),
+        type: 'error',
+      })
       return
     }
     const duration = Number.parseInt(pollDuration, 10)
@@ -274,15 +301,15 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
       setQuestion('')
       setOptions(['', ''])
       setPollDuration('')
-      toastManager.add({ title: 'Poll started', type: 'success' })
-    }, 'Could not start the poll')
+      toastManager.add({ title: t('viewerOverlay.engagement.pollStartedToast'), type: 'success' })
+    }, t('viewerOverlay.engagement.pollStartFailed'))
   }
 
   const closePoll = (pollId: string) =>
     void run(async () => {
       setPoll(await engagementApi.closePoll(overlayId, pollId))
-      toastManager.add({ title: 'Poll closed', type: 'success' })
-    }, 'Could not close the poll')
+      toastManager.add({ title: t('viewerOverlay.engagement.pollClosedToast'), type: 'success' })
+    }, t('viewerOverlay.engagement.pollCloseFailed'))
 
   // --- Prediction actions ----------------------------------------------------
 
@@ -290,7 +317,7 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
     const labels = outcomes.map((o) => o.trim()).filter(Boolean)
     if (!title.trim() || labels.length < 2) {
       toastManager.add({
-        title: 'A prediction needs a title and at least 2 outcomes',
+        title: t('viewerOverlay.engagement.predictionIncompleteToast'),
         type: 'error',
       })
       return
@@ -307,19 +334,25 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
       setTitle('')
       setOutcomes(['', ''])
       setAutoLock('')
-      toastManager.add({ title: 'Prediction started', type: 'success' })
-    }, 'Could not start the prediction')
+      toastManager.add({
+        title: t('viewerOverlay.engagement.predictionStartedToast'),
+        type: 'success',
+      })
+    }, t('viewerOverlay.engagement.predictionStartFailed'))
   }
 
   const lockPrediction = (pid: string) =>
     void run(async () => {
       setPrediction(await engagementApi.lockPrediction(overlayId, pid))
-      toastManager.add({ title: 'Prediction locked — wagers are frozen', type: 'success' })
-    }, 'Could not lock the prediction')
+      toastManager.add({
+        title: t('viewerOverlay.engagement.predictionLockedToast'),
+        type: 'success',
+      })
+    }, t('viewerOverlay.engagement.predictionLockFailed'))
 
   const resolvePrediction = (pid: string) => {
     if (!winnerId) {
-      toastManager.add({ title: 'Pick the winning outcome first', type: 'error' })
+      toastManager.add({ title: t('viewerOverlay.engagement.pickWinnerToast'), type: 'error' })
       return
     }
     void run(async () => {
@@ -330,13 +363,16 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
         // while LOCKED, so this is a lost race (auto-lock/refresh), not user error —
         // acknowledge it neutrally rather than scolding (L-U7).
         setPrediction(resolved)
-        toastManager.add({ title: 'The prediction is no longer locked — refresh and try again' })
+        toastManager.add({ title: t('viewerOverlay.engagement.predictionNoLongerLockedToast') })
         return
       }
       setPrediction(resolved)
       setWinnerId('')
-      toastManager.add({ title: 'Prediction resolved — winners paid out', type: 'success' })
-    }, 'Could not resolve the prediction')
+      toastManager.add({
+        title: t('viewerOverlay.engagement.predictionResolvedToast'),
+        type: 'success',
+      })
+    }, t('viewerOverlay.engagement.predictionResolveFailed'))
   }
 
   const cancelPrediction = (pid: string) =>
@@ -348,14 +384,19 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
       // Cancel is an idempotent guarded update: a 200 on an already-finished
       // prediction returns it unchanged — don't claim a refund that didn't happen.
       if (result.state === 'CANCELED') {
-        toastManager.add({ title: 'Prediction canceled — all wagers refunded', type: 'success' })
+        toastManager.add({
+          title: t('viewerOverlay.engagement.predictionCanceledToast'),
+          type: 'success',
+        })
       } else {
         toastManager.add({
-          title: `Nothing to cancel — the prediction is already ${result.state.toLowerCase()}`,
+          title: t('viewerOverlay.engagement.nothingToCancelToast', {
+            state: result.state.toLowerCase(),
+          }),
           type: 'error',
         })
       }
-    }, 'Could not cancel the prediction')
+    }, t('viewerOverlay.engagement.predictionCancelFailed'))
 
   // --- Twitch mirroring opt-in ------------------------------------------------
 
@@ -364,11 +405,11 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
       window.location.href = await engagementApi.getTwitchMirrorConsentUrl(overlayId)
     } catch {
       toastManager.add({
-        title: 'Could not start Twitch consent. Please try again.',
+        title: t('viewerOverlay.engagement.twitchConsentFailedToast'),
         type: 'error',
       })
     }
-  }, [overlayId])
+  }, [overlayId, t])
 
   // Disarm the cancel/payout confirmations if they aren't acted on quickly.
   useEffect(() => {
@@ -415,10 +456,12 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
         {/* Poll column */}
         <div className="rounded-lg border border-border bg-surface-2 p-3">
           <div className="mb-2 flex items-center justify-between">
-            <h3 className="text-xs font-semibold tracking-wide text-text-sub uppercase">Poll</h3>
+            <h3 className="text-xs font-semibold tracking-wide text-text-sub uppercase">
+              {t('viewerOverlay.engagement.pollHeading')}
+            </h3>
             {poll && (
               <span className="flex items-center gap-1.5">
-                {pollNative && <TwitchSourceBadge />}
+                {pollNative && <TwitchSourceBadge t={t} />}
                 <StateBadge state={poll.state} />
               </span>
             )}
@@ -431,17 +474,19 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                 <TallyBar
                   key={o.id}
                   label={`${o.idx}. ${o.label}`}
-                  detail={`${pollTotal > 0 ? Math.round((o.votes / pollTotal) * 100) : 0}% (${o.votes.toLocaleString()})`}
+                  detail={`${pollTotal > 0 ? Math.round((o.votes / pollTotal) * 100) : 0}% (${formatNumber(o.votes)})`}
                   pct={pollTotal > 0 ? Math.round((o.votes / pollTotal) * 100) : 0}
                   accent="twitch"
                 />
               ))}
               <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                 <span className="text-[11px] text-text-sub">
-                  {pollTotal.toLocaleString()} votes
+                  {t('viewerOverlay.engagement.pollVotes', { total: formatNumber(pollTotal) })}
                   {poll.ends_at &&
                     poll.state === 'ACTIVE' &&
-                    ` · auto-closes ${new Date(poll.ends_at).toLocaleTimeString()}`}
+                    t('viewerOverlay.engagement.pollAutoCloses', {
+                      time: formatTime(new Date(poll.ends_at)),
+                    })}
                 </span>
                 {pollFinished ? (
                   <button
@@ -449,7 +494,7 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                     onClick={() => setPoll(null)}
                     className={secondaryButtonClass}
                   >
-                    New poll
+                    {t('viewerOverlay.engagement.pollNew')}
                   </button>
                 ) : (
                   !pollNative && (
@@ -459,14 +504,14 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                       disabled={busy}
                       className={primaryButtonClass}
                     >
-                      Close poll
+                      {t('viewerOverlay.engagement.pollClose')}
                     </button>
                   )
                 )}
               </div>
               {pollNative && (
                 <p className="text-[11px] text-text-sub">
-                  Mirrored from Twitch — viewers vote in the Twitch UI/chat
+                  {t('viewerOverlay.engagement.pollMirroredNote')}
                 </p>
               )}
             </div>
@@ -476,8 +521,8 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                 type="text"
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
-                placeholder="Question"
-                aria-label="Poll question"
+                placeholder={t('viewerOverlay.engagement.pollQuestionPlaceholder')}
+                aria-label={t('viewerOverlay.engagement.pollQuestionLabel')}
                 disabled={busy}
                 className={inputClass}
               />
@@ -485,7 +530,7 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                 labels={options}
                 onChange={setOptions}
                 max={MAX_POLL_OPTIONS}
-                placeholder="Option"
+                noun={t('viewerOverlay.engagement.pollOptionNoun')}
                 disabled={busy}
               />
               <div className="flex flex-wrap items-center gap-3">
@@ -496,34 +541,38 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                     onChange={(e) => setAllowChange(e.target.checked)}
                     className="accent-twitch"
                   />
-                  Allow vote changes
+                  {t('viewerOverlay.engagement.pollAllowChange')}
                 </label>
                 <label className="flex items-center gap-1.5 text-xs text-text-sub">
-                  Auto-close after
+                  {t('viewerOverlay.engagement.pollAutoCloseAfter')}
                   <input
                     type="number"
                     min={0}
                     value={pollDuration}
                     onChange={(e) => setPollDuration(e.target.value)}
-                    placeholder="∞"
+                    placeholder={NO_LIMIT_PLACEHOLDER}
                     disabled={busy}
                     className={clsx(inputClass, 'w-16')}
                   />
-                  s
+                  {t('viewerOverlay.engagement.secondsSuffix')}
                 </label>
               </div>
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[11px] text-text-sub">
-                  Viewers vote on the{' '}
-                  <a
-                    href={`/overlay/${overlayId}/participate`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
-                  >
-                    participate page
-                  </a>{' '}
-                  or from chat (<code>!vote 2</code> or just <code>2</code>)
+                  {interpolateElements(t('viewerOverlay.engagement.pollParticipateHint'), {
+                    link: (
+                      <a
+                        href={`/overlay/${overlayId}/participate`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                      >
+                        {t('viewerOverlay.engagement.participateLink')}
+                      </a>
+                    ),
+                    voteCommand: <code>{VOTE_COMMAND}</code>,
+                    shortCommand: <code>{VOTE_SHORTHAND}</code>,
+                  })}
                 </span>
                 <button
                   type="button"
@@ -531,7 +580,7 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                   disabled={busy}
                   className={primaryButtonClass}
                 >
-                  Start poll
+                  {t('viewerOverlay.engagement.pollStart')}
                 </button>
               </div>
             </div>
@@ -542,11 +591,11 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
         <div className="rounded-lg border border-border bg-surface-2 p-3">
           <div className="mb-2 flex items-center justify-between">
             <h3 className="text-xs font-semibold tracking-wide text-text-sub uppercase">
-              Prediction
+              {t('viewerOverlay.engagement.predictionHeading')}
             </h3>
             {prediction && (
               <span className="flex items-center gap-1.5">
-                {predNative && <TwitchSourceBadge />}
+                {predNative && <TwitchSourceBadge t={t} />}
                 <StateBadge state={prediction.state} />
               </span>
             )}
@@ -559,14 +608,19 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                 className="space-y-2"
                 role={prediction.state === 'LOCKED' && !predNative ? 'radiogroup' : undefined}
                 aria-label={
-                  prediction.state === 'LOCKED' && !predNative ? 'Winning outcome' : undefined
+                  prediction.state === 'LOCKED' && !predNative
+                    ? t('viewerOverlay.engagement.winningOutcome')
+                    : undefined
                 }
               >
                 {prediction.outcomes.map((o) => (
                   <TallyBar
                     key={o.id}
                     label={`${o.idx}. ${o.label}`}
-                    detail={`${o.total_points.toLocaleString()} pts · ${o.entrants.toLocaleString()} entrants`}
+                    detail={t('viewerOverlay.engagement.predictionOutcomeTally', {
+                      points: formatNumber(o.total_points),
+                      entrants: formatNumber(o.entrants),
+                    })}
                     pct={predTotal > 0 ? Math.round((o.total_points / predTotal) * 100) : 0}
                     accent="sky"
                     leading={
@@ -579,12 +633,17 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                             setWinnerId(o.id)
                             setConfirmResolve(false) // re-arm the payout confirm when the winner changes
                           }}
-                          aria-label={`Winning outcome: ${o.label}`}
+                          aria-label={t('viewerOverlay.engagement.winningOutcomeChoice', {
+                            label: o.label,
+                          })}
                           className="accent-twitch focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
                         />
                       ) : prediction.winning_outcome_id === o.id ? (
-                        <span title="Winning outcome" aria-label="Winning outcome">
-                          🏆
+                        <span
+                          title={t('viewerOverlay.engagement.winningOutcome')}
+                          aria-label={t('viewerOverlay.engagement.winningOutcome')}
+                        >
+                          {WINNER_GLYPH}
                         </span>
                       ) : undefined
                     }
@@ -593,10 +652,14 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
               </div>
               <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                 <span className="text-[11px] text-text-sub">
-                  {predTotal.toLocaleString()} points wagered
+                  {t('viewerOverlay.engagement.predictionPointsWagered', {
+                    total: formatNumber(predTotal),
+                  })}
                   {prediction.auto_lock_at &&
                     prediction.state === 'ACTIVE' &&
-                    ` · auto-locks ${new Date(prediction.auto_lock_at).toLocaleTimeString()}`}
+                    t('viewerOverlay.engagement.predictionAutoLocks', {
+                      time: formatTime(new Date(prediction.auto_lock_at)),
+                    })}
                 </span>
                 <div className="flex flex-wrap gap-2">
                   {!predNative && prediction.state === 'ACTIVE' && (
@@ -606,7 +669,7 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                       disabled={busy}
                       className={primaryButtonClass}
                     >
-                      Lock wagers
+                      {t('viewerOverlay.engagement.predictionLock')}
                     </button>
                   )}
                   {!predNative && prediction.state === 'LOCKED' && (
@@ -615,7 +678,7 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                       onClick={() => {
                         if (!winnerId) {
                           toastManager.add({
-                            title: 'Pick the winning outcome first',
+                            title: t('viewerOverlay.engagement.pickWinnerToast'),
                             type: 'error',
                           })
                           return
@@ -629,14 +692,20 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                         resolvePrediction(prediction.id)
                       }}
                       disabled={busy || !winnerId}
-                      title={winnerId ? undefined : 'Select the winning outcome first'}
+                      title={
+                        winnerId
+                          ? undefined
+                          : t('viewerOverlay.engagement.predictionResolveDisabledTitle')
+                      }
                       className={primaryButtonClass}
                     >
                       {!winnerLabel
-                        ? 'Resolve'
+                        ? t('viewerOverlay.engagement.predictionResolve')
                         : confirmResolve
-                          ? `Pay out "${winnerLabel}" — final?`
-                          : `Pay out "${winnerLabel}"`}
+                          ? t('viewerOverlay.engagement.predictionPayOutConfirm', {
+                              label: winnerLabel,
+                            })
+                          : t('viewerOverlay.engagement.predictionPayOut', { label: winnerLabel })}
                     </button>
                   )}
                   {!predNative &&
@@ -648,17 +717,17 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                         disabled={busy}
                         className="rounded-lg border border-destructive/50 px-3 py-1.5 text-xs font-semibold text-destructive transition-colors hover:bg-destructive/10 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        Really refund all wagers?
+                        {t('viewerOverlay.engagement.predictionCancelConfirm')}
                       </button>
                     ) : (
                       <button
                         type="button"
                         onClick={() => setConfirmCancel(true)}
                         disabled={busy}
-                        title="Cancel and refund all wagers"
+                        title={t('viewerOverlay.engagement.predictionCancelTitle')}
                         className={secondaryButtonClass}
                       >
-                        Cancel & refund
+                        {t('viewerOverlay.engagement.predictionCancel')}
                       </button>
                     ))}
                   {predFinished && (
@@ -670,19 +739,19 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                       }}
                       className={secondaryButtonClass}
                     >
-                      New prediction
+                      {t('viewerOverlay.engagement.predictionNew')}
                     </button>
                   )}
                 </div>
               </div>
               {prediction.state === 'LOCKED' && !predNative && (
                 <p className="text-[11px] text-text-sub">
-                  Pick the winning outcome, then pay out. Payouts are final.
+                  {t('viewerOverlay.engagement.predictionLockedNote')}
                 </p>
               )}
               {predNative && (
                 <p className="text-[11px] text-text-sub">
-                  Mirrored from Twitch — runs on Twitch channel points
+                  {t('viewerOverlay.engagement.predictionMirroredNote')}
                 </p>
               )}
             </div>
@@ -692,8 +761,8 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="Title (e.g. Will we win this round?)"
-                aria-label="Prediction title"
+                placeholder={t('viewerOverlay.engagement.predictionTitlePlaceholder')}
+                aria-label={t('viewerOverlay.engagement.predictionTitleLabel')}
                 disabled={busy}
                 className={inputClass}
               />
@@ -701,34 +770,37 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                 labels={outcomes}
                 onChange={setOutcomes}
                 max={MAX_PREDICTION_OUTCOMES}
-                placeholder="Outcome"
+                noun={t('viewerOverlay.engagement.predictionOutcomeNoun')}
                 disabled={busy}
               />
               <label className="flex items-center gap-1.5 text-xs text-text-sub">
-                Auto-lock wagers after
+                {t('viewerOverlay.engagement.predictionAutoLockAfter')}
                 <input
                   type="number"
                   min={0}
                   value={autoLock}
                   onChange={(e) => setAutoLock(e.target.value)}
-                  placeholder="∞"
+                  placeholder={NO_LIMIT_PLACEHOLDER}
                   disabled={busy}
                   className={clsx(inputClass, 'w-16')}
                 />
-                s
+                {t('viewerOverlay.engagement.secondsSuffix')}
               </label>
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[11px] text-text-sub">
-                  Viewers wager on the{' '}
-                  <a
-                    href={`/overlay/${overlayId}/participate`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
-                  >
-                    participate page
-                  </a>{' '}
-                  (they can see their balance) — or from chat: <code>!predict 1 500</code>
+                  {interpolateElements(t('viewerOverlay.engagement.predictionParticipateHint'), {
+                    link: (
+                      <a
+                        href={`/overlay/${overlayId}/participate`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                      >
+                        {t('viewerOverlay.engagement.participateLink')}
+                      </a>
+                    ),
+                    predictCommand: <code>{PREDICT_COMMAND}</code>,
+                  })}
                 </span>
                 <button
                   type="button"
@@ -736,7 +808,7 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                   disabled={busy}
                   className={primaryButtonClass}
                 >
-                  Start prediction
+                  {t('viewerOverlay.engagement.predictionStart')}
                 </button>
               </div>
             </div>
@@ -750,16 +822,13 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
           the note sets the expectation that a native round only mirrors after the next
           channel sync (M5), so a streamer who just enabled it doesn't think it's broken. */}
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
-        <p className="text-[11px] text-text-sub">
-          Mirror native Twitch polls &amp; predictions onto your overlays (read-only). Opt-in; takes
-          effect after the next channel sync (a stream restart or re-adding the source).
-        </p>
+        <p className="text-[11px] text-text-sub">{t('viewerOverlay.engagement.mirrorNote')}</p>
         <button
           type="button"
           onClick={() => void startMirrorConsent()}
           className={secondaryButtonClass}
         >
-          Enable Twitch mirroring
+          {t('viewerOverlay.engagement.mirrorEnable')}
         </button>
       </div>
     </section>

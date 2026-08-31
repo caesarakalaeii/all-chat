@@ -24,6 +24,8 @@ import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PlatformBadge } from '@/components/ui/badge'
 import { ChannelLink } from '@/components/ChannelLink'
+import { formatDate, useTranslations } from '@/lib/i18n'
+import { interpolateElements } from '@/lib/i18n/emphasise'
 
 interface Source {
   id: string
@@ -42,15 +44,21 @@ interface Source {
   owner_display_name?: string
 }
 
+// The dash shown where a source has no resolvable owner. A typographic symbol
+// standing in for absent data, not copy.
+const NO_OWNER_DASH = '\u2014'
+
 // Short, stable label for a source's owner: the resolved username, else a
-// truncated user id (orphaned/unjoined rows), else a dash.
+// truncated user id (orphaned/unjoined rows), else a dash. All three are
+// identifiers rather than copy, so this stays independent of the catalog.
 function ownerLabel(source: Source): string {
   if (source.owner_username) return `@${source.owner_username}`
   if (source.user_id) return source.user_id.slice(0, 8)
-  return '—'
+  return NO_OWNER_DASH
 }
 
 export default function SourcesPage() {
+  const t = useTranslations()
   const [sources, setSources] = useState<Source[]>([])
   const [platformFilter, setPlatformFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -92,13 +100,13 @@ export default function SourcesPage() {
         setLoading(false)
       } catch (err) {
         console.error('Failed to load sources:', err)
-        setError('Failed to load sources')
+        setError(t('admin.sources.loadError'))
         setLoading(false)
       }
     }
 
     fetchSources()
-  }, [])
+  }, [t])
 
   // Derived during render (no state-in-effect): filter by owner scope, platform,
   // status, and search (channel name/id, overlay name, owner username).
@@ -144,30 +152,31 @@ export default function SourcesPage() {
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-text">Sources</h1>
-        <p className="mt-1 text-sm text-text-sub">
-          View and manage all chat sources across overlays
-        </p>
+        <h1 className="text-2xl font-bold text-text">{t('admin.sources.heading')}</h1>
+        <p className="mt-1 text-sm text-text-sub">{t('admin.sources.intro')}</p>
       </div>
 
       {/* Owner scope (from ?user=) */}
       {userFilter && (
         <div className="mb-4 flex items-center gap-3 rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm">
           <span className="text-text-sub">
-            Showing sources owned by{' '}
-            <Link
-              href={`/admin/users?user=${userFilter}`}
-              className="font-medium text-text hover:underline"
-            >
-              {userFilterLabel}
-            </Link>
+            {interpolateElements(t('admin.sources.ownerScope'), {
+              owner: (
+                <Link
+                  href={`/admin/users?user=${userFilter}`}
+                  className="font-medium text-text hover:underline"
+                >
+                  {userFilterLabel}
+                </Link>
+              ),
+            })}
           </span>
           <button
             type="button"
             onClick={() => setUserFilter(null)}
             className="ml-auto text-text-sub transition-colors hover:text-text"
           >
-            Clear
+            {t('admin.sources.ownerScopeClear')}
           </button>
         </div>
       )}
@@ -188,7 +197,7 @@ export default function SourcesPage() {
               </svg>
             </div>
             <div>
-              <div className="text-xs text-text-sub">Twitch</div>
+              <div className="text-xs text-text-sub">{t('common.platforms.twitch')}</div>
               <div className="text-lg font-semibold text-text">{platformCounts.twitch}</div>
             </div>
           </div>
@@ -207,7 +216,7 @@ export default function SourcesPage() {
               </svg>
             </div>
             <div>
-              <div className="text-xs text-text-sub">YouTube</div>
+              <div className="text-xs text-text-sub">{t('common.platforms.youtube')}</div>
               <div className="text-lg font-semibold text-text">{platformCounts.youtube}</div>
             </div>
           </div>
@@ -230,7 +239,7 @@ export default function SourcesPage() {
               </svg>
             </div>
             <div>
-              <div className="text-xs text-text-sub">Kick</div>
+              <div className="text-xs text-text-sub">{t('common.platforms.kick')}</div>
               <div className="text-lg font-semibold text-text">{platformCounts.kick}</div>
             </div>
           </div>
@@ -249,7 +258,7 @@ export default function SourcesPage() {
               </svg>
             </div>
             <div>
-              <div className="text-xs text-text-sub">TikTok</div>
+              <div className="text-xs text-text-sub">{t('common.platforms.tiktok')}</div>
               <div className="text-lg font-semibold text-text">{platformCounts.tiktok}</div>
             </div>
           </div>
@@ -261,12 +270,12 @@ export default function SourcesPage() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div>
             <label htmlFor={searchId} className="mb-2 block text-sm font-medium text-text-sub">
-              Search
+              {t('admin.sources.searchLabel')}
             </label>
             <input
               id={searchId}
               type="text"
-              placeholder="Search by channel, overlay, or owner..."
+              placeholder={t('admin.sources.searchPlaceholder')}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:text-sm"
@@ -277,7 +286,7 @@ export default function SourcesPage() {
               htmlFor={platformFilterId}
               className="mb-2 block text-sm font-medium text-text-sub"
             >
-              Platform
+              {t('admin.sources.platformLabel')}
             </label>
             <select
               id={platformFilterId}
@@ -285,11 +294,11 @@ export default function SourcesPage() {
               onChange={(e) => setPlatformFilter(e.target.value)}
               className="block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:text-sm"
             >
-              <option value="all">All Platforms</option>
-              <option value="twitch">Twitch</option>
-              <option value="youtube">YouTube</option>
-              <option value="kick">Kick</option>
-              <option value="tiktok">TikTok</option>
+              <option value="all">{t('admin.sources.platformAll')}</option>
+              <option value="twitch">{t('common.platforms.twitch')}</option>
+              <option value="youtube">{t('common.platforms.youtube')}</option>
+              <option value="kick">{t('common.platforms.kick')}</option>
+              <option value="tiktok">{t('common.platforms.tiktok')}</option>
             </select>
           </div>
           <div>
@@ -297,7 +306,7 @@ export default function SourcesPage() {
               htmlFor={statusFilterId}
               className="mb-2 block text-sm font-medium text-text-sub"
             >
-              Status
+              {t('admin.sources.statusLabel')}
             </label>
             <select
               id={statusFilterId}
@@ -305,9 +314,9 @@ export default function SourcesPage() {
               onChange={(e) => setStatusFilter(e.target.value)}
               className="block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:text-sm"
             >
-              <option value="all">All Status</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
+              <option value="all">{t('admin.sources.statusAll')}</option>
+              <option value="active">{t('admin.sources.statusActive')}</option>
+              <option value="inactive">{t('admin.sources.statusInactive')}</option>
             </select>
           </div>
         </div>
@@ -322,7 +331,7 @@ export default function SourcesPage() {
         </Card>
       ) : filteredSources.length === 0 ? (
         <Card className="p-8 text-center text-sm text-text-dim">
-          {sources.length === 0 ? 'No sources found.' : 'No sources match your filters.'}
+          {sources.length === 0 ? t('admin.sources.emptyNone') : t('admin.sources.emptyFiltered')}
         </Card>
       ) : (
         <>
@@ -330,31 +339,31 @@ export default function SourcesPage() {
           <Card className="hidden overflow-hidden md:block">
             <div className="border-b border-border px-4 py-5">
               <h3 className="text-base font-medium text-text">
-                All Sources ({filteredSources.length})
+                {t('admin.sources.listHeading', { count: filteredSources.length })}
               </h3>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <caption className="sr-only">Chat sources</caption>
+                <caption className="sr-only">{t('admin.sources.tableCaption')}</caption>
                 <thead className="border-b border-border bg-surface-2">
                   <tr>
                     <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
-                      Platform
+                      {t('admin.sources.columnPlatform')}
                     </th>
                     <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
-                      Channel
+                      {t('admin.sources.columnChannel')}
                     </th>
                     <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
-                      Overlay
+                      {t('admin.sources.columnOverlay')}
                     </th>
                     <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
-                      Owner
+                      {t('admin.sources.columnOwner')}
                     </th>
                     <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
-                      Status
+                      {t('admin.sources.columnStatus')}
                     </th>
                     <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
-                      Created
+                      {t('admin.sources.columnCreated')}
                     </th>
                   </tr>
                 </thead>
@@ -391,22 +400,22 @@ export default function SourcesPage() {
                             {ownerLabel(source)}
                           </Link>
                         ) : (
-                          <span className="text-sm text-text-dim">—</span>
+                          <span className="text-sm text-text-dim">{NO_OWNER_DASH}</span>
                         )}
                       </td>
                       <td className="px-4 py-3">
                         {source.is_active ? (
                           <span className="inline-flex items-center rounded-full bg-kick/10 px-2 py-0.5 text-xs font-medium text-kick">
-                            Active
+                            {t('admin.sources.statusActive')}
                           </span>
                         ) : (
                           <span className="inline-flex items-center rounded-full bg-badge-bg px-2 py-0.5 text-xs font-medium text-text-dim">
-                            Inactive
+                            {t('admin.sources.statusInactive')}
                           </span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-sm text-text-sub">
-                        {new Date(source.created_at).toLocaleDateString()}
+                        {formatDate(new Date(source.created_at))}
                       </td>
                     </tr>
                   ))}
@@ -418,7 +427,7 @@ export default function SourcesPage() {
           {/* Mobile card list */}
           <div className="space-y-3 md:hidden">
             <h3 className="text-sm font-medium text-text-sub">
-              All Sources ({filteredSources.length})
+              {t('admin.sources.listHeading', { count: filteredSources.length })}
             </h3>
             {filteredSources.map((source) => (
               <Card key={source.id} className="p-4">
@@ -452,14 +461,14 @@ export default function SourcesPage() {
                       {ownerLabel(source)}
                     </Link>
                   )}
-                  <span>{new Date(source.created_at).toLocaleDateString()}</span>
+                  <span>{formatDate(new Date(source.created_at))}</span>
                   {source.is_active ? (
                     <span className="inline-flex items-center rounded-full bg-kick/10 px-2 py-0.5 font-medium text-kick">
-                      Active
+                      {t('admin.sources.statusActive')}
                     </span>
                   ) : (
                     <span className="inline-flex items-center rounded-full bg-badge-bg px-2 py-0.5 font-medium text-text-dim">
-                      Inactive
+                      {t('admin.sources.statusInactive')}
                     </span>
                   )}
                 </div>

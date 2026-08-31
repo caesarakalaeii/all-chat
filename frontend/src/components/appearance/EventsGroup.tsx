@@ -19,6 +19,7 @@
  */
 
 import React from 'react'
+import { useTranslations } from '@/lib/i18n'
 import type { VisualSettings } from '@/lib/types/visual-settings'
 import { ToggleSwitch } from './ToggleSwitch'
 import { SliderControl } from './SliderControl'
@@ -28,23 +29,21 @@ export interface EventsGroupProps {
   onChange: (patch: Partial<VisualSettings>) => void
 }
 
+// The row's label lives in the catalog under `showField`, so the two lists
+// cannot drift: a field without a key fails tsc.
 const EVENT_ROWS: Array<{
-  label: string
-  showField: keyof VisualSettings
+  showField: 'showSuperChat' | 'showSubscriptions' | 'showRaids' | 'showBits' | 'showMembershipGift'
   sizeField: keyof VisualSettings
 }> = [
-  { label: 'Super Chat', showField: 'showSuperChat', sizeField: 'superChatSizeModifier' },
-  { label: 'Subscriptions', showField: 'showSubscriptions', sizeField: 'subscriptionSizeModifier' },
-  { label: 'Raids', showField: 'showRaids', sizeField: 'raidSizeModifier' },
-  { label: 'Bits', showField: 'showBits', sizeField: 'bitsSizeModifier' },
-  {
-    label: 'Membership Gift',
-    showField: 'showMembershipGift',
-    sizeField: 'membershipGiftSizeModifier',
-  },
+  { showField: 'showSuperChat', sizeField: 'superChatSizeModifier' },
+  { showField: 'showSubscriptions', sizeField: 'subscriptionSizeModifier' },
+  { showField: 'showRaids', sizeField: 'raidSizeModifier' },
+  { showField: 'showBits', sizeField: 'bitsSizeModifier' },
+  { showField: 'showMembershipGift', sizeField: 'membershipGiftSizeModifier' },
 ]
 
 export function EventsGroup({ visualSettings, onChange }: EventsGroupProps): React.ReactElement {
+  const t = useTranslations()
   const settings = visualSettings as Record<string, string | undefined>
 
   return (
@@ -55,14 +54,14 @@ export function EventsGroup({ visualSettings, onChange }: EventsGroupProps): Rea
         const sizeValue = parseFloat((settings[row.sizeField as string] as string) ?? '1')
 
         return (
-          <div key={row.label} className="space-y-2">
+          <div key={row.showField} className="space-y-2">
             <ToggleSwitch
-              label={row.label}
+              label={t(`overlayEditor.events.${row.showField}`)}
               checked={checked}
               onChange={(next) => onChange({ [row.showField]: next ? 'block' : 'none' })}
             />
             <SliderControl
-              label="Size modifier"
+              label={t('overlayEditor.events.sizeModifier')}
               value={sizeValue}
               min={0.5}
               max={3.0}

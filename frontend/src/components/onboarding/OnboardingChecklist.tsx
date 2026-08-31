@@ -46,14 +46,19 @@ import {
 import { trackEvent } from '@/lib/analytics'
 import { DISCORD_INVITE_URL, PATREON_JOIN_URL } from '@/lib/constants'
 import { cn } from '@/lib/utils'
+import { useTranslations } from '@/lib/i18n'
 import type { SpotlightSection } from '@/components/editor/sectionRegistry'
 
-const STEP_LABELS: Record<OnboardingStepId, string> = {
-  create_overlay: 'Create your overlay',
-  connect_source: 'Connect a chat source',
-  choose_theme: 'Pick a theme',
-  copy_obs: 'Add it to OBS',
-}
+/**
+ * Step id to `onboarding.steps.*` leaf. `as const satisfies` rather than a
+ * plain annotation so a typo in a stem still fails `tsc` at the `t()` call.
+ */
+const STEP_MESSAGE_STEMS = {
+  create_overlay: 'createOverlay',
+  connect_source: 'connectSource',
+  choose_theme: 'chooseTheme',
+  copy_obs: 'copyObs',
+} as const satisfies Record<OnboardingStepId, string>
 
 const STEP_INDEX: Record<OnboardingStepId, number> = {
   create_overlay: 0,
@@ -89,6 +94,7 @@ export function OnboardingChecklist({
   onSpotlightSection,
   overlayCount = 0,
 }: OnboardingChecklistProps) {
+  const t = useTranslations()
   const router = useRouter()
   const status = useOnboardingStore((s) => s.status)
   const activeOverlayId = useOnboardingStore((s) => s.activeOverlayId)
@@ -166,7 +172,7 @@ export function OnboardingChecklist({
       case 'create_overlay':
         return (
           <Button size="sm" variant="gradient" onClick={() => setCreateOpen(true)}>
-            Create
+            {t('onboarding.checklist.create')}
           </Button>
         )
       case 'connect_source':
@@ -175,7 +181,7 @@ export function OnboardingChecklist({
         if (surface === 'editor' && onSpotlightSection) {
           return (
             <Button size="sm" variant="outline" onClick={() => onSpotlightSection(section)}>
-              Show me
+              {t('onboarding.checklist.showMe')}
             </Button>
           )
         }
@@ -186,7 +192,7 @@ export function OnboardingChecklist({
             disabled={!activeOverlayId}
             onClick={() => activeOverlayId && router.push(`/overlays/${activeOverlayId}`)}
           >
-            Open editor
+            {t('onboarding.checklist.openEditor')}
           </Button>
         )
       }
@@ -194,7 +200,7 @@ export function OnboardingChecklist({
         return (
           <Button size="sm" variant="outline" disabled={!activeOverlayId} onClick={handleCopyObs}>
             <Clipboard className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-            {copied ? 'Copied!' : 'Copy link'}
+            {copied ? t('onboarding.checklist.copied') : t('onboarding.checklist.copyLink')}
           </Button>
         )
     }
@@ -202,7 +208,7 @@ export function OnboardingChecklist({
 
   return (
     <section
-      aria-label="Setup guide"
+      aria-label={t('onboarding.checklist.title')}
       className={cn(
         'border border-border-md bg-surface',
         variant === 'floating'
@@ -212,9 +218,14 @@ export function OnboardingChecklist({
     >
       <header className="flex items-center justify-between gap-2 border-b border-border p-3">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-text">Setup guide</p>
+          <p className="text-sm font-semibold text-text">{t('onboarding.checklist.title')}</p>
           <p className="text-xs text-text-sub" aria-live="polite">
-            {coreDone ? 'All steps done!' : `${doneCount} of ${steps.length} steps done`}
+            {coreDone
+              ? t('onboarding.checklist.allDone')
+              : t('onboarding.checklist.progress', {
+                  done: doneCount,
+                  total: steps.length,
+                })}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
@@ -222,7 +233,9 @@ export function OnboardingChecklist({
             type="button"
             onClick={() => minimize(!minimized)}
             aria-expanded={!minimized}
-            aria-label={minimized ? 'Expand setup guide' : 'Minimize setup guide'}
+            aria-label={
+              minimized ? t('onboarding.checklist.expand') : t('onboarding.checklist.minimize')
+            }
             className="flex h-6 w-6 items-center justify-center rounded-md text-text-sub hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
           >
             {minimized ? (
@@ -234,7 +247,7 @@ export function OnboardingChecklist({
           <button
             type="button"
             onClick={() => setConfirmDismiss(true)}
-            aria-label="Dismiss setup guide"
+            aria-label={t('onboarding.checklist.dismiss')}
             className="flex h-6 w-6 items-center justify-center rounded-md text-text-sub hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
           >
             <X className="h-4 w-4" aria-hidden="true" />
@@ -265,8 +278,10 @@ export function OnboardingChecklist({
                       step.done ? 'text-text-dim line-through' : 'text-text'
                     )}
                   >
-                    {STEP_LABELS[step.id]}
-                    {step.done && <VisuallyHidden> (done)</VisuallyHidden>}
+                    {t(`onboarding.steps.${STEP_MESSAGE_STEMS[step.id]}`)}
+                    {step.done && (
+                      <VisuallyHidden>{t('onboarding.checklist.stepDone')}</VisuallyHidden>
+                    )}
                   </span>
                 </span>
                 {step.active && !step.done && stepCta(step.id)}
@@ -276,19 +291,21 @@ export function OnboardingChecklist({
 
           {activeStep?.id === 'copy_obs' && !coreDone && (
             <div className="rounded-lg border border-border bg-surface-2 p-3">
-              <p className="mb-1.5 text-xs font-semibold text-text">In OBS:</p>
+              <p className="mb-1.5 text-xs font-semibold text-text">
+                {t('onboarding.obs.heading')}
+              </p>
               <ObsHelpContent />
             </div>
           )}
 
           {showExtras && (
             <div className="rounded-lg border border-border bg-surface-2 p-3">
-              <p className="text-sm font-semibold text-text">Optional: go further</p>
+              <p className="text-sm font-semibold text-text">{t('onboarding.extras.heading')}</p>
               {/* Feature names/claims mirror app/upgrade/page.tsx — keep in sync. */}
               <ul className="mt-2 space-y-2 text-sm">
                 <li>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-medium text-text">Text-to-speech</span>
+                    <span className="font-medium text-text">{t('onboarding.extras.ttsTitle')}</span>
                     {surface === 'editor' && onSpotlightSection ? (
                       <Button
                         size="sm"
@@ -298,7 +315,7 @@ export function OnboardingChecklist({
                           onSpotlightSection('appearance')
                         }}
                       >
-                        Show me
+                        {t('onboarding.checklist.showMe')}
                       </Button>
                     ) : (
                       <Button
@@ -310,25 +327,23 @@ export function OnboardingChecklist({
                           if (activeOverlayId) router.push(`/overlays/${activeOverlayId}`)
                         }}
                       >
-                        Show me
+                        {t('onboarding.checklist.showMe')}
                       </Button>
                     )}
                   </div>
-                  <p className="text-xs text-text-sub">
-                    Read chat aloud. Browser voices are free; ElevenLabs voices are Premium.
-                  </p>
+                  <p className="text-xs text-text-sub">{t('onboarding.extras.ttsBody')}</p>
                 </li>
                 <li>
-                  <span className="font-medium text-text">Moderate from your overlay</span>
-                  <p className="text-xs text-text-sub">
-                    Delete, timeout, ban and unban from the Monitor View button at the top of the
-                    editor. Full controls on Twitch, Kick and Discord; timeout and ban on YouTube.
-                    (Premium)
-                  </p>
+                  <span className="font-medium text-text">
+                    {t('onboarding.extras.moderationTitle')}
+                  </span>
+                  <p className="text-xs text-text-sub">{t('onboarding.extras.moderationBody')}</p>
                 </li>
                 <li>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-medium text-text">Let your mods help</span>
+                    <span className="font-medium text-text">
+                      {t('onboarding.extras.moderatorsTitle')}
+                    </span>
                     {surface === 'editor' && onSpotlightSection ? (
                       <Button
                         size="sm"
@@ -341,7 +356,7 @@ export function OnboardingChecklist({
                           onSpotlightSection('moderators')
                         }}
                       >
-                        Show me
+                        {t('onboarding.checklist.showMe')}
                       </Button>
                     ) : (
                       <Button
@@ -356,53 +371,49 @@ export function OnboardingChecklist({
                           if (activeOverlayId) router.push(`/overlays/${activeOverlayId}`)
                         }}
                       >
-                        Show me
+                        {t('onboarding.checklist.showMe')}
                       </Button>
                     )}
                   </div>
+                  <p className="text-xs text-text-sub">{t('onboarding.extras.moderatorsBody')}</p>
+                </li>
+                <li>
+                  <span className="font-medium text-text">
+                    {t('onboarding.extras.sharedChatTitle')}
+                  </span>
+                  <p className="text-xs text-text-sub">{t('onboarding.extras.sharedChatBody')}</p>
+                </li>
+                <li>
+                  <span className="font-medium text-text">
+                    {t('onboarding.extras.streamSelectionTitle')}
+                  </span>
                   <p className="text-xs text-text-sub">
-                    Hand the Monitor View to your existing moderators under Moderators. They act
-                    with their own platform accounts, and they never need Premium themselves.
-                    (Premium)
+                    {t('onboarding.extras.streamSelectionBody')}
                   </p>
                 </li>
                 <li>
-                  <span className="font-medium text-text">Shared chat</span>
-                  <p className="text-xs text-text-sub">
-                    Combine several channels into one conversation via the Share Overlay button.
-                    (Premium)
-                  </p>
-                </li>
-                <li>
-                  <span className="font-medium text-text">YouTube stream selection</span>
-                  <p className="text-xs text-text-sub">
-                    Pick exactly which broadcast an overlay listens to, per YouTube source in
-                    Sources. (Premium)
-                  </p>
-                </li>
-                <li>
-                  <span className="font-medium text-text">Differently-coloured bubbles</span>
+                  <span className="font-medium text-text">
+                    {t('onboarding.extras.bubbleColorsTitle')}
+                  </span>
                   {/* Listed here but NOT in app/upgrade/page.tsx, for the same reason as
                       Stream Deck buttons below: that list is specifically the PREMIUM
                       tour, and the bubble_colors gate is seeded free (migration 090)
                       because it is pure client-side CSS — no bandwidth, quota or send
                       path. If the gate is ever flipped to premium, move this entry into
                       the /upgrade list and keep the two in sync per the note above. */}
-                  <p className="text-xs text-text-sub">
-                    Give each platform its own bubble colour, or cycle a palette down the feed,
-                    under Bubble colors in Appearance. Free.
-                  </p>
+                  <p className="text-xs text-text-sub">{t('onboarding.extras.bubbleColorsBody')}</p>
                 </li>
                 <li>
-                  <span className="font-medium text-text">Viewer flairs</span>
-                  <p className="text-xs text-text-sub">
-                    Premium cosmetics for chatters, like animated name gradients, under Flairs in
-                    the navigation.
-                  </p>
+                  <span className="font-medium text-text">
+                    {t('onboarding.extras.flairsTitle')}
+                  </span>
+                  <p className="text-xs text-text-sub">{t('onboarding.extras.flairsBody')}</p>
                 </li>
                 <li>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-medium text-text">Stream Deck buttons</span>
+                    <span className="font-medium text-text">
+                      {t('onboarding.extras.streamDeckTitle')}
+                    </span>
                     <Button
                       size="sm"
                       variant="outline"
@@ -414,7 +425,7 @@ export function OnboardingChecklist({
                         router.push('/settings/devices')
                       }}
                     >
-                      Show me
+                      {t('onboarding.checklist.showMe')}
                     </Button>
                   </div>
                   {/* Deliberately listed here rather than in app/upgrade/page.tsx: that
@@ -423,11 +434,7 @@ export function OnboardingChecklist({
                       the shipped plugin docs say both plugins are free. If the gate is ever
                       flipped to premium, move this entry into the /upgrade list and keep the
                       two in sync per the note above. */}
-                  <p className="text-xs text-text-sub">
-                    Drive polls, predictions and canned messages from a physical button. Link a
-                    Stream Deck or StreamController under Paired devices — nothing to copy or paste.
-                    Starting a poll or prediction is still Premium.
-                  </p>
+                  <p className="text-xs text-text-sub">{t('onboarding.extras.streamDeckBody')}</p>
                 </li>
               </ul>
               <p className="mt-2 text-xs text-text-sub">
@@ -440,15 +447,15 @@ export function OnboardingChecklist({
                   }
                   className="font-medium text-text underline decoration-dotted underline-offset-2 hover:text-twitch"
                 >
-                  See everything Premium includes
+                  {t('onboarding.extras.seePremium')}
                 </a>
               </p>
               <div className="mt-2 flex gap-2">
                 <Button size="sm" variant="outline" onClick={() => markExtrasDone(false)}>
-                  Done
+                  {t('onboarding.extras.done')}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => markExtrasDone(true)}>
-                  Skip
+                  {t('onboarding.extras.skip')}
                 </Button>
               </div>
             </div>
@@ -456,10 +463,8 @@ export function OnboardingChecklist({
 
           {showFinale && (
             <div className="rounded-lg border border-border bg-surface-2 p-3">
-              <p className="text-sm font-semibold text-text">You&apos;re live! 🎉</p>
-              <p className="mt-1 text-sm text-text-sub">
-                Questions, feedback, or theme requests? Our community is happy to help.
-              </p>
+              <p className="text-sm font-semibold text-text">{t('onboarding.finale.title')}</p>
+              <p className="mt-1 text-sm text-text-sub">{t('onboarding.finale.body')}</p>
               <div className="mt-2 flex gap-2">
                 <Button
                   size="sm"
@@ -471,12 +476,12 @@ export function OnboardingChecklist({
                       rel="noopener noreferrer"
                       onClick={() => trackEvent('onboarding_discord_clicked')}
                     >
-                      Join the Discord
+                      {t('onboarding.finale.joinDiscord')}
                     </a>
                   }
                 />
                 <Button size="sm" variant="gradient" onClick={() => void finish()}>
-                  Finish
+                  {t('onboarding.finale.finish')}
                 </Button>
               </div>
             </div>
@@ -488,13 +493,11 @@ export function OnboardingChecklist({
 
       <Dialog.Root open={confirmDismiss} onOpenChange={setConfirmDismiss}>
         <DialogContent size="sm">
-          <DialogTitle>Hide the setup guide?</DialogTitle>
-          <DialogDescription>
-            You can restart it anytime from Settings → Setup guide.
-          </DialogDescription>
+          <DialogTitle>{t('onboarding.dismissDialog.title')}</DialogTitle>
+          <DialogDescription>{t('onboarding.dismissDialog.body')}</DialogDescription>
           <div className="mt-4 flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setConfirmDismiss(false)}>
-              Keep it
+              {t('onboarding.dismissDialog.keep')}
             </Button>
             <Button
               variant="outline"
@@ -503,7 +506,7 @@ export function OnboardingChecklist({
                 void dismiss(activeStep?.id ?? 'extras')
               }}
             >
-              Hide guide
+              {t('onboarding.dismissDialog.hide')}
             </Button>
           </div>
         </DialogContent>

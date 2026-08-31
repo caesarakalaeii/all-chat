@@ -34,6 +34,7 @@ import { SAMPLE_PREVIEW_MESSAGES } from '@/lib/theme-marketplace/constants'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { clearCache } from '@/lib/theme-marketplace/cache'
 import { trackEvent } from '@/lib/analytics'
+import { useTranslations } from '@/lib/i18n'
 import { VisuallyHidden } from '@/components/ui/visually-hidden'
 import type { Theme } from '@/lib/theme-marketplace/types'
 
@@ -50,6 +51,7 @@ export default function ThemeMarketplaceModal({
   onApplyTheme,
   themeType = 'overlay',
 }: ThemeMarketplaceModalProps) {
+  const t = useTranslations()
   const { user } = useAuthStore()
   const isAdmin = user?.is_admin || false
 
@@ -141,12 +143,18 @@ export default function ThemeMarketplaceModal({
         <div className="flex items-center justify-between border-b border-border p-6">
           <div>
             <DialogTitle className="text-2xl font-bold">
-              {themeType === 'creditroll' ? 'Credit Roll' : ''} Theme Marketplace
+              {t(
+                themeType === 'creditroll'
+                  ? 'overlayEditor.themeMarketplace.titleCreditRoll'
+                  : 'overlayEditor.themeMarketplace.title'
+              )}
             </DialogTitle>
             <DialogDescription className="mt-1">
-              {themeType === 'creditroll'
-                ? 'Browse and apply custom CSS themes for your credit roll'
-                : 'Browse and apply custom CSS themes for your overlay'}
+              {t(
+                themeType === 'creditroll'
+                  ? 'overlayEditor.themeMarketplace.descriptionCreditRoll'
+                  : 'overlayEditor.themeMarketplace.description'
+              )}
             </DialogDescription>
           </div>
           <div className="flex items-center gap-2">
@@ -158,8 +166,8 @@ export default function ThemeMarketplaceModal({
                   refreshThemes()
                 }}
                 className="rounded-lg p-2 text-text-dim transition-colors hover:bg-surface-2 hover:text-twitch"
-                aria-label="Force refresh themes from GitHub"
-                title="Force refresh themes (Admin)"
+                aria-label={t('overlayEditor.themeMarketplace.syncLabel')}
+                title={t('overlayEditor.themeMarketplace.syncTitle')}
               >
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
@@ -175,7 +183,7 @@ export default function ThemeMarketplaceModal({
             {/* Close Button */}
             <Dialog.Close
               className="rounded-lg p-2 text-text-dim transition-colors hover:bg-surface-2 hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
-              aria-label="Close theme marketplace"
+              aria-label={t('overlayEditor.themeMarketplace.closeLabel')}
             >
               <svg
                 className="h-6 w-6"
@@ -218,9 +226,9 @@ export default function ThemeMarketplaceModal({
                   className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-b-2 border-twitch"
                   aria-hidden="true"
                 />
-                <VisuallyHidden>Loading themes</VisuallyHidden>
+                <VisuallyHidden>{t('overlayEditor.themeMarketplace.loading')}</VisuallyHidden>
                 <p className="text-text-sub" aria-hidden="true">
-                  Loading themes...
+                  {t('overlayEditor.themeMarketplace.loadingEllipsis')}
                 </p>
               </div>
             </div>
@@ -247,7 +255,9 @@ export default function ThemeMarketplaceModal({
                   />
                 </svg>
                 <div>
-                  <p className="font-semibold text-yellow-400">Error Loading Themes</p>
+                  <p className="font-semibold text-yellow-400">
+                    {t('overlayEditor.themeMarketplace.errorTitle')}
+                  </p>
                   <p className="text-sm text-yellow-300/80">{error}</p>
                 </div>
               </div>
@@ -270,8 +280,12 @@ export default function ThemeMarketplaceModal({
                   d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M12 12h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                 />
               </svg>
-              <p className="text-lg text-text-sub">No themes found</p>
-              <p className="mt-1 text-sm text-text-dim">Try adjusting your filters</p>
+              <p className="text-lg text-text-sub">
+                {t('overlayEditor.themeMarketplace.emptyTitle')}
+              </p>
+              <p className="mt-1 text-sm text-text-dim">
+                {t('overlayEditor.themeMarketplace.emptyBody')}
+              </p>
             </div>
           )}
 
@@ -280,7 +294,10 @@ export default function ThemeMarketplaceModal({
             <>
               {/* Count */}
               <div aria-live="polite" className="mb-4 text-sm text-text-sub">
-                Showing {filteredCount} of {totalCount} themes
+                {t('overlayEditor.themeMarketplace.showingCount', {
+                  shown: filteredCount,
+                  total: totalCount,
+                })}
               </div>
 
               {/* Grid */}

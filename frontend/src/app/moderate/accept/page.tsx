@@ -49,6 +49,8 @@ import { Card } from '@/components/ui/card'
 import { PlatformBadge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { VisuallyHidden } from '@/components/ui/visually-hidden'
+import { useTranslations, type TFunction } from '@/lib/i18n'
+import { interpolateElements } from '@/lib/i18n/emphasise'
 import { boundInviteAccount, delegationErrorCode, moderationApi } from '@/lib/api/moderation'
 import {
   DELEGATABLE_ACTIONS,
@@ -56,12 +58,16 @@ import {
   type ModerationAction,
 } from '@/lib/types/moderation'
 
-const ACTION_LABELS: Record<ModerationAction, string> = {
-  delete: 'Delete messages',
-  timeout: 'Time viewers out',
-  ban: 'Ban viewers',
-  unban: 'Lift bans and timeouts',
-}
+/**
+ * Catalog key stem per action. `satisfies` rather than an annotation keeps the
+ * stems literal, so a typo fails tsc at the t() call.
+ */
+const ACTION_MESSAGE_STEMS = {
+  delete: 'actionDelete',
+  timeout: 'actionTimeout',
+  ban: 'actionBan',
+  unban: 'actionUnban',
+} as const satisfies Record<ModerationAction, string>
 
 /**
  * Human copy for a failed preview or accept, keyed on the machine-readable `code` rather
@@ -71,31 +77,42 @@ const ACTION_LABELS: Record<ModerationAction, string> = {
  * redeemed and revoked alike, which the server keeps deliberately indistinguishable, so
  * the copy names all three rather than guessing one.
  */
-function inviteErrorMessage(err: unknown): string {
+function inviteErrorMessage(t: TFunction, err: unknown): string {
   switch (delegationErrorCode(err)) {
     case 'invite_not_found':
-      return 'This invite is not valid any more — it may already have been used, or the streamer may have withdrawn it. Ask them for a new one.'
+      return t('moderation.accept.errorNotFound')
     case 'invite_expired':
-      return 'This invite has expired. Ask the streamer for a new one.'
+      return t('moderation.accept.errorExpired')
     case 'already_moderator':
-      return 'You already moderate this channel. It is on your channels page.'
+      return t('moderation.accept.errorAlreadyModerator')
     case 'owner_cannot_accept':
-      return 'This is your own overlay — you already have full moderation on it.'
+      return t('moderation.accept.errorOwnerCannotAccept')
     case 'invite_bound_to_other_account': {
+      // Four whole sentences rather than one with optional clauses appended:
+      // the platform and the account are each optional server-side, and a
+      // second language will not put them where English does.
       const bound = boundInviteAccount(err)
-      const account = bound?.account ? ` (${bound.account})` : ''
-      const platform = bound?.platform ? ` ${bound.platform}` : ''
-      return `This invite is for a specific${platform} account${account}. Sign in as that account, or ask the streamer to send a new invite for this one.`
+      if (bound?.platform && bound.account)
+        return t('moderation.accept.errorBoundToOtherBoth', {
+          platform: bound.platform,
+          account: bound.account,
+        })
+      if (bound?.platform)
+        return t('moderation.accept.errorBoundToOtherPlatform', { platform: bound.platform })
+      if (bound?.account)
+        return t('moderation.accept.errorBoundToOtherAccount', { account: bound.account })
+      return t('moderation.accept.errorBoundToOther')
     }
     default:
-      return 'Could not open this invite. Check the link and try again.'
+      return t('moderation.accept.errorUnknown')
   }
 }
 
 function InvitePreviewSkeleton() {
+  const t = useTranslations()
   return (
     <div role="status" className="space-y-4 rounded-xl border border-border bg-surface p-6">
-      <VisuallyHidden>Loading invite</VisuallyHidden>
+      <VisuallyHidden>{t('moderation.accept.loadingInvite')}</VisuallyHidden>
       <Skeleton className="h-5 w-2/3" />
       <Skeleton className="h-3 w-1/2" />
       <div className="flex gap-1.5">
@@ -107,6 +124,7 @@ function InvitePreviewSkeleton() {
 }
 
 function DeadEnd({ message }: { message: string }) {
+  const t = useTranslations()
   return (
     <Card className="p-6">
       <div className="flex items-start gap-3">
@@ -117,7 +135,7 @@ function DeadEnd({ message }: { message: string }) {
             href="/moderate"
             className="inline-flex w-fit items-center rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-text-sub transition-colors hover:border-border-md hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
           >
-            Go to your channels
+            {t('moderation.accept.goToChannels')}
           </Link>
         </div>
       </div>
@@ -136,23 +154,23 @@ function DeadEnd({ message }: { message: string }) {
  * it does not need to be.
  */
 function SignInPrompt() {
+  const t = useTranslations()
   return (
     <Card className="p-6">
       <div className="flex items-start gap-3">
         <Info className="mt-0.5 size-5 shrink-0 text-text-dim" aria-hidden="true" />
         <div className="space-y-4">
           <div className="space-y-1">
-            <p className="text-sm font-semibold text-text">Sign in to accept this invite</p>
-            <p className="text-sm text-text-sub">
-              Moderating is tied to an All-Chat account, so we need to know which one to hand this
-              to. Sign in, then open the invite link again — it stays valid.
+            <p className="text-sm font-semibold text-text">
+              {t('moderation.accept.signInHeading')}
             </p>
+            <p className="text-sm text-text-sub">{t('moderation.accept.signInBody')}</p>
           </div>
           <Link
             href="/"
             className="inline-flex w-fit items-center rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-text-sub transition-colors hover:border-border-md hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
           >
-            Sign in
+            {t('moderation.accept.signIn')}
           </Link>
         </div>
       </div>
@@ -161,6 +179,7 @@ function SignInPrompt() {
 }
 
 function AcceptContent() {
+  const t = useTranslations()
   const router = useRouter()
   const token = useSearchParams().get('token') ?? ''
   const { user, loading, init } = useAuthStore()
@@ -184,7 +203,7 @@ function AcceptContent() {
     if (!user) return
     if (!token) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- terminal state for a malformed link, not a fetch result
-      setError('This link is missing its invite code. Ask the streamer to send it again.')
+      setError(t('moderation.accept.errorMissingToken'))
       return
     }
     let cancelled = false
@@ -193,12 +212,12 @@ function AcceptContent() {
         if (!cancelled) setPreview(p)
       })
       .catch((err) => {
-        if (!cancelled) setError(inviteErrorMessage(err))
+        if (!cancelled) setError(inviteErrorMessage(t, err))
       })
     return () => {
       cancelled = true
     }
-  }, [user, token, loadPreview])
+  }, [user, token, loadPreview, t])
 
   const handleAccept = async () => {
     setAccepting(true)
@@ -208,7 +227,7 @@ function AcceptContent() {
       const accepted = await moderationApi.acceptInvite(token)
       router.push(`/overlay/${accepted.overlay_id}/view`)
     } catch (err) {
-      setError(inviteErrorMessage(err))
+      setError(inviteErrorMessage(t, err))
       setAccepting(false)
     }
   }
@@ -226,7 +245,7 @@ function AcceptContent() {
       >
         <div className="mb-8 flex items-center gap-3">
           <ShieldCheck className="size-7 text-twitch" strokeWidth={1.5} aria-hidden="true" />
-          <h1 className="text-2xl font-bold text-text">Moderation invite</h1>
+          <h1 className="text-2xl font-bold text-text">{t('moderation.accept.heading')}</h1>
         </div>
 
         {!isHydrated || loading ? (
@@ -244,30 +263,37 @@ function AcceptContent() {
             <div className="space-y-6">
               <div>
                 <p className="text-sm text-text-sub">
-                  <span className="font-semibold text-text">{preview.owner_display_name}</span> is
-                  asking you to help moderate
+                  {interpolateElements(t('moderation.accept.askingToHelp'), {
+                    owner: (
+                      <span className="font-semibold text-text">{preview.owner_display_name}</span>
+                    ),
+                  })}
                 </p>
                 <p className="mt-1 text-lg font-semibold text-text">{preview.overlay_name}</p>
                 {preview.invitee_label && (
                   <p className="mt-1 text-xs text-text-dim">
-                    They addressed this invite to &ldquo;{preview.invitee_label}&rdquo;.
+                    {t('moderation.accept.addressedTo', { label: preview.invitee_label })}
                   </p>
                 )}
               </div>
 
               <div>
-                <h2 className="text-sm font-semibold text-text">What you would be able to do</h2>
+                <h2 className="text-sm font-semibold text-text">
+                  {t('moderation.accept.actionsHeading')}
+                </h2>
                 <ul className="mt-2 space-y-1">
                   {actions.map((action) => (
                     <li key={action} className="text-sm text-text-sub">
-                      {ACTION_LABELS[action]}
+                      {t(`moderation.accept.${ACTION_MESSAGE_STEMS[action]}`)}
                     </li>
                   ))}
                 </ul>
               </div>
 
               <div>
-                <h2 className="text-sm font-semibold text-text">On these platforms</h2>
+                <h2 className="text-sm font-semibold text-text">
+                  {t('moderation.accept.platformsHeading')}
+                </h2>
                 {platforms.length > 0 ? (
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {platforms.map((leg) => (
@@ -276,7 +302,7 @@ function AcceptContent() {
                   </div>
                 ) : (
                   <p className="mt-2 text-sm text-text-sub">
-                    None yet — {preview.owner_display_name} still has to turn a platform on.
+                    {t('moderation.accept.noPlatforms', { owner: preview.owner_display_name })}
                   </p>
                 )}
               </div>
@@ -286,16 +312,20 @@ function AcceptContent() {
               <p className="flex items-start gap-2 rounded-lg border border-border bg-surface-2 px-4 py-3 text-xs text-text-sub">
                 <Info className="mt-0.5 size-3.5 shrink-0 text-text-dim" aria-hidden="true" />
                 <span>
-                  You will act with your own platform account, so each platform still checks that{' '}
-                  {preview.owner_display_name} made you a moderator there. Nothing is asked of you
-                  now — you connect a platform the first time you moderate on it.
+                  {t('moderation.accept.ownAccountNote', { owner: preview.owner_display_name })}
                 </span>
               </p>
 
               {preview.expected_account && (
                 <p className="text-xs text-text-dim">
-                  This invite is meant for {preview.expected_platform ?? ''}{' '}
-                  {preview.expected_account}.
+                  {preview.expected_platform
+                    ? t('moderation.accept.expectedAccountOnPlatform', {
+                        platform: preview.expected_platform,
+                        account: preview.expected_account,
+                      })
+                    : t('moderation.accept.expectedAccount', {
+                        account: preview.expected_account,
+                      })}
                 </p>
               )}
 
@@ -307,13 +337,13 @@ function AcceptContent() {
 
               <div className="flex flex-wrap gap-3">
                 <Button variant="gradient" onClick={() => void handleAccept()} disabled={accepting}>
-                  {accepting ? 'Accepting…' : 'Accept and start moderating'}
+                  {accepting ? t('moderation.accept.accepting') : t('moderation.accept.accept')}
                 </Button>
                 <Link
                   href="/dashboard"
                   className="inline-flex items-center rounded-lg border border-border px-4 py-2 text-sm font-medium text-text-sub transition-colors hover:border-border-md hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
                 >
-                  Not now
+                  {t('moderation.accept.notNow')}
                 </Link>
               </div>
             </div>

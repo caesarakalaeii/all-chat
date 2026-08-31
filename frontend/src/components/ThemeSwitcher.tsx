@@ -44,6 +44,8 @@ import { Palette, Pause, Play } from 'lucide-react'
 import { trackEvent } from '@/lib/analytics'
 import { DISCORD_INVITE_URL } from '@/lib/constants'
 import { useReducedMotion } from '@/hooks/useReducedMotion'
+import { useTranslations, type MessageKey } from '@/lib/i18n'
+import { interpolateElements } from '@/lib/i18n/emphasise'
 
 /**
  * The curated showcase — four visually distinct looks that read well at a glance:
@@ -51,16 +53,19 @@ import { useReducedMotion } from '@/hooks/useReducedMotion'
  * card layout. All use icon platform badges and hide timestamps for a tidy sample.
  * Any id that no longer resolves is dropped silently so a rename can't crash the page.
  */
-const SHOWCASE: ReadonlyArray<{ id: string; label: string }> = [
-  { id: 'minimal-theme', label: 'Minimal' },
-  { id: 'comic-speech-theme', label: 'Comic' },
-  { id: 'sticky-notes-theme', label: 'Sticky Notes' },
-  { id: 'modern-dark-theme', label: 'Modern Dark' },
-]
+// `as const satisfies` rather than an annotation: an annotation widens labelKey
+// to string, and a mistyped catalog key would then resolve at runtime to a key
+// that echoes itself instead of failing tsc.
+const SHOWCASE = [
+  { id: 'minimal-theme', labelKey: 'marketing.themeSwitcher.showcaseMinimal' },
+  { id: 'comic-speech-theme', labelKey: 'marketing.themeSwitcher.showcaseComic' },
+  { id: 'sticky-notes-theme', labelKey: 'marketing.themeSwitcher.showcaseStickyNotes' },
+  { id: 'modern-dark-theme', labelKey: 'marketing.themeSwitcher.showcaseModernDark' },
+] as const satisfies ReadonlyArray<{ id: string; labelKey: MessageKey }>
 
 interface ResolvedTheme {
   id: string
-  label: string
+  labelKey: MessageKey
   theme: Theme
 }
 
@@ -83,6 +88,7 @@ interface ThemeSwitcherProps {
 }
 
 export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
+  const t = useTranslations()
   const [active, setActive] = useState(0)
   const [paused, setPaused] = useState(false)
   // Explicit pause via the visible control (WCAG 2.2.2 Pause, Stop, Hide) —
@@ -139,13 +145,15 @@ export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
       onFocusCapture={() => setPaused(true)}
       onBlurCapture={() => setPaused(false)}
     >
-      <p className="mb-3 text-xs font-bold tracking-widest text-text-sub uppercase">Themes</p>
+      <p className="mb-3 text-xs font-bold tracking-widest text-text-sub uppercase">
+        {t('marketing.themeSwitcher.heading')}
+      </p>
 
       <div
         className="overflow-hidden rounded-xl border border-border-md bg-surface"
         role="group"
         aria-roledescription="carousel"
-        aria-label="Featured themes"
+        aria-label={t('marketing.themeSwitcher.carouselLabel')}
       >
         {/* Only the active slide is mounted (one webfont at a time); the frame
             eases between each theme's natural height. */}
@@ -180,7 +188,7 @@ export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
           <div
             className="flex shrink-0 items-center gap-2"
             role="group"
-            aria-label="Choose a theme"
+            aria-label={t('marketing.themeSwitcher.dotsGroupLabel')}
           >
             {/* Under reduced motion the rotation is off entirely, so the
                 pause control would be inert — hide it. */}
@@ -188,7 +196,11 @@ export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
               <button
                 type="button"
                 onClick={() => setUserPaused((p) => !p)}
-                aria-label={userPaused ? 'Resume theme rotation' : 'Pause theme rotation'}
+                aria-label={
+                  userPaused
+                    ? t('marketing.themeSwitcher.resumeLabel')
+                    : t('marketing.themeSwitcher.pauseLabel')
+                }
                 aria-pressed={userPaused}
                 className="flex h-6 w-6 items-center justify-center rounded-full text-text-sub hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:ring-offset-2 focus-visible:ring-offset-surface focus-visible:outline-none"
               >
@@ -199,17 +211,19 @@ export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
                 )}
               </button>
             )}
-            {RESOLVED.map((t, i) => {
+            {RESOLVED.map((entry, i) => {
               const isActive = i === active
               return (
                 // The button itself is 24x24 (WCAG 2.5.8 target size — axe
                 // measures the element box, so padding on a 10px dot wouldn't
                 // count); the visual dot is the inner span, unchanged.
                 <button
-                  key={t.id}
+                  key={entry.id}
                   type="button"
                   onClick={() => select(i)}
-                  aria-label={`Show ${t.label}`}
+                  aria-label={t('marketing.themeSwitcher.showThemeLabel', {
+                    theme: t(entry.labelKey),
+                  })}
                   aria-current={isActive}
                   className="group flex h-6 w-6 items-center justify-center rounded-full focus-visible:ring-2 focus-visible:ring-twitch focus-visible:ring-offset-2 focus-visible:ring-offset-surface focus-visible:outline-none"
                 >
@@ -230,42 +244,50 @@ export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
       <p className="mt-4 flex items-center justify-center gap-1.5 text-center text-sm text-text-sub">
         <Palette className="h-4 w-4 shrink-0" aria-hidden="true" />
         <span>
-          {BUILTIN_COUNT} built-in themes — restyle any{' '}
-          <Link
-            href="/docs#customize"
-            onClick={() =>
-              trackEvent('cta_click', { cta: 'customize-gui', location: 'theme-switcher' })
+          {interpolateElements(
+            t('marketing.themeSwitcher.customiseCaption', { count: BUILTIN_COUNT }),
+            {
+              gui: (
+                <Link
+                  href="/docs#customize"
+                  onClick={() =>
+                    trackEvent('cta_click', { cta: 'customize-gui', location: 'theme-switcher' })
+                  }
+                  className="font-medium text-text underline decoration-dotted underline-offset-2 hover:text-twitch"
+                >
+                  {t('marketing.themeSwitcher.customiseGuiLink')}
+                </Link>
+              ),
+              css: (
+                <Link
+                  href="/docs#custom-css"
+                  onClick={() =>
+                    trackEvent('cta_click', { cta: 'customize-css', location: 'theme-switcher' })
+                  }
+                  className="font-medium text-text underline decoration-dotted underline-offset-2 hover:text-twitch"
+                >
+                  {t('marketing.themeSwitcher.customiseCssLink')}
+                </Link>
+              ),
             }
-            className="font-medium text-text underline decoration-dotted underline-offset-2 hover:text-twitch"
-          >
-            point-and-click
-          </Link>
-          , or{' '}
-          <Link
-            href="/docs#custom-css"
-            onClick={() =>
-              trackEvent('cta_click', { cta: 'customize-css', location: 'theme-switcher' })
-            }
-            className="font-medium text-text underline decoration-dotted underline-offset-2 hover:text-twitch"
-          >
-            write your own CSS
-          </Link>
-          .
+          )}
         </span>
       </p>
 
       <p className="mt-1.5 text-center text-sm text-text-sub">
-        Coming from another tool?{' '}
-        <a
-          href={DISCORD_INVITE_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={() => trackEvent('outbound_click', { dest: 'discord_theme_help' })}
-          className="font-medium text-text underline decoration-dotted underline-offset-2 hover:text-twitch"
-        >
-          Ask on Discord
-        </a>{' '}
-        and we&apos;ll port your theme.
+        {interpolateElements(t('marketing.themeSwitcher.portCaption'), {
+          discord: (
+            <a
+              href={DISCORD_INVITE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => trackEvent('outbound_click', { dest: 'discord_theme_help' })}
+              className="font-medium text-text underline decoration-dotted underline-offset-2 hover:text-twitch"
+            >
+              {t('marketing.themeSwitcher.portDiscordLink')}
+            </a>
+          ),
+        })}
       </p>
     </div>
   )

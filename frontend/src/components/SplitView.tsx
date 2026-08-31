@@ -21,6 +21,7 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useRef, useState, useCallback } from 'react'
 import { PreviewBackdropPicker } from '@/components/editor/PreviewBackdropPicker'
+import { useTranslations } from '@/lib/i18n'
 
 const MIN_LEFT = 25
 const MAX_LEFT = 70
@@ -58,6 +59,7 @@ export function SplitView({
   children: React.ReactNode
   onIframeReady?: (iframe: HTMLIFrameElement) => void
 }) {
+  const t = useTranslations()
   const containerRef = useRef<HTMLDivElement>(null)
   const [leftPct, setLeftPct] = useState(40)
   const isDragging = useRef(false)
@@ -127,7 +129,7 @@ export function SplitView({
       <div className="relative hidden w-1 flex-shrink-0 md:block">
         <div
           role="slider"
-          aria-label="Resize panels"
+          aria-label={t('common.splitPane.resizeLabel')}
           aria-orientation="horizontal"
           aria-valuemin={MIN_LEFT}
           aria-valuemax={MAX_LEFT}
@@ -146,7 +148,7 @@ export function SplitView({
         <div className="absolute top-1/2 left-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 flex-col gap-1">
           <button
             type="button"
-            aria-label="Shrink config panel"
+            aria-label={t('common.splitPane.shrinkConfigLabel')}
             onClick={() => stepBy(-BUTTON_STEP)}
             className={STEP_BUTTON_CLASS}
           >
@@ -154,7 +156,7 @@ export function SplitView({
           </button>
           <button
             type="button"
-            aria-label="Grow config panel"
+            aria-label={t('common.splitPane.growConfigLabel')}
             onClick={() => stepBy(BUTTON_STEP)}
             className={STEP_BUTTON_CLASS}
           >
@@ -182,7 +184,7 @@ export function SplitView({
           )}
           src={`/overlays/${overlayId}/preview/embed`}
           className="h-full w-full border-0"
-          title="Overlay live preview"
+          title={t('common.splitPane.previewTitle')}
           sandbox="allow-scripts allow-same-origin"
         />
       </div>

@@ -29,6 +29,7 @@ import {
   type ModerationControlsProps,
 } from '@/components/overlay/ModerationControls'
 import { DEFAULT_VIEW_PREFS, type MonitorViewPrefs } from '@/app/overlay/[id]/view/viewPrefs'
+import { TIME_ONLY, formatDateTime, useTranslations } from '@/lib/i18n'
 import { renderMessageContent } from '@/lib/renderMessage'
 import type { SourceCapability } from '@/lib/types/moderation'
 import { buildGradientCSS } from '@/lib/utils/gradient'
@@ -75,9 +76,10 @@ export function ChatRow({
   moderation?: ChatRowModeration
   onUserClick?: (item: ViewItem) => void
 }) {
+  const t = useTranslations()
   const mod = item._moderated
   const displayName = item.user?.display_name || item.user?.username
-  const time = new Date(item.timestamp).toLocaleTimeString()
+  const time = formatDateTime(new Date(item.timestamp), TIME_ONLY)
   const isShared = item.metadata?.is_shared_chat === true
   // Gradient names render with a transparent text color, so a hover underline
   // alone would be invisible on them — the opacity dip covers that case.
@@ -177,7 +179,7 @@ export function ChatRow({
         )}
         {isShared && (
           <span className="ml-1 rounded bg-twitch/20 px-1 text-[10px] font-medium text-twitch uppercase">
-            shared
+            {t('viewerOverlay.chatPanel.sharedBadge')}
           </span>
         )}
         <span className="text-text-dim">: </span>

@@ -68,3 +68,40 @@ export function formatDateTime(
 ): string {
   return dateTimeFormatter(locale, options).format(value)
 }
+
+// Option sets reproducing the three no-argument toLocale* calls exactly. They
+// are pinned against real toLocale* output in format.test.ts, because an option
+// set that merely looks right changes the rendered text -- dateStyle:'short',
+// the obvious spelling of TIMESTAMP, renders a 2-digit year.
+export const DATE_ONLY: Intl.DateTimeFormatOptions = {
+  year: 'numeric',
+  month: 'numeric',
+  day: 'numeric',
+}
+export const TIME_ONLY: Intl.DateTimeFormatOptions = {
+  hour: 'numeric',
+  minute: '2-digit',
+  second: '2-digit',
+}
+export const TIMESTAMP: Intl.DateTimeFormatOptions = { ...DATE_ONLY, ...TIME_ONLY }
+
+/**
+ * The date alone, as `toLocaleDateString()` renders it but locale-pinned.
+ *
+ * `timeZone` is a parameter only so tests can pin one; leaving it undefined
+ * uses the host zone, which is what the toLocale* call it replaces also did.
+ * Pinning the zone as well would change which day a timestamp falls on.
+ */
+export function formatDate(value: Date | number, timeZone?: string): string {
+  return formatDateTime(value, timeZone ? { ...DATE_ONLY, timeZone } : DATE_ONLY)
+}
+
+/** The time alone, as `toLocaleTimeString()` renders it but locale-pinned. */
+export function formatTime(value: Date | number, timeZone?: string): string {
+  return formatDateTime(value, timeZone ? { ...TIME_ONLY, timeZone } : TIME_ONLY)
+}
+
+/** Date and time, as `toLocaleString()` renders it but locale-pinned. */
+export function formatTimestamp(value: Date | number, timeZone?: string): string {
+  return formatDateTime(value, timeZone ? { ...TIMESTAMP, timeZone } : TIMESTAMP)
+}

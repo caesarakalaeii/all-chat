@@ -28,6 +28,7 @@ import { cn } from '@/lib/utils'
 import { safeExternalRedirect } from '@/lib/auth/redirect-allowlist'
 import type { NameGradient } from '@/lib/types/message'
 import { UserAvatar } from '@/components/UserAvatar'
+import { useTranslations } from '@/lib/i18n'
 
 // JWT claims from viewer token
 interface ViewerJWTClaims {
@@ -42,10 +43,10 @@ interface ViewerJWTClaims {
   exp?: number
 }
 
-const PLATFORMS: { key: 'twitch' | 'youtube' | 'kick'; label: string; color: string }[] = [
-  { key: 'twitch', label: 'Twitch', color: 'bg-purple-500' },
-  { key: 'youtube', label: 'YouTube', color: 'bg-red-500' },
-  { key: 'kick', label: 'Kick', color: 'bg-green-500' },
+const PLATFORMS: { key: 'twitch' | 'youtube' | 'kick'; color: string }[] = [
+  { key: 'twitch', color: 'bg-purple-500' },
+  { key: 'youtube', color: 'bg-red-500' },
+  { key: 'kick', color: 'bg-green-500' },
 ]
 
 function decodeViewerJWT(token: string): ViewerJWTClaims | null {
@@ -62,6 +63,7 @@ function decodeViewerJWT(token: string): ViewerJWTClaims | null {
 }
 
 function PlatformBadge({ platform }: { platform: string }) {
+  const t = useTranslations()
   const found = PLATFORMS.find((p) => p.key === platform)
   if (!found) return null
   return (
@@ -71,7 +73,7 @@ function PlatformBadge({ platform }: { platform: string }) {
         found.color
       )}
     >
-      {found.label}
+      {t(`common.platforms.${found.key}`)}
     </span>
   )
 }
@@ -115,21 +117,19 @@ async function viewerConnect(platform: 'twitch' | 'youtube' | 'kick', viewerID: 
 }
 
 function UnauthenticatedState() {
+  const t = useTranslations()
   return (
     <div className="min-h-screen bg-bg">
       <AppNav />
       <main id="main-content" tabIndex={-1} className="mx-auto max-w-2xl space-y-6 px-4 py-12">
-        <h1 className="text-2xl font-bold text-text">Viewer Identity</h1>
-        <p className="text-sm text-text-sub">Customize how your name appears across all overlays</p>
+        <h1 className="text-2xl font-bold text-text">{t('settings.viewer.heading')}</h1>
+        <p className="text-sm text-text-sub">{t('settings.viewer.subheading')}</p>
 
         <Card className="p-6">
           <h2 className="mb-2 text-lg font-semibold text-text">
-            Sign in to manage your viewer identity
+            {t('settings.viewer.signInHeading')}
           </h2>
-          <p className="mb-6 text-sm text-text-sub">
-            Connect your streaming platform account to set a custom name color and manage your
-            viewer identity.
-          </p>
+          <p className="mb-6 text-sm text-text-sub">{t('settings.viewer.signInBody')}</p>
           <div className="flex flex-col gap-3 sm:flex-row">
             <button
               onClick={() => viewerLogin('twitch')}
@@ -146,7 +146,7 @@ function UnauthenticatedState() {
                   d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z"
                 />
               </svg>
-              Sign in with Twitch
+              {t('settings.viewer.signInTwitch')}
             </button>
             <button
               onClick={() => viewerLogin('youtube')}
@@ -164,7 +164,7 @@ function UnauthenticatedState() {
                   d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"
                 />
               </svg>
-              Sign in with YouTube
+              {t('settings.viewer.signInYoutube')}
             </button>
             <button
               onClick={() => viewerLogin('kick')}
@@ -182,7 +182,7 @@ function UnauthenticatedState() {
                   d="M37 .036h164.448v113.621h54.71v-56.82h54.731V.036h164.448v170.777h-54.73v56.82h-54.711v56.8h54.71v56.82h54.73V512.03H310.89v-56.82h-54.73v-56.8h-54.711v113.62H37V.036z"
                 />
               </svg>
-              Sign in with Kick
+              {t('settings.viewer.signInKick')}
             </button>
           </div>
         </Card>
@@ -196,6 +196,7 @@ function UnauthenticatedState() {
 // ---------------------------------------------------------------------------
 
 function ColorGradientCard({ claims }: { claims: ViewerJWTClaims }) {
+  const t = useTranslations()
   const [activeTab, setActiveTab] = useState<'solid' | 'gradient'>('solid')
   const angleId = useId()
 
@@ -278,11 +279,11 @@ function ColorGradientCard({ claims }: { claims: ViewerJWTClaims }) {
     if (token) {
       const latestClaims = decodeViewerJWT(token)
       if (!latestClaims?.is_premium) {
-        setGradientError('Premium required')
+        setGradientError(t('settings.viewer.premiumRequired'))
         return
       }
     } else {
-      setGradientError('Premium required')
+      setGradientError(t('settings.viewer.premiumRequired'))
       return
     }
 
@@ -303,24 +304,24 @@ function ColorGradientCard({ claims }: { claims: ViewerJWTClaims }) {
 
       if (!res.ok) {
         if (res.status === 403) {
-          setGradientError('Premium required')
+          setGradientError(t('settings.viewer.premiumRequired'))
         } else {
-          setGradientError('Save failed')
+          setGradientError(t('settings.viewer.saveFailed'))
         }
       }
     } catch {
-      setGradientError('Save failed')
+      setGradientError(t('settings.viewer.saveFailed'))
     } finally {
       setGradientSaving(false)
     }
-  }, [gradientStops, gradientAngle])
+  }, [gradientStops, gradientAngle, t])
 
   return (
     <Card className="p-6">
-      <h2 className="mb-1 text-lg font-semibold text-text">Name Color</h2>
-      <p className="mb-4 text-sm text-text-sub">
-        Set a custom color or gradient for your name on overlays
-      </p>
+      <h2 className="mb-1 text-lg font-semibold text-text">
+        {t('settings.viewer.nameColorHeading')}
+      </h2>
+      <p className="mb-4 text-sm text-text-sub">{t('settings.viewer.nameColorBody')}</p>
 
       {/* Tab bar */}
       <div className="mb-4 flex border-b border-border">
@@ -333,7 +334,7 @@ function ColorGradientCard({ claims }: { claims: ViewerJWTClaims }) {
               : 'text-text-sub hover:text-text'
           )}
         >
-          Solid Color
+          {t('settings.viewer.solidTab')}
         </button>
         <button
           disabled={!claims.is_premium}
@@ -348,10 +349,10 @@ function ColorGradientCard({ claims }: { claims: ViewerJWTClaims }) {
             !claims.is_premium && 'cursor-not-allowed opacity-50'
           )}
         >
-          Gradient
+          {t('settings.viewer.gradientTab')}
           {!claims.is_premium && (
             <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-xs text-amber-400">
-              Premium
+              {t('settings.viewer.premiumPill')}
             </span>
           )}
         </button>
@@ -359,9 +360,9 @@ function ColorGradientCard({ claims }: { claims: ViewerJWTClaims }) {
 
       {!claims.is_premium && (
         <p className="mb-4 text-xs text-text-dim">
-          Gradient names are a viewer premium cosmetic.{' '}
+          {t('settings.viewer.gradientUpsell')}{' '}
           <Link href="/settings/viewer/premium" className="font-medium text-twitch hover:underline">
-            Unlock viewer premium
+            {t('settings.viewer.unlockPremium')}
           </Link>
         </p>
       )}
@@ -375,31 +376,35 @@ function ColorGradientCard({ claims }: { claims: ViewerJWTClaims }) {
               value={nameColor}
               onChange={(e) => saveColor(e.target.value)}
               className="h-10 w-10 cursor-pointer rounded border border-border bg-transparent"
-              aria-label="Name color picker"
+              aria-label={t('settings.viewer.colorPickerLabel')}
             />
             <input
               type="text"
               value={nameColor}
               onChange={(e) => debouncedSaveColor(e.target.value)}
               className="w-28 rounded border border-border bg-surface-2 px-2 py-1 font-mono text-sm text-text"
-              aria-label="Name color hex value"
+              aria-label={t('settings.viewer.colorHexLabel')}
               maxLength={7}
             />
-            {savedFeedback && <span className="ml-2 text-xs text-green-400">Saved ✓</span>}
+            {savedFeedback && (
+              <span className="ml-2 text-xs text-green-400">
+                {t('settings.viewer.savedFeedback')}
+              </span>
+            )}
           </div>
-          <p className="mt-2 text-xs text-text-sub">Changes save automatically</p>
+          <p className="mt-2 text-xs text-text-sub">{t('settings.viewer.autoSaveNote')}</p>
 
           {/* Live preview */}
           <div className="mt-4 border-t border-border pt-4">
-            <p className="mb-2 text-xs text-text-sub">Preview</p>
+            <p className="mb-2 text-xs text-text-sub">{t('settings.viewer.previewLabel')}</p>
             <div className="flex items-center gap-2">
               <div className="flex h-6 w-6 items-center justify-center rounded-full bg-surface-2 text-xs font-medium text-text-sub">
                 {(claims.display_name ?? claims.username ?? 'V').charAt(0).toUpperCase()}
               </div>
               <span className="text-sm font-semibold" style={{ color: nameColor }}>
-                {claims.display_name ?? claims.username ?? 'Viewer'}
+                {claims.display_name ?? claims.username ?? t('settings.viewer.viewerFallbackName')}
               </span>
-              <span className="text-sm text-text-sub">Hello world!</span>
+              <span className="text-sm text-text-sub">{t('settings.viewer.previewMessage')}</span>
             </div>
           </div>
         </div>
@@ -438,7 +443,7 @@ function ColorGradientCard({ claims }: { claims: ViewerJWTClaims }) {
                   <button
                     onClick={() => setGradientStops(gradientStops.filter((_, j) => j !== i))}
                     className="text-lg leading-none text-text-sub hover:text-text"
-                    aria-label={`Remove stop ${i + 1}`}
+                    aria-label={t('settings.viewer.removeStopLabel', { index: i + 1 })}
                   >
                     ×
                   </button>
@@ -454,13 +459,13 @@ function ColorGradientCard({ claims }: { claims: ViewerJWTClaims }) {
             disabled={gradientStops.length >= 4}
             onClick={() => setGradientStops([...gradientStops, '#ffffff'])}
           >
-            + Add stop
+            {t('settings.viewer.addStop')}
           </Button>
 
           {/* Angle controls */}
           <div className="mt-3 flex items-center gap-3">
             <label htmlFor={angleId} className="w-10 text-xs text-text-sub">
-              Angle
+              {t('settings.viewer.angleLabel')}
             </label>
             <input
               id={angleId}
@@ -477,7 +482,7 @@ function ColorGradientCard({ claims }: { claims: ViewerJWTClaims }) {
               max={360}
               value={gradientAngle}
               onChange={(e) => setGradientAngle(Math.min(360, Math.max(0, Number(e.target.value))))}
-              aria-label="Angle in degrees"
+              aria-label={t('settings.viewer.angleDegreesLabel')}
               className="w-16 rounded border border-border bg-surface-2 px-2 py-1 text-right text-sm text-text"
             />
             <span className="text-xs text-text-sub">°</span>
@@ -486,14 +491,16 @@ function ColorGradientCard({ claims }: { claims: ViewerJWTClaims }) {
           {/* Save gradient button + error */}
           <div className="mt-4 flex items-center gap-3">
             <Button onClick={handleSaveGradient} disabled={gradientSaving}>
-              {gradientSaving ? 'Saving…' : 'Save gradient'}
+              {gradientSaving
+                ? t('settings.viewer.savingGradient')
+                : t('settings.viewer.saveGradient')}
             </Button>
             {gradientError && <span className="text-xs text-red-400">{gradientError}</span>}
           </div>
 
           {/* Live preview */}
           <div className="mt-4 border-t border-border pt-4">
-            <p className="mb-2 text-xs text-text-sub">Preview</p>
+            <p className="mb-2 text-xs text-text-sub">{t('settings.viewer.previewLabel')}</p>
             <div className="flex items-center gap-2">
               <div className="flex h-6 w-6 items-center justify-center rounded-full bg-surface-2 text-xs font-medium text-text-sub">
                 {(claims.display_name ?? 'V').charAt(0).toUpperCase()}
@@ -508,9 +515,9 @@ function ColorGradientCard({ claims }: { claims: ViewerJWTClaims }) {
                   }),
                 }}
               >
-                {claims.display_name ?? claims.username ?? 'Viewer'}
+                {claims.display_name ?? claims.username ?? t('settings.viewer.viewerFallbackName')}
               </span>
-              <span className="text-sm text-text-sub">Hello world!</span>
+              <span className="text-sm text-text-sub">{t('settings.viewer.previewMessage')}</span>
             </div>
           </div>
         </div>
@@ -530,9 +537,12 @@ interface CatalogItem {
   is_premium: boolean
 }
 
-const NONE_ITEM: CatalogItem = { id: null, name: 'None', image_url: '', is_premium: false }
+// The "no frame" / "no flair" row prepended to each catalog. Its name is copy,
+// so it is resolved per render rather than baked into a module constant.
+const NONE_ITEM: Omit<CatalogItem, 'name'> = { id: null, image_url: '', is_premium: false }
 
 function AvatarCosmeticsCard({ claims }: { claims: ViewerJWTClaims }) {
+  const t = useTranslations()
   const isPremium = claims.is_premium ?? false
   const [frames, setFrames] = useState<CatalogItem[]>([])
   const [flairs, setFlairs] = useState<CatalogItem[]>([])
@@ -560,17 +570,18 @@ function AvatarCosmeticsCard({ claims }: { claims: ViewerJWTClaims }) {
             : Promise.resolve(null),
         ])
 
-        let frameList: CatalogItem[] = [NONE_ITEM]
-        let flairList: CatalogItem[] = [NONE_ITEM]
+        const noneItem: CatalogItem = { ...NONE_ITEM, name: t('settings.viewer.noneItem') }
+        let frameList: CatalogItem[] = [noneItem]
+        let flairList: CatalogItem[] = [noneItem]
 
         if (framesRes.ok) {
           const data = (await framesRes.json()) as { frames: CatalogItem[] }
-          frameList = [NONE_ITEM, ...(data.frames ?? [])]
+          frameList = [noneItem, ...(data.frames ?? [])]
           setFrames(frameList)
         }
         if (flairsRes.ok) {
           const data = (await flairsRes.json()) as { flairs: CatalogItem[] }
-          flairList = [NONE_ITEM, ...(data.flairs ?? [])]
+          flairList = [noneItem, ...(data.flairs ?? [])]
           setFlairs(flairList)
         }
 
@@ -596,7 +607,7 @@ function AvatarCosmeticsCard({ claims }: { claims: ViewerJWTClaims }) {
       }
     }
     fetchCatalogsAndSelection()
-  }, [claims.viewer_id])
+  }, [claims.viewer_id, t])
 
   const handleSelectFrame = (item: CatalogItem) => {
     if (item.is_premium && !isPremium) return
@@ -630,16 +641,16 @@ function AvatarCosmeticsCard({ claims }: { claims: ViewerJWTClaims }) {
 
       if (!res.ok) {
         if (res.status === 403) {
-          setSaveError('Premium required')
+          setSaveError(t('settings.viewer.premiumRequired'))
         } else {
-          setSaveError('Save failed')
+          setSaveError(t('settings.viewer.saveFailed'))
         }
       } else {
         setSavedFeedback(true)
         setTimeout(() => setSavedFeedback(false), 2000)
       }
     } catch {
-      setSaveError('Save failed')
+      setSaveError(t('settings.viewer.saveFailed'))
     } finally {
       setSaving(false)
     }
@@ -664,21 +675,23 @@ function AvatarCosmeticsCard({ claims }: { claims: ViewerJWTClaims }) {
 
   return (
     <Card className="p-6">
-      <h2 className="mb-1 text-lg font-semibold text-text">Avatar Cosmetics</h2>
-      <p className="mb-4 text-sm text-text-sub">Choose a frame and flair for your avatar</p>
+      <h2 className="mb-1 text-lg font-semibold text-text">
+        {t('settings.viewer.cosmeticsHeading')}
+      </h2>
+      <p className="mb-4 text-sm text-text-sub">{t('settings.viewer.cosmeticsBody')}</p>
 
       {!isPremium && (
         <p className="mb-4 text-xs text-text-dim">
-          Some frames and flairs are viewer premium.{' '}
+          {t('settings.viewer.cosmeticsUpsell')}{' '}
           <Link href="/settings/viewer/premium" className="font-medium text-twitch hover:underline">
-            Unlock viewer premium
+            {t('settings.viewer.unlockPremium')}
           </Link>
         </p>
       )}
 
       {/* Avatar Frame section */}
       <div className="mb-6">
-        <h3 className="mb-3 text-sm font-medium text-text">Avatar Frame</h3>
+        <h3 className="mb-3 text-sm font-medium text-text">{t('settings.viewer.frameHeading')}</h3>
         <div className="grid grid-cols-4 gap-2">
           {frames.map((item) => (
             <button
@@ -702,7 +715,7 @@ function AvatarCosmeticsCard({ claims }: { claims: ViewerJWTClaims }) {
                 />
               ) : (
                 <div className="flex h-16 w-16 items-center justify-center rounded bg-surface-2 text-xs text-text-sub">
-                  None
+                  {t('settings.viewer.noneItem')}
                 </div>
               )}
               <span className="mt-1 block truncate text-center text-xs text-text-sub">
@@ -716,7 +729,7 @@ function AvatarCosmeticsCard({ claims }: { claims: ViewerJWTClaims }) {
 
       {/* Avatar Flair section */}
       <div className="mb-6">
-        <h3 className="mb-3 text-sm font-medium text-text">Avatar Flair</h3>
+        <h3 className="mb-3 text-sm font-medium text-text">{t('settings.viewer.flairHeading')}</h3>
         <div className="grid grid-cols-4 gap-2">
           {flairs.map((item) => (
             <button
@@ -740,7 +753,7 @@ function AvatarCosmeticsCard({ claims }: { claims: ViewerJWTClaims }) {
                 />
               ) : (
                 <div className="flex h-16 w-16 items-center justify-center rounded bg-surface-2 text-xs text-text-sub">
-                  None
+                  {t('settings.viewer.noneItem')}
                 </div>
               )}
               <span className="mt-1 block truncate text-center text-xs text-text-sub">
@@ -754,7 +767,7 @@ function AvatarCosmeticsCard({ claims }: { claims: ViewerJWTClaims }) {
 
       {/* Live preview */}
       <div className="mt-4 mb-6">
-        <p className="mb-2 text-xs text-text-sub">Preview</p>
+        <p className="mb-2 text-xs text-text-sub">{t('settings.viewer.previewLabel')}</p>
         <UserAvatar
           avatarUrl={claims.avatar_url}
           frameUrl={previewFrameUrl}
@@ -767,9 +780,11 @@ function AvatarCosmeticsCard({ claims }: { claims: ViewerJWTClaims }) {
       {/* Save button */}
       <div className="flex items-center gap-3">
         <Button onClick={handleSave} disabled={saving}>
-          {saving ? 'Saving…' : 'Save'}
+          {saving ? t('settings.viewer.saving') : t('settings.viewer.save')}
         </Button>
-        {savedFeedback && <span className="text-xs text-green-400">Saved ✓</span>}
+        {savedFeedback && (
+          <span className="text-xs text-green-400">{t('settings.viewer.savedFeedback')}</span>
+        )}
         {saveError && <span className="text-xs text-red-400">{saveError}</span>}
       </div>
     </Card>
@@ -781,6 +796,7 @@ function AvatarCosmeticsCard({ claims }: { claims: ViewerJWTClaims }) {
 // ---------------------------------------------------------------------------
 
 function LinkedPlatformsCard({ claims }: { claims: ViewerJWTClaims }) {
+  const t = useTranslations()
   const [connecting, setConnecting] = useState<string | null>(null)
   const [disconnecting, setDisconnecting] = useState<string | null>(null)
   // linkedPlatforms: null = loading, string[] = fetched set
@@ -810,9 +826,9 @@ function LinkedPlatformsCard({ claims }: { claims: ViewerJWTClaims }) {
       .catch(() => {
         // On network error fall back to JWT platform so UI still shows something
         setLinkedPlatforms(new Set(claims.platform ? [claims.platform] : []))
-        setFetchError('Could not load linked platforms')
+        setFetchError(t('settings.viewer.loadLinkedFailed'))
       })
-  }, [claims.viewer_id, claims.platform])
+  }, [claims.viewer_id, claims.platform, t])
 
   const handleConnect = async (key: 'twitch' | 'youtube' | 'kick') => {
     if (!claims.viewer_id) return
@@ -841,10 +857,10 @@ function LinkedPlatformsCard({ claims }: { claims: ViewerJWTClaims }) {
         })
       } else {
         const data = (await res.json()) as { error?: string }
-        setFetchError(data.error ?? 'Failed to disconnect platform')
+        setFetchError(data.error ?? t('settings.viewer.disconnectFailed'))
       }
     } catch {
-      setFetchError('Failed to disconnect platform')
+      setFetchError(t('settings.viewer.disconnectFailed'))
     } finally {
       setDisconnecting(null)
     }
@@ -856,13 +872,11 @@ function LinkedPlatformsCard({ claims }: { claims: ViewerJWTClaims }) {
 
   return (
     <Card className="p-6">
-      <h2 className="mb-1 text-lg font-semibold text-text">Linked Platforms</h2>
-      <p className="mb-4 text-sm text-text-sub">
-        Connect additional platforms to share your cosmetics across all your chats
-      </p>
+      <h2 className="mb-1 text-lg font-semibold text-text">{t('settings.viewer.linkedHeading')}</h2>
+      <p className="mb-4 text-sm text-text-sub">{t('settings.viewer.linkedBody')}</p>
       {fetchError && <p className="mb-3 text-xs text-red-400">{fetchError}</p>}
       <div className="flex flex-col gap-3">
-        {PLATFORMS.map(({ key, label, color }) => {
+        {PLATFORMS.map(({ key, color }) => {
           const isConnected = effectiveLinked.has(key)
           const isCurrentPlatform = claims.platform === key
           return (
@@ -872,12 +886,12 @@ function LinkedPlatformsCard({ claims }: { claims: ViewerJWTClaims }) {
             >
               <div className="flex items-center gap-3">
                 <span className={cn('h-3 w-3 rounded-full', color)} aria-hidden="true" />
-                <span className="text-sm text-text">{label}</span>
+                <span className="text-sm text-text">{t(`common.platforms.${key}`)}</span>
               </div>
               {isConnected ? (
                 <div className="flex items-center gap-2">
                   <span className="rounded-full bg-green-500/15 px-2 py-0.5 text-xs font-medium text-green-400">
-                    Connected
+                    {t('settings.viewer.connected')}
                   </span>
                   {/* Cannot disconnect the platform the viewer is currently signed in with */}
                   {!isCurrentPlatform && (
@@ -886,7 +900,9 @@ function LinkedPlatformsCard({ claims }: { claims: ViewerJWTClaims }) {
                       disabled={disconnecting === key}
                       className="rounded-md border border-red-500/40 px-3 py-1 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {disconnecting === key ? 'Disconnecting…' : 'Disconnect'}
+                      {disconnecting === key
+                        ? t('settings.viewer.disconnecting')
+                        : t('settings.viewer.disconnect')}
                     </button>
                   )}
                 </div>
@@ -896,7 +912,9 @@ function LinkedPlatformsCard({ claims }: { claims: ViewerJWTClaims }) {
                   disabled={connecting === key || !claims.viewer_id}
                   className="rounded-md border border-border px-3 py-1 text-xs font-medium text-text transition-colors hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {connecting === key ? 'Connecting…' : 'Connect'}
+                  {connecting === key
+                    ? t('settings.viewer.connecting')
+                    : t('settings.viewer.connect')}
                 </button>
               )}
             </div>
@@ -912,27 +930,30 @@ function LinkedPlatformsCard({ claims }: { claims: ViewerJWTClaims }) {
 // ---------------------------------------------------------------------------
 
 function ViewerSettingsContent({ claims }: { claims: ViewerJWTClaims }) {
+  const t = useTranslations()
   return (
     <div className="min-h-screen bg-bg">
       <AppNav />
       <main id="main-content" tabIndex={-1} className="mx-auto max-w-2xl space-y-6 px-4 py-12">
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-text">Viewer Identity</h1>
-          <p className="mt-1 text-sm text-text-sub">
-            Customize how your name appears across all overlays
-          </p>
+          <h1 className="text-2xl font-bold text-text">{t('settings.viewer.heading')}</h1>
+          <p className="mt-1 text-sm text-text-sub">{t('settings.viewer.subheading')}</p>
         </div>
 
         {/* Profile summary */}
         <Card className="p-6">
-          <h2 className="mb-4 text-lg font-semibold text-text">Profile</h2>
+          <h2 className="mb-4 text-lg font-semibold text-text">
+            {t('settings.viewer.profileHeading')}
+          </h2>
           <div className="flex items-center gap-3">
             {claims.avatar_url && (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={claims.avatar_url}
-                alt={claims.display_name ?? claims.username ?? 'Viewer'}
+                alt={
+                  claims.display_name ?? claims.username ?? t('settings.viewer.viewerFallbackName')
+                }
                 width={48}
                 height={48}
                 className="rounded-full object-cover"
@@ -940,7 +961,7 @@ function ViewerSettingsContent({ claims }: { claims: ViewerJWTClaims }) {
             )}
             <div className="flex flex-col gap-1">
               <span className="text-lg font-medium text-text">
-                {claims.display_name ?? claims.username ?? 'Viewer'}
+                {claims.display_name ?? claims.username ?? t('settings.viewer.viewerFallbackName')}
               </span>
               {claims.platform && <PlatformBadge platform={claims.platform} />}
             </div>

@@ -16,14 +16,17 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+import { useTranslations } from '@/lib/i18n'
+
 export function PremiumBadge({ size = 18, title }: { size?: number; title?: string }) {
+  const t = useTranslations()
   return (
     <svg
       width={size}
       height={size}
       viewBox="0 0 18 18"
       fill="none"
-      aria-label="Premium badge"
+      aria-label={t('common.badges.premiumLabel')}
       className="inline-block shrink-0"
     >
       {title && <title>{title}</title>}

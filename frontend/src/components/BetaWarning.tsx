@@ -30,6 +30,7 @@
 import { Dialog } from '@/components/ui/dialog'
 import { DiscordIcon } from '@/components/icons/DiscordIcon'
 import { DISCORD_INVITE_URL } from '@/lib/constants'
+import { useTranslations } from '@/lib/i18n'
 
 interface BetaWarningProps {
   platform: 'youtube' | 'tiktok'
@@ -38,19 +39,21 @@ interface BetaWarningProps {
 }
 
 export function BetaWarning({ platform, onCancel, onContinue }: BetaWarningProps) {
-  const platformName = platform.charAt(0).toUpperCase() + platform.slice(1)
+  const t = useTranslations()
 
-  // YouTube-specific messaging: Under Google OAuth verification review
+  // Whole strings per platform rather than one template with the platform name
+  // spliced in: YouTube is under Google OAuth verification review and TikTok is
+  // in closed beta, so the two sets differ by more than the name.
   const isYouTube = platform === 'youtube'
   const title = isYouTube
-    ? 'YouTube — OAuth Verification in Progress'
-    : `${platformName} — Closed Beta`
+    ? t('common.betaWarning.youtubeTitle')
+    : t('common.betaWarning.tiktokTitle')
   const message = isYouTube
-    ? 'YouTube integration is currently under Google OAuth verification review. We cannot add new test users during this period.'
-    : `${platformName} integration is currently in closed beta. If you haven't been added to the beta program yet, authentication will fail.`
+    ? t('common.betaWarning.youtubeBody')
+    : t('common.betaWarning.tiktokBody')
   const existingUserMessage = isYouTube
-    ? 'If you were previously added as a test user, you can continue to use YouTube integration.'
-    : "If you're already in the beta, you can proceed with authentication."
+    ? t('common.betaWarning.youtubeExistingUser')
+    : t('common.betaWarning.tiktokExistingUser')
 
   return (
     <Dialog.Root
@@ -85,8 +88,8 @@ export function BetaWarning({ platform, onCancel, onContinue }: BetaWarningProps
 
         <p className="mt-3 text-sm text-text-sub">
           {isYouTube
-            ? 'Join our Discord community to stay updated on verification progress and get support:'
-            : 'To join the beta, please join our Discord community:'}
+            ? t('common.betaWarning.youtubeDiscordPrompt')
+            : t('common.betaWarning.tiktokDiscordPrompt')}
         </p>
 
         <a
@@ -96,7 +99,7 @@ export function BetaWarning({ platform, onCancel, onContinue }: BetaWarningProps
           className="mt-2 inline-flex items-center gap-2 text-sm text-blue-400 underline underline-offset-4 hover:text-blue-300"
         >
           <DiscordIcon className="h-4 w-4 shrink-0" />
-          Join Discord Server
+          {t('common.betaWarning.discordLink')}
         </a>
 
         <p className="mt-3 text-xs text-text-sub">{existingUserMessage}</p>
@@ -107,13 +110,13 @@ export function BetaWarning({ platform, onCancel, onContinue }: BetaWarningProps
             onClick={onCancel}
             className="rounded-lg bg-surface-2 px-4 py-2 font-medium text-text transition-opacity hover:opacity-80"
           >
-            Cancel
+            {t('common.betaWarning.cancelButton')}
           </button>
           <button
             onClick={onContinue}
             className="rounded-lg bg-yellow-600 px-4 py-2 font-medium text-white transition-opacity hover:opacity-80"
           >
-            I Understand, Continue
+            {t('common.betaWarning.continueButton')}
           </button>
         </div>
       </Dialog.Content>

@@ -30,8 +30,10 @@ import { useAuthStore } from '@/lib/stores/auth-store'
 import { useOverlayStore } from '@/lib/stores/overlay-store'
 import { trackEvent } from '@/lib/analytics'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
+import { useTranslations } from '@/lib/i18n'
 
 function NewOverlayContent() {
+  const t = useTranslations()
   const router = useRouter()
   const { createOverlay } = useOverlayStore()
 
@@ -42,7 +44,7 @@ function NewOverlayContent() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!name.trim()) {
-      setNameError('Overlay name is required')
+      setNameError(t('overlayEditor.create.nameRequired'))
       return
     }
     setNameError('')
@@ -50,12 +52,15 @@ function NewOverlayContent() {
     try {
       const overlay = await createOverlay({ name: name.trim() })
       trackEvent('overlay_created')
-      toastManager.add({ title: `"${overlay.name}" created`, type: 'success' })
+      toastManager.add({
+        title: t('overlayEditor.toasts.created', { name: overlay.name }),
+        type: 'success',
+      })
       router.push(`/overlays/${overlay.id}`)
     } catch (err) {
       toastManager.add({
-        title: 'Failed to create overlay',
-        description: 'Please try again.',
+        title: t('overlayEditor.toasts.createFailed'),
+        description: t('common.toast.tryAgain'),
         type: 'error',
       })
     } finally {
@@ -68,19 +73,17 @@ function NewOverlayContent() {
       <AppNav />
       <main id="main-content" tabIndex={-1} className="mx-auto max-w-lg px-4 py-12">
         <Card className="p-8">
-          <h1 className="mb-2 text-2xl font-bold text-text">Create Overlay</h1>
-          <p className="mb-8 text-sm text-text-sub">
-            Give your overlay a name. You can add chat sources after creation.
-          </p>
+          <h1 className="mb-2 text-2xl font-bold text-text">{t('overlayEditor.create.heading')}</h1>
+          <p className="mb-8 text-sm text-text-sub">{t('overlayEditor.create.body')}</p>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
               <label htmlFor="overlay-name" className="text-sm font-medium text-text">
-                Overlay Name
+                {t('overlayEditor.create.nameLabel')}
               </label>
               <Input
                 id="overlay-name"
                 type="text"
-                placeholder="e.g. Main Stream, TikTok Only"
+                placeholder={t('overlayEditor.create.namePlaceholder')}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
@@ -96,7 +99,7 @@ function NewOverlayContent() {
             </div>
             <div className="flex justify-end gap-3">
               <Button variant="outline" type="button" onClick={() => router.back()}>
-                Cancel
+                {t('overlayEditor.create.cancel')}
               </Button>
               <Button variant="gradient" type="submit" disabled={isSubmitting || !name.trim()}>
                 {isSubmitting ? (
@@ -104,7 +107,7 @@ function NewOverlayContent() {
                     <Skeleton className="h-4 w-24 rounded" />
                   </span>
                 ) : (
-                  'Create Overlay'
+                  t('overlayEditor.create.submit')
                 )}
               </Button>
             </div>

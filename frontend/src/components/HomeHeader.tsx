@@ -40,8 +40,10 @@ import { InfinityLogo } from '@/components/InfinityLogo'
 import { dashStyleFor } from '@/lib/dashboard-button-styles'
 import { trackEvent } from '@/lib/analytics'
 import { cn } from '@/lib/utils'
+import { useTranslations } from '@/lib/i18n'
 
 export function HomeHeader() {
+  const t = useTranslations()
   const { user, loading } = useAuthStore()
   const dashStyle = dashStyleFor(user?.auth_provider)
 
@@ -53,10 +55,12 @@ export function HomeHeader() {
         <Link
           href="/"
           className="flex items-center gap-2.5 rounded-sm focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
-          aria-label="All-Chat home"
+          aria-label={t('marketing.header.homeLabel')}
         >
           <InfinityLogo size={26} />
-          <span className="text-base font-extrabold tracking-tight text-text">all-chat</span>
+          <span className="text-base font-extrabold tracking-tight text-text">
+            {t('common.brand.wordmark')}
+          </span>
         </Link>
 
         {/* Right side — Docs is always present; the action depends on auth state */}
@@ -65,7 +69,7 @@ export function HomeHeader() {
             href="/docs"
             className="rounded-sm text-sm text-text-sub transition-colors hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
           >
-            Docs
+            {t('marketing.header.docs')}
           </Link>
 
           {loading ? (
@@ -90,7 +94,7 @@ export function HomeHeader() {
               )}
             >
               <LayoutGrid className="h-4 w-4" aria-hidden="true" />
-              Dashboard
+              {t('marketing.header.dashboard')}
             </Link>
           ) : (
             <a
@@ -98,7 +102,7 @@ export function HomeHeader() {
               onClick={() => trackEvent('cta_click', { cta: 'signin', location: 'nav' })}
               className="rounded-lg border border-border bg-surface px-4 py-1.5 text-sm font-semibold text-text transition-colors hover:border-border-md focus-visible:ring-2 focus-visible:ring-twitch focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
             >
-              Sign in
+              {t('marketing.header.signIn')}
             </a>
           )}
         </nav>

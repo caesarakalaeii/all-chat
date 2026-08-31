@@ -38,6 +38,10 @@ import CookieBanner from '@/components/CookieBanner'
 import ImpersonationBanner from '@/components/ImpersonationBanner'
 import { ToastProvider } from '@/components/ui/toast'
 import { DEFAULT_LOCALE, getTranslations } from '@/lib/i18n'
+
+// Module scope, not inside the component: `metadata` is evaluated on the
+// server before any component runs.
+const t = getTranslations()
 import { cn } from '@/lib/utils'
 import { DISCORD_INVITE_URL } from '@/lib/constants'
 
@@ -58,11 +62,10 @@ const dmMono = DM_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL('https://allch.at'),
   title: {
-    default: 'All-Chat — Every chat. One overlay.',
-    template: '%s | All-Chat',
+    default: t('metadata.site.titleDefault'),
+    template: t('metadata.site.titleTemplate'),
   },
-  description:
-    'See all your Twitch, YouTube, Kick, TikTok, and Discord chat in one OBS chat overlay. Drop it into OBS and go. 7TV, BTTV, and FFZ emotes built in. Free and open source.',
+  description: t('metadata.site.description'),
   keywords: [
     'twitch chat',
     'youtube chat',
@@ -90,15 +93,13 @@ export const metadata: Metadata = {
     locale: 'en_US',
     url: 'https://allch.at',
     siteName: 'All-Chat',
-    title: 'All-Chat — Every chat. One overlay.',
-    description:
-      'All your Twitch, YouTube, Kick, TikTok, and Discord chat in one OBS overlay. 7TV, BTTV, and FFZ emotes built in.',
+    title: t('metadata.site.socialTitle'),
+    description: t('metadata.site.socialDescription'),
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'All-Chat — Every chat. One overlay.',
-    description:
-      'All your Twitch, YouTube, Kick, TikTok, and Discord chat in one OBS overlay. 7TV, BTTV, and FFZ emotes built in.',
+    title: t('metadata.site.socialTitle'),
+    description: t('metadata.site.socialDescription'),
   },
   robots: {
     index: true,
@@ -129,7 +130,6 @@ const webSiteLd = {
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const t = getTranslations()
   return (
     <html lang={DEFAULT_LOCALE} className={cn(barlow.variable, dmMono.variable)}>
       <body>

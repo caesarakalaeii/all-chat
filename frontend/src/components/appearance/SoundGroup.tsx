@@ -25,6 +25,8 @@ import { AdvancedDisclosure } from '@/components/editor/AdvancedDisclosure'
 import { PremiumBadge } from '@/components/PremiumBadge'
 import { PremiumUpsellLink } from '@/components/PremiumUpsellLink'
 import { PRESET_NAMES } from '@/lib/utils/soundPlayer'
+import { useTranslations } from '@/lib/i18n'
+import { emphasise } from '@/lib/i18n/emphasise'
 import type { DisplaySettings } from '@/lib/types/overlay'
 import { trackEvent } from '@/lib/analytics'
 
@@ -37,16 +39,13 @@ export interface SoundGroupProps {
   onPreview?: () => void
 }
 
-function capitalize(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1)
-}
-
 export function SoundGroup({
   displaySettings,
   onChange,
   isPremium,
   onPreview,
 }: SoundGroupProps): React.ReactElement {
+  const t = useTranslations()
   const enabled = displaySettings.notification_sound_enabled ?? false
   const preset = displaySettings.notification_sound_preset ?? 'chime'
   const volume = displaySettings.notification_sound_volume ?? 0.5
@@ -55,14 +54,9 @@ export function SoundGroup({
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-text-dim">
-        These sounds play on your public OBS overlay, for everyone watching your stream. Want a
-        private alert only you hear when new activity arrives (channel-point redeems, a TikTok Rose,
-        and so on)? Open the Monitor view and turn on Activity sound in its Display menu. That is a
-        separate setting and stays on that device.
-      </p>
+      <p className="text-xs text-text-dim">{t('overlayEditor.sounds.scopeNote')}</p>
       <ToggleSwitch
-        label="Enable notification sounds"
+        label={t('overlayEditor.sounds.enable')}
         checked={enabled}
         onChange={(checked) => {
           if (checked) trackEvent('sound_enabled')
@@ -73,23 +67,23 @@ export function SoundGroup({
       {enabled && (
         <>
           <div>
-            <p className="mb-1 text-sm text-text-sub">Sound preset</p>
+            <p className="mb-1 text-sm text-text-sub">{t('overlayEditor.sounds.preset')}</p>
             <select
-              aria-label="Sound preset"
+              aria-label={t('overlayEditor.sounds.preset')}
               value={preset}
               onChange={(e) => onChange({ notification_sound_preset: e.target.value })}
               className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text"
             >
               {SOUND_PRESETS.map((name) => (
                 <option key={name} value={name}>
-                  {capitalize(name)}
+                  {t(`common.soundPresets.${name}`)}
                 </option>
               ))}
             </select>
           </div>
 
           <SliderControl
-            label="Volume"
+            label={t('overlayEditor.sounds.volume')}
             value={volume}
             min={0}
             max={1}
@@ -104,19 +98,19 @@ export function SoundGroup({
               onClick={onPreview}
               className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text hover:bg-surface-2"
             >
-              Test sound
+              {t('overlayEditor.sounds.test')}
             </button>
           )}
 
           {/* Low-traffic fine-tuning lives behind Advanced (ADR-0042) */}
           <AdvancedDisclosure count={2}>
             <SliderControl
-              label="Cooldown"
+              label={t('overlayEditor.sounds.cooldown')}
               value={cooldown}
               min={100}
               max={5000}
               step={100}
-              unit=" ms"
+              unit={t('overlayEditor.sounds.millisecondsUnit')}
               onChange={(v) => onChange({ notification_sound_cooldown: v })}
             />
 
@@ -124,19 +118,26 @@ export function SoundGroup({
               <div className="mb-1 flex items-center gap-2">
                 {!isPremium && <PremiumBadge />}
                 <p className="text-sm text-text-sub">
-                  Custom sound URL
+                  {t('overlayEditor.sounds.customUrl')}
                   {!isPremium && (
                     <span className="ml-1 text-xs text-text-dim">
-                      — Upload your own notification sound (
-                      <PremiumUpsellLink>Premium</PremiumUpsellLink>)
+                      {emphasise(
+                        t('overlayEditor.sounds.customUrlUpsell', {
+                          emphasis: t('overlayEditor.sounds.customUrlUpsellEmphasis'),
+                        }),
+                        t('overlayEditor.sounds.customUrlUpsellEmphasis'),
+                        (run) => (
+                          <PremiumUpsellLink>{run}</PremiumUpsellLink>
+                        )
+                      )}
                     </span>
                   )}
                 </p>
               </div>
               <input
                 type="url"
-                aria-label="Custom sound URL"
-                placeholder="https://example.com/sound.mp3"
+                aria-label={t('overlayEditor.sounds.customUrl')}
+                placeholder={t('overlayEditor.sounds.customUrlPlaceholder')}
                 value={customUrl}
                 disabled={!isPremium}
                 onChange={(e) => onChange({ notification_sound_url: e.target.value })}

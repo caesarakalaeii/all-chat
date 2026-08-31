@@ -37,15 +37,21 @@ import { apiErrorReason, viewerApi } from '@/lib/api/viewer'
 import { inMemoryTokens } from '@/lib/auth/in-memory-store'
 import { safeExternalRedirect } from '@/lib/auth/redirect-allowlist'
 import { useEngagementLive } from '@/lib/hooks/useEngagementLive'
+import { type TFunction, formatNumber, useTranslations } from '@/lib/i18n'
 import type { Poll, Prediction, ViewerEngagement } from '@/lib/types/engagement'
 
 const REFRESH_MS = 3000
 const HEARTBEAT_MS = 60000
-const PLATFORMS: ReadonlyArray<{ id: 'twitch' | 'youtube' | 'kick'; label: string }> = [
-  { id: 'twitch', label: 'Twitch' },
-  { id: 'youtube', label: 'YouTube' },
-  { id: 'kick', label: 'Kick' },
-]
+// The three platforms with a viewer web login. Their display names live in
+// common.platforms.*, which several other surfaces already read.
+const PLATFORMS = ['twitch', 'youtube', 'kick'] as const
+// Glyphs that sit beside copy stating the same thing in words, so they are
+// decoration rather than text to translate.
+const BALANCE_GLYPH = '🔥'
+const POLL_GLYPH = '📊'
+const PREDICTION_GLYPH = '🔮'
+const LOCKED_GLYPH = '🔒'
+const YOUR_VOTE_GLYPH = '✓'
 
 function hasViewerToken(): boolean {
   if (typeof window === 'undefined') return false
@@ -60,29 +66,34 @@ function isUnauthorized(err: unknown): boolean {
 // copy (L-U2), so a failure surfaces something actionable instead of the opaque
 // "wager not accepted". Reasons: repository/predictions.go WagerResult.Reason.
 function wagerRejectionCopy(
+  t: TFunction,
   reason: string | undefined,
   pointsName: string,
   balance: number
 ): string | null {
   switch (reason) {
     case 'not_found':
-      return 'This prediction is no longer available.'
+      return t('viewerOverlay.participate.rejectNotFound')
     case 'not_active':
-      return 'Betting is closed for this round.'
+      return t('viewerOverlay.participate.rejectNotActive')
     case 'bad_outcome':
-      return 'That outcome is not valid.'
+      return t('viewerOverlay.participate.rejectBadOutcome')
     case 'already_wagered':
-      return 'You already placed a wager this round.'
+      return t('viewerOverlay.participate.rejectAlreadyWagered')
     case 'insufficient':
-      return `Not enough ${pointsName}. You have ${balance.toLocaleString()}.`
+      return t('viewerOverlay.participate.rejectInsufficient', {
+        pointsName,
+        balance: formatNumber(balance),
+      })
     case 'native':
-      return 'This prediction runs on Twitch channel points.'
+      return t('viewerOverlay.participate.rejectNative')
     default:
       return null
   }
 }
 
 export default function ParticipatePage({ params }: { params: Promise<{ id: string }> }) {
+  const t = useTranslations()
   const { id } = use(params)
   const [authed, setAuthed] = useState<boolean | null>(null)
   const [engagement, setEngagement] = useState<ViewerEngagement | null>(null)
@@ -220,13 +231,16 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
       // round re-announces even though the message text is identical — an unchanged
       // aria-live node is not re-read by screen readers.
       const clear = setTimeout(() => setAnnouncement(''), 0)
-      const set = setTimeout(() => setAnnouncement('Prediction locked — betting is closed.'), 50)
+      const set = setTimeout(
+        () => setAnnouncement(t('viewerOverlay.participate.lockedAnnouncement')),
+        50
+      )
       return () => {
         clearTimeout(clear)
         clearTimeout(set)
       }
     }
-  }, [prediction?.state])
+  }, [prediction?.state, t])
 
   // Watch-time heartbeat while the tab is open and the viewer is logged in.
   useEffect(() => {
@@ -246,10 +260,10 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
         const data = (await res.json()) as { auth_url?: string }
         if (data.auth_url) safeExternalRedirect(data.auth_url)
       } catch {
-        setNotice('Could not start login. Please try again.')
+        setNotice(t('viewerOverlay.participate.loginFailed'))
       }
     },
-    [id]
+    [id, t]
   )
 
   const vote = useCallback(
@@ -268,12 +282,12 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
           setAuthed(false) // session expired mid-vote → bounce to login (L-U10)
           return
         }
-        setNotice(err instanceof Error ? err.message : 'Vote failed')
+        setNotice(err instanceof Error ? err.message : t('viewerOverlay.participate.voteFailed'))
       } finally {
         setBusy(false)
       }
     },
-    [poll, busy, id, refresh]
+    [poll, busy, id, refresh, t]
   )
 
   const wager = useCallback(
@@ -282,14 +296,17 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
       if (!prediction || busy || prediction.source === 'twitch_native') return
       const amount = Number.parseInt(wagerAmount, 10)
       if (!Number.isFinite(amount) || amount <= 0) {
-        setNotice('Enter a positive amount to wager.')
+        setNotice(t('viewerOverlay.participate.wagerNeedsAmount'))
         return
       }
       const balance = engagement?.balance ?? 0
       if (amount > balance) {
         // Pre-empt the server 'insufficient' with a clearer, local message (L-U3).
         setNotice(
-          `Not enough ${engagement?.points_name ?? 'Points'} — you have ${balance.toLocaleString()}.`
+          t('viewerOverlay.participate.insufficientLocal', {
+            pointsName: engagement?.points_name ?? t('viewerOverlay.participate.defaultPointsName'),
+            balance: formatNumber(balance),
+          })
         )
         return
       }
@@ -307,16 +324,19 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
           return
         }
         const copy = wagerRejectionCopy(
+          t,
           apiErrorReason(err),
-          engagement?.points_name ?? 'Points',
+          engagement?.points_name ?? t('viewerOverlay.participate.defaultPointsName'),
           engagement?.balance ?? 0
         )
-        setNotice(copy ?? (err instanceof Error ? err.message : 'Wager failed'))
+        setNotice(
+          copy ?? (err instanceof Error ? err.message : t('viewerOverlay.participate.wagerFailed'))
+        )
       } finally {
         setBusy(false)
       }
     },
-    [prediction, busy, wagerAmount, id, engagement, refresh]
+    [prediction, busy, wagerAmount, id, engagement, refresh, t]
   )
 
   if (authed === null) {
@@ -326,7 +346,7 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
         tabIndex={-1}
         className="mx-auto max-w-md p-6 text-center text-text-sub"
       >
-        Loading…
+        {t('viewerOverlay.participate.loading')}
       </main>
     )
   }
@@ -334,24 +354,23 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
   if (!authed) {
     return (
       <main id="main-content" tabIndex={-1} className="mx-auto max-w-md space-y-4 p-6 text-center">
-        <h1 className="text-xl font-bold">Join the fun</h1>
-        <p className="text-text-sub">Log in with your platform account to vote and wager.</p>
+        <h1 className="text-xl font-bold">{t('viewerOverlay.participate.loginHeading')}</h1>
+        <p className="text-text-sub">{t('viewerOverlay.participate.loginBlurb')}</p>
         <div className="flex flex-col gap-2">
-          {PLATFORMS.map((p) => (
+          {PLATFORMS.map((platform) => (
             <button
-              key={p.id}
-              onClick={() => void login(p.id)}
+              key={platform}
+              onClick={() => void login(platform)}
               className="rounded-lg bg-purple-600 px-4 py-2 font-semibold text-white hover:bg-purple-700"
             >
-              Continue with {p.label}
+              {t('viewerOverlay.participate.loginWith', {
+                platform: t(`common.platforms.${platform}`),
+              })}
             </button>
           ))}
         </div>
         {/* N2: TikTok/Discord have no web login — point those viewers at chat commands. */}
-        <p className="text-sm text-text-sub">
-          Watching on TikTok or Discord? Take part with the on-screen chat commands — web login
-          isn&apos;t available for those platforms yet.
-        </p>
+        <p className="text-sm text-text-sub">{t('viewerOverlay.participate.noWebLoginNote')}</p>
       </main>
     )
   }
@@ -364,19 +383,26 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
   const pollNative = poll?.source === 'twitch_native'
   const predNative = prediction?.source === 'twitch_native'
   const balance = engagement?.balance ?? 0
-  const pointsName = engagement?.points_name ?? 'Points'
+  const pointsName = engagement?.points_name ?? t('viewerOverlay.participate.defaultPointsName')
 
   return (
     <main id="main-content" tabIndex={-1} className="mx-auto max-w-md space-y-6 p-4">
       <header className="flex items-center justify-between">
-        <h1 className="text-lg font-bold">Participate</h1>
+        <h1 className="text-lg font-bold">{t('viewerOverlay.participate.heading')}</h1>
         <span
           className="rounded-full bg-surface-2 px-3 py-1 text-sm font-semibold text-text"
           aria-live="polite"
           aria-atomic="true"
-          aria-label={`Balance: ${balance.toLocaleString()} ${pointsName}`}
+          aria-label={t('viewerOverlay.participate.balanceLabel', {
+            balance: formatNumber(balance),
+            pointsName,
+          })}
         >
-          <span aria-hidden="true">🔥</span> {balance.toLocaleString()} {pointsName}
+          <span aria-hidden="true">{BALANCE_GLYPH}</span>{' '}
+          {t('viewerOverlay.participate.balance', {
+            balance: formatNumber(balance),
+            pointsName,
+          })}
         </span>
       </header>
 
@@ -394,20 +420,21 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
 
       {settled && (
         <p role="status" className="rounded-md bg-surface-2 px-3 py-2 text-sm text-text">
-          Your prediction on “{settled.outcomeLabel}” settled — you wagered{' '}
-          {settled.amount.toLocaleString()} {pointsName}. Check your balance above.
+          {t('viewerOverlay.participate.settledBanner', {
+            outcome: settled.outcomeLabel,
+            amount: formatNumber(settled.amount),
+            pointsName,
+          })}
         </p>
       )}
 
       {poll && poll.state === 'ACTIVE' && (
         <section className="space-y-2">
           <h2 className="flex items-center gap-2 font-semibold">
-            <span aria-hidden="true">📊</span> {poll.question}
+            <span aria-hidden="true">{POLL_GLYPH}</span> {poll.question}
           </h2>
           {pollNative && (
-            <p className="text-sm text-text-sub">
-              This poll runs on Twitch — vote in Twitch chat or the Twitch app.
-            </p>
+            <p className="text-sm text-text-sub">{t('viewerOverlay.participate.pollNativeNote')}</p>
           )}
           {poll.options.map((o) => {
             const pct = pollTotal > 0 ? Math.round((o.votes / pollTotal) * 100) : 0
@@ -417,7 +444,13 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
                 key={o.id}
                 onClick={() => void vote(o.idx)}
                 disabled={busy || pollNative}
-                title={pollNative ? 'Vote in Twitch chat' : busy ? 'Working…' : undefined}
+                title={
+                  pollNative
+                    ? t('viewerOverlay.participate.pollVoteNativeTitle')
+                    : busy
+                      ? t('viewerOverlay.participate.working')
+                      : undefined
+                }
                 className={clsx(
                   'relative flex w-full items-center justify-between overflow-hidden rounded-lg border px-3 py-2 text-left',
                   mine ? 'border-purple-500' : 'border-border',
@@ -433,13 +466,16 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
                   {mine && (
                     <>
                       {' '}
-                      <span aria-hidden="true">✓</span>
-                      <span className="sr-only">(your vote)</span>
+                      <span aria-hidden="true">{YOUR_VOTE_GLYPH}</span>
+                      <span className="sr-only">{t('viewerOverlay.participate.yourVote')}</span>
                     </>
                   )}
                 </span>
                 <span className="relative text-sm text-text tabular-nums">
-                  {pct}% ({o.votes.toLocaleString()})
+                  {t('viewerOverlay.participate.pollOptionTally', {
+                    pct,
+                    votes: formatNumber(o.votes),
+                  })}
                 </span>
               </button>
             )
@@ -450,38 +486,43 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
       {prediction && (prediction.state === 'ACTIVE' || prediction.state === 'LOCKED') && (
         <section className="space-y-2">
           <h2 className="flex items-center gap-2 font-semibold">
-            <span aria-hidden="true">🔮</span> {prediction.title}
+            <span aria-hidden="true">{PREDICTION_GLYPH}</span> {prediction.title}
             {prediction.state === 'LOCKED' && (
               <span className="text-sm text-text-sub">
-                <span aria-hidden="true">🔒</span> locked
+                <span aria-hidden="true">{LOCKED_GLYPH}</span>{' '}
+                {t('viewerOverlay.participate.predictionLocked')}
               </span>
             )}
           </h2>
           {predNative && (
-            <p className="text-sm text-text-sub">This prediction runs on Twitch channel points.</p>
+            <p className="text-sm text-text-sub">
+              {t('viewerOverlay.participate.predictionNativeNote')}
+            </p>
           )}
           {!alreadyWagered && predOpen && !predNative && (
             <div className="space-y-1">
               <div className="flex items-center justify-between text-xs text-text-sub">
                 <span>
-                  You have {balance.toLocaleString()} {pointsName}
+                  {t('viewerOverlay.participate.youHave', {
+                    balance: formatNumber(balance),
+                    pointsName,
+                  })}
                 </span>
                 <button
                   type="button"
                   onClick={() => setWagerAmount(String(balance))}
                   className="rounded px-1.5 py-0.5 font-medium text-text-sub underline hover:text-text focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:outline-none"
                 >
-                  Max
+                  {t('viewerOverlay.participate.maxWager')}
                 </button>
               </div>
               {balance <= 0 && (
                 <p className="text-xs text-text-sub">
-                  You have no {pointsName} yet. Earn them by keeping this page open and by
-                  supporting the stream (subs, bits, donations, gifts), then come back to wager.
+                  {t('viewerOverlay.participate.noPointsYet', { pointsName })}
                 </p>
               )}
               <label htmlFor="wager-amount" className="sr-only">
-                Amount to wager in {pointsName}
+                {t('viewerOverlay.participate.wagerAmountLabel', { pointsName })}
               </label>
               <input
                 id="wager-amount"
@@ -491,7 +532,9 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
                 inputMode="numeric"
                 value={wagerAmount}
                 onChange={(e) => setWagerAmount(e.target.value)}
-                placeholder={`Amount to wager (${pointsName})`}
+                placeholder={t('viewerOverlay.participate.wagerAmountPlaceholder', {
+                  pointsName,
+                })}
                 className="w-full rounded-lg border border-border bg-transparent px-3 py-2 text-text placeholder:text-text-dim"
               />
             </div>
@@ -501,13 +544,13 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
             const mine = engagement?.wager_outcome_id === o.id
             const disabled = busy || alreadyWagered || !predOpen || predNative
             const title = predNative
-              ? 'Runs on Twitch channel points'
+              ? t('viewerOverlay.participate.wagerNativeTitle')
               : alreadyWagered
-                ? 'You already wagered this round'
+                ? t('viewerOverlay.participate.wagerAlreadyTitle')
                 : !predOpen
-                  ? 'Betting is closed'
+                  ? t('viewerOverlay.participate.wagerClosedTitle')
                   : busy
-                    ? 'Working…'
+                    ? t('viewerOverlay.participate.working')
                     : undefined
             return (
               <button
@@ -527,26 +570,28 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
                 />
                 <span className="relative font-medium">
                   {o.idx}. {o.label}
-                  {mine && ` · your wager: ${(engagement?.wager_amount ?? 0).toLocaleString()}`}
+                  {mine &&
+                    t('viewerOverlay.participate.yourWager', {
+                      amount: formatNumber(engagement?.wager_amount ?? 0),
+                    })}
                 </span>
                 <span className="relative text-sm text-text tabular-nums">
-                  {o.total_points.toLocaleString()} · {pct}%
+                  {t('viewerOverlay.participate.outcomeTally', {
+                    points: formatNumber(o.total_points),
+                    pct,
+                  })}
                 </span>
               </button>
             )
           })}
           {alreadyWagered && (
-            <p className="text-sm text-text-sub">
-              You&apos;ve locked in your wager for this round.
-            </p>
+            <p className="text-sm text-text-sub">{t('viewerOverlay.participate.alreadyWagered')}</p>
           )}
         </section>
       )}
 
       {!poll && !prediction && (
-        <p className="text-center text-text-sub">
-          No active poll or prediction right now. Hang tight!
-        </p>
+        <p className="text-center text-text-sub">{t('viewerOverlay.participate.nothingActive')}</p>
       )}
     </main>
   )

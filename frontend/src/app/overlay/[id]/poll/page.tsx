@@ -31,10 +31,16 @@ import { use, useCallback, useEffect, useState } from 'react'
 import clsx from 'clsx'
 import type { Poll } from '@/lib/types/engagement'
 import { useEngagementLive } from '@/lib/hooks/useEngagementLive'
+import { formatNumber, useTranslations } from '@/lib/i18n'
 
 const POLL_INTERVAL_MS = 2000
+// Decoration: the chart glyph is already behind aria-hidden, and the stopwatch
+// sits immediately before the countdown, which says "remaining" in words.
+const POLL_GLYPH = '📊'
+const TIMER_GLYPH = '⏱'
 
 export default function PollOverlayPage({ params }: { params: Promise<{ id: string }> }) {
+  const t = useTranslations()
   const { id } = use(params)
   const [poll, setPoll] = useState<Poll | null>(null)
   const [now, setNow] = useState(() => Date.now())
@@ -103,11 +109,11 @@ export default function PollOverlayPage({ params }: { params: Promise<{ id: stri
     <div className="min-h-screen bg-transparent p-4">
       <div className="mx-auto max-w-md rounded-xl bg-black/70 p-4 text-white shadow-lg backdrop-blur-sm">
         <div className="mb-3 flex items-center gap-2 text-lg font-bold">
-          <span aria-hidden>📊</span>
+          <span aria-hidden>{POLL_GLYPH}</span>
           <span className="min-w-0 flex-1 truncate">{poll.question}</span>
           {isClosed && (
             <span className="shrink-0 rounded bg-white/20 px-1.5 py-0.5 text-[10px] font-bold tracking-wide uppercase">
-              Final
+              {t('viewerOverlay.pollWidget.finalBadge')}
             </span>
           )}
         </div>
@@ -136,12 +142,17 @@ export default function PollOverlayPage({ params }: { params: Promise<{ id: stri
                         an accessible name and reads for colourblind viewers. */}
                     {isTop && (
                       <span className="shrink-0 rounded bg-yellow-400 px-1.5 py-0.5 text-[10px] font-bold text-black uppercase">
-                        {isTie ? 'Tie' : 'Winner'}
+                        {isTie
+                          ? t('viewerOverlay.pollWidget.tiePill')
+                          : t('viewerOverlay.pollWidget.winnerPill')}
                       </span>
                     )}
                   </span>
                   <span className="tabular-nums">
-                    {pct}% ({o.votes.toLocaleString()})
+                    {t('viewerOverlay.pollWidget.optionTally', {
+                      pct,
+                      votes: formatNumber(o.votes),
+                    })}
                   </span>
                 </div>
               </div>
@@ -149,11 +160,16 @@ export default function PollOverlayPage({ params }: { params: Promise<{ id: stri
           })}
         </div>
         {isClosed ? (
-          <div className="mt-3 text-right text-sm font-semibold text-white/80">Final results</div>
+          <div className="mt-3 text-right text-sm font-semibold text-white/80">
+            {t('viewerOverlay.pollWidget.finalResults')}
+          </div>
         ) : (
           remaining !== null && (
             <div className="mt-3 text-right text-sm text-white/80 tabular-nums">
-              ⏱ {Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, '0')} remaining
+              {TIMER_GLYPH}{' '}
+              {t('viewerOverlay.pollWidget.remaining', {
+                clock: `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}`,
+              })}
             </div>
           )
         )}

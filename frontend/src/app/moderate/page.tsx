@@ -50,21 +50,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { VisuallyHidden } from '@/components/ui/visually-hidden'
 import { getDiscordIdentity, startDiscordAccountLink } from '@/lib/api/discord'
 import { moderationApi } from '@/lib/api/moderation'
-import { DELEGATABLE_ACTIONS, type Delegation, type ModerationAction } from '@/lib/types/moderation'
-
-const ACTION_LABELS: Record<ModerationAction, string> = {
-  delete: 'Delete messages',
-  timeout: 'Timeout',
-  ban: 'Ban',
-  unban: 'Unban',
-}
-
-const PLATFORM_LABELS: Record<string, string> = {
-  twitch: 'Twitch',
-  youtube: 'YouTube',
-  kick: 'Kick',
-  discord: 'Discord',
-}
+import { DELEGATABLE_ACTIONS, DELEGATABLE_PLATFORMS, type Delegation } from '@/lib/types/moderation'
+import { useTranslations, type TFunction } from '@/lib/i18n'
 
 /**
  * Copy for the mod-consent redirect's query string. The OAuth flow returns here rather
@@ -72,6 +59,7 @@ const PLATFORM_LABELS: Record<string, string> = {
  * platform, so there is no single overlay it belongs to.
  */
 function consentNotice(
+  t: TFunction,
   connected: string | null,
   error: string | null,
   discordAccount: string | null
@@ -80,25 +68,30 @@ function consentNotice(
   // different All-Chat account, and no amount of retrying changes it. One Discord identity may
   // back at most one account, or a second could inherit the first's server permissions.
   if (error === 'already_linked') {
-    return 'That Discord account is already linked to another All-Chat account. Link a different one, or unlink it from the other account first.'
+    return t('moderation.channels.noticeDiscordAlreadyLinked')
   }
   if (error) {
-    return 'That connection did not complete. Open a channel below and try again from there.'
+    return t('moderation.channels.noticeConnectFailed')
   }
   if (discordAccount === 'linked') {
-    return 'Discord account linked. All-Chat can now check your own server permissions when you moderate Discord.'
+    return t('moderation.channels.noticeDiscordLinked')
   }
   if (connected) {
-    const name = PLATFORM_LABELS[connected] ?? connected
-    return `${name} connected. It now covers every channel that delegated ${name} to you.`
+    // `connected` is a query-string value, so it may name a platform the
+    // catalog has no display name for. Falling back to the raw value keeps the
+    // notice readable rather than printing a catalog key.
+    const known = DELEGATABLE_PLATFORMS.find((p) => p === connected)
+    const name = known ? t(`common.platforms.${known}`) : connected
+    return t('moderation.channels.noticeConnected', { platform: name })
   }
   return null
 }
 
 function DelegationSkeleton() {
+  const t = useTranslations()
   return (
     <div role="status" className="grid grid-cols-1 gap-6 md:grid-cols-2">
-      <VisuallyHidden>Loading channels</VisuallyHidden>
+      <VisuallyHidden>{t('moderation.channels.loading')}</VisuallyHidden>
       {Array.from({ length: 2 }).map((_, i) => (
         <div key={i} className="space-y-3 rounded-xl border border-border bg-surface p-6">
           <Skeleton className="h-4 w-1/2" />
@@ -114,19 +107,18 @@ function DelegationSkeleton() {
 }
 
 function EmptyState() {
+  const t = useTranslations()
   return (
     <div className="flex flex-col items-center gap-4 py-24 text-center">
       <ShieldCheck className="size-16 text-text-dim" strokeWidth={1} aria-hidden="true" />
-      <h2 className="text-xl font-semibold text-text">No channels yet</h2>
-      <p className="max-w-md text-sm text-text-sub">
-        When a streamer invites you to moderate their overlay, they send you a private link. Open it
-        while signed in to this account and their channel appears here.
-      </p>
+      <h2 className="text-xl font-semibold text-text">{t('moderation.channels.emptyHeading')}</h2>
+      <p className="max-w-md text-sm text-text-sub">{t('moderation.channels.emptyBody')}</p>
     </div>
   )
 }
 
 function DelegationCard({ delegation }: { delegation: Delegation }) {
+  const t = useTranslations()
   // Rendered in the backend's canonical order rather than the array's, so two grants with
   // the same permissions always read identically.
   const actions = DELEGATABLE_ACTIONS.filter((a) => delegation.actions.includes(a))
@@ -138,7 +130,9 @@ function DelegationCard({ delegation }: { delegation: Delegation }) {
       <div className="flex flex-1 flex-col gap-4 p-6">
         <div className="min-w-0">
           <h2 className="truncate font-semibold text-text">{delegation.overlay_name}</h2>
-          <p className="truncate text-sm text-text-sub">for {delegation.owner_display_name}</p>
+          <p className="truncate text-sm text-text-sub">
+            {t('moderation.channels.forOwner', { owner: delegation.owner_display_name })}
+          </p>
         </div>
 
         {platforms.length > 0 ? (
@@ -149,7 +143,7 @@ function DelegationCard({ delegation }: { delegation: Delegation }) {
           </div>
         ) : (
           <p className="text-xs text-text-dim">
-            No platforms turned on yet — ask {delegation.owner_display_name} to enable one.
+            {t('moderation.channels.noPlatforms', { owner: delegation.owner_display_name })}
           </p>
         )}
 
@@ -159,7 +153,7 @@ function DelegationCard({ delegation }: { delegation: Delegation }) {
               key={action}
               className="rounded-full border border-border bg-surface-2 px-2 py-0.5 text-[0.65rem] text-text-sub"
             >
-              {ACTION_LABELS[action]}
+              {t(`moderation.actions.${action}`)}
             </li>
           ))}
         </ul>
@@ -168,8 +162,7 @@ function DelegationCard({ delegation }: { delegation: Delegation }) {
           <p className="flex items-start gap-2 text-xs text-text-sub">
             <Info className="mt-0.5 size-3.5 shrink-0 text-text-dim" aria-hidden="true" />
             <span>
-              Paused after 90 days without any actions. Ask {delegation.owner_display_name} to turn
-              it back on.
+              {t('moderation.channels.suspendedNote', { owner: delegation.owner_display_name })}
             </span>
           </p>
         )}
@@ -180,8 +173,7 @@ function DelegationCard({ delegation }: { delegation: Delegation }) {
           <p className="flex items-start gap-2 text-xs text-text-sub">
             <Info className="mt-0.5 size-3.5 shrink-0 text-text-dim" aria-hidden="true" />
             <span>
-              {delegation.owner_display_name}&apos;s plan does not include moderation right now, so
-              actions are unavailable until they renew it.
+              {t('moderation.channels.unavailableNote', { owner: delegation.owner_display_name })}
             </span>
           </p>
         )}
@@ -193,7 +185,7 @@ function DelegationCard({ delegation }: { delegation: Delegation }) {
           className="mt-auto inline-flex w-fit items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-text-sub transition-colors hover:border-border-md hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
         >
           <MonitorPlay className="size-4" aria-hidden="true" />
-          Open chat monitor
+          {t('moderation.channels.openMonitor')}
         </Link>
       </div>
     </Card>
@@ -201,8 +193,10 @@ function DelegationCard({ delegation }: { delegation: Delegation }) {
 }
 
 function ModerateContent() {
+  const t = useTranslations()
   const params = useSearchParams()
   const notice = consentNotice(
+    t,
     params.get('connected'),
     params.get('error'),
     params.get('discord_account')
@@ -271,11 +265,8 @@ function ModerateContent() {
       <AppNav />
       <main id="main-content" tabIndex={-1} className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-text">Channels you moderate</h1>
-          <p className="mt-1 text-sm text-text-sub">
-            Overlays other streamers have handed you. You act with your own platform account, so
-            each platform still checks that you are one of their moderators.
-          </p>
+          <h1 className="text-2xl font-bold text-text">{t('moderation.channels.heading')}</h1>
+          <p className="mt-1 text-sm text-text-sub">{t('moderation.channels.subheading')}</p>
         </div>
 
         {notice && (
@@ -289,22 +280,19 @@ function ModerateContent() {
           <div className="mb-6 flex flex-wrap items-start justify-between gap-3 rounded-lg border border-border bg-surface-2 px-4 py-3 text-sm text-text-sub">
             <span className="flex items-start gap-2">
               <Info className="mt-0.5 size-4 shrink-0 text-text-dim" aria-hidden="true" />
-              <span>
-                Link your Discord account to moderate Discord. All-Chat checks your own server
-                permissions before it acts, so it needs to know which Discord account is yours.
-              </span>
+              <span>{t('moderation.channels.discordPromptBody')}</span>
             </span>
             <Button size="sm" onClick={() => void startDiscordAccountLink('moderate')}>
-              Link Discord
+              {t('moderation.channels.linkDiscord')}
             </Button>
           </div>
         )}
 
         {loadFailed ? (
           <div className="space-y-3">
-            <p className="text-sm text-text-sub">Could not load your channels.</p>
+            <p className="text-sm text-text-sub">{t('moderation.channels.loadFailed')}</p>
             <Button variant="outline" size="sm" onClick={() => void reload()}>
-              Try again
+              {t('moderation.channels.tryAgain')}
             </Button>
           </div>
         ) : delegations === null ? (

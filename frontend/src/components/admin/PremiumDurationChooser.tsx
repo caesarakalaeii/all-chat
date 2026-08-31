@@ -21,23 +21,27 @@
 import { useState } from 'react'
 import clsx from 'clsx'
 import { Input } from '@/components/ui/input'
+import { useTranslations, type MessageKey } from '@/lib/i18n'
 
 export const DAY_SECONDS = 86400
 // Mirrors the backend cap (~10 years) in share-service / auth-service.
 export const MAX_DAYS = 3650
 
 interface Preset {
-  label: string
+  labelKey: MessageKey
   seconds: number | null // null = permanent
 }
 
-const PRESETS: Preset[] = [
-  { label: 'Permanent', seconds: null },
-  { label: '1 day', seconds: 1 * DAY_SECONDS },
-  { label: '7 days', seconds: 7 * DAY_SECONDS },
-  { label: '30 days', seconds: 30 * DAY_SECONDS },
-  { label: '90 days', seconds: 90 * DAY_SECONDS },
-]
+// The preset chips. `as const satisfies` rather than an annotation: an
+// annotation widens labelKey to string, and a mistyped catalog key would then
+// resolve at runtime to a key that echoes itself instead of failing tsc.
+const PRESETS = [
+  { labelKey: 'admin.premiumDuration.presetPermanent', seconds: null },
+  { labelKey: 'admin.premiumDuration.preset1Day', seconds: 1 * DAY_SECONDS },
+  { labelKey: 'admin.premiumDuration.preset7Days', seconds: 7 * DAY_SECONDS },
+  { labelKey: 'admin.premiumDuration.preset30Days', seconds: 30 * DAY_SECONDS },
+  { labelKey: 'admin.premiumDuration.preset90Days', seconds: 90 * DAY_SECONDS },
+] as const satisfies readonly Preset[]
 
 function presetKey(seconds: number | null): string {
   return seconds === null ? 'permanent' : String(seconds)
@@ -73,10 +77,11 @@ export interface PremiumDurationChooserProps {
  * dialog that unmounts on close) to reset it.
  */
 export function PremiumDurationChooser({ onChange, disabled }: PremiumDurationChooserProps) {
+  const t = useTranslations()
   const [choice, setChoice] = useState<string>('permanent')
   const [customDays, setCustomDays] = useState('')
 
-  function selectPreset(preset: Preset) {
+  function selectPreset(preset: (typeof PRESETS)[number]) {
     setChoice(presetKey(preset.seconds))
     onChange(preset.seconds, true)
   }
@@ -98,7 +103,7 @@ export function PremiumDurationChooser({ onChange, disabled }: PremiumDurationCh
 
   return (
     <div className="mt-4">
-      <p className="mb-2 text-xs font-medium text-text-sub">Duration</p>
+      <p className="mb-2 text-xs font-medium text-text-sub">{t('admin.premiumDuration.label')}</p>
       <div className="flex flex-wrap gap-2">
         {PRESETS.map((preset) => (
           <button
@@ -108,7 +113,7 @@ export function PremiumDurationChooser({ onChange, disabled }: PremiumDurationCh
             onClick={() => selectPreset(preset)}
             className={chipClass(choice === presetKey(preset.seconds))}
           >
-            {preset.label}
+            {t(preset.labelKey)}
           </button>
         ))}
         <button
@@ -117,7 +122,7 @@ export function PremiumDurationChooser({ onChange, disabled }: PremiumDurationCh
           onClick={() => selectCustom(customDays)}
           className={chipClass(choice === 'custom')}
         >
-          Custom
+          {t('admin.premiumDuration.presetCustom')}
         </button>
       </div>
       {choice === 'custom' && (
@@ -129,12 +134,14 @@ export function PremiumDurationChooser({ onChange, disabled }: PremiumDurationCh
             size="sm"
             value={customDays}
             disabled={disabled}
-            placeholder="days"
-            aria-label="Custom duration in days"
+            placeholder={t('admin.premiumDuration.customPlaceholder')}
+            aria-label={t('admin.premiumDuration.customFieldLabel')}
             onChange={(e) => selectCustom(e.target.value)}
             className="w-24"
           />
-          <span className="text-xs text-text-dim">days (1&ndash;{MAX_DAYS})</span>
+          <span className="text-xs text-text-dim">
+            {t('admin.premiumDuration.customRange', { max: MAX_DAYS })}
+          </span>
         </div>
       )}
     </div>

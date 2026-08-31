@@ -31,11 +31,15 @@ import { notFound } from 'next/navigation'
 import ThemePreview from '@/components/theme-marketplace/ThemePreview'
 import { getBundledThemes } from '@/lib/theme-marketplace/bundled-themes'
 import { SAMPLE_PREVIEW_MESSAGES } from '@/lib/theme-marketplace/constants'
+import { getTranslations } from '@/lib/i18n'
 
 export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { robots: { index: false, follow: false } }
 
 export default function ThemeContrastHarness() {
+  // getTranslations, not the hook: this is a Server Component.
+  const t = getTranslations()
+
   if (process.env.NODE_ENV === 'production') notFound()
 
   const themes = getBundledThemes()
@@ -43,10 +47,9 @@ export default function ThemeContrastHarness() {
   return (
     <main id="main-content" tabIndex={-1} className="mx-auto max-w-2xl space-y-8 p-6">
       <header>
-        <h1 className="text-xl font-bold text-text">Theme contrast harness</h1>
+        <h1 className="text-xl font-bold text-text">{t('docs.themeContrast.heading')}</h1>
         <p className="text-sm text-text-sub">
-          Dev-only. Renders every bundled theme for the message-text WCAG gate. {themes.length}{' '}
-          themes.
+          {t('docs.themeContrast.intro', { count: themes.length })}
         </p>
       </header>
 

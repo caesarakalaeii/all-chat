@@ -34,6 +34,7 @@ import { Editor, OnMount, OnValidate } from '@monaco-editor/react'
 import { useRef, useEffect } from 'react'
 import { markerSeverityToLevel } from '@/lib/utils/custom-css'
 import type { CssIssue } from '@/lib/utils/custom-css'
+import { useTranslations } from '@/lib/i18n'
 
 export type { CssIssue }
 
@@ -55,6 +56,7 @@ export default function MonacoCSSEditor({
   placeholder = '/* Enter your custom CSS here */',
   readOnly = false,
 }: MonacoCSSEditorProps) {
+  const t = useTranslations()
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null)
   // Guards the onChange that Monaco fires when WE call setValue() to sync an
   // external value (theme preload, "Reset to theme"). Without this, a preload
@@ -119,10 +121,8 @@ export default function MonacoCSSEditor({
     // role="group" + aria-label mark the editor region for assistive tech;
     // the hint below documents Monaco's built-in keyboard-trap escape
     // (WCAG 2.1.2): Ctrl+M toggles tab-focus mode, Escape releases focus.
-    <div role="group" aria-label="Custom CSS editor">
-      <p className="mb-1 text-xs text-text-dim">
-        Press Ctrl+M to toggle Tab capturing; Escape then Tab leaves the editor.
-      </p>
+    <div role="group" aria-label={t('common.cssEditor.regionLabel')}>
+      <p className="mb-1 text-xs text-text-dim">{t('common.cssEditor.keyboardHint')}</p>
       <div className="overflow-hidden rounded-lg border border-border">
         <Editor
           height={height}
@@ -146,7 +146,7 @@ export default function MonacoCSSEditor({
           }}
           loading={
             <div className="flex h-full items-center justify-center bg-bg">
-              <div className="text-sm text-text-dim">Loading editor...</div>
+              <div className="text-sm text-text-dim">{t('common.cssEditor.loading')}</div>
             </div>
           }
         />

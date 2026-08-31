@@ -32,6 +32,7 @@ import { useEffect, useState } from 'react'
 import { Card } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { apiClient } from '@/lib/api/client'
+import { useTranslations } from '@/lib/i18n'
 import { toastManager } from '@/lib/toast'
 
 interface ShowcaseState {
@@ -42,6 +43,7 @@ interface ShowcaseState {
 }
 
 export function AmbassadorSettingsCard() {
+  const t = useTranslations()
   // null while loading — keeps the switch disabled until we know the real state.
   const [consent, setConsent] = useState<boolean | null>(null)
   const [tagline, setTagline] = useState<string | null>(null)
@@ -72,12 +74,14 @@ export function AmbassadorSettingsCard() {
     try {
       await apiClient.put('/api/v1/ambassadors/me/showcase', { featured_consent: next })
       toastManager.add({
-        title: next ? 'You will now appear on the homepage' : 'Removed from the homepage showcase',
+        title: next
+          ? t('settings.ambassador.toastFeatured')
+          : t('settings.ambassador.toastUnfeatured'),
         type: 'success',
       })
     } catch {
       setConsent(prev ?? false) // rollback
-      toastManager.add({ title: 'Failed to update showcase setting', type: 'error' })
+      toastManager.add({ title: t('settings.ambassador.toastFailed'), type: 'error' })
     } finally {
       setSaving(false)
     }
@@ -85,16 +89,14 @@ export function AmbassadorSettingsCard() {
 
   return (
     <Card className="p-6">
-      <h2 className="mb-4 text-lg font-semibold text-text">Ambassador</h2>
-      <p className="mb-4 text-sm text-text-sub">
-        You&rsquo;re an All-Chat ambassador. Choose whether to be featured on the public homepage.
-      </p>
+      <h2 className="mb-4 text-lg font-semibold text-text">{t('settings.ambassador.heading')}</h2>
+      <p className="mb-4 text-sm text-text-sub">{t('settings.ambassador.body')}</p>
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-sm font-medium text-text">Feature me on the homepage</p>
+          <p className="text-sm font-medium text-text">{t('settings.ambassador.featureToggle')}</p>
           {tagline && (
             <p className="mt-1 truncate text-xs text-text-sub">
-              Your card reads: &ldquo;{tagline}&rdquo;
+              {t('settings.ambassador.cardReads', { tagline })}
             </p>
           )}
         </div>
@@ -102,7 +104,7 @@ export function AmbassadorSettingsCard() {
           checked={consent ?? false}
           onCheckedChange={toggle}
           disabled={saving || consent === null}
-          aria-label="Feature me on the homepage"
+          aria-label={t('settings.ambassador.featureToggle')}
         >
           <Switch.Thumb />
         </Switch.Root>
