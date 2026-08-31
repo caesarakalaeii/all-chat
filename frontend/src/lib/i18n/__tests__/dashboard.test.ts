@@ -86,3 +86,97 @@ describe('dashboard copy', () => {
     expect(t('dashboard.toasts.overlayUpdateFailed')).toBe('Failed to update overlay')
   })
 })
+
+describe('share requests page copy', () => {
+  it('keeps the page chrome and its two tabs', () => {
+    expect(t('dashboard.shares.heading')).toBe('Share Requests')
+    // The count is part of the tab label, so it is a placeholder rather than a
+    // fragment appended after the word.
+    expect(t('dashboard.shares.tabPending', { count: '3' })).toBe('Pending (3)')
+    expect(t('dashboard.shares.tabHistory', { count: '7' })).toBe('History (7)')
+    expect(t('dashboard.shares.loading')).toBe('Loading requests...')
+    expect(t('dashboard.shares.emptyPending')).toBe('No pending share requests')
+    expect(t('dashboard.shares.emptyHistory')).toBe('No request history')
+    // Stands in for a sender whose profile did not load.
+    expect(t('dashboard.shares.unknownUser')).toBe('Unknown User')
+  })
+
+  it('keeps the five status badges', () => {
+    expect(t('dashboard.shares.statusPending')).toBe('Pending')
+    // 'accepted' reads "Active": the badge names the state of the share, not
+    // the state of the request.
+    expect(t('dashboard.shares.statusAccepted')).toBe('Active')
+    expect(t('dashboard.shares.statusExpired')).toBe('Expired')
+    expect(t('dashboard.shares.statusRevoked')).toBe('Revoked')
+    expect(t('dashboard.shares.statusRejected')).toBe('Rejected')
+  })
+
+  it('keeps the request card', () => {
+    expect(t('dashboard.shares.loadingUser')).toBe('Loading user info...')
+    expect(t('dashboard.shares.revoke')).toBe('Revoke')
+    expect(t('dashboard.shares.accept')).toBe('Accept')
+    expect(t('dashboard.shares.reject')).toBe('Reject')
+    // Stands in for a sender with no display name.
+    expect(t('dashboard.shares.userFallbackName')).toBe('User')
+  })
+
+  it('keeps the accept modal', () => {
+    expect(t('dashboard.shares.acceptTitle', { sender: 'Sarah' })).toBe(
+      'Sarah wants to share with you'
+    )
+    expect(t('dashboard.shares.cannotAcceptTitle')).toBe('Cannot Accept Share')
+    expect(t('dashboard.shares.noOverlaysError')).toBe('Create an overlay first to accept shares')
+    expect(t('dashboard.shares.loadOverlaysFailed')).toBe('Failed to load overlays')
+    expect(t('dashboard.shares.close')).toBe('Close')
+    expect(t('dashboard.shares.loadingOverlays')).toBe('Loading overlays...')
+    // The required marker is rendered as its own element, so the label keeps a
+    // placeholder for it rather than being split around the asterisk.
+    expect(t('dashboard.shares.shareBackLabel', { required: '*' })).toBe(
+      'Share back which overlay? *'
+    )
+    expect(t('dashboard.shares.requiredMarker')).toBe('*')
+    expect(t('dashboard.shares.cancel')).toBe('Cancel')
+    expect(t('dashboard.shares.acceptButton')).toBe('Accept')
+    expect(t('dashboard.shares.accepting')).toBe('Accepting...')
+  })
+
+  it('keeps the three expiry options', () => {
+    expect(t('dashboard.shares.expiryLegend')).toBe('When should the share expire?')
+    expect(t('dashboard.shares.expiryThisStream')).toBe('This stream')
+    expect(t('dashboard.shares.expiryThisStreamHint')).toBe('Expires when your stream ends')
+    // Kick has no stream-lifecycle detection, so 'this stream' would never
+    // expire there.
+    expect(t('dashboard.shares.expiryKickUnavailable')).toBe(
+      '(not available for Kick — stream detection not yet supported)'
+    )
+    expect(t('dashboard.shares.expiryCustom')).toBe('Custom duration')
+    expect(t('dashboard.shares.expiryCustomPlaceholder')).toBe('hours')
+    expect(t('dashboard.shares.expiryCustomLabel')).toBe('Custom duration in hours')
+    expect(t('dashboard.shares.expiryCustomHint')).toBe('hours (1-168)')
+    expect(t('dashboard.shares.expiryCustomError')).toBe('Must be between 1 and 168 hours')
+    expect(t('dashboard.shares.expiryUnlimited')).toBe('Unlimited')
+    expect(t('dashboard.shares.expiryUnlimitedHint')).toBe('Never expires')
+  })
+
+  it('keeps the add-source modal', () => {
+    // The render site spelled the apostrophes &apos;, which is U+0027.
+    expect(t('dashboard.shares.addSourceTitle', { sender: 'Sarah' })).toBe(
+      "Add Sarah's overlay to one of yours?"
+    )
+    expect(t('dashboard.shares.addSourcePreview', { sender: 'Sarah' })).toBe(
+      "Sarah's overlay (shared chat)"
+    )
+    expect(t('dashboard.shares.addSourceSelectLabel')).toBe('Add to which overlay?')
+    expect(t('dashboard.shares.addSourceSkip')).toBe('Skip')
+    expect(t('dashboard.shares.addSourceAdd')).toBe('Add')
+    expect(t('dashboard.shares.addSourceAdding')).toBe('Adding...')
+  })
+
+  it('keeps the revocation confirmation', () => {
+    expect(t('dashboard.shares.revokeTitle', { partner: 'Sarah' })).toBe('Revoke share with Sarah?')
+    expect(t('dashboard.shares.revokeBody')).toBe('This will stop message delivery immediately.')
+    expect(t('dashboard.shares.revokeCancel')).toBe('Cancel')
+    expect(t('dashboard.shares.revokeConfirm')).toBe('Revoke')
+    expect(t('dashboard.shares.revoking')).toBe('Revoking...')
+  })
+})
