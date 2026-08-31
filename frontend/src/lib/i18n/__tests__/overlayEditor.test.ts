@@ -816,3 +816,104 @@ describe('editor page chrome copy', () => {
     expect(t('overlayEditor.page.shareSending')).toBe('Sending...')
   })
 })
+
+describe('message settings copy', () => {
+  it('keeps the two sliders with their value in the sentence', () => {
+    // The value sits in a coloured <span> mid-label, so the label stays whole
+    // and the render site wraps the {value} run. 'Message Duration' appends its
+    // unit inside the same span, which is why the unit is part of that key.
+    expect(t('overlayEditor.messages.maxMessagesLabel', { value: '42' })).toBe('Max Messages: 42')
+    expect(t('overlayEditor.messages.messageDurationLabel', { value: '12s' })).toBe(
+      'Message Duration: 12s'
+    )
+    expect(t('overlayEditor.messages.durationSeconds', { seconds: 12 })).toBe('12s')
+  })
+
+  it('keeps the fade and ordering controls', () => {
+    expect(t('overlayEditor.messages.disableFade')).toBe('Disable Message Fade Out')
+    expect(t('overlayEditor.messages.disableFadeHint')).toBe(
+      'Messages stay visible until max is reached'
+    )
+    expect(t('overlayEditor.messages.invertOrder')).toBe('Invert Message Order')
+    expect(t('overlayEditor.messages.invertOrderHint')).toBe(
+      'Reverses the reading order so the newest message is listed first. This is the order only \u2014 use Feed Anchor to move the feed to the other edge.'
+    )
+  })
+
+  it('keeps the feed anchor control', () => {
+    expect(t('overlayEditor.messages.feedAnchorLabel')).toBe('Feed Anchor')
+    expect(t('overlayEditor.messages.feedAnchorTop')).toBe('Top edge \u2014 feed grows downward')
+    expect(t('overlayEditor.messages.feedAnchorBottom')).toBe(
+      'Bottom edge \u2014 feed grows upward'
+    )
+    expect(t('overlayEditor.messages.feedAnchorHint')).toBe(
+      'Which edge of the overlay the feed sits on when it is not full. Anchor it to the bottom and each new message pushes the older ones up.'
+    )
+  })
+
+  it('keeps every entry-animation option', () => {
+    expect(t('overlayEditor.messages.entryAnimationLabel')).toBe('Entry Animation')
+    expect(t('overlayEditor.messages.entryAnimationHint')).toBe(
+      'How new messages appear on the overlay'
+    )
+    expect(t('overlayEditor.messages.animationDefault')).toBe('Fade + slide up (default)')
+    expect(t('overlayEditor.messages.animationFlyLeft')).toBe('Fly in from left')
+    expect(t('overlayEditor.messages.animationFlyRight')).toBe('Fly in from right')
+    expect(t('overlayEditor.messages.animationFlySpring')).toBe('Fly in with overshoot')
+    expect(t('overlayEditor.messages.animationPop')).toBe('Pop in')
+    expect(t('overlayEditor.messages.animationBounce')).toBe('Bounce up')
+    expect(t('overlayEditor.messages.animationFlip')).toBe('Flip in')
+    expect(t('overlayEditor.messages.animationSwoosh')).toBe('Swoosh')
+    expect(t('overlayEditor.messages.animationSoftFocus')).toBe('Soft focus')
+  })
+
+  it('keeps the emote provider toggles', () => {
+    expect(t('overlayEditor.messages.emoteProvidersLabel')).toBe('Emote Providers')
+    // The three provider names are third-party products, so they are locked as
+    // names rather than translated. They live in the catalog anyway: the render
+    // site must not carry literals, and a language may transliterate a name.
+    expect(t('overlayEditor.messages.seventv')).toBe('7TV')
+    expect(t('overlayEditor.messages.betterttv')).toBe('BetterTTV')
+    expect(t('overlayEditor.messages.frankerfacez')).toBe('FrankerFaceZ')
+  })
+
+  it('keeps the 7TV emote-set override copy', () => {
+    expect(t('overlayEditor.messages.seventvOverrideLabel')).toBe('7TV Emote Set')
+    expect(t('overlayEditor.messages.seventvOverrideHint')).toBe(
+      'Optional. Paste a 7TV emote-set ID, an emote-set URL, or your 7TV profile URL to attach those emotes to this overlay regardless of which platforms you stream on.'
+    )
+    expect(t('overlayEditor.messages.seventvCurrentlyActive')).toBe('Currently active: ')
+    expect(t('overlayEditor.messages.seventvQuotedName', { name: 'Cool Set' })).toBe('"Cool Set"')
+    expect(t('overlayEditor.messages.seventvEmoteCount', { count: 120 })).toBe(' (120 emotes)')
+    expect(t('overlayEditor.messages.seventvRemove')).toBe('Remove')
+    expect(t('overlayEditor.messages.seventvRemoving')).toBe('Removing\u2026')
+    expect(t('overlayEditor.messages.seventvRemoved')).toBe('7TV emote set removed')
+    expect(t('overlayEditor.messages.seventvRemoveFailed')).toBe('Failed to remove 7TV emote set')
+    expect(t('overlayEditor.messages.seventvReplacePlaceholder')).toBe(
+      'Paste a new ID/URL to replace\u2026'
+    )
+    expect(t('overlayEditor.messages.seventvUrlPlaceholder')).toBe('https://7tv.app/users/...')
+    expect(t('overlayEditor.messages.seventvVerify')).toBe('Verify')
+    expect(t('overlayEditor.messages.seventvChecking')).toBe('Checking\u2026')
+    expect(t('overlayEditor.messages.seventvResolveFailed')).toBe('Could not resolve 7TV reference')
+  })
+
+  it('keeps the resolved-reference notice as one sentence', () => {
+    // Was four concatenated fragments: 'Resolved', an optional ` to "name"`, an
+    // optional ` (n emotes)` and a trailing clause. Word order is the first
+    // thing a second language changes, so the four cases are four whole
+    // sentences instead.
+    expect(t('overlayEditor.messages.seventvResolved')).toBe(
+      'Resolved \u2014 click Save Configuration to apply.'
+    )
+    expect(t('overlayEditor.messages.seventvResolvedNamed', { name: 'Cool Set' })).toBe(
+      'Resolved to "Cool Set" \u2014 click Save Configuration to apply.'
+    )
+    expect(t('overlayEditor.messages.seventvResolvedCounted', { count: 120 })).toBe(
+      'Resolved (120 emotes) \u2014 click Save Configuration to apply.'
+    )
+    expect(
+      t('overlayEditor.messages.seventvResolvedNamedCounted', { name: 'Cool Set', count: 120 })
+    ).toBe('Resolved to "Cool Set" (120 emotes) \u2014 click Save Configuration to apply.')
+  })
+})
