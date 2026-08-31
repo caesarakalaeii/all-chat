@@ -36,25 +36,23 @@
  * Source of truth: services/moderation-service/README.md capability matrix.
  * Parses source as text (repo convention, see token-contrast.test.ts).
  *
- * The upgrade and onboarding copy now lives in the i18n catalog (#799), so this
- * gate reads those namespace files rather than the render sites. It must follow
- * the copy: a claim is equally false wherever it is stored, and a gate pointed
- * at a file the words have left passes for the wrong reason. docs/page.tsx is
- * still read directly because its copy has not been migrated yet.
+ * The upgrade, onboarding and docs copy now lives in the i18n catalog (#799),
+ * so this gate reads those namespace files rather than the render sites. It
+ * must follow the copy: a claim is equally false wherever it is stored, and a
+ * gate pointed at a file the words have left passes for the wrong reason.
  */
 
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-const read = (rel: string) => readFileSync(join(__dirname, '..', rel), 'utf-8')
 const readCatalog = (namespace: string) =>
   readFileSync(join(__dirname, '..', '..', 'lib', 'i18n', 'messages', 'en', namespace), 'utf-8')
 
 describe('moderation copy is honest per-platform (ADR-0017)', () => {
   const upgrade = readCatalog('marketing.ts')
   const onboarding = readCatalog('onboarding.ts')
-  const docs = read('docs/page.tsx')
+  const docs = readCatalog('docs.ts')
 
   it('no surface makes the false blanket "ban across Twitch, YouTube, Kick, and Discord" claim', () => {
     for (const src of [upgrade, onboarding, docs]) {
@@ -68,6 +66,8 @@ describe('moderation copy is honest per-platform (ADR-0017)', () => {
   })
 
   it('the docs page spells out the real per-platform limits', () => {
+    // \s+ rather than a literal space: the claim used to straddle a JSX line
+    // wrap and now sits on one catalog line, and the gate should not care which.
     expect(docs).toMatch(/Twitch, Kick and Discord do delete, timeout, ban and unban/)
     expect(docs).toMatch(/YouTube does\s+timeout and ban/)
     expect(docs).toMatch(/TikTok has no\s+moderation API/)

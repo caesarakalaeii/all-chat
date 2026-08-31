@@ -777,10 +777,10 @@ describe('streamer guide CSS reference tables', () => {
     )
     expect(t('docs.guideCssHooks.dataUsername')).toBe('Messages from a specific user.')
     expect(t('docs.guideCssHooks.dataFeedAnchorTopBottom')).toBe(
-      'attribute|The overlay wrapper, carrying the Feed Anchor setting. Read it to adapt; don’t override the wrapper’s flex-direction or the list’s margin-top, which are what move the feed.'
+      'The overlay wrapper, carrying the Feed Anchor setting. Read it to adapt; don’t override the wrapper’s flex-direction or the list’s margin-top, which are what move the feed.'
     )
     expect(t('docs.guideCssHooks.dataFeedOrderNewestLastNewestFirst')).toBe(
-      'attribute|The overlay wrapper, carrying the Invert Message Order setting. It also flips --msg-enter-dir and --msg-enter-origin, so entry animations come in from the end the newest message lands on.'
+      'The overlay wrapper, carrying the Invert Message Order setting. It also flips --msg-enter-dir and --msg-enter-origin, so entry animations come in from the end the newest message lands on.'
     )
   })
 })
