@@ -15,14 +15,6 @@
       "count": 22
     }
   },
-  "src/app/admin/search/page.tsx": {
-    "no-restricted-syntax": {
-      "count": 6
-    },
-    "react/jsx-no-literals": {
-      "count": 10
-    }
-  },
   "src/app/admin/sources/page.tsx": {
     "no-restricted-syntax": {
       "count": 1

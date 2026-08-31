@@ -234,9 +234,7 @@ describe('admin global search copy', () => {
     expect(t('admin.search.groupViewers')).toBe('Viewers')
     // Two count formats, whole rather than assembled: the truncated one reads
     // "(showing 8 of 30)" and the exact one "(30)".
-    expect(t('admin.search.groupCountTruncated', { shown: 8, total: 30 })).toBe(
-      '(showing 8 of 30)'
-    )
+    expect(t('admin.search.groupCountTruncated', { shown: 8, total: 30 })).toBe('(showing 8 of 30)')
     expect(t('admin.search.groupCountExact', { total: 4 })).toBe('(4)')
   })
 

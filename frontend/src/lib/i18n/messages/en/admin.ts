@@ -125,4 +125,28 @@ export const admin = {
     makeEarlyAccessConfirm: 'Make Early Access',
     dialogCancel: 'No, keep as-is',
   },
+  search: {
+    heading: 'Search',
+    intro: 'Find any user, overlay, source, or viewer and jump straight to it',
+    inputPlaceholder: 'Search users, overlays, sources, viewers...',
+    inputLabel: 'Global admin search',
+    promptState: 'Type at least one character to search.',
+    loadingState: 'Searching...',
+    // The typographic quotes are part of the copy: a language that quotes with
+    // guillemets or corner brackets replaces the pair, which it cannot do if the
+    // render site holds one of each.
+    emptyState: 'Nothing matches “{query}”.',
+    groupUsers: 'Users',
+    groupOverlays: 'Overlays',
+    groupSources: 'Sources',
+    groupViewers: 'Viewers',
+    groupCountTruncated: '(showing {shown} of {total})',
+    groupCountExact: '({total})',
+    badgePremium: 'Premium',
+    badgeBanned: 'Banned',
+    // Whole phrases, not a count or a name plus a fragment the render site keeps:
+    // a bare noun or preposition in JSX cannot be reordered by a translation.
+    overlaySourceCount: '{count} sources',
+    sourceInOverlay: 'in {overlay}',
+  },
 } as const
