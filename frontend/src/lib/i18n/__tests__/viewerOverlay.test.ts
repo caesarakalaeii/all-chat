@@ -143,3 +143,134 @@ describe('engagement controls copy', () => {
     expect(t('viewerOverlay.engagement.mirrorEnable')).toBe('Enable Twitch mirroring')
   })
 })
+
+describe('participate page copy', () => {
+  it('keeps the loading and login gate', () => {
+    expect(t('viewerOverlay.participate.loading')).toBe('Loading…')
+    expect(t('viewerOverlay.participate.loginHeading')).toBe('Join the fun')
+    expect(t('viewerOverlay.participate.loginBlurb')).toBe(
+      'Log in with your platform account to vote and wager.'
+    )
+    expect(t('viewerOverlay.participate.loginWith', { platform: 'Twitch' })).toBe(
+      'Continue with Twitch'
+    )
+    // N2: TikTok and Discord have no web login, so those viewers are pointed at
+    // the chat commands instead.
+    expect(t('viewerOverlay.participate.noWebLoginNote')).toBe(
+      "Watching on TikTok or Discord? Take part with the on-screen chat commands — web login isn't available for those platforms yet."
+    )
+  })
+
+  it('keeps the header and its balance readout', () => {
+    expect(t('viewerOverlay.participate.heading')).toBe('Participate')
+    expect(
+      t('viewerOverlay.participate.balanceLabel', { balance: '1,200', pointsName: 'Points' })
+    ).toBe('Balance: 1,200 Points')
+    expect(t('viewerOverlay.participate.balance', { balance: '1,200', pointsName: 'Points' })).toBe(
+      '1,200 Points'
+    )
+    // The name a streamer gives their points is configurable; this is the
+    // fallback when they have not set one.
+    expect(t('viewerOverlay.participate.defaultPointsName')).toBe('Points')
+  })
+
+  it('keeps the settled-prediction banner as one sentence', () => {
+    expect(
+      t('viewerOverlay.participate.settledBanner', {
+        outcome: 'Yes',
+        amount: '500',
+        pointsName: 'Points',
+      })
+    ).toBe('Your prediction on “Yes” settled — you wagered 500 Points. Check your balance above.')
+  })
+
+  it('keeps the poll section copy', () => {
+    expect(t('viewerOverlay.participate.pollNativeNote')).toBe(
+      'This poll runs on Twitch — vote in Twitch chat or the Twitch app.'
+    )
+    expect(t('viewerOverlay.participate.pollVoteNativeTitle')).toBe('Vote in Twitch chat')
+    expect(t('viewerOverlay.participate.working')).toBe('Working…')
+    expect(t('viewerOverlay.participate.yourVote')).toBe('(your vote)')
+    expect(t('viewerOverlay.participate.pollOptionTally', { pct: '40', votes: '12' })).toBe(
+      '40% (12)'
+    )
+  })
+
+  it('keeps the prediction section copy', () => {
+    expect(t('viewerOverlay.participate.predictionLocked')).toBe('locked')
+    expect(t('viewerOverlay.participate.predictionNativeNote')).toBe(
+      'This prediction runs on Twitch channel points.'
+    )
+    expect(t('viewerOverlay.participate.youHave', { balance: '1,200', pointsName: 'Points' })).toBe(
+      'You have 1,200 Points'
+    )
+    expect(t('viewerOverlay.participate.maxWager')).toBe('Max')
+    expect(t('viewerOverlay.participate.noPointsYet', { pointsName: 'Points' })).toBe(
+      'You have no Points yet. Earn them by keeping this page open and by supporting the stream (subs, bits, donations, gifts), then come back to wager.'
+    )
+    expect(t('viewerOverlay.participate.wagerAmountLabel', { pointsName: 'Points' })).toBe(
+      'Amount to wager in Points'
+    )
+    expect(t('viewerOverlay.participate.wagerAmountPlaceholder', { pointsName: 'Points' })).toBe(
+      'Amount to wager (Points)'
+    )
+    expect(t('viewerOverlay.participate.yourWager', { amount: '500' })).toBe(' · your wager: 500')
+    expect(t('viewerOverlay.participate.outcomeTally', { points: '900', pct: '60' })).toBe(
+      '900 · 60%'
+    )
+    expect(t('viewerOverlay.participate.alreadyWagered')).toBe(
+      "You've locked in your wager for this round."
+    )
+    expect(t('viewerOverlay.participate.nothingActive')).toBe(
+      'No active poll or prediction right now. Hang tight!'
+    )
+  })
+
+  it('keeps the four disabled-outcome button titles distinct', () => {
+    expect(t('viewerOverlay.participate.wagerNativeTitle')).toBe('Runs on Twitch channel points')
+    expect(t('viewerOverlay.participate.wagerAlreadyTitle')).toBe('You already wagered this round')
+    expect(t('viewerOverlay.participate.wagerClosedTitle')).toBe('Betting is closed')
+  })
+
+  it('announces the prediction locking', () => {
+    expect(t('viewerOverlay.participate.lockedAnnouncement')).toBe(
+      'Prediction locked — betting is closed.'
+    )
+  })
+
+  it('keeps every wager rejection reason, including both insufficient-balance wordings', () => {
+    // The server reason and the local pre-empt are worded differently and both
+    // reach viewers; collapsing them would change rendered output.
+    expect(t('viewerOverlay.participate.rejectNotFound')).toBe(
+      'This prediction is no longer available.'
+    )
+    expect(t('viewerOverlay.participate.rejectNotActive')).toBe('Betting is closed for this round.')
+    expect(t('viewerOverlay.participate.rejectBadOutcome')).toBe('That outcome is not valid.')
+    expect(t('viewerOverlay.participate.rejectAlreadyWagered')).toBe(
+      'You already placed a wager this round.'
+    )
+    expect(
+      t('viewerOverlay.participate.rejectInsufficient', {
+        pointsName: 'Points',
+        balance: '10',
+      })
+    ).toBe('Not enough Points. You have 10.')
+    expect(
+      t('viewerOverlay.participate.insufficientLocal', { pointsName: 'Points', balance: '10' })
+    ).toBe('Not enough Points — you have 10.')
+    expect(t('viewerOverlay.participate.rejectNative')).toBe(
+      'This prediction runs on Twitch channel points.'
+    )
+  })
+
+  it('keeps the remaining failure notices', () => {
+    expect(t('viewerOverlay.participate.loginFailed')).toBe(
+      'Could not start login. Please try again.'
+    )
+    expect(t('viewerOverlay.participate.voteFailed')).toBe('Vote failed')
+    expect(t('viewerOverlay.participate.wagerFailed')).toBe('Wager failed')
+    expect(t('viewerOverlay.participate.wagerNeedsAmount')).toBe(
+      'Enter a positive amount to wager.'
+    )
+  })
+})
