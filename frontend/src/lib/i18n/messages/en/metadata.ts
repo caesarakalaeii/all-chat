@@ -22,4 +22,18 @@
  * Read from Server Components, so via `getTranslations()`.
  */
 
-export const metadata = {} as const
+export const metadata = {
+  // The generated social card. Its text ships as an image, so the alt is the
+  // only version a screen reader ever reaches; both are copy.
+  socialCard: {
+    alt: 'All-Chat — Every chat. One overlay.',
+    title: 'All-Chat',
+    subtitle: 'Every chat. One overlay.',
+    emoteProviders: '7TV + BTTV + FFZ Emotes',
+    tagline: 'One overlay. Every chat. All platforms.',
+  },
+  impressum: {
+    title: 'Impressum | All-Chat',
+    description: 'Legal notice (Impressum) as required by § 5 DDG.',
+  },
+} as const

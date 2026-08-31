@@ -70,4 +70,26 @@ export const legal = {
     learnMore: 'Learn More',
     footer: 'Your data is stored locally in your browser and transmitted securely via HTTPS',
   },
+  // Chrome on all three legal routes.
+  layout: {
+    eyebrow: 'All-Chat Legal',
+    lastUpdated: 'Last updated: {date}',
+    // One string: a &copy; entity, the year and the product name were three
+    // separate JSX runs.
+    copyright: '© {year} All-Chat',
+    homeLink: 'Home',
+    privacyLink: 'Privacy Policy',
+    termsLink: 'Terms of Service',
+    impressumLink: 'Impressum',
+  },
+  // Only the fallback is migratable. The Impressum body is mounted at runtime
+  // from IMPRESSUM_FILE_PATH and is not in this repo.
+  impressum: {
+    title: 'Impressum',
+    notConfigured: 'The Impressum for this instance has not been configured yet.',
+    // One sentence with both paths as params: it was five JSX runs around two
+    // <code> elements.
+    operatorHint:
+      'If you are the operator: mount a ConfigMap containing your Impressum HTML to {path} or set the {variable} environment variable. See the deployment documentation for details.',
+  },
 } as const

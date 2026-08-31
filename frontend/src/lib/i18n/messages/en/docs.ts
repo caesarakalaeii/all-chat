@@ -27,4 +27,11 @@ export const docs = {
     columnType: 'Type',
     columnDescription: 'Description',
   },
+  // /dev/theme-contrast, the developer harness the WCAG contrast gate measures.
+  themeContrast: {
+    heading: 'Theme contrast harness',
+    // One sentence: 'themes.' was a JSX run after the number, which a language
+    // putting the noun first cannot move.
+    intro: 'Dev-only. Renders every bundled theme for the message-text WCAG gate. {count} themes.',
+  },
 } as const

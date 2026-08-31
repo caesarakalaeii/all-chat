@@ -163,4 +163,26 @@ export const marketing = {
     errorTitle: 'Login error',
     errorBody: 'Failed to initiate {platform} login.',
   },
+  // The landing page's rotating theme showcase.
+  themeSwitcher: {
+    heading: 'Themes',
+    carouselLabel: 'Featured themes',
+    dotsGroupLabel: 'Choose a theme',
+    pauseLabel: 'Pause theme rotation',
+    resumeLabel: 'Resume theme rotation',
+    showThemeLabel: 'Show {theme}',
+    // The showcase table carried these as module data, so the gate never saw
+    // them. They are what the dot buttons announce.
+    showcaseMinimal: 'Minimal',
+    showcaseComic: 'Comic',
+    showcaseStickyNotes: 'Sticky Notes',
+    showcaseModernDark: 'Modern Dark',
+    // Whole sentences with the links as params: they were five and three JSX
+    // runs, which a language reordering the clauses could not move.
+    customiseCaption: '{count} built-in themes — restyle any {gui}, or {css}.',
+    customiseGuiLink: 'point-and-click',
+    customiseCssLink: 'write your own CSS',
+    portCaption: "Coming from another tool? {discord} and we'll port your theme.",
+    portDiscordLink: 'Ask on Discord',
+  },
 } as const

@@ -18,16 +18,25 @@
 
 import { readFileSync } from 'fs'
 import LegalLayout from '@/components/legal/LegalLayout'
+import { getTranslations } from '@/lib/i18n'
+import { interpolateElements } from '@/lib/i18n/emphasise'
+
+// Module scope for the metadata block, so getTranslations rather than the hook.
+const t = getTranslations()
 
 export const dynamic = 'force-dynamic'
 
 export const metadata = {
-  title: 'Impressum | All-Chat',
-  description: 'Legal notice (Impressum) as required by § 5 DDG.',
+  title: t('metadata.impressum.title'),
+  description: t('metadata.impressum.description'),
   alternates: { canonical: '/legal/impressum' },
 }
 
 const IMPRESSUM_PATH = process.env.IMPRESSUM_FILE_PATH || '/etc/allchat/impressum.html'
+
+// The environment variable's own name, quoted back to the operator. An
+// identifier, not copy.
+const IMPRESSUM_ENV_VAR = 'IMPRESSUM_FILE_PATH'
 
 function loadImpressum(): string | null {
   try {
@@ -41,20 +50,23 @@ export default function ImpressumPage() {
   const html = loadImpressum()
 
   return (
-    <LegalLayout title="Impressum" lastUpdated="">
+    <LegalLayout title={t('legal.impressum.title')} lastUpdated="">
       {html ? (
         <div dangerouslySetInnerHTML={{ __html: html }} />
       ) : (
         <section className="space-y-4">
-          <p className="text-text-sub">
-            The Impressum for this instance has not been configured yet.
-          </p>
+          <p className="text-text-sub">{t('legal.impressum.notConfigured')}</p>
           <p className="text-sm text-text-dim">
-            If you are the operator: mount a ConfigMap containing your Impressum HTML to{' '}
-            <code className="rounded bg-surface-2 px-1.5 py-0.5 text-xs">{IMPRESSUM_PATH}</code> or
-            set the{' '}
-            <code className="rounded bg-surface-2 px-1.5 py-0.5 text-xs">IMPRESSUM_FILE_PATH</code>{' '}
-            environment variable. See the deployment documentation for details.
+            {interpolateElements(t('legal.impressum.operatorHint'), {
+              path: (
+                <code className="rounded bg-surface-2 px-1.5 py-0.5 text-xs">{IMPRESSUM_PATH}</code>
+              ),
+              variable: (
+                <code className="rounded bg-surface-2 px-1.5 py-0.5 text-xs">
+                  {IMPRESSUM_ENV_VAR}
+                </code>
+              ),
+            })}
           </p>
         </section>
       )}

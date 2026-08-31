@@ -1,9 +1,4 @@
 {
-  "src/app/dev/theme-contrast/page.tsx": {
-    "react/jsx-no-literals": {
-      "count": 3
-    }
-  },
   "src/app/docs/api/page.tsx": {
     "react/jsx-no-literals": {
       "count": 134
@@ -12,14 +7,6 @@
   "src/app/docs/page.tsx": {
     "react/jsx-no-literals": {
       "count": 226
-    }
-  },
-  "src/app/legal/impressum/page.tsx": {
-    "no-restricted-syntax": {
-      "count": 1
-    },
-    "react/jsx-no-literals": {
-      "count": 5
     }
   },
   "src/app/legal/privacy/page.tsx": {
@@ -36,24 +23,6 @@
     },
     "react/jsx-no-literals": {
       "count": 73
-    }
-  },
-  "src/app/opengraph-image.tsx": {
-    "react/jsx-no-literals": {
-      "count": 8
-    }
-  },
-  "src/components/ThemeSwitcher.tsx": {
-    "no-restricted-syntax": {
-      "count": 2
-    },
-    "react/jsx-no-literals": {
-      "count": 8
-    }
-  },
-  "src/components/legal/LegalLayout.tsx": {
-    "react/jsx-no-literals": {
-      "count": 8
     }
   }
 }
