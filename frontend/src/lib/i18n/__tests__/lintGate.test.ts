@@ -80,6 +80,30 @@ describe('i18n lint gate', () => {
       'export const P = () => <style dangerouslySetInnerHTML={{ __html: `.a { color: red; }` }} />\n'
     expect(await lint(source)).toEqual([])
   })
+
+  it('passes a code sample inside <Pre>, which is a program rather than copy', async () => {
+    // Both /docs pages document the WebSocket API by showing the JSON frames and
+    // the JavaScript and Python that read them. That is a program: translating
+    // an identifier would produce a sample that does not run. <Pre> is
+    // capitalised, so unlike <style> it can be named in elementOverrides.
+    const source = 'export const P = () => <Pre lang="json">{`{ "type": "ping" }`}</Pre>\n'
+    expect(await lint(source)).toEqual([])
+  })
+
+  it('passes a wire field name inside <Code>', async () => {
+    // <Code> holds a field name, a JSON fragment or a chat command - values that
+    // cross a process boundary and must stay byte-identical.
+    expect(await lint('export const P = () => <Code>overlay_id</Code>\n')).toEqual([])
+  })
+
+  it('still flags copy in an element nested inside <Pre>', async () => {
+    // applyToNestedElements defaults to true, so the override would otherwise
+    // exempt a whole subtree. Prose that happens to sit under a <Pre> is still
+    // copy, and this is the case that would let it through unnoticed.
+    expect(await lint('export const P = () => <Pre><p>Save changes</p></Pre>\n')).toContain(
+      'react/jsx-no-literals'
+    )
+  })
 })
 
 describe('i18n lint gate configuration', () => {
