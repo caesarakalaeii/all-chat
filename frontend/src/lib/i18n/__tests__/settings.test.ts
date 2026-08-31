@@ -141,3 +141,88 @@ describe('settings index page copy', () => {
     expect(t('settings.index.deleteConfirm')).toBe('Yes, delete my account')
   })
 })
+
+describe('viewer identity page copy', () => {
+  it('keeps the unauthenticated sign-in card', () => {
+    expect(t('settings.viewer.heading')).toBe('Viewer Identity')
+    expect(t('settings.viewer.subheading')).toBe(
+      'Customize how your name appears across all overlays'
+    )
+    expect(t('settings.viewer.signInHeading')).toBe('Sign in to manage your viewer identity')
+    expect(t('settings.viewer.signInBody')).toBe(
+      'Connect your streaming platform account to set a custom name color and manage your viewer identity.'
+    )
+    // One key per platform rather than a {platform} placeholder: the button copy
+    // is per-platform in the source and a placeholder would change nothing here
+    // while hiding which buttons exist.
+    expect(t('settings.viewer.signInTwitch')).toBe('Sign in with Twitch')
+    expect(t('settings.viewer.signInYoutube')).toBe('Sign in with YouTube')
+    expect(t('settings.viewer.signInKick')).toBe('Sign in with Kick')
+  })
+
+  it('keeps the profile summary', () => {
+    expect(t('settings.viewer.profileHeading')).toBe('Profile')
+    // Shown in place of a missing display name and username.
+    expect(t('settings.viewer.viewerFallbackName')).toBe('Viewer')
+  })
+
+  it('keeps the name colour card', () => {
+    expect(t('settings.viewer.nameColorHeading')).toBe('Name Color')
+    expect(t('settings.viewer.nameColorBody')).toBe(
+      'Set a custom color or gradient for your name on overlays'
+    )
+    expect(t('settings.viewer.solidTab')).toBe('Solid Color')
+    expect(t('settings.viewer.gradientTab')).toBe('Gradient')
+    expect(t('settings.viewer.premiumPill')).toBe('Premium')
+    expect(t('settings.viewer.gradientUpsell')).toBe(
+      'Gradient names are a viewer premium cosmetic.'
+    )
+    expect(t('settings.viewer.unlockPremium')).toBe('Unlock viewer premium')
+    expect(t('settings.viewer.colorPickerLabel')).toBe('Name color picker')
+    expect(t('settings.viewer.colorHexLabel')).toBe('Name color hex value')
+    expect(t('settings.viewer.savedFeedback')).toBe('Saved ✓')
+    expect(t('settings.viewer.autoSaveNote')).toBe('Changes save automatically')
+    expect(t('settings.viewer.previewLabel')).toBe('Preview')
+    expect(t('settings.viewer.previewMessage')).toBe('Hello world!')
+  })
+
+  it('keeps the gradient editor controls', () => {
+    expect(t('settings.viewer.removeStopLabel', { index: '2' })).toBe('Remove stop 2')
+    expect(t('settings.viewer.addStop')).toBe('+ Add stop')
+    expect(t('settings.viewer.angleLabel')).toBe('Angle')
+    expect(t('settings.viewer.angleDegreesLabel')).toBe('Angle in degrees')
+    expect(t('settings.viewer.saveGradient')).toBe('Save gradient')
+    expect(t('settings.viewer.savingGradient')).toBe('Saving…')
+  })
+
+  it('keeps the avatar cosmetics card', () => {
+    expect(t('settings.viewer.cosmeticsHeading')).toBe('Avatar Cosmetics')
+    expect(t('settings.viewer.cosmeticsBody')).toBe('Choose a frame and flair for your avatar')
+    expect(t('settings.viewer.cosmeticsUpsell')).toBe('Some frames and flairs are viewer premium.')
+    expect(t('settings.viewer.frameHeading')).toBe('Avatar Frame')
+    expect(t('settings.viewer.flairHeading')).toBe('Avatar Flair')
+    // The catalog entry standing for "no frame" / "no flair".
+    expect(t('settings.viewer.noneItem')).toBe('None')
+    expect(t('settings.viewer.save')).toBe('Save')
+    expect(t('settings.viewer.saving')).toBe('Saving…')
+  })
+
+  it('keeps the cosmetics save errors', () => {
+    expect(t('settings.viewer.premiumRequired')).toBe('Premium required')
+    expect(t('settings.viewer.saveFailed')).toBe('Save failed')
+  })
+
+  it('keeps the linked platforms card', () => {
+    expect(t('settings.viewer.linkedHeading')).toBe('Linked Platforms')
+    expect(t('settings.viewer.linkedBody')).toBe(
+      'Connect additional platforms to share your cosmetics across all your chats'
+    )
+    expect(t('settings.viewer.connected')).toBe('Connected')
+    expect(t('settings.viewer.connect')).toBe('Connect')
+    expect(t('settings.viewer.connecting')).toBe('Connecting…')
+    expect(t('settings.viewer.disconnect')).toBe('Disconnect')
+    expect(t('settings.viewer.disconnecting')).toBe('Disconnecting…')
+    expect(t('settings.viewer.loadLinkedFailed')).toBe('Could not load linked platforms')
+    expect(t('settings.viewer.disconnectFailed')).toBe('Failed to disconnect platform')
+  })
+})
