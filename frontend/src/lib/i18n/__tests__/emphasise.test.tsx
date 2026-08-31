@@ -19,7 +19,7 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest'
 import { cleanup, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { emphasise, interpolateElements } from '@/lib/i18n/emphasise'
 
@@ -121,5 +121,22 @@ describe('interpolateElements', () => {
     )
 
     expect(screen.getByTestId('sentence')).toHaveTextContent('a ok b {missing} c')
+  })
+  it('renders a placeholder used twice without a duplicate React key', () => {
+    // /docs/api names the same wire field twice in one sentence
+    // ('... a {status} frame per configured source ... {status} data:'), which
+    // is copy a translator must be able to reorder. Keying each substitution by
+    // placeholder name alone makes the second one collide with the first, and
+    // React reports that as an error rather than throwing, so a rendered-text
+    // assertion alone would not catch it.
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    render(
+      <p data-testid="sentence">{interpolateElements('a {x} b {x} c', { x: <code>X</code> })}</p>
+    )
+
+    expect(screen.getByTestId('sentence')).toHaveTextContent('a X b X c')
+    expect(errors).not.toHaveBeenCalled()
+    errors.mockRestore()
   })
 })
