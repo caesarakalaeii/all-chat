@@ -165,6 +165,26 @@ const PLATFORM_BORDER: Record<string, string> = {
 // open/closed maps (editor-panel-sections-v1 / appearance-panel-sections-v1).
 const ACTIVE_SECTION_STORAGE_KEY = 'editor-active-section-v1'
 
+/**
+ * '3 errors' or '1 warning', in words the catalog owns.
+ *
+ * The pre-migration code appended an 's' when the count was above one. That is
+ * an English rule, so the singular and plural are separate catalog keys and the
+ * choice between them is made here.
+ *
+ * Takes `t` as a parameter because it is not a component and cannot call the hook.
+ */
+function cssProblemCount(t: TFunction, kind: 'error' | 'warning', count: number): string {
+  if (kind === 'error') {
+    return count === 1
+      ? t('overlayEditor.customCss.errorCountOne', { count })
+      : t('overlayEditor.customCss.errorCountMany', { count })
+  }
+  return count === 1
+    ? t('overlayEditor.customCss.warningCountOne', { count })
+    : t('overlayEditor.customCss.warningCountMany', { count })
+}
+
 /** A 7TV reference the API resolved: always a set ID, optionally named and counted. */
 type ResolvedSevenTvReference = {
   status: 'resolved'
@@ -3811,33 +3831,38 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                   {activeSection === 'custom-css' && (
                     <div className="space-y-3">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-xs font-medium text-text">Custom CSS</span>
+                        <span className="text-xs font-medium text-text">
+                          {t('overlayEditor.customCss.heading')}
+                        </span>
                         {(() => {
                           const customized = isCustomCssForked(customCss, pristineThemeCss)
                           if (!customized) {
                             return themeId ? (
                               <span className="inline-flex items-center rounded-full border border-green-500/20 bg-green-500/10 px-2 py-0.5 text-[11px] font-medium text-green-400">
-                                Using “{getBundledTheme(themeId)?.name ?? themeId}” theme ·
-                                auto-updates
+                                {t('overlayEditor.customCss.usingTheme', {
+                                  theme: getBundledTheme(themeId)?.name ?? themeId,
+                                })}
                               </span>
                             ) : (
-                              <span className="text-[11px] text-text-dim">No theme applied</span>
+                              <span className="text-[11px] text-text-dim">
+                                {t('overlayEditor.customCss.noThemeApplied')}
+                              </span>
                             )
                           }
                           if (!themeId) {
                             return (
                               <span className="inline-flex items-center rounded-full border border-border bg-surface-2 px-2 py-0.5 text-[11px] font-medium text-text-sub">
-                                Custom CSS
+                                {t('overlayEditor.customCss.customPill')}
                               </span>
                             )
                           }
                           return customCssMode === 'fork' ? (
                             <span className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-400">
-                              Full copy saved — theme updates paused
+                              {t('overlayEditor.customCss.forkedPill')}
                             </span>
                           ) : (
                             <span className="inline-flex items-center rounded-full border border-green-500/20 bg-green-500/10 px-2 py-0.5 text-[11px] font-medium text-green-400">
-                              Customized — untouched theme rules still auto-update
+                              {t('overlayEditor.customCss.layeredPill')}
                             </span>
                           )
                         })()}
@@ -3848,15 +3873,14 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           className="ml-auto text-xs"
                           onClick={handleResetCustomCss}
                         >
-                          {themeId ? 'Reset to theme' : 'Clear'}
+                          {themeId
+                            ? t('overlayEditor.customCss.resetToTheme')
+                            : t('overlayEditor.customCss.clear')}
                         </Button>
                       </div>
 
                       <p className="text-xs text-text-sub">
-                        Edit the CSS below — the preview updates as you type. Only your changes are
-                        saved, so fixes we ship to the theme still reach the rules you didn’t touch.
-                        Deleting theme rules can’t be layered, so it stores a full copy and pauses
-                        theme updates for this overlay; “Reset to theme” re-links it.
+                        {t('overlayEditor.customCss.explainer')}
                       </p>
 
                       <MonacoCSSEditor
@@ -3864,7 +3888,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                         onChange={handleCustomCssChange}
                         onValidate={setCssIssues}
                         height="320px"
-                        placeholder="/* Enter your custom CSS here */"
+                        placeholder={t('overlayEditor.customCss.editorPlaceholder')}
                       />
 
                       {/* Tips for broken CSS, surfaced from Monaco's CSS language service. */}
@@ -3873,31 +3897,37 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                         const warnings = cssIssues.filter((i) => i.severity === 'warning')
                         if (errors.length === 0 && warnings.length === 0) {
                           return (
-                            <p className="text-xs text-green-400">✓ No CSS problems detected.</p>
+                            <p className="text-xs text-green-400">
+                              {t('overlayEditor.customCss.noProblems')}
+                            </p>
                           )
                         }
                         const parts: string[] = []
                         if (errors.length > 0)
-                          parts.push(`${errors.length} error${errors.length > 1 ? 's' : ''}`)
+                          parts.push(cssProblemCount(t, 'error', errors.length))
                         if (warnings.length > 0)
-                          parts.push(`${warnings.length} warning${warnings.length > 1 ? 's' : ''}`)
+                          parts.push(cssProblemCount(t, 'warning', warnings.length))
                         return (
                           <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2">
                             <p className="text-xs font-medium text-amber-300">
-                              {parts.join(' · ')} — invalid rules are ignored by the browser, so fix
-                              these for your styles to take effect. Incomplete rules aren’t
-                              previewed.
+                              {t('overlayEditor.customCss.problemsAdvice', {
+                                counts: parts.join(t('overlayEditor.customCss.problemsSeparator')),
+                              })}
                             </p>
                             <ul className="mt-1 space-y-0.5">
                               {[...errors, ...warnings].slice(0, 5).map((issue, idx) => (
                                 <li key={idx} className="text-[11px] text-text-sub">
-                                  <span className="font-mono text-text-dim">L{issue.line}:</span>{' '}
+                                  <span className="font-mono text-text-dim">
+                                    {t('overlayEditor.customCss.issueLine', { line: issue.line })}
+                                  </span>{' '}
                                   {issue.message}
                                 </li>
                               ))}
                               {errors.length + warnings.length > 5 && (
                                 <li className="text-[11px] text-text-dim">
-                                  …and {errors.length + warnings.length - 5} more
+                                  {t('overlayEditor.customCss.moreIssues', {
+                                    count: errors.length + warnings.length - 5,
+                                  })}
                                 </li>
                               )}
                             </ul>
@@ -3906,16 +3936,18 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                       })()}
 
                       <p className="text-xs text-text-sub">
-                        Need inspiration? Explore{' '}
-                        <a
-                          href="https://github.com/caesarakalaeii/all-chat/tree/main/docs/overlay-themes"
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-twitch hover:underline"
-                        >
-                          theme docs
-                        </a>
-                        .
+                        {interpolateElements(t('overlayEditor.customCss.inspiration'), {
+                          docsLink: (
+                            <a
+                              href="https://github.com/caesarakalaeii/all-chat/tree/main/docs/overlay-themes"
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-twitch hover:underline"
+                            >
+                              {t('overlayEditor.customCss.themeDocsLink')}
+                            </a>
+                          ),
+                        })}
                       </p>
                     </div>
                   )}

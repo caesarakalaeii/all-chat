@@ -562,6 +562,37 @@ export const overlayEditor = {
     seventvResolvedNamedCounted:
       'Resolved to "{name}" ({count} emotes) — click Save Configuration to apply.',
   },
+  // The Custom CSS section: the theme-linkage pills, the Monaco editor and the
+  // problem summary the CSS language service feeds.
+  customCss: {
+    heading: 'Custom CSS',
+    usingTheme: 'Using “{theme}” theme · auto-updates',
+    noThemeApplied: 'No theme applied',
+    customPill: 'Custom CSS',
+    forkedPill: 'Full copy saved — theme updates paused',
+    layeredPill: 'Customized — untouched theme rules still auto-update',
+    resetToTheme: 'Reset to theme',
+    clear: 'Clear',
+    explainer:
+      'Edit the CSS below — the preview updates as you type. Only your changes are saved, so fixes we ship to the theme still reach the rules you didn’t touch. Deleting theme rules can’t be layered, so it stores a full copy and pauses theme updates for this overlay; “Reset to theme” re-links it.',
+    editorPlaceholder: '/* Enter your custom CSS here */',
+    noProblems: '✓ No CSS problems detected.',
+    // Singular and plural are separate keys rather than a stem plus an appended
+    // 's': that rule is English-specific.
+    errorCountOne: '{count} error',
+    errorCountMany: '{count} errors',
+    warningCountOne: '{count} warning',
+    warningCountMany: '{count} warnings',
+    problemsSeparator: ' · ',
+    // {counts} is the joined error and warning phrases.
+    problemsAdvice:
+      '{counts} — invalid rules are ignored by the browser, so fix these for your styles to take effect. Incomplete rules aren’t previewed.',
+    issueLine: 'L{line}:',
+    moreIssues: '…and {count} more',
+    // {docsLink} is rendered as a link to the theme docs on GitHub.
+    inspiration: 'Need inspiration? Explore {docsLink}.',
+    themeDocsLink: 'theme docs',
+  },
   // Sample copy the credit-roll theme preview renders so a streamer can see a
   // theme applied to something. It mirrors the real credits overlay.
   creditRollPreview: {
