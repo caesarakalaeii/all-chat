@@ -24,6 +24,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import { maintenanceApi } from '@/lib/api/maintenance'
 import type { MaintenanceWindow } from '@/lib/types/maintenance'
+import { useTranslations } from '@/lib/i18n'
 
 const DATE_FORMAT = new Intl.DateTimeFormat(undefined, {
   month: 'short',
@@ -44,6 +45,7 @@ function isActive(mw: MaintenanceWindow): boolean {
  * click. Shown to everyone viewing the monitor (owners and moderators alike).
  */
 export function MaintenanceInfoButton() {
+  const t = useTranslations()
   const [windows, setWindows] = useState<MaintenanceWindow[]>([])
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -78,8 +80,8 @@ export function MaintenanceInfoButton() {
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        aria-label="Service announcements"
-        title="Service announcements"
+        aria-label={t('common.maintenanceInfo.buttonLabel')}
+        title={t('common.maintenanceInfo.buttonLabel')}
         className={clsx(
           'flex items-center justify-center rounded-lg border p-1.5 transition-colors focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none',
           open
@@ -95,7 +97,7 @@ export function MaintenanceInfoButton() {
       {open && (
         <div className="absolute right-0 z-50 mt-2 w-72 rounded-lg border border-border bg-surface p-3 shadow-lg">
           <p className="mb-2 text-[10px] font-semibold tracking-wide text-text-dim uppercase">
-            Service announcements
+            {t('common.maintenanceInfo.popoverHeading')}
           </p>
           <div className="flex flex-col gap-3">
             {windows.map((mw) => {

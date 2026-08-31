@@ -35,13 +35,19 @@ import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { useHydrated } from '@/hooks/useHydrated'
 import { InfinityLogo } from '@/components/InfinityLogo'
+import { useTranslations } from '@/lib/i18n'
 
 interface ProtectedRouteProps {
   children: React.ReactNode
   requireAdmin?: boolean
 }
 
+// The no-entry sign shown above the 403 heading. Decoration beside copy that
+// says the same thing in words, so not part of the catalog.
+const FORBIDDEN_GLYPH = '\u{1F6AB}'
+
 export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRouteProps) {
+  const t = useTranslations()
   const router = useRouter()
   const { user, loading, init } = useAuthStore()
   const isHydrated = useHydrated()
@@ -77,16 +83,14 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
     return (
       <div className="flex min-h-screen items-center justify-center bg-bg">
         <div className="w-full max-w-md rounded-xl border border-border bg-surface p-8 text-center">
-          <div className="mb-4 text-5xl">🚫</div>
-          <h1 className="mb-2 text-2xl font-bold text-text">403 Forbidden</h1>
-          <p className="mb-6 text-text-sub">
-            You do not have permission to access this page. Admin privileges are required.
-          </p>
+          <div className="mb-4 text-5xl">{FORBIDDEN_GLYPH}</div>
+          <h1 className="mb-2 text-2xl font-bold text-text">{t('common.forbidden.heading')}</h1>
+          <p className="mb-6 text-text-sub">{t('common.forbidden.body')}</p>
           <button
             onClick={() => router.push('/dashboard')}
             className="rounded-lg bg-twitch px-6 py-2 font-semibold text-bg transition hover:opacity-90"
           >
-            Go to Dashboard
+            {t('common.forbidden.dashboardButton')}
           </button>
         </div>
       </div>

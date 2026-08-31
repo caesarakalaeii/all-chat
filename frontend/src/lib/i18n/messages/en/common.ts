@@ -98,4 +98,79 @@ export const common = {
     days: '{days}d',
     daysAndHours: '{days}d {hours}h',
   },
+  // AllChatBadge and PremiumBadge render on the overlay chat rows, the appearance
+  // groups and the viewer settings tabs, so their labels belong to no one surface.
+  badges: {
+    allChatLabel: 'All-Chat badge',
+    premiumLabel: 'Premium badge',
+  },
+  dialog: {
+    closeLabel: 'Close dialog',
+  },
+  toast: {
+    closeLabel: 'Close notification',
+  },
+  // SplitView and ResizableSplit share the divider label; the step buttons and
+  // the preview iframe title are SplitView's.
+  splitPane: {
+    resizeLabel: 'Resize panels',
+    shrinkConfigLabel: 'Shrink config panel',
+    growConfigLabel: 'Grow config panel',
+    previewTitle: 'Overlay live preview',
+  },
+  cssEditor: {
+    regionLabel: 'Custom CSS editor',
+    keyboardHint: 'Press Ctrl+M to toggle Tab capturing; Escape then Tab leaves the editor.',
+    loading: 'Loading editor...',
+  },
+  impersonation: {
+    bannerLabel: 'Admin Mode:',
+    // One sentence with the username as a param: it was two JSX runs either side
+    // of the name, which a language that fronts the name could not reorder.
+    viewingAs: 'Viewing as {username}',
+    exitButton: 'Exit & Return to Admin',
+  },
+  moderatingElsewhere: {
+    channelOne: '{count} channel',
+    channelMany: '{count} channels',
+    // The bolded count phrase is a param, so emphasise can wrap it wherever the
+    // language puts it.
+    sentence: 'You moderate {channels} for other streamers.',
+    openLink: 'Open',
+  },
+  maintenanceInfo: {
+    buttonLabel: 'Service announcements',
+    popoverHeading: 'Service announcements',
+  },
+  eventSubMigration: {
+    body: 'The old IRC chat connection is being retired and can drop messages when many streams are live. Reconnect to move to the new connection and keep your chat reliable.',
+    reconnectButton: 'Reconnect now',
+    dismissLabel: 'Dismiss',
+  },
+  forbidden: {
+    heading: '403 Forbidden',
+    body: 'You do not have permission to access this page. Admin privileges are required.',
+    dashboardButton: 'Go to Dashboard',
+  },
+  // Two whole sets rather than one template with a {platform} hole. The source
+  // spliced a capitalised platform name into shared sentences, but YouTube's copy
+  // differs from TikTok's by more than that name, so collapsing them would be a
+  // rewording.
+  betaWarning: {
+    youtubeTitle: 'YouTube — OAuth Verification in Progress',
+    tiktokTitle: 'TikTok — Closed Beta',
+    youtubeBody:
+      'YouTube integration is currently under Google OAuth verification review. We cannot add new test users during this period.',
+    tiktokBody:
+      "TikTok integration is currently in closed beta. If you haven't been added to the beta program yet, authentication will fail.",
+    youtubeDiscordPrompt:
+      'Join our Discord community to stay updated on verification progress and get support:',
+    tiktokDiscordPrompt: 'To join the beta, please join our Discord community:',
+    youtubeExistingUser:
+      'If you were previously added as a test user, you can continue to use YouTube integration.',
+    tiktokExistingUser: "If you're already in the beta, you can proceed with authentication.",
+    discordLink: 'Join Discord Server',
+    cancelButton: 'Cancel',
+    continueButton: 'I Understand, Continue',
+  },
 } as const

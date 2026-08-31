@@ -43,73 +43,9 @@
       "count": 8
     }
   },
-  "src/components/AllChatBadge.tsx": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "src/components/BetaWarning.tsx": {
-    "react/jsx-no-literals": {
-      "count": 3
-    }
-  },
-  "src/components/EventSubMigrationBanner.tsx": {
-    "no-restricted-syntax": {
-      "count": 1
-    },
-    "react/jsx-no-literals": {
-      "count": 2
-    }
-  },
-  "src/components/ImpersonationBanner.tsx": {
-    "react/jsx-no-literals": {
-      "count": 3
-    }
-  },
-  "src/components/MaintenanceInfoButton.tsx": {
-    "no-restricted-syntax": {
-      "count": 2
-    },
-    "react/jsx-no-literals": {
-      "count": 1
-    }
-  },
-  "src/components/ModeratingElsewhereCard.tsx": {
-    "react/jsx-no-literals": {
-      "count": 3
-    }
-  },
-  "src/components/MonacoCSSEditor.tsx": {
-    "no-restricted-syntax": {
-      "count": 1
-    },
-    "react/jsx-no-literals": {
-      "count": 2
-    }
-  },
   "src/components/PlatformStatusIndicators.tsx": {
     "react/jsx-no-literals": {
       "count": 2
-    }
-  },
-  "src/components/PremiumBadge.tsx": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "src/components/ProtectedRoute.tsx": {
-    "react/jsx-no-literals": {
-      "count": 4
-    }
-  },
-  "src/components/ResizableSplit.tsx": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "src/components/SplitView.tsx": {
-    "no-restricted-syntax": {
-      "count": 4
     }
   },
   "src/components/ThemeSwitcher.tsx": {
@@ -136,16 +72,6 @@
   "src/components/legal/LegalLayout.tsx": {
     "react/jsx-no-literals": {
       "count": 8
-    }
-  },
-  "src/components/ui/dialog.tsx": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "src/components/ui/toast.tsx": {
-    "no-restricted-syntax": {
-      "count": 1
     }
   }
 }

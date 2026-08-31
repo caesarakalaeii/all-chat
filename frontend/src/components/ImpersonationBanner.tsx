@@ -20,8 +20,11 @@
 
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/stores/auth-store'
+import { useTranslations } from '@/lib/i18n'
+import { emphasise } from '@/lib/i18n/emphasise'
 
 export default function ImpersonationBanner() {
+  const t = useTranslations()
   const router = useRouter()
   const { isImpersonating, impersonatedUsername, stopImpersonation } = useAuthStore()
 
@@ -64,8 +67,14 @@ export default function ImpersonationBanner() {
           />
         </svg>
         <div>
-          <span className="font-semibold">Admin Mode:</span> Viewing as{' '}
-          <span className="font-mono">{impersonatedUsername}</span>
+          <span className="font-semibold">{t('common.impersonation.bannerLabel')}</span>{' '}
+          {emphasise(
+            t('common.impersonation.viewingAs', { username: impersonatedUsername ?? '' }),
+            impersonatedUsername ?? '',
+            (run) => (
+              <span className="font-mono">{run}</span>
+            )
+          )}
         </div>
       </div>
       <button
@@ -73,7 +82,7 @@ export default function ImpersonationBanner() {
         onClick={handleExitImpersonation}
         className="rounded bg-white px-4 py-1 font-medium text-orange-600 transition-colors hover:bg-orange-50 focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-orange-600 focus-visible:outline-none"
       >
-        Exit & Return to Admin
+        {t('common.impersonation.exitButton')}
       </button>
     </div>
   )
