@@ -471,4 +471,25 @@ export const viewerOverlay = {
     listenerDeprecated: 'The legacy Twitch chat connection is being retired.',
     listenerRemedy: '\u2192 Re-add your Twitch source to switch to the new EventSub connection',
   },
+  // The per-channel connection tooltips on the overlay pages' status strip. Each
+  // is one whole string: the ' - ' separator is punctuation a language may
+  // change, and neither the order of name and status nor the parenthesis
+  // convention is fixed.
+  statusIndicator: {
+    active: '{platform} - {channel} (Active)',
+    inactive: '{platform} - {channel} (Inactive)',
+    connected: '{platform} - {channel} (Connected)',
+    reconnecting: '{platform} - {channel} - Reconnecting in {seconds}s',
+    reconnectingWithError: '{platform} - {channel} - {error} (retry in {seconds}s)',
+    quotaExceeded: '{platform} - {channel} - Quota exceeded',
+    error: '{platform} - {channel} - Error',
+    discoveryPaused: '{platform} - {channel} - Discovery paused (use chat monitor to retry)',
+    authRequired: '{platform} - {channel} - Auth Required',
+    offline: '{platform} - {channel} - Offline',
+    // A backend error_message is not copy; the sentence framing it is.
+    withErrorMessage: '{platform} - {channel} - {error}',
+    // The seconds abbreviation on the reconnect badge, for the same reason the
+    // unit letters in common.duration are copy.
+    countdownSeconds: '{seconds}s',
+  },
 } as const

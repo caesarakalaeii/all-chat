@@ -43,11 +43,6 @@
       "count": 8
     }
   },
-  "src/components/PlatformStatusIndicators.tsx": {
-    "react/jsx-no-literals": {
-      "count": 2
-    }
-  },
   "src/components/ThemeSwitcher.tsx": {
     "no-restricted-syntax": {
       "count": 2

@@ -34,6 +34,7 @@ import { useEffect, useState } from 'react'
 import clsx from 'clsx'
 import { DiscordIcon as DiscordMark } from '@/components/icons/DiscordIcon'
 import type { PlatformStatus } from '@/lib/types/message'
+import { useTranslations, type MessageKey, type TFunction } from '@/lib/i18n'
 
 export interface SourceInfo {
   platform: string
@@ -92,7 +93,7 @@ const KickIcon = () => (
       textAnchor="middle"
       fontFamily="monospace"
     >
-      K
+      {KICK_GLYPH}
     </text>
   </svg>
 )
@@ -109,12 +110,131 @@ const TikTokIcon = () => (
 
 const DiscordIcon = () => <DiscordMark className="h-5 w-5 text-discord" />
 
-const platformIcons: Record<string, { icon: React.FC; label: string }> = {
-  twitch: { icon: TwitchIcon, label: 'Twitch' },
-  youtube: { icon: YouTubeIcon, label: 'YouTube' },
-  kick: { icon: KickIcon, label: 'Kick' },
-  tiktok: { icon: TikTokIcon, label: 'TikTok' },
-  discord: { icon: DiscordIcon, label: 'Discord' },
+// The letter the Kick mark draws. A brand glyph, not copy.
+const KICK_GLYPH = 'K'
+
+// The icon plus the catalog key naming the platform. `as const satisfies` rather
+// than an annotation: an annotation widens the key to string and a typo would
+// stop failing tsc.
+const platformIcons = {
+  twitch: { icon: TwitchIcon, nameKey: 'common.platforms.twitch' },
+  youtube: { icon: YouTubeIcon, nameKey: 'common.platforms.youtube' },
+  kick: { icon: KickIcon, nameKey: 'common.platforms.kick' },
+  tiktok: { icon: TikTokIcon, nameKey: 'common.platforms.tiktok' },
+  discord: { icon: DiscordIcon, nameKey: 'common.platforms.discord' },
+} as const satisfies Record<string, { icon: React.FC; nameKey: MessageKey }>
+
+type KnownPlatform = keyof typeof platformIcons
+
+/**
+ * The icon and name key for a stored platform value, or undefined when this
+ * build does not know it. A stored source can name a platform an older or newer
+ * release added, and indexing the const table with a bare string would need a
+ * cast to do it.
+ */
+function platformDefinition(platform: string): (typeof platformIcons)[KnownPlatform] | undefined {
+  return platform in platformIcons ? platformIcons[platform as KnownPlatform] : undefined
+}
+
+/**
+ * The Tailwind classes for one channel's indicator. Split out of the render body
+ * alongside indicatorTooltip so the two stay in step: they branch on exactly the
+ * same status values, and a status handled by one but not the other renders a
+ * colour that contradicts its own tooltip.
+ */
+function indicatorClass(
+  isActive: boolean,
+  status: PlatformStatus | undefined,
+  countdown: number | undefined
+): string {
+  if (!status) return isActive ? 'bg-white/10' : 'opacity-40 bg-surface/50'
+  if (status.status === 'reconnecting' && countdown !== undefined) {
+    return 'bg-yellow-500/20 opacity-100'
+  }
+  if (status.status === 'quota_exceeded') return 'bg-red-500/20 opacity-100'
+  if (status.status === 'error') return 'bg-red-500/20 opacity-100 border border-red-500/50'
+  // Discovery gave up after the 1h cap and is parked awaiting a manual
+  // re-trigger (chat monitor → Rediscover). Distinct from a red error: nothing
+  // is broken, an action is needed.
+  if (status.status === 'paused') {
+    return 'bg-indigo-500/20 opacity-100 border border-indigo-500/40'
+  }
+  if (status.status === 'offline') {
+    return isAuthError(status)
+      ? 'bg-red-500/20 opacity-100 border border-red-500/50'
+      : 'opacity-20 bg-surface/50'
+  }
+  if (status.status === 'connected') return 'bg-green-500/20 opacity-100'
+  return isActive ? 'bg-white/10' : 'opacity-40 bg-surface/50'
+}
+
+/** An offline channel whose error names OAuth or a token needs re-authorising. */
+function isAuthError(status: PlatformStatus): boolean {
+  const message = status.error_message?.toLowerCase()
+  return !!message && (message.includes('oauth') || message.includes('token'))
+}
+
+/**
+ * One channel's tooltip. Takes the translator first because a plain module
+ * function cannot call a hook. Each branch resolves a whole sentence rather than
+ * concatenating a name, a separator and a status phrase.
+ */
+function indicatorTooltip(
+  t: TFunction,
+  platform: string,
+  channel: string,
+  isActive: boolean,
+  status: PlatformStatus | undefined,
+  countdown: number | undefined
+): string {
+  if (!status) {
+    return isActive
+      ? t('viewerOverlay.statusIndicator.active', { platform, channel })
+      : t('viewerOverlay.statusIndicator.inactive', { platform, channel })
+  }
+  // A backend error_message is not copy, so it is passed through as a param.
+  const error = status.error_message
+  if (status.status === 'reconnecting' && countdown !== undefined) {
+    return error
+      ? t('viewerOverlay.statusIndicator.reconnectingWithError', {
+          platform,
+          channel,
+          error,
+          seconds: countdown,
+        })
+      : t('viewerOverlay.statusIndicator.reconnecting', {
+          platform,
+          channel,
+          seconds: countdown,
+        })
+  }
+  if (status.status === 'quota_exceeded') {
+    return t('viewerOverlay.statusIndicator.quotaExceeded', { platform, channel })
+  }
+  if (status.status === 'error') {
+    return error
+      ? t('viewerOverlay.statusIndicator.withErrorMessage', { platform, channel, error })
+      : t('viewerOverlay.statusIndicator.error', { platform, channel })
+  }
+  if (status.status === 'paused') {
+    return error
+      ? t('viewerOverlay.statusIndicator.withErrorMessage', { platform, channel, error })
+      : t('viewerOverlay.statusIndicator.discoveryPaused', { platform, channel })
+  }
+  if (status.status === 'offline') {
+    if (isAuthError(status)) {
+      return t('viewerOverlay.statusIndicator.authRequired', { platform, channel })
+    }
+    return error
+      ? t('viewerOverlay.statusIndicator.withErrorMessage', { platform, channel, error })
+      : t('viewerOverlay.statusIndicator.offline', { platform, channel })
+  }
+  if (status.status === 'connected') {
+    return t('viewerOverlay.statusIndicator.connected', { platform, channel })
+  }
+  return isActive
+    ? t('viewerOverlay.statusIndicator.active', { platform, channel })
+    : t('viewerOverlay.statusIndicator.inactive', { platform, channel })
 }
 
 export default function PlatformStatusIndicators({
@@ -123,6 +243,7 @@ export default function PlatformStatusIndicators({
   channelStatuses,
   variant = 'fixed',
 }: PlatformStatusIndicatorsProps) {
+  const t = useTranslations()
   const [countdowns, setCountdowns] = useState<Map<string, number>>(new Map())
 
   // Update countdown timers every second
@@ -158,63 +279,22 @@ export default function PlatformStatusIndicators({
       )}
     >
       {entries.map(([key, source]) => {
-        const platformDef = platformIcons[source.platform]
+        const platformDef = platformDefinition(source.platform)
         if (!platformDef) return null
 
         const isActive = activeChannels.has(key)
         const status = channelStatuses.get(key)
         const countdown = countdowns.get(key)
         const Icon = platformDef.icon
-        const platformLabel = platformDef.label
-
-        // Determine status class
-        let statusClass = isActive ? 'bg-white/10' : 'opacity-40 bg-surface/50'
-        let tooltipText = `${platformLabel} - ${source.channelName} ${isActive ? '(Active)' : '(Inactive)'}`
-
-        if (status) {
-          if (status.status === 'reconnecting' && countdown !== undefined) {
-            statusClass = 'bg-yellow-500/20 opacity-100'
-            if (status.error_message) {
-              tooltipText = `${platformLabel} - ${source.channelName} - ${status.error_message} (retry in ${countdown}s)`
-            } else {
-              tooltipText = `${platformLabel} - ${source.channelName} - Reconnecting in ${countdown}s`
-            }
-          } else if (status.status === 'quota_exceeded') {
-            statusClass = 'bg-red-500/20 opacity-100'
-            tooltipText = `${platformLabel} - ${source.channelName} - Quota exceeded`
-          } else if (status.status === 'error') {
-            statusClass = 'bg-red-500/20 opacity-100 border border-red-500/50'
-            tooltipText = status.error_message
-              ? `${platformLabel} - ${source.channelName} - ${status.error_message}`
-              : `${platformLabel} - ${source.channelName} - Error`
-          } else if (status.status === 'paused') {
-            // Discovery gave up after the 1h cap and is parked awaiting a manual
-            // re-trigger (chat monitor → Rediscover). Distinct from a red error:
-            // nothing is broken, an action is needed.
-            statusClass = 'bg-indigo-500/20 opacity-100 border border-indigo-500/40'
-            tooltipText = status.error_message
-              ? `${platformLabel} - ${source.channelName} - ${status.error_message}`
-              : `${platformLabel} - ${source.channelName} - Discovery paused (use chat monitor to retry)`
-          } else if (status.status === 'offline') {
-            // Check if offline is due to auth error
-            const isAuthError =
-              status.error_message?.toLowerCase().includes('oauth') ||
-              status.error_message?.toLowerCase().includes('token')
-
-            if (isAuthError) {
-              statusClass = 'bg-red-500/20 opacity-100 border border-red-500/50'
-              tooltipText = `${platformLabel} - ${source.channelName} - Auth Required`
-            } else {
-              statusClass = 'opacity-20 bg-surface/50'
-              tooltipText = status.error_message
-                ? `${platformLabel} - ${source.channelName} - ${status.error_message}`
-                : `${platformLabel} - ${source.channelName} - Offline`
-            }
-          } else if (status.status === 'connected') {
-            statusClass = 'bg-green-500/20 opacity-100'
-            tooltipText = `${platformLabel} - ${source.channelName} (Connected)`
-          }
-        }
+        const statusClass = indicatorClass(isActive, status, countdown)
+        const tooltipText = indicatorTooltip(
+          t,
+          t(platformDef.nameKey),
+          source.channelName,
+          isActive,
+          status,
+          countdown
+        )
 
         return (
           <div
@@ -231,7 +311,7 @@ export default function PlatformStatusIndicators({
             <Icon />
             {status?.status === 'reconnecting' && countdown !== undefined && (
               <div className="absolute -right-1 -bottom-1 rounded bg-yellow-500 px-1 font-mono text-xs text-white">
-                {countdown}s
+                {t('viewerOverlay.statusIndicator.countdownSeconds', { seconds: countdown })}
               </div>
             )}
           </div>
