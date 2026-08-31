@@ -381,3 +381,58 @@ describe('admin overlays page copy', () => {
     expect(t('admin.overlays.sourcesEmpty')).toBe('No sources connected')
   })
 })
+
+describe('admin sources page copy', () => {
+  it('keeps the page header and load error', () => {
+    expect(t('admin.sources.heading')).toBe('Sources')
+    expect(t('admin.sources.intro')).toBe('View and manage all chat sources across overlays')
+    expect(t('admin.sources.loadError')).toBe('Failed to load sources')
+  })
+
+  it('keeps the owner scope banner as one sentence with the link as a param', () => {
+    // The owner name sat inside the sentence as a <Link>. The whole sentence is
+    // one key with an {owner} hole; interpolateElements splits the unresolved
+    // template so the link can move where the language puts it.
+    expect(t('admin.sources.ownerScope', { owner: 'caesar' })).toBe(
+      'Showing sources owned by caesar'
+    )
+    expect(t('admin.sources.ownerScopeClear')).toBe('Clear')
+  })
+
+  it('keeps the filter labels and select options', () => {
+    expect(t('admin.sources.searchLabel')).toBe('Search')
+    expect(t('admin.sources.searchPlaceholder')).toBe('Search by channel, overlay, or owner...')
+    expect(t('admin.sources.platformLabel')).toBe('Platform')
+    expect(t('admin.sources.platformAll')).toBe('All Platforms')
+    expect(t('admin.sources.statusLabel')).toBe('Status')
+    expect(t('admin.sources.statusAll')).toBe('All Status')
+    expect(t('admin.sources.statusActive')).toBe('Active')
+    expect(t('admin.sources.statusInactive')).toBe('Inactive')
+  })
+
+  it('keeps the two empty-list states', () => {
+    expect(t('admin.sources.emptyNone')).toBe('No sources found.')
+    expect(t('admin.sources.emptyFiltered')).toBe('No sources match your filters.')
+  })
+
+  it('keeps the table heading, caption and column headers', () => {
+    expect(t('admin.sources.listHeading', { count: 12 })).toBe('All Sources (12)')
+    expect(t('admin.sources.tableCaption')).toBe('Chat sources')
+    expect(t('admin.sources.columnPlatform')).toBe('Platform')
+    expect(t('admin.sources.columnChannel')).toBe('Channel')
+    expect(t('admin.sources.columnOverlay')).toBe('Overlay')
+    expect(t('admin.sources.columnOwner')).toBe('Owner')
+    expect(t('admin.sources.columnStatus')).toBe('Status')
+    expect(t('admin.sources.columnCreated')).toBe('Created')
+  })
+
+  it('reads the four platform stat labels from the shared namespace', () => {
+    // The stat cards spelled 'Twitch', 'YouTube', 'Kick' and 'TikTok' inline.
+    // They are the tenth duplicate of the platform name table, so they read
+    // common.platforms.* like the other nine.
+    expect(t('common.platforms.twitch')).toBe('Twitch')
+    expect(t('common.platforms.youtube')).toBe('YouTube')
+    expect(t('common.platforms.kick')).toBe('Kick')
+    expect(t('common.platforms.tiktok')).toBe('TikTok')
+  })
+})
