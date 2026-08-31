@@ -32,6 +32,48 @@ export const metadata = {
     emoteProviders: '7TV + BTTV + FFZ Emotes',
     tagline: 'One overlay. Every chat. All platforms.',
   },
+  // layout.tsx, inherited by every route that does not override it.
+  site: {
+    titleDefault: 'All-Chat — Every chat. One overlay.',
+    // Copy, not configuration: it places the page title relative to the brand.
+    titleTemplate: '%s | All-Chat',
+    description:
+      'See all your Twitch, YouTube, Kick, TikTok, and Discord chat in one OBS chat overlay. Drop it into OBS and go. 7TV, BTTV, and FFZ emotes built in. Free and open source.',
+    // openGraph and twitter carried identical strings, so one key each.
+    socialTitle: 'All-Chat — Every chat. One overlay.',
+    socialDescription:
+      'All your Twitch, YouTube, Kick, TikTok, and Discord chat in one OBS overlay. 7TV, BTTV, and FFZ emotes built in.',
+  },
+  home: {
+    title: 'Multi-Platform Chat Overlay for Twitch, YouTube, Kick & TikTok | All-Chat',
+    description:
+      'Free multi-platform chat overlay for OBS. Merge your Twitch, YouTube, Kick, TikTok, and Discord chat into one overlay, with 7TV, BTTV, and FFZ emotes built in. Open source, no install.',
+  },
+  docs: {
+    title: 'Documentation',
+    description:
+      'Get your All-Chat overlay live in OBS, pick from 16 built-in themes, and make it your own — no CSS required to start, full CSS control when you want it.',
+  },
+  docsApi: {
+    title: 'Developer API',
+    description:
+      'Connect third-party tools to the All-Chat unified chat WebSocket stream: message format, platform events, status messages and reconnection (Twitch, YouTube, Kick, TikTok, Discord).',
+  },
+  upgrade: {
+    title: 'Upgrade to Premium | All-Chat',
+    description:
+      'Back All-Chat on Patreon to unlock premium features: moderate from your overlay, ElevenLabs TTS, YouTube stream selection, shared chat, and viewer flairs.',
+  },
+  // The OBS browser-source routes. Seen in the browser-source title bar and in
+  // a tab title, so still copy.
+  overlay: {
+    title: 'All-Chat Overlay',
+    description: 'Chat overlay for OBS Browser Source',
+  },
+  overlayMonitor: {
+    title: 'All-Chat Monitor',
+    description: 'Readable chat & activity monitor for streamers',
+  },
   impressum: {
     title: 'Impressum | All-Chat',
     description: 'Legal notice (Impressum) as required by § 5 DDG.',

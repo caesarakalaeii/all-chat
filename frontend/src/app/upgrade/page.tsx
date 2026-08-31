@@ -28,9 +28,8 @@ import { interpolateElements } from '@/lib/i18n/emphasise'
 const t = getTranslations()
 
 export const metadata = {
-  title: 'Upgrade to Premium | All-Chat',
-  description:
-    'Back All-Chat on Patreon to unlock premium features: moderate from your overlay, ElevenLabs TTS, YouTube stream selection, shared chat, and viewer flairs.',
+  title: t('metadata.upgrade.title'),
+  description: t('metadata.upgrade.description'),
   alternates: { canonical: '/upgrade' },
 }
 

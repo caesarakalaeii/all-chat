@@ -29,9 +29,8 @@ import { interpolateElements } from '@/lib/i18n/emphasise'
 const t = getTranslations()
 
 export const metadata = {
-  title: 'Documentation',
-  description:
-    'Get your All-Chat overlay live in OBS, pick from 16 built-in themes, and make it your own — no CSS required to start, full CSS control when you want it.',
+  title: t('metadata.docs.title'),
+  description: t('metadata.docs.description'),
   alternates: { canonical: '/docs' },
 }
 

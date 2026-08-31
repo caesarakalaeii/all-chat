@@ -27,9 +27,8 @@ import { interpolateElements } from '@/lib/i18n/emphasise'
 const t = getTranslations()
 
 export const metadata = {
-  title: 'Developer API',
-  description:
-    'Connect third-party tools to the All-Chat unified chat WebSocket stream: message format, platform events, status messages and reconnection (Twitch, YouTube, Kick, TikTok, Discord).',
+  title: t('metadata.docsApi.title'),
+  description: t('metadata.docsApi.description'),
   alternates: { canonical: '/docs/api' },
 }
 

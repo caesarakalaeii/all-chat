@@ -37,11 +37,8 @@ export const metadata: Metadata = {
   // `absolute` overrides the layout title template ("%s | All-Chat") so the
   // query terms lead the <title>, and a keyword-led description overrides the
   // layout default for this page specifically.
-  title: {
-    absolute: 'Multi-Platform Chat Overlay for Twitch, YouTube, Kick & TikTok | All-Chat',
-  },
-  description:
-    'Free multi-platform chat overlay for OBS. Merge your Twitch, YouTube, Kick, TikTok, and Discord chat into one overlay, with 7TV, BTTV, and FFZ emotes built in. Open source, no install.',
+  title: { absolute: t('metadata.home.title') },
+  description: t('metadata.home.description'),
   alternates: { canonical: '/' },
 }
 
