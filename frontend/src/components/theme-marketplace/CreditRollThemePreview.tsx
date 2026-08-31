@@ -28,6 +28,8 @@
 import { useMemo } from 'react'
 import clsx from 'clsx'
 
+import { useTranslations } from '@/lib/i18n'
+
 interface CreditRollThemePreviewProps {
   css: string
   themeId?: string
@@ -65,6 +67,7 @@ export default function CreditRollThemePreview({
   const scopeId = `credit-roll-preview-${themeId.replace(/[^a-z0-9]/gi, '-')}`
 
   // Scope CSS using Shadow DOM approach - wrap all selectors with unique ID
+  const t = useTranslations()
   const scopedCss = useMemo(() => {
     return css
       .split('\n')
@@ -125,15 +128,17 @@ export default function CreditRollThemePreview({
       <div className="min-h-full overflow-y-auto bg-linear-to-b from-surface to-bg p-4">
         {/* Header */}
         <div className="mb-6 text-center">
-          <h1 className="mb-2 text-3xl font-bold text-white">🎬 Stream Credits</h1>
-          <p className="text-sm text-text-sub">Thank you for your support!</p>
+          <h1 className="mb-2 text-3xl font-bold text-white">
+            {t('overlayEditor.creditRollPreview.heading')}
+          </h1>
+          <p className="text-sm text-text-sub">{t('overlayEditor.creditRollPreview.subheading')}</p>
         </div>
 
         {/* Sample Leaderboard */}
         <div className="mx-auto max-w-md">
           <h2 className="mb-4 flex items-center gap-2 text-2xl font-bold text-white">
             <span className="text-3xl">⭐</span>
-            Top Subscribers
+            {t('overlayEditor.creditRollPreview.leaderboardHeading')}
           </h2>
           <div className="space-y-4">
             {SAMPLE_LEADERBOARD_DATA.map((entry) => (
@@ -182,8 +187,10 @@ export default function CreditRollThemePreview({
 
         {/* Footer */}
         <div className="mt-8 text-center">
-          <div className="mb-2 text-2xl font-bold text-white">Thank you! ❤️</div>
-          <p className="text-sm text-text-sub">See you next stream!</p>
+          <div className="mb-2 text-2xl font-bold text-white">
+            {t('overlayEditor.creditRollPreview.footerHeading')}
+          </div>
+          <p className="text-sm text-text-sub">{t('overlayEditor.creditRollPreview.footerBody')}</p>
         </div>
       </div>
     </div>

@@ -25,6 +25,7 @@
 'use client'
 
 import clsx from 'clsx'
+import { useTranslations } from '@/lib/i18n'
 import type { Theme, ChatMessagePreview } from '@/lib/theme-marketplace/types'
 import ThemePreview from './ThemePreview'
 import CreditRollThemePreview from './CreditRollThemePreview'
@@ -68,6 +69,7 @@ export default function ThemeCard({
   onApply,
   themeType = 'overlay',
 }: ThemeCardProps) {
+  const t = useTranslations()
   return (
     <div className="theme-card flex flex-col overflow-hidden rounded-lg border border-border bg-surface transition-all duration-200 hover:-translate-y-1 hover:border-twitch/50 hover:shadow-lg">
       {/* Preview */}
@@ -125,7 +127,7 @@ export default function ThemeCard({
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
-          Apply Theme
+          {t('overlayEditor.themeMarketplace.applyTheme')}
         </button>
       </div>
     </div>

@@ -42,8 +42,8 @@ describe('ambassador settings copy', () => {
   })
 
   it('keeps the showcase toggle toasts', () => {
-    expect(t('settings.ambassador.toasts.featured')).toBe('You will now appear on the homepage')
-    expect(t('settings.ambassador.toasts.unfeatured')).toBe('Removed from the homepage showcase')
-    expect(t('settings.ambassador.toasts.failed')).toBe('Failed to update showcase setting')
+    expect(t('settings.ambassador.toastFeatured')).toBe('You will now appear on the homepage')
+    expect(t('settings.ambassador.toastUnfeatured')).toBe('Removed from the homepage showcase')
+    expect(t('settings.ambassador.toastFailed')).toBe('Failed to update showcase setting')
   })
 })

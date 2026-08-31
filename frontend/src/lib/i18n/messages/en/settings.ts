@@ -20,4 +20,16 @@
  * The settings surfaces, including linked devices and platform connections.
  */
 
-export const settings = {} as const
+export const settings = {
+  ambassador: {
+    heading: 'Ambassador',
+    // The render site spelled the apostrophe &rsquo; and the quotes
+    // &ldquo;/&rdquo;. A catalog string is not HTML, so they are the characters.
+    body: 'You’re an All-Chat ambassador. Choose whether to be featured on the public homepage.',
+    featureToggle: 'Feature me on the homepage',
+    cardReads: 'Your card reads: “{tagline}”',
+    toastFeatured: 'You will now appear on the homepage',
+    toastUnfeatured: 'Removed from the homepage showcase',
+    toastFailed: 'Failed to update showcase setting',
+  },
+} as const

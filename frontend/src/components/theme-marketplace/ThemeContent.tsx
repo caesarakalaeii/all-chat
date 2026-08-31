@@ -24,6 +24,7 @@ import ThemeFilters from './ThemeFilters'
 import { useThemeMarketplace } from '@/hooks/useThemeMarketplace'
 import { SAMPLE_PREVIEW_MESSAGES } from '@/lib/theme-marketplace/constants'
 import { clearCache } from '@/lib/theme-marketplace/cache'
+import { useTranslations } from '@/lib/i18n'
 import type { Theme } from '@/lib/theme-marketplace/types'
 
 interface ThemeContentProps {
@@ -32,6 +33,7 @@ interface ThemeContentProps {
 }
 
 export function ThemeContent({ onApply, isAdmin = false }: ThemeContentProps): React.ReactElement {
+  const t = useTranslations()
   const {
     themes,
     loading,
@@ -68,7 +70,9 @@ export function ThemeContent({ onApply, isAdmin = false }: ThemeContentProps): R
         <div className="flex items-center justify-center py-8">
           <div className="text-center">
             <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-b-2 border-purple-500" />
-            <p className="text-sm text-text-sub">Loading themes...</p>
+            <p className="text-sm text-text-sub">
+              {t('overlayEditor.themeMarketplace.loadingEllipsis')}
+            </p>
           </div>
         </div>
       )}
@@ -76,7 +80,9 @@ export function ThemeContent({ onApply, isAdmin = false }: ThemeContentProps): R
       {/* Error State */}
       {error && !loading && (
         <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3">
-          <p className="text-sm font-semibold text-yellow-400">Error Loading Themes</p>
+          <p className="text-sm font-semibold text-yellow-400">
+            {t('overlayEditor.themeMarketplace.errorTitle')}
+          </p>
           <p className="text-xs text-yellow-300/80">{error}</p>
         </div>
       )}
@@ -84,8 +90,10 @@ export function ThemeContent({ onApply, isAdmin = false }: ThemeContentProps): R
       {/* Empty State */}
       {!loading && themes.length === 0 && !error && (
         <div className="py-8 text-center">
-          <p className="text-sm text-text-sub">No themes found</p>
-          <p className="mt-1 text-xs text-text-dim">Try adjusting your filters</p>
+          <p className="text-sm text-text-sub">{t('overlayEditor.themeMarketplace.emptyTitle')}</p>
+          <p className="mt-1 text-xs text-text-dim">
+            {t('overlayEditor.themeMarketplace.emptyBody')}
+          </p>
         </div>
       )}
 
@@ -94,7 +102,10 @@ export function ThemeContent({ onApply, isAdmin = false }: ThemeContentProps): R
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <p className="text-xs text-text-sub">
-              Showing {filteredCount} of {totalCount} themes
+              {t('overlayEditor.themeMarketplace.showingCount', {
+                shown: filteredCount,
+                total: totalCount,
+              })}
             </p>
             {isAdmin && (
               <button
@@ -103,7 +114,7 @@ export function ThemeContent({ onApply, isAdmin = false }: ThemeContentProps): R
                   refreshThemes()
                 }}
                 className="hover:bg-subtle flex items-center gap-1 rounded px-2 py-1 text-xs text-text-dim transition-colors hover:text-text"
-                title="Force refresh themes from GitHub (Admin)"
+                title={t('overlayEditor.themeMarketplace.syncTitleInline')}
               >
                 <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
@@ -113,7 +124,7 @@ export function ThemeContent({ onApply, isAdmin = false }: ThemeContentProps): R
                     d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
                   />
                 </svg>
-                Sync
+                {t('overlayEditor.themeMarketplace.sync')}
               </button>
             )}
           </div>

@@ -101,6 +101,9 @@ const NOT_COPY = [
   '✗',
   '★',
   '☆',
+  // A decorative emoji standing alone in its own element is an icon, not copy:
+  // a translator has nothing to do with a star, and a key per icon is noise.
+  '⭐',
 ]
 
 // The JSX attributes whose value a user reads: screen-reader labels, tooltips,

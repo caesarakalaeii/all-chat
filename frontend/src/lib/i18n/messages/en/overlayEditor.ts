@@ -21,4 +21,37 @@
  * marketplace.
  */
 
-export const overlayEditor = {} as const
+export const overlayEditor = {
+  themeMarketplace: {
+    // Two title keys, not a qualifier concatenated onto a shared noun phrase:
+    // see the comment in __tests__/overlayEditor.test.ts.
+    title: 'Theme Marketplace',
+    titleCreditRoll: 'Credit Roll Theme Marketplace',
+    description: 'Browse and apply custom CSS themes for your overlay',
+    descriptionCreditRoll: 'Browse and apply custom CSS themes for your credit roll',
+    loading: 'Loading themes',
+    loadingEllipsis: 'Loading themes...',
+    errorTitle: 'Error Loading Themes',
+    emptyTitle: 'No themes found',
+    emptyBody: 'Try adjusting your filters',
+    showingCount: 'Showing {shown} of {total} themes',
+    applyTheme: 'Apply Theme',
+    clearFilters: 'Clear Filters',
+    searchLabel: 'Search themes',
+    searchPlaceholder: 'Search themes...',
+    sync: 'Sync',
+    syncTitleInline: 'Force refresh themes from GitHub (Admin)',
+    syncLabel: 'Force refresh themes from GitHub',
+    syncTitle: 'Force refresh themes (Admin)',
+    closeLabel: 'Close theme marketplace',
+  },
+  // Sample copy the credit-roll theme preview renders so a streamer can see a
+  // theme applied to something. It mirrors the real credits overlay.
+  creditRollPreview: {
+    heading: '🎬 Stream Credits',
+    subheading: 'Thank you for your support!',
+    leaderboardHeading: 'Top Subscribers',
+    footerHeading: 'Thank you! ❤️',
+    footerBody: 'See you next stream!',
+  },
+} as const

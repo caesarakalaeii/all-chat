@@ -648,48 +648,6 @@
       "count": 8
     }
   },
-  "src/components/settings/AmbassadorSettingsCard.tsx": {
-    "no-restricted-syntax": {
-      "count": 1
-    },
-    "react/jsx-no-literals": {
-      "count": 5
-    }
-  },
-  "src/components/theme-marketplace/CreditRollThemePreview.tsx": {
-    "react/jsx-no-literals": {
-      "count": 6
-    }
-  },
-  "src/components/theme-marketplace/ThemeCard.tsx": {
-    "react/jsx-no-literals": {
-      "count": 1
-    }
-  },
-  "src/components/theme-marketplace/ThemeContent.tsx": {
-    "no-restricted-syntax": {
-      "count": 1
-    },
-    "react/jsx-no-literals": {
-      "count": 8
-    }
-  },
-  "src/components/theme-marketplace/ThemeFilters.tsx": {
-    "no-restricted-syntax": {
-      "count": 2
-    },
-    "react/jsx-no-literals": {
-      "count": 1
-    }
-  },
-  "src/components/theme-marketplace/ThemeMarketplaceModal.tsx": {
-    "no-restricted-syntax": {
-      "count": 3
-    },
-    "react/jsx-no-literals": {
-      "count": 9
-    }
-  },
   "src/components/ui/dialog.tsx": {
     "no-restricted-syntax": {
       "count": 1
