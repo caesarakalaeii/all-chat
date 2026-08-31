@@ -25,12 +25,37 @@ import clsx from 'clsx'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Dialog } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
 import { toastManager } from '@/lib/toast'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { PremiumDurationChooser } from '@/components/admin/PremiumDurationChooser'
 import { UserAvatar } from '@/components/UserAvatar'
+
+type UserFilter = 'all' | 'active' | 'banned' | 'premium' | 'beta' | 'unconfigured'
+
+// One row per filter tab. Table-driven so the six tabs cannot drift apart the
+// way six hand-written <button>s did — they previously carried three different
+// active colours and duplicated the same class string six times.
+const USER_FILTERS: {
+  value: UserFilter
+  labelKey: MessageKey
+  titleKey?: MessageKey
+}[] = [
+  { value: 'all', labelKey: 'admin.users.tabAll' },
+  { value: 'active', labelKey: 'admin.users.tabActive' },
+  { value: 'banned', labelKey: 'admin.users.tabBanned' },
+  { value: 'premium', labelKey: 'admin.users.tabPremium' },
+  { value: 'beta', labelKey: 'admin.users.tabBeta' },
+  {
+    value: 'unconfigured',
+    labelKey: 'admin.users.tabNoSetup',
+    titleKey: 'admin.users.tabNoSetupTitle',
+  },
+]
 import { formatDate, formatTimestamp, useTranslations } from '@/lib/i18n'
+import type { MessageKey } from '@/lib/i18n/translate'
 
 interface User {
   id: string
@@ -75,9 +100,7 @@ export default function UsersPage() {
   const [error, setError] = useState<string | null>(null)
   const [impersonating, setImpersonating] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
-  const [filter, setFilter] = useState<
-    'all' | 'active' | 'banned' | 'premium' | 'beta' | 'unconfigured'
-  >('all')
+  const [filter, setFilter] = useState<UserFilter>('all')
   const [showBanModal, setShowBanModal] = useState(false)
   const [userToBan, setUserToBan] = useState<User | null>(null)
   const [banReason, setBanReason] = useState('')
@@ -484,11 +507,14 @@ export default function UsersPage() {
     )
   }
 
-  const bannedCount = users.filter((u) => u.is_banned).length
-  const activeCount = users.filter((u) => !u.is_banned).length
-  const premiumCount = users.filter((u) => u.is_premium).length
-  const betaCount = users.filter((u) => u.is_beta_tester).length
-  const unconfiguredCount = users.filter((u) => u.sources_count === 0).length
+  const counts: Record<UserFilter, number> = {
+    all: users.length,
+    active: users.filter((u) => !u.is_banned).length,
+    banned: users.filter((u) => u.is_banned).length,
+    premium: users.filter((u) => u.is_premium).length,
+    beta: users.filter((u) => u.is_beta_tester).length,
+    unconfigured: users.filter((u) => u.sources_count === 0).length,
+  }
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
@@ -515,85 +541,32 @@ export default function UsersPage() {
 
                 {/* Search Input */}
                 <div className="mt-4">
-                  <input
+                  <Input
                     type="text"
                     placeholder={t('admin.users.searchPlaceholder')}
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full rounded-lg border border-border bg-surface-2 px-4 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                   />
                 </div>
 
                 {/* Filter Tabs */}
-                <div className="mt-4 flex space-x-4 border-b border-border">
-                  <button
-                    onClick={() => setFilter('all')}
-                    className={clsx(
-                      'border-b-2 px-1 pb-2 text-sm font-medium transition-colors',
-                      filter === 'all'
-                        ? 'border-primary text-primary'
-                        : 'border-transparent text-text-sub hover:border-border hover:text-text'
-                    )}
-                  >
-                    {t('admin.users.tabAll', { count: users.length })}
-                  </button>
-                  <button
-                    onClick={() => setFilter('active')}
-                    className={clsx(
-                      'border-b-2 px-1 pb-2 text-sm font-medium transition-colors',
-                      filter === 'active'
-                        ? 'border-primary text-primary'
-                        : 'border-transparent text-text-sub hover:border-border hover:text-text'
-                    )}
-                  >
-                    {t('admin.users.tabActive', { count: activeCount })}
-                  </button>
-                  <button
-                    onClick={() => setFilter('banned')}
-                    className={clsx(
-                      'border-b-2 px-1 pb-2 text-sm font-medium transition-colors',
-                      filter === 'banned'
-                        ? 'border-primary text-primary'
-                        : 'border-transparent text-text-sub hover:border-border hover:text-text'
-                    )}
-                  >
-                    {t('admin.users.tabBanned', { count: bannedCount })}
-                  </button>
-                  <button
-                    onClick={() => setFilter('premium')}
-                    className={clsx(
-                      'border-b-2 px-1 pb-2 text-sm font-medium transition-colors',
-                      filter === 'premium'
-                        ? 'border-amber-400 text-amber-400'
-                        : 'border-transparent text-text-sub hover:border-border hover:text-text'
-                    )}
-                  >
-                    {t('admin.users.tabPremium', { count: premiumCount })}
-                  </button>
-                  <button
-                    onClick={() => setFilter('beta')}
-                    className={clsx(
-                      'border-b-2 px-1 pb-2 text-sm font-medium transition-colors',
-                      filter === 'beta'
-                        ? 'border-violet-400 text-violet-400'
-                        : 'border-transparent text-text-sub hover:border-border hover:text-text'
-                    )}
-                  >
-                    {t('admin.users.tabBeta', { count: betaCount })}
-                  </button>
-                  <button
-                    onClick={() => setFilter('unconfigured')}
-                    title={t('admin.users.tabNoSetupTitle')}
-                    className={clsx(
-                      'border-b-2 px-1 pb-2 text-sm font-medium transition-colors',
-                      filter === 'unconfigured'
-                        ? 'border-amber-400 text-amber-400'
-                        : 'border-transparent text-text-sub hover:border-border hover:text-text'
-                    )}
-                  >
-                    {t('admin.users.tabNoSetup', { count: unconfiguredCount })}
-                  </button>
-                </div>
+                <Tabs
+                  value={filter}
+                  onValueChange={(value) => setFilter(value as UserFilter)}
+                  className="mt-4"
+                >
+                  <TabsList variant="line" className="w-full justify-start border-b border-border">
+                    {USER_FILTERS.map((tab) => (
+                      <TabsTrigger
+                        key={tab.value}
+                        value={tab.value}
+                        title={tab.titleKey ? t(tab.titleKey) : undefined}
+                      >
+                        {t(tab.labelKey, { count: counts[tab.value] })}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </Tabs>
               </div>
               <ul className="max-h-[70vh] divide-y divide-border overflow-y-auto">
                 {displayUsers.map((user) => (
@@ -1133,26 +1106,24 @@ export default function UsersPage() {
                           <p className="mb-1 text-xs font-medium text-text-sub">
                             {t('admin.users.taglineLabel')}
                           </p>
-                          <input
+                          <Input
                             type="text"
                             value={ambassadorTagline}
                             onChange={(e) => setAmbassadorTagline(e.target.value)}
                             maxLength={120}
                             placeholder={t('admin.users.taglinePlaceholder')}
                             aria-label={t('admin.users.taglineFieldLabel')}
-                            className="w-full rounded-lg border border-border bg-surface-2 px-4 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                           />
                         </div>
                         <div>
                           <p className="mb-1 text-xs font-medium text-text-sub">
                             {t('admin.users.sortOrderLabel')}
                           </p>
-                          <input
+                          <Input
                             type="number"
                             value={ambassadorSortOrder}
                             onChange={(e) => setAmbassadorSortOrder(e.target.value)}
                             aria-label={t('admin.users.sortOrderFieldLabel')}
-                            className="w-full rounded-lg border border-border bg-surface-2 px-4 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                           />
                         </div>
                         <Button
@@ -1233,14 +1204,13 @@ export default function UsersPage() {
                         <p className="mb-1 text-xs font-medium text-text-sub">
                           {t('admin.users.taglineOptionalLabel')}
                         </p>
-                        <input
+                        <Input
                           type="text"
                           value={ambassadorTagline}
                           onChange={(e) => setAmbassadorTagline(e.target.value)}
                           maxLength={120}
                           placeholder={t('admin.users.taglinePlaceholder')}
                           aria-label={t('admin.users.taglineFieldLabel')}
-                          className="w-full rounded-lg border border-border bg-surface-2 px-4 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                         />
                       </div>
                       <Button

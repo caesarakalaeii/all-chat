@@ -19,6 +19,7 @@
  */
 
 import { Moon, Sun } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 
 /** Controlled light/dark toggle for the observability view header. */
 export function OverlayViewThemeToggle({
@@ -29,13 +30,14 @@ export function OverlayViewThemeToggle({
   onToggle: () => void
 }) {
   return (
-    <button
+    <Button
       onClick={onToggle}
-      className="flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-sub transition-colors hover:border-border-md hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+      variant="outline"
+      size="sm"
       aria-label={light ? 'Switch to dark mode' : 'Switch to light mode'}
     >
       {light ? <Moon className="h-3.5 w-3.5" /> : <Sun className="h-3.5 w-3.5" />}
       {light ? 'Dark' : 'Light'}
-    </button>
+    </Button>
   )
 }

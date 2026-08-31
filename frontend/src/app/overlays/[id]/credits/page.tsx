@@ -43,6 +43,7 @@ import { trackEvent } from '@/lib/analytics'
 import { AppNav } from '@/components/AppNav'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import type { Overlay, CreditRollConfig } from '@/lib/types/overlay'
 import { getTranslations, useTranslations } from '@/lib/i18n'
 import { interpolateElements } from '@/lib/i18n/emphasise'
@@ -261,9 +262,11 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                 </svg>
               )}
               <p className="font-medium">{notification.message}</p>
-              <button
+              <Button
                 onClick={() => setNotification(null)}
-                className="ml-2 text-text-dim transition-colors hover:text-text"
+                variant="ghost"
+                size="icon-xs"
+                className="ml-2"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
@@ -273,7 +276,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                     d="M6 18L18 6M6 6l12 12"
                   />
                 </svg>
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -398,7 +401,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                   >
                     {t('overlayEditor.credits.topNLabel')}
                   </label>
-                  <input
+                  <Input
                     id={`${fieldId}-top-n`}
                     type="number"
                     min="1"
@@ -408,7 +411,6 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                       setConfig({ ...config, leaderboard_top_n: parseInt(e.target.value) })
                     }
                     aria-describedby={`${fieldId}-top-n-hint`}
-                    className="w-full rounded-lg border border-border bg-bg px-4 py-2 text-text focus-visible:border-twitch focus-visible:ring-3 focus-visible:ring-twitch/50 focus-visible:outline-none"
                   />
                   <p id={`${fieldId}-top-n-hint`} className="mt-1 text-xs text-text-dim">
                     {t('overlayEditor.credits.topNHint')}
@@ -499,7 +501,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                   >
                     {t('overlayEditor.credits.durationLabel')}
                   </label>
-                  <input
+                  <Input
                     id={`${fieldId}-duration`}
                     type="number"
                     min="10"
@@ -509,7 +511,6 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                       setConfig({ ...config, display_duration_seconds: parseInt(e.target.value) })
                     }
                     aria-describedby={`${fieldId}-duration-hint`}
-                    className="w-full rounded-lg border border-border bg-bg px-4 py-2 text-text focus-visible:border-twitch focus-visible:ring-3 focus-visible:ring-twitch/50 focus-visible:outline-none"
                   />
                   <p id={`${fieldId}-duration-hint`} className="mt-1 text-xs text-text-dim">
                     {t('overlayEditor.credits.durationHint')}
@@ -579,7 +580,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                     >
                       {t('overlayEditor.credits.maxClipsLabel')}
                     </label>
-                    <input
+                    <Input
                       id={`${fieldId}-clips-max`}
                       type="number"
                       min="1"
@@ -588,7 +589,6 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                       onChange={(e) =>
                         setConfig({ ...config, clips_max_count: parseInt(e.target.value) })
                       }
-                      className="w-full rounded-lg border border-border bg-bg px-4 py-2 text-text focus-visible:border-twitch focus-visible:ring-3 focus-visible:ring-twitch/50 focus-visible:outline-none"
                     />
                   </div>
                   <div>
@@ -598,7 +598,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                     >
                       {t('overlayEditor.credits.fallbackDaysLabel')}
                     </label>
-                    <input
+                    <Input
                       id={`${fieldId}-clips-fallback`}
                       type="number"
                       min="1"
@@ -608,7 +608,6 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                         setConfig({ ...config, clips_fallback_days: parseInt(e.target.value) })
                       }
                       aria-describedby={`${fieldId}-clips-fallback-hint`}
-                      className="w-full rounded-lg border border-border bg-bg px-4 py-2 text-text focus-visible:border-twitch focus-visible:ring-3 focus-visible:ring-twitch/50 focus-visible:outline-none"
                     />
                     <p id={`${fieldId}-clips-fallback-hint`} className="mt-1 text-xs text-text-dim">
                       {t('overlayEditor.credits.fallbackDaysHint')}

@@ -19,6 +19,7 @@
  */
 
 import clsx from 'clsx'
+import { Button } from '@/components/ui/button'
 import { Settings } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
@@ -173,13 +174,15 @@ export function ViewSettingsBar({ prefs, onChange, onTestActivitySound }: ViewSe
                 />
 
                 {onTestActivitySound && (
-                  <button
+                  <Button
                     type="button"
                     onClick={onTestActivitySound}
-                    className="self-start rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text hover:bg-surface-2 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                    variant="outline"
+                    size="sm"
+                    className="self-start"
                   >
                     {t('viewerOverlay.viewSettings.testSound')}
-                  </button>
+                  </Button>
                 )}
               </div>
             )}

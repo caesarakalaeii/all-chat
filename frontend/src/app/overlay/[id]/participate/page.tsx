@@ -32,6 +32,8 @@
 'use client'
 
 import { use, useCallback, useEffect, useRef, useState } from 'react'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 import clsx from 'clsx'
 import { apiErrorReason, viewerApi } from '@/lib/api/viewer'
 import { inMemoryTokens } from '@/lib/auth/in-memory-store'
@@ -508,13 +510,15 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
                     pointsName,
                   })}
                 </span>
-                <button
+                <Button
                   type="button"
                   onClick={() => setWagerAmount(String(balance))}
-                  className="rounded px-1.5 py-0.5 font-medium text-text-sub underline hover:text-text focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:outline-none"
+                  variant="link"
+                  size="xs"
+                  className="h-auto p-0 font-medium text-text-sub underline hover:text-text"
                 >
                   {t('viewerOverlay.participate.maxWager')}
-                </button>
+                </Button>
               </div>
               {balance <= 0 && (
                 <p className="text-xs text-text-sub">
@@ -524,7 +528,7 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
               <label htmlFor="wager-amount" className="sr-only">
                 {t('viewerOverlay.participate.wagerAmountLabel', { pointsName })}
               </label>
-              <input
+              <Input
                 id="wager-amount"
                 type="number"
                 min={1}
@@ -535,7 +539,6 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
                 placeholder={t('viewerOverlay.participate.wagerAmountPlaceholder', {
                   pointsName,
                 })}
-                className="w-full rounded-lg border border-border bg-transparent px-3 py-2 text-text placeholder:text-text-dim"
               />
             </div>
           )}

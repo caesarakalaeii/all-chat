@@ -31,6 +31,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Card } from '@/components/ui/card'
 import { PlatformBadge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import { UserAvatar } from '@/components/UserAvatar'
 import { useTranslations } from '@/lib/i18n'
 
@@ -165,13 +166,13 @@ export default function AdminSearchPage() {
         <p className="mt-1 text-sm text-text-sub">{t('admin.search.intro')}</p>
       </div>
 
-      <input
+      <Input
         type="search"
         placeholder={t('admin.search.inputPlaceholder')}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         aria-label={t('admin.search.inputLabel')}
-        className="mb-6 w-full rounded-lg border border-border bg-surface-2 px-4 py-3 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        className="mb-6"
       />
 
       {!debounced ? (

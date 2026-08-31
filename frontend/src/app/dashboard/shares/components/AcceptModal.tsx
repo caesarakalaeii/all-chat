@@ -31,6 +31,7 @@ import { overlaysApi } from '@/lib/api/overlays'
 import { PlatformBadge } from './PlatformBadge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
 import type { ShareRequest } from '@/lib/types/share'
 import type { Overlay } from '@/lib/types/overlay'
 import { trackEvent } from '@/lib/analytics'
@@ -263,7 +264,7 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
                     {expiryOption === 'custom' && (
                       <div className="mt-2">
                         <div className="flex items-center gap-2">
-                          <input
+                          <Input
                             type="number"
                             min="1"
                             max="168"
@@ -275,12 +276,7 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
                             aria-describedby={
                               isValidCustomHours() ? hoursHintId : `${hoursHintId} ${hoursErrorId}`
                             }
-                            className={clsx(
-                              'w-24 rounded-lg border bg-surface-2 px-2 py-1 text-sm text-text transition-all duration-200 focus-visible:ring-2 focus-visible:ring-blue-500/20 focus-visible:outline-none',
-                              !isValidCustomHours()
-                                ? 'border-red-500 focus-visible:border-red-500'
-                                : 'border-border focus-visible:border-blue-500'
-                            )}
+                            className="w-24"
                           />
                           <span id={hoursHintId} className="text-sm text-text-sub">
                             {t('dashboard.shares.expiryCustomHint')}
