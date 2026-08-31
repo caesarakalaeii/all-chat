@@ -120,3 +120,112 @@ describe('compact duration copy', () => {
     expect(t('common.duration.daysAndHours', { days: 3, hours: 4 })).toBe('3d 4h')
   })
 })
+
+describe('shared chrome copy', () => {
+  it('keeps the two badge aria labels', () => {
+    // AllChatBadge and PremiumBadge render on the overlay chat rows, the
+    // appearance groups and the viewer settings tabs, so their labels belong to
+    // no single surface.
+    expect(t('common.badges.allChatLabel')).toBe('All-Chat badge')
+    expect(t('common.badges.premiumLabel')).toBe('Premium badge')
+  })
+
+  it('keeps the dialog and toast dismiss labels', () => {
+    // ui/dialog and ui/toast are primitives every surface mounts.
+    expect(t('common.dialog.closeLabel')).toBe('Close dialog')
+    expect(t('common.toast.closeLabel')).toBe('Close notification')
+  })
+
+  it('keeps the split pane controls', () => {
+    // SplitView and ResizableSplit both label their divider 'Resize panels';
+    // the step buttons and the preview iframe are SplitView's.
+    expect(t('common.splitPane.resizeLabel')).toBe('Resize panels')
+    expect(t('common.splitPane.shrinkConfigLabel')).toBe('Shrink config panel')
+    expect(t('common.splitPane.growConfigLabel')).toBe('Grow config panel')
+    expect(t('common.splitPane.previewTitle')).toBe('Overlay live preview')
+  })
+
+  it('keeps the CSS editor label, keyboard hint and loading state', () => {
+    expect(t('common.cssEditor.regionLabel')).toBe('Custom CSS editor')
+    expect(t('common.cssEditor.keyboardHint')).toBe(
+      'Press Ctrl+M to toggle Tab capturing; Escape then Tab leaves the editor.'
+    )
+    expect(t('common.cssEditor.loading')).toBe('Loading editor...')
+  })
+
+  it('keeps the impersonation banner copy', () => {
+    // 'Admin Mode:' and 'Viewing as' were two JSX runs either side of the
+    // username. One sentence with the username as a param, so a language that
+    // fronts the name can move it.
+    expect(t('common.impersonation.bannerLabel')).toBe('Admin Mode:')
+    expect(t('common.impersonation.viewingAs', { username: 'kate' })).toBe('Viewing as kate')
+    expect(t('common.impersonation.exitButton')).toBe('Exit & Return to Admin')
+  })
+
+  it('keeps the moderating-elsewhere card copy', () => {
+    // The sentence was three JSX runs around a bolded count, with the count's
+    // noun switching on singular. Two whole sentences with the count as a param
+    // and the bold applied through emphasise on the count phrase.
+    expect(t('common.moderatingElsewhere.channelOne', { count: 1 })).toBe('1 channel')
+    expect(t('common.moderatingElsewhere.channelMany', { count: 4 })).toBe('4 channels')
+    expect(t('common.moderatingElsewhere.sentence', { channels: '4 channels' })).toBe(
+      'You moderate 4 channels for other streamers.'
+    )
+    expect(t('common.moderatingElsewhere.openLink')).toBe('Open')
+  })
+
+  it('keeps the service announcements label', () => {
+    // One key for both the aria-label and the title, which were byte-identical,
+    // plus the popover heading that repeats it.
+    expect(t('common.maintenanceInfo.buttonLabel')).toBe('Service announcements')
+    expect(t('common.maintenanceInfo.popoverHeading')).toBe('Service announcements')
+  })
+
+  it('keeps the EventSub migration banner copy', () => {
+    expect(t('common.eventSubMigration.body')).toBe(
+      'The old IRC chat connection is being retired and can drop messages when many streams are live. Reconnect to move to the new connection and keep your chat reliable.'
+    )
+    expect(t('common.eventSubMigration.reconnectButton')).toBe('Reconnect now')
+    expect(t('common.eventSubMigration.dismissLabel')).toBe('Dismiss')
+  })
+
+  it('keeps the 403 page copy', () => {
+    expect(t('common.forbidden.heading')).toBe('403 Forbidden')
+    expect(t('common.forbidden.body')).toBe(
+      'You do not have permission to access this page. Admin privileges are required.'
+    )
+    expect(t('common.forbidden.dashboardButton')).toBe('Go to Dashboard')
+  })
+
+  it('keeps the beta warning dialog copy', () => {
+    // Two platforms, two whole sets. The source built the titles and bodies by
+    // splicing a capitalised platform name into a sentence; YouTube's copy
+    // differs from TikTok's by more than that name, so a shared template with a
+    // {platform} hole would have been a rewording.
+    expect(t('common.betaWarning.youtubeTitle')).toBe(
+      'YouTube \u2014 OAuth Verification in Progress'
+    )
+    expect(t('common.betaWarning.tiktokTitle')).toBe('TikTok \u2014 Closed Beta')
+    expect(t('common.betaWarning.youtubeBody')).toBe(
+      'YouTube integration is currently under Google OAuth verification review. We cannot add new test users during this period.'
+    )
+    expect(t('common.betaWarning.tiktokBody')).toBe(
+      "TikTok integration is currently in closed beta. If you haven't been added to the beta program yet, authentication will fail."
+    )
+    expect(t('common.betaWarning.youtubeDiscordPrompt')).toBe(
+      'Join our Discord community to stay updated on verification progress and get support:'
+    )
+    expect(t('common.betaWarning.tiktokDiscordPrompt')).toBe(
+      'To join the beta, please join our Discord community:'
+    )
+    expect(t('common.betaWarning.youtubeExistingUser')).toBe(
+      'If you were previously added as a test user, you can continue to use YouTube integration.'
+    )
+    expect(t('common.betaWarning.tiktokExistingUser')).toBe(
+      "If you're already in the beta, you can proceed with authentication."
+    )
+    expect(t('common.betaWarning.discordLink')).toBe('Join Discord Server')
+    expect(t('common.betaWarning.cancelButton')).toBe('Cancel')
+    expect(t('common.betaWarning.continueButton')).toBe('I Understand, Continue')
+  })
+})
