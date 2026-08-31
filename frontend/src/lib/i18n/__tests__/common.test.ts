@@ -229,3 +229,25 @@ describe('shared chrome copy', () => {
     expect(t('common.betaWarning.continueButton')).toBe('I Understand, Continue')
   })
 })
+
+describe('shared toast copy', () => {
+  it('keeps the try-again line used by three surfaces', () => {
+    // /dashboard, /overlays/new and the onboarding create dialog all render
+    // this as a toast description, so it is genuinely shared rather than
+    // pre-populated. dashboard.toasts.tryAgain is folded into it.
+    expect(t('common.toast.tryAgain')).toBe('Please try again.')
+  })
+
+  it('keeps the ElevenLabs fallback notice', () => {
+    // Raised by both the viewer overlay and the editor's embedded preview, so
+    // it belongs to neither surface's namespace.
+    expect(t('common.toast.elevenLabsFallback')).toBe(
+      'ElevenLabs unavailable \u2014 using browser voice.'
+    )
+  })
+
+  it('keeps the EventSub migration toasts', () => {
+    expect(t('common.eventSubMigration.connectedToast')).toBe('Twitch chat connected')
+    expect(t('common.eventSubMigration.failedToast')).toBe('Could not start the upgrade')
+  })
+})

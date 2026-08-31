@@ -1296,3 +1296,16 @@ describe('embed preview page copy', () => {
     )
   })
 })
+
+describe('overlay editor toast copy', () => {
+  it('keeps the create-overlay toasts', () => {
+    // The name is quoted in the original, with U+0022 either side.
+    expect(t('overlayEditor.toasts.created', { name: 'My Overlay' })).toBe('"My Overlay" created')
+    expect(t('overlayEditor.toasts.createFailed')).toBe('Failed to create overlay')
+  })
+
+  it('keeps the event-settings toasts', () => {
+    expect(t('overlayEditor.toasts.eventSettingsSaved')).toBe('Event settings saved')
+    expect(t('overlayEditor.toasts.eventSettingsSaveFailed')).toBe('Failed to save event settings')
+  })
+})

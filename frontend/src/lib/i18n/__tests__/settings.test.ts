@@ -456,3 +456,17 @@ describe('viewer premium page copy', () => {
     expect(t('settings.viewerPremium.signInLink')).toBe('Go to viewer sign-in →')
   })
 })
+
+describe('revocation toast copy', () => {
+  it('keeps the device revocation toasts', () => {
+    expect(t('settings.devices.revokedToast', { name: 'Stream Deck' })).toBe('Revoked Stream Deck')
+    expect(t('settings.devices.revokeFailedToast')).toBe('Could not revoke that device')
+  })
+
+  it('keeps the API token revocation toasts', () => {
+    // Same sentence shape as the device toast, deliberately not shared: the
+    // two name different things and a language may inflect the verb for each.
+    expect(t('settings.apiTokens.revokedToast', { name: 'CI token' })).toBe('Revoked CI token')
+    expect(t('settings.apiTokens.revokeFailedToast')).toBe('Could not revoke that token')
+  })
+})

@@ -832,3 +832,11 @@ describe('premium duration chooser copy', () => {
     expect(t('admin.premiumDuration.customRange', { max: 3650 })).toBe('days (1\u20133650)')
   })
 })
+
+describe('feature-flag toast copy', () => {
+  it('keeps the update failure, naming the flag', () => {
+    expect(t('admin.features.updateFailed', { flag: 'overlay_v2' })).toBe(
+      'Failed to update overlay_v2. Please try again.'
+    )
+  })
+})

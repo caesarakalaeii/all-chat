@@ -178,3 +178,9 @@ describe('create overlay dialog', () => {
     expect(t('onboarding.createDialog.submitting')).toBe('Creating…')
   })
 })
+
+describe('create overlay dialog toast copy', () => {
+  it('keeps the failure title', () => {
+    expect(t('onboarding.createDialog.failedToast')).toBe('Could not create the overlay')
+  })
+})
