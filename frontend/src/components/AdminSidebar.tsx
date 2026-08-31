@@ -39,6 +39,7 @@ import {
 import type { LucideIcon } from 'lucide-react'
 import { InfinityLogo } from '@/components/InfinityLogo'
 import { Dialog } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { cn } from '@/lib/utils'
 
@@ -140,14 +141,16 @@ function SidebarFooter({ onNavigate }: { onNavigate?: () => void }) {
         <ArrowLeft className="size-4 shrink-0" aria-hidden="true" />
         <span className="truncate">Back to app</span>
       </Link>
-      <button
+      <Button
         type="button"
         onClick={handleLogout}
-        className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-text-sub transition-colors hover:bg-surface-2/60 hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+        variant="ghost"
+        size="lg"
+        className="w-full justify-start gap-3"
       >
         <LogOut className="size-4 shrink-0" aria-hidden="true" />
         <span className="truncate">Log out</span>
-      </button>
+      </Button>
     </div>
   )
 }
@@ -206,15 +209,17 @@ export function AdminSidebar() {
 
       {/* Mobile top bar */}
       <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-border bg-nav-bg px-4 backdrop-blur-[20px] lg:hidden">
-        <button
+        <Button
           type="button"
           onClick={() => setOpen(true)}
           aria-label="Open admin menu"
           aria-expanded={open}
-          className="-ml-2 rounded-lg p-2 text-text-sub transition-colors hover:bg-surface-2 hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+          variant="ghost"
+          size="icon"
+          className="-ml-2"
         >
           <Menu className="size-5" aria-hidden="true" />
-        </button>
+        </Button>
         <SidebarBrand />
       </header>
 

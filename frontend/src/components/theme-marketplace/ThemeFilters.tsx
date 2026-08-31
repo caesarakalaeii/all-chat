@@ -25,6 +25,8 @@
 'use client'
 
 import clsx from 'clsx'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 
 interface ThemeFiltersProps {
   searchQuery: string
@@ -50,12 +52,12 @@ export default function ThemeFilters({
       {/* Search Bar */}
       <div className="flex gap-2">
         <div className="relative flex-1">
-          <input
+          <Input
             type="search"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Search themes..."
-            className="w-full rounded-lg border border-border bg-bg px-4 py-2 pl-10 text-text placeholder-text-dim transition-colors focus-visible:border-twitch focus-visible:ring-3 focus-visible:ring-twitch/50 focus-visible:outline-none"
+            className="pl-10"
             aria-label="Search themes"
           />
           <svg
@@ -75,12 +77,14 @@ export default function ThemeFilters({
 
         {/* Clear Filters Button */}
         {hasActiveFilters && (
-          <button
+          <Button
             onClick={onClearFilters}
-            className="rounded-lg border border-border bg-surface-2 px-4 py-2 font-medium whitespace-nowrap text-text transition-colors hover:bg-surface-2/80"
+            variant="secondary"
+            size="lg"
+            className="whitespace-nowrap"
           >
             Clear Filters
-          </button>
+          </Button>
         )}
       </div>
 

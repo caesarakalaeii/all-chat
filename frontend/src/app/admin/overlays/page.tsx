@@ -24,6 +24,7 @@ import clsx from 'clsx'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PlatformBadge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import { ChannelLink } from '@/components/ChannelLink'
 import { formatConnectedFor } from '@/lib/utils'
 
@@ -282,12 +283,12 @@ export default function OverlaysPage() {
 
                 {/* Search Input */}
                 <div className="mt-4 flex items-center gap-3">
-                  <input
+                  <Input
                     type="text"
                     placeholder="Search by overlay name, ID, or owner..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="focus-visible:ring-ring flex-1 rounded-lg border border-border bg-surface-2 px-4 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none"
+                    className="flex-1"
                   />
                   <button
                     type="button"

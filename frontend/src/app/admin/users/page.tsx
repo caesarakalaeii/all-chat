@@ -25,11 +25,31 @@ import clsx from 'clsx'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Input } from '@/components/ui/input'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Dialog } from '@/components/ui/dialog'
 import { toastManager } from '@/lib/toast'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { PremiumDurationChooser } from '@/components/admin/PremiumDurationChooser'
 import { UserAvatar } from '@/components/UserAvatar'
+
+type UserFilter = 'all' | 'active' | 'banned' | 'premium' | 'beta' | 'unconfigured'
+
+// One row per filter tab. Table-driven so the six tabs cannot drift apart the
+// way six hand-written <button>s did — they previously carried three different
+// active colours and duplicated the same class string six times.
+const USER_FILTERS: { value: UserFilter; label: string; title?: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'active', label: 'Active' },
+  { value: 'banned', label: 'Banned' },
+  { value: 'premium', label: 'Premium' },
+  { value: 'beta', label: 'Beta' },
+  {
+    value: 'unconfigured',
+    label: 'No setup',
+    title: 'Signed up but never configured a chat source (0 overlays or 0 sources)',
+  },
+]
 
 interface User {
   id: string
@@ -73,9 +93,7 @@ export default function UsersPage() {
   const [error, setError] = useState<string | null>(null)
   const [impersonating, setImpersonating] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
-  const [filter, setFilter] = useState<
-    'all' | 'active' | 'banned' | 'premium' | 'beta' | 'unconfigured'
-  >('all')
+  const [filter, setFilter] = useState<UserFilter>('all')
   const [showBanModal, setShowBanModal] = useState(false)
   const [userToBan, setUserToBan] = useState<User | null>(null)
   const [banReason, setBanReason] = useState('')
@@ -476,11 +494,14 @@ export default function UsersPage() {
     )
   }
 
-  const bannedCount = users.filter((u) => u.is_banned).length
-  const activeCount = users.filter((u) => !u.is_banned).length
-  const premiumCount = users.filter((u) => u.is_premium).length
-  const betaCount = users.filter((u) => u.is_beta_tester).length
-  const unconfiguredCount = users.filter((u) => u.sources_count === 0).length
+  const counts: Record<UserFilter, number> = {
+    all: users.length,
+    active: users.filter((u) => !u.is_banned).length,
+    banned: users.filter((u) => u.is_banned).length,
+    premium: users.filter((u) => u.is_premium).length,
+    beta: users.filter((u) => u.is_beta_tester).length,
+    unconfigured: users.filter((u) => u.sources_count === 0).length,
+  }
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
@@ -505,85 +526,28 @@ export default function UsersPage() {
 
                 {/* Search Input */}
                 <div className="mt-4">
-                  <input
+                  <Input
                     type="text"
                     placeholder="Search by username, display name, or platform ID..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="focus-visible:ring-ring w-full rounded-lg border border-border bg-surface-2 px-4 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none"
                   />
                 </div>
 
                 {/* Filter Tabs */}
-                <div className="mt-4 flex space-x-4 border-b border-border">
-                  <button
-                    onClick={() => setFilter('all')}
-                    className={clsx(
-                      'border-b-2 px-1 pb-2 text-sm font-medium transition-colors',
-                      filter === 'all'
-                        ? 'border-primary text-primary'
-                        : 'border-transparent text-text-sub hover:border-border hover:text-text'
-                    )}
-                  >
-                    All ({users.length})
-                  </button>
-                  <button
-                    onClick={() => setFilter('active')}
-                    className={clsx(
-                      'border-b-2 px-1 pb-2 text-sm font-medium transition-colors',
-                      filter === 'active'
-                        ? 'border-primary text-primary'
-                        : 'border-transparent text-text-sub hover:border-border hover:text-text'
-                    )}
-                  >
-                    Active ({activeCount})
-                  </button>
-                  <button
-                    onClick={() => setFilter('banned')}
-                    className={clsx(
-                      'border-b-2 px-1 pb-2 text-sm font-medium transition-colors',
-                      filter === 'banned'
-                        ? 'border-primary text-primary'
-                        : 'border-transparent text-text-sub hover:border-border hover:text-text'
-                    )}
-                  >
-                    Banned ({bannedCount})
-                  </button>
-                  <button
-                    onClick={() => setFilter('premium')}
-                    className={clsx(
-                      'border-b-2 px-1 pb-2 text-sm font-medium transition-colors',
-                      filter === 'premium'
-                        ? 'border-amber-400 text-amber-400'
-                        : 'border-transparent text-text-sub hover:border-border hover:text-text'
-                    )}
-                  >
-                    Premium ({premiumCount})
-                  </button>
-                  <button
-                    onClick={() => setFilter('beta')}
-                    className={clsx(
-                      'border-b-2 px-1 pb-2 text-sm font-medium transition-colors',
-                      filter === 'beta'
-                        ? 'border-violet-400 text-violet-400'
-                        : 'border-transparent text-text-sub hover:border-border hover:text-text'
-                    )}
-                  >
-                    Beta ({betaCount})
-                  </button>
-                  <button
-                    onClick={() => setFilter('unconfigured')}
-                    title="Signed up but never configured a chat source (0 overlays or 0 sources)"
-                    className={clsx(
-                      'border-b-2 px-1 pb-2 text-sm font-medium transition-colors',
-                      filter === 'unconfigured'
-                        ? 'border-amber-400 text-amber-400'
-                        : 'border-transparent text-text-sub hover:border-border hover:text-text'
-                    )}
-                  >
-                    No setup ({unconfiguredCount})
-                  </button>
-                </div>
+                <Tabs
+                  value={filter}
+                  onValueChange={(value) => setFilter(value as UserFilter)}
+                  className="mt-4"
+                >
+                  <TabsList variant="line" className="w-full justify-start border-b border-border">
+                    {USER_FILTERS.map((tab) => (
+                      <TabsTrigger key={tab.value} value={tab.value} title={tab.title}>
+                        {tab.label} ({counts[tab.value]})
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </Tabs>
               </div>
               <ul className="max-h-[70vh] divide-y divide-border overflow-y-auto">
                 {displayUsers.map((user) => (
@@ -624,7 +588,7 @@ export default function UsersPage() {
                                   </span>
                                 )}
                                 {user.is_banned && (
-                                  <span className="bg-destructive/10 text-destructive border-destructive/20 inline-flex items-center rounded border px-2 py-0.5 text-xs font-medium">
+                                  <span className="inline-flex items-center rounded border border-destructive/20 bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">
                                     BANNED
                                   </span>
                                 )}
@@ -1082,26 +1046,24 @@ export default function UsersPage() {
                       <div className="space-y-3">
                         <div>
                           <p className="mb-1 text-xs font-medium text-text-sub">Showcase tagline</p>
-                          <input
+                          <Input
                             type="text"
                             value={ambassadorTagline}
                             onChange={(e) => setAmbassadorTagline(e.target.value)}
                             maxLength={120}
                             placeholder="e.g. Multistreams to Twitch, YouTube and Kick"
                             aria-label="Ambassador showcase tagline"
-                            className="focus-visible:ring-ring w-full rounded-lg border border-border bg-surface-2 px-4 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none"
                           />
                         </div>
                         <div>
                           <p className="mb-1 text-xs font-medium text-text-sub">
                             Display order (lower shows first)
                           </p>
-                          <input
+                          <Input
                             type="number"
                             value={ambassadorSortOrder}
                             onChange={(e) => setAmbassadorSortOrder(e.target.value)}
                             aria-label="Ambassador display order"
-                            className="focus-visible:ring-ring w-full rounded-lg border border-border bg-surface-2 px-4 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none"
                           />
                         </div>
                         <Button
@@ -1173,14 +1135,13 @@ export default function UsersPage() {
                         <p className="mb-1 text-xs font-medium text-text-sub">
                           Showcase tagline (optional)
                         </p>
-                        <input
+                        <Input
                           type="text"
                           value={ambassadorTagline}
                           onChange={(e) => setAmbassadorTagline(e.target.value)}
                           maxLength={120}
                           placeholder="e.g. Multistreams to Twitch, YouTube and Kick"
                           aria-label="Ambassador showcase tagline"
-                          className="focus-visible:ring-ring w-full rounded-lg border border-border bg-surface-2 px-4 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none"
                         />
                       </div>
                       <Button
@@ -1205,11 +1166,11 @@ export default function UsersPage() {
                 <div className="mt-6 border-t border-border pt-6">
                   {selectedUser.is_banned ? (
                     <>
-                      <div className="bg-destructive/10 border-destructive/20 mb-3 rounded-lg border p-3">
-                        <p className="text-destructive text-sm font-medium">
+                      <div className="mb-3 rounded-lg border border-destructive/20 bg-destructive/10 p-3">
+                        <p className="text-sm font-medium text-destructive">
                           Banned: {selectedUser.banned_reason}
                         </p>
-                        <p className="text-destructive/70 mt-1 text-xs">
+                        <p className="mt-1 text-xs text-destructive/70">
                           {selectedUser.banned_at &&
                             `Banned on ${new Date(selectedUser.banned_at).toLocaleString()}`}
                         </p>
@@ -1322,7 +1283,7 @@ export default function UsersPage() {
                   )}
                   <Link
                     href={`/admin/sources?user=${selectedUser.id}`}
-                    className="text-primary mt-3 inline-block text-xs font-medium hover:underline"
+                    className="mt-3 inline-block text-xs font-medium text-primary hover:underline"
                   >
                     View this user&rsquo;s sources
                   </Link>
@@ -1375,7 +1336,7 @@ export default function UsersPage() {
               id={banReasonId}
               value={banReason}
               onChange={(e) => setBanReason(e.target.value)}
-              className="focus-visible:ring-ring w-full resize-none rounded-lg border border-border bg-surface-2 px-3 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none"
+              className="w-full resize-none rounded-lg border border-border bg-surface-2 px-3 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
               rows={3}
               placeholder="Spam, abuse, ToS violation, etc..."
             />

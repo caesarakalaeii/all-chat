@@ -28,6 +28,7 @@
 'use client'
 
 import { Suspense } from 'react'
+import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useTrackOnce } from '@/hooks/useTrackOnce'
@@ -80,12 +81,14 @@ function AuthErrorContent() {
           >
             Return to Home
           </Link>
-          <button
+          <Button
             onClick={() => window.history.back()}
-            className="block w-full rounded-lg border border-border bg-surface px-6 py-3 font-semibold text-text transition-colors hover:bg-surface-2"
+            variant="outline"
+            size="lg"
+            className="w-full"
           >
             Go Back
-          </button>
+          </Button>
         </div>
       </div>
     </div>

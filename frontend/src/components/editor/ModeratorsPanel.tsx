@@ -44,6 +44,7 @@ import { AlertDialog } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
+import { Input } from '@/components/ui/input'
 import { boundInviteAccount, delegationErrorCode, moderationApi } from '@/lib/api/moderation'
 import {
   DELEGATABLE_ACTIONS,
@@ -284,7 +285,7 @@ export function ModeratorsPanel({ overlayId }: { overlayId: string }) {
         </p>
       )}
       {rowError !== null && (
-        <p role="alert" className="text-destructive text-xs">
+        <p role="alert" className="text-xs text-destructive">
           {rowError}
         </p>
       )}
@@ -414,7 +415,7 @@ function ModeratorRow({ grant, onToggleLeg, onToggleAction, onRemove }: Moderato
                 'rounded-md border px-2 py-0.5 text-xs transition-colors focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none',
                 on
                   ? 'border-twitch/40 bg-twitch/10 text-text'
-                  : 'bg-surface-alt border-border text-text-dim'
+                  : 'border-border bg-surface-2 text-text-dim'
               )}
             >
               {ACTION_LABELS[action]}
@@ -543,7 +544,7 @@ function InviteDialog({ overlayId, open, onOpenChange }: InviteDialogProps) {
               Send this link to the person you want to moderate. It works once, expires in 7 days,
               and <strong>won&apos;t be shown again</strong> — if it gets lost, create a new invite.
             </Dialog.Description>
-            <code className="bg-surface-alt block overflow-x-auto rounded-lg border border-border p-2 text-xs break-all text-text">
+            <code className="block overflow-x-auto rounded-lg border border-border bg-surface-2 p-2 text-xs break-all text-text">
               {inviteLink}
             </code>
             <div className="flex justify-end gap-2">
@@ -564,13 +565,12 @@ function InviteDialog({ overlayId, open, onOpenChange }: InviteDialogProps) {
 
             <label className="block space-y-1">
               <span className="text-xs text-text-sub">Who is this for? (optional)</span>
-              <input
+              <Input
                 type="text"
                 value={label}
                 maxLength={120}
                 onChange={(e) => setLabel(e.target.value)}
                 placeholder="Sarah, my Twitch mod"
-                className="w-full rounded-lg border border-border bg-surface px-2 py-1 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
               />
             </label>
 
@@ -615,7 +615,7 @@ function InviteDialog({ overlayId, open, onOpenChange }: InviteDialogProps) {
             </fieldset>
 
             {gateBlocked && (
-              <div className="bg-surface-alt space-y-1 rounded-lg border border-border p-2">
+              <div className="space-y-1 rounded-lg border border-border bg-surface-2 p-2">
                 <p className="text-xs text-text-sub">
                   Delegating moderation is part of All-Chat premium. Your moderators never pay —
                   only your own plan matters.
@@ -629,7 +629,7 @@ function InviteDialog({ overlayId, open, onOpenChange }: InviteDialogProps) {
               </div>
             )}
             {error !== null && (
-              <p role="alert" className="text-destructive text-xs">
+              <p role="alert" className="text-xs text-destructive">
                 {error}
               </p>
             )}

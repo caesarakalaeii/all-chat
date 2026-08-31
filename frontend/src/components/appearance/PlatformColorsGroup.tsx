@@ -19,6 +19,7 @@
  */
 
 import React from 'react'
+import { Button } from '@/components/ui/button'
 import { RotateCcw } from 'lucide-react'
 import type { VisualSettings } from '@/lib/types/visual-settings'
 import { ColorPickerControl } from './ColorPickerControl'
@@ -51,14 +52,15 @@ export function PlatformColorsGroup({
               value={settings[p.field] ?? p.brandDefault}
               onChange={(hex) => onChange({ [p.field]: hex })}
             />
-            <button
+            <Button
               type="button"
               aria-label={`Reset ${p.label} accent`}
               onClick={() => onChange({ [p.field]: undefined })}
-              className="rounded p-1 text-text-dim transition-colors hover:text-text"
+              variant="ghost"
+              size="icon-xs"
             >
               <RotateCcw className="h-3 w-3" />
-            </button>
+            </Button>
           </div>
         )
       })}

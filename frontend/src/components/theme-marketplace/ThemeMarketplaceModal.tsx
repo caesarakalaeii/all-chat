@@ -35,6 +35,7 @@ import { useAuthStore } from '@/lib/stores/auth-store'
 import { clearCache } from '@/lib/theme-marketplace/cache'
 import { trackEvent } from '@/lib/analytics'
 import { VisuallyHidden } from '@/components/ui/visually-hidden'
+import { Button } from '@/components/ui/button'
 import type { Theme } from '@/lib/theme-marketplace/types'
 
 interface ThemeMarketplaceModalProps {
@@ -152,12 +153,14 @@ export default function ThemeMarketplaceModal({
           <div className="flex items-center gap-2">
             {/* Admin Force Refresh Button */}
             {isAdmin && (
-              <button
+              <Button
                 onClick={() => {
                   clearCache()
                   refreshThemes()
                 }}
-                className="rounded-lg p-2 text-text-dim transition-colors hover:bg-surface-2 hover:text-twitch"
+                variant="ghost"
+                size="icon"
+                className="hover:text-twitch"
                 aria-label="Force refresh themes from GitHub"
                 title="Force refresh themes (Admin)"
               >
@@ -169,7 +172,7 @@ export default function ThemeMarketplaceModal({
                     d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
                   />
                 </svg>
-              </button>
+              </Button>
             )}
 
             {/* Close Button */}

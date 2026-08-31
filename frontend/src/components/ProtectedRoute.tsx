@@ -31,6 +31,7 @@
 'use client'
 
 import { useEffect } from 'react'
+import { Button } from '@/components/ui/button'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { useHydrated } from '@/hooks/useHydrated'
@@ -82,12 +83,9 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
           <p className="mb-6 text-text-sub">
             You do not have permission to access this page. Admin privileges are required.
           </p>
-          <button
-            onClick={() => router.push('/dashboard')}
-            className="rounded-lg bg-twitch px-6 py-2 font-semibold text-bg transition hover:opacity-90"
-          >
+          <Button onClick={() => router.push('/dashboard')} size="lg">
             Go to Dashboard
-          </button>
+          </Button>
         </div>
       </div>
     )

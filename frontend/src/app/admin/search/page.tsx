@@ -31,6 +31,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Card } from '@/components/ui/card'
 import { PlatformBadge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import { UserAvatar } from '@/components/UserAvatar'
 
 const GROUP_LIMIT = 8
@@ -165,13 +166,13 @@ export default function AdminSearchPage() {
         </p>
       </div>
 
-      <input
+      <Input
         type="search"
         placeholder="Search users, overlays, sources, viewers..."
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         aria-label="Global admin search"
-        className="focus-visible:ring-ring mb-6 w-full rounded-lg border border-border bg-surface-2 px-4 py-3 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none"
+        className="mb-6"
       />
 
       {!debounced ? (
@@ -210,7 +211,7 @@ export default function AdminSearchPage() {
                       </span>
                     )}
                     {u.is_banned && (
-                      <span className="bg-destructive/10 text-destructive rounded px-2 py-0.5 text-xs font-medium">
+                      <span className="rounded bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">
                         Banned
                       </span>
                     )}

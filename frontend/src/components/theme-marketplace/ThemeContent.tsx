@@ -19,6 +19,7 @@
  */
 
 import React from 'react'
+import { Button } from '@/components/ui/button'
 import ThemeCard from './ThemeCard'
 import ThemeFilters from './ThemeFilters'
 import { useThemeMarketplace } from '@/hooks/useThemeMarketplace'
@@ -97,12 +98,13 @@ export function ThemeContent({ onApply, isAdmin = false }: ThemeContentProps): R
               Showing {filteredCount} of {totalCount} themes
             </p>
             {isAdmin && (
-              <button
+              <Button
                 onClick={() => {
                   clearCache()
                   refreshThemes()
                 }}
-                className="hover:bg-subtle flex items-center gap-1 rounded px-2 py-1 text-xs text-text-dim transition-colors hover:text-text"
+                variant="ghost"
+                size="xs"
                 title="Force refresh themes from GitHub (Admin)"
               >
                 <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -114,7 +116,7 @@ export function ThemeContent({ onApply, isAdmin = false }: ThemeContentProps): R
                   />
                 </svg>
                 Sync
-              </button>
+              </Button>
             )}
           </div>
           <div className="grid grid-cols-1 gap-6 @[480px]:grid-cols-2 @[768px]:grid-cols-3">

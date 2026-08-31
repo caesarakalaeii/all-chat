@@ -28,6 +28,7 @@
 'use client'
 
 import { Dialog } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
 import { DiscordIcon } from '@/components/icons/DiscordIcon'
 import { DISCORD_INVITE_URL } from '@/lib/constants'
 
@@ -103,12 +104,9 @@ export function BetaWarning({ platform, onCancel, onContinue }: BetaWarningProps
 
         {/* Action buttons */}
         <div className="mt-6 flex justify-end gap-3">
-          <button
-            onClick={onCancel}
-            className="rounded-lg bg-surface-2 px-4 py-2 font-medium text-text transition-opacity hover:opacity-80"
-          >
+          <Button onClick={onCancel} variant="secondary" size="lg">
             Cancel
-          </button>
+          </Button>
           <button
             onClick={onContinue}
             className="rounded-lg bg-yellow-600 px-4 py-2 font-medium text-white transition-opacity hover:opacity-80"

@@ -218,27 +218,29 @@ export function OnboardingChecklist({
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <button
+          <Button
             type="button"
             onClick={() => minimize(!minimized)}
             aria-expanded={!minimized}
             aria-label={minimized ? 'Expand setup guide' : 'Minimize setup guide'}
-            className="flex h-6 w-6 items-center justify-center rounded-md text-text-sub hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+            variant="ghost"
+            size="icon-xs"
           >
             {minimized ? (
               <ChevronUp className="h-4 w-4" aria-hidden="true" />
             ) : (
               <ChevronDown className="h-4 w-4" aria-hidden="true" />
             )}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={() => setConfirmDismiss(true)}
             aria-label="Dismiss setup guide"
-            className="flex h-6 w-6 items-center justify-center rounded-md text-text-sub hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+            variant="ghost"
+            size="icon-xs"
           >
             <X className="h-4 w-4" aria-hidden="true" />
-          </button>
+          </Button>
         </div>
       </header>
 

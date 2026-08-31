@@ -37,6 +37,7 @@
 'use client'
 
 import clsx from 'clsx'
+import { Button } from '@/components/ui/button'
 import { BarChart3, ExternalLink, Info, RotateCw, SlidersHorizontal } from 'lucide-react'
 import Link from 'next/link'
 import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -799,15 +800,16 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
           />
           <OverlayViewThemeToggle light={light} onToggle={() => setLight((v) => !v)} />
           {isOwner && hasYouTubeSource && (
-            <button
+            <Button
               onClick={handleYouTubeRediscover}
               disabled={rediscovering}
               title="Force YouTube to re-discover the live stream — use if chat stopped after a stream crash or restart"
-              className="flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-sub transition-colors hover:border-border-md hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+              variant="outline"
+              size="sm"
             >
               <RotateCw className={clsx('h-3.5 w-3.5', rediscovering && 'animate-spin')} />
               Re-discover YouTube
-            </button>
+            </Button>
           )}
           <Link
             href={`/overlay/${id}`}
@@ -898,7 +900,7 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
               {s.channel_name ? ` ${s.channel_name}` : ''}.
             </span>
             {s.platform === 'twitch' || s.platform === 'kick' || s.platform === 'youtube' ? (
-              <button
+              <Button
                 type="button"
                 onClick={() =>
                   void connectAsModerator(
@@ -906,10 +908,11 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
                     capabilities?.delegated_actions ?? []
                   )
                 }
-                className="font-medium text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                variant="link"
+                className="h-auto p-0 font-medium"
               >
                 Connect {s.platform}
-              </button>
+              </Button>
             ) : null}
           </div>
         ))}
@@ -924,13 +927,14 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
             Link your Discord account to moderate Discord here — All-Chat checks your own server
             permissions before acting.
           </span>
-          <button
+          <Button
             type="button"
             onClick={() => void linkDiscordAccount()}
-            className="font-medium text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+            variant="link"
+            className="h-auto p-0 font-medium"
           >
             Link Discord
-          </button>
+          </Button>
         </div>
       )}
 
@@ -955,15 +959,16 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
             s.platform === 'kick' ||
             s.platform === 'youtube' ||
             s.platform === 'discord' ? (
-              <button
+              <Button
                 type="button"
                 onClick={() => enableModeration(s.platform)}
-                className="font-medium text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                variant="link"
+                className="h-auto p-0 font-medium"
               >
                 {s.platform === 'discord'
                   ? 'Re-invite the bot'
                   : 'Enable moderation & chat sending'}
-              </button>
+              </Button>
             ) : (
               <span className="text-text-dim">(coming soon for {s.platform})</span>
             )}
@@ -982,13 +987,14 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
             an AutoMod &ldquo;manage&rdquo; permission to send us held messages at all — All-Chat
             only reads them; there are no approve/deny buttons yet.
           </span>
-          <button
+          <Button
             type="button"
             onClick={() => void enableModLog()}
-            className="font-medium text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+            variant="link"
+            className="h-auto p-0 font-medium"
           >
             Show moderation &amp; AutoMod events
-          </button>
+          </Button>
         </div>
       )}
 
@@ -1004,7 +1010,7 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
             Your {reauthPrompt.platform} moderation permission expired or was never granted —
             re-authorize to keep moderating {isOwner ? 'from your overlay' : 'here'}.
           </span>
-          <button
+          <Button
             type="button"
             onClick={() => {
               const platform = reauthPrompt.platform
@@ -1018,14 +1024,15 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
               }
               void enableModeration(platform)
             }}
-            className="font-medium text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+            variant="link"
+            className="h-auto p-0 font-medium"
           >
             {reauthPrompt.platform === 'discord'
               ? 'Re-invite the bot'
               : isModerator
                 ? `Reconnect ${reauthPrompt.platform}`
                 : 'Re-authorize moderation & chat sending'}
-          </button>
+          </Button>
         </div>
       )}
 

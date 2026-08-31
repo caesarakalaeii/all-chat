@@ -423,12 +423,14 @@ function SourceCard({
               </div>
             )}
             {isTwitch && !source.chat_via_eventsub && isOwnChannel && onReconnectChat && (
-              <button
+              <Button
                 onClick={onReconnectChat}
-                className="mt-1 inline-flex items-center gap-1 rounded text-xs text-text-sub underline-offset-2 transition-colors hover:text-text hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                variant="link"
+                size="xs"
+                className="mt-1 h-auto p-0 text-text-sub hover:text-text"
               >
                 Reconnect to enable chat
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -437,7 +439,7 @@ function SourceCard({
             <Button
               variant="outline"
               size="sm"
-              className="text-destructive border-destructive/40 hover:bg-destructive/10 text-xs"
+              className="border-destructive/40 text-xs text-destructive hover:bg-destructive/10"
               onClick={() => onRevoke(source)}
             >
               Revoke
@@ -446,12 +448,14 @@ function SourceCard({
           <Dialog.Root open={confirmOpen} onOpenChange={setConfirmOpen}>
             <Dialog.Trigger
               render={
-                <button
-                  className="hover:text-destructive rounded text-text-sub transition-colors focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  className="hover:text-destructive"
                   aria-label={`Remove ${source.channel_name || source.channel_id}`}
                 >
                   <X className="size-4" />
-                </button>
+                </Button>
               }
             />
             <Dialog.Content>
@@ -478,23 +482,27 @@ function SourceCard({
       </div>
       {/* Configure relay button — Discord only */}
       {isDiscord && onConfigureRelay && (
-        <button
-          className="mt-2 flex items-center gap-1 rounded text-xs text-text-sub transition-colors hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+        <Button
+          variant="ghost"
+          size="xs"
+          className="mt-2 px-0"
           onClick={() => onConfigureRelay(source)}
         >
           <ChevronRight className="size-3" />
           Configure relay
-        </button>
+        </Button>
       )}
       {/* Stream selection button — YouTube only */}
       {isYoutube && onConfigureStreamSelect && (
-        <button
-          className="mt-2 flex items-center gap-1 rounded text-xs text-text-sub transition-colors hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+        <Button
+          variant="ghost"
+          size="xs"
+          className="mt-2 px-0"
           onClick={() => onConfigureStreamSelect(source)}
         >
           <ChevronRight className="size-3" />
           Stream selection
-        </button>
+        </Button>
       )}
     </Card>
   )
@@ -949,7 +957,7 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
 
   if (loadError) {
     return (
-      <p className="text-destructive text-xs">
+      <p className="text-xs text-destructive">
         Could not load engagement settings. Reload the page to try again.
       </p>
     )
@@ -1012,7 +1020,7 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
             <label htmlFor={`earn-${f.key}`} className="mb-1 block text-xs text-text-sub">
               {f.label}
             </label>
-            <input
+            <Input
               id={`earn-${f.key}`}
               type="number"
               min={0}
@@ -1020,10 +1028,8 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
               value={numbers[f.key]}
               disabled={f.comingSoon}
               onChange={(e) => setNumbers({ ...numbers, [f.key]: e.target.value })}
-              className={cn(
-                'w-full rounded-md border border-border bg-bg px-2 py-1 text-xs text-text',
-                f.comingSoon && 'opacity-50'
-              )}
+              size="sm"
+              className={cn(f.comingSoon && 'opacity-50')}
             />
             <p className="mt-0.5 text-[11px] text-text-sub">
               {f.hint}
@@ -1260,9 +1266,10 @@ function AddSourceForm({
 
       {/* OAuth buttons — fetch auth_url then redirect, same pattern as login */}
       <div className="grid grid-cols-1 gap-2">
-        <button
+        <Button
           onClick={() => startOAuth(`/api/v1/auth/twitch/add-source/${overlayId}`)}
-          className="flex items-center gap-2.5 rounded-lg bg-twitch px-4 py-2.5 text-sm font-semibold text-bg transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
+          size="lg"
+          className="gap-2.5"
         >
           <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
             <path
@@ -1271,11 +1278,12 @@ function AddSourceForm({
             />
           </svg>
           Connect Twitch
-        </button>
+        </Button>
 
-        <button
+        <Button
           onClick={() => startOAuth(`/api/v1/auth/youtube/add-source/${overlayId}`)}
-          className="flex items-center gap-2.5 rounded-lg px-4 py-2.5 text-sm font-semibold text-bg transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
+          size="lg"
+          className="gap-2.5 text-bg"
           style={
             { backgroundColor: '#FF0000', '--tw-ring-color': '#FF0000' } as React.CSSProperties
           }
@@ -1287,11 +1295,12 @@ function AddSourceForm({
             />
           </svg>
           Connect YouTube
-        </button>
+        </Button>
 
-        <button
+        <Button
           onClick={() => startOAuth(`/api/v1/auth/kick/add-source/${overlayId}`)}
-          className="flex items-center gap-2.5 rounded-lg px-4 py-2.5 text-sm font-semibold text-bg transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-kick focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
+          size="lg"
+          className="gap-2.5 text-bg"
           style={{ backgroundColor: 'var(--color-kick)' }}
         >
           <svg className="h-4 w-4 shrink-0" viewBox="0 0 512 512" aria-hidden="true">
@@ -1301,13 +1310,14 @@ function AddSourceForm({
             />
           </svg>
           Connect Kick
-        </button>
+        </Button>
 
         {/* TikTok — no OAuth; the button matches the OAuth buttons but opens a
             username dialog, since TikTok Live is keyed on a creator handle. */}
-        <button
+        <Button
           onClick={() => setTiktokDialogOpen(true)}
-          className="flex items-center gap-2.5 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
+          size="lg"
+          className="gap-2.5 text-white"
           style={
             { backgroundColor: '#010101', '--tw-ring-color': '#69C9D0' } as React.CSSProperties
           }
@@ -1319,7 +1329,7 @@ function AddSourceForm({
             />
           </svg>
           Connect TikTok
-        </button>
+        </Button>
 
         {/* Discord — guild dialog or settings prompt */}
         {guildsLoaded && guilds.length === 0 ? (
@@ -1331,9 +1341,10 @@ function AddSourceForm({
             first to add Discord sources.
           </p>
         ) : (
-          <button
+          <Button
             onClick={handleDiscordButtonClick}
-            className="flex items-center gap-2.5 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
+            size="lg"
+            className="gap-2.5 text-white"
             style={
               { backgroundColor: '#5865F2', '--tw-ring-color': '#5865F2' } as React.CSSProperties
             }
@@ -1346,7 +1357,7 @@ function AddSourceForm({
               />
             </svg>
             Connect Discord
-          </button>
+          </Button>
         )}
       </div>
 
@@ -1376,10 +1387,12 @@ function AddSourceForm({
           {discordStep === 1 && (
             <div className="mt-3 space-y-2">
               {guilds.map((guild) => (
-                <button
+                <Button
                   key={guild.guild_id}
                   onClick={() => handleSelectGuild(guild)}
-                  className="flex w-full items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-text transition-colors hover:bg-surface-2 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                  variant="outline"
+                  size="lg"
+                  className="w-full justify-start gap-3"
                 >
                   {guild.guild_icon ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -1395,7 +1408,7 @@ function AddSourceForm({
                   )}
                   <span className="truncate font-medium">{guild.guild_name}</span>
                   <ChevronRight className="ml-auto size-4 shrink-0 text-text-sub" />
-                </button>
+                </Button>
               ))}
             </div>
           )}
@@ -2938,7 +2951,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
         <AppNav />
         <div className="flex h-[calc(100vh-60px)] items-center justify-center">
           <div className="text-center">
-            <p className="text-destructive mb-4 text-lg">Overlay not found</p>
+            <p className="mb-4 text-lg text-destructive">Overlay not found</p>
             <Button variant="outline" onClick={() => router.push('/dashboard')}>
               Return to Dashboard
             </Button>
@@ -2965,13 +2978,15 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           {/* 1. Header */}
           <div className="flex items-start justify-between">
             <div>
-              <button
+              <Button
                 onClick={() => router.push('/dashboard')}
-                className="mb-1 flex items-center gap-1 rounded text-sm text-text-sub hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                variant="ghost"
+                size="sm"
+                className="mb-1 px-0"
               >
                 <ChevronLeft className="size-4" />
                 Back
-              </button>
+              </Button>
               <h1 className="text-xl font-bold text-text">{overlay.name}</h1>
               {overlay.description && (
                 <p className="mt-0.5 text-sm text-text-sub">{overlay.description}</p>
@@ -3023,12 +3038,14 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           <Dialog.Root>
             <Dialog.Trigger
               render={
-                <button
+                <Button
                   type="button"
-                  className="mx-auto block text-xs text-text-sub underline-offset-2 hover:text-text hover:underline"
+                  variant="link"
+                  size="xs"
+                  className="mx-auto h-auto p-0 text-text-sub hover:text-text"
                 >
                   How do I add this to OBS?
-                </button>
+                </Button>
               }
             />
             <Dialog.Content size="sm">
@@ -3072,7 +3089,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="hover:text-destructive shrink-0 text-xs text-text-sub"
+                  className="shrink-0 text-xs text-text-sub hover:text-destructive"
                   onClick={handleUnsetExtensionOverlay}
                 >
                   Deactivate
@@ -3139,7 +3156,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                 <label htmlFor="share-recipient" className="mb-1 block text-xs text-text-sub">
                   Twitch username
                 </label>
-                <input
+                <Input
                   id="share-recipient"
                   ref={shareInputRef}
                   type="text"
@@ -3147,7 +3164,6 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                   onChange={(e) => setShareRecipient(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSendShareRequest()}
                   placeholder="e.g. somestreamer"
-                  className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text placeholder:text-text-sub focus-visible:ring-2 focus-visible:ring-twitch/50 focus-visible:outline-none"
                   disabled={shareLoading}
                 />
               </div>
@@ -3188,13 +3204,15 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                   {activeSection === 'theme' && (
                     <div>
                       <ThemeContent onApply={handleThemeApply} isAdmin={user?.is_admin === true} />
-                      <button
+                      <Button
                         type="button"
-                        className="mt-3 text-xs text-text-sub underline-offset-2 hover:text-text hover:underline"
+                        variant="link"
+                        size="xs"
+                        className="mt-3 h-auto p-0 text-text-sub hover:text-text"
                         onClick={handleResetToTheme}
                       >
                         Reset to theme defaults
-                      </button>
+                      </Button>
                     </div>
                   )}
 
@@ -3379,14 +3397,16 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           <h3 className="mb-3 text-sm font-medium text-text">Shared Overlays</h3>
                           <div className="space-y-2">
                             {acceptedShares.map((share) => (
-                              <button
+                              <Button
                                 key={share.share_id}
                                 onClick={() => handleAddSharedOverlay(share)}
-                                className="flex w-full items-center justify-between rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text transition-colors hover:bg-surface-2"
+                                variant="outline"
+                                size="lg"
+                                className="w-full justify-between"
                               >
                                 <span>{share.sender_display_name}&apos;s overlay</span>
                                 <span className="text-xs text-twitch">+ Add</span>
-                              </button>
+                              </Button>
                             ))}
                           </div>
                         </div>
@@ -3627,7 +3647,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                             </div>
                           )}
                           <div className="flex gap-2">
-                            <input
+                            <Input
                               type="text"
                               value={seventvOverrideInput}
                               onChange={(e) => {
@@ -3639,7 +3659,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                                   ? 'Paste a new ID/URL to replace…'
                                   : 'https://7tv.app/users/...'
                               }
-                              className="flex-1 rounded-md border border-border bg-bg px-2 py-1 text-xs text-text"
+                              className="flex-1"
                             />
                             <Button
                               type="button"
@@ -3850,12 +3870,11 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           >
                             Display Name
                           </label>
-                          <input
+                          <Input
                             id={`${mockFieldId}-display-name`}
                             type="text"
                             value={mockForm.displayName}
                             onChange={(e) => handleMockInputChange('displayName', e.target.value)}
-                            className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
                           />
                         </div>
                         <div>
@@ -3865,12 +3884,11 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           >
                             Username
                           </label>
-                          <input
+                          <Input
                             id={`${mockFieldId}-username`}
                             type="text"
                             value={mockForm.username}
                             onChange={(e) => handleMockInputChange('username', e.target.value)}
-                            className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
                           />
                         </div>
                       </div>
@@ -3882,13 +3900,12 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           >
                             Avatar URL
                           </label>
-                          <input
+                          <Input
                             id={`${mockFieldId}-avatar-url`}
                             type="text"
                             value={mockForm.avatarUrl}
                             onChange={(e) => handleMockInputChange('avatarUrl', e.target.value)}
                             placeholder="https://..."
-                            className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
                           />
                         </div>
                         <div>
@@ -3965,7 +3982,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                       <Button
                         type="button"
                         variant="outline"
-                        className="border-destructive/50 text-destructive hover:bg-destructive/10 w-full"
+                        className="w-full border-destructive/50 text-destructive hover:bg-destructive/10"
                         onClick={() => setShowResetConfirm(true)}
                         disabled={isResetting}
                       >

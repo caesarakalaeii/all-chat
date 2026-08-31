@@ -20,7 +20,7 @@
 
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import React from 'react'
-import { render, screen, fireEvent, cleanup, waitFor, act } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup, waitFor, act, within } from '@testing-library/react'
 
 // Mock @/lib/toast BEFORE importing the component under test. The mock exposes
 // toastManager.add so TTSGroup's `toastManager.add({ title, type })` calls
@@ -677,8 +677,10 @@ describe('TTSGroup', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: /^Regenerate URL$/ }))
     const dialog = screen.getByRole('alertdialog')
-    // The destructive confirm button is the second Regenerate URL button, inside the dialog.
-    const confirmBtn = dialog.querySelector('button.bg-red-500\\/10') as HTMLButtonElement
+    // Selected by accessible name, NOT by a utility class: styling classes move
+    // whenever a control adopts a design-system primitive, and a test that
+    // asserts on them breaks for a reason that has nothing to do with behaviour.
+    const confirmBtn = within(dialog).getByRole('button', { name: /^Regenerate URL$/ })
     expect(confirmBtn).not.toBeNull()
     await act(async () => {
       fireEvent.click(confirmBtn)

@@ -58,6 +58,66 @@
      --color-text-sub. Locked by src/app/__tests__/token-contrast.test.ts. */
   --color-text-dim: oklch(0.575 0.008 270);
 
+  /* Status colors. Absolute oklch rather than aliases: none of the neutral or
+     platform hues carry the right meaning, and these are read as TEXT on all
+     three backdrops (`text-destructive` on a form error, `text-warning` on a
+     quota banner), so each is tuned to clear 4.5:1 against the lightest of
+     them (--color-surface-2) rather than only against --color-bg.
+     Locked by src/app/__tests__/token-contrast.test.ts.
+     They exist so nothing has to reach for a raw palette class again — see
+     the "no raw palette colors" rule in frontend/DESIGN_SYSTEM.md. */
+  --color-destructive: oklch(0.66 0.19 25); /* #f05653 */
+  --color-success: oklch(0.76 0.17 152); /* #47cf79 */
+  --color-warning: oklch(0.8 0.15 80); /* #f0b135 */
+  --color-info: oklch(0.75 0.13 240); /* #55b8f8 */
+
+  /* --------------------------------------------------
+     TIER 2b: SHADCN COMPATIBILITY LAYER (ADR-0056)
+
+     shadcn registry components are written against a fixed token vocabulary
+     (`bg-primary`, `text-muted-foreground`, `border-input`, `ring-ring`, …).
+     This project names its tokens differently (bg / surface / text / text-sub),
+     so before this block every one of those utilities matched no token and
+     Tailwind emitted NOTHING for it — a silent failure with no build error and
+     no lint error. `ui/button.tsx` shipped with 27 such classes and therefore
+     had no background at all, and `text-destructive` rendered error copy in
+     ordinary body color in 35 places.
+
+     Aliasing is deliberate, and one-directional: the tokens above stay the
+     source of truth and the names below are a translation of them, so a
+     component pasted from the registry works unedited while the design system
+     keeps a single palette. Do not give an alias its own color value — that
+     forks the palette, which is the thing this block exists to prevent.
+
+     Every mapping here is asserted in src/app/__tests__/token-contrast.test.ts.
+     -------------------------------------------------- */
+  --color-background: var(--color-bg);
+  --color-foreground: var(--color-text);
+  --color-card: var(--color-surface);
+  --color-card-foreground: var(--color-text);
+  /* Popover sits on --color-surface, NOT --color-surface-2, so that
+     --color-accent (the shadcn hover/selected background, surface-2) reads as
+     a visible step ON TOP of it. Pointing both at surface-2 would make every
+     menu-item hover invisible. */
+  --color-popover: var(--color-surface);
+  --color-popover-foreground: var(--color-text);
+  --color-primary: var(--color-twitch);
+  --color-primary-foreground: var(--color-bg);
+  --color-secondary: var(--color-surface-2);
+  --color-secondary-foreground: var(--color-text);
+  --color-muted: var(--color-surface-2);
+  --color-muted-foreground: var(--color-text-sub);
+  /* shadcn's "accent" is not a brand accent — it is the hover/selected
+     background for menu items, list rows and toggles. */
+  --color-accent: var(--color-surface-2);
+  --color-accent-foreground: var(--color-text);
+  --color-destructive-foreground: var(--color-bg);
+  /* Input border. --color-border (6% white) is too faint to read as an edge on
+     a control the user is meant to click into; --color-border-md (10%) is the
+     tier the existing hand-rolled inputs already use. */
+  --color-input: var(--color-border-md);
+  --color-ring: var(--color-twitch);
+
   /* --------------------------------------------------
      TIER 3: COMPONENT TOKENS (specific-use)
      -------------------------------------------------- */

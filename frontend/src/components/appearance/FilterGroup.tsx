@@ -19,6 +19,8 @@
  */
 
 import React, { useState } from 'react'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 import { X } from 'lucide-react'
 import { ToggleSwitch } from './ToggleSwitch'
 import { SliderControl } from './SliderControl'
@@ -81,7 +83,7 @@ function TagInput({
       {tags.map((tag) => (
         <span
           key={tag}
-          className="bg-surface-alt flex items-center gap-1 rounded px-2 py-0.5 text-xs text-text"
+          className="flex items-center gap-1 rounded bg-surface-2 px-2 py-0.5 text-xs text-text"
         >
           {tag}
           <button type="button" onClick={() => onRemove(tag)} aria-label={`Remove ${tag}`}>
@@ -89,10 +91,13 @@ function TagInput({
           </button>
         </span>
       ))}
-      <input
+      <Input
+        size="sm"
         className={
+          // This input sits INSIDE the bordered chip row, so it drops the
+          // primitive's own border and fill — that is the whole override.
           // eslint-disable-next-line tailwindcss/no-unnecessary-arbitrary-value -- px is intentional here: this is a fixed-size caret floor for the tag input, sized against the customiser panel rather than the 12px label text beside it, sized to the layout it sits in rather than to the reading text, so it must not grow with the root font size the way the suggested rem-relative utility would
-          'min-w-[120px] flex-1 bg-transparent text-xs text-text outline-none placeholder:text-text-dim'
+          'min-w-[120px] flex-1 border-0 bg-transparent focus-visible:ring-0'
         }
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
@@ -143,13 +148,15 @@ export function FilterGroup({ filterSettings, onChange }: FilterGroupProps): Rea
           onRemove={handleRemoveUser}
           placeholder="Type username, press Enter"
         />
-        <button
+        <Button
           type="button"
-          className="mt-1 text-xs text-twitch hover:underline"
+          variant="link"
+          size="xs"
+          className="mt-1 h-auto p-0"
           onClick={handleAddCommonBots}
         >
           Add common bots
-        </button>
+        </Button>
       </div>
       <div>
         <p className="mb-1 text-sm text-text-sub">Blocked keywords</p>

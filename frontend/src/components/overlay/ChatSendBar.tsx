@@ -19,6 +19,8 @@
  */
 
 import clsx from 'clsx'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 import { Lock, Send } from 'lucide-react'
 import { useId, useMemo, useState } from 'react'
 
@@ -311,7 +313,7 @@ export function ChatSendBar({ sources, onEnable, onReauth }: ChatSendBarProps) {
           <label htmlFor={inputId} className="sr-only">
             Chat message
           </label>
-          <input
+          <Input
             id={inputId}
             type="text"
             value={text}
@@ -320,16 +322,12 @@ export function ChatSendBar({ sources, onEnable, onReauth }: ChatSendBarProps) {
             disabled={sending}
             placeholder={selection.kind === 'all' ? 'Message all platforms…' : 'Send a message…'}
             autoComplete="off"
-            className="min-w-0 flex-1 rounded-lg border border-border bg-bg px-3 py-1.5 text-sm text-text placeholder:text-text-dim focus-visible:border-border-md focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none disabled:opacity-60"
+            className="min-w-0 flex-1"
           />
-          <button
-            type="submit"
-            disabled={!canSubmit}
-            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-twitch px-3 py-1.5 text-xs font-semibold text-bg transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-          >
+          <Button type="submit" disabled={!canSubmit} size="xs" className="shrink-0">
             <Send className="h-3.5 w-3.5" />
             Send
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -347,37 +345,40 @@ export function ChatSendBar({ sources, onEnable, onReauth }: ChatSendBarProps) {
         >
           <span>{feedback.text}</span>
           {feedback.kind === 'error' && feedback.action === 'enable' && (
-            <button
+            <Button
               type="button"
               onClick={() => feedback.platform && onEnable(feedback.platform)}
-              className="font-semibold text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+              variant="link"
+              className="h-auto p-0 font-semibold"
             >
               Enable sending
-            </button>
+            </Button>
           )}
           {feedback.kind === 'error' && feedback.action === 'reauth' && (
-            <button
+            <Button
               type="button"
               onClick={() => onReauth(feedback.platform)}
-              className="font-semibold text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+              variant="link"
+              className="h-auto p-0 font-semibold"
             >
               Reconnect
-            </button>
+            </Button>
           )}
           {feedback.kind === 'partial' &&
             feedback.actions?.map((a) => (
-              <button
+              <Button
                 key={`${a.platform}-${a.action}`}
                 type="button"
                 onClick={() =>
                   a.action === 'reauth' ? onReauth(a.platform) : onEnable(a.platform)
                 }
-                className="font-semibold text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                variant="link"
+                className="h-auto p-0 font-semibold"
               >
                 {a.action === 'reauth'
                   ? `Reconnect ${platformLabel(a.platform)}`
                   : `Enable ${platformLabel(a.platform)}`}
-              </button>
+              </Button>
             ))}
         </div>
       )}

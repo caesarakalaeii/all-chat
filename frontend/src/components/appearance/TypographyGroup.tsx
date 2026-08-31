@@ -19,6 +19,7 @@
  */
 
 import React, { useId } from 'react'
+import { Input } from '@/components/ui/input'
 import { Select } from '@base-ui/react/select'
 import type { VisualSettings } from '@/lib/types/visual-settings'
 import { FontFamilyCombobox } from './FontFamilyCombobox'
@@ -136,7 +137,7 @@ export function TypographyGroup({
                     <Select.Item
                       key={opt.value}
                       value={opt.value}
-                      className="hover:bg-subtle data-[highlighted]:bg-subtle flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-text"
+                      className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-text hover:bg-surface-2 data-[highlighted]:bg-surface-2"
                     >
                       <Select.ItemIndicator className="w-4">
                         <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
@@ -158,7 +159,7 @@ export function TypographyGroup({
         <label htmlFor={`${fieldId}-body-size`} className="w-28 shrink-0 text-sm text-text-sub">
           Body Size
         </label>
-        <input
+        <Input
           id={`${fieldId}-body-size`}
           type="number"
           min={10}
@@ -166,7 +167,7 @@ export function TypographyGroup({
           value={visualSettings.fontSize?.replace('px', '') ?? ''}
           onChange={(e) => onChange({ fontSize: `${e.target.value}px` })}
           aria-describedby={`${fieldId}-body-size-unit`}
-          className="w-16 rounded border border-border bg-bg px-2 py-1 text-sm text-text focus-visible:ring-1 focus-visible:ring-border focus-visible:outline-none"
+          className="w-16"
         />
         <span id={`${fieldId}-body-size-unit`} className="text-sm text-text-dim">
           px
@@ -178,13 +179,13 @@ export function TypographyGroup({
         <label htmlFor={`${fieldId}-username-size`} className="w-28 shrink-0 text-sm text-text-sub">
           Username Size
         </label>
-        <input
+        <Input
           id={`${fieldId}-username-size`}
           type="number"
           value={visualSettings.usernameFontSize?.replace('px', '') ?? ''}
           onChange={(e) => onChange({ usernameFontSize: `${e.target.value}px` })}
           aria-describedby={`${fieldId}-username-size-unit`}
-          className="w-16 rounded border border-border bg-bg px-2 py-1 text-sm text-text focus-visible:ring-1 focus-visible:ring-border focus-visible:outline-none"
+          className="w-16"
         />
         <span id={`${fieldId}-username-size-unit`} className="text-sm text-text-dim">
           px
@@ -199,13 +200,13 @@ export function TypographyGroup({
         >
           Timestamp Size
         </label>
-        <input
+        <Input
           id={`${fieldId}-timestamp-size`}
           type="number"
           value={visualSettings.timestampFontSize?.replace('px', '') ?? ''}
           onChange={(e) => onChange({ timestampFontSize: `${e.target.value}px` })}
           aria-describedby={`${fieldId}-timestamp-size-unit`}
-          className="w-16 rounded border border-border bg-bg px-2 py-1 text-sm text-text focus-visible:ring-1 focus-visible:ring-border focus-visible:outline-none"
+          className="w-16"
         />
         <span id={`${fieldId}-timestamp-size-unit`} className="text-sm text-text-dim">
           px

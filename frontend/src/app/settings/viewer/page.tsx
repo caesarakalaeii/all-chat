@@ -23,6 +23,7 @@ import Link from 'next/link'
 import { AppNav } from '@/components/AppNav'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { buildGradientCSS } from '@/lib/utils/gradient'
 import { cn } from '@/lib/utils'
 import { safeExternalRedirect } from '@/lib/auth/redirect-allowlist'
@@ -131,10 +132,7 @@ function UnauthenticatedState() {
             viewer identity.
           </p>
           <div className="flex flex-col gap-3 sm:flex-row">
-            <button
-              onClick={() => viewerLogin('twitch')}
-              className="flex items-center gap-2.5 rounded-lg bg-twitch px-6 py-3 font-semibold text-bg transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
-            >
+            <Button onClick={() => viewerLogin('twitch')} size="lg" className="gap-2.5 px-6 py-3">
               <svg
                 className="h-5 w-5 shrink-0"
                 viewBox="0 0 24 24"
@@ -147,10 +145,11 @@ function UnauthenticatedState() {
                 />
               </svg>
               Sign in with Twitch
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => viewerLogin('youtube')}
-              className="flex items-center gap-2.5 rounded-lg px-6 py-3 font-semibold text-bg transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
+              size="lg"
+              className="gap-2.5 px-6 py-3 text-bg"
               style={{ backgroundColor: '#FF0000', ['--tw-ring-color' as string]: '#FF0000' }}
             >
               <svg
@@ -165,10 +164,11 @@ function UnauthenticatedState() {
                 />
               </svg>
               Sign in with YouTube
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => viewerLogin('kick')}
-              className="flex items-center gap-2.5 rounded-lg px-6 py-3 font-semibold text-bg transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-kick focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
+              size="lg"
+              className="gap-2.5 px-6 py-3 text-bg"
               style={{ backgroundColor: 'var(--color-kick)' }}
             >
               <svg
@@ -183,7 +183,7 @@ function UnauthenticatedState() {
                 />
               </svg>
               Sign in with Kick
-            </button>
+            </Button>
           </div>
         </Card>
       </main>
@@ -329,7 +329,7 @@ function ColorGradientCard({ claims }: { claims: ViewerJWTClaims }) {
           className={cn(
             'px-4 py-2 text-sm font-medium transition-colors',
             activeTab === 'solid'
-              ? 'border-primary border-b-2 text-text'
+              ? 'border-b-2 border-primary text-text'
               : 'text-text-sub hover:text-text'
           )}
         >
@@ -343,7 +343,7 @@ function ColorGradientCard({ claims }: { claims: ViewerJWTClaims }) {
           className={cn(
             'flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors',
             activeTab === 'gradient'
-              ? 'border-primary border-b-2 text-text'
+              ? 'border-b-2 border-primary text-text'
               : 'text-text-sub hover:text-text',
             !claims.is_premium && 'cursor-not-allowed opacity-50'
           )}
@@ -377,11 +377,11 @@ function ColorGradientCard({ claims }: { claims: ViewerJWTClaims }) {
               className="h-10 w-10 cursor-pointer rounded border border-border bg-transparent"
               aria-label="Name color picker"
             />
-            <input
+            <Input
               type="text"
               value={nameColor}
               onChange={(e) => debouncedSaveColor(e.target.value)}
-              className="w-28 rounded border border-border bg-surface-2 px-2 py-1 font-mono text-sm text-text"
+              className="w-28 font-mono"
               aria-label="Name color hex value"
               maxLength={7}
             />
@@ -422,7 +422,7 @@ function ColorGradientCard({ claims }: { claims: ViewerJWTClaims }) {
                   }}
                   className="h-8 w-8 cursor-pointer rounded border border-border"
                 />
-                <input
+                <Input
                   type="text"
                   value={stop}
                   onChange={(e) => {
@@ -432,16 +432,18 @@ function ColorGradientCard({ claims }: { claims: ViewerJWTClaims }) {
                       setGradientStops(s)
                     }
                   }}
-                  className="w-24 rounded border border-border bg-surface-2 px-2 py-1 font-mono text-sm text-text"
+                  className="w-24 font-mono"
                 />
                 {gradientStops.length > 2 && (
-                  <button
+                  <Button
                     onClick={() => setGradientStops(gradientStops.filter((_, j) => j !== i))}
-                    className="text-lg leading-none text-text-sub hover:text-text"
+                    variant="ghost"
+                    size="icon-xs"
+                    className="text-lg leading-none"
                     aria-label={`Remove stop ${i + 1}`}
                   >
                     ×
-                  </button>
+                  </Button>
                 )}
               </div>
             ))}
@@ -471,14 +473,14 @@ function ColorGradientCard({ claims }: { claims: ViewerJWTClaims }) {
               onChange={(e) => setGradientAngle(Number(e.target.value))}
               className="flex-1"
             />
-            <input
+            <Input
               type="number"
               min={0}
               max={360}
               value={gradientAngle}
               onChange={(e) => setGradientAngle(Math.min(360, Math.max(0, Number(e.target.value))))}
               aria-label="Angle in degrees"
-              className="w-16 rounded border border-border bg-surface-2 px-2 py-1 text-right text-sm text-text"
+              className="w-16 text-right"
             />
             <span className="text-xs text-text-sub">°</span>
           </div>
@@ -881,23 +883,25 @@ function LinkedPlatformsCard({ claims }: { claims: ViewerJWTClaims }) {
                   </span>
                   {/* Cannot disconnect the platform the viewer is currently signed in with */}
                   {!isCurrentPlatform && (
-                    <button
+                    <Button
                       onClick={() => handleDisconnect(key)}
                       disabled={disconnecting === key}
-                      className="rounded-md border border-red-500/40 px-3 py-1 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+                      variant="destructive"
+                      size="xs"
                     >
                       {disconnecting === key ? 'Disconnecting…' : 'Disconnect'}
-                    </button>
+                    </Button>
                   )}
                 </div>
               ) : (
-                <button
+                <Button
                   onClick={() => handleConnect(key)}
                   disabled={connecting === key || !claims.viewer_id}
-                  className="rounded-md border border-border px-3 py-1 text-xs font-medium text-text transition-colors hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  variant="outline"
+                  size="xs"
                 >
                   {connecting === key ? 'Connecting…' : 'Connect'}
-                </button>
+                </Button>
               )}
             </div>
           )

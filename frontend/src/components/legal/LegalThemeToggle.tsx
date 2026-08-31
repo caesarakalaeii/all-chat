@@ -19,6 +19,7 @@
  */
 
 import { useEffect, useState } from 'react'
+import { Button } from '@/components/ui/button'
 
 import { useHydrated } from '@/hooks/useHydrated'
 
@@ -60,9 +61,10 @@ export function LegalThemeToggle() {
   }, [hydrated, light])
 
   return (
-    <button
+    <Button
       onClick={() => setChosenLight(!light)}
-      className="flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-sub transition-colors hover:border-border-md hover:text-text"
+      variant="outline"
+      size="sm"
       aria-label={light ? 'Switch to dark mode' : 'Switch to light mode'}
     >
       {light ? (
@@ -101,6 +103,6 @@ export function LegalThemeToggle() {
         </svg>
       )}
       {light ? 'Dark' : 'Light'}
-    </button>
+    </Button>
   )
 }

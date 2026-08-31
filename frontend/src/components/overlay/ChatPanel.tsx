@@ -19,6 +19,7 @@
  */
 
 import clsx from 'clsx'
+import { Button } from '@/components/ui/button'
 import { ArrowDown, ArrowUp, Filter, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
@@ -188,14 +189,15 @@ export function ChatPanel({ items, prefs, capabilities, moderation }: ChatPanelP
             Showing only messages from{' '}
             <span className="font-semibold text-text">{userFilter.label}</span>
           </span>
-          <button
+          <Button
             type="button"
             onClick={clearFilter}
-            className="ml-auto flex shrink-0 items-center gap-1 rounded font-medium text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+            variant="link"
+            className="ml-auto h-auto shrink-0 p-0 font-medium"
           >
             <X className="h-3.5 w-3.5" aria-hidden />
             Show all chat
-          </button>
+          </Button>
         </div>
       )}
       <div ref={scrollRef} onScroll={handleScroll} className="min-h-0 flex-1 overflow-y-auto">

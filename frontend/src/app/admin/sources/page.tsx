@@ -23,6 +23,8 @@ import Link from 'next/link'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PlatformBadge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 import { ChannelLink } from '@/components/ChannelLink'
 
 interface Source {
@@ -162,13 +164,15 @@ export default function SourcesPage() {
               {userFilterLabel}
             </Link>
           </span>
-          <button
+          <Button
             type="button"
             onClick={() => setUserFilter(null)}
-            className="ml-auto text-text-sub transition-colors hover:text-text"
+            variant="ghost"
+            size="xs"
+            className="ml-auto"
           >
             Clear
-          </button>
+          </Button>
         </div>
       )}
 
@@ -263,13 +267,13 @@ export default function SourcesPage() {
             <label htmlFor={searchId} className="mb-2 block text-sm font-medium text-text-sub">
               Search
             </label>
-            <input
+            <Input
               id={searchId}
               type="text"
               placeholder="Search by channel, overlay, or owner..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="focus-visible:ring-ring block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none sm:text-sm"
+              className="block sm:text-sm"
             />
           </div>
           <div>
@@ -283,7 +287,7 @@ export default function SourcesPage() {
               id={platformFilterId}
               value={platformFilter}
               onChange={(e) => setPlatformFilter(e.target.value)}
-              className="focus-visible:ring-ring block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text focus-visible:ring-2 focus-visible:outline-none sm:text-sm"
+              className="block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:text-sm"
             >
               <option value="all">All Platforms</option>
               <option value="twitch">Twitch</option>
@@ -303,7 +307,7 @@ export default function SourcesPage() {
               id={statusFilterId}
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="focus-visible:ring-ring block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text focus-visible:ring-2 focus-visible:outline-none sm:text-sm"
+              className="block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:text-sm"
             >
               <option value="all">All Status</option>
               <option value="active">Active</option>

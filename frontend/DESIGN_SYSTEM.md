@@ -1,815 +1,295 @@
 # All-Chat Design System
 
-**Last Updated**: 2026-03-09
-**Status**: Active - All frontend changes must follow these rules
-**Design Direction**: StreamElements Modern (Option 2)
+**Status**: Active. Enforced by CI, not by convention.
+**Authority**: `src/app/globals.css` is the source of truth for tokens. This
+document explains it; where they disagree, the CSS wins and this file is a bug.
+**Rationale**: [ADR-0056](../docs/adr/0056-shadcn-token-vocabulary-as-the-design-system-contract.md)
+
+> Working as an agent? Start with `.claude/skills/shadcn-ui/SKILL.md` — it is the
+> procedure. This file is the reference behind it.
 
 ---
 
-## Philosophy
+## The one rule
 
-All-Chat is a **professional creator tool** for streamers aggregating multi-platform chat. The UI should feel:
+**Never invent a class name.** Tailwind has no unknown-class error: write
+`bg-primary` when no `--color-primary` token exists and Tailwind emits nothing.
+The build passes, types pass, lint passes, and the element renders unstyled.
 
-- **Polished** (creators expect professional tools)
-- **Approachable** (not sterile or intimidating)
-- **Functional** (tool-first, not decoration)
-- **Consistent** (predictable patterns across all pages)
+This is not hypothetical — it is how the app shipped a `<Button>` with no
+background and error text that was never red (ADR-0056). Everything below exists
+to make that impossible.
 
-**Inspiration**: StreamElements, Linear, Notion, Radix UI
-**Not like**: Generic Tailwind templates, corporate dashboards, social media apps
-
----
-
-## Color System
-
-### Base Palette
-
-```css
-/* Backgrounds */
---bg-primary: #0f172a /* slate-900 - page background */ --bg-secondary: #1a2332
-  /* slate-850 - card background */ --bg-tertiary: #1e293b /* slate-800 - elevated cards */
-  /* Borders */ --border-default: rgb(51 65 85 / 0.5) /* slate-700/50 - subtle borders */
-  --border-focus: #3b82f6 /* blue-500 - focus rings */ /* Text */ --text-primary: #f8fafc
-  /* slate-50 - headings, primary content */ --text-secondary: #94a3b8
-  /* slate-400 - secondary content */ --text-tertiary: #64748b /* slate-500 - labels, metadata */
-  /* Platform Colors (use as accents only) */ --color-twitch: #9146ff --color-youtube: #ff0000
-  --color-kick: #53fc18 --color-tiktok: #000000 /* Accent Gradient (primary CTAs) */
-  --accent-gradient: linear-gradient(to right, #a855f7, #3b82f6) /* purple-500 → blue-500 */
-  /* Status Colors */ --status-success: #10b981 /* green-500 */ --status-warning: #f59e0b
-  /* amber-500 */ --status-error: #ef4444 /* red-500 */ --status-info: #3b82f6 /* blue-500 */;
-```
-
-### Usage Rules
-
-```
-✅ DO:
-- Use slate-900/850/800 for backgrounds (not gray-900)
-- Use platform colors for badges, borders, status indicators
-- Use accent gradient for primary CTAs only (create overlay, save, submit)
-- Use status colors for states (connected/disconnected, success/error)
-
-❌ DON'T:
-- Mix gray and slate scales (pick one: slate)
-- Use more than 2 accent colors in one component
-- Use bright colors for large backgrounds
-- Use pure black (#000000) except for TikTok brand
-```
+`npx vitest run --project unit src/__tests__/design-tokens.test.ts` compiles the
+real stylesheet and fails on any utility that emits no CSS. Run it when you
+touch classes.
 
 ---
 
-## Typography
+## Layers
 
-### Font Stack
+Work top-down. Stop at the first layer that answers the question.
 
-```css
---font-sans: 'Inter', system-ui, -apple-system, sans-serif;
---font-mono: 'SF Mono', 'Consolas', monospace;
-```
+| Layer            | Where                             | Use it for                                            |
+| ---------------- | --------------------------------- | ----------------------------------------------------- |
+| 1. Primitives    | `src/components/ui/*`             | Buttons, inputs, dialogs, tabs — anything with chrome |
+| 2. Tokens        | `@theme` in `src/app/globals.css` | Colour, spacing, radius, type scale                   |
+| 3. Raw utilities | Tailwind built-ins                | Layout only: flex, grid, gap, position                |
 
-### Scale
-
-```
-/* Headings */
---text-4xl: 2.25rem (36px) - Page titles
---text-3xl: 1.875rem (30px) - Section headers
---text-2xl: 1.5rem (24px) - Card titles
---text-xl: 1.25rem (20px) - Subsection headers
---text-lg: 1.125rem (18px) - Emphasized text
-
-/* Body */
---text-base: 1rem (16px) - Default body text
---text-sm: 0.875rem (14px) - Secondary text, labels
---text-xs: 0.75rem (12px) - Metadata, captions
-
-/* Weights */
---font-semibold: 600 - Headings
---font-medium: 500 - Emphasized body text
---font-normal: 400 - Body text
-```
-
-### Usage Rules
-
-```
-✅ DO:
-- Page titles: text-3xl font-semibold text-slate-50
-- Section headers: text-xl font-semibold text-slate-50
-- Card titles: text-lg font-semibold text-slate-50
-- Body text: text-base text-slate-300
-- Labels: text-sm font-medium text-slate-400
-- Metadata: text-xs text-slate-500
-- Use leading-relaxed (1.625) for body text
-
-❌ DON'T:
-- Use more than 3 font sizes on one page
-- Use font weights below 400 (no light/thin)
-- Use uppercase for body text (only for small labels: text-xs uppercase tracking-wide)
-```
+If a need is not met at layer 1, add a primitive — do not hand-roll at layer 3.
 
 ---
 
-## Spacing & Layout
+## Layer 1: primitives
 
-### Container System
+### What exists
 
-```
-/* Max widths */
---container-sm: 640px   /* Forms, focused content */
---container-md: 768px   /* Standard content */
---container-lg: 1024px  /* Dashboards */
---container-xl: 1280px  /* Wide dashboards */
---container-2xl: 1536px /* Admin tables */
+`button` · `input` · `textarea` · `label` · `field` · `select` · `switch` ·
+`toggle` · `toggle-group` · `tabs` · `card` · `badge` · `dialog` ·
+`alert-dialog` · `popover` · `separator` · `skeleton` · `toast` ·
+`visually-hidden`
 
-/* Padding */
---container-padding: px-4 sm:px-6 lg:px-8
-```
+Check `ls src/components/ui/` — this list ages.
 
-### Spacing Scale
-
-```
-/* Use Tailwind scale consistently */
-gap-2  (0.5rem / 8px)   - Icon + text
-gap-3  (0.75rem / 12px) - Form fields
-gap-4  (1rem / 16px)    - Card internal spacing
-gap-6  (1.5rem / 24px)  - Between cards
-gap-8  (2rem / 32px)    - Between sections
-
-/* Padding */
-p-3    - Compact buttons, badges
-p-4    - Compact cards
-p-6    - Standard cards
-p-8    - Page sections
-
-/* Margin */
-mb-2   - Label → Input
-mb-4   - Input → Input
-mb-6   - Section → Section
-mb-8   - Major section breaks
-```
-
-### Usage Rules
-
-```
-✅ DO:
-- Use even numbers (gap-2, gap-4, gap-6, gap-8)
-- Cards: p-6 (default), p-4 (compact)
-- Sections: py-8 or py-12
-- Responsive: gap-4 md:gap-6 lg:gap-8
-
-❌ DON'T:
-- Use odd spacing (gap-5, gap-7, p-5)
-- Mix px/py unnecessarily (use p-6, not px-6 py-6)
-- Use mb-12+ (break into sections instead)
-```
-
----
-
-## Components
-
-### Buttons
-
-**Variants:**
-
-```tsx
-// Primary (main actions)
-<button className="rounded-lg bg-gradient-to-r from-purple-500 to-blue-500 px-6 py-2.5 text-sm font-semibold text-white shadow-md transition-all duration-200 hover:shadow-lg hover:scale-[1.02]">
-  Create Overlay
-</button>
-
-// Secondary (alternative actions)
-<button className="rounded-lg border border-slate-700 bg-slate-850 px-6 py-2.5 text-sm font-semibold text-slate-100 shadow-md transition-all duration-200 hover:bg-slate-800 hover:shadow-lg">
-  Cancel
-</button>
-
-// Destructive (delete, disconnect)
-<button className="rounded-lg bg-red-600 px-6 py-2.5 text-sm font-semibold text-white shadow-md transition-all duration-200 hover:bg-red-700 hover:shadow-lg">
-  Delete
-</button>
-
-// Ghost (tertiary actions)
-<button className="rounded-lg px-4 py-2 text-sm font-medium text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100">
-  Learn More
-</button>
-
-// Icon button (toolbar actions)
-<button className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100">
-  <Icon size={20} />
-</button>
-```
-
-**Rules:**
-
-```
-✅ DO:
-- Use gradient only for primary CTAs
-- Add shadow-md + hover:shadow-lg
-- Use transition-all duration-200
-- Icon buttons: p-2, icon size 20px
-
-❌ DON'T:
-- Use gradients on multiple button types
-- Omit hover states
-- Use py-3+ (buttons should be compact)
-```
-
----
-
-### Cards
-
-**Variants:**
-
-```tsx
-// Standard card
-<div className="rounded-xl border border-slate-700/50 bg-slate-850 p-6 shadow-lg">
-  {children}
-</div>
-
-// Elevated card (modals, popovers)
-<div className="rounded-xl border border-slate-700/50 bg-slate-800 p-6 shadow-2xl">
-  {children}
-</div>
-
-// Interactive card (hover state)
-<div className="rounded-xl border border-slate-700/50 bg-slate-850 p-6 shadow-lg transition-all duration-200 hover:shadow-xl hover:scale-[1.02] cursor-pointer">
-  {children}
-</div>
-
-// Compact card (dashboard widgets)
-<div className="rounded-lg border border-slate-700/50 bg-slate-850 p-4 shadow-md">
-  {children}
-</div>
-```
-
-**Rules:**
-
-```
-✅ DO:
-- Default: rounded-xl, p-6, shadow-lg
-- Compact: rounded-lg, p-4, shadow-md
-- Always include border (subtle depth)
-- Interactive: add hover:shadow-xl hover:scale-[1.02]
-
-❌ DON'T:
-- Use rounded-md or rounded-2xl (stick to lg/xl)
-- Omit shadows (cards need depth)
-- Nest cards more than 2 levels deep
-```
-
----
-
-### Form Inputs
-
-**Text inputs:**
-
-```tsx
-<div className="space-y-2">
-  <label className="block text-sm font-medium text-slate-400">
-    Overlay Name
-  </label>
-  <input
-    type="text"
-    className="w-full rounded-lg border border-slate-600 bg-slate-850 px-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 transition-all duration-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-    placeholder="My Awesome Overlay"
-  />
-</div>
-
-// Error state
-<input className="... border-red-500 focus:border-red-500 focus:ring-red-500/20" />
-<p className="mt-1.5 text-xs text-red-400">This field is required</p>
-```
-
-**Rules:**
-
-```
-✅ DO:
-- Label: text-sm font-medium text-slate-400
-- Input: rounded-lg, px-4 py-2.5, bg-slate-850
-- Focus: ring-2, ring-blue-500/20 (20% opacity)
-- Error: border-red-500, text-xs text-red-400
-- Space: space-y-2 (label → input)
-
-❌ DON'T:
-- Use py-3+ (inputs should align with buttons)
-- Omit focus rings (accessibility)
-- Use placeholder as label (separate label required)
-```
-
----
-
-### Badges
-
-**Platform badges:**
-
-```tsx
-// Twitch
-<span className="inline-flex items-center gap-1.5 rounded-full bg-purple-500/10 px-2.5 py-0.5 text-xs font-medium text-purple-400 border border-purple-500/20">
-  <TwitchIcon size={12} />
-  Twitch
-</span>
-
-// YouTube
-<span className="inline-flex items-center gap-1.5 rounded-full bg-red-500/10 px-2.5 py-0.5 text-xs font-medium text-red-400 border border-red-500/20">
-  <YoutubeIcon size={12} />
-  YouTube
-</span>
-
-// Status badge
-<span className="inline-flex items-center gap-1.5 rounded-full bg-green-500/10 px-2.5 py-0.5 text-xs font-medium text-green-400 border border-green-500/20">
-  <div className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
-  Connected
-</span>
-```
-
-**Rules:**
-
-```
-✅ DO:
-- rounded-full (not rounded-lg)
-- px-2.5 py-0.5 (tight padding)
-- bg-{color}-500/10 (10% opacity background)
-- border border-{color}-500/20 (subtle border)
-- text-xs font-medium
-- Icon: size={12}
-
-❌ DON'T:
-- Use solid backgrounds (too bold)
-- Use text-sm (badges are small)
-- Omit borders (need subtle definition)
-```
-
----
-
-### Modals & Overlays
-
-**Modal backdrop:**
-
-```tsx
-<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-  <div className="relative w-full max-w-lg rounded-xl border border-slate-700/50 bg-slate-800 p-6 shadow-2xl">
-    {children}
-  </div>
-</div>
-```
-
-**Rules:**
-
-```
-✅ DO:
-- Backdrop: bg-black/60 backdrop-blur-sm
-- Modal: bg-slate-800 (one level darker)
-- Max width: max-w-lg (default), max-w-2xl (large)
-- Shadow: shadow-2xl (strongest depth)
-- Z-index: z-50
-
-❌ DON'T:
-- Use bg-slate-900 (too dark, no contrast)
-- Omit backdrop-blur-sm (depth cue)
-- Use fixed width (always max-w-X)
-```
-
----
-
-## Layout Patterns
-
-### Dashboard Grid
-
-```tsx
-<div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-  <Card>Overlay 1</Card>
-  <Card>Overlay 2</Card>
-  <Card>Overlay 3</Card>
-</div>
-```
-
-### Sidebar + Content
-
-```tsx
-<div className="flex min-h-screen">
-  <aside className="w-64 border-r border-slate-700/50 bg-slate-900 p-6">Navigation</aside>
-  <main className="flex-1 p-8">Content</main>
-</div>
-```
-
-### Split Preview
-
-```tsx
-<div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-  <div>Configuration</div>
-  <div className="sticky top-6 h-fit">Live Preview</div>
-</div>
-```
-
----
-
-## Animation & Transitions
-
-### Standard Transitions
-
-```css
-/* Default (most components) */
-transition-all duration-200
-
-/* Color changes only (hover states) */
-transition-colors duration-200
-
-/* Slow transitions (large elements) */
-transition-all duration-300
-```
-
-### Hover States
-
-```css
-/* Cards */
-hover:shadow-xl hover:scale-[1.02]
-
-/* Buttons */
-hover:shadow-lg hover:scale-[1.02]
-
-/* Links */
-hover:text-slate-100
-
-/* Backgrounds */
-hover:bg-slate-800
-```
-
-### Rules
-
-```
-✅ DO:
-- Use duration-200 (default)
-- Combine shadow + scale for depth
-- Use scale-[1.02] (subtle, not 1.05)
-- Add cursor-pointer for interactive elements
-
-❌ DON'T:
-- Use duration-100 (too fast)
-- Use scale-[1.1] (too aggressive)
-- Animate width/height (janky performance)
-- Use transform-gpu unless necessary
-```
-
----
-
-## Icons
-
-**Library**: Lucide React (already installed)
-
-**Sizing:**
-
-```
-size={16} - Inline with text (text-sm)
-size={20} - Default (text-base)
-size={24} - Emphasized icons (text-lg)
-size={32} - Large icons (hero sections)
-```
-
-**Usage:**
-
-```tsx
-// Inline with text
-<button className="inline-flex items-center gap-2">
-  <PlusIcon size={16} />
-  <span>Add Source</span>
-</button>
-
-// Icon-only button
-<button className="p-2 rounded-lg hover:bg-slate-800">
-  <SettingsIcon size={20} />
-</button>
-
-// Leading icon (cards, list items)
-<div className="flex items-start gap-3">
-  <TwitchIcon size={24} className="text-purple-400" />
-  <div>...</div>
-</div>
-```
-
-**Rules:**
-
-```
-✅ DO:
-- Use size prop (not className="w-5 h-5")
-- Use stroke-2 (default weight)
-- Color icons with platform colors
-- Align with text: items-center
-
-❌ DON'T:
-- Mix icon sizes in same component
-- Use size={18} or size={22} (stick to 16/20/24)
-- Use stroke-1 (too thin)
-```
-
----
-
-## Responsive Design
-
-### Breakpoints
-
-```
-sm: 640px   - Mobile landscape
-md: 768px   - Tablet
-lg: 1024px  - Desktop
-xl: 1280px  - Large desktop
-2xl: 1536px - Ultra-wide
-```
-
-### Patterns
-
-```tsx
-// Grid columns
-<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-
-// Padding
-<div className="px-4 sm:px-6 lg:px-8">
-
-// Text size
-<h1 className="text-2xl md:text-3xl lg:text-4xl">
-
-// Hidden on mobile
-<div className="hidden lg:block">
-
-// Stack on mobile, side-by-side on desktop
-<div className="flex flex-col lg:flex-row gap-6">
-```
-
-**Rules:**
-
-```
-✅ DO:
-- Design mobile-first (default styles for mobile)
-- Test at 375px, 768px, 1280px
-- Hide non-essential content on mobile
-- Use gap-4 md:gap-6 lg:gap-8 (scale spacing)
-
-❌ DON'T:
-- Use max-sm: or max-md: (mobile-first only)
-- Hide critical actions on mobile
-- Use fixed pixel widths (always responsive units)
-```
-
----
-
-## Platform Color Usage
-
-### Color Mapping
-
-```tsx
-const platformColors = {
-  twitch: {
-    bg: 'bg-purple-500/10',
-    border: 'border-purple-500/20',
-    text: 'text-purple-400',
-    badge: 'bg-purple-500',
-  },
-  youtube: {
-    bg: 'bg-red-500/10',
-    border: 'border-red-500/20',
-    text: 'text-red-400',
-    badge: 'bg-red-500',
-  },
-  kick: {
-    bg: 'bg-green-500/10',
-    border: 'border-green-500/20',
-    text: 'text-green-400',
-    badge: 'bg-green-500',
-  },
-  tiktok: {
-    bg: 'bg-slate-700/10',
-    border: 'border-slate-600/20',
-    text: 'text-slate-300',
-    badge: 'bg-slate-600',
-  },
-}
-```
-
-### Usage Examples
-
-```tsx
-// Source card with platform accent
-<div className="rounded-xl border-l-4 border-l-purple-500 bg-slate-850 p-6">
-  <span className="text-purple-400">Twitch</span>
-</div>
-
-// Platform badge
-<span className="inline-flex items-center gap-1.5 rounded-full bg-red-500/10 px-2.5 py-0.5 text-xs font-medium text-red-400 border border-red-500/20">
-  YouTube
-</span>
-```
-
-**Rules:**
-
-```
-✅ DO:
-- Use platform colors for badges, borders, status indicators
-- Use /10 opacity for backgrounds, /20 for borders
-- Keep text readable: 400 shade (not 500)
-- Border-left accent: border-l-4 border-l-{color}-500
-
-❌ DON'T:
-- Use platform colors for large backgrounds
-- Mix multiple platform colors in one component
-- Use solid platform backgrounds (too bright)
-```
-
----
-
-## Accessibility
-
-### Focus States
-
-```css
-/* All interactive elements MUST have visible focus */
-focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500
-```
-
-### Color Contrast
-
-```
-✅ Required contrast ratios:
-- Normal text (16px): 4.5:1
-- Large text (24px+): 3:1
-- Interactive elements: 3:1
-
-✅ Our palette meets WCAG AA:
-- slate-50 on slate-900: 16.1:1 ✓
-- slate-400 on slate-900: 7.2:1 ✓
-- blue-500 on slate-900: 8.2:1 ✓
-```
-
-### Keyboard Navigation
-
-```
-✅ DO:
-- All interactive elements: cursor-pointer
-- Buttons: Add focus:ring-2
-- Modals: Trap focus, Escape to close
-- Forms: Tab order logical
-
-❌ DON'T:
-- Use div as button (use <button>)
-- Remove focus outline without replacement
-- Use hover:scale without focus equivalent
-```
-
----
-
-## Component Library
-
-### Architecture: @base-ui/react + shadcn CLI
-
-**Primitives**: `@base-ui/react` (already installed) — unstyled, accessible components from the MUI team
-**Scaffolding**: `shadcn` CLI — generates component files wired to @base-ui/react
-**Variants**: `class-variance-authority` (CVA) — type-safe variant patterns
-**Docs + Testing**: Storybook 10 (`npm run storybook`) — every component must have a story
-
-**Why @base-ui/react over Radix UI:**
-
-- More modern API, built on floating-ui
-- Native data-slot attributes (design system friendly)
-- Same accessible-first philosophy
-- Already installed and used in `components/ui/button.tsx`
-
-**Add components:**
+### Adding one
 
 ```bash
-npx shadcn@latest add card
-npx shadcn@latest add input
-npx shadcn@latest add dialog
-npx shadcn@latest add badge
-npx shadcn@latest add select
-npx shadcn@latest add toast
+cd frontend
+npx shadcn@4 search @shadcn -q "combobox"   # find it
+npx shadcn@4 view @shadcn/combobox          # read it before installing
+npx shadcn@4 add @shadcn/combobox           # install
 ```
 
-**Every component must have a Storybook story:**
+Then: add the AGPL header (every source file has one), run
+`npx prettier --write src/components/ui/`, and run the design-token test.
 
-```bash
-# Start Storybook
-npm run storybook
-# Opens at http://localhost:6006
-```
+The registry's `base-nova` style targets Base UI, which is what this project
+already uses, and its components are written against the token vocabulary
+aliased in `globals.css`. **They drop in unedited. That is the contract.**
 
-Story file template: `src/stories/ComponentName.stories.ts`
+### Keep registry files verbatim
 
-### Accessibility Gate
+Do not restyle a primitive in place. `npx shadcn@4 diff` is only useful while
+the file matches upstream, and a local edit turns every future upstream fix into
+a manual merge.
 
-Storybook a11y addon is installed. Currently set to `'todo'` mode in `.storybook/preview.ts`.
-During Phase 26, this is changed to `'error'` mode — **zero a11y violations allowed.**
-
----
-
-## LLM Enforcement Checklist
-
-When implementing UI changes, **validate against these rules:**
-
-```
-□ Colors: Only slate-900/850/800 backgrounds (not gray)
-□ Text: slate-50 (headings), slate-400 (body)
-□ Spacing: Even numbers only (gap-4, gap-6, not gap-5)
-□ Buttons: Use <Button> from @/components/ui/button (not raw <button>)
-□ Cards: rounded-xl, p-6, shadow-lg, border
-□ Icons: Lucide React, size={20} default
-□ Transitions: transition-all duration-200
-□ Hover: shadow-xl + scale-[1.02]
-□ Focus: ring-2 ring-blue-500/20 (handled by @base-ui/react primitives)
-□ Platform colors: badges/borders only (not backgrounds)
-□ Typography: Inter font, text-base default
-□ Responsive: Mobile-first, md:, lg: breakpoints
-□ Accessibility: Use @base-ui/react primitives (handles ARIA), verify in Storybook a11y tab
-□ New component? → Add Storybook story in src/stories/
-□ No dynamic className construction (use platformColors mapping object)
-```
-
-**Before committing:**
-
-1. Run checklist above
-2. Open Storybook (`npm run storybook`) and check a11y tab for new components
-3. Test mobile (375px), tablet (768px), desktop (1280px)
-4. Run `npm run lint` — zero ESLint errors
-
-**Development workflow for page changes:**
-
-```bash
-make frontend-dev    # Start minimal backend (postgres, redis, gateway, overlay-manager, message-processor)
-make frontend-seed   # Create test overlay and sources
-make frontend-messages # Generate mock chat messages
-cd frontend && npm run dev  # Start frontend at localhost:3000
-```
-
----
-
-## Migration Plan
-
-See: `/home/caesar/git/all-chat/.planning/ROADMAP.md` (Phase XX)
-
-**Phase 1: Design Tokens** (current)
-
-- ✓ Create DESIGN_SYSTEM.md
-- Create Tailwind theme config
-- Audit existing colors/spacing
-
-**Phase 2: Component Library**
-
-- Install shadcn/ui
-- Customize components to match design system
-- Document in Storybook (optional)
-
-**Phase 3: Page-by-Page Migration**
-
-- Landing page → new design system
-- Dashboard → new design system
-- Overlay editor → new design system
-- Settings → new design system
-- Admin pages → new design system
-
-**Phase 4: Enforcement**
-
-- Add ESLint rules for Tailwind (no gray-900, etc.)
-- Pre-commit hook to validate design system
-- Update CI to check for violations
-
----
-
-## Examples
-
-### Before (Current "Claude Code" feeling)
+Local styling goes in the **call site's** `className`:
 
 ```tsx
-<div className="rounded bg-gray-800 p-6 shadow">
-  <h2 className="text-xl font-bold">My Overlay</h2>
-  <button className="rounded bg-purple-600 px-4 py-2">Edit</button>
-</div>
+<Button variant="outline" size="sm" className="w-full justify-start">
 ```
 
-### After (StreamElements Modern)
+If a change genuinely belongs in the primitive — a project-wide behaviour, like
+`aria-invalid` styling on `Input` — make it and **write down why in the file**.
+That note is what tells the next person the diff is intentional.
+
+### Choosing a variant
+
+| Intent                        | Variant       | Notes                                                                      |
+| ----------------------------- | ------------- | -------------------------------------------------------------------------- |
+| The main action               | `default`     | One per view. Filled brand purple                                          |
+| Marketing / hero CTA          | `gradient`    | Landing surfaces only                                                      |
+| Supporting action             | `outline`     | The common case                                                            |
+| Filled but secondary          | `secondary`   | Tinted surface                                                             |
+| Low emphasis, icons, toolbars | `ghost`       | No chrome until hover                                                      |
+| Destructive                   | `destructive` | Tinted, not solid red — solid red for a routine "Remove" reads as an alarm |
+| Inline text action            | `link`        | Add `className="h-auto p-0"` when it sits in a sentence                    |
+
+Sizes: `xs` `sm` `default` `lg`, and `icon-xs` `icon-sm` `icon` `icon-lg` for
+square icon-only buttons. Icon-only buttons need an `aria-label`.
+
+### When a native element is right
+
+`<Button>` is for things that **look like buttons**. Use a native `<button>`
+with tokens and `focus-visible:` for click targets that are not button-shaped:
+
+- list rows and cards that happen to be clickable
+- colour swatches and theme thumbnails
+- controls carrying `role="radio"` / `role="option"` / `role="switch"`, where
+  the ARIA semantics were chosen deliberately
+
+Wrapping those in `<Button>` fights its `inline-flex items-center justify-center`
+layout and, for the ARIA cases, changes semantics that tests assert on.
+
+### Forms
+
+`Field` wires label ↔ control ↔ description ↔ error automatically. Prefer it
+over hand-plumbed `htmlFor` / `aria-describedby`:
 
 ```tsx
-<div className="bg-slate-850 rounded-xl border border-slate-700/50 p-6 shadow-lg transition-all duration-200 hover:scale-[1.02] hover:shadow-xl">
-  <h2 className="text-lg font-semibold text-slate-50">My Overlay</h2>
-  <button className="mt-4 rounded-lg bg-gradient-to-r from-purple-500 to-blue-500 px-6 py-2.5 text-sm font-semibold text-white shadow-md transition-all duration-200 hover:scale-[1.02] hover:shadow-lg">
-    Edit
-  </button>
-</div>
+<Field.Root>
+  <Field.Label>Channel name</Field.Label>
+  <Field.Control render={<Input />} />
+  <Field.Description>Shown under your messages.</Field.Description>
+  <Field.Error />
+</Field.Root>
 ```
 
-**Key differences:**
+`Input` owns its invalid state — set `aria-invalid` and the red border follows.
+Do not hand-roll error borders at the call site.
 
-1. slate instead of gray (warmer, more refined)
-2. Border + shadow for depth
-3. Gradient CTA (distinctive, not flat purple)
-4. Hover states (scale + shadow increase)
-5. Transitions (smooth interactions)
-6. Consistent spacing (p-6, px-6 py-2.5)
+The `render` prop is the Base UI composition idiom, and it is how you put a
+primitive's styling on someone else's element:
 
----
-
-## Questions?
-
-- **"What if I need a color not in the system?"** → Ask first. Likely a platform color or status color.
-- **"Can I use gray-X?"** → No. Use slate-X instead (warmer tone).
-- **"rounded-lg or rounded-xl?"** → Cards: xl. Buttons/inputs: lg.
-- **"How much shadow?"** → Cards: shadow-lg. Buttons: shadow-md. Modals: shadow-2xl.
-- **"Can I add animation-X?"** → Keep it simple. transition-all duration-200 covers 90% of cases.
+```tsx
+<AlertDialog.Close render={<Button variant="outline" size="sm" />}>Cancel</AlertDialog.Close>
+```
 
 ---
 
-**Last updated**: 2026-03-09 by Claude Code
-**Next review**: After Phase 2 (Component Library) completion
+## Layer 2: tokens
+
+Defined in the `@theme` block of `src/app/globals.css`. Dark-only; there is no
+light theme for app chrome.
+
+### Colour
+
+**Surfaces and text** — a three-step depth scale and a three-step text hierarchy:
+
+| Token               | Class              | Use                                     |
+| ------------------- | ------------------ | --------------------------------------- |
+| `--color-bg`        | `bg-bg`            | Page background                         |
+| `--color-surface`   | `bg-surface`       | Cards, dialogs, popovers                |
+| `--color-surface-2` | `bg-surface-2`     | Raised or hovered rows within a surface |
+| `--color-border`    | `border-border`    | Standard hairline                       |
+| `--color-border-md` | `border-border-md` | Emphasised edge, input borders          |
+| `--color-text`      | `text-text`        | Primary copy, headings                  |
+| `--color-text-sub`  | `text-text-sub`    | Secondary copy, labels                  |
+| `--color-text-dim`  | `text-text-dim`    | Captions, timestamps, placeholders      |
+
+**Status** — `text-destructive` `text-success` `text-warning` `text-info`, plus
+the `bg-`/`border-` forms. Each clears 4.5:1 as text on all three surfaces.
+
+**Platform** — `twitch` `youtube` `kick` `tiktok` `discord`, with matching
+`--shadow-glow-*`. Accents and identity only, never large fills.
+
+### No raw palette colours
+
+`text-red-400`, `bg-amber-500`, `slate-*`, `gray-*` — none of these are the
+design system. They are unverified for contrast and drift apart across files.
+`gray-*` and `slate-*` are lint errors; the rest are on their way out (ADR-0056).
+
+Reach for the status token instead. `text-red-400` → `text-destructive`.
+
+### Type, spacing, radius
+
+The scale is deliberately small and deliberately not Tailwind's default —
+`text-base` is 14px here, not 16px, because this is a dense tool UI.
+
+`text-xs` 11 · `text-sm` 13 · `text-base` 14 · `text-lg` 16 · `text-xl` 20 ·
+`text-2xl` 24 · `text-3xl` 32
+
+Spacing: `1 2 3 4 6 8 12 16`. Radius: `sm` 4 · `md` 8 · `lg` 12 · `xl` 16 ·
+`2xl` 24 · `full`.
+
+### The shadcn alias block
+
+`globals.css` also defines `--color-primary`, `--color-muted-foreground`,
+`--color-input`, `--color-ring` and the rest of the registry's vocabulary as
+**aliases** onto the tokens above. That is what lets a registry component drop
+in unedited.
+
+**When you write your own markup, prefer the project names** (`bg-surface`,
+`text-text-sub`) — they say what the thing is. The aliases exist so vendored
+code works, not as a second vocabulary to choose from.
+
+**Never give an alias its own colour value.** An alias carries a `var()` and
+nothing else. A value there forks the palette into two, which is the exact
+failure ADR-0056 exists to prevent.
+
+Adding a token? Add it to `@theme`, then add its contrast assertion to
+`src/app/__tests__/token-contrast.test.ts`. A token with no contrast lock is a
+token nobody has checked.
+
+---
+
+## Layer 3: raw utilities
+
+Fine for layout: `flex`, `grid`, `gap-*`, `absolute`, `w-full`, `min-w-0`.
+
+Not fine for colour, border, radius, shadow or focus. If you are writing
+`rounded-lg border border-border bg-surface px-3 py-1.5`, you are rebuilding
+`<Button variant="outline" size="sm">` by hand — that is how the codebase
+reached 66 distinct button styles.
+
+### `cn()`, never template literals
+
+```tsx
+import { cn } from '@/lib/utils'
+
+;<div className={cn('rounded-lg p-4', isActive && 'bg-surface-2')} />
+```
+
+Template literals in `className` are a lint error. `cn()` merges Tailwind
+conflicts correctly (`tailwind-merge`); string concatenation produces
+`"px-2 px-4"` and lets the loser win at random.
+
+### Focus
+
+`focus-visible:`, never `focus:` — bare `focus:` fires on mouse click and puts
+a ring on a button someone just clicked. This is a lint error outside
+`src/components/ui/**`, which is exempt because the registry uses `focus:` in
+the two places it is correct (listbox items, `focus:z-10` stacking).
+
+Primitives already carry the right ring. Do not add your own.
+
+---
+
+## Overlay surfaces are a different scope
+
+`src/app/overlay/**`, the embed preview and `ThemePreview` are **broadcast art**
+rendered inside OBS: user-themable, composited over gameplay footage, held to a
+separate contrast floor (`tests/e2e/theme-contrast.spec.ts`). The chrome's
+neutral tokens are the wrong vocabulary there and the palette rule is not
+enforced.
+
+Everything else — dashboard, editor, settings, admin, marketing, legal — is
+chrome and follows this document.
+
+---
+
+## What CI enforces
+
+| Check            | Command                                                                                          | Fails on                                                                       |
+| ---------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| Dead tokens      | `npx vitest run --project unit src/__tests__/design-tokens.test.ts`                              | Any utility that emits no CSS                                                  |
+| Token contrast   | `npx vitest run --project unit src/app/__tests__/token-contrast.test.ts`                         | A token or alias below its WCAG floor, or an alias pointing at a renamed token |
+| Broken utilities | `npx vitest run --project unit src/__tests__/no-broken-tailwind-utilities.test.ts`               | Class names Tailwind v4 silently drops                                         |
+| Design rules     | `npx eslint .`                                                                                   | `gray-*`/`slate-*`, template `className`s, bare `focus:`                       |
+| Accessibility    | `npx eslint -c eslint.a11y.config.mjs --suppressions-location eslint.a11y.suppressions.json src` | New a11y violations (shrink-only ratchet)                                      |
+| Types            | `npx tsc --noEmit`                                                                               |                                                                                |
+| Format           | `npx prettier --check .`                                                                         | Also sorts Tailwind classes                                                    |
+
+Two suites are **red on `main`** and not yours to fix: the `api-tokens`,
+`LegalThemeToggle`, `OnboardingChecklist` and `useCreditRollThemeMarketplace`
+tests fail in the node-environment `unit` project (missing jsdom globals), and
+`auth-service ./repository/`. Scope around them; do not gate work on them.
+
+---
+
+## Adding a UI feature: checklist
+
+1. Does a primitive exist? Use it.
+2. Does the registry have one? `npx shadcn@4 add` it, unedited.
+3. Only then hand-roll — with tokens, `cn()`, and `focus-visible:`.
+4. Run the design-token test and `npx tsc --noEmit`.
+5. Add a Storybook story (`src/stories/`) — the a11y CI gate runs axe over it.
+6. Ship the release steps in `CLAUDE.md` → _Shipping a Feature_: premium gate,
+   onboarding tour entry, Patreon post.
+
+## Anti-patterns, with the fix
+
+| Anti-pattern                                                    | Fix                                                |
+| --------------------------------------------------------------- | -------------------------------------------------- |
+| `<button className="rounded-lg bg-twitch px-4 py-2 …">`         | `<Button size="lg">`                               |
+| `<input className="w-full rounded-lg border …">`                | `<Input />`                                        |
+| `const primaryButtonClass = '…'` at the top of a component file | A `<Button>` variant                               |
+| `text-red-400`                                                  | `text-destructive`                                 |
+| `className={`p-2 ${active ? 'bg-x' : ''}`}`                     | `className={cn('p-2', active && 'bg-x')}`          |
+| `focus:ring-2`                                                  | `focus-visible:ring-2`, or let the primitive do it |
+| Copying a primitive to tweak one colour                         | `className` at the call site                       |
+| A test selecting `button.bg-red-500\\/10`                       | `getByRole('button', { name: /…/ })`               |
+
+That last one is not a style nit. A test asserting on a utility class breaks the
+moment a control adopts a primitive — for a reason that has nothing to do with
+behaviour. Select by role and accessible name.

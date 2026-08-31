@@ -33,6 +33,8 @@
 'use client'
 
 import clsx from 'clsx'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 import { Plus, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { toastManager } from '@/lib/toast'
@@ -45,13 +47,6 @@ import type { Poll, Prediction } from '@/lib/types/engagement'
 const REFRESH_MS = 3000
 const MAX_POLL_OPTIONS = 5
 const MAX_PREDICTION_OUTCOMES = 10
-
-const inputClass =
-  'w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-xs text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none'
-const primaryButtonClass =
-  'rounded-lg bg-twitch px-3 py-1.5 text-xs font-semibold text-bg transition-colors hover:bg-twitch/90 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50'
-const secondaryButtonClass =
-  'rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-sub transition-colors hover:border-border-md hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50'
 
 function errorMessage(err: unknown, fallback: string): string {
   return err instanceof ApiError ? err.message : fallback
@@ -75,38 +70,41 @@ function LabelListEditor({
     <div className="space-y-1.5">
       {labels.map((label, i) => (
         <div key={i} className="flex items-center gap-1.5">
-          <input
+          <Input
             type="text"
             value={label}
             onChange={(e) => onChange(labels.map((l, j) => (j === i ? e.target.value : l)))}
             placeholder={`${placeholder} ${i + 1}`}
             aria-label={`${placeholder} ${i + 1}`}
             disabled={disabled}
-            className={inputClass}
+            size="sm"
           />
           {labels.length > 2 && (
-            <button
+            <Button
               type="button"
               onClick={() => onChange(labels.filter((_, j) => j !== i))}
               disabled={disabled}
               title="Remove"
-              className="rounded p-1 text-text-dim transition-colors hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+              variant="ghost"
+              size="icon-xs"
             >
               <X className="h-3.5 w-3.5" />
-            </button>
+            </Button>
           )}
         </div>
       ))}
       {labels.length < max && (
-        <button
+        <Button
           type="button"
           onClick={() => onChange([...labels, ''])}
           disabled={disabled}
-          className="flex items-center gap-1 text-xs text-text-sub transition-colors hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+          variant="ghost"
+          size="xs"
+          className="px-0"
         >
           <Plus className="h-3.5 w-3.5" />
           Add {placeholder.toLowerCase()}
-        </button>
+        </Button>
       )}
     </div>
   )
@@ -444,23 +442,19 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                     ` · auto-closes ${new Date(poll.ends_at).toLocaleTimeString()}`}
                 </span>
                 {pollFinished ? (
-                  <button
-                    type="button"
-                    onClick={() => setPoll(null)}
-                    className={secondaryButtonClass}
-                  >
+                  <Button type="button" onClick={() => setPoll(null)} variant="outline" size="xs">
                     New poll
-                  </button>
+                  </Button>
                 ) : (
                   !pollNative && (
-                    <button
+                    <Button
                       type="button"
                       onClick={() => closePoll(poll.id)}
                       disabled={busy}
-                      className={primaryButtonClass}
+                      size="xs"
                     >
                       Close poll
-                    </button>
+                    </Button>
                   )
                 )}
               </div>
@@ -472,14 +466,14 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
             </div>
           ) : (
             <div className="space-y-2">
-              <input
+              <Input
                 type="text"
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
                 placeholder="Question"
                 aria-label="Poll question"
                 disabled={busy}
-                className={inputClass}
+                size="sm"
               />
               <LabelListEditor
                 labels={options}
@@ -500,14 +494,15 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                 </label>
                 <label className="flex items-center gap-1.5 text-xs text-text-sub">
                   Auto-close after
-                  <input
+                  <Input
                     type="number"
                     min={0}
                     value={pollDuration}
                     onChange={(e) => setPollDuration(e.target.value)}
                     placeholder="∞"
                     disabled={busy}
-                    className={clsx(inputClass, 'w-16')}
+                    size="sm"
+                    className="w-16"
                   />
                   s
                 </label>
@@ -525,14 +520,9 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                   </a>{' '}
                   or from chat (<code>!vote 2</code> or just <code>2</code>)
                 </span>
-                <button
-                  type="button"
-                  onClick={startPoll}
-                  disabled={busy}
-                  className={primaryButtonClass}
-                >
+                <Button type="button" onClick={startPoll} disabled={busy} size="xs">
                   Start poll
-                </button>
+                </Button>
               </div>
             </div>
           )}
@@ -600,17 +590,17 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                 </span>
                 <div className="flex flex-wrap gap-2">
                   {!predNative && prediction.state === 'ACTIVE' && (
-                    <button
+                    <Button
                       type="button"
                       onClick={() => lockPrediction(prediction.id)}
                       disabled={busy}
-                      className={primaryButtonClass}
+                      size="xs"
                     >
                       Lock wagers
-                    </button>
+                    </Button>
                   )}
                   {!predNative && prediction.state === 'LOCKED' && (
-                    <button
+                    <Button
                       type="button"
                       onClick={() => {
                         if (!winnerId) {
@@ -630,48 +620,51 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                       }}
                       disabled={busy || !winnerId}
                       title={winnerId ? undefined : 'Select the winning outcome first'}
-                      className={primaryButtonClass}
+                      size="xs"
                     >
                       {!winnerLabel
                         ? 'Resolve'
                         : confirmResolve
                           ? `Pay out "${winnerLabel}" — final?`
                           : `Pay out "${winnerLabel}"`}
-                    </button>
+                    </Button>
                   )}
                   {!predNative &&
                     (prediction.state === 'ACTIVE' || prediction.state === 'LOCKED') &&
                     (confirmCancel ? (
-                      <button
+                      <Button
                         type="button"
                         onClick={() => cancelPrediction(prediction.id)}
                         disabled={busy}
-                        className="border-destructive/50 text-destructive hover:bg-destructive/10 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                        variant="destructive"
+                        size="xs"
                       >
                         Really refund all wagers?
-                      </button>
+                      </Button>
                     ) : (
-                      <button
+                      <Button
                         type="button"
                         onClick={() => setConfirmCancel(true)}
                         disabled={busy}
                         title="Cancel and refund all wagers"
-                        className={secondaryButtonClass}
+                        variant="outline"
+                        size="xs"
                       >
                         Cancel & refund
-                      </button>
+                      </Button>
                     ))}
                   {predFinished && (
-                    <button
+                    <Button
                       type="button"
                       onClick={() => {
                         setPrediction(null)
                         setWinnerId('')
                       }}
-                      className={secondaryButtonClass}
+                      variant="outline"
+                      size="xs"
                     >
                       New prediction
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>
@@ -688,14 +681,14 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
             </div>
           ) : (
             <div className="space-y-2">
-              <input
+              <Input
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Title (e.g. Will we win this round?)"
                 aria-label="Prediction title"
                 disabled={busy}
-                className={inputClass}
+                size="sm"
               />
               <LabelListEditor
                 labels={outcomes}
@@ -706,14 +699,15 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
               />
               <label className="flex items-center gap-1.5 text-xs text-text-sub">
                 Auto-lock wagers after
-                <input
+                <Input
                   type="number"
                   min={0}
                   value={autoLock}
                   onChange={(e) => setAutoLock(e.target.value)}
                   placeholder="∞"
                   disabled={busy}
-                  className={clsx(inputClass, 'w-16')}
+                  size="sm"
+                  className="w-16"
                 />
                 s
               </label>
@@ -730,14 +724,9 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                   </a>{' '}
                   (they can see their balance) — or from chat: <code>!predict 1 500</code>
                 </span>
-                <button
-                  type="button"
-                  onClick={startPrediction}
-                  disabled={busy}
-                  className={primaryButtonClass}
-                >
+                <Button type="button" onClick={startPrediction} disabled={busy} size="xs">
                   Start prediction
-                </button>
+                </Button>
               </div>
             </div>
           )}
@@ -754,13 +743,9 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
           Mirror native Twitch polls &amp; predictions onto your overlays (read-only). Opt-in; takes
           effect after the next channel sync (a stream restart or re-adding the source).
         </p>
-        <button
-          type="button"
-          onClick={() => void startMirrorConsent()}
-          className={secondaryButtonClass}
-        >
+        <Button type="button" onClick={() => void startMirrorConsent()} variant="outline" size="xs">
           Enable Twitch mirroring
-        </button>
+        </Button>
       </div>
     </section>
   )
