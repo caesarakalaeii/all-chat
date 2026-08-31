@@ -253,14 +253,6 @@
       "count": 16
     }
   },
-  "src/app/settings/viewer/page.tsx": {
-    "no-restricted-syntax": {
-      "count": 3
-    },
-    "react/jsx-no-literals": {
-      "count": 38
-    }
-  },
   "src/app/settings/viewer/premium/page.tsx": {
     "react/jsx-no-literals": {
       "count": 21
