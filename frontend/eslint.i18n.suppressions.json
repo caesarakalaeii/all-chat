@@ -204,19 +204,6 @@
       "count": 20
     }
   },
-  "src/app/overlays/[id]/preview/embed/page.tsx": {
-    "react/jsx-no-literals": {
-      "count": 3
-    }
-  },
-  "src/app/overlays/new/page.tsx": {
-    "no-restricted-syntax": {
-      "count": 1
-    },
-    "react/jsx-no-literals": {
-      "count": 4
-    }
-  },
   "src/app/upgrade/page.tsx": {
     "react/jsx-no-literals": {
       "count": 15

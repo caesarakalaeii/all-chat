@@ -783,4 +783,21 @@ export const overlayEditor = {
     likeWindowLabel: 'Like Aggregation Window (seconds)',
     likeWindowDescription: 'Likes are collected in this window to prevent spam',
   },
+  // /overlays/new: the name-only create form.
+  create: {
+    heading: 'Create Overlay',
+    body: 'Give your overlay a name. You can add chat sources after creation.',
+    nameLabel: 'Overlay Name',
+    namePlaceholder: 'e.g. Main Stream, TikTok Only',
+    nameRequired: 'Overlay name is required',
+    cancel: 'Cancel',
+    submit: 'Create Overlay',
+  },
+  // /overlays/[id]/preview/embed. Chat message content is never copy — only the
+  // chrome around it, which here is one empty state.
+  embedPreview: {
+    // Three full stops, not an ellipsis: transcribed as the render site had it.
+    waitingHeading: 'Waiting for messages...',
+    waitingBody: 'Messages will appear here when chat is active',
+  },
 } as const
