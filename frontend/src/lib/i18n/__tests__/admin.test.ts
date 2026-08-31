@@ -299,3 +299,85 @@ describe('admin cosmetics catalog copy', () => {
     expect(t('admin.cosmetics.addError')).toBe('Add failed')
   })
 })
+
+describe('admin overlays page copy', () => {
+  it('keeps the page header and the degraded-status warning', () => {
+    expect(t('admin.overlays.heading')).toBe('Overlays')
+    expect(t('admin.overlays.intro')).toBe('Manage overlays and their connected chat sources')
+    expect(t('admin.overlays.loadError')).toBe('Failed to load overlays')
+    // The typographic quotes were &ldquo;/&rdquo; entities and travel with the
+    // copy: a language that quotes with guillemets replaces the pair.
+    expect(t('admin.overlays.statusUnavailable')).toBe(
+      'Live connection status is currently unavailable, so overlays may show as \u201Cnot connected\u201D even if they are live.'
+    )
+  })
+
+  it('keeps the list header, search field and filter toggle', () => {
+    // Two count shapes rather than a bare ' of N' fragment appended in JSX: a
+    // language that words "8 of 30" differently cannot reorder a fragment the
+    // render site owns.
+    expect(t('admin.overlays.listHeadingAll', { count: 12 })).toBe('All Overlays (12)')
+    expect(t('admin.overlays.listHeadingFiltered', { shown: 8, total: 30 })).toBe(
+      'All Overlays (8 of 30)'
+    )
+    expect(t('admin.overlays.searchPlaceholder')).toBe('Search by overlay name, ID, or owner...')
+    expect(t('admin.overlays.connectedFilter', { count: 4 })).toBe('Connected (4)')
+  })
+
+  it('keeps the two empty-list states', () => {
+    expect(t('admin.overlays.emptyNone')).toBe('No overlays found.')
+    expect(t('admin.overlays.emptyFiltered')).toBe('No overlays match your search or filter.')
+  })
+
+  it('keeps the row labels', () => {
+    expect(t('admin.overlays.rowSourceCount', { count: 3 })).toBe('3 sources')
+    expect(t('admin.overlays.rowIdPrefix', { id: 'ov_1' })).toBe('ID: ov_1')
+    expect(t('admin.overlays.rowCreated', { date: '13/07/2026' })).toBe('Created 13/07/2026')
+    expect(t('admin.overlays.openInNewTabLabel', { name: 'Main' })).toBe(
+      'Open overlay Main in a new tab'
+    )
+    // Two whole titles: the dot's tooltip either names the start time or does not.
+    expect(t('admin.overlays.dotConnectedSince', { timestamp: '13/07/2026, 08:48' })).toBe(
+      'Connected since 13/07/2026, 08:48'
+    )
+    expect(t('admin.overlays.dotConnected')).toBe('Connected')
+    // The elapsed label likewise: with a duration, or bare when the connection
+    // start is unknown.
+    expect(t('admin.overlays.connectedFor', { duration: '3h 12m' })).toBe('Connected 3h 12m')
+    expect(t('admin.overlays.connected')).toBe('Connected')
+  })
+
+  it('keeps the detail panel labels', () => {
+    expect(t('admin.overlays.detailHeading')).toBe('Overlay Details')
+    expect(t('admin.overlays.detailName')).toBe('Name')
+    expect(t('admin.overlays.detailId')).toBe('ID')
+    expect(t('admin.overlays.detailOwner')).toBe('Owner')
+    // The owner link was built from a handle-or-fallback plus an optional
+    // ' (Display Name)' tail, so four whole link texts. A fragment starting with
+    // a space is not something a translator can reorder, and the parenthesis
+    // convention is language-specific.
+    expect(t('admin.overlays.ownerHandle', { username: 'caesar' })).toBe('@caesar')
+    expect(
+      t('admin.overlays.ownerHandleNamed', { username: 'caesar', displayName: 'Caesar' })
+    ).toBe('@caesar (Caesar)')
+    expect(t('admin.overlays.ownerFallback')).toBe('View user')
+    expect(t('admin.overlays.ownerFallbackNamed', { displayName: 'Caesar' })).toBe(
+      'View user (Caesar)'
+    )
+    expect(t('admin.overlays.ownerUnknown')).toBe('Unknown')
+    expect(t('admin.overlays.detailConnection')).toBe('Connection')
+    expect(t('admin.overlays.notConnected')).toBe('Not connected')
+    expect(t('admin.overlays.connectedSinceRow', { timestamp: '13/07/2026, 08:48' })).toBe(
+      'Since 13/07/2026, 08:48'
+    )
+    expect(t('admin.overlays.selectPrompt')).toBe('Select an overlay to view details')
+  })
+
+  it('keeps the connected sources panel copy', () => {
+    expect(t('admin.overlays.sourcesHeading', { count: 2 })).toBe('Connected Sources (2)')
+    expect(t('admin.overlays.sourceActive')).toBe('Active')
+    expect(t('admin.overlays.sourceInactive')).toBe('Inactive')
+    expect(t('admin.overlays.sourceAdded', { date: '13/07/2026' })).toBe('Added 13/07/2026')
+    expect(t('admin.overlays.sourcesEmpty')).toBe('No sources connected')
+  })
+})

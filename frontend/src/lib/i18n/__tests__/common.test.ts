@@ -104,3 +104,19 @@ describe('app nav copy', () => {
     expect(t('common.appNav.logOut')).toBe('Log out')
   })
 })
+
+describe('compact duration copy', () => {
+  it('keeps the four compact duration shapes', () => {
+    // formatCompactDuration in lib/utils.ts assembled these from unit letters.
+    // They live in common rather than admin.* because the helper is generic
+    // infrastructure with no owning surface; the unit letters are copy in their
+    // own right, since a language that does not abbreviate days as 'd' has
+    // nowhere else to say so.
+    expect(t('common.duration.justNow')).toBe('just now')
+    expect(t('common.duration.minutes', { minutes: 8 })).toBe('8m')
+    expect(t('common.duration.hours', { hours: 3 })).toBe('3h')
+    expect(t('common.duration.hoursAndMinutes', { hours: 5, minutes: 12 })).toBe('5h 12m')
+    expect(t('common.duration.days', { days: 3 })).toBe('3d')
+    expect(t('common.duration.daysAndHours', { days: 3, hours: 4 })).toBe('3d 4h')
+  })
+})
