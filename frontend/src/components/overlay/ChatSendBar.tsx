@@ -263,7 +263,11 @@ export function ChatSendBar({ sources, onEnable, onReauth }: ChatSendBarProps) {
     >
       <div className="flex flex-wrap items-center gap-2">
         {/* Platform target pills */}
-        <div role="radiogroup" aria-label="Send to" className="flex flex-wrap items-center gap-1.5">
+        <div
+          role="radiogroup"
+          aria-label={t('viewerOverlay.chatSend.targetGroupLabel')}
+          className="flex flex-wrap items-center gap-1.5"
+        >
           {platformSources.map((s) => {
             const platform = s.platform as SingleSendPlatform
             const enabled = s.can_send === true
@@ -277,13 +281,19 @@ export function ChatSendBar({ sources, onEnable, onReauth }: ChatSendBarProps) {
                 aria-checked={active}
                 aria-label={
                   enabled
-                    ? `Send to ${platformLabel(t, platform)}`
-                    : `Enable sending for ${platformLabel(t, platform)}`
+                    ? t('viewerOverlay.chatSend.sendToPlatform', {
+                        platform: platformLabel(t, platform),
+                      })
+                    : t('viewerOverlay.chatSend.enableSendingFor', {
+                        platform: platformLabel(t, platform),
+                      })
                 }
                 title={
                   enabled
                     ? platformLabel(t, platform)
-                    : `Enable sending for ${platformLabel(t, platform)}`
+                    : t('viewerOverlay.chatSend.enableSendingFor', {
+                        platform: platformLabel(t, platform),
+                      })
                 }
                 onClick={() =>
                   enabled

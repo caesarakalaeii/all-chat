@@ -235,7 +235,7 @@
   },
   "src/components/overlay/ChatSendBar.tsx": {
     "no-restricted-syntax": {
-      "count": 2
+      "count": 1
     }
   },
   "src/components/overlay/PlatformGlyph.tsx": {

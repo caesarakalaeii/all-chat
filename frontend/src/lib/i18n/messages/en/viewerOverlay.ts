@@ -319,6 +319,9 @@ export const viewerOverlay = {
   },
 
   chatSend: {
+    targetGroupLabel: 'Send to',
+    sendToPlatform: 'Send to {platform}',
+    enableSendingFor: 'Enable sending for {platform}',
     allLabel: 'Send to all platforms',
     allText: 'All',
     messageLabel: 'Chat message',
