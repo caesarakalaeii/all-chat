@@ -196,14 +196,6 @@
       "count": 3
     }
   },
-  "src/components/CookieBanner.tsx": {
-    "no-restricted-syntax": {
-      "count": 2
-    },
-    "react/jsx-no-literals": {
-      "count": 35
-    }
-  },
   "src/components/ErrorDisplay.tsx": {
     "no-restricted-syntax": {
       "count": 2
