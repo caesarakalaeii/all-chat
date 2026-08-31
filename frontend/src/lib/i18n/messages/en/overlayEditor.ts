@@ -22,6 +22,26 @@
  */
 
 export const overlayEditor = {
+  nav: {
+    settingsLabel: 'Overlay settings',
+    // The count is a placeholder rather than an appended `({n})`: the
+    // parentheses are punctuation a language may render differently.
+    advancedCount: 'Advanced ({count})',
+  },
+  previewBackdrop: {
+    heading: 'Backdrop',
+    appBackground: 'Preview on app background',
+    lightBackground: 'Preview on light background',
+    chromaGreen: 'Preview on chroma green',
+    customColor: 'Custom preview background color',
+  },
+  settingsSearch: {
+    label: 'Search settings',
+    placeholder: 'Search settings… (e.g. badge, fade, banned words)',
+    clearLabel: 'Clear search',
+    resultsLabel: 'Matching settings',
+    noResults: 'No settings match “{query}”',
+  },
   themeMarketplace: {
     // Two title keys, not a qualifier concatenated onto a shared noun phrase:
     // see the comment in __tests__/overlayEditor.test.ts.
