@@ -722,3 +722,122 @@ describe('chat send bar form label', () => {
     expect(t('viewerOverlay.chatSend.formLabel')).toBe('Send a chat message')
   })
 })
+
+describe('monitor view header copy', () => {
+  it('keeps the header buttons and their tooltips', () => {
+    expect(t('viewerOverlay.monitor.details')).toBe('Details')
+    expect(t('viewerOverlay.monitor.engagement')).toBe('Engagement')
+    expect(t('viewerOverlay.monitor.engagementTitle')).toBe(
+      'Run polls and predictions for this overlay'
+    )
+    expect(t('viewerOverlay.monitor.rediscoverYouTube')).toBe('Re-discover YouTube')
+    expect(t('viewerOverlay.monitor.rediscoverYouTubeTitle')).toBe(
+      'Force YouTube to re-discover the live stream — use if chat stopped after a stream crash or restart'
+    )
+    expect(t('viewerOverlay.monitor.obsOverlay')).toBe('OBS overlay')
+  })
+})
+
+describe('monitor view notice copy', () => {
+  it('keeps both connection notices whole', () => {
+    expect(t('viewerOverlay.monitor.stillReconnecting')).toBe(
+      'Still reconnecting — this recovers on its own, and messages sent meanwhile replay when the connection returns. Closing this page is what loses them.'
+    )
+    expect(t('viewerOverlay.monitor.replayTruncated')).toBe(
+      'Some earlier messages may be missing — the disconnection outlasted the replay buffer, so the oldest part of the gap could not be recovered.'
+    )
+  })
+
+  it('keeps the no-role notice saying nothing about the overlay itself', () => {
+    // The payload behind this is identical for an overlay that does not exist,
+    // so it must not read as a fact about this one.
+    expect(t('viewerOverlay.monitor.noRole')).toBe(
+      "You can view this monitor, but you don't moderate here — moderation is disabled."
+    )
+  })
+
+  it('keeps both feature-gated notices, and only the owner gets a call to action', () => {
+    // The gate is keyed on the OWNER, so /upgrade would sell a moderator a plan
+    // that is not theirs to buy.
+    expect(t('viewerOverlay.monitor.featureGatedOwner')).toBe(
+      'Chat moderation is a premium feature.'
+    )
+    expect(t('viewerOverlay.monitor.featureGatedUpgrade')).toBe(
+      'Upgrade to moderate from your overlay'
+    )
+    expect(t('viewerOverlay.monitor.featureGatedModerator')).toBe(
+      "This streamer's plan doesn't include moderation right now, so your actions are unavailable until they renew it."
+    )
+  })
+
+  it('keeps both forms of the connect-to-moderate notice', () => {
+    // The channel name is optional, so it is two whole sentences rather than one
+    // with a fragment appended.
+    expect(t('viewerOverlay.monitor.needsConsent', { platform: 'twitch' })).toBe(
+      'Connect your own twitch account to moderate.'
+    )
+    expect(
+      t('viewerOverlay.monitor.needsConsentChannel', { platform: 'twitch', channel: 'somebody' })
+    ).toBe('Connect your own twitch account to moderate somebody.')
+    expect(t('viewerOverlay.monitor.connectPlatform', { platform: 'twitch' })).toBe(
+      'Connect twitch'
+    )
+  })
+
+  it('keeps the Discord link notice, which is per person rather than per server', () => {
+    expect(t('viewerOverlay.monitor.needsDiscordLink')).toBe(
+      'Link your Discord account to moderate Discord here — All-Chat checks your own server permissions before acting.'
+    )
+    expect(t('viewerOverlay.monitor.linkDiscord')).toBe('Link Discord')
+  })
+
+  it('keeps all four missing-scope notices and their two buttons', () => {
+    expect(t('viewerOverlay.monitor.missingScope', { platform: 'twitch' })).toBe(
+      'Grant moderation permissions to enable mod actions for twitch.'
+    )
+    expect(
+      t('viewerOverlay.monitor.missingScopeChannel', { platform: 'twitch', channel: 'somebody' })
+    ).toBe('Grant moderation permissions to enable mod actions for twitch (somebody).')
+    expect(t('viewerOverlay.monitor.missingScopeDiscord', { platform: 'discord' })).toBe(
+      'Re-invite the bot with moderation permissions to enable mod actions for discord.'
+    )
+    expect(
+      t('viewerOverlay.monitor.missingScopeDiscordChannel', {
+        platform: 'discord',
+        channel: 'general',
+      })
+    ).toBe(
+      'Re-invite the bot with moderation permissions to enable mod actions for discord (general).'
+    )
+    expect(t('viewerOverlay.monitor.reinviteBot')).toBe('Re-invite the bot')
+    expect(t('viewerOverlay.monitor.enableModeration')).toBe('Enable moderation & chat sending')
+    expect(t('viewerOverlay.monitor.comingSoonFor', { platform: 'tiktok' })).toBe(
+      '(coming soon for tiktok)'
+    )
+  })
+
+  it('keeps the Twitch mod-log opt-in with its scope explanation intact', () => {
+    // The scope note is not padding: the consent screen asks for
+    // moderator:manage:automod, which on a read-only feature looks like a mistake
+    // and gets declined.
+    expect(t('viewerOverlay.monitor.modLogOptIn')).toBe(
+      'Show Twitch moderation actions and AutoMod holds in this activity feed. Twitch requires an AutoMod “manage” permission to send us held messages at all — All-Chat only reads them; there are no approve/deny buttons yet.'
+    )
+    expect(t('viewerOverlay.monitor.enableModLog')).toBe('Show moderation & AutoMod events')
+  })
+
+  it('keeps both role variants of the re-auth prompt and all three of its buttons', () => {
+    expect(t('viewerOverlay.monitor.reauthOwner', { platform: 'twitch' })).toBe(
+      'Your twitch moderation permission expired or was never granted — re-authorize to keep moderating from your overlay.'
+    )
+    expect(t('viewerOverlay.monitor.reauthModerator', { platform: 'twitch' })).toBe(
+      'Your twitch moderation permission expired or was never granted — re-authorize to keep moderating here.'
+    )
+    expect(t('viewerOverlay.monitor.reconnectPlatform', { platform: 'twitch' })).toBe(
+      'Reconnect twitch'
+    )
+    expect(t('viewerOverlay.monitor.reauthorizeModeration')).toBe(
+      'Re-authorize moderation & chat sending'
+    )
+  })
+})
