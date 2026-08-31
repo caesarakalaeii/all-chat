@@ -24,4 +24,70 @@
  * a joined string, so word order stays the catalog's business.
  */
 
-export const errors = {} as const
+export const errors = {
+  unauthorized: {
+    title: 'Authentication Required',
+    message: 'You need to sign in to send messages.',
+    step1: 'Click the "Sign in with {platform}" button',
+    step2: 'Authorize the application to send messages on your behalf',
+    step3: 'Try sending your message again',
+  },
+  tokenExpired: {
+    title: 'Session Expired',
+    message: 'Your authentication session has expired.',
+    step1: 'Sign in again to refresh your session',
+    step2: 'Make sure to authorize the application',
+    step3: 'Try sending your message again',
+  },
+  rateLimited: {
+    title: 'Rate Limit Reached',
+    message: "You're sending messages too quickly. Please slow down.",
+    step1: 'Wait a moment before sending another message',
+    step2: 'Avoid sending messages in rapid succession',
+    step3: 'The rate limit will reset automatically',
+  },
+  banned: {
+    title: 'Unable to Send Messages',
+    message: 'You are currently banned from sending messages.',
+    step1: 'Check the reason for the ban below',
+    step2: 'Contact the streamer or moderators if you believe this is an error',
+    step3: "Wait for the ban to expire if it's temporary",
+  },
+  streamerOffline: {
+    title: 'Stream Not Live',
+    message: 'This streamer is not currently live.',
+    step1: 'Check if the stream has ended or not started yet',
+    step2: 'Try refreshing the page to update the stream status',
+    step3: 'You can only send messages when the stream is live',
+  },
+  // The only error type with four steps.
+  platformApiError: {
+    title: 'Platform Error',
+    message: 'The streaming platform encountered an error.',
+    step1: 'This is likely a temporary issue with the platform',
+    step2: 'Wait a moment and try again',
+    step3: 'Check if the platform is experiencing outages',
+    step4: 'Try sending your message again in a few moments',
+  },
+  networkError: {
+    title: 'Connection Error',
+    message: 'Failed to connect to the server.',
+    step1: 'Check your internet connection',
+    step2: 'Try refreshing the page',
+    step3: 'If the problem persists, the server may be experiencing issues',
+  },
+  validationError: {
+    title: 'Invalid Message',
+    message: 'Your message did not meet the requirements.',
+    step1: 'Check that your message is not empty',
+    step2: 'Make sure your message is not too long',
+    step3: 'Avoid using prohibited characters or content',
+  },
+  unknownError: {
+    title: 'Unexpected Error',
+    message: 'An unexpected error occurred while sending your message.',
+    step1: 'Try sending your message again',
+    step2: 'Refresh the page if the problem persists',
+    step3: 'Contact support if this error continues',
+  },
+} as const
