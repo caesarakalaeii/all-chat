@@ -421,6 +421,39 @@ export const overlayEditor = {
       'Mirror your native Twitch polls & predictions onto All-Chat overlays (read-only — viewers still vote in Twitch). Opt-in; it adds read-only Twitch scopes and takes effect after the next channel sync (a stream restart or re-adding the source).',
     enableMirroring: 'Enable Twitch mirroring',
   },
+  // Attaching a new platform to the overlay: the OAuth buttons, the Discord
+  // guild/channel dialogs, the TikTok username dialog and the admin escape hatch.
+  addSource: {
+    intro: 'Connect a platform to this overlay.',
+    connectTwitch: 'Connect Twitch',
+    connectYoutube: 'Connect YouTube',
+    connectKick: 'Connect Kick',
+    connectTiktok: 'Connect TikTok',
+    connectDiscord: 'Connect Discord',
+    // {emphasis} is the link to /settings.
+    discordNeedsServer: 'Connect a Discord server in {emphasis} first to add Discord sources.',
+    discordNeedsServerEmphasis: 'Settings',
+    channelLabel: 'Channel',
+    selectChannel: 'Select a channel...',
+    back: 'Back',
+    cancel: 'Cancel',
+    add: 'Add',
+    // Two spellings of the same word, deliberately. The Discord dialog rendered
+    // three dots and the TikTok one a real ellipsis; unifying them would change
+    // what is on screen, which this migration does not do.
+    addingEllipsis: 'Adding...',
+    adding: 'Adding\u2026',
+    tiktokTitle: 'Connect TikTok',
+    // The apostrophes are U+0027: the render site wrote &apos;, not ’.
+    tiktokBody:
+      "TikTok has no login step here. Enter the creator's username and we'll pull their live chat.",
+    tiktokPlaceholder: '@username',
+    adminSummary: 'Admin: manual channel ID',
+    adminYoutubePlaceholder: '@handle, channel URL, or UC\u2026',
+    adminChannelPlaceholder: 'Channel ID or username',
+    adminAdd: 'Add manually',
+    adminResolving: 'Resolving\u2026',
+  },
   // Sample copy the credit-roll theme preview renders so a streamer can see a
   // theme applied to something. It mirrors the real credits overlay.
   creditRollPreview: {
