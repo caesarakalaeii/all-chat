@@ -400,3 +400,59 @@ describe('paired devices page copy', () => {
     expect(t('settings.devices.revoking')).toBe('Revoking…')
   })
 })
+
+describe('streamer premium page copy', () => {
+  it('keeps the page chrome', () => {
+    expect(t('settings.premium.back')).toBe('← Back to Settings')
+    expect(t('settings.premium.heading')).toBe('Premium')
+    expect(t('settings.premium.connectPitch')).toBe(
+      'Back All-Chat on Patreon to unlock premium features automatically.'
+    )
+    // The trailing clause after the Patreon link. It is a sentence tail, not a
+    // fragment being concatenated into one: the {link} placeholder holds the
+    // whole sentence together.
+    expect(t('settings.premium.notAPatronSuffix', { link: 'Subscribe on Patreon' })).toBe(
+      'Not a patron yet? Subscribe on Patreon, then connect.'
+    )
+    expect(t('settings.premium.premiumRow')).toBe('Premium')
+    expect(t('settings.premium.statusExpired')).toBe('Below premium tier')
+    expect(t('settings.premium.notGranting')).toBe(
+      'Your Patreon is linked but not granting premium. Make sure your pledge is active and at or above the premium tier.'
+    )
+    expect(t('settings.premium.disconnectBody')).toBe(
+      'This unlinks your Patreon account. Premium granted by your subscription will be removed.'
+    )
+  })
+})
+
+describe('viewer premium page copy', () => {
+  it('keeps the authenticated page', () => {
+    expect(t('settings.viewerPremium.back')).toBe('← Back to Viewer Identity')
+    expect(t('settings.viewerPremium.heading')).toBe('Viewer Premium')
+    expect(t('settings.viewerPremium.subheading')).toBe(
+      'A cheaper subscription that unlocks viewer cosmetics — your premium chat badge and name gradient — across every overlay you appear in.'
+    )
+    expect(t('settings.viewerPremium.connectPitch')).toBe(
+      'Back All-Chat on Patreon to unlock your viewer premium cosmetics automatically.'
+    )
+    expect(t('settings.viewerPremium.notAPatronSuffix', { link: 'Subscribe on Patreon' })).toBe(
+      'Not a patron yet? Subscribe on Patreon (viewer tier from €2), then connect.'
+    )
+    expect(t('settings.viewerPremium.premiumRow')).toBe('Viewer premium')
+    expect(t('settings.viewerPremium.statusExpired')).toBe('Below viewer tier')
+    expect(t('settings.viewerPremium.notGranting')).toBe(
+      'Your Patreon is linked but not granting viewer premium. Make sure your pledge is active and at or above the viewer tier.'
+    )
+    expect(t('settings.viewerPremium.disconnectBody')).toBe(
+      'This unlinks your Patreon account. Viewer premium granted by your subscription will be removed.'
+    )
+  })
+
+  it('keeps the unauthenticated page', () => {
+    expect(t('settings.viewerPremium.signInHeading')).toBe('Sign in to manage viewer premium')
+    expect(t('settings.viewerPremium.signInBody')).toBe(
+      'Sign in with your streaming platform account, then back All-Chat on Patreon to unlock your premium chat badge and cosmetics.'
+    )
+    expect(t('settings.viewerPremium.signInLink')).toBe('Go to viewer sign-in →')
+  })
+})

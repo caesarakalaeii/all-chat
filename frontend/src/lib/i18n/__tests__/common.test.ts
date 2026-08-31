@@ -41,3 +41,32 @@ describe('shared platform names', () => {
     expect(t('common.platforms.discord')).toBe('Discord')
   })
 })
+
+describe('Patreon subscription copy', () => {
+  it('keeps the strings /settings/premium and /settings/viewer/premium both render', () => {
+    // Both pages drive the same Patreon connect flow with byte-identical copy.
+    // Only the strings that differ between them stay in settings.*.
+    expect(t('common.patreon.heading')).toBe('Patreon')
+    expect(t('common.patreon.connect')).toBe('Connect Patreon')
+    expect(t('common.patreon.connecting')).toBe('Redirecting…')
+    expect(t('common.patreon.notAPatron')).toBe('Not a patron yet?')
+    expect(t('common.patreon.subscribe')).toBe('Subscribe on Patreon')
+    expect(t('common.patreon.subscriptionRow')).toBe('Subscription')
+    expect(t('common.patreon.renewsRow')).toBe('Renews')
+    expect(t('common.patreon.active')).toBe('Active')
+    expect(t('common.patreon.inactive')).toBe('Inactive')
+    expect(t('common.patreon.disconnect')).toBe('Disconnect Patreon')
+    expect(t('common.patreon.disconnectTitle')).toBe('Disconnect Patreon?')
+    expect(t('common.patreon.disconnectCancel')).toBe('Cancel')
+    expect(t('common.patreon.disconnectConfirm')).toBe('Yes, disconnect')
+  })
+
+  it('keeps the four shared pledge statuses', () => {
+    // The fifth, "expired", differs per page ("Below premium tier" vs "Below
+    // viewer tier"), so it stays in each page's own namespace.
+    expect(t('common.patreon.statusActive')).toBe('Active')
+    expect(t('common.patreon.statusDeclined')).toBe('Payment declined')
+    expect(t('common.patreon.statusFormer')).toBe('Ended')
+    expect(t('common.patreon.statusNotSubscribed')).toBe('Not subscribed')
+  })
+})
