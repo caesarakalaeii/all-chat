@@ -18,7 +18,13 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { formatDateTime, formatNumber } from '@/lib/i18n/format'
+import {
+  formatDate,
+  formatDateTime,
+  formatNumber,
+  formatTime,
+  formatTimestamp,
+} from '@/lib/i18n/format'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -79,5 +85,40 @@ describe('formatDateTime', () => {
   it('builds separate formatters for different options', () => {
     expect(formatDateTime(instant, { timeZone: 'UTC', month: 'short' })).toBe('Mar')
     expect(formatDateTime(instant, { timeZone: 'UTC', month: 'long' })).toBe('March')
+  })
+})
+
+/**
+ * The three presets exist so a call site migrating off toLocaleDateString(),
+ * toLocaleTimeString() or toLocaleString() has a drop-in with the same output.
+ * Each is asserted against what the corresponding toLocale* call produces for
+ * the same instant in the same locale: the migration's rule is that rendered
+ * copy does not change, and a preset whose option set is merely plausible would
+ * break that silently.
+ */
+describe('the toLocale* presets render exactly what they replace', () => {
+  const instant = new Date('2026-03-04T15:06:07Z')
+
+  it('formatDate matches toLocaleDateString', () => {
+    expect(formatDate(instant, 'UTC')).toBe(instant.toLocaleDateString('en', { timeZone: 'UTC' }))
+    expect(formatDate(instant, 'UTC')).toBe('3/4/2026')
+  })
+
+  it('formatTime matches toLocaleTimeString', () => {
+    expect(formatTime(instant, 'UTC')).toBe(instant.toLocaleTimeString('en', { timeZone: 'UTC' }))
+    expect(formatTime(instant, 'UTC')).toBe('3:06:07 PM')
+  })
+
+  it('formatTimestamp matches toLocaleString, keeping both date and time', () => {
+    // dateStyle:'short' would have been the obvious option set and is wrong: it
+    // renders a 2-digit year, so timestamps would have silently lost a century.
+    expect(formatTimestamp(instant, 'UTC')).toBe(instant.toLocaleString('en', { timeZone: 'UTC' }))
+    expect(formatTimestamp(instant, 'UTC')).toBe('3/4/2026, 3:06:07 PM')
+  })
+
+  it('pins the locale, so a host default cannot leak in', () => {
+    expect(formatDate(instant, 'UTC')).not.toBe(
+      instant.toLocaleDateString('de', { timeZone: 'UTC' })
+    )
   })
 })
