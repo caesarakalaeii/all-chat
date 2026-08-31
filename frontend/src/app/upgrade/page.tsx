@@ -22,6 +22,10 @@ import { AppNav } from '@/components/AppNav'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { PATREON_JOIN_URL } from '@/lib/constants'
+import { getTranslations } from '@/lib/i18n'
+import { interpolateElements } from '@/lib/i18n/emphasise'
+
+const t = getTranslations()
 
 export const metadata = {
   title: 'Upgrade to Premium | All-Chat',
@@ -32,50 +36,25 @@ export const metadata = {
 
 interface PremiumFeature {
   icon: React.ComponentType<{ className?: string }>
-  title: string
-  description: string
+  /** Names this row's pair of `marketing.upgrade.*Title` / `*Body` leaves. */
+  messageStem: string
 }
 
 // Keep in sync with the onboarding extras tour in
 // components/onboarding/OnboardingChecklist.tsx — its copy mirrors this list
 // (see CLAUDE.md "Shipping a Feature").
-const features: PremiumFeature[] = [
-  {
-    icon: ShieldCheck,
-    title: 'Moderate from your overlay',
-    description:
-      'Moderate straight from the monitor view — no second dashboard. Delete, timeout, ban and unban on Twitch, Kick and Discord; timeout and ban on YouTube. (TikTok has no moderation API.)',
-  },
-  {
-    icon: Users,
-    title: 'Let your moderators help',
-    description:
-      'Hand the monitor view to the moderators you already trust. They act with their own platform accounts, so Twitch, YouTube and Kick check their moderator role on every action — and they never need a plan of their own.',
-  },
-  {
-    icon: Volume2,
-    title: 'ElevenLabs text-to-speech',
-    description:
-      'Read chat aloud with high-quality ElevenLabs voices, with full control over priority and pronunciation.',
-  },
-  {
-    icon: Radio,
-    title: 'YouTube stream selection',
-    description:
-      'Pick exactly which YouTube broadcast an overlay listens to instead of relying on auto-detection.',
-  },
-  {
-    icon: MessagesSquare,
-    title: 'Shared chat',
-    description: 'Combine several channels into one shared conversation across your overlays.',
-  },
-  {
-    icon: Sparkles,
-    title: 'Viewer flairs',
-    description:
-      'Stand out in any chat you appear in with premium cosmetics like animated name gradients.',
-  },
-]
+//
+// `as const satisfies` rather than a plain annotation: an annotation widens the
+// stems to string, and a typo would then resolve to a missing key at runtime
+// instead of failing tsc at the call site.
+const features = [
+  { icon: ShieldCheck, messageStem: 'moderation' },
+  { icon: Users, messageStem: 'moderators' },
+  { icon: Volume2, messageStem: 'tts' },
+  { icon: Radio, messageStem: 'streamSelection' },
+  { icon: MessagesSquare, messageStem: 'sharedChat' },
+  { icon: Sparkles, messageStem: 'flairs' },
+] as const satisfies ReadonlyArray<PremiumFeature>
 
 export default function UpgradePage() {
   return (
@@ -86,16 +65,12 @@ export default function UpgradePage() {
         <header className="space-y-4 text-center">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-3 py-1 text-xs font-medium text-text-sub">
             <Sparkles className="h-3.5 w-3.5 text-twitch" />
-            All-Chat Premium
+            {t('marketing.upgrade.badge')}
           </span>
           <h1 className="text-3xl font-bold text-text sm:text-4xl">
-            Unlock the full power of your overlay
+            {t('marketing.upgrade.title')}
           </h1>
-          <p className="mx-auto max-w-xl text-text-sub">
-            Premium is funded entirely through Patreon — it keeps All-Chat running and unlocks the
-            features that make multistream moderation effortless. Back the project once, and premium
-            applies automatically to your account.
-          </p>
+          <p className="mx-auto max-w-xl text-text-sub">{t('marketing.upgrade.body')}</p>
           <div className="flex flex-col items-center justify-center gap-3 pt-2 sm:flex-row">
             <Button
               variant="gradient"
@@ -105,26 +80,28 @@ export default function UpgradePage() {
                 // screen-reader-accessible content (jsx-a11y/anchor-has-content);
                 // Base UI renders the anchor with the Button's styling.
                 <a href={PATREON_JOIN_URL} target="_blank" rel="noopener noreferrer">
-                  Subscribe on Patreon
+                  {t('marketing.upgrade.subscribe')}
                 </a>
               }
             />
             <Button variant="outline" size="lg" render={<Link href="/settings/premium" />}>
-              Already a patron? Connect Patreon
+              {t('marketing.upgrade.connectPatreon')}
             </Button>
           </div>
         </header>
 
         {/* Feature list */}
         <Card className="divide-y divide-border p-0">
-          {features.map(({ icon: Icon, title, description }) => (
-            <div key={title} className="flex items-start gap-4 p-5">
+          {features.map(({ icon: Icon, messageStem }) => (
+            <div key={messageStem} className="flex items-start gap-4 p-5">
               <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface-2 text-twitch">
                 <Icon className="h-5 w-5" />
               </span>
               <div className="space-y-1">
-                <h2 className="font-semibold text-text">{title}</h2>
-                <p className="text-sm text-text-sub">{description}</p>
+                <h2 className="font-semibold text-text">
+                  {t(`marketing.upgrade.${messageStem}Title`)}
+                </h2>
+                <p className="text-sm text-text-sub">{t(`marketing.upgrade.${messageStem}Body`)}</p>
               </div>
             </div>
           ))}
@@ -132,52 +109,58 @@ export default function UpgradePage() {
 
         {/* How it works */}
         <Card className="space-y-4 p-6">
-          <h2 className="text-lg font-semibold text-text">How it works</h2>
+          <h2 className="text-lg font-semibold text-text">{t('marketing.upgrade.howItWorks')}</h2>
           <ol className="space-y-3 text-sm text-text-sub">
             <li className="flex gap-3">
               <Check className="mt-0.5 h-4 w-4 shrink-0 text-twitch" />
               <span>
-                Back All-Chat on{' '}
-                <a
-                  href={PATREON_JOIN_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-medium text-twitch underline underline-offset-2"
-                >
-                  Patreon
-                </a>{' '}
-                at the premium tier.
+                {interpolateElements(t('marketing.upgrade.step1'), {
+                  patreon: (
+                    <a
+                      href={PATREON_JOIN_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-twitch underline underline-offset-2"
+                    >
+                      {t('marketing.upgrade.step1Patreon')}
+                    </a>
+                  ),
+                })}
               </span>
             </li>
             <li className="flex gap-3">
               <Check className="mt-0.5 h-4 w-4 shrink-0 text-twitch" />
               <span>
-                Connect your Patreon account on the{' '}
-                <Link
-                  href="/settings/premium"
-                  className="font-medium text-twitch underline underline-offset-2"
-                >
-                  Premium settings
-                </Link>{' '}
-                page.
+                {interpolateElements(t('marketing.upgrade.step2'), {
+                  settings: (
+                    <Link
+                      href="/settings/premium"
+                      className="font-medium text-twitch underline underline-offset-2"
+                    >
+                      {t('marketing.upgrade.step2Settings')}
+                    </Link>
+                  ),
+                })}
               </span>
             </li>
             <li className="flex gap-3">
               <Check className="mt-0.5 h-4 w-4 shrink-0 text-twitch" />
-              <span>Premium unlocks automatically — no codes, no waiting.</span>
+              <span>{t('marketing.upgrade.step3')}</span>
             </li>
           </ol>
         </Card>
 
         <p className="text-center text-xs text-text-dim">
-          Just want viewer cosmetics?{' '}
-          <Link
-            href="/settings/viewer/premium"
-            className="text-text-sub underline underline-offset-2"
-          >
-            See viewer premium
-          </Link>
-          .
+          {interpolateElements(t('marketing.upgrade.viewerFootnote'), {
+            link: (
+              <Link
+                href="/settings/viewer/premium"
+                className="text-text-sub underline underline-offset-2"
+              >
+                {t('marketing.upgrade.viewerFootnoteLink')}
+              </Link>
+            ),
+          })}
         </p>
       </main>
     </div>
