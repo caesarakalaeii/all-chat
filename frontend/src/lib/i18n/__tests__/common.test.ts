@@ -91,3 +91,16 @@ describe('shared wordmark', () => {
     expect(t('common.brand.wordmark')).toBe('all-chat')
   })
 })
+
+describe('app nav copy', () => {
+  it('keeps the logged-in nav link labels', () => {
+    // AppNav is chrome on every logged-in surface (dashboard, settings,
+    // overlays, docs), so its copy is shared rather than owned by one of them.
+    expect(t('common.appNav.dashboard')).toBe('Dashboard')
+    expect(t('common.appNav.flairs')).toBe('Flairs')
+    expect(t('common.appNav.admin')).toBe('Admin')
+    expect(t('common.appNav.settings')).toBe('Settings')
+    expect(t('common.appNav.docs')).toBe('Docs')
+    expect(t('common.appNav.logOut')).toBe('Log out')
+  })
+})
