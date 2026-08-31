@@ -357,3 +357,130 @@ describe('sound group copy', () => {
     expect(t('overlayEditor.sounds.customUrlPlaceholder')).toBe('https://example.com/sound.mp3')
   })
 })
+
+describe('text-to-speech group copy', () => {
+  it('keeps the section headers, which the panel renders upper-case as written', () => {
+    expect(t('overlayEditor.tts.sectionVoice')).toBe('VOICE')
+    expect(t('overlayEditor.tts.sectionAdvanced')).toBe('ADVANCED (ELEVENLABS)')
+    expect(t('overlayEditor.tts.sectionThrottling')).toBe('THROTTLING')
+    expect(t('overlayEditor.tts.sectionContent')).toBe('CONTENT')
+    expect(t('overlayEditor.tts.sectionPriority')).toBe('PRIORITY')
+  })
+
+  it('keeps the top-level toggle and its unsupported-browser notice', () => {
+    expect(t('overlayEditor.tts.enable')).toBe('Enable text-to-speech')
+    expect(t('overlayEditor.tts.unsupported')).toBe('This browser does not support text-to-speech.')
+  })
+
+  it('keeps the provider choice and its upsell', () => {
+    expect(t('overlayEditor.tts.provider')).toBe('Voice provider')
+    expect(t('overlayEditor.tts.providerBrowser')).toBe('Browser (free)')
+    expect(t('overlayEditor.tts.providerElevenLabs')).toBe('ElevenLabs (premium)')
+    // Rendered three times as `<PremiumUpsellLink /> to use ElevenLabs voices.`
+    // — the link has its own copy, so only the trailing clause is here. It is
+    // one key, not three, because the three sites were byte-identical.
+    expect(t('overlayEditor.tts.upsellSuffix')).toBe('to use ElevenLabs voices.')
+  })
+
+  it('keeps the browser voice picker', () => {
+    expect(t('overlayEditor.tts.browserVoice')).toBe('Voice')
+    expect(t('overlayEditor.tts.browserVoiceDefault')).toBe('Default')
+    expect(t('overlayEditor.tts.browserVoiceNote')).toBe(
+      'Browser voice \u2014 list depends on your OS/browser.'
+    )
+  })
+
+  it('keeps the speech sliders and the test button', () => {
+    expect(t('overlayEditor.tts.volume')).toBe('Volume')
+    expect(t('overlayEditor.tts.rate')).toBe('Speech rate')
+    expect(t('overlayEditor.tts.pitch')).toBe('Pitch')
+    expect(t('overlayEditor.tts.test')).toBe('Test voice')
+  })
+
+  it('keeps the throttling controls', () => {
+    expect(t('overlayEditor.tts.filterMode')).toBe('Which messages are spoken')
+    expect(t('overlayEditor.tts.filterModeAll')).toBe('All')
+    expect(t('overlayEditor.tts.filterModeSample')).toBe('Sample')
+    expect(t('overlayEditor.tts.filterModePriorityOnly')).toBe('Priority-only')
+    expect(t('overlayEditor.tts.sampleRate')).toBe('Sample rate')
+    expect(t('overlayEditor.tts.sampleRateNote')).toBe('Chance a non-priority message is spoken.')
+    expect(t('overlayEditor.tts.maxQueue')).toBe('Max queue length')
+    expect(t('overlayEditor.tts.messagesPerMinute')).toBe('Messages per minute')
+    expect(t('overlayEditor.tts.userCooldown')).toBe('Per-user cooldown')
+    expect(t('overlayEditor.tts.staleness')).toBe('Drop messages older than')
+    // Suffixed onto the number by NumberControl; the leading space is the
+    // separator and is part of the copy.
+    expect(t('overlayEditor.tts.secondsUnit')).toBe(' s')
+  })
+
+  it('keeps the content controls', () => {
+    expect(t('overlayEditor.tts.readUsername')).toBe('Read username')
+    expect(t('overlayEditor.tts.readPlatform')).toBe('Read platform name')
+    expect(t('overlayEditor.tts.maxMessageLength')).toBe('Max message length')
+    expect(t('overlayEditor.tts.charsUnit')).toBe(' chars')
+    expect(t('overlayEditor.tts.skipEmoteOnly')).toBe('Skip emote-only messages')
+    expect(t('overlayEditor.tts.skipLinks')).toBe('Skip link-only messages')
+    expect(t('overlayEditor.tts.platforms')).toBe('Platforms')
+  })
+
+  it('keeps the priority controls', () => {
+    expect(t('overlayEditor.tts.priorityEvents')).toBe('Announce priority events')
+    expect(t('overlayEditor.tts.priorityBitsMin')).toBe('Minimum bits to announce')
+  })
+
+  it('keeps the API key field and its states', () => {
+    expect(t('overlayEditor.tts.apiKeyLabel')).toBe('ElevenLabs API key')
+    expect(t('overlayEditor.tts.apiKeyPlaceholder')).toBe('sk-...')
+    expect(t('overlayEditor.tts.apiKeyEncrypted')).toBe(
+      'Your key is encrypted server-side and never returned.'
+    )
+    expect(t('overlayEditor.tts.saveKey')).toBe('Save key')
+    expect(t('overlayEditor.tts.savingKey')).toBe('Saving\u2026')
+    expect(t('overlayEditor.tts.keySaved')).toBe(
+      'Key saved and encrypted. Click Test key to verify.'
+    )
+    expect(t('overlayEditor.tts.testKey')).toBe('Test key')
+    expect(t('overlayEditor.tts.testingKey')).toBe('Testing\u2026')
+    expect(t('overlayEditor.tts.removeKey')).toBe('Remove key')
+    expect(t('overlayEditor.tts.removingKey')).toBe('Removing\u2026')
+    expect(t('overlayEditor.tts.confirmRemoveKey')).toBe('Confirm remove')
+  })
+
+  it('keeps the quota readout as one sentence with all three numbers in it', () => {
+    // Was five sibling nodes: two locale-formatted numbers, the words, the
+    // percentage and a bare '%)'. A language that orders the count after the
+    // unit cannot reassemble that.
+    expect(t('overlayEditor.tts.quota', { remaining: '9,000', limit: '10,000', percent: 90 })).toBe(
+      '9,000 / 10,000 characters this month (90%)'
+    )
+    expect(t('overlayEditor.tts.quotaUnknown')).toBe('Click Test key to see your remaining quota.')
+  })
+
+  it('keeps the ElevenLabs voice picker states', () => {
+    expect(t('overlayEditor.tts.elevenLabsVoice')).toBe('ElevenLabs voice')
+    expect(t('overlayEditor.tts.voicesLoading')).toBe('Loading voices\u2026')
+    expect(t('overlayEditor.tts.voicesError')).toBe('Could not load voices')
+    expect(t('overlayEditor.tts.voicesPending')).toBe('Voices will load shortly\u2026')
+    expect(t('overlayEditor.tts.voicesNeedKey')).toBe('Enter your API key above to load voices.')
+    expect(t('overlayEditor.tts.voicesEmpty')).toBe('No voices available')
+    expect(t('overlayEditor.tts.saveVoice')).toBe('Save voice')
+    expect(t('overlayEditor.tts.savingVoice')).toBe('Saving voice\u2026')
+  })
+
+  it('keeps the OBS URL panel copy', () => {
+    expect(t('overlayEditor.tts.obsUrlNote')).toBe(
+      'Paste this URL into OBS as your browser source to enable ElevenLabs TTS.'
+    )
+    expect(t('overlayEditor.tts.obsUrlLabel')).toBe(
+      'OBS URL \u2014 copy and paste into OBS browser source'
+    )
+    expect(t('overlayEditor.tts.copyObsUrl')).toBe('Copy OBS URL')
+    expect(t('overlayEditor.tts.regenerateObsUrl')).toBe('Regenerate URL')
+    expect(t('overlayEditor.tts.regeneratingObsUrl')).toBe('Regenerating\u2026')
+    expect(t('overlayEditor.tts.regenerateConfirmTitle')).toBe('Regenerate OBS URL?')
+    expect(t('overlayEditor.tts.regenerateConfirmBody')).toBe(
+      'This invalidates the current OBS URL. You\u2019ll need to paste the new URL into OBS.'
+    )
+    expect(t('overlayEditor.tts.cancel')).toBe('Cancel')
+  })
+})
