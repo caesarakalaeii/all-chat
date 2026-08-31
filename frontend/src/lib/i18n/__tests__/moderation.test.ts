@@ -67,9 +67,14 @@ describe('moderators panel copy', () => {
     expect(t('moderation.roster.loadFailed')).toBe("Could not load this overlay's moderators.")
     expect(t('moderation.roster.tryAgain')).toBe('Try again')
     expect(t('moderation.roster.loading')).toBe('Loading moderators…')
-    expect(t('moderation.roster.explainer')).toBe(
+    // The emphasised words are a placeholder so the sentence stays whole. The
+    // rendered text must still read exactly as it did before the migration.
+    expect(
+      t('moderation.roster.explainer', { emphasis: t('moderation.roster.explainerEmphasis') })
+    ).toBe(
       'Moderators act with their own platform accounts, so Twitch, YouTube and Kick check their moderator role on every action. Removing someone here takes effect immediately.'
     )
+    expect(t('moderation.roster.explainerEmphasis')).toBe('their own')
     expect(t('moderation.roster.inviteButton')).toBe('Invite a moderator')
     expect(t('moderation.roster.usage', { used: '2', cap: '5' })).toBe('2 of 5 used')
     expect(t('moderation.roster.removeAll')).toBe('Remove all')
@@ -123,9 +128,12 @@ describe('moderators panel copy', () => {
 
   it('keeps the invite dialog copy, including the shown-once warning', () => {
     expect(t('moderation.invite.title')).toBe('Invite a moderator')
-    expect(t('moderation.invite.sendLink')).toBe(
+    expect(
+      t('moderation.invite.sendLink', { emphasis: t('moderation.invite.sendLinkEmphasis') })
+    ).toBe(
       "Send this link to the person you want to moderate. It works once, expires in 7 days, and won't be shown again — if it gets lost, create a new invite."
     )
+    expect(t('moderation.invite.sendLinkEmphasis')).toBe("won't be shown again")
     expect(t('moderation.invite.copied')).toBe('Copied')
     expect(t('moderation.invite.copyLink')).toBe('Copy link')
     expect(t('moderation.invite.done')).toBe('Done')

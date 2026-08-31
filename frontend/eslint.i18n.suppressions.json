@@ -518,14 +518,6 @@
       "count": 3
     }
   },
-  "src/components/editor/ModeratorsPanel.tsx": {
-    "no-restricted-syntax": {
-      "count": 1
-    },
-    "react/jsx-no-literals": {
-      "count": 35
-    }
-  },
   "src/components/legal/LegalLayout.tsx": {
     "react/jsx-no-literals": {
       "count": 8
