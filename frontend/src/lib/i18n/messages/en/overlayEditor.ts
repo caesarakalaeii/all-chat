@@ -802,5 +802,57 @@ export const overlayEditor = {
     createFailed: 'Failed to create overlay',
     eventSettingsSaved: 'Event settings saved',
     eventSettingsSaveFailed: 'Failed to save event settings',
+    streamSelectionSaved: 'Stream selection saved',
+    streamSelectionSaveFailed: 'Failed to save stream selection',
+    relaySaved: 'Relay settings saved',
+    relaySaveFailed: 'Failed to save relay settings',
+    engagementSaved: 'Engagement settings saved',
+    engagementSaveFailed: 'Failed to save engagement settings',
+    twitchConsentFailed: 'Could not start Twitch consent. Please try again.',
+    discordSourceAdded: 'Discord source added',
+    discordSourceAddFailed: 'Failed to add Discord source',
+    // Raised by three handlers -- the OAuth short-circuit, the manual channel-ID
+    // form and the add-source callback -- with a different body each time.
+    sourceAdded: 'Source added',
+    oauthConnectFailed: 'Could not connect',
+    tiktokSourceAdded: 'TikTok source added',
+    tiktokSourceAddFailed: 'Failed to add TikTok source',
+    tiktokSourceAddFailedBody: 'Check the username and try again.',
+    manualSourceAddFailed: 'Failed to add source',
+    manualSourceAddFailedBody: 'Verify the channel ID and try again.',
+    // The platform name arrives in the ?source_added= query param.
+    oauthSourceAddedBody: 'Successfully added {platform} source!',
+    youtubePermissionRequired: 'YouTube permission required',
+    youtubePermissionRequiredBody:
+      'To add your YouTube channel, you must allow All-Chat to see your YouTube account. Please try again and approve the YouTube permission on the Google screen.',
+    youtubeNoChannel: 'No YouTube channel found',
+    youtubeNoChannelBody:
+      'We could not find a YouTube channel on that Google account. Make sure the account has a YouTube channel, then try again.',
+    // Same words as manualSourceAddFailed but a separate failure with its own
+    // body, so a language that varies the phrasing by cause can say so.
+    oauthSourceAddFailed: 'Failed to add source',
+    sourceRemoved: 'Source removed',
+    sourceRemoveFailed: 'Failed to remove source',
+    twitchChatConnected: 'Twitch chat connected',
+    twitchChatReconnectFailed: 'Could not reconnect Twitch chat',
+    sharedOverlayAdded: 'Shared overlay added',
+    sharedOverlayAddedBody: "Added {sender}'s overlay",
+    sharedOverlayAddFailed: 'Failed to add shared overlay',
+    shareRevoked: 'Share revoked',
+    shareRevokedBody: 'Your share with {revoker} was revoked',
+    // Stands in for the revoker when the socket envelope omits the username.
+    shareRevokedUnknownRevoker: 'someone',
+    shareRequestSent: 'Share request sent to {username}',
+    shareRequestFailed: 'Failed to send share request',
+    cloned: 'Overlay cloned',
+    cloneFailed: 'Failed to clone overlay',
+    // U+2014 em dash, U+2026 ellipsis.
+    overlayIdReset: 'Overlay ID reset \u2014 redirecting\u2026',
+    overlayIdResetFailed: 'Failed to reset overlay ID',
+    mockMessageFailed: 'Failed to send mock message',
+    extensionOverlaySet: 'Extension overlay set',
+    extensionOverlaySetBody: 'This overlay will be shown in the browser extension.',
+    extensionOverlayUnset: 'Extension overlay deactivated',
+    extensionOverlayUpdateFailed: 'Failed to update overlay',
   },
 } as const

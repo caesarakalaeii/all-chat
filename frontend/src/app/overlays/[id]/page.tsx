@@ -623,10 +623,13 @@ function StreamSelectionPanel({
       Object.keys(config).forEach((k) => config[k] === undefined && delete config[k])
       await overlaysApi.updateSourceConfig(overlayId, source.id, config)
       trackEvent('yt_stream_strategy_set', { strategy })
-      toastManager.add({ title: 'Stream selection saved', type: 'success' })
+      toastManager.add({ title: t('overlayEditor.toasts.streamSelectionSaved'), type: 'success' })
       onSaved()
     } catch {
-      toastManager.add({ title: 'Failed to save stream selection', type: 'error' })
+      toastManager.add({
+        title: t('overlayEditor.toasts.streamSelectionSaveFailed'),
+        type: 'error',
+      })
     } finally {
       setSaving(false)
     }
@@ -762,10 +765,10 @@ function RelayPanel({
     onSaved({ ...source, config: newConfig })
     try {
       await updateSourceConfig(overlayId, source.id, newConfig)
-      toastManager.add({ title: 'Relay settings saved', type: 'success' })
+      toastManager.add({ title: t('overlayEditor.toasts.relaySaved'), type: 'success' })
     } catch {
       onSaved(source) // rollback
-      toastManager.add({ title: 'Failed to save relay settings', type: 'error' })
+      toastManager.add({ title: t('overlayEditor.toasts.relaySaveFailed'), type: 'error' })
     } finally {
       setSaving(false)
     }
@@ -959,10 +962,10 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
           string
         >
       )
-      toastManager.add({ title: 'Engagement settings saved', type: 'success' })
+      toastManager.add({ title: t('overlayEditor.toasts.engagementSaved'), type: 'success' })
     } catch (err) {
       toastManager.add({
-        title: 'Failed to save engagement settings',
+        title: t('overlayEditor.toasts.engagementSaveFailed'),
         description: err instanceof ApiError ? err.message : undefined,
         type: 'error',
       })
@@ -1009,7 +1012,7 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
       window.location.href = await engagementApi.getTwitchMirrorConsentUrl(overlayId)
     } catch {
       toastManager.add({
-        title: 'Could not start Twitch consent. Please try again.',
+        title: t('overlayEditor.toasts.twitchConsentFailed'),
         type: 'error',
       })
     }
@@ -1268,13 +1271,13 @@ function AddSourceForm({
       setSelectedChannelName('')
       onSourceAdded?.()
       trackEvent('source_configured', { platform: 'discord' })
-      toastManager.add({ title: 'Discord source added', type: 'success' })
+      toastManager.add({ title: t('overlayEditor.toasts.discordSourceAdded'), type: 'success' })
     } catch (err) {
       // Surface the server's reason: the Discord source guard (ADR-0048) refuses channels in
       // servers the user has not connected and explains what to do, which a generic failure
       // toast would throw away.
       toastManager.add({
-        title: 'Failed to add Discord source',
+        title: t('overlayEditor.toasts.discordSourceAddFailed'),
         description: err instanceof ApiError ? err.message : undefined,
         type: 'error',
       })
@@ -1299,12 +1302,12 @@ function AddSourceForm({
       // source), so the source was added directly without an OAuth reflow.
       // Refresh the source list instead of silently doing nothing.
       onSourceAdded?.()
-      toastManager.add({ title: 'Source added', type: 'success' })
+      toastManager.add({ title: t('overlayEditor.toasts.sourceAdded'), type: 'success' })
       return
     }
     // Surface the failure rather than failing silently.
     toastManager.add({
-      title: 'Could not connect',
+      title: t('overlayEditor.toasts.oauthConnectFailed'),
       description: result.message,
       type: 'error',
     })
@@ -2564,10 +2567,11 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   useNotificationSocket(id, undefined, (envelope) => {
     if (envelope.type === 'share_revoked') {
       const data = envelope.data as { revoked_by_username?: string } | undefined
-      const revoker = data?.revoked_by_username || 'someone'
+      const revoker =
+        data?.revoked_by_username || t('overlayEditor.toasts.shareRevokedUnknownRevoker')
       toastManager.add({
-        title: 'Share revoked',
-        description: `Your share with ${revoker} was revoked`,
+        title: t('overlayEditor.toasts.shareRevoked'),
+        description: t('overlayEditor.toasts.shareRevokedBody', { revoker }),
         type: 'error',
       })
       overlaysApi.getSources(id).then(setSources).catch(console.error)
@@ -2581,8 +2585,8 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
 
     if (sourceAdded) {
       toastManager.add({
-        title: 'Source added',
-        description: `Successfully added ${sourceAdded} source!`,
+        title: t('overlayEditor.toasts.sourceAdded'),
+        description: t('overlayEditor.toasts.oauthSourceAddedBody', { platform: sourceAdded }),
         type: 'success',
       })
       overlaysApi.getSources(id).then(setSources).catch(console.error)
@@ -2590,24 +2594,22 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     } else if (error === 'youtube_permission_required') {
       trackEvent('source_add_failed', { platform: 'youtube', reason: 'permission_required' })
       toastManager.add({
-        title: 'YouTube permission required',
-        description:
-          'To add your YouTube channel, you must allow All-Chat to see your YouTube account. Please try again and approve the YouTube permission on the Google screen.',
+        title: t('overlayEditor.toasts.youtubePermissionRequired'),
+        description: t('overlayEditor.toasts.youtubePermissionRequiredBody'),
         type: 'error',
       })
     } else if (error === 'youtube_no_channel') {
       trackEvent('source_add_failed', { platform: 'youtube', reason: 'no_channel' })
       toastManager.add({
-        title: 'No YouTube channel found',
-        description:
-          'We could not find a YouTube channel on that Google account. Make sure the account has a YouTube channel, then try again.',
+        title: t('overlayEditor.toasts.youtubeNoChannel'),
+        description: t('overlayEditor.toasts.youtubeNoChannelBody'),
         type: 'error',
       })
     } else if (error === 'failed_to_add_source') {
       trackEvent('source_add_failed', { reason: 'failed' })
       toastManager.add({
-        title: 'Failed to add source',
-        description: 'Please try again.',
+        title: t('overlayEditor.toasts.oauthSourceAddFailed'),
+        description: t('common.toast.tryAgain'),
         type: 'error',
       })
     }
@@ -2630,11 +2632,11 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     try {
       await overlaysApi.removeSource(id, sourceId)
       setSources((prev) => prev.filter((s) => s.id !== sourceId))
-      toastManager.add({ title: 'Source removed', type: 'success' })
+      toastManager.add({ title: t('overlayEditor.toasts.sourceRemoved'), type: 'success' })
     } catch {
       toastManager.add({
-        title: 'Failed to remove source',
-        description: 'Please try again.',
+        title: t('overlayEditor.toasts.sourceRemoveFailed'),
+        description: t('common.toast.tryAgain'),
         type: 'error',
       })
     }
@@ -2654,11 +2656,11 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
       // Already holds the chat scopes — nothing to re-grant; refresh so the
       // now-migrated source reflects its EventSub state.
       void overlaysApi.getSources(id).then(setSources).catch(console.error)
-      toastManager.add({ title: 'Twitch chat connected', type: 'success' })
+      toastManager.add({ title: t('overlayEditor.toasts.twitchChatConnected'), type: 'success' })
       return
     }
     toastManager.add({
-      title: 'Could not reconnect Twitch chat',
+      title: t('overlayEditor.toasts.twitchChatReconnectFailed'),
       description: result.message,
       type: 'error',
     })
@@ -2672,11 +2674,11 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
       })
       setSources((prev) => [...prev, source])
       trackEvent('source_configured', { platform: 'tiktok' })
-      toastManager.add({ title: 'TikTok source added', type: 'success' })
+      toastManager.add({ title: t('overlayEditor.toasts.tiktokSourceAdded'), type: 'success' })
     } catch {
       toastManager.add({
-        title: 'Failed to add TikTok source',
-        description: 'Check the username and try again.',
+        title: t('overlayEditor.toasts.tiktokSourceAddFailed'),
+        description: t('overlayEditor.toasts.tiktokSourceAddFailedBody'),
         type: 'error',
       })
     }
@@ -2690,11 +2692,11 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
       })
       setSources((prev) => [...prev, source])
       trackEvent('source_configured', { platform })
-      toastManager.add({ title: 'Source added', type: 'success' })
+      toastManager.add({ title: t('overlayEditor.toasts.sourceAdded'), type: 'success' })
     } catch {
       toastManager.add({
-        title: 'Failed to add source',
-        description: 'Verify the channel ID and try again.',
+        title: t('overlayEditor.toasts.manualSourceAddFailed'),
+        description: t('overlayEditor.toasts.manualSourceAddFailedBody'),
         type: 'error',
       })
     }
@@ -2711,14 +2713,16 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
       setSources(updated)
       trackEvent('source_configured', { platform: 'shared_overlay' })
       toastManager.add({
-        title: 'Shared overlay added',
-        description: `Added ${share.sender_display_name}'s overlay`,
+        title: t('overlayEditor.toasts.sharedOverlayAdded'),
+        description: t('overlayEditor.toasts.sharedOverlayAddedBody', {
+          sender: share.sender_display_name,
+        }),
         type: 'success',
       })
     } catch {
       toastManager.add({
-        title: 'Failed to add shared overlay',
-        description: 'Please try again.',
+        title: t('overlayEditor.toasts.sharedOverlayAddFailed'),
+        description: t('common.toast.tryAgain'),
         type: 'error',
       })
     }
@@ -2755,10 +2759,10 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     setIsCloning(true)
     try {
       const cloned = await overlaysApi.clone(id)
-      toastManager.add({ title: 'Overlay cloned', type: 'success' })
+      toastManager.add({ title: t('overlayEditor.toasts.cloned'), type: 'success' })
       router.push(`/overlays/${cloned.id}`)
     } catch {
-      toastManager.add({ title: 'Failed to clone overlay', type: 'error' })
+      toastManager.add({ title: t('overlayEditor.toasts.cloneFailed'), type: 'error' })
     } finally {
       setIsCloning(false)
     }
@@ -2772,10 +2776,10 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
         await overlaysApi.update(cloned.id, { name: overlay.name })
       }
       await overlaysApi.delete(id)
-      toastManager.add({ title: 'Overlay ID reset — redirecting…', type: 'success' })
+      toastManager.add({ title: t('overlayEditor.toasts.overlayIdReset'), type: 'success' })
       router.push(`/overlays/${cloned.id}`)
     } catch {
-      toastManager.add({ title: 'Failed to reset overlay ID', type: 'error' })
+      toastManager.add({ title: t('overlayEditor.toasts.overlayIdResetFailed'), type: 'error' })
       setIsResetting(false)
     }
     setShowResetConfirm(false)
@@ -2787,11 +2791,14 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     setShareLoading(true)
     try {
       await sharesApi.createRequest(username, id)
-      toastManager.add({ title: `Share request sent to ${username}`, type: 'success' })
+      toastManager.add({
+        title: t('overlayEditor.toasts.shareRequestSent', { username }),
+        type: 'success',
+      })
       setShowShareModal(false)
       setShareRecipient('')
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to send share request'
+      const msg = err instanceof Error ? err.message : t('overlayEditor.toasts.shareRequestFailed')
       toastManager.add({ title: msg, type: 'error' })
     } finally {
       setShareLoading(false)
@@ -2844,7 +2851,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
       setMockForm((prev) => ({ ...prev, message: '' }))
     } catch (error) {
       console.error('[Editor] Failed to send mock message:', error)
-      toastManager.add({ title: 'Failed to send mock message', type: 'error' })
+      toastManager.add({ title: t('overlayEditor.toasts.mockMessageFailed'), type: 'error' })
     }
   }
 
@@ -2977,14 +2984,17 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
       const updated = await overlaysApi.update(id, { is_public_for_viewers: true })
       setOverlay(updated)
       toastManager.add({
-        title: 'Extension overlay set',
-        description: 'This overlay will be shown in the browser extension.',
+        title: t('overlayEditor.toasts.extensionOverlaySet'),
+        description: t('overlayEditor.toasts.extensionOverlaySetBody'),
         type: 'success',
       })
     } catch {
       // Roll back optimistic update on failure
       setIsPublicForViewers(false)
-      toastManager.add({ title: 'Failed to update overlay', type: 'error' })
+      toastManager.add({
+        title: t('overlayEditor.toasts.extensionOverlayUpdateFailed'),
+        type: 'error',
+      })
     }
   }
 
@@ -2994,11 +3004,14 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     try {
       const updated = await overlaysApi.update(id, { is_public_for_viewers: false })
       setOverlay(updated)
-      toastManager.add({ title: 'Extension overlay deactivated', type: 'success' })
+      toastManager.add({ title: t('overlayEditor.toasts.extensionOverlayUnset'), type: 'success' })
     } catch {
       // Roll back optimistic update on failure
       setIsPublicForViewers(true)
-      toastManager.add({ title: 'Failed to update overlay', type: 'error' })
+      toastManager.add({
+        title: t('overlayEditor.toasts.extensionOverlayUpdateFailed'),
+        type: 'error',
+      })
     }
   }
 
