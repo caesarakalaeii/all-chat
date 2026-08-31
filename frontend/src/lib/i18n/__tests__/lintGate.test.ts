@@ -81,25 +81,34 @@ describe('i18n lint gate', () => {
     expect(await lint(source)).toEqual([])
   })
 
-  it('passes a code sample inside <Pre>, which is a program rather than copy', async () => {
-    // Both /docs pages document the WebSocket API by showing the JSON frames and
-    // the JavaScript and Python that read them. That is a program: translating
-    // an identifier would produce a sample that does not run. <Pre> is
-    // capitalised, so unlike <style> it can be named in elementOverrides.
-    const source = 'export const P = () => <Pre lang="json">{`{ "type": "ping" }`}</Pre>\n'
+  it('passes a not-copy value referenced through a named constant', async () => {
+    // The route every not-copy value in this sweep takes: a wire field name, a
+    // brand mark, a chat command or a code sample is hoisted to a named module
+    // constant with a comment saying why, and the render site reads the
+    // constant. Both /docs pages need this for the ~51 API identifiers they
+    // name in <Code> and the JSON/JavaScript/Python samples in <Pre>:
+    // translating an identifier produces a sample that does not run, and
+    // translating a field name names a field the gateway does not send.
+    //
+    // Two narrower fixes were tried first and BOTH fail, so do not reach for
+    // them again:
+    //
+    //   - elementOverrides: { Pre: ..., Code: ... }. Setting the option at all
+    //     registers a VariableDeclaration handler (jsx-no-literals.js:439) that
+    //     calls isRequireStatement(d.init) with no null check, so ESLint crashes
+    //     outright on any uninitialised `let` anywhere in the linted set. `let
+    //     token: string` in src/app/chat/auth-success/page.tsx:113 is one.
+    //   - Wrapping the value in an expression container, `<Code>{'x'}</Code>`.
+    //     Under noStrings: true the rule reports a string literal inside a
+    //     container too, so this changes nothing.
+    const source =
+      "const WIRE_TYPE = 'chat_message'\nexport const P = () => <Code>{WIRE_TYPE}</Code>\n"
     expect(await lint(source)).toEqual([])
   })
 
-  it('passes a wire field name inside <Code>', async () => {
-    // <Code> holds a field name, a JSON fragment or a chat command - values that
-    // cross a process boundary and must stay byte-identical.
-    expect(await lint('export const P = () => <Code>overlay_id</Code>\n')).toEqual([])
-  })
-
-  it('still flags copy in an element nested inside <Pre>', async () => {
-    // applyToNestedElements defaults to true, so the override would otherwise
-    // exempt a whole subtree. Prose that happens to sit under a <Pre> is still
-    // copy, and this is the case that would let it through unnoticed.
+  it('still flags copy inside <Pre>, so it is not a blanket exemption', async () => {
+    // Nothing about <Pre> is exempt: the case above passes because of what the
+    // child IS, not where it sits. Prose under a <Pre> is still copy.
     expect(await lint('export const P = () => <Pre><p>Save changes</p></Pre>\n')).toContain(
       'react/jsx-no-literals'
     )
