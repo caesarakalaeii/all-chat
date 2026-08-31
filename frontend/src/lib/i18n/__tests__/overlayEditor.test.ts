@@ -1273,3 +1273,26 @@ describe('event display settings page copy', () => {
     )
   })
 })
+
+describe('create overlay page copy', () => {
+  it('keeps the form', () => {
+    expect(t('overlayEditor.create.heading')).toBe('Create Overlay')
+    expect(t('overlayEditor.create.body')).toBe(
+      'Give your overlay a name. You can add chat sources after creation.'
+    )
+    expect(t('overlayEditor.create.nameLabel')).toBe('Overlay Name')
+    expect(t('overlayEditor.create.namePlaceholder')).toBe('e.g. Main Stream, TikTok Only')
+    expect(t('overlayEditor.create.nameRequired')).toBe('Overlay name is required')
+    expect(t('overlayEditor.create.cancel')).toBe('Cancel')
+    expect(t('overlayEditor.create.submit')).toBe('Create Overlay')
+  })
+})
+
+describe('embed preview page copy', () => {
+  it('keeps the waiting-for-messages empty state', () => {
+    expect(t('overlayEditor.embedPreview.waitingHeading')).toBe('Waiting for messages...')
+    expect(t('overlayEditor.embedPreview.waitingBody')).toBe(
+      'Messages will appear here when chat is active'
+    )
+  })
+})
