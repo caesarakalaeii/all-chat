@@ -429,14 +429,6 @@
       "count": 3
     }
   },
-  "src/components/appearance/TTSGroup.tsx": {
-    "no-restricted-syntax": {
-      "count": 26
-    },
-    "react/jsx-no-literals": {
-      "count": 28
-    }
-  },
   "src/components/docs/prose.tsx": {
     "react/jsx-no-literals": {
       "count": 3
