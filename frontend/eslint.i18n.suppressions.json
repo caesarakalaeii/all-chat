@@ -7,14 +7,6 @@
       "count": 85
     }
   },
-  "src/app/admin/viewers/page.tsx": {
-    "no-restricted-syntax": {
-      "count": 3
-    },
-    "react/jsx-no-literals": {
-      "count": 61
-    }
-  },
   "src/app/dev/theme-contrast/page.tsx": {
     "react/jsx-no-literals": {
       "count": 3

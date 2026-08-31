@@ -45,6 +45,7 @@ import { PremiumDurationChooser } from '@/components/admin/PremiumDurationChoose
 import { UserAvatar } from '@/components/UserAvatar'
 import { PlatformBadge } from '@/components/ui/badge'
 import { ChannelLink } from '@/components/ChannelLink'
+import { useTranslations } from '@/lib/i18n'
 
 interface ViewerSession {
   id: string
@@ -92,9 +93,20 @@ interface ViewerActivity {
 
 const PAGE_SIZE = 50
 
+// The reason recorded when an admin bans without typing one. A request-body
+// value, not copy: admin_viewers.go:141 applies the identical default
+// server-side, and translating one side would silently split the stored value.
+const DEFAULT_BAN_REASON = 'No reason provided'
+
+// The dash shown where a session-only viewer has no linked account. A
+// typographic symbol standing in for absent data, not copy; the title attribute
+// beside it says the same thing in words.
+const NO_ACCOUNT_DASH = '\u2014'
+
 export default function AdminViewersPage() {
   const router = useRouter()
   const { user } = useAuthStore()
+  const t = useTranslations()
 
   const [viewers, setViewers] = useState<ViewerSession[]>([])
   const [total, setTotal] = useState(0)
@@ -148,11 +160,11 @@ export default function AdminViewersPage() {
 
   // Debounce the search box so we don't hit the API on every keystroke.
   useEffect(() => {
-    const t = setTimeout(() => {
+    const debounce = setTimeout(() => {
       setSearch(searchInput)
       setOffset(0)
     }, 300)
-    return () => clearTimeout(t)
+    return () => clearTimeout(debounce)
   }, [searchInput])
 
   // Fetch is defined inline in the effect (state is set only after the await, so
@@ -182,7 +194,7 @@ export default function AdminViewersPage() {
       } catch (error) {
         if (cancelled) return
         console.error('Failed to fetch viewers:', error)
-        toastManager.add({ title: 'Failed to load viewers', type: 'error' })
+        toastManager.add({ title: t('admin.viewers.loadError'), type: 'error' })
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -192,7 +204,7 @@ export default function AdminViewersPage() {
     return () => {
       cancelled = true
     }
-  }, [user, offset, search, statusFilter, premiumFilter, platformFilter, refreshKey])
+  }, [user, offset, search, statusFilter, premiumFilter, platformFilter, refreshKey, t])
 
   const refetchViewers = () => setRefreshKey((k) => k + 1)
 
@@ -207,7 +219,7 @@ export default function AdminViewersPage() {
       setActivity(data)
     } catch (error) {
       console.error('Failed to fetch viewer activity:', error)
-      toastManager.add({ title: 'Failed to load activity', type: 'error' })
+      toastManager.add({ title: t('admin.viewers.activityLoadError'), type: 'error' })
     } finally {
       setActivityLoading(false)
     }
@@ -225,16 +237,19 @@ export default function AdminViewersPage() {
     try {
       setBanningId(selectedViewer.id)
       await apiClient.post(`/api/v1/admin/viewers/${selectedViewer.id}/ban`, {
-        reason: banReason || 'No reason provided',
+        reason: banReason || DEFAULT_BAN_REASON,
       })
-      toastManager.add({ title: `${selectedViewer.username} banned successfully`, type: 'success' })
+      toastManager.add({
+        title: t('admin.viewers.banSuccess', { username: selectedViewer.username }),
+        type: 'success',
+      })
       setShowBanModal(false)
       setSelectedViewer(null)
       setBanReason('')
       refetchViewers()
     } catch (error) {
       console.error('Failed to ban viewer:', error)
-      toastManager.add({ title: 'Failed to ban viewer', type: 'error' })
+      toastManager.add({ title: t('admin.viewers.banError'), type: 'error' })
     } finally {
       setBanningId(null)
     }
@@ -244,12 +259,12 @@ export default function AdminViewersPage() {
     try {
       setBanningId(viewerId)
       await apiClient.post(`/api/v1/admin/viewers/${viewerId}/unban`, {})
-      toastManager.add({ title: `${username} unbanned successfully`, type: 'success' })
+      toastManager.add({ title: t('admin.viewers.unbanSuccess', { username }), type: 'success' })
       setUnbanDialogViewer(null)
       refetchViewers()
     } catch (error) {
       console.error('Failed to unban viewer:', error)
-      toastManager.add({ title: 'Failed to unban viewer', type: 'error' })
+      toastManager.add({ title: t('admin.viewers.unbanError'), type: 'error' })
     } finally {
       setBanningId(null)
     }
@@ -267,14 +282,16 @@ export default function AdminViewersPage() {
       }
       await apiClient.post(`/api/v1/admin/viewers/${viewer.id}/premium`, body)
       toastManager.add({
-        title: `${viewer.username} premium ${viewer.is_premium ? 'revoked' : 'granted'}`,
+        title: viewer.is_premium
+          ? t('admin.viewers.premiumRevoked', { username: viewer.username })
+          : t('admin.viewers.premiumGranted', { username: viewer.username }),
         type: 'success',
       })
       setPremiumDialogViewer(null)
       refetchViewers()
     } catch (error) {
       console.error('Failed to update viewer premium:', error)
-      toastManager.add({ title: 'Failed to update premium status', type: 'error' })
+      toastManager.add({ title: t('admin.viewers.premiumError'), type: 'error' })
     } finally {
       setPremiumLoading(false)
     }
@@ -291,14 +308,18 @@ export default function AdminViewersPage() {
   function renderPremiumControl(viewer: ViewerSession) {
     if (!viewer.viewer_id) {
       return (
-        <span className="text-xs text-text-dim" title="Session-only viewer (no linked account)">
-          —
+        <span className="text-xs text-text-dim" title={t('admin.viewers.sessionOnlyTitle')}>
+          {NO_ACCOUNT_DASH}
         </span>
       )
     }
     return (
       <button
-        aria-label={`${viewer.is_premium ? 'Premium' : 'Free'}: change premium status for ${viewer.username}`}
+        aria-label={
+          viewer.is_premium
+            ? t('admin.viewers.changePremiumPremiumLabel', { username: viewer.username })
+            : t('admin.viewers.changePremiumFreeLabel', { username: viewer.username })
+        }
         className={clsx(
           'inline-flex items-center rounded px-2 py-0.5 text-xs font-medium transition-colors',
           viewer.is_premium
@@ -312,7 +333,7 @@ export default function AdminViewersPage() {
           setPremiumDialogViewer(viewer)
         }}
       >
-        {viewer.is_premium ? 'Premium' : 'Free'}
+        {viewer.is_premium ? t('admin.viewers.premiumBadge') : t('admin.viewers.freeBadge')}
       </button>
     )
   }
@@ -321,27 +342,33 @@ export default function AdminViewersPage() {
     return (
       <div className="flex items-center gap-2">
         <Button variant="outline" size="sm" onClick={() => openActivity(viewer)}>
-          Activity
+          {t('admin.viewers.activityButton')}
         </Button>
         {viewer.is_banned ? (
           <Button
             variant="outline"
             size="sm"
-            aria-label={`${banningId === viewer.id ? 'Unbanning' : 'Unban'} ${viewer.username}`}
+            aria-label={
+              banningId === viewer.id
+                ? t('admin.viewers.unbanningLabel', { username: viewer.username })
+                : t('admin.viewers.unbanLabel', { username: viewer.username })
+            }
             disabled={banningId === viewer.id}
             onClick={() => setUnbanDialogViewer(viewer)}
           >
-            {banningId === viewer.id ? 'Unbanning...' : 'Unban'}
+            {banningId === viewer.id
+              ? t('admin.viewers.unbanningButton')
+              : t('admin.viewers.unbanButton')}
           </Button>
         ) : (
           <Button
             variant="destructive"
             size="sm"
-            aria-label={`Ban ${viewer.username}`}
+            aria-label={t('admin.viewers.banLabel', { username: viewer.username })}
             disabled={banningId === viewer.id}
             onClick={() => handleBanClick(viewer)}
           >
-            Ban
+            {t('admin.viewers.banButton')}
           </Button>
         )}
       </div>
@@ -376,12 +403,12 @@ export default function AdminViewersPage() {
     <div className="mx-auto max-w-7xl px-4 py-8">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-text">Viewer Management</h1>
-          <p className="mt-1 text-sm text-text-sub">
-            Search viewer sessions, inspect activity, and manage bans and premium
-          </p>
+          <h1 className="text-2xl font-bold text-text">{t('admin.viewers.heading')}</h1>
+          <p className="mt-1 text-sm text-text-sub">{t('admin.viewers.intro')}</p>
         </div>
-        <span className="text-sm text-text-sub">{total.toLocaleString()} matching</span>
+        <span className="text-sm text-text-sub">
+          {t('admin.viewers.totalMatching', { count: total.toLocaleString() })}
+        </span>
       </div>
 
       {/* Search + filters (server-side) */}
@@ -389,12 +416,12 @@ export default function AdminViewersPage() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="lg:col-span-2">
             <label htmlFor={searchId} className="mb-2 block text-sm font-medium text-text-sub">
-              Search
+              {t('admin.viewers.searchLabel')}
             </label>
             <input
               id={searchId}
               type="text"
-              placeholder="Username, display name, or platform user ID..."
+              placeholder={t('admin.viewers.searchPlaceholder')}
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               className="focus-visible:ring-ring block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none sm:text-sm"
@@ -402,7 +429,7 @@ export default function AdminViewersPage() {
           </div>
           <div>
             <label htmlFor={platformId} className="mb-2 block text-sm font-medium text-text-sub">
-              Platform
+              {t('admin.viewers.platformLabel')}
             </label>
             <select
               id={platformId}
@@ -413,17 +440,17 @@ export default function AdminViewersPage() {
               }}
               className="focus-visible:ring-ring block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text focus-visible:ring-2 focus-visible:outline-none sm:text-sm"
             >
-              <option value="all">All platforms</option>
-              <option value="twitch">Twitch</option>
-              <option value="youtube">YouTube</option>
-              <option value="kick">Kick</option>
-              <option value="tiktok">TikTok</option>
+              <option value="all">{t('admin.viewers.platformAll')}</option>
+              <option value="twitch">{t('common.platforms.twitch')}</option>
+              <option value="youtube">{t('common.platforms.youtube')}</option>
+              <option value="kick">{t('common.platforms.kick')}</option>
+              <option value="tiktok">{t('common.platforms.tiktok')}</option>
             </select>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label htmlFor={statusId} className="mb-2 block text-sm font-medium text-text-sub">
-                Status
+                {t('admin.viewers.statusLabel')}
               </label>
               <select
                 id={statusId}
@@ -434,14 +461,14 @@ export default function AdminViewersPage() {
                 }}
                 className="focus-visible:ring-ring block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text focus-visible:ring-2 focus-visible:outline-none sm:text-sm"
               >
-                <option value="all">Any</option>
-                <option value="active">Active</option>
-                <option value="banned">Banned</option>
+                <option value="all">{t('admin.viewers.statusAny')}</option>
+                <option value="active">{t('admin.viewers.statusActive')}</option>
+                <option value="banned">{t('admin.viewers.statusBanned')}</option>
               </select>
             </div>
             <div>
               <label htmlFor={premiumId} className="mb-2 block text-sm font-medium text-text-sub">
-                Premium
+                {t('admin.viewers.premiumLabel')}
               </label>
               <select
                 id={premiumId}
@@ -452,9 +479,9 @@ export default function AdminViewersPage() {
                 }}
                 className="focus-visible:ring-ring block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text focus-visible:ring-2 focus-visible:outline-none sm:text-sm"
               >
-                <option value="all">Any</option>
-                <option value="premium">Premium</option>
-                <option value="free">Free</option>
+                <option value="all">{t('admin.viewers.premiumAny')}</option>
+                <option value="premium">{t('admin.viewers.premiumOnly')}</option>
+                <option value="free">{t('admin.viewers.premiumFree')}</option>
               </select>
             </div>
           </div>
@@ -469,34 +496,32 @@ export default function AdminViewersPage() {
           ))}
         </Card>
       ) : viewers.length === 0 ? (
-        <Card className="p-8 text-center text-sm text-text-dim">
-          No viewer sessions match your search or filters.
-        </Card>
+        <Card className="p-8 text-center text-sm text-text-dim">{t('admin.viewers.empty')}</Card>
       ) : (
         <>
           <Card className="hidden overflow-hidden md:block">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <caption className="sr-only">Viewers</caption>
+                <caption className="sr-only">{t('admin.viewers.tableCaption')}</caption>
                 <thead className="border-b border-border bg-surface-2">
                   <tr>
                     <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
-                      Viewer
+                      {t('admin.viewers.columnViewer')}
                     </th>
                     <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
-                      Platform
+                      {t('admin.viewers.columnPlatform')}
                     </th>
                     <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
-                      Last Message
+                      {t('admin.viewers.columnLastMessage')}
                     </th>
                     <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
-                      Premium
+                      {t('admin.viewers.columnPremium')}
                     </th>
                     <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
-                      Status
+                      {t('admin.viewers.columnStatus')}
                     </th>
                     <th scope="col" className="px-4 py-3 text-left font-medium text-text-sub">
-                      Actions
+                      {t('admin.viewers.columnActions')}
                     </th>
                   </tr>
                 </thead>
@@ -514,24 +539,24 @@ export default function AdminViewersPage() {
                           ? formatDistanceToNow(new Date(viewer.last_message_at), {
                               addSuffix: true,
                             })
-                          : 'Never'}
+                          : t('admin.viewers.neverMessaged')}
                       </td>
                       <td className="px-4 py-3">{renderPremiumControl(viewer)}</td>
                       <td className="px-4 py-3">
                         {viewer.is_banned ? (
                           <div>
                             <span className="bg-destructive/10 text-destructive inline-flex items-center rounded px-2 py-0.5 text-xs font-medium">
-                              BANNED
+                              {t('admin.viewers.badgeBanned')}
                             </span>
                             {viewer.banned_reason && (
                               <div className="mt-1 text-xs text-text-dim">
-                                Reason: {viewer.banned_reason}
+                                {t('admin.viewers.banReason', { reason: viewer.banned_reason })}
                               </div>
                             )}
                           </div>
                         ) : (
                           <span className="inline-flex items-center rounded bg-kick/10 px-2 py-0.5 text-xs font-medium text-kick">
-                            Active
+                            {t('admin.viewers.badgeActive')}
                           </span>
                         )}
                       </td>
@@ -551,11 +576,11 @@ export default function AdminViewersPage() {
                   {renderIdentity(viewer)}
                   {viewer.is_banned ? (
                     <span className="bg-destructive/10 text-destructive inline-flex shrink-0 items-center rounded px-2 py-0.5 text-xs font-medium">
-                      BANNED
+                      {t('admin.viewers.badgeBanned')}
                     </span>
                   ) : (
                     <span className="inline-flex shrink-0 items-center rounded bg-kick/10 px-2 py-0.5 text-xs font-medium text-kick">
-                      Active
+                      {t('admin.viewers.badgeActive')}
                     </span>
                   )}
                 </div>
@@ -564,11 +589,13 @@ export default function AdminViewersPage() {
                   <span>
                     {viewer.last_message_at
                       ? formatDistanceToNow(new Date(viewer.last_message_at), { addSuffix: true })
-                      : 'Never'}
+                      : t('admin.viewers.neverMessaged')}
                   </span>
                 </div>
                 {viewer.is_banned && viewer.banned_reason && (
-                  <div className="mt-2 text-xs text-text-dim">Reason: {viewer.banned_reason}</div>
+                  <div className="mt-2 text-xs text-text-dim">
+                    {t('admin.viewers.banReason', { reason: viewer.banned_reason })}
+                  </div>
                 )}
                 <div className="mt-3 flex items-center justify-between gap-3">
                   {renderPremiumControl(viewer)}
@@ -581,8 +608,11 @@ export default function AdminViewersPage() {
           {/* Pagination */}
           <div className="mt-4 flex items-center justify-between text-sm text-text-sub">
             <span>
-              Showing {pageStart.toLocaleString()}–{pageEnd.toLocaleString()} of{' '}
-              {total.toLocaleString()}
+              {t('admin.viewers.pageRange', {
+                start: pageStart.toLocaleString(),
+                end: pageEnd.toLocaleString(),
+                total: total.toLocaleString(),
+              })}
             </span>
             <div className="flex items-center gap-2">
               <Button
@@ -591,7 +621,7 @@ export default function AdminViewersPage() {
                 disabled={!hasPrev}
                 onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
               >
-                Previous
+                {t('admin.viewers.previousPage')}
               </Button>
               <Button
                 variant="outline"
@@ -599,7 +629,7 @@ export default function AdminViewersPage() {
                 disabled={!hasNext}
                 onClick={() => setOffset(offset + PAGE_SIZE)}
               >
-                Next
+                {t('admin.viewers.nextPage')}
               </Button>
             </div>
           </div>
@@ -618,10 +648,10 @@ export default function AdminViewersPage() {
       >
         {activityViewer && (
           <Dialog.Content>
-            <Dialog.Title>Activity for &ldquo;{activityViewer.username}&rdquo;</Dialog.Title>
-            <Dialog.Description>
-              Messages this viewer has sent through All-Chat, and whose chats they appear in.
-            </Dialog.Description>
+            <Dialog.Title>
+              {t('admin.viewers.activityTitle', { username: activityViewer.username })}
+            </Dialog.Title>
+            <Dialog.Description>{t('admin.viewers.activityDescription')}</Dialog.Description>
             {activityLoading ? (
               <div className="mt-4 space-y-2">
                 <Skeleton className="h-10 w-full rounded-lg" />
@@ -631,17 +661,21 @@ export default function AdminViewersPage() {
               <div className="mt-4">
                 <div className="mb-4 flex gap-6 text-sm">
                   <div>
-                    <div className="text-xs text-text-sub">Total messages</div>
+                    <div className="text-xs text-text-sub">
+                      {t('admin.viewers.activityTotalMessages')}
+                    </div>
                     <div className="text-lg font-semibold text-text">
                       {activity.total_messages.toLocaleString()}
                     </div>
                   </div>
                   <div>
-                    <div className="text-xs text-text-sub">Last message</div>
+                    <div className="text-xs text-text-sub">
+                      {t('admin.viewers.activityLastMessage')}
+                    </div>
                     <div className="text-lg font-semibold text-text">
                       {activity.last_sent_at
                         ? formatDistanceToNow(new Date(activity.last_sent_at), { addSuffix: true })
-                        : 'Never'}
+                        : t('admin.viewers.neverMessaged')}
                     </div>
                   </div>
                 </div>
@@ -658,7 +692,9 @@ export default function AdminViewersPage() {
                               href={`/admin/users?user=${s.streamer_user_id}`}
                               className="text-primary text-sm font-medium hover:underline"
                             >
-                              {s.streamer_username ? `@${s.streamer_username}` : 'View streamer'}
+                              {s.streamer_username
+                                ? `@${s.streamer_username}`
+                                : t('admin.viewers.activityStreamerFallback')}
                             </Link>
                             <div className="mt-0.5 flex items-center gap-2 text-xs text-text-sub">
                               <PlatformBadge platform={s.platform} size="sm" />
@@ -674,7 +710,7 @@ export default function AdminViewersPage() {
                                 href={`/admin/overlays?overlay=${s.overlay_id}`}
                                 className="text-xs text-text-sub hover:underline"
                               >
-                                overlay
+                                {t('admin.viewers.activityOverlayLink')}
                               </Link>
                             )}
                           </div>
@@ -683,14 +719,14 @@ export default function AdminViewersPage() {
                     ))}
                   </ul>
                 ) : (
-                  <p className="text-sm text-text-dim italic">
-                    No message activity recorded for this viewer.
-                  </p>
+                  <p className="text-sm text-text-dim italic">{t('admin.viewers.activityEmpty')}</p>
                 )}
               </div>
             ) : null}
             <div className="mt-6 flex justify-end">
-              <Dialog.Close render={<Button variant="outline">Close</Button>} />
+              <Dialog.Close
+                render={<Button variant="outline">{t('admin.viewers.activityClose')}</Button>}
+              />
             </div>
           </Dialog.Content>
         )}
@@ -706,19 +742,23 @@ export default function AdminViewersPage() {
         {premiumDialogViewer && (
           <Dialog.Content showCloseButton={false}>
             <Dialog.Title>
-              {premiumDialogViewer.is_premium ? 'Revoke' : 'Grant'} premium for &ldquo;
-              {premiumDialogViewer.username}&rdquo;?
+              {premiumDialogViewer.is_premium
+                ? t('admin.viewers.revokePremiumTitle', {
+                    username: premiumDialogViewer.username,
+                  })
+                : t('admin.viewers.grantPremiumTitle', { username: premiumDialogViewer.username })}
             </Dialog.Title>
             <Dialog.Description>
               {premiumDialogViewer.is_premium
-                ? 'They will lose access to gradients, avatar frames, and flairs.'
-                : 'They will be able to use gradients, avatar frames, and flairs.'}
+                ? t('admin.viewers.revokePremiumBody')
+                : t('admin.viewers.grantPremiumBody')}
             </Dialog.Description>
             {premiumDialogViewer.is_premium ? (
               premiumDialogViewer.premium_expires_at && (
                 <p className="mt-2 text-xs font-medium text-amber-400/80">
-                  Time-limited &mdash; expires{' '}
-                  {new Date(premiumDialogViewer.premium_expires_at).toLocaleString()}
+                  {t('admin.viewers.premiumExpires', {
+                    timestamp: new Date(premiumDialogViewer.premium_expires_at).toLocaleString(),
+                  })}
                 </p>
               )
             ) : (
@@ -731,7 +771,9 @@ export default function AdminViewersPage() {
               />
             )}
             <div className="mt-6 flex justify-end gap-3">
-              <Dialog.Close render={<Button variant="outline">Cancel</Button>} />
+              <Dialog.Close
+                render={<Button variant="outline">{t('admin.viewers.premiumDialogCancel')}</Button>}
+              />
               <Button
                 variant="default"
                 disabled={
@@ -740,10 +782,10 @@ export default function AdminViewersPage() {
                 onClick={() => handleTogglePremium(premiumDialogViewer, grantDurationSeconds)}
               >
                 {premiumLoading
-                  ? 'Updating...'
+                  ? t('admin.viewers.premiumUpdating')
                   : premiumDialogViewer.is_premium
-                    ? 'Revoke Premium'
-                    : 'Grant Premium'}
+                    ? t('admin.viewers.revokePremiumConfirm')
+                    : t('admin.viewers.grantPremiumConfirm')}
               </Button>
             </div>
           </Dialog.Content>
@@ -759,18 +801,20 @@ export default function AdminViewersPage() {
       >
         {unbanDialogViewer && (
           <Dialog.Content showCloseButton={false}>
-            <Dialog.Title>Unban &ldquo;{unbanDialogViewer.username}&rdquo;?</Dialog.Title>
-            <Dialog.Description>
-              This will restore their ability to send messages.
-            </Dialog.Description>
+            <Dialog.Title>
+              {t('admin.viewers.unbanTitle', { username: unbanDialogViewer.username })}
+            </Dialog.Title>
+            <Dialog.Description>{t('admin.viewers.unbanBody')}</Dialog.Description>
             <div className="mt-6 flex justify-end gap-3">
-              <Dialog.Close render={<Button variant="outline">Cancel</Button>} />
+              <Dialog.Close
+                render={<Button variant="outline">{t('admin.viewers.unbanCancel')}</Button>}
+              />
               <Button
                 variant="default"
                 disabled={banningId === unbanDialogViewer.id}
                 onClick={() => handleUnban(unbanDialogViewer.id, unbanDialogViewer.username)}
               >
-                Unban Viewer
+                {t('admin.viewers.unbanConfirm')}
               </Button>
             </div>
           </Dialog.Content>
@@ -789,19 +833,21 @@ export default function AdminViewersPage() {
         }}
       >
         <Dialog.Content showCloseButton={false}>
-          <Dialog.Title>Ban Viewer &ldquo;{selectedViewer?.username}&rdquo;?</Dialog.Title>
+          <Dialog.Title>
+            {t('admin.viewers.banTitle', { username: selectedViewer?.username ?? '' })}
+          </Dialog.Title>
           <Dialog.Description>
-            This will prevent {selectedViewer?.username} from sending messages.
+            {t('admin.viewers.banBody', { username: selectedViewer?.username ?? '' })}
           </Dialog.Description>
           <div className="mt-4">
             <label htmlFor={banReasonId} className="mb-2 block text-sm font-medium text-text-sub">
-              Reason (optional)
+              {t('admin.viewers.banReasonLabel')}
             </label>
             <textarea
               id={banReasonId}
               value={banReason}
               onChange={(e) => setBanReason(e.target.value)}
-              placeholder="Enter reason for ban..."
+              placeholder={t('admin.viewers.banReasonPlaceholder')}
               className="focus-visible:ring-ring w-full resize-none rounded-lg border border-border bg-surface-2 px-3 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none"
               rows={3}
             />
@@ -810,7 +856,7 @@ export default function AdminViewersPage() {
             <Dialog.Close
               render={
                 <Button variant="outline" disabled={banningId === selectedViewer?.id}>
-                  Cancel
+                  {t('admin.viewers.banCancel')}
                 </Button>
               }
             />
@@ -819,7 +865,9 @@ export default function AdminViewersPage() {
               disabled={banningId === selectedViewer?.id}
               onClick={handleBan}
             >
-              {banningId === selectedViewer?.id ? 'Banning...' : 'Ban Viewer'}
+              {banningId === selectedViewer?.id
+                ? t('admin.viewers.banning')
+                : t('admin.viewers.banConfirm')}
             </Button>
           </div>
         </Dialog.Content>
