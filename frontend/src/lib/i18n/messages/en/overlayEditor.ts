@@ -268,6 +268,32 @@ export const overlayEditor = {
     regenerateConfirmBody:
       'This invalidates the current OBS URL. You’ll need to paste the new URL into OBS.',
     cancel: 'Cancel',
+    // Inline errors on the API key form, shown next to the field rather than as
+    // a toast.
+    apiKeyEmptyError: 'API key cannot be empty.',
+    pickVoiceError: 'Pick a voice before saving.',
+    saveKeyError: 'Could not save. Try again.',
+    apiKeySavedToast: 'API key saved.',
+    apiKeySaveFailedToast: 'Could not save key',
+    // Shown as the toast description when the rejected value is not an Error,
+    // so there is no message to surface.
+    networkErrorDetail: 'network error',
+    apiKeyRemovedToast: 'API key removed.',
+    apiKeyRemoveFailedToast: 'Could not remove key. Try again.',
+    // One toast per ElevenLabs status code from the key test. 401 and 422 say
+    // the same thing today but are distinct outcomes, so they share a key only
+    // because the sentence is identical, not because the causes are.
+    testInvalidKeyToast: 'Invalid API key',
+    // U+2014 em dash.
+    testRateLimitedToast: 'Rate-limited \u2014 try again in a minute',
+    testUnreachableToast: 'Could not reach ElevenLabs. Check your connection.',
+    testUnavailableToast: 'ElevenLabs service unavailable',
+    voiceUpdatedToast: 'Voice updated.',
+    voiceSaveFailedToast: 'Could not save voice',
+    obsUrlCopiedToast: 'OBS URL copied.',
+    obsUrlCopyFailedToast: 'Could not copy URL.',
+    obsUrlRegeneratedToast: 'New OBS URL copied to clipboard.',
+    obsUrlRegenerateFailedToast: 'Could not regenerate URL. Try again.',
   },
   colorPicker: {
     swatchLabel: 'Pick color for {label}',

@@ -225,11 +225,11 @@ function ApiKeyInput({
 
   async function handleSave(): Promise<void> {
     if (apiKey.trim() === '') {
-      setError('API key cannot be empty.')
+      setError(t('overlayEditor.tts.apiKeyEmptyError'))
       return
     }
     if (voiceId.trim() === '') {
-      setError('Pick a voice before saving.')
+      setError(t('overlayEditor.tts.pickVoiceError'))
       return
     }
     setSaving(true)
@@ -238,12 +238,12 @@ function ApiKeyInput({
       await onSave(apiKey, voiceId)
       // T-13-07 mitigation: clear key from state immediately after POST resolves.
       onApiKeyChange('')
-      toastManager.add({ title: 'API key saved.', type: 'success' })
+      toastManager.add({ title: t('overlayEditor.tts.apiKeySavedToast'), type: 'success' })
     } catch (e) {
-      setError('Could not save. Try again.')
+      setError(t('overlayEditor.tts.saveKeyError'))
       toastManager.add({
-        title: 'Could not save key',
-        description: e instanceof Error ? e.message : 'network error',
+        title: t('overlayEditor.tts.apiKeySaveFailedToast'),
+        description: e instanceof Error ? e.message : t('overlayEditor.tts.networkErrorDetail'),
         type: 'error',
       })
     } finally {
@@ -268,22 +268,28 @@ function ApiKeyInput({
         } else {
           switch (r.errorCode) {
             case 401:
-              toastManager.add({ title: 'Invalid API key', type: 'error' })
+              toastManager.add({ title: t('overlayEditor.tts.testInvalidKeyToast'), type: 'error' })
               break
             case 422:
-              toastManager.add({ title: 'Invalid API key', type: 'error' })
+              toastManager.add({ title: t('overlayEditor.tts.testInvalidKeyToast'), type: 'error' })
               break
             case 429:
-              toastManager.add({ title: 'Rate-limited — try again in a minute', type: 'error' })
+              toastManager.add({
+                title: t('overlayEditor.tts.testRateLimitedToast'),
+                type: 'error',
+              })
               break
             case 0:
               toastManager.add({
-                title: 'Could not reach ElevenLabs. Check your connection.',
+                title: t('overlayEditor.tts.testUnreachableToast'),
                 type: 'error',
               })
               break
             default:
-              toastManager.add({ title: 'ElevenLabs service unavailable', type: 'error' })
+              toastManager.add({
+                title: t('overlayEditor.tts.testUnavailableToast'),
+                type: 'error',
+              })
           }
         }
       }
@@ -309,10 +315,13 @@ function ApiKeyInput({
     setRemoving(true)
     try {
       await onRemove()
-      toastManager.add({ title: 'API key removed.', type: 'success' })
+      toastManager.add({ title: t('overlayEditor.tts.apiKeyRemovedToast'), type: 'success' })
       setQuota(null)
     } catch {
-      toastManager.add({ title: 'Could not remove key. Try again.', type: 'error' })
+      toastManager.add({
+        title: t('overlayEditor.tts.apiKeyRemoveFailedToast'),
+        type: 'error',
+      })
     } finally {
       setRemoving(false)
       setRemoveArmed(false)
@@ -761,11 +770,17 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
                   void (async (): Promise<void> => {
                     try {
                       await props.onSaveVoice!(pickedVoiceId)
-                      toastManager.add({ title: 'Voice updated.', type: 'success' })
+                      toastManager.add({
+                        title: t('overlayEditor.tts.voiceUpdatedToast'),
+                        type: 'success',
+                      })
                     } catch (e) {
                       toastManager.add({
-                        title: 'Could not save voice',
-                        description: e instanceof Error ? e.message : 'network error',
+                        title: t('overlayEditor.tts.voiceSaveFailedToast'),
+                        description:
+                          e instanceof Error
+                            ? e.message
+                            : t('overlayEditor.tts.networkErrorDetail'),
                         type: 'error',
                       })
                     } finally {
@@ -787,9 +802,15 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
                 if (!props.obsUrl) return
                 try {
                   await navigator.clipboard.writeText(props.obsUrl)
-                  toastManager.add({ title: 'OBS URL copied.', type: 'success' })
+                  toastManager.add({
+                    title: t('overlayEditor.tts.obsUrlCopiedToast'),
+                    type: 'success',
+                  })
                 } catch {
-                  toastManager.add({ title: 'Could not copy URL.', type: 'error' })
+                  toastManager.add({
+                    title: t('overlayEditor.tts.obsUrlCopyFailedToast'),
+                    type: 'error',
+                  })
                 }
               }}
               onRegenerate={async (): Promise<void> => {
@@ -802,9 +823,15 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
                     // Clipboard permission missing — toast still surfaces success,
                     // but on failure we fall through to the catch below.
                   }
-                  toastManager.add({ title: 'New OBS URL copied to clipboard.', type: 'success' })
+                  toastManager.add({
+                    title: t('overlayEditor.tts.obsUrlRegeneratedToast'),
+                    type: 'success',
+                  })
                 } catch {
-                  toastManager.add({ title: 'Could not regenerate URL. Try again.', type: 'error' })
+                  toastManager.add({
+                    title: t('overlayEditor.tts.obsUrlRegenerateFailedToast'),
+                    type: 'error',
+                  })
                 }
               }}
             />
