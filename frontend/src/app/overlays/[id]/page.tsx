@@ -3959,7 +3959,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           htmlFor={`${mockFieldId}-platform`}
                           className="mb-1 block text-xs text-text-sub"
                         >
-                          Platform
+                          {t('overlayEditor.testing.platformLabel')}
                         </label>
                         <select
                           id={`${mockFieldId}-platform`}
@@ -3972,10 +3972,10 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           }
                           className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
                         >
-                          <option value="twitch">Twitch</option>
-                          <option value="youtube">YouTube</option>
-                          <option value="kick">Kick</option>
-                          <option value="tiktok">TikTok</option>
+                          <option value="twitch">{t('common.platforms.twitch')}</option>
+                          <option value="youtube">{t('common.platforms.youtube')}</option>
+                          <option value="kick">{t('common.platforms.kick')}</option>
+                          <option value="tiktok">{t('common.platforms.tiktok')}</option>
                         </select>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
@@ -3984,7 +3984,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                             htmlFor={`${mockFieldId}-display-name`}
                             className="mb-1 block text-xs text-text-sub"
                           >
-                            Display Name
+                            {t('overlayEditor.testing.displayNameLabel')}
                           </label>
                           <input
                             id={`${mockFieldId}-display-name`}
@@ -3999,7 +3999,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                             htmlFor={`${mockFieldId}-username`}
                             className="mb-1 block text-xs text-text-sub"
                           >
-                            Username
+                            {t('overlayEditor.testing.usernameLabel')}
                           </label>
                           <input
                             id={`${mockFieldId}-username`}
@@ -4016,14 +4016,14 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                             htmlFor={`${mockFieldId}-avatar-url`}
                             className="mb-1 block text-xs text-text-sub"
                           >
-                            Avatar URL
+                            {t('overlayEditor.testing.avatarUrlLabel')}
                           </label>
                           <input
                             id={`${mockFieldId}-avatar-url`}
                             type="text"
                             value={mockForm.avatarUrl}
                             onChange={(e) => handleMockInputChange('avatarUrl', e.target.value)}
-                            placeholder="https://..."
+                            placeholder={t('overlayEditor.testing.avatarUrlPlaceholder')}
                             className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
                           />
                         </div>
@@ -4032,7 +4032,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                             htmlFor={`${mockFieldId}-color`}
                             className="mb-1 block text-xs text-text-sub"
                           >
-                            Name Color
+                            {t('overlayEditor.testing.nameColorLabel')}
                           </label>
                           <input
                             id={`${mockFieldId}-color`}
@@ -4048,14 +4048,14 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           htmlFor={`${mockFieldId}-message`}
                           className="mb-1 block text-xs text-text-sub"
                         >
-                          Message
+                          {t('overlayEditor.testing.messageLabel')}
                         </label>
                         <textarea
                           id={`${mockFieldId}-message`}
                           value={mockForm.message}
                           onChange={(e) => handleMockInputChange('message', e.target.value)}
                           className="h-16 w-full resize-none rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
-                          placeholder="Type something fun..."
+                          placeholder={t('overlayEditor.testing.messagePlaceholder')}
                         />
                       </div>
                       <Button
@@ -4064,7 +4064,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                         disabled={!mockForm.message.trim()}
                         className="w-full"
                       >
-                        Inject Message
+                        {t('overlayEditor.testing.injectMessage')}
                       </Button>
                       <div className="flex gap-2">
                         <Button
@@ -4075,7 +4075,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           data-setting-anchor="sampleChat"
                           onClick={() => void handleAddSampleTranscript()}
                         >
-                          💬 Sample Chat
+                          {t('overlayEditor.testing.sampleChat')}
                         </Button>
                         <Button
                           type="button"
@@ -4085,7 +4085,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           data-setting-anchor="sampleEvents"
                           onClick={() => void handleAddSampleEvents()}
                         >
-                          ⭐ Sample Events
+                          {t('overlayEditor.testing.sampleEvents')}
                         </Button>
                       </div>
                     </div>
@@ -4094,9 +4094,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                   {activeSection === 'danger-zone' && (
                     <div className="space-y-3">
                       <p className="text-xs text-text-sub">
-                        Reset your overlay ID to revoke any leaked OBS URLs. A new overlay with the
-                        same configuration will be created and you will be redirected to it. The old
-                        overlay and its URL will be permanently deleted.
+                        {t('overlayEditor.dangerZone.explainer')}
                       </p>
                       <Button
                         type="button"
@@ -4105,7 +4103,9 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                         onClick={() => setShowResetConfirm(true)}
                         disabled={isResetting}
                       >
-                        {isResetting ? 'Resetting…' : 'Reset Overlay ID'}
+                        {isResetting
+                          ? t('overlayEditor.dangerZone.resetting')
+                          : t('overlayEditor.dangerZone.resetOverlayId')}
                       </Button>
                     </div>
                   )}
@@ -4120,7 +4120,9 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                 disabled={!configLoaded || isSavingConfig}
                 className="w-full"
               >
-                {isSavingConfig ? 'Saving...' : 'Save Configuration'}
+                {isSavingConfig
+                  ? t('overlayEditor.page.savingConfiguration')
+                  : t('overlayEditor.page.saveConfiguration')}
               </Button>
               {/* Always-mounted live region so save success/failure announces
                   to screen readers (WCAG 4.1.3) — conditionally mounting the
@@ -4156,15 +4158,13 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
       {/* Theme apply confirm dialog */}
       <Dialog.Root open={showThemeConfirm} onOpenChange={setShowThemeConfirm}>
         <Dialog.Content size="sm" showCloseButton={false}>
-          <Dialog.Title>Apply theme?</Dialog.Title>
-          <Dialog.Description>
-            Loading this theme will reset your visual customizations. Continue?
-          </Dialog.Description>
+          <Dialog.Title>{t('overlayEditor.page.applyThemeTitle')}</Dialog.Title>
+          <Dialog.Description>{t('overlayEditor.page.applyThemeBody')}</Dialog.Description>
           <div className="mt-4 flex justify-end gap-2">
             <Dialog.Close
               render={
                 <Button type="button" variant="outline" size="sm">
-                  Cancel
+                  {t('overlayEditor.page.applyThemeCancel')}
                 </Button>
               }
             />
@@ -4179,7 +4179,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                 setShowThemeConfirm(false)
               }}
             >
-              Continue
+              {t('overlayEditor.page.applyThemeContinue')}
             </Button>
           </div>
         </Dialog.Content>
@@ -4188,16 +4188,13 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
       {/* Reset Overlay ID confirm dialog */}
       <Dialog.Root open={showResetConfirm} onOpenChange={setShowResetConfirm}>
         <Dialog.Content size="sm" showCloseButton={false}>
-          <Dialog.Title>Reset Overlay ID?</Dialog.Title>
-          <Dialog.Description>
-            This will create a new overlay with a fresh ID and permanently delete this one. Any
-            existing OBS URLs will stop working — update your browser source after the reset.
-          </Dialog.Description>
+          <Dialog.Title>{t('overlayEditor.dangerZone.confirmTitle')}</Dialog.Title>
+          <Dialog.Description>{t('overlayEditor.dangerZone.confirmBody')}</Dialog.Description>
           <div className="mt-4 flex justify-end gap-2">
             <Dialog.Close
               render={
                 <Button type="button" variant="outline" size="sm">
-                  Cancel
+                  {t('overlayEditor.dangerZone.cancel')}
                 </Button>
               }
             />
@@ -4208,7 +4205,9 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
               disabled={isResetting}
               onClick={() => void handleConfirmResetOverlayId()}
             >
-              {isResetting ? 'Resetting…' : 'Reset ID'}
+              {isResetting
+                ? t('overlayEditor.dangerZone.resetting')
+                : t('overlayEditor.dangerZone.confirmReset')}
             </Button>
           </div>
         </Dialog.Content>

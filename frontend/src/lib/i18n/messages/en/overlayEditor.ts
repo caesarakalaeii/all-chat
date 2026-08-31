@@ -500,6 +500,39 @@ export const overlayEditor = {
     shareCancel: 'Cancel',
     shareSend: 'Send Request',
     shareSending: 'Sending...',
+    applyThemeTitle: 'Apply theme?',
+    applyThemeBody: 'Loading this theme will reset your visual customizations. Continue?',
+    applyThemeCancel: 'Cancel',
+    applyThemeContinue: 'Continue',
+    saveConfiguration: 'Save Configuration',
+    savingConfiguration: 'Saving...',
+  },
+  // Injecting a fake chat message so a streamer can see their overlay react.
+  testing: {
+    platformLabel: 'Platform',
+    displayNameLabel: 'Display Name',
+    usernameLabel: 'Username',
+    avatarUrlLabel: 'Avatar URL',
+    avatarUrlPlaceholder: 'https://...',
+    nameColorLabel: 'Name Color',
+    messageLabel: 'Message',
+    messagePlaceholder: 'Type something fun...',
+    injectMessage: 'Inject Message',
+    // The emoji is part of the label as it renders, so it stays in the string.
+    sampleChat: '\u{1F4AC} Sample Chat',
+    sampleEvents: '\u2B50 Sample Events',
+  },
+  // Resetting the overlay ID, which revokes every OBS URL pointing at it.
+  dangerZone: {
+    explainer:
+      'Reset your overlay ID to revoke any leaked OBS URLs. A new overlay with the same configuration will be created and you will be redirected to it. The old overlay and its URL will be permanently deleted.',
+    resetOverlayId: 'Reset Overlay ID',
+    resetting: 'Resetting\u2026',
+    confirmTitle: 'Reset Overlay ID?',
+    confirmBody:
+      'This will create a new overlay with a fresh ID and permanently delete this one. Any existing OBS URLs will stop working — update your browser source after the reset.',
+    cancel: 'Cancel',
+    confirmReset: 'Reset ID',
   },
   // The Messages section: how many messages show, how long they last, which
   // edge the feed grows from, how they animate in and which emote sets apply.
