@@ -165,7 +165,7 @@ function PlatformChipRow({ platforms, onToggle }: PlatformChipRowProps): React.R
             className={
               active
                 ? 'rounded-full border border-twitch bg-twitch/15 px-3 py-1 text-xs text-text'
-                : 'bg-surface-alt rounded-full border border-border px-3 py-1 text-xs text-text-sub'
+                : 'rounded-full border border-border bg-surface-2 px-3 py-1 text-xs text-text-sub'
             }
             aria-pressed={active}
           >
@@ -353,7 +353,7 @@ function ApiKeyInput({
                 void handleSave()
               }}
               disabled={disabled || saving}
-              className="hover:bg-surface-alt rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {saving ? 'Saving…' : 'Save key'}
             </button>
@@ -377,7 +377,7 @@ function ApiKeyInput({
               void handleTest()
             }}
             disabled={disabled || testing}
-            className="hover:bg-surface-alt rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {testing ? 'Testing…' : 'Test key'}
           </button>
@@ -398,7 +398,7 @@ function ApiKeyInput({
             }}
             disabled={disabled || removing}
             className={cn(
-              'hover:bg-surface-alt rounded-lg border px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-50',
+              'rounded-lg border px-3 py-1.5 text-sm hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50',
               removeArmed
                 ? 'border-red-500 bg-red-500/10 text-red-400'
                 : 'border-border bg-surface text-text-sub'
@@ -451,14 +451,14 @@ function ObsUrlPanel({ obsUrl, onCopy, onRegenerate }: ObsUrlPanelProps): React.
           onClick={() => {
             void onCopy()
           }}
-          className="hover:bg-surface-alt rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text"
+          className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text hover:bg-surface-2"
         >
           Copy OBS URL
         </button>
         <button
           type="button"
           onClick={() => setConfirmOpen(true)}
-          className="hover:bg-surface-alt rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text"
+          className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text hover:bg-surface-2"
         >
           Regenerate URL
         </button>
@@ -470,7 +470,7 @@ function ObsUrlPanel({ obsUrl, onCopy, onRegenerate }: ObsUrlPanelProps): React.
             This invalidates the current OBS URL. You&apos;ll need to paste the new URL into OBS.
           </AlertDialog.Description>
           <div className="mt-4 flex justify-end gap-2">
-            <AlertDialog.Close className="hover:bg-surface-alt rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text-sub focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none">
+            <AlertDialog.Close className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text-sub hover:bg-surface-2 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none">
               Cancel
             </AlertDialog.Close>
             <button
@@ -762,7 +762,7 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
                     }
                   })()
                 }}
-                className="hover:bg-surface-alt rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {savingVoice ? 'Saving voice…' : 'Save voice'}
               </button>
@@ -913,7 +913,7 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
             <button
               type="button"
               onClick={onPreview}
-              className="hover:bg-surface-alt rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text"
+              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text hover:bg-surface-2"
             >
               Test voice
             </button>

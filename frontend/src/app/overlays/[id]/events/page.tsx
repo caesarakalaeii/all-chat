@@ -237,7 +237,7 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
           </Card>
         ) : !settings ? (
           <Card className="p-6 text-center">
-            <p className="text-destructive mb-4">Failed to load event settings</p>
+            <p className="mb-4 text-destructive">Failed to load event settings</p>
             <Button variant="outline" onClick={() => router.push(`/overlays/${id}`)}>
               Back to Overlay
             </Button>

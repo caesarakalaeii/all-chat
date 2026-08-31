@@ -52,6 +52,7 @@ cd frontend && npm run dev  # Start frontend
 
 | Task | Guide | Lines |
 |------|-------|-------|
+| Build or change any frontend UI | [DESIGN_SYSTEM.md](./frontend/DESIGN_SYSTEM.md) (skill: `shadcn-ui`) | ~250 |
 | Add support for a new platform | [QUICK-REF-ADD-PLATFORM.md](./docs/llm-guides/QUICK-REF-ADD-PLATFORM.md) | ~150 |
 | Debug YouTube quota issues | [QUICK-REF-DEBUG-QUOTA.md](./docs/llm-guides/QUICK-REF-DEBUG-QUOTA.md) | ~200 |
 | Add a new HTTP endpoint | [QUICK-REF-ADD-ENDPOINT.md](./docs/llm-guides/QUICK-REF-ADD-ENDPOINT.md) | ~100 |
@@ -126,6 +127,7 @@ Each service has a detailed README:
 - [Testing Guide](./docs/TESTING_COMPREHENSIVE.md) - Unit, integration, E2E tests
 - [Accessibility](./docs/ACCESSIBILITY.md) - WCAG 2.2 AA scope, CI gates (shrink-only ratchets), contracts for new UI code
 - [Frontend i18n](./docs/frontend/I18N.md) - the UI string catalog: how to add a string, placeholder syntax, why there is no provider and no locale in the URL
+- [Design System](./frontend/DESIGN_SYSTEM.md) - shadcn primitives, design tokens, and the CI gates that keep the UI consistent (ADR-0056). Agents: use the `shadcn-ui` skill
 
 ---
 
