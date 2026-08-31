@@ -82,6 +82,255 @@ export const legal = {
     termsLink: 'Terms of Service',
     impressumLink: 'Impressum',
   },
+  // The privacy policy. The largest disclosure in the frontend: one key per
+  // heading, paragraph, list item and legal basis, and nothing reworded.
+  privacy: {
+    title: 'Privacy Policy (Datenschutzerklärung)',
+    lastUpdated: 'July 30, 2026',
+    // Every DSGVO article reference carries a U+00A0 from an &nbsp; entity.
+    // It is part of the rendered text, so it stays escaped here to be
+    // visible to a reviewer.
+    controllerHeading: '1. Controller (Verantwortlicher, Art.\u00A04 Nr.\u00A07 DSGVO)',
+    collectHeading: '2. Information We Collect',
+    useHeading: '3. How We Use Your Information',
+    storageHeading: '4. Data Storage & Security',
+    sharingHeading: '5. Data Sharing & Third Parties',
+    retentionHeading: '6. Data Retention',
+    rightsHeading: '7. Your Rights (Art.\u00A015–21 DSGVO)',
+    cookiesHeading: '8. Cookies, Browser Storage & Analytics',
+    childrenHeading: "9. Children's Privacy",
+    transfersHeading: '10. International Data Transfers',
+    updatesHeading: '11. Updates',
+    openSourceHeading: '12. Transparency & Open Source',
+    platformNotesHeading: '13. Platform-Specific Notes',
+    contactHeading: '14. Contact',
+    authSubheading: '2.1 Authentication Information',
+    chatSubheading: '2.2 Chat Data',
+    overlaySubheading: '2.3 Overlay Configuration',
+    viewerIdentitySubheading: '2.4 Cross-Platform Viewer Identity',
+    logDataSubheading: '2.5 Usage & Log Data',
+    patreonSubheading: '2.6 Premium Membership (Patreon)',
+    storageLocationsSubheading: '4.1 Storage Locations',
+    safeguardsSubheading: '4.2 Safeguards',
+    platformApisSubheading: '5.1 Streaming Platform APIs',
+    fontsSubheading: '5.2 Fonts (Self-Hosted)',
+    frontendResourcesSubheading: '5.3 Third-Party Frontend Resources',
+    youtubeNoticeSubheading: '5.4 YouTube-Specific Notice',
+    noSalesSubheading: '5.5 No Data Sales',
+    analyticsSubheading: '5.6 Usage Analytics (Self-Hosted, Cookieless)',
+    twitchSubheading: 'Twitch',
+    youtubeSubheading: 'YouTube',
+    tiktokSubheading: 'TikTok',
+    kickSubheading: 'Kick',
+    discordSubheading: 'Discord',
+    // The two callout boxes at the top. Each opens with a bolded label that
+    // begins the sentence, so the label is a {label} param rather than a
+    // separate fragment.
+    tldr: '{label} All-Chat only collects the information we need to authenticate with your streaming platforms and render chat in your overlays. Tokens are encrypted, chat messages are automatically deleted after one hour, and we never sell your data. We use cookieless, self-hosted analytics (no tracking cookies; see Section\u00A05.6).',
+    tldrLabel: 'TL;DR:',
+    openSourceCallout:
+      '{label} All-Chat is licensed under AGPL-3.0. Review the entire codebase—including how we store and process your data—on {github}.',
+    openSourceCalloutLabel: 'Open Source Transparency:',
+    githubLinkText: 'GitHub',
+    // The statutory ground for each kind of processing. One key each: the
+    // article number and the reason it applies are a single statement, and
+    // splitting them would let a translator pair the wrong two.
+    authLegalBasis:
+      'Legal basis: Art.\u00A06(1)(b) DSGVO – performance of a contract (providing the service you signed up for).',
+    chatLegalBasis:
+      'Legal basis: Art.\u00A06(1)(b) DSGVO (service delivery) and Art.\u00A06(1)(f) DSGVO (legitimate interest in abuse prevention).',
+    overlayLegalBasis: 'Legal basis: Art.\u00A06(1)(b) DSGVO.',
+    viewerIdentityLegalBasis:
+      'Legal basis: Art.\u00A06(1)(a) DSGVO – your consent. You can unlink platforms at any time from the viewer settings.',
+    logDataLegalBasis:
+      'Legal basis: Art.\u00A06(1)(f) DSGVO – legitimate interest in maintaining service security and availability.',
+    fontsLegalBasis:
+      'Legal basis: Art.\u00A06(1)(f) DSGVO – legitimate interest in delivering the visual appearance of the overlay. The font files themselves are licensed under the SIL Open Font License 1.1 or Apache 2.0.',
+    frontendResourcesLegalBasis:
+      'Legal basis: Art.\u00A06(1)(f) DSGVO – legitimate interest in providing a functional and visually complete overlay experience. You can avoid loading these by not opening the theme marketplace. Fallback avatars (shown when a platform avatar is unavailable) are generated locally in your browser and involve no external request.',
+    patreonLegalBasis:
+      'Legal basis: Art.\u00A06(1)(b) DSGVO – providing the premium features you subscribed to. For the data you provide on patreon.com itself, Patreon, Inc. (US) is an independent controller; see the {patreonPolicy}.',
+    patreonPolicyLinkText: 'Patreon Privacy Policy',
+    controllerBody:
+      'The person responsible for data processing on this website is listed in the {impressum}. For privacy-related inquiries contact {email}.',
+    impressumLinkText: 'Impressum',
+    supportEmail: 'all.chat.support@gmail.com',
+    authIntro:
+      'When you connect Twitch, YouTube, TikTok, Kick, or Discord we store the minimum data required to create overlays and reconnect later:',
+    authIdentifiers: 'Platform identifiers (user ID, username, display name)',
+    authProfileImages: 'Profile images provided by the platform',
+    authTokens: 'Encrypted OAuth access and refresh tokens',
+    authScopes: 'Token scopes and expiration dates',
+    chatIntro: 'For active overlays we temporarily process:',
+    chatMessages: 'Messages flowing through connected channels',
+    chatMetadata: 'Message metadata (timestamps, emotes, badges, highlights)',
+    chatAuthor: 'Per-message author details (display name, color, avatar)',
+    chatRetention:
+      'Chat messages sent through All-Chat are logged for rate-limiting and abuse detection and {emphasis}. Messages displayed in the overlay are streamed through memory and are not persisted once the overlay session ends.',
+    chatRetentionEmphasis: 'automatically deleted after one hour',
+    overlayIntro: 'To render and sync overlays we store:',
+    overlayNames: 'Overlay names, IDs, and custom CSS or theme settings',
+    overlaySources: 'Connected chat sources (platform, channel ID, channel name)',
+    overlayFilters: 'Filter settings (blocked words, user-level rules)',
+    viewerIdentityBody:
+      'If you choose to link multiple platform accounts as a viewer (e.g.\u00A0Twitch + YouTube), we create a unified viewer profile that associates your platform identities. This is {emphasis}.',
+    viewerIdentityEmphasis: 'opt-in only and requires your explicit action',
+    logDataIntro: 'For observability and abuse prevention we log:',
+    logDataIp:
+      'Anonymised IP address (last octet zeroed), browser user agent, and basic request info',
+    logDataMetrics: 'API usage metrics, cache hits, and connection status',
+    logDataTraces: 'Error traces and diagnostic logs (retained up to 90 days)',
+    patreonIntro:
+      'Premium features are unlocked through a paid membership on Patreon. If you connect your Patreon account to All-Chat, we store:',
+    patreonUserId: 'Your Patreon user ID',
+    patreonTokens: 'Encrypted OAuth access and refresh tokens for the Patreon API',
+    patreonMembership:
+      'Your membership state for our campaign (status, tier, pledge amount, renewal date)',
+    patreonNoPaymentData:
+      'We do {not} receive or store your payment details; payments are processed entirely by Patreon. Patreon notifies us via webhooks when your membership changes, and a periodic reconciliation keeps the state current. Disconnecting Patreon in the Settings page deletes the stored tokens and revokes subscription-derived premium.',
+    notEmphasis: 'not',
+    useIntro: 'Everything we store directly supports the core overlay experience:',
+    useAuthenticate: 'Authenticate against the platforms you authorize',
+    useFetch: 'Fetch live chat messages and normalize them into a single feed',
+    useRender: 'Render overlays, perform emote lookups, and respect your filters',
+    useMonitor: 'Monitor service reliability and debug incidents',
+    useAbuse: 'Detect and prevent abuse (rate-limiting, bans)',
+    storagePostgres: 'PostgreSQL for account data, overlays, and encrypted OAuth tokens',
+    storageRedis: 'Redis for ephemeral sessions, message fan-out, and rate limiting',
+    storageLocation:
+      'All of the above runs on our own infrastructure on servers located in {country} (hosting provider: Hetzner Online GmbH)',
+    storageCountry: 'Germany',
+    safeguardsEncryption: 'OAuth tokens encrypted with AES-GCM before touching the database',
+    safeguardsHttps:
+      'HTTPS at the ingress layer for all external traffic; internal services isolated via Kubernetes network policies',
+    safeguardsAccess: 'Role-scoped infrastructure access and audit logging',
+    safeguardsPatching: 'Regular dependency upgrades and security patching',
+    safeguardsHeaders:
+      'Security headers (X-Content-Type-Options, X-Frame-Options, Referrer-Policy)',
+    safeguardsCaveat:
+      'No storage system is perfectly secure, but we follow industry best practices to keep your tokens and overlays safe.',
+    platformApisIntro: 'We connect to the following services to deliver the core product:',
+    platformApisTwitch: 'Twitch EventSub and Helix APIs',
+    platformApisYoutube: 'YouTube Live Chat and OAuth APIs',
+    platformApisTiktokKick: 'TikTok Live APIs and Kick APIs',
+    platformApisDiscord: 'Discord Gateway API',
+    platformApisEmotes: '7TV, BTTV, FFZ for emote metadata',
+    platformApisScopes:
+      "Every integration remains subject to the platform's own policies and scopes you approve.",
+    // Three emphasised runs plus a <code> path in one sentence, so the render
+    // site uses interpolateElements rather than nested emphasise calls.
+    fontsBody:
+      'Typography assets originally distributed by Google Fonts are {selfHosted}. The fonts used by the All-Chat interface are bundled at build time via Next.js, and fonts selectable for overlay customization are served through a server-side proxy at {proxyPath}. Your browser only connects to the All-Chat origin; {noTransmission} when fonts are loaded. This aligns with the Landgericht München I ruling on Google Fonts (20 January 2022, Az. 3 O 17493/20).',
+    fontsSelfHostedEmphasis: 'self-hosted on our infrastructure',
+    fontsNoTransmissionEmphasis:
+      'no IP address, user agent, or request metadata is transmitted to Google',
+    frontendResourcesIntro:
+      'Overlay and dashboard pages may load the following external resources. Each request transmits your {emphasis} and browser user agent to the respective provider:',
+    ipAddressEmphasis: 'IP address',
+    frontendResourcesGithub:
+      '{label} (api.github.com) – fetches community themes from our public repository in the theme marketplace',
+    githubApiLabel: 'GitHub API',
+    youtubeNoticeBody:
+      "Your use of All-Chat's YouTube integration is also governed by the {googlePolicy}. This applies only to the YouTube API integration (data flows described in Section 5.1); it does {not} apply to fonts, which are self-hosted as described in Section 5.2.",
+    googlePolicyLinkText: 'Google Privacy Policy',
+    noSalesBody:
+      'We never sell or rent your data. We may disclose information when required by law or to respond to legitimate security incidents.',
+    analyticsBody:
+      'To understand how the site is used and where to improve it, we run {umami}, an open-source analytics tool that we {selfHost}. It is {cookieless}: it sets no cookies, creates no persistent identifier, and performs no cross-site or cross-device tracking. The data is processed on our own infrastructure and is {notShared} (unlike Google Analytics or similar services).',
+    umamiLinkText: 'Umami',
+    analyticsSelfHostEmphasis: 'host ourselves',
+    analyticsCookielessEmphasis: 'cookieless',
+    analyticsNotSharedEmphasis: 'not shared with any third party',
+    analyticsRecordsIntro: 'For each page view it records aggregate, non-identifying information:',
+    analyticsRecordsPage: 'The page you visited and the referring URL',
+    analyticsRecordsBrowser: 'Browser, operating system, device type, and screen size',
+    analyticsRecordsCountry: 'Approximate country, derived from your IP address at request time',
+    analyticsIpNote:
+      'Your {ipNotStored}: it is used only momentarily to derive the country and to generate a daily, salted hash for counting unique visits, after which it is discarded. We do {not} track public overlay views (the pages OBS loads as a browser source). You can block the analytics script with any browser content blocker without affecting the site.',
+    analyticsIpNotStoredEmphasis: 'IP address is not stored',
+    analyticsConsentNote:
+      'Because the tracker stores no information on, and reads none from, your device, it does not require consent under §\u00A025 TDDDG; the processing of the resulting data rests on Art.\u00A06(1)(f) DSGVO – our legitimate interest in measuring and improving the service.',
+    // Retention rows: the bolded label opens the row and the rest continues
+    // the sentence it starts, per the legal.cookieBanner convention.
+    retentionAccount: '{label} kept until you delete your account',
+    retentionAccountLabel: 'Account & overlay data:',
+    retentionTokens:
+      '{label} deleted when you disconnect a platform, when they expire (cleaned up after 7 days), or when you delete your account',
+    retentionTokensLabel: 'OAuth tokens:',
+    retentionSentMessages: '{label} automatically deleted after 1 hour',
+    retentionSentMessagesLabel: 'Chat messages sent through All-Chat:',
+    retentionDisplayedMessages: '{label} streamed through memory only; not persisted',
+    retentionDisplayedMessagesLabel: 'Chat messages displayed in overlays:',
+    retentionLogs: '{label} retained for up to 90 days',
+    retentionLogsLabel: 'Usage logs:',
+    retentionQuotaLogs: '{label} retained for 30 days',
+    retentionQuotaLogsLabel: 'YouTube quota audit logs:',
+    // The Art. 15-21 data subject rights. Same {label} shape as the
+    // retention rows above.
+    rightsIntro: 'You can exercise the following at any time:',
+    rightsAccess: '{label} Request a copy of the data we store about you',
+    rightsAccessLabel: 'Access (Art.\u00A015):',
+    rightsRectification: '{label} Correct inaccurate information',
+    rightsRectificationLabel: 'Rectification (Art.\u00A016):',
+    rightsErasure:
+      '{label} Delete your account and all associated data from the Settings page or by contacting us',
+    rightsErasureLabel: 'Erasure (Art.\u00A017):',
+    rightsRestriction: '{label} Request restriction of processing in certain circumstances',
+    rightsRestrictionLabel: 'Restriction (Art.\u00A018):',
+    rightsPortability:
+      '{label} Export your data in a machine-readable format via the Settings page',
+    rightsPortabilityLabel: 'Data portability (Art.\u00A020):',
+    rightsObjection: '{label} Object to processing based on legitimate interest',
+    rightsObjectionLabel: 'Objection (Art.\u00A021):',
+    rightsWithdraw: '{label} Disconnect platforms or unlink viewer identities at any time',
+    rightsWithdrawLabel: 'Withdraw consent:',
+    rightsContact:
+      'Contact us at {email} or use the Settings page. You also have the right to lodge a complaint with your supervisory authority (Aufsichtsbehörde).',
+    noProfiling:
+      'We do not use automated decision-making or profiling within the meaning of Art.\u00A022 DSGVO.',
+    youtubeRevoke:
+      "For YouTube Data: You can revoke All-Chat's access to your YouTube data via the {googleSettings}.",
+    googleSettingsPageLinkText: 'Google security settings page',
+    cookiesIntro: 'All-Chat uses {emphasis} (not cookies) for essential functionality:',
+    localStorageEmphasis: 'browser localStorage',
+    cookiesTokens: 'Authentication tokens (JWT) to keep you logged in',
+    cookiesPreferences: 'User preferences and last-visited state',
+    cookiesNoAdvertising:
+      'We do not use advertising cookies or cross-site tracking. We do use {emphasis} (self-hosted Umami) – it sets nothing on your device and stores no personal identifier; see Section\u00A05.6 for the full description. Fonts are self-hosted (Section\u00A05.2) and do not set cookies. The GitHub API (Section\u00A05.3) may cause GitHub to set its own cookies when the theme marketplace is loaded.',
+    cookielessAnalyticsEmphasis: 'privacy-friendly, cookieless usage analytics',
+    childrenBody:
+      'All-Chat is not intended for children under 16 (the DSGVO minimum age for consent to data processing in Germany). If we discover data belonging to a minor we will delete it immediately.',
+    transfersBody:
+      'All-Chat itself is hosted on servers located in Germany (see Section\u00A04.1). However, when you use streaming platform integrations, data is transferred to servers operated by Twitch (Amazon, US), Google/YouTube (US), TikTok (various), and Kick (AU). If you connect a Patreon membership, data is exchanged with Patreon, Inc. (US). The GitHub API (theme marketplace) may also involve transfers to the US.',
+    transfersLegalBasis:
+      "Where a provider is certified under the EU–US Data Privacy Framework, the transfer rests on the EU Commission's adequacy decision (Art.\u00A045 DSGVO). Otherwise, the transfer is necessary to perform the service you requested (Art.\u00A049(1)(b) DSGVO). Fonts are self-hosted on our infrastructure and therefore do not involve any third-country transfer when loaded.",
+    updatesBody:
+      "We'll post updates to this page when the policy changes and include a new {lastUpdatedLabel} date. Significant changes will be announced inside the dashboard.",
+    updatesLastUpdatedEmphasis: 'Last Updated',
+    openSourceAuditable: 'All source code is publicly auditable under AGPL-3.0',
+    openSourceNoTracking:
+      'No hidden tracking — our analytics are cookieless and documented (Section\u00A05.6), and the whole stack is verifiable on GitHub',
+    openSourceScrutiny: 'Privacy practices are open to community scrutiny',
+    openSourceRepository: 'Source: {repository}',
+    repositoryLinkText: 'github.com/caesarakalaeii/all-chat',
+    // Section 13, one paragraph per platform. What All-Chat does NOT access
+    // is the load-bearing half of each of these.
+    twitchNote:
+      'We connect to Twitch EventSub to receive chat messages. We do not access channel analytics, subscriber information, or payment data.',
+    youtubeNote:
+      "We use the YouTube Live Chat API. We do not access video content, channel analytics, or subscriber data. API usage is subject to YouTube's quota limits. You can revoke access via {googleSettings} or the All-Chat Settings page. Disconnecting deletes your stored OAuth tokens.",
+    googleSettingsLinkText: 'Google security settings',
+    tiktokNote:
+      'We access live stream chat data only. We do not access your videos, followers, or other personal content. Revoke access through TikTok app settings or All-Chat settings.',
+    kickNote:
+      'We connect via WebSocket to receive live chat. We do not access channel analytics or payment data.',
+    discordNote:
+      'When you connect a Discord server, we store the guild ID and name. Chat relay uses webhook URLs you configure. We do not access server member lists or DMs.',
+    contactEmailRow: 'Email: {email}',
+    contactHostedNote:
+      'This contact is for users of the official hosted service at {host}. Self-hosted installations should contact their own administrator.',
+    hostedDomain: 'allch.at',
+  },
   // The terms of service. One key per heading, paragraph and list item: these
   // are contractual statements, and a reworded term is a different term.
   terms: {

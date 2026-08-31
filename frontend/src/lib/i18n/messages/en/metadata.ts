@@ -36,6 +36,10 @@ export const metadata = {
     title: 'Impressum | All-Chat',
     description: 'Legal notice (Impressum) as required by § 5 DDG.',
   },
+  privacy: {
+    title: 'Privacy Policy | All-Chat',
+    description: 'Learn how All-Chat collects, processes, and protects your information.',
+  },
   terms: {
     title: 'Terms of Service | All-Chat',
     description: 'Understand the rules and responsibilities for using All-Chat.',
