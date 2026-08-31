@@ -155,3 +155,31 @@ describe('unknown error', () => {
     expect(t('errors.unknownError.step3')).toBe('Contact support if this error continues')
   })
 })
+
+describe('error display chrome copy', () => {
+  it('keeps the icon and dismiss labels', () => {
+    expect(t('errors.display.iconLabel')).toBe('Error icon')
+    expect(t('errors.display.dismissLabel')).toBe('Dismiss error')
+  })
+
+  it('keeps the per-error-kind detail lines', () => {
+    expect(t('errors.display.rateLimitCountdown', { countdown: '1:05' })).toBe(
+      'You can send another message in 1:05'
+    )
+    expect(t('errors.display.reasonLabel')).toBe('Reason:')
+    expect(t('errors.display.expiresLabel')).toBe('Expires:')
+    expect(t('errors.display.platformMessage', { message: 'slow down' })).toBe(
+      'Platform message: slow down'
+    )
+  })
+
+  it('keeps the actionable-steps heading and the action buttons', () => {
+    expect(t('errors.display.whatYouCanDo')).toBe('What you can do:')
+    expect(t('errors.display.tryAgain')).toBe('Try Again')
+    expect(t('errors.display.signInWith', { platform: 'Twitch' })).toBe('Sign in with Twitch')
+    // Two words are swapped in place today; each whole label is its own key so a
+    // translator is not asked to make "Show" and "Details" agree separately.
+    expect(t('errors.display.showDetails')).toBe('Show Details')
+    expect(t('errors.display.hideDetails')).toBe('Hide Details')
+  })
+})

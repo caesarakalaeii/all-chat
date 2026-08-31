@@ -70,3 +70,15 @@ describe('Patreon subscription copy', () => {
     expect(t('common.patreon.statusNotSubscribed')).toBe('Not subscribed')
   })
 })
+
+describe('shared sound preset names', () => {
+  it('names the three soundPlayer presets', () => {
+    // Two surfaces read these: the overlay editor's on-stream notification
+    // sounds and the monitor view's private activity sound. Casing rules are
+    // language-specific, so the display name cannot be derived from the stored
+    // lowercase value by capitalising it.
+    expect(t('common.soundPresets.chime')).toBe('Chime')
+    expect(t('common.soundPresets.pop')).toBe('Pop')
+    expect(t('common.soundPresets.ping')).toBe('Ping')
+  })
+})

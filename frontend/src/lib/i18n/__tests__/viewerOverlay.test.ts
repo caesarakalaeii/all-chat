@@ -524,3 +524,184 @@ describe('observability summary copy', () => {
     expect(t('viewerOverlay.observability.eventTokenWarnings')).toBe('Token Warnings')
   })
 })
+
+describe('view settings bar copy', () => {
+  it('keeps the gear button and the popover headings', () => {
+    expect(t('viewerOverlay.viewSettings.buttonLabel')).toBe('Display settings')
+    expect(t('viewerOverlay.viewSettings.buttonText')).toBe('Display')
+    expect(t('viewerOverlay.viewSettings.heading')).toBe('View settings')
+    expect(t('viewerOverlay.viewSettings.chatOrderHeading')).toBe('Chat order')
+    expect(t('viewerOverlay.viewSettings.activitySoundHeading')).toBe('Activity sound')
+  })
+
+  it('keeps all six display toggles', () => {
+    expect(t('viewerOverlay.viewSettings.showAvatars')).toBe('Avatars')
+    expect(t('viewerOverlay.viewSettings.showBadges')).toBe('Badges')
+    expect(t('viewerOverlay.viewSettings.showPronouns')).toBe('Pronouns')
+    expect(t('viewerOverlay.viewSettings.showTimestamps')).toBe('Timestamps')
+    expect(t('viewerOverlay.viewSettings.showPlatformGlyph')).toBe('Platform icon')
+    expect(t('viewerOverlay.viewSettings.showModeration')).toBe('Moderation controls')
+  })
+
+  it('keeps the chat order toggle and its scope note', () => {
+    expect(t('viewerOverlay.viewSettings.newestFirst')).toBe('Newest messages first')
+    expect(t('viewerOverlay.viewSettings.newestFirstNote')).toBe(
+      'Puts the newest message at the top of the Chat panel, so you can read chat without looking down. Only affects this browser.'
+    )
+  })
+
+  it('keeps the activity sound controls and their scope note', () => {
+    expect(t('viewerOverlay.viewSettings.activitySoundEnabled')).toBe('Sound on new activity')
+    expect(t('viewerOverlay.viewSettings.soundPresetLabel')).toBe('Sound')
+    expect(t('viewerOverlay.viewSettings.volume')).toBe('Volume')
+    expect(t('viewerOverlay.viewSettings.testSound')).toBe('Test sound')
+    expect(t('viewerOverlay.viewSettings.activitySoundNote')).toBe(
+      "Plays only here, in this browser, so you notice easy-to-miss activity like channel-point redeems or a TikTok Rose. This is separate from your overlay's on-stream notification sounds."
+    )
+  })
+})
+
+describe('chat send bar copy', () => {
+  it('keeps the platform pills and the composer', () => {
+    expect(t('viewerOverlay.chatSend.allLabel')).toBe('Send to all platforms')
+    expect(t('viewerOverlay.chatSend.allText')).toBe('All')
+    expect(t('viewerOverlay.chatSend.messageLabel')).toBe('Chat message')
+    expect(t('viewerOverlay.chatSend.placeholderAll')).toBe('Message all platforms…')
+    expect(t('viewerOverlay.chatSend.placeholderOne')).toBe('Send a message…')
+    expect(t('viewerOverlay.chatSend.send')).toBe('Send')
+  })
+
+  it('keeps the two inline recovery buttons, named and unnamed', () => {
+    expect(t('viewerOverlay.chatSend.enableSending')).toBe('Enable sending')
+    expect(t('viewerOverlay.chatSend.reconnect')).toBe('Reconnect')
+    expect(t('viewerOverlay.chatSend.enablePlatform', { platform: 'Kick' })).toBe('Enable Kick')
+    expect(t('viewerOverlay.chatSend.reconnectPlatform', { platform: 'Kick' })).toBe(
+      'Reconnect Kick'
+    )
+  })
+
+  it('keeps every send failure message, with and without a named platform', () => {
+    expect(t('viewerOverlay.chatSend.sendFailed')).toBe('Could not send. Please try again.')
+    expect(t('viewerOverlay.chatSend.missingScope')).toBe("Sending isn't enabled yet.")
+    expect(t('viewerOverlay.chatSend.missingScopeFor', { platform: 'Kick' })).toBe(
+      "Sending isn't enabled for Kick yet."
+    )
+    expect(t('viewerOverlay.chatSend.reauthRequired', { platform: 'Kick' })).toBe(
+      'Your Kick login expired. Please reconnect.'
+    )
+    // Rendered when the error body names no platform.
+    expect(t('viewerOverlay.chatSend.reauthRequiredGeneric')).toBe(
+      'Your platform login expired. Please reconnect.'
+    )
+    expect(t('viewerOverlay.chatSend.rateLimitedRetry', { seconds: '30' })).toBe(
+      'Rate limited — try again in 30s.'
+    )
+    expect(t('viewerOverlay.chatSend.rateLimited')).toBe('Rate limited — please slow down.')
+    expect(t('viewerOverlay.chatSend.streamOffline')).toBe('That channel is not live right now.')
+  })
+
+  it('keeps the send-to-all result line', () => {
+    expect(t('viewerOverlay.chatSend.sent')).toBe('Sent ✓')
+    expect(t('viewerOverlay.chatSend.resultOk', { platform: 'Kick' })).toBe('Kick ✓')
+    expect(t('viewerOverlay.chatSend.resultFailed', { platform: 'Kick' })).toBe('Kick ✗')
+    expect(t('viewerOverlay.chatSend.resultFailedWhy', { platform: 'Kick', why: 'offline' })).toBe(
+      'Kick ✗ offline'
+    )
+  })
+
+  it('keeps the short reason words for a per-platform send failure', () => {
+    expect(t('viewerOverlay.chatSend.reasonReauthRequired')).toBe('reconnect')
+    expect(t('viewerOverlay.chatSend.reasonMissingScope')).toBe('locked')
+    expect(t('viewerOverlay.chatSend.reasonStreamOffline')).toBe('offline')
+    expect(t('viewerOverlay.chatSend.reasonQuotaExhausted')).toBe('quota')
+    expect(t('viewerOverlay.chatSend.reasonSendFailed')).toBe('failed')
+  })
+})
+
+describe('moderation controls copy', () => {
+  it('keeps the menu trigger and the actions', () => {
+    expect(t('viewerOverlay.moderationControls.menuLabel')).toBe('Moderate user')
+    expect(t('viewerOverlay.moderationControls.timeout')).toBe('Timeout')
+    expect(t('viewerOverlay.moderationControls.ban')).toBe('Ban user')
+    expect(t('viewerOverlay.moderationControls.unban')).toBe('Unban user')
+    expect(t('viewerOverlay.moderationControls.deleteMessage')).toBe('Delete message')
+  })
+
+  it('keeps every disabled reason, each naming where the reader can act', () => {
+    // ADR-0048: sending someone at a fix that is not theirs to make is the
+    // failure mode this vocabulary exists to prevent, so no two of these
+    // collapse into one another even where they read similarly.
+    expect(t('viewerOverlay.moderationControls.noModerationApi', { platform: 'TikTok' })).toBe(
+      'TikTok has no moderation API'
+    )
+    expect(t('viewerOverlay.moderationControls.unavailable')).toBe(
+      'Moderation is unavailable for this source'
+    )
+    expect(t('viewerOverlay.moderationControls.missingScope')).toBe(
+      'Grant moderation permissions to enable mod actions'
+    )
+    expect(t('viewerOverlay.moderationControls.needsDiscordLink')).toBe(
+      'Link your Discord account to moderate here'
+    )
+    expect(t('viewerOverlay.moderationControls.ownerChannelUnverified')).toBe(
+      "This streamer's Discord account isn't connected, so nothing can be moderated here"
+    )
+    expect(t('viewerOverlay.moderationControls.botMissingPermission')).toBe(
+      "The All-Chat bot wasn't given this Discord permission \u2014 ask the streamer to re-invite it"
+    )
+  })
+})
+
+describe('layout picker copy', () => {
+  it('keeps the group label and all four layout options', () => {
+    expect(t('viewerOverlay.layoutPicker.groupLabel')).toBe('Panel layout')
+    expect(t('viewerOverlay.layoutPicker.chatLeft')).toBe('Chat left, events right')
+    expect(t('viewerOverlay.layoutPicker.chatRight')).toBe('Chat right, events left')
+    expect(t('viewerOverlay.layoutPicker.chatTop')).toBe('Chat top, events below')
+    expect(t('viewerOverlay.layoutPicker.eventsTop')).toBe('Events top, chat below')
+  })
+})
+
+describe('platform glyph copy', () => {
+  it('labels a glyph group with the platforms in it', () => {
+    expect(t('viewerOverlay.platformGlyph.groupLabel', { platforms: 'twitch, kick' })).toBe(
+      'Platforms: twitch, kick'
+    )
+  })
+})
+
+describe('event system notice copy', () => {
+  it('keeps both OAuth token warnings and their remedy', () => {
+    // Streamer-facing system notices rendered inside an event body. The event's
+    // own content is viewer-authored and untouched; these lines are ours.
+    expect(t('viewerOverlay.eventNotice.tokenExpired')).toBe('OAuth token has expired')
+    expect(t('viewerOverlay.eventNotice.tokenRefreshFailed')).toBe('Failed to refresh OAuth token')
+    expect(t('viewerOverlay.eventNotice.tokenExpiredFor', { username: 'bob' })).toBe(
+      'OAuth token has expired for bob'
+    )
+    expect(t('viewerOverlay.eventNotice.tokenRefreshFailedFor', { username: 'bob' })).toBe(
+      'Failed to refresh OAuth token for bob'
+    )
+    expect(t('viewerOverlay.eventNotice.tokenRemedy')).toBe(
+      '→ Please reconnect your account in Settings → Connections'
+    )
+  })
+
+  it('keeps the Discord permission notice and its remedy', () => {
+    expect(t('viewerOverlay.eventNotice.channelInaccessible', { channel: '123' })).toBe(
+      'Channel 123 is not accessible'
+    )
+    expect(t('viewerOverlay.eventNotice.channelRemedy')).toBe(
+      '→ Grant the bot "View Channel" permission in your Discord server settings'
+    )
+  })
+
+  it('keeps the listener deprecation notice and its remedy', () => {
+    expect(t('viewerOverlay.eventNotice.listenerDeprecated')).toBe(
+      'The legacy Twitch chat connection is being retired.'
+    )
+    expect(t('viewerOverlay.eventNotice.listenerRemedy')).toBe(
+      '→ Re-add your Twitch source to switch to the new EventSub connection'
+    )
+  })
+})
