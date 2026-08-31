@@ -90,3 +90,47 @@ describe('admin dashboard copy', () => {
     expect(t('admin.dashboard.last30Days')).toBe('Last 30 days')
   })
 })
+
+describe('admin maintenance copy', () => {
+  it('keeps the page header and empty state', () => {
+    expect(t('admin.maintenance.heading')).toBe('Maintenance')
+    expect(t('admin.maintenance.intro')).toBe(
+      'Schedule planned downtime windows. Users see a banner on the dashboard for upcoming and active maintenance.'
+    )
+    expect(t('admin.maintenance.scheduleButton')).toBe('Schedule')
+    expect(t('admin.maintenance.emptyTitle')).toBe('No maintenance windows scheduled')
+    expect(t('admin.maintenance.emptyBody')).toBe(
+      'Schedule a maintenance window to notify users of upcoming downtime.'
+    )
+  })
+
+  it('keeps the window list labels', () => {
+    // The count was a JSX expression between a literal '(' and ')', so the
+    // parenthesis has to travel with the copy: a language that brackets
+    // differently cannot reorder a bare '(' left at the render site.
+    expect(t('admin.maintenance.listHeading', { count: 3 })).toBe('Scheduled Windows (3)')
+    expect(t('admin.maintenance.statusActive')).toBe('Active')
+    expect(t('admin.maintenance.statusUpcoming')).toBe('Upcoming')
+    expect(t('admin.maintenance.deleteLabel', { title: 'Database maintenance' })).toBe(
+      'Delete Database maintenance'
+    )
+    expect(t('admin.maintenance.deleteConfirm')).toBe('Delete this maintenance window?')
+  })
+
+  it('keeps the schedule dialog', () => {
+    expect(t('admin.maintenance.dialogTitle')).toBe('Schedule Maintenance')
+    expect(t('admin.maintenance.dialogBody')).toBe(
+      'Create a maintenance window. Users will see a banner on the dashboard until the window ends.'
+    )
+    expect(t('admin.maintenance.titleLabel')).toBe('Title')
+    expect(t('admin.maintenance.titlePlaceholder')).toBe('e.g. Database maintenance')
+    expect(t('admin.maintenance.descriptionLabel')).toBe('Description')
+    expect(t('admin.maintenance.descriptionPlaceholder')).toBe(
+      'Optional details about the maintenance'
+    )
+    expect(t('admin.maintenance.startsAtLabel')).toBe('Starts at')
+    expect(t('admin.maintenance.endsAtLabel')).toBe('Ends at')
+    expect(t('admin.maintenance.cancelButton')).toBe('Cancel')
+    expect(t('admin.maintenance.submittingButton')).toBe('Scheduling…')
+  })
+})
