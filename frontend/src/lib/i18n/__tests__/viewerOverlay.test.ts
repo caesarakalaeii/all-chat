@@ -274,3 +274,100 @@ describe('participate page copy', () => {
     )
   })
 })
+
+describe('poll widget copy', () => {
+  it('keeps the closed-round badge and footer', () => {
+    expect(t('viewerOverlay.pollWidget.finalBadge')).toBe('Final')
+    expect(t('viewerOverlay.pollWidget.finalResults')).toBe('Final results')
+  })
+
+  it('keeps the winner and tie pills distinct', () => {
+    // P3-12: a non-unique top count labels every tied option, rather than
+    // arbitrarily crowning the first.
+    expect(t('viewerOverlay.pollWidget.winnerPill')).toBe('Winner')
+    expect(t('viewerOverlay.pollWidget.tiePill')).toBe('Tie')
+  })
+
+  it('keeps the tally and the countdown', () => {
+    expect(t('viewerOverlay.pollWidget.optionTally', { pct: '40', votes: '12' })).toBe('40% (12)')
+    expect(t('viewerOverlay.pollWidget.remaining', { clock: '1:05' })).toBe('1:05 remaining')
+  })
+})
+
+describe('prediction widget copy', () => {
+  it('keeps the three state badges', () => {
+    // The padlock and trophy are inseparable from these badges as rendered —
+    // there is no sibling word for either, so they are part of the string.
+    expect(t('viewerOverlay.predictionWidget.stateLocked')).toBe('🔒 LOCKED')
+    expect(t('viewerOverlay.predictionWidget.stateResolved')).toBe('🏆 RESOLVED')
+    expect(t('viewerOverlay.predictionWidget.stateOpen')).toBe('OPEN')
+  })
+
+  it('keeps the winner pill, the tally and the pool footer', () => {
+    expect(t('viewerOverlay.predictionWidget.winnerPill')).toBe('Winner')
+    expect(t('viewerOverlay.predictionWidget.outcomeTally', { points: '900', pct: '60' })).toBe(
+      '900 pts · 60%'
+    )
+    expect(t('viewerOverlay.predictionWidget.pool', { points: '1,500', players: '4' })).toBe(
+      '1,500 pts wagered · 4 players'
+    )
+  })
+})
+
+describe('credit roll copy', () => {
+  it('keeps the loading, error and empty states', () => {
+    expect(t('viewerOverlay.credits.loading')).toBe('Loading Credits...')
+    expect(t('viewerOverlay.credits.errorHeading')).toBe('Unable to Load Credit Roll')
+    expect(t('viewerOverlay.credits.errorHint')).toBe(
+      'Make sure you have an active streaming session'
+    )
+    expect(t('viewerOverlay.credits.empty')).toBe('No credit roll data available')
+  })
+
+  it('keeps the load failure message', () => {
+    expect(t('viewerOverlay.credits.loadFailed')).toBe('Failed to load credit roll')
+  })
+
+  it('keeps the roll header and its session facts', () => {
+    expect(t('viewerOverlay.credits.heading')).toBe('🎬 Stream Credits')
+    expect(t('viewerOverlay.credits.subheading')).toBe(
+      'Thank you to everyone who supported the stream!'
+    )
+    expect(t('viewerOverlay.credits.session', { date: '31/08/2026' })).toBe('Session: 31/08/2026')
+    expect(t('viewerOverlay.credits.duration', { duration: '2 hours' })).toBe('Duration: 2 hours')
+  })
+
+  it('keeps every branch of the session duration, including both plural forms', () => {
+    // English-only pluralisation, so each form is its own key rather than a
+    // suffix stitched on at the render site.
+    expect(t('viewerOverlay.credits.durationHourOne', { hours: '1' })).toBe('1 hour')
+    expect(t('viewerOverlay.credits.durationHourMany', { hours: '2' })).toBe('2 hours')
+    expect(t('viewerOverlay.credits.durationMinuteOne', { minutes: '1' })).toBe('1 minute')
+    expect(t('viewerOverlay.credits.durationMinuteMany', { minutes: '5' })).toBe('5 minutes')
+    expect(
+      t('viewerOverlay.credits.durationHoursAndMinutes', { hours: '2 hours', minutes: '5 minutes' })
+    ).toBe('2 hours 5 minutes')
+    expect(t('viewerOverlay.credits.durationJustStarted')).toBe('just started')
+  })
+
+  it('keeps all seven leaderboard titles', () => {
+    expect(t('viewerOverlay.credits.topSubscribers')).toBe('Top Subscribers')
+    expect(t('viewerOverlay.credits.topGifters')).toBe('Top Gifters')
+    expect(t('viewerOverlay.credits.topCheerers')).toBe('Top Cheerers')
+    expect(t('viewerOverlay.credits.topChannelPoints')).toBe('Top Channel Points')
+    expect(t('viewerOverlay.credits.topRaiders')).toBe('Top Raiders')
+    expect(t('viewerOverlay.credits.topSuperChats')).toBe('Top Super Chats')
+    expect(t('viewerOverlay.credits.newFollowers')).toBe('New Followers')
+  })
+
+  it('keeps the now-playing clip block', () => {
+    expect(t('viewerOverlay.credits.nowPlaying')).toBe('Now Playing')
+    expect(t('viewerOverlay.credits.clipViews', { views: '120' })).toBe('120 views')
+    expect(t('viewerOverlay.credits.clipCounter', { index: '2', total: '5' })).toBe('Clip 2/5')
+  })
+
+  it('keeps the sign-off', () => {
+    expect(t('viewerOverlay.credits.thanks')).toBe('Thank you for watching! ❤️')
+    expect(t('viewerOverlay.credits.seeYou')).toBe('See you next stream!')
+  })
+})
