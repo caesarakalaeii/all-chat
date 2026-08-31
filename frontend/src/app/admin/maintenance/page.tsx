@@ -28,20 +28,25 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { DialogRoot, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { toastManager } from '@/lib/toast'
-import { useTranslations } from '@/lib/i18n'
+import { formatDateTime, useTranslations } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import type { MaintenanceWindow, CreateMaintenanceRequest } from '@/lib/types/maintenance'
 
-const DATE_FORMAT = new Intl.DateTimeFormat(undefined, {
+// Not a module-level Intl.DateTimeFormat: that formats with whatever locale the
+// machine has. formatDateTime pins the UI locale and caches the constructor
+// itself, keyed by locale and options, so calling it per render costs nothing.
+const DATE_FORMAT_OPTIONS: Intl.DateTimeFormatOptions = {
   year: 'numeric',
   month: 'short',
   day: 'numeric',
   hour: '2-digit',
   minute: '2-digit',
-})
+}
 
 function formatRange(startsAt: string, endsAt: string): string {
-  return `${DATE_FORMAT.format(new Date(startsAt))} – ${DATE_FORMAT.format(new Date(endsAt))}`
+  const from = formatDateTime(new Date(startsAt), DATE_FORMAT_OPTIONS)
+  const to = formatDateTime(new Date(endsAt), DATE_FORMAT_OPTIONS)
+  return `${from} – ${to}`
 }
 
 function isActive(mw: MaintenanceWindow): boolean {

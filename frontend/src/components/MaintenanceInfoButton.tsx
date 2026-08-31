@@ -24,14 +24,17 @@ import { useEffect, useRef, useState } from 'react'
 
 import { maintenanceApi } from '@/lib/api/maintenance'
 import type { MaintenanceWindow } from '@/lib/types/maintenance'
-import { useTranslations } from '@/lib/i18n'
+import { formatDateTime, useTranslations } from '@/lib/i18n'
 
-const DATE_FORMAT = new Intl.DateTimeFormat(undefined, {
+// Not a module-level Intl.DateTimeFormat: that formats with whatever locale the
+// machine has, and this popover renders inside OBS as well as a browser.
+// formatDateTime pins the UI locale and caches the constructor itself.
+const DATE_FORMAT_OPTIONS: Intl.DateTimeFormatOptions = {
   month: 'short',
   day: 'numeric',
   hour: '2-digit',
   minute: '2-digit',
-})
+}
 
 function isActive(mw: MaintenanceWindow): boolean {
   const now = Date.now()
@@ -110,9 +113,10 @@ export function MaintenanceInfoButton() {
                   <p className="mt-0.5 font-medium text-text">{mw.title}</p>
                   <p className="mt-0.5 text-text-sub">
                     {active
-                      ? `Expected completion: ${DATE_FORMAT.format(new Date(mw.ends_at))}`
-                      : `${DATE_FORMAT.format(new Date(mw.starts_at))} to ${DATE_FORMAT.format(
-                          new Date(mw.ends_at)
+                      ? `Expected completion: ${formatDateTime(new Date(mw.ends_at), DATE_FORMAT_OPTIONS)}`
+                      : `${formatDateTime(new Date(mw.starts_at), DATE_FORMAT_OPTIONS)} to ${formatDateTime(
+                          new Date(mw.ends_at),
+                          DATE_FORMAT_OPTIONS
                         )}`}
                   </p>
                   {mw.description && (

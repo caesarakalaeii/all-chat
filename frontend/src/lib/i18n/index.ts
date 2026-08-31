@@ -67,5 +67,5 @@ export function useTranslations(): TFunction {
 }
 
 export { DEFAULT_LOCALE, SUPPORTED_LOCALES, isSupportedLocale, type Locale } from './config'
-export { formatDateTime, formatNumber } from './format'
+export { formatDate, formatDateTime, formatNumber, formatTime, formatTimestamp } from './format'
 export type { MessageKey, MessageParams, TFunction } from './translate'
