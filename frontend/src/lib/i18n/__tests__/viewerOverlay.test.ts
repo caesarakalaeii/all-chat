@@ -377,3 +377,150 @@ describe('OBS chat overlay copy', () => {
     expect(t('viewerOverlay.chatOverlay.sharedChat')).toBe('Shared Chat')
   })
 })
+
+describe('activity panel copy', () => {
+  it('keeps the panel chrome', () => {
+    expect(t('viewerOverlay.activity.heading')).toBe('Activity & Events')
+    expect(t('viewerOverlay.activity.empty')).toBe('No events yet.')
+    expect(t('viewerOverlay.activity.modBadge')).toBe('mod')
+  })
+
+  it('keeps the fallback name for a moderated user with no username', () => {
+    expect(t('viewerOverlay.activity.someUser')).toBe('a user')
+  })
+
+  it('keeps both forms of every moderation log line', () => {
+    // Each line is one whole sentence per reachable combination, rather than a
+    // stem with " by <moderator>" appended: a translator cannot place a clause
+    // they cannot see, and the moderator is not always known.
+    expect(t('viewerOverlay.activity.deleted')).toBe('Message deleted')
+    expect(t('viewerOverlay.activity.deletedBy', { moderator: 'mod1' })).toBe(
+      'Message deleted by mod1'
+    )
+    expect(t('viewerOverlay.activity.cleared')).toBe('Chat cleared')
+    expect(t('viewerOverlay.activity.clearedBy', { moderator: 'mod1' })).toBe(
+      'Chat cleared by mod1'
+    )
+    expect(t('viewerOverlay.activity.banned', { user: 'bob' })).toBe('Banned bob')
+    expect(t('viewerOverlay.activity.bannedBy', { user: 'bob', moderator: 'mod1' })).toBe(
+      'Banned bob by mod1'
+    )
+  })
+
+  it('keeps all four timeout forms', () => {
+    // Duration and moderator are independently optional.
+    expect(t('viewerOverlay.activity.timedOut', { user: 'bob' })).toBe('Timed out bob')
+    expect(t('viewerOverlay.activity.timedOutFor', { user: 'bob', seconds: '600' })).toBe(
+      'Timed out bob for 600s'
+    )
+    expect(t('viewerOverlay.activity.timedOutBy', { user: 'bob', moderator: 'mod1' })).toBe(
+      'Timed out bob by mod1'
+    )
+    expect(
+      t('viewerOverlay.activity.timedOutForBy', {
+        user: 'bob',
+        seconds: '600',
+        moderator: 'mod1',
+      })
+    ).toBe('Timed out bob for 600s by mod1')
+  })
+
+  it('keeps the AutoMod hold lines and the held badge', () => {
+    expect(t('viewerOverlay.activity.automodHeld', { user: 'bob' })).toBe(
+      'AutoMod held a message from bob'
+    )
+    expect(
+      t('viewerOverlay.activity.automodHeldCategory', { user: 'bob', category: 'profanity' })
+    ).toBe('AutoMod held a message from bob (profanity)')
+    expect(t('viewerOverlay.activity.automodResolved', { resolution: 'approved' })).toBe(
+      'AutoMod hold approved'
+    )
+    expect(
+      t('viewerOverlay.activity.automodResolvedBy', { resolution: 'approved', moderator: 'mod1' })
+    ).toBe('AutoMod hold approved by mod1')
+    // The badge shown while a hold is still waiting on a decision.
+    expect(t('viewerOverlay.activity.automodHeldBadge')).toBe('held')
+  })
+})
+
+describe('chat panel copy', () => {
+  it('keeps the panel chrome', () => {
+    expect(t('viewerOverlay.chatPanel.heading')).toBe('Chat')
+    expect(t('viewerOverlay.chatPanel.empty')).toBe('No chat messages yet.')
+  })
+
+  it('keeps the user-filter notice and both of its empty states', () => {
+    expect(t('viewerOverlay.chatPanel.filteredBy', { user: 'bob' })).toBe(
+      'Showing only messages from bob'
+    )
+    expect(t('viewerOverlay.chatPanel.showAll')).toBe('Show all chat')
+    expect(t('viewerOverlay.chatPanel.filteredEmpty', { user: 'bob' })).toBe(
+      'No messages from bob yet.'
+    )
+    expect(t('viewerOverlay.chatPanel.filteredCount', { shown: '3', total: '40' })).toBe('3 of 40')
+  })
+
+  it('keeps the shared-chat marker on a chat row', () => {
+    expect(t('viewerOverlay.chatPanel.sharedBadge')).toBe('shared')
+  })
+})
+
+describe('observability summary copy', () => {
+  it('keeps the four card titles', () => {
+    expect(t('viewerOverlay.observability.sources', { count: '3' })).toBe('Sources (3)')
+    expect(t('viewerOverlay.observability.configuredEvents')).toBe('Configured Events')
+    expect(t('viewerOverlay.observability.emotes')).toBe('Emotes')
+    expect(t('viewerOverlay.observability.filters')).toBe('Filters')
+  })
+
+  it('keeps the source list states', () => {
+    expect(t('viewerOverlay.observability.noSources')).toBe('No sources configured.')
+    expect(t('viewerOverlay.observability.sourceLive')).toBe('live')
+    expect(t('viewerOverlay.observability.sourceIdle')).toBe('idle')
+  })
+
+  it('keeps the events fallback and the emote set default', () => {
+    expect(t('viewerOverlay.observability.eventsUnavailable')).toBe(
+      'Event configuration unavailable; events appear here as they arrive.'
+    )
+    expect(t('viewerOverlay.observability.sevenTvSet')).toBe('7TV set')
+    expect(t('viewerOverlay.observability.sevenTvDefault')).toBe('per-source default')
+  })
+
+  it('keeps the filter rows and the read-only note', () => {
+    expect(t('viewerOverlay.observability.bannedWords')).toBe('Banned words')
+    expect(t('viewerOverlay.observability.bannedUsers')).toBe('Banned users')
+    expect(t('viewerOverlay.observability.minLength')).toBe('Min length')
+    expect(t('viewerOverlay.observability.hideCommands')).toBe('Hide commands')
+    expect(t('viewerOverlay.observability.sayHiFilter')).toBe('Say hi filter')
+    expect(t('viewerOverlay.observability.yes')).toBe('yes')
+    expect(t('viewerOverlay.observability.no')).toBe('no')
+    expect(t('viewerOverlay.observability.filtersNote')).toBe(
+      'Filters are shown for reference; this view displays all messages.'
+    )
+  })
+
+  it('keeps all 21 configured-event labels', () => {
+    expect(t('viewerOverlay.observability.eventTwitchSubs')).toBe('Twitch Subs')
+    expect(t('viewerOverlay.observability.eventTwitchResubs')).toBe('Twitch Resubs')
+    expect(t('viewerOverlay.observability.eventTwitchGiftSubs')).toBe('Twitch Gift Subs')
+    expect(t('viewerOverlay.observability.eventTwitchBits')).toBe('Twitch Bits')
+    expect(t('viewerOverlay.observability.eventTwitchRaids')).toBe('Twitch Raids')
+    expect(t('viewerOverlay.observability.eventTwitchChannelPoints')).toBe('Channel Points')
+    expect(t('viewerOverlay.observability.eventTwitchFollows')).toBe('Twitch Follows')
+    expect(t('viewerOverlay.observability.eventTwitchWatchStreaks')).toBe('Watch Streaks')
+    expect(t('viewerOverlay.observability.eventYoutubeSuperChat')).toBe('YouTube Super Chat')
+    expect(t('viewerOverlay.observability.eventYoutubeSuperSticker')).toBe('Super Sticker')
+    expect(t('viewerOverlay.observability.eventYoutubeMembers')).toBe('YouTube Members')
+    expect(t('viewerOverlay.observability.eventYoutubeMemberMilestones')).toBe('Member Milestones')
+    expect(t('viewerOverlay.observability.eventYoutubeMemberGifts')).toBe('Member Gifts')
+    expect(t('viewerOverlay.observability.eventKickSubs')).toBe('Kick Subs')
+    expect(t('viewerOverlay.observability.eventKickGifts')).toBe('Kick Gifts')
+    expect(t('viewerOverlay.observability.eventTiktokLikes')).toBe('TikTok Likes')
+    expect(t('viewerOverlay.observability.eventTiktokGifts')).toBe('TikTok Gifts')
+    expect(t('viewerOverlay.observability.eventTiktokFollows')).toBe('TikTok Follows')
+    expect(t('viewerOverlay.observability.eventTiktokShares')).toBe('TikTok Shares')
+    expect(t('viewerOverlay.observability.eventTiktokTreasureChests')).toBe('TikTok Coin Chests')
+    expect(t('viewerOverlay.observability.eventTokenWarnings')).toBe('Token Warnings')
+  })
+})
