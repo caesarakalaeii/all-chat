@@ -283,7 +283,10 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
   const startPoll = () => {
     const labels = options.map((o) => o.trim()).filter(Boolean)
     if (!question.trim() || labels.length < 2) {
-      toastManager.add({ title: 'A poll needs a question and at least 2 options', type: 'error' })
+      toastManager.add({
+        title: t('viewerOverlay.engagement.pollIncompleteToast'),
+        type: 'error',
+      })
       return
     }
     const duration = Number.parseInt(pollDuration, 10)
@@ -298,15 +301,15 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
       setQuestion('')
       setOptions(['', ''])
       setPollDuration('')
-      toastManager.add({ title: 'Poll started', type: 'success' })
-    }, 'Could not start the poll')
+      toastManager.add({ title: t('viewerOverlay.engagement.pollStartedToast'), type: 'success' })
+    }, t('viewerOverlay.engagement.pollStartFailed'))
   }
 
   const closePoll = (pollId: string) =>
     void run(async () => {
       setPoll(await engagementApi.closePoll(overlayId, pollId))
-      toastManager.add({ title: 'Poll closed', type: 'success' })
-    }, 'Could not close the poll')
+      toastManager.add({ title: t('viewerOverlay.engagement.pollClosedToast'), type: 'success' })
+    }, t('viewerOverlay.engagement.pollCloseFailed'))
 
   // --- Prediction actions ----------------------------------------------------
 
@@ -314,7 +317,7 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
     const labels = outcomes.map((o) => o.trim()).filter(Boolean)
     if (!title.trim() || labels.length < 2) {
       toastManager.add({
-        title: 'A prediction needs a title and at least 2 outcomes',
+        title: t('viewerOverlay.engagement.predictionIncompleteToast'),
         type: 'error',
       })
       return
@@ -331,19 +334,25 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
       setTitle('')
       setOutcomes(['', ''])
       setAutoLock('')
-      toastManager.add({ title: 'Prediction started', type: 'success' })
-    }, 'Could not start the prediction')
+      toastManager.add({
+        title: t('viewerOverlay.engagement.predictionStartedToast'),
+        type: 'success',
+      })
+    }, t('viewerOverlay.engagement.predictionStartFailed'))
   }
 
   const lockPrediction = (pid: string) =>
     void run(async () => {
       setPrediction(await engagementApi.lockPrediction(overlayId, pid))
-      toastManager.add({ title: 'Prediction locked — wagers are frozen', type: 'success' })
-    }, 'Could not lock the prediction')
+      toastManager.add({
+        title: t('viewerOverlay.engagement.predictionLockedToast'),
+        type: 'success',
+      })
+    }, t('viewerOverlay.engagement.predictionLockFailed'))
 
   const resolvePrediction = (pid: string) => {
     if (!winnerId) {
-      toastManager.add({ title: 'Pick the winning outcome first', type: 'error' })
+      toastManager.add({ title: t('viewerOverlay.engagement.pickWinnerToast'), type: 'error' })
       return
     }
     void run(async () => {
@@ -354,13 +363,16 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
         // while LOCKED, so this is a lost race (auto-lock/refresh), not user error —
         // acknowledge it neutrally rather than scolding (L-U7).
         setPrediction(resolved)
-        toastManager.add({ title: 'The prediction is no longer locked — refresh and try again' })
+        toastManager.add({ title: t('viewerOverlay.engagement.predictionNoLongerLockedToast') })
         return
       }
       setPrediction(resolved)
       setWinnerId('')
-      toastManager.add({ title: 'Prediction resolved — winners paid out', type: 'success' })
-    }, 'Could not resolve the prediction')
+      toastManager.add({
+        title: t('viewerOverlay.engagement.predictionResolvedToast'),
+        type: 'success',
+      })
+    }, t('viewerOverlay.engagement.predictionResolveFailed'))
   }
 
   const cancelPrediction = (pid: string) =>
@@ -372,14 +384,19 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
       // Cancel is an idempotent guarded update: a 200 on an already-finished
       // prediction returns it unchanged — don't claim a refund that didn't happen.
       if (result.state === 'CANCELED') {
-        toastManager.add({ title: 'Prediction canceled — all wagers refunded', type: 'success' })
+        toastManager.add({
+          title: t('viewerOverlay.engagement.predictionCanceledToast'),
+          type: 'success',
+        })
       } else {
         toastManager.add({
-          title: `Nothing to cancel — the prediction is already ${result.state.toLowerCase()}`,
+          title: t('viewerOverlay.engagement.nothingToCancelToast', {
+            state: result.state.toLowerCase(),
+          }),
           type: 'error',
         })
       }
-    }, 'Could not cancel the prediction')
+    }, t('viewerOverlay.engagement.predictionCancelFailed'))
 
   // --- Twitch mirroring opt-in ------------------------------------------------
 
@@ -388,11 +405,11 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
       window.location.href = await engagementApi.getTwitchMirrorConsentUrl(overlayId)
     } catch {
       toastManager.add({
-        title: 'Could not start Twitch consent. Please try again.',
+        title: t('viewerOverlay.engagement.twitchConsentFailedToast'),
         type: 'error',
       })
     }
-  }, [overlayId])
+  }, [overlayId, t])
 
   // Disarm the cancel/payout confirmations if they aren't acted on quickly.
   useEffect(() => {
@@ -661,7 +678,7 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                       onClick={() => {
                         if (!winnerId) {
                           toastManager.add({
-                            title: 'Pick the winning outcome first',
+                            title: t('viewerOverlay.engagement.pickWinnerToast'),
                             type: 'error',
                           })
                           return

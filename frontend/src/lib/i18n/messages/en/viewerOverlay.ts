@@ -81,6 +81,31 @@ export const viewerOverlay = {
     mirrorNote:
       'Mirror native Twitch polls & predictions onto your overlays (read-only). Opt-in; takes effect after the next channel sync (a stream restart or re-adding the source).',
     mirrorEnable: 'Enable Twitch mirroring',
+
+    // Toasts. The *Failed keys are the fallbacks run() shows when the API
+    // rejects without an ApiError message of its own.
+    pollIncompleteToast: 'A poll needs a question and at least 2 options',
+    pollStartedToast: 'Poll started',
+    pollStartFailed: 'Could not start the poll',
+    pollClosedToast: 'Poll closed',
+    pollCloseFailed: 'Could not close the poll',
+    predictionIncompleteToast: 'A prediction needs a title and at least 2 outcomes',
+    predictionStartedToast: 'Prediction started',
+    predictionStartFailed: 'Could not start the prediction',
+    // U+2014 em dash in each of the four sentences that carry one.
+    predictionLockedToast: 'Prediction locked \u2014 wagers are frozen',
+    predictionLockFailed: 'Could not lock the prediction',
+    pickWinnerToast: 'Pick the winning outcome first',
+    predictionNoLongerLockedToast:
+      'The prediction is no longer locked \u2014 refresh and try again',
+    predictionResolvedToast: 'Prediction resolved \u2014 winners paid out',
+    predictionResolveFailed: 'Could not resolve the prediction',
+    predictionCanceledToast: 'Prediction canceled \u2014 all wagers refunded',
+    // The state is the engagement service's own value, lowercased at the call
+    // site because that is what renders today.
+    nothingToCancelToast: 'Nothing to cancel \u2014 the prediction is already {state}',
+    predictionCancelFailed: 'Could not cancel the prediction',
+    twitchConsentFailedToast: 'Could not start Twitch consent. Please try again.',
   },
 
   participate: {
