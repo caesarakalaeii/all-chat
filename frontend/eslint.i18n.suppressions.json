@@ -289,14 +289,6 @@
       "count": 5
     }
   },
-  "src/components/overlay/EngagementControls.tsx": {
-    "no-restricted-syntax": {
-      "count": 12
-    },
-    "react/jsx-no-literals": {
-      "count": 35
-    }
-  },
   "src/components/overlay/EventContent.tsx": {
     "react/jsx-no-literals": {
       "count": 4
