@@ -1409,3 +1409,43 @@ describe('overlay editor source toast copy', () => {
     expect(t('overlayEditor.toasts.extensionOverlayUpdateFailed')).toBe('Failed to update overlay')
   })
 })
+
+describe('TTS group toast and inline error copy', () => {
+  it('keeps the API key save errors', () => {
+    expect(t('overlayEditor.tts.apiKeyEmptyError')).toBe('API key cannot be empty.')
+    expect(t('overlayEditor.tts.pickVoiceError')).toBe('Pick a voice before saving.')
+    expect(t('overlayEditor.tts.saveKeyError')).toBe('Could not save. Try again.')
+  })
+
+  it('keeps the API key toasts', () => {
+    expect(t('overlayEditor.tts.apiKeySavedToast')).toBe('API key saved.')
+    expect(t('overlayEditor.tts.apiKeySaveFailedToast')).toBe('Could not save key')
+    // Stands in for the thrown error's message when the failure is not an Error.
+    expect(t('overlayEditor.tts.networkErrorDetail')).toBe('network error')
+    expect(t('overlayEditor.tts.apiKeyRemovedToast')).toBe('API key removed.')
+    expect(t('overlayEditor.tts.apiKeyRemoveFailedToast')).toBe('Could not remove key. Try again.')
+  })
+
+  it('keeps the ElevenLabs key-test toasts, one per status code', () => {
+    expect(t('overlayEditor.tts.testInvalidKeyToast')).toBe('Invalid API key')
+    // U+2014 em dash.
+    expect(t('overlayEditor.tts.testRateLimitedToast')).toBe(
+      'Rate-limited \u2014 try again in a minute'
+    )
+    expect(t('overlayEditor.tts.testUnreachableToast')).toBe(
+      'Could not reach ElevenLabs. Check your connection.'
+    )
+    expect(t('overlayEditor.tts.testUnavailableToast')).toBe('ElevenLabs service unavailable')
+  })
+
+  it('keeps the voice and OBS URL toasts', () => {
+    expect(t('overlayEditor.tts.voiceUpdatedToast')).toBe('Voice updated.')
+    expect(t('overlayEditor.tts.voiceSaveFailedToast')).toBe('Could not save voice')
+    expect(t('overlayEditor.tts.obsUrlCopiedToast')).toBe('OBS URL copied.')
+    expect(t('overlayEditor.tts.obsUrlCopyFailedToast')).toBe('Could not copy URL.')
+    expect(t('overlayEditor.tts.obsUrlRegeneratedToast')).toBe('New OBS URL copied to clipboard.')
+    expect(t('overlayEditor.tts.obsUrlRegenerateFailedToast')).toBe(
+      'Could not regenerate URL. Try again.'
+    )
+  })
+})
