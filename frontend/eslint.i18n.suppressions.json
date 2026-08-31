@@ -16,13 +16,5 @@
     "react/jsx-no-literals": {
       "count": 205
     }
-  },
-  "src/app/legal/terms/page.tsx": {
-    "no-restricted-syntax": {
-      "count": 1
-    },
-    "react/jsx-no-literals": {
-      "count": 73
-    }
   }
 }

@@ -18,277 +18,244 @@
 
 import Link from 'next/link'
 import LegalLayout from '@/components/legal/LegalLayout'
+import { getTranslations } from '@/lib/i18n'
+import { emphasise, interpolateElements } from '@/lib/i18n/emphasise'
+
+// getTranslations, not the hook: this route is a Server Component.
+const t = getTranslations()
 
 export const metadata = {
-  title: 'Terms of Service | All-Chat',
-  description: 'Understand the rules and responsibilities for using All-Chat.',
+  title: t('metadata.terms.title'),
+  description: t('metadata.terms.description'),
   alternates: { canonical: '/legal/terms' },
 }
 
 const listClasses = 'list-disc pl-6 space-y-1 text-text-sub'
+const linkClasses = 'text-twitch underline decoration-twitch/30 underline-offset-4'
+
+const SUPPORT_MAILTO = 'mailto:all.chat.support@gmail.com'
 
 export default function TermsOfServicePage() {
+  const supportEmail = t('legal.terms.supportEmail')
+  const privacyLinkText = t('legal.terms.privacyLinkText')
+
+  const privacyLink = (
+    <Link href="/legal/privacy" className={linkClasses}>
+      {privacyLinkText}
+    </Link>
+  )
+  const supportLink = (
+    <a href={SUPPORT_MAILTO} className={linkClasses}>
+      {supportEmail}
+    </a>
+  )
+
   return (
-    <LegalLayout title="Terms of Service (Nutzungsbedingungen)" lastUpdated="July 30, 2026">
+    <LegalLayout title={t('legal.terms.title')} lastUpdated={t('legal.terms.lastUpdated')}>
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">1. Acceptance of Terms</h2>
+        <h2 className="text-2xl font-semibold text-text">{t('legal.terms.acceptanceHeading')}</h2>
         <p>
-          By accessing or using All-Chat you agree to these Terms of Service and our{' '}
-          <Link
-            href="/legal/privacy"
-            className="text-twitch underline decoration-twitch/30 underline-offset-4"
-          >
-            Privacy Policy
-          </Link>
-          . If you disagree with any part, you should discontinue use immediately.
+          {emphasise(
+            t('legal.terms.acceptanceBody', { privacy: privacyLinkText }),
+            privacyLinkText,
+            () => privacyLink
+          )}
         </p>
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">2. Description of Service</h2>
-        <p>
-          All-Chat aggregates real-time chat from Twitch, YouTube, Kick, TikTok, and Discord into a
-          single overlay so you can display cross-platform conversation on your stream. You can
-          customize overlays, connect sources, and broadcast them via OBS or browser sources.
-        </p>
+        <h2 className="text-2xl font-semibold text-text">{t('legal.terms.descriptionHeading')}</h2>
+        <p>{t('legal.terms.descriptionBody')}</p>
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">3. Accounts &amp; Authentication</h2>
-        <p>You are responsible for all activity that happens under your account. You agree to:</p>
+        <h2 className="text-2xl font-semibold text-text">{t('legal.terms.accountsHeading')}</h2>
+        <p>{t('legal.terms.accountsIntro')}</p>
         <ul className={listClasses}>
-          <li>Provide accurate registration details</li>
-          <li>Maintain the security of your credentials and OAuth grants</li>
+          <li>{t('legal.terms.accountsAccurate')}</li>
+          <li>{t('legal.terms.accountsSecurity')}</li>
           <li>
-            Notify us at{' '}
-            <a
-              href="mailto:all.chat.support@gmail.com"
-              className="text-twitch underline decoration-twitch/30 underline-offset-4"
-            >
-              all.chat.support@gmail.com
-            </a>{' '}
-            if you suspect compromise
+            {emphasise(
+              t('legal.terms.accountsNotify', { email: supportEmail }),
+              supportEmail,
+              () => supportLink
+            )}
           </li>
-          <li>
-            Comply with the terms of Twitch, YouTube, TikTok, Kick, Discord, and any other connected
-            platform
-          </li>
+          <li>{t('legal.terms.accountsComply')}</li>
         </ul>
-      </section>
-
-      <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">4. Acceptable Use</h2>
-        <p>You agree not to misuse the Service, including but not limited to:</p>
-        <ul className={listClasses}>
-          <li>Breaking local, national, or international laws</li>
-          <li>Infringing intellectual property or privacy rights of others</li>
-          <li>Uploading malware, spam, or malicious code</li>
-          <li>Attempting to bypass authentication, rate limits, or security controls</li>
-          <li>Harassing or abusing other users</li>
-          <li>Using All-Chat in a way that violates partner platform policies</li>
-        </ul>
-      </section>
-
-      <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">5. Third-Party Integrations</h2>
-        <p>
-          All-Chat relies on third-party APIs. Their availability, scopes, and rate limits may
-          change.
-        </p>
-        <ul className={listClasses}>
-          <li>You must comply with each platform&apos;s terms of service</li>
-          <li>We are not accountable for outages or policy shifts by those platforms</li>
-          <li>Platform-specific quotas can impact overlay functionality</li>
-        </ul>
-        <p className="font-semibold text-text">
-          YouTube Integration: By using All-Chat to connect to YouTube, you agree to be bound by the{' '}
-          <a
-            href="https://www.youtube.com/t/terms"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-twitch underline decoration-twitch/30 underline-offset-4"
-          >
-            YouTube Terms of Service
-          </a>
-          .
-        </p>
-      </section>
-
-      <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">6. Privacy</h2>
-        <p>
-          Your use of All-Chat is also governed by our{' '}
-          <Link
-            href="/legal/privacy"
-            className="text-twitch underline decoration-twitch/30 underline-offset-4"
-          >
-            Privacy Policy
-          </Link>
-          , which explains what we collect, how it is used, and your rights under the DSGVO. For
-          transparency: All-Chat measures aggregate usage with{' '}
-          <strong className="text-text">self-hosted, cookieless analytics</strong> (Umami) that set
-          nothing on your device and store no personal identifier &ndash; see Section&nbsp;5.6 of
-          the Privacy Policy.
-        </p>
-      </section>
-
-      <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">7. Open Source License</h2>
-        <p>
-          All-Chat is released under the{' '}
-          <a
-            href="https://www.gnu.org/licenses/agpl-3.0.html"
-            target="_blank"
-            rel="noreferrer"
-            className="text-twitch underline decoration-twitch/30 underline-offset-4"
-          >
-            GNU Affero General Public License v3.0 (AGPL-3.0)
-          </a>
-          . That means you may use, study, modify, and distribute the software as long as your
-          derivative works also inherit the AGPL-3.0 terms. If you run a modified version of
-          All-Chat as a hosted service, you must provide the source to your users.
-        </p>
-        <p>
-          The canonical repository is available on{' '}
-          <a
-            href="https://github.com/caesarakalaeii/all-chat"
-            target="_blank"
-            rel="noreferrer"
-            className="text-twitch underline decoration-twitch/30 underline-offset-4"
-          >
-            GitHub
-          </a>
-          .
-        </p>
-      </section>
-
-      <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">8. Availability &amp; Support</h2>
-        <p>We aim for high uptime but do not guarantee:</p>
-        <ul className={listClasses}>
-          <li>Uninterrupted access or zero bugs</li>
-          <li>Compatibility with every browser or streamer setup</li>
-          <li>Immediate fixes or feature requests</li>
-        </ul>
-        <p>
-          Support for the hosted service at <strong className="text-text">allch.at</strong> is
-          best-effort. Community/self-hosted deployments must rely on their own maintainers or the
-          open source community for assistance.
-        </p>
-      </section>
-
-      <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">9. Limitation of Liability</h2>
-        <p>
-          We are liable without limitation for damages caused intentionally or by gross negligence,
-          for injury to life, body, or health, and under the German Product Liability Act
-          (Produkthaftungsgesetz).
-        </p>
-        <p>
-          In cases of slight negligence, we are liable only for the breach of essential contractual
-          obligations (Kardinalpflichten): obligations whose fulfilment makes the proper performance
-          of the contract possible in the first place and on whose fulfilment you may regularly
-          rely. In such cases, our liability is limited to the damage that is foreseeable and
-          typical for this type of service. Any further liability is excluded.
-        </p>
-        <p>
-          These limitations also apply in favour of our legal representatives and vicarious agents
-          (Erf&uuml;llungsgehilfen).
-        </p>
-      </section>
-
-      <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">10. Indemnification</h2>
-        <p>
-          You agree to indemnify All-Chat against third-party claims, including the reasonable costs
-          of legal defence, arising from your culpable violation of these Terms, applicable law, or
-          the rights of others. This does not apply to the extent you are not responsible for the
-          violation.
-        </p>
       </section>
 
       <section className="space-y-4">
         <h2 className="text-2xl font-semibold text-text">
-          11. Premium Subscriptions &amp; Right of Withdrawal (Widerrufsrecht)
+          {t('legal.terms.acceptableUseHeading')}
         </h2>
-        <p>
-          The core All-Chat service is free of charge. Premium features are unlocked through a paid
-          membership on{' '}
-          <a
-            href="https://www.patreon.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-twitch underline decoration-twitch/30 underline-offset-4"
-          >
-            Patreon
-          </a>
-          : you subscribe to our campaign on patreon.com and then connect your Patreon account to
-          All-Chat. The subscription contract, billing, cancellation, and any statutory right of
-          withdrawal for the paid membership are handled by Patreon under Patreon&apos;s own terms.
-          All-Chat itself does not charge you and does not process payments.
-        </p>
-        <p>
-          You may stop using All-Chat and delete your account at any time via the Settings page.
-          Upon deletion, your personal data is removed as described in our Privacy Policy. Note that
-          deleting your All-Chat account does not cancel a Patreon membership; cancel it directly on
-          Patreon.
+        <p>{t('legal.terms.acceptableUseIntro')}</p>
+        <ul className={listClasses}>
+          <li>{t('legal.terms.acceptableUseLaws')}</li>
+          <li>{t('legal.terms.acceptableUseIp')}</li>
+          <li>{t('legal.terms.acceptableUseMalware')}</li>
+          <li>{t('legal.terms.acceptableUseBypass')}</li>
+          <li>{t('legal.terms.acceptableUseHarassment')}</li>
+          <li>{t('legal.terms.acceptableUsePartner')}</li>
+        </ul>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-2xl font-semibold text-text">{t('legal.terms.thirdPartyHeading')}</h2>
+        <p>{t('legal.terms.thirdPartyIntro')}</p>
+        <ul className={listClasses}>
+          <li>{t('legal.terms.thirdPartyComply')}</li>
+          <li>{t('legal.terms.thirdPartyOutages')}</li>
+          <li>{t('legal.terms.thirdPartyQuotas')}</li>
+        </ul>
+        <p className="font-semibold text-text">
+          {interpolateElements(t('legal.terms.youtubeBinding'), {
+            youtubeTerms: (
+              <a
+                href="https://www.youtube.com/t/terms"
+                target="_blank"
+                rel="noopener noreferrer"
+                className={linkClasses}
+              >
+                {t('legal.terms.youtubeTermsLinkText')}
+              </a>
+            ),
+          })}
         </p>
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">12. Changes to Terms</h2>
+        <h2 className="text-2xl font-semibold text-text">{t('legal.terms.privacyHeading')}</h2>
+        {/* Two runs in one sentence, so interpolateElements rather than two
+            nested emphasise calls. */}
         <p>
-          We may update these Terms over time. Material changes will be announced in the dashboard,
-          and the new version will be posted here with an updated effective date.
+          {interpolateElements(t('legal.terms.privacyBody'), {
+            privacy: privacyLink,
+            analytics: (
+              <strong className="text-text">{t('legal.terms.privacyAnalyticsEmphasis')}</strong>
+            ),
+          })}
         </p>
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">13. Termination</h2>
+        <h2 className="text-2xl font-semibold text-text">{t('legal.terms.licenseHeading')}</h2>
         <p>
-          We reserve the right to suspend or terminate your access for any breach of these Terms or
-          abusive behavior. You may stop using the Service at any time by deleting your account in
-          the Settings page.
+          {interpolateElements(t('legal.terms.licenseBody'), {
+            license: (
+              <a
+                href="https://www.gnu.org/licenses/agpl-3.0.html"
+                target="_blank"
+                rel="noreferrer"
+                className={linkClasses}
+              >
+                {t('legal.terms.licenseLinkText')}
+              </a>
+            ),
+          })}
+        </p>
+        <p>
+          {interpolateElements(t('legal.terms.licenseRepository'), {
+            github: (
+              <a
+                href="https://github.com/caesarakalaeii/all-chat"
+                target="_blank"
+                rel="noreferrer"
+                className={linkClasses}
+              >
+                {t('legal.terms.githubLinkText')}
+              </a>
+            ),
+          })}
         </p>
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">14. Governing Law &amp; Jurisdiction</h2>
+        <h2 className="text-2xl font-semibold text-text">{t('legal.terms.availabilityHeading')}</h2>
+        <p>{t('legal.terms.availabilityIntro')}</p>
+        <ul className={listClasses}>
+          <li>{t('legal.terms.availabilityUptime')}</li>
+          <li>{t('legal.terms.availabilityCompat')}</li>
+          <li>{t('legal.terms.availabilityFixes')}</li>
+        </ul>
         <p>
-          These Terms are governed by the laws of the Federal Republic of Germany, excluding the UN
-          Convention on Contracts for the International Sale of Goods (CISG). If you are a consumer,
-          the mandatory consumer protection provisions of the country in which you habitually reside
-          remain unaffected. If you are a merchant (Kaufmann), a legal entity under public law, or a
-          special fund under public law, the exclusive place of jurisdiction is the domicile of the
-          operator.
+          {emphasise(
+            t('legal.terms.availabilitySupport', { host: t('legal.terms.hostedDomain') }),
+            t('legal.terms.hostedDomain'),
+            (run) => (
+              <strong className="text-text">{run}</strong>
+            )
+          )}
         </p>
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">15. Legal Notice</h2>
+        <h2 className="text-2xl font-semibold text-text">{t('legal.terms.liabilityHeading')}</h2>
+        <p>{t('legal.terms.liabilityGross')}</p>
+        <p>{t('legal.terms.liabilitySlight')}</p>
+        <p>{t('legal.terms.liabilityAgents')}</p>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-2xl font-semibold text-text">{t('legal.terms.indemnityHeading')}</h2>
+        <p>{t('legal.terms.indemnityBody')}</p>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-2xl font-semibold text-text">{t('legal.terms.premiumHeading')}</h2>
         <p>
-          The operator&apos;s identity and contact details are available in the{' '}
-          <Link
-            href="/legal/impressum"
-            className="text-twitch underline decoration-twitch/30 underline-offset-4"
-          >
-            Impressum
-          </Link>
-          .
+          {interpolateElements(t('legal.terms.premiumBody'), {
+            patreon: (
+              <a
+                href="https://www.patreon.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className={linkClasses}
+              >
+                {t('legal.terms.patreonLinkText')}
+              </a>
+            ),
+          })}
+        </p>
+        <p>{t('legal.terms.premiumCancellation')}</p>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-2xl font-semibold text-text">{t('legal.terms.changesHeading')}</h2>
+        <p>{t('legal.terms.changesBody')}</p>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-2xl font-semibold text-text">{t('legal.terms.terminationHeading')}</h2>
+        <p>{t('legal.terms.terminationBody')}</p>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-2xl font-semibold text-text">{t('legal.terms.governingLawHeading')}</h2>
+        <p>{t('legal.terms.governingLawBody')}</p>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-2xl font-semibold text-text">{t('legal.terms.legalNoticeHeading')}</h2>
+        <p>
+          {interpolateElements(t('legal.terms.legalNoticeBody'), {
+            impressum: (
+              <Link href="/legal/impressum" className={linkClasses}>
+                {t('legal.terms.impressumLinkText')}
+              </Link>
+            ),
+          })}
         </p>
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">16. Contact</h2>
+        <h2 className="text-2xl font-semibold text-text">{t('legal.terms.contactHeading')}</h2>
         <p>
-          Questions? Reach us at{' '}
-          <a
-            href="mailto:all.chat.support@gmail.com"
-            className="text-twitch underline decoration-twitch/30 underline-offset-4"
-          >
-            all.chat.support@gmail.com
-          </a>
-          . Hosted community forks should contact their own administrators.
+          {emphasise(
+            t('legal.terms.contactBody', { email: supportEmail }),
+            supportEmail,
+            () => supportLink
+          )}
         </p>
       </section>
     </LegalLayout>

@@ -294,10 +294,11 @@ describe('terms of service body copy', () => {
   })
 
   it('keeps both license paragraphs', () => {
-    expect(
-      t('legal.terms.licenseBody', { license: 'GNU Affero General Public License v3.0' })
-    ).toBe(
-      'All-Chat is released under the GNU Affero General Public License v3.0. That means you may use, study, modify, and distribute the software as long as your derivative works also inherit the AGPL-3.0 terms. If you run a modified version of All-Chat as a hosted service, you must provide the source to your users.'
+    // Composed with the link text the render site actually passes, so this pins
+    // the sentence as rendered rather than a value nothing produces: the <a> in
+    // the source wrapped the "(AGPL-3.0)" suffix too.
+    expect(t('legal.terms.licenseBody', { license: t('legal.terms.licenseLinkText') })).toBe(
+      'All-Chat is released under the GNU Affero General Public License v3.0 (AGPL-3.0). That means you may use, study, modify, and distribute the software as long as your derivative works also inherit the AGPL-3.0 terms. If you run a modified version of All-Chat as a hosted service, you must provide the source to your users.'
     )
     expect(t('legal.terms.licenseLinkText')).toBe(
       'GNU Affero General Public License v3.0 (AGPL-3.0)'
@@ -353,5 +354,13 @@ describe('terms of service body copy', () => {
     expect(t('legal.terms.governingLawBody')).toBe(
       'These Terms are governed by the laws of the Federal Republic of Germany, excluding the UN Convention on Contracts for the International Sale of Goods (CISG). If you are a consumer, the mandatory consumer protection provisions of the country in which you habitually reside remain unaffected. If you are a merchant (Kaufmann), a legal entity under public law, or a special fund under public law, the exclusive place of jurisdiction is the domicile of the operator.'
     )
+  })
+})
+
+describe('terms of service link text', () => {
+  it('keeps the Patreon link text in the terms namespace, not common', () => {
+    // common.patreon.heading is a section heading on a different surface. This
+    // is a run inside a legal sentence, so it stays with the sentence.
+    expect(t('legal.terms.patreonLinkText')).toBe('Patreon')
   })
 })
