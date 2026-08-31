@@ -419,7 +419,18 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
         </div>
       </div>
 
-      <style jsx global>{`
+      {/*
+       * The roll header's entrance animation. Injected the way the sibling
+       * overlay routes inject their global CSS (see overlay/layout.tsx and
+       * overlay/[id]/view/layout.tsx) rather than through styled-jsx: both emit
+       * the same global rules, and this shape keeps the stylesheet out of a JSX
+       * text node, which the i18n gate reads as copy. Hoisting the styled-jsx
+       * template to a constant is not an option — styled-jsx only transforms an
+       * inline literal, so a hoisted one ships unscoped and unminified.
+       */}
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
         @keyframes fade-in {
           from {
             opacity: 0;
@@ -434,7 +445,9 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
         .animate-fade-in {
           animation: fade-in 1s ease-out;
         }
-      `}</style>
+      `,
+        }}
+      />
     </>
   )
 }

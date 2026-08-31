@@ -64,14 +64,20 @@ describe('i18n lint gate', () => {
     expect(await lint('export const P = () => <p className="text-sm">{copy}</p>\n')).toEqual([])
   })
 
-  it('passes a stylesheet written as styled-jsx <style> children', async () => {
-    // styled-jsx requires the CSS to be an inline template literal child: hoisting
-    // it to a constant makes the transform skip it, so the CSS ships unscoped and
-    // unminified. That was measured against a real `next build` — the keyframes
-    // came through verbatim instead of minified. So the gate has to accept this
-    // shape, and a <style> element's children are a stylesheet by definition.
+  it('passes a stylesheet injected through dangerouslySetInnerHTML', async () => {
+    // How every overlay route injects global CSS. It is an attribute rather than
+    // a child, so the rule does not see it.
+    //
+    // The gate CANNOT accept the styled-jsx `<style jsx>{`...`}</style>` shape
+    // instead: react/jsx-no-literals reports a template-literal child of any
+    // element, and its elementOverrides option only resolves capitalised
+    // component names, so a lowercase <style> cannot be named. Hoisting the CSS
+    // to a constant does not help either — styled-jsx only transforms an inline
+    // literal, and a hoisted one ships unscoped and unminified, measured with a
+    // real `next build`. So a styled-jsx stylesheet is a violation here by
+    // design, and the fix is to inject it the way the neighbours do.
     const source =
-      'export const P = () => (\n  <style jsx global>{`\n    .a { color: red; }\n  `}</style>\n)\n'
+      'export const P = () => <style dangerouslySetInnerHTML={{ __html: `.a { color: red; }` }} />\n'
     expect(await lint(source)).toEqual([])
   })
 })
