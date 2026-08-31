@@ -470,3 +470,24 @@ describe('revocation toast copy', () => {
     expect(t('settings.apiTokens.revokeFailedToast')).toBe('Could not revoke that token')
   })
 })
+
+describe('settings index toast copy', () => {
+  it('keeps the setup-guide and account toasts', () => {
+    expect(t('settings.index.restartGuideFailedToast')).toBe('Could not restart the setup guide')
+    expect(t('settings.index.accountDeletedToast')).toBe('Account deleted')
+    expect(t('settings.index.accountDeleteFailedToast')).toBe('Failed to delete account')
+  })
+
+  it('keeps the Discord link toasts', () => {
+    // Four distinct outcomes: a server connected, an account linked, an account
+    // unlinked, and the unlink failing. Not collapsible -- they name different
+    // things even though three of them read similarly.
+    expect(t('settings.index.discordServerConnectedToast')).toBe('Discord server connected!')
+    expect(t('settings.index.discordLinkedToast')).toBe('Discord account linked!')
+    expect(t('settings.index.discordUnlinkedToast')).toBe('Discord account unlinked')
+    expect(t('settings.index.discordUnlinkFailedToast')).toBe(
+      'Could not unlink your Discord account'
+    )
+    expect(t('settings.index.discordDisconnectFailedToast')).toBe('Failed to disconnect server')
+  })
+})

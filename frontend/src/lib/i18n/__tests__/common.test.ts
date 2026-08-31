@@ -251,3 +251,16 @@ describe('shared toast copy', () => {
     expect(t('common.eventSubMigration.failedToast')).toBe('Could not start the upgrade')
   })
 })
+
+describe('Patreon connect toast copy', () => {
+  it('keeps the five toasts both premium pages raise', () => {
+    // /settings/premium and /settings/viewer/premium raise a byte-identical set
+    // of five, so these are common.* by the two-callers-on-the-same-string rule
+    // rather than duplicated into settings.premium.* and settings.viewerPremium.*.
+    expect(t('common.patreon.connectedToast')).toBe('Patreon connected!')
+    expect(t('common.patreon.connectFailedToast')).toBe('Could not connect Patreon')
+    expect(t('common.patreon.connectStartFailedToast')).toBe('Could not start Patreon connect')
+    expect(t('common.patreon.disconnectedToast')).toBe('Patreon disconnected')
+    expect(t('common.patreon.disconnectFailedToast')).toBe('Failed to disconnect')
+  })
+})
