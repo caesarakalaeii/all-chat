@@ -248,3 +248,54 @@ describe('admin global search copy', () => {
     expect(t('admin.search.sourceInOverlay', { overlay: 'Main overlay' })).toBe('in Main overlay')
   })
 })
+
+describe('admin cosmetics catalog copy', () => {
+  it('keeps the page header and tab labels', () => {
+    expect(t('admin.cosmetics.heading')).toBe('Cosmetics Catalog')
+    expect(t('admin.cosmetics.intro')).toBe('Manage avatar frames and flairs')
+    // The tab bar rendered the wire values 'frames'/'flairs' through a CSS
+    // `capitalize`, so the visible text was never in the source. It is copy now,
+    // and a language whose casing rules differ from CSS's gets to choose it.
+    expect(t('admin.cosmetics.tabFrames')).toBe('Frames')
+    expect(t('admin.cosmetics.tabFlairs')).toBe('Flairs')
+  })
+
+  it('keeps both empty states whole', () => {
+    // `itemLabel.toLowerCase()` built "No frames in catalog yet" from a
+    // capitalised noun and a lowercasing call. Two whole sentences instead: the
+    // noun inflects and the lowercase form is not always the visible one.
+    expect(t('admin.cosmetics.emptyFrames')).toBe('No frames in catalog yet')
+    expect(t('admin.cosmetics.emptyFlairs')).toBe('No flairs in catalog yet')
+  })
+
+  it('keeps the add form labels for both entry kinds', () => {
+    expect(t('admin.cosmetics.addFrameHeading')).toBe('Add Frame')
+    expect(t('admin.cosmetics.addFlairHeading')).toBe('Add Flair')
+    expect(t('admin.cosmetics.nameLabel')).toBe('Name')
+    expect(t('admin.cosmetics.framePlaceholder')).toBe('Frame name')
+    expect(t('admin.cosmetics.flairPlaceholder')).toBe('Flair name')
+    expect(t('admin.cosmetics.imageUrlLabel')).toBe('Image URL')
+    expect(t('admin.cosmetics.imageUrlPlaceholder')).toBe('https://example.com/frame.png')
+    expect(t('admin.cosmetics.previewAlt')).toBe('Preview')
+    expect(t('admin.cosmetics.premiumOnlyLabel')).toBe('Premium only')
+    expect(t('admin.cosmetics.submitFrame')).toBe('Add Frame')
+    expect(t('admin.cosmetics.submitFlair')).toBe('Add Flair')
+    expect(t('admin.cosmetics.submittingButton')).toBe('Adding…')
+  })
+
+  it('keeps the entry row badge and delete label', () => {
+    expect(t('admin.cosmetics.badgePremium')).toBe('Premium')
+    expect(t('admin.cosmetics.deleteLabel', { name: 'Gold Ring' })).toBe('Delete Gold Ring')
+  })
+
+  it('keeps the load, add and delete toast copy', () => {
+    expect(t('admin.cosmetics.loadFramesError')).toBe('Failed to load frames')
+    expect(t('admin.cosmetics.loadFlairsError')).toBe('Failed to load flairs')
+    expect(t('admin.cosmetics.frameDeleted')).toBe('Frame deleted')
+    expect(t('admin.cosmetics.flairDeleted')).toBe('Flair deleted')
+    expect(t('admin.cosmetics.deleteError')).toBe('Delete failed')
+    expect(t('admin.cosmetics.frameAdded')).toBe('Frame added')
+    expect(t('admin.cosmetics.flairAdded')).toBe('Flair added')
+    expect(t('admin.cosmetics.addError')).toBe('Add failed')
+  })
+})
