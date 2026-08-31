@@ -205,4 +205,90 @@ export const viewerOverlay = {
   chatOverlay: {
     sharedChat: 'Shared Chat',
   },
+
+  activity: {
+    heading: 'Activity & Events',
+    empty: 'No events yet.',
+    modBadge: 'mod',
+    // Stands in for the name when a moderation frame carries neither a username
+    // nor a resolvable user id.
+    someUser: 'a user',
+
+    // One whole sentence per reachable combination. The moderator, the timeout
+    // duration and the AutoMod category are each independently optional, and a
+    // sentence with an empty hole in it is not something a translator can place.
+    deleted: 'Message deleted',
+    deletedBy: 'Message deleted by {moderator}',
+    cleared: 'Chat cleared',
+    clearedBy: 'Chat cleared by {moderator}',
+    banned: 'Banned {user}',
+    bannedBy: 'Banned {user} by {moderator}',
+    timedOut: 'Timed out {user}',
+    timedOutFor: 'Timed out {user} for {seconds}s',
+    timedOutBy: 'Timed out {user} by {moderator}',
+    timedOutForBy: 'Timed out {user} for {seconds}s by {moderator}',
+    automodHeld: 'AutoMod held a message from {user}',
+    automodHeldCategory: 'AutoMod held a message from {user} ({category})',
+    automodResolved: 'AutoMod hold {resolution}',
+    automodResolvedBy: 'AutoMod hold {resolution} by {moderator}',
+    automodHeldBadge: 'held',
+  },
+
+  chatPanel: {
+    heading: 'Chat',
+    empty: 'No chat messages yet.',
+    filteredBy: 'Showing only messages from {user}',
+    showAll: 'Show all chat',
+    filteredEmpty: 'No messages from {user} yet.',
+    filteredCount: '{shown} of {total}',
+    sharedBadge: 'shared',
+  },
+
+  observability: {
+    sources: 'Sources ({count})',
+    configuredEvents: 'Configured Events',
+    emotes: 'Emotes',
+    filters: 'Filters',
+
+    noSources: 'No sources configured.',
+    sourceLive: 'live',
+    sourceIdle: 'idle',
+
+    eventsUnavailable: 'Event configuration unavailable; events appear here as they arrive.',
+    sevenTvSet: '7TV set',
+    sevenTvDefault: 'per-source default',
+
+    bannedWords: 'Banned words',
+    bannedUsers: 'Banned users',
+    minLength: 'Min length',
+    hideCommands: 'Hide commands',
+    sayHiFilter: 'Say hi filter',
+    yes: 'yes',
+    no: 'no',
+    filtersNote: 'Filters are shown for reference; this view displays all messages.',
+
+    // Worded differently from the overlay editor's event names in
+    // overlayEditor.*, so they are their own keys rather than shared.
+    eventTwitchSubs: 'Twitch Subs',
+    eventTwitchResubs: 'Twitch Resubs',
+    eventTwitchGiftSubs: 'Twitch Gift Subs',
+    eventTwitchBits: 'Twitch Bits',
+    eventTwitchRaids: 'Twitch Raids',
+    eventTwitchChannelPoints: 'Channel Points',
+    eventTwitchFollows: 'Twitch Follows',
+    eventTwitchWatchStreaks: 'Watch Streaks',
+    eventYoutubeSuperChat: 'YouTube Super Chat',
+    eventYoutubeSuperSticker: 'Super Sticker',
+    eventYoutubeMembers: 'YouTube Members',
+    eventYoutubeMemberMilestones: 'Member Milestones',
+    eventYoutubeMemberGifts: 'Member Gifts',
+    eventKickSubs: 'Kick Subs',
+    eventKickGifts: 'Kick Gifts',
+    eventTiktokLikes: 'TikTok Likes',
+    eventTiktokGifts: 'TikTok Gifts',
+    eventTiktokFollows: 'TikTok Follows',
+    eventTiktokShares: 'TikTok Shares',
+    eventTiktokTreasureChests: 'TikTok Coin Chests',
+    eventTokenWarnings: 'Token Warnings',
+  },
 } as const

@@ -241,21 +241,6 @@
       "count": 8
     }
   },
-  "src/components/overlay/ActivityPanel.tsx": {
-    "react/jsx-no-literals": {
-      "count": 5
-    }
-  },
-  "src/components/overlay/ChatPanel.tsx": {
-    "react/jsx-no-literals": {
-      "count": 3
-    }
-  },
-  "src/components/overlay/ChatRow.tsx": {
-    "react/jsx-no-literals": {
-      "count": 1
-    }
-  },
   "src/components/overlay/ChatSendBar.tsx": {
     "no-restricted-syntax": {
       "count": 3
@@ -280,14 +265,6 @@
     },
     "react/jsx-no-literals": {
       "count": 4
-    }
-  },
-  "src/components/overlay/ObservabilitySummary.tsx": {
-    "no-restricted-syntax": {
-      "count": 3
-    },
-    "react/jsx-no-literals": {
-      "count": 9
     }
   },
   "src/components/overlay/PlatformGlyph.tsx": {
