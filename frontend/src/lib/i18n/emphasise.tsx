@@ -92,9 +92,11 @@ export function interpolateElements(
     const name = match[1]
     if (!(name in elements)) continue
     parts.push(template.slice(cursor, match.index))
-    // Keyed by name: the names are unique within a template, and React needs a
-    // stable key for each element in the array.
-    parts.push(<React.Fragment key={name}>{elements[name]}</React.Fragment>)
+    // Keyed by name AND source offset, not by name alone: copy may legitimately
+    // name one placeholder twice ('a {status} frame ... {status} data:'), and
+    // two fragments keyed 'status' make React log a duplicate-key error. The
+    // offset is stable across renders because the template is.
+    parts.push(<React.Fragment key={`${name}@${match.index}`}>{elements[name]}</React.Fragment>)
     cursor = match.index + match[0].length
   }
   parts.push(template.slice(cursor))
