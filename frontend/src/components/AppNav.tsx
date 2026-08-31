@@ -27,6 +27,7 @@ import { InfinityLogo } from '@/components/InfinityLogo'
 import { DiscordIcon } from '@/components/icons/DiscordIcon'
 import { DISCORD_INVITE_URL } from '@/lib/constants'
 import { trackEvent } from '@/lib/analytics'
+import { useTranslations } from '@/lib/i18n'
 
 const activeClass =
   'relative text-text flex items-center px-3.5 h-full text-sm ' +
@@ -41,6 +42,7 @@ const inactiveClass =
 export function AppNav() {
   const pathname = usePathname()
   const router = useRouter()
+  const t = useTranslations()
   const { user, logout } = useAuthStore()
   const { viewerToken, viewerLogout } = useViewerAuthStore()
 
@@ -76,30 +78,32 @@ export function AppNav() {
         className="mr-4 flex shrink-0 items-center gap-2.5 rounded-sm focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none sm:mr-10"
       >
         <InfinityLogo size={28} />
-        <span className="text-base font-extrabold tracking-tight text-text">all-chat</span>
+        <span className="text-base font-extrabold tracking-tight text-text">
+          {t('common.brand.wordmark')}
+        </span>
       </Link>
       {/* Scrolls within itself on narrow viewports so the PAGE never scrolls
           horizontally (WCAG 1.4.10 reflow at 320px). */}
       <div className="flex h-full gap-0.5 overflow-x-auto">
         <Link href="/dashboard" className={isActive('/dashboard') ? activeClass : inactiveClass}>
-          Dashboard
+          {t('common.appNav.dashboard')}
         </Link>
         <Link
           href="/settings/viewer"
           className={isActive('/settings/viewer') ? activeClass : inactiveClass}
         >
-          Flairs
+          {t('common.appNav.flairs')}
         </Link>
         {user?.is_admin && (
           <Link href="/admin" className={isActive('/admin') ? activeClass : inactiveClass}>
-            Admin
+            {t('common.appNav.admin')}
           </Link>
         )}
         <Link href="/settings" className={pathname === '/settings' ? activeClass : inactiveClass}>
-          Settings
+          {t('common.appNav.settings')}
         </Link>
         <Link href="/docs" className={isActive('/docs') ? activeClass : inactiveClass}>
-          Docs
+          {t('common.appNav.docs')}
         </Link>
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-1 pl-2">
@@ -114,14 +118,14 @@ export function AppNav() {
           className="flex items-center gap-1.5 rounded-sm px-3 py-1.5 text-sm text-text-sub transition-colors hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
         >
           <DiscordIcon className="h-4 w-4 text-discord" />
-          <span className="sr-only sm:not-sr-only">Discord</span>
+          <span className="sr-only sm:not-sr-only">{t('common.platforms.discord')}</span>
         </a>
         {isLoggedIn && (
           <button
             onClick={handleLogout}
             className="rounded-sm px-3 py-1.5 text-sm text-text-sub transition-colors hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
           >
-            Log out
+            {t('common.appNav.logOut')}
           </button>
         )}
       </div>

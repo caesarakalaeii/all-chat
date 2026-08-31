@@ -36,7 +36,6 @@ const t = getTranslations()
 describe('landing page header', () => {
   it('keeps the sticky header labels', () => {
     expect(t('marketing.header.homeLabel')).toBe('All-Chat home')
-    expect(t('marketing.header.wordmark')).toBe('all-chat')
     expect(t('marketing.header.docs')).toBe('Docs')
     expect(t('marketing.header.dashboard')).toBe('Dashboard')
     expect(t('marketing.header.signIn')).toBe('Sign in')

@@ -24,9 +24,24 @@
  */
 
 export const common = {
-  // Product names, keyed by the platform identifier the code already carries.
-  // Read by the moderator roster and by the overlay editor's bubble colour
-  // picker, which is why they are not in either namespace.
+  brand: {
+    // Set in lowercase by every nav that renders it (the marketing header, the
+    // app nav, the admin rail and the admin top nav), unlike the 'All-Chat' of
+    // prose and aria labels. A locale that transliterates the product name would
+    // change this; one that does not leaves it alone.
+    wordmark: 'all-chat',
+  },
+  // The logged-in app nav, which is chrome on every authenticated surface
+  // (dashboard, settings, overlays, docs, admin) rather than copy owned by one of
+  // them. Its wordmark and Discord label read common.brand and common.platforms.
+  appNav: {
+    dashboard: 'Dashboard',
+    flairs: 'Flairs',
+    admin: 'Admin',
+    settings: 'Settings',
+    docs: 'Docs',
+    logOut: 'Log out',
+  },
   // The soundPlayer presets. Read by the overlay editor's on-stream notification
   // sounds and by the monitor view's private activity sound. Casing rules are
   // language-specific, so the display name cannot be derived by capitalising the
@@ -36,6 +51,9 @@ export const common = {
     pop: 'Pop',
     ping: 'Ping',
   },
+  // Product names, keyed by the platform identifier the code already carries.
+  // Read by the moderator roster and by the overlay editor's bubble colour
+  // picker, which is why they are not in either namespace.
   platforms: {
     twitch: 'Twitch',
     youtube: 'YouTube',

@@ -59,7 +59,7 @@ export function HomeHeader() {
         >
           <InfinityLogo size={26} />
           <span className="text-base font-extrabold tracking-tight text-text">
-            {t('marketing.header.wordmark')}
+            {t('common.brand.wordmark')}
           </span>
         </Link>
 

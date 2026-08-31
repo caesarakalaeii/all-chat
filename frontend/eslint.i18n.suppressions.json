@@ -28,14 +28,6 @@
       "count": 22
     }
   },
-  "src/app/admin/page.tsx": {
-    "no-restricted-syntax": {
-      "count": 7
-    },
-    "react/jsx-no-literals": {
-      "count": 5
-    }
-  },
   "src/app/admin/search/page.tsx": {
     "no-restricted-syntax": {
       "count": 6
@@ -112,27 +104,9 @@
       "count": 8
     }
   },
-  "src/components/AdminNav.tsx": {
-    "react/jsx-no-literals": {
-      "count": 2
-    }
-  },
-  "src/components/AdminSidebar.tsx": {
-    "no-restricted-syntax": {
-      "count": 3
-    },
-    "react/jsx-no-literals": {
-      "count": 4
-    }
-  },
   "src/components/AllChatBadge.tsx": {
     "no-restricted-syntax": {
       "count": 1
-    }
-  },
-  "src/components/AppNav.tsx": {
-    "react/jsx-no-literals": {
-      "count": 8
     }
   },
   "src/components/BetaWarning.tsx": {

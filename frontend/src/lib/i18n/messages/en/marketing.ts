@@ -23,7 +23,6 @@
 export const marketing = {
   header: {
     homeLabel: 'All-Chat home',
-    wordmark: 'all-chat',
     docs: 'Docs',
     dashboard: 'Dashboard',
     signIn: 'Sign in',
