@@ -917,3 +917,56 @@ describe('message settings copy', () => {
     ).toBe('Resolved to "Cool Set" (120 emotes) \u2014 click Save Configuration to apply.')
   })
 })
+
+describe('custom CSS section copy', () => {
+  it('keeps the section heading and its theme-state pills', () => {
+    expect(t('overlayEditor.customCss.heading')).toBe('Custom CSS')
+    expect(t('overlayEditor.customCss.usingTheme', { theme: 'Neon' })).toBe(
+      'Using \u201cNeon\u201d theme \u00b7 auto-updates'
+    )
+    expect(t('overlayEditor.customCss.noThemeApplied')).toBe('No theme applied')
+    expect(t('overlayEditor.customCss.customPill')).toBe('Custom CSS')
+    expect(t('overlayEditor.customCss.forkedPill')).toBe(
+      'Full copy saved \u2014 theme updates paused'
+    )
+    expect(t('overlayEditor.customCss.layeredPill')).toBe(
+      'Customized \u2014 untouched theme rules still auto-update'
+    )
+    expect(t('overlayEditor.customCss.resetToTheme')).toBe('Reset to theme')
+    expect(t('overlayEditor.customCss.clear')).toBe('Clear')
+  })
+
+  it('keeps the editor explainer and placeholder', () => {
+    expect(t('overlayEditor.customCss.explainer')).toBe(
+      'Edit the CSS below \u2014 the preview updates as you type. Only your changes are saved, so fixes we ship to the theme still reach the rules you didn\u2019t touch. Deleting theme rules can\u2019t be layered, so it stores a full copy and pauses theme updates for this overlay; \u201cReset to theme\u201d re-links it.'
+    )
+    expect(t('overlayEditor.customCss.editorPlaceholder')).toBe('/* Enter your custom CSS here */')
+  })
+
+  it('keeps each CSS problem count as its own whole phrase', () => {
+    // Was `${n} error${n > 1 ? 's' : ''}`, which builds a plural by appending a
+    // letter — a rule that holds in English and almost nowhere else. Singular
+    // and plural are separate keys so a language can spell each properly.
+    expect(t('overlayEditor.customCss.noProblems')).toBe('\u2713 No CSS problems detected.')
+    expect(t('overlayEditor.customCss.errorCountOne', { count: 1 })).toBe('1 error')
+    expect(t('overlayEditor.customCss.errorCountMany', { count: 3 })).toBe('3 errors')
+    expect(t('overlayEditor.customCss.warningCountOne', { count: 1 })).toBe('1 warning')
+    expect(t('overlayEditor.customCss.warningCountMany', { count: 3 })).toBe('3 warnings')
+    expect(t('overlayEditor.customCss.problemsSeparator')).toBe(' \u00b7 ')
+    expect(t('overlayEditor.customCss.problemsAdvice', { counts: '3 errors' })).toBe(
+      '3 errors \u2014 invalid rules are ignored by the browser, so fix these for your styles to take effect. Incomplete rules aren\u2019t previewed.'
+    )
+  })
+
+  it('keeps the per-issue line reference and the overflow row', () => {
+    expect(t('overlayEditor.customCss.issueLine', { line: 12 })).toBe('L12:')
+    expect(t('overlayEditor.customCss.moreIssues', { count: 4 })).toBe('\u2026and 4 more')
+  })
+
+  it('keeps the theme-docs pointer as one sentence around its link', () => {
+    expect(t('overlayEditor.customCss.inspiration', { docsLink: 'theme docs' })).toBe(
+      'Need inspiration? Explore theme docs.'
+    )
+    expect(t('overlayEditor.customCss.themeDocsLink')).toBe('theme docs')
+  })
+})
