@@ -22,13 +22,21 @@
 			></sdpi-textarea>
 		</sdpi-item>
 
+		<!--
+			These four and no others. The option list is the SEND surface, which is
+			narrower than the platforms All-Chat reads chat from: TikTok publishes no
+			API for posting into a live chat and Discord sources are a one-way relay,
+			so neither can be a target here. TikTok was offered until a streamer asked
+			why the button did nothing — the server had been answering 501 to it all
+			along. KEEP IN SYNC with PLATFORMS in src/allchat/settings.ts; the parity
+			script asserts these match.
+		-->
 		<sdpi-item label="Platform">
 			<sdpi-select setting="platform" default="all">
 				<option value="all">All connected platforms</option>
 				<option value="twitch">Twitch</option>
 				<option value="youtube">YouTube</option>
 				<option value="kick">Kick</option>
-				<option value="tiktok">TikTok</option>
 			</sdpi-select>
 		</sdpi-item>
 
