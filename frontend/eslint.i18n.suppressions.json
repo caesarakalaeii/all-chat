@@ -235,11 +235,6 @@
       "count": 4
     }
   },
-  "src/app/settings/devices/page.tsx": {
-    "react/jsx-no-literals": {
-      "count": 23
-    }
-  },
   "src/app/settings/premium/page.tsx": {
     "react/jsx-no-literals": {
       "count": 16

@@ -51,15 +51,17 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { listDevices, revokeDevice, type PairedDevice } from '@/lib/api/devices'
+import { useTranslations, type TFunction } from '@/lib/i18n'
+import { interpolateElements } from '@/lib/i18n/emphasise'
 import { toastManager } from '@/lib/toast'
 
 const STREAMDECK_GUIDE =
   'https://github.com/caesarakalaeii/all-chat/blob/main/docs/guides/streamdeck.md'
 
-function formatDate(value: string | null): string {
-  if (!value) return '—'
+function formatDate(t: TFunction, value: string | null): string {
+  if (!value) return t('settings.devices.unknownDate')
   const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return '—'
+  if (Number.isNaN(parsed.getTime())) return t('settings.devices.unknownDate')
   return parsed.toLocaleDateString(undefined, {
     year: 'numeric',
     month: 'short',
@@ -75,10 +77,12 @@ function isLive(device: PairedDevice): boolean {
 }
 
 /** Short human status, so a lapsed pairing is obvious without reading dates. */
-function statusOf(device: PairedDevice): string {
-  if (device.revoked_at) return `Revoked ${formatDate(device.revoked_at)}`
-  if (!isLive(device)) return `Expired ${formatDate(device.expires_at)}`
-  return `Active until ${formatDate(device.expires_at)}`
+function statusOf(t: TFunction, device: PairedDevice): string {
+  if (device.revoked_at)
+    return t('settings.devices.statusRevoked', { date: formatDate(t, device.revoked_at) })
+  if (!isLive(device))
+    return t('settings.devices.statusExpired', { date: formatDate(t, device.expires_at) })
+  return t('settings.devices.statusActive', { date: formatDate(t, device.expires_at) })
 }
 
 // ---------------------------------------------------------------------------
@@ -86,14 +90,18 @@ function statusOf(device: PairedDevice): string {
 // ---------------------------------------------------------------------------
 
 function EmptyState() {
+  const t = useTranslations()
   return (
     <div className="rounded-lg border border-dashed border-border p-6 text-center">
-      <p className="text-sm font-medium text-text">No paired devices yet</p>
+      <p className="text-sm font-medium text-text">{t('settings.devices.emptyHeading')}</p>
       <p className="mx-auto mt-2 max-w-md text-sm text-text-sub">
-        Linking starts in the plugin, not here: open your Stream Deck or StreamController settings
-        and press <strong className="font-medium text-text">Link with All-Chat</strong>. Your
-        browser opens an approve screen, you pick an overlay, and the plugin receives its credential
-        directly — nothing is copied or pasted.
+        {interpolateElements(t('settings.devices.emptyBody'), {
+          linkAction: (
+            <strong className="font-medium text-text">
+              {t('settings.devices.emptyLinkAction')}
+            </strong>
+          ),
+        })}
       </p>
       <p className="mt-3 text-sm text-text-sub">
         <Link
@@ -102,14 +110,14 @@ function EmptyState() {
           rel="noopener noreferrer"
           className="font-medium text-twitch hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-twitch"
         >
-          Setup guide
+          {t('settings.devices.setupGuide')}
         </Link>{' '}
         ·{' '}
         <Link
           href="/link"
           className="font-medium text-twitch hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-twitch"
         >
-          I have a pairing code
+          {t('settings.devices.havePairingCode')}
         </Link>
       </p>
     </div>
@@ -127,19 +135,31 @@ function DeviceRow({
   device: PairedDevice
   onRevoke: (device: PairedDevice) => void
 }) {
+  const t = useTranslations()
   const live = isLive(device)
   return (
     <li className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-border px-4 py-3">
       <div className="min-w-0">
         <p className="truncate text-sm font-medium text-text">{device.name}</p>
         <p className="mt-0.5 text-xs text-text-sub">
-          Controls{' '}
-          <span className="font-medium text-text">{device.overlay_name || device.overlay_id}</span>{' '}
-          · {statusOf(device)}
+          {interpolateElements(
+            t('settings.devices.controlsOverlay', { status: statusOf(t, device) }),
+            {
+              overlay: (
+                <span className="font-medium text-text">
+                  {device.overlay_name || device.overlay_id}
+                </span>
+              ),
+            }
+          )}
         </p>
         <p className="mt-0.5 text-xs text-text-sub">
-          Last used {device.last_used_at ? formatDate(device.last_used_at) : 'never'} · Paired{' '}
-          {formatDate(device.created_at)}
+          {t('settings.devices.rowDates', {
+            lastUsed: device.last_used_at
+              ? formatDate(t, device.last_used_at)
+              : t('settings.devices.neverUsed'),
+            paired: formatDate(t, device.created_at),
+          })}
         </p>
         <p className="mt-1 flex flex-wrap gap-1.5">
           {device.scopes.map((scope) => (
@@ -157,9 +177,9 @@ function DeviceRow({
           variant="outline"
           size="sm"
           onClick={() => onRevoke(device)}
-          aria-label={`Revoke ${device.name}`}
+          aria-label={t('settings.devices.revokeLabel', { name: device.name })}
         >
-          Revoke
+          {t('settings.devices.revoke')}
         </Button>
       )}
     </li>
@@ -171,6 +191,7 @@ function DeviceRow({
 // ---------------------------------------------------------------------------
 
 function DevicesContent() {
+  const t = useTranslations()
   const [devices, setDevices] = useState<PairedDevice[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -184,11 +205,11 @@ function DevicesContent() {
       setDevices(await listDevices())
       setLoadError(null)
     } catch {
-      setLoadError('Could not load your paired devices. Refresh the page to try again.')
+      setLoadError(t('settings.devices.loadFailed'))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     void (async () => {
@@ -216,26 +237,19 @@ function DevicesContent() {
       <AppNav />
       <main id="main-content" tabIndex={-1} className="mx-auto max-w-2xl space-y-6 px-4 py-12">
         <div>
-          <h1 className="text-2xl font-bold text-text">Paired devices</h1>
-          <p className="mt-1 text-sm text-text-sub">
-            Stream Deck and StreamController control surfaces linked to your account. Each one is
-            locked to a single overlay and lapses on its own if it stops being used.
-          </p>
+          <h1 className="text-2xl font-bold text-text">{t('settings.devices.heading')}</h1>
+          <p className="mt-1 text-sm text-text-sub">{t('settings.devices.subheading')}</p>
         </div>
 
         <Card className="p-6">
-          <h2 className="text-lg font-semibold text-text">Your devices</h2>
-          <p className="mt-1 mb-4 text-sm text-text-sub">
-            Only the details below are stored. The credential itself was sent straight to the plugin
-            and is kept as a hash here — it is never shown in this dashboard, which is why there is
-            nothing on this page to copy.
-          </p>
+          <h2 className="text-lg font-semibold text-text">{t('settings.devices.listHeading')}</h2>
+          <p className="mt-1 mb-4 text-sm text-text-sub">{t('settings.devices.listBody')}</p>
 
           {loading ? (
             <div className="space-y-2" role="status">
               <Skeleton className="h-20 w-full" />
               <Skeleton className="h-20 w-full" />
-              <span className="sr-only">Loading paired devices</span>
+              <span className="sr-only">{t('settings.devices.loadingLabel')}</span>
             </div>
           ) : loadError ? (
             <p role="alert" className="text-sm text-red-400">
@@ -254,25 +268,27 @@ function DevicesContent() {
 
         <Card className="p-6">
           <h2 className="text-lg font-semibold text-text">
-            On a second machine or a headless box?
+            {t('settings.devices.headlessHeading')}
           </h2>
           <p className="mt-1 text-sm text-text-sub">
-            Linking needs the plugin and this browser on the same computer. When they are not — a
-            Stream Deck driving a capture PC, a server with no desktop — use a{' '}
-            <Link
-              href="/settings/api-tokens"
-              className="font-medium text-twitch hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-twitch"
-            >
-              personal access token
-            </Link>{' '}
-            instead, or start with{' '}
-            <Link
-              href="/link"
-              className="font-medium text-twitch hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-twitch"
-            >
-              a pairing code
-            </Link>{' '}
-            if your plugin is showing one.
+            {interpolateElements(t('settings.devices.headlessBody'), {
+              tokenLink: (
+                <Link
+                  href="/settings/api-tokens"
+                  className="font-medium text-twitch hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-twitch"
+                >
+                  {t('settings.devices.headlessTokenLink')}
+                </Link>
+              ),
+              pairingLink: (
+                <Link
+                  href="/link"
+                  className="font-medium text-twitch hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-twitch"
+                >
+                  {t('settings.devices.headlessPairingLink')}
+                </Link>
+              ),
+            })}
           </p>
         </Card>
       </main>
@@ -284,10 +300,10 @@ function DevicesContent() {
         }}
       >
         <AlertDialog.Content size="sm">
-          <AlertDialog.Title>Revoke this device?</AlertDialog.Title>
+          <AlertDialog.Title>{t('settings.devices.revokeConfirmTitle')}</AlertDialog.Title>
           <AlertDialog.Description>
             {revokeTarget
-              ? `“${revokeTarget.name}” stops working immediately. Link it again from the plugin if you still want to use it.`
+              ? t('settings.devices.revokeConfirmBody', { name: revokeTarget.name })
               : ''}
           </AlertDialog.Description>
           <div className="mt-6 flex justify-end gap-2">
@@ -297,10 +313,10 @@ function DevicesContent() {
               disabled={revoking}
               onClick={() => setRevokeTarget(null)}
             >
-              Cancel
+              {t('settings.devices.revokeCancel')}
             </Button>
             <Button size="sm" disabled={revoking} onClick={() => void handleConfirmRevoke()}>
-              {revoking ? 'Revoking…' : 'Revoke device'}
+              {revoking ? t('settings.devices.revoking') : t('settings.devices.revokeConfirm')}
             </Button>
           </div>
         </AlertDialog.Content>

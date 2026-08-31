@@ -209,4 +209,47 @@ export const settings = {
     revokeConfirm: 'Revoke token',
     revoking: 'Revoking…',
   },
+  // Settings → paired devices: the Stream Deck / StreamController control
+  // surfaces linked to the account (ADR-0049). Metadata only — no credential
+  // is ever rendered here, which is why there is no reveal copy.
+  devices: {
+    heading: 'Paired devices',
+    subheading:
+      'Stream Deck and StreamController control surfaces linked to your account. Each one is locked to a single overlay and lapses on its own if it stops being used.',
+    listHeading: 'Your devices',
+    listBody:
+      'Only the details below are stored. The credential itself was sent straight to the plugin and is kept as a hash here — it is never shown in this dashboard, which is why there is nothing on this page to copy.',
+    loadingLabel: 'Loading paired devices',
+    loadFailed: 'Could not load your paired devices. Refresh the page to try again.',
+    emptyHeading: 'No paired devices yet',
+    // {linkAction} is emphasised at the render site.
+    emptyBody:
+      'Linking starts in the plugin, not here: open your Stream Deck or StreamController settings and press {linkAction}. Your browser opens an approve screen, you pick an overlay, and the plugin receives its credential directly — nothing is copied or pasted.',
+    emptyLinkAction: 'Link with All-Chat',
+    setupGuide: 'Setup guide',
+    havePairingCode: 'I have a pairing code',
+    // {overlay} is emphasised; {status} is one of the three status strings below.
+    controlsOverlay: 'Controls {overlay} · {status}',
+    rowDates: 'Last used {lastUsed} · Paired {paired}',
+    neverUsed: 'never',
+    // Stands in for a missing or unparseable timestamp.
+    unknownDate: '—',
+    revokeLabel: 'Revoke {name}',
+    revoke: 'Revoke',
+    statusRevoked: 'Revoked {date}',
+    statusExpired: 'Expired {date}',
+    statusActive: 'Active until {date}',
+    headlessHeading: 'On a second machine or a headless box?',
+    // Both {tokenLink} and {pairingLink} are rendered as links.
+    headlessBody:
+      'Linking needs the plugin and this browser on the same computer. When they are not — a Stream Deck driving a capture PC, a server with no desktop — use a {tokenLink} instead, or start with {pairingLink} if your plugin is showing one.',
+    headlessTokenLink: 'personal access token',
+    headlessPairingLink: 'a pairing code',
+    revokeConfirmTitle: 'Revoke this device?',
+    revokeConfirmBody:
+      '“{name}” stops working immediately. Link it again from the plugin if you still want to use it.',
+    revokeCancel: 'Cancel',
+    revokeConfirm: 'Revoke device',
+    revoking: 'Revoking…',
+  },
 } as const
