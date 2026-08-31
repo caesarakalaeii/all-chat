@@ -1,9 +1,4 @@
 {
-  "src/app/docs/api/page.tsx": {
-    "react/jsx-no-literals": {
-      "count": 134
-    }
-  },
   "src/app/docs/page.tsx": {
     "react/jsx-no-literals": {
       "count": 226

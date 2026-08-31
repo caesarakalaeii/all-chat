@@ -18,8 +18,13 @@
 
 import Link from 'next/link'
 import { AppNav } from '@/components/AppNav'
-import { Code, Pre, FieldTable } from '@/components/docs/prose'
+import { Code, Pre, FieldTable, type Field } from '@/components/docs/prose'
 import { JsonLd } from '@/components/JsonLd'
+import { getTranslations, type MessageKey } from '@/lib/i18n'
+import { interpolateElements } from '@/lib/i18n/emphasise'
+
+// getTranslations, not useTranslations: this is a Server Component.
+const t = getTranslations()
 
 export const metadata = {
   title: 'Developer API',
@@ -58,98 +63,193 @@ const breadcrumbLd = {
 
 const TEST_OVERLAY_ID = '00000000-0000-4000-8000-000000000a11'
 
+// The anchor is a URL fragment people bookmark and link to, so it stays a
+// literal; only the label is copy. `as const satisfies`, not an annotation: an
+// annotation widens labelKey to string and a typo stops failing tsc.
 const toc = [
-  ['connect-a-tool', 'Connect a tool'],
-  ['message-format', 'Message format'],
-  ['chat-messages', 'Chat messages'],
-  ['events', 'Events'],
-  ['status-messages', 'Status & control messages'],
-  ['reconnecting', 'Reconnecting & heartbeats'],
-  ['try-it-now', 'Try it now (no setup)'],
+  { id: 'connect-a-tool', labelKey: 'docs.api.tocConnectATool' },
+  { id: 'message-format', labelKey: 'docs.api.tocMessageFormat' },
+  { id: 'chat-messages', labelKey: 'docs.api.tocChatMessages' },
+  { id: 'events', labelKey: 'docs.api.tocEvents' },
+  { id: 'status-messages', labelKey: 'docs.api.tocStatusMessages' },
+  { id: 'reconnecting', labelKey: 'docs.api.tocReconnecting' },
+  { id: 'try-it-now', labelKey: 'docs.api.tocTryItNow' },
+] as const satisfies readonly { id: string; labelKey: MessageKey }[]
+
+// Wire values the gateway sends. Not copy: a translated field name names a
+// field that does not exist. Named here so the prose below can interpolate the
+// same string the reference tables document.
+const FIELD_TYPE = 'type'
+const FIELD_DATA = 'data'
+const FIELD_EVENT = 'event'
+const FIELD_MESSAGE = 'message'
+const FIELD_ATTACHMENTS = 'attachments'
+const FIELD_OVERLAY_ID = 'overlay_id'
+const TYPE_CHAT_MESSAGE = 'chat_message'
+const TYPE_MESSAGE_UPDATE = 'message_update'
+const TYPE_CONNECTED = 'connected'
+const TYPE_PLATFORM_STATUS = 'platform_status'
+const SHAPE_EMOTE = 'Emote'
+const SHAPE_ATTACHMENT = 'Attachment'
+const SHAPE_BADGE = 'Badge'
+const SHAPE_MESSAGE = '{ "text": string, "emotes": Emote[], "attachments"?: Attachment[] }'
+const SHAPE_BADGE_FIELDS = '{ "name", "version", "icon_url" }'
+const SHAPE_BADGE_EXAMPLE = '{ "name": "subscriber", "version": "12", "icon_url": "..." }'
+const FRAME_PING = '{ "type": "ping" }'
+const FRAME_PONG = '{ "type": "pong" }'
+const QUERY_SINCE = '?since=<ms-epoch>'
+
+// The poll votes a viewer types into the test overlay's chat. Chat commands
+// cross a process boundary, so they are not copy either.
+const POLL_VOTES = ['1', '2', '3', '4'] as const
+
+// Event type names, by platform. Same reasoning as the field names above: these
+// are the literal strings the gateway puts in event.type.
+const EVENT_TYPES_BY_PLATFORM = [
+  {
+    platformKey: 'common.platforms.twitch',
+    className: 'text-twitch',
+    types: [
+      'subscription',
+      'resubscription',
+      'gift_subscription',
+      'mystery_gift',
+      'bits',
+      'raid',
+      'channel_points',
+      'watch_streak',
+      'announcement',
+      'bits_badge_tier',
+      'unraid',
+      'modiversary',
+      'charity_donation',
+      'gift_paid_upgrade',
+      'prime_paid_upgrade',
+      'pay_it_forward',
+      'twitch_notice',
+      'message_deletion',
+    ],
+  },
+  {
+    platformKey: 'common.platforms.youtube',
+    className: 'text-youtube',
+    types: [
+      'super_chat',
+      'super_sticker',
+      'new_sponsor',
+      'member_milestone',
+      'membership_gift',
+      'gift_received',
+    ],
+  },
+  {
+    platformKey: 'common.platforms.tiktok',
+    className: 'text-tiktok',
+    types: ['gift', 'like_aggregate', 'follow', 'share'],
+  },
+] as const satisfies readonly {
+  platformKey: MessageKey
+  className: string
+  types: readonly string[]
+}[]
+
+const QUERY_PARAMS_FIELDS: readonly Field[] = [
+  { name: '?token=', type: 'JWT (optional)', descKey: 'docs.apiFields.queryParamsToken' },
+  { name: '?since=', type: 'int (optional)', descKey: 'docs.apiFields.queryParamsSince' },
 ]
 
-export default function DeveloperDocsPage() {
-  return (
-    <div className="min-h-screen bg-bg transition-colors duration-300">
-      <JsonLd data={techArticleLd} />
-      <JsonLd data={breadcrumbLd} />
-      <AppNav />
-      <div className="mx-auto max-w-4xl px-4 py-12">
-        <div className="rounded-xl border border-border bg-surface p-8 transition-colors duration-300 md:p-12">
-          <div className="mb-8 space-y-2">
-            <p className="text-xs font-semibold tracking-[0.2em] text-twitch uppercase">
-              Developer API
-            </p>
-            <h1 className="text-3xl font-bold text-text">Developer API reference</h1>
-            <p className="text-sm text-text-dim">
-              Read the unified chat stream over one WebSocket to build bots, moderation tools, vote
-              counters, analytics, alerts — anything.
-            </p>
-            <p className="text-sm text-text-sub">
-              Just setting up your overlay?{' '}
-              <Link href="/docs" className="text-twitch hover:underline">
-                See the streamer guide →
-              </Link>
-            </p>
-          </div>
+const ENVELOPE_FIELDS: readonly Field[] = [
+  { name: 'type', type: 'string', descKey: 'docs.apiFields.envelopeType' },
+  { name: 'data', type: 'object', descKey: 'docs.apiFields.envelopeData' },
+  { name: 'timestamp', type: 'string', descKey: 'docs.apiFields.envelopeTimestamp' },
+]
 
-          {/* Table of contents */}
-          <nav className="mb-10 rounded-lg border border-border bg-surface-2 p-5">
-            <p className="mb-2 text-xs font-semibold tracking-[0.15em] text-text-dim uppercase">
-              On this page
-            </p>
-            <ul className="grid gap-1 sm:grid-cols-2">
-              {toc.map(([id, label]) => (
-                <li key={id}>
-                  <a href={`#${id}`} className="text-sm text-twitch hover:underline">
-                    {label}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </nav>
+const MESSAGE_TYPES_FIELDS: readonly Field[] = [
+  { name: 'chat_message', type: '', descKey: 'docs.apiFields.messageTypesChatMessage' },
+  { name: 'message_update', type: '', descKey: 'docs.apiFields.messageTypesMessageUpdate' },
+  { name: 'connected', type: '', descKey: 'docs.apiFields.messageTypesConnected' },
+  { name: 'platform_status', type: '', descKey: 'docs.apiFields.messageTypesPlatformStatus' },
+  { name: 'ping', type: '', descKey: 'docs.apiFields.messageTypesPing' },
+  { name: 'error', type: '', descKey: 'docs.apiFields.messageTypesError' },
+]
 
-          <div className="legal-prose space-y-10 leading-relaxed text-text-sub">
-            {/* Connect a tool */}
-            <section id="connect-a-tool">
-              <h2>Connect a tool</h2>
-              <p>
-                All-Chat aggregates live chat from <strong>Twitch</strong>, <strong>YouTube</strong>
-                , <strong>Kick</strong>, <strong>TikTok</strong> and <strong>Discord</strong> into a
-                single normalized stream — every message, plus platform events like subs, bits,
-                raids, super chats and gifts, in one format, with 7TV/BTTV/FFZ emotes resolved for
-                you. The same stream that powers the browser overlay is the one your tool reads.
-              </p>
-              <p>
-                Open a WebSocket to the overlay endpoint. Reading the stream is{' '}
-                <strong>anonymous</strong> — no token or account is required (this is the same
-                &quot;OBS mode&quot; the browser overlay uses):
-              </p>
-              <Pre>{`wss://allch.at/ws/overlay/{overlay_id}`}</Pre>
-              <p>
-                Your <Code>overlay_id</Code> is the UUID in your overlay&apos;s browser-source URL.
-                Want to try without an account first? Use the{' '}
-                <a href="#try-it-now">public test overlay</a>.
-              </p>
+const CHAT_MESSAGE_FIELDS: readonly Field[] = [
+  { name: 'id', type: 'string', descKey: 'docs.apiFields.chatMessageId' },
+  { name: 'overlay_id', type: 'string', descKey: 'docs.apiFields.chatMessageOverlayId' },
+  { name: 'platform', type: 'string', descKey: 'docs.apiFields.chatMessagePlatform' },
+  { name: 'channel_id', type: 'string', descKey: 'docs.apiFields.chatMessageChannelId' },
+  { name: 'channel_name', type: 'string', descKey: 'docs.apiFields.chatMessageChannelName' },
+  { name: 'user', type: 'object', descKey: 'docs.apiFields.chatMessageUser' },
+  { name: 'message', type: 'object', descKey: 'docs.apiFields.chatMessageMessage' },
+  { name: 'timestamp', type: 'string', descKey: 'docs.apiFields.chatMessageTimestamp' },
+  { name: 'metadata', type: 'object', descKey: 'docs.apiFields.chatMessageMetadata' },
+  { name: 'event', type: 'object?', descKey: 'docs.apiFields.chatMessageEvent' },
+]
 
-              <h3>Query parameters</h3>
-              <FieldTable
-                rows={[
-                  {
-                    name: '?token=',
-                    type: 'JWT (optional)',
-                    desc: 'Owner token. Only needed for owner-scoped access; omit it for read-only consumption.',
-                  },
-                  {
-                    name: '?since=',
-                    type: 'int (optional)',
-                    desc: 'Milliseconds since the Unix epoch. On connect, the server replays buffered messages newer than this timestamp so a reconnecting client can backfill the gap. Omit to start live.',
-                  },
-                ]}
-              />
+const USER_FIELDS: readonly Field[] = [
+  { name: 'id', type: 'string', descKey: 'docs.apiFields.userId' },
+  { name: 'username', type: 'string', descKey: 'docs.apiFields.userUsername' },
+  { name: 'display_name', type: 'string', descKey: 'docs.apiFields.userDisplayName' },
+  { name: 'color', type: 'string?', descKey: 'docs.apiFields.userColor' },
+  { name: 'badges', type: 'Badge[]', descKey: 'docs.apiFields.userBadges' },
+  { name: 'avatar_url', type: 'string?', descKey: 'docs.apiFields.userAvatarUrl' },
+  { name: 'pronouns', type: 'string?', descKey: 'docs.apiFields.userPronouns' },
+  { name: 'name_gradient', type: 'string?', descKey: 'docs.apiFields.userNameGradient' },
+  {
+    name: 'source_badges / source_user_id',
+    type: '?',
+    descKey: 'docs.apiFields.userSourceBadgesSourceUserId',
+  },
+  {
+    name: 'avatar_frame_url / avatar_flair_url',
+    type: 'string?',
+    descKey: 'docs.apiFields.userAvatarFrameUrlAvatarFlairUrl',
+  },
+]
 
-              <h3>Minimal example (JavaScript)</h3>
-              <Pre lang="javascript">{`const ws = new WebSocket(
+const EMOTE_FIELDS: readonly Field[] = [
+  { name: 'code', type: 'string', descKey: 'docs.apiFields.emoteCode' },
+  { name: 'provider', type: 'string', descKey: 'docs.apiFields.emoteProvider' },
+  { name: 'url', type: 'string', descKey: 'docs.apiFields.emoteUrl' },
+  { name: 'positions', type: 'int[][]', descKey: 'docs.apiFields.emotePositions' },
+]
+
+const ATTACHMENT_FIELDS: readonly Field[] = [
+  { name: 'type', type: 'string', descKey: 'docs.apiFields.attachmentType' },
+  { name: 'url', type: 'string', descKey: 'docs.apiFields.attachmentUrl' },
+  { name: 'content_type', type: 'string?', descKey: 'docs.apiFields.attachmentContentType' },
+  { name: 'width / height', type: 'int?', descKey: 'docs.apiFields.attachmentWidthHeight' },
+  { name: 'thumb_url', type: 'string?', descKey: 'docs.apiFields.attachmentThumbUrl' },
+  { name: 'spoiler', type: 'bool?', descKey: 'docs.apiFields.attachmentSpoiler' },
+  { name: 'filename', type: 'string?', descKey: 'docs.apiFields.attachmentFilename' },
+]
+
+const EVENT_FIELDS: readonly Field[] = [
+  { name: 'type', type: 'string', descKey: 'docs.apiFields.eventType' },
+  { name: 'tier', type: 'string', descKey: 'docs.apiFields.eventTier' },
+  { name: 'value', type: 'object?', descKey: 'docs.apiFields.eventValue' },
+  { name: 'duration', type: 'int', descKey: 'docs.apiFields.eventDuration' },
+  { name: 'is_update', type: 'bool', descKey: 'docs.apiFields.eventIsUpdate' },
+  { name: 'aggregation_id', type: 'string?', descKey: 'docs.apiFields.eventAggregationId' },
+  { name: 'metadata', type: 'object?', descKey: 'docs.apiFields.eventMetadata' },
+]
+
+const PLATFORM_STATUS_FIELDS: readonly Field[] = [
+  { name: 'platform', type: 'string', descKey: 'docs.apiFields.platformStatusPlatform' },
+  { name: 'channel_id', type: 'string', descKey: 'docs.apiFields.platformStatusChannelId' },
+  { name: 'channel_name', type: 'string?', descKey: 'docs.apiFields.platformStatusChannelName' },
+  { name: 'status', type: 'string', descKey: 'docs.apiFields.platformStatusStatus' },
+  { name: 'next_retry_at', type: 'string?', descKey: 'docs.apiFields.platformStatusNextRetryAt' },
+  { name: 'error_message', type: 'string?', descKey: 'docs.apiFields.platformStatusErrorMessage' },
+]
+
+// The code samples. Not copy: translating an identifier or a JSON key
+// produces a sample that does not run against the gateway. Hoisted out of
+// the JSX so the i18n gate, which cannot tell a <Pre> child from a
+// paragraph, does not have to.
+const WS_URL_TEMPLATE = `wss://allch.at/ws/overlay/{overlay_id}`
+
+const JS_EXAMPLE = `const ws = new WebSocket(
   "wss://allch.at/ws/overlay/${TEST_OVERLAY_ID}"
 )
 
@@ -173,10 +273,9 @@ ws.onmessage = (e) => {
     case "platform_status":
       break
   }
-}`}</Pre>
+}`
 
-              <h3>Minimal example (Python)</h3>
-              <Pre lang="python">{`# pip install websocket-client
+const PYTHON_EXAMPLE = `# pip install websocket-client
 import json, websocket
 
 def on_message(ws, raw):
@@ -194,211 +293,15 @@ ws = websocket.WebSocketApp(
     "wss://allch.at/ws/overlay/${TEST_OVERLAY_ID}",
     on_message=on_message,
 )
-ws.run_forever()`}</Pre>
-            </section>
+ws.run_forever()`
 
-            {/* Message format */}
-            <section id="message-format">
-              <h2>Message format</h2>
-              <p>Every frame is JSON with the same envelope:</p>
-              <Pre lang="json">{`{
+const ENVELOPE_EXAMPLE = `{
   "type": "chat_message",
   "data": { ... },          // shape depends on "type" (omitted for ping/pong)
   "timestamp": "2026-06-18T14:30:00Z"
-}`}</Pre>
-              <FieldTable
-                rows={[
-                  { name: 'type', type: 'string', desc: 'Message type (see below).' },
-                  {
-                    name: 'data',
-                    type: 'object',
-                    desc: 'Payload; shape depends on type. Omitted for ping/pong.',
-                  },
-                  {
-                    name: 'timestamp',
-                    type: 'string',
-                    desc: 'RFC 3339 timestamp of when the gateway sent the frame.',
-                  },
-                ]}
-              />
-              <p>
-                <Code>type</Code> is one of:
-              </p>
-              <FieldTable
-                rows={[
-                  {
-                    name: 'chat_message',
-                    type: '',
-                    desc: 'A chat message or a platform event. data is the unified message object.',
-                  },
-                  {
-                    name: 'message_update',
-                    type: '',
-                    desc: 'An update to a previously sent message (e.g. TikTok like aggregates). Same data shape as chat_message.',
-                  },
-                  {
-                    name: 'connected',
-                    type: '',
-                    desc: 'Sent once on connect: { overlay_id, message }.',
-                  },
-                  {
-                    name: 'platform_status',
-                    type: '',
-                    desc: 'Connection status of a source platform.',
-                  },
-                  {
-                    name: 'ping',
-                    type: '',
-                    desc: 'Heartbeat from the server. Reply with { "type": "pong" }.',
-                  },
-                  { name: 'error', type: '', desc: 'Error notice: { code, message }.' },
-                ]}
-              />
-            </section>
+}`
 
-            {/* Chat messages */}
-            <section id="chat-messages">
-              <h2>Chat messages</h2>
-              <p>
-                For <Code>chat_message</Code> and <Code>message_update</Code>, <Code>data</Code> is
-                the unified message object:
-              </p>
-              <FieldTable
-                rows={[
-                  { name: 'id', type: 'string', desc: 'Unique message ID.' },
-                  {
-                    name: 'overlay_id',
-                    type: 'string',
-                    desc: 'Overlay this message was delivered to.',
-                  },
-                  {
-                    name: 'platform',
-                    type: 'string',
-                    desc: '"twitch" | "youtube" | "kick" | "tiktok" | "discord".',
-                  },
-                  { name: 'channel_id', type: 'string', desc: 'Platform channel identifier.' },
-                  { name: 'channel_name', type: 'string', desc: 'Human-readable channel name.' },
-                  { name: 'user', type: 'object', desc: 'Author info (see below).' },
-                  {
-                    name: 'message',
-                    type: 'object',
-                    desc: '{ text, emotes[], attachments[]? } (see below).',
-                  },
-                  { name: 'timestamp', type: 'string', desc: 'RFC 3339 message time (UTC).' },
-                  {
-                    name: 'metadata',
-                    type: 'object',
-                    desc: 'Free-form, platform-specific extras.',
-                  },
-                  {
-                    name: 'event',
-                    type: 'object?',
-                    desc: 'Present only when the message is a platform event (see Events). Absent for normal chat.',
-                  },
-                ]}
-              />
-
-              <h3>user</h3>
-              <FieldTable
-                rows={[
-                  { name: 'id', type: 'string', desc: 'Platform user ID.' },
-                  { name: 'username', type: 'string', desc: 'Login/handle.' },
-                  { name: 'display_name', type: 'string', desc: 'Display name.' },
-                  { name: 'color', type: 'string?', desc: 'Name color, hex (e.g. "#FF0000").' },
-                  { name: 'badges', type: 'Badge[]', desc: 'Author badges (see below).' },
-                  {
-                    name: 'avatar_url',
-                    type: 'string?',
-                    desc: 'Profile image URL when available.',
-                  },
-                  { name: 'pronouns', type: 'string?', desc: 'e.g. "she/her" when known.' },
-                  {
-                    name: 'name_gradient',
-                    type: 'string?',
-                    desc: 'Optional gradient descriptor (JSON string).',
-                  },
-                  {
-                    name: 'source_badges / source_user_id',
-                    type: '?',
-                    desc: 'Origin-channel identity for shared-chat messages.',
-                  },
-                  {
-                    name: 'avatar_frame_url / avatar_flair_url',
-                    type: 'string?',
-                    desc: 'Cosmetic frame/flair when set.',
-                  },
-                ]}
-              />
-
-              <h3>message, emotes, and attachments</h3>
-              <p>
-                <Code>message</Code> is{' '}
-                <Code>{`{ "text": string, "emotes": Emote[], "attachments"?: Attachment[] }`}</Code>
-                . Each <Code>Emote</Code>:
-              </p>
-              <FieldTable
-                rows={[
-                  { name: 'code', type: 'string', desc: 'Emote text token, e.g. "Kappa".' },
-                  {
-                    name: 'provider',
-                    type: 'string',
-                    desc: '"twitch" | "7tv" | "bttv" | "ffz" | "discord" | platform.',
-                  },
-                  { name: 'url', type: 'string', desc: 'CDN image URL.' },
-                  {
-                    name: 'positions',
-                    type: 'int[][]',
-                    desc: 'Array of [start, end] index pairs into text where the emote occurs.',
-                  },
-                ]}
-              />
-              <p>
-                <Code>attachments</Code> is present only when a message carries media (Discord
-                image/GIF/video uploads and Tenor/Giphy link previews today). Each{' '}
-                <Code>Attachment</Code>:
-              </p>
-              <FieldTable
-                rows={[
-                  {
-                    name: 'type',
-                    type: 'string',
-                    desc: '"image" or "video". GIFs are images that animate.',
-                  },
-                  { name: 'url', type: 'string', desc: 'Media URL.' },
-                  {
-                    name: 'content_type',
-                    type: 'string?',
-                    desc: 'MIME type, e.g. "image/gif", "video/mp4".',
-                  },
-                  {
-                    name: 'width / height',
-                    type: 'int?',
-                    desc: 'Intrinsic pixel dimensions when known.',
-                  },
-                  {
-                    name: 'thumb_url',
-                    type: 'string?',
-                    desc: 'Poster frame for videos when available.',
-                  },
-                  {
-                    name: 'spoiler',
-                    type: 'bool?',
-                    desc: 'True when the sender marked the media a spoiler.',
-                  },
-                  {
-                    name: 'filename',
-                    type: 'string?',
-                    desc: 'Original filename (used for alt text).',
-                  },
-                ]}
-              />
-              <p>
-                Each <Code>Badge</Code> is <Code>{`{ "name", "version", "icon_url" }`}</Code> — e.g.{' '}
-                <Code>{`{ "name": "subscriber", "version": "12", "icon_url": "..." }`}</Code>.
-              </p>
-
-              <h3>Example</h3>
-              <Pre lang="json">{`{
+const CHAT_MESSAGE_EXAMPLE = `{
   "type": "chat_message",
   "data": {
     "id": "abc123",
@@ -423,73 +326,9 @@ ws.run_forever()`}</Pre>
     "metadata": {}
   },
   "timestamp": "2026-06-18T14:30:00Z"
-}`}</Pre>
-            </section>
+}`
 
-            {/* Events */}
-            <section id="events">
-              <h2>Events</h2>
-              <p>
-                Platform events (subs, bits, raids, donations, …) arrive as{' '}
-                <Code>chat_message</Code> frames whose <Code>data</Code> includes an{' '}
-                <Code>event</Code> object. Normal chat has no <Code>event</Code> field.
-              </p>
-              <FieldTable
-                rows={[
-                  { name: 'type', type: 'string', desc: 'Event type (see list below).' },
-                  {
-                    name: 'tier',
-                    type: 'string',
-                    desc: 'Relative prominence: "high" | "medium" | "low".',
-                  },
-                  {
-                    name: 'value',
-                    type: 'object?',
-                    desc: '{ amount: number, currency: string, display_text: string } — e.g. amount 250, currency "bits", display_text "250 bits".',
-                  },
-                  {
-                    name: 'duration',
-                    type: 'int',
-                    desc: 'Suggested on-screen display time, seconds.',
-                  },
-                  {
-                    name: 'is_update',
-                    type: 'bool',
-                    desc: 'true when this updates a prior event (e.g. TikTok like aggregates, delivered as message_update).',
-                  },
-                  {
-                    name: 'aggregation_id',
-                    type: 'string?',
-                    desc: 'Groups successive updates of the same aggregate.',
-                  },
-                  { name: 'metadata', type: 'object?', desc: 'Event-specific raw fields.' },
-                ]}
-              />
-              <h3>Event types by platform</h3>
-              <ul>
-                <li>
-                  <strong className="text-twitch">Twitch</strong>: <Code>subscription</Code>,{' '}
-                  <Code>resubscription</Code>, <Code>gift_subscription</Code>,{' '}
-                  <Code>mystery_gift</Code>, <Code>bits</Code>, <Code>raid</Code>,{' '}
-                  <Code>channel_points</Code>, <Code>watch_streak</Code>, <Code>announcement</Code>,{' '}
-                  <Code>bits_badge_tier</Code>, <Code>unraid</Code>, <Code>modiversary</Code>,{' '}
-                  <Code>charity_donation</Code>, <Code>gift_paid_upgrade</Code>,{' '}
-                  <Code>prime_paid_upgrade</Code>, <Code>pay_it_forward</Code>,{' '}
-                  <Code>twitch_notice</Code>, <Code>message_deletion</Code>
-                </li>
-                <li>
-                  <strong className="text-youtube">YouTube</strong>: <Code>super_chat</Code>,{' '}
-                  <Code>super_sticker</Code>, <Code>new_sponsor</Code>,{' '}
-                  <Code>member_milestone</Code>, <Code>membership_gift</Code>,{' '}
-                  <Code>gift_received</Code>
-                </li>
-                <li>
-                  <strong className="text-tiktok">TikTok</strong>: <Code>gift</Code>,{' '}
-                  <Code>like_aggregate</Code>, <Code>follow</Code>, <Code>share</Code>
-                </li>
-              </ul>
-              <h3>Example (Twitch subscription)</h3>
-              <Pre lang="json">{`{
+const SUBSCRIPTION_EVENT_EXAMPLE = `{
   "type": "chat_message",
   "data": {
     "id": "evt-sub-1",
@@ -510,92 +349,257 @@ ws.run_forever()`}</Pre>
     }
   },
   "timestamp": "2026-06-18T14:35:00Z"
-}`}</Pre>
+}`
+
+const WS_URL_TEST_OVERLAY = `wss://allch.at/ws/overlay/${TEST_OVERLAY_ID}`
+
+/**
+ * Renders 'Platform: a, b, c', the platform name emphasised and each event type
+ * in a <Code>.
+ *
+ * The label keeps the colon so it stays one translatable unit: a language that
+ * spaces punctuation differently (French puts a space before a colon) needs to
+ * move it, and a bare ':' at the render site is not something a translator can
+ * see, let alone change.
+ */
+function EventTypeList({
+  platformKey,
+  className,
+  types,
+}: {
+  platformKey: MessageKey
+  className: string
+  types: readonly string[]
+}) {
+  return (
+    <li>
+      {interpolateElements(t('docs.api.eventTypesLabel'), {
+        platform: <strong className={className}>{t(platformKey)}</strong>,
+      })}{' '}
+      {types.map((type, index) => (
+        <span key={type}>
+          {index > 0 ? ', ' : ''}
+          <Code>{type}</Code>
+        </span>
+      ))}
+    </li>
+  )
+}
+
+export default function DeveloperDocsPage() {
+  return (
+    <div className="min-h-screen bg-bg transition-colors duration-300">
+      <JsonLd data={techArticleLd} />
+      <JsonLd data={breadcrumbLd} />
+      <AppNav />
+      <div className="mx-auto max-w-4xl px-4 py-12">
+        <div className="rounded-xl border border-border bg-surface p-8 transition-colors duration-300 md:p-12">
+          <div className="mb-8 space-y-2">
+            <p className="text-xs font-semibold tracking-[0.2em] text-twitch uppercase">
+              {t('docs.api.eyebrow')}
+            </p>
+            <h1 className="text-3xl font-bold text-text">{t('docs.api.heading')}</h1>
+            <p className="text-sm text-text-dim">{t('docs.api.intro')}</p>
+            <p className="text-sm text-text-sub">
+              {interpolateElements(t('docs.api.guidePrompt'), {
+                guide: (
+                  <Link href="/docs" className="text-twitch hover:underline">
+                    {t('docs.api.guideLinkText')}
+                  </Link>
+                ),
+              })}
+            </p>
+          </div>
+
+          {/* Table of contents */}
+          <nav className="mb-10 rounded-lg border border-border bg-surface-2 p-5">
+            <p className="mb-2 text-xs font-semibold tracking-[0.15em] text-text-dim uppercase">
+              {t('docs.api.tocHeading')}
+            </p>
+            <ul className="grid gap-1 sm:grid-cols-2">
+              {toc.map(({ id, labelKey }) => (
+                <li key={id}>
+                  <a href={`#${id}`} className="text-sm text-twitch hover:underline">
+                    {t(labelKey)}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+
+          <div className="legal-prose space-y-10 leading-relaxed text-text-sub">
+            {/* Connect a tool */}
+            <section id="connect-a-tool">
+              <h2>{t('docs.api.connectHeading')}</h2>
+              <p>
+                {interpolateElements(t('docs.api.connectBody'), {
+                  twitch: <strong>{t('common.platforms.twitch')}</strong>,
+                  youtube: <strong>{t('common.platforms.youtube')}</strong>,
+                  kick: <strong>{t('common.platforms.kick')}</strong>,
+                  tiktok: <strong>{t('common.platforms.tiktok')}</strong>,
+                  discord: <strong>{t('common.platforms.discord')}</strong>,
+                })}
+              </p>
+              <p>
+                {interpolateElements(t('docs.api.connectAnonymous'), {
+                  anonymous: <strong>{t('docs.api.connectAnonymousEmphasis')}</strong>,
+                })}
+              </p>
+              <Pre>{WS_URL_TEMPLATE}</Pre>
+              <p>
+                {interpolateElements(t('docs.api.connectOverlayId'), {
+                  field: <Code>{FIELD_OVERLAY_ID}</Code>,
+                  testOverlay: <a href="#try-it-now">{t('docs.api.connectTestOverlayLinkText')}</a>,
+                })}
+              </p>
+
+              <h3>{t('docs.api.queryParamsHeading')}</h3>
+              <FieldTable rows={QUERY_PARAMS_FIELDS} />
+
+              <h3>{t('docs.api.exampleJavascriptHeading')}</h3>
+              <Pre lang="javascript">{JS_EXAMPLE}</Pre>
+
+              <h3>{t('docs.api.examplePythonHeading')}</h3>
+              <Pre lang="python">{PYTHON_EXAMPLE}</Pre>
+            </section>
+
+            {/* Message format */}
+            <section id="message-format">
+              <h2>{t('docs.api.formatHeading')}</h2>
+              <p>{t('docs.api.formatBody')}</p>
+              <Pre lang="json">{ENVELOPE_EXAMPLE}</Pre>
+              <FieldTable rows={ENVELOPE_FIELDS} />
+              <p>
+                {interpolateElements(t('docs.api.formatTypeList'), {
+                  field: <Code>{FIELD_TYPE}</Code>,
+                })}
+              </p>
+              <FieldTable rows={MESSAGE_TYPES_FIELDS} />
+            </section>
+
+            {/* Chat messages */}
+            <section id="chat-messages">
+              <h2>{t('docs.api.chatHeading')}</h2>
+              <p>
+                {interpolateElements(t('docs.api.chatBody'), {
+                  chat: <Code>{TYPE_CHAT_MESSAGE}</Code>,
+                  update: <Code>{TYPE_MESSAGE_UPDATE}</Code>,
+                  data: <Code>{FIELD_DATA}</Code>,
+                })}
+              </p>
+              <FieldTable rows={CHAT_MESSAGE_FIELDS} />
+
+              <h3>{t('docs.api.userHeading')}</h3>
+              <FieldTable rows={USER_FIELDS} />
+
+              <h3>{t('docs.api.messageHeading')}</h3>
+              <p>
+                {interpolateElements(t('docs.api.messageBody'), {
+                  field: <Code>{FIELD_MESSAGE}</Code>,
+                  shape: <Code>{SHAPE_MESSAGE}</Code>,
+                  emote: <Code>{SHAPE_EMOTE}</Code>,
+                })}
+              </p>
+              <FieldTable rows={EMOTE_FIELDS} />
+              <p>
+                {interpolateElements(t('docs.api.attachmentsBody'), {
+                  field: <Code>{FIELD_ATTACHMENTS}</Code>,
+                  attachment: <Code>{SHAPE_ATTACHMENT}</Code>,
+                })}
+              </p>
+              <FieldTable rows={ATTACHMENT_FIELDS} />
+              <p>
+                {interpolateElements(t('docs.api.badgeBody'), {
+                  badge: <Code>{SHAPE_BADGE}</Code>,
+                  shape: <Code>{SHAPE_BADGE_FIELDS}</Code>,
+                  example: <Code>{SHAPE_BADGE_EXAMPLE}</Code>,
+                })}
+              </p>
+
+              <h3>{t('docs.api.exampleHeading')}</h3>
+              <Pre lang="json">{CHAT_MESSAGE_EXAMPLE}</Pre>
+            </section>
+
+            {/* Events */}
+            <section id="events">
+              <h2>{t('docs.api.eventsHeading')}</h2>
+              <p>
+                {interpolateElements(t('docs.api.eventsBody'), {
+                  chat: <Code>{TYPE_CHAT_MESSAGE}</Code>,
+                  data: <Code>{FIELD_DATA}</Code>,
+                  event: <Code>{FIELD_EVENT}</Code>,
+                })}
+              </p>
+              <FieldTable rows={EVENT_FIELDS} />
+              <h3>{t('docs.api.eventTypesHeading')}</h3>
+              <ul>
+                {EVENT_TYPES_BY_PLATFORM.map((platform) => (
+                  <EventTypeList key={platform.platformKey} {...platform} />
+                ))}
+              </ul>
+              <h3>{t('docs.api.exampleSubscriptionHeading')}</h3>
+              <Pre lang="json">{SUBSCRIPTION_EVENT_EXAMPLE}</Pre>
             </section>
 
             {/* Status messages */}
             <section id="status-messages">
-              <h2>Status &amp; control messages</h2>
+              <h2>{t('docs.api.statusHeading')}</h2>
               <p>
-                On connect the server sends a <Code>connected</Code> frame, then a{' '}
-                <Code>platform_status</Code> frame per configured source so your UI can show
-                indicators immediately. <Code>platform_status</Code> data:
+                {interpolateElements(t('docs.api.statusBody'), {
+                  connected: <Code>{TYPE_CONNECTED}</Code>,
+                  status: <Code>{TYPE_PLATFORM_STATUS}</Code>,
+                })}
               </p>
-              <FieldTable
-                rows={[
-                  { name: 'platform', type: 'string', desc: 'Source platform.' },
-                  { name: 'channel_id', type: 'string', desc: 'Source channel.' },
-                  { name: 'channel_name', type: 'string?', desc: 'Human-readable channel name.' },
-                  {
-                    name: 'status',
-                    type: 'string',
-                    desc: '"connected" | "reconnecting" | "offline" | "quota_exceeded".',
-                  },
-                  {
-                    name: 'next_retry_at',
-                    type: 'string?',
-                    desc: 'RFC 3339 time of the next reconnect attempt, when applicable.',
-                  },
-                  {
-                    name: 'error_message',
-                    type: 'string?',
-                    desc: 'Human-readable detail when degraded.',
-                  },
-                ]}
-              />
+              <FieldTable rows={PLATFORM_STATUS_FIELDS} />
             </section>
 
             {/* Reconnecting */}
             <section id="reconnecting">
-              <h2>Reconnecting &amp; heartbeats</h2>
+              <h2>{t('docs.api.reconnectHeading')}</h2>
               <ul>
                 <li>
-                  The server periodically sends <Code>{`{ "type": "ping" }`}</Code>. Reply with{' '}
-                  <Code>{`{ "type": "pong" }`}</Code>. (Most WebSocket libraries also answer
-                  low-level ping frames automatically.)
+                  {interpolateElements(t('docs.api.reconnectPing'), {
+                    ping: <Code>{FRAME_PING}</Code>,
+                    pong: <Code>{FRAME_PONG}</Code>,
+                  })}
                 </li>
                 <li>
-                  If the socket drops, reconnect with backoff. To backfill messages missed during a
-                  brief disconnect, reconnect with <Code>?since=&lt;ms-epoch&gt;</Code> set to just
-                  before you lost the connection — the server replays buffered messages newer than
-                  that timestamp.
+                  {interpolateElements(t('docs.api.reconnectBackfill'), {
+                    since: <Code>{QUERY_SINCE}</Code>,
+                  })}
                 </li>
-                <li>
-                  Treat IDs as the dedup key when combining the replay buffer with live messages.
-                </li>
+                <li>{t('docs.api.reconnectDedup')}</li>
               </ul>
             </section>
 
             {/* Try it now */}
             <section id="try-it-now">
-              <h2>Try it now (no setup)</h2>
+              <h2>{t('docs.api.tryItHeading')}</h2>
               <p>
-                There is a public test overlay that streams realistic fake traffic — random chat,
-                poll votes (the literal messages <Code>1</Code>, <Code>2</Code>, <Code>3</Code>,{' '}
-                <Code>4</Code>) and platform events — so you can build and validate an integration
-                without an account or a real channel. Just connect; traffic flows while a client is
-                connected and stops when the last one disconnects:
+                {interpolateElements(t('docs.api.tryItBody'), {
+                  one: <Code>{POLL_VOTES[0]}</Code>,
+                  two: <Code>{POLL_VOTES[1]}</Code>,
+                  three: <Code>{POLL_VOTES[2]}</Code>,
+                  four: <Code>{POLL_VOTES[3]}</Code>,
+                })}
               </p>
-              <Pre>{`wss://allch.at/ws/overlay/${TEST_OVERLAY_ID}`}</Pre>
-              <p>
-                Drop that URL into either example above and you should immediately see messages and
-                events stream in.
-              </p>
+              <Pre>{WS_URL_TEST_OVERLAY}</Pre>
+              <p>{t('docs.api.tryItOutro')}</p>
             </section>
           </div>
 
           {/* Footer */}
           <div className="mt-12 flex flex-col gap-3 border-t border-border pt-6 text-sm text-text-dim sm:flex-row sm:items-center sm:justify-between">
-            <span>&copy; {new Date().getFullYear()} All-Chat</span>
+            <span>{t('docs.api.footerCopyright', { year: new Date().getFullYear() })}</span>
             <div className="flex flex-wrap items-center gap-4">
               <Link href="/docs" className="transition-colors hover:text-text">
-                Streamer guide
+                {t('docs.api.footerGuideLink')}
               </Link>
               <Link href="/legal/privacy" className="transition-colors hover:text-text">
-                Privacy Policy
+                {t('docs.api.footerPrivacyLink')}
               </Link>
               <Link href="/legal/terms" className="transition-colors hover:text-text">
-                Terms of Service
+                {t('docs.api.footerTermsLink')}
               </Link>
             </div>
           </div>

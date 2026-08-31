@@ -28,7 +28,7 @@ import javascript from 'highlight.js/lib/languages/javascript'
 import python from 'highlight.js/lib/languages/python'
 import json from 'highlight.js/lib/languages/json'
 import css from 'highlight.js/lib/languages/css'
-import { getTranslations } from '@/lib/i18n'
+import { getTranslations, type MessageKey } from '@/lib/i18n'
 
 // Register only the languages the docs actually use. Idempotent across imports.
 hljs.registerLanguage('javascript', javascript)
@@ -65,12 +65,15 @@ export function Pre({ children, lang }: { children: string; lang?: CodeLang }) {
 }
 
 export interface Field {
+  /** Wire field name, as the gateway sends it. Not copy, so not a key. */
   name: string
+  /** Wire type. Not copy either. */
   type: string
-  desc: string
+  /** The description, which is the only translatable part of a row. */
+  descKey: MessageKey
 }
 
-export function FieldTable({ rows }: { rows: Field[] }) {
+export function FieldTable({ rows }: { rows: readonly Field[] }) {
   // getTranslations, not useTranslations: these are Server Components.
   const t = getTranslations()
   return (
@@ -90,7 +93,7 @@ export function FieldTable({ rows }: { rows: Field[] }) {
                 <span className="font-mono text-text">{r.name}</span>
               </td>
               <td className="px-4 py-2 font-mono text-text-dim">{r.type}</td>
-              <td className="px-4 py-2 text-text-sub">{r.desc}</td>
+              <td className="px-4 py-2 text-text-sub">{t(r.descKey)}</td>
             </tr>
           ))}
         </tbody>
