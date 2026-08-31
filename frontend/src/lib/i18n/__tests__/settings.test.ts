@@ -226,3 +226,101 @@ describe('viewer identity page copy', () => {
     expect(t('settings.viewer.disconnectFailed')).toBe('Failed to disconnect platform')
   })
 })
+
+describe('API tokens page copy', () => {
+  it('keeps the page chrome', () => {
+    expect(t('settings.apiTokens.heading')).toBe('API Tokens')
+    expect(t('settings.apiTokens.subheading')).toBe(
+      'Personal access tokens for the Stream Deck and StreamController plugins.'
+    )
+    expect(t('settings.apiTokens.listHeading')).toBe('Your tokens')
+    expect(t('settings.apiTokens.listBody')).toBe(
+      'Only the details below are stored — the token itself is kept as a hash and can never be shown again.'
+    )
+    expect(t('settings.apiTokens.loadFailed')).toBe(
+      'Could not load your tokens. Refresh the page to try again.'
+    )
+  })
+
+  it('keeps the minted token reveal, the one-shot secret warning included', () => {
+    expect(t('settings.apiTokens.revealRegionLabel', { name: 'Studio PC' })).toBe(
+      'New token Studio PC'
+    )
+    expect(t('settings.apiTokens.revealHeading')).toBe('Copy your new token now')
+    // The token name is emphasised mid-sentence, so the sentence stays whole and
+    // the emphasised run is its own key. See settings.viewer for the convention.
+    expect(t('settings.apiTokens.revealWarning', { name: 'Studio PC' })).toBe(
+      'This is the only time Studio PC will ever be shown. We store only a hash of it, so it cannot be displayed again — if you lose it, revoke this token and create a new one.'
+    )
+    expect(t('settings.apiTokens.copyToken')).toBe('Copy token')
+    expect(t('settings.apiTokens.copied')).toBe('Copied ✓')
+    expect(t('settings.apiTokens.copyFailed')).toBe(
+      'Could not copy automatically — select the token and copy it manually.'
+    )
+    // The render site spelled the apostrophe &apos;, which is U+0027.
+    expect(t('settings.apiTokens.dismissReveal')).toBe("I've saved it")
+  })
+
+  it('keeps the create form', () => {
+    expect(t('settings.apiTokens.createHeading')).toBe('Create a token')
+    expect(t('settings.apiTokens.createBody')).toBe(
+      'Give the token a name you will recognise later, and grant it only what the device needs.'
+    )
+    expect(t('settings.apiTokens.nameLabel')).toBe('Token name')
+    expect(t('settings.apiTokens.namePlaceholder')).toBe('Stream Deck (studio PC)')
+    expect(t('settings.apiTokens.nameDescription')).toBe(
+      'Shown in the list below so you know what to revoke.'
+    )
+    expect(t('settings.apiTokens.scopesLegend')).toBe('Scopes')
+    expect(t('settings.apiTokens.noScopesWarning')).toBe(
+      'Pick at least one scope — a token with none can authenticate but do nothing.'
+    )
+    expect(t('settings.apiTokens.create')).toBe('Create token')
+    expect(t('settings.apiTokens.creating')).toBe('Creating…')
+    expect(t('settings.apiTokens.createFailed')).toBe('Could not create the token. Try again.')
+  })
+
+  it('keeps the scope titles and descriptions, keyed by the wire scope name', () => {
+    expect(t('settings.apiTokens.scopeChatWriteTitle')).toBe('Send chat messages')
+    expect(t('settings.apiTokens.scopeChatWriteDescription')).toBe(
+      'Lets the plugin post messages to your connected chats.'
+    )
+    expect(t('settings.apiTokens.scopeEngagementWriteTitle')).toBe('Run polls and predictions')
+    expect(t('settings.apiTokens.scopeEngagementWriteDescription')).toBe(
+      'Lets the plugin open, resolve and cancel polls and predictions.'
+    )
+  })
+
+  it('keeps the empty state and its plugin links', () => {
+    expect(t('settings.apiTokens.emptyHeading')).toBe("You don't have any API tokens yet")
+    expect(t('settings.apiTokens.emptyBody')).toBe(
+      "A personal access token lets a device sign in as you without your password — it's how the Stream Deck and StreamController plugins send chat messages and run polls and predictions on your behalf. Create one per device so you can revoke it on its own."
+    )
+    expect(t('settings.apiTokens.setupGuides')).toBe('Setup guides:')
+    expect(t('settings.apiTokens.streamDeckReadme')).toBe('Stream Deck plugin README')
+    expect(t('settings.apiTokens.streamControllerReadme')).toBe('StreamController plugin README')
+  })
+
+  it('keeps the token row', () => {
+    // One key with two placeholders, not two fragments joined by the middle dot:
+    // a second language reorders the two dates.
+    expect(t('settings.apiTokens.tokenDates', { created: '1 Jan 2026', lastUsed: 'never' })).toBe(
+      'Created 1 Jan 2026 · Last used never'
+    )
+    expect(t('settings.apiTokens.neverUsed')).toBe('never')
+    // Stands in for a missing or unparseable timestamp.
+    expect(t('settings.apiTokens.unknownDate')).toBe('—')
+    expect(t('settings.apiTokens.revokeLabel', { name: 'Studio PC' })).toBe('Revoke Studio PC')
+    expect(t('settings.apiTokens.revoke')).toBe('Revoke')
+  })
+
+  it('keeps the revoke confirmation', () => {
+    expect(t('settings.apiTokens.revokeConfirmTitle')).toBe('Revoke this token?')
+    expect(t('settings.apiTokens.revokeConfirmBody', { name: 'Studio PC' })).toBe(
+      '“Studio PC” stops working immediately. Any device using it will need a new token.'
+    )
+    expect(t('settings.apiTokens.revokeCancel')).toBe('Cancel')
+    expect(t('settings.apiTokens.revokeConfirm')).toBe('Revoke token')
+    expect(t('settings.apiTokens.revoking')).toBe('Revoking…')
+  })
+})
