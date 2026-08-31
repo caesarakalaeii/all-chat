@@ -436,3 +436,149 @@ describe('admin sources page copy', () => {
     expect(t('common.platforms.tiktok')).toBe('TikTok')
   })
 })
+
+describe('admin viewers page copy', () => {
+  it('keeps the page header and the total count', () => {
+    expect(t('admin.viewers.heading')).toBe('Viewer Management')
+    expect(t('admin.viewers.intro')).toBe(
+      'Search viewer sessions, inspect activity, and manage bans and premium'
+    )
+    // The count and the word 'matching' were siblings in JSX. One key, so a
+    // language that puts the count last can.
+    expect(t('admin.viewers.totalMatching', { count: '1,204' })).toBe('1,204 matching')
+  })
+
+  it('keeps the search and filter controls', () => {
+    expect(t('admin.viewers.searchLabel')).toBe('Search')
+    expect(t('admin.viewers.searchPlaceholder')).toBe(
+      'Username, display name, or platform user ID...'
+    )
+    expect(t('admin.viewers.platformLabel')).toBe('Platform')
+    expect(t('admin.viewers.platformAll')).toBe('All platforms')
+    expect(t('admin.viewers.statusLabel')).toBe('Status')
+    expect(t('admin.viewers.statusAny')).toBe('Any')
+    expect(t('admin.viewers.statusActive')).toBe('Active')
+    expect(t('admin.viewers.statusBanned')).toBe('Banned')
+    expect(t('admin.viewers.premiumLabel')).toBe('Premium')
+    expect(t('admin.viewers.premiumAny')).toBe('Any')
+    expect(t('admin.viewers.premiumOnly')).toBe('Premium')
+    expect(t('admin.viewers.premiumFree')).toBe('Free')
+  })
+
+  it('keeps the table caption, column headers and empty state', () => {
+    expect(t('admin.viewers.empty')).toBe('No viewer sessions match your search or filters.')
+    expect(t('admin.viewers.tableCaption')).toBe('Viewers')
+    expect(t('admin.viewers.columnViewer')).toBe('Viewer')
+    expect(t('admin.viewers.columnPlatform')).toBe('Platform')
+    expect(t('admin.viewers.columnLastMessage')).toBe('Last Message')
+    expect(t('admin.viewers.columnPremium')).toBe('Premium')
+    expect(t('admin.viewers.columnStatus')).toBe('Status')
+    expect(t('admin.viewers.columnActions')).toBe('Actions')
+  })
+
+  it('keeps the row badges, controls and their aria labels', () => {
+    expect(t('admin.viewers.neverMessaged')).toBe('Never')
+    expect(t('admin.viewers.badgeBanned')).toBe('BANNED')
+    expect(t('admin.viewers.badgeActive')).toBe('Active')
+    expect(t('admin.viewers.banReason', { reason: 'spam' })).toBe('Reason: spam')
+    expect(t('admin.viewers.sessionOnlyTitle')).toBe('Session-only viewer (no linked account)')
+    expect(t('admin.viewers.premiumBadge')).toBe('Premium')
+    expect(t('admin.viewers.freeBadge')).toBe('Free')
+    // Two whole aria labels: the badge word sits in front of the sentence, and
+    // a language that fronts the verb cannot move a fragment the render site
+    // assembled.
+    expect(t('admin.viewers.changePremiumPremiumLabel', { username: 'kate' })).toBe(
+      'Premium: change premium status for kate'
+    )
+    expect(t('admin.viewers.changePremiumFreeLabel', { username: 'kate' })).toBe(
+      'Free: change premium status for kate'
+    )
+    expect(t('admin.viewers.activityButton')).toBe('Activity')
+    expect(t('admin.viewers.unbanButton')).toBe('Unban')
+    expect(t('admin.viewers.unbanningButton')).toBe('Unbanning...')
+    expect(t('admin.viewers.unbanLabel', { username: 'kate' })).toBe('Unban kate')
+    expect(t('admin.viewers.unbanningLabel', { username: 'kate' })).toBe('Unbanning kate')
+    expect(t('admin.viewers.banButton')).toBe('Ban')
+    expect(t('admin.viewers.banLabel', { username: 'kate' })).toBe('Ban kate')
+  })
+
+  it('keeps the pagination copy', () => {
+    // The range was three formatted numbers and two separators interleaved in
+    // JSX. One sentence: a language that words a range differently now can.
+    expect(t('admin.viewers.pageRange', { start: '1', end: '50', total: '1,204' })).toBe(
+      'Showing 1\u201350 of 1,204'
+    )
+    expect(t('admin.viewers.previousPage')).toBe('Previous')
+    expect(t('admin.viewers.nextPage')).toBe('Next')
+  })
+
+  it('keeps the activity dialog copy', () => {
+    // The typographic quotes were entities either side of the username.
+    expect(t('admin.viewers.activityTitle', { username: 'kate' })).toBe(
+      'Activity for \u201Ckate\u201D'
+    )
+    expect(t('admin.viewers.activityDescription')).toBe(
+      'Messages this viewer has sent through All-Chat, and whose chats they appear in.'
+    )
+    expect(t('admin.viewers.activityTotalMessages')).toBe('Total messages')
+    expect(t('admin.viewers.activityLastMessage')).toBe('Last message')
+    expect(t('admin.viewers.activityStreamerFallback')).toBe('View streamer')
+    expect(t('admin.viewers.activityOverlayLink')).toBe('overlay')
+    expect(t('admin.viewers.activityEmpty')).toBe('No message activity recorded for this viewer.')
+    expect(t('admin.viewers.activityClose')).toBe('Close')
+  })
+
+  it('keeps the premium dialog copy', () => {
+    // Two whole titles rather than a 'Revoke'/'Grant' word the render site puts
+    // in front of the rest.
+    expect(t('admin.viewers.revokePremiumTitle', { username: 'kate' })).toBe(
+      'Revoke premium for \u201Ckate\u201D?'
+    )
+    expect(t('admin.viewers.grantPremiumTitle', { username: 'kate' })).toBe(
+      'Grant premium for \u201Ckate\u201D?'
+    )
+    expect(t('admin.viewers.revokePremiumBody')).toBe(
+      'They will lose access to gradients, avatar frames, and flairs.'
+    )
+    expect(t('admin.viewers.grantPremiumBody')).toBe(
+      'They will be able to use gradients, avatar frames, and flairs.'
+    )
+    expect(t('admin.viewers.premiumExpires', { timestamp: '13/07/2026, 08:48' })).toBe(
+      'Time-limited \u2014 expires 13/07/2026, 08:48'
+    )
+    expect(t('admin.viewers.premiumDialogCancel')).toBe('Cancel')
+    expect(t('admin.viewers.revokePremiumConfirm')).toBe('Revoke Premium')
+    expect(t('admin.viewers.grantPremiumConfirm')).toBe('Grant Premium')
+    expect(t('admin.viewers.premiumUpdating')).toBe('Updating...')
+  })
+
+  it('keeps the unban and ban dialog copy', () => {
+    expect(t('admin.viewers.unbanTitle', { username: 'kate' })).toBe('Unban \u201Ckate\u201D?')
+    expect(t('admin.viewers.unbanBody')).toBe('This will restore their ability to send messages.')
+    expect(t('admin.viewers.unbanCancel')).toBe('Cancel')
+    expect(t('admin.viewers.unbanConfirm')).toBe('Unban Viewer')
+    expect(t('admin.viewers.banTitle', { username: 'kate' })).toBe('Ban Viewer \u201Ckate\u201D?')
+    expect(t('admin.viewers.banBody', { username: 'kate' })).toBe(
+      'This will prevent kate from sending messages.'
+    )
+    expect(t('admin.viewers.banReasonLabel')).toBe('Reason (optional)')
+    expect(t('admin.viewers.banReasonPlaceholder')).toBe('Enter reason for ban...')
+    expect(t('admin.viewers.banCancel')).toBe('Cancel')
+    expect(t('admin.viewers.banConfirm')).toBe('Ban Viewer')
+    expect(t('admin.viewers.banning')).toBe('Banning...')
+  })
+
+  it('keeps the viewer mutation toast copy', () => {
+    expect(t('admin.viewers.loadError')).toBe('Failed to load viewers')
+    expect(t('admin.viewers.activityLoadError')).toBe('Failed to load activity')
+    expect(t('admin.viewers.banSuccess', { username: 'kate' })).toBe('kate banned successfully')
+    expect(t('admin.viewers.banError')).toBe('Failed to ban viewer')
+    expect(t('admin.viewers.unbanSuccess', { username: 'kate' })).toBe('kate unbanned successfully')
+    expect(t('admin.viewers.unbanError')).toBe('Failed to unban viewer')
+    // Two whole sentences: the render site interpolated 'granted'/'revoked' as a
+    // bare past participle, which is not a translatable unit.
+    expect(t('admin.viewers.premiumGranted', { username: 'kate' })).toBe('kate premium granted')
+    expect(t('admin.viewers.premiumRevoked', { username: 'kate' })).toBe('kate premium revoked')
+    expect(t('admin.viewers.premiumError')).toBe('Failed to update premium status')
+  })
+})
