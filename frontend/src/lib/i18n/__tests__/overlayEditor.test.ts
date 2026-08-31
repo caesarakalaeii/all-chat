@@ -250,3 +250,110 @@ describe('typography and visibility group copy', () => {
     expect(t('overlayEditor.events.showMembershipGift')).toBe('Membership Gift')
   })
 })
+
+describe('filter group copy', () => {
+  it('keeps the blocked-user and blocked-keyword fields', () => {
+    expect(t('overlayEditor.filters.blockedUsernames')).toBe('Blocked usernames')
+    expect(t('overlayEditor.filters.blockedUsernamesPlaceholder')).toBe(
+      'Type username, press Enter'
+    )
+    expect(t('overlayEditor.filters.addCommonBots')).toBe('Add common bots')
+    expect(t('overlayEditor.filters.blockedKeywords')).toBe('Blocked keywords')
+    expect(t('overlayEditor.filters.blockedKeywordsPlaceholder')).toBe(
+      'Type keyword or regex, press Enter'
+    )
+  })
+
+  it('names the tag remove button after the tag it removes', () => {
+    expect(t('overlayEditor.filters.removeTag', { tag: 'nightbot' })).toBe('Remove nightbot')
+  })
+
+  it('keeps the say-hi filter copy', () => {
+    // sectionRegistry.ts duplicates this label so the editor search can index
+    // it, and sectionRegistry.test.ts fails if the two disagree.
+    expect(t('overlayEditor.filters.hideSayHi')).toBe('Hide YouTube "said hi" greetings')
+    expect(t('overlayEditor.filters.hideSayHiNote')).toBe(
+      'Only YouTube messages whose entire text is the greeting posted by the vertical-stream \u201cSay hi!\u201d button. Hidden messages also make no sound and are not read by TTS.'
+    )
+    expect(t('overlayEditor.filters.sayHiPhrases')).toBe('Extra \u201csaid hi\u201d phrases')
+    expect(t('overlayEditor.filters.sayHiPhrasesPlaceholder')).toBe('Type phrase, press Enter')
+    expect(t('overlayEditor.filters.sayHiPhrasesNote')).toBe(
+      'The button\u2019s text is localised, so add what it posts in your language \u2014 for example the German phrase.'
+    )
+  })
+
+  it('keeps the remaining filter controls', () => {
+    expect(t('overlayEditor.filters.hideCommands')).toBe('Hide bot commands (!)')
+    expect(t('overlayEditor.filters.minMessageLength')).toBe('Min message length')
+    // Suffixed onto the slider's number by SliderControl, leading space and all.
+    expect(t('overlayEditor.filters.charsUnit')).toBe(' chars')
+  })
+})
+
+describe('bubble colours group copy', () => {
+  it('keeps the locked-state upsell as one sentence around the link', () => {
+    expect(t('overlayEditor.bubbleColors.lockedNotice')).toBe(
+      'Different bubble colours per platform, or a palette cycled down the feed, are a {emphasis} feature.'
+    )
+    expect(t('overlayEditor.bubbleColors.lockedNoticeEmphasis')).toBe('Premium')
+  })
+
+  it('keeps the per-platform section copy', () => {
+    expect(t('overlayEditor.bubbleColors.perPlatformHeading')).toBe('Per platform')
+    expect(t('overlayEditor.bubbleColors.perPlatformBody')).toBe(
+      'Tell sources apart at a glance. Unset platforms keep the normal bubble background.'
+    )
+    expect(t('overlayEditor.bubbleColors.resetPlatform', { platform: 'Twitch' })).toBe(
+      'Reset Twitch bubble colour'
+    )
+  })
+
+  it('keeps the palette section copy', () => {
+    expect(t('overlayEditor.bubbleColors.paletteHeading')).toBe('Palette')
+    expect(t('overlayEditor.bubbleColors.paletteBody')).toBe(
+      'Two or more colours, cycled down the feed. A row keeps its colour while it is on screen. Needs at least two to take effect.'
+    )
+    expect(t('overlayEditor.bubbleColors.swatchLabel', { index: 2 })).toBe('Colour 2')
+    expect(t('overlayEditor.bubbleColors.removeSwatch', { index: 2 })).toBe('Remove colour 2')
+    expect(t('overlayEditor.bubbleColors.addSwatch')).toBe('Add colour')
+    expect(t('overlayEditor.bubbleColors.singleSwatchNote')).toBe(
+      'One colour behaves the same as Bubble background. Add a second to start cycling.'
+    )
+  })
+})
+
+describe('sound group copy', () => {
+  it('keeps the OBS-versus-monitor explanation whole', () => {
+    expect(t('overlayEditor.sounds.scopeNote')).toBe(
+      'These sounds play on your public OBS overlay, for everyone watching your stream. Want a private alert only you hear when new activity arrives (channel-point redeems, a TikTok Rose, and so on)? Open the Monitor view and turn on Activity sound in its Display menu. That is a separate setting and stays on that device.'
+    )
+  })
+
+  it('keeps the sound controls', () => {
+    expect(t('overlayEditor.sounds.enable')).toBe('Enable notification sounds')
+    expect(t('overlayEditor.sounds.preset')).toBe('Sound preset')
+    expect(t('overlayEditor.sounds.volume')).toBe('Volume')
+    expect(t('overlayEditor.sounds.test')).toBe('Test sound')
+    expect(t('overlayEditor.sounds.cooldown')).toBe('Cooldown')
+    // Suffixed onto the slider's number, leading space and all.
+    expect(t('overlayEditor.sounds.millisecondsUnit')).toBe(' ms')
+  })
+
+  it('keeps the preset names the picker offers', () => {
+    // The render site title-cased soundPlayer's lowercase PRESET_NAMES with a
+    // local capitalize(). A language whose casing rules differ cannot derive
+    // the display name from the stored value, so each preset gets a key.
+    expect(t('overlayEditor.sounds.presetChime')).toBe('Chime')
+    expect(t('overlayEditor.sounds.presetPop')).toBe('Pop')
+    expect(t('overlayEditor.sounds.presetPing')).toBe('Ping')
+  })
+
+  it('keeps the custom sound URL field and its upsell', () => {
+    expect(t('overlayEditor.sounds.customUrl')).toBe('Custom sound URL')
+    expect(t('overlayEditor.sounds.customUrlUpsell')).toBe(
+      '\u2014 Upload your own notification sound ({emphasis})'
+    )
+    expect(t('overlayEditor.sounds.customUrlUpsellEmphasis')).toBe('Premium')
+    expect(t('overlayEditor.sounds.customUrlPlaceholder')).toBe('https://example.com/sound.mp3')
+  })
+})
