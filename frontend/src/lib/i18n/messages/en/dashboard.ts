@@ -50,7 +50,6 @@ export const dashboard = {
   toasts: {
     overlayDeleted: 'Overlay deleted',
     overlayDeleteFailed: 'Failed to delete overlay',
-    tryAgain: 'Please try again.',
     extensionOverlayUpdated: 'Extension overlay updated',
     extensionOverlayDeactivated: 'Extension overlay deactivated',
     overlayUpdateFailed: 'Failed to update overlay',

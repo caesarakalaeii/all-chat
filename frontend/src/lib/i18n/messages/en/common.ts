@@ -109,6 +109,10 @@ export const common = {
   },
   toast: {
     closeLabel: 'Close notification',
+    // Three callers: /dashboard, /overlays/new and the onboarding create dialog.
+    tryAgain: 'Please try again.',
+    // Raised by both the viewer overlay and the editor's embedded preview.
+    elevenLabsFallback: 'ElevenLabs unavailable \u2014 using browser voice.',
   },
   // SplitView and ResizableSplit share the divider label; the step buttons and
   // the preview iframe title are SplitView's.
@@ -146,6 +150,8 @@ export const common = {
     body: 'The old IRC chat connection is being retired and can drop messages when many streams are live. Reconnect to move to the new connection and keep your chat reliable.',
     reconnectButton: 'Reconnect now',
     dismissLabel: 'Dismiss',
+    connectedToast: 'Twitch chat connected',
+    failedToast: 'Could not start the upgrade',
   },
   forbidden: {
     heading: '403 Forbidden',

@@ -219,10 +219,13 @@ function DevicesContent() {
     try {
       await revokeDevice(revokeTarget.id)
       setDevices((previous) => previous.filter((d) => d.id !== revokeTarget.id))
-      toastManager.add({ title: `Revoked ${revokeTarget.name}`, type: 'success' })
+      toastManager.add({
+        title: t('settings.devices.revokedToast', { name: revokeTarget.name }),
+        type: 'success',
+      })
       setRevokeTarget(null)
     } catch {
-      toastManager.add({ title: 'Could not revoke that device', type: 'error' })
+      toastManager.add({ title: t('settings.devices.revokeFailedToast'), type: 'error' })
     } finally {
       setRevoking(false)
     }

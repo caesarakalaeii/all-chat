@@ -258,9 +258,9 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
       })
       if (!res.ok) throw new Error()
       setSettings(await res.json())
-      toastManager.add({ title: 'Event settings saved', type: 'success' })
+      toastManager.add({ title: t('overlayEditor.toasts.eventSettingsSaved'), type: 'success' })
     } catch {
-      toastManager.add({ title: 'Failed to save event settings', type: 'error' })
+      toastManager.add({ title: t('overlayEditor.toasts.eventSettingsSaveFailed'), type: 'error' })
     } finally {
       setSaving(false)
     }

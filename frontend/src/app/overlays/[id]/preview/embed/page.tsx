@@ -277,7 +277,7 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
   const handleTTSFallback = useCallback(() => {
     if (ttsFallbackToastShownRef.current) return
     ttsFallbackToastShownRef.current = true
-    toastManager.add({ title: 'ElevenLabs unavailable — using browser voice.' })
+    toastManager.add({ title: t('common.toast.elevenLabsFallback') })
   }, [])
 
   const wsClientRef = useRef<WebSocketClient | null>(null)

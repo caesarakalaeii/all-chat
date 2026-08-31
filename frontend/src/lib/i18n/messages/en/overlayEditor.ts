@@ -795,4 +795,12 @@ export const overlayEditor = {
     waitingHeading: 'Waiting for messages...',
     waitingBody: 'Messages will appear here when chat is active',
   },
+  // Toasts raised from the editor routes.
+  toasts: {
+    // The name is quoted in the original, U+0022 either side.
+    created: '"{name}" created',
+    createFailed: 'Failed to create overlay',
+    eventSettingsSaved: 'Event settings saved',
+    eventSettingsSaveFailed: 'Failed to save event settings',
+  },
 } as const

@@ -65,8 +65,8 @@ export function CreateOverlayDialog({ open, onOpenChange }: CreateOverlayDialogP
       router.push(`/overlays/${overlay.id}`)
     } catch {
       toastManager.add({
-        title: 'Could not create the overlay',
-        description: 'Please try again.',
+        title: t('onboarding.createDialog.failedToast'),
+        description: t('common.toast.tryAgain'),
       })
       setSubmitting(false)
     }

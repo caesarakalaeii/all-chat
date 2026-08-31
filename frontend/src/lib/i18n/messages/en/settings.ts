@@ -207,6 +207,8 @@ export const settings = {
     revokeCancel: 'Cancel',
     revokeConfirm: 'Revoke token',
     revoking: 'Revoking…',
+    revokedToast: 'Revoked {name}',
+    revokeFailedToast: 'Could not revoke that token',
   },
   // Settings → paired devices: the Stream Deck / StreamController control
   // surfaces linked to the account (ADR-0049). Metadata only — no credential
@@ -250,6 +252,8 @@ export const settings = {
     revokeCancel: 'Cancel',
     revokeConfirm: 'Revoke device',
     revoking: 'Revoking…',
+    revokedToast: 'Revoked {name}',
+    revokeFailedToast: 'Could not revoke that device',
   },
   // /settings/premium. The strings shared with /settings/viewer/premium live in
   // common.patreon.*; only what names the streamer tier is here.

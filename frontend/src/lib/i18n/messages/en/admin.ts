@@ -124,6 +124,7 @@ export const admin = {
     makeEarlyAccessBody: 'Only beta testers will be able to use this early-access feature.',
     makeEarlyAccessConfirm: 'Make Early Access',
     dialogCancel: 'No, keep as-is',
+    updateFailed: 'Failed to update {flag}. Please try again.',
   },
   search: {
     heading: 'Search',

@@ -112,7 +112,7 @@ export default function AdminFeaturesPage() {
       })
     } catch {
       toastManager.add({
-        title: `Failed to update ${key}. Please try again.`,
+        title: t('admin.features.updateFailed', { flag: key }),
         type: 'error',
       })
     } finally {

@@ -52,12 +52,15 @@ function NewOverlayContent() {
     try {
       const overlay = await createOverlay({ name: name.trim() })
       trackEvent('overlay_created')
-      toastManager.add({ title: `"${overlay.name}" created`, type: 'success' })
+      toastManager.add({
+        title: t('overlayEditor.toasts.created', { name: overlay.name }),
+        type: 'success',
+      })
       router.push(`/overlays/${overlay.id}`)
     } catch (err) {
       toastManager.add({
-        title: 'Failed to create overlay',
-        description: 'Please try again.',
+        title: t('overlayEditor.toasts.createFailed'),
+        description: t('common.toast.tryAgain'),
         type: 'error',
       })
     } finally {

@@ -397,10 +397,13 @@ function ApiTokensContent() {
     try {
       await revokeApiToken(revokeTarget.id)
       setTokens((previous) => previous.filter((t) => t.id !== revokeTarget.id))
-      toastManager.add({ title: `Revoked ${revokeTarget.name}`, type: 'success' })
+      toastManager.add({
+        title: t('settings.apiTokens.revokedToast', { name: revokeTarget.name }),
+        type: 'success',
+      })
       setRevokeTarget(null)
     } catch {
-      toastManager.add({ title: 'Could not revoke that token', type: 'error' })
+      toastManager.add({ title: t('settings.apiTokens.revokeFailedToast'), type: 'error' })
     } finally {
       setRevoking(false)
     }

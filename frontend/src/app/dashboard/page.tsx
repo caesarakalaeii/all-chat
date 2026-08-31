@@ -218,7 +218,7 @@ function DashboardContent() {
     } catch {
       toastManager.add({
         title: t('dashboard.toasts.overlayDeleteFailed'),
-        description: t('dashboard.toasts.tryAgain'),
+        description: t('common.toast.tryAgain'),
         type: 'error',
       })
     }

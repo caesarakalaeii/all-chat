@@ -256,7 +256,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   const handleTTSFallback = useCallback(() => {
     if (ttsFallbackToastShownRef.current) return
     ttsFallbackToastShownRef.current = true
-    toastManager.add({ title: 'ElevenLabs unavailable — using browser voice.' })
+    toastManager.add({ title: t('common.toast.elevenLabsFallback') })
   }, [])
 
   // Phase 13: Destroy TTS player on unmount

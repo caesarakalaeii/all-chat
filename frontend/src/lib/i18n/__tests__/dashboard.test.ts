@@ -80,7 +80,8 @@ describe('dashboard copy', () => {
   it('keeps the overlay mutation toasts', () => {
     expect(t('dashboard.toasts.overlayDeleted')).toBe('Overlay deleted')
     expect(t('dashboard.toasts.overlayDeleteFailed')).toBe('Failed to delete overlay')
-    expect(t('dashboard.toasts.tryAgain')).toBe('Please try again.')
+    // 'Please try again.' moved to common.toast.tryAgain when a third caller
+    // appeared; common.test.ts asserts it now. Not dropped, relocated.
     expect(t('dashboard.toasts.extensionOverlayUpdated')).toBe('Extension overlay updated')
     expect(t('dashboard.toasts.extensionOverlayDeactivated')).toBe('Extension overlay deactivated')
     expect(t('dashboard.toasts.overlayUpdateFailed')).toBe('Failed to update overlay')

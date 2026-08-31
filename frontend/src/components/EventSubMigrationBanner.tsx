@@ -90,12 +90,12 @@ export function EventSubMigrationBanner({
     if (result.kind === 'added') {
       // Already authorized with the chat scopes — the channel is moving to
       // EventSub; hide the nudge.
-      toastManager.add({ title: 'Twitch chat connected', type: 'success' })
+      toastManager.add({ title: t('common.eventSubMigration.connectedToast'), type: 'success' })
       setDismissed(true)
       return
     }
     toastManager.add({
-      title: 'Could not start the upgrade',
+      title: t('common.eventSubMigration.failedToast'),
       description: result.message,
       type: 'error',
     })

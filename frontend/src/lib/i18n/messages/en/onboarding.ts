@@ -103,5 +103,6 @@ export const onboarding = {
     cancel: 'Cancel',
     submit: 'Create overlay',
     submitting: 'Creating…',
+    failedToast: 'Could not create the overlay',
   },
 } as const
