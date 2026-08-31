@@ -484,3 +484,96 @@ describe('text-to-speech group copy', () => {
     expect(t('overlayEditor.tts.cancel')).toBe('Cancel')
   })
 })
+
+describe('source card copy', () => {
+  it('keeps the per-source status and action labels', () => {
+    expect(t('overlayEditor.sources.chatViaEventsub')).toBe('Chat via EventSub')
+    expect(t('overlayEditor.sources.reconnectChat')).toBe('Reconnect to enable chat')
+    expect(t('overlayEditor.sources.revoke')).toBe('Revoke')
+    expect(t('overlayEditor.sources.configureRelay')).toBe('Configure relay')
+    expect(t('overlayEditor.sources.streamSelection')).toBe('Stream selection')
+    expect(t('overlayEditor.sources.removeLabel', { channel: 'somechannel' })).toBe(
+      'Remove somechannel'
+    )
+  })
+
+  it('keeps the remove confirmation as one sentence naming the channel', () => {
+    // The render site wrapped the channel name in <strong> mid-sentence, so the
+    // sentence stays whole and `emphasise` re-wraps the run. See
+    // src/lib/i18n/emphasise.tsx for why the fragments are not split.
+    expect(t('overlayEditor.sources.removeConfirmTitle')).toBe('Remove source?')
+    expect(t('overlayEditor.sources.removeConfirmBody', { emphasis: 'somechannel' })).toBe(
+      'Remove somechannel from this overlay. Chat messages from this source will stop appearing.'
+    )
+    expect(t('overlayEditor.sources.remove')).toBe('Remove')
+    expect(t('overlayEditor.sources.cancel')).toBe('Cancel')
+  })
+
+  it('keeps the empty and skeleton states', () => {
+    expect(t('overlayEditor.sources.empty')).toBe('No sources added yet. Add a platform below.')
+    expect(t('overlayEditor.sources.sharedHeading')).toBe('Shared Overlays')
+    expect(t('overlayEditor.sources.sharedOwner', { owner: 'someone' })).toBe("someone's overlay")
+    expect(t('overlayEditor.sources.add')).toBe('+ Add')
+  })
+})
+
+describe('stream selection panel copy', () => {
+  it('keeps the strategy field labels and hints', () => {
+    expect(t('overlayEditor.streamSelection.strategyLabel')).toBe('Stream selection strategy')
+    expect(t('overlayEditor.streamSelection.strategyHint')).toBe(
+      'When this channel has multiple concurrent live streams, choose which one to monitor.'
+    )
+    expect(t('overlayEditor.streamSelection.premiumSuffix')).toBe(' (Premium)')
+    expect(t('overlayEditor.streamSelection.upsellSuffix')).toBe(
+      ' to use advanced stream selection.'
+    )
+    expect(t('overlayEditor.streamSelection.locked')).toBe(
+      'Non-default strategies require a premium subscription.'
+    )
+  })
+
+  it('keeps the title-keyword field', () => {
+    expect(t('overlayEditor.streamSelection.matchLabel')).toBe('Title keyword')
+    expect(t('overlayEditor.streamSelection.matchPlaceholder')).toBe('e.g. synthwave, lofi, jazz')
+  })
+
+  it('keeps every strategy label and description', () => {
+    // The keys are suffixed rather than nested one level deeper: the three-level
+    // cap in messages.test.ts forbids streamSelection.firstFound.label.
+    expect(t('overlayEditor.streamSelection.firstFoundLabel')).toBe('First found')
+    expect(t('overlayEditor.streamSelection.firstFoundDescription')).toBe(
+      'Picks the first live stream (default)'
+    )
+    expect(t('overlayEditor.streamSelection.mostViewersLabel')).toBe('Most viewers')
+    expect(t('overlayEditor.streamSelection.mostViewersDescription')).toBe(
+      'Picks the stream with the highest viewer count'
+    )
+    expect(t('overlayEditor.streamSelection.fewestViewersLabel')).toBe('Fewest viewers')
+    expect(t('overlayEditor.streamSelection.fewestViewersDescription')).toBe(
+      'Picks the stream with the lowest viewer count'
+    )
+    expect(t('overlayEditor.streamSelection.titleMatchLabel')).toBe('Title match')
+    expect(t('overlayEditor.streamSelection.titleMatchDescription')).toBe(
+      'Picks the first stream whose title contains a keyword'
+    )
+    expect(t('overlayEditor.streamSelection.titleMatchAllLabel')).toBe('Title match (all)')
+    expect(t('overlayEditor.streamSelection.titleMatchAllDescription')).toBe(
+      'Monitors all streams whose title contains a keyword'
+    )
+    expect(t('overlayEditor.streamSelection.allLabel')).toBe('All streams')
+    expect(t('overlayEditor.streamSelection.allDescription')).toBe(
+      'Monitors all concurrent live streams simultaneously'
+    )
+  })
+})
+
+describe('Discord relay panel copy', () => {
+  it('keeps the relay controls', () => {
+    expect(t('overlayEditor.relay.loopFilter')).toBe(
+      'Loop filter: active \u2014 Discord messages are never relayed back to Discord.'
+    )
+    expect(t('overlayEditor.relay.enable')).toBe('Enable relay')
+    expect(t('overlayEditor.relay.outboundChannelLabel')).toBe('Outbound channel')
+    expect(t('overlayEditor.relay.selectChannel')).toBe('Select a channel...')
+  })
+})
