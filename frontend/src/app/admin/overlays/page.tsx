@@ -25,7 +25,7 @@ import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PlatformBadge } from '@/components/ui/badge'
 import { ChannelLink } from '@/components/ChannelLink'
-import { useTranslations, type TFunction } from '@/lib/i18n'
+import { type TFunction, formatDate, formatTimestamp, useTranslations } from '@/lib/i18n'
 import { formatConnectedFor } from '@/lib/utils'
 
 // Connections open longer than this are highlighted so admins can spot overlays
@@ -363,7 +363,7 @@ export default function OverlaysPage() {
                                 title={
                                   since
                                     ? t('admin.overlays.dotConnectedSince', {
-                                        timestamp: new Date(since).toLocaleString(),
+                                        timestamp: formatTimestamp(new Date(since)),
                                       })
                                     : t('admin.overlays.dotConnected')
                                 }
@@ -381,7 +381,7 @@ export default function OverlaysPage() {
                           </p>
                           <p className="mt-1 text-xs text-text-dim">
                             {t('admin.overlays.rowCreated', {
-                              date: new Date(overlay.created_at).toLocaleDateString(),
+                              date: formatDate(new Date(overlay.created_at)),
                             })}
                             {isConnected && (
                               <>
@@ -537,7 +537,7 @@ export default function OverlaysPage() {
                       {selectedConnected && selectedSince && (
                         <dd className="mt-1 text-xs text-text-dim">
                           {t('admin.overlays.connectedSinceRow', {
-                            timestamp: new Date(selectedSince).toLocaleString(),
+                            timestamp: formatTimestamp(new Date(selectedSince)),
                           })}
                         </dd>
                       )}
@@ -591,7 +591,7 @@ export default function OverlaysPage() {
                               </p>
                               <p className="mt-1 text-xs text-text-dim">
                                 {t('admin.overlays.sourceAdded', {
-                                  date: new Date(source.created_at).toLocaleDateString(),
+                                  date: formatDate(new Date(source.created_at)),
                                 })}
                               </p>
                             </div>

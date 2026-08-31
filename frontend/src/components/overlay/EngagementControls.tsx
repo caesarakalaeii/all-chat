@@ -40,7 +40,7 @@ import { toastManager } from '@/lib/toast'
 import { ApiError } from '@/lib/api/client'
 import { engagementApi } from '@/lib/api/engagement'
 import { useEngagementLive } from '@/lib/hooks/useEngagementLive'
-import { useTranslations, type TFunction } from '@/lib/i18n'
+import { type TFunction, formatNumber, formatTime, useTranslations } from '@/lib/i18n'
 import { interpolateElements } from '@/lib/i18n/emphasise'
 import type { Poll, Prediction } from '@/lib/types/engagement'
 
@@ -457,18 +457,18 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                 <TallyBar
                   key={o.id}
                   label={`${o.idx}. ${o.label}`}
-                  detail={`${pollTotal > 0 ? Math.round((o.votes / pollTotal) * 100) : 0}% (${o.votes.toLocaleString()})`}
+                  detail={`${pollTotal > 0 ? Math.round((o.votes / pollTotal) * 100) : 0}% (${formatNumber(o.votes)})`}
                   pct={pollTotal > 0 ? Math.round((o.votes / pollTotal) * 100) : 0}
                   accent="twitch"
                 />
               ))}
               <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                 <span className="text-[11px] text-text-sub">
-                  {t('viewerOverlay.engagement.pollVotes', { total: pollTotal.toLocaleString() })}
+                  {t('viewerOverlay.engagement.pollVotes', { total: formatNumber(pollTotal) })}
                   {poll.ends_at &&
                     poll.state === 'ACTIVE' &&
                     t('viewerOverlay.engagement.pollAutoCloses', {
-                      time: new Date(poll.ends_at).toLocaleTimeString(),
+                      time: formatTime(new Date(poll.ends_at)),
                     })}
                 </span>
                 {pollFinished ? (
@@ -601,8 +601,8 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                     key={o.id}
                     label={`${o.idx}. ${o.label}`}
                     detail={t('viewerOverlay.engagement.predictionOutcomeTally', {
-                      points: o.total_points.toLocaleString(),
-                      entrants: o.entrants.toLocaleString(),
+                      points: formatNumber(o.total_points),
+                      entrants: formatNumber(o.entrants),
                     })}
                     pct={predTotal > 0 ? Math.round((o.total_points / predTotal) * 100) : 0}
                     accent="sky"
@@ -636,12 +636,12 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
               <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                 <span className="text-[11px] text-text-sub">
                   {t('viewerOverlay.engagement.predictionPointsWagered', {
-                    total: predTotal.toLocaleString(),
+                    total: formatNumber(predTotal),
                   })}
                   {prediction.auto_lock_at &&
                     prediction.state === 'ACTIVE' &&
                     t('viewerOverlay.engagement.predictionAutoLocks', {
-                      time: new Date(prediction.auto_lock_at).toLocaleTimeString(),
+                      time: formatTime(new Date(prediction.auto_lock_at)),
                     })}
                 </span>
                 <div className="flex flex-wrap gap-2">

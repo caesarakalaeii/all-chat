@@ -84,7 +84,7 @@ import type { TTSPlayer, TTSSettings } from '@/lib/utils/ttsPlayer'
 import { resolveUsernameColor } from '@/lib/utils/usernameColor'
 import { scopeCustomCss } from '@/lib/theme-marketplace/scope-css'
 import '@/styles/events.css'
-import { useTranslations } from '@/lib/i18n'
+import { formatTime, useTranslations } from '@/lib/i18n'
 
 /**
  * Kick's logo is the letter K drawn as SVG text. A brand mark, not copy, so it
@@ -996,7 +996,7 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
 
                         {/* Timestamp */}
                         <div className="mt-1 text-xs text-slate-500">
-                          {new Date(message.timestamp).toLocaleTimeString()}
+                          {formatTime(new Date(message.timestamp))}
                         </div>
                       </div>
                     </div>

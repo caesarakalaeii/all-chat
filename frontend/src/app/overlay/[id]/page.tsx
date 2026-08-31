@@ -117,7 +117,7 @@ import { AllChatBadge } from '@/components/AllChatBadge'
 import { PremiumBadge } from '@/components/PremiumBadge'
 import { EventContent } from '@/components/overlay/EventContent'
 import { MessageAttachments } from '@/components/overlay/MessageAttachments'
-import { useTranslations } from '@/lib/i18n'
+import { formatTime, useTranslations } from '@/lib/i18n'
 import { resolveUsernameColor } from '@/lib/utils/usernameColor'
 import '@/styles/events.css'
 
@@ -1043,7 +1043,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                   {/* Timestamp */}
                   {showTimestamps && (
                     <div className="mt-1 text-xs text-slate-500">
-                      {new Date(message.timestamp).toLocaleTimeString()}
+                      {formatTime(new Date(message.timestamp))}
                     </div>
                   )}
                 </div>

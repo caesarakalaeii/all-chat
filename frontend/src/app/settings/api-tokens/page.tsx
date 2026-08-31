@@ -57,7 +57,7 @@ import {
   type ApiTokenScope,
   type CreatedApiToken,
 } from '@/lib/api/api-tokens'
-import { useTranslations, type TFunction } from '@/lib/i18n'
+import { type TFunction, formatDateTime, useTranslations } from '@/lib/i18n'
 import { interpolateElements } from '@/lib/i18n/emphasise'
 import { toastManager } from '@/lib/toast'
 
@@ -75,15 +75,11 @@ const SCOPE_MESSAGE_STEMS = {
   'engagement:write': 'scopeEngagementWrite',
 } as const satisfies Record<ApiTokenScope, string>
 
-function formatDate(t: TFunction, value: string | null): string {
+function formatDayOrUnknown(t: TFunction, value: string | null): string {
   if (!value) return t('settings.apiTokens.unknownDate')
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return t('settings.apiTokens.unknownDate')
-  return parsed.toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  })
+  return formatDateTime(parsed, { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
 // ---------------------------------------------------------------------------
@@ -318,9 +314,9 @@ function TokenRow({ token, onRevoke }: { token: ApiToken; onRevoke: (token: ApiT
         <p className="truncate text-sm font-medium text-text">{token.name}</p>
         <p className="mt-0.5 text-xs text-text-sub">
           {t('settings.apiTokens.tokenDates', {
-            created: formatDate(t, token.created_at),
+            created: formatDayOrUnknown(t, token.created_at),
             lastUsed: token.last_used_at
-              ? formatDate(t, token.last_used_at)
+              ? formatDayOrUnknown(t, token.last_used_at)
               : t('settings.apiTokens.neverUsed'),
           })}
         </p>

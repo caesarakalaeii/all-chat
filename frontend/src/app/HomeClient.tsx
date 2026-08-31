@@ -54,7 +54,7 @@ import { trackEvent } from '@/lib/analytics'
 import { stashSigninPlatform } from '@/lib/analytics-auth'
 import { safeExternalRedirect } from '@/lib/auth/redirect-allowlist'
 import { dashStyleFor } from '@/lib/dashboard-button-styles'
-import { useTranslations, type TFunction } from '@/lib/i18n'
+import { type TFunction, formatNumber, useTranslations } from '@/lib/i18n'
 
 // ---------------------------------------------------------------------------
 // Platform stat data
@@ -84,7 +84,7 @@ function reportLoginFailure(t: TFunction, reason: 'noAuthUrl' | 'requestFailed',
 function formatCount(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`
-  return n.toLocaleString()
+  return formatNumber(n)
 }
 
 // ---------------------------------------------------------------------------

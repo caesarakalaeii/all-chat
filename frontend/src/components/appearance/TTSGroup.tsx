@@ -27,7 +27,7 @@ import { PremiumBadge } from '@/components/PremiumBadge'
 import { PremiumUpsellLink } from '@/components/PremiumUpsellLink'
 import { AlertDialog } from '@/components/ui/alert-dialog'
 import { useBrowserVoices } from '@/lib/hooks/useBrowserVoices'
-import { useTranslations } from '@/lib/i18n'
+import { formatNumber, useTranslations } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import type { DisplaySettings } from '@/lib/types/overlay'
 
@@ -382,8 +382,8 @@ function ApiKeyInput({
           {quota ? (
             <p className="text-xs text-text-dim">
               {t('overlayEditor.tts.quota', {
-                remaining: quota.remaining.toLocaleString(),
-                limit: quota.limit.toLocaleString(),
+                remaining: formatNumber(quota.remaining),
+                limit: formatNumber(quota.limit),
                 percent: quotaPct ?? 0,
               })}
             </p>

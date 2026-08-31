@@ -36,7 +36,7 @@ import {
   isAuthError,
   isPlatformApiError,
 } from '@/lib/types/errors'
-import { useTranslations } from '@/lib/i18n'
+import { formatTimestamp, useTranslations } from '@/lib/i18n'
 import { emphasise } from '@/lib/i18n/emphasise'
 
 interface ErrorDisplayProps {
@@ -188,7 +188,7 @@ export default function ErrorDisplay({
             {isBannedError(error) && error.expiresAt && (
               <p className={clsx('mb-2 text-sm', style.text)}>
                 <strong>{t('errors.display.expiresLabel')}</strong>{' '}
-                {new Date(error.expiresAt).toLocaleString()}
+                {formatTimestamp(new Date(error.expiresAt))}
               </p>
             )}
 

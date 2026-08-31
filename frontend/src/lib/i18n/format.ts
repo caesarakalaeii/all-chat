@@ -73,17 +73,17 @@ export function formatDateTime(
 // are pinned against real toLocale* output in format.test.ts, because an option
 // set that merely looks right changes the rendered text -- dateStyle:'short',
 // the obvious spelling of TIMESTAMP, renders a 2-digit year.
-const DATE_ONLY: Intl.DateTimeFormatOptions = {
+export const DATE_ONLY: Intl.DateTimeFormatOptions = {
   year: 'numeric',
   month: 'numeric',
   day: 'numeric',
 }
-const TIME_ONLY: Intl.DateTimeFormatOptions = {
+export const TIME_ONLY: Intl.DateTimeFormatOptions = {
   hour: 'numeric',
   minute: '2-digit',
   second: '2-digit',
 }
-const TIMESTAMP: Intl.DateTimeFormatOptions = { ...DATE_ONLY, ...TIME_ONLY }
+export const TIMESTAMP: Intl.DateTimeFormatOptions = { ...DATE_ONLY, ...TIME_ONLY }
 
 /**
  * The date alone, as `toLocaleDateString()` renders it but locale-pinned.

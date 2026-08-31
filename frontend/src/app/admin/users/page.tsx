@@ -30,7 +30,7 @@ import { toastManager } from '@/lib/toast'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { PremiumDurationChooser } from '@/components/admin/PremiumDurationChooser'
 import { UserAvatar } from '@/components/UserAvatar'
-import { useTranslations } from '@/lib/i18n'
+import { formatDate, formatTimestamp, useTranslations } from '@/lib/i18n'
 
 interface User {
   id: string
@@ -668,7 +668,7 @@ export default function UsersPage() {
                             <p className="text-sm text-text-sub">@{user.username}</p>
                             <p className="mt-1 text-xs text-text-dim">
                               {t('admin.users.rowJoined', {
-                                date: new Date(user.created_at).toLocaleDateString(),
+                                date: formatDate(new Date(user.created_at)),
                               })}
                             </p>
                           </div>
@@ -865,7 +865,7 @@ export default function UsersPage() {
                         {selectedUser.premium_expires_at && (
                           <p className="mt-1 text-xs font-medium text-amber-400/70">
                             {t('admin.users.premiumExpires', {
-                              timestamp: new Date(selectedUser.premium_expires_at).toLocaleString(),
+                              timestamp: formatTimestamp(new Date(selectedUser.premium_expires_at)),
                             })}
                           </p>
                         )}
@@ -1278,7 +1278,7 @@ export default function UsersPage() {
                         <p className="mt-1 text-xs text-destructive/70">
                           {selectedUser.banned_at &&
                             t('admin.users.bannedOn', {
-                              timestamp: new Date(selectedUser.banned_at).toLocaleString(),
+                              timestamp: formatTimestamp(new Date(selectedUser.banned_at)),
                             })}
                         </p>
                       </div>

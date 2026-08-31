@@ -51,22 +51,18 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { listDevices, revokeDevice, type PairedDevice } from '@/lib/api/devices'
-import { useTranslations, type TFunction } from '@/lib/i18n'
+import { type TFunction, formatDateTime, useTranslations } from '@/lib/i18n'
 import { interpolateElements } from '@/lib/i18n/emphasise'
 import { toastManager } from '@/lib/toast'
 
 const STREAMDECK_GUIDE =
   'https://github.com/caesarakalaeii/all-chat/blob/main/docs/guides/streamdeck.md'
 
-function formatDate(t: TFunction, value: string | null): string {
+function formatDayOrUnknown(t: TFunction, value: string | null): string {
   if (!value) return t('settings.devices.unknownDate')
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return t('settings.devices.unknownDate')
-  return parsed.toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  })
+  return formatDateTime(parsed, { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
 /** True when the device is neither revoked nor past its sliding expiry. */
@@ -79,10 +75,10 @@ function isLive(device: PairedDevice): boolean {
 /** Short human status, so a lapsed pairing is obvious without reading dates. */
 function statusOf(t: TFunction, device: PairedDevice): string {
   if (device.revoked_at)
-    return t('settings.devices.statusRevoked', { date: formatDate(t, device.revoked_at) })
+    return t('settings.devices.statusRevoked', { date: formatDayOrUnknown(t, device.revoked_at) })
   if (!isLive(device))
-    return t('settings.devices.statusExpired', { date: formatDate(t, device.expires_at) })
-  return t('settings.devices.statusActive', { date: formatDate(t, device.expires_at) })
+    return t('settings.devices.statusExpired', { date: formatDayOrUnknown(t, device.expires_at) })
+  return t('settings.devices.statusActive', { date: formatDayOrUnknown(t, device.expires_at) })
 }
 
 // ---------------------------------------------------------------------------
@@ -156,9 +152,9 @@ function DeviceRow({
         <p className="mt-0.5 text-xs text-text-sub">
           {t('settings.devices.rowDates', {
             lastUsed: device.last_used_at
-              ? formatDate(t, device.last_used_at)
+              ? formatDayOrUnknown(t, device.last_used_at)
               : t('settings.devices.neverUsed'),
-            paired: formatDate(t, device.created_at),
+            paired: formatDayOrUnknown(t, device.created_at),
           })}
         </p>
         <p className="mt-1 flex flex-wrap gap-1.5">

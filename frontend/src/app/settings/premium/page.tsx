@@ -27,7 +27,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Dialog } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useTranslations, type TFunction } from '@/lib/i18n'
+import { type TFunction, formatDate, useTranslations } from '@/lib/i18n'
 import { interpolateElements } from '@/lib/i18n/emphasise'
 import { toastManager } from '@/lib/toast'
 import { PATREON_JOIN_URL } from '@/lib/constants'
@@ -177,7 +177,7 @@ function PremiumContent() {
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-text-sub">{t('common.patreon.renewsRow')}</span>
                   <span className="font-medium text-text">
-                    {new Date(status.renews_at).toLocaleDateString()}
+                    {formatDate(new Date(status.renews_at))}
                   </span>
                 </div>
               )}

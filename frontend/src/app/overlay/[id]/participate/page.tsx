@@ -37,7 +37,7 @@ import { apiErrorReason, viewerApi } from '@/lib/api/viewer'
 import { inMemoryTokens } from '@/lib/auth/in-memory-store'
 import { safeExternalRedirect } from '@/lib/auth/redirect-allowlist'
 import { useEngagementLive } from '@/lib/hooks/useEngagementLive'
-import { useTranslations, type TFunction } from '@/lib/i18n'
+import { type TFunction, formatNumber, useTranslations } from '@/lib/i18n'
 import type { Poll, Prediction, ViewerEngagement } from '@/lib/types/engagement'
 
 const REFRESH_MS = 3000
@@ -83,7 +83,7 @@ function wagerRejectionCopy(
     case 'insufficient':
       return t('viewerOverlay.participate.rejectInsufficient', {
         pointsName,
-        balance: balance.toLocaleString(),
+        balance: formatNumber(balance),
       })
     case 'native':
       return t('viewerOverlay.participate.rejectNative')
@@ -305,7 +305,7 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
         setNotice(
           t('viewerOverlay.participate.insufficientLocal', {
             pointsName: engagement?.points_name ?? t('viewerOverlay.participate.defaultPointsName'),
-            balance: balance.toLocaleString(),
+            balance: formatNumber(balance),
           })
         )
         return
@@ -394,13 +394,13 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
           aria-live="polite"
           aria-atomic="true"
           aria-label={t('viewerOverlay.participate.balanceLabel', {
-            balance: balance.toLocaleString(),
+            balance: formatNumber(balance),
             pointsName,
           })}
         >
           <span aria-hidden="true">{BALANCE_GLYPH}</span>{' '}
           {t('viewerOverlay.participate.balance', {
-            balance: balance.toLocaleString(),
+            balance: formatNumber(balance),
             pointsName,
           })}
         </span>
@@ -422,7 +422,7 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
         <p role="status" className="rounded-md bg-surface-2 px-3 py-2 text-sm text-text">
           {t('viewerOverlay.participate.settledBanner', {
             outcome: settled.outcomeLabel,
-            amount: settled.amount.toLocaleString(),
+            amount: formatNumber(settled.amount),
             pointsName,
           })}
         </p>
@@ -474,7 +474,7 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
                 <span className="relative text-sm text-text tabular-nums">
                   {t('viewerOverlay.participate.pollOptionTally', {
                     pct,
-                    votes: o.votes.toLocaleString(),
+                    votes: formatNumber(o.votes),
                   })}
                 </span>
               </button>
@@ -504,7 +504,7 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
               <div className="flex items-center justify-between text-xs text-text-sub">
                 <span>
                   {t('viewerOverlay.participate.youHave', {
-                    balance: balance.toLocaleString(),
+                    balance: formatNumber(balance),
                     pointsName,
                   })}
                 </span>
@@ -572,12 +572,12 @@ export default function ParticipatePage({ params }: { params: Promise<{ id: stri
                   {o.idx}. {o.label}
                   {mine &&
                     t('viewerOverlay.participate.yourWager', {
-                      amount: (engagement?.wager_amount ?? 0).toLocaleString(),
+                      amount: formatNumber(engagement?.wager_amount ?? 0),
                     })}
                 </span>
                 <span className="relative text-sm text-text tabular-nums">
                   {t('viewerOverlay.participate.outcomeTally', {
-                    points: o.total_points.toLocaleString(),
+                    points: formatNumber(o.total_points),
                     pct,
                   })}
                 </span>

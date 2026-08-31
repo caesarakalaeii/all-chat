@@ -24,7 +24,7 @@ import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PlatformBadge } from '@/components/ui/badge'
 import { ChannelLink } from '@/components/ChannelLink'
-import { useTranslations } from '@/lib/i18n'
+import { formatDate, useTranslations } from '@/lib/i18n'
 import { interpolateElements } from '@/lib/i18n/emphasise'
 
 interface Source {
@@ -415,7 +415,7 @@ export default function SourcesPage() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-sm text-text-sub">
-                        {new Date(source.created_at).toLocaleDateString()}
+                        {formatDate(new Date(source.created_at))}
                       </td>
                     </tr>
                   ))}
@@ -461,7 +461,7 @@ export default function SourcesPage() {
                       {ownerLabel(source)}
                     </Link>
                   )}
-                  <span>{new Date(source.created_at).toLocaleDateString()}</span>
+                  <span>{formatDate(new Date(source.created_at))}</span>
                   {source.is_active ? (
                     <span className="inline-flex items-center rounded-full bg-kick/10 px-2 py-0.5 font-medium text-kick">
                       {t('admin.sources.statusActive')}

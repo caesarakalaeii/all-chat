@@ -17,7 +17,7 @@
  */
 
 import { MessageAttachments } from '@/components/overlay/MessageAttachments'
-import { useTranslations, type TFunction } from '@/lib/i18n'
+import { type TFunction, formatNumber, useTranslations } from '@/lib/i18n'
 import { renderMessageContent } from '@/lib/renderMessage'
 import type { ChatMessage } from '@/lib/types/message'
 
@@ -268,7 +268,7 @@ export function EventContent({ message }: { message: ChatMessage }) {
             typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : NaN
           const parts: string[] = []
           const viewers = num(m.viewer_count)
-          if (viewers > 0) parts.push(`${viewers.toLocaleString()} viewers`)
+          if (viewers > 0) parts.push(`${formatNumber(viewers)} viewers`)
           if (num(m.months) > 0) parts.push(`${num(m.months)} months`)
           if (num(m.streak) > 0) parts.push(`${num(m.streak)} month streak`)
           if (num(m.gift_count) > 0) parts.push(`${num(m.gift_count)} gifts`)
@@ -276,7 +276,7 @@ export function EventContent({ message }: { message: ChatMessage }) {
           // Watch streaks pay out channel points; the streak count itself is already in the value
           // pill, so only the reward is added here.
           if (num(m.channel_points_awarded) > 0)
-            parts.push(`+${num(m.channel_points_awarded).toLocaleString()} points`)
+            parts.push(`+${formatNumber(num(m.channel_points_awarded))} points`)
           if (num(m.like_count) > 0) parts.push(`${num(m.like_count)} likes`)
           if (num(m.diamonds) > 0) parts.push(`${num(m.diamonds)} diamonds`)
           return parts.length > 0 ? (

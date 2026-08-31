@@ -31,7 +31,7 @@ import { use, useCallback, useEffect, useState } from 'react'
 import clsx from 'clsx'
 import type { Poll } from '@/lib/types/engagement'
 import { useEngagementLive } from '@/lib/hooks/useEngagementLive'
-import { useTranslations } from '@/lib/i18n'
+import { formatNumber, useTranslations } from '@/lib/i18n'
 
 const POLL_INTERVAL_MS = 2000
 // Decoration: the chart glyph is already behind aria-hidden, and the stopwatch
@@ -151,7 +151,7 @@ export default function PollOverlayPage({ params }: { params: Promise<{ id: stri
                   <span className="tabular-nums">
                     {t('viewerOverlay.pollWidget.optionTally', {
                       pct,
-                      votes: o.votes.toLocaleString(),
+                      votes: formatNumber(o.votes),
                     })}
                   </span>
                 </div>

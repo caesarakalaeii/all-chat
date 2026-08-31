@@ -45,7 +45,7 @@ import { PremiumDurationChooser } from '@/components/admin/PremiumDurationChoose
 import { UserAvatar } from '@/components/UserAvatar'
 import { PlatformBadge } from '@/components/ui/badge'
 import { ChannelLink } from '@/components/ChannelLink'
-import { useTranslations } from '@/lib/i18n'
+import { formatNumber, formatTimestamp, useTranslations } from '@/lib/i18n'
 
 interface ViewerSession {
   id: string
@@ -407,7 +407,7 @@ export default function AdminViewersPage() {
           <p className="mt-1 text-sm text-text-sub">{t('admin.viewers.intro')}</p>
         </div>
         <span className="text-sm text-text-sub">
-          {t('admin.viewers.totalMatching', { count: total.toLocaleString() })}
+          {t('admin.viewers.totalMatching', { count: formatNumber(total) })}
         </span>
       </div>
 
@@ -609,9 +609,9 @@ export default function AdminViewersPage() {
           <div className="mt-4 flex items-center justify-between text-sm text-text-sub">
             <span>
               {t('admin.viewers.pageRange', {
-                start: pageStart.toLocaleString(),
-                end: pageEnd.toLocaleString(),
-                total: total.toLocaleString(),
+                start: formatNumber(pageStart),
+                end: formatNumber(pageEnd),
+                total: formatNumber(total),
               })}
             </span>
             <div className="flex items-center gap-2">
@@ -665,7 +665,7 @@ export default function AdminViewersPage() {
                       {t('admin.viewers.activityTotalMessages')}
                     </div>
                     <div className="text-lg font-semibold text-text">
-                      {activity.total_messages.toLocaleString()}
+                      {formatNumber(activity.total_messages)}
                     </div>
                   </div>
                   <div>
@@ -703,7 +703,7 @@ export default function AdminViewersPage() {
                           </div>
                           <div className="shrink-0 text-right">
                             <div className="text-sm font-semibold text-text">
-                              {s.message_count.toLocaleString()}
+                              {formatNumber(s.message_count)}
                             </div>
                             {s.overlay_id && (
                               <Link
@@ -757,7 +757,7 @@ export default function AdminViewersPage() {
               premiumDialogViewer.premium_expires_at && (
                 <p className="mt-2 text-xs font-medium text-amber-400/80">
                   {t('admin.viewers.premiumExpires', {
-                    timestamp: new Date(premiumDialogViewer.premium_expires_at).toLocaleString(),
+                    timestamp: formatTimestamp(new Date(premiumDialogViewer.premium_expires_at)),
                   })}
                 </p>
               )

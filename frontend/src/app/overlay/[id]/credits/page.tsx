@@ -38,7 +38,7 @@ import Image from 'next/image'
 import { use, useEffect, useState, useRef } from 'react'
 import clsx from 'clsx'
 import Script from 'next/script'
-import { useTranslations, type TFunction } from '@/lib/i18n'
+import { type TFunction, formatDate, formatNumber, useTranslations } from '@/lib/i18n'
 import type { CreditRollResponse, CreditRollConfig, LeaderboardEntry } from '@/lib/types/overlay'
 
 // Decoration: the warning triangle sits above copy naming the failure, and the
@@ -331,7 +331,7 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
             <div className="mt-4 text-slate-400">
               <p>
                 {t('viewerOverlay.credits.session', {
-                  date: new Date(creditData.session_started_at).toLocaleDateString(),
+                  date: formatDate(new Date(creditData.session_started_at)),
                 })}
               </p>
               <p>
@@ -395,7 +395,7 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
                 <div className="flex items-center justify-between text-sm text-slate-400">
                   <span>
                     {t('viewerOverlay.credits.clipViews', {
-                      views: currentClip.view_count.toLocaleString(),
+                      views: formatNumber(currentClip.view_count),
                     })}
                   </span>
                   <span>

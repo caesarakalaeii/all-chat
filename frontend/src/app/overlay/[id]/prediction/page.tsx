@@ -30,7 +30,7 @@ import { use, useCallback, useEffect, useState } from 'react'
 import clsx from 'clsx'
 import type { Prediction } from '@/lib/types/engagement'
 import { useEngagementLive } from '@/lib/hooks/useEngagementLive'
-import { useTranslations } from '@/lib/i18n'
+import { formatNumber, useTranslations } from '@/lib/i18n'
 
 const POLL_INTERVAL_MS = 2000
 // Decoration beside the prediction title; already behind aria-hidden.
@@ -141,7 +141,7 @@ export default function PredictionOverlayPage({ params }: { params: Promise<{ id
                   </span>
                   <span className="tabular-nums">
                     {t('viewerOverlay.predictionWidget.outcomeTally', {
-                      points: o.total_points.toLocaleString(),
+                      points: formatNumber(o.total_points),
                       pct,
                     })}
                   </span>
@@ -153,7 +153,7 @@ export default function PredictionOverlayPage({ params }: { params: Promise<{ id
         <div className="mt-3 flex items-center justify-between text-sm text-white/80">
           <span className="tabular-nums">
             {t('viewerOverlay.predictionWidget.pool', {
-              points: totalPool.toLocaleString(),
+              points: formatNumber(totalPool),
               players: prediction.outcomes.reduce((s, o) => s + o.entrants, 0),
             })}
           </span>

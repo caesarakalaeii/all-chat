@@ -22,7 +22,7 @@ import clsx from 'clsx'
 import { Ban, Clock, Eraser, Gavel, ShieldAlert, Trash2 } from 'lucide-react'
 
 import { CompactEvent } from '@/components/overlay/CompactEvent'
-import { useTranslations, type TFunction } from '@/lib/i18n'
+import { type TFunction, formatTime, useTranslations } from '@/lib/i18n'
 import type { ModEntry, ModKind, ViewItem } from '@/lib/utils/overlayViewModel'
 
 // Typographic quotation marks around the held message. Punctuation, not copy —
@@ -113,7 +113,7 @@ function ModRow({ entry, t }: { entry: ModEntry; t: TFunction }) {
     <div className="border-b border-border/60 bg-youtube/5 px-3 py-1.5 text-sm">
       <div className="flex items-center gap-2">
         <span className="shrink-0 font-mono text-xs text-text-dim tabular-nums select-none">
-          {new Date(entry.at).toLocaleTimeString()}
+          {formatTime(new Date(entry.at))}
         </span>
         <Icon className="h-4 w-4 shrink-0 text-youtube" />
         <span className="rounded bg-youtube/15 px-1.5 py-0.5 text-[10px] font-semibold text-youtube uppercase">

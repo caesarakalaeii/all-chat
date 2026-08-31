@@ -26,7 +26,7 @@ import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PlatformBadge } from '@/components/ui/badge'
 import { DESCRIBED_ADMIN_LINKS } from '@/components/AdminSidebar'
-import { useTranslations } from '@/lib/i18n'
+import { formatNumber, useTranslations } from '@/lib/i18n'
 
 interface AdminStats {
   total_users: number
@@ -60,7 +60,7 @@ function StatCard({
       {value === undefined ? (
         <Skeleton className="h-8 w-16" />
       ) : (
-        <p className="text-3xl font-bold text-text">{value.toLocaleString()}</p>
+        <p className="text-3xl font-bold text-text">{formatNumber(value)}</p>
       )}
     </Card>
   )
@@ -180,7 +180,7 @@ export default function AdminDashboard() {
                   className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-1.5 transition-colors hover:bg-surface-2"
                 >
                   <PlatformBadge platform={platform} size="sm" />
-                  <span className="text-sm font-semibold text-text">{count.toLocaleString()}</span>
+                  <span className="text-sm font-semibold text-text">{formatNumber(count)}</span>
                 </Link>
               ))}
           </div>
