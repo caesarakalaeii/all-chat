@@ -358,12 +358,12 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         if (url) window.location.href = url
       } catch {
         toastManager.add({
-          title: 'Could not start moderation setup. Please try again.',
+          title: t('viewerOverlay.monitor.consentStartFailed'),
           type: 'error',
         })
       }
     },
-    [id]
+    [id, t]
   )
 
   // Opt-in for the Twitch moderation log (channel.moderate + AutoMod holds), which is a
@@ -376,11 +376,11 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
       window.location.href = await moderationApi.getTwitchModLogConsentUrl(id)
     } catch {
       toastManager.add({
-        title: 'Could not start Twitch consent. Please try again.',
+        title: t('viewerOverlay.monitor.twitchConsentStartFailed'),
         type: 'error',
       })
     }
-  }, [id])
+  }, [id, t])
 
   // A delegated moderator connecting their OWN account for a platform (ADR-0048).
   //
@@ -396,12 +396,12 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         if (url) window.location.href = url
       } catch {
         toastManager.add({
-          title: `Connecting ${platform} is not available yet. Ask the streamer to moderate there for now.`,
+          title: t('viewerOverlay.monitor.modConnectUnavailable', { platform }),
           type: 'error',
         })
       }
     },
-    []
+    [t]
   )
 
   // Discord's equivalent of connectAsModerator, and deliberately not the same call: the moderator
@@ -412,12 +412,11 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
       await startDiscordAccountLink('moderate')
     } catch {
       toastManager.add({
-        title:
-          'Linking Discord is not available right now. Ask the streamer to moderate there for now.',
+        title: t('viewerOverlay.monitor.discordLinkUnavailable'),
         type: 'error',
       })
     }
-  }, [])
+  }, [t])
 
   // Re-consent when a send fails with `reauth_required` (the streamer's platform
   // send token expired or was revoked). Chat sending requires the advanced-controls
@@ -442,10 +441,13 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         }
         if (url) window.location.href = url
       } catch {
-        toastManager.add({ title: 'Could not start re-login. Please try again.', type: 'error' })
+        toastManager.add({
+          title: t('viewerOverlay.monitor.reloginStartFailed'),
+          type: 'error',
+        })
       }
     },
-    [id]
+    [id, t]
   )
 
   // Restore the saved theme once on mount.
@@ -541,18 +543,18 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
     setRediscovering(true)
     try {
       await moderationApi.forceYouTubeRediscover(id)
-      toastManager.add({ title: 'Re-discovering YouTube stream…', type: 'success' })
+      toastManager.add({ title: t('viewerOverlay.monitor.rediscoverStarted'), type: 'success' })
     } catch (err) {
       const status = err instanceof ApiError ? err.status : 0
       if (status === 429)
-        toastManager.add({ title: 'Please wait a moment before retrying', type: 'error' })
+        toastManager.add({ title: t('viewerOverlay.monitor.rediscoverRateLimited'), type: 'error' })
       else if (status === 403)
-        toastManager.add({ title: 'Not authorized for this overlay', type: 'error' })
-      else toastManager.add({ title: 'Could not trigger re-discovery', type: 'error' })
+        toastManager.add({ title: t('viewerOverlay.monitor.rediscoverForbidden'), type: 'error' })
+      else toastManager.add({ title: t('viewerOverlay.monitor.rediscoverFailed'), type: 'error' })
     } finally {
       setRediscovering(false)
     }
-  }, [id])
+  }, [id, t])
 
   // --- Optimistic moderation actions ---------------------------------------
 
@@ -573,38 +575,38 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         case 'connect_required':
           // Consent is deferred to first use, so for a moderator this is the expected first click,
           // not a fault. The per-source banner already offers the button; this names the reason.
-          return isModerator ? `Connect your own ${platform} account to moderate here` : null
+          return isModerator ? t('viewerOverlay.monitor.connectRequired', { platform }) : null
         case 'owner_channel_unverified':
           // For a moderator, only the streamer can fix this, so the copy stops at the cause rather
           // than offering a button that would do nothing. An owner can hit it too (the anchor gates
           // their own path on YouTube), and there it is theirs to fix by reconnecting the account.
           return isModerator
-            ? `This streamer's ${platform} account isn't connected, so nothing can be moderated here`
-            : `Your ${platform} account isn't connected for this channel — reconnect it to moderate here`
+            ? t('viewerOverlay.monitor.ownerChannelUnverifiedModerator', { platform })
+            : t('viewerOverlay.monitor.ownerChannelUnverifiedOwner', { platform })
         case 'delegation_unsupported':
-          return `Moderators can't act on ${platform} yet — ask the streamer to handle this one`
+          return t('viewerOverlay.monitor.delegationUnsupported', { platform })
         case 'target_not_actionable':
           // Not about the caller at all — the platform protects this person from everyone, so there
           // is no CTA to offer either role.
-          return `${platform} won't let anyone moderate this person — they're the channel owner or another moderator`
+          return t('viewerOverlay.monitor.targetNotActionable', { platform })
         // Discord's five. The shared bot performs every write there, so All-Chat's own check is
         // the only authority and these codes carry the entire explanation — which makes naming
         // the right person to ask the whole job of this copy.
         case 'discord_link_required':
-          return 'Link your Discord account to moderate here'
+          return t('viewerOverlay.monitor.discordLinkRequired')
         case 'mod_not_in_guild':
-          return "You're not in this Discord server — ask the streamer to invite you"
+          return t('viewerOverlay.monitor.modNotInGuild')
         case 'mod_lacks_permission':
-          return "Your Discord roles don't allow this — ask the streamer for a role that does"
+          return t('viewerOverlay.monitor.modLacksPermission')
         case 'mod_below_target':
-          return "Discord's role hierarchy blocks this — your highest role has to sit above theirs"
+          return t('viewerOverlay.monitor.modBelowTarget')
         case 'bot_missing_permission':
-          return "The All-Chat bot wasn't given this Discord permission — ask the streamer to re-invite it"
+          return t('viewerOverlay.monitor.botMissingPermission')
         default:
           return null
       }
     },
-    [isModerator]
+    [isModerator, t]
   )
 
   // Apply an optimistic mark + log entry, fire the API, and roll back on error.
@@ -649,17 +651,17 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
           // recovery banner and a toast pointing at it (mirrors the chat-send reauth path).
           setReauthPrompt({ platform })
           toastManager.add({
-            title: `${platform} needs you to re-authorize moderation`,
+            title: t('viewerOverlay.monitor.reauthNeededToast', { platform }),
             type: 'error',
           })
         } else if (delegated !== null) {
           toastManager.add({ title: delegated, type: 'error' })
         } else {
-          toastManager.add({ title: 'Moderation action failed', type: 'error' })
+          toastManager.add({ title: t('viewerOverlay.monitor.actionFailed'), type: 'error' })
         }
       }
     },
-    [delegatedFailureMessage]
+    [delegatedFailureMessage, t]
   )
 
   const handleDelete = useCallback(
@@ -674,10 +676,10 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         item.platform,
         meta,
         () => moderationApi.deleteMessage(id, req),
-        'Message deleted'
+        t('viewerOverlay.monitor.messageDeleted')
       )
     },
-    [id, runModeration]
+    [id, runModeration, t]
   )
 
   const handleTimeout = useCallback(
@@ -693,10 +695,12 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         item.platform,
         meta,
         () => moderationApi.timeoutUser(id, req),
-        `Timed out ${req.target_username || 'user'}`
+        t('viewerOverlay.monitor.timedOut', {
+          name: req.target_username || t('viewerOverlay.monitor.unnamedTarget'),
+        })
       )
     },
-    [id, runModeration]
+    [id, runModeration, t]
   )
 
   const handleBan = useCallback(
@@ -712,35 +716,45 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         item.platform,
         meta,
         () => moderationApi.banUser(id, req),
-        `Banned ${req.target_username || 'user'}`
+        t('viewerOverlay.monitor.banned', {
+          name: req.target_username || t('viewerOverlay.monitor.unnamedTarget'),
+        })
       )
     },
-    [id, runModeration]
+    [id, runModeration, t]
   )
 
   // Unban has no message-level visual mark; just fire and toast.
   const handleUnban = useCallback(
     (item: ViewItem) => {
-      const name = item.user?.display_name || item.user?.username || 'user'
+      const name =
+        item.user?.display_name || item.user?.username || t('viewerOverlay.monitor.unnamedTarget')
       moderationApi
         .unbanUser(id, buildUnbanRequest(item))
-        .then(() => toastManager.add({ title: `Unbanned ${name}`, type: 'success' }))
+        .then(() =>
+          toastManager.add({
+            title: t('viewerOverlay.monitor.unbanned', { name }),
+            type: 'success',
+          })
+        )
         .catch((err) => {
           const delegated = delegatedFailureMessage(err, item.platform)
           if (isModerationReauthError(err)) {
             setReauthPrompt({ platform: item.platform })
             toastManager.add({
-              title: `${item.platform} needs you to re-authorize moderation`,
+              title: t('viewerOverlay.monitor.reauthNeededToast', {
+                platform: item.platform,
+              }),
               type: 'error',
             })
           } else if (delegated !== null) {
             toastManager.add({ title: delegated, type: 'error' })
           } else {
-            toastManager.add({ title: 'Unban failed', type: 'error' })
+            toastManager.add({ title: t('viewerOverlay.monitor.unbanFailed'), type: 'error' })
           }
         })
     },
-    [id, delegatedFailureMessage]
+    [id, delegatedFailureMessage, t]
   )
 
   // Only owners in the rollout cohort get live action callbacks; everyone else

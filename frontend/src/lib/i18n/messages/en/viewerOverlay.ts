@@ -454,6 +454,57 @@ export const viewerOverlay = {
       'Your {platform} moderation permission expired or was never granted \u2014 re-authorize to keep moderating here.',
     reconnectPlatform: 'Reconnect {platform}',
     reauthorizeModeration: 'Re-authorize moderation & chat sending',
+
+    // Toasts raised when a consent flow cannot even be started.
+    consentStartFailed: 'Could not start moderation setup. Please try again.',
+    twitchConsentStartFailed: 'Could not start Twitch consent. Please try again.',
+    modConnectUnavailable:
+      'Connecting {platform} is not available yet. Ask the streamer to moderate there for now.',
+    discordLinkUnavailable:
+      'Linking Discord is not available right now. Ask the streamer to moderate there for now.',
+    reloginStartFailed: 'Could not start re-login. Please try again.',
+
+    // U+2026 ellipsis.
+    rediscoverStarted: 'Re-discovering YouTube stream\u2026',
+    rediscoverRateLimited: 'Please wait a moment before retrying',
+    rediscoverForbidden: 'Not authorized for this overlay',
+    rediscoverFailed: 'Could not trigger re-discovery',
+
+    // Outcomes of a moderation action. The platform is the raw lowercase wire
+    // value, which is what renders today.
+    reauthNeededToast: '{platform} needs you to re-authorize moderation',
+    actionFailed: 'Moderation action failed',
+    messageDeleted: 'Message deleted',
+    timedOut: 'Timed out {name}',
+    banned: 'Banned {name}',
+    unbanned: 'Unbanned {name}',
+    unbanFailed: 'Unban failed',
+    // Stands in for the target's name when the request carries neither a
+    // username nor a display name.
+    unnamedTarget: 'user',
+
+    // Delegated-moderation failures (ADR-0048), one whole sentence per code.
+    connectRequired: 'Connect your own {platform} account to moderate here',
+    // Two sentences rather than one: the moderator is told only the cause,
+    // because only the streamer can fix it, while the owner is told the remedy.
+    ownerChannelUnverifiedModerator:
+      "This streamer's {platform} account isn't connected, so nothing can be moderated here",
+    ownerChannelUnverifiedOwner:
+      "Your {platform} account isn't connected for this channel \u2014 reconnect it to moderate here",
+    delegationUnsupported:
+      "Moderators can't act on {platform} yet \u2014 ask the streamer to handle this one",
+    targetNotActionable:
+      "{platform} won't let anyone moderate this person \u2014 they're the channel owner or another moderator",
+    // Discord's five. The shared bot performs every write there, so these codes
+    // carry the whole explanation and name the person to ask.
+    discordLinkRequired: 'Link your Discord account to moderate here',
+    modNotInGuild: "You're not in this Discord server \u2014 ask the streamer to invite you",
+    modLacksPermission:
+      "Your Discord roles don't allow this \u2014 ask the streamer for a role that does",
+    modBelowTarget:
+      "Discord's role hierarchy blocks this \u2014 your highest role has to sit above theirs",
+    botMissingPermission:
+      "The All-Chat bot wasn't given this Discord permission \u2014 ask the streamer to re-invite it",
   },
 
   // Streamer-facing system notices rendered inside an event body. The event's
