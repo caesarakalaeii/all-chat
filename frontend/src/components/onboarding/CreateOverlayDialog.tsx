@@ -35,6 +35,7 @@ import { useOverlayStore } from '@/lib/stores/overlay-store'
 import { useOnboardingStore } from '@/lib/stores/onboarding-store'
 import { trackEvent } from '@/lib/analytics'
 import { toastManager } from '@/lib/toast'
+import { useTranslations } from '@/lib/i18n'
 
 export interface CreateOverlayDialogProps {
   open: boolean
@@ -42,6 +43,7 @@ export interface CreateOverlayDialogProps {
 }
 
 export function CreateOverlayDialog({ open, onOpenChange }: CreateOverlayDialogProps) {
+  const t = useTranslations()
   const router = useRouter()
   const createOverlay = useOverlayStore((s) => s.createOverlay)
   const setActiveOverlay = useOnboardingStore((s) => s.setActiveOverlay)
@@ -73,13 +75,11 @@ export function CreateOverlayDialog({ open, onOpenChange }: CreateOverlayDialogP
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <DialogTitle>Create your overlay</DialogTitle>
-        <DialogDescription>
-          Give it a name — you&apos;ll connect your chat right after.
-        </DialogDescription>
+        <DialogTitle>{t('onboarding.createDialog.title')}</DialogTitle>
+        <DialogDescription>{t('onboarding.createDialog.body')}</DialogDescription>
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           <Field.Root>
-            <Field.Label>Overlay name</Field.Label>
+            <Field.Label>{t('onboarding.createDialog.nameLabel')}</Field.Label>
             <Field.Control
               render={
                 <Input
@@ -92,10 +92,12 @@ export function CreateOverlayDialog({ open, onOpenChange }: CreateOverlayDialogP
           </Field.Root>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
-              Cancel
+              {t('onboarding.createDialog.cancel')}
             </Button>
             <Button type="submit" variant="gradient" disabled={!name.trim() || submitting}>
-              {submitting ? 'Creating…' : 'Create overlay'}
+              {submitting
+                ? t('onboarding.createDialog.submitting')
+                : t('onboarding.createDialog.submit')}
             </Button>
           </div>
         </form>

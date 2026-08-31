@@ -328,24 +328,6 @@
       "count": 8
     }
   },
-  "src/components/onboarding/CreateOverlayDialog.tsx": {
-    "react/jsx-no-literals": {
-      "count": 4
-    }
-  },
-  "src/components/onboarding/ObsHelpContent.tsx": {
-    "react/jsx-no-literals": {
-      "count": 5
-    }
-  },
-  "src/components/onboarding/OnboardingChecklist.tsx": {
-    "no-restricted-syntax": {
-      "count": 2
-    },
-    "react/jsx-no-literals": {
-      "count": 39
-    }
-  },
   "src/components/overlay/ActivityPanel.tsx": {
     "react/jsx-no-literals": {
       "count": 5

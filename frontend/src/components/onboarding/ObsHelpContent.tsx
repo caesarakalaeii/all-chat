@@ -22,19 +22,21 @@
  * copy can never drift between the two.
  */
 
+import { useTranslations } from '@/lib/i18n'
+import { interpolateElements } from '@/lib/i18n/emphasise'
+
 export function ObsHelpContent() {
+  const t = useTranslations()
   return (
     <ol className="list-decimal space-y-1.5 pl-5 text-sm text-text-sub">
       <li>
-        In OBS, click <strong className="text-text">+</strong> under Sources and choose{' '}
-        <strong className="text-text">Browser</strong>.
+        {interpolateElements(t('onboarding.obs.step1'), {
+          plus: <strong className="text-text">{t('onboarding.obs.step1Plus')}</strong>,
+          browser: <strong className="text-text">{t('onboarding.obs.step1Browser')}</strong>,
+        })}
       </li>
-      <li>Paste the copied overlay link into the URL field.</li>
-      <li>
-        Size the source to the area chat should fill (a tall, narrow box like 450×800 works well,
-        not your full canvas), then drag it into place. Chat appears as soon as the overlay
-        connects.
-      </li>
+      <li>{t('onboarding.obs.step2')}</li>
+      <li>{t('onboarding.obs.step3')}</li>
     </ol>
   )
 }
