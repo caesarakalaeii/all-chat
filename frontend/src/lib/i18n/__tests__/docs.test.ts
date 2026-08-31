@@ -40,3 +40,16 @@ describe('docs field table copy', () => {
     expect(t('docs.fieldTable.columnDescription')).toBe('Description')
   })
 })
+
+describe('theme contrast harness copy', () => {
+  it('keeps the dev harness header', () => {
+    // /dev/theme-contrast is a developer tool, so its copy sits with the other
+    // developer-facing surfaces rather than in a user namespace.
+    expect(t('docs.themeContrast.heading')).toBe('Theme contrast harness')
+    // One sentence with the count as a param: 'themes.' was a separate JSX run
+    // after the number, which a language that puts the noun first cannot move.
+    expect(t('docs.themeContrast.intro', { count: 34 })).toBe(
+      'Dev-only. Renders every bundled theme for the message-text WCAG gate. 34 themes.'
+    )
+  })
+})

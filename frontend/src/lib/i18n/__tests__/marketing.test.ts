@@ -282,3 +282,42 @@ describe('login failures', () => {
     )
   })
 })
+
+describe('theme switcher copy', () => {
+  it('keeps the section heading and carousel labels', () => {
+    expect(t('marketing.themeSwitcher.heading')).toBe('Themes')
+    expect(t('marketing.themeSwitcher.carouselLabel')).toBe('Featured themes')
+    expect(t('marketing.themeSwitcher.dotsGroupLabel')).toBe('Choose a theme')
+    expect(t('marketing.themeSwitcher.pauseLabel')).toBe('Pause theme rotation')
+    expect(t('marketing.themeSwitcher.resumeLabel')).toBe('Resume theme rotation')
+    expect(t('marketing.themeSwitcher.showThemeLabel', { theme: 'Minimal' })).toBe('Show Minimal')
+  })
+
+  it('keeps the four showcase theme names', () => {
+    // The showcase table carried these as module data, so the gate never saw
+    // them. They are the labels the dot buttons announce.
+    expect(t('marketing.themeSwitcher.showcaseMinimal')).toBe('Minimal')
+    expect(t('marketing.themeSwitcher.showcaseComic')).toBe('Comic')
+    expect(t('marketing.themeSwitcher.showcaseStickyNotes')).toBe('Sticky Notes')
+    expect(t('marketing.themeSwitcher.showcaseModernDark')).toBe('Modern Dark')
+  })
+
+  it('keeps the two captions whole, with their links as params', () => {
+    // The first caption was five JSX runs around two <Link>s; the second three
+    // around an <a>. interpolateElements splits the unresolved template so each
+    // link lands where the language puts it, and the count stays a param.
+    expect(
+      t('marketing.themeSwitcher.customiseCaption', {
+        count: 34,
+        gui: 'point-and-click',
+        css: 'write your own CSS',
+      })
+    ).toBe('34 built-in themes — restyle any point-and-click, or write your own CSS.')
+    expect(t('marketing.themeSwitcher.customiseGuiLink')).toBe('point-and-click')
+    expect(t('marketing.themeSwitcher.customiseCssLink')).toBe('write your own CSS')
+    expect(t('marketing.themeSwitcher.portCaption', { discord: 'Ask on Discord' })).toBe(
+      "Coming from another tool? Ask on Discord and we'll port your theme."
+    )
+    expect(t('marketing.themeSwitcher.portDiscordLink')).toBe('Ask on Discord')
+  })
+})

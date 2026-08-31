@@ -121,3 +121,51 @@ describe('cookie banner disclosure list', () => {
     expect(t('legal.cookieBanner.termsOfService')).toBe('Terms of Service')
   })
 })
+
+describe('legal layout chrome copy', () => {
+  it('keeps the eyebrow, last-updated line and copyright', () => {
+    expect(t('legal.layout.eyebrow')).toBe('All-Chat Legal')
+    // One sentence: 'Last updated:' and the date were JSX siblings.
+    expect(t('legal.layout.lastUpdated', { date: '13 July 2026' })).toBe(
+      'Last updated: 13 July 2026'
+    )
+    // The © came from a &copy; entity, and the year and the product name sat
+    // either side of it as separate runs. One string with the year as a param.
+    expect(t('legal.layout.copyright', { year: 2026 })).toBe('\u00A9 2026 All-Chat')
+  })
+
+  it('keeps the four footer links', () => {
+    expect(t('legal.layout.homeLink')).toBe('Home')
+    expect(t('legal.layout.privacyLink')).toBe('Privacy Policy')
+    expect(t('legal.layout.termsLink')).toBe('Terms of Service')
+    expect(t('legal.layout.impressumLink')).toBe('Impressum')
+  })
+})
+
+describe('impressum fallback copy', () => {
+  it('keeps the page title and metadata', () => {
+    expect(t('legal.impressum.title')).toBe('Impressum')
+    expect(t('metadata.impressum.title')).toBe('Impressum | All-Chat')
+    expect(t('metadata.impressum.description')).toBe(
+      'Legal notice (Impressum) as required by \u00A7 5 DDG.'
+    )
+  })
+
+  it('keeps the not-configured notice with both paths as params', () => {
+    // The Impressum body itself is mounted at runtime and is not in this repo;
+    // only this fallback is migratable. The operator hint was five JSX runs
+    // around two <code> elements, so it becomes one sentence with the file path
+    // and the variable name as params.
+    expect(t('legal.impressum.notConfigured')).toBe(
+      'The Impressum for this instance has not been configured yet.'
+    )
+    expect(
+      t('legal.impressum.operatorHint', {
+        path: '/etc/allchat/impressum.html',
+        variable: 'IMPRESSUM_FILE_PATH',
+      })
+    ).toBe(
+      'If you are the operator: mount a ConfigMap containing your Impressum HTML to /etc/allchat/impressum.html or set the IMPRESSUM_FILE_PATH environment variable. See the deployment documentation for details.'
+    )
+  })
+})
