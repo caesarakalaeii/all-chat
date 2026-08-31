@@ -364,3 +364,518 @@ describe('terms of service link text', () => {
     expect(t('legal.terms.patreonLinkText')).toBe('Patreon')
   })
 })
+
+describe('privacy policy headings', () => {
+  it('keeps the page title, the effective date and the metadata', () => {
+    // &auml; in the source title.
+    expect(t('legal.privacy.title')).toBe('Privacy Policy (Datenschutzerkl\u00E4rung)')
+    expect(t('legal.privacy.lastUpdated')).toBe('July 30, 2026')
+    expect(t('metadata.privacy.title')).toBe('Privacy Policy | All-Chat')
+    expect(t('metadata.privacy.description')).toBe(
+      'Learn how All-Chat collects, processes, and protects your information.'
+    )
+  })
+
+  it('keeps all fourteen numbered section headings', () => {
+    // Every DSGVO article reference is separated by a U+00A0 from an &nbsp;.
+    expect(t('legal.privacy.controllerHeading')).toBe(
+      '1. Controller (Verantwortlicher, Art.\u00A04 Nr.\u00A07 DSGVO)'
+    )
+    expect(t('legal.privacy.collectHeading')).toBe('2. Information We Collect')
+    expect(t('legal.privacy.useHeading')).toBe('3. How We Use Your Information')
+    expect(t('legal.privacy.storageHeading')).toBe('4. Data Storage & Security')
+    expect(t('legal.privacy.sharingHeading')).toBe('5. Data Sharing & Third Parties')
+    expect(t('legal.privacy.retentionHeading')).toBe('6. Data Retention')
+    expect(t('legal.privacy.rightsHeading')).toBe('7. Your Rights (Art.\u00A015\u201321 DSGVO)')
+    expect(t('legal.privacy.cookiesHeading')).toBe('8. Cookies, Browser Storage & Analytics')
+    expect(t('legal.privacy.childrenHeading')).toBe("9. Children's Privacy")
+    expect(t('legal.privacy.transfersHeading')).toBe('10. International Data Transfers')
+    expect(t('legal.privacy.updatesHeading')).toBe('11. Updates')
+    expect(t('legal.privacy.openSourceHeading')).toBe('12. Transparency & Open Source')
+    expect(t('legal.privacy.platformNotesHeading')).toBe('13. Platform-Specific Notes')
+    expect(t('legal.privacy.contactHeading')).toBe('14. Contact')
+  })
+
+  it('keeps every subsection heading', () => {
+    expect(t('legal.privacy.authSubheading')).toBe('2.1 Authentication Information')
+    expect(t('legal.privacy.chatSubheading')).toBe('2.2 Chat Data')
+    expect(t('legal.privacy.overlaySubheading')).toBe('2.3 Overlay Configuration')
+    expect(t('legal.privacy.viewerIdentitySubheading')).toBe('2.4 Cross-Platform Viewer Identity')
+    expect(t('legal.privacy.logDataSubheading')).toBe('2.5 Usage & Log Data')
+    expect(t('legal.privacy.patreonSubheading')).toBe('2.6 Premium Membership (Patreon)')
+    expect(t('legal.privacy.storageLocationsSubheading')).toBe('4.1 Storage Locations')
+    expect(t('legal.privacy.safeguardsSubheading')).toBe('4.2 Safeguards')
+    expect(t('legal.privacy.platformApisSubheading')).toBe('5.1 Streaming Platform APIs')
+    expect(t('legal.privacy.fontsSubheading')).toBe('5.2 Fonts (Self-Hosted)')
+    expect(t('legal.privacy.frontendResourcesSubheading')).toBe(
+      '5.3 Third-Party Frontend Resources'
+    )
+    expect(t('legal.privacy.youtubeNoticeSubheading')).toBe('5.4 YouTube-Specific Notice')
+    expect(t('legal.privacy.noSalesSubheading')).toBe('5.5 No Data Sales')
+    expect(t('legal.privacy.analyticsSubheading')).toBe(
+      '5.6 Usage Analytics (Self-Hosted, Cookieless)'
+    )
+    expect(t('legal.privacy.twitchSubheading')).toBe('Twitch')
+    expect(t('legal.privacy.youtubeSubheading')).toBe('YouTube')
+    expect(t('legal.privacy.tiktokSubheading')).toBe('TikTok')
+    expect(t('legal.privacy.kickSubheading')).toBe('Kick')
+    expect(t('legal.privacy.discordSubheading')).toBe('Discord')
+  })
+})
+
+describe('privacy policy summary callouts', () => {
+  it('keeps the TL;DR box whole', () => {
+    expect(t('legal.privacy.tldr', { label: 'TL;DR:' })).toBe(
+      'TL;DR: All-Chat only collects the information we need to authenticate with your streaming platforms and render chat in your overlays. Tokens are encrypted, chat messages are automatically deleted after one hour, and we never sell your data. We use cookieless, self-hosted analytics (no tracking cookies; see Section\u00A05.6).'
+    )
+    expect(t('legal.privacy.tldrLabel')).toBe('TL;DR:')
+  })
+
+  it('keeps the open source box, both em dashes included', () => {
+    expect(
+      t('legal.privacy.openSourceCallout', { label: 'Open Source Transparency:', github: 'GitHub' })
+    ).toBe(
+      'Open Source Transparency: All-Chat is licensed under AGPL-3.0. Review the entire codebase\u2014including how we store and process your data\u2014on GitHub.'
+    )
+    expect(t('legal.privacy.openSourceCalloutLabel')).toBe('Open Source Transparency:')
+    expect(t('legal.privacy.githubLinkText')).toBe('GitHub')
+  })
+})
+
+describe('privacy policy legal bases', () => {
+  it('keeps each legal-basis line whole, article reference included', () => {
+    // These are the statutory grounds for each kind of processing. Each is one
+    // key: the article number and the reason it applies are one statement.
+    expect(t('legal.privacy.authLegalBasis')).toBe(
+      'Legal basis: Art.\u00A06(1)(b) DSGVO \u2013 performance of a contract (providing the service you signed up for).'
+    )
+    expect(t('legal.privacy.chatLegalBasis')).toBe(
+      'Legal basis: Art.\u00A06(1)(b) DSGVO (service delivery) and Art.\u00A06(1)(f) DSGVO (legitimate interest in abuse prevention).'
+    )
+    expect(t('legal.privacy.overlayLegalBasis')).toBe('Legal basis: Art.\u00A06(1)(b) DSGVO.')
+    expect(t('legal.privacy.viewerIdentityLegalBasis')).toBe(
+      'Legal basis: Art.\u00A06(1)(a) DSGVO \u2013 your consent. You can unlink platforms at any time from the viewer settings.'
+    )
+    expect(t('legal.privacy.logDataLegalBasis')).toBe(
+      'Legal basis: Art.\u00A06(1)(f) DSGVO \u2013 legitimate interest in maintaining service security and availability.'
+    )
+    expect(t('legal.privacy.fontsLegalBasis')).toBe(
+      'Legal basis: Art.\u00A06(1)(f) DSGVO \u2013 legitimate interest in delivering the visual appearance of the overlay. The font files themselves are licensed under the SIL Open Font License 1.1 or Apache 2.0.'
+    )
+    expect(t('legal.privacy.frontendResourcesLegalBasis')).toBe(
+      'Legal basis: Art.\u00A06(1)(f) DSGVO \u2013 legitimate interest in providing a functional and visually complete overlay experience. You can avoid loading these by not opening the theme marketplace. Fallback avatars (shown when a platform avatar is unavailable) are generated locally in your browser and involve no external request.'
+    )
+    expect(t('legal.privacy.patreonLegalBasis', { patreonPolicy: 'Patreon Privacy Policy' })).toBe(
+      'Legal basis: Art.\u00A06(1)(b) DSGVO \u2013 providing the premium features you subscribed to. For the data you provide on patreon.com itself, Patreon, Inc. (US) is an independent controller; see the Patreon Privacy Policy.'
+    )
+    expect(t('legal.privacy.patreonPolicyLinkText')).toBe('Patreon Privacy Policy')
+  })
+})
+
+describe('privacy policy collection sections', () => {
+  it('keeps section 1 with both links', () => {
+    expect(
+      t('legal.privacy.controllerBody', {
+        impressum: 'Impressum',
+        email: 'all.chat.support@gmail.com',
+      })
+    ).toBe(
+      'The person responsible for data processing on this website is listed in the Impressum. For privacy-related inquiries contact all.chat.support@gmail.com.'
+    )
+    expect(t('legal.privacy.impressumLinkText')).toBe('Impressum')
+    expect(t('legal.privacy.supportEmail')).toBe('all.chat.support@gmail.com')
+  })
+
+  it('keeps the authentication data list', () => {
+    expect(t('legal.privacy.authIntro')).toBe(
+      'When you connect Twitch, YouTube, TikTok, Kick, or Discord we store the minimum data required to create overlays and reconnect later:'
+    )
+    expect(t('legal.privacy.authIdentifiers')).toBe(
+      'Platform identifiers (user ID, username, display name)'
+    )
+    expect(t('legal.privacy.authProfileImages')).toBe('Profile images provided by the platform')
+    expect(t('legal.privacy.authTokens')).toBe('Encrypted OAuth access and refresh tokens')
+    expect(t('legal.privacy.authScopes')).toBe('Token scopes and expiration dates')
+  })
+
+  it('keeps the chat data list and its retention sentence', () => {
+    expect(t('legal.privacy.chatIntro')).toBe('For active overlays we temporarily process:')
+    expect(t('legal.privacy.chatMessages')).toBe('Messages flowing through connected channels')
+    expect(t('legal.privacy.chatMetadata')).toBe(
+      'Message metadata (timestamps, emotes, badges, highlights)'
+    )
+    expect(t('legal.privacy.chatAuthor')).toBe(
+      'Per-message author details (display name, color, avatar)'
+    )
+    expect(
+      t('legal.privacy.chatRetention', { emphasis: 'automatically deleted after one hour' })
+    ).toBe(
+      'Chat messages sent through All-Chat are logged for rate-limiting and abuse detection and automatically deleted after one hour. Messages displayed in the overlay are streamed through memory and are not persisted once the overlay session ends.'
+    )
+    expect(t('legal.privacy.chatRetentionEmphasis')).toBe('automatically deleted after one hour')
+  })
+
+  it('keeps the overlay configuration list', () => {
+    expect(t('legal.privacy.overlayIntro')).toBe('To render and sync overlays we store:')
+    expect(t('legal.privacy.overlayNames')).toBe(
+      'Overlay names, IDs, and custom CSS or theme settings'
+    )
+    expect(t('legal.privacy.overlaySources')).toBe(
+      'Connected chat sources (platform, channel ID, channel name)'
+    )
+    expect(t('legal.privacy.overlayFilters')).toBe(
+      'Filter settings (blocked words, user-level rules)'
+    )
+  })
+
+  it('keeps the viewer identity paragraph and its opt-in emphasis', () => {
+    // e.g.&nbsp;Twitch: the no-break space after "e.g." is in the rendered text.
+    expect(
+      t('legal.privacy.viewerIdentityBody', {
+        emphasis: 'opt-in only and requires your explicit action',
+      })
+    ).toBe(
+      'If you choose to link multiple platform accounts as a viewer (e.g.\u00A0Twitch + YouTube), we create a unified viewer profile that associates your platform identities. This is opt-in only and requires your explicit action.'
+    )
+    expect(t('legal.privacy.viewerIdentityEmphasis')).toBe(
+      'opt-in only and requires your explicit action'
+    )
+  })
+
+  it('keeps the log data list', () => {
+    expect(t('legal.privacy.logDataIntro')).toBe('For observability and abuse prevention we log:')
+    expect(t('legal.privacy.logDataIp')).toBe(
+      'Anonymised IP address (last octet zeroed), browser user agent, and basic request info'
+    )
+    expect(t('legal.privacy.logDataMetrics')).toBe(
+      'API usage metrics, cache hits, and connection status'
+    )
+    expect(t('legal.privacy.logDataTraces')).toBe(
+      'Error traces and diagnostic logs (retained up to 90 days)'
+    )
+  })
+
+  it('keeps the Patreon section', () => {
+    expect(t('legal.privacy.patreonIntro')).toBe(
+      'Premium features are unlocked through a paid membership on Patreon. If you connect your Patreon account to All-Chat, we store:'
+    )
+    expect(t('legal.privacy.patreonUserId')).toBe('Your Patreon user ID')
+    expect(t('legal.privacy.patreonTokens')).toBe(
+      'Encrypted OAuth access and refresh tokens for the Patreon API'
+    )
+    expect(t('legal.privacy.patreonMembership')).toBe(
+      'Your membership state for our campaign (status, tier, pledge amount, renewal date)'
+    )
+    expect(t('legal.privacy.patreonNoPaymentData', { not: 'not' })).toBe(
+      'We do not receive or store your payment details; payments are processed entirely by Patreon. Patreon notifies us via webhooks when your membership changes, and a periodic reconciliation keeps the state current. Disconnecting Patreon in the Settings page deletes the stored tokens and revokes subscription-derived premium.'
+    )
+    expect(t('legal.privacy.notEmphasis')).toBe('not')
+  })
+})
+
+describe('privacy policy usage, storage and sharing', () => {
+  it('keeps the how-we-use list', () => {
+    expect(t('legal.privacy.useIntro')).toBe(
+      'Everything we store directly supports the core overlay experience:'
+    )
+    expect(t('legal.privacy.useAuthenticate')).toBe(
+      'Authenticate against the platforms you authorize'
+    )
+    expect(t('legal.privacy.useFetch')).toBe(
+      'Fetch live chat messages and normalize them into a single feed'
+    )
+    expect(t('legal.privacy.useRender')).toBe(
+      'Render overlays, perform emote lookups, and respect your filters'
+    )
+    expect(t('legal.privacy.useMonitor')).toBe('Monitor service reliability and debug incidents')
+    expect(t('legal.privacy.useAbuse')).toBe('Detect and prevent abuse (rate-limiting, bans)')
+  })
+
+  it('keeps both storage lists and the no-system-is-secure note', () => {
+    expect(t('legal.privacy.storagePostgres')).toBe(
+      'PostgreSQL for account data, overlays, and encrypted OAuth tokens'
+    )
+    expect(t('legal.privacy.storageRedis')).toBe(
+      'Redis for ephemeral sessions, message fan-out, and rate limiting'
+    )
+    expect(t('legal.privacy.storageLocation', { country: 'Germany' })).toBe(
+      'All of the above runs on our own infrastructure on servers located in Germany (hosting provider: Hetzner Online GmbH)'
+    )
+    expect(t('legal.privacy.storageCountry')).toBe('Germany')
+    expect(t('legal.privacy.safeguardsEncryption')).toBe(
+      'OAuth tokens encrypted with AES-GCM before touching the database'
+    )
+    expect(t('legal.privacy.safeguardsHttps')).toBe(
+      'HTTPS at the ingress layer for all external traffic; internal services isolated via Kubernetes network policies'
+    )
+    expect(t('legal.privacy.safeguardsAccess')).toBe(
+      'Role-scoped infrastructure access and audit logging'
+    )
+    expect(t('legal.privacy.safeguardsPatching')).toBe(
+      'Regular dependency upgrades and security patching'
+    )
+    expect(t('legal.privacy.safeguardsHeaders')).toBe(
+      'Security headers (X-Content-Type-Options, X-Frame-Options, Referrer-Policy)'
+    )
+    expect(t('legal.privacy.safeguardsCaveat')).toBe(
+      'No storage system is perfectly secure, but we follow industry best practices to keep your tokens and overlays safe.'
+    )
+  })
+
+  it('keeps the platform API list and its scopes note', () => {
+    expect(t('legal.privacy.platformApisIntro')).toBe(
+      'We connect to the following services to deliver the core product:'
+    )
+    expect(t('legal.privacy.platformApisTwitch')).toBe('Twitch EventSub and Helix APIs')
+    expect(t('legal.privacy.platformApisYoutube')).toBe('YouTube Live Chat and OAuth APIs')
+    expect(t('legal.privacy.platformApisTiktokKick')).toBe('TikTok Live APIs and Kick APIs')
+    expect(t('legal.privacy.platformApisDiscord')).toBe('Discord Gateway API')
+    expect(t('legal.privacy.platformApisEmotes')).toBe('7TV, BTTV, FFZ for emote metadata')
+    expect(t('legal.privacy.platformApisScopes')).toBe(
+      "Every integration remains subject to the platform's own policies and scopes you approve."
+    )
+  })
+
+  it('keeps the self-hosted fonts paragraph and its Munich ruling reference', () => {
+    // Three runs plus a <code> path in one sentence, and &uuml; in Muenchen.
+    expect(
+      t('legal.privacy.fontsBody', {
+        selfHosted: 'self-hosted on our infrastructure',
+        proxyPath: '/font-proxy/*',
+        noTransmission: 'no IP address, user agent, or request metadata is transmitted to Google',
+      })
+    ).toBe(
+      'Typography assets originally distributed by Google Fonts are self-hosted on our infrastructure. The fonts used by the All-Chat interface are bundled at build time via Next.js, and fonts selectable for overlay customization are served through a server-side proxy at /font-proxy/*. Your browser only connects to the All-Chat origin; no IP address, user agent, or request metadata is transmitted to Google when fonts are loaded. This aligns with the Landgericht M\u00FCnchen I ruling on Google Fonts (20 January 2022, Az. 3 O 17493/20).'
+    )
+    expect(t('legal.privacy.fontsSelfHostedEmphasis')).toBe('self-hosted on our infrastructure')
+    expect(t('legal.privacy.fontsNoTransmissionEmphasis')).toBe(
+      'no IP address, user agent, or request metadata is transmitted to Google'
+    )
+  })
+
+  it('keeps the third-party frontend resource disclosure', () => {
+    expect(t('legal.privacy.frontendResourcesIntro', { emphasis: 'IP address' })).toBe(
+      'Overlay and dashboard pages may load the following external resources. Each request transmits your IP address and browser user agent to the respective provider:'
+    )
+    expect(t('legal.privacy.ipAddressEmphasis')).toBe('IP address')
+    expect(t('legal.privacy.frontendResourcesGithub', { label: 'GitHub API' })).toBe(
+      'GitHub API (api.github.com) \u2013 fetches community themes from our public repository in the theme marketplace'
+    )
+    expect(t('legal.privacy.githubApiLabel')).toBe('GitHub API')
+  })
+
+  it('keeps the YouTube-specific notice and the no-data-sales note', () => {
+    expect(
+      t('legal.privacy.youtubeNoticeBody', { googlePolicy: 'Google Privacy Policy', not: 'not' })
+    ).toBe(
+      "Your use of All-Chat's YouTube integration is also governed by the Google Privacy Policy. This applies only to the YouTube API integration (data flows described in Section 5.1); it does not apply to fonts, which are self-hosted as described in Section 5.2."
+    )
+    expect(t('legal.privacy.googlePolicyLinkText')).toBe('Google Privacy Policy')
+    expect(t('legal.privacy.noSalesBody')).toBe(
+      'We never sell or rent your data. We may disclose information when required by law or to respond to legitimate security incidents.'
+    )
+  })
+
+  it('keeps the whole cookieless analytics disclosure', () => {
+    expect(
+      t('legal.privacy.analyticsBody', {
+        umami: 'Umami',
+        selfHost: 'host ourselves',
+        cookieless: 'cookieless',
+        notShared: 'not shared with any third party',
+      })
+    ).toBe(
+      'To understand how the site is used and where to improve it, we run Umami, an open-source analytics tool that we host ourselves. It is cookieless: it sets no cookies, creates no persistent identifier, and performs no cross-site or cross-device tracking. The data is processed on our own infrastructure and is not shared with any third party (unlike Google Analytics or similar services).'
+    )
+    expect(t('legal.privacy.umamiLinkText')).toBe('Umami')
+    expect(t('legal.privacy.analyticsSelfHostEmphasis')).toBe('host ourselves')
+    expect(t('legal.privacy.analyticsCookielessEmphasis')).toBe('cookieless')
+    expect(t('legal.privacy.analyticsNotSharedEmphasis')).toBe('not shared with any third party')
+    expect(t('legal.privacy.analyticsRecordsIntro')).toBe(
+      'For each page view it records aggregate, non-identifying information:'
+    )
+    expect(t('legal.privacy.analyticsRecordsPage')).toBe(
+      'The page you visited and the referring URL'
+    )
+    expect(t('legal.privacy.analyticsRecordsBrowser')).toBe(
+      'Browser, operating system, device type, and screen size'
+    )
+    expect(t('legal.privacy.analyticsRecordsCountry')).toBe(
+      'Approximate country, derived from your IP address at request time'
+    )
+    expect(
+      t('legal.privacy.analyticsIpNote', { ipNotStored: 'IP address is not stored', not: 'not' })
+    ).toBe(
+      'Your IP address is not stored: it is used only momentarily to derive the country and to generate a daily, salted hash for counting unique visits, after which it is discarded. We do not track public overlay views (the pages OBS loads as a browser source). You can block the analytics script with any browser content blocker without affecting the site.'
+    )
+    expect(t('legal.privacy.analyticsIpNotStoredEmphasis')).toBe('IP address is not stored')
+    // &sect; and the &nbsp; after it are both part of the rendered text.
+    expect(t('legal.privacy.analyticsConsentNote')).toBe(
+      'Because the tracker stores no information on, and reads none from, your device, it does not require consent under \u00A7\u00A025 TDDDG; the processing of the resulting data rests on Art.\u00A06(1)(f) DSGVO \u2013 our legitimate interest in measuring and improving the service.'
+    )
+  })
+})
+
+describe('privacy policy retention, rights and the rest', () => {
+  it('keeps each retention row with its bolded label inside the sentence', () => {
+    expect(t('legal.privacy.retentionAccount', { label: 'Account & overlay data:' })).toBe(
+      'Account & overlay data: kept until you delete your account'
+    )
+    expect(t('legal.privacy.retentionAccountLabel')).toBe('Account & overlay data:')
+    expect(t('legal.privacy.retentionTokens', { label: 'OAuth tokens:' })).toBe(
+      'OAuth tokens: deleted when you disconnect a platform, when they expire (cleaned up after 7 days), or when you delete your account'
+    )
+    expect(t('legal.privacy.retentionTokensLabel')).toBe('OAuth tokens:')
+    expect(
+      t('legal.privacy.retentionSentMessages', { label: 'Chat messages sent through All-Chat:' })
+    ).toBe('Chat messages sent through All-Chat: automatically deleted after 1 hour')
+    expect(t('legal.privacy.retentionSentMessagesLabel')).toBe(
+      'Chat messages sent through All-Chat:'
+    )
+    expect(
+      t('legal.privacy.retentionDisplayedMessages', {
+        label: 'Chat messages displayed in overlays:',
+      })
+    ).toBe('Chat messages displayed in overlays: streamed through memory only; not persisted')
+    expect(t('legal.privacy.retentionDisplayedMessagesLabel')).toBe(
+      'Chat messages displayed in overlays:'
+    )
+    expect(t('legal.privacy.retentionLogs', { label: 'Usage logs:' })).toBe(
+      'Usage logs: retained for up to 90 days'
+    )
+    expect(t('legal.privacy.retentionLogsLabel')).toBe('Usage logs:')
+    expect(t('legal.privacy.retentionQuotaLogs', { label: 'YouTube quota audit logs:' })).toBe(
+      'YouTube quota audit logs: retained for 30 days'
+    )
+    expect(t('legal.privacy.retentionQuotaLogsLabel')).toBe('YouTube quota audit logs:')
+  })
+
+  it('keeps each data-subject right with its article reference', () => {
+    expect(t('legal.privacy.rightsIntro')).toBe('You can exercise the following at any time:')
+    expect(t('legal.privacy.rightsAccess', { label: 'Access (Art.\u00A015):' })).toBe(
+      'Access (Art.\u00A015): Request a copy of the data we store about you'
+    )
+    expect(t('legal.privacy.rightsAccessLabel')).toBe('Access (Art.\u00A015):')
+    expect(t('legal.privacy.rightsRectification', { label: 'Rectification (Art.\u00A016):' })).toBe(
+      'Rectification (Art.\u00A016): Correct inaccurate information'
+    )
+    expect(t('legal.privacy.rightsRectificationLabel')).toBe('Rectification (Art.\u00A016):')
+    expect(t('legal.privacy.rightsErasure', { label: 'Erasure (Art.\u00A017):' })).toBe(
+      'Erasure (Art.\u00A017): Delete your account and all associated data from the Settings page or by contacting us'
+    )
+    expect(t('legal.privacy.rightsErasureLabel')).toBe('Erasure (Art.\u00A017):')
+    expect(t('legal.privacy.rightsRestriction', { label: 'Restriction (Art.\u00A018):' })).toBe(
+      'Restriction (Art.\u00A018): Request restriction of processing in certain circumstances'
+    )
+    expect(t('legal.privacy.rightsRestrictionLabel')).toBe('Restriction (Art.\u00A018):')
+    expect(
+      t('legal.privacy.rightsPortability', { label: 'Data portability (Art.\u00A020):' })
+    ).toBe(
+      'Data portability (Art.\u00A020): Export your data in a machine-readable format via the Settings page'
+    )
+    expect(t('legal.privacy.rightsPortabilityLabel')).toBe('Data portability (Art.\u00A020):')
+    expect(t('legal.privacy.rightsObjection', { label: 'Objection (Art.\u00A021):' })).toBe(
+      'Objection (Art.\u00A021): Object to processing based on legitimate interest'
+    )
+    expect(t('legal.privacy.rightsObjectionLabel')).toBe('Objection (Art.\u00A021):')
+    expect(t('legal.privacy.rightsWithdraw', { label: 'Withdraw consent:' })).toBe(
+      'Withdraw consent: Disconnect platforms or unlink viewer identities at any time'
+    )
+    expect(t('legal.privacy.rightsWithdrawLabel')).toBe('Withdraw consent:')
+  })
+
+  it('keeps the rights contact, the no-profiling note and the YouTube revocation', () => {
+    // &ouml; in Aufsichtsbehoerde.
+    expect(t('legal.privacy.rightsContact', { email: 'all.chat.support@gmail.com' })).toBe(
+      'Contact us at all.chat.support@gmail.com or use the Settings page. You also have the right to lodge a complaint with your supervisory authority (Aufsichtsbeh\u00F6rde).'
+    )
+    expect(t('legal.privacy.noProfiling')).toBe(
+      'We do not use automated decision-making or profiling within the meaning of Art.\u00A022 DSGVO.'
+    )
+    expect(
+      t('legal.privacy.youtubeRevoke', { googleSettings: 'Google security settings page' })
+    ).toBe(
+      "For YouTube Data: You can revoke All-Chat's access to your YouTube data via the Google security settings page."
+    )
+    expect(t('legal.privacy.googleSettingsPageLinkText')).toBe('Google security settings page')
+  })
+
+  it('keeps the browser storage section', () => {
+    expect(t('legal.privacy.cookiesIntro', { emphasis: 'browser localStorage' })).toBe(
+      'All-Chat uses browser localStorage (not cookies) for essential functionality:'
+    )
+    expect(t('legal.privacy.localStorageEmphasis')).toBe('browser localStorage')
+    expect(t('legal.privacy.cookiesTokens')).toBe(
+      'Authentication tokens (JWT) to keep you logged in'
+    )
+    expect(t('legal.privacy.cookiesPreferences')).toBe('User preferences and last-visited state')
+    expect(
+      t('legal.privacy.cookiesNoAdvertising', {
+        emphasis: 'privacy-friendly, cookieless usage analytics',
+      })
+    ).toBe(
+      'We do not use advertising cookies or cross-site tracking. We do use privacy-friendly, cookieless usage analytics (self-hosted Umami) \u2013 it sets nothing on your device and stores no personal identifier; see Section\u00A05.6 for the full description. Fonts are self-hosted (Section\u00A05.2) and do not set cookies. The GitHub API (Section\u00A05.3) may cause GitHub to set its own cookies when the theme marketplace is loaded.'
+    )
+    expect(t('legal.privacy.cookielessAnalyticsEmphasis')).toBe(
+      'privacy-friendly, cookieless usage analytics'
+    )
+  })
+
+  it('keeps the children, transfers, updates and open source sections', () => {
+    expect(t('legal.privacy.childrenBody')).toBe(
+      'All-Chat is not intended for children under 16 (the DSGVO minimum age for consent to data processing in Germany). If we discover data belonging to a minor we will delete it immediately.'
+    )
+    expect(t('legal.privacy.transfersBody')).toBe(
+      'All-Chat itself is hosted on servers located in Germany (see Section\u00A04.1). However, when you use streaming platform integrations, data is transferred to servers operated by Twitch (Amazon, US), Google/YouTube (US), TikTok (various), and Kick (AU). If you connect a Patreon membership, data is exchanged with Patreon, Inc. (US). The GitHub API (theme marketplace) may also involve transfers to the US.'
+    )
+    expect(t('legal.privacy.transfersLegalBasis')).toBe(
+      "Where a provider is certified under the EU\u2013US Data Privacy Framework, the transfer rests on the EU Commission's adequacy decision (Art.\u00A045 DSGVO). Otherwise, the transfer is necessary to perform the service you requested (Art.\u00A049(1)(b) DSGVO). Fonts are self-hosted on our infrastructure and therefore do not involve any third-country transfer when loaded."
+    )
+    expect(t('legal.privacy.updatesBody', { lastUpdatedLabel: 'Last Updated' })).toBe(
+      "We'll post updates to this page when the policy changes and include a new Last Updated date. Significant changes will be announced inside the dashboard."
+    )
+    expect(t('legal.privacy.updatesLastUpdatedEmphasis')).toBe('Last Updated')
+    expect(t('legal.privacy.openSourceAuditable')).toBe(
+      'All source code is publicly auditable under AGPL-3.0'
+    )
+    expect(t('legal.privacy.openSourceNoTracking')).toBe(
+      'No hidden tracking \u2014 our analytics are cookieless and documented (Section\u00A05.6), and the whole stack is verifiable on GitHub'
+    )
+    expect(t('legal.privacy.openSourceScrutiny')).toBe(
+      'Privacy practices are open to community scrutiny'
+    )
+    expect(
+      t('legal.privacy.openSourceRepository', { repository: 'github.com/caesarakalaeii/all-chat' })
+    ).toBe('Source: github.com/caesarakalaeii/all-chat')
+    expect(t('legal.privacy.repositoryLinkText')).toBe('github.com/caesarakalaeii/all-chat')
+  })
+
+  it('keeps every platform-specific note', () => {
+    expect(t('legal.privacy.twitchNote')).toBe(
+      'We connect to Twitch EventSub to receive chat messages. We do not access channel analytics, subscriber information, or payment data.'
+    )
+    expect(t('legal.privacy.youtubeNote', { googleSettings: 'Google security settings' })).toBe(
+      "We use the YouTube Live Chat API. We do not access video content, channel analytics, or subscriber data. API usage is subject to YouTube's quota limits. You can revoke access via Google security settings or the All-Chat Settings page. Disconnecting deletes your stored OAuth tokens."
+    )
+    expect(t('legal.privacy.googleSettingsLinkText')).toBe('Google security settings')
+    expect(t('legal.privacy.tiktokNote')).toBe(
+      'We access live stream chat data only. We do not access your videos, followers, or other personal content. Revoke access through TikTok app settings or All-Chat settings.'
+    )
+    expect(t('legal.privacy.kickNote')).toBe(
+      'We connect via WebSocket to receive live chat. We do not access channel analytics or payment data.'
+    )
+    expect(t('legal.privacy.discordNote')).toBe(
+      'When you connect a Discord server, we store the guild ID and name. Chat relay uses webhook URLs you configure. We do not access server member lists or DMs.'
+    )
+  })
+
+  it('keeps the contact section', () => {
+    expect(t('legal.privacy.contactEmailRow', { email: 'all.chat.support@gmail.com' })).toBe(
+      'Email: all.chat.support@gmail.com'
+    )
+    expect(t('legal.privacy.contactHostedNote', { host: 'allch.at' })).toBe(
+      'This contact is for users of the official hosted service at allch.at. Self-hosted installations should contact their own administrator.'
+    )
+    expect(t('legal.privacy.hostedDomain')).toBe('allch.at')
+  })
+})
