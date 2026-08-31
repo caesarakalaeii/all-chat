@@ -136,8 +136,24 @@ either side fails there rather than compiling to an empty rule.
 
 ### Scope boundary
 
-Everything under `src/app/overlay/**`, the embed preview and the marketplace
-theme preview is **broadcast art rendered inside OBS**, not app chrome:
+> **Amendment, 2026-08-31.** This section originally excluded all of
+> `src/app/overlay/**`. That was wrong, and the error was in the rule rather
+> than the reasoning: only four of the six routes under that directory render
+> into a browser source. `/overlay/[id]/view` is the streamer's **monitor
+> page** (chat plus moderation controls) and `/overlay/[id]/participate` is a
+> **viewer-facing web page** — ordinary app chrome that an over-broad glob was
+> letting out of the design system. The exclusion now lists the OBS routes
+> individually. Add one only if it genuinely renders transparent into OBS.
+>
+> A second bug surfaced while fixing the first: written as
+> `src/app/overlay/[id]/page.tsx`, the pattern excludes nothing at all —
+> square brackets are a glob **character class**, so it matches
+> `overlay/i/page.tsx` and `overlay/d/page.tsx` and never the real route. The
+> patterns use `*` for the dynamic segment. This is the same shape of failure
+> as the dead tokens: a rule that reads correctly and silently does nothing.
+
+The OBS render surfaces, the embed preview and the marketplace theme preview
+are **broadcast art rendered inside OBS**, not app chrome:
 user-themable, composited over arbitrary gameplay footage, and already carved
 out of the app's guarantees by the scope note in `token-contrast.test.ts` and
 the separate floor in `tests/e2e/theme-contrast.spec.ts`. The chrome's neutral
@@ -190,10 +206,14 @@ with a bonus: the dead-token gate is in CI _first_, so it guards #799's own
 work while that work is still being written. The migration is preserved on
 `design/shadcn-call-site-migration` rather than rewritten from scratch.
 
-**Deferred.** The 329 raw palette classes are likewise not migrated. Most are
-status colours that now have tokens, but each needs a semantic judgement (is
-this amber a warning, a premium marker, or brand decoration?) that a mechanical
-rewrite gets wrong. The palette rule currently bans only `gray-*`/`slate-*`,
+**Deferred.** The raw palette classes are being migrated in semantic passes
+rather than mechanically, because each needs a judgement a rewrite gets wrong.
+The **premium** pass is done: amber meaning "paid feature" was the largest
+cluster and now has its own `--color-premium` token, deliberately warmer than
+`--color-warning` (hue 65 vs 80) because written as `amber-400` the two were
+nearly the same paint — a "costs money" marker and a "something may go wrong"
+marker were indistinguishable side by side. The **warning** cluster (~25 sites:
+maintenance, beta, theme-import errors) is the obvious next one. The palette rule currently bans only `gray-*`/`slate-*`,
 which is at zero; widening it to the full palette should follow the ratchet
 pattern the a11y gate already uses.
 

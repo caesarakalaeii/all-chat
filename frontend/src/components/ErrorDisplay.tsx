@@ -27,6 +27,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { Button, buttonVariants } from '@/components/ui/button'
 import clsx from 'clsx'
 import {
   ChatError,
@@ -216,17 +217,15 @@ export default function ErrorDisplay({
             {/* Action buttons */}
             <div className="mt-3 flex gap-2">
               {canRetry && onRetry && (
-                <button
+                <Button
                   onClick={onRetry}
-                  className={clsx(
-                    'rounded border px-3 py-1.5 text-sm font-medium hover:opacity-80',
-                    style.text,
-                    style.border
-                  )}
+                  variant="outline"
+                  size="sm"
+                  className={clsx(style.text, style.border)}
                   disabled={countdown !== null}
                 >
                   {t('errors.display.tryAgain')}
-                </button>
+                </Button>
               )}
 
               {/* Re-auth button for auth errors */}
@@ -234,7 +233,7 @@ export default function ErrorDisplay({
                 <a
                   href={`/api/v1/auth/viewer/${error.platform}/login`}
                   className={clsx(
-                    'rounded border px-3 py-1.5 text-sm font-medium hover:opacity-80',
+                    buttonVariants({ variant: 'outline', size: 'sm' }),
                     style.text,
                     style.border
                   )}
@@ -247,16 +246,14 @@ export default function ErrorDisplay({
 
               {/* Technical details toggle */}
               {error.technicalDetails && (
-                <button
+                <Button
                   onClick={() => setShowDetails(!showDetails)}
-                  className={clsx(
-                    'rounded border px-3 py-1.5 text-sm font-medium hover:opacity-80',
-                    style.text,
-                    style.border
-                  )}
+                  variant="outline"
+                  size="sm"
+                  className={clsx(style.text, style.border)}
                 >
                   {showDetails ? t('errors.display.hideDetails') : t('errors.display.showDetails')}
-                </button>
+                </Button>
               )}
             </div>
 
@@ -271,13 +268,15 @@ export default function ErrorDisplay({
 
         {/* Dismiss button */}
         {onDismiss && (
-          <button
+          <Button
             onClick={onDismiss}
-            className={clsx('flex-shrink-0 text-xl hover:opacity-70', style.text)}
+            variant="ghost"
+            size="icon-sm"
+            className={clsx('shrink-0 text-xl', style.text)}
             aria-label={t('errors.display.dismissLabel')}
           >
             &times;
-          </button>
+          </Button>
         )}
       </div>
     </div>

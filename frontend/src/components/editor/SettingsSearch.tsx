@@ -19,6 +19,8 @@
  */
 
 import React, { useId, useRef, useState } from 'react'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 import { Search, X } from 'lucide-react'
 import { useTranslations } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
@@ -95,7 +97,7 @@ export function SettingsSearch({ onNavigate }: SettingsSearchProps): React.React
         aria-hidden="true"
         className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-text-sub"
       />
-      <input
+      <Input
         ref={inputRef}
         type="text"
         role="combobox"
@@ -116,20 +118,22 @@ export function SettingsSearch({ onNavigate }: SettingsSearchProps): React.React
           setSelectedIndex(0)
         }}
         onKeyDown={handleKeyDown}
-        className="w-full rounded-lg border border-border bg-surface-2 py-2 pr-8 pl-9 text-sm text-text placeholder:text-text-sub focus-visible:ring-2 focus-visible:ring-twitch/50 focus-visible:outline-none"
+        className="pr-8 pl-9"
       />
       {query !== '' && (
-        <button
+        <Button
           type="button"
           aria-label={t('overlayEditor.settingsSearch.clearLabel')}
           onClick={() => {
             reset()
             inputRef.current?.focus()
           }}
-          className="absolute top-1/2 right-2 -translate-y-1/2 rounded p-1 text-text-sub hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+          variant="ghost"
+          size="icon-xs"
+          className="absolute top-1/2 right-2 -translate-y-1/2"
         >
           <X aria-hidden="true" className="size-3.5" />
-        </button>
+        </Button>
       )}
       {open && (
         <div

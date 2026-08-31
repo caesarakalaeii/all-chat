@@ -44,6 +44,7 @@ import { FeaturedAmbassadors } from '@/components/FeaturedAmbassadors'
 import { HomeHeader } from '@/components/HomeHeader'
 import { ThemeSwitcher } from '@/components/ThemeSwitcher'
 import { PlatformBadge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { SpotlightCard } from '@/components/SpotlightCard'
 import { PLATFORM_COLORS } from '@/lib/platform-colors'
 import { toastManager } from '@/lib/toast'
@@ -263,9 +264,10 @@ export default function HomeClient() {
               className="relative flex scroll-mt-24 flex-col justify-center gap-3 sm:flex-row"
             >
               {/* Twitch */}
-              <button
+              <Button
                 onClick={handleTwitchLogin}
-                className="flex items-center gap-2.5 rounded-lg bg-twitch px-6 py-3 font-semibold text-bg transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
+                size="lg"
+                className="gap-2.5 px-6 py-3"
                 aria-label={t('marketing.hero.signInWith', {
                   platform: t('common.platforms.twitch'),
                 })}
@@ -282,13 +284,14 @@ export default function HomeClient() {
                   />
                 </svg>
                 {t('marketing.hero.signInWith', { platform: t('common.platforms.twitch') })}
-              </button>
+              </Button>
 
               {/* YouTube — exact brand red #FF0000; dark label for WCAG AA (white on
                   #FF0000 is ~4.0:1), official white-on-red icon kept (logo exemption) */}
-              <button
+              <Button
                 onClick={handleYouTubeLogin}
-                className="flex items-center gap-2.5 rounded-lg px-6 py-3 font-semibold text-bg transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
+                size="lg"
+                className="gap-2.5 px-6 py-3 text-bg"
                 style={
                   {
                     backgroundColor: '#FF0000',
@@ -312,12 +315,13 @@ export default function HomeClient() {
                   />
                 </svg>
                 {t('marketing.hero.signInWith', { platform: t('common.platforms.youtube') })}
-              </button>
+              </Button>
 
               {/* Kick — brand green, dark text + official block-K logo */}
-              <button
+              <Button
                 onClick={handleKickLogin}
-                className="flex items-center gap-2.5 rounded-lg px-6 py-3 font-semibold text-bg transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-kick focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
+                size="lg"
+                className="gap-2.5 px-6 py-3 text-bg"
                 style={{ backgroundColor: 'var(--color-kick)' }}
                 aria-label={t('marketing.hero.signInWith', {
                   platform: t('common.platforms.kick'),
@@ -335,7 +339,7 @@ export default function HomeClient() {
                   />
                 </svg>
                 {t('marketing.hero.signInWith', { platform: t('common.platforms.kick') })}
-              </button>
+              </Button>
             </div>
 
             <p className="relative mt-4 text-xs text-text-sub">{t('marketing.hero.reassurance')}</p>

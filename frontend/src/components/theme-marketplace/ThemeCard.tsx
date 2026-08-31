@@ -25,6 +25,7 @@
 'use client'
 
 import clsx from 'clsx'
+import { Button } from '@/components/ui/button'
 import { useTranslations } from '@/lib/i18n'
 import type { Theme, ChatMessagePreview } from '@/lib/theme-marketplace/types'
 import ThemePreview from './ThemePreview'
@@ -84,14 +85,16 @@ export default function ThemeCard({
         {/* Name and Favorite */}
         <div className="mb-2 flex items-start justify-between gap-2">
           <h3 className="flex-1 text-base leading-tight font-semibold text-text">{theme.name}</h3>
-          <button
+          <Button
             onClick={() => onToggleFavorite(theme.id)}
-            className="flex-shrink-0 text-xl transition-transform hover:scale-110"
+            variant="ghost"
+            size="icon-sm"
+            className="shrink-0 text-xl hover:scale-110"
             aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
             title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
           >
             {isFavorite ? '⭐' : '☆'}
-          </button>
+          </Button>
         </div>
 
         {/* Description */}
@@ -120,15 +123,12 @@ export default function ThemeCard({
         </div>
 
         {/* Apply Button */}
-        <button
-          onClick={() => onApply(theme)}
-          className="mt-auto flex w-full items-center justify-center gap-2 rounded-lg bg-twitch px-4 py-2 text-sm font-semibold text-bg transition-colors hover:bg-twitch/90"
-        >
+        <Button onClick={() => onApply(theme)} size="lg" className="mt-auto w-full">
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
           {t('overlayEditor.themeMarketplace.applyTheme')}
-        </button>
+        </Button>
       </div>
     </div>
   )

@@ -27,6 +27,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { DialogRoot, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
 import { toastManager } from '@/lib/toast'
 import { formatDateTime, useTranslations } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
@@ -230,7 +231,7 @@ export default function AdminMaintenancePage() {
               <label className="mb-1 block text-sm font-medium text-text" htmlFor="maint-title">
                 {t('admin.maintenance.titleLabel')} <span className="text-destructive">*</span>
               </label>
-              <input
+              <Input
                 id="maint-title"
                 type="text"
                 required
@@ -238,7 +239,6 @@ export default function AdminMaintenancePage() {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder={t('admin.maintenance.titlePlaceholder')}
-                className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
               />
             </div>
             <div>
@@ -265,26 +265,24 @@ export default function AdminMaintenancePage() {
                 >
                   {t('admin.maintenance.startsAtLabel')} <span className="text-destructive">*</span>
                 </label>
-                <input
+                <Input
                   id="maint-starts-at"
                   type="datetime-local"
                   required
                   value={startsAt}
                   onChange={(e) => setStartsAt(e.target.value)}
-                  className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
                 />
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-text" htmlFor="maint-ends-at">
                   {t('admin.maintenance.endsAtLabel')} <span className="text-destructive">*</span>
                 </label>
-                <input
+                <Input
                   id="maint-ends-at"
                   type="datetime-local"
                   required
                   value={endsAt}
                   onChange={(e) => setEndsAt(e.target.value)}
-                  className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
                 />
               </div>
             </div>

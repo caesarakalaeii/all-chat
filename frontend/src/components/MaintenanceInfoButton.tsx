@@ -19,6 +19,7 @@
  */
 
 import clsx from 'clsx'
+import { Button } from '@/components/ui/button'
 import { Info } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
@@ -79,23 +80,20 @@ export function MaintenanceInfoButton() {
 
   return (
     <div className="relative" ref={containerRef}>
-      <button
+      <Button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-label={t('common.maintenanceInfo.buttonLabel')}
         title={t('common.maintenanceInfo.buttonLabel')}
+        variant="outline"
+        size="icon-sm"
         className={clsx(
-          'flex items-center justify-center rounded-lg border p-1.5 transition-colors focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none',
-          open
-            ? 'border-border-md bg-surface-2 text-text'
-            : hasActive
-              ? 'border-amber-500/30 text-amber-300 hover:border-amber-500/50'
-              : 'border-border text-text-sub hover:border-border-md hover:text-text'
+          !open && hasActive && 'border-amber-500/30 text-amber-300 hover:border-amber-500/50'
         )}
       >
         <Info className="h-3.5 w-3.5" />
-      </button>
+      </Button>
 
       {open && (
         <div className="absolute right-0 z-50 mt-2 w-72 rounded-lg border border-border bg-surface p-3 shadow-lg">

@@ -39,6 +39,7 @@ import {
 import type { LucideIcon } from 'lucide-react'
 import { InfinityLogo } from '@/components/InfinityLogo'
 import { Dialog } from '@/components/ui/dialog'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { useTranslations } from '@/lib/i18n'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { cn } from '@/lib/utils'
@@ -145,22 +146,31 @@ function SidebarFooter({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <div className="flex flex-col gap-0.5 border-t border-border pt-3">
+      {/* Styled with buttonVariants rather than <Button> because this navigates:
+          it must stay an <a> for middle-click, copy-link and keyboard Enter.
+          Sharing the variant is what keeps it pixel-identical to the Log out
+          row directly below it. */}
       <Link
         href="/dashboard"
         onClick={onNavigate}
-        className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-text-sub transition-colors hover:bg-surface-2/60 hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+        className={cn(
+          buttonVariants({ variant: 'ghost', size: 'lg' }),
+          'w-full justify-start gap-3'
+        )}
       >
         <ArrowLeft className="size-4 shrink-0" aria-hidden="true" />
         <span className="truncate">{t('admin.sidebar.backToApp')}</span>
       </Link>
-      <button
+      <Button
         type="button"
         onClick={handleLogout}
-        className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-text-sub transition-colors hover:bg-surface-2/60 hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+        variant="ghost"
+        size="lg"
+        className="w-full justify-start gap-3"
       >
         <LogOut className="size-4 shrink-0" aria-hidden="true" />
         <span className="truncate">{t('admin.sidebar.logOut')}</span>
-      </button>
+      </Button>
     </div>
   )
 }
@@ -223,15 +233,17 @@ export function AdminSidebar() {
 
       {/* Mobile top bar */}
       <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-border bg-nav-bg px-4 backdrop-blur-[20px] lg:hidden">
-        <button
+        <Button
           type="button"
           onClick={() => setOpen(true)}
           aria-label={t('admin.sidebar.openMenuLabel')}
           aria-expanded={open}
-          className="-ml-2 rounded-lg p-2 text-text-sub transition-colors hover:bg-surface-2 hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+          variant="ghost"
+          size="icon"
+          className="-ml-2"
         >
           <Menu className="size-5" aria-hidden="true" />
-        </button>
+        </Button>
         <SidebarBrand />
       </header>
 

@@ -19,6 +19,7 @@
  */
 
 import React, { useId } from 'react'
+import { Input } from '@/components/ui/input'
 import { Select } from '@base-ui/react/select'
 import { useTranslations } from '@/lib/i18n'
 import type { VisualSettings } from '@/lib/types/visual-settings'
@@ -154,7 +155,7 @@ export function TypographyGroup({
         <label htmlFor={`${fieldId}-body-size`} className="w-28 shrink-0 text-sm text-text-sub">
           {t('overlayEditor.typography.bodySize')}
         </label>
-        <input
+        <Input
           id={`${fieldId}-body-size`}
           type="number"
           min={10}
@@ -162,7 +163,7 @@ export function TypographyGroup({
           value={visualSettings.fontSize?.replace('px', '') ?? ''}
           onChange={(e) => onChange({ fontSize: `${e.target.value}px` })}
           aria-describedby={`${fieldId}-body-size-unit`}
-          className="w-16 rounded border border-border bg-bg px-2 py-1 text-sm text-text focus-visible:ring-1 focus-visible:ring-border focus-visible:outline-none"
+          className="w-16"
         />
         <span id={`${fieldId}-body-size-unit`} className="text-sm text-text-dim">
           {t('overlayEditor.typography.pixelUnit')}
@@ -174,13 +175,13 @@ export function TypographyGroup({
         <label htmlFor={`${fieldId}-username-size`} className="w-28 shrink-0 text-sm text-text-sub">
           {t('overlayEditor.typography.usernameSize')}
         </label>
-        <input
+        <Input
           id={`${fieldId}-username-size`}
           type="number"
           value={visualSettings.usernameFontSize?.replace('px', '') ?? ''}
           onChange={(e) => onChange({ usernameFontSize: `${e.target.value}px` })}
           aria-describedby={`${fieldId}-username-size-unit`}
-          className="w-16 rounded border border-border bg-bg px-2 py-1 text-sm text-text focus-visible:ring-1 focus-visible:ring-border focus-visible:outline-none"
+          className="w-16"
         />
         <span id={`${fieldId}-username-size-unit`} className="text-sm text-text-dim">
           {t('overlayEditor.typography.pixelUnit')}
@@ -195,13 +196,13 @@ export function TypographyGroup({
         >
           {t('overlayEditor.typography.timestampSize')}
         </label>
-        <input
+        <Input
           id={`${fieldId}-timestamp-size`}
           type="number"
           value={visualSettings.timestampFontSize?.replace('px', '') ?? ''}
           onChange={(e) => onChange({ timestampFontSize: `${e.target.value}px` })}
           aria-describedby={`${fieldId}-timestamp-size-unit`}
-          className="w-16 rounded border border-border bg-bg px-2 py-1 text-sm text-text focus-visible:ring-1 focus-visible:ring-border focus-visible:outline-none"
+          className="w-16"
         />
         <span id={`${fieldId}-timestamp-size-unit`} className="text-sm text-text-dim">
           {t('overlayEditor.typography.pixelUnit')}

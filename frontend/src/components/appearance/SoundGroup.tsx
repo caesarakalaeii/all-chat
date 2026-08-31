@@ -19,6 +19,8 @@
  */
 
 import React from 'react'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 import { ToggleSwitch } from './ToggleSwitch'
 import { SliderControl } from './SliderControl'
 import { AdvancedDisclosure } from '@/components/editor/AdvancedDisclosure'
@@ -93,13 +95,9 @@ export function SoundGroup({
           />
 
           {onPreview && (
-            <button
-              type="button"
-              onClick={onPreview}
-              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text hover:bg-surface-2"
-            >
+            <Button type="button" onClick={onPreview} variant="outline" size="sm">
               {t('overlayEditor.sounds.test')}
-            </button>
+            </Button>
           )}
 
           {/* Low-traffic fine-tuning lives behind Advanced (ADR-0042) */}
@@ -134,14 +132,13 @@ export function SoundGroup({
                   )}
                 </p>
               </div>
-              <input
+              <Input
                 type="url"
                 aria-label={t('overlayEditor.sounds.customUrl')}
                 placeholder={t('overlayEditor.sounds.customUrlPlaceholder')}
                 value={customUrl}
                 disabled={!isPremium}
                 onChange={(e) => onChange({ notification_sound_url: e.target.value })}
-                className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text placeholder:text-text-dim disabled:cursor-not-allowed disabled:opacity-50"
               />
             </div>
           </AdvancedDisclosure>

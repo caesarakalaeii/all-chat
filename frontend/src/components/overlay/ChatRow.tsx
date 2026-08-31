@@ -17,6 +17,7 @@
  */
 
 import Image from 'next/image'
+import { Button } from '@/components/ui/button'
 import clsx from 'clsx'
 
 import { AllChatBadge } from '@/components/AllChatBadge'
@@ -161,14 +162,19 @@ export function ChatRow({
             ) : null
           )}
         {onUserClick && item.user ? (
-          <button
+          <Button
             type="button"
             onClick={() => onUserClick(item)}
             title={`Show only messages from ${displayName}`}
-            className="cursor-pointer rounded-sm align-baseline hover:underline hover:opacity-75 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+            variant="link"
+            size="xs"
+            // Inline text inside a chat line, not a control with chrome: the
+            // height, padding and text colour all have to come off so the name
+            // keeps the user's own colour and sits on the surrounding baseline.
+            className="h-auto p-0 align-baseline text-inherit hover:opacity-75"
           >
             {nameEl}
-          </button>
+          </Button>
         ) : (
           nameEl
         )}

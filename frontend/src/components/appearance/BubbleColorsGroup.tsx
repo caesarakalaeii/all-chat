@@ -35,6 +35,7 @@
  */
 
 import React from 'react'
+import { Button } from '@/components/ui/button'
 import { Plus, RotateCcw, X } from 'lucide-react'
 import { PremiumBadge } from '@/components/PremiumBadge'
 import { PremiumUpsellLink } from '@/components/PremiumUpsellLink'
@@ -121,17 +122,18 @@ export function BubbleColorsGroup({
                   value={typeof current === 'string' ? current : platform.sample}
                   onChange={(hex) => onChange({ [platform.field]: hex })}
                 />
-                <button
+                <Button
                   type="button"
                   aria-label={t('overlayEditor.bubbleColors.resetPlatform', {
                     platform: platformName,
                   })}
                   disabled={locked}
                   onClick={() => onChange({ [platform.field]: undefined })}
-                  className="rounded p-1 text-text-dim transition-colors hover:text-text disabled:cursor-not-allowed"
+                  variant="ghost"
+                  size="icon-xs"
                 >
                   <RotateCcw className="h-3 w-3" />
-                </button>
+                </Button>
               </div>
             )
           })}
@@ -154,28 +156,30 @@ export function BubbleColorsGroup({
                   writePalette(palette.map((entry, i) => (i === index ? hex : entry)))
                 }
               />
-              <button
+              <Button
                 type="button"
                 aria-label={t('overlayEditor.bubbleColors.removeSwatch', { index: index + 1 })}
                 disabled={locked}
                 onClick={() => writePalette(palette.filter((_, i) => i !== index))}
-                className="rounded p-1 text-text-dim transition-colors hover:text-text disabled:cursor-not-allowed"
+                variant="ghost"
+                size="icon-xs"
               >
                 <X className="h-3 w-3" />
-              </button>
+              </Button>
             </div>
           ))}
 
           {palette.length < MAX_BUBBLE_PALETTE && (
-            <button
+            <Button
               type="button"
               disabled={locked}
               onClick={() => writePalette([...palette, NEW_SWATCH])}
-              className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text transition-colors hover:bg-surface-2 disabled:cursor-not-allowed"
+              variant="outline"
+              size="sm"
             >
               <Plus className="h-3.5 w-3.5" />
               {t('overlayEditor.bubbleColors.addSwatch')}
-            </button>
+            </Button>
           )}
 
           {palette.length === 1 && (

@@ -44,6 +44,7 @@ import { toastManager } from '@/lib/toast'
 import { PremiumDurationChooser } from '@/components/admin/PremiumDurationChooser'
 import { UserAvatar } from '@/components/UserAvatar'
 import { PlatformBadge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import { ChannelLink } from '@/components/ChannelLink'
 import { formatNumber, formatTimestamp, useTranslations } from '@/lib/i18n'
 
@@ -323,7 +324,7 @@ export default function AdminViewersPage() {
         className={clsx(
           'inline-flex items-center rounded px-2 py-0.5 text-xs font-medium transition-colors',
           viewer.is_premium
-            ? 'bg-amber-400/10 text-amber-400 hover:bg-amber-400/20'
+            ? 'bg-premium/10 text-premium hover:bg-premium/20'
             : 'bg-surface-2 text-text-dim hover:bg-surface-2/80'
         )}
         onClick={() => {
@@ -418,13 +419,13 @@ export default function AdminViewersPage() {
             <label htmlFor={searchId} className="mb-2 block text-sm font-medium text-text-sub">
               {t('admin.viewers.searchLabel')}
             </label>
-            <input
+            <Input
               id={searchId}
               type="text"
               placeholder={t('admin.viewers.searchPlaceholder')}
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              className="block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:text-sm"
+              className="block sm:text-sm"
             />
           </div>
           <div>
@@ -755,7 +756,7 @@ export default function AdminViewersPage() {
             </Dialog.Description>
             {premiumDialogViewer.is_premium ? (
               premiumDialogViewer.premium_expires_at && (
-                <p className="mt-2 text-xs font-medium text-amber-400/80">
+                <p className="mt-2 text-xs font-medium text-premium/80">
                   {t('admin.viewers.premiumExpires', {
                     timestamp: formatTimestamp(new Date(premiumDialogViewer.premium_expires_at)),
                   })}

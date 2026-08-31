@@ -24,11 +24,12 @@ import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { AppNav } from '@/components/AppNav'
 import { Card } from '@/components/ui/card'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Input } from '@/components/ui/input'
 import { toastManager } from '@/lib/toast'
 import { ChevronLeft } from 'lucide-react'
-import { PLATFORM_COLORS } from '@/lib/platform-colors'
 import { cn } from '@/lib/utils'
 import { useTranslations } from '@/lib/i18n'
 import { interpolateElements } from '@/lib/i18n/emphasise'
@@ -71,12 +72,18 @@ type Tab = 'global' | 'twitch' | 'youtube' | 'kick' | 'tiktok'
 
 const TAB_IDS: readonly Tab[] = ['global', 'twitch', 'youtube', 'kick', 'tiktok']
 
-const TAB_COLOR: Record<Tab, string> = {
-  global: 'text-text',
-  twitch: PLATFORM_COLORS.twitch.text,
-  youtube: PLATFORM_COLORS.youtube.text,
-  kick: PLATFORM_COLORS.kick.text,
-  tiktok: PLATFORM_COLORS.tiktok.text,
+// Active-tab colour per platform: the selected tab and its underline take the
+// platform's brand colour. Spelled out with the `data-active:` variant rather
+// than derived from PLATFORM_COLORS, because Tailwind only emits classes it can
+// see literally in the source — a name assembled at runtime produces no CSS
+// (ADR-0056). `after:bg-current` makes the line-variant underline follow
+// whatever colour won, so the two can never drift apart.
+const TAB_ACTIVE_COLOR: Record<Tab, string> = {
+  global: 'data-active:text-text data-active:after:bg-current',
+  twitch: 'data-active:text-twitch data-active:after:bg-current',
+  youtube: 'data-active:text-youtube data-active:after:bg-current',
+  kick: 'data-active:text-kick data-active:after:bg-current',
+  tiktok: 'data-active:text-tiktok data-active:after:bg-current',
 }
 
 /**
@@ -199,7 +206,7 @@ function NumberInput({
     <div className="border-b border-border py-3 last:border-0">
       <label className="mb-0.5 block text-sm font-medium text-text">{label}</label>
       <p className="mb-2 text-xs text-text-sub">{description}</p>
-      <input
+      <Input
         type="number"
         min={min}
         max={max}
@@ -208,7 +215,7 @@ function NumberInput({
         onChange={(e) =>
           onChange(step && step < 1 ? parseFloat(e.target.value) : parseInt(e.target.value))
         }
-        className="w-28 rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+        className="w-28"
       />
     </div>
   )
@@ -272,13 +279,15 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
       <div className="mx-auto max-w-3xl px-4 py-8">
         {/* Header */}
         <div className="mb-6">
-          <button
+          <Button
             onClick={() => router.push(`/overlays/${id}`)}
-            className="mb-3 flex items-center gap-1 rounded text-sm text-text-sub hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+            variant="ghost"
+            size="sm"
+            className="mb-3 px-0"
           >
             <ChevronLeft className="size-4" />
             {t('overlayEditor.eventSettings.back')}
-          </button>
+          </Button>
           <h1 className="text-2xl font-bold text-text">
             {t('overlayEditor.eventSettings.heading')}
           </h1>
@@ -304,24 +313,20 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
         ) : (
           <Card className="overflow-hidden">
             {/* Platform tabs */}
-            <div className="flex overflow-x-auto border-b border-border">
-              {TAB_IDS.map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={cn(
-                    'shrink-0 border-b-2 px-4 py-3 text-sm font-medium transition-colors focus-visible:outline-none',
-                    activeTab === tab
-                      ? cn(TAB_COLOR[tab], 'border-current')
-                      : 'border-transparent text-text-sub hover:text-text'
-                  )}
-                >
-                  {tab === 'global'
-                    ? t('overlayEditor.eventSettings.tabGlobal')
-                    : t(`common.platforms.${tab}`)}
-                </button>
-              ))}
-            </div>
+            <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as Tab)}>
+              <TabsList
+                variant="line"
+                className="w-full justify-start overflow-x-auto border-b border-border"
+              >
+                {TAB_IDS.map((tab) => (
+                  <TabsTrigger key={tab} value={tab} className={TAB_ACTIVE_COLOR[tab]}>
+                    {tab === 'global'
+                      ? t('overlayEditor.eventSettings.tabGlobal')
+                      : t(`common.platforms.${tab}`)}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
 
             <div className="p-6">
               {/* Global tab */}

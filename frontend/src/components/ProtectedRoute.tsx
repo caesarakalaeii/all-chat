@@ -31,6 +31,7 @@
 'use client'
 
 import { useEffect } from 'react'
+import { Button } from '@/components/ui/button'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { useHydrated } from '@/hooks/useHydrated'
@@ -86,12 +87,9 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
           <div className="mb-4 text-5xl">{FORBIDDEN_GLYPH}</div>
           <h1 className="mb-2 text-2xl font-bold text-text">{t('common.forbidden.heading')}</h1>
           <p className="mb-6 text-text-sub">{t('common.forbidden.body')}</p>
-          <button
-            onClick={() => router.push('/dashboard')}
-            className="rounded-lg bg-twitch px-6 py-2 font-semibold text-bg transition hover:opacity-90"
-          >
+          <Button onClick={() => router.push('/dashboard')} size="lg">
             {t('common.forbidden.dashboardButton')}
-          </button>
+          </Button>
         </div>
       </div>
     )

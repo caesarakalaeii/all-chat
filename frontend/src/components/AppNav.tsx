@@ -19,6 +19,7 @@
  */
 
 import Link from 'next/link'
+import { Button } from '@/components/ui/button'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { useViewerAuthStore } from '@/lib/stores/viewer-auth-store'
@@ -121,12 +122,9 @@ export function AppNav() {
           <span className="sr-only sm:not-sr-only">{t('common.platforms.discord')}</span>
         </a>
         {isLoggedIn && (
-          <button
-            onClick={handleLogout}
-            className="rounded-sm px-3 py-1.5 text-sm text-text-sub transition-colors hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
-          >
+          <Button onClick={handleLogout} variant="ghost">
             {t('common.appNav.logOut')}
-          </button>
+          </Button>
         )}
       </div>
     </nav>

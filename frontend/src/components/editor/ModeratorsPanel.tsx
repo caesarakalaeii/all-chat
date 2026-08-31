@@ -44,6 +44,7 @@ import { AlertDialog } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
+import { Input } from '@/components/ui/input'
 import { boundInviteAccount, delegationErrorCode, moderationApi } from '@/lib/api/moderation'
 import { useTranslations, type TFunction } from '@/lib/i18n'
 import { emphasise } from '@/lib/i18n/emphasise'
@@ -595,13 +596,12 @@ function InviteDialog({ overlayId, open, onOpenChange }: InviteDialogProps) {
 
             <label className="block space-y-1">
               <span className="text-xs text-text-sub">{t('moderation.invite.labelPrompt')}</span>
-              <input
+              <Input
                 type="text"
                 value={label}
                 maxLength={120}
                 onChange={(e) => setLabel(e.target.value)}
                 placeholder={t('moderation.invite.labelPlaceholder')}
-                className="w-full rounded-lg border border-border bg-surface px-2 py-1 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
               />
             </label>
 
