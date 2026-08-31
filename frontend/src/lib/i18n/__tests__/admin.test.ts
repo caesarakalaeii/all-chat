@@ -812,3 +812,23 @@ describe('admin users role dialog cancel buttons', () => {
     expect(t('admin.users.revokeAmbassadorCancel')).toBe('Cancel')
   })
 })
+
+describe('premium duration chooser copy', () => {
+  it('keeps the field label, presets and custom range hint', () => {
+    // The chooser is shared by /admin/users and /admin/viewers, both of which
+    // grant premium. Its keys sit in admin.premiumDuration.* rather than either
+    // page's namespace, and not in common.* — both callers are admin surfaces.
+    expect(t('admin.premiumDuration.label')).toBe('Duration')
+    expect(t('admin.premiumDuration.presetPermanent')).toBe('Permanent')
+    expect(t('admin.premiumDuration.preset1Day')).toBe('1 day')
+    expect(t('admin.premiumDuration.preset7Days')).toBe('7 days')
+    expect(t('admin.premiumDuration.preset30Days')).toBe('30 days')
+    expect(t('admin.premiumDuration.preset90Days')).toBe('90 days')
+    expect(t('admin.premiumDuration.presetCustom')).toBe('Custom')
+    expect(t('admin.premiumDuration.customPlaceholder')).toBe('days')
+    expect(t('admin.premiumDuration.customFieldLabel')).toBe('Custom duration in days')
+    // The en dash came from an &ndash; entity, and the range is one string: a
+    // language that words a range differently cannot reorder JSX siblings.
+    expect(t('admin.premiumDuration.customRange', { max: 3650 })).toBe('days (1\u20133650)')
+  })
+})
