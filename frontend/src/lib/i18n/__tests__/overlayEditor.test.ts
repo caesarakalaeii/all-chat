@@ -1116,3 +1116,160 @@ describe('credit roll settings copy', () => {
     expect(t('overlayEditor.credits.cancel')).toBe('Cancel')
   })
 })
+
+describe('event display settings page copy', () => {
+  it('keeps the page chrome and its tabs', () => {
+    expect(t('overlayEditor.eventSettings.back')).toBe('Back to Overlay')
+    expect(t('overlayEditor.eventSettings.heading')).toBe('Event Display Settings')
+    expect(t('overlayEditor.eventSettings.subheading')).toBe(
+      'Control which platform events appear on your overlay.'
+    )
+    expect(t('overlayEditor.eventSettings.loadFailed')).toBe('Failed to load event settings')
+    expect(t('overlayEditor.eventSettings.save')).toBe('Save Settings')
+    expect(t('overlayEditor.eventSettings.saving')).toBe('Saving…')
+    expect(t('overlayEditor.eventSettings.cancel')).toBe('Cancel')
+    expect(t('overlayEditor.eventSettings.tabGlobal')).toBe('Global')
+  })
+
+  it('keeps the global tab', () => {
+    expect(t('overlayEditor.eventSettings.systemEventsHeading')).toBe('System Events')
+    expect(t('overlayEditor.eventSettings.tokenWarningsLabel')).toBe('Token Warnings')
+    expect(t('overlayEditor.eventSettings.tokenWarningsDescription')).toBe(
+      'Display OAuth authentication errors on overlay (requires token-refresh-service)'
+    )
+    expect(t('overlayEditor.eventSettings.displaySettingsHeading')).toBe('Display Settings')
+    expect(t('overlayEditor.eventSettings.durationMultiplierLabel')).toBe(
+      'Event Duration Multiplier'
+    )
+    expect(t('overlayEditor.eventSettings.durationMultiplierDescription')).toBe(
+      'Multiply all event display durations (0.5 = half time, 2.0 = double time)'
+    )
+  })
+
+  it('keeps the event tier explainer, each tier a whole sentence', () => {
+    expect(t('overlayEditor.eventSettings.tiersHeading')).toBe('About event tiers')
+    // The leading bullet and the emphasised tier name stay in the sentence as
+    // placeholders; splitting on the em dash would leave a translator with
+    // fragments that no longer form a sentence.
+    expect(t('overlayEditor.eventSettings.tierHigh', { tier: 'High-value' })).toBe(
+      '• High-value — subs, large donations, raids: 30+ seconds'
+    )
+    expect(t('overlayEditor.eventSettings.tierHighName')).toBe('High-value')
+    expect(t('overlayEditor.eventSettings.tierMedium', { tier: 'Medium-value' })).toBe(
+      '• Medium-value — follows, small gifts: 15 seconds'
+    )
+    expect(t('overlayEditor.eventSettings.tierMediumName')).toBe('Medium-value')
+    expect(t('overlayEditor.eventSettings.tierLow', { tier: 'Low-value' })).toBe(
+      '• Low-value — likes, shares: 5–10 seconds'
+    )
+    expect(t('overlayEditor.eventSettings.tierLowName')).toBe('Low-value')
+    // The two CSS class names are protocol, not copy, so they stay at the render
+    // site; the sentence around them is a template with both as placeholders.
+    expect(
+      t('overlayEditor.eventSettings.tierStyling', {
+        tierClass: '.event-tier-high',
+        typeClass: '.event-type-raid',
+      })
+    ).toBe('• Style with CSS classes: .event-tier-high, .event-type-raid')
+  })
+
+  it('keeps the Twitch event toggles', () => {
+    expect(t('overlayEditor.eventSettings.twitchSubsLabel')).toBe('Subscriptions')
+    expect(t('overlayEditor.eventSettings.twitchSubsDescription')).toBe(
+      'New subscriptions and resubscriptions'
+    )
+    expect(t('overlayEditor.eventSettings.twitchResubsLabel')).toBe('Resubscriptions')
+    expect(t('overlayEditor.eventSettings.twitchResubsDescription')).toBe(
+      'Monthly resubscription notices with streak information'
+    )
+    expect(t('overlayEditor.eventSettings.twitchGiftSubsLabel')).toBe('Gift Subscriptions')
+    expect(t('overlayEditor.eventSettings.twitchGiftSubsDescription')).toBe(
+      'Gift subs and mystery gift bombs'
+    )
+    expect(t('overlayEditor.eventSettings.twitchBitsLabel')).toBe('Bits / Cheers')
+    expect(t('overlayEditor.eventSettings.twitchBitsDescription')).toBe('Bits cheered in chat')
+    expect(t('overlayEditor.eventSettings.twitchRaidsLabel')).toBe('Raids')
+    expect(t('overlayEditor.eventSettings.twitchRaidsDescription')).toBe(
+      'Incoming raids from other channels'
+    )
+    expect(t('overlayEditor.eventSettings.twitchChannelPointsLabel')).toBe('Channel Points')
+    expect(t('overlayEditor.eventSettings.twitchChannelPointsDescription')).toBe(
+      'Channel point reward redemptions (requires EventSub service)'
+    )
+    expect(t('overlayEditor.eventSettings.twitchFollowsLabel')).toBe('Follows')
+    expect(t('overlayEditor.eventSettings.twitchFollowsDescription')).toBe(
+      'New channel followers (requires EventSub service)'
+    )
+    expect(t('overlayEditor.eventSettings.twitchWatchStreaksLabel')).toBe('Watch Streaks')
+    expect(t('overlayEditor.eventSettings.twitchWatchStreaksDescription')).toBe(
+      "Returning viewers' watch-streak milestones. Turning this off hides the milestone only — their chat message still shows"
+    )
+  })
+
+  it('keeps the YouTube event toggles', () => {
+    expect(t('overlayEditor.eventSettings.youtubeSuperChatLabel')).toBe('Super Chat')
+    expect(t('overlayEditor.eventSettings.youtubeSuperChatDescription')).toBe(
+      'Paid Super Chat messages'
+    )
+    expect(t('overlayEditor.eventSettings.youtubeSuperStickerLabel')).toBe('Super Stickers')
+    expect(t('overlayEditor.eventSettings.youtubeSuperStickerDescription')).toBe(
+      'Paid Super Sticker purchases'
+    )
+    expect(t('overlayEditor.eventSettings.youtubeMembersLabel')).toBe('New Members')
+    expect(t('overlayEditor.eventSettings.youtubeMembersDescription')).toBe(
+      'New channel memberships'
+    )
+    expect(t('overlayEditor.eventSettings.youtubeMemberMilestonesLabel')).toBe('Member Milestones')
+    expect(t('overlayEditor.eventSettings.youtubeMemberMilestonesDescription')).toBe(
+      'Membership anniversary celebrations'
+    )
+    expect(t('overlayEditor.eventSettings.youtubeMemberGiftsLabel')).toBe('Membership Gifts')
+    expect(t('overlayEditor.eventSettings.youtubeMemberGiftsDescription')).toBe(
+      'Gifted memberships'
+    )
+  })
+
+  it('keeps the Kick event toggles and the reverse-engineering caveat', () => {
+    expect(t('overlayEditor.eventSettings.kickSubsLabel')).toBe('Subscriptions')
+    expect(t('overlayEditor.eventSettings.kickSubsDescription')).toBe('Kick channel subscriptions')
+    // The render site spelled the ampersand &amp;; a catalog string is not HTML.
+    expect(t('overlayEditor.eventSettings.kickGiftsLabel')).toBe('Gifts & Donations')
+    expect(t('overlayEditor.eventSettings.kickGiftsDescription')).toBe(
+      'Gift subscriptions and donations'
+    )
+    expect(t('overlayEditor.eventSettings.kickCaveat')).toBe(
+      '⚠️ Kick events require reverse-engineering and may not be available yet.'
+    )
+  })
+
+  it('keeps the TikTok event toggles and the coin chest caveat', () => {
+    expect(t('overlayEditor.eventSettings.tiktokLikesLabel')).toBe('Likes')
+    expect(t('overlayEditor.eventSettings.tiktokLikesDescription')).toBe(
+      'Likes sent during stream (aggregated)'
+    )
+    expect(t('overlayEditor.eventSettings.tiktokGiftsLabel')).toBe('Gifts')
+    expect(t('overlayEditor.eventSettings.tiktokGiftsDescription')).toBe(
+      'Virtual gifts sent with diamond values'
+    )
+    expect(t('overlayEditor.eventSettings.tiktokFollowsLabel')).toBe('Follows')
+    expect(t('overlayEditor.eventSettings.tiktokFollowsDescription')).toBe(
+      'New followers during stream'
+    )
+    expect(t('overlayEditor.eventSettings.tiktokSharesLabel')).toBe('Shares')
+    expect(t('overlayEditor.eventSettings.tiktokSharesDescription')).toBe(
+      'Stream shares to other platforms'
+    )
+    expect(t('overlayEditor.eventSettings.tiktokTreasureChestsLabel')).toBe('Coin Chests')
+    // The "best effort" caveat is load bearing — see the comment on the toggle.
+    expect(t('overlayEditor.eventSettings.tiktokTreasureChestsDescription')).toBe(
+      'Treasure boxes of coins dropped by viewers. Best effort: TikTok does not reliably send these to third-party tools, so they may not appear.'
+    )
+    expect(t('overlayEditor.eventSettings.advancedHeading')).toBe('Advanced')
+    expect(t('overlayEditor.eventSettings.likeWindowLabel')).toBe(
+      'Like Aggregation Window (seconds)'
+    )
+    expect(t('overlayEditor.eventSettings.likeWindowDescription')).toBe(
+      'Likes are collected in this window to prevent spam'
+    )
+  })
+})
