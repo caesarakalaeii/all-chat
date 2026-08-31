@@ -112,3 +112,58 @@ describe('editor chrome copy', () => {
     )
   })
 })
+
+describe('appearance control copy', () => {
+  it('keeps the background group labels', () => {
+    expect(t('overlayEditor.appearance.background.overlayHeading')).toBe('Overlay background')
+    expect(t('overlayEditor.appearance.background.overlayColor')).toBe('Overlay background')
+    expect(t('overlayEditor.appearance.background.bubbleHeading')).toBe('Bubble background')
+    expect(t('overlayEditor.appearance.background.bubbleColor')).toBe('Bubble background')
+    expect(t('overlayEditor.appearance.background.borderColor')).toBe('Border color')
+    expect(t('overlayEditor.appearance.background.borderRadius')).toBe('Border radius')
+    expect(t('overlayEditor.appearance.background.borderWidth')).toBe('Border width')
+    expect(t('overlayEditor.appearance.background.padding')).toBe('Padding')
+    expect(t('overlayEditor.appearance.background.messageGap')).toBe('Message gap')
+    expect(t('overlayEditor.appearance.background.backdropBlur')).toBe('Backdrop blur')
+  })
+
+  it('keeps the colors group labels', () => {
+    expect(t('overlayEditor.appearance.colors.message')).toBe('Message color')
+    expect(t('overlayEditor.appearance.colors.username')).toBe('Username color')
+    expect(t('overlayEditor.appearance.colors.timestamp')).toBe('Timestamp color')
+  })
+
+  it('keeps the sizing group labels and the emote-scale caveat', () => {
+    expect(t('overlayEditor.appearance.sizing.avatarSize')).toBe('Avatar size')
+    expect(t('overlayEditor.appearance.sizing.badgeSize')).toBe('Badge size')
+    expect(t('overlayEditor.appearance.sizing.emoteScale')).toBe('Emote scale')
+    expect(t('overlayEditor.appearance.sizing.emoteScaleNote')).toBe(
+      'Emote scale applies to third-party emotes (7TV, BTTV, FFZ). Standard emoji are not affected.'
+    )
+  })
+
+  it('keeps the per-event size modifier label', () => {
+    expect(t('overlayEditor.appearance.events.sizeModifier')).toBe('Size modifier')
+  })
+
+  it('names the colour picker controls after the swatch they belong to', () => {
+    // All three took the control's own `label` prop, so the placeholder carries
+    // it through rather than the catalog holding one key per swatch.
+    expect(t('overlayEditor.appearance.colorPicker.swatchLabel', { label: 'Border color' })).toBe(
+      'Pick color for Border color'
+    )
+    expect(t('overlayEditor.appearance.colorPicker.popoverTitle', { label: 'Border color' })).toBe(
+      'Color for Border color'
+    )
+    expect(t('overlayEditor.appearance.colorPicker.hexLabel', { label: 'Border color' })).toBe(
+      'Hex value for Border color'
+    )
+  })
+
+  it('keeps the font picker labels and group headings', () => {
+    expect(t('overlayEditor.appearance.fontPicker.openLabel')).toBe('Open font picker')
+    expect(t('overlayEditor.appearance.fontPicker.empty')).toBe('No fonts found')
+    expect(t('overlayEditor.appearance.fontPicker.systemGroup')).toBe('System Fonts')
+    expect(t('overlayEditor.appearance.fontPicker.googleGroup')).toBe('Google Fonts')
+  })
+})
