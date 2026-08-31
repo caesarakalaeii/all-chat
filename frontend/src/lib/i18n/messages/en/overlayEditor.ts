@@ -310,6 +310,59 @@ export const overlayEditor = {
     syncTitle: 'Force refresh themes (Admin)',
     closeLabel: 'Close theme marketplace',
   },
+  // The list of platforms feeding this overlay, and the per-source card.
+  sources: {
+    chatViaEventsub: 'Chat via EventSub',
+    reconnectChat: 'Reconnect to enable chat',
+    revoke: 'Revoke',
+    configureRelay: 'Configure relay',
+    streamSelection: 'Stream selection',
+    removeLabel: 'Remove {channel}',
+    removeConfirmTitle: 'Remove source?',
+    // {emphasis} is the channel name, which the render site wraps in <strong>.
+    removeConfirmBody:
+      'Remove {emphasis} from this overlay. Chat messages from this source will stop appearing.',
+    remove: 'Remove',
+    cancel: 'Cancel',
+    empty: 'No sources added yet. Add a platform below.',
+    sharedHeading: 'Shared Overlays',
+    sharedOwner: "{owner}'s overlay",
+    add: '+ Add',
+  },
+  // YouTube channels can have several concurrent live streams; this panel picks
+  // which one the overlay follows.
+  streamSelection: {
+    strategyLabel: 'Stream selection strategy',
+    strategyHint:
+      'When this channel has multiple concurrent live streams, choose which one to monitor.',
+    // Appended to a non-default option's label while the account is not
+    // premium. The leading space is part of the copy.
+    premiumSuffix: ' (Premium)',
+    // Follows the <PremiumUpsellLink /> element, so it opens with a space.
+    upsellSuffix: ' to use advanced stream selection.',
+    locked: 'Non-default strategies require a premium subscription.',
+    matchLabel: 'Title keyword',
+    matchPlaceholder: 'e.g. synthwave, lofi, jazz',
+    firstFoundLabel: 'First found',
+    firstFoundDescription: 'Picks the first live stream (default)',
+    mostViewersLabel: 'Most viewers',
+    mostViewersDescription: 'Picks the stream with the highest viewer count',
+    fewestViewersLabel: 'Fewest viewers',
+    fewestViewersDescription: 'Picks the stream with the lowest viewer count',
+    titleMatchLabel: 'Title match',
+    titleMatchDescription: 'Picks the first stream whose title contains a keyword',
+    titleMatchAllLabel: 'Title match (all)',
+    titleMatchAllDescription: 'Monitors all streams whose title contains a keyword',
+    allLabel: 'All streams',
+    allDescription: 'Monitors all concurrent live streams simultaneously',
+  },
+  // Relaying All-Chat messages back out to a Discord channel.
+  relay: {
+    loopFilter: 'Loop filter: active — Discord messages are never relayed back to Discord.',
+    enable: 'Enable relay',
+    outboundChannelLabel: 'Outbound channel',
+    selectChannel: 'Select a channel...',
+  },
   // Sample copy the credit-roll theme preview renders so a streamer can see a
   // theme applied to something. It mirrors the real credits overlay.
   creditRollPreview: {

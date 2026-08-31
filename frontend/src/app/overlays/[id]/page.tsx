@@ -113,6 +113,8 @@ import { EditorSectionHeader } from '@/components/editor/EditorSectionHeader'
 import { SettingsSearch } from '@/components/editor/SettingsSearch'
 import { AdvancedDisclosure } from '@/components/editor/AdvancedDisclosure'
 import { ModeratorsPanel } from '@/components/editor/ModeratorsPanel'
+import { useTranslations } from '@/lib/i18n'
+import { emphasise } from '@/lib/i18n/emphasise'
 import {
   EDITOR_SECTIONS,
   type EditorSectionId,
@@ -344,6 +346,7 @@ function SourceCard({
   isOwnChannel?: boolean
   onReconnectChat?: () => void
 }) {
+  const t = useTranslations()
   const [confirmOpen, setConfirmOpen] = useState(false)
   const isTwitch = source.platform === 'twitch'
   const isShared = source.platform === 'shared_overlay'
@@ -418,7 +421,7 @@ function SourceCard({
               <div className="mt-1">
                 <span className="inline-flex items-center gap-1 rounded-full border border-green-500/20 bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-400">
                   <span className="size-1.5 rounded-full bg-green-400" />
-                  Chat via EventSub
+                  {t('overlayEditor.sources.chatViaEventsub')}
                 </span>
               </div>
             )}
@@ -427,7 +430,7 @@ function SourceCard({
                 onClick={onReconnectChat}
                 className="mt-1 inline-flex items-center gap-1 rounded text-xs text-text-sub underline-offset-2 transition-colors hover:text-text hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
               >
-                Reconnect to enable chat
+                {t('overlayEditor.sources.reconnectChat')}
               </button>
             )}
           </div>
@@ -440,7 +443,7 @@ function SourceCard({
               className="text-destructive border-destructive/40 hover:bg-destructive/10 text-xs"
               onClick={() => onRevoke(source)}
             >
-              Revoke
+              {t('overlayEditor.sources.revoke')}
             </Button>
           )}
           <Dialog.Root open={confirmOpen} onOpenChange={setConfirmOpen}>
@@ -448,20 +451,31 @@ function SourceCard({
               render={
                 <button
                   className="hover:text-destructive rounded text-text-sub transition-colors focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
-                  aria-label={`Remove ${source.channel_name || source.channel_id}`}
+                  aria-label={t('overlayEditor.sources.removeLabel', {
+                    channel: source.channel_name || source.channel_id,
+                  })}
                 >
                   <X className="size-4" />
                 </button>
               }
             />
             <Dialog.Content>
-              <Dialog.Title>Remove source?</Dialog.Title>
+              <Dialog.Title>{t('overlayEditor.sources.removeConfirmTitle')}</Dialog.Title>
               <Dialog.Description>
-                Remove <strong>{source.channel_name || source.channel_id}</strong> from this
-                overlay. Chat messages from this source will stop appearing.
+                {emphasise(
+                  t('overlayEditor.sources.removeConfirmBody', {
+                    emphasis: source.channel_name || source.channel_id,
+                  }),
+                  source.channel_name || source.channel_id,
+                  (run) => (
+                    <strong>{run}</strong>
+                  )
+                )}
               </Dialog.Description>
               <div className="flex justify-end gap-3 pt-2">
-                <Dialog.Close render={<Button variant="outline">Cancel</Button>} />
+                <Dialog.Close
+                  render={<Button variant="outline">{t('overlayEditor.sources.cancel')}</Button>}
+                />
                 <Button
                   variant="destructive"
                   onClick={() => {
@@ -469,7 +483,7 @@ function SourceCard({
                     onRemove(source.id)
                   }}
                 >
-                  Remove
+                  {t('overlayEditor.sources.remove')}
                 </Button>
               </div>
             </Dialog.Content>
@@ -483,7 +497,7 @@ function SourceCard({
           onClick={() => onConfigureRelay(source)}
         >
           <ChevronRight className="size-3" />
-          Configure relay
+          {t('overlayEditor.sources.configureRelay')}
         </button>
       )}
       {/* Stream selection button — YouTube only */}
@@ -493,7 +507,7 @@ function SourceCard({
           onClick={() => onConfigureStreamSelect(source)}
         >
           <ChevronRight className="size-3" />
-          Stream selection
+          {t('overlayEditor.sources.streamSelection')}
         </button>
       )}
     </Card>
@@ -502,37 +516,16 @@ function SourceCard({
 
 // ---- StreamSelectionPanel ---------------------------------------------------
 
+// The wire values only. Their labels and descriptions live in the catalog under
+// `overlayEditor.streamSelection.<camelCasedValue>Label|Description`, so this
+// list stays the single source of the API contract and holds no copy.
 const STREAM_STRATEGIES = [
-  {
-    value: 'first_found',
-    label: 'First found',
-    description: 'Picks the first live stream (default)',
-  },
-  {
-    value: 'most_viewers',
-    label: 'Most viewers',
-    description: 'Picks the stream with the highest viewer count',
-  },
-  {
-    value: 'fewest_viewers',
-    label: 'Fewest viewers',
-    description: 'Picks the stream with the lowest viewer count',
-  },
-  {
-    value: 'title_match',
-    label: 'Title match',
-    description: 'Picks the first stream whose title contains a keyword',
-  },
-  {
-    value: 'title_match_all',
-    label: 'Title match (all)',
-    description: 'Monitors all streams whose title contains a keyword',
-  },
-  {
-    value: 'all',
-    label: 'All streams',
-    description: 'Monitors all concurrent live streams simultaneously',
-  },
+  { value: 'first_found', messageStem: 'firstFound' },
+  { value: 'most_viewers', messageStem: 'mostViewers' },
+  { value: 'fewest_viewers', messageStem: 'fewestViewers' },
+  { value: 'title_match', messageStem: 'titleMatch' },
+  { value: 'title_match_all', messageStem: 'titleMatchAll' },
+  { value: 'all', messageStem: 'all' },
 ] as const
 
 function StreamSelectionPanel({
@@ -546,9 +539,11 @@ function StreamSelectionPanel({
   isPremium: boolean
   onSaved: () => void
 }) {
+  const t = useTranslations()
   const ytConfig = (source.config ?? {}) as import('@/lib/types/overlay').YouTubeSourceConfig
   const [strategy, setStrategy] = useState(ytConfig.stream_select ?? 'first_found')
   const [matchTerm, setMatchTerm] = useState(ytConfig.stream_match ?? '')
+  const selectedStrategy = STREAM_STRATEGIES.find((s) => s.value === strategy)
   const [saving, setSaving] = useState(false)
   const strategySelectId = useId()
   const strategyHintId = useId()
@@ -591,10 +586,10 @@ function StreamSelectionPanel({
             htmlFor={strategySelectId}
             className="mb-1 block text-xs font-medium text-text-sub"
           >
-            Stream selection strategy
+            {t('overlayEditor.streamSelection.strategyLabel')}
           </label>
           <p id={strategyHintId} className="mb-2 text-xs text-text-sub/70">
-            When this channel has multiple concurrent live streams, choose which one to monitor.
+            {t('overlayEditor.streamSelection.strategyHint')}
           </p>
           <select
             id={strategySelectId}
@@ -609,19 +604,22 @@ function StreamSelectionPanel({
                 value={s.value}
                 disabled={!isPremium && s.value !== 'first_found'}
               >
-                {s.label}
-                {!isPremium && s.value !== 'first_found' ? ' (Premium)' : ''}
+                {t(`overlayEditor.streamSelection.${s.messageStem}Label`)}
+                {!isPremium && s.value !== 'first_found'
+                  ? t('overlayEditor.streamSelection.premiumSuffix')
+                  : ''}
               </option>
             ))}
           </select>
-          {STREAM_STRATEGIES.find((s) => s.value === strategy) && (
+          {selectedStrategy && (
             <p className="mt-1 text-xs text-text-sub/60">
-              {STREAM_STRATEGIES.find((s) => s.value === strategy)?.description}
+              {t(`overlayEditor.streamSelection.${selectedStrategy.messageStem}Description`)}
             </p>
           )}
           {!isPremium && (
             <p className="mt-1 text-xs text-text-dim">
-              <PremiumUpsellLink /> to use advanced stream selection.
+              <PremiumUpsellLink />
+              {t('overlayEditor.streamSelection.upsellSuffix')}
             </p>
           )}
         </div>
@@ -629,22 +627,20 @@ function StreamSelectionPanel({
         {(strategy === 'title_match' || strategy === 'title_match_all') && (
           <div>
             <label htmlFor={matchInputId} className="mb-1 block text-xs font-medium text-text-sub">
-              Title keyword
+              {t('overlayEditor.streamSelection.matchLabel')}
             </label>
             <Input
               id={matchInputId}
               value={matchTerm}
               onChange={(e) => setMatchTerm(e.target.value)}
-              placeholder="e.g. synthwave, lofi, jazz"
+              placeholder={t('overlayEditor.streamSelection.matchPlaceholder')}
               className="text-xs"
             />
           </div>
         )}
 
         {locked && (
-          <p className="text-xs text-yellow-400/80">
-            Non-default strategies require a premium subscription.
-          </p>
+          <p className="text-xs text-yellow-400/80">{t('overlayEditor.streamSelection.locked')}</p>
         )}
 
         <Button
@@ -677,6 +673,7 @@ function RelayPanel({
   overlayId: string
   onSaved: (updated: ChatSource) => void
 }) {
+  const t = useTranslations()
   const discordConfig = source.config as DiscordSourceConfig
   const [relayEnabled, setRelayEnabled] = useState(discordConfig.relay_enabled ?? false)
   const [relayChannelId, setRelayChannelId] = useState<string>(discordConfig.relay_channel_id ?? '')
@@ -722,9 +719,7 @@ function RelayPanel({
   return (
     <div className="mt-1 ml-4 space-y-3 rounded-lg border border-border bg-surface-2 p-4">
       {/* Loop filter info — static */}
-      <p className="text-xs text-text-sub">
-        Loop filter: active — Discord messages are never relayed back to Discord.
-      </p>
+      <p className="text-xs text-text-sub">{t('overlayEditor.relay.loopFilter')}</p>
 
       {/* Relay toggle */}
       <label className="flex cursor-pointer items-center gap-2 text-sm text-text">
@@ -734,14 +729,14 @@ function RelayPanel({
           onChange={(e) => setRelayEnabled(e.target.checked)}
           className="size-4 accent-discord"
         />
-        Enable relay
+        {t('overlayEditor.relay.enable')}
       </label>
 
       {/* Outbound channel picker — visible only when relay enabled */}
       {relayEnabled && (
         <div>
           <label htmlFor={relayChannelSelectId} className="mb-1 block text-xs text-text-sub">
-            Outbound channel
+            {t('overlayEditor.relay.outboundChannelLabel')}
           </label>
           {channelsLoading ? (
             <Skeleton className="h-9 w-full rounded-lg" />
@@ -752,7 +747,7 @@ function RelayPanel({
               onChange={(e) => setRelayChannelId(e.target.value)}
               className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
             >
-              <option value="">Select a channel...</option>
+              <option value="">{t('overlayEditor.relay.selectChannel')}</option>
               {channels.map((cat) => (
                 <optgroup key={cat.id || 'uncategorized'} label={cat.name}>
                   {cat.channels.map((ch) => (
@@ -1615,6 +1610,7 @@ function AddSourceForm({
 // ---- Page ------------------------------------------------------------------
 
 export default function OverlayEditorPage({ params }: { params: Promise<{ id: string }> }) {
+  const t = useTranslations()
   const { id } = use(params)
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -3367,7 +3363,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           ))}
                           {sources.length === 0 && (
                             <p className="py-2 text-sm text-text-sub">
-                              No sources added yet. Add a platform below.
+                              {t('overlayEditor.sources.empty')}
                             </p>
                           )}
                         </div>
@@ -3376,7 +3372,9 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                       {/* Accepted shared overlays — add as source */}
                       {acceptedShares.length > 0 && (
                         <div className="mb-4 border-t border-border pt-4">
-                          <h3 className="mb-3 text-sm font-medium text-text">Shared Overlays</h3>
+                          <h3 className="mb-3 text-sm font-medium text-text">
+                            {t('overlayEditor.sources.sharedHeading')}
+                          </h3>
                           <div className="space-y-2">
                             {acceptedShares.map((share) => (
                               <button
@@ -3384,8 +3382,14 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                                 onClick={() => handleAddSharedOverlay(share)}
                                 className="flex w-full items-center justify-between rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text transition-colors hover:bg-surface-2"
                               >
-                                <span>{share.sender_display_name}&apos;s overlay</span>
-                                <span className="text-xs text-twitch">+ Add</span>
+                                <span>
+                                  {t('overlayEditor.sources.sharedOwner', {
+                                    owner: share.sender_display_name,
+                                  })}
+                                </span>
+                                <span className="text-xs text-twitch">
+                                  {t('overlayEditor.sources.add')}
+                                </span>
                               </button>
                             ))}
                           </div>

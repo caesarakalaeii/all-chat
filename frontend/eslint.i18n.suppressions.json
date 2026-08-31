@@ -232,10 +232,10 @@
   },
   "src/app/overlays/[id]/page.tsx": {
     "no-restricted-syntax": {
-      "count": 8
+      "count": 7
     },
     "react/jsx-no-literals": {
-      "count": 152
+      "count": 129
     }
   },
   "src/app/overlays/[id]/preview/embed/page.tsx": {
