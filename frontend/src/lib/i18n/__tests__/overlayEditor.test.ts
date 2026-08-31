@@ -167,3 +167,88 @@ describe('appearance control copy', () => {
     expect(t('overlayEditor.appearance.fontPicker.googleGroup')).toBe('Google Fonts')
   })
 })
+
+describe('typography and visibility group copy', () => {
+  it('keeps the font family field labels', () => {
+    // Label and aria-label were byte-identical at every one of the three
+    // sites, so they share one key each rather than doubling up.
+    expect(t('overlayEditor.appearance.typography.bodyFont')).toBe('Body Font')
+    expect(t('overlayEditor.appearance.typography.usernameFont')).toBe('Username Font')
+    expect(t('overlayEditor.appearance.typography.timestampFont')).toBe('Timestamp Font')
+  })
+
+  it('keeps the font picker placeholder and default accessible name', () => {
+    expect(t('overlayEditor.appearance.fontPicker.placeholder')).toBe('Select font…')
+    expect(t('overlayEditor.appearance.fontPicker.defaultLabel')).toBe('Font family')
+  })
+
+  it('keeps the font weight options in numeric order', () => {
+    expect(t('overlayEditor.appearance.typography.fontWeight')).toBe('Font Weight')
+    expect(t('overlayEditor.appearance.typography.fontWeightPlaceholder')).toBe('Select weight…')
+    expect(t('overlayEditor.appearance.typography.fontWeightOptions.100')).toBe('100 Thin')
+    expect(t('overlayEditor.appearance.typography.fontWeightOptions.300')).toBe('300 Light')
+    expect(t('overlayEditor.appearance.typography.fontWeightOptions.400')).toBe('400 Regular')
+    expect(t('overlayEditor.appearance.typography.fontWeightOptions.500')).toBe('500 Medium')
+    expect(t('overlayEditor.appearance.typography.fontWeightOptions.600')).toBe('600 SemiBold')
+    expect(t('overlayEditor.appearance.typography.fontWeightOptions.700')).toBe('700 Bold')
+    expect(t('overlayEditor.appearance.typography.fontWeightOptions.800')).toBe('800 ExtraBold')
+    expect(t('overlayEditor.appearance.typography.fontWeightOptions.900')).toBe('900 Black')
+  })
+
+  it('keeps the font size fields and their pixel unit', () => {
+    expect(t('overlayEditor.appearance.typography.bodySize')).toBe('Body Size')
+    expect(t('overlayEditor.appearance.typography.usernameSize')).toBe('Username Size')
+    expect(t('overlayEditor.appearance.typography.timestampSize')).toBe('Timestamp Size')
+    // Rendered as the accessible description beside each number input, so it is
+    // read out and therefore copy, not a CSS unit token.
+    expect(t('overlayEditor.appearance.typography.pixelUnit')).toBe('px')
+  })
+
+  it('keeps the text shadow presets', () => {
+    expect(t('overlayEditor.appearance.typography.textShadow')).toBe('Text Shadow')
+    expect(t('overlayEditor.appearance.typography.textShadowPresets.none')).toBe('None (default)')
+    expect(t('overlayEditor.appearance.typography.textShadowPresets.soft')).toBe('Soft shadow')
+    expect(t('overlayEditor.appearance.typography.textShadowPresets.strong')).toBe('Strong shadow')
+    expect(t('overlayEditor.appearance.typography.textShadowPresets.outline')).toBe('Outline')
+    expect(t('overlayEditor.appearance.typography.textShadowCustom')).toBe('Custom')
+    expect(t('overlayEditor.appearance.typography.textShadowNote')).toBe(
+      'Keeps chat readable over bright gameplay. Try it with a light preview backdrop.'
+    )
+  })
+
+  it('keeps the advanced typography sliders', () => {
+    expect(t('overlayEditor.appearance.typography.lineHeight')).toBe('Line Height')
+    expect(t('overlayEditor.appearance.typography.letterSpacing')).toBe('Letter Spacing')
+  })
+
+  it('keeps the visibility toggles', () => {
+    expect(t('overlayEditor.appearance.visibility.showAvatars')).toBe('Show avatars')
+    expect(t('overlayEditor.appearance.visibility.showBadges')).toBe('Show badges')
+    expect(t('overlayEditor.appearance.visibility.showTimestamps')).toBe('Show timestamps')
+    expect(t('overlayEditor.appearance.visibility.showEmotes')).toBe('Show emotes')
+    expect(t('overlayEditor.appearance.visibility.showUsername')).toBe('Show username')
+    expect(t('overlayEditor.appearance.visibility.showPlatformBadge')).toBe('Show platform badge')
+    expect(t('overlayEditor.appearance.visibility.showPlatformIndicators')).toBe(
+      'Show platform indicators'
+    )
+    expect(t('overlayEditor.appearance.visibility.showPronouns')).toBe('Show pronouns')
+  })
+
+  it('keeps the badge and pronoun placement options', () => {
+    expect(t('overlayEditor.appearance.visibility.position')).toBe('Position')
+    expect(t('overlayEditor.appearance.visibility.style')).toBe('Style')
+    expect(t('overlayEditor.appearance.visibility.beforeUsername')).toBe('Before username')
+    expect(t('overlayEditor.appearance.visibility.afterUsername')).toBe('After username')
+    expect(t('overlayEditor.appearance.visibility.styleText')).toBe('Text')
+    expect(t('overlayEditor.appearance.visibility.styleIcon')).toBe('Icon')
+    expect(t('overlayEditor.appearance.visibility.pronounPillColor')).toBe('Pill color')
+  })
+
+  it('keeps the event visibility rows', () => {
+    expect(t('overlayEditor.appearance.events.showSuperChat')).toBe('Super Chat')
+    expect(t('overlayEditor.appearance.events.showSubscriptions')).toBe('Subscriptions')
+    expect(t('overlayEditor.appearance.events.showRaids')).toBe('Raids')
+    expect(t('overlayEditor.appearance.events.showBits')).toBe('Bits')
+    expect(t('overlayEditor.appearance.events.showMembershipGift')).toBe('Membership Gift')
+  })
+})

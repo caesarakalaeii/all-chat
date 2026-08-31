@@ -42,6 +42,48 @@ export const overlayEditor = {
     resultsLabel: 'Matching settings',
     noResults: 'No settings match “{query}”',
   },
+  // The appearance groups in src/components/appearance/, keyed by the group the
+  // control is rendered in rather than by the setting it writes.
+  appearance: {
+    background: {
+      overlayHeading: 'Overlay background',
+      overlayColor: 'Overlay background',
+      bubbleHeading: 'Bubble background',
+      bubbleColor: 'Bubble background',
+      borderColor: 'Border color',
+      borderRadius: 'Border radius',
+      borderWidth: 'Border width',
+      padding: 'Padding',
+      messageGap: 'Message gap',
+      backdropBlur: 'Backdrop blur',
+    },
+    colors: {
+      message: 'Message color',
+      username: 'Username color',
+      timestamp: 'Timestamp color',
+    },
+    sizing: {
+      avatarSize: 'Avatar size',
+      badgeSize: 'Badge size',
+      emoteScale: 'Emote scale',
+      emoteScaleNote:
+        'Emote scale applies to third-party emotes (7TV, BTTV, FFZ). Standard emoji are not affected.',
+    },
+    events: {
+      sizeModifier: 'Size modifier',
+    },
+    colorPicker: {
+      swatchLabel: 'Pick color for {label}',
+      popoverTitle: 'Color for {label}',
+      hexLabel: 'Hex value for {label}',
+    },
+    fontPicker: {
+      openLabel: 'Open font picker',
+      empty: 'No fonts found',
+      systemGroup: 'System Fonts',
+      googleGroup: 'Google Fonts',
+    },
+  },
   themeMarketplace: {
     // Two title keys, not a qualifier concatenated onto a shared noun phrase:
     // see the comment in __tests__/overlayEditor.test.ts.
