@@ -903,3 +903,85 @@ describe('platform status indicator tooltips', () => {
     expect(t('viewerOverlay.statusIndicator.countdownSeconds', { seconds: 12 })).toBe('12s')
   })
 })
+
+describe('monitor view moderation toast copy', () => {
+  it('keeps the consent-flow failures', () => {
+    expect(t('viewerOverlay.monitor.consentStartFailed')).toBe(
+      'Could not start moderation setup. Please try again.'
+    )
+    expect(t('viewerOverlay.monitor.twitchConsentStartFailed')).toBe(
+      'Could not start Twitch consent. Please try again.'
+    )
+    expect(t('viewerOverlay.monitor.modConnectUnavailable', { platform: 'kick' })).toBe(
+      'Connecting kick is not available yet. Ask the streamer to moderate there for now.'
+    )
+    expect(t('viewerOverlay.monitor.discordLinkUnavailable')).toBe(
+      'Linking Discord is not available right now. Ask the streamer to moderate there for now.'
+    )
+    expect(t('viewerOverlay.monitor.reloginStartFailed')).toBe(
+      'Could not start re-login. Please try again.'
+    )
+  })
+
+  it('keeps the YouTube re-discovery toasts', () => {
+    // U+2026 ellipsis.
+    expect(t('viewerOverlay.monitor.rediscoverStarted')).toBe('Re-discovering YouTube stream\u2026')
+    expect(t('viewerOverlay.monitor.rediscoverRateLimited')).toBe(
+      'Please wait a moment before retrying'
+    )
+    expect(t('viewerOverlay.monitor.rediscoverForbidden')).toBe('Not authorized for this overlay')
+    expect(t('viewerOverlay.monitor.rediscoverFailed')).toBe('Could not trigger re-discovery')
+  })
+
+  it('keeps the moderation action outcomes', () => {
+    expect(t('viewerOverlay.monitor.reauthNeededToast', { platform: 'twitch' })).toBe(
+      'twitch needs you to re-authorize moderation'
+    )
+    expect(t('viewerOverlay.monitor.actionFailed')).toBe('Moderation action failed')
+    expect(t('viewerOverlay.monitor.messageDeleted')).toBe('Message deleted')
+    expect(t('viewerOverlay.monitor.timedOut', { name: 'ada' })).toBe('Timed out ada')
+    expect(t('viewerOverlay.monitor.banned', { name: 'ada' })).toBe('Banned ada')
+    expect(t('viewerOverlay.monitor.unbanned', { name: 'ada' })).toBe('Unbanned ada')
+    expect(t('viewerOverlay.monitor.unbanFailed')).toBe('Unban failed')
+    // Stands in for the target's name when the request carries neither a
+    // username nor a display name.
+    expect(t('viewerOverlay.monitor.unnamedTarget')).toBe('user')
+  })
+
+  it('keeps the delegated-moderation failure copy, one sentence per code', () => {
+    expect(t('viewerOverlay.monitor.connectRequired', { platform: 'kick' })).toBe(
+      'Connect your own kick account to moderate here'
+    )
+    expect(t('viewerOverlay.monitor.ownerChannelUnverifiedModerator', { platform: 'kick' })).toBe(
+      "This streamer's kick account isn't connected, so nothing can be moderated here"
+    )
+    // U+2014 em dash.
+    expect(t('viewerOverlay.monitor.ownerChannelUnverifiedOwner', { platform: 'kick' })).toBe(
+      "Your kick account isn't connected for this channel \u2014 reconnect it to moderate here"
+    )
+    expect(t('viewerOverlay.monitor.delegationUnsupported', { platform: 'kick' })).toBe(
+      "Moderators can't act on kick yet \u2014 ask the streamer to handle this one"
+    )
+    expect(t('viewerOverlay.monitor.targetNotActionable', { platform: 'kick' })).toBe(
+      "kick won't let anyone moderate this person \u2014 they're the channel owner or another moderator"
+    )
+  })
+
+  it('keeps the five Discord delegation failures', () => {
+    expect(t('viewerOverlay.monitor.discordLinkRequired')).toBe(
+      'Link your Discord account to moderate here'
+    )
+    expect(t('viewerOverlay.monitor.modNotInGuild')).toBe(
+      "You're not in this Discord server \u2014 ask the streamer to invite you"
+    )
+    expect(t('viewerOverlay.monitor.modLacksPermission')).toBe(
+      "Your Discord roles don't allow this \u2014 ask the streamer for a role that does"
+    )
+    expect(t('viewerOverlay.monitor.modBelowTarget')).toBe(
+      "Discord's role hierarchy blocks this \u2014 your highest role has to sit above theirs"
+    )
+    expect(t('viewerOverlay.monitor.botMissingPermission')).toBe(
+      "The All-Chat bot wasn't given this Discord permission \u2014 ask the streamer to re-invite it"
+    )
+  })
+})
