@@ -134,3 +134,73 @@ describe('admin maintenance copy', () => {
     expect(t('admin.maintenance.submittingButton')).toBe('Scheduling…')
   })
 })
+
+describe('admin feature gates copy', () => {
+  it('keeps the page header, error and empty state', () => {
+    expect(t('admin.features.heading')).toBe('Features')
+    expect(t('admin.features.intro')).toBe(
+      'Manage capability-level gates. Premium controls paid access; early access restricts a feature to beta testers. Both toggle without a code deploy.'
+    )
+    expect(t('admin.features.loadError')).toBe(
+      'Failed to load feature gates. Refresh the page to try again.'
+    )
+    expect(t('admin.features.emptyTitle')).toBe('No feature gates configured')
+    expect(t('admin.features.emptyBody')).toBe(
+      'Feature gates are added automatically when new features ship. Check back after the next deployment.'
+    )
+  })
+
+  it('keeps the gate list badges and switch labels', () => {
+    expect(t('admin.features.listHeading', { count: 7 })).toBe('Feature Gates (7)')
+    expect(t('admin.features.badgePremiumOnly')).toBe('Premium only')
+    expect(t('admin.features.badgeFreeForAll')).toBe('Free for all')
+    expect(t('admin.features.badgeEarlyAccess')).toBe('Early access')
+    expect(t('admin.features.badgeStandard')).toBe('Standard')
+    expect(t('admin.features.togglePremiumLabel', { feature: 'credits_roll' })).toBe(
+      'Toggle premium for credits_roll'
+    )
+    expect(t('admin.features.toggleEarlyAccessLabel', { feature: 'credits_roll' })).toBe(
+      'Toggle early access for credits_roll'
+    )
+  })
+
+  it('keeps all four confirmation dialogs whole', () => {
+    // Two orthogonal dimensions, each with two directions, so four dialogs. Each
+    // is a whole title rather than a stem plus a direction fragment: the feature
+    // key sits mid-sentence and word order is the first thing a second language
+    // changes.
+    expect(t('admin.features.makeFreeTitle', { feature: 'credits_roll' })).toBe(
+      'Make credits_roll free for all users?'
+    )
+    expect(t('admin.features.makeFreeBody')).toBe(
+      'All authenticated users will gain access immediately. No code deploy required.'
+    )
+    expect(t('admin.features.makeFreeConfirm')).toBe('Make Free')
+
+    expect(t('admin.features.makePremiumTitle', { feature: 'credits_roll' })).toBe(
+      'Restrict credits_roll to premium users?'
+    )
+    expect(t('admin.features.makePremiumBody')).toBe(
+      'Only users with premium access will be able to use this feature.'
+    )
+    expect(t('admin.features.makePremiumConfirm')).toBe('Make Premium')
+
+    expect(t('admin.features.graduateTitle', { feature: 'credits_roll' })).toBe(
+      'Graduate credits_roll from early access?'
+    )
+    expect(t('admin.features.graduateBody')).toBe(
+      'Beta-tester-only access is lifted; the feature defers to its premium gate.'
+    )
+    expect(t('admin.features.graduateConfirm')).toBe('Graduate')
+
+    expect(t('admin.features.makeEarlyAccessTitle', { feature: 'credits_roll' })).toBe(
+      'Restrict credits_roll to beta testers?'
+    )
+    expect(t('admin.features.makeEarlyAccessBody')).toBe(
+      'Only beta testers will be able to use this early-access feature.'
+    )
+    expect(t('admin.features.makeEarlyAccessConfirm')).toBe('Make Early Access')
+
+    expect(t('admin.features.dialogCancel')).toBe('No, keep as-is')
+  })
+})
