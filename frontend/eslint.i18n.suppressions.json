@@ -68,21 +68,6 @@
       "count": 61
     }
   },
-  "src/app/auth/callback/page.tsx": {
-    "react/jsx-no-literals": {
-      "count": 3
-    }
-  },
-  "src/app/chat/auth-error/page.tsx": {
-    "react/jsx-no-literals": {
-      "count": 6
-    }
-  },
-  "src/app/chat/auth-success/page.tsx": {
-    "react/jsx-no-literals": {
-      "count": 6
-    }
-  },
   "src/app/dev/theme-contrast/page.tsx": {
     "react/jsx-no-literals": {
       "count": 3
@@ -120,14 +105,6 @@
     },
     "react/jsx-no-literals": {
       "count": 73
-    }
-  },
-  "src/app/link/page.tsx": {
-    "no-restricted-syntax": {
-      "count": 2
-    },
-    "react/jsx-no-literals": {
-      "count": 25
     }
   },
   "src/app/opengraph-image.tsx": {
