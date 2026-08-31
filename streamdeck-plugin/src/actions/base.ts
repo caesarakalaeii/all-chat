@@ -25,6 +25,7 @@ import streamDeck, {
 
 import {
 	AllChatError,
+	linkFailureMessage,
 	malformedTokenMessage,
 	missingTokenMessage,
 	premiumGateMessage,
@@ -171,16 +172,18 @@ export abstract class AllChatAction<
 					report("linked", `Linked. Revoke this device any time at ${ACCOUNT_DEVICES_URL}.`);
 					return;
 				} catch (fallbackError) {
+					// The raw reason goes to the log; the property inspector gets copy a
+					// streamer can act on. See linkFailureMessage.
 					const reason =
 						fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
 					logger.error(`${this.label}: linking failed — ${reason}`);
-					report("failed", reason);
+					report("failed", linkFailureMessage(fallbackError));
 					return;
 				}
 			}
 			const reason = error instanceof Error ? error.message : String(error);
 			logger.error(`${this.label}: linking failed — ${reason}`);
-			report("failed", reason);
+			report("failed", linkFailureMessage(error));
 		}
 	}
 

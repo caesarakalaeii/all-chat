@@ -47,6 +47,7 @@ from typing import Any, Mapping
 
 from .settings import (
     ACCOUNT_TOKENS_URL,
+    DEFAULT_BASE_URL,
     SCOPE_CHAT_WRITE,
     SCOPE_ENGAGEMENT_WRITE,
     UPGRADE_URL,
@@ -204,3 +205,59 @@ def forbidden_message(body: Any) -> str:
         f"gate. The usual cause is an overlay ID that belongs to a different account -- "
         f"check the overlay ID in this key's settings."
     )
+
+
+def link_failure_message(exc: BaseException) -> str:
+    """The subtitle shown under the Link button when a link attempt fails.
+
+    The row used to render ``exc.message`` verbatim, and anything that was not an
+    :class:`AllChatError` as ``f"Linking failed: {type(exc).__name__}: {exc}"`` --
+    an exception class name is not something to put in front of a streamer.
+
+    Most of those messages are written for the plugin log: they carry a URL, an
+    errno, an HTTP status or a server-supplied string. This translates the ones
+    that leak detail and deliberately passes the rest through, because several
+    are already good user-facing copy ("The pairing code expired before it was
+    approved. Start linking again.") and replacing those with something generic
+    would be a downgrade. The rule: an authored message with no status attached
+    is copy and survives; anything carrying transport or HTTP detail is replaced.
+
+    Mirrored by ``linkFailureMessage`` in the Stream Deck plugin's ``errors.ts``
+    (this module's header carries the file-level sync pointer). ADR-0049 counts
+    "what the button surfaces on failure" as part of the action contract, so the
+    two plugins must not tell a user two different things about one failure.
+    """
+    if not isinstance(exc, AllChatError):
+        # A TypeError or similar: implementation detail, nothing user-actionable.
+        return (
+            f"Linking did not complete. Press \"Link with All-Chat\" to try again, or "
+            f"paste a personal access token from {ACCOUNT_TOKENS_URL} instead."
+        )
+    if exc.kind == NETWORK:
+        # Unreachable host, DNS, TLS, a timeout, or a loopback port that could not
+        # be bound. All of them carry an errno or a URL in the message.
+        return (
+            "Could not reach All-Chat. Check your internet connection and try again. "
+            "If you self-host, check the Server field in this action's settings."
+        )
+    if exc.kind == FORBIDDEN:
+        return (
+            "The approval could not be verified, so nothing was linked. Press "
+            "\"Link with All-Chat\" and approve the device again."
+        )
+    if exc.kind == UNAUTHORIZED:
+        return unauthorized_message()
+    if exc.status is not None and exc.status >= 500:
+        return (
+            f"All-Chat could not complete the link because the server returned an error "
+            f"(HTTP {exc.status}). That is a fault on the server, not on this machine: "
+            f"try again in a few minutes, and report it if it keeps happening."
+        )
+    if exc.status is not None:
+        return (
+            f"All-Chat refused the link (HTTP {exc.status}). Make sure you are signed in "
+            f"at {DEFAULT_BASE_URL} as the account you want this action to control, then "
+            f"press \"Link with All-Chat\" again."
+        )
+    # No status: an authored message, e.g. the expired pairing code. Show it as written.
+    return exc.message

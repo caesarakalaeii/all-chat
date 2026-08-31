@@ -372,3 +372,25 @@ func TestTokenResolverDispatch_PropagatesRealErrors(t *testing.T) {
 		t.Fatal("dispatcher swallowed a resolver failure")
 	}
 }
+
+func TestTouchDeviceTokenSQL_MultipliesTheLifetimeInsteadOfConcatenatingIt(t *testing.T) {
+	// This statement is best-effort by design and its failure is logged at Debug, which
+	// made it the worst place in the feature for a broken parameter type to hide.
+	//
+	// `expires_at = NOW() + ($2 || ' seconds')::INTERVAL` types $2 as text, because `||`
+	// has only a text overload, and pgx v5 refuses to encode the int64 lifetime into a
+	// text parameter. The UPDATE therefore errored on every authenticated request and
+	// nobody saw it: last_used_at was never written and the expiry never slid, so a
+	// device token expired 90 days after it was minted however heavily the deck was used.
+	// The comment on the constant promises the opposite, so this pins the mechanism that
+	// makes the promise true.
+	if strings.Contains(touchDeviceTokenSQL, "|| ' seconds')") {
+		t.Error("touchDeviceTokenSQL concatenates the lifetime into an INTERVAL again. That " +
+			"types the parameter as text, pgx v5 cannot encode an int64 into text, and because " +
+			"this write is best-effort the failure is invisible — device tokens silently stop " +
+			"being renewed. Use `$2 * INTERVAL '1 second'`.")
+	}
+	if !strings.Contains(touchDeviceTokenSQL, "$2 * INTERVAL '1 second'") {
+		t.Error("touchDeviceTokenSQL no longer derives the expiry from the lifetime parameter")
+	}
+}
