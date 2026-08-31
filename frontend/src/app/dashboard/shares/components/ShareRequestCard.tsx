@@ -28,6 +28,7 @@ import { AddSourceModal } from './AddSourceModal'
 import { RevocationConfirmModal } from './RevocationConfirmModal'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { useTranslations } from '@/lib/i18n'
 
 interface ShareRequestCardProps {
   request: ShareRequest
@@ -35,6 +36,7 @@ interface ShareRequestCardProps {
 }
 
 export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
+  const t = useTranslations()
   const [showAcceptModal, setShowAcceptModal] = useState(false)
   const senderPlatform = request.overlay_sources?.[0]?.platform
   const [showAddSourceModal, setShowAddSourceModal] = useState(false)
@@ -71,7 +73,7 @@ export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
           <div className="flex items-center">
             <div className="h-10 w-10 rounded-full bg-surface-2"></div>
             <div className="ml-3">
-              <p className="text-sm text-text-sub">Loading user info...</p>
+              <p className="text-sm text-text-sub">{t('dashboard.shares.loadingUser')}</p>
             </div>
           </div>
         )}
@@ -101,7 +103,7 @@ export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
             className="mt-2 w-full"
             onClick={() => setShowRevokeModal(true)}
           >
-            Revoke
+            {t('dashboard.shares.revoke')}
           </Button>
         )}
       </div>
@@ -115,7 +117,7 @@ export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
             className="flex-1"
             onClick={() => setShowAcceptModal(true)}
           >
-            Accept
+            {t('dashboard.shares.accept')}
           </Button>
           <Button
             variant="outline"
@@ -126,7 +128,7 @@ export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
               console.log('Reject not implemented yet (Phase 15)')
             }}
           >
-            Reject
+            {t('dashboard.shares.reject')}
           </Button>
         </div>
       )}
@@ -139,7 +141,7 @@ export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
           onClose={() => setShowAcceptModal(false)}
           onAccepted={(senderOverlayId) => {
             setAcceptedShare({
-              senderName: request.sender?.display_name || 'User',
+              senderName: request.sender?.display_name || t('dashboard.shares.userFallbackName'),
               senderOverlayId,
             })
             setShowAcceptModal(false)
@@ -151,7 +153,7 @@ export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
       {/* RevocationConfirmModal */}
       {showRevokeModal && (
         <RevocationConfirmModal
-          partnerName={request.sender?.display_name || 'User'}
+          partnerName={request.sender?.display_name || t('dashboard.shares.userFallbackName')}
           shareId={request.id}
           onClose={() => setShowRevokeModal(false)}
           onRevoked={() => {

@@ -175,8 +175,7 @@ export const settings = {
     namePlaceholder: 'Stream Deck (studio PC)',
     nameDescription: 'Shown in the list below so you know what to revoke.',
     scopesLegend: 'Scopes',
-    noScopesWarning:
-      'Pick at least one scope — a token with none can authenticate but do nothing.',
+    noScopesWarning: 'Pick at least one scope — a token with none can authenticate but do nothing.',
     create: 'Create token',
     creating: 'Creating…',
     createFailed: 'Could not create the token. Try again.',
@@ -274,8 +273,7 @@ export const settings = {
     heading: 'Viewer Premium',
     subheading:
       'A cheaper subscription that unlocks viewer cosmetics — your premium chat badge and name gradient — across every overlay you appear in.',
-    connectPitch:
-      'Back All-Chat on Patreon to unlock your viewer premium cosmetics automatically.',
+    connectPitch: 'Back All-Chat on Patreon to unlock your viewer premium cosmetics automatically.',
     notAPatronSuffix: 'Not a patron yet? {link} (viewer tier from €2), then connect.',
     premiumRow: 'Viewer premium',
     statusExpired: 'Below viewer tier',

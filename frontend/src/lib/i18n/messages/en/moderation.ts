@@ -160,8 +160,7 @@ export const moderation = {
       'This invite is not valid any more — it may already have been used, or the streamer may have withdrawn it. Ask them for a new one.',
     errorExpired: 'This invite has expired. Ask the streamer for a new one.',
     errorAlreadyModerator: 'You already moderate this channel. It is on your channels page.',
-    errorOwnerCannotAccept:
-      'This is your own overlay — you already have full moderation on it.',
+    errorOwnerCannotAccept: 'This is your own overlay — you already have full moderation on it.',
     // The platform and the account are each optional, so all four reachable
     // combinations are whole sentences.
     errorBoundToOther:

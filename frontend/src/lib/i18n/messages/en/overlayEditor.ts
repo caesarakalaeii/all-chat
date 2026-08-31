@@ -743,8 +743,7 @@ export const overlayEditor = {
     twitchRaidsLabel: 'Raids',
     twitchRaidsDescription: 'Incoming raids from other channels',
     twitchChannelPointsLabel: 'Channel Points',
-    twitchChannelPointsDescription:
-      'Channel point reward redemptions (requires EventSub service)',
+    twitchChannelPointsDescription: 'Channel point reward redemptions (requires EventSub service)',
     twitchFollowsLabel: 'Follows',
     twitchFollowsDescription: 'New channel followers (requires EventSub service)',
     twitchWatchStreaksLabel: 'Watch Streaks',

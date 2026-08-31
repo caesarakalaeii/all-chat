@@ -25,8 +25,10 @@ import { ShareRequest } from '@/lib/types/share'
 import { ShareRequestCard } from './components/ShareRequestCard'
 import { AddSourceModal } from './components/AddSourceModal'
 import { toastManager } from '@/lib/toast'
+import { useTranslations } from '@/lib/i18n'
 
 export default function ShareRequestsPage() {
+  const t = useTranslations()
   const [requests, setRequests] = useState<ShareRequest[]>([])
   const [filter, setFilter] = useState<'pending' | 'history'>('pending')
   const [loading, setLoading] = useState(true)
@@ -116,14 +118,14 @@ export default function ShareRequestsPage() {
       {/* Add Source Modal for unseen acceptances */}
       {showUnseenPrompt && unseenAcceptances.length > 0 && (
         <AddSourceModal
-          senderName={unseenAcceptances[0].sender_display_name || 'Unknown User'}
+          senderName={unseenAcceptances[0].sender_display_name || t('dashboard.shares.unknownUser')}
           senderOverlayId={unseenAcceptances[0].sender_overlay_id}
           onClose={handleCloseUnseenPrompt}
           onAdded={handleAddedSource}
         />
       )}
 
-      <h1 className="mb-6 text-2xl font-semibold text-text">Share Requests</h1>
+      <h1 className="mb-6 text-2xl font-semibold text-text">{t('dashboard.shares.heading')}</h1>
 
       {/* Tab Filters */}
       <div className="mb-6 flex space-x-4 border-b border-border">
@@ -136,7 +138,7 @@ export default function ShareRequestsPage() {
               : 'border-transparent text-text-sub hover:text-text'
           )}
         >
-          Pending ({pendingCount})
+          {t('dashboard.shares.tabPending', { count: pendingCount })}
         </button>
         <button
           onClick={() => setFilter('history')}
@@ -147,21 +149,23 @@ export default function ShareRequestsPage() {
               : 'border-transparent text-text-sub hover:text-text'
           )}
         >
-          History ({historyCount})
+          {t('dashboard.shares.tabHistory', { count: historyCount })}
         </button>
       </div>
 
       {/* Loading state */}
       {loading && (
         <div role="status" className="py-8 text-center text-text-sub">
-          Loading requests...
+          {t('dashboard.shares.loading')}
         </div>
       )}
 
       {/* Empty state */}
       {!loading && sortedRequests.length === 0 && (
         <div className="py-8 text-center text-text-sub">
-          {filter === 'pending' ? 'No pending share requests' : 'No request history'}
+          {filter === 'pending'
+            ? t('dashboard.shares.emptyPending')
+            : t('dashboard.shares.emptyHistory')}
         </div>
       )}
 

@@ -91,34 +91,6 @@
       "count": 6
     }
   },
-  "src/app/dashboard/shares/components/AcceptModal.tsx": {
-    "no-restricted-syntax": {
-      "count": 2
-    },
-    "react/jsx-no-literals": {
-      "count": 15
-    }
-  },
-  "src/app/dashboard/shares/components/AddSourceModal.tsx": {
-    "react/jsx-no-literals": {
-      "count": 6
-    }
-  },
-  "src/app/dashboard/shares/components/RevocationConfirmModal.tsx": {
-    "react/jsx-no-literals": {
-      "count": 3
-    }
-  },
-  "src/app/dashboard/shares/components/ShareRequestCard.tsx": {
-    "react/jsx-no-literals": {
-      "count": 4
-    }
-  },
-  "src/app/dashboard/shares/page.tsx": {
-    "react/jsx-no-literals": {
-      "count": 4
-    }
-  },
   "src/app/dev/theme-contrast/page.tsx": {
     "react/jsx-no-literals": {
       "count": 3
