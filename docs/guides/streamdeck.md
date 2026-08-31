@@ -145,9 +145,15 @@ both outright. A leaked credential is a bad day, not a lost account.
 ## Step 3: The actions
 
 **Send chat message.** Type the message into the key's settings; pressing the key
-fans it out to every chat you have connected — Twitch, YouTube, Kick, TikTok and
-Discord — in one press. This is the action most people buy the hardware for.
-Requires `chat:write`.
+fans it out to every chat you have connected — Twitch, YouTube and Kick — in one
+press. This is the action most people buy the hardware for. Requires
+`chat:write`.
+
+Those three are the platforms All-Chat can *post* to, which is a shorter list
+than the platforms it *reads*. TikTok publishes no API for sending into a live
+chat, and a Discord source is a one-way relay into your overlay, so messages
+still arrive from both but neither can be a target. They are not offered in the
+platform picker and are not included in "all".
 
 **Poll control.** One action with a mode you choose per key. *Start* opens a poll
 from the question and options configured on that key. *Close* ends the poll

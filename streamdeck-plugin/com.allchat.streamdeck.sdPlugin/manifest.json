@@ -1,7 +1,7 @@
 {
 	"$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
 	"Name": "All-Chat",
-	"Version": "0.1.0.0",
+	"Version": "0.1.1.0",
 	"Author": "caesarakalaeii",
 	"Description": "Drive your All-Chat account from hardware keys: send chat messages, and start or close polls and predictions. Free plugin; starting polls and predictions needs All-Chat premium.",
 	"Category": "All-Chat",
