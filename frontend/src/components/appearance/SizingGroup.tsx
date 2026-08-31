@@ -34,7 +34,7 @@ export function SizingGroup({ visualSettings, onChange }: SizingGroupProps): Rea
   return (
     <div className="space-y-3">
       <SliderControl
-        label={t('overlayEditor.appearance.sizing.avatarSize')}
+        label={t('overlayEditor.sizing.avatarSize')}
         value={parseFloat(visualSettings.avatarSize ?? '32')}
         min={16}
         max={64}
@@ -43,7 +43,7 @@ export function SizingGroup({ visualSettings, onChange }: SizingGroupProps): Rea
         onChange={(v) => onChange({ avatarSize: `${v}px` })}
       />
       <SliderControl
-        label={t('overlayEditor.appearance.sizing.badgeSize')}
+        label={t('overlayEditor.sizing.badgeSize')}
         value={parseFloat(visualSettings.badgeSize ?? '18')}
         min={12}
         max={32}
@@ -52,7 +52,7 @@ export function SizingGroup({ visualSettings, onChange }: SizingGroupProps): Rea
         onChange={(v) => onChange({ badgeSize: `${v}px` })}
       />
       <SliderControl
-        label={t('overlayEditor.appearance.sizing.emoteScale')}
+        label={t('overlayEditor.sizing.emoteScale')}
         value={parseFloat(visualSettings.emoteScale ?? '1')}
         min={0.5}
         max={3.0}
@@ -60,9 +60,7 @@ export function SizingGroup({ visualSettings, onChange }: SizingGroupProps): Rea
         unit="×"
         onChange={(v) => onChange({ emoteScale: `${v}` })}
       />
-      <p className="text-xs text-text-dim">
-        {t('overlayEditor.appearance.sizing.emoteScaleNote')}
-      </p>
+      <p className="text-xs text-text-dim">{t('overlayEditor.sizing.emoteScaleNote')}</p>
     </div>
   )
 }

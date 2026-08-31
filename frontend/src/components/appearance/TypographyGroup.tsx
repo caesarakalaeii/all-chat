@@ -20,39 +20,32 @@
 
 import React, { useId } from 'react'
 import { Select } from '@base-ui/react/select'
+import { useTranslations } from '@/lib/i18n'
 import type { VisualSettings } from '@/lib/types/visual-settings'
 import { FontFamilyCombobox } from './FontFamilyCombobox'
 import { SliderControl } from './SliderControl'
 import { AdvancedDisclosure } from '@/components/editor/AdvancedDisclosure'
 
-interface FontWeightOption {
-  label: string
-  value: string
-}
-
-const FONT_WEIGHT_OPTIONS: FontWeightOption[] = [
-  { label: '100 Thin', value: '100' },
-  { label: '300 Light', value: '300' },
-  { label: '400 Regular', value: '400' },
-  { label: '500 Medium', value: '500' },
-  { label: '600 SemiBold', value: '600' },
-  { label: '700 Bold', value: '700' },
-  { label: '800 ExtraBold', value: '800' },
-  { label: '900 Black', value: '900' },
-]
+// The CSS font-weight values, in the order the picker offers them. The label
+// lives in the catalog keyed by this value.
+const FONT_WEIGHT_VALUES = ['100', '300', '400', '500', '600', '700', '800', '900'] as const
 
 // Readability presets for chat text over live video. Values are full
 // text-shadow declarations applied via --chat-text-shadow (inherited from the
 // overlay container). '' = unset the field, falling back to the theme/none.
-const TEXT_SHADOW_PRESETS: ReadonlyArray<{ label: string; value: string }> = [
-  { label: 'None (default)', value: '' },
-  { label: 'Soft shadow', value: '0 1px 2px rgba(0, 0, 0, 0.6)' },
+// `name` keys the label in the catalog.
+const TEXT_SHADOW_PRESETS: ReadonlyArray<{
+  name: 'None' | 'Soft' | 'Strong' | 'Outline'
+  value: string
+}> = [
+  { name: 'None', value: '' },
+  { name: 'Soft', value: '0 1px 2px rgba(0, 0, 0, 0.6)' },
   {
-    label: 'Strong shadow',
+    name: 'Strong',
     value: '0 1px 2px rgba(0, 0, 0, 0.9), 0 2px 6px rgba(0, 0, 0, 0.7)',
   },
   {
-    label: 'Outline',
+    name: 'Outline',
     value:
       '1px 1px 0 rgba(0, 0, 0, 0.85), -1px 1px 0 rgba(0, 0, 0, 0.85), 1px -1px 0 rgba(0, 0, 0, 0.85), -1px -1px 0 rgba(0, 0, 0, 0.85)',
   },
@@ -67,6 +60,7 @@ export function TypographyGroup({
   visualSettings,
   onChange,
 }: TypographyGroupProps): React.ReactElement {
+  const t = useTranslations()
   const fieldId = useId()
   const lineHeight = parseFloat(visualSettings.lineHeight ?? '1.5')
   const letterSpacing = parseFloat(visualSettings.letterSpacing?.replace('px', '') ?? '0')
@@ -75,38 +69,38 @@ export function TypographyGroup({
     <div className="space-y-3">
       {/* Body Font Family */}
       <div className="flex flex-col gap-1">
-        <span className="text-sm text-text-sub">Body Font</span>
+        <span className="text-sm text-text-sub">{t('overlayEditor.typography.bodyFont')}</span>
         <FontFamilyCombobox
           value={visualSettings.fontFamily ?? null}
           onChange={(value) => onChange({ fontFamily: value ?? undefined })}
-          aria-label="Body Font"
+          aria-label={t('overlayEditor.typography.bodyFont')}
         />
       </div>
 
       {/* Username Font Family */}
       <div className="flex flex-col gap-1">
-        <span className="text-sm text-text-sub">Username Font</span>
+        <span className="text-sm text-text-sub">{t('overlayEditor.typography.usernameFont')}</span>
         <FontFamilyCombobox
           value={visualSettings.usernameFontFamily ?? null}
           onChange={(value) => onChange({ usernameFontFamily: value ?? undefined })}
-          aria-label="Username Font"
+          aria-label={t('overlayEditor.typography.usernameFont')}
         />
       </div>
 
       {/* Timestamp Font Family */}
       <div className="flex flex-col gap-1">
-        <span className="text-sm text-text-sub">Timestamp Font</span>
+        <span className="text-sm text-text-sub">{t('overlayEditor.typography.timestampFont')}</span>
         <FontFamilyCombobox
           value={visualSettings.timestampFontFamily ?? null}
           onChange={(value) => onChange({ timestampFontFamily: value ?? undefined })}
-          aria-label="Timestamp Font"
+          aria-label={t('overlayEditor.typography.timestampFont')}
         />
       </div>
 
       {/* Font Weight */}
       <div className="flex flex-col gap-1">
         <label htmlFor={`${fieldId}-font-weight`} className="text-sm text-text-sub">
-          Font Weight
+          {t('overlayEditor.typography.fontWeight')}
         </label>
         <Select.Root
           value={visualSettings.fontWeight ?? null}
@@ -116,7 +110,7 @@ export function TypographyGroup({
             id={`${fieldId}-font-weight`}
             className="flex w-full items-center justify-between rounded border border-border bg-bg px-2 py-1.5 text-sm text-text focus-visible:ring-1 focus-visible:ring-border focus-visible:outline-none"
           >
-            <Select.Value placeholder="Select weight…" />
+            <Select.Value placeholder={t('overlayEditor.typography.fontWeightPlaceholder')} />
             <Select.Icon className="text-text-dim">
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
@@ -132,10 +126,10 @@ export function TypographyGroup({
             <Select.Positioner className="z-200">
               <Select.Popup className="rounded border border-border bg-surface py-1 shadow-lg">
                 <Select.List>
-                  {FONT_WEIGHT_OPTIONS.map((opt) => (
+                  {FONT_WEIGHT_VALUES.map((weight) => (
                     <Select.Item
-                      key={opt.value}
-                      value={opt.value}
+                      key={weight}
+                      value={weight}
                       className="hover:bg-subtle data-[highlighted]:bg-subtle flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-text"
                     >
                       <Select.ItemIndicator className="w-4">
@@ -143,7 +137,9 @@ export function TypographyGroup({
                           <path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" />
                         </svg>
                       </Select.ItemIndicator>
-                      <Select.ItemText>{opt.label}</Select.ItemText>
+                      <Select.ItemText>
+                        {t(`overlayEditor.typography.fontWeight${weight}`)}
+                      </Select.ItemText>
                     </Select.Item>
                   ))}
                 </Select.List>
@@ -156,7 +152,7 @@ export function TypographyGroup({
       {/* Body Font Size */}
       <div className="flex items-center gap-2">
         <label htmlFor={`${fieldId}-body-size`} className="w-28 shrink-0 text-sm text-text-sub">
-          Body Size
+          {t('overlayEditor.typography.bodySize')}
         </label>
         <input
           id={`${fieldId}-body-size`}
@@ -169,14 +165,14 @@ export function TypographyGroup({
           className="w-16 rounded border border-border bg-bg px-2 py-1 text-sm text-text focus-visible:ring-1 focus-visible:ring-border focus-visible:outline-none"
         />
         <span id={`${fieldId}-body-size-unit`} className="text-sm text-text-dim">
-          px
+          {t('overlayEditor.typography.pixelUnit')}
         </span>
       </div>
 
       {/* Username Font Size */}
       <div className="flex items-center gap-2">
         <label htmlFor={`${fieldId}-username-size`} className="w-28 shrink-0 text-sm text-text-sub">
-          Username Size
+          {t('overlayEditor.typography.usernameSize')}
         </label>
         <input
           id={`${fieldId}-username-size`}
@@ -187,7 +183,7 @@ export function TypographyGroup({
           className="w-16 rounded border border-border bg-bg px-2 py-1 text-sm text-text focus-visible:ring-1 focus-visible:ring-border focus-visible:outline-none"
         />
         <span id={`${fieldId}-username-size-unit`} className="text-sm text-text-dim">
-          px
+          {t('overlayEditor.typography.pixelUnit')}
         </span>
       </div>
 
@@ -197,7 +193,7 @@ export function TypographyGroup({
           htmlFor={`${fieldId}-timestamp-size`}
           className="w-28 shrink-0 text-sm text-text-sub"
         >
-          Timestamp Size
+          {t('overlayEditor.typography.timestampSize')}
         </label>
         <input
           id={`${fieldId}-timestamp-size`}
@@ -208,14 +204,14 @@ export function TypographyGroup({
           className="w-16 rounded border border-border bg-bg px-2 py-1 text-sm text-text focus-visible:ring-1 focus-visible:ring-border focus-visible:outline-none"
         />
         <span id={`${fieldId}-timestamp-size-unit`} className="text-sm text-text-dim">
-          px
+          {t('overlayEditor.typography.pixelUnit')}
         </span>
       </div>
 
       {/* Text Shadow — readability against live video */}
       <div className="flex flex-col gap-1">
         <label htmlFor={`${fieldId}-text-shadow`} className="text-sm text-text-sub">
-          Text Shadow
+          {t('overlayEditor.typography.textShadow')}
         </label>
         <select
           id={`${fieldId}-text-shadow`}
@@ -226,25 +222,25 @@ export function TypographyGroup({
           className="rounded border border-border bg-bg px-2 py-1.5 text-sm text-text focus-visible:ring-1 focus-visible:ring-border focus-visible:outline-none"
         >
           {TEXT_SHADOW_PRESETS.map((preset) => (
-            <option key={preset.label} value={preset.value}>
-              {preset.label}
+            <option key={preset.name} value={preset.value}>
+              {t(`overlayEditor.typography.textShadow${preset.name}`)}
             </option>
           ))}
           {visualSettings.textShadow !== undefined &&
             !TEXT_SHADOW_PRESETS.some((p) => p.value === visualSettings.textShadow) && (
-              <option value={visualSettings.textShadow}>Custom</option>
+              <option value={visualSettings.textShadow}>
+                {t('overlayEditor.typography.textShadowCustom')}
+              </option>
             )}
         </select>
-        <p className="text-xs text-text-dim">
-          Keeps chat readable over bright gameplay. Try it with a light preview backdrop.
-        </p>
+        <p className="text-xs text-text-dim">{t('overlayEditor.typography.textShadowNote')}</p>
       </div>
 
       {/* Low-traffic fine-tuning lives behind Advanced (ADR-0042) */}
       <AdvancedDisclosure count={2}>
         {/* Line Height */}
         <SliderControl
-          label="Line Height"
+          label={t('overlayEditor.typography.lineHeight')}
           value={lineHeight}
           min={1.0}
           max={2.5}
@@ -254,7 +250,7 @@ export function TypographyGroup({
 
         {/* Letter Spacing */}
         <SliderControl
-          label="Letter Spacing"
+          label={t('overlayEditor.typography.letterSpacing')}
           value={letterSpacing}
           min={-2}
           max={8}

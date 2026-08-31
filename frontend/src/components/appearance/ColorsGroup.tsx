@@ -34,17 +34,17 @@ export function ColorsGroup({ visualSettings, onChange }: ColorsGroupProps): Rea
   return (
     <div className="space-y-3">
       <ColorPickerControl
-        label={t('overlayEditor.appearance.colors.message')}
+        label={t('overlayEditor.colors.message')}
         value={visualSettings.messageColor ?? '#ffffff'}
         onChange={(hex) => onChange({ messageColor: hex })}
       />
       <ColorPickerControl
-        label={t('overlayEditor.appearance.colors.username')}
+        label={t('overlayEditor.colors.username')}
         value={visualSettings.usernameColor ?? '#a0a0ff'}
         onChange={(hex) => onChange({ usernameColor: hex })}
       />
       <ColorPickerControl
-        label={t('overlayEditor.appearance.colors.timestamp')}
+        label={t('overlayEditor.colors.timestamp')}
         value={visualSettings.timestampColor ?? '#888888'}
         onChange={(hex) => onChange({ timestampColor: hex })}
       />

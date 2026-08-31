@@ -21,6 +21,7 @@
 import React, { useState } from 'react'
 import { Combobox } from '@base-ui/react/combobox'
 import { Check } from 'lucide-react'
+import { useTranslations } from '@/lib/i18n'
 
 interface FontOption {
   label: string
@@ -65,10 +66,15 @@ export interface FontFamilyComboboxProps {
 export function FontFamilyCombobox({
   value,
   onChange,
-  placeholder = 'Select font…',
-  'aria-label': ariaLabel = 'Font family',
+  placeholder,
+  'aria-label': ariaLabel,
 }: FontFamilyComboboxProps): React.ReactElement {
+  const t = useTranslations()
   const [inputValue, setInputValue] = useState<string>('')
+  // The two defaults are copy, and a default in the parameter list cannot call
+  // a hook, so they are resolved here instead.
+  const resolvedPlaceholder = placeholder ?? t('overlayEditor.fontPicker.placeholder')
+  const resolvedAriaLabel = ariaLabel ?? t('overlayEditor.fontPicker.defaultLabel')
 
   const filterFonts = (fonts: FontOption[]): FontOption[] => {
     if (!inputValue) return fonts
@@ -90,12 +96,12 @@ export function FontFamilyCombobox({
       <div className="relative">
         <Combobox.Input
           className="w-full rounded border border-border bg-bg px-2 py-1.5 text-sm text-text placeholder:text-text-dim focus-visible:ring-1 focus-visible:ring-border focus-visible:outline-none"
-          placeholder={placeholder}
-          aria-label={ariaLabel}
+          placeholder={resolvedPlaceholder}
+          aria-label={resolvedAriaLabel}
         />
         <Combobox.Trigger
           className="absolute inset-y-0 right-0 flex items-center px-2 text-text-dim"
-          aria-label="Open font picker"
+          aria-label={t('overlayEditor.fontPicker.openLabel')}
         >
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -107,13 +113,13 @@ export function FontFamilyCombobox({
           <Combobox.Popup className="max-h-60 overflow-y-auto rounded border border-border bg-surface py-1 shadow-lg">
             {!hasResults && (
               <Combobox.Empty className="px-3 py-2 text-sm text-text-dim">
-                No fonts found
+                {t('overlayEditor.fontPicker.empty')}
               </Combobox.Empty>
             )}
             {filteredSystem.length > 0 && (
               <Combobox.Group>
                 <Combobox.GroupLabel className="px-3 py-1 text-xs font-semibold tracking-wide text-text-dim uppercase">
-                  System Fonts
+                  {t('overlayEditor.fontPicker.systemGroup')}
                 </Combobox.GroupLabel>
                 {filteredSystem.map((font) => (
                   <Combobox.Item
@@ -132,7 +138,7 @@ export function FontFamilyCombobox({
             {filteredGoogle.length > 0 && (
               <Combobox.Group>
                 <Combobox.GroupLabel className="px-3 py-1 text-xs font-semibold tracking-wide text-text-dim uppercase">
-                  Google Fonts
+                  {t('overlayEditor.fontPicker.googleGroup')}
                 </Combobox.GroupLabel>
                 {filteredGoogle.map((font) => (
                   <Combobox.Item

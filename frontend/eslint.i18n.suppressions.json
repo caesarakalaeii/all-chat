@@ -429,32 +429,9 @@
       "count": 3
     }
   },
-  "src/components/appearance/BackgroundGroup.tsx": {
-    "no-restricted-syntax": {
-      "count": 8
-    },
-    "react/jsx-no-literals": {
-      "count": 2
-    }
-  },
   "src/components/appearance/BubbleColorsGroup.tsx": {
     "react/jsx-no-literals": {
       "count": 9
-    }
-  },
-  "src/components/appearance/ColorPickerControl.tsx": {
-    "react/jsx-no-literals": {
-      "count": 1
-    }
-  },
-  "src/components/appearance/ColorsGroup.tsx": {
-    "no-restricted-syntax": {
-      "count": 3
-    }
-  },
-  "src/components/appearance/EventsGroup.tsx": {
-    "no-restricted-syntax": {
-      "count": 1
     }
   },
   "src/components/appearance/FilterGroup.tsx": {
@@ -463,22 +440,6 @@
     },
     "react/jsx-no-literals": {
       "count": 6
-    }
-  },
-  "src/components/appearance/FontFamilyCombobox.tsx": {
-    "no-restricted-syntax": {
-      "count": 1
-    },
-    "react/jsx-no-literals": {
-      "count": 3
-    }
-  },
-  "src/components/appearance/SizingGroup.tsx": {
-    "no-restricted-syntax": {
-      "count": 3
-    },
-    "react/jsx-no-literals": {
-      "count": 1
     }
   },
   "src/components/appearance/SoundGroup.tsx": {
@@ -495,22 +456,6 @@
     },
     "react/jsx-no-literals": {
       "count": 28
-    }
-  },
-  "src/components/appearance/TypographyGroup.tsx": {
-    "no-restricted-syntax": {
-      "count": 6
-    },
-    "react/jsx-no-literals": {
-      "count": 13
-    }
-  },
-  "src/components/appearance/VisibilityGroup.tsx": {
-    "no-restricted-syntax": {
-      "count": 4
-    },
-    "react/jsx-no-literals": {
-      "count": 3
     }
   },
   "src/components/docs/prose.tsx": {

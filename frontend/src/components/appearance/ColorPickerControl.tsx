@@ -33,6 +33,7 @@
 import React from 'react'
 import { HexColorPicker, HexColorInput } from 'react-colorful'
 import { Popover } from '@/components/ui/popover'
+import { useTranslations } from '@/lib/i18n'
 import { alphaFromHex, hexWithAlpha, normalizeHex, stripAlpha } from '@/lib/utils/hex-alpha'
 
 export interface ColorPickerControlProps {
@@ -46,6 +47,7 @@ export function ColorPickerControl({
   value,
   onChange,
 }: ColorPickerControlProps): React.ReactElement {
+  const t = useTranslations()
   const alpha = alphaFromHex(value)
   const opacityPercent = Math.round(alpha * 100)
 
@@ -74,18 +76,20 @@ export function ColorPickerControl({
             data-testid="color-swatch"
             className="h-full w-full rounded border border-border focus-visible:ring-2 focus-visible:ring-twitch focus-visible:ring-offset-2 focus-visible:ring-offset-surface focus-visible:outline-none"
             style={{ backgroundColor: value }}
-            aria-label={`Pick color for ${label}`}
+            aria-label={t('overlayEditor.colorPicker.swatchLabel', { label })}
           />
         </div>
         <Popover.Content className="space-y-2">
-          <Popover.Title className="sr-only">{`Color for ${label}`}</Popover.Title>
+          <Popover.Title className="sr-only">
+            {t('overlayEditor.colorPicker.popoverTitle', { label })}
+          </Popover.Title>
           <HexColorPicker color={stripAlpha(value)} onChange={handleColorChange} />
           <HexColorInput
             color={value}
             onChange={handleHexInput}
             prefixed
             alpha
-            aria-label={`Hex value for ${label}`}
+            aria-label={t('overlayEditor.colorPicker.hexLabel', { label })}
             className="w-full rounded border border-border bg-bg px-2 py-1.5 font-mono text-sm text-text focus-visible:ring-1 focus-visible:ring-border focus-visible:outline-none"
           />
         </Popover.Content>

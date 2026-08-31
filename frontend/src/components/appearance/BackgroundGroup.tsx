@@ -43,10 +43,10 @@ export function BackgroundGroup({
           legacy sibling *BgOpacity setting is folded in on read and cleared on
           write, so a saved value is never dimmed twice (ADR-0050). */}
       <p className="text-xs font-medium tracking-wide text-text-sub uppercase">
-        {t('overlayEditor.appearance.background.overlayHeading')}
+        {t('overlayEditor.background.overlayHeading')}
       </p>
       <ColorPickerControl
-        label={t('overlayEditor.appearance.background.overlayColor')}
+        label={t('overlayEditor.background.overlayColor')}
         value={withLegacyOpacity(
           visualSettings.overlayBgColor ?? '#000000',
           visualSettings.overlayBgOpacity ?? '0.7'
@@ -56,10 +56,10 @@ export function BackgroundGroup({
 
       {/* Bubble background */}
       <p className="text-xs font-medium tracking-wide text-text-sub uppercase">
-        {t('overlayEditor.appearance.background.bubbleHeading')}
+        {t('overlayEditor.background.bubbleHeading')}
       </p>
       <ColorPickerControl
-        label={t('overlayEditor.appearance.background.bubbleColor')}
+        label={t('overlayEditor.background.bubbleColor')}
         value={withLegacyOpacity(
           visualSettings.bubbleBgColor ?? '#1a1a2e',
           visualSettings.bubbleBgOpacity ?? '0.85'
@@ -69,14 +69,14 @@ export function BackgroundGroup({
 
       {/* Border color */}
       <ColorPickerControl
-        label={t('overlayEditor.appearance.background.borderColor')}
+        label={t('overlayEditor.background.borderColor')}
         value={visualSettings.bubbleBorderColor ?? '#333333'}
         onChange={(hex) => onChange({ bubbleBorderColor: hex })}
       />
 
       {/* Sliders */}
       <SliderControl
-        label={t('overlayEditor.appearance.background.borderRadius')}
+        label={t('overlayEditor.background.borderRadius')}
         value={parseFloat(visualSettings.bubbleBorderRadius ?? '8')}
         min={0}
         max={24}
@@ -85,7 +85,7 @@ export function BackgroundGroup({
         onChange={(v) => onChange({ bubbleBorderRadius: `${v}px` })}
       />
       <SliderControl
-        label={t('overlayEditor.appearance.background.borderWidth')}
+        label={t('overlayEditor.background.borderWidth')}
         value={parseFloat(visualSettings.bubbleBorderWidth ?? '0')}
         min={0}
         max={8}
@@ -96,7 +96,7 @@ export function BackgroundGroup({
       {/* Low-traffic fine-tuning lives behind Advanced (ADR-0042) */}
       <AdvancedDisclosure count={3}>
         <SliderControl
-          label={t('overlayEditor.appearance.background.padding')}
+          label={t('overlayEditor.background.padding')}
           value={parseFloat(visualSettings.bubblePadding ?? '8')}
           min={0}
           max={32}
@@ -105,7 +105,7 @@ export function BackgroundGroup({
           onChange={(v) => onChange({ bubblePadding: `${v}px` })}
         />
         <SliderControl
-          label={t('overlayEditor.appearance.background.messageGap')}
+          label={t('overlayEditor.background.messageGap')}
           value={parseFloat(visualSettings.messageGap ?? '4')}
           min={0}
           max={24}
@@ -114,7 +114,7 @@ export function BackgroundGroup({
           onChange={(v) => onChange({ messageGap: `${v}px` })}
         />
         <SliderControl
-          label={t('overlayEditor.appearance.background.backdropBlur')}
+          label={t('overlayEditor.background.backdropBlur')}
           value={parseFloat(visualSettings.backdropBlur ?? '0')}
           min={0}
           max={20}
