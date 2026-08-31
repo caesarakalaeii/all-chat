@@ -371,3 +371,9 @@ describe('credit roll copy', () => {
     expect(t('viewerOverlay.credits.seeYou')).toBe('See you next stream!')
   })
 })
+
+describe('OBS chat overlay copy', () => {
+  it('keeps the shared-chat indicator', () => {
+    expect(t('viewerOverlay.chatOverlay.sharedChat')).toBe('Shared Chat')
+  })
+})
