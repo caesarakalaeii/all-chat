@@ -180,3 +180,31 @@ describe('share requests page copy', () => {
     expect(t('dashboard.shares.revoking')).toBe('Revoking...')
   })
 })
+
+describe('share request toast copy', () => {
+  it('keeps the load and notification failures', () => {
+    expect(t('dashboard.shares.loadRequestsFailed')).toBe('Failed to load share requests')
+    // One key for both notification toggles: the two call sites were
+    // byte-identical, and a language cannot need two spellings of one sentence.
+    expect(t('dashboard.shares.notificationUpdateFailed')).toBe(
+      'Failed to update notification status'
+    )
+  })
+
+  it('keeps the accept toasts', () => {
+    expect(t('dashboard.shares.acceptedToast', { sender: 'Alice' })).toBe(
+      'Share accepted from Alice!'
+    )
+    // The fallback when the sender has no display name. Lowercase in the
+    // original because it sits mid-sentence, unlike shares.userFallbackName.
+    expect(t('dashboard.shares.acceptedToastUnknownSender')).toBe('user')
+    expect(t('dashboard.shares.circularTitle')).toBe('Cannot accept')
+    expect(t('dashboard.shares.circularBody')).toBe('This would create a circular share dependency')
+  })
+
+  it('keeps the add-source and revoke toasts', () => {
+    expect(t('dashboard.shares.addSourceToast', { sender: 'Alice' })).toBe("Added Alice's overlay!")
+    expect(t('dashboard.shares.revokedToast')).toBe('Share revoked')
+    expect(t('dashboard.shares.revokeFailedToast')).toBe('Failed to revoke share')
+  })
+})
