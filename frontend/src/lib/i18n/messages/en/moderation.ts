@@ -120,4 +120,58 @@ export const moderation = {
       'Delegating moderation is part of All-Chat premium. Your moderators never pay — only your own plan matters.',
     upgradeLink: 'Upgrade to invite moderators',
   },
+  // /moderate/accept: the page a delegation invite link lands on (ADR-0048).
+  accept: {
+    heading: 'Moderation invite',
+    loadingInvite: 'Loading invite',
+    goToChannels: 'Go to your channels',
+    accept: 'Accept and start moderating',
+    accepting: 'Accepting…',
+    notNow: 'Not now',
+    // Not moderation.actions.*: those are the roster's terse labels. This page
+    // spells each action out for someone deciding whether to accept, keyed by
+    // the ModerationAction the row grants.
+    actionDelete: 'Delete messages',
+    actionTimeout: 'Time viewers out',
+    actionBan: 'Ban viewers',
+    actionUnban: 'Lift bans and timeouts',
+    signInHeading: 'Sign in to accept this invite',
+    signInBody:
+      'Moderating is tied to an All-Chat account, so we need to know which one to hand this to. Sign in, then open the invite link again — it stays valid.',
+    signIn: 'Sign in',
+    // {owner} is emphasised at the render site.
+    askingToHelp: '{owner} is asking you to help moderate',
+    // The render site spelled the quotes &ldquo;/&rdquo;.
+    addressedTo: 'They addressed this invite to “{label}”.',
+    actionsHeading: 'What you would be able to do',
+    platformsHeading: 'On these platforms',
+    noPlatforms: 'None yet — {owner} still has to turn a platform on.',
+    ownAccountNote:
+      'You will act with your own platform account, so each platform still checks that {owner} made you a moderator there. Nothing is asked of you now — you connect a platform the first time you moderate on it.',
+    // expected_platform is optional, so two whole sentences rather than one key
+    // with an empty placeholder in it.
+    expectedAccount: 'This invite is meant for {account}.',
+    expectedAccountOnPlatform: 'This invite is meant for {platform} {account}.',
+    errorMissingToken: 'This link is missing its invite code. Ask the streamer to send it again.',
+    // Deliberately covers unknown, already redeemed and revoked alike: the
+    // server keeps the three indistinguishable, so the copy names all three
+    // rather than guessing one.
+    errorNotFound:
+      'This invite is not valid any more — it may already have been used, or the streamer may have withdrawn it. Ask them for a new one.',
+    errorExpired: 'This invite has expired. Ask the streamer for a new one.',
+    errorAlreadyModerator: 'You already moderate this channel. It is on your channels page.',
+    errorOwnerCannotAccept:
+      'This is your own overlay — you already have full moderation on it.',
+    // The platform and the account are each optional, so all four reachable
+    // combinations are whole sentences.
+    errorBoundToOther:
+      'This invite is for a specific account. Sign in as that account, or ask the streamer to send a new invite for this one.',
+    errorBoundToOtherAccount:
+      'This invite is for a specific account ({account}). Sign in as that account, or ask the streamer to send a new invite for this one.',
+    errorBoundToOtherPlatform:
+      'This invite is for a specific {platform} account. Sign in as that account, or ask the streamer to send a new invite for this one.',
+    errorBoundToOtherBoth:
+      'This invite is for a specific {platform} account ({account}). Sign in as that account, or ask the streamer to send a new invite for this one.',
+    errorUnknown: 'Could not open this invite. Check the link and try again.',
+  },
 } as const

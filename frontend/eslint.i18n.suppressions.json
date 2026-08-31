@@ -166,11 +166,6 @@
       "count": 25
     }
   },
-  "src/app/moderate/accept/page.tsx": {
-    "react/jsx-no-literals": {
-      "count": 17
-    }
-  },
   "src/app/moderate/page.tsx": {
     "react/jsx-no-literals": {
       "count": 16
