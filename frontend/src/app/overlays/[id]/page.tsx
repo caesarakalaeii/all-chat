@@ -113,7 +113,7 @@ import { EditorSectionHeader } from '@/components/editor/EditorSectionHeader'
 import { SettingsSearch } from '@/components/editor/SettingsSearch'
 import { AdvancedDisclosure } from '@/components/editor/AdvancedDisclosure'
 import { ModeratorsPanel } from '@/components/editor/ModeratorsPanel'
-import { useTranslations } from '@/lib/i18n'
+import { getTranslations, useTranslations } from '@/lib/i18n'
 import { emphasise, interpolateElements } from '@/lib/i18n/emphasise'
 import {
   EDITOR_SECTIONS,
@@ -121,6 +121,11 @@ import {
   type SpotlightSection,
 } from '@/components/editor/sectionRegistry'
 import dynamic from 'next/dynamic'
+
+// Read through getTranslations() rather than the hook: the dynamic() loading
+// callback below is not a component, so it cannot call one. Same pattern as
+// SAY_HI_TOGGLE_LABEL in components/appearance/FilterGroup.tsx.
+const EDITOR_LOADING_LABEL = getTranslations()('overlayEditor.page.loadingEditor')
 
 // Dynamically import Monaco Editor to avoid SSR issues
 const MonacoCSSEditor = dynamic(() => import('@/components/MonacoCSSEditor'), {
@@ -132,7 +137,7 @@ const MonacoCSSEditor = dynamic(() => import('@/components/MonacoCSSEditor'), {
         'flex h-[300px] items-center justify-center rounded-lg border border-border bg-surface-2'
       }
     >
-      <div className="text-sm text-text-sub">Loading editor...</div>
+      <div className="text-sm text-text-sub">{EDITOR_LOADING_LABEL}</div>
     </div>
   ),
 })
@@ -2968,9 +2973,9 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
         <AppNav />
         <div className="flex h-[calc(100vh-60px)] items-center justify-center">
           <div className="text-center">
-            <p className="text-destructive mb-4 text-lg">Overlay not found</p>
+            <p className="text-destructive mb-4 text-lg">{t('overlayEditor.page.notFound')}</p>
             <Button variant="outline" onClick={() => router.push('/dashboard')}>
-              Return to Dashboard
+              {t('overlayEditor.page.returnToDashboard')}
             </Button>
           </div>
         </div>
@@ -3000,7 +3005,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                 className="mb-1 flex items-center gap-1 rounded text-sm text-text-sub hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
               >
                 <ChevronLeft className="size-4" />
-                Back
+                {t('overlayEditor.page.back')}
               </button>
               <h1 className="text-xl font-bold text-text">{overlay.name}</h1>
               {overlay.description && (
@@ -3012,23 +3017,23 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                 variant="outline"
                 size="sm"
                 onClick={() => window.open(`/overlay/${id}/view`, '_blank', 'noopener,noreferrer')}
-                title="Open the readable chat & activity monitor in a new tab"
+                title={t('overlayEditor.page.monitorViewTitle')}
               >
-                Monitor View
+                {t('overlayEditor.page.monitorView')}
               </Button>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => router.push(`/overlays/${id}/events`)}
               >
-                Event Settings
+                {t('overlayEditor.page.eventSettings')}
               </Button>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => router.push(`/overlays/${id}/credits`)}
               >
-                Credits
+                {t('overlayEditor.page.credits')}
               </Button>
               <Button
                 variant="outline"
@@ -3036,7 +3041,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                 disabled={isCloning}
                 onClick={() => void handleCloneOverlay()}
               >
-                {isCloning ? 'Cloning…' : 'Clone'}
+                {isCloning ? t('overlayEditor.page.cloning') : t('overlayEditor.page.clone')}
               </Button>
             </div>
           </div>
@@ -3048,7 +3053,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
             onClick={handleCopyObsUrl}
           >
             <Clipboard className="size-4" />
-            {copiedObs ? 'Copied!' : 'Copy OBS URL'}
+            {copiedObs ? t('overlayEditor.page.copiedObsUrl') : t('overlayEditor.page.copyObsUrl')}
           </Button>
           <Dialog.Root>
             <Dialog.Trigger
@@ -3057,12 +3062,12 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                   type="button"
                   className="mx-auto block text-xs text-text-sub underline-offset-2 hover:text-text hover:underline"
                 >
-                  How do I add this to OBS?
+                  {t('overlayEditor.page.obsHelpTrigger')}
                 </button>
               }
             />
             <Dialog.Content size="sm">
-              <Dialog.Title>Add the overlay to OBS</Dialog.Title>
+              <Dialog.Title>{t('overlayEditor.page.obsHelpTitle')}</Dialog.Title>
               <div className="mt-3">
                 <ObsHelpContent />
               </div>
@@ -3076,7 +3081,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
             onClick={handleShareClick}
           >
             <Share2 className="size-4" />
-            Share Overlay
+            {t('overlayEditor.page.shareOverlay')}
           </Button>
 
           {/* 2c. Extension overlay */}
@@ -3085,17 +3090,19 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
               <Puzzle className="mt-0.5 size-4 shrink-0 text-twitch" />
               <div className="min-w-0 flex-1">
                 <div className="mb-0.5 flex items-center gap-2">
-                  <p className="text-sm font-semibold text-text">Browser Extension Overlay</p>
+                  <p className="text-sm font-semibold text-text">
+                    {t('overlayEditor.page.extensionHeading')}
+                  </p>
                   {isPublicForViewers && (
                     <span className="inline-flex items-center rounded border border-twitch/30 bg-twitch/15 px-1.5 py-0.5 text-[10px] font-semibold text-twitch">
-                      Active
+                      {t('overlayEditor.page.extensionActive')}
                     </span>
                   )}
                 </div>
                 <p className="text-xs text-text-sub">
                   {isPublicForViewers
-                    ? 'This overlay is shown to viewers via the browser extension at allch.at/c/caesarlp.'
-                    : 'Set this as the overlay shown to viewers via the browser extension.'}
+                    ? t('overlayEditor.page.extensionActiveBody')
+                    : t('overlayEditor.page.extensionInactiveBody')}
                 </p>
               </div>
               {isPublicForViewers ? (
@@ -3105,7 +3112,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                   className="hover:text-destructive shrink-0 text-xs text-text-sub"
                   onClick={handleUnsetExtensionOverlay}
                 >
-                  Deactivate
+                  {t('overlayEditor.page.extensionDeactivate')}
                 </Button>
               ) : (
                 <Button
@@ -3114,7 +3121,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                   className="shrink-0 text-xs"
                   onClick={handleSetAsExtensionOverlay}
                 >
-                  Set Active
+                  {t('overlayEditor.page.extensionSetActive')}
                 </Button>
               )}
             </div>
@@ -3123,34 +3130,40 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           {/* Premium required dialog */}
           <Dialog.Root open={showPremiumRequired} onOpenChange={setShowPremiumRequired}>
             <Dialog.Content size="sm">
-              <Dialog.Title>Premium Feature</Dialog.Title>
+              <Dialog.Title>{t('overlayEditor.page.premiumRequiredTitle')}</Dialog.Title>
               <Dialog.Description>
-                Sharing your overlay is a premium feature.{' '}
-                <PremiumUpsellLink>Upgrade your account</PremiumUpsellLink> to share your chat with
-                other streamers.
+                {interpolateElements(t('overlayEditor.page.premiumRequiredBody'), {
+                  upgradeLink: (
+                    <PremiumUpsellLink>
+                      {t('overlayEditor.page.premiumUpgradeLink')}
+                    </PremiumUpsellLink>
+                  ),
+                })}
               </Dialog.Description>
               <p className="mt-3 text-sm text-text-sub">
-                Questions? Join our{' '}
-                <a
-                  href={DISCORD_INVITE_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-medium text-twitch hover:underline"
-                >
-                  Discord community
-                </a>
-                .
+                {interpolateElements(t('overlayEditor.page.questionsJoin'), {
+                  discordLink: (
+                    <a
+                      href={DISCORD_INVITE_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-twitch hover:underline"
+                    >
+                      {t('overlayEditor.page.discordCommunityLink')}
+                    </a>
+                  ),
+                })}
               </p>
               <div className="mt-5 flex gap-2">
                 <Dialog.Close
                   render={
                     <Button type="button" variant="outline" className="flex-1">
-                      Close
+                      {t('overlayEditor.page.close')}
                     </Button>
                   }
                 />
                 <Link href="/upgrade" className="flex-1">
-                  <Button className="w-full">Upgrade</Button>
+                  <Button className="w-full">{t('overlayEditor.page.upgrade')}</Button>
                 </Link>
               </div>
             </Dialog.Content>
@@ -3159,15 +3172,19 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           {/* Share overlay modal */}
           <Dialog.Root open={showShareModal} onOpenChange={setShowShareModal}>
             <Dialog.Content size="sm">
-              <Dialog.Title>Share Overlay</Dialog.Title>
+              <Dialog.Title>{t('overlayEditor.page.shareTitle')}</Dialog.Title>
               <Dialog.Description>
-                Enter the Twitch username of the person you want to share{' '}
-                <strong>{overlay?.name}</strong> with. They&apos;ll receive a request they can
-                accept or decline.
+                {emphasise(
+                  t('overlayEditor.page.shareBody', { emphasis: overlay.name }),
+                  overlay.name,
+                  (run) => (
+                    <strong>{run}</strong>
+                  )
+                )}
               </Dialog.Description>
               <div className="mt-4 mb-4">
                 <label htmlFor="share-recipient" className="mb-1 block text-xs text-text-sub">
-                  Twitch username
+                  {t('overlayEditor.page.shareRecipientLabel')}
                 </label>
                 <input
                   id="share-recipient"
@@ -3176,7 +3193,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                   value={shareRecipient}
                   onChange={(e) => setShareRecipient(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSendShareRequest()}
-                  placeholder="e.g. somestreamer"
+                  placeholder={t('overlayEditor.page.shareRecipientPlaceholder')}
                   className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text placeholder:text-text-sub focus-visible:ring-2 focus-visible:ring-twitch/50 focus-visible:outline-none"
                   disabled={shareLoading}
                 />
@@ -3190,7 +3207,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                       className="flex-1"
                       disabled={shareLoading}
                     >
-                      Cancel
+                      {t('overlayEditor.page.shareCancel')}
                     </Button>
                   }
                 />
@@ -3199,7 +3216,9 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                   onClick={handleSendShareRequest}
                   disabled={shareLoading || !shareRecipient.trim()}
                 >
-                  {shareLoading ? 'Sending...' : 'Send Request'}
+                  {shareLoading
+                    ? t('overlayEditor.page.shareSending')
+                    : t('overlayEditor.page.shareSend')}
                 </Button>
               </div>
             </Dialog.Content>
@@ -3223,7 +3242,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                         className="mt-3 text-xs text-text-sub underline-offset-2 hover:text-text hover:underline"
                         onClick={handleResetToTheme}
                       >
-                        Reset to theme defaults
+                        {t('overlayEditor.page.resetToThemeDefaults')}
                       </button>
                     </div>
                   )}

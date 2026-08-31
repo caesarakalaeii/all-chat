@@ -454,6 +454,53 @@ export const overlayEditor = {
     adminAdd: 'Add manually',
     adminResolving: 'Resolving\u2026',
   },
+  // The editor page itself: its load states, the header actions, the OBS URL
+  // controls, the browser-extension card and the two overlay-sharing dialogs.
+  page: {
+    loadingEditor: 'Loading editor...',
+    notFound: 'Overlay not found',
+    returnToDashboard: 'Return to Dashboard',
+    back: 'Back',
+    monitorView: 'Monitor View',
+    monitorViewTitle: 'Open the readable chat & activity monitor in a new tab',
+    eventSettings: 'Event Settings',
+    credits: 'Credits',
+    clone: 'Clone',
+    cloning: 'Cloning\u2026',
+    copyObsUrl: 'Copy OBS URL',
+    copiedObsUrl: 'Copied!',
+    obsHelpTrigger: 'How do I add this to OBS?',
+    obsHelpTitle: 'Add the overlay to OBS',
+    shareOverlay: 'Share Overlay',
+    resetToThemeDefaults: 'Reset to theme defaults',
+    extensionHeading: 'Browser Extension Overlay',
+    extensionActive: 'Active',
+    extensionActiveBody:
+      'This overlay is shown to viewers via the browser extension at allch.at/c/caesarlp.',
+    extensionInactiveBody: 'Set this as the overlay shown to viewers via the browser extension.',
+    extensionDeactivate: 'Deactivate',
+    extensionSetActive: 'Set Active',
+    premiumRequiredTitle: 'Premium Feature',
+    // {upgradeLink} and {discordLink} are rendered as links by the call site,
+    // with their text coming from the two sibling keys below.
+    premiumRequiredBody:
+      'Sharing your overlay is a premium feature. {upgradeLink} to share your chat with other streamers.',
+    premiumUpgradeLink: 'Upgrade your account',
+    questionsJoin: 'Questions? Join our {discordLink}.',
+    discordCommunityLink: 'Discord community',
+    close: 'Close',
+    upgrade: 'Upgrade',
+    shareTitle: 'Share Overlay',
+    // {emphasis} is the overlay name, which the render site emboldens. The
+    // apostrophe is U+0027: the render site wrote &apos;.
+    shareBody:
+      "Enter the Twitch username of the person you want to share {emphasis} with. They'll receive a request they can accept or decline.",
+    shareRecipientLabel: 'Twitch username',
+    shareRecipientPlaceholder: 'e.g. somestreamer',
+    shareCancel: 'Cancel',
+    shareSend: 'Send Request',
+    shareSending: 'Sending...',
+  },
   // Sample copy the credit-roll theme preview renders so a streamer can see a
   // theme applied to something. It mirrors the real credits overlay.
   creditRollPreview: {
