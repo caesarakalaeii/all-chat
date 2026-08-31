@@ -28,6 +28,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { DialogRoot, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { toastManager } from '@/lib/toast'
+import { useTranslations } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import type { MaintenanceWindow, CreateMaintenanceRequest } from '@/lib/types/maintenance'
 
@@ -50,6 +51,7 @@ function isActive(mw: MaintenanceWindow): boolean {
 
 export default function AdminMaintenancePage() {
   const router = useRouter()
+  const t = useTranslations()
   const { user } = useAuthStore()
 
   const [maintenances, setMaintenances] = useState<MaintenanceWindow[]>([])
@@ -125,7 +127,7 @@ export default function AdminMaintenancePage() {
   }
 
   async function handleDelete(id: string) {
-    if (!window.confirm('Delete this maintenance window?')) return
+    if (!window.confirm(t('admin.maintenance.deleteConfirm'))) return
     try {
       await maintenanceApi.remove(id)
       toastManager.add({ title: 'Maintenance window deleted', type: 'success' })
@@ -140,15 +142,12 @@ export default function AdminMaintenancePage() {
       {/* Page header */}
       <div className="mb-6 flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-text">Maintenance</h1>
-          <p className="mt-1 text-sm text-text-sub">
-            Schedule planned downtime windows. Users see a banner on the dashboard for upcoming and
-            active maintenance.
-          </p>
+          <h1 className="text-2xl font-bold text-text">{t('admin.maintenance.heading')}</h1>
+          <p className="mt-1 text-sm text-text-sub">{t('admin.maintenance.intro')}</p>
         </div>
         <Button variant="gradient" onClick={() => setShowCreate(true)}>
           <Plus className="mr-2 size-4" />
-          Schedule
+          {t('admin.maintenance.scheduleButton')}
         </Button>
       </div>
 
@@ -162,16 +161,14 @@ export default function AdminMaintenancePage() {
       ) : maintenances.length === 0 ? (
         <Card className="p-6 text-center">
           <Wrench className="mx-auto mb-3 size-8 text-text-dim" strokeWidth={1} />
-          <p className="text-base font-bold text-text">No maintenance windows scheduled</p>
-          <p className="mt-1 text-sm text-text-sub">
-            Schedule a maintenance window to notify users of upcoming downtime.
-          </p>
+          <p className="text-base font-bold text-text">{t('admin.maintenance.emptyTitle')}</p>
+          <p className="mt-1 text-sm text-text-sub">{t('admin.maintenance.emptyBody')}</p>
         </Card>
       ) : (
         <Card className="overflow-hidden">
           <div className="border-b border-border px-4 py-3">
             <h2 className="text-base font-bold text-text">
-              Scheduled Windows ({maintenances.length})
+              {t('admin.maintenance.listHeading', { count: maintenances.length })}
             </h2>
           </div>
           <div className="divide-y divide-border">
@@ -190,7 +187,9 @@ export default function AdminMaintenancePage() {
                             : 'border-blue-500/20 bg-blue-500/10 text-blue-400'
                         )}
                       >
-                        {active ? 'Active' : 'Upcoming'}
+                        {active
+                          ? t('admin.maintenance.statusActive')
+                          : t('admin.maintenance.statusUpcoming')}
                       </span>
                     </div>
                     <p className="mt-0.5 text-xs text-text-sub">
@@ -204,7 +203,7 @@ export default function AdminMaintenancePage() {
                     variant="ghost"
                     size="icon"
                     onClick={() => handleDelete(mw.id)}
-                    aria-label={`Delete ${mw.title}`}
+                    aria-label={t('admin.maintenance.deleteLabel', { title: mw.title })}
                     className="hover:text-destructive shrink-0 text-text-dim"
                   >
                     <Trash2 className="size-4" />
@@ -219,15 +218,12 @@ export default function AdminMaintenancePage() {
       {/* Create maintenance dialog */}
       <DialogRoot open={showCreate} onOpenChange={setShowCreate}>
         <DialogContent>
-          <DialogTitle>Schedule Maintenance</DialogTitle>
-          <DialogDescription>
-            Create a maintenance window. Users will see a banner on the dashboard until the window
-            ends.
-          </DialogDescription>
+          <DialogTitle>{t('admin.maintenance.dialogTitle')}</DialogTitle>
+          <DialogDescription>{t('admin.maintenance.dialogBody')}</DialogDescription>
           <form onSubmit={handleCreate} className="mt-4 space-y-4">
             <div>
               <label className="mb-1 block text-sm font-medium text-text" htmlFor="maint-title">
-                Title <span className="text-destructive">*</span>
+                {t('admin.maintenance.titleLabel')} <span className="text-destructive">*</span>
               </label>
               <input
                 id="maint-title"
@@ -236,7 +232,7 @@ export default function AdminMaintenancePage() {
                 maxLength={200}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Database maintenance"
+                placeholder={t('admin.maintenance.titlePlaceholder')}
                 className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
               />
             </div>
@@ -245,14 +241,14 @@ export default function AdminMaintenancePage() {
                 className="mb-1 block text-sm font-medium text-text"
                 htmlFor="maint-description"
               >
-                Description
+                {t('admin.maintenance.descriptionLabel')}
               </label>
               <textarea
                 id="maint-description"
                 rows={3}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Optional details about the maintenance"
+                placeholder={t('admin.maintenance.descriptionPlaceholder')}
                 className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
               />
             </div>
@@ -262,7 +258,7 @@ export default function AdminMaintenancePage() {
                   className="mb-1 block text-sm font-medium text-text"
                   htmlFor="maint-starts-at"
                 >
-                  Starts at <span className="text-destructive">*</span>
+                  {t('admin.maintenance.startsAtLabel')} <span className="text-destructive">*</span>
                 </label>
                 <input
                   id="maint-starts-at"
@@ -275,7 +271,7 @@ export default function AdminMaintenancePage() {
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-text" htmlFor="maint-ends-at">
-                  Ends at <span className="text-destructive">*</span>
+                  {t('admin.maintenance.endsAtLabel')} <span className="text-destructive">*</span>
                 </label>
                 <input
                   id="maint-ends-at"
@@ -296,10 +292,12 @@ export default function AdminMaintenancePage() {
                   resetForm()
                 }}
               >
-                Cancel
+                {t('admin.maintenance.cancelButton')}
               </Button>
               <Button type="submit" variant="gradient" disabled={submitting}>
-                {submitting ? 'Scheduling…' : 'Schedule'}
+                {submitting
+                  ? t('admin.maintenance.submittingButton')
+                  : t('admin.maintenance.scheduleButton')}
               </Button>
             </div>
           </form>

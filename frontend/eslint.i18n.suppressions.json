@@ -12,14 +12,6 @@
       "count": 6
     }
   },
-  "src/app/admin/maintenance/page.tsx": {
-    "no-restricted-syntax": {
-      "count": 2
-    },
-    "react/jsx-no-literals": {
-      "count": 13
-    }
-  },
   "src/app/admin/overlays/page.tsx": {
     "no-restricted-syntax": {
       "count": 1

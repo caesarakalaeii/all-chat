@@ -66,4 +66,30 @@ export const admin = {
     sourcesByPlatformHeading: 'Sources by platform',
     manageHeading: 'Manage',
   },
+  maintenance: {
+    heading: 'Maintenance',
+    intro:
+      'Schedule planned downtime windows. Users see a banner on the dashboard for upcoming and active maintenance.',
+    scheduleButton: 'Schedule',
+    emptyTitle: 'No maintenance windows scheduled',
+    emptyBody: 'Schedule a maintenance window to notify users of upcoming downtime.',
+    // The parenthesis is part of the copy, not punctuation the render site holds:
+    // a language that brackets differently cannot reorder a fragment left in JSX.
+    listHeading: 'Scheduled Windows ({count})',
+    statusActive: 'Active',
+    statusUpcoming: 'Upcoming',
+    deleteLabel: 'Delete {title}',
+    deleteConfirm: 'Delete this maintenance window?',
+    dialogTitle: 'Schedule Maintenance',
+    dialogBody:
+      'Create a maintenance window. Users will see a banner on the dashboard until the window ends.',
+    titleLabel: 'Title',
+    titlePlaceholder: 'e.g. Database maintenance',
+    descriptionLabel: 'Description',
+    descriptionPlaceholder: 'Optional details about the maintenance',
+    startsAtLabel: 'Starts at',
+    endsAtLabel: 'Ends at',
+    cancelButton: 'Cancel',
+    submittingButton: 'Scheduling…',
+  },
 } as const
