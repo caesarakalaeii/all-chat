@@ -21,7 +21,7 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { emphasise } from '@/lib/i18n/emphasise'
+import { emphasise, interpolateElements } from '@/lib/i18n/emphasise'
 
 afterEach(cleanup)
 
@@ -71,5 +71,55 @@ describe('emphasise', () => {
 
     expect(screen.getByTestId('sentence')).toHaveTextContent('Premium is Premium.')
     expect(screen.getAllByText('Premium')).toHaveLength(1)
+  })
+})
+
+describe('interpolateElements', () => {
+  it('wraps each named placeholder in its own element', () => {
+    render(
+      <p data-testid="sentence">
+        {interpolateElements('Join from chat ({voteCommand} or just {bareVote}) to play.', {
+          voteCommand: <code>!vote 2</code>,
+          bareVote: <code>2</code>,
+        })}
+      </p>
+    )
+
+    expect(screen.getByTestId('sentence')).toHaveTextContent(
+      'Join from chat (!vote 2 or just 2) to play.'
+    )
+    expect(screen.getByText('!vote 2').tagName).toBe('CODE')
+    expect(screen.getByText('2').tagName).toBe('CODE')
+  })
+
+  it('keeps a placeholder whose value is a substring of another distinct', () => {
+    // `2` occurs inside `!vote 2`. Substituting the values first and searching
+    // for them afterwards would wrap the wrong run, which is why the split is
+    // done on the unresolved template instead.
+    render(
+      <p data-testid="sentence">
+        {interpolateElements('{long} then {short}', {
+          long: <code>!vote 2</code>,
+          short: <em>2</em>,
+        })}
+      </p>
+    )
+
+    expect(screen.getByTestId('sentence')).toHaveTextContent('!vote 2 then 2')
+    expect(screen.getByText('!vote 2').tagName).toBe('CODE')
+    expect(screen.getByText('2').tagName).toBe('EM')
+  })
+
+  it('leaves an unknown placeholder in place rather than dropping the run', () => {
+    // Mirrors t()'s never-throws rule: a drifted key must cost the reader as
+    // little as possible, and a visible {brace} is a louder bug report than a
+    // silently shortened sentence.
+    render(
+      <p data-testid="sentence">
+        {interpolateElements('a {known} b {missing} c', { known: <code>ok</code> })}
+      </p>
+    )
+
+    expect(screen.getByTestId('sentence')).toHaveTextContent('a ok b {missing} c')
   })
 })

@@ -363,6 +363,66 @@ export const overlayEditor = {
     outboundChannelLabel: 'Outbound channel',
     selectChannel: 'Select a channel...',
   },
+  // Viewer points, the earn-rate grid, the OBS poll/prediction widgets and the
+  // Twitch native-mirroring opt-in. Saved against the engagement service, so
+  // this panel is independent of Save Configuration.
+  engagement: {
+    loadError: 'Could not load engagement settings. Reload the page to try again.',
+    enablePoints: 'Enable viewer points',
+    announceRounds: 'Announce new rounds in chat',
+    announceRoundsHint:
+      'Posts the question, numbered options and the participate link to your chat when a round starts. Needs the “advanced controls” send permission (the same grant the Monitor view’s chat sending uses) — without it the announcement is skipped.',
+    // The four command placeholders are chat commands, not copy. The render site
+    // re-wraps each in <code>; see the copy lock for why the sentence is whole.
+    pointsExplainer:
+      'Viewers earn {pointsName} by supporting the stream (subs, bits, donations, gifts) and by keeping the participation page open, and wager them on predictions. Run polls and predictions from the Monitor View; viewers join straight from chat ({voteCommand} or just {bareVote}, {predictCommand}) or the participation page — no install required.',
+    pointsNameLabel: 'Points name',
+    pointsNamePlaceholder: 'Points',
+    save: 'Save Engagement Settings',
+    saving: 'Saving...',
+    bitsMultiplierLabel: 'Points per bit',
+    bitsMultiplierHint: 'Twitch cheers',
+    usdMultiplierLabel: 'Points per USD',
+    usdMultiplierHint: 'donations & Super Chats',
+    subHighLabel: 'Tier 3 sub',
+    subHighHint: 'Twitch Tier 3',
+    subMediumLabel: 'Tier 2 sub',
+    subMediumHint: 'Twitch Tier 2',
+    subLowLabel: 'Base sub / member',
+    subLowHint: 'Tier 1, Prime, Kick & YouTube members',
+    giftPerSubLabel: 'Per gifted sub',
+    giftPerSubHint: 'awarded to the gifter',
+    chatPerMinuteLabel: 'Chatting, per minute',
+    chatPerMinuteHint: 'active chatters',
+    watchPerMinuteLabel: 'Participation page, per min',
+    watchPerMinuteHint:
+      'while the viewer keeps the participate page open (not stream-watch time)',
+    // Appended to a hint for a dimension that has no producer yet. The leading
+    // space is part of the copy.
+    comingSoonSuffix: ' (coming soon)',
+    invalidValue: 'Invalid value for "{field}"',
+    mustBeWhole: '"{field}" must be a whole number',
+    linksHeading: 'Widget & viewer links',
+    pollWidgetLabel: 'OBS poll widget',
+    pollWidgetDescription: 'Browser source that shows the live poll',
+    predictionWidgetLabel: 'OBS prediction widget',
+    predictionWidgetDescription: 'Browser source that shows the live prediction',
+    participateLabel: 'Viewer participation page',
+    participateDescription:
+      'Viewers vote, wager and check their balance — no install needed',
+    copyLink: 'Copy link',
+    copiedLink: 'Copied!',
+    copyLinkFailed: 'Could not copy the link',
+    browserSourceHint:
+      'In OBS/Streamlabs: add a {emphasis}, paste a widget URL, and set it to your canvas size (e.g. 1920×1080). The widgets are transparent and only appear while a round is live.',
+    browserSourceHintEmphasis: 'Browser Source',
+    participateShareHint:
+      'Share the participation link with mobile viewers — put it on-screen or in your channel panels so they can join without the extension.',
+    mirroringHeading: 'Twitch native mirroring',
+    mirroringBody:
+      'Mirror your native Twitch polls & predictions onto All-Chat overlays (read-only — viewers still vote in Twitch). Opt-in; it adds read-only Twitch scopes and takes effect after the next channel sync (a stream restart or re-adding the source).',
+    enableMirroring: 'Enable Twitch mirroring',
+  },
   // Sample copy the credit-roll theme preview renders so a streamer can see a
   // theme applied to something. It mirrors the real credits overlay.
   creditRollPreview: {

@@ -797,38 +797,34 @@ type EarnNumberKey =
   | 'chat_per_minute'
   | 'watch_per_minute'
 
-const EARN_NUMBER_FIELDS: ReadonlyArray<{
-  key: EarnNumberKey
-  label: string
-  hint: string
-  float?: boolean
-  comingSoon?: boolean
-}> = [
-  { key: 'bits_multiplier', label: 'Points per bit', hint: 'Twitch cheers', float: true },
-  { key: 'usd_multiplier', label: 'Points per USD', hint: 'donations & Super Chats', float: true },
-  { key: 'sub_high', label: 'Tier 3 sub', hint: 'Twitch Tier 3' },
-  { key: 'sub_medium', label: 'Tier 2 sub', hint: 'Twitch Tier 2' },
-  { key: 'sub_low', label: 'Base sub / member', hint: 'Tier 1, Prime, Kick & YouTube members' },
-  { key: 'gift_per_sub', label: 'Per gifted sub', hint: 'awarded to the gifter' },
+// The wire keys and their numeric behaviour only. Labels and hints live in the
+// catalog under `overlayEditor.engagement.<messageStem>Label|Hint`.
+// `as const` rather than a ReadonlyArray annotation: it keeps each messageStem a
+// string literal, so a stem with no matching catalog key fails tsc at the
+// lookup below instead of rendering the key name to a streamer.
+const EARN_NUMBER_FIELDS = [
+  { key: 'bits_multiplier', messageStem: 'bitsMultiplier', float: true },
+  { key: 'usd_multiplier', messageStem: 'usdMultiplier', float: true },
+  { key: 'sub_high', messageStem: 'subHigh' },
+  { key: 'sub_medium', messageStem: 'subMedium' },
+  { key: 'sub_low', messageStem: 'subLow' },
+  { key: 'gift_per_sub', messageStem: 'giftPerSub' },
   // chat_per_minute has no producer in v1 (nothing publishes engagement:chat), so it
   // never accrues — flag it disabled so streamers don't configure a dead dimension (M6).
-  {
-    key: 'chat_per_minute',
-    label: 'Chatting, per minute',
-    hint: 'active chatters',
-    comingSoon: true,
-  },
+  { key: 'chat_per_minute', messageStem: 'chatPerMinute', comingSoon: true },
   // watch_per_minute rewards participation-PAGE focus time (heartbeat), not stream-watch time (M6).
-  {
-    key: 'watch_per_minute',
-    label: 'Participation page, per min',
-    hint: 'while the viewer keeps the participate page open (not stream-watch time)',
-  },
-]
+  { key: 'watch_per_minute', messageStem: 'watchPerMinute' },
+] as const satisfies ReadonlyArray<{
+  key: EarnNumberKey
+  messageStem: string
+  float?: boolean
+  comingSoon?: boolean
+}>
 
 // Earn config lives on the engagement-service (own endpoint, like the TTS
 // config), so this panel loads and saves independently of Save Configuration.
 function EngagementPanel({ overlayId }: { overlayId: string }) {
+  const t = useTranslations()
   const [config, setConfig] = useState<EarnConfig | null>(null)
   const [numbers, setNumbers] = useState<Record<EarnNumberKey, string> | null>(null)
   const [loadError, setLoadError] = useState(false)
@@ -863,13 +859,20 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
     for (const f of EARN_NUMBER_FIELDS) {
       if (f.comingSoon) continue // not editable yet; the stored value is preserved via ...config
       const n = Number(numbers[f.key])
+      const fieldLabel = t(`overlayEditor.engagement.${f.messageStem}Label`)
       if (!Number.isFinite(n) || n < 0) {
-        toastManager.add({ title: `Invalid value for "${f.label}"`, type: 'error' })
+        toastManager.add({
+          title: t('overlayEditor.engagement.invalidValue', { field: fieldLabel }),
+          type: 'error',
+        })
         return
       }
       // All point amounts are int64 server-side; only the multipliers take decimals.
       if (!f.float && !Number.isInteger(n)) {
-        toastManager.add({ title: `"${f.label}" must be a whole number`, type: 'error' })
+        toastManager.add({
+          title: t('overlayEditor.engagement.mustBeWhole', { field: fieldLabel }),
+          type: 'error',
+        })
         return
       }
       parsed[f.key] = n
@@ -944,9 +947,7 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
 
   if (loadError) {
     return (
-      <p className="text-destructive text-xs">
-        Could not load engagement settings. Reload the page to try again.
-      </p>
+      <p className="text-destructive text-xs">{t('overlayEditor.engagement.loadError')}</p>
     )
   }
   if (!config || !numbers) {
@@ -962,15 +963,9 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
           onChange={(e) => setConfig({ ...config, enabled: e.target.checked })}
           className="size-4 accent-twitch"
         />
-        Enable viewer points
+        {t('overlayEditor.engagement.enablePoints')}
       </label>
-      <p className="text-xs text-text-sub">
-        Viewers earn {config.points_name.trim() || 'Points'} by supporting the stream (subs, bits,
-        donations, gifts) and by keeping the participation page open, and wager them on predictions.
-        Run polls and predictions from the Monitor View; viewers join straight from chat (
-        <code>!vote 2</code> or just <code>2</code>, <code>!predict 1 500</code>) or the
-        participation page — no install required.
-      </p>
+      <p className="text-xs text-text-sub">{pointsExplainer}</p>
 
       <div>
         <label className="flex cursor-pointer items-center gap-2 text-sm text-text">
@@ -980,24 +975,22 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
             onChange={(e) => setConfig({ ...config, announce_on_start: e.target.checked })}
             className="size-4 accent-twitch"
           />
-          Announce new rounds in chat
+          {t('overlayEditor.engagement.announceRounds')}
         </label>
         <p className="mt-0.5 text-[11px] text-text-sub">
-          Posts the question, numbered options and the participate link to your chat when a round
-          starts. Needs the “advanced controls” send permission (the same grant the Monitor view’s
-          chat sending uses) — without it the announcement is skipped.
+          {t('overlayEditor.engagement.announceRoundsHint')}
         </p>
       </div>
 
       <div>
         <label htmlFor="earn-points-name" className="mb-1 block text-xs text-text-sub">
-          Points name
+          {t('overlayEditor.engagement.pointsNameLabel')}
         </label>
         <Input
           id="earn-points-name"
           value={config.points_name}
           onChange={(e) => setConfig({ ...config, points_name: e.target.value })}
-          placeholder="Points"
+          placeholder={t('overlayEditor.engagement.pointsNamePlaceholder')}
         />
       </div>
 
@@ -1005,7 +998,7 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
         {EARN_NUMBER_FIELDS.map((f) => (
           <div key={f.key}>
             <label htmlFor={`earn-${f.key}`} className="mb-1 block text-xs text-text-sub">
-              {f.label}
+              {t(`overlayEditor.engagement.${f.messageStem}Label`)}
             </label>
             <input
               id={`earn-${f.key}`}
@@ -1021,15 +1014,15 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
               )}
             />
             <p className="mt-0.5 text-[11px] text-text-sub">
-              {f.hint}
-              {f.comingSoon && ' (coming soon)'}
+              {t(`overlayEditor.engagement.${f.messageStem}Hint`)}
+              {f.comingSoon && t('overlayEditor.engagement.comingSoonSuffix')}
             </p>
           </div>
         ))}
       </div>
 
       <Button size="sm" className="w-full" disabled={saving} onClick={() => void handleSave()}>
-        {saving ? 'Saving...' : 'Save Engagement Settings'}
+        {saving ? t('overlayEditor.engagement.saving') : t('overlayEditor.engagement.save')}
       </Button>
 
       <div className="space-y-2 border-t border-border pt-3">
