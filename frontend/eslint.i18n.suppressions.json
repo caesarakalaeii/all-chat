@@ -114,22 +114,12 @@
   },
   "src/app/overlay/[id]/credits/page.tsx": {
     "react/jsx-no-literals": {
-      "count": 16
+      "count": 1
     }
   },
   "src/app/overlay/[id]/page.tsx": {
     "react/jsx-no-literals": {
       "count": 2
-    }
-  },
-  "src/app/overlay/[id]/poll/page.tsx": {
-    "react/jsx-no-literals": {
-      "count": 6
-    }
-  },
-  "src/app/overlay/[id]/prediction/page.tsx": {
-    "react/jsx-no-literals": {
-      "count": 5
     }
   },
   "src/app/overlay/[id]/view/page.tsx": {

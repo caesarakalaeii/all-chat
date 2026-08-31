@@ -30,12 +30,16 @@ import { use, useCallback, useEffect, useState } from 'react'
 import clsx from 'clsx'
 import type { Prediction } from '@/lib/types/engagement'
 import { useEngagementLive } from '@/lib/hooks/useEngagementLive'
+import { useTranslations } from '@/lib/i18n'
 
 const POLL_INTERVAL_MS = 2000
+// Decoration beside the prediction title; already behind aria-hidden.
+const PREDICTION_GLYPH = '🔮'
 
 const OUTCOME_COLORS = ['bg-sky-500/70', 'bg-pink-500/70', 'bg-amber-500/70', 'bg-emerald-500/70']
 
 export default function PredictionOverlayPage({ params }: { params: Promise<{ id: string }> }) {
+  const t = useTranslations()
   const { id } = use(params)
   const [prediction, setPrediction] = useState<Prediction | null>(null)
 
@@ -90,16 +94,16 @@ export default function PredictionOverlayPage({ params }: { params: Promise<{ id
   const totalPool = prediction.outcomes.reduce((sum, o) => sum + o.total_points, 0)
   const stateBadge =
     prediction.state === 'LOCKED'
-      ? '🔒 LOCKED'
+      ? t('viewerOverlay.predictionWidget.stateLocked')
       : prediction.state === 'RESOLVED'
-        ? '🏆 RESOLVED'
-        : 'OPEN'
+        ? t('viewerOverlay.predictionWidget.stateResolved')
+        : t('viewerOverlay.predictionWidget.stateOpen')
 
   return (
     <div className="min-h-screen bg-transparent p-4">
       <div className="mx-auto max-w-md rounded-xl bg-black/70 p-4 text-white shadow-lg backdrop-blur-sm">
         <div className="mb-3 flex items-center gap-2 text-lg font-bold">
-          <span aria-hidden>🔮</span>
+          <span aria-hidden>{PREDICTION_GLYPH}</span>
           <span>{prediction.title}</span>
         </div>
         <div className="space-y-2">
@@ -131,12 +135,15 @@ export default function PredictionOverlayPage({ params }: { params: Promise<{ id
                         has an accessible name and reads for colourblind viewers (L-A1). */}
                     {isWinner && (
                       <span className="shrink-0 rounded bg-yellow-400 px-1.5 py-0.5 text-[10px] font-bold text-black uppercase">
-                        Winner
+                        {t('viewerOverlay.predictionWidget.winnerPill')}
                       </span>
                     )}
                   </span>
                   <span className="tabular-nums">
-                    {o.total_points.toLocaleString()} pts · {pct}%
+                    {t('viewerOverlay.predictionWidget.outcomeTally', {
+                      points: o.total_points.toLocaleString(),
+                      pct,
+                    })}
                   </span>
                 </div>
               </div>
@@ -145,8 +152,10 @@ export default function PredictionOverlayPage({ params }: { params: Promise<{ id
         </div>
         <div className="mt-3 flex items-center justify-between text-sm text-white/80">
           <span className="tabular-nums">
-            {totalPool.toLocaleString()} pts wagered ·{' '}
-            {prediction.outcomes.reduce((s, o) => s + o.entrants, 0)} players
+            {t('viewerOverlay.predictionWidget.pool', {
+              points: totalPool.toLocaleString(),
+              players: prediction.outcomes.reduce((s, o) => s + o.entrants, 0),
+            })}
           </span>
           <span className="font-semibold">{stateBadge}</span>
         </div>

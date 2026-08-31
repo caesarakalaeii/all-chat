@@ -142,4 +142,61 @@ export const viewerOverlay = {
     wagerFailed: 'Wager failed',
     wagerNeedsAmount: 'Enter a positive amount to wager.',
   },
+
+  pollWidget: {
+    finalBadge: 'Final',
+    finalResults: 'Final results',
+    // P3-12: a non-unique top vote count is a tie, and every tied option says so.
+    winnerPill: 'Winner',
+    tiePill: 'Tie',
+    optionTally: '{pct}% ({votes})',
+    remaining: '{clock} remaining',
+  },
+
+  predictionWidget: {
+    // The padlock and trophy have no sibling word here, so they are part of what
+    // the badge reads rather than decoration beside it.
+    stateLocked: '🔒 LOCKED',
+    stateResolved: '🏆 RESOLVED',
+    stateOpen: 'OPEN',
+    winnerPill: 'Winner',
+    outcomeTally: '{points} pts · {pct}%',
+    pool: '{points} pts wagered · {players} players',
+  },
+
+  credits: {
+    loading: 'Loading Credits...',
+    loadFailed: 'Failed to load credit roll',
+    errorHeading: 'Unable to Load Credit Roll',
+    errorHint: 'Make sure you have an active streaming session',
+    empty: 'No credit roll data available',
+
+    heading: '🎬 Stream Credits',
+    subheading: 'Thank you to everyone who supported the stream!',
+    session: 'Session: {date}',
+    duration: 'Duration: {duration}',
+
+    // English-only pluralisation, so one key per form.
+    durationHourOne: '{hours} hour',
+    durationHourMany: '{hours} hours',
+    durationMinuteOne: '{minutes} minute',
+    durationMinuteMany: '{minutes} minutes',
+    durationHoursAndMinutes: '{hours} {minutes}',
+    durationJustStarted: 'just started',
+
+    topSubscribers: 'Top Subscribers',
+    topGifters: 'Top Gifters',
+    topCheerers: 'Top Cheerers',
+    topChannelPoints: 'Top Channel Points',
+    topRaiders: 'Top Raiders',
+    topSuperChats: 'Top Super Chats',
+    newFollowers: 'New Followers',
+
+    nowPlaying: 'Now Playing',
+    clipViews: '{views} views',
+    clipCounter: 'Clip {index}/{total}',
+
+    thanks: 'Thank you for watching! ❤️',
+    seeYou: 'See you next stream!',
+  },
 } as const
