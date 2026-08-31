@@ -429,27 +429,6 @@
       "count": 3
     }
   },
-  "src/components/appearance/BubbleColorsGroup.tsx": {
-    "react/jsx-no-literals": {
-      "count": 9
-    }
-  },
-  "src/components/appearance/FilterGroup.tsx": {
-    "no-restricted-syntax": {
-      "count": 5
-    },
-    "react/jsx-no-literals": {
-      "count": 6
-    }
-  },
-  "src/components/appearance/SoundGroup.tsx": {
-    "no-restricted-syntax": {
-      "count": 6
-    },
-    "react/jsx-no-literals": {
-      "count": 6
-    }
-  },
   "src/components/appearance/TTSGroup.tsx": {
     "no-restricted-syntax": {
       "count": 26

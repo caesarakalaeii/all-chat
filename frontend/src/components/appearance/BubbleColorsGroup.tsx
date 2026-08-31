@@ -38,6 +38,8 @@ import React from 'react'
 import { Plus, RotateCcw, X } from 'lucide-react'
 import { PremiumBadge } from '@/components/PremiumBadge'
 import { PremiumUpsellLink } from '@/components/PremiumUpsellLink'
+import { useTranslations } from '@/lib/i18n'
+import { emphasise } from '@/lib/i18n/emphasise'
 import type { VisualSettings } from '@/lib/types/visual-settings'
 import { MAX_BUBBLE_PALETTE } from '@/lib/utils/visual-settings-to-css'
 import { ColorPickerControl } from './ColorPickerControl'
@@ -45,12 +47,18 @@ import { ColorPickerControl } from './ColorPickerControl'
 /** Starting colour for a newly added palette entry — a neutral dark bubble. */
 const NEW_SWATCH = '#1e293b'
 
-const PLATFORMS: ReadonlyArray<{ field: keyof VisualSettings; label: string; sample: string }> = [
-  { field: 'twitchBubbleBg', label: 'Twitch', sample: '#2a1b3d' },
-  { field: 'youtubeBubbleBg', label: 'YouTube', sample: '#3d1b1b' },
-  { field: 'kickBubbleBg', label: 'Kick', sample: '#1b3d22' },
-  { field: 'tiktokBubbleBg', label: 'TikTok', sample: '#1b333d' },
-  { field: 'discordBubbleBg', label: 'Discord', sample: '#22253d' },
+// `platform` keys the display name in common.platforms.*, shared with the
+// moderator roster rather than duplicated here.
+const PLATFORMS: ReadonlyArray<{
+  field: keyof VisualSettings
+  platform: 'twitch' | 'youtube' | 'kick' | 'tiktok' | 'discord'
+  sample: string
+}> = [
+  { field: 'twitchBubbleBg', platform: 'twitch', sample: '#2a1b3d' },
+  { field: 'youtubeBubbleBg', platform: 'youtube', sample: '#3d1b1b' },
+  { field: 'kickBubbleBg', platform: 'kick', sample: '#1b3d22' },
+  { field: 'tiktokBubbleBg', platform: 'tiktok', sample: '#1b333d' },
+  { field: 'discordBubbleBg', platform: 'discord', sample: '#22253d' },
 ]
 
 export interface BubbleColorsGroupProps {
@@ -65,6 +73,7 @@ export function BubbleColorsGroup({
   onChange,
   locked = false,
 }: BubbleColorsGroupProps): React.ReactElement {
+  const t = useTranslations()
   const palette = visualSettings.bubblePalette ?? []
 
   // Always write the whole list back: the setting is one array, and an entry's
@@ -79,8 +88,15 @@ export function BubbleColorsGroup({
         <div className="flex items-start gap-2 rounded-lg border border-border bg-surface p-3">
           <PremiumBadge />
           <p className="text-sm text-text-sub">
-            Different bubble colours per platform, or a palette cycled down the feed, are a{' '}
-            <PremiumUpsellLink>Premium</PremiumUpsellLink> feature.
+            {emphasise(
+              t('overlayEditor.bubbleColors.lockedNotice', {
+                emphasis: t('overlayEditor.bubbleColors.lockedNoticeEmphasis'),
+              }),
+              t('overlayEditor.bubbleColors.lockedNoticeEmphasis'),
+              (run) => (
+                <PremiumUpsellLink>{run}</PremiumUpsellLink>
+              )
+            )}
           </p>
         </div>
       )}
@@ -88,23 +104,28 @@ export function BubbleColorsGroup({
       <fieldset disabled={locked} className="space-y-5 disabled:opacity-50">
         <div className="space-y-3">
           <div>
-            <h3 className="text-sm font-medium text-text">Per platform</h3>
+            <h3 className="text-sm font-medium text-text">
+              {t('overlayEditor.bubbleColors.perPlatformHeading')}
+            </h3>
             <p className="text-xs text-text-dim">
-              Tell sources apart at a glance. Unset platforms keep the normal bubble background.
+              {t('overlayEditor.bubbleColors.perPlatformBody')}
             </p>
           </div>
           {PLATFORMS.map((platform) => {
             const current = visualSettings[platform.field]
+            const platformName = t(`common.platforms.${platform.platform}`)
             return (
               <div key={String(platform.field)} className="flex items-center gap-1">
                 <ColorPickerControl
-                  label={platform.label}
+                  label={platformName}
                   value={typeof current === 'string' ? current : platform.sample}
                   onChange={(hex) => onChange({ [platform.field]: hex })}
                 />
                 <button
                   type="button"
-                  aria-label={`Reset ${platform.label} bubble colour`}
+                  aria-label={t('overlayEditor.bubbleColors.resetPlatform', {
+                    platform: platformName,
+                  })}
                   disabled={locked}
                   onClick={() => onChange({ [platform.field]: undefined })}
                   className="rounded p-1 text-text-dim transition-colors hover:text-text disabled:cursor-not-allowed"
@@ -118,17 +139,16 @@ export function BubbleColorsGroup({
 
         <div className="space-y-3">
           <div>
-            <h3 className="text-sm font-medium text-text">Palette</h3>
-            <p className="text-xs text-text-dim">
-              Two or more colours, cycled down the feed. A row keeps its colour while it is on
-              screen. Needs at least two to take effect.
-            </p>
+            <h3 className="text-sm font-medium text-text">
+              {t('overlayEditor.bubbleColors.paletteHeading')}
+            </h3>
+            <p className="text-xs text-text-dim">{t('overlayEditor.bubbleColors.paletteBody')}</p>
           </div>
 
           {palette.map((color, index) => (
             <div key={index} className="flex items-center gap-1">
               <ColorPickerControl
-                label={`Colour ${index + 1}`}
+                label={t('overlayEditor.bubbleColors.swatchLabel', { index: index + 1 })}
                 value={color}
                 onChange={(hex) =>
                   writePalette(palette.map((entry, i) => (i === index ? hex : entry)))
@@ -136,7 +156,7 @@ export function BubbleColorsGroup({
               />
               <button
                 type="button"
-                aria-label={`Remove colour ${index + 1}`}
+                aria-label={t('overlayEditor.bubbleColors.removeSwatch', { index: index + 1 })}
                 disabled={locked}
                 onClick={() => writePalette(palette.filter((_, i) => i !== index))}
                 className="rounded p-1 text-text-dim transition-colors hover:text-text disabled:cursor-not-allowed"
@@ -154,13 +174,13 @@ export function BubbleColorsGroup({
               className="hover:bg-surface-alt flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text transition-colors disabled:cursor-not-allowed"
             >
               <Plus className="h-3.5 w-3.5" />
-              Add colour
+              {t('overlayEditor.bubbleColors.addSwatch')}
             </button>
           )}
 
           {palette.length === 1 && (
             <p className="text-xs text-text-dim">
-              One colour behaves the same as Bubble background. Add a second to start cycling.
+              {t('overlayEditor.bubbleColors.singleSwatchNote')}
             </p>
           )}
         </div>

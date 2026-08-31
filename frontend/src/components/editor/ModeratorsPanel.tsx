@@ -46,6 +46,7 @@ import { Dialog } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
 import { boundInviteAccount, delegationErrorCode, moderationApi } from '@/lib/api/moderation'
 import { useTranslations, type TFunction } from '@/lib/i18n'
+import { emphasise } from '@/lib/i18n/emphasise'
 import {
   DELEGATABLE_ACTIONS,
   DELEGATABLE_PLATFORMS,
@@ -58,33 +59,9 @@ import {
 } from '@/lib/types/moderation'
 import { cn } from '@/lib/utils'
 
-/**
- * Render a catalog sentence whose `{emphasis}` placeholder is a <strong> run.
- *
- * The catalog holds the sentence whole, because word order is the first thing a
- * second language changes and a translator cannot place emphasis inside a
- * fragment they cannot see. `t()` returns a string, so the element cannot be
- * passed in as a param — the resolved sentence is split around the emphasised
- * words instead. Rendered text is identical to the pre-migration markup.
- */
-function emphasisedSentence(sentence: string, emphasis: string) {
-  const [before, ...rest] = sentence.split(emphasis)
-  // No match means the copy and its emphasis key drifted apart. Render the
-  // sentence plainly rather than dropping it: losing the bold is cosmetic,
-  // losing the sentence is not.
-  if (rest.length === 0) return sentence
-  return (
-    <>
-      {before}
-      <strong>{emphasis}</strong>
-      {rest.join(emphasis)}
-    </>
-  )
-}
-
 /** Display name for a platform, from the catalog. */
 function platformLabel(t: TFunction, platform: DelegatablePlatform): string {
-  return t(`moderation.platforms.${platform}`)
+  return t(`common.platforms.${platform}`)
 }
 
 /** Display name for a delegatable action, from the catalog. */
@@ -283,11 +260,14 @@ export function ModeratorsPanel({ overlayId }: { overlayId: string }) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-text-sub">
-        {emphasisedSentence(
+        {emphasise(
           t('moderation.roster.explainer', {
             emphasis: t('moderation.roster.explainerEmphasis'),
           }),
-          t('moderation.roster.explainerEmphasis')
+          t('moderation.roster.explainerEmphasis'),
+          (run) => (
+            <strong>{run}</strong>
+          )
         )}
       </p>
 
@@ -585,11 +565,14 @@ function InviteDialog({ overlayId, open, onOpenChange }: InviteDialogProps) {
         {created !== null ? (
           <div className="space-y-3">
             <Dialog.Description className="text-xs">
-              {emphasisedSentence(
+              {emphasise(
                 t('moderation.invite.sendLink', {
                   emphasis: t('moderation.invite.sendLinkEmphasis'),
                 }),
-                t('moderation.invite.sendLinkEmphasis')
+                t('moderation.invite.sendLinkEmphasis'),
+                (run) => (
+                  <strong>{run}</strong>
+                )
               )}
             </Dialog.Description>
             <code className="bg-surface-alt block overflow-x-auto rounded-lg border border-border p-2 text-xs break-all text-text">

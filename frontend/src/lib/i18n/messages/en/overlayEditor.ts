@@ -131,6 +131,67 @@ export const overlayEditor = {
     styleIcon: 'Icon',
     pronounPillColor: 'Pill color',
   },
+  filters: {
+    blockedUsernames: 'Blocked usernames',
+    blockedUsernamesPlaceholder: 'Type username, press Enter',
+    addCommonBots: 'Add common bots',
+    blockedKeywords: 'Blocked keywords',
+    blockedKeywordsPlaceholder: 'Type keyword or regex, press Enter',
+    removeTag: 'Remove {tag}',
+    hideCommands: 'Hide bot commands (!)',
+    // sectionRegistry.ts duplicates this label so the editor settings search
+    // can index it while the section is unmounted, and sectionRegistry.test.ts
+    // fails if the two disagree.
+    hideSayHi: 'Hide YouTube "said hi" greetings',
+    hideSayHiNote:
+      'Only YouTube messages whose entire text is the greeting posted by the vertical-stream “Say hi!” button. Hidden messages also make no sound and are not read by TTS.',
+    sayHiPhrases: 'Extra “said hi” phrases',
+    sayHiPhrasesPlaceholder: 'Type phrase, press Enter',
+    sayHiPhrasesNote:
+      'The button’s text is localised, so add what it posts in your language — for example the German phrase.',
+    minMessageLength: 'Min message length',
+    // Suffixed onto the slider's number by SliderControl. The leading space is
+    // the separator and is part of the copy.
+    charsUnit: ' chars',
+  },
+  bubbleColors: {
+    lockedNotice:
+      'Different bubble colours per platform, or a palette cycled down the feed, are a {emphasis} feature.',
+    lockedNoticeEmphasis: 'Premium',
+    perPlatformHeading: 'Per platform',
+    perPlatformBody:
+      'Tell sources apart at a glance. Unset platforms keep the normal bubble background.',
+    resetPlatform: 'Reset {platform} bubble colour',
+    paletteHeading: 'Palette',
+    paletteBody:
+      'Two or more colours, cycled down the feed. A row keeps its colour while it is on screen. Needs at least two to take effect.',
+    swatchLabel: 'Colour {index}',
+    removeSwatch: 'Remove colour {index}',
+    addSwatch: 'Add colour',
+    singleSwatchNote:
+      'One colour behaves the same as Bubble background. Add a second to start cycling.',
+  },
+  sounds: {
+    scopeNote:
+      'These sounds play on your public OBS overlay, for everyone watching your stream. Want a private alert only you hear when new activity arrives (channel-point redeems, a TikTok Rose, and so on)? Open the Monitor view and turn on Activity sound in its Display menu. That is a separate setting and stays on that device.',
+    enable: 'Enable notification sounds',
+    preset: 'Sound preset',
+    // Suffixed with the soundPlayer preset name the option writes. Casing rules
+    // are language-specific, so the display name cannot be derived from the
+    // stored lowercase value.
+    presetChime: 'Chime',
+    presetPop: 'Pop',
+    presetPing: 'Ping',
+    volume: 'Volume',
+    test: 'Test sound',
+    cooldown: 'Cooldown',
+    // Suffixed onto the slider's number; the leading space is the separator.
+    millisecondsUnit: ' ms',
+    customUrl: 'Custom sound URL',
+    customUrlUpsell: '— Upload your own notification sound ({emphasis})',
+    customUrlUpsellEmphasis: 'Premium',
+    customUrlPlaceholder: 'https://example.com/sound.mp3',
+  },
   colorPicker: {
     swatchLabel: 'Pick color for {label}',
     popoverTitle: 'Color for {label}',

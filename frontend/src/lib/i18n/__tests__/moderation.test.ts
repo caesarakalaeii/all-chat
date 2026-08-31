@@ -28,12 +28,10 @@ import { getTranslations } from '@/lib/i18n'
 const t = getTranslations()
 
 describe('moderators panel copy', () => {
-  it('keeps the platform and action labels', () => {
-    expect(t('moderation.platforms.twitch')).toBe('Twitch')
-    expect(t('moderation.platforms.youtube')).toBe('YouTube')
-    expect(t('moderation.platforms.kick')).toBe('Kick')
-    expect(t('moderation.platforms.discord')).toBe('Discord')
-
+  // The platform names this panel renders moved to common.platforms.* once the
+  // overlay editor's bubble colour picker became their second reader.
+  // __tests__/common.test.ts pins them now.
+  it('keeps the action labels', () => {
     expect(t('moderation.actions.delete')).toBe('Delete messages')
     expect(t('moderation.actions.timeout')).toBe('Timeout')
     expect(t('moderation.actions.ban')).toBe('Ban')

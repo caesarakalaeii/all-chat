@@ -23,4 +23,15 @@
  * from one caller "for later" makes every surface depend on copy no reader owns.
  */
 
-export const common = {} as const
+export const common = {
+  // Product names, keyed by the platform identifier the code already carries.
+  // Read by the moderator roster and by the overlay editor's bubble colour
+  // picker, which is why they are not in either namespace.
+  platforms: {
+    twitch: 'Twitch',
+    youtube: 'YouTube',
+    kick: 'Kick',
+    tiktok: 'TikTok',
+    discord: 'Discord',
+  },
+} as const

@@ -21,12 +21,6 @@
  */
 
 export const moderation = {
-  platforms: {
-    twitch: 'Twitch',
-    youtube: 'YouTube',
-    kick: 'Kick',
-    discord: 'Discord',
-  },
   actions: {
     delete: 'Delete messages',
     timeout: 'Timeout',
