@@ -36,6 +36,7 @@
  */
 
 import { useState, useEffect } from 'react'
+import { Button } from '@/components/ui/button'
 import { useHydrated } from '@/hooks/useHydrated'
 import { useTranslations } from '@/lib/i18n'
 import { interpolateElements } from '@/lib/i18n/emphasise'
@@ -248,12 +249,9 @@ export default function CookieBanner() {
 
               {/* Action Buttons */}
               <div className="flex flex-wrap gap-3">
-                <button
-                  onClick={acknowledgeBanner}
-                  className="rounded-lg bg-twitch px-6 py-2.5 font-medium text-bg transition-colors hover:bg-twitch/80 focus-visible:ring-3 focus-visible:ring-twitch/50 focus-visible:outline-none"
-                >
+                <Button onClick={acknowledgeBanner} size="lg">
                   {t('legal.cookieBanner.acknowledge')}
-                </button>
+                </Button>
                 <a
                   href="/legal/privacy"
                   target="_blank"

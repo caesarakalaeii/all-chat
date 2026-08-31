@@ -20,7 +20,7 @@
 
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import React from 'react'
-import { render, screen, fireEvent, cleanup, waitFor, act } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup, waitFor, act, within } from '@testing-library/react'
 
 // Mock @/lib/toast BEFORE importing the component under test. The mock exposes
 // toastManager.add so TTSGroup's `toastManager.add({ title, type })` calls
@@ -677,8 +677,10 @@ describe('TTSGroup', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: /^Regenerate URL$/ }))
     const dialog = screen.getByRole('alertdialog')
-    // The destructive confirm button is the second Regenerate URL button, inside the dialog.
-    const confirmBtn = dialog.querySelector('button.bg-red-500\\/10') as HTMLButtonElement
+    // Selected by accessible name, NOT by a utility class: styling classes move
+    // whenever a control adopts a design-system primitive, and a test that
+    // asserts on them breaks for a reason that has nothing to do with behaviour.
+    const confirmBtn = within(dialog).getByRole('button', { name: /^Regenerate URL$/ })
     expect(confirmBtn).not.toBeNull()
     await act(async () => {
       fireEvent.click(confirmBtn)
@@ -1159,27 +1161,22 @@ describe('TTSGroup - conditional class attributes', () => {
       onRemoveKey: vi.fn().mockResolvedValue(undefined),
     })
 
+    // Asserts on the DESIGN TOKEN, not on raw palette classes. The intent — the
+    // armed state reads as destructive and the unarmed one does not — is stable;
+    // `border-red-500`/`text-red-400` were an implementation detail that moved
+    // the moment this control adopted <Button variant="destructive"> (ADR-0056).
     const unarmed = screen.getByRole('button', { name: /^Remove key$/ })
     const unarmedClasses = unarmed.className.split(/\s+/)
-    expect(unarmedClasses).toContain('rounded-lg')
-    expect(unarmedClasses).toContain('border')
     expect(unarmedClasses).toContain('border-border')
-    expect(unarmedClasses).toContain('bg-surface')
-    expect(unarmedClasses).toContain('text-text-sub')
-    expect(unarmedClasses).not.toContain('border-red-500')
+    expect(unarmedClasses).not.toContain('text-destructive')
 
     fireEvent.click(unarmed)
 
     const armed = await screen.findByRole('button', { name: /^Confirm remove$/ })
     const armedClasses = armed.className.split(/\s+/)
-    expect(armedClasses).toContain('rounded-lg')
-    expect(armedClasses).toContain('border')
-    expect(armedClasses).toContain('border-red-500')
-    expect(armedClasses).toContain('bg-red-500/10')
-    expect(armedClasses).toContain('text-red-400')
+    expect(armedClasses).toContain('text-destructive')
+    expect(armedClasses).toContain('bg-destructive/10')
     expect(armedClasses).not.toContain('border-border')
-    expect(armedClasses).not.toContain('bg-surface')
-    expect(armedClasses).not.toContain('text-text-sub')
   })
 
   it('the Advanced block is a positioning context only for non-premium users', () => {

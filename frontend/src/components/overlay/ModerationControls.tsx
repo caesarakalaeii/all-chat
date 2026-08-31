@@ -22,6 +22,7 @@ import clsx from 'clsx'
 import { Ban, Clock, ShieldOff, Trash2 } from 'lucide-react'
 
 import { Popover } from '@/components/ui/popover'
+import { Button } from '@/components/ui/button'
 import { useTranslations, type TFunction } from '@/lib/i18n'
 import { MODERATABLE_PLATFORMS, TIMEOUT_PRESETS } from '@/lib/types/moderation'
 import type { SourceCapability } from '@/lib/types/moderation'
@@ -110,21 +111,23 @@ export function ModerationControls({
       {/* Delete — revealed on row hover. Hidden for moderatable sources that don't
           support single-message delete (Kick/YouTube). */}
       {showDelete && (
-        <button
+        <Button
           type="button"
           onClick={() => onDelete(item)}
           disabled={!can('delete')}
           title={disabled ? disabledReason : t('viewerOverlay.moderationControls.deleteMessage')}
           aria-label={t('viewerOverlay.moderationControls.deleteMessage')}
+          variant="ghost"
+          size="icon-xs"
           className={clsx(
-            'rounded p-0.5 opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none',
+            'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
             can('delete')
-              ? 'text-text-dim hover:bg-red-500/10 hover:text-red-400'
-              : 'cursor-not-allowed text-text-dim/50'
+              ? 'text-text-dim hover:bg-destructive/10 hover:text-destructive'
+              : 'text-text-dim/50'
           )}
         >
           <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        </Button>
       )}
 
       {/* Per-user actions trigger. Hidden for moderatable sources with no per-user
@@ -133,20 +136,20 @@ export function ModerationControls({
         <Popover.Root>
           <Popover.Trigger
             render={
-              <button
+              <Button
                 type="button"
                 disabled={disabled}
                 title={disabled ? disabledReason : t('viewerOverlay.moderationControls.menuLabel')}
                 aria-label={t('viewerOverlay.moderationControls.menuLabel')}
+                variant="ghost"
+                size="icon-xs"
                 className={clsx(
-                  'rounded p-0.5 opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none',
-                  disabled
-                    ? 'cursor-not-allowed text-text-dim/50'
-                    : 'text-text-dim hover:bg-surface-2 hover:text-text'
+                  'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
+                  disabled ? 'text-text-dim/50' : 'text-text-dim'
                 )}
               >
                 <Clock className="h-3.5 w-3.5" />
-              </button>
+              </Button>
             }
           />
           <Popover.Content className="w-44 border-border bg-surface p-2">
@@ -163,14 +166,16 @@ export function ModerationControls({
                     <Popover.Close
                       key={preset.seconds}
                       render={
-                        <button
+                        <Button
                           type="button"
                           onClick={() => onTimeout(item, preset.seconds)}
-                          className="flex flex-1 items-center justify-center gap-1 rounded border border-border px-1.5 py-1 text-xs font-medium text-text-sub transition-colors hover:border-border-md hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                          variant="outline"
+                          size="xs"
+                          className="flex-1"
                         >
                           <Clock className="h-3 w-3" />
                           {preset.label}
-                        </button>
+                        </Button>
                       }
                     />
                   ))}
@@ -181,14 +186,16 @@ export function ModerationControls({
             {can('ban') && (
               <Popover.Close
                 render={
-                  <button
+                  <Button
                     type="button"
                     onClick={() => onBan(item)}
-                    className="flex w-full items-center gap-2 rounded border border-red-500/20 bg-red-500/10 px-2 py-1.5 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/20 focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:outline-none"
+                    variant="destructive"
+                    size="xs"
+                    className="w-full justify-start gap-2"
                   >
                     <Ban className="h-3.5 w-3.5" />
                     {t('viewerOverlay.moderationControls.ban')}
-                  </button>
+                  </Button>
                 }
               />
             )}
@@ -196,14 +203,16 @@ export function ModerationControls({
             {can('unban') && (
               <Popover.Close
                 render={
-                  <button
+                  <Button
                     type="button"
                     onClick={() => onUnban(item)}
-                    className="mt-1 flex w-full items-center gap-2 rounded border border-border px-2 py-1.5 text-xs font-medium text-text-sub transition-colors hover:border-border-md hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                    variant="outline"
+                    size="xs"
+                    className="mt-1 w-full justify-start gap-2"
                   >
                     <ShieldOff className="h-3.5 w-3.5" />
                     {t('viewerOverlay.moderationControls.unban')}
-                  </button>
+                  </Button>
                 }
               />
             )}

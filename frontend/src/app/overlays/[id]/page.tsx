@@ -483,12 +483,14 @@ function SourceCard({
               </div>
             )}
             {isTwitch && !source.chat_via_eventsub && isOwnChannel && onReconnectChat && (
-              <button
+              <Button
                 onClick={onReconnectChat}
-                className="mt-1 inline-flex items-center gap-1 rounded text-xs text-text-sub underline-offset-2 transition-colors hover:text-text hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                variant="link"
+                size="xs"
+                className="mt-1 h-auto p-0 text-text-sub hover:text-text"
               >
                 {t('overlayEditor.sources.reconnectChat')}
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -506,14 +508,16 @@ function SourceCard({
           <Dialog.Root open={confirmOpen} onOpenChange={setConfirmOpen}>
             <Dialog.Trigger
               render={
-                <button
-                  className="rounded text-text-sub transition-colors hover:text-destructive focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  className="hover:text-destructive"
                   aria-label={t('overlayEditor.sources.removeLabel', {
                     channel: source.channel_name || source.channel_id,
                   })}
                 >
                   <X className="size-4" />
-                </button>
+                </Button>
               }
             />
             <Dialog.Content>
@@ -549,23 +553,27 @@ function SourceCard({
       </div>
       {/* Configure relay button — Discord only */}
       {isDiscord && onConfigureRelay && (
-        <button
-          className="mt-2 flex items-center gap-1 rounded text-xs text-text-sub transition-colors hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+        <Button
+          variant="ghost"
+          size="xs"
+          className="mt-2 px-0"
           onClick={() => onConfigureRelay(source)}
         >
           <ChevronRight className="size-3" />
           {t('overlayEditor.sources.configureRelay')}
-        </button>
+        </Button>
       )}
       {/* Stream selection button — YouTube only */}
       {isYoutube && onConfigureStreamSelect && (
-        <button
-          className="mt-2 flex items-center gap-1 rounded text-xs text-text-sub transition-colors hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+        <Button
+          variant="ghost"
+          size="xs"
+          className="mt-2 px-0"
           onClick={() => onConfigureStreamSelect(source)}
         >
           <ChevronRight className="size-3" />
           {t('overlayEditor.sources.streamSelection')}
-        </button>
+        </Button>
       )}
     </Card>
   )
@@ -1086,7 +1094,7 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
             <label htmlFor={`earn-${f.key}`} className="mb-1 block text-xs text-text-sub">
               {t(`overlayEditor.engagement.${f.messageStem}Label`)}
             </label>
-            <input
+            <Input
               id={`earn-${f.key}`}
               type="number"
               min={0}
@@ -1094,10 +1102,8 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
               value={numbers[f.key]}
               disabled={f.comingSoon}
               onChange={(e) => setNumbers({ ...numbers, [f.key]: e.target.value })}
-              className={cn(
-                'w-full rounded-md border border-border bg-bg px-2 py-1 text-xs text-text',
-                f.comingSoon && 'opacity-50'
-              )}
+              size="sm"
+              className={cn(f.comingSoon && 'opacity-50')}
             />
             <p className="mt-0.5 text-[11px] text-text-sub">
               {t(`overlayEditor.engagement.${f.messageStem}Hint`)}
@@ -1342,9 +1348,10 @@ function AddSourceForm({
 
       {/* OAuth buttons — fetch auth_url then redirect, same pattern as login */}
       <div className="grid grid-cols-1 gap-2">
-        <button
+        <Button
           onClick={() => startOAuth(`/api/v1/auth/twitch/add-source/${overlayId}`)}
-          className="flex items-center gap-2.5 rounded-lg bg-twitch px-4 py-2.5 text-sm font-semibold text-bg transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
+          size="lg"
+          className="gap-2.5"
         >
           <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
             <path
@@ -1353,11 +1360,12 @@ function AddSourceForm({
             />
           </svg>
           {t('overlayEditor.addSource.connectTwitch')}
-        </button>
+        </Button>
 
-        <button
+        <Button
           onClick={() => startOAuth(`/api/v1/auth/youtube/add-source/${overlayId}`)}
-          className="flex items-center gap-2.5 rounded-lg px-4 py-2.5 text-sm font-semibold text-bg transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
+          size="lg"
+          className="gap-2.5 text-bg"
           style={
             { backgroundColor: '#FF0000', '--tw-ring-color': '#FF0000' } as React.CSSProperties
           }
@@ -1369,11 +1377,12 @@ function AddSourceForm({
             />
           </svg>
           {t('overlayEditor.addSource.connectYoutube')}
-        </button>
+        </Button>
 
-        <button
+        <Button
           onClick={() => startOAuth(`/api/v1/auth/kick/add-source/${overlayId}`)}
-          className="flex items-center gap-2.5 rounded-lg px-4 py-2.5 text-sm font-semibold text-bg transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-kick focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
+          size="lg"
+          className="gap-2.5 text-bg"
           style={{ backgroundColor: 'var(--color-kick)' }}
         >
           <svg className="h-4 w-4 shrink-0" viewBox="0 0 512 512" aria-hidden="true">
@@ -1383,13 +1392,14 @@ function AddSourceForm({
             />
           </svg>
           {t('overlayEditor.addSource.connectKick')}
-        </button>
+        </Button>
 
         {/* TikTok — no OAuth; the button matches the OAuth buttons but opens a
             username dialog, since TikTok Live is keyed on a creator handle. */}
-        <button
+        <Button
           onClick={() => setTiktokDialogOpen(true)}
-          className="flex items-center gap-2.5 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
+          size="lg"
+          className="gap-2.5 text-white"
           style={
             { backgroundColor: '#010101', '--tw-ring-color': '#69C9D0' } as React.CSSProperties
           }
@@ -1401,7 +1411,7 @@ function AddSourceForm({
             />
           </svg>
           {t('overlayEditor.addSource.connectTiktok')}
-        </button>
+        </Button>
 
         {/* Discord — guild dialog or settings prompt */}
         {guildsLoaded && guilds.length === 0 ? (
@@ -1419,9 +1429,10 @@ function AddSourceForm({
             )}
           </p>
         ) : (
-          <button
+          <Button
             onClick={handleDiscordButtonClick}
-            className="flex items-center gap-2.5 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
+            size="lg"
+            className="gap-2.5 text-white"
             style={
               { backgroundColor: '#5865F2', '--tw-ring-color': '#5865F2' } as React.CSSProperties
             }
@@ -1434,7 +1445,7 @@ function AddSourceForm({
               />
             </svg>
             {t('overlayEditor.addSource.connectDiscord')}
-          </button>
+          </Button>
         )}
       </div>
 
@@ -1464,10 +1475,12 @@ function AddSourceForm({
           {discordStep === 1 && (
             <div className="mt-3 space-y-2">
               {guilds.map((guild) => (
-                <button
+                <Button
                   key={guild.guild_id}
                   onClick={() => handleSelectGuild(guild)}
-                  className="flex w-full items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-text transition-colors hover:bg-surface-2 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                  variant="outline"
+                  size="lg"
+                  className="w-full justify-start gap-3"
                 >
                   {guild.guild_icon ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -1483,7 +1496,7 @@ function AddSourceForm({
                   )}
                   <span className="truncate font-medium">{guild.guild_name}</span>
                   <ChevronRight className="ml-auto size-4 shrink-0 text-text-sub" />
-                </button>
+                </Button>
               ))}
             </div>
           )}
@@ -3065,13 +3078,15 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           {/* 1. Header */}
           <div className="flex items-start justify-between">
             <div>
-              <button
+              <Button
                 onClick={() => router.push('/dashboard')}
-                className="mb-1 flex items-center gap-1 rounded text-sm text-text-sub hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                variant="ghost"
+                size="sm"
+                className="mb-1 px-0"
               >
                 <ChevronLeft className="size-4" />
                 {t('overlayEditor.page.back')}
-              </button>
+              </Button>
               <h1 className="text-xl font-bold text-text">{overlay.name}</h1>
               {overlay.description && (
                 <p className="mt-0.5 text-sm text-text-sub">{overlay.description}</p>
@@ -3123,12 +3138,14 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           <Dialog.Root>
             <Dialog.Trigger
               render={
-                <button
+                <Button
                   type="button"
-                  className="mx-auto block text-xs text-text-sub underline-offset-2 hover:text-text hover:underline"
+                  variant="link"
+                  size="xs"
+                  className="mx-auto h-auto p-0 text-text-sub hover:text-text"
                 >
                   {t('overlayEditor.page.obsHelpTrigger')}
-                </button>
+                </Button>
               }
             />
             <Dialog.Content size="sm">
@@ -3251,7 +3268,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                 <label htmlFor="share-recipient" className="mb-1 block text-xs text-text-sub">
                   {t('overlayEditor.page.shareRecipientLabel')}
                 </label>
-                <input
+                <Input
                   id="share-recipient"
                   ref={shareInputRef}
                   type="text"
@@ -3259,7 +3276,6 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                   onChange={(e) => setShareRecipient(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSendShareRequest()}
                   placeholder={t('overlayEditor.page.shareRecipientPlaceholder')}
-                  className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text placeholder:text-text-sub focus-visible:ring-2 focus-visible:ring-twitch/50 focus-visible:outline-none"
                   disabled={shareLoading}
                 />
               </div>
@@ -3302,13 +3318,15 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                   {activeSection === 'theme' && (
                     <div>
                       <ThemeContent onApply={handleThemeApply} isAdmin={user?.is_admin === true} />
-                      <button
+                      <Button
                         type="button"
-                        className="mt-3 text-xs text-text-sub underline-offset-2 hover:text-text hover:underline"
+                        variant="link"
+                        size="xs"
+                        className="mt-3 h-auto p-0 text-text-sub hover:text-text"
                         onClick={handleResetToTheme}
                       >
                         {t('overlayEditor.page.resetToThemeDefaults')}
-                      </button>
+                      </Button>
                     </div>
                   )}
 
@@ -3495,10 +3513,12 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           </h3>
                           <div className="space-y-2">
                             {acceptedShares.map((share) => (
-                              <button
+                              <Button
                                 key={share.share_id}
                                 onClick={() => handleAddSharedOverlay(share)}
-                                className="flex w-full items-center justify-between rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text transition-colors hover:bg-surface-2"
+                                variant="outline"
+                                size="lg"
+                                className="w-full justify-between"
                               >
                                 <span>
                                   {t('overlayEditor.sources.sharedOwner', {
@@ -3508,7 +3528,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                                 <span className="text-xs text-twitch">
                                   {t('overlayEditor.sources.add')}
                                 </span>
-                              </button>
+                              </Button>
                             ))}
                           </div>
                         </div>
@@ -3769,7 +3789,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                             </div>
                           )}
                           <div className="flex gap-2">
-                            <input
+                            <Input
                               type="text"
                               value={seventvOverrideInput}
                               onChange={(e) => {
@@ -3781,7 +3801,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                                   ? t('overlayEditor.messages.seventvReplacePlaceholder')
                                   : t('overlayEditor.messages.seventvUrlPlaceholder')
                               }
-                              className="flex-1 rounded-md border border-border bg-bg px-2 py-1 text-xs text-text"
+                              className="flex-1"
                             />
                             <Button
                               type="button"
@@ -3999,12 +4019,11 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           >
                             {t('overlayEditor.testing.displayNameLabel')}
                           </label>
-                          <input
+                          <Input
                             id={`${mockFieldId}-display-name`}
                             type="text"
                             value={mockForm.displayName}
                             onChange={(e) => handleMockInputChange('displayName', e.target.value)}
-                            className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
                           />
                         </div>
                         <div>
@@ -4014,12 +4033,11 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           >
                             {t('overlayEditor.testing.usernameLabel')}
                           </label>
-                          <input
+                          <Input
                             id={`${mockFieldId}-username`}
                             type="text"
                             value={mockForm.username}
                             onChange={(e) => handleMockInputChange('username', e.target.value)}
-                            className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
                           />
                         </div>
                       </div>
@@ -4031,13 +4049,12 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           >
                             {t('overlayEditor.testing.avatarUrlLabel')}
                           </label>
-                          <input
+                          <Input
                             id={`${mockFieldId}-avatar-url`}
                             type="text"
                             value={mockForm.avatarUrl}
                             onChange={(e) => handleMockInputChange('avatarUrl', e.target.value)}
                             placeholder={t('overlayEditor.testing.avatarUrlPlaceholder')}
-                            className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
                           />
                         </div>
                         <div>

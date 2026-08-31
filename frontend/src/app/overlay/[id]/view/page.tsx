@@ -37,6 +37,7 @@
 'use client'
 
 import clsx from 'clsx'
+import { Button } from '@/components/ui/button'
 import { BarChart3, ExternalLink, Info, RotateCw, SlidersHorizontal } from 'lucide-react'
 import Link from 'next/link'
 import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -833,15 +834,16 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
           />
           <OverlayViewThemeToggle light={light} onToggle={() => setLight((v) => !v)} />
           {isOwner && hasYouTubeSource && (
-            <button
+            <Button
               onClick={handleYouTubeRediscover}
               disabled={rediscovering}
               title={t('viewerOverlay.monitor.rediscoverYouTubeTitle')}
-              className="flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-sub transition-colors hover:border-border-md hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+              variant="outline"
+              size="sm"
             >
               <RotateCw className={clsx('h-3.5 w-3.5', rediscovering && 'animate-spin')} />
               {t('viewerOverlay.monitor.rediscoverYouTube')}
-            </button>
+            </Button>
           )}
           <Link
             href={`/overlay/${id}`}
@@ -931,7 +933,7 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
                 : t('viewerOverlay.monitor.needsConsent', { platform: s.platform })}
             </span>
             {s.platform === 'twitch' || s.platform === 'kick' || s.platform === 'youtube' ? (
-              <button
+              <Button
                 type="button"
                 onClick={() =>
                   void connectAsModerator(
@@ -939,10 +941,11 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
                     capabilities?.delegated_actions ?? []
                   )
                 }
-                className="font-medium text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                variant="link"
+                className="h-auto p-0 font-medium"
               >
                 {t('viewerOverlay.monitor.connectPlatform', { platform: s.platform })}
-              </button>
+              </Button>
             ) : null}
           </div>
         ))}
@@ -954,13 +957,14 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-xs text-text-sub">
           <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
           <span>{t('viewerOverlay.monitor.needsDiscordLink')}</span>
-          <button
+          <Button
             type="button"
             onClick={() => void linkDiscordAccount()}
-            className="font-medium text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+            variant="link"
+            className="h-auto p-0 font-medium"
           >
             {t('viewerOverlay.monitor.linkDiscord')}
-          </button>
+          </Button>
         </div>
       )}
 
@@ -980,15 +984,16 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
             s.platform === 'kick' ||
             s.platform === 'youtube' ||
             s.platform === 'discord' ? (
-              <button
+              <Button
                 type="button"
                 onClick={() => enableModeration(s.platform)}
-                className="font-medium text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                variant="link"
+                className="h-auto p-0 font-medium"
               >
                 {s.platform === 'discord'
                   ? t('viewerOverlay.monitor.reinviteBot')
                   : t('viewerOverlay.monitor.enableModeration')}
-              </button>
+              </Button>
             ) : (
               <span className="text-text-dim">
                 {t('viewerOverlay.monitor.comingSoonFor', { platform: s.platform })}
@@ -1005,13 +1010,14 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-xs text-text-sub">
           <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
           <span>{t('viewerOverlay.monitor.modLogOptIn')}</span>
-          <button
+          <Button
             type="button"
             onClick={() => void enableModLog()}
-            className="font-medium text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+            variant="link"
+            className="h-auto p-0 font-medium"
           >
             {t('viewerOverlay.monitor.enableModLog')}
-          </button>
+          </Button>
         </div>
       )}
 
@@ -1028,7 +1034,7 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
               ? t('viewerOverlay.monitor.reauthOwner', { platform: reauthPrompt.platform })
               : t('viewerOverlay.monitor.reauthModerator', { platform: reauthPrompt.platform })}
           </span>
-          <button
+          <Button
             type="button"
             onClick={() => {
               const platform = reauthPrompt.platform
@@ -1042,7 +1048,8 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
               }
               void enableModeration(platform)
             }}
-            className="font-medium text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+            variant="link"
+            className="h-auto p-0 font-medium"
           >
             {reauthPrompt.platform === 'discord'
               ? t('viewerOverlay.monitor.reinviteBot')
@@ -1051,7 +1058,7 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
                     platform: reauthPrompt.platform,
                   })
                 : t('viewerOverlay.monitor.reauthorizeModeration')}
-          </button>
+          </Button>
         </div>
       )}
 

@@ -36,6 +36,7 @@ import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { apiClient } from '@/lib/api/client'
 import { Card } from '@/components/ui/card'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -182,22 +183,16 @@ export default function AdminCosmeticsPage() {
         </div>
 
         {/* Tab bar */}
-        <div className="mb-6 flex border-b border-border">
-          {(['frames', 'flairs'] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={cn(
-                'px-4 py-2 text-sm font-medium transition-colors',
-                activeTab === tab
-                  ? 'border-b-2 border-primary text-text'
-                  : 'text-text-sub hover:text-text'
-              )}
-            >
-              {tab === 'frames' ? t('admin.cosmetics.tabFrames') : t('admin.cosmetics.tabFlairs')}
-            </button>
-          ))}
-        </div>
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) => setActiveTab(value as 'frames' | 'flairs')}
+          className="mb-6"
+        >
+          <TabsList variant="line" className="w-full justify-start border-b border-border">
+            <TabsTrigger value="frames">{t('admin.cosmetics.tabFrames')}</TabsTrigger>
+            <TabsTrigger value="flairs">{t('admin.cosmetics.tabFlairs')}</TabsTrigger>
+          </TabsList>
+        </Tabs>
 
         {/* Entry list */}
         {loading ? (

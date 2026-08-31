@@ -26,6 +26,8 @@ import { SliderControl } from './SliderControl'
 import { PremiumBadge } from '@/components/PremiumBadge'
 import { PremiumUpsellLink } from '@/components/PremiumUpsellLink'
 import { AlertDialog } from '@/components/ui/alert-dialog'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 import { useBrowserVoices } from '@/lib/hooks/useBrowserVoices'
 import { formatNumber, useTranslations } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
@@ -125,7 +127,7 @@ function NumberControl({
   return (
     <div className="flex items-center gap-2">
       <span className="w-40 shrink-0 text-sm text-text-sub">{label}</span>
-      <input
+      <Input
         type="number"
         aria-label={label}
         value={value}
@@ -136,7 +138,7 @@ function NumberControl({
           const parsed = parseFloat(e.target.value)
           if (Number.isFinite(parsed)) onChange(parsed)
         }}
-        className="w-24 rounded-lg border border-border bg-surface px-2 py-1 text-sm text-text"
+        className="w-24"
       />
       {unit && <span className="text-xs text-text-dim">{unit}</span>}
     </div>
@@ -344,7 +346,7 @@ function ApiKeyInput({
             )}
           </p>
           <div className="flex gap-2">
-            <input
+            <Input
               type="password"
               value={apiKey}
               onChange={(e) => onApiKeyChange(e.target.value)}
@@ -353,18 +355,19 @@ function ApiKeyInput({
               spellCheck={false}
               aria-label={t('overlayEditor.tts.apiKeyLabel')}
               disabled={disabled || saving}
-              className="flex-1 rounded-lg border border-border bg-surface px-3 py-1.5 font-mono text-sm text-text placeholder:text-text-dim disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex-1 font-mono"
             />
-            <button
+            <Button
               type="button"
               onClick={() => {
                 void handleSave()
               }}
               disabled={disabled || saving}
-              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
+              variant="outline"
+              size="sm"
             >
               {saving ? t('overlayEditor.tts.savingKey') : t('overlayEditor.tts.saveKey')}
-            </button>
+            </Button>
           </div>
           {error && (
             <p role="alert" className="mt-1 text-xs font-medium text-red-400">
@@ -377,16 +380,17 @@ function ApiKeyInput({
       {hasSavedKey && (
         <>
           <p className="text-xs text-text-dim">{t('overlayEditor.tts.keySaved')}</p>
-          <button
+          <Button
             type="button"
             onClick={() => {
               void handleTest()
             }}
             disabled={disabled || testing}
-            className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
+            variant="outline"
+            size="sm"
           >
             {testing ? t('overlayEditor.tts.testingKey') : t('overlayEditor.tts.testKey')}
-          </button>
+          </Button>
 
           {quota ? (
             <p className="text-xs text-text-dim">
@@ -400,25 +404,23 @@ function ApiKeyInput({
             <p className="text-xs text-text-dim">{t('overlayEditor.tts.quotaUnknown')}</p>
           )}
 
-          <button
+          {/* Two-state control: arming it switches the whole button to the
+              destructive variant rather than hand-painting red over an outline. */}
+          <Button
             type="button"
             onClick={() => {
               void handleRemoveClick()
             }}
             disabled={disabled || removing}
-            className={cn(
-              'rounded-lg border px-3 py-1.5 text-sm hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50',
-              removeArmed
-                ? 'border-red-500 bg-red-500/10 text-red-400'
-                : 'border-border bg-surface text-text-sub'
-            )}
+            variant={removeArmed ? 'destructive' : 'outline'}
+            size="sm"
           >
             {removing
               ? t('overlayEditor.tts.removingKey')
               : removeArmed
                 ? t('overlayEditor.tts.confirmRemoveKey')
                 : t('overlayEditor.tts.removeKey')}
-          </button>
+          </Button>
         </>
       )}
     </div>
@@ -449,31 +451,28 @@ function ObsUrlPanel({ obsUrl, onCopy, onRegenerate }: ObsUrlPanelProps): React.
   return (
     <div className="space-y-2">
       <p className="text-xs text-text-dim">{t('overlayEditor.tts.obsUrlNote')}</p>
-      <input
+      <Input
         type="text"
         readOnly
         value={obsUrl}
         onFocus={(e) => e.target.select()}
         aria-label={t('overlayEditor.tts.obsUrlLabel')}
-        className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text select-all"
+        className="select-all"
       />
       <div className="flex gap-2">
-        <button
+        <Button
           type="button"
           onClick={() => {
             void onCopy()
           }}
-          className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text hover:bg-surface-2"
+          variant="outline"
+          size="sm"
         >
           {t('overlayEditor.tts.copyObsUrl')}
-        </button>
-        <button
-          type="button"
-          onClick={() => setConfirmOpen(true)}
-          className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text hover:bg-surface-2"
-        >
+        </Button>
+        <Button type="button" onClick={() => setConfirmOpen(true)} variant="outline" size="sm">
           {t('overlayEditor.tts.regenerateObsUrl')}
-        </button>
+        </Button>
       </div>
       <AlertDialog.Root open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialog.Content size="sm">
@@ -484,21 +483,22 @@ function ObsUrlPanel({ obsUrl, onCopy, onRegenerate }: ObsUrlPanelProps): React.
             {t('overlayEditor.tts.regenerateConfirmBody')}
           </AlertDialog.Description>
           <div className="mt-4 flex justify-end gap-2">
-            <AlertDialog.Close className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text-sub hover:bg-surface-2 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none">
+            <AlertDialog.Close render={<Button variant="outline" size="sm" />}>
               {t('overlayEditor.tts.cancel')}
             </AlertDialog.Close>
-            <button
+            <Button
               type="button"
               onClick={() => {
                 void handleConfirm()
               }}
               disabled={rotating}
-              className="rounded-lg border border-red-500 bg-red-500/10 px-3 py-1.5 text-sm text-red-400 hover:bg-red-500/20 focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+              variant="destructive"
+              size="sm"
             >
               {rotating
                 ? t('overlayEditor.tts.regeneratingObsUrl')
                 : t('overlayEditor.tts.regenerateObsUrl')}
-            </button>
+            </Button>
           </div>
         </AlertDialog.Content>
       </AlertDialog.Root>
@@ -761,7 +761,7 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
             props.onSaveVoice &&
             pickedVoiceId !== '' &&
             pickedVoiceId !== (props.savedVoiceId ?? '') && (
-              <button
+              <Button
                 type="button"
                 disabled={!isPremium || savingVoice}
                 onClick={() => {
@@ -788,12 +788,13 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
                     }
                   })()
                 }}
-                className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
+                variant="outline"
+                size="sm"
               >
                 {savingVoice
                   ? t('overlayEditor.tts.savingVoice')
                   : t('overlayEditor.tts.saveVoice')}
-              </button>
+              </Button>
             )}
           {props.hasElevenLabsConfig && props.obsUrl && (
             <ObsUrlPanel
@@ -948,13 +949,9 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
           )}
 
           {onPreview && (
-            <button
-              type="button"
-              onClick={onPreview}
-              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text hover:bg-surface-2"
-            >
+            <Button type="button" onClick={onPreview} variant="outline" size="sm">
               {t('overlayEditor.tts.test')}
-            </button>
+            </Button>
           )}
 
           {/* ---------- THROTTLING ---------- */}

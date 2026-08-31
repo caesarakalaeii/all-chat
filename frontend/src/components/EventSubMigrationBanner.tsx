@@ -19,6 +19,7 @@
  */
 
 import { useState } from 'react'
+import { Button } from '@/components/ui/button'
 import { Radio, X } from 'lucide-react'
 import { safeExternalRedirect } from '@/lib/auth/redirect-allowlist'
 import { startAddSourceReflow } from '@/lib/api/add-source'
@@ -125,12 +126,9 @@ export function EventSubMigrationBanner({
         <p className="mt-0.5 text-text-sub">{t('common.eventSubMigration.body')}</p>
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        <button
-          onClick={handleUpgrade}
-          className="rounded-md bg-twitch px-3 py-1.5 text-xs font-semibold text-bg transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
-        >
+        <Button onClick={handleUpgrade} size="xs">
           {t('common.eventSubMigration.reconnectButton')}
-        </button>
+        </Button>
         <button
           onClick={handleDismiss}
           aria-label={t('common.eventSubMigration.dismissLabel')}
