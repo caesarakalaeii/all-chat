@@ -31,10 +31,10 @@
  * a namespace.
  */
 
+// `common.*` is deliberately absent until a string is genuinely shared by two
+// surfaces. A namespace holding one key nobody reads is dead weight, and the
+// convention is documented rather than reserved by an empty object.
 export const enMessages = {
-  common: {
-    dismiss: 'Dismiss',
-  },
   a11y: {
     skipToMainContent: 'Skip to main content',
   },
