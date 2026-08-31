@@ -21,6 +21,37 @@ try {
   // Plugin not available or doesn't support flat config
 }
 
+// ENFORCE-03 — design-system rules shared by the configs below.
+//
+// Rule 1 previously read "use slate-* instead of gray-*". That advice was
+// wrong: `slate-*` is not part of this design system either. The token system
+// lives in src/app/globals.css (`bg-surface`, `text-text-sub`, …) and both
+// scales are equally off it. See frontend/DESIGN_SYSTEM.md.
+const DESIGN_SYSTEM_RULES = [
+  {
+    selector: 'JSXAttribute[name.name="className"] Literal[value=/\\b(gray|slate)-[0-9]/]',
+    message:
+      'Use a design token (bg-surface, text-text-sub, border-border) instead of gray-*/slate-*. See frontend/DESIGN_SYSTEM.md.',
+  },
+  {
+    selector:
+      'CallExpression[callee.name=/^(clsx|cn|cva)$/] Literal[value=/\\b(gray|slate)-[0-9]/]',
+    message:
+      'Use a design token instead of gray-*/slate-* inside utility functions. See frontend/DESIGN_SYSTEM.md.',
+  },
+  {
+    selector: 'JSXAttribute[name.name="className"] TemplateLiteral',
+    message:
+      'Do not concatenate className strings. Use cn() or a CVA variant instead. See frontend/DESIGN_SYSTEM.md.',
+  },
+  {
+    // Negative lookbehind prevents matching focus-visible: and focus-within:.
+    selector: 'JSXAttribute[name.name="className"] Literal[value=/(?<![\\w-])focus:/]',
+    message:
+      'Use focus-visible: instead of focus: for keyboard navigation accessibility. See frontend/DESIGN_SYSTEM.md.',
+  },
+]
+
 export default defineConfig([
   // Next.js core-web-vitals rules (react, react-hooks, @next/next)
   ...nextVitals,
@@ -86,35 +117,60 @@ export default defineConfig([
 
   // Custom design-token enforcement rules (ENFORCE-03)
   // All rules are 'error' — no warnings. Violations block commits and CI.
+  // The design system they enforce: frontend/DESIGN_SYSTEM.md.
   {
+    rules: {
+      'no-restricted-syntax': ['error', ...DESIGN_SYSTEM_RULES],
+    },
+  },
+
+  // Vendored shadcn registry primitives.
+  //
+  // These files are copied verbatim from the registry so `npx shadcn@4 diff`
+  // stays meaningful (ADR-0056), and the registry writes `focus:` in the two
+  // places where it is the CORRECT selector, not a mistake:
+  //   - listbox/menu items (select, dropdown), which Base UI moves DOM focus
+  //     onto for pointer highlighting too — `focus-visible:` would delete the
+  //     hover highlight entirely;
+  //   - `focus:z-10` in joined groups, a stacking fix that lifts the focused
+  //     item so its ring is not clipped by its neighbour (and which already
+  //     sits next to a `focus-visible:z-10`).
+  // Exempting the directory keeps the files byte-identical to upstream. The
+  // rule still applies to every hand-written component, which is where the
+  // mouse-click-focus bug it guards against actually happens.
+  {
+    files: ['src/components/ui/**/*.tsx'],
     rules: {
       'no-restricted-syntax': [
         'error',
-        // Rule 1: No gray-* Tailwind classes — use slate-* (design system uses slate scale)
-        {
-          selector: 'JSXAttribute[name.name="className"] Literal[value=/\\bgray-/]',
-          message:
-            'Use slate-* instead of gray-* (design system uses slate scale). See DESIGN_SYSTEM.md.',
-        },
-        // Also catch gray-* inside clsx(), cn(), cva() calls
-        {
-          selector: 'CallExpression[callee.name=/^(clsx|cn|cva)$/] Literal[value=/\\bgray-/]',
-          message:
-            'Use slate-* instead of gray-* inside utility functions (design system uses slate scale).',
-        },
-        // Rule 2: No template literals in className JSX props — use clsx() or CVA
-        {
-          selector: 'JSXAttribute[name.name="className"] TemplateLiteral',
-          message:
-            'Do not concatenate className strings. Use clsx() or CVA variants instead. See DESIGN_SYSTEM.md.',
-        },
-        // Rule 3: No bare focus: — must use focus-visible: for keyboard a11y
-        // Negative lookbehind prevents matching focus-visible: and focus-within:
-        {
-          selector: 'JSXAttribute[name.name="className"] Literal[value=/(?<![\\w-])focus:/]',
-          message:
-            'Use focus-visible: instead of focus: for keyboard navigation accessibility. See DESIGN_SYSTEM.md.',
-        },
+        ...DESIGN_SYSTEM_RULES.filter((rule) => !rule.message.startsWith('Use focus-visible:')),
+      ],
+    },
+  },
+
+  // OBS render surfaces and theme previews.
+  //
+  // Everything under src/app/overlay/** (plus the embed preview and the
+  // marketplace theme preview) is BROADCAST ART rendered inside OBS, not app
+  // chrome: user-themable, composited over arbitrary gameplay footage, and
+  // already carved out of the app's design guarantees elsewhere — see the
+  // scope note in src/app/__tests__/token-contrast.test.ts and the separate
+  // floor in tests/e2e/theme-contrast.spec.ts.
+  //
+  // The app's neutral tokens (bg / surface / text) describe the CHROME's
+  // palette and are the wrong vocabulary for a credits roll or a chat bubble
+  // that has to read over someone's stream. The other ENFORCE-03 rules
+  // (no template classNames, focus-visible) still apply here.
+  {
+    files: [
+      'src/app/overlay/**/*.tsx',
+      'src/app/overlays/**/preview/embed/*.tsx',
+      'src/components/theme-marketplace/ThemePreview.tsx',
+    ],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        ...DESIGN_SYSTEM_RULES.filter((rule) => !rule.message.includes('gray-*/slate-*')),
       ],
     },
   },

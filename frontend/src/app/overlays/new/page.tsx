@@ -89,7 +89,7 @@ function NewOverlayContent() {
                 aria-describedby={nameError ? 'name-error' : undefined}
               />
               {nameError && (
-                <p id="name-error" className="text-destructive text-sm" role="alert">
+                <p id="name-error" className="text-sm text-destructive" role="alert">
                   {nameError}
                 </p>
               )}

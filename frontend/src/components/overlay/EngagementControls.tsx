@@ -646,7 +646,7 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
                         type="button"
                         onClick={() => cancelPrediction(prediction.id)}
                         disabled={busy}
-                        className="border-destructive/50 text-destructive hover:bg-destructive/10 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                        className="rounded-lg border border-destructive/50 px-3 py-1.5 text-xs font-semibold text-destructive transition-colors hover:bg-destructive/10 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         Really refund all wagers?
                       </button>

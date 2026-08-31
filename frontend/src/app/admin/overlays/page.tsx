@@ -287,7 +287,7 @@ export default function OverlaysPage() {
                     placeholder="Search by overlay name, ID, or owner..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="focus-visible:ring-ring flex-1 rounded-lg border border-border bg-surface-2 px-4 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none"
+                    className="flex-1 rounded-lg border border-border bg-surface-2 px-4 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                   />
                   <button
                     type="button"
