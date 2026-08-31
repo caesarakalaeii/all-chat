@@ -390,6 +390,72 @@ export const viewerOverlay = {
     groupLabel: 'Platforms: {platforms}',
   },
 
+  monitor: {
+    details: 'Details',
+    engagement: 'Engagement',
+    engagementTitle: 'Run polls and predictions for this overlay',
+    rediscoverYouTube: 'Re-discover YouTube',
+    rediscoverYouTubeTitle:
+      'Force YouTube to re-discover the live stream \u2014 use if chat stopped after a stream crash or restart',
+    obsOverlay: 'OBS overlay',
+
+    stillReconnecting:
+      'Still reconnecting \u2014 this recovers on its own, and messages sent meanwhile replay when the connection returns. Closing this page is what loses them.',
+    replayTruncated:
+      'Some earlier messages may be missing \u2014 the disconnection outlasted the replay buffer, so the oldest part of the gap could not be recovered.',
+
+    // Says nothing about the overlay itself: the payload behind it is identical
+    // for an overlay that does not exist.
+    noRole: "You can view this monitor, but you don't moderate here \u2014 moderation is disabled.",
+
+    // The gate is keyed on the OWNER, so only the owner's form has a call to
+    // action \u2014 /upgrade would sell a moderator a plan that is not theirs to buy.
+    featureGatedOwner: 'Chat moderation is a premium feature.',
+    featureGatedUpgrade: 'Upgrade to moderate from your overlay',
+    featureGatedModerator:
+      "This streamer's plan doesn't include moderation right now, so your actions are unavailable until they renew it.",
+
+    // The channel name is optional, so two whole sentences rather than one with
+    // a fragment appended. {platform} is the raw lowercase wire value, which is
+    // what renders today.
+    needsConsent: 'Connect your own {platform} account to moderate.',
+    needsConsentChannel: 'Connect your own {platform} account to moderate {channel}.',
+    connectPlatform: 'Connect {platform}',
+
+    // One banner for the whole overlay: the link is per PERSON, not per server.
+    needsDiscordLink:
+      'Link your Discord account to moderate Discord here \u2014 All-Chat checks your own server permissions before acting.',
+    linkDiscord: 'Link Discord',
+
+    missingScope: 'Grant moderation permissions to enable mod actions for {platform}.',
+    missingScopeChannel:
+      'Grant moderation permissions to enable mod actions for {platform} ({channel}).',
+    missingScopeDiscord:
+      'Re-invite the bot with moderation permissions to enable mod actions for {platform}.',
+    missingScopeDiscordChannel:
+      'Re-invite the bot with moderation permissions to enable mod actions for {platform} ({channel}).',
+    reinviteBot: 'Re-invite the bot',
+    enableModeration: 'Enable moderation & chat sending',
+    comingSoonFor: '(coming soon for {platform})',
+
+    // The scope note is not padding: the consent screen asks for
+    // moderator:manage:automod, which on a read-only feature looks like a
+    // mistake and gets declined.
+    modLogOptIn:
+      'Show Twitch moderation actions and AutoMod holds in this activity feed. Twitch requires an AutoMod \u201cmanage\u201d permission to send us held messages at all \u2014 All-Chat only reads them; there are no approve/deny buttons yet.',
+    enableModLog: 'Show moderation & AutoMod events',
+
+    // Two role variants: a moderator sent down the streamer's re-consent path
+    // half-succeeds and then 404s, so each is told to re-authorize in its own
+    // place.
+    reauthOwner:
+      'Your {platform} moderation permission expired or was never granted \u2014 re-authorize to keep moderating from your overlay.',
+    reauthModerator:
+      'Your {platform} moderation permission expired or was never granted \u2014 re-authorize to keep moderating here.',
+    reconnectPlatform: 'Reconnect {platform}',
+    reauthorizeModeration: 'Re-authorize moderation & chat sending',
+  },
+
   // Streamer-facing system notices rendered inside an event body. The event's
   // own content is viewer-authored and never translated; these lines are ours.
   eventNotice: {

@@ -112,14 +112,6 @@
       "count": 8
     }
   },
-  "src/app/overlay/[id]/view/page.tsx": {
-    "no-restricted-syntax": {
-      "count": 2
-    },
-    "react/jsx-no-literals": {
-      "count": 20
-    }
-  },
   "src/components/AdminNav.tsx": {
     "react/jsx-no-literals": {
       "count": 2
