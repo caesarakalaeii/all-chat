@@ -122,11 +122,6 @@
       "count": 2
     }
   },
-  "src/app/overlay/[id]/participate/page.tsx": {
-    "react/jsx-no-literals": {
-      "count": 25
-    }
-  },
   "src/app/overlay/[id]/poll/page.tsx": {
     "react/jsx-no-literals": {
       "count": 6
