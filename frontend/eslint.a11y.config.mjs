@@ -77,6 +77,16 @@ export default defineConfig([
     },
     rules: {
       ...jsxA11y.flatConfigs.strict.rules,
+      // Teach the rule about the design-system control primitives (ADR-0056).
+      // It detects an associated control by looking for a native input/select/
+      // textarea, so a <label> wrapping <Input> — which renders exactly such an
+      // element — reads as a label with no control. `controlComponents` is the
+      // rule's own option for this; without it, adopting a primitive would
+      // *create* accessibility errors out of unchanged, correct markup.
+      'jsx-a11y/label-has-associated-control': [
+        'error',
+        { controlComponents: ['Input', 'Textarea', 'Select', 'Switch', 'Field.Control'] },
+      ],
       // Design-system rule (mirrors eslint.config.mjs Rule 3): bare focus:
       // suppresses keyboard focus indication — always use focus-visible:.
       'no-restricted-syntax': [
@@ -87,6 +97,25 @@ export default defineConfig([
             'Use focus-visible: instead of focus: for keyboard navigation accessibility. See DESIGN_SYSTEM.md.',
         },
       ],
+    },
+  },
+
+  // Vendored shadcn registry primitives — see the matching block in
+  // eslint.config.mjs for the full rationale (ADR-0056). Two rules cannot hold
+  // for a primitive by construction:
+  //   - `focus:` is the CORRECT selector on a listbox item (Base UI moves DOM
+  //     focus there for pointer highlighting too) and in a `focus:z-10`
+  //     stacking fix;
+  //   - `label-has-associated-control` can never pass in `label.tsx`, whose
+  //     entire job is to render a bare <label> for a caller to associate.
+  // Exempting the directory keeps these files byte-identical to upstream so
+  // `npx shadcn@4 diff` stays usable. Both rules still apply everywhere else,
+  // which is where the bugs they catch actually occur.
+  {
+    files: ['src/components/ui/**/*.tsx'],
+    rules: {
+      'no-restricted-syntax': 'off',
+      'jsx-a11y/label-has-associated-control': 'off',
     },
   },
 

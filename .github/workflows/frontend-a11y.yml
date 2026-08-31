@@ -15,6 +15,11 @@ name: Frontend A11y Gate
 # the intra-workflow "skip shim" — it avoids the mixed-PR double-run/race a
 # separate paths-ignore shim would introduce.
 #
+# The a11y-static job also carries the DESIGN-SYSTEM gates (ADR-0056): the
+# token contrast lock and the dead-token check. They live here, rather than in
+# frontend-quality.yml, for the same reason the a11y checks do — that workflow
+# is dispatch-only and never runs on a PR.
+#
 # Ratchets (may only shrink, never grow):
 #   - frontend/eslint.a11y.suppressions.json  (jsx-a11y strict baseline)
 #   - frontend/tests/e2e/a11y-baseline.json   (axe smoke baseline)
@@ -54,6 +59,10 @@ jobs:
               - '.github/workflows/frontend-a11y.yml'
 
   a11y-static:
+    # Do NOT rename: this string is the required-status-check context in branch
+    # protection. Renaming it makes the old context stop reporting, and every
+    # PR then sits permanently "Expected"/blocked. The job now also carries the
+    # design-system gates despite the name.
     name: A11y lint + token contrast
     needs: changes
     if: needs.changes.outputs.frontend == 'true'
@@ -83,6 +92,18 @@ jobs:
 
       - name: Design-token contrast lock
         run: npx vitest --project unit --run src/app/__tests__/token-contrast.test.ts
+
+      # ADR-0056. Compiles globals.css with the real Tailwind compiler and fails
+      # on any utility that emits no CSS. This runs here rather than in
+      # frontend-quality.yml because that workflow is dispatch-only/dead, and a
+      # gate that does not run is not a gate — which is exactly how 119 dead
+      # utilities reached production in the first place. No suppressions
+      # baseline: the check is at zero and a dead token is always a bug.
+      - name: Design-system gates (dead tokens, broken utilities)
+        run: >
+          npx vitest --project unit --run
+          src/__tests__/design-tokens.test.ts
+          src/__tests__/no-broken-tailwind-utilities.test.ts
 
   a11y-storybook:
     name: Storybook axe (components + pages)

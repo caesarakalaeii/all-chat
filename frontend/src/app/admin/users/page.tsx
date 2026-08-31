@@ -510,7 +510,7 @@ export default function UsersPage() {
                     placeholder="Search by username, display name, or platform ID..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="focus-visible:ring-ring w-full rounded-lg border border-border bg-surface-2 px-4 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none"
+                    className="w-full rounded-lg border border-border bg-surface-2 px-4 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                   />
                 </div>
 
@@ -624,7 +624,7 @@ export default function UsersPage() {
                                   </span>
                                 )}
                                 {user.is_banned && (
-                                  <span className="bg-destructive/10 text-destructive border-destructive/20 inline-flex items-center rounded border px-2 py-0.5 text-xs font-medium">
+                                  <span className="inline-flex items-center rounded border border-destructive/20 bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">
                                     BANNED
                                   </span>
                                 )}
@@ -1089,7 +1089,7 @@ export default function UsersPage() {
                             maxLength={120}
                             placeholder="e.g. Multistreams to Twitch, YouTube and Kick"
                             aria-label="Ambassador showcase tagline"
-                            className="focus-visible:ring-ring w-full rounded-lg border border-border bg-surface-2 px-4 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none"
+                            className="w-full rounded-lg border border-border bg-surface-2 px-4 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                           />
                         </div>
                         <div>
@@ -1101,7 +1101,7 @@ export default function UsersPage() {
                             value={ambassadorSortOrder}
                             onChange={(e) => setAmbassadorSortOrder(e.target.value)}
                             aria-label="Ambassador display order"
-                            className="focus-visible:ring-ring w-full rounded-lg border border-border bg-surface-2 px-4 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none"
+                            className="w-full rounded-lg border border-border bg-surface-2 px-4 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                           />
                         </div>
                         <Button
@@ -1180,7 +1180,7 @@ export default function UsersPage() {
                           maxLength={120}
                           placeholder="e.g. Multistreams to Twitch, YouTube and Kick"
                           aria-label="Ambassador showcase tagline"
-                          className="focus-visible:ring-ring w-full rounded-lg border border-border bg-surface-2 px-4 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none"
+                          className="w-full rounded-lg border border-border bg-surface-2 px-4 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                         />
                       </div>
                       <Button
@@ -1205,11 +1205,11 @@ export default function UsersPage() {
                 <div className="mt-6 border-t border-border pt-6">
                   {selectedUser.is_banned ? (
                     <>
-                      <div className="bg-destructive/10 border-destructive/20 mb-3 rounded-lg border p-3">
-                        <p className="text-destructive text-sm font-medium">
+                      <div className="mb-3 rounded-lg border border-destructive/20 bg-destructive/10 p-3">
+                        <p className="text-sm font-medium text-destructive">
                           Banned: {selectedUser.banned_reason}
                         </p>
-                        <p className="text-destructive/70 mt-1 text-xs">
+                        <p className="mt-1 text-xs text-destructive/70">
                           {selectedUser.banned_at &&
                             `Banned on ${new Date(selectedUser.banned_at).toLocaleString()}`}
                         </p>
@@ -1322,7 +1322,7 @@ export default function UsersPage() {
                   )}
                   <Link
                     href={`/admin/sources?user=${selectedUser.id}`}
-                    className="text-primary mt-3 inline-block text-xs font-medium hover:underline"
+                    className="mt-3 inline-block text-xs font-medium text-primary hover:underline"
                   >
                     View this user&rsquo;s sources
                   </Link>
@@ -1375,7 +1375,7 @@ export default function UsersPage() {
               id={banReasonId}
               value={banReason}
               onChange={(e) => setBanReason(e.target.value)}
-              className="focus-visible:ring-ring w-full resize-none rounded-lg border border-border bg-surface-2 px-3 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none"
+              className="w-full resize-none rounded-lg border border-border bg-surface-2 px-3 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
               rows={3}
               placeholder="Spam, abuse, ToS violation, etc..."
             />

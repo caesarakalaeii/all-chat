@@ -284,7 +284,7 @@ export function ModeratorsPanel({ overlayId }: { overlayId: string }) {
         </p>
       )}
       {rowError !== null && (
-        <p role="alert" className="text-destructive text-xs">
+        <p role="alert" className="text-xs text-destructive">
           {rowError}
         </p>
       )}
@@ -414,7 +414,7 @@ function ModeratorRow({ grant, onToggleLeg, onToggleAction, onRemove }: Moderato
                 'rounded-md border px-2 py-0.5 text-xs transition-colors focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none',
                 on
                   ? 'border-twitch/40 bg-twitch/10 text-text'
-                  : 'bg-surface-alt border-border text-text-dim'
+                  : 'border-border bg-surface-2 text-text-dim'
               )}
             >
               {ACTION_LABELS[action]}
@@ -543,7 +543,7 @@ function InviteDialog({ overlayId, open, onOpenChange }: InviteDialogProps) {
               Send this link to the person you want to moderate. It works once, expires in 7 days,
               and <strong>won&apos;t be shown again</strong> — if it gets lost, create a new invite.
             </Dialog.Description>
-            <code className="bg-surface-alt block overflow-x-auto rounded-lg border border-border p-2 text-xs break-all text-text">
+            <code className="block overflow-x-auto rounded-lg border border-border bg-surface-2 p-2 text-xs break-all text-text">
               {inviteLink}
             </code>
             <div className="flex justify-end gap-2">
@@ -615,7 +615,7 @@ function InviteDialog({ overlayId, open, onOpenChange }: InviteDialogProps) {
             </fieldset>
 
             {gateBlocked && (
-              <div className="bg-surface-alt space-y-1 rounded-lg border border-border p-2">
+              <div className="space-y-1 rounded-lg border border-border bg-surface-2 p-2">
                 <p className="text-xs text-text-sub">
                   Delegating moderation is part of All-Chat premium. Your moderators never pay —
                   only your own plan matters.
@@ -629,7 +629,7 @@ function InviteDialog({ overlayId, open, onOpenChange }: InviteDialogProps) {
               </div>
             )}
             {error !== null && (
-              <p role="alert" className="text-destructive text-xs">
+              <p role="alert" className="text-xs text-destructive">
                 {error}
               </p>
             )}

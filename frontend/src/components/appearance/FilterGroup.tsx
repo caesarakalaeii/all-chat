@@ -81,7 +81,7 @@ function TagInput({
       {tags.map((tag) => (
         <span
           key={tag}
-          className="bg-surface-alt flex items-center gap-1 rounded px-2 py-0.5 text-xs text-text"
+          className="flex items-center gap-1 rounded bg-surface-2 px-2 py-0.5 text-xs text-text"
         >
           {tag}
           <button type="button" onClick={() => onRemove(tag)} aria-label={`Remove ${tag}`}>

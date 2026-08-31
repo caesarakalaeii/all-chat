@@ -35,7 +35,7 @@ import { expect, within } from 'storybook/test'
 const TestComponent = ({ iteration, platform }: { iteration: number; platform: string }) => (
   <div
     data-testid={`render-${iteration}`}
-    className="flex items-center gap-2 rounded-md bg-slate-800 px-3 py-2 text-sm text-slate-100"
+    className="flex items-center gap-2 rounded-md bg-surface-2 px-3 py-2 text-sm text-text"
   >
     <span className="font-medium text-twitch">{platform}</span>
     <span>Test message {iteration}</span>
@@ -78,8 +78,7 @@ export const RenderAt20MsgPerSec: Story = {
 
       // Create a new element to simulate a message arriving
       const el = document.createElement('div')
-      el.className =
-        'flex items-center gap-2 rounded-md bg-slate-800 px-3 py-2 text-sm text-slate-100'
+      el.className = 'flex items-center gap-2 rounded-md bg-surface-2 px-3 py-2 text-sm text-text'
       el.setAttribute('data-testid', `perf-msg-${i}`)
       el.innerHTML = `<span class="font-medium text-twitch">twitch</span><span>Test message ${i}</span>`
       canvasElement.appendChild(el)

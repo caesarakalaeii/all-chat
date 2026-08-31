@@ -182,7 +182,7 @@ export default function AdminCosmeticsPage() {
               className={cn(
                 'px-4 py-2 text-sm font-medium capitalize transition-colors',
                 activeTab === tab
-                  ? 'border-primary border-b-2 text-text'
+                  ? 'border-b-2 border-primary text-text'
                   : 'text-text-sub hover:text-text'
               )}
             >
@@ -231,7 +231,7 @@ export default function AdminCosmeticsPage() {
                       variant="ghost"
                       size="sm"
                       onClick={() => handleDelete(entry.id)}
-                      className="hover:text-destructive text-text-sub"
+                      className="text-text-sub hover:text-destructive"
                       aria-label={`Delete ${entry.name}`}
                     >
                       ×

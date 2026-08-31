@@ -205,7 +205,7 @@ export default function AdminMaintenancePage() {
                     size="icon"
                     onClick={() => handleDelete(mw.id)}
                     aria-label={`Delete ${mw.title}`}
-                    className="hover:text-destructive shrink-0 text-text-dim"
+                    className="shrink-0 text-text-dim hover:text-destructive"
                   >
                     <Trash2 className="size-4" />
                   </Button>

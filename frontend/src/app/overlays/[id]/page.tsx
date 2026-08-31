@@ -437,7 +437,7 @@ function SourceCard({
             <Button
               variant="outline"
               size="sm"
-              className="text-destructive border-destructive/40 hover:bg-destructive/10 text-xs"
+              className="border-destructive/40 text-xs text-destructive hover:bg-destructive/10"
               onClick={() => onRevoke(source)}
             >
               Revoke
@@ -447,7 +447,7 @@ function SourceCard({
             <Dialog.Trigger
               render={
                 <button
-                  className="hover:text-destructive rounded text-text-sub transition-colors focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                  className="rounded text-text-sub transition-colors hover:text-destructive focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
                   aria-label={`Remove ${source.channel_name || source.channel_id}`}
                 >
                   <X className="size-4" />
@@ -949,7 +949,7 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
 
   if (loadError) {
     return (
-      <p className="text-destructive text-xs">
+      <p className="text-xs text-destructive">
         Could not load engagement settings. Reload the page to try again.
       </p>
     )
@@ -2938,7 +2938,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
         <AppNav />
         <div className="flex h-[calc(100vh-60px)] items-center justify-center">
           <div className="text-center">
-            <p className="text-destructive mb-4 text-lg">Overlay not found</p>
+            <p className="mb-4 text-lg text-destructive">Overlay not found</p>
             <Button variant="outline" onClick={() => router.push('/dashboard')}>
               Return to Dashboard
             </Button>
@@ -3072,7 +3072,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="hover:text-destructive shrink-0 text-xs text-text-sub"
+                  className="shrink-0 text-xs text-text-sub hover:text-destructive"
                   onClick={handleUnsetExtensionOverlay}
                 >
                   Deactivate
@@ -3965,7 +3965,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                       <Button
                         type="button"
                         variant="outline"
-                        className="border-destructive/50 text-destructive hover:bg-destructive/10 w-full"
+                        className="w-full border-destructive/50 text-destructive hover:bg-destructive/10"
                         onClick={() => setShowResetConfirm(true)}
                         disabled={isResetting}
                       >

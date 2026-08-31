@@ -119,7 +119,7 @@ export function FontFamilyCombobox({
                   <Combobox.Item
                     key={font.value}
                     value={font.value}
-                    className="hover:bg-subtle data-[highlighted]:bg-subtle flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-text"
+                    className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-text hover:bg-surface-2 data-[highlighted]:bg-surface-2"
                   >
                     <Combobox.ItemIndicator className="w-4">
                       <Check className="h-3 w-3" />
@@ -138,7 +138,7 @@ export function FontFamilyCombobox({
                   <Combobox.Item
                     key={font.value}
                     value={font.value}
-                    className="hover:bg-subtle data-[highlighted]:bg-subtle flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-text"
+                    className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-text hover:bg-surface-2 data-[highlighted]:bg-surface-2"
                   >
                     <Combobox.ItemIndicator className="w-4">
                       <Check className="h-3 w-3" />

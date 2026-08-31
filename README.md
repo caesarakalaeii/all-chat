@@ -285,6 +285,7 @@ Architecture decisions are documented as ADRs in [`docs/adr/`](./docs/adr/README
 |-------|------|
 | Onboarding | [GETTING_STARTED.md](./docs/GETTING_STARTED.md) |
 | Frontend dev | [FRONTEND_QUICK_START.md](./docs/frontend/FRONTEND_QUICK_START.md) |
+| Frontend UI / design system | [DESIGN_SYSTEM.md](./frontend/DESIGN_SYSTEM.md) |
 | CSS customization | [CSS_CUSTOMIZATION.md](./docs/CSS_CUSTOMIZATION.md) |
 | Deployment | [DEPLOYMENT.md](./docs/DEPLOYMENT.md) |
 | Architecture overview | [docs/architecture/](./docs/architecture/00-OVERVIEW.md) |
