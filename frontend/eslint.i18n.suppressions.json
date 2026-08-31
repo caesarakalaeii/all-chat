@@ -227,16 +227,6 @@
       "count": 4
     }
   },
-  "src/app/settings/premium/page.tsx": {
-    "react/jsx-no-literals": {
-      "count": 16
-    }
-  },
-  "src/app/settings/viewer/premium/page.tsx": {
-    "react/jsx-no-literals": {
-      "count": 21
-    }
-  },
   "src/app/upgrade/page.tsx": {
     "react/jsx-no-literals": {
       "count": 15

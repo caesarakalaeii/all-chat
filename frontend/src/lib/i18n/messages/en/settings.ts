@@ -252,4 +252,40 @@ export const settings = {
     revokeConfirm: 'Revoke device',
     revoking: 'Revoking…',
   },
+  // /settings/premium. The strings shared with /settings/viewer/premium live in
+  // common.patreon.*; only what names the streamer tier is here.
+  premium: {
+    back: '← Back to Settings',
+    heading: 'Premium',
+    connectPitch: 'Back All-Chat on Patreon to unlock premium features automatically.',
+    // {link} is the Patreon anchor. One sentence, not a head and a tail joined
+    // around it — a second language moves the clause.
+    notAPatronSuffix: 'Not a patron yet? {link}, then connect.',
+    premiumRow: 'Premium',
+    statusExpired: 'Below premium tier',
+    notGranting:
+      'Your Patreon is linked but not granting premium. Make sure your pledge is active and at or above the premium tier.',
+    disconnectBody:
+      'This unlinks your Patreon account. Premium granted by your subscription will be removed.',
+  },
+  // /settings/viewer/premium: the cheaper viewer-cosmetics subscription.
+  viewerPremium: {
+    back: '← Back to Viewer Identity',
+    heading: 'Viewer Premium',
+    subheading:
+      'A cheaper subscription that unlocks viewer cosmetics — your premium chat badge and name gradient — across every overlay you appear in.',
+    connectPitch:
+      'Back All-Chat on Patreon to unlock your viewer premium cosmetics automatically.',
+    notAPatronSuffix: 'Not a patron yet? {link} (viewer tier from €2), then connect.',
+    premiumRow: 'Viewer premium',
+    statusExpired: 'Below viewer tier',
+    notGranting:
+      'Your Patreon is linked but not granting viewer premium. Make sure your pledge is active and at or above the viewer tier.',
+    disconnectBody:
+      'This unlinks your Patreon account. Viewer premium granted by your subscription will be removed.',
+    signInHeading: 'Sign in to manage viewer premium',
+    signInBody:
+      'Sign in with your streaming platform account, then back All-Chat on Patreon to unlock your premium chat badge and cosmetics.',
+    signInLink: 'Go to viewer sign-in →',
+  },
 } as const

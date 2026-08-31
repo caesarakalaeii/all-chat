@@ -34,4 +34,28 @@ export const common = {
     tiktok: 'TikTok',
     discord: 'Discord',
   },
+  // The Patreon connect flow. /settings/premium and /settings/viewer/premium
+  // render these byte-identically; the strings that name which premium tier is
+  // meant stay in each page's own namespace.
+  patreon: {
+    heading: 'Patreon',
+    connect: 'Connect Patreon',
+    connecting: 'Redirecting…',
+    notAPatron: 'Not a patron yet?',
+    subscribe: 'Subscribe on Patreon',
+    subscriptionRow: 'Subscription',
+    renewsRow: 'Renews',
+    active: 'Active',
+    inactive: 'Inactive',
+    disconnect: 'Disconnect Patreon',
+    disconnectTitle: 'Disconnect Patreon?',
+    disconnectCancel: 'Cancel',
+    disconnectConfirm: 'Yes, disconnect',
+    // Pledge statuses, keyed by the value the payment API returns. The fifth,
+    // 'expired', names the tier and so lives per page.
+    statusActive: 'Active',
+    statusDeclined: 'Payment declined',
+    statusFormer: 'Ended',
+    statusNotSubscribed: 'Not subscribed',
+  },
 } as const
