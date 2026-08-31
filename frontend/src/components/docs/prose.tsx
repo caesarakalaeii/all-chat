@@ -28,6 +28,7 @@ import javascript from 'highlight.js/lib/languages/javascript'
 import python from 'highlight.js/lib/languages/python'
 import json from 'highlight.js/lib/languages/json'
 import css from 'highlight.js/lib/languages/css'
+import { getTranslations } from '@/lib/i18n'
 
 // Register only the languages the docs actually use. Idempotent across imports.
 hljs.registerLanguage('javascript', javascript)
@@ -70,14 +71,16 @@ export interface Field {
 }
 
 export function FieldTable({ rows }: { rows: Field[] }) {
+  // getTranslations, not useTranslations: these are Server Components.
+  const t = getTranslations()
   return (
     <div className="my-4 overflow-x-auto rounded-lg border border-border">
       <table className="w-full border-collapse text-left text-sm">
         <thead>
           <tr className="bg-surface-2 text-text">
-            <th className="px-4 py-2 font-semibold">Field</th>
-            <th className="px-4 py-2 font-semibold">Type</th>
-            <th className="px-4 py-2 font-semibold">Description</th>
+            <th className="px-4 py-2 font-semibold">{t('docs.fieldTable.columnField')}</th>
+            <th className="px-4 py-2 font-semibold">{t('docs.fieldTable.columnType')}</th>
+            <th className="px-4 py-2 font-semibold">{t('docs.fieldTable.columnDescription')}</th>
           </tr>
         </thead>
         <tbody>

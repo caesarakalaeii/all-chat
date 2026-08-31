@@ -51,19 +51,6 @@
       "count": 8
     }
   },
-  "src/components/admin/PremiumDurationChooser.tsx": {
-    "no-restricted-syntax": {
-      "count": 2
-    },
-    "react/jsx-no-literals": {
-      "count": 3
-    }
-  },
-  "src/components/docs/prose.tsx": {
-    "react/jsx-no-literals": {
-      "count": 3
-    }
-  },
   "src/components/legal/LegalLayout.tsx": {
     "react/jsx-no-literals": {
       "count": 8

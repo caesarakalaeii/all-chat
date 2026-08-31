@@ -480,4 +480,21 @@ export const admin = {
     ambassadorRemoved: '{username} is no longer an ambassador',
     ambassadorError: 'Failed to update ambassador status',
   },
+  // The premium-grant duration chooser, shared by /admin/users and
+  // /admin/viewers. Both callers are admin surfaces, so this sits here rather
+  // than in common.*, which holds copy shared across unrelated surfaces.
+  premiumDuration: {
+    label: 'Duration',
+    presetPermanent: 'Permanent',
+    preset1Day: '1 day',
+    preset7Days: '7 days',
+    preset30Days: '30 days',
+    preset90Days: '90 days',
+    presetCustom: 'Custom',
+    customPlaceholder: 'days',
+    customFieldLabel: 'Custom duration in days',
+    // One string: the en dash came from an &ndash; entity, and a language that
+    // words a range differently cannot reorder JSX siblings.
+    customRange: 'days (1–{max})',
+  },
 } as const

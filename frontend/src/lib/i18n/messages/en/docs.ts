@@ -20,4 +20,11 @@
  * The in-app documentation pages.
  */
 
-export const docs = {} as const
+export const docs = {
+  // FieldTable in components/docs/prose.tsx, shared by both /docs pages.
+  fieldTable: {
+    columnField: 'Field',
+    columnType: 'Type',
+    columnDescription: 'Description',
+  },
+} as const
