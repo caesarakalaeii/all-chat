@@ -501,6 +501,67 @@ export const overlayEditor = {
     shareSend: 'Send Request',
     shareSending: 'Sending...',
   },
+  // The Messages section: how many messages show, how long they last, which
+  // edge the feed grows from, how they animate in and which emote sets apply.
+  messages: {
+    // {value} is rendered in a coloured <span>, so the label stays one sentence.
+    maxMessagesLabel: 'Max Messages: {value}',
+    messageDurationLabel: 'Message Duration: {value}',
+    // The unit is inside the same emphasised span as the number.
+    durationSeconds: '{seconds}s',
+    disableFade: 'Disable Message Fade Out',
+    disableFadeHint: 'Messages stay visible until max is reached',
+    invertOrder: 'Invert Message Order',
+    invertOrderHint:
+      'Reverses the reading order so the newest message is listed first. This is the order only — use Feed Anchor to move the feed to the other edge.',
+    feedAnchorLabel: 'Feed Anchor',
+    feedAnchorTop: 'Top edge — feed grows downward',
+    feedAnchorBottom: 'Bottom edge — feed grows upward',
+    feedAnchorHint:
+      'Which edge of the overlay the feed sits on when it is not full. Anchor it to the bottom and each new message pushes the older ones up.',
+    entryAnimationLabel: 'Entry Animation',
+    entryAnimationHint: 'How new messages appear on the overlay',
+    animationDefault: 'Fade + slide up (default)',
+    animationFlyLeft: 'Fly in from left',
+    animationFlyRight: 'Fly in from right',
+    animationFlySpring: 'Fly in with overshoot',
+    animationPop: 'Pop in',
+    animationBounce: 'Bounce up',
+    animationFlip: 'Flip in',
+    animationSwoosh: 'Swoosh',
+    animationSoftFocus: 'Soft focus',
+    emoteProvidersLabel: 'Emote Providers',
+    // Third-party product names. Not translated, but held here so no render site
+    // carries a literal and a language that transliterates names has somewhere
+    // to do it.
+    seventv: '7TV',
+    betterttv: 'BetterTTV',
+    frankerfacez: 'FrankerFaceZ',
+    seventvOverrideLabel: '7TV Emote Set',
+    seventvOverrideHint:
+      'Optional. Paste a 7TV emote-set ID, an emote-set URL, or your 7TV profile URL to attach those emotes to this overlay regardless of which platforms you stream on.',
+    // The trailing space separates this label from the set name beside it.
+    seventvCurrentlyActive: 'Currently active: ',
+    seventvQuotedName: '"{name}"',
+    seventvEmoteCount: ' ({count} emotes)',
+    seventvRemove: 'Remove',
+    seventvRemoving: 'Removing\u2026',
+    seventvRemoved: '7TV emote set removed',
+    seventvRemoveFailed: 'Failed to remove 7TV emote set',
+    seventvReplacePlaceholder: 'Paste a new ID/URL to replace\u2026',
+    seventvUrlPlaceholder: 'https://7tv.app/users/...',
+    seventvVerify: 'Verify',
+    seventvChecking: 'Checking\u2026',
+    seventvResolveFailed: 'Could not resolve 7TV reference',
+    // Four whole sentences rather than one built from optional fragments. The
+    // name and count are each optional at the call site, so all four
+    // combinations are reachable and each is a sentence a translator can order.
+    seventvResolved: 'Resolved — click Save Configuration to apply.',
+    seventvResolvedNamed: 'Resolved to "{name}" — click Save Configuration to apply.',
+    seventvResolvedCounted: 'Resolved ({count} emotes) — click Save Configuration to apply.',
+    seventvResolvedNamedCounted:
+      'Resolved to "{name}" ({count} emotes) — click Save Configuration to apply.',
+  },
   // Sample copy the credit-roll theme preview renders so a streamer can see a
   // theme applied to something. It mirrors the real credits overlay.
   creditRollPreview: {

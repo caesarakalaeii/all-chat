@@ -113,7 +113,7 @@ import { EditorSectionHeader } from '@/components/editor/EditorSectionHeader'
 import { SettingsSearch } from '@/components/editor/SettingsSearch'
 import { AdvancedDisclosure } from '@/components/editor/AdvancedDisclosure'
 import { ModeratorsPanel } from '@/components/editor/ModeratorsPanel'
-import { getTranslations, useTranslations } from '@/lib/i18n'
+import { getTranslations, useTranslations, type TFunction } from '@/lib/i18n'
 import { emphasise, interpolateElements } from '@/lib/i18n/emphasise'
 import {
   EDITOR_SECTIONS,
@@ -165,19 +165,51 @@ const PLATFORM_BORDER: Record<string, string> = {
 // open/closed maps (editor-panel-sections-v1 / appearance-panel-sections-v1).
 const ACTIVE_SECTION_STORAGE_KEY = 'editor-active-section-v1'
 
+/** A 7TV reference the API resolved: always a set ID, optionally named and counted. */
+type ResolvedSevenTvReference = {
+  status: 'resolved'
+  setID: string
+  name?: string
+  emoteCount?: number
+}
+
+/**
+ * The notice shown once a 7TV reference resolves.
+ *
+ * The name and the emote count are each optional, so there are four reachable
+ * sentences. They are four separate catalog keys rather than one key plus two
+ * appended fragments: a translator cannot reorder across a fragment boundary,
+ * and the pre-migration code built exactly that kind of sentence.
+ *
+ * Takes `t` as a parameter because it is not a component and cannot call the hook.
+ */
+function resolvedSevenTvNotice(t: TFunction, state: ResolvedSevenTvReference): string {
+  const { name, emoteCount } = state
+  const hasCount = typeof emoteCount === 'number'
+  if (name && hasCount) {
+    return t('overlayEditor.messages.seventvResolvedNamedCounted', { name, count: emoteCount })
+  }
+  if (name) return t('overlayEditor.messages.seventvResolvedNamed', { name })
+  if (hasCount) return t('overlayEditor.messages.seventvResolvedCounted', { count: emoteCount })
+  return t('overlayEditor.messages.seventvResolved')
+}
+
 // Entry-animation choices for new chat messages ('' = default fade + slide up).
 // Values map to .msg-anim-* classes in globals.css via visual_settings.
-const ENTRY_ANIMATION_OPTIONS: ReadonlyArray<{ value: MessageAnimation | ''; label: string }> = [
-  { value: '', label: 'Fade + slide up (default)' },
-  { value: 'fly-left', label: 'Fly in from left' },
-  { value: 'fly-right', label: 'Fly in from right' },
-  { value: 'fly-spring', label: 'Fly in with overshoot' },
-  { value: 'pop', label: 'Pop in' },
-  { value: 'bounce', label: 'Bounce up' },
-  { value: 'flip', label: 'Flip in' },
-  { value: 'swoosh', label: 'Swoosh' },
-  { value: 'soft-focus', label: 'Soft focus' },
-]
+// Labels live in the catalog under `overlayEditor.messages.animation<Stem>`;
+// this list holds only the class-name values. `as const satisfies` keeps each
+// stem a string literal so a typo fails tsc at the lookup.
+const ENTRY_ANIMATION_OPTIONS = [
+  { value: '', messageStem: 'Default' },
+  { value: 'fly-left', messageStem: 'FlyLeft' },
+  { value: 'fly-right', messageStem: 'FlyRight' },
+  { value: 'fly-spring', messageStem: 'FlySpring' },
+  { value: 'pop', messageStem: 'Pop' },
+  { value: 'bounce', messageStem: 'Bounce' },
+  { value: 'flip', messageStem: 'Flip' },
+  { value: 'swoosh', messageStem: 'Swoosh' },
+  { value: 'soft-focus', messageStem: 'SoftFocus' },
+] as const satisfies ReadonlyArray<{ value: MessageAnimation | ''; messageStem: string }>
 
 // Maps onboarding spotlight targets to left-nav sections (ADR-0042). The
 // guide's 'appearance' target predates the flat nav; Typography is the first
@@ -1718,7 +1750,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   const [seventvResolveState, setSeventvResolveState] = useState<
     | { status: 'idle' }
     | { status: 'resolving' }
-    | { status: 'resolved'; setID: string; name?: string; emoteCount?: number }
+    | ResolvedSevenTvReference
     | { status: 'error'; message: string }
   >({ status: 'idle' })
   const [seventvRemoving, setSeventvRemoving] = useState(false)
@@ -3466,7 +3498,9 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                       {/* Max Messages */}
                       <div data-setting-anchor="maxMessages">
                         <label className="mb-1 block text-xs text-text-sub">
-                          Max Messages: <span className="text-twitch">{maxMessages}</span>
+                          {interpolateElements(t('overlayEditor.messages.maxMessagesLabel'), {
+                            value: <span className="text-twitch">{maxMessages}</span>,
+                          })}
                         </label>
                         <input
                           type="range"
@@ -3481,7 +3515,15 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                       {/* Message Duration */}
                       <div data-setting-anchor="messageDuration">
                         <label className="mb-1 block text-xs text-text-sub">
-                          Message Duration: <span className="text-twitch">{messageDuration}s</span>
+                          {interpolateElements(t('overlayEditor.messages.messageDurationLabel'), {
+                            value: (
+                              <span className="text-twitch">
+                                {t('overlayEditor.messages.durationSeconds', {
+                                  seconds: messageDuration,
+                                })}
+                              </span>
+                            ),
+                          })}
                         </label>
                         <input
                           type="range"
@@ -3503,10 +3545,10 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                             onChange={(e) => setDisableMessageFade(e.target.checked)}
                             className="accent-twitch"
                           />
-                          Disable Message Fade Out
+                          {t('overlayEditor.messages.disableFade')}
                         </label>
                         <p className="mt-1 ml-5 text-xs text-text-sub">
-                          Messages stay visible until max is reached
+                          {t('overlayEditor.messages.disableFadeHint')}
                         </p>
                       </div>
 
@@ -3519,7 +3561,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           htmlFor={feedAnchorSelectId}
                           className="mb-1 block text-xs text-text-sub"
                         >
-                          Feed Anchor
+                          {t('overlayEditor.messages.feedAnchorLabel')}
                         </label>
                         <select
                           id={feedAnchorSelectId}
@@ -3527,12 +3569,13 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           onChange={(e) => setFeedAnchor(parseFeedAnchor(e.target.value))}
                           className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-xs text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
                         >
-                          <option value="top">Top edge — feed grows downward</option>
-                          <option value="bottom">Bottom edge — feed grows upward</option>
+                          <option value="top">{t('overlayEditor.messages.feedAnchorTop')}</option>
+                          <option value="bottom">
+                            {t('overlayEditor.messages.feedAnchorBottom')}
+                          </option>
                         </select>
                         <p className="mt-1 text-xs text-text-sub">
-                          Which edge of the overlay the feed sits on when it is not full. Anchor it
-                          to the bottom and each new message pushes the older ones up.
+                          {t('overlayEditor.messages.feedAnchorHint')}
                         </p>
                       </div>
 
@@ -3545,11 +3588,10 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                             onChange={(e) => setInvertMessageOrder(e.target.checked)}
                             className="accent-twitch"
                           />
-                          Invert Message Order
+                          {t('overlayEditor.messages.invertOrder')}
                         </label>
                         <p className="mt-1 ml-5 text-xs text-text-sub">
-                          Reverses the reading order so the newest message is listed first. This is
-                          the order only — use Feed Anchor to move the feed to the other edge.
+                          {t('overlayEditor.messages.invertOrderHint')}
                         </p>
                       </div>
 
@@ -3559,7 +3601,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           htmlFor={entryAnimationSelectId}
                           className="mb-1 block text-xs text-text-sub"
                         >
-                          Entry Animation
+                          {t('overlayEditor.messages.entryAnimationLabel')}
                         </label>
                         <select
                           id={entryAnimationSelectId}
@@ -3575,18 +3617,20 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                         >
                           {ENTRY_ANIMATION_OPTIONS.map((opt) => (
                             <option key={opt.value} value={opt.value}>
-                              {opt.label}
+                              {t(`overlayEditor.messages.animation${opt.messageStem}`)}
                             </option>
                           ))}
                         </select>
                         <p className="mt-1 text-xs text-text-sub">
-                          How new messages appear on the overlay
+                          {t('overlayEditor.messages.entryAnimationHint')}
                         </p>
                       </div>
 
                       {/* Emote Providers */}
                       <div data-setting-anchor="emoteProviders">
-                        <p className="mb-2 text-xs text-text-sub">Emote Providers</p>
+                        <p className="mb-2 text-xs text-text-sub">
+                          {t('overlayEditor.messages.emoteProvidersLabel')}
+                        </p>
                         <div className="space-y-1.5">
                           <label className="flex items-center gap-2 text-xs text-text-sub">
                             <input
@@ -3595,7 +3639,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                               onChange={(e) => setEnable7tv(e.target.checked)}
                               className="accent-twitch"
                             />
-                            7TV
+                            {t('overlayEditor.messages.seventv')}
                           </label>
                           <label className="flex items-center gap-2 text-xs text-text-sub">
                             <input
@@ -3604,7 +3648,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                               onChange={(e) => setEnableBttv(e.target.checked)}
                               className="accent-twitch"
                             />
-                            BetterTTV
+                            {t('overlayEditor.messages.betterttv')}
                           </label>
                           <label className="flex items-center gap-2 text-xs text-text-sub">
                             <input
@@ -3613,7 +3657,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                               onChange={(e) => setEnableFfz(e.target.checked)}
                               className="accent-twitch"
                             />
-                            FrankerFaceZ
+                            {t('overlayEditor.messages.frankerfacez')}
                           </label>
                         </div>
                       </div>
@@ -3621,25 +3665,31 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                       {/* 7TV emote-set override — useful when no Twitch source exists */}
                       <AdvancedDisclosure count={1}>
                         <div data-setting-anchor="seventvOverride">
-                          <p className="mb-1 text-xs text-text-sub">7TV Emote Set</p>
+                          <p className="mb-1 text-xs text-text-sub">
+                            {t('overlayEditor.messages.seventvOverrideLabel')}
+                          </p>
                           <p className="mb-2 text-[11px] text-text-sub/70">
-                            Optional. Paste a 7TV emote-set ID, an emote-set URL, or your 7TV
-                            profile URL to attach those emotes to this overlay regardless of which
-                            platforms you stream on.
+                            {t('overlayEditor.messages.seventvOverrideHint')}
                           </p>
                           {/* Saved-state pill: shows what's actually attached right now,
                         with a one-click Remove. Hidden while nothing is saved. */}
                           {seventvOverrideSavedID !== '' && (
                             <div className="mb-2 flex items-center justify-between gap-2 rounded-md border border-border bg-surface-2 px-2 py-1.5 text-[11px]">
                               <span className="truncate text-text">
-                                <span className="text-text-sub">Currently active: </span>
+                                <span className="text-text-sub">
+                                  {t('overlayEditor.messages.seventvCurrentlyActive')}
+                                </span>
                                 {seventvSavedDescriptor?.name ? (
                                   <>
                                     <span className="font-medium">
-                                      &quot;{seventvSavedDescriptor.name}&quot;
+                                      {t('overlayEditor.messages.seventvQuotedName', {
+                                        name: seventvSavedDescriptor.name,
+                                      })}
                                     </span>
                                     {typeof seventvSavedDescriptor.emoteCount === 'number'
-                                      ? ` (${seventvSavedDescriptor.emoteCount} emotes)`
+                                      ? t('overlayEditor.messages.seventvEmoteCount', {
+                                          count: seventvSavedDescriptor.emoteCount,
+                                        })
                                       : ''}
                                   </>
                                 ) : (
@@ -3664,14 +3714,14 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                                     setSeventvResolveState({ status: 'idle' })
                                     setConfigAlert({
                                       type: 'success',
-                                      message: '7TV emote set removed',
+                                      message: t('overlayEditor.messages.seventvRemoved'),
                                     })
                                     setTimeout(() => setConfigAlert(null), 5000)
                                   } catch (err) {
                                     const message =
                                       err instanceof Error
                                         ? err.message
-                                        : 'Failed to remove 7TV emote set'
+                                        : t('overlayEditor.messages.seventvRemoveFailed')
                                     setConfigAlert({ type: 'error', message })
                                     setTimeout(() => setConfigAlert(null), 5000)
                                   } finally {
@@ -3679,7 +3729,9 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                                   }
                                 }}
                               >
-                                {seventvRemoving ? 'Removing…' : 'Remove'}
+                                {seventvRemoving
+                                  ? t('overlayEditor.messages.seventvRemoving')
+                                  : t('overlayEditor.messages.seventvRemove')}
                               </Button>
                             </div>
                           )}
@@ -3693,8 +3745,8 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                               }}
                               placeholder={
                                 seventvOverrideSavedID !== ''
-                                  ? 'Paste a new ID/URL to replace…'
-                                  : 'https://7tv.app/users/...'
+                                  ? t('overlayEditor.messages.seventvReplacePlaceholder')
+                                  : t('overlayEditor.messages.seventvUrlPlaceholder')
                               }
                               className="flex-1 rounded-md border border-border bg-bg px-2 py-1 text-xs text-text"
                             />
@@ -3725,25 +3777,20 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                                   const message =
                                     err instanceof Error
                                       ? err.message
-                                      : 'Could not resolve 7TV reference'
+                                      : t('overlayEditor.messages.seventvResolveFailed')
                                   setSeventvResolveState({ status: 'error', message })
                                 }
                               }}
                             >
-                              {seventvResolveState.status === 'resolving' ? 'Checking…' : 'Verify'}
+                              {seventvResolveState.status === 'resolving'
+                                ? t('overlayEditor.messages.seventvChecking')
+                                : t('overlayEditor.messages.seventvVerify')}
                             </Button>
                           </div>
                           {seventvResolveState.status === 'resolved' &&
                             seventvResolveState.setID !== seventvOverrideSavedID && (
                               <p className="mt-1 text-[11px] text-green-500">
-                                Resolved
-                                {seventvResolveState.name
-                                  ? ` to "${seventvResolveState.name}"`
-                                  : ''}
-                                {typeof seventvResolveState.emoteCount === 'number'
-                                  ? ` (${seventvResolveState.emoteCount} emotes)`
-                                  : ''}
-                                {' — click Save Configuration to apply.'}
+                                {resolvedSevenTvNotice(t, seventvResolveState)}
                               </p>
                             )}
                           {seventvResolveState.status === 'error' && (

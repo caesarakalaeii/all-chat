@@ -235,7 +235,7 @@
       "count": 3
     },
     "react/jsx-no-literals": {
-      "count": 60
+      "count": 36
     }
   },
   "src/app/overlays/[id]/preview/embed/page.tsx": {
