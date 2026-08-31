@@ -166,3 +166,101 @@ describe('moderators panel copy', () => {
     expect(t('moderation.invite.upgradeLink')).toBe('Upgrade to invite moderators')
   })
 })
+
+describe('invite acceptance page copy', () => {
+  it('keeps the page chrome', () => {
+    expect(t('moderation.accept.heading')).toBe('Moderation invite')
+    expect(t('moderation.accept.loadingInvite')).toBe('Loading invite')
+    expect(t('moderation.accept.goToChannels')).toBe('Go to your channels')
+    expect(t('moderation.accept.accept')).toBe('Accept and start moderating')
+    expect(t('moderation.accept.accepting')).toBe('Accepting…')
+    expect(t('moderation.accept.notNow')).toBe('Not now')
+  })
+
+  it('keeps the four action labels, which read differently here than in the roster', () => {
+    // moderation.actions.* is the roster's terse wording ("Timeout"). This page
+    // spells each action out for someone deciding whether to accept, so the
+    // copy is genuinely different and gets its own keys.
+    expect(t('moderation.accept.actionDelete')).toBe('Delete messages')
+    expect(t('moderation.accept.actionTimeout')).toBe('Time viewers out')
+    expect(t('moderation.accept.actionBan')).toBe('Ban viewers')
+    expect(t('moderation.accept.actionUnban')).toBe('Lift bans and timeouts')
+  })
+
+  it('keeps the sign-in prompt', () => {
+    expect(t('moderation.accept.signInHeading')).toBe('Sign in to accept this invite')
+    expect(t('moderation.accept.signInBody')).toBe(
+      'Moderating is tied to an All-Chat account, so we need to know which one to hand this to. Sign in, then open the invite link again — it stays valid.'
+    )
+    expect(t('moderation.accept.signIn')).toBe('Sign in')
+  })
+
+  it('keeps the invite summary', () => {
+    // The owner name is emphasised, so the sentence stays whole with a
+    // placeholder rather than being split around the <span>.
+    expect(t('moderation.accept.askingToHelp', { owner: 'Sarah' })).toBe(
+      'Sarah is asking you to help moderate'
+    )
+    // The render site spelled the quotes &ldquo;/&rdquo;.
+    expect(t('moderation.accept.addressedTo', { label: 'my Twitch mod' })).toBe(
+      'They addressed this invite to “my Twitch mod”.'
+    )
+    expect(t('moderation.accept.actionsHeading')).toBe('What you would be able to do')
+    expect(t('moderation.accept.platformsHeading')).toBe('On these platforms')
+    expect(t('moderation.accept.noPlatforms', { owner: 'Sarah' })).toBe(
+      'None yet — Sarah still has to turn a platform on.'
+    )
+    expect(t('moderation.accept.ownAccountNote', { owner: 'Sarah' })).toBe(
+      'You will act with your own platform account, so each platform still checks that Sarah made you a moderator there. Nothing is asked of you now — you connect a platform the first time you moderate on it.'
+    )
+    // expected_platform is optional server-side, so the two reachable renders
+    // are two whole sentences. One key with an empty placeholder would leave a
+    // translator with a sentence that has a hole in it in one of the two cases.
+    expect(t('moderation.accept.expectedAccount', { account: 'sarah' })).toBe(
+      'This invite is meant for sarah.'
+    )
+    expect(
+      t('moderation.accept.expectedAccountOnPlatform', { platform: 'Twitch', account: 'sarah' })
+    ).toBe('This invite is meant for Twitch sarah.')
+  })
+
+  it('keeps every invite failure message', () => {
+    expect(t('moderation.accept.errorMissingToken')).toBe(
+      'This link is missing its invite code. Ask the streamer to send it again.'
+    )
+    // "Not found" deliberately covers unknown, redeemed and revoked alike,
+    // because the server keeps the three indistinguishable.
+    expect(t('moderation.accept.errorNotFound')).toBe(
+      'This invite is not valid any more — it may already have been used, or the streamer may have withdrawn it. Ask them for a new one.'
+    )
+    expect(t('moderation.accept.errorExpired')).toBe(
+      'This invite has expired. Ask the streamer for a new one.'
+    )
+    expect(t('moderation.accept.errorAlreadyModerator')).toBe(
+      'You already moderate this channel. It is on your channels page.'
+    )
+    expect(t('moderation.accept.errorOwnerCannotAccept')).toBe(
+      'This is your own overlay — you already have full moderation on it.'
+    )
+    // The platform and the account are each optional server-side, so the four
+    // reachable combinations are four whole sentences rather than one stem with
+    // fragments appended.
+    expect(t('moderation.accept.errorBoundToOther')).toBe(
+      'This invite is for a specific account. Sign in as that account, or ask the streamer to send a new invite for this one.'
+    )
+    expect(t('moderation.accept.errorBoundToOtherAccount', { account: 'sarah' })).toBe(
+      'This invite is for a specific account (sarah). Sign in as that account, or ask the streamer to send a new invite for this one.'
+    )
+    expect(t('moderation.accept.errorBoundToOtherPlatform', { platform: 'Twitch' })).toBe(
+      'This invite is for a specific Twitch account. Sign in as that account, or ask the streamer to send a new invite for this one.'
+    )
+    expect(
+      t('moderation.accept.errorBoundToOtherBoth', { platform: 'Twitch', account: 'sarah' })
+    ).toBe(
+      'This invite is for a specific Twitch account (sarah). Sign in as that account, or ask the streamer to send a new invite for this one.'
+    )
+    expect(t('moderation.accept.errorUnknown')).toBe(
+      'Could not open this invite. Check the link and try again.'
+    )
+  })
+})
