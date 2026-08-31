@@ -174,4 +174,39 @@ export const moderation = {
       'This invite is for a specific {platform} account ({account}). Sign in as that account, or ask the streamer to send a new invite for this one.',
     errorUnknown: 'Could not open this invite. Check the link and try again.',
   },
+  // /moderate: "Channels you moderate", the only listing an accepted delegation
+  // is reachable from. Never links a moderator to /upgrade — entitlement is the
+  // streamer's, so there is nothing here a volunteer could buy.
+  channels: {
+    heading: 'Channels you moderate',
+    subheading:
+      'Overlays other streamers have handed you. You act with your own platform account, so each platform still checks that you are one of their moderators.',
+    loading: 'Loading channels',
+    loadFailed: 'Could not load your channels.',
+    tryAgain: 'Try again',
+    emptyHeading: 'No channels yet',
+    emptyBody:
+      'When a streamer invites you to moderate their overlay, they send you a private link. Open it while signed in to this account and their channel appears here.',
+    forOwner: 'for {owner}',
+    noPlatforms: 'No platforms turned on yet — ask {owner} to enable one.',
+    suspendedNote: 'Paused after 90 days without any actions. Ask {owner} to turn it back on.',
+    // The render site spelled the apostrophe &apos;, which is U+0027.
+    unavailableNote:
+      "{owner}'s plan does not include moderation right now, so actions are unavailable until they renew it.",
+    openMonitor: 'Open chat monitor',
+    discordPromptBody:
+      'Link your Discord account to moderate Discord. All-Chat checks your own server permissions before it acts, so it needs to know which Discord account is yours.',
+    linkDiscord: 'Link Discord',
+    // The mod-consent redirect's query string. already_linked is the one failure
+    // worth its own words: that Discord account backs a different All-Chat
+    // account, and retrying cannot change it.
+    noticeDiscordAlreadyLinked:
+      'That Discord account is already linked to another All-Chat account. Link a different one, or unlink it from the other account first.',
+    noticeConnectFailed:
+      'That connection did not complete. Open a channel below and try again from there.',
+    noticeDiscordLinked:
+      'Discord account linked. All-Chat can now check your own server permissions when you moderate Discord.',
+    noticeConnected:
+      '{platform} connected. It now covers every channel that delegated {platform} to you.',
+  },
 } as const

@@ -166,11 +166,6 @@
       "count": 25
     }
   },
-  "src/app/moderate/page.tsx": {
-    "react/jsx-no-literals": {
-      "count": 16
-    }
-  },
   "src/app/opengraph-image.tsx": {
     "react/jsx-no-literals": {
       "count": 8
