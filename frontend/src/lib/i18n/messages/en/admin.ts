@@ -401,10 +401,12 @@ export const admin = {
     revokePremiumLabel: 'Revoke Premium for {username}',
     revokePremiumTitle: 'Revoke premium for “{username}”?',
     revokePremiumBody: 'They will no longer be able to create or accept share requests.',
+    revokePremiumCancel: 'Cancel',
     grantPremiumButton: 'Grant Premium',
     grantPremiumLabel: 'Grant Premium to {username}',
     grantPremiumTitle: 'Grant premium to “{username}”?',
     grantPremiumBody: 'They will be able to create and accept chat overlay share requests.',
+    grantPremiumCancel: 'Cancel',
     betaActiveTitle: 'Beta tester',
     betaActiveBody: 'Has all premium features plus early-access ones.',
     revokeBetaButton: 'Revoke Beta Tester',
@@ -412,11 +414,13 @@ export const admin = {
     revokeBetaTitle: 'Revoke beta tester for “{username}”?',
     revokeBetaBody:
       'They lose early-access features. Premium then follows their subscription or any admin override.',
+    revokeBetaCancel: 'Cancel',
     grantBetaButton: 'Grant Beta Tester',
     grantBetaLabel: 'Grant Beta Tester to {username}',
     grantBetaTitle: 'Grant beta tester to “{username}”?',
     grantBetaBody:
       'They gain all premium features plus early-access ones. Use this to grandfather pre-monetization premium users.',
+    grantBetaCancel: 'Cancel',
     ambassadorActiveTitle: 'Ambassador',
     ambassadorActiveBody:
       'Has all premium plus early-access features. Appears on the homepage only after the streamer opts in from their settings.',
@@ -433,6 +437,7 @@ export const admin = {
     revokeAmbassadorTitle: 'Revoke ambassador for “{username}”?',
     revokeAmbassadorBody:
       'They are removed from the homepage showcase and lose early-access features. Premium then follows their subscription or any admin override.',
+    revokeAmbassadorCancel: 'Cancel',
     grantAmbassadorButton: 'Grant Ambassador',
     grantAmbassadorLabel: 'Grant Ambassador to {username}',
     bannedReason: 'Banned: {reason}',

@@ -906,7 +906,7 @@ export default function UsersPage() {
                             <Dialog.Close
                               render={
                                 <Button variant="outline" disabled={premiumLoading}>
-                                  Cancel
+                                  {t('admin.users.revokePremiumCancel')}
                                 </Button>
                               }
                             />
@@ -971,7 +971,7 @@ export default function UsersPage() {
                           <Dialog.Close
                             render={
                               <Button variant="outline" disabled={premiumLoading}>
-                                Cancel
+                                {t('admin.users.grantPremiumCancel')}
                               </Button>
                             }
                           />
@@ -1041,7 +1041,7 @@ export default function UsersPage() {
                             <Dialog.Close
                               render={
                                 <Button variant="outline" disabled={betaLoading}>
-                                  Cancel
+                                  {t('admin.users.revokeBetaCancel')}
                                 </Button>
                               }
                             />
@@ -1093,7 +1093,7 @@ export default function UsersPage() {
                           <Dialog.Close
                             render={
                               <Button variant="outline" disabled={betaLoading}>
-                                Cancel
+                                {t('admin.users.grantBetaCancel')}
                               </Button>
                             }
                           />
@@ -1208,7 +1208,7 @@ export default function UsersPage() {
                             <Dialog.Close
                               render={
                                 <Button variant="outline" disabled={ambassadorLoading}>
-                                  Cancel
+                                  {t('admin.users.revokeAmbassadorCancel')}
                                 </Button>
                               }
                             />

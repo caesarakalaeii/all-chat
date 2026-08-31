@@ -1,9 +1,4 @@
 {
-  "src/app/admin/users/page.tsx": {
-    "react/jsx-no-literals": {
-      "count": 5
-    }
-  },
   "src/app/dev/theme-contrast/page.tsx": {
     "react/jsx-no-literals": {
       "count": 3
