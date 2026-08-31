@@ -82,3 +82,12 @@ describe('shared sound preset names', () => {
     expect(t('common.soundPresets.ping')).toBe('Ping')
   })
 })
+
+describe('shared wordmark', () => {
+  it('spells the product wordmark once for every nav that renders it', () => {
+    // Four surfaces render it: the marketing header, the app nav, the admin rail
+    // and the admin top nav. It is lowercase deliberately — the wordmark is set
+    // in lowercase everywhere, unlike the 'All-Chat' of prose and aria labels.
+    expect(t('common.brand.wordmark')).toBe('all-chat')
+  })
+})
