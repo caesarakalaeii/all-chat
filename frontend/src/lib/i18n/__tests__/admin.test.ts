@@ -840,3 +840,16 @@ describe('feature-flag toast copy', () => {
     )
   })
 })
+
+describe('maintenance toast copy', () => {
+  it('keeps the load, validation, schedule and delete toasts', () => {
+    expect(t('admin.maintenance.loadFailedToast')).toBe('Failed to load maintenance windows')
+    // A validation message, not a request failure: raised before anything is
+    // sent, when the operator has the two times the wrong way round.
+    expect(t('admin.maintenance.invalidRangeToast')).toBe('Start time must be before end time')
+    expect(t('admin.maintenance.scheduledToast')).toBe('Maintenance scheduled')
+    expect(t('admin.maintenance.scheduleFailedToast')).toBe('Failed to schedule maintenance')
+    expect(t('admin.maintenance.deletedToast')).toBe('Maintenance window deleted')
+    expect(t('admin.maintenance.deleteFailedToast')).toBe('Failed to delete maintenance window')
+  })
+})
