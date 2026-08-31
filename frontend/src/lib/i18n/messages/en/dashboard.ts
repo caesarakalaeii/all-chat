@@ -20,4 +20,39 @@
  * The streamer dashboard and the widgets it owns.
  */
 
-export const dashboard = {} as const
+export const dashboard = {
+  overlays: {
+    heading: 'Overlays',
+    newOverlay: 'New Overlay',
+    loading: 'Loading overlays',
+    extensionBadge: 'Extension',
+    deactivateExtension: 'Deactivate Extension',
+    setAsExtension: 'Set as Extension Overlay',
+    deleteLabel: 'Delete {name}',
+    // Two keys rather than a concatenated 's': see the comment in
+    // __tests__/dashboard.test.ts. The caller picks by count.
+    sourceCountOne: '{count} source',
+    sourceCountOther: '{count} sources',
+  },
+  empty: {
+    heading: 'No overlays yet',
+    body: 'Create your first overlay to see chat from all your platforms in one place.',
+    createFirst: 'Create your first overlay',
+  },
+  deleteOverlay: {
+    // The render site spelled the quotes &ldquo;/&rdquo;. A catalog string is
+    // not HTML, so they are the characters themselves.
+    title: 'Delete “{name}”?',
+    description: 'This action cannot be undone. All sources will be removed.',
+    cancel: 'Cancel',
+    confirm: 'Delete',
+  },
+  toasts: {
+    overlayDeleted: 'Overlay deleted',
+    overlayDeleteFailed: 'Failed to delete overlay',
+    tryAgain: 'Please try again.',
+    extensionOverlayUpdated: 'Extension overlay updated',
+    extensionOverlayDeactivated: 'Extension overlay deactivated',
+    overlayUpdateFailed: 'Failed to update overlay',
+  },
+} as const
