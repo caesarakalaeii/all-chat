@@ -29,17 +29,18 @@ import { DEFAULT_LOCALE, type Locale } from './config'
 
 // Constructing an Intl formatter is expensive relative to formatting with one,
 // and code that moves off a module-level constant tends to construct per render.
-// Keyed by locale plus the serialised options, which is why callers may pass a
-// fresh options object without paying for a new formatter.
-const numberFormatters = new Map<string, Intl.NumberFormat>()
+// The date cache is keyed by locale plus the serialised options, so a caller may
+// pass a fresh options object each render without paying for a new formatter.
+// Passing the same keys in a different order costs one extra cache entry and
+// never a wrong result.
+const numberFormatters = new Map<Locale, Intl.NumberFormat>()
 const dateTimeFormatters = new Map<string, Intl.DateTimeFormat>()
 
-function numberFormatter(locale: Locale, options: Intl.NumberFormatOptions): Intl.NumberFormat {
-  const cacheKey = `${locale}|${JSON.stringify(options)}`
-  const cached = numberFormatters.get(cacheKey)
+function numberFormatter(locale: Locale): Intl.NumberFormat {
+  const cached = numberFormatters.get(locale)
   if (cached) return cached
-  const formatter = new Intl.NumberFormat(locale, options)
-  numberFormatters.set(cacheKey, formatter)
+  const formatter = new Intl.NumberFormat(locale)
+  numberFormatters.set(locale, formatter)
   return formatter
 }
 
@@ -55,12 +56,8 @@ function dateTimeFormatter(
   return formatter
 }
 
-export function formatNumber(
-  value: number,
-  locale: Locale = DEFAULT_LOCALE,
-  options: Intl.NumberFormatOptions = {}
-): string {
-  return numberFormatter(locale, options).format(value)
+export function formatNumber(value: number, locale: Locale = DEFAULT_LOCALE): string {
+  return numberFormatter(locale).format(value)
 }
 
 /** `value` is a Date or epoch milliseconds. */
