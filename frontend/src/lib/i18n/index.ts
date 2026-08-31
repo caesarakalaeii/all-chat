@@ -28,14 +28,29 @@ import { enMessages } from './messages/en'
 import { translate, type MessageParams, type MessageKey, type TFunction } from './translate'
 
 /**
+ * One TFunction per locale, built on first use.
+ *
+ * The identity has to be stable: a component that resolves copy inside
+ * useEffect or useCallback must list t in its dependency array, and a fresh
+ * closure per render would re-fire that effect on every render. Guarded by
+ * __tests__/index.test.ts.
+ */
+const translatorsByLocale = new Map<Locale, TFunction>()
+
+/**
  * For Server Components, plain modules and tests.
  *
  * The locale argument is accepted and ignored while English is the only catalog,
  * so that call sites already pass what locale #2 will need. Picking a catalog
  * from it then happens here and nowhere else.
  */
-export function getTranslations(_locale: Locale = DEFAULT_LOCALE): TFunction {
-  return (key: MessageKey, params?: MessageParams) => translate(enMessages, key, params)
+export function getTranslations(locale: Locale = DEFAULT_LOCALE): TFunction {
+  const cached = translatorsByLocale.get(locale)
+  if (cached) return cached
+  const translator: TFunction = (key: MessageKey, params?: MessageParams) =>
+    translate(enMessages, key, params)
+  translatorsByLocale.set(locale, translator)
+  return translator
 }
 
 /**
