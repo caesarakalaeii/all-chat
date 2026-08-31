@@ -985,3 +985,59 @@ describe('monitor view moderation toast copy', () => {
     )
   })
 })
+
+describe('engagement controls toast copy', () => {
+  it('keeps the poll toasts', () => {
+    expect(t('viewerOverlay.engagement.pollIncompleteToast')).toBe(
+      'A poll needs a question and at least 2 options'
+    )
+    expect(t('viewerOverlay.engagement.pollStartedToast')).toBe('Poll started')
+    expect(t('viewerOverlay.engagement.pollStartFailed')).toBe('Could not start the poll')
+    expect(t('viewerOverlay.engagement.pollClosedToast')).toBe('Poll closed')
+    expect(t('viewerOverlay.engagement.pollCloseFailed')).toBe('Could not close the poll')
+  })
+
+  it('keeps the prediction toasts', () => {
+    expect(t('viewerOverlay.engagement.predictionIncompleteToast')).toBe(
+      'A prediction needs a title and at least 2 outcomes'
+    )
+    expect(t('viewerOverlay.engagement.predictionStartedToast')).toBe('Prediction started')
+    expect(t('viewerOverlay.engagement.predictionStartFailed')).toBe(
+      'Could not start the prediction'
+    )
+    // U+2014 em dash in each of these four.
+    expect(t('viewerOverlay.engagement.predictionLockedToast')).toBe(
+      'Prediction locked \u2014 wagers are frozen'
+    )
+    expect(t('viewerOverlay.engagement.predictionLockFailed')).toBe('Could not lock the prediction')
+    expect(t('viewerOverlay.engagement.pickWinnerToast')).toBe('Pick the winning outcome first')
+    expect(t('viewerOverlay.engagement.predictionNoLongerLockedToast')).toBe(
+      'The prediction is no longer locked \u2014 refresh and try again'
+    )
+    expect(t('viewerOverlay.engagement.predictionResolvedToast')).toBe(
+      'Prediction resolved \u2014 winners paid out'
+    )
+    expect(t('viewerOverlay.engagement.predictionResolveFailed')).toBe(
+      'Could not resolve the prediction'
+    )
+  })
+
+  it('keeps the prediction cancel toasts', () => {
+    expect(t('viewerOverlay.engagement.predictionCanceledToast')).toBe(
+      'Prediction canceled \u2014 all wagers refunded'
+    )
+    // The state is the service's own value, lowercased at the call site.
+    expect(t('viewerOverlay.engagement.nothingToCancelToast', { state: 'resolved' })).toBe(
+      'Nothing to cancel \u2014 the prediction is already resolved'
+    )
+    expect(t('viewerOverlay.engagement.predictionCancelFailed')).toBe(
+      'Could not cancel the prediction'
+    )
+  })
+
+  it('keeps the Twitch mirroring consent failure', () => {
+    expect(t('viewerOverlay.engagement.twitchConsentFailedToast')).toBe(
+      'Could not start Twitch consent. Please try again.'
+    )
+  })
+})
