@@ -57,27 +57,28 @@ import {
   type ApiTokenScope,
   type CreatedApiToken,
 } from '@/lib/api/api-tokens'
+import { useTranslations, type TFunction } from '@/lib/i18n'
+import { interpolateElements } from '@/lib/i18n/emphasise'
 import { toastManager } from '@/lib/toast'
 
 const STREAMDECK_README = 'https://github.com/caesarakalaeii/all-chat/tree/main/streamdeck-plugin'
 const STREAMCONTROLLER_README =
   'https://github.com/caesarakalaeii/all-chat/tree/main/streamcontroller-plugin'
 
-const SCOPE_LABELS: Record<ApiTokenScope, { title: string; description: string }> = {
-  'chat:write': {
-    title: 'Send chat messages',
-    description: 'Lets the plugin post messages to your connected chats.',
-  },
-  'engagement:write': {
-    title: 'Run polls and predictions',
-    description: 'Lets the plugin open, resolve and cancel polls and predictions.',
-  },
-}
+/**
+ * Catalog key stem per scope. `satisfies` rather than a type annotation so the
+ * stems stay literal — an annotation widens them to string and a typo stops
+ * failing tsc at the t() call.
+ */
+const SCOPE_MESSAGE_STEMS = {
+  'chat:write': 'scopeChatWrite',
+  'engagement:write': 'scopeEngagementWrite',
+} as const satisfies Record<ApiTokenScope, string>
 
-function formatDate(value: string | null): string {
-  if (!value) return '—'
+function formatDate(t: TFunction, value: string | null): string {
+  if (!value) return t('settings.apiTokens.unknownDate')
   const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return '—'
+  if (Number.isNaN(parsed.getTime())) return t('settings.apiTokens.unknownDate')
   return parsed.toLocaleDateString(undefined, {
     year: 'numeric',
     month: 'short',
@@ -101,6 +102,7 @@ function MintedTokenReveal({
   minted: CreatedApiToken
   onDismiss: () => void
 }) {
+  const t = useTranslations()
   const [copied, setCopied] = useState(false)
   const [copyError, setCopyError] = useState<string | null>(null)
 
@@ -110,22 +112,22 @@ function MintedTokenReveal({
       setCopied(true)
       setCopyError(null)
     } catch {
-      setCopyError('Could not copy automatically — select the token and copy it manually.')
+      setCopyError(t('settings.apiTokens.copyFailed'))
     }
-  }, [minted.token])
+  }, [minted.token, t])
 
   return (
     <Card
       className="border-twitch/60 p-6"
       role="region"
-      aria-label={`New token ${minted.name}`}
+      aria-label={t('settings.apiTokens.revealRegionLabel', { name: minted.name })}
       data-testid="minted-token-reveal"
     >
-      <h2 className="text-lg font-semibold text-text">Copy your new token now</h2>
+      <h2 className="text-lg font-semibold text-text">{t('settings.apiTokens.revealHeading')}</h2>
       <p className="mt-1 text-sm text-amber-400">
-        This is the only time <strong>{minted.name}</strong> will ever be shown. We store only a
-        hash of it, so it cannot be displayed again — if you lose it, revoke this token and create a
-        new one.
+        {interpolateElements(t('settings.apiTokens.revealWarning'), {
+          name: <strong>{minted.name}</strong>,
+        })}
       </p>
 
       <code
@@ -137,10 +139,10 @@ function MintedTokenReveal({
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <Button variant="outline" size="sm" onClick={() => void handleCopy()}>
-          {copied ? 'Copied ✓' : 'Copy token'}
+          {copied ? t('settings.apiTokens.copied') : t('settings.apiTokens.copyToken')}
         </Button>
         <Button size="sm" onClick={onDismiss}>
-          I&apos;ve saved it
+          {t('settings.apiTokens.dismissReveal')}
         </Button>
       </div>
       {copyError && <p className="mt-2 text-xs text-red-400">{copyError}</p>}
@@ -164,6 +166,7 @@ function CreateTokenForm({
   onCreated: (minted: CreatedApiToken) => void
   disabled: boolean
 }) {
+  const t = useTranslations()
   const nameId = useId()
   const [name, setName] = useState('')
   const [scopes, setScopes] = useState<Set<ApiTokenScope>>(new Set(['chat:write']))
@@ -196,7 +199,7 @@ function CreateTokenForm({
       setName('')
     } catch (err) {
       setError(
-        err instanceof Error && err.message ? err.message : 'Could not create the token. Try again.'
+        err instanceof Error && err.message ? err.message : t('settings.apiTokens.createFailed')
       )
     } finally {
       setCreating(false)
@@ -205,60 +208,62 @@ function CreateTokenForm({
 
   return (
     <Card className="p-6">
-      <h2 className="text-lg font-semibold text-text">Create a token</h2>
-      <p className="mt-1 mb-4 text-sm text-text-sub">
-        Give the token a name you will recognise later, and grant it only what the device needs.
-      </p>
+      <h2 className="text-lg font-semibold text-text">{t('settings.apiTokens.createHeading')}</h2>
+      <p className="mt-1 mb-4 text-sm text-text-sub">{t('settings.apiTokens.createBody')}</p>
 
       <form onSubmit={handleSubmit} className="space-y-5">
         <Field.Root>
-          <Field.Label htmlFor={nameId}>Token name</Field.Label>
+          <Field.Label htmlFor={nameId}>{t('settings.apiTokens.nameLabel')}</Field.Label>
           <Field.Control
             render={
               <Input
                 id={nameId}
                 value={name}
                 maxLength={120}
-                placeholder="Stream Deck (studio PC)"
+                placeholder={t('settings.apiTokens.namePlaceholder')}
                 onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
                   setName(event.target.value)
                 }
               />
             }
           />
-          <Field.Description>Shown in the list below so you know what to revoke.</Field.Description>
+          <Field.Description>{t('settings.apiTokens.nameDescription')}</Field.Description>
         </Field.Root>
 
         <fieldset className="space-y-3">
-          <legend className="text-sm font-medium text-text">Scopes</legend>
-          {API_TOKEN_SCOPES.map((scope) => (
-            <Field.Root key={scope} className="flex-row items-start gap-3">
-              <Switch.Root
-                checked={scopes.has(scope)}
-                onCheckedChange={(checked: boolean) => toggleScope(scope, checked)}
-                aria-label={SCOPE_LABELS[scope].title}
-              >
-                <Switch.Thumb />
-              </Switch.Root>
-              <div className="flex flex-col gap-0.5">
-                <Field.Label className="cursor-pointer">{SCOPE_LABELS[scope].title}</Field.Label>
-                <Field.Description className="text-xs">
-                  {SCOPE_LABELS[scope].description} <code className="text-text-dim">{scope}</code>
-                </Field.Description>
-              </div>
-            </Field.Root>
-          ))}
+          <legend className="text-sm font-medium text-text">
+            {t('settings.apiTokens.scopesLegend')}
+          </legend>
+          {API_TOKEN_SCOPES.map((scope) => {
+            const title = t(`settings.apiTokens.${SCOPE_MESSAGE_STEMS[scope]}Title`)
+            return (
+              <Field.Root key={scope} className="flex-row items-start gap-3">
+                <Switch.Root
+                  checked={scopes.has(scope)}
+                  onCheckedChange={(checked: boolean) => toggleScope(scope, checked)}
+                  aria-label={title}
+                >
+                  <Switch.Thumb />
+                </Switch.Root>
+                <div className="flex flex-col gap-0.5">
+                  <Field.Label className="cursor-pointer">{title}</Field.Label>
+                  <Field.Description className="text-xs">
+                    {t(`settings.apiTokens.${SCOPE_MESSAGE_STEMS[scope]}Description`)}{' '}
+                    <code className="text-text-dim">{scope}</code>
+                  </Field.Description>
+                </div>
+              </Field.Root>
+            )
+          })}
           {scopes.size === 0 && (
-            <p className="text-xs text-amber-400">
-              Pick at least one scope — a token with none can authenticate but do nothing.
-            </p>
+            <p className="text-xs text-amber-400">{t('settings.apiTokens.noScopesWarning')}</p>
           )}
         </fieldset>
 
         {error && <p className="text-sm text-red-400">{error}</p>}
 
         <Button type="submit" disabled={!canSubmit}>
-          {creating ? 'Creating…' : 'Create token'}
+          {creating ? t('settings.apiTokens.creating') : t('settings.apiTokens.create')}
         </Button>
       </form>
     </Card>
@@ -270,23 +275,22 @@ function CreateTokenForm({
 // ---------------------------------------------------------------------------
 
 function EmptyState() {
+  const t = useTranslations()
   return (
     <div className="rounded-lg border border-dashed border-border p-6 text-center">
-      <p className="text-sm font-medium text-text">You don&apos;t have any API tokens yet</p>
+      <p className="text-sm font-medium text-text">{t('settings.apiTokens.emptyHeading')}</p>
       <p className="mx-auto mt-2 max-w-md text-sm text-text-sub">
-        A personal access token lets a device sign in as you without your password — it&apos;s how
-        the Stream Deck and StreamController plugins send chat messages and run polls and
-        predictions on your behalf. Create one per device so you can revoke it on its own.
+        {t('settings.apiTokens.emptyBody')}
       </p>
       <p className="mt-3 text-sm text-text-sub">
-        Setup guides:{' '}
+        {t('settings.apiTokens.setupGuides')}{' '}
         <Link
           href={STREAMDECK_README}
           target="_blank"
           rel="noopener noreferrer"
           className="font-medium text-twitch hover:underline"
         >
-          Stream Deck plugin README
+          {t('settings.apiTokens.streamDeckReadme')}
         </Link>{' '}
         ·{' '}
         <Link
@@ -295,7 +299,7 @@ function EmptyState() {
           rel="noopener noreferrer"
           className="font-medium text-twitch hover:underline"
         >
-          StreamController plugin README
+          {t('settings.apiTokens.streamControllerReadme')}
         </Link>
       </p>
     </div>
@@ -307,13 +311,18 @@ function EmptyState() {
 // ---------------------------------------------------------------------------
 
 function TokenRow({ token, onRevoke }: { token: ApiToken; onRevoke: (token: ApiToken) => void }) {
+  const t = useTranslations()
   return (
     <li className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-border px-4 py-3">
       <div className="min-w-0">
         <p className="truncate text-sm font-medium text-text">{token.name}</p>
         <p className="mt-0.5 text-xs text-text-sub">
-          Created {formatDate(token.created_at)} · Last used{' '}
-          {token.last_used_at ? formatDate(token.last_used_at) : 'never'}
+          {t('settings.apiTokens.tokenDates', {
+            created: formatDate(t, token.created_at),
+            lastUsed: token.last_used_at
+              ? formatDate(t, token.last_used_at)
+              : t('settings.apiTokens.neverUsed'),
+          })}
         </p>
         <p className="mt-1 flex flex-wrap gap-1.5">
           {token.scopes.map((scope) => (
@@ -330,9 +339,9 @@ function TokenRow({ token, onRevoke }: { token: ApiToken; onRevoke: (token: ApiT
         variant="outline"
         size="sm"
         onClick={() => onRevoke(token)}
-        aria-label={`Revoke ${token.name}`}
+        aria-label={t('settings.apiTokens.revokeLabel', { name: token.name })}
       >
-        Revoke
+        {t('settings.apiTokens.revoke')}
       </Button>
     </li>
   )
@@ -343,6 +352,7 @@ function TokenRow({ token, onRevoke }: { token: ApiToken; onRevoke: (token: ApiT
 // ---------------------------------------------------------------------------
 
 function ApiTokensContent() {
+  const t = useTranslations()
   const [tokens, setTokens] = useState<ApiToken[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -364,11 +374,11 @@ function ApiTokensContent() {
       setTokens(await listApiTokens())
       setLoadError(null)
     } catch {
-      setLoadError('Could not load your tokens. Refresh the page to try again.')
+      setLoadError(t('settings.apiTokens.loadFailed'))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     void (async () => {
@@ -405,10 +415,8 @@ function ApiTokensContent() {
       <AppNav />
       <main id="main-content" tabIndex={-1} className="mx-auto max-w-2xl space-y-6 px-4 py-12">
         <div>
-          <h1 className="text-2xl font-bold text-text">API Tokens</h1>
-          <p className="mt-1 text-sm text-text-sub">
-            Personal access tokens for the Stream Deck and StreamController plugins.
-          </p>
+          <h1 className="text-2xl font-bold text-text">{t('settings.apiTokens.heading')}</h1>
+          <p className="mt-1 text-sm text-text-sub">{t('settings.apiTokens.subheading')}</p>
         </div>
 
         {minted && <MintedTokenReveal minted={minted} onDismiss={() => setMinted(null)} />}
@@ -416,11 +424,8 @@ function ApiTokensContent() {
         <CreateTokenForm onCreated={handleCreated} disabled={loading} />
 
         <Card className="p-6">
-          <h2 className="text-lg font-semibold text-text">Your tokens</h2>
-          <p className="mt-1 mb-4 text-sm text-text-sub">
-            Only the details below are stored — the token itself is kept as a hash and can never be
-            shown again.
-          </p>
+          <h2 className="text-lg font-semibold text-text">{t('settings.apiTokens.listHeading')}</h2>
+          <p className="mt-1 mb-4 text-sm text-text-sub">{t('settings.apiTokens.listBody')}</p>
 
           {loading ? (
             <div className="space-y-2">
@@ -448,10 +453,10 @@ function ApiTokensContent() {
         }}
       >
         <AlertDialog.Content size="sm">
-          <AlertDialog.Title>Revoke this token?</AlertDialog.Title>
+          <AlertDialog.Title>{t('settings.apiTokens.revokeConfirmTitle')}</AlertDialog.Title>
           <AlertDialog.Description>
             {revokeTarget
-              ? `“${revokeTarget.name}” stops working immediately. Any device using it will need a new token.`
+              ? t('settings.apiTokens.revokeConfirmBody', { name: revokeTarget.name })
               : ''}
           </AlertDialog.Description>
           <div className="mt-6 flex justify-end gap-2">
@@ -461,10 +466,10 @@ function ApiTokensContent() {
               disabled={revoking}
               onClick={() => setRevokeTarget(null)}
             >
-              Cancel
+              {t('settings.apiTokens.revokeCancel')}
             </Button>
             <Button size="sm" disabled={revoking} onClick={() => void handleConfirmRevoke()}>
-              {revoking ? 'Revoking…' : 'Revoke token'}
+              {revoking ? t('settings.apiTokens.revoking') : t('settings.apiTokens.revokeConfirm')}
             </Button>
           </div>
         </AlertDialog.Content>

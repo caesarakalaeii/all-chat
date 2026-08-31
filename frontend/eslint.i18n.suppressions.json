@@ -235,14 +235,6 @@
       "count": 4
     }
   },
-  "src/app/settings/api-tokens/page.tsx": {
-    "no-restricted-syntax": {
-      "count": 1
-    },
-    "react/jsx-no-literals": {
-      "count": 24
-    }
-  },
   "src/app/settings/devices/page.tsx": {
     "react/jsx-no-literals": {
       "count": 23

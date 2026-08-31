@@ -148,4 +148,65 @@ export const settings = {
     loadLinkedFailed: 'Could not load linked platforms',
     disconnectFailed: 'Failed to disconnect platform',
   },
+  // Settings → API tokens: minting, listing and revoking the personal access
+  // tokens the Stream Deck and StreamController plugins authenticate with.
+  apiTokens: {
+    heading: 'API Tokens',
+    subheading: 'Personal access tokens for the Stream Deck and StreamController plugins.',
+    listHeading: 'Your tokens',
+    listBody:
+      'Only the details below are stored — the token itself is kept as a hash and can never be shown again.',
+    loadFailed: 'Could not load your tokens. Refresh the page to try again.',
+    revealRegionLabel: 'New token {name}',
+    revealHeading: 'Copy your new token now',
+    // {name} is emphasised at the render site. The sentence stays whole so a
+    // translator can move the name; see docs/frontend/I18N.md.
+    revealWarning:
+      'This is the only time {name} will ever be shown. We store only a hash of it, so it cannot be displayed again — if you lose it, revoke this token and create a new one.',
+    copyToken: 'Copy token',
+    copied: 'Copied ✓',
+    copyFailed: 'Could not copy automatically — select the token and copy it manually.',
+    // The render site spelled the apostrophe &apos;, which is U+0027.
+    dismissReveal: "I've saved it",
+    createHeading: 'Create a token',
+    createBody:
+      'Give the token a name you will recognise later, and grant it only what the device needs.',
+    nameLabel: 'Token name',
+    namePlaceholder: 'Stream Deck (studio PC)',
+    nameDescription: 'Shown in the list below so you know what to revoke.',
+    scopesLegend: 'Scopes',
+    noScopesWarning:
+      'Pick at least one scope — a token with none can authenticate but do nothing.',
+    create: 'Create token',
+    creating: 'Creating…',
+    createFailed: 'Could not create the token. Try again.',
+    // Keyed by the wire scope name with the colon dropped, so API_TOKEN_SCOPES
+    // stays the single list of scopes and a new one fails tsc until its copy
+    // lands. A fourth key level is not available; see __tests__/messages.test.ts.
+    scopeChatWriteTitle: 'Send chat messages',
+    scopeChatWriteDescription: 'Lets the plugin post messages to your connected chats.',
+    scopeEngagementWriteTitle: 'Run polls and predictions',
+    scopeEngagementWriteDescription:
+      'Lets the plugin open, resolve and cancel polls and predictions.',
+    emptyHeading: "You don't have any API tokens yet",
+    emptyBody:
+      "A personal access token lets a device sign in as you without your password — it's how the Stream Deck and StreamController plugins send chat messages and run polls and predictions on your behalf. Create one per device so you can revoke it on its own.",
+    setupGuides: 'Setup guides:',
+    streamDeckReadme: 'Stream Deck plugin README',
+    streamControllerReadme: 'StreamController plugin README',
+    // One key, two placeholders: a second language reorders the two dates and
+    // the middle dot is not a boundary it can rely on.
+    tokenDates: 'Created {created} · Last used {lastUsed}',
+    neverUsed: 'never',
+    // Stands in for a missing or unparseable timestamp.
+    unknownDate: '—',
+    revokeLabel: 'Revoke {name}',
+    revoke: 'Revoke',
+    revokeConfirmTitle: 'Revoke this token?',
+    revokeConfirmBody:
+      '“{name}” stops working immediately. Any device using it will need a new token.',
+    revokeCancel: 'Cancel',
+    revokeConfirm: 'Revoke token',
+    revoking: 'Revoking…',
+  },
 } as const
