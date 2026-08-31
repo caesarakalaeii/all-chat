@@ -21,15 +21,18 @@
 import { useEffect, useState } from 'react'
 import { Wrench, X } from 'lucide-react'
 import { maintenanceApi } from '@/lib/api/maintenance'
+import { formatDateTime, useTranslations } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import type { MaintenanceWindow } from '@/lib/types/maintenance'
 
-const DATE_FORMAT = new Intl.DateTimeFormat(undefined, {
+// Pinned to the UI locale via formatDateTime, so the date reads as English
+// wherever the browser source runs. See docs/frontend/I18N.md.
+const DATE_OPTIONS: Intl.DateTimeFormatOptions = {
   month: 'short',
   day: 'numeric',
   hour: '2-digit',
   minute: '2-digit',
-})
+}
 
 function isActive(mw: MaintenanceWindow): boolean {
   const now = Date.now()
@@ -37,6 +40,7 @@ function isActive(mw: MaintenanceWindow): boolean {
 }
 
 export function MaintenanceBanner() {
+  const t = useTranslations()
   const [windows, setWindows] = useState<MaintenanceWindow[]>([])
   const [dismissed, setDismissed] = useState<Set<string>>(new Set())
 
@@ -72,14 +76,16 @@ export function MaintenanceBanner() {
             <span className="min-w-0 flex-1">
               {active ? (
                 <>
-                  <strong>Maintenance in progress:</strong> {mw.title} — Expected completion:{' '}
-                  {DATE_FORMAT.format(new Date(mw.ends_at))}
+                  <strong>{t('maintenanceBanner.activeLabel')}</strong> {mw.title} —{' '}
+                  {t('maintenanceBanner.expectedCompletion')}{' '}
+                  {formatDateTime(new Date(mw.ends_at), DATE_OPTIONS)}
                 </>
               ) : (
                 <>
-                  <strong>Scheduled maintenance:</strong> {mw.title} —{' '}
-                  {DATE_FORMAT.format(new Date(mw.starts_at))} to{' '}
-                  {DATE_FORMAT.format(new Date(mw.ends_at))}
+                  <strong>{t('maintenanceBanner.scheduledLabel')}</strong> {mw.title} —{' '}
+                  {formatDateTime(new Date(mw.starts_at), DATE_OPTIONS)}{' '}
+                  {t('maintenanceBanner.rangeSeparator')}{' '}
+                  {formatDateTime(new Date(mw.ends_at), DATE_OPTIONS)}
                 </>
               )}
               {mw.description && (
@@ -89,7 +95,7 @@ export function MaintenanceBanner() {
             <button
               type="button"
               onClick={() => setDismissed((prev) => new Set(prev).add(mw.id))}
-              aria-label={`Dismiss maintenance banner: ${mw.title}`}
+              aria-label={t('maintenanceBanner.dismissLabel', { title: mw.title })}
               className="shrink-0 rounded p-0.5 opacity-60 transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:ring-current focus-visible:outline-none"
             >
               <X className="size-3.5" aria-hidden="true" />

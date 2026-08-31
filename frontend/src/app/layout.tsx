@@ -37,6 +37,7 @@ import { JsonLd } from '@/components/JsonLd'
 import CookieBanner from '@/components/CookieBanner'
 import ImpersonationBanner from '@/components/ImpersonationBanner'
 import { ToastProvider } from '@/components/ui/toast'
+import { DEFAULT_LOCALE, getTranslations } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import { DISCORD_INVITE_URL } from '@/lib/constants'
 
@@ -128,8 +129,9 @@ const webSiteLd = {
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const t = getTranslations()
   return (
-    <html lang="en" className={cn(barlow.variable, dmMono.variable)}>
+    <html lang={DEFAULT_LOCALE} className={cn(barlow.variable, dmMono.variable)}>
       <body>
         {/* Skip link (WCAG 2.4.1): first focusable element on every page;
             visually hidden until keyboard-focused. Pages opt in by giving
@@ -138,7 +140,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           href="#main-content"
           className="sr-only z-100 rounded-md border border-border-md bg-surface-2 px-4 py-2 text-sm font-medium text-text focus-visible:not-sr-only focus-visible:fixed focus-visible:top-4 focus-visible:left-4 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
         >
-          Skip to main content
+          {t('a11y.skipToMainContent')}
         </a>
         <JsonLd data={organizationLd} />
         <JsonLd data={webSiteLd} />
