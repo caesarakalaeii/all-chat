@@ -705,3 +705,14 @@ describe('event system notice copy', () => {
     )
   })
 })
+
+describe('chat send bar platform pill copy', () => {
+  it('keeps both states of a platform pill', () => {
+    // These are ternary branches, invisible to the i18n lint's prop selector.
+    expect(t('viewerOverlay.chatSend.targetGroupLabel')).toBe('Send to')
+    expect(t('viewerOverlay.chatSend.sendToPlatform', { platform: 'Kick' })).toBe('Send to Kick')
+    expect(t('viewerOverlay.chatSend.enableSendingFor', { platform: 'Kick' })).toBe(
+      'Enable sending for Kick'
+    )
+  })
+})
