@@ -125,6 +125,7 @@ Each service has a detailed README:
 - [CONTRIBUTING.md](./CONTRIBUTING.md) - Pull request process, code review guidelines
 - [Testing Guide](./docs/TESTING_COMPREHENSIVE.md) - Unit, integration, E2E tests
 - [Accessibility](./docs/ACCESSIBILITY.md) - WCAG 2.2 AA scope, CI gates (shrink-only ratchets), contracts for new UI code
+- [Frontend i18n](./docs/frontend/I18N.md) - the UI string catalog: how to add a string, placeholder syntax, why there is no provider and no locale in the URL
 
 ---
 
