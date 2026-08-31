@@ -92,4 +92,37 @@ export const admin = {
     cancelButton: 'Cancel',
     submittingButton: 'Scheduling…',
   },
+  features: {
+    heading: 'Features',
+    intro:
+      'Manage capability-level gates. Premium controls paid access; early access restricts a feature to beta testers. Both toggle without a code deploy.',
+    loadError: 'Failed to load feature gates. Refresh the page to try again.',
+    emptyTitle: 'No feature gates configured',
+    emptyBody:
+      'Feature gates are added automatically when new features ship. Check back after the next deployment.',
+    listHeading: 'Feature Gates ({count})',
+    badgePremiumOnly: 'Premium only',
+    badgeFreeForAll: 'Free for all',
+    badgeEarlyAccess: 'Early access',
+    badgeStandard: 'Standard',
+    togglePremiumLabel: 'Toggle premium for {feature}',
+    toggleEarlyAccessLabel: 'Toggle early access for {feature}',
+    // Two orthogonal gate dimensions, each with two directions, so four whole
+    // dialogs. The feature key sits mid-sentence in every title, so these cannot
+    // be a shared stem plus a direction fragment: a language that fronts the verb
+    // or the object could not reassemble the sentence.
+    makeFreeTitle: 'Make {feature} free for all users?',
+    makeFreeBody: 'All authenticated users will gain access immediately. No code deploy required.',
+    makeFreeConfirm: 'Make Free',
+    makePremiumTitle: 'Restrict {feature} to premium users?',
+    makePremiumBody: 'Only users with premium access will be able to use this feature.',
+    makePremiumConfirm: 'Make Premium',
+    graduateTitle: 'Graduate {feature} from early access?',
+    graduateBody: 'Beta-tester-only access is lifted; the feature defers to its premium gate.',
+    graduateConfirm: 'Graduate',
+    makeEarlyAccessTitle: 'Restrict {feature} to beta testers?',
+    makeEarlyAccessBody: 'Only beta testers will be able to use this early-access feature.',
+    makeEarlyAccessConfirm: 'Make Early Access',
+    dialogCancel: 'No, keep as-is',
+  },
 } as const

@@ -7,11 +7,6 @@
       "count": 9
     }
   },
-  "src/app/admin/features/page.tsx": {
-    "react/jsx-no-literals": {
-      "count": 6
-    }
-  },
   "src/app/admin/overlays/page.tsx": {
     "no-restricted-syntax": {
       "count": 1
