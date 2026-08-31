@@ -91,6 +91,15 @@ export const settings = {
       'This permanently deletes your account and all overlays. This action cannot be undone.',
     deleteCancel: 'Cancel',
     deleteConfirm: 'Yes, delete my account',
+    // Toasts.
+    restartGuideFailedToast: 'Could not restart the setup guide',
+    accountDeletedToast: 'Account deleted',
+    accountDeleteFailedToast: 'Failed to delete account',
+    discordServerConnectedToast: 'Discord server connected!',
+    discordLinkedToast: 'Discord account linked!',
+    discordUnlinkedToast: 'Discord account unlinked',
+    discordUnlinkFailedToast: 'Could not unlink your Discord account',
+    discordDisconnectFailedToast: 'Failed to disconnect server',
   },
   // The viewer-facing identity page (/settings/viewer): name colour, avatar
   // cosmetics and the platform links that share them across chats.

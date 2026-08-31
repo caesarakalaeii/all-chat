@@ -84,6 +84,13 @@ export const common = {
     statusDeclined: 'Payment declined',
     statusFormer: 'Ended',
     statusNotSubscribed: 'Not subscribed',
+    // Toasts. Both /settings/premium and /settings/viewer/premium raise this
+    // exact set, which is why they are here rather than per page.
+    connectedToast: 'Patreon connected!',
+    connectFailedToast: 'Could not connect Patreon',
+    connectStartFailedToast: 'Could not start Patreon connect',
+    disconnectedToast: 'Patreon disconnected',
+    disconnectFailedToast: 'Failed to disconnect',
   },
   // Compact elapsed durations, read by formatCompactDuration in lib/utils.ts.
   // They sit here rather than in a surface namespace because that helper is

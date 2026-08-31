@@ -73,8 +73,8 @@ function SettingsContent() {
       router.push('/dashboard')
     } catch {
       toastManager.add({
-        title: 'Could not restart the setup guide',
-        description: 'Please try again.',
+        title: t('settings.index.restartGuideFailedToast'),
+        description: t('common.toast.tryAgain'),
         type: 'error',
       })
       setRestartingGuide(false)
@@ -106,7 +106,7 @@ function SettingsContent() {
 
   useEffect(() => {
     if (!justConnected) return
-    toastManager.add({ title: 'Discord server connected!', type: 'success' })
+    toastManager.add({ title: t('settings.index.discordServerConnectedToast'), type: 'success' })
     router.replace('/settings')
   }, [justConnected, router])
 
@@ -143,7 +143,7 @@ function SettingsContent() {
   // account could inherit the first's server permissions.
   useEffect(() => {
     if (justLinked) {
-      toastManager.add({ title: 'Discord account linked!', type: 'success' })
+      toastManager.add({ title: t('settings.index.discordLinkedToast'), type: 'success' })
       router.replace('/settings')
       return
     }
@@ -164,9 +164,9 @@ function SettingsContent() {
     try {
       await unlinkDiscordAccount()
       setIdentity({ linked: false })
-      toastManager.add({ title: 'Discord account unlinked', type: 'success' })
+      toastManager.add({ title: t('settings.index.discordUnlinkedToast'), type: 'success' })
     } catch {
-      toastManager.add({ title: 'Could not unlink your Discord account', type: 'error' })
+      toastManager.add({ title: t('settings.index.discordUnlinkFailedToast'), type: 'error' })
     }
   }
 
@@ -179,8 +179,8 @@ function SettingsContent() {
       setGuilds((prev) => prev.filter((g) => g.guild_id !== targetId))
     } catch {
       toastManager.add({
-        title: 'Failed to disconnect server',
-        description: 'Please try again.',
+        title: t('settings.index.discordDisconnectFailedToast'),
+        description: t('common.toast.tryAgain'),
         type: 'error',
       })
     }
@@ -189,13 +189,13 @@ function SettingsContent() {
   async function handleDeleteAccount() {
     try {
       await authApi.deleteAccount()
-      toastManager.add({ title: 'Account deleted', type: 'success' })
+      toastManager.add({ title: t('settings.index.accountDeletedToast'), type: 'success' })
       logout()
       router.replace('/')
     } catch {
       toastManager.add({
-        title: 'Failed to delete account',
-        description: 'Please try again.',
+        title: t('settings.index.accountDeleteFailedToast'),
+        description: t('common.toast.tryAgain'),
         type: 'error',
       })
     }

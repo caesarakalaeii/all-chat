@@ -82,15 +82,15 @@ function PremiumContent() {
   useEffect(() => {
     const result = searchParams.get('patreon')
     if (result === 'connected') {
-      toastManager.add({ title: 'Patreon connected!', type: 'success' })
+      toastManager.add({ title: t('common.patreon.connectedToast'), type: 'success' })
       router.replace('/settings/premium')
       void (async () => {
         await fetchStatus()
       })()
     } else if (result === 'error') {
       toastManager.add({
-        title: 'Could not connect Patreon',
-        description: 'Please try again.',
+        title: t('common.patreon.connectFailedToast'),
+        description: t('common.toast.tryAgain'),
         type: 'error',
       })
       router.replace('/settings/premium')
@@ -103,17 +103,17 @@ function PremiumContent() {
       await startPatreonConnect()
     } catch {
       setConnecting(false)
-      toastManager.add({ title: 'Could not start Patreon connect', type: 'error' })
+      toastManager.add({ title: t('common.patreon.connectStartFailedToast'), type: 'error' })
     }
   }
 
   async function handleDisconnect() {
     try {
       await disconnectPatreon()
-      toastManager.add({ title: 'Patreon disconnected', type: 'success' })
+      toastManager.add({ title: t('common.patreon.disconnectedToast'), type: 'success' })
       fetchStatus()
     } catch {
-      toastManager.add({ title: 'Failed to disconnect', type: 'error' })
+      toastManager.add({ title: t('common.patreon.disconnectFailedToast'), type: 'error' })
     }
   }
 
