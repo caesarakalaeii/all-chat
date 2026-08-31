@@ -117,8 +117,13 @@ import { AllChatBadge } from '@/components/AllChatBadge'
 import { PremiumBadge } from '@/components/PremiumBadge'
 import { EventContent } from '@/components/overlay/EventContent'
 import { MessageAttachments } from '@/components/overlay/MessageAttachments'
+import { useTranslations } from '@/lib/i18n'
 import { resolveUsernameColor } from '@/lib/utils/usernameColor'
 import '@/styles/events.css'
+
+// The letter the Kick icon's SVG draws — a brand mark, not text. Matches the
+// preview embed's constant of the same name.
+const KICK_GLYPH = 'K'
 
 // Default display duration (seconds) for an event based on its tier. Pure
 // helper hoisted to module scope so the fade effect can reference it safely.
@@ -136,6 +141,7 @@ function getTierDuration(tier: EventTier): number {
 }
 
 export default function OBSOverlayPage({ params }: { params: Promise<{ id: string }> }) {
+  const t = useTranslations()
   const { id } = use(params)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [maxMessages, setMaxMessages] = useState(50)
@@ -663,7 +669,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
               textAnchor="middle"
               fontFamily="monospace"
             >
-              K
+              {KICK_GLYPH}
             </text>
           </svg>
         )
@@ -963,7 +969,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                     {/* Shared Chat Indicator */}
                     {isSharedChat && (
                       <span className="rounded border border-purple-400/50 bg-purple-600/80 px-1.5 py-0.5 text-xs font-semibold text-purple-100 uppercase">
-                        Shared Chat
+                        {t('viewerOverlay.chatOverlay.sharedChat')}
                       </span>
                     )}
 

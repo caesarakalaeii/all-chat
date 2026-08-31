@@ -117,11 +117,6 @@
       "count": 1
     }
   },
-  "src/app/overlay/[id]/page.tsx": {
-    "react/jsx-no-literals": {
-      "count": 2
-    }
-  },
   "src/app/overlay/[id]/view/page.tsx": {
     "no-restricted-syntax": {
       "count": 2

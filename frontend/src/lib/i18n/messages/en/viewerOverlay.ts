@@ -199,4 +199,10 @@ export const viewerOverlay = {
     thanks: 'Thank you for watching! ❤️',
     seeYou: 'See you next stream!',
   },
+
+  // The OBS chat overlay renders viewer-authored content — usernames, message
+  // bodies, emotes, badges — none of which is translated. This is its only copy.
+  chatOverlay: {
+    sharedChat: 'Shared Chat',
+  },
 } as const
