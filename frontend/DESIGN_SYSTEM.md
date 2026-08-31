@@ -98,6 +98,23 @@ That note is what tells the next person the diff is intentional.
 Sizes: `xs` `sm` `default` `lg`, and `icon-xs` `icon-sm` `icon` `icon-lg` for
 square icon-only buttons. Icon-only buttons need an `aria-label`.
 
+### Links that look like buttons
+
+A control that **navigates** must stay an `<a>` — middle-click, copy-link and
+open-in-new-tab all break on a `<button>`. Share the styling instead of the
+element, with `buttonVariants`:
+
+```tsx
+import Link from 'next/link'
+import { buttonVariants } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
+
+<Link href="/dashboard" className={cn(buttonVariants({ variant: 'ghost', size: 'lg' }), 'w-full justify-start')}>
+```
+
+This is the only correct way to make a link and a button in the same row look
+identical. Hand-copying the button's classes onto the link is how they drift.
+
 ### When a native element is right
 
 `<Button>` is for things that **look like buttons**. Use a native `<button>`
