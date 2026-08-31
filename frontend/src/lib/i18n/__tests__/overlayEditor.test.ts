@@ -577,3 +577,117 @@ describe('Discord relay panel copy', () => {
     expect(t('overlayEditor.relay.selectChannel')).toBe('Select a channel...')
   })
 })
+
+describe('engagement panel copy', () => {
+  it('keeps the load failure and the toggles', () => {
+    expect(t('overlayEditor.engagement.loadError')).toBe(
+      'Could not load engagement settings. Reload the page to try again.'
+    )
+    expect(t('overlayEditor.engagement.enablePoints')).toBe('Enable viewer points')
+    expect(t('overlayEditor.engagement.announceRounds')).toBe('Announce new rounds in chat')
+    expect(t('overlayEditor.engagement.announceRoundsHint')).toBe(
+      'Posts the question, numbered options and the participate link to your chat when a round ' +
+        'starts. Needs the \u201Cadvanced controls\u201D send permission (the same grant the ' +
+        'Monitor view\u2019s chat sending uses) \u2014 without it the announcement is skipped.'
+    )
+  })
+
+  it('keeps the points explainer as one sentence with the four inline code runs', () => {
+    // The paragraph interleaved five text nodes with <code> elements. It stays a
+    // single sentence: the code samples are chat commands, not copy, so they
+    // arrive as placeholders and the render site re-wraps them in <code>.
+    expect(
+      t('overlayEditor.engagement.pointsExplainer', {
+        pointsName: 'Points',
+        voteCommand: '!vote 2',
+        bareVote: '2',
+        predictCommand: '!predict 1 500',
+      })
+    ).toBe(
+      'Viewers earn Points by supporting the stream (subs, bits, donations, gifts) and by ' +
+        'keeping the participation page open, and wager them on predictions. Run polls and ' +
+        'predictions from the Monitor View; viewers join straight from chat (!vote 2 or just 2, ' +
+        '!predict 1 500) or the participation page \u2014 no install required.'
+    )
+  })
+
+  it('keeps the points-name field and the save button', () => {
+    expect(t('overlayEditor.engagement.pointsNameLabel')).toBe('Points name')
+    expect(t('overlayEditor.engagement.pointsNamePlaceholder')).toBe('Points')
+    expect(t('overlayEditor.engagement.save')).toBe('Save Engagement Settings')
+    expect(t('overlayEditor.engagement.saving')).toBe('Saving...')
+  })
+
+  it('keeps every earn-rate field label and hint', () => {
+    expect(t('overlayEditor.engagement.bitsMultiplierLabel')).toBe('Points per bit')
+    expect(t('overlayEditor.engagement.bitsMultiplierHint')).toBe('Twitch cheers')
+    expect(t('overlayEditor.engagement.usdMultiplierLabel')).toBe('Points per USD')
+    expect(t('overlayEditor.engagement.usdMultiplierHint')).toBe('donations & Super Chats')
+    expect(t('overlayEditor.engagement.subHighLabel')).toBe('Tier 3 sub')
+    expect(t('overlayEditor.engagement.subHighHint')).toBe('Twitch Tier 3')
+    expect(t('overlayEditor.engagement.subMediumLabel')).toBe('Tier 2 sub')
+    expect(t('overlayEditor.engagement.subMediumHint')).toBe('Twitch Tier 2')
+    expect(t('overlayEditor.engagement.subLowLabel')).toBe('Base sub / member')
+    expect(t('overlayEditor.engagement.subLowHint')).toBe('Tier 1, Prime, Kick & YouTube members')
+    expect(t('overlayEditor.engagement.giftPerSubLabel')).toBe('Per gifted sub')
+    expect(t('overlayEditor.engagement.giftPerSubHint')).toBe('awarded to the gifter')
+    expect(t('overlayEditor.engagement.chatPerMinuteLabel')).toBe('Chatting, per minute')
+    expect(t('overlayEditor.engagement.chatPerMinuteHint')).toBe('active chatters')
+    expect(t('overlayEditor.engagement.watchPerMinuteLabel')).toBe('Participation page, per min')
+    expect(t('overlayEditor.engagement.watchPerMinuteHint')).toBe(
+      'while the viewer keeps the participate page open (not stream-watch time)'
+    )
+    expect(t('overlayEditor.engagement.comingSoonSuffix')).toBe(' (coming soon)')
+  })
+
+  it('keeps the earn-rate validation toasts naming the offending field', () => {
+    expect(t('overlayEditor.engagement.invalidValue', { field: 'Points per bit' })).toBe(
+      'Invalid value for "Points per bit"'
+    )
+    expect(t('overlayEditor.engagement.mustBeWhole', { field: 'Tier 3 sub' })).toBe(
+      '"Tier 3 sub" must be a whole number'
+    )
+  })
+
+  it('keeps the widget and viewer link copy', () => {
+    expect(t('overlayEditor.engagement.linksHeading')).toBe('Widget & viewer links')
+    expect(t('overlayEditor.engagement.pollWidgetLabel')).toBe('OBS poll widget')
+    expect(t('overlayEditor.engagement.pollWidgetDescription')).toBe(
+      'Browser source that shows the live poll'
+    )
+    expect(t('overlayEditor.engagement.predictionWidgetLabel')).toBe('OBS prediction widget')
+    expect(t('overlayEditor.engagement.predictionWidgetDescription')).toBe(
+      'Browser source that shows the live prediction'
+    )
+    expect(t('overlayEditor.engagement.participateLabel')).toBe('Viewer participation page')
+    expect(t('overlayEditor.engagement.participateDescription')).toBe(
+      'Viewers vote, wager and check their balance \u2014 no install needed'
+    )
+    expect(t('overlayEditor.engagement.copyLink')).toBe('Copy link')
+    expect(t('overlayEditor.engagement.copiedLink')).toBe('Copied!')
+    expect(t('overlayEditor.engagement.copyLinkFailed')).toBe('Could not copy the link')
+  })
+
+  it('keeps the browser-source guidance with the emphasised source type', () => {
+    expect(t('overlayEditor.engagement.browserSourceHint', { emphasis: 'Browser Source' })).toBe(
+      'In OBS/Streamlabs: add a Browser Source, paste a widget URL, and set it to your canvas ' +
+        'size (e.g. 1920\u00D71080). The widgets are transparent and only appear while a round ' +
+        'is live.'
+    )
+    expect(t('overlayEditor.engagement.browserSourceHintEmphasis')).toBe('Browser Source')
+    expect(t('overlayEditor.engagement.participateShareHint')).toBe(
+      'Share the participation link with mobile viewers \u2014 put it on-screen or in your ' +
+        'channel panels so they can join without the extension.'
+    )
+  })
+
+  it('keeps the Twitch mirroring section', () => {
+    expect(t('overlayEditor.engagement.mirroringHeading')).toBe('Twitch native mirroring')
+    expect(t('overlayEditor.engagement.mirroringBody')).toBe(
+      'Mirror your native Twitch polls & predictions onto All-Chat overlays (read-only \u2014 ' +
+        'viewers still vote in Twitch). Opt-in; it adds read-only Twitch scopes and takes ' +
+        'effect after the next channel sync (a stream restart or re-adding the source).'
+    )
+    expect(t('overlayEditor.engagement.enableMirroring')).toBe('Enable Twitch mirroring')
+  })
+})
