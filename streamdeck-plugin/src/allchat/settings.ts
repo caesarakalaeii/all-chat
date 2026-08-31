@@ -74,6 +74,38 @@ export const LOOPBACK_PATH = "/allchat/device-callback";
  */
 export const LOOPBACK_HOST = "127.0.0.1";
 
+/**
+ * Platforms accepted by `POST /api/v1/auth/chat/send`. `all` fans the message out
+ * to every connected platform and returns a per-platform result — and fans out to
+ * exactly these three, see `handleStreamerSendToAll` in
+ * `services/auth-service/handlers/chat_send.go`.
+ *
+ * This list is the SEND surface, which is narrower than the set of platforms
+ * All-Chat reads chat from. Keep it that way: an entry here that the server cannot
+ * post to is a button that fails on press, which is how `tiktok` shipped in both
+ * plugins' pickers while auth-service answered 501 to it.
+ *
+ * The picker in `ui/send-message.html` offers these and nothing else; the parity
+ * script asserts that, because the picker is where the drift actually happened.
+ */
+export const PLATFORMS = ["all", "twitch", "youtube", "kick"] as const;
+
+/**
+ * Platforms All-Chat READS but cannot POST to, with the reason. These are offered
+ * nowhere, but a key configured before they were removed still has one saved, so the
+ * value must be explained rather than reported as a typo.
+ *
+ * KEEP IN SYNC with `streamcontroller-plugin/allchat/settings.py` (ADR-0049).
+ */
+export const UNSENDABLE_PLATFORMS: Readonly<Record<string, string>> = {
+	tiktok:
+		"TikTok publishes no API for posting into a live chat, so All-Chat can show " +
+		"TikTok chat on your overlay but cannot send to it.",
+	discord:
+		"A Discord source is a one-way relay into your overlay. All-Chat has no send " +
+		"path back into a Discord channel.",
+};
+
 /** Settings shared by all three action types. */
 export type ConnectionSettings = {
 	/**
@@ -93,7 +125,7 @@ export type ConnectionSettings = {
 export type SendMessageSettings = ConnectionSettings & {
 	/** Message text sent on key-down. */
 	message?: string;
-	/** Target platform: `twitch` | `youtube` | `kick` | `tiktok` | `all`. */
+	/** Target platform: one of {@link PLATFORMS}. */
 	platform?: string;
 };
 

@@ -207,8 +207,14 @@ no trailing slash.
 ### Send Chat Message
 
 Sends a fixed message to your chat on key-down. Configure the message text and a
-target platform — `twitch`, `youtube`, `kick`, `tiktok`, or `all` to fan out to
-every connected platform. Free on every account.
+target platform — `twitch`, `youtube`, `kick`, or `all` to fan out to every
+connected one of those three. Free on every account.
+
+**TikTok and Discord are not send targets.** All-Chat reads their chat onto your
+overlay, but TikTok publishes no API for posting into a live chat and a Discord
+source is a one-way relay, so neither can be posted to and neither is included in
+`all`. A key still configured for TikTok from an earlier version says so when
+pressed instead of failing silently.
 
 ### Poll Control
 

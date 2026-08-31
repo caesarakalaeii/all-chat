@@ -47,6 +47,7 @@ TS_SETTINGS = TS / "src" / "allchat" / "settings.ts"
 PY_SETTINGS = PY / "allchat" / "settings.py"
 TS_LINKING = TS / "src" / "allchat" / "linking.ts"
 PY_LINKING = PY / "allchat" / "linking.py"
+TS_SEND_UI = TS / "com.allchat.streamdeck.sdPlugin" / "ui" / "send-message.html"
 
 # ---------------------------------------------------------------------------
 # 1. The action list. THIS is the contract ADR-0049 asks for: adding a button
@@ -118,6 +119,27 @@ LINKING_TIMEOUTS: tuple[tuple[str, str, float], ...] = (
 #: approve screen; asking for different sets per platform would mean the same button
 #: works on Windows and 403s on Linux.
 LINKING_SCOPES: tuple[str, ...] = ("chat:write", "engagement:write")
+
+# ---------------------------------------------------------------------------
+# 2c. The send surface.
+#
+#     `POST /api/v1/auth/chat/send` posts to Twitch, YouTube and Kick, and `all`
+#     fans out to exactly those (handleStreamerSendToAll in
+#     services/auth-service/handlers/chat_send.go). It is NARROWER than the set of
+#     platforms All-Chat reads chat from, and that gap is the trap: both plugins
+#     shipped `tiktok` in their pickers while auth-service answered 501 to it, so
+#     the button silently did nothing and a streamer had to ask why.
+#
+#     Checked in three places rather than one, because the Elgato picker is a
+#     fourth source of truth written in HTML that no compiler or test reads: the
+#     TS constant, the Python constant, and the <option> list must agree.
+# ---------------------------------------------------------------------------
+SEND_PLATFORMS: tuple[str, ...] = ("all", "twitch", "youtube", "kick")
+
+#: Platforms All-Chat reads but cannot post to. Both plugins must refuse these with
+#: the REASON (see UNSENDABLE_PLATFORMS in either settings module) rather than as an
+#: unknown value, because keys configured before the removal still carry them.
+UNSENDABLE: tuple[str, ...] = ("tiktok", "discord")
 
 # ---------------------------------------------------------------------------
 # 3. Keep-in-sync pointers, e.g.
@@ -243,6 +265,57 @@ def check_constants() -> None:
             )
 
 
+def check_send_platforms() -> None:
+    """The send surface, spelled in four places, must be one list.
+
+    The picker is included deliberately. `tsc` never opens the HTML and no unit test
+    asserts on it, so an <option> the server rejects is invisible until a streamer
+    presses the key.
+    """
+    ts_platforms = _string_list(strip_ts_comments(read(TS_SETTINGS)), "PLATFORMS")
+    py_platforms = _string_list(strip_py_comments(read(PY_SETTINGS)), "PLATFORMS")
+    ui_platforms = tuple(re.findall(r'<option value="([a-z]+)"', read(TS_SEND_UI)))
+
+    for label, found in (
+        (f"{TS_SETTINGS.relative_to(REPO)} PLATFORMS", ts_platforms),
+        (f"{PY_SETTINGS.relative_to(REPO)} PLATFORMS", py_platforms),
+        (f"{TS_SEND_UI.relative_to(REPO)} <option> values", ui_platforms),
+    ):
+        if set(found) != set(SEND_PLATFORMS):
+            fail(
+                f"send-platform drift: {label} is {list(found)}, expected "
+                f"{list(SEND_PLATFORMS)}. The server posts to Twitch/YouTube/Kick only; "
+                f"anything else here is a key that fails on press."
+            )
+
+    # The refusal must name the reason. A platform merely absent from PLATFORMS gets
+    # "not a platform All-Chat sends to", which reads as a typo for a value the plugin
+    # itself offered until recently.
+    for path in (TS_SETTINGS, PY_SETTINGS):
+        # Keys only: `"tiktok": (` in Python, `tiktok:` in TS. The explanation text
+        # itself is prose and deliberately not compared — it is allowed to be worded
+        # for each plugin's UI, as long as both cover the same platforms.
+        keys = set(re.findall(r'^\s*"?([a-z]+)"?:', _unsendable_literal(read(path)), re.MULTILINE))
+        if keys != set(UNSENDABLE):
+            fail(
+                f"{path.relative_to(REPO)} UNSENDABLE_PLATFORMS covers {sorted(keys)}, "
+                f"expected {sorted(UNSENDABLE)}. Each read-only platform needs an "
+                f"explanation, not just an absence."
+            )
+
+
+def _string_list(src: str, name: str) -> tuple[str, ...]:
+    """Values of `NAME = [...]` / `NAME = (...)`, in either language."""
+    match = re.search(rf"^(?:export const )?{name}\s*[:=][^=\[(]*[\[(](.*?)[\])]", src, re.DOTALL | re.MULTILINE)
+    return tuple(re.findall(r'"([a-z]+)"', match.group(1))) if match else ()
+
+
+def _unsendable_literal(src: str) -> str:
+    """The body of the UNSENDABLE_PLATFORMS mapping, in either language."""
+    match = re.search(r"UNSENDABLE_PLATFORMS[^=]*=\s*\{(.*?)\n\}", src, re.DOTALL)
+    return match.group(1) if match else ""
+
+
 def check_sync_pointers() -> None:
     pointers: dict[Path, set[str]] = {}
     for path in PLUGIN_SOURCES:
@@ -335,6 +408,7 @@ def _scope_literal(src: str, name: str) -> str:
 def main() -> int:
     check_action_list()
     check_constants()
+    check_send_platforms()
     check_linking()
     check_sync_pointers()
 
@@ -351,8 +425,9 @@ def main() -> int:
 
     print(
         f"Desktop plugin parity OK: {len(ACTIONS)} actions, "
-        f"{len(SHARED_CONSTANTS)} shared constants, {len(LINKING_TIMEOUTS)} linking "
-        f"timeouts, pointers mutual."
+        f"{len(SHARED_CONSTANTS)} shared constants, {len(SEND_PLATFORMS)} send "
+        f"platforms (picker included), {len(LINKING_TIMEOUTS)} linking timeouts, "
+        f"pointers mutual."
     )
     return 0
 

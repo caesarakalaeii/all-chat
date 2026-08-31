@@ -12,7 +12,7 @@ import { action, type KeyDownEvent } from "@elgato/streamdeck";
 
 import { sendChatMessage } from "../allchat/api.js";
 import { AllChatError } from "../allchat/errors.js";
-import type { SendMessageSettings } from "../allchat/settings.js";
+import { PLATFORMS, UNSENDABLE_PLATFORMS, type SendMessageSettings } from "../allchat/settings.js";
 import { AllChatAction } from "./base.js";
 
 /** Platform used when the key does not name one: fan out everywhere. */
@@ -35,7 +35,27 @@ export class SendMessageAction extends AllChatAction<SendMessageSettings> {
 				);
 			}
 
-			const platform = settings.platform?.trim() || DEFAULT_PLATFORM;
+			const platform = (settings.platform?.trim() || DEFAULT_PLATFORM).toLowerCase();
+
+			// A read-only platform is answered before the generic "not a platform"
+			// text. Both are refusals, but only this one is a property of the
+			// platform rather than a typo, and a streamer who picked TikTok deserves
+			// the reason instead of a list it is missing from. Keys configured while
+			// TikTok was still in the picker land here on their next press.
+			const unsendable = UNSENDABLE_PLATFORMS[platform];
+			if (unsendable) {
+				throw new AllChatError(
+					"not-configured",
+					`${unsendable} Point this key at one of: ${PLATFORMS.join(", ")}.`,
+				);
+			}
+			if (!(PLATFORMS as readonly string[]).includes(platform)) {
+				throw new AllChatError(
+					"not-configured",
+					`"${platform}" is not a platform All-Chat sends to. Choose one of: ${PLATFORMS.join(", ")}.`,
+				);
+			}
+
 			await sendChatMessage(conn, message, platform);
 
 			// Log the length rather than the text: a key can carry anything, and

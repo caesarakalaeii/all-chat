@@ -69,9 +69,13 @@ def _premium(exc: AllChatError, what: str) -> AllChatError:
 def send_chat_message(conn: Connection, message: str, platform: str) -> Any:
     """Sends a chat message as the token's owner.
 
-    ``platform`` is one of ``twitch``, ``youtube``, ``kick``, ``tiktok``, or
-    ``all`` to fan out to every connected platform. Both fields are required by
-    the server. Not premium-gated; needs the ``chat:write`` scope.
+    ``platform`` is one of ``twitch``, ``youtube``, ``kick``, or ``all`` to fan out
+    to every connected one of those three. Both fields are required by the server.
+    Not premium-gated; needs the ``chat:write`` scope.
+
+    TikTok and Discord are NOT valid here even though All-Chat reads their chat:
+    the server answers 501 and 400 respectively. See
+    :data:`allchat.settings.UNSENDABLE_PLATFORMS`.
     """
     return post(
         base_url=conn.base_url,
