@@ -798,3 +798,17 @@ describe('admin users page copy', () => {
     expect(t('admin.users.ambassadorError')).toBe('Failed to update ambassador status')
   })
 })
+
+describe('admin users role dialog cancel buttons', () => {
+  it('keeps a cancel label per role dialog', () => {
+    // Five separate keys rather than one shared 'Cancel'. They sit in five
+    // different dialogs, and a language that varies the dismiss word by what is
+    // being dismissed ("Abbrechen" against "Nicht widerrufen") needs the choice.
+    // A single key would take that choice away from every one of them at once.
+    expect(t('admin.users.revokePremiumCancel')).toBe('Cancel')
+    expect(t('admin.users.grantPremiumCancel')).toBe('Cancel')
+    expect(t('admin.users.revokeBetaCancel')).toBe('Cancel')
+    expect(t('admin.users.grantBetaCancel')).toBe('Cancel')
+    expect(t('admin.users.revokeAmbassadorCancel')).toBe('Cancel')
+  })
+})
