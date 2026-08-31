@@ -117,5 +117,17 @@ export const dashboard = {
     revokeCancel: 'Cancel',
     revokeConfirm: 'Revoke',
     revoking: 'Revoking...',
+    // Toasts. loadOverlaysFailed above is the modal's inline error, not a toast.
+    loadRequestsFailed: 'Failed to load share requests',
+    // One key for both notification toggles: the call sites were identical.
+    notificationUpdateFailed: 'Failed to update notification status',
+    acceptedToast: 'Share accepted from {sender}!',
+    // Mid-sentence, so lowercase; userFallbackName stands alone and is 'User'.
+    acceptedToastUnknownSender: 'user',
+    circularTitle: 'Cannot accept',
+    circularBody: 'This would create a circular share dependency',
+    addSourceToast: "Added {sender}'s overlay!",
+    revokedToast: 'Share revoked',
+    revokeFailedToast: 'Failed to revoke share',
   },
 } as const

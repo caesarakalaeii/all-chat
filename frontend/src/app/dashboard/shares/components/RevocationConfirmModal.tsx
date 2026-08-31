@@ -45,11 +45,11 @@ export function RevocationConfirmModal({
     setLoading(true)
     try {
       await sharesApi.revokeShare(shareId)
-      toastManager.add({ title: 'Share revoked', type: 'success' })
+      toastManager.add({ title: t('dashboard.shares.revokedToast'), type: 'success' })
       onRevoked()
       onClose()
     } catch (err) {
-      toastManager.add({ title: 'Failed to revoke share', type: 'error' })
+      toastManager.add({ title: t('dashboard.shares.revokeFailedToast'), type: 'error' })
     } finally {
       setLoading(false)
     }

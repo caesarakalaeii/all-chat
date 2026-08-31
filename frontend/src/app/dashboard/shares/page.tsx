@@ -47,7 +47,7 @@ export default function ShareRequestsPage() {
       setRequests(data)
     } catch (error) {
       console.error('Failed to fetch share requests:', error)
-      toastManager.add({ title: 'Failed to load share requests', type: 'error' })
+      toastManager.add({ title: t('dashboard.shares.loadRequestsFailed'), type: 'error' })
     } finally {
       setLoading(false)
     }
@@ -78,7 +78,10 @@ export default function ShareRequestsPage() {
         }
       } catch (error) {
         console.error('Failed to mark acceptance seen:', error)
-        toastManager.add({ title: 'Failed to update notification status', type: 'error' })
+        toastManager.add({
+          title: t('dashboard.shares.notificationUpdateFailed'),
+          type: 'error',
+        })
       }
     }
   }
@@ -94,7 +97,10 @@ export default function ShareRequestsPage() {
         }
       } catch (error) {
         console.error('Failed to mark acceptance seen:', error)
-        toastManager.add({ title: 'Failed to update notification status', type: 'error' })
+        toastManager.add({
+          title: t('dashboard.shares.notificationUpdateFailed'),
+          type: 'error',
+        })
       }
     }
   }

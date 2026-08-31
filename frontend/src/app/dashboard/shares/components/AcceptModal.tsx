@@ -117,7 +117,9 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
 
       trackEvent('share_accepted')
       toastManager.add({
-        title: `Share accepted from ${request.sender?.display_name || 'user'}!`,
+        title: t('dashboard.shares.acceptedToast', {
+          sender: request.sender?.display_name || t('dashboard.shares.acceptedToastUnknownSender'),
+        }),
         type: 'success',
       })
       onAccepted(response.sender_overlay_id)
@@ -129,8 +131,8 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
 
       if (errorMessage.toLowerCase().includes('circular share')) {
         toastManager.add({
-          title: 'Cannot accept',
-          description: 'This would create a circular share dependency',
+          title: t('dashboard.shares.circularTitle'),
+          description: t('dashboard.shares.circularBody'),
           type: 'error',
         })
       } else {

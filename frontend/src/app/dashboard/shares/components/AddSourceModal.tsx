@@ -65,7 +65,7 @@ export function AddSourceModal({
         }
       } catch (err) {
         console.error('Failed to fetch overlays:', err)
-        toastManager.add({ title: 'Failed to load overlays', type: 'error' })
+        toastManager.add({ title: t('dashboard.shares.loadOverlaysFailed'), type: 'error' })
       } finally {
         setLoadingOverlays(false)
       }
@@ -87,7 +87,10 @@ export function AddSourceModal({
       })
       trackEvent('source_added', { platform: 'shared_overlay' })
 
-      toastManager.add({ title: `Added ${senderName}'s overlay!`, type: 'success' })
+      toastManager.add({
+        title: t('dashboard.shares.addSourceToast', { sender: senderName }),
+        type: 'success',
+      })
 
       if (onAdded) {
         onAdded()
