@@ -176,12 +176,8 @@ export const overlayEditor = {
       'These sounds play on your public OBS overlay, for everyone watching your stream. Want a private alert only you hear when new activity arrives (channel-point redeems, a TikTok Rose, and so on)? Open the Monitor view and turn on Activity sound in its Display menu. That is a separate setting and stays on that device.',
     enable: 'Enable notification sounds',
     preset: 'Sound preset',
-    // Suffixed with the soundPlayer preset name the option writes. Casing rules
-    // are language-specific, so the display name cannot be derived from the
-    // stored lowercase value.
-    presetChime: 'Chime',
-    presetPop: 'Pop',
-    presetPing: 'Ping',
+    // The preset display names are in common.soundPresets.*: the monitor view's
+    // private activity sound renders the same three.
     volume: 'Volume',
     test: 'Test sound',
     cooldown: 'Cooldown',

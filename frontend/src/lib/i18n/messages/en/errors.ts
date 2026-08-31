@@ -90,4 +90,24 @@ export const errors = {
     step2: 'Refresh the page if the problem persists',
     step3: 'Contact support if this error continues',
   },
+
+  // Chrome around a rendered ChatError: the labels, the detail lines and the
+  // recovery buttons. The nine error bodies above are the copy itself.
+  display: {
+    iconLabel: 'Error icon',
+    dismissLabel: 'Dismiss error',
+
+    rateLimitCountdown: 'You can send another message in {countdown}',
+    reasonLabel: 'Reason:',
+    expiresLabel: 'Expires:',
+    platformMessage: 'Platform message: {message}',
+
+    whatYouCanDo: 'What you can do:',
+    tryAgain: 'Try Again',
+    signInWith: 'Sign in with {platform}',
+    // Two whole labels rather than a swapped word plus ' Details': a translator
+    // is not asked to make the verb and the noun agree separately.
+    showDetails: 'Show Details',
+    hideDetails: 'Hide Details',
+  },
 } as const

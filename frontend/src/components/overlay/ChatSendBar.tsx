@@ -31,10 +31,12 @@ import {
   type SendErrorBody,
   type SendPlatform,
 } from '@/lib/api/chat'
+import { useTranslations, type TFunction } from '@/lib/i18n'
 import type { SourceCapability } from '@/lib/types/moderation'
 
 /** Platforms the send bar supports (TikTok/Discord are hidden — no send path). */
-const SENDABLE_PLATFORMS: ReadonlySet<string> = new Set(['twitch', 'youtube', 'kick'])
+const SENDABLE_PLATFORM_NAMES = ['twitch', 'youtube', 'kick'] as const
+const SENDABLE_PLATFORMS: ReadonlySet<string> = new Set(SENDABLE_PLATFORM_NAMES)
 
 /** A platform string the send endpoint accepts as a single target. */
 type SingleSendPlatform = Exclude<SendPlatform, 'all'>
@@ -51,33 +53,35 @@ interface ChatSendBarProps {
   onReauth: (platform?: string) => void
 }
 
-/** Pretty platform label for inline feedback. */
-function platformLabel(platform: string): string {
-  switch (platform) {
-    case 'twitch':
-      return 'Twitch'
-    case 'youtube':
-      return 'YouTube'
-    case 'kick':
-      return 'Kick'
-    default:
-      return platform
-  }
+/**
+ * Display name for a platform, from the shared catalog.
+ *
+ * A send-to-all result can name a platform we do not know, so an unrecognised
+ * value falls through as-is rather than rendering a key that echoes itself.
+ */
+function platformLabel(t: TFunction, platform: string): string {
+  const known = SENDABLE_PLATFORM_NAMES.find((name) => name === platform)
+  return known ? t(`common.platforms.${known}`) : platform
 }
 
-/** Human-readable label for a send-to-all per-platform `error_kind`. */
-function humanizeErrorKind(kind: string): string {
+/**
+ * One word for a send-to-all per-platform `error_kind`.
+ *
+ * An unrecognised kind is shown verbatim: it is more use to the streamer than
+ * nothing, and the backend can add kinds without a frontend release.
+ */
+function humanizeErrorKind(t: TFunction, kind: string): string {
   switch (kind) {
     case 'reauth_required':
-      return 'reconnect'
+      return t('viewerOverlay.chatSend.reasonReauthRequired')
     case 'missing_scope':
-      return 'locked'
+      return t('viewerOverlay.chatSend.reasonMissingScope')
     case 'stream_offline':
-      return 'offline'
+      return t('viewerOverlay.chatSend.reasonStreamOffline')
     case 'quota_exhausted':
-      return 'quota'
+      return t('viewerOverlay.chatSend.reasonQuotaExhausted')
     case 'send_failed':
-      return 'failed'
+      return t('viewerOverlay.chatSend.reasonSendFailed')
     default:
       return kind
   }
@@ -97,6 +101,7 @@ type Feedback =
  * pill kicks off the consent flow (which also grants send scopes, ADR-0017).
  */
 export function ChatSendBar({ sources, onEnable, onReauth }: ChatSendBarProps) {
+  const t = useTranslations()
   const inputId = useId()
 
   // Sendable sources in a stable order, deduped by platform (one pill per platform).
@@ -147,7 +152,7 @@ export function ChatSendBar({ sources, onEnable, onReauth }: ChatSendBarProps) {
 
   const handleError = (err: unknown) => {
     if (!(err instanceof ApiError)) {
-      setFeedback({ kind: 'error', text: 'Could not send. Please try again.' })
+      setFeedback({ kind: 'error', text: t('viewerOverlay.chatSend.sendFailed') })
       return
     }
     const body = (err.data ?? {}) as Partial<SendErrorBody>
@@ -157,7 +162,11 @@ export function ChatSendBar({ sources, onEnable, onReauth }: ChatSendBarProps) {
     if (code === 'missing_scope') {
       setFeedback({
         kind: 'error',
-        text: `Sending isn't enabled${platform ? ` for ${platformLabel(platform)}` : ''} yet.`,
+        text: platform
+          ? t('viewerOverlay.chatSend.missingScopeFor', {
+              platform: platformLabel(t, platform),
+            })
+          : t('viewerOverlay.chatSend.missingScope'),
         platform,
         action: 'enable',
       })
@@ -166,7 +175,9 @@ export function ChatSendBar({ sources, onEnable, onReauth }: ChatSendBarProps) {
     if (code === 'reauth_required') {
       setFeedback({
         kind: 'error',
-        text: `Your ${platform ? platformLabel(platform) : 'platform'} login expired. Please reconnect.`,
+        text: platform
+          ? t('viewerOverlay.chatSend.reauthRequired', { platform: platformLabel(t, platform) })
+          : t('viewerOverlay.chatSend.reauthRequiredGeneric'),
         platform,
         action: 'reauth',
       })
@@ -176,20 +187,22 @@ export function ChatSendBar({ sources, onEnable, onReauth }: ChatSendBarProps) {
       const retry = body.retry_after_seconds
       setFeedback({
         kind: 'error',
-        text: retry ? `Rate limited — try again in ${retry}s.` : 'Rate limited — please slow down.',
+        text: retry
+          ? t('viewerOverlay.chatSend.rateLimitedRetry', { seconds: retry })
+          : t('viewerOverlay.chatSend.rateLimited'),
       })
       return
     }
     if (err.status === 422) {
       setFeedback({
         kind: 'error',
-        text: body.details || 'That channel is not live right now.',
+        text: body.details || t('viewerOverlay.chatSend.streamOffline'),
       })
       return
     }
     setFeedback({
       kind: 'error',
-      text: body.details || err.message || 'Could not send. Please try again.',
+      text: body.details || err.message || t('viewerOverlay.chatSend.sendFailed'),
     })
   }
 
@@ -201,10 +214,16 @@ export function ChatSendBar({ sources, onEnable, onReauth }: ChatSendBarProps) {
     try {
       const res = await sendStreamerMessage({ message: trimmed, platform: targetPlatform })
       if (isSendToAllResponse(res)) {
-        const parts = res.results.map(
-          (r) =>
-            `${platformLabel(r.platform)} ${r.success ? '✓' : `✗${r.error_kind ? ` ${humanizeErrorKind(r.error_kind)}` : ''}`}`
-        )
+        const parts = res.results.map((r) => {
+          const platform = platformLabel(t, r.platform)
+          if (r.success) return t('viewerOverlay.chatSend.resultOk', { platform })
+          return r.error_kind
+            ? t('viewerOverlay.chatSend.resultFailedWhy', {
+                platform,
+                why: humanizeErrorKind(t, r.error_kind),
+              })
+            : t('viewerOverlay.chatSend.resultFailed', { platform })
+        })
         const allOk = res.results.every((r) => r.success)
         // Surface an actionable button per failed platform that needs a user
         // fix (reauth or enable). Without this the partial line just prints
@@ -226,7 +245,7 @@ export function ChatSendBar({ sources, onEnable, onReauth }: ChatSendBarProps) {
           ...(actions.length ? { actions } : {}),
         })
       } else {
-        setFeedback({ kind: 'success', text: 'Sent ✓' })
+        setFeedback({ kind: 'success', text: t('viewerOverlay.chatSend.sent') })
       }
       setText('')
     } catch (err) {
@@ -258,13 +277,13 @@ export function ChatSendBar({ sources, onEnable, onReauth }: ChatSendBarProps) {
                 aria-checked={active}
                 aria-label={
                   enabled
-                    ? `Send to ${platformLabel(platform)}`
-                    : `Enable sending for ${platformLabel(platform)}`
+                    ? `Send to ${platformLabel(t, platform)}`
+                    : `Enable sending for ${platformLabel(t, platform)}`
                 }
                 title={
                   enabled
-                    ? platformLabel(platform)
-                    : `Enable sending for ${platformLabel(platform)}`
+                    ? platformLabel(t, platform)
+                    : `Enable sending for ${platformLabel(t, platform)}`
                 }
                 onClick={() =>
                   enabled
@@ -281,7 +300,7 @@ export function ChatSendBar({ sources, onEnable, onReauth }: ChatSendBarProps) {
                 )}
               >
                 <PlatformGlyph platform={platform} className="h-3.5 w-3.5" />
-                <span>{platformLabel(platform)}</span>
+                <span>{platformLabel(t, platform)}</span>
                 {!enabled && <Lock className="h-3 w-3" aria-hidden="true" />}
               </button>
             )
@@ -292,7 +311,7 @@ export function ChatSendBar({ sources, onEnable, onReauth }: ChatSendBarProps) {
               type="button"
               role="radio"
               aria-checked={selection.kind === 'all'}
-              aria-label="Send to all platforms"
+              aria-label={t('viewerOverlay.chatSend.allLabel')}
               onClick={() => setSelection({ kind: 'all' })}
               className={clsx(
                 'rounded-full border px-2.5 py-1 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none',
@@ -301,7 +320,7 @@ export function ChatSendBar({ sources, onEnable, onReauth }: ChatSendBarProps) {
                   : 'border-border text-text-sub hover:border-border-md hover:text-text'
               )}
             >
-              All
+              {t('viewerOverlay.chatSend.allText')}
             </button>
           )}
         </div>
@@ -309,7 +328,7 @@ export function ChatSendBar({ sources, onEnable, onReauth }: ChatSendBarProps) {
         {/* Message input + send */}
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <label htmlFor={inputId} className="sr-only">
-            Chat message
+            {t('viewerOverlay.chatSend.messageLabel')}
           </label>
           <input
             id={inputId}
@@ -318,7 +337,11 @@ export function ChatSendBar({ sources, onEnable, onReauth }: ChatSendBarProps) {
             onChange={(e) => setText(e.target.value)}
             maxLength={MAX_MESSAGE_LENGTH}
             disabled={sending}
-            placeholder={selection.kind === 'all' ? 'Message all platforms…' : 'Send a message…'}
+            placeholder={
+              selection.kind === 'all'
+                ? t('viewerOverlay.chatSend.placeholderAll')
+                : t('viewerOverlay.chatSend.placeholderOne')
+            }
             autoComplete="off"
             className="min-w-0 flex-1 rounded-lg border border-border bg-bg px-3 py-1.5 text-sm text-text placeholder:text-text-dim focus-visible:border-border-md focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none disabled:opacity-60"
           />
@@ -328,7 +351,7 @@ export function ChatSendBar({ sources, onEnable, onReauth }: ChatSendBarProps) {
             className="flex shrink-0 items-center gap-1.5 rounded-lg bg-twitch px-3 py-1.5 text-xs font-semibold text-bg transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Send className="h-3.5 w-3.5" />
-            Send
+            {t('viewerOverlay.chatSend.send')}
           </button>
         </div>
       </div>
@@ -352,7 +375,7 @@ export function ChatSendBar({ sources, onEnable, onReauth }: ChatSendBarProps) {
               onClick={() => feedback.platform && onEnable(feedback.platform)}
               className="font-semibold text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
             >
-              Enable sending
+              {t('viewerOverlay.chatSend.enableSending')}
             </button>
           )}
           {feedback.kind === 'error' && feedback.action === 'reauth' && (
@@ -361,7 +384,7 @@ export function ChatSendBar({ sources, onEnable, onReauth }: ChatSendBarProps) {
               onClick={() => onReauth(feedback.platform)}
               className="font-semibold text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
             >
-              Reconnect
+              {t('viewerOverlay.chatSend.reconnect')}
             </button>
           )}
           {feedback.kind === 'partial' &&
@@ -375,8 +398,12 @@ export function ChatSendBar({ sources, onEnable, onReauth }: ChatSendBarProps) {
                 className="font-semibold text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
               >
                 {a.action === 'reauth'
-                  ? `Reconnect ${platformLabel(a.platform)}`
-                  : `Enable ${platformLabel(a.platform)}`}
+                  ? t('viewerOverlay.chatSend.reconnectPlatform', {
+                      platform: platformLabel(t, a.platform),
+                    })
+                  : t('viewerOverlay.chatSend.enablePlatform', {
+                      platform: platformLabel(t, a.platform),
+                    })}
               </button>
             ))}
         </div>

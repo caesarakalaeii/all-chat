@@ -39,19 +39,6 @@ export interface SoundGroupProps {
   onPreview?: () => void
 }
 
-/**
- * Catalog key suffix for a preset's display name.
- *
- * The names were title-cased from soundPlayer's lowercase PRESET_NAMES at the
- * render site. Casing rules are language-specific, so each preset now carries
- * its own key and the mapping lives here.
- */
-const PRESET_KEY_SUFFIX = {
-  chime: 'Chime',
-  pop: 'Pop',
-  ping: 'Ping',
-} as const
-
 export function SoundGroup({
   displaySettings,
   onChange,
@@ -89,7 +76,7 @@ export function SoundGroup({
             >
               {SOUND_PRESETS.map((name) => (
                 <option key={name} value={name}>
-                  {t(`overlayEditor.sounds.preset${PRESET_KEY_SUFFIX[name]}`)}
+                  {t(`common.soundPresets.${name}`)}
                 </option>
               ))}
             </select>

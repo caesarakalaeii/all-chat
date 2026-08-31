@@ -27,6 +27,15 @@ export const common = {
   // Product names, keyed by the platform identifier the code already carries.
   // Read by the moderator roster and by the overlay editor's bubble colour
   // picker, which is why they are not in either namespace.
+  // The soundPlayer presets. Read by the overlay editor's on-stream notification
+  // sounds and by the monitor view's private activity sound. Casing rules are
+  // language-specific, so the display name cannot be derived by capitalising the
+  // stored lowercase value.
+  soundPresets: {
+    chime: 'Chime',
+    pop: 'Pop',
+    ping: 'Ping',
+  },
   platforms: {
     twitch: 'Twitch',
     youtube: 'YouTube',

@@ -343,9 +343,9 @@ describe('sound group copy', () => {
     // The render site title-cased soundPlayer's lowercase PRESET_NAMES with a
     // local capitalize(). A language whose casing rules differ cannot derive
     // the display name from the stored value, so each preset gets a key.
-    expect(t('overlayEditor.sounds.presetChime')).toBe('Chime')
-    expect(t('overlayEditor.sounds.presetPop')).toBe('Pop')
-    expect(t('overlayEditor.sounds.presetPing')).toBe('Ping')
+    // The three preset display names moved to common.soundPresets.* once the
+    // monitor view's activity sound became their second reader.
+    // __tests__/common.test.ts pins them now.
   })
 
   it('keeps the custom sound URL field and its upsell', () => {

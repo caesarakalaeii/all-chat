@@ -17,8 +17,29 @@
  */
 
 import { MessageAttachments } from '@/components/overlay/MessageAttachments'
+import { useTranslations, type TFunction } from '@/lib/i18n'
 import { renderMessageContent } from '@/lib/renderMessage'
 import type { ChatMessage } from '@/lib/types/message'
+
+/**
+ * Headline for a token_expiration_warning notice.
+ *
+ * Two independent variables (expired vs refresh-failed, named vs unnamed
+ * account) give four whole sentences rather than a stem with " for <name>"
+ * appended — see docs/frontend/I18N.md on not concatenating fragments.
+ */
+function tokenWarningTitle(t: TFunction, metadata: Record<string, unknown> | undefined): string {
+  const expired = metadata?.failure_reason === 'expired'
+  const username = metadata?.username ? String(metadata.username) : ''
+  if (username) {
+    return expired
+      ? t('viewerOverlay.eventNotice.tokenExpiredFor', { username })
+      : t('viewerOverlay.eventNotice.tokenRefreshFailedFor', { username })
+  }
+  return expired
+    ? t('viewerOverlay.eventNotice.tokenExpired')
+    : t('viewerOverlay.eventNotice.tokenRefreshFailed')
+}
 
 /**
  * Inner content for an event / system-notice row: icon + title + user + optional
@@ -36,6 +57,7 @@ import type { ChatMessage } from '@/lib/types/message'
  * platform/username row header live in each call site's row wrapper, not here.
  */
 export function EventContent({ message }: { message: ChatMessage }) {
+  const t = useTranslations()
   const event = message.event!
 
   // Event icon based on type
@@ -210,36 +232,31 @@ export function EventContent({ message }: { message: ChatMessage }) {
       </div>
       {event.type === 'token_expiration_warning' && (
         <div className="event-warning-message mt-2 space-y-1 text-sm text-orange-200">
-          <div className="font-semibold">
-            {event.metadata?.failure_reason === 'expired'
-              ? 'OAuth token has expired'
-              : 'Failed to refresh OAuth token'}
-            {event.metadata?.username ? ` for ${String(event.metadata.username)}` : ''}
-          </div>
+          <div className="font-semibold">{tokenWarningTitle(t, event.metadata)}</div>
           <div className="text-xs text-orange-300">
-            {'→ Please reconnect your account in Settings → Connections'}
+            {t('viewerOverlay.eventNotice.tokenRemedy')}
           </div>
         </div>
       )}
       {event.type === 'source_permission_error' && (
         <div className="event-warning-message mt-2 space-y-1 text-sm text-red-200">
           <div className="font-semibold">
-            {`Channel ${String(event.metadata?.channel_id || '')} is not accessible`}
+            {t('viewerOverlay.eventNotice.channelInaccessible', {
+              channel: String(event.metadata?.channel_id || ''),
+            })}
           </div>
-          <div className="text-xs text-red-300">
-            {'→ Grant the bot "View Channel" permission in your Discord server settings'}
-          </div>
+          <div className="text-xs text-red-300">{t('viewerOverlay.eventNotice.channelRemedy')}</div>
         </div>
       )}
       {event.type === 'listener_deprecation_notice' && (
         <div className="event-warning-message mt-2 space-y-1 text-sm text-amber-200">
           <div className="font-semibold">
             {String(
-              event.metadata?.description || 'The legacy Twitch chat connection is being retired.'
+              event.metadata?.description || t('viewerOverlay.eventNotice.listenerDeprecated')
             )}
           </div>
           <div className="text-xs text-amber-300">
-            {'→ Re-add your Twitch source to switch to the new EventSub connection'}
+            {t('viewerOverlay.eventNotice.listenerRemedy')}
           </div>
         </div>
       )}

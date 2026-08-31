@@ -22,6 +22,7 @@ import clsx from 'clsx'
 import { PanelBottom, PanelLeft, PanelRight, PanelTop, type LucideIcon } from 'lucide-react'
 
 import type { ViewLayout } from '@/app/overlay/[id]/view/viewLayout'
+import { useTranslations } from '@/lib/i18n'
 
 interface LayoutPickerProps {
   layout: ViewLayout
@@ -29,12 +30,16 @@ interface LayoutPickerProps {
 }
 
 /** The four presets, each with an icon hinting where the chat panel sits. */
-const OPTIONS: ReadonlyArray<{ value: ViewLayout; label: string; Icon: LucideIcon }> = [
-  { value: 'chat-left', label: 'Chat left, events right', Icon: PanelLeft },
-  { value: 'chat-right', label: 'Chat right, events left', Icon: PanelRight },
-  { value: 'chat-top', label: 'Chat top, events below', Icon: PanelTop },
-  { value: 'events-top', label: 'Events top, chat below', Icon: PanelBottom },
-]
+// The wire value paired with its catalog key stem, so the label is looked up as
+// t(`viewerOverlay.layoutPicker.${messageStem}`). `as const satisfies` rather
+// than a type annotation: an annotation widens the stems to string and a typo
+// would stop failing tsc.
+const OPTIONS = [
+  { value: 'chat-left', messageStem: 'chatLeft', Icon: PanelLeft },
+  { value: 'chat-right', messageStem: 'chatRight', Icon: PanelRight },
+  { value: 'chat-top', messageStem: 'chatTop', Icon: PanelTop },
+  { value: 'events-top', messageStem: 'eventsTop', Icon: PanelBottom },
+] as const satisfies ReadonlyArray<{ value: ViewLayout; messageStem: string; Icon: LucideIcon }>
 
 /**
  * Compact segmented control for the overlay monitor's layout. Picks one of four
@@ -43,13 +48,15 @@ const OPTIONS: ReadonlyArray<{ value: ViewLayout; label: string; Icon: LucideIco
  * Details, theme toggle).
  */
 export function LayoutPicker({ layout, onChange }: LayoutPickerProps) {
+  const t = useTranslations()
   return (
     <div
       role="radiogroup"
-      aria-label="Panel layout"
+      aria-label={t('viewerOverlay.layoutPicker.groupLabel')}
       className="flex items-center rounded-lg border border-border p-0.5"
     >
-      {OPTIONS.map(({ value, label, Icon }) => {
+      {OPTIONS.map(({ value, messageStem, Icon }) => {
+        const label = t(`viewerOverlay.layoutPicker.${messageStem}`)
         const active = layout === value
         return (
           <button

@@ -291,4 +291,114 @@ export const viewerOverlay = {
     eventTiktokTreasureChests: 'TikTok Coin Chests',
     eventTokenWarnings: 'Token Warnings',
   },
+
+  viewSettings: {
+    buttonLabel: 'Display settings',
+    buttonText: 'Display',
+    heading: 'View settings',
+    chatOrderHeading: 'Chat order',
+    activitySoundHeading: 'Activity sound',
+
+    showAvatars: 'Avatars',
+    showBadges: 'Badges',
+    showPronouns: 'Pronouns',
+    showTimestamps: 'Timestamps',
+    showPlatformGlyph: 'Platform icon',
+    showModeration: 'Moderation controls',
+
+    newestFirst: 'Newest messages first',
+    newestFirstNote:
+      'Puts the newest message at the top of the Chat panel, so you can read chat without looking down. Only affects this browser.',
+
+    activitySoundEnabled: 'Sound on new activity',
+    soundPresetLabel: 'Sound',
+    volume: 'Volume',
+    testSound: 'Test sound',
+    activitySoundNote:
+      "Plays only here, in this browser, so you notice easy-to-miss activity like channel-point redeems or a TikTok Rose. This is separate from your overlay's on-stream notification sounds.",
+  },
+
+  chatSend: {
+    allLabel: 'Send to all platforms',
+    allText: 'All',
+    messageLabel: 'Chat message',
+    placeholderAll: 'Message all platforms\u2026',
+    placeholderOne: 'Send a message\u2026',
+    send: 'Send',
+
+    enableSending: 'Enable sending',
+    reconnect: 'Reconnect',
+    enablePlatform: 'Enable {platform}',
+    reconnectPlatform: 'Reconnect {platform}',
+
+    sendFailed: 'Could not send. Please try again.',
+    // Named and unnamed forms: the error body does not always carry a platform.
+    missingScope: "Sending isn't enabled yet.",
+    missingScopeFor: "Sending isn't enabled for {platform} yet.",
+    reauthRequired: 'Your {platform} login expired. Please reconnect.',
+    reauthRequiredGeneric: 'Your platform login expired. Please reconnect.',
+    rateLimitedRetry: 'Rate limited \u2014 try again in {seconds}s.',
+    rateLimited: 'Rate limited \u2014 please slow down.',
+    streamOffline: 'That channel is not live right now.',
+
+    sent: 'Sent \u2713',
+    resultOk: '{platform} \u2713',
+    resultFailed: '{platform} \u2717',
+    resultFailedWhy: '{platform} \u2717 {why}',
+
+    // One word each, naming why a single platform in a send-to-all failed.
+    reasonReauthRequired: 'reconnect',
+    reasonMissingScope: 'locked',
+    reasonStreamOffline: 'offline',
+    reasonQuotaExhausted: 'quota',
+    reasonSendFailed: 'failed',
+  },
+
+  moderationControls: {
+    menuLabel: 'Moderate user',
+    timeout: 'Timeout',
+    ban: 'Ban user',
+    unban: 'Unban user',
+    deleteMessage: 'Delete message',
+
+    // ADR-0048: each reason names what stands in the way and who can clear it.
+    // Sending someone at a fix that is not theirs to make is the failure mode
+    // this vocabulary exists to prevent, so none of these collapse together.
+    noModerationApi: '{platform} has no moderation API',
+    unavailable: 'Moderation is unavailable for this source',
+    missingScope: 'Grant moderation permissions to enable mod actions',
+    needsDiscordLink: 'Link your Discord account to moderate here',
+    ownerChannelUnverified:
+      "This streamer's Discord account isn't connected, so nothing can be moderated here",
+    botMissingPermission:
+      "The All-Chat bot wasn't given this Discord permission \u2014 ask the streamer to re-invite it",
+  },
+
+  layoutPicker: {
+    groupLabel: 'Panel layout',
+    chatLeft: 'Chat left, events right',
+    chatRight: 'Chat right, events left',
+    chatTop: 'Chat top, events below',
+    eventsTop: 'Events top, chat below',
+  },
+
+  platformGlyph: {
+    groupLabel: 'Platforms: {platforms}',
+  },
+
+  // Streamer-facing system notices rendered inside an event body. The event's
+  // own content is viewer-authored and never translated; these lines are ours.
+  eventNotice: {
+    tokenExpired: 'OAuth token has expired',
+    tokenRefreshFailed: 'Failed to refresh OAuth token',
+    tokenExpiredFor: 'OAuth token has expired for {username}',
+    tokenRefreshFailedFor: 'Failed to refresh OAuth token for {username}',
+    tokenRemedy: '\u2192 Please reconnect your account in Settings \u2192 Connections',
+
+    channelInaccessible: 'Channel {channel} is not accessible',
+    channelRemedy: '\u2192 Grant the bot "View Channel" permission in your Discord server settings',
+
+    listenerDeprecated: 'The legacy Twitch chat connection is being retired.',
+    listenerRemedy: '\u2192 Re-add your Twitch source to switch to the new EventSub connection',
+  },
 } as const

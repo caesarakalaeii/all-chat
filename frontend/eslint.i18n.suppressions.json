@@ -148,14 +148,6 @@
       "count": 3
     }
   },
-  "src/components/ErrorDisplay.tsx": {
-    "no-restricted-syntax": {
-      "count": 2
-    },
-    "react/jsx-no-literals": {
-      "count": 8
-    }
-  },
   "src/components/EventSubMigrationBanner.tsx": {
     "no-restricted-syntax": {
       "count": 1
@@ -243,44 +235,12 @@
   },
   "src/components/overlay/ChatSendBar.tsx": {
     "no-restricted-syntax": {
-      "count": 3
-    },
-    "react/jsx-no-literals": {
-      "count": 5
-    }
-  },
-  "src/components/overlay/EventContent.tsx": {
-    "react/jsx-no-literals": {
-      "count": 4
-    }
-  },
-  "src/components/overlay/LayoutPicker.tsx": {
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "src/components/overlay/ModerationControls.tsx": {
-    "no-restricted-syntax": {
       "count": 2
-    },
-    "react/jsx-no-literals": {
-      "count": 4
     }
   },
   "src/components/overlay/PlatformGlyph.tsx": {
-    "no-restricted-syntax": {
-      "count": 5
-    },
     "react/jsx-no-literals": {
       "count": 1
-    }
-  },
-  "src/components/overlay/ViewSettingsBar.tsx": {
-    "no-restricted-syntax": {
-      "count": 4
-    },
-    "react/jsx-no-literals": {
-      "count": 8
     }
   },
   "src/components/ui/dialog.tsx": {
