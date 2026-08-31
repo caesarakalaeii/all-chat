@@ -841,3 +841,65 @@ describe('monitor view notice copy', () => {
     )
   })
 })
+
+describe('platform status indicator tooltips', () => {
+  it('keeps the eight status tooltips whole', () => {
+    // Every tooltip was a template literal assembling a platform name, a channel
+    // name and a status phrase with ' - ' separators. Each becomes one string:
+    // the separator is punctuation a language may change, and the order of name
+    // and status is not fixed either.
+    expect(
+      t('viewerOverlay.statusIndicator.active', { platform: 'Twitch', channel: 'caesar' })
+    ).toBe('Twitch - caesar (Active)')
+    expect(
+      t('viewerOverlay.statusIndicator.inactive', { platform: 'Twitch', channel: 'caesar' })
+    ).toBe('Twitch - caesar (Inactive)')
+    expect(
+      t('viewerOverlay.statusIndicator.connected', { platform: 'Twitch', channel: 'caesar' })
+    ).toBe('Twitch - caesar (Connected)')
+    expect(
+      t('viewerOverlay.statusIndicator.reconnecting', {
+        platform: 'Twitch',
+        channel: 'caesar',
+        seconds: 12,
+      })
+    ).toBe('Twitch - caesar - Reconnecting in 12s')
+    expect(
+      t('viewerOverlay.statusIndicator.reconnectingWithError', {
+        platform: 'Twitch',
+        channel: 'caesar',
+        error: 'closed',
+        seconds: 12,
+      })
+    ).toBe('Twitch - caesar - closed (retry in 12s)')
+    expect(
+      t('viewerOverlay.statusIndicator.quotaExceeded', { platform: 'YouTube', channel: 'caesar' })
+    ).toBe('YouTube - caesar - Quota exceeded')
+    expect(t('viewerOverlay.statusIndicator.error', { platform: 'Kick', channel: 'caesar' })).toBe(
+      'Kick - caesar - Error'
+    )
+    expect(
+      t('viewerOverlay.statusIndicator.discoveryPaused', { platform: 'Kick', channel: 'caesar' })
+    ).toBe('Kick - caesar - Discovery paused (use chat monitor to retry)')
+    expect(
+      t('viewerOverlay.statusIndicator.authRequired', { platform: 'Kick', channel: 'caesar' })
+    ).toBe('Kick - caesar - Auth Required')
+    expect(
+      t('viewerOverlay.statusIndicator.offline', { platform: 'Kick', channel: 'caesar' })
+    ).toBe('Kick - caesar - Offline')
+    // A backend error_message is not copy, but the frame it sits in is.
+    expect(
+      t('viewerOverlay.statusIndicator.withErrorMessage', {
+        platform: 'Kick',
+        channel: 'caesar',
+        error: 'token expired',
+      })
+    ).toBe('Kick - caesar - token expired')
+  })
+
+  it('keeps the reconnect countdown badge', () => {
+    // The bare 's' beside the number is the seconds abbreviation, and a language
+    // that does not abbreviate seconds as 's' has nowhere else to say so.
+    expect(t('viewerOverlay.statusIndicator.countdownSeconds', { seconds: 12 })).toBe('12s')
+  })
+})
