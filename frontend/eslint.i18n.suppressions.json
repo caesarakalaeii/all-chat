@@ -1,0 +1,708 @@
+{
+  "src/app/HomeClient.tsx": {
+    "no-restricted-syntax": {
+      "count": 3
+    },
+    "react/jsx-no-literals": {
+      "count": 35
+    }
+  },
+  "src/app/admin/cosmetics/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
+    },
+    "react/jsx-no-literals": {
+      "count": 9
+    }
+  },
+  "src/app/admin/features/page.tsx": {
+    "react/jsx-no-literals": {
+      "count": 6
+    }
+  },
+  "src/app/admin/maintenance/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
+    },
+    "react/jsx-no-literals": {
+      "count": 13
+    }
+  },
+  "src/app/admin/overlays/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    },
+    "react/jsx-no-literals": {
+      "count": 22
+    }
+  },
+  "src/app/admin/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 7
+    },
+    "react/jsx-no-literals": {
+      "count": 5
+    }
+  },
+  "src/app/admin/search/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 6
+    },
+    "react/jsx-no-literals": {
+      "count": 10
+    }
+  },
+  "src/app/admin/sources/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    },
+    "react/jsx-no-literals": {
+      "count": 32
+    }
+  },
+  "src/app/admin/users/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 9
+    },
+    "react/jsx-no-literals": {
+      "count": 85
+    }
+  },
+  "src/app/admin/viewers/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 3
+    },
+    "react/jsx-no-literals": {
+      "count": 61
+    }
+  },
+  "src/app/auth/callback/page.tsx": {
+    "react/jsx-no-literals": {
+      "count": 3
+    }
+  },
+  "src/app/chat/auth-error/page.tsx": {
+    "react/jsx-no-literals": {
+      "count": 6
+    }
+  },
+  "src/app/chat/auth-success/page.tsx": {
+    "react/jsx-no-literals": {
+      "count": 6
+    }
+  },
+  "src/app/dashboard/page.tsx": {
+    "react/jsx-no-literals": {
+      "count": 15
+    }
+  },
+  "src/app/dashboard/shares/components/AcceptModal.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
+    },
+    "react/jsx-no-literals": {
+      "count": 15
+    }
+  },
+  "src/app/dashboard/shares/components/AddSourceModal.tsx": {
+    "react/jsx-no-literals": {
+      "count": 6
+    }
+  },
+  "src/app/dashboard/shares/components/RevocationConfirmModal.tsx": {
+    "react/jsx-no-literals": {
+      "count": 3
+    }
+  },
+  "src/app/dashboard/shares/components/ShareRequestCard.tsx": {
+    "react/jsx-no-literals": {
+      "count": 4
+    }
+  },
+  "src/app/dashboard/shares/page.tsx": {
+    "react/jsx-no-literals": {
+      "count": 4
+    }
+  },
+  "src/app/dev/theme-contrast/page.tsx": {
+    "react/jsx-no-literals": {
+      "count": 3
+    }
+  },
+  "src/app/docs/api/page.tsx": {
+    "react/jsx-no-literals": {
+      "count": 134
+    }
+  },
+  "src/app/docs/page.tsx": {
+    "react/jsx-no-literals": {
+      "count": 226
+    }
+  },
+  "src/app/legal/impressum/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    },
+    "react/jsx-no-literals": {
+      "count": 5
+    }
+  },
+  "src/app/legal/privacy/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    },
+    "react/jsx-no-literals": {
+      "count": 205
+    }
+  },
+  "src/app/legal/terms/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    },
+    "react/jsx-no-literals": {
+      "count": 73
+    }
+  },
+  "src/app/link/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
+    },
+    "react/jsx-no-literals": {
+      "count": 25
+    }
+  },
+  "src/app/moderate/accept/page.tsx": {
+    "react/jsx-no-literals": {
+      "count": 17
+    }
+  },
+  "src/app/moderate/page.tsx": {
+    "react/jsx-no-literals": {
+      "count": 16
+    }
+  },
+  "src/app/opengraph-image.tsx": {
+    "react/jsx-no-literals": {
+      "count": 8
+    }
+  },
+  "src/app/overlay/[id]/credits/page.tsx": {
+    "react/jsx-no-literals": {
+      "count": 16
+    }
+  },
+  "src/app/overlay/[id]/page.tsx": {
+    "react/jsx-no-literals": {
+      "count": 2
+    }
+  },
+  "src/app/overlay/[id]/participate/page.tsx": {
+    "react/jsx-no-literals": {
+      "count": 25
+    }
+  },
+  "src/app/overlay/[id]/poll/page.tsx": {
+    "react/jsx-no-literals": {
+      "count": 6
+    }
+  },
+  "src/app/overlay/[id]/prediction/page.tsx": {
+    "react/jsx-no-literals": {
+      "count": 5
+    }
+  },
+  "src/app/overlay/[id]/view/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
+    },
+    "react/jsx-no-literals": {
+      "count": 20
+    }
+  },
+  "src/app/overlays/[id]/credits/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    },
+    "react/jsx-no-literals": {
+      "count": 43
+    }
+  },
+  "src/app/overlays/[id]/events/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 3
+    },
+    "react/jsx-no-literals": {
+      "count": 20
+    }
+  },
+  "src/app/overlays/[id]/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 8
+    },
+    "react/jsx-no-literals": {
+      "count": 152
+    }
+  },
+  "src/app/overlays/[id]/preview/embed/page.tsx": {
+    "react/jsx-no-literals": {
+      "count": 3
+    }
+  },
+  "src/app/overlays/new/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    },
+    "react/jsx-no-literals": {
+      "count": 4
+    }
+  },
+  "src/app/settings/api-tokens/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    },
+    "react/jsx-no-literals": {
+      "count": 24
+    }
+  },
+  "src/app/settings/devices/page.tsx": {
+    "react/jsx-no-literals": {
+      "count": 23
+    }
+  },
+  "src/app/settings/page.tsx": {
+    "react/jsx-no-literals": {
+      "count": 40
+    }
+  },
+  "src/app/settings/premium/page.tsx": {
+    "react/jsx-no-literals": {
+      "count": 16
+    }
+  },
+  "src/app/settings/viewer/page.tsx": {
+    "no-restricted-syntax": {
+      "count": 3
+    },
+    "react/jsx-no-literals": {
+      "count": 38
+    }
+  },
+  "src/app/settings/viewer/premium/page.tsx": {
+    "react/jsx-no-literals": {
+      "count": 21
+    }
+  },
+  "src/app/upgrade/page.tsx": {
+    "react/jsx-no-literals": {
+      "count": 15
+    }
+  },
+  "src/components/AdminNav.tsx": {
+    "react/jsx-no-literals": {
+      "count": 2
+    }
+  },
+  "src/components/AdminSidebar.tsx": {
+    "no-restricted-syntax": {
+      "count": 3
+    },
+    "react/jsx-no-literals": {
+      "count": 4
+    }
+  },
+  "src/components/AllChatBadge.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/components/AppNav.tsx": {
+    "react/jsx-no-literals": {
+      "count": 8
+    }
+  },
+  "src/components/BetaWarning.tsx": {
+    "react/jsx-no-literals": {
+      "count": 3
+    }
+  },
+  "src/components/CookieBanner.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
+    },
+    "react/jsx-no-literals": {
+      "count": 35
+    }
+  },
+  "src/components/ErrorDisplay.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
+    },
+    "react/jsx-no-literals": {
+      "count": 8
+    }
+  },
+  "src/components/EventSubMigrationBanner.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    },
+    "react/jsx-no-literals": {
+      "count": 2
+    }
+  },
+  "src/components/FaqSection.tsx": {
+    "react/jsx-no-literals": {
+      "count": 1
+    }
+  },
+  "src/components/FeaturedAmbassadors.tsx": {
+    "react/jsx-no-literals": {
+      "count": 2
+    }
+  },
+  "src/components/HomeHeader.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    },
+    "react/jsx-no-literals": {
+      "count": 4
+    }
+  },
+  "src/components/ImpersonationBanner.tsx": {
+    "react/jsx-no-literals": {
+      "count": 3
+    }
+  },
+  "src/components/MaintenanceInfoButton.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
+    },
+    "react/jsx-no-literals": {
+      "count": 1
+    }
+  },
+  "src/components/ModeratingElsewhereCard.tsx": {
+    "react/jsx-no-literals": {
+      "count": 3
+    }
+  },
+  "src/components/MonacoCSSEditor.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    },
+    "react/jsx-no-literals": {
+      "count": 2
+    }
+  },
+  "src/components/PlatformStatusIndicators.tsx": {
+    "react/jsx-no-literals": {
+      "count": 2
+    }
+  },
+  "src/components/PremiumBadge.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/components/ProtectedRoute.tsx": {
+    "react/jsx-no-literals": {
+      "count": 4
+    }
+  },
+  "src/components/ResizableSplit.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/components/SplitView.tsx": {
+    "no-restricted-syntax": {
+      "count": 4
+    }
+  },
+  "src/components/ThemeSwitcher.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
+    },
+    "react/jsx-no-literals": {
+      "count": 8
+    }
+  },
+  "src/components/admin/PremiumDurationChooser.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
+    },
+    "react/jsx-no-literals": {
+      "count": 3
+    }
+  },
+  "src/components/appearance/BackgroundGroup.tsx": {
+    "no-restricted-syntax": {
+      "count": 8
+    },
+    "react/jsx-no-literals": {
+      "count": 2
+    }
+  },
+  "src/components/appearance/BubbleColorsGroup.tsx": {
+    "react/jsx-no-literals": {
+      "count": 9
+    }
+  },
+  "src/components/appearance/ColorPickerControl.tsx": {
+    "react/jsx-no-literals": {
+      "count": 1
+    }
+  },
+  "src/components/appearance/ColorsGroup.tsx": {
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "src/components/appearance/EventsGroup.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/components/appearance/FilterGroup.tsx": {
+    "no-restricted-syntax": {
+      "count": 5
+    },
+    "react/jsx-no-literals": {
+      "count": 6
+    }
+  },
+  "src/components/appearance/FontFamilyCombobox.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    },
+    "react/jsx-no-literals": {
+      "count": 3
+    }
+  },
+  "src/components/appearance/SizingGroup.tsx": {
+    "no-restricted-syntax": {
+      "count": 3
+    },
+    "react/jsx-no-literals": {
+      "count": 1
+    }
+  },
+  "src/components/appearance/SoundGroup.tsx": {
+    "no-restricted-syntax": {
+      "count": 6
+    },
+    "react/jsx-no-literals": {
+      "count": 6
+    }
+  },
+  "src/components/appearance/TTSGroup.tsx": {
+    "no-restricted-syntax": {
+      "count": 26
+    },
+    "react/jsx-no-literals": {
+      "count": 28
+    }
+  },
+  "src/components/appearance/TypographyGroup.tsx": {
+    "no-restricted-syntax": {
+      "count": 6
+    },
+    "react/jsx-no-literals": {
+      "count": 13
+    }
+  },
+  "src/components/appearance/VisibilityGroup.tsx": {
+    "no-restricted-syntax": {
+      "count": 4
+    },
+    "react/jsx-no-literals": {
+      "count": 3
+    }
+  },
+  "src/components/docs/prose.tsx": {
+    "react/jsx-no-literals": {
+      "count": 3
+    }
+  },
+  "src/components/editor/AdvancedDisclosure.tsx": {
+    "react/jsx-no-literals": {
+      "count": 1
+    }
+  },
+  "src/components/editor/EditorNav.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/components/editor/ModeratorsPanel.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    },
+    "react/jsx-no-literals": {
+      "count": 35
+    }
+  },
+  "src/components/editor/PreviewBackdropPicker.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
+    },
+    "react/jsx-no-literals": {
+      "count": 1
+    }
+  },
+  "src/components/editor/SettingsSearch.tsx": {
+    "no-restricted-syntax": {
+      "count": 4
+    },
+    "react/jsx-no-literals": {
+      "count": 2
+    }
+  },
+  "src/components/legal/LegalLayout.tsx": {
+    "react/jsx-no-literals": {
+      "count": 8
+    }
+  },
+  "src/components/onboarding/CreateOverlayDialog.tsx": {
+    "react/jsx-no-literals": {
+      "count": 4
+    }
+  },
+  "src/components/onboarding/ObsHelpContent.tsx": {
+    "react/jsx-no-literals": {
+      "count": 5
+    }
+  },
+  "src/components/onboarding/OnboardingChecklist.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
+    },
+    "react/jsx-no-literals": {
+      "count": 39
+    }
+  },
+  "src/components/overlay/ActivityPanel.tsx": {
+    "react/jsx-no-literals": {
+      "count": 5
+    }
+  },
+  "src/components/overlay/ChatPanel.tsx": {
+    "react/jsx-no-literals": {
+      "count": 3
+    }
+  },
+  "src/components/overlay/ChatRow.tsx": {
+    "react/jsx-no-literals": {
+      "count": 1
+    }
+  },
+  "src/components/overlay/ChatSendBar.tsx": {
+    "no-restricted-syntax": {
+      "count": 3
+    },
+    "react/jsx-no-literals": {
+      "count": 5
+    }
+  },
+  "src/components/overlay/EngagementControls.tsx": {
+    "no-restricted-syntax": {
+      "count": 12
+    },
+    "react/jsx-no-literals": {
+      "count": 35
+    }
+  },
+  "src/components/overlay/EventContent.tsx": {
+    "react/jsx-no-literals": {
+      "count": 4
+    }
+  },
+  "src/components/overlay/LayoutPicker.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/components/overlay/ModerationControls.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
+    },
+    "react/jsx-no-literals": {
+      "count": 4
+    }
+  },
+  "src/components/overlay/ObservabilitySummary.tsx": {
+    "no-restricted-syntax": {
+      "count": 3
+    },
+    "react/jsx-no-literals": {
+      "count": 9
+    }
+  },
+  "src/components/overlay/PlatformGlyph.tsx": {
+    "no-restricted-syntax": {
+      "count": 5
+    },
+    "react/jsx-no-literals": {
+      "count": 1
+    }
+  },
+  "src/components/overlay/ViewSettingsBar.tsx": {
+    "no-restricted-syntax": {
+      "count": 4
+    },
+    "react/jsx-no-literals": {
+      "count": 8
+    }
+  },
+  "src/components/settings/AmbassadorSettingsCard.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    },
+    "react/jsx-no-literals": {
+      "count": 5
+    }
+  },
+  "src/components/theme-marketplace/CreditRollThemePreview.tsx": {
+    "react/jsx-no-literals": {
+      "count": 6
+    }
+  },
+  "src/components/theme-marketplace/ThemeCard.tsx": {
+    "react/jsx-no-literals": {
+      "count": 1
+    }
+  },
+  "src/components/theme-marketplace/ThemeContent.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    },
+    "react/jsx-no-literals": {
+      "count": 8
+    }
+  },
+  "src/components/theme-marketplace/ThemeFilters.tsx": {
+    "no-restricted-syntax": {
+      "count": 2
+    },
+    "react/jsx-no-literals": {
+      "count": 1
+    }
+  },
+  "src/components/theme-marketplace/ThemeMarketplaceModal.tsx": {
+    "no-restricted-syntax": {
+      "count": 3
+    },
+    "react/jsx-no-literals": {
+      "count": 9
+    }
+  },
+  "src/components/ui/dialog.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/components/ui/toast.tsx": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  }
+}

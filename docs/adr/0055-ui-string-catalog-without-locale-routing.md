@@ -54,8 +54,22 @@ locale. Locale never enters the URL, and it is not resolved at request time.**
 - `config.ts` — `SUPPORTED_LOCALES = ['en'] as const`, `Locale`,
   `DEFAULT_LOCALE`, `isSupportedLocale`. Adding a language means editing this one
   array and adding one file under `messages/`.
-- `messages/en.ts` — a nested object literal ending in `as const`. Namespaces are
-  camelCase, nested at most three levels, keyed by surface.
+- `messages/en/` — one file per namespace, each a nested object literal ending in
+  `as const`, composed by a barrel at `messages/en/index.ts` that exports
+  `enMessages` and `EnMessages`. Namespaces are camelCase, nested at most three
+  levels, keyed by surface.
+
+  This started as a single `messages/en.ts`, which is what the pilot needed. It
+  was split when the migration (issue #799) moved every surface's copy into it:
+  that work ran as five ordered batches, and one file means every batch conflicts
+  with every other one on the same hunk. The decision is unchanged — same module,
+  same `as const`, same `MessageKey`, same import path, since `./messages/en`
+  resolves to the barrel. Only the file layout moved.
+
+  The barrel composes by naming each namespace in a literal object. Spreading,
+  `satisfies MessageCatalog` or an explicit type annotation would each widen the
+  composed type and turn `MessageKey` into `string`, switching the compile-time
+  key check off with nothing failing.
 - `translate.ts` — `translate(messages, key, params?)`. `MessageKey` is a
   recursive mapped type flattening the catalog into a union of dotted paths. It
   does not widen to `string` and does not use `any`. Placeholders are single
@@ -106,6 +120,35 @@ attribute stops being a second source of truth) and `MaintenanceBanner.tsx`
 copy and `errorMessages.ts` are untouched. Migrating everything in the same change
 would bury the design under a diff nobody can review, and the design is the part
 that is expensive to retrofit.
+
+The rest followed in issue #799, which also added the gate below. Nothing about
+the design changed there; only the catalog's file layout, recorded above.
+
+### A lint gate, ratcheted the way the a11y gate is
+
+A catalog with no gate drains back to literals within a release: the next feature
+is written the way the surrounding code reads, and the surrounding code was
+literals. `frontend/eslint.i18n.config.mjs` is therefore a standalone ESLint
+config — standalone for the same reason `eslint.a11y.config.mjs` is, so it stays
+green independently of the react-hooks debt in `eslint.config.mjs` — run by
+`.github/workflows/frontend-i18n.yml` as a required check, with a shrink-only
+baseline in `eslint.i18n.suppressions.json`.
+
+It is two rules, not one, and the split is the interesting part.
+`react/jsx-no-literals` with `noStrings: true` covers JSX **text nodes**. Props
+are covered by a `no-restricted-syntax` selector over an explicit attribute list
+(`aria-label`, `placeholder`, `title`, `alt`, `label`), the same technique the
+a11y config uses for its `focus:` rule. The obvious alternative,
+`jsx-no-literals`' own `ignoreProps: false`, was rejected: it flags **every** JSX
+string attribute, `className`, `href`, `type`, `id` and `data-*` included, which
+on this tree is thousands of hits with the real ones buried inside them. A
+baseline that large is not a ratchet, it is a wall.
+
+`eslint-plugin-react` is resolved out of `eslint-config-next`'s nested copy via
+`createRequire`, exactly as the a11y config resolves `eslint-plugin-jsx-a11y`. It
+is not in `frontend/package.json` and must not be: a `frontend/` lockfile change
+has broken the Docker build before, and the plugin's published peer range stops
+at ESLint 9 while this repo is on 10.
 
 ## Considered Options
 
