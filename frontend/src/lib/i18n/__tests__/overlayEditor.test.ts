@@ -691,3 +691,55 @@ describe('engagement panel copy', () => {
     expect(t('overlayEditor.engagement.enableMirroring')).toBe('Enable Twitch mirroring')
   })
 })
+
+describe('add-source form copy', () => {
+  it('keeps the intro and the four OAuth buttons', () => {
+    expect(t('overlayEditor.addSource.intro')).toBe('Connect a platform to this overlay.')
+    expect(t('overlayEditor.addSource.connectTwitch')).toBe('Connect Twitch')
+    expect(t('overlayEditor.addSource.connectYoutube')).toBe('Connect YouTube')
+    expect(t('overlayEditor.addSource.connectKick')).toBe('Connect Kick')
+    expect(t('overlayEditor.addSource.connectTiktok')).toBe('Connect TikTok')
+    expect(t('overlayEditor.addSource.connectDiscord')).toBe('Connect Discord')
+  })
+
+  it('keeps the no-Discord-server prompt as one sentence around its link', () => {
+    // Was three JSX children with the link in the middle. The link text is the
+    // {emphasis} run so the sentence survives a word-order change.
+    expect(t('overlayEditor.addSource.discordNeedsServer', { emphasis: 'Settings' })).toBe(
+      'Connect a Discord server in Settings first to add Discord sources.'
+    )
+    expect(t('overlayEditor.addSource.discordNeedsServerEmphasis')).toBe('Settings')
+  })
+
+  it('keeps the Discord channel picker', () => {
+    expect(t('overlayEditor.addSource.channelLabel')).toBe('Channel')
+    expect(t('overlayEditor.addSource.selectChannel')).toBe('Select a channel...')
+    expect(t('overlayEditor.addSource.back')).toBe('Back')
+    expect(t('overlayEditor.addSource.cancel')).toBe('Cancel')
+    expect(t('overlayEditor.addSource.add')).toBe('Add')
+    expect(t('overlayEditor.addSource.addingEllipsis')).toBe('Adding...')
+  })
+
+  it('keeps the TikTok dialog', () => {
+    expect(t('overlayEditor.addSource.tiktokTitle')).toBe('Connect TikTok')
+    expect(t('overlayEditor.addSource.tiktokBody')).toBe(
+      // &apos; in the JSX is U+0027, a straight apostrophe, not the curly one
+      // other copy in this file uses. Transcribed as it renders.
+      "TikTok has no login step here. Enter the creator's username and we'll pull their live chat."
+    )
+    expect(t('overlayEditor.addSource.tiktokPlaceholder')).toBe('@username')
+    // The TikTok dialog uses a real ellipsis where the Discord one uses three
+    // dots. Both are transcribed as they were rather than normalised.
+    expect(t('overlayEditor.addSource.adding')).toBe('Adding\u2026')
+  })
+
+  it('keeps the admin manual-entry form', () => {
+    expect(t('overlayEditor.addSource.adminSummary')).toBe('Admin: manual channel ID')
+    expect(t('overlayEditor.addSource.adminYoutubePlaceholder')).toBe(
+      '@handle, channel URL, or UC\u2026'
+    )
+    expect(t('overlayEditor.addSource.adminChannelPlaceholder')).toBe('Channel ID or username')
+    expect(t('overlayEditor.addSource.adminAdd')).toBe('Add manually')
+    expect(t('overlayEditor.addSource.adminResolving')).toBe('Resolving\u2026')
+  })
+})
