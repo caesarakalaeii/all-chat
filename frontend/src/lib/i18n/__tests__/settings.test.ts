@@ -324,3 +324,79 @@ describe('API tokens page copy', () => {
     expect(t('settings.apiTokens.revoking')).toBe('Revoking…')
   })
 })
+
+describe('paired devices page copy', () => {
+  it('keeps the page chrome', () => {
+    expect(t('settings.devices.heading')).toBe('Paired devices')
+    expect(t('settings.devices.subheading')).toBe(
+      'Stream Deck and StreamController control surfaces linked to your account. Each one is locked to a single overlay and lapses on its own if it stops being used.'
+    )
+    expect(t('settings.devices.listHeading')).toBe('Your devices')
+    expect(t('settings.devices.listBody')).toBe(
+      'Only the details below are stored. The credential itself was sent straight to the plugin and is kept as a hash here — it is never shown in this dashboard, which is why there is nothing on this page to copy.'
+    )
+    expect(t('settings.devices.loadingLabel')).toBe('Loading paired devices')
+    expect(t('settings.devices.loadFailed')).toBe(
+      'Could not load your paired devices. Refresh the page to try again.'
+    )
+  })
+
+  it('keeps the empty state, the plugin-side link instruction included', () => {
+    expect(t('settings.devices.emptyHeading')).toBe('No paired devices yet')
+    // "Link with All-Chat" is emphasised mid-sentence, so it stays a placeholder
+    // inside one whole sentence rather than three concatenated fragments.
+    expect(t('settings.devices.emptyBody', { linkAction: 'Link with All-Chat' })).toBe(
+      'Linking starts in the plugin, not here: open your Stream Deck or StreamController settings and press Link with All-Chat. Your browser opens an approve screen, you pick an overlay, and the plugin receives its credential directly — nothing is copied or pasted.'
+    )
+    expect(t('settings.devices.emptyLinkAction')).toBe('Link with All-Chat')
+    expect(t('settings.devices.setupGuide')).toBe('Setup guide')
+    expect(t('settings.devices.havePairingCode')).toBe('I have a pairing code')
+  })
+
+  it('keeps the device row', () => {
+    expect(t('settings.devices.controlsOverlay', { overlay: 'Main', status: 'Active' })).toBe(
+      'Controls Main · Active'
+    )
+    expect(t('settings.devices.rowDates', { lastUsed: 'never', paired: '1 Jan 2026' })).toBe(
+      'Last used never · Paired 1 Jan 2026'
+    )
+    expect(t('settings.devices.neverUsed')).toBe('never')
+    expect(t('settings.devices.unknownDate')).toBe('—')
+    expect(t('settings.devices.revokeLabel', { name: 'Deck' })).toBe('Revoke Deck')
+    expect(t('settings.devices.revoke')).toBe('Revoke')
+  })
+
+  it('keeps the three device statuses', () => {
+    expect(t('settings.devices.statusRevoked', { date: '1 Feb 2026' })).toBe('Revoked 1 Feb 2026')
+    expect(t('settings.devices.statusExpired', { date: '1 Feb 2026' })).toBe('Expired 1 Feb 2026')
+    expect(t('settings.devices.statusActive', { date: '1 Feb 2026' })).toBe(
+      'Active until 1 Feb 2026'
+    )
+  })
+
+  it('keeps the headless-machine card and its two links', () => {
+    expect(t('settings.devices.headlessHeading')).toBe('On a second machine or a headless box?')
+    // Two links inside one sentence, so both are placeholders and the sentence
+    // is never split. emphasise() cannot do this — see emphasise.tsx.
+    expect(
+      t('settings.devices.headlessBody', {
+        tokenLink: 'personal access token',
+        pairingLink: 'a pairing code',
+      })
+    ).toBe(
+      'Linking needs the plugin and this browser on the same computer. When they are not — a Stream Deck driving a capture PC, a server with no desktop — use a personal access token instead, or start with a pairing code if your plugin is showing one.'
+    )
+    expect(t('settings.devices.headlessTokenLink')).toBe('personal access token')
+    expect(t('settings.devices.headlessPairingLink')).toBe('a pairing code')
+  })
+
+  it('keeps the revoke confirmation', () => {
+    expect(t('settings.devices.revokeConfirmTitle')).toBe('Revoke this device?')
+    expect(t('settings.devices.revokeConfirmBody', { name: 'Deck' })).toBe(
+      '“Deck” stops working immediately. Link it again from the plugin if you still want to use it.'
+    )
+    expect(t('settings.devices.revokeCancel')).toBe('Cancel')
+    expect(t('settings.devices.revokeConfirm')).toBe('Revoke device')
+    expect(t('settings.devices.revoking')).toBe('Revoking…')
+  })
+})
