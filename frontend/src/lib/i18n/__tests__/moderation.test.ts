@@ -264,3 +264,63 @@ describe('invite acceptance page copy', () => {
     )
   })
 })
+
+describe('channels you moderate page copy', () => {
+  it('keeps the page chrome', () => {
+    expect(t('moderation.channels.heading')).toBe('Channels you moderate')
+    expect(t('moderation.channels.subheading')).toBe(
+      'Overlays other streamers have handed you. You act with your own platform account, so each platform still checks that you are one of their moderators.'
+    )
+    expect(t('moderation.channels.loading')).toBe('Loading channels')
+    expect(t('moderation.channels.loadFailed')).toBe('Could not load your channels.')
+    expect(t('moderation.channels.tryAgain')).toBe('Try again')
+  })
+
+  it('keeps the empty state', () => {
+    expect(t('moderation.channels.emptyHeading')).toBe('No channels yet')
+    expect(t('moderation.channels.emptyBody')).toBe(
+      'When a streamer invites you to moderate their overlay, they send you a private link. Open it while signed in to this account and their channel appears here.'
+    )
+  })
+
+  it('keeps the delegation card', () => {
+    expect(t('moderation.channels.forOwner', { owner: 'Sarah' })).toBe('for Sarah')
+    expect(t('moderation.channels.noPlatforms', { owner: 'Sarah' })).toBe(
+      'No platforms turned on yet — ask Sarah to enable one.'
+    )
+    expect(t('moderation.channels.suspendedNote', { owner: 'Sarah' })).toBe(
+      'Paused after 90 days without any actions. Ask Sarah to turn it back on.'
+    )
+    // The streamer's plan, never the moderator's: there is nothing here a
+    // volunteer could buy, so the copy states the cause and stops.
+    // The render site spelled the apostrophe &apos;, which is U+0027.
+    expect(t('moderation.channels.unavailableNote', { owner: 'Sarah' })).toBe(
+      "Sarah's plan does not include moderation right now, so actions are unavailable until they renew it."
+    )
+    expect(t('moderation.channels.openMonitor')).toBe('Open chat monitor')
+  })
+
+  it('keeps the Discord link prompt', () => {
+    expect(t('moderation.channels.discordPromptBody')).toBe(
+      'Link your Discord account to moderate Discord. All-Chat checks your own server permissions before it acts, so it needs to know which Discord account is yours.'
+    )
+    expect(t('moderation.channels.linkDiscord')).toBe('Link Discord')
+  })
+
+  it('keeps the four mod-consent redirect notices', () => {
+    // already_linked is the one failure worth its own words: no amount of
+    // retrying changes it.
+    expect(t('moderation.channels.noticeDiscordAlreadyLinked')).toBe(
+      'That Discord account is already linked to another All-Chat account. Link a different one, or unlink it from the other account first.'
+    )
+    expect(t('moderation.channels.noticeConnectFailed')).toBe(
+      'That connection did not complete. Open a channel below and try again from there.'
+    )
+    expect(t('moderation.channels.noticeDiscordLinked')).toBe(
+      'Discord account linked. All-Chat can now check your own server permissions when you moderate Discord.'
+    )
+    expect(t('moderation.channels.noticeConnected', { platform: 'Twitch' })).toBe(
+      'Twitch connected. It now covers every channel that delegated Twitch to you.'
+    )
+  })
+})
