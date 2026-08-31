@@ -1309,3 +1309,103 @@ describe('overlay editor toast copy', () => {
     expect(t('overlayEditor.toasts.eventSettingsSaveFailed')).toBe('Failed to save event settings')
   })
 })
+
+describe('overlay editor source toast copy', () => {
+  it('keeps the stream-selection and relay toasts', () => {
+    expect(t('overlayEditor.toasts.streamSelectionSaved')).toBe('Stream selection saved')
+    expect(t('overlayEditor.toasts.streamSelectionSaveFailed')).toBe(
+      'Failed to save stream selection'
+    )
+    expect(t('overlayEditor.toasts.relaySaved')).toBe('Relay settings saved')
+    expect(t('overlayEditor.toasts.relaySaveFailed')).toBe('Failed to save relay settings')
+  })
+
+  it('keeps the engagement toasts', () => {
+    expect(t('overlayEditor.toasts.engagementSaved')).toBe('Engagement settings saved')
+    expect(t('overlayEditor.toasts.engagementSaveFailed')).toBe(
+      'Failed to save engagement settings'
+    )
+    expect(t('overlayEditor.toasts.twitchConsentFailed')).toBe(
+      'Could not start Twitch consent. Please try again.'
+    )
+  })
+
+  it('keeps the add-source toasts', () => {
+    expect(t('overlayEditor.toasts.discordSourceAdded')).toBe('Discord source added')
+    expect(t('overlayEditor.toasts.discordSourceAddFailed')).toBe('Failed to add Discord source')
+    expect(t('overlayEditor.toasts.sourceAdded')).toBe('Source added')
+    expect(t('overlayEditor.toasts.oauthConnectFailed')).toBe('Could not connect')
+    expect(t('overlayEditor.toasts.tiktokSourceAdded')).toBe('TikTok source added')
+    expect(t('overlayEditor.toasts.tiktokSourceAddFailed')).toBe('Failed to add TikTok source')
+    expect(t('overlayEditor.toasts.tiktokSourceAddFailedBody')).toBe(
+      'Check the username and try again.'
+    )
+    expect(t('overlayEditor.toasts.manualSourceAddFailed')).toBe('Failed to add source')
+    expect(t('overlayEditor.toasts.manualSourceAddFailedBody')).toBe(
+      'Verify the channel ID and try again.'
+    )
+  })
+
+  it('keeps the OAuth-callback source toasts', () => {
+    expect(t('overlayEditor.toasts.oauthSourceAddedBody', { platform: 'youtube' })).toBe(
+      'Successfully added youtube source!'
+    )
+    expect(t('overlayEditor.toasts.youtubePermissionRequired')).toBe('YouTube permission required')
+    expect(t('overlayEditor.toasts.youtubePermissionRequiredBody')).toBe(
+      'To add your YouTube channel, you must allow All-Chat to see your YouTube account. Please try again and approve the YouTube permission on the Google screen.'
+    )
+    expect(t('overlayEditor.toasts.youtubeNoChannel')).toBe('No YouTube channel found')
+    expect(t('overlayEditor.toasts.youtubeNoChannelBody')).toBe(
+      'We could not find a YouTube channel on that Google account. Make sure the account has a YouTube channel, then try again.'
+    )
+    expect(t('overlayEditor.toasts.oauthSourceAddFailed')).toBe('Failed to add source')
+  })
+
+  it('keeps the remove-source and Twitch-reconnect toasts', () => {
+    expect(t('overlayEditor.toasts.sourceRemoved')).toBe('Source removed')
+    expect(t('overlayEditor.toasts.sourceRemoveFailed')).toBe('Failed to remove source')
+    expect(t('overlayEditor.toasts.twitchChatConnected')).toBe('Twitch chat connected')
+    expect(t('overlayEditor.toasts.twitchChatReconnectFailed')).toBe(
+      'Could not reconnect Twitch chat'
+    )
+  })
+
+  it('keeps the shared-overlay toasts', () => {
+    expect(t('overlayEditor.toasts.sharedOverlayAdded')).toBe('Shared overlay added')
+    expect(t('overlayEditor.toasts.sharedOverlayAddedBody', { sender: 'Ada' })).toBe(
+      "Added Ada's overlay"
+    )
+    expect(t('overlayEditor.toasts.sharedOverlayAddFailed')).toBe('Failed to add shared overlay')
+    // The share-revoked notification names the revoker; 'someone' stands in when
+    // the socket envelope omits the username.
+    expect(t('overlayEditor.toasts.shareRevoked')).toBe('Share revoked')
+    expect(t('overlayEditor.toasts.shareRevokedBody', { revoker: 'Ada' })).toBe(
+      'Your share with Ada was revoked'
+    )
+    expect(t('overlayEditor.toasts.shareRevokedUnknownRevoker')).toBe('someone')
+    expect(t('overlayEditor.toasts.shareRequestSent', { username: 'ada' })).toBe(
+      'Share request sent to ada'
+    )
+    expect(t('overlayEditor.toasts.shareRequestFailed')).toBe('Failed to send share request')
+  })
+
+  it('keeps the clone, reset and mock-message toasts', () => {
+    expect(t('overlayEditor.toasts.cloned')).toBe('Overlay cloned')
+    expect(t('overlayEditor.toasts.cloneFailed')).toBe('Failed to clone overlay')
+    // U+2014 em dash and U+2026 ellipsis, both as in the original.
+    expect(t('overlayEditor.toasts.overlayIdReset')).toBe(
+      'Overlay ID reset \u2014 redirecting\u2026'
+    )
+    expect(t('overlayEditor.toasts.overlayIdResetFailed')).toBe('Failed to reset overlay ID')
+    expect(t('overlayEditor.toasts.mockMessageFailed')).toBe('Failed to send mock message')
+  })
+
+  it('keeps the extension-overlay toasts', () => {
+    expect(t('overlayEditor.toasts.extensionOverlaySet')).toBe('Extension overlay set')
+    expect(t('overlayEditor.toasts.extensionOverlaySetBody')).toBe(
+      'This overlay will be shown in the browser extension.'
+    )
+    expect(t('overlayEditor.toasts.extensionOverlayUnset')).toBe('Extension overlay deactivated')
+    expect(t('overlayEditor.toasts.extensionOverlayUpdateFailed')).toBe('Failed to update overlay')
+  })
+})
