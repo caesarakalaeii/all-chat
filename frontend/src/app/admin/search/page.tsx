@@ -32,6 +32,7 @@ import Link from 'next/link'
 import { Card } from '@/components/ui/card'
 import { PlatformBadge } from '@/components/ui/badge'
 import { UserAvatar } from '@/components/UserAvatar'
+import { useTranslations } from '@/lib/i18n'
 
 const GROUP_LIMIT = 8
 
@@ -81,6 +82,7 @@ function readInitialQuery(): string {
 }
 
 export default function AdminSearchPage() {
+  const t = useTranslations()
   // Seed both from ?q= via lazy initializers (e.g. arriving from a deep link) so
   // results appear immediately without a synchronous setState in an effect.
   const [query, setQuery] = useState(readInitialQuery)
@@ -159,35 +161,35 @@ export default function AdminSearchPage() {
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-text">Search</h1>
-        <p className="mt-1 text-sm text-text-sub">
-          Find any user, overlay, source, or viewer and jump straight to it
-        </p>
+        <h1 className="text-2xl font-bold text-text">{t('admin.search.heading')}</h1>
+        <p className="mt-1 text-sm text-text-sub">{t('admin.search.intro')}</p>
       </div>
 
       <input
         type="search"
-        placeholder="Search users, overlays, sources, viewers..."
+        placeholder={t('admin.search.inputPlaceholder')}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        aria-label="Global admin search"
+        aria-label={t('admin.search.inputLabel')}
         className="mb-6 w-full rounded-lg border border-border bg-surface-2 px-4 py-3 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
       />
 
       {!debounced ? (
         <Card className="p-8 text-center text-sm text-text-dim">
-          Type at least one character to search.
+          {t('admin.search.promptState')}
         </Card>
       ) : loading && !hasResults ? (
-        <Card className="p-8 text-center text-sm text-text-dim">Searching...</Card>
+        <Card className="p-8 text-center text-sm text-text-dim">
+          {t('admin.search.loadingState')}
+        </Card>
       ) : !hasResults ? (
         <Card className="p-8 text-center text-sm text-text-dim">
-          Nothing matches &ldquo;{debounced}&rdquo;.
+          {t('admin.search.emptyState', { query: debounced })}
         </Card>
       ) : (
         <div className="space-y-6">
           {users.length > 0 && (
-            <ResultGroup title="Users" count={users.length}>
+            <ResultGroup title={t('admin.search.groupUsers')} count={users.length}>
               {users.slice(0, GROUP_LIMIT).map((u) => (
                 <Link
                   key={u.id}
@@ -206,12 +208,12 @@ export default function AdminSearchPage() {
                   <div className="ml-auto flex gap-1">
                     {u.is_premium && (
                       <span className="rounded bg-amber-400/10 px-2 py-0.5 text-xs font-medium text-amber-400">
-                        Premium
+                        {t('admin.search.badgePremium')}
                       </span>
                     )}
                     {u.is_banned && (
                       <span className="rounded bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">
-                        Banned
+                        {t('admin.search.badgeBanned')}
                       </span>
                     )}
                   </div>
@@ -221,7 +223,7 @@ export default function AdminSearchPage() {
           )}
 
           {overlays.length > 0 && (
-            <ResultGroup title="Overlays" count={overlays.length}>
+            <ResultGroup title={t('admin.search.groupOverlays')} count={overlays.length}>
               {overlays.slice(0, GROUP_LIMIT).map((o) => (
                 <Link
                   key={o.id}
@@ -235,7 +237,7 @@ export default function AdminSearchPage() {
                     </div>
                   </div>
                   <span className="shrink-0 text-xs text-text-dim">
-                    {o.sources_count ?? 0} sources
+                    {t('admin.search.overlaySourceCount', { count: o.sources_count ?? 0 })}
                   </span>
                 </Link>
               ))}
@@ -243,7 +245,7 @@ export default function AdminSearchPage() {
           )}
 
           {sources.length > 0 && (
-            <ResultGroup title="Sources" count={sources.length}>
+            <ResultGroup title={t('admin.search.groupSources')} count={sources.length}>
               {sources.slice(0, GROUP_LIMIT).map((s) => (
                 <Link
                   key={s.id}
@@ -254,7 +256,7 @@ export default function AdminSearchPage() {
                   <div className="min-w-0">
                     <div className="truncate text-sm font-medium text-text">{s.channel_name}</div>
                     <div className="truncate text-xs text-text-sub">
-                      in {s.overlay_name}
+                      {t('admin.search.sourceInOverlay', { overlay: s.overlay_name })}
                       {s.owner_username ? ` · @${s.owner_username}` : ''}
                     </div>
                   </div>
@@ -264,7 +266,7 @@ export default function AdminSearchPage() {
           )}
 
           {viewers.length > 0 && (
-            <ResultGroup title="Viewers" count={viewers.length}>
+            <ResultGroup title={t('admin.search.groupViewers')} count={viewers.length}>
               {viewers.slice(0, GROUP_LIMIT).map((v) => (
                 <Link
                   key={v.id}
@@ -295,10 +297,14 @@ function ResultGroup({
   count: number
   children: React.ReactNode
 }) {
+  const t = useTranslations()
   return (
     <section>
       <h2 className="mb-2 text-sm font-semibold text-text-sub">
-        {title} {count > GROUP_LIMIT ? `(showing ${GROUP_LIMIT} of ${count})` : `(${count})`}
+        {title}{' '}
+        {count > GROUP_LIMIT
+          ? t('admin.search.groupCountTruncated', { shown: GROUP_LIMIT, total: count })
+          : t('admin.search.groupCountExact', { total: count })}
       </h2>
       <div className="space-y-2">{children}</div>
     </section>

@@ -23,6 +23,7 @@ import { toastManager } from '@/lib/toast'
 import { sharesApi } from '@/lib/api/shares'
 import { Button } from '@/components/ui/button'
 import { AlertDialog } from '@/components/ui/alert-dialog'
+import { useTranslations } from '@/lib/i18n'
 
 interface RevocationConfirmModalProps {
   partnerName: string
@@ -37,17 +38,18 @@ export function RevocationConfirmModal({
   onClose,
   onRevoked,
 }: RevocationConfirmModalProps) {
+  const t = useTranslations()
   const [loading, setLoading] = useState(false)
 
   const handleRevoke = async () => {
     setLoading(true)
     try {
       await sharesApi.revokeShare(shareId)
-      toastManager.add({ title: 'Share revoked', type: 'success' })
+      toastManager.add({ title: t('dashboard.shares.revokedToast'), type: 'success' })
       onRevoked()
       onClose()
     } catch (err) {
-      toastManager.add({ title: 'Failed to revoke share', type: 'error' })
+      toastManager.add({ title: t('dashboard.shares.revokeFailedToast'), type: 'error' })
     } finally {
       setLoading(false)
     }
@@ -57,15 +59,15 @@ export function RevocationConfirmModal({
     <AlertDialog.Root open onOpenChange={(open) => !open && onClose()}>
       <AlertDialog.Content>
         <AlertDialog.Title className="mb-4 text-xl">
-          Revoke share with {partnerName}?
+          {t('dashboard.shares.revokeTitle', { partner: partnerName })}
         </AlertDialog.Title>
         <AlertDialog.Description className="mb-6 text-base">
-          This will stop message delivery immediately.
+          {t('dashboard.shares.revokeBody')}
         </AlertDialog.Description>
         {/* Cancel first in DOM order: least-destructive action receives initial focus */}
         <div className="flex gap-3">
           <Button variant="outline" className="flex-1" onClick={onClose} disabled={loading}>
-            Cancel
+            {t('dashboard.shares.revokeCancel')}
           </Button>
           <Button
             variant="destructive"
@@ -73,7 +75,7 @@ export function RevocationConfirmModal({
             onClick={handleRevoke}
             disabled={loading}
           >
-            {loading ? 'Revoking...' : 'Revoke'}
+            {loading ? t('dashboard.shares.revoking') : t('dashboard.shares.revokeConfirm')}
           </Button>
         </div>
       </AlertDialog.Content>

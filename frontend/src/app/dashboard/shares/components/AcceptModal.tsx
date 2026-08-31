@@ -35,6 +35,8 @@ import type { ShareRequest } from '@/lib/types/share'
 import type { Overlay } from '@/lib/types/overlay'
 import { trackEvent } from '@/lib/analytics'
 import { toastManager } from '@/lib/toast'
+import { useTranslations } from '@/lib/i18n'
+import { interpolateElements } from '@/lib/i18n/emphasise'
 
 interface AcceptModalProps {
   request: ShareRequest
@@ -44,6 +46,7 @@ interface AcceptModalProps {
 }
 
 export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: AcceptModalProps) {
+  const t = useTranslations()
   const [overlays, setOverlays] = useState<Overlay[]>([])
   const [selectedOverlay, setSelectedOverlay] = useState<string>('')
   const [pickedExpiry, setPickedExpiry] = useState<'this_stream' | 'custom' | 'unlimited'>(
@@ -76,18 +79,18 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
         if (data.length > 0) {
           setSelectedOverlay(data[0].id)
         } else {
-          setError('Create an overlay first to accept shares')
+          setError(t('dashboard.shares.noOverlaysError'))
         }
       } catch (err) {
         console.error('Failed to fetch overlays:', err)
-        setError('Failed to load overlays')
+        setError(t('dashboard.shares.loadOverlaysFailed'))
       } finally {
         setLoadingOverlays(false)
       }
     }
 
     fetchOverlays()
-  }, [])
+  }, [t])
 
   // Validation logic
   const isValidCustomHours = () => {
@@ -114,7 +117,9 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
 
       trackEvent('share_accepted')
       toastManager.add({
-        title: `Share accepted from ${request.sender?.display_name || 'user'}!`,
+        title: t('dashboard.shares.acceptedToast', {
+          sender: request.sender?.display_name || t('dashboard.shares.acceptedToastUnknownSender'),
+        }),
         type: 'success',
       })
       onAccepted(response.sender_overlay_id)
@@ -126,8 +131,8 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
 
       if (errorMessage.toLowerCase().includes('circular share')) {
         toastManager.add({
-          title: 'Cannot accept',
-          description: 'This would create a circular share dependency',
+          title: t('dashboard.shares.circularTitle'),
+          description: t('dashboard.shares.circularBody'),
           type: 'error',
         })
       } else {
@@ -143,10 +148,12 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
     return (
       <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
         <Dialog.Content>
-          <DialogTitle className="mb-4 pr-8 text-xl">Cannot Accept Share</DialogTitle>
+          <DialogTitle className="mb-4 pr-8 text-xl">
+            {t('dashboard.shares.cannotAcceptTitle')}
+          </DialogTitle>
           <DialogDescription className="mb-6 text-base">{error}</DialogDescription>
           <Button variant="outline" className="w-full" onClick={onClose}>
-            Close
+            {t('dashboard.shares.close')}
           </Button>
         </Dialog.Content>
       </Dialog.Root>
@@ -158,7 +165,9 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
       <Dialog.Content>
         {/* Title */}
         <DialogTitle className="mb-4 pr-8 text-xl">
-          {request.sender?.display_name || 'User'} wants to share with you
+          {t('dashboard.shares.acceptTitle', {
+            sender: request.sender?.display_name || t('dashboard.shares.userFallbackName'),
+          })}
         </DialogTitle>
 
         {/* Platform badges */}
@@ -171,7 +180,9 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
         )}
 
         {loadingOverlays ? (
-          <div className="py-8 text-center text-text-sub">Loading overlays...</div>
+          <div className="py-8 text-center text-text-sub">
+            {t('dashboard.shares.loadingOverlays')}
+          </div>
         ) : (
           <>
             {/* Overlay dropdown */}
@@ -180,7 +191,11 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
                 htmlFor="overlay-select"
                 className="mb-2 block text-sm font-medium text-text-sub"
               >
-                Share back which overlay? <span className="text-red-400">*</span>
+                {interpolateElements(t('dashboard.shares.shareBackLabel'), {
+                  required: (
+                    <span className="text-red-400">{t('dashboard.shares.requiredMarker')}</span>
+                  ),
+                })}
               </label>
               <select
                 id="overlay-select"
@@ -199,7 +214,7 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
             {/* Expiry options */}
             <fieldset className="mb-6">
               <legend className="mb-2 block text-sm font-medium text-text-sub">
-                When should the share expire?
+                {t('dashboard.shares.expiryLegend')}
               </legend>
               <div className="space-y-2">
                 {/* This stream */}
@@ -219,14 +234,14 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
                     className="mt-1 mr-2 accent-blue-500"
                   />
                   <span className="text-sm font-medium text-text">
-                    This stream
+                    {t('dashboard.shares.expiryThisStream')}
                     {isKickUser && (
                       <span className="ml-1 text-xs text-text-dim">
-                        (not available for Kick — stream detection not yet supported)
+                        {t('dashboard.shares.expiryKickUnavailable')}
                       </span>
                     )}
                     <span className="block text-xs font-normal text-text-dim">
-                      Expires when your stream ends
+                      {t('dashboard.shares.expiryThisStreamHint')}
                     </span>
                   </span>
                 </label>
@@ -242,7 +257,9 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
                     className="mt-1 mr-2 accent-blue-500"
                   />
                   <div className="flex-1">
-                    <div className="text-sm font-medium text-text">Custom duration</div>
+                    <div className="text-sm font-medium text-text">
+                      {t('dashboard.shares.expiryCustom')}
+                    </div>
                     {expiryOption === 'custom' && (
                       <div className="mt-2">
                         <div className="flex items-center gap-2">
@@ -252,8 +269,8 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
                             max="168"
                             value={customHours}
                             onChange={(e) => setCustomHours(e.target.value)}
-                            placeholder="hours"
-                            aria-label="Custom duration in hours"
+                            placeholder={t('dashboard.shares.expiryCustomPlaceholder')}
+                            aria-label={t('dashboard.shares.expiryCustomLabel')}
                             aria-invalid={!isValidCustomHours()}
                             aria-describedby={
                               isValidCustomHours() ? hoursHintId : `${hoursHintId} ${hoursErrorId}`
@@ -266,12 +283,12 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
                             )}
                           />
                           <span id={hoursHintId} className="text-sm text-text-sub">
-                            hours (1-168)
+                            {t('dashboard.shares.expiryCustomHint')}
                           </span>
                         </div>
                         {!isValidCustomHours() && (
                           <p id={hoursErrorId} className="mt-1 text-xs text-red-400">
-                            Must be between 1 and 168 hours
+                            {t('dashboard.shares.expiryCustomError')}
                           </p>
                         )}
                       </div>
@@ -290,8 +307,10 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
                     className="mt-1 mr-2 accent-blue-500"
                   />
                   <span className="text-sm font-medium text-text">
-                    Unlimited
-                    <span className="block text-xs font-normal text-text-dim">Never expires</span>
+                    {t('dashboard.shares.expiryUnlimited')}
+                    <span className="block text-xs font-normal text-text-dim">
+                      {t('dashboard.shares.expiryUnlimitedHint')}
+                    </span>
                   </span>
                 </label>
               </div>
@@ -300,7 +319,7 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
             {/* Action buttons */}
             <div className="flex gap-3">
               <Button variant="outline" className="flex-1" onClick={onClose} disabled={loading}>
-                Cancel
+                {t('dashboard.shares.cancel')}
               </Button>
               <Button
                 variant="gradient"
@@ -308,7 +327,7 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
                 onClick={handleAccept}
                 disabled={!canSubmit}
               >
-                {loading ? 'Accepting...' : 'Accept'}
+                {loading ? t('dashboard.shares.accepting') : t('dashboard.shares.acceptButton')}
               </Button>
             </div>
           </>

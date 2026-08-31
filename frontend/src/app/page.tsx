@@ -27,18 +27,18 @@
 import type { Metadata } from 'next'
 import HomeClient from './HomeClient'
 import { JsonLd } from '@/components/JsonLd'
-import { FAQ_ITEMS } from '@/lib/faq'
+import { FAQ_MESSAGE_STEMS } from '@/lib/faq'
+import { getTranslations } from '@/lib/i18n'
+
+const t = getTranslations()
 
 export const metadata: Metadata = {
   // The homepage targets the category search intent, not just the brand.
   // `absolute` overrides the layout title template ("%s | All-Chat") so the
   // query terms lead the <title>, and a keyword-led description overrides the
   // layout default for this page specifically.
-  title: {
-    absolute: 'Multi-Platform Chat Overlay for Twitch, YouTube, Kick & TikTok | All-Chat',
-  },
-  description:
-    'Free multi-platform chat overlay for OBS. Merge your Twitch, YouTube, Kick, TikTok, and Discord chat into one overlay, with 7TV, BTTV, and FFZ emotes built in. Open source, no install.',
+  title: { absolute: t('metadata.home.title') },
+  description: t('metadata.home.description'),
   alternates: { canonical: '/' },
 }
 
@@ -66,10 +66,10 @@ const softwareApplicationLd = {
 const faqLd = {
   '@context': 'https://schema.org',
   '@type': 'FAQPage',
-  mainEntity: FAQ_ITEMS.map((item) => ({
+  mainEntity: FAQ_MESSAGE_STEMS.map((stem) => ({
     '@type': 'Question',
-    name: item.question,
-    acceptedAnswer: { '@type': 'Answer', text: item.answer },
+    name: t(`marketing.faq.${stem}Question`),
+    acceptedAnswer: { '@type': 'Answer', text: t(`marketing.faq.${stem}Answer`) },
   })),
 }
 

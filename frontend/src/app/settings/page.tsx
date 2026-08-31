@@ -43,8 +43,10 @@ import {
   unlinkDiscordAccount,
 } from '@/lib/api/discord'
 import type { DiscordGuild, DiscordIdentity } from '@/lib/api/discord'
+import { useTranslations } from '@/lib/i18n'
 
 function SettingsContent() {
+  const t = useTranslations()
   const router = useRouter()
   const searchParams = useSearchParams()
   const user = useAuthStore((state) => state.user)
@@ -71,8 +73,8 @@ function SettingsContent() {
       router.push('/dashboard')
     } catch {
       toastManager.add({
-        title: 'Could not restart the setup guide',
-        description: 'Please try again.',
+        title: t('settings.index.restartGuideFailedToast'),
+        description: t('common.toast.tryAgain'),
         type: 'error',
       })
       setRestartingGuide(false)
@@ -104,7 +106,7 @@ function SettingsContent() {
 
   useEffect(() => {
     if (!justConnected) return
-    toastManager.add({ title: 'Discord server connected!', type: 'success' })
+    toastManager.add({ title: t('settings.index.discordServerConnectedToast'), type: 'success' })
     router.replace('/settings')
   }, [justConnected, router])
 
@@ -141,7 +143,7 @@ function SettingsContent() {
   // account could inherit the first's server permissions.
   useEffect(() => {
     if (justLinked) {
-      toastManager.add({ title: 'Discord account linked!', type: 'success' })
+      toastManager.add({ title: t('settings.index.discordLinkedToast'), type: 'success' })
       router.replace('/settings')
       return
     }
@@ -162,9 +164,9 @@ function SettingsContent() {
     try {
       await unlinkDiscordAccount()
       setIdentity({ linked: false })
-      toastManager.add({ title: 'Discord account unlinked', type: 'success' })
+      toastManager.add({ title: t('settings.index.discordUnlinkedToast'), type: 'success' })
     } catch {
-      toastManager.add({ title: 'Could not unlink your Discord account', type: 'error' })
+      toastManager.add({ title: t('settings.index.discordUnlinkFailedToast'), type: 'error' })
     }
   }
 
@@ -177,8 +179,8 @@ function SettingsContent() {
       setGuilds((prev) => prev.filter((g) => g.guild_id !== targetId))
     } catch {
       toastManager.add({
-        title: 'Failed to disconnect server',
-        description: 'Please try again.',
+        title: t('settings.index.discordDisconnectFailedToast'),
+        description: t('common.toast.tryAgain'),
         type: 'error',
       })
     }
@@ -187,13 +189,13 @@ function SettingsContent() {
   async function handleDeleteAccount() {
     try {
       await authApi.deleteAccount()
-      toastManager.add({ title: 'Account deleted', type: 'success' })
+      toastManager.add({ title: t('settings.index.accountDeletedToast'), type: 'success' })
       logout()
       router.replace('/')
     } catch {
       toastManager.add({
-        title: 'Failed to delete account',
-        description: 'Please try again.',
+        title: t('settings.index.accountDeleteFailedToast'),
+        description: t('common.toast.tryAgain'),
         type: 'error',
       })
     }
@@ -205,11 +207,13 @@ function SettingsContent() {
     <div className="min-h-screen bg-bg">
       <AppNav />
       <main id="main-content" tabIndex={-1} className="mx-auto max-w-2xl space-y-6 px-4 py-12">
-        <h1 className="text-2xl font-bold text-text">Settings</h1>
+        <h1 className="text-2xl font-bold text-text">{t('settings.index.heading')}</h1>
 
         {/* Profile section */}
         <Card className="p-6">
-          <h2 className="mb-4 text-lg font-semibold text-text">Profile</h2>
+          <h2 className="mb-4 text-lg font-semibold text-text">
+            {t('settings.index.profileHeading')}
+          </h2>
           <div className="space-y-3">
             {user.profile_image_url && (
               <div className="mb-4 flex items-center gap-3">
@@ -224,46 +228,51 @@ function SettingsContent() {
               </div>
             )}
             <div>
-              <span className="text-sm text-text-sub">Username</span>
+              <span className="text-sm text-text-sub">{t('settings.index.usernameLabel')}</span>
               <p className="font-medium text-text">{user.username}</p>
             </div>
             <div>
-              <span className="text-sm text-text-sub">Primary Platform</span>
-              <p className="font-medium text-text capitalize">{user.auth_provider ?? 'Unknown'}</p>
+              <span className="text-sm text-text-sub">
+                {t('settings.index.primaryPlatformLabel')}
+              </span>
+              <p className="font-medium text-text capitalize">
+                {user.auth_provider ?? t('settings.index.primaryPlatformUnknown')}
+              </p>
             </div>
           </div>
         </Card>
 
         {/* Setup guide section */}
         <Card className="p-6">
-          <h2 className="mb-4 text-lg font-semibold text-text">Setup guide</h2>
+          <h2 className="mb-4 text-lg font-semibold text-text">
+            {t('settings.index.setupGuideHeading')}
+          </h2>
           <div className="flex items-center justify-between gap-4">
-            <p className="text-sm text-text-sub">
-              Walk through overlay setup again: create an overlay, connect chat, pick a theme, and
-              get the OBS link.
-            </p>
+            <p className="text-sm text-text-sub">{t('settings.index.setupGuideBody')}</p>
             <Button
               variant="outline"
               disabled={restartingGuide}
               onClick={() => void handleRestartGuide()}
             >
-              {restartingGuide ? 'Restarting…' : 'Restart'}
+              {restartingGuide
+                ? t('settings.index.setupGuideRestarting')
+                : t('settings.index.setupGuideRestart')}
             </Button>
           </div>
         </Card>
 
         {/* Premium section */}
         <Card className="p-6">
-          <h2 className="mb-4 text-lg font-semibold text-text">Premium</h2>
+          <h2 className="mb-4 text-lg font-semibold text-text">
+            {t('settings.index.premiumHeading')}
+          </h2>
           <div className="flex items-center justify-between gap-4">
-            <p className="text-sm text-text-sub">
-              Unlock premium features by backing All-Chat on Patreon.
-            </p>
+            <p className="text-sm text-text-sub">{t('settings.index.premiumBody')}</p>
             <Link
               href="/settings/premium"
               className="inline-flex items-center justify-center rounded-lg border border-border px-4 py-2 text-sm text-text transition-colors hover:bg-surface-2"
             >
-              Manage Premium
+              {t('settings.index.premiumManage')}
             </Link>
           </div>
         </Card>
@@ -273,17 +282,16 @@ function SettingsContent() {
             /link, and nothing is ever copied or pasted. Listed ABOVE the token card
             because this is the path a streamer should reach for first. */}
         <Card className="p-6">
-          <h2 className="mb-4 text-lg font-semibold text-text">Paired devices</h2>
+          <h2 className="mb-4 text-lg font-semibold text-text">
+            {t('settings.index.devicesHeading')}
+          </h2>
           <div className="flex items-center justify-between gap-4">
-            <p className="text-sm text-text-sub">
-              See and revoke the Stream Deck and StreamController control surfaces linked to your
-              account. Each one is locked to a single overlay.
-            </p>
+            <p className="text-sm text-text-sub">{t('settings.index.devicesBody')}</p>
             <Link
               href="/settings/devices"
               className="inline-flex shrink-0 items-center justify-center rounded-lg border border-border px-4 py-2 text-sm text-text transition-colors hover:bg-surface-2"
             >
-              Manage devices
+              {t('settings.index.devicesManage')}
             </Link>
           </div>
         </Card>
@@ -293,17 +301,16 @@ function SettingsContent() {
             can find is a token page nobody revokes. Still the supported path for a
             headless box or a second PC, which a loopback redirect cannot reach. */}
         <Card className="p-6">
-          <h2 className="mb-4 text-lg font-semibold text-text">API tokens</h2>
+          <h2 className="mb-4 text-lg font-semibold text-text">
+            {t('settings.index.tokensHeading')}
+          </h2>
           <div className="flex items-center justify-between gap-4">
-            <p className="text-sm text-text-sub">
-              Create and revoke personal access tokens. Use these where linking cannot reach — a
-              headless capture box, a second PC, or a script.
-            </p>
+            <p className="text-sm text-text-sub">{t('settings.index.tokensBody')}</p>
             <Link
               href="/settings/api-tokens"
               className="inline-flex shrink-0 items-center justify-center rounded-lg border border-border px-4 py-2 text-sm text-text transition-colors hover:bg-surface-2"
             >
-              Manage tokens
+              {t('settings.index.tokensManage')}
             </Link>
           </div>
         </Card>
@@ -314,24 +321,23 @@ function SettingsContent() {
 
         {/* Data & Privacy section */}
         <Card className="p-6">
-          <h2 className="mb-4 text-lg font-semibold text-text">Data &amp; Privacy</h2>
-          <p className="mb-4 text-sm text-text-sub">
-            We keep data collection minimal and transparent. Review the policies below for details
-            about how tokens, overlays, and chat metadata are processed.
-          </p>
+          <h2 className="mb-4 text-lg font-semibold text-text">
+            {t('settings.index.privacyHeading')}
+          </h2>
+          <p className="mb-4 text-sm text-text-sub">{t('settings.index.privacyBody')}</p>
           <div className="flex flex-col gap-3">
             <Link
               href="/legal/privacy"
               className="inline-flex items-center justify-between rounded-lg border border-border px-4 py-3 text-sm text-text transition-colors hover:bg-surface-2"
             >
-              <span>Privacy Policy</span>
+              <span>{t('settings.index.privacyPolicyLink')}</span>
               <span aria-hidden="true">→</span>
             </Link>
             <Link
               href="/legal/terms"
               className="inline-flex items-center justify-between rounded-lg border border-border px-4 py-3 text-sm text-text transition-colors hover:bg-surface-2"
             >
-              <span>Terms of Service</span>
+              <span>{t('settings.index.termsLink')}</span>
               <span aria-hidden="true">→</span>
             </Link>
           </div>
@@ -339,17 +345,21 @@ function SettingsContent() {
 
         {/* Discord section */}
         <Card className="p-6">
-          <h2 className="mb-4 text-lg font-semibold text-text">Discord</h2>
+          <h2 className="mb-4 text-lg font-semibold text-text">
+            {t('settings.index.discordHeading')}
+          </h2>
 
           {guildsLoading ? (
             <div role="status">
-              <VisuallyHidden>Loading Discord servers</VisuallyHidden>
+              <VisuallyHidden>{t('settings.index.discordServersLoading')}</VisuallyHidden>
               <Skeleton className="h-10 w-full" />
             </div>
           ) : guilds.length === 0 ? (
             <div className="flex items-center justify-between">
-              <p className="text-sm text-text-sub">No Discord server connected.</p>
-              <Button onClick={startDiscordOAuth}>Connect Discord Server</Button>
+              <p className="text-sm text-text-sub">{t('settings.index.discordNoServer')}</p>
+              <Button onClick={startDiscordOAuth}>
+                {t('settings.index.discordConnectServer')}
+              </Button>
             </div>
           ) : (
             <div className="space-y-3">
@@ -380,19 +390,31 @@ function SettingsContent() {
                     <Dialog.Trigger
                       render={
                         <Button variant="destructive" onClick={() => setDisconnectTarget(guild)}>
-                          Disconnect
+                          {t('settings.index.discordDisconnect')}
                         </Button>
                       }
                     />
                     <Dialog.Content showCloseButton={false}>
-                      <Dialog.Title>Disconnect {guild.guild_name}?</Dialog.Title>
+                      <Dialog.Title>
+                        {t('settings.index.discordDisconnectTitle', {
+                          guild: guild.guild_name,
+                        })}
+                      </Dialog.Title>
                       <Dialog.Description>
-                        This will remove all Discord sources connected to {guild.guild_name}.
+                        {t('settings.index.discordDisconnectBody', {
+                          guild: guild.guild_name,
+                        })}
                       </Dialog.Description>
                       <div className="mt-6 flex justify-end gap-3">
-                        <Dialog.Close render={<Button variant="outline">Cancel</Button>} />
+                        <Dialog.Close
+                          render={
+                            <Button variant="outline">
+                              {t('settings.index.discordDisconnectCancel')}
+                            </Button>
+                          }
+                        />
                         <Button variant="destructive" onClick={handleDisconnectGuild}>
-                          Yes, disconnect
+                          {t('settings.index.discordDisconnectConfirm')}
                         </Button>
                       </div>
                     </Dialog.Content>
@@ -401,7 +423,7 @@ function SettingsContent() {
               ))}
               <div className="pt-2">
                 <Button variant="ghost" className="text-sm" onClick={startDiscordOAuth}>
-                  Connect another server
+                  {t('settings.index.discordConnectAnother')}
                 </Button>
               </div>
             </div>
@@ -413,26 +435,32 @@ function SettingsContent() {
               moderation API, so the shared bot writes and All-Chat checks real people's server
               permissions itself (ADR-0048). No token is kept. */}
           <div className="mt-6 border-t border-border pt-4">
-            <h3 className="text-sm font-semibold text-text">Your Discord account</h3>
+            <h3 className="text-sm font-semibold text-text">
+              {t('settings.index.discordAccountHeading')}
+            </h3>
             {identityLoading ? (
               <div role="status" className="mt-3">
-                <VisuallyHidden>Loading your Discord account link</VisuallyHidden>
+                <VisuallyHidden>{t('settings.index.discordAccountLoading')}</VisuallyHidden>
                 <Skeleton className="h-9 w-full" />
               </div>
             ) : (
               <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                 <p className="text-sm text-text-sub">
                   {identity?.linked
-                    ? `Linked as ${identity.discord_username ?? 'your Discord account'}. Needed so moderators can act on your Discord servers.`
-                    : 'Not linked. Link it to let moderators you invite act on your Discord servers.'}
+                    ? t('settings.index.discordAccountLinked', {
+                        username:
+                          identity.discord_username ??
+                          t('settings.index.discordAccountFallbackName'),
+                      })
+                    : t('settings.index.discordAccountUnlinked')}
                 </p>
                 {identity?.linked ? (
                   <Button variant="outline" onClick={handleUnlinkDiscordAccount}>
-                    Unlink
+                    {t('settings.index.discordAccountUnlink')}
                   </Button>
                 ) : (
                   <Button onClick={() => void startDiscordAccountLink('settings')}>
-                    Link Discord account
+                    {t('settings.index.discordAccountLink')}
                   </Button>
                 )}
               </div>
@@ -442,23 +470,23 @@ function SettingsContent() {
 
         {/* Danger zone */}
         <Card className="border-destructive/20 p-6">
-          <h2 className="mb-2 text-lg font-semibold text-destructive">Danger Zone</h2>
-          <p className="mb-4 text-sm text-text-sub">
-            Deleting your account removes all overlays, OAuth grants, and cached chat sources. This
-            action is permanent and cannot be undone.
-          </p>
+          <h2 className="mb-2 text-lg font-semibold text-destructive">
+            {t('settings.index.dangerHeading')}
+          </h2>
+          <p className="mb-4 text-sm text-text-sub">{t('settings.index.dangerBody')}</p>
           <Dialog.Root>
-            <Dialog.Trigger render={<Button variant="destructive">Delete Account</Button>} />
+            <Dialog.Trigger
+              render={<Button variant="destructive">{t('settings.index.deleteAccount')}</Button>}
+            />
             <Dialog.Content showCloseButton={false}>
-              <Dialog.Title>Delete your account?</Dialog.Title>
-              <Dialog.Description>
-                This permanently deletes your account and all overlays. This action cannot be
-                undone.
-              </Dialog.Description>
+              <Dialog.Title>{t('settings.index.deleteConfirmTitle')}</Dialog.Title>
+              <Dialog.Description>{t('settings.index.deleteConfirmBody')}</Dialog.Description>
               <div className="mt-6 flex justify-end gap-3">
-                <Dialog.Close render={<Button variant="outline">Cancel</Button>} />
+                <Dialog.Close
+                  render={<Button variant="outline">{t('settings.index.deleteCancel')}</Button>}
+                />
                 <Button variant="destructive" onClick={handleDeleteAccount}>
-                  Yes, delete my account
+                  {t('settings.index.deleteConfirm')}
                 </Button>
               </div>
             </Dialog.Content>

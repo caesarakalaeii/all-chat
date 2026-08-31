@@ -84,6 +84,13 @@ import type { TTSPlayer, TTSSettings } from '@/lib/utils/ttsPlayer'
 import { resolveUsernameColor } from '@/lib/utils/usernameColor'
 import { scopeCustomCss } from '@/lib/theme-marketplace/scope-css'
 import '@/styles/events.css'
+import { formatTime, useTranslations } from '@/lib/i18n'
+
+/**
+ * Kick's logo is the letter K drawn as SVG text. A brand mark, not copy, so it
+ * stays out of the catalog where a translator would see it as a word.
+ */
+const KICK_GLYPH = 'K'
 
 // ---- Platform helpers (identical to preview/page.tsx) ---------------------
 
@@ -134,7 +141,7 @@ const PlatformIcon = ({ platform }: { platform: string }) => {
             textAnchor="middle"
             fontFamily="monospace"
           >
-            K
+            {KICK_GLYPH}
           </text>
         </svg>
       )
@@ -185,6 +192,7 @@ function ensureGoogleFontLoaded(fontFamily: string): void {
 
 export default function OverlayEmbedPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
+  const t = useTranslations()
 
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [maxMessages, setMaxMessages] = useState(50)
@@ -269,7 +277,7 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
   const handleTTSFallback = useCallback(() => {
     if (ttsFallbackToastShownRef.current) return
     ttsFallbackToastShownRef.current = true
-    toastManager.add({ title: 'ElevenLabs unavailable — using browser voice.' })
+    toastManager.add({ title: t('common.toast.elevenLabsFallback') })
   }, [])
 
   const wsClientRef = useRef<WebSocketClient | null>(null)
@@ -759,8 +767,10 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                     d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
                   />
                 </svg>
-                <p className="mb-2 text-lg font-medium">Waiting for messages...</p>
-                <p className="text-sm">Messages will appear here when chat is active</p>
+                <p className="mb-2 text-lg font-medium">
+                  {t('overlayEditor.embedPreview.waitingHeading')}
+                </p>
+                <p className="text-sm">{t('overlayEditor.embedPreview.waitingBody')}</p>
               </div>
             </div>
           ) : (
@@ -986,7 +996,7 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
 
                         {/* Timestamp */}
                         <div className="mt-1 text-xs text-slate-500">
-                          {new Date(message.timestamp).toLocaleTimeString()}
+                          {formatTime(new Date(message.timestamp))}
                         </div>
                       </div>
                     </div>

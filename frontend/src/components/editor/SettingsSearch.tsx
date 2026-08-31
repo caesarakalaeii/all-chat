@@ -20,6 +20,7 @@
 
 import React, { useId, useRef, useState } from 'react'
 import { Search, X } from 'lucide-react'
+import { useTranslations } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import {
   EDITOR_GROUPS,
@@ -50,6 +51,7 @@ function crumbFor(hit: SearchHit): string {
  * can name ("badge", "fade", "banned words") without knowing our grouping.
  */
 export function SettingsSearch({ onNavigate }: SettingsSearchProps): React.ReactElement {
+  const t = useTranslations()
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -97,7 +99,7 @@ export function SettingsSearch({ onNavigate }: SettingsSearchProps): React.React
         ref={inputRef}
         type="text"
         role="combobox"
-        aria-label="Search settings"
+        aria-label={t('overlayEditor.settingsSearch.label')}
         aria-expanded={open}
         // Only reference the listbox while it is actually mounted — a dangling
         // aria-controls id is an axe violation (aria-valid-attr-value)
@@ -106,7 +108,7 @@ export function SettingsSearch({ onNavigate }: SettingsSearchProps): React.React
           open && hits.length > 0 ? `${listboxId}-option-${selectedIndex}` : undefined
         }
         aria-autocomplete="list"
-        placeholder="Search settings… (e.g. badge, fade, banned words)"
+        placeholder={t('overlayEditor.settingsSearch.placeholder')}
         autoComplete="off"
         value={query}
         onChange={(e) => {
@@ -119,7 +121,7 @@ export function SettingsSearch({ onNavigate }: SettingsSearchProps): React.React
       {query !== '' && (
         <button
           type="button"
-          aria-label="Clear search"
+          aria-label={t('overlayEditor.settingsSearch.clearLabel')}
           onClick={() => {
             reset()
             inputRef.current?.focus()
@@ -133,12 +135,12 @@ export function SettingsSearch({ onNavigate }: SettingsSearchProps): React.React
         <div
           id={listboxId}
           role="listbox"
-          aria-label="Matching settings"
+          aria-label={t('overlayEditor.settingsSearch.resultsLabel')}
           className="absolute top-full right-0 left-0 z-30 mt-1 overflow-hidden rounded-lg border border-border bg-surface p-1 shadow-lg"
         >
           {hits.length === 0 ? (
             <p className="px-3 py-2 text-sm text-text-sub">
-              No settings match &ldquo;{query.trim()}&rdquo;
+              {t('overlayEditor.settingsSearch.noResults', { query: query.trim() })}
             </p>
           ) : (
             hits.map((hit, index) => (

@@ -21,6 +21,7 @@ import clsx from 'clsx'
 import { PlatformGlyph } from '@/components/overlay/PlatformGlyph'
 import type { EventType } from '@/lib/types/message'
 import type { ViewItem } from '@/lib/utils/overlayViewModel'
+import { formatTime } from '@/lib/i18n'
 
 const EVENT_TITLE: Partial<Record<EventType, string>> = {
   subscription: 'Subscription',
@@ -73,7 +74,7 @@ export function CompactEvent({ item }: { item: ViewItem }) {
   const event = item.event!
   const title = EVENT_TITLE[event.type] ?? 'Event'
   const name = item.user?.display_name || item.user?.username
-  const time = new Date(item.timestamp).toLocaleTimeString()
+  const time = formatTime(new Date(item.timestamp))
   const isSystem = SYSTEM_TYPES.has(event.type)
 
   return (

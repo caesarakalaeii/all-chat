@@ -49,8 +49,14 @@ import { trackEvent } from '@/lib/analytics'
 import { resolveSigninPlatform, readAndClearSigninPlatform } from '@/lib/analytics-auth'
 import { isAllowedExternalRedirect } from '@/lib/auth/redirect-allowlist'
 import { InfinityLogo } from '@/components/InfinityLogo'
+import { useTranslations } from '@/lib/i18n'
+
+// Not copy: the decoration above the error text, which states the failure in
+// words directly beneath it.
+const WARNING_GLYPH = '⚠️'
 
 function AuthCallbackContent() {
+  const t = useTranslations()
   const router = useRouter()
   const searchParams = useSearchParams()
   const { setUser } = useAuthStore()
@@ -65,7 +71,7 @@ function AuthCallbackContent() {
       const code = searchParams.get('code')
       if (!code) {
         trackEvent('signin_failed', { reason: 'no_code' })
-        setError('No authentication code received')
+        setError(t('auth.callback.noCode'))
         setLoading(false)
         return
       }
@@ -94,7 +100,7 @@ function AuthCallbackContent() {
       } catch (err) {
         console.error('Token exchange failed:', err)
         trackEvent('signin_failed', { reason: 'exchange_failed' })
-        setError('Authentication failed. The code may have expired — please try again.')
+        setError(t('auth.callback.exchangeFailed'))
         setLoading(false)
         return
       }
@@ -148,30 +154,30 @@ function AuthCallbackContent() {
       } catch (err) {
         console.error('Authentication failed:', err)
         trackEvent('signin_failed', { reason: 'me_fetch_failed' })
-        setError('Authentication failed. Please try again.')
+        setError(t('auth.callback.failed'))
         setLoading(false)
       }
     }
 
     handleCallback()
-  }, [searchParams, setUser, router])
+  }, [searchParams, setUser, router, t])
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-bg">
       {loading ? (
         <div className="flex flex-col items-center gap-4">
           <InfinityLogo size={64} />
-          <p className="text-sm text-text-sub">Authenticating...</p>
+          <p className="text-sm text-text-sub">{t('auth.callback.authenticating')}</p>
         </div>
       ) : error ? (
         <div className="text-center">
-          <div className="mb-4 text-5xl">⚠️</div>
+          <div className="mb-4 text-5xl">{WARNING_GLYPH}</div>
           <p className="mb-4 text-lg text-youtube">{error}</p>
           <Link
             href="/"
             className="inline-block rounded-lg bg-twitch px-6 py-2 font-semibold text-bg transition-opacity hover:opacity-90"
           >
-            Return to Home
+            {t('auth.callback.returnHome')}
           </Link>
         </div>
       ) : null}

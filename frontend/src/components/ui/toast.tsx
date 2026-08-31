@@ -22,9 +22,11 @@ import { Toast as ToastPrimitive } from '@base-ui/react/toast'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toastManager } from '@/lib/toast'
+import { useTranslations } from '@/lib/i18n'
 
 function ToastList() {
   const { toasts } = ToastPrimitive.useToastManager()
+  const t = useTranslations()
   return (
     <>
       {toasts.map((toast) => (
@@ -56,7 +58,7 @@ function ToastList() {
             </div>
             <ToastPrimitive.Close
               className="shrink-0 text-text-sub transition-colors hover:text-text"
-              aria-label="Close notification"
+              aria-label={t('common.toast.closeLabel')}
             >
               <X className="size-4" />
             </ToastPrimitive.Close>

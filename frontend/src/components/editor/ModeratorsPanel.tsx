@@ -45,6 +45,8 @@ import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
 import { boundInviteAccount, delegationErrorCode, moderationApi } from '@/lib/api/moderation'
+import { useTranslations, type TFunction } from '@/lib/i18n'
+import { emphasise } from '@/lib/i18n/emphasise'
 import {
   DELEGATABLE_ACTIONS,
   DELEGATABLE_PLATFORMS,
@@ -57,18 +59,14 @@ import {
 } from '@/lib/types/moderation'
 import { cn } from '@/lib/utils'
 
-const PLATFORM_LABELS: Record<DelegatablePlatform, string> = {
-  twitch: 'Twitch',
-  youtube: 'YouTube',
-  kick: 'Kick',
-  discord: 'Discord',
+/** Display name for a platform, from the catalog. */
+function platformLabel(t: TFunction, platform: DelegatablePlatform): string {
+  return t(`common.platforms.${platform}`)
 }
 
-const ACTION_LABELS: Record<ModerationAction, string> = {
-  delete: 'Delete messages',
-  timeout: 'Timeout',
-  ban: 'Ban',
-  unban: 'Unban',
+/** Display name for a delegatable action, from the catalog. */
+function actionLabel(t: TFunction, action: ModerationAction): string {
+  return t(`moderation.actions.${action}`)
 }
 
 /**
@@ -76,17 +74,21 @@ const ACTION_LABELS: Record<ModerationAction, string> = {
  * do, never as a verdict about the person: this value is the last platform answer we
  * happened to observe, not a decision.
  */
-function readinessNote(platform: DelegatablePlatform, v: GrantVerification): string | null {
-  const name = PLATFORM_LABELS[platform]
+function readinessNote(
+  t: TFunction,
+  platform: DelegatablePlatform,
+  v: GrantVerification
+): string | null {
+  const name = platformLabel(t, platform)
   switch (v) {
     case 'not_a_moderator':
-      return `Not a moderator on ${name} yet — add them in ${name}'s own tools.`
+      return t('moderation.readiness.notAModerator', { platform: name })
     case 'needs_consent':
-      return `Waiting for them to connect their ${name} account.`
+      return t('moderation.readiness.needsConsent', { platform: name })
     case 'needs_discord_link':
-      return 'Waiting for them to link Discord.'
+      return t('moderation.readiness.needsDiscordLink')
     case 'unavailable':
-      return `Could not check ${name} just now.`
+      return t('moderation.readiness.unavailable', { platform: name })
     case 'verified':
     case 'unverified':
       return null
@@ -94,22 +96,22 @@ function readinessNote(platform: DelegatablePlatform, v: GrantVerification): str
 }
 
 /** Human label for a grant's lifecycle state. */
-function statusLabel(grant: ModeratorGrant): string {
+function statusLabel(t: TFunction, grant: ModeratorGrant): string {
   switch (grant.status) {
     case 'pending':
-      return 'Invite pending'
+      return t('moderation.status.pending')
     case 'suspended':
-      return 'Paused after 90 days idle'
+      return t('moderation.status.suspended')
     case 'revoked':
-      return 'Removed'
+      return t('moderation.status.revoked')
     case 'active':
-      return 'Active'
+      return t('moderation.status.active')
   }
 }
 
 /** Who a row is about: the accepted account, else whatever the streamer typed. */
-function grantName(grant: ModeratorGrant): string {
-  return grant.display_name || grant.invitee_label || 'Unnamed invite'
+function grantName(t: TFunction, grant: ModeratorGrant): string {
+  return grant.display_name || grant.invitee_label || t('moderation.unnamedInvite')
 }
 
 /**
@@ -125,6 +127,7 @@ function inviteURL(token: string): string {
 }
 
 export function ModeratorsPanel({ overlayId }: { overlayId: string }) {
+  const t = useTranslations()
   const [list, setList] = useState<ModeratorList | null>(null)
   const [loadFailed, setLoadFailed] = useState(false)
   const [inviteOpen, setInviteOpen] = useState(false)
@@ -179,7 +182,12 @@ export function ModeratorsPanel({ overlayId }: { overlayId: string }) {
       await moderationApi.updateGrant(overlayId, grant.id, { platforms: { [platform]: enabled } })
       await reload()
     } catch {
-      setRowError(`Could not change ${PLATFORM_LABELS[platform]} for ${grantName(grant)}.`)
+      setRowError(
+        t('moderation.row.legChangeFailed', {
+          platform: platformLabel(t, platform),
+          name: grantName(t, grant),
+        })
+      )
     }
   }
 
@@ -190,7 +198,7 @@ export function ModeratorsPanel({ overlayId }: { overlayId: string }) {
     // An empty action set is a 400 server-side and a nonsense grant besides, so removing
     // the last one is not offered as an edit — remove the moderator instead.
     if (next.length === 0) {
-      setRowError(`${grantName(grant)} needs at least one action. Remove them instead.`)
+      setRowError(t('moderation.row.needsOneAction', { name: grantName(t, grant) }))
       return
     }
     setRowError(null)
@@ -200,20 +208,20 @@ export function ModeratorsPanel({ overlayId }: { overlayId: string }) {
       })
       await reload()
     } catch {
-      setRowError(`Could not update ${grantName(grant)}.`)
+      setRowError(t('moderation.row.updateFailed', { name: grantName(t, grant) }))
     }
   }
 
   const handleRevoke = async () => {
     if (!revoking) return
-    const name = grantName(revoking)
+    const name = grantName(t, revoking)
     setRevoking(null)
     try {
       await moderationApi.revokeGrant(overlayId, revoking.id)
-      setNotice(`Removed ${name}.`)
+      setNotice(t('moderation.row.removed', { name }))
       await reload()
     } catch {
-      setRowError(`Could not remove ${name}.`)
+      setRowError(t('moderation.row.removeFailed', { name }))
     }
   }
 
@@ -221,26 +229,30 @@ export function ModeratorsPanel({ overlayId }: { overlayId: string }) {
     setRevokeAllOpen(false)
     try {
       const { revoked } = await moderationApi.revokeAllModerators(overlayId)
-      setNotice(`Removed ${revoked} ${revoked === 1 ? 'moderator' : 'moderators'}.`)
+      setNotice(
+        t(revoked === 1 ? 'moderation.row.removedCountOne' : 'moderation.row.removedCountMany', {
+          count: String(revoked),
+        })
+      )
       await reload()
     } catch {
-      setRowError('Could not remove everyone. Try again.')
+      setRowError(t('moderation.row.removeAllFailed'))
     }
   }
 
   if (loadFailed) {
     return (
       <div className="space-y-3">
-        <p className="text-sm text-text-sub">Could not load this overlay&apos;s moderators.</p>
+        <p className="text-sm text-text-sub">{t('moderation.roster.loadFailed')}</p>
         <Button variant="outline" size="sm" onClick={() => void reload()}>
-          Try again
+          {t('moderation.roster.tryAgain')}
         </Button>
       </div>
     )
   }
 
   if (list === null) {
-    return <p className="text-sm text-text-dim">Loading moderators…</p>
+    return <p className="text-sm text-text-dim">{t('moderation.roster.loading')}</p>
   }
 
   const atCap = list.used >= list.cap
@@ -248,17 +260,23 @@ export function ModeratorsPanel({ overlayId }: { overlayId: string }) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-text-sub">
-        Moderators act with <strong>their own</strong> platform accounts, so Twitch, YouTube and
-        Kick check their moderator role on every action. Removing someone here takes effect
-        immediately.
+        {emphasise(
+          t('moderation.roster.explainer', {
+            emphasis: t('moderation.roster.explainerEmphasis'),
+          }),
+          t('moderation.roster.explainerEmphasis'),
+          (run) => (
+            <strong>{run}</strong>
+          )
+        )}
       </p>
 
       <div className="flex flex-wrap items-center gap-3">
         <Button size="sm" disabled={atCap} onClick={() => setInviteOpen(true)}>
-          Invite a moderator
+          {t('moderation.roster.inviteButton')}
         </Button>
         <span className="text-xs text-text-dim">
-          {list.used} of {list.cap} used
+          {t('moderation.roster.usage', { used: String(list.used), cap: String(list.cap) })}
         </span>
         {list.moderators.length > 0 && (
           <Button
@@ -267,14 +285,14 @@ export function ModeratorsPanel({ overlayId }: { overlayId: string }) {
             className="ml-auto"
             onClick={() => setRevokeAllOpen(true)}
           >
-            Remove all
+            {t('moderation.roster.removeAll')}
           </Button>
         )}
       </div>
 
       {atCap && (
         <p className="text-xs text-text-dim">
-          This overlay is at its limit of {list.cap} moderators. Remove someone to invite another.
+          {t('moderation.roster.atCap', { cap: String(list.cap) })}
         </p>
       )}
 
@@ -290,10 +308,7 @@ export function ModeratorsPanel({ overlayId }: { overlayId: string }) {
       )}
 
       {list.moderators.length === 0 ? (
-        <p className="text-sm text-text-dim">
-          No one moderates this overlay yet. Invite someone and they will be able to delete messages
-          and time viewers out from the monitor view, using their own platform accounts.
-        </p>
+        <p className="text-sm text-text-dim">{t('moderation.roster.empty')}</p>
       ) : (
         <ul className="space-y-3">
           {list.moderators.map((grant) => (
@@ -325,22 +340,23 @@ export function ModeratorsPanel({ overlayId }: { overlayId: string }) {
       >
         <AlertDialog.Content size="sm">
           <AlertDialog.Title className="text-sm font-medium">
-            Remove {revoking === null ? '' : grantName(revoking)}?
+            {t('moderation.revoke.title', {
+              name: revoking === null ? '' : grantName(t, revoking),
+            })}
           </AlertDialog.Title>
           <AlertDialog.Description className="text-xs">
-            They lose access to this overlay&apos;s moderation on their next action. Their past
-            actions stay in the log.
+            {t('moderation.revoke.description')}
           </AlertDialog.Description>
           <div className="mt-4 flex justify-end gap-2">
             <AlertDialog.Close
               render={
                 <Button variant="outline" size="sm">
-                  Cancel
+                  {t('moderation.revoke.cancel')}
                 </Button>
               }
             />
             <Button variant="destructive" size="sm" onClick={() => void handleRevoke()}>
-              Remove
+              {t('moderation.revoke.confirm')}
             </Button>
           </div>
         </AlertDialog.Content>
@@ -349,22 +365,21 @@ export function ModeratorsPanel({ overlayId }: { overlayId: string }) {
       <AlertDialog.Root open={revokeAllOpen} onOpenChange={setRevokeAllOpen}>
         <AlertDialog.Content size="sm">
           <AlertDialog.Title className="text-sm font-medium">
-            Remove every moderator?
+            {t('moderation.revokeAll.title')}
           </AlertDialog.Title>
           <AlertDialog.Description className="text-xs">
-            This removes everyone on this overlay, including invites nobody has accepted yet. You
-            can invite people again afterwards.
+            {t('moderation.revokeAll.description')}
           </AlertDialog.Description>
           <div className="mt-4 flex justify-end gap-2">
             <AlertDialog.Close
               render={
                 <Button variant="outline" size="sm">
-                  Cancel
+                  {t('moderation.revoke.cancel')}
                 </Button>
               }
             />
             <Button variant="destructive" size="sm" onClick={() => void handleRevokeAll()}>
-              Remove everyone
+              {t('moderation.revokeAll.confirm')}
             </Button>
           </div>
         </AlertDialog.Content>
@@ -381,7 +396,8 @@ interface ModeratorRowProps {
 }
 
 function ModeratorRow({ grant, onToggleLeg, onToggleAction, onRemove }: ModeratorRowProps) {
-  const name = grantName(grant)
+  const t = useTranslations()
+  const name = grantName(t, grant)
   const legs = new Map(grant.platforms.map((leg) => [leg.platform, leg]))
 
   return (
@@ -390,14 +406,19 @@ function ModeratorRow({ grant, onToggleLeg, onToggleAction, onRemove }: Moderato
         <div className="min-w-0">
           <p className="truncate text-sm font-medium text-text">{name}</p>
           <p className="text-xs text-text-dim">
-            {statusLabel(grant)}
+            {statusLabel(t, grant)}
             {grant.status === 'pending' && grant.expected_account !== undefined && (
-              <> · for {grant.expected_account}</>
+              <> · {t('moderation.row.forAccount', { account: grant.expected_account })}</>
             )}
           </p>
         </div>
-        <Button variant="destructive" size="sm" aria-label={`Remove ${name}`} onClick={onRemove}>
-          Remove
+        <Button
+          variant="destructive"
+          size="sm"
+          aria-label={t('moderation.row.removeLabel', { name })}
+          onClick={onRemove}
+        >
+          {t('moderation.row.removeButton')}
         </Button>
       </div>
 
@@ -417,7 +438,7 @@ function ModeratorRow({ grant, onToggleLeg, onToggleAction, onRemove }: Moderato
                   : 'border-border bg-surface-2 text-text-dim'
               )}
             >
-              {ACTION_LABELS[action]}
+              {actionLabel(t, action)}
             </button>
           )
         })}
@@ -427,18 +448,21 @@ function ModeratorRow({ grant, onToggleLeg, onToggleAction, onRemove }: Moderato
         {DELEGATABLE_PLATFORMS.map((platform) => {
           const leg = legs.get(platform)
           const enabled = leg?.enabled ?? false
-          const note = leg === undefined ? null : readinessNote(platform, leg.verification)
+          const note = leg === undefined ? null : readinessNote(t, platform, leg.verification)
           return (
             <li key={platform} className="flex items-start gap-2">
               <Switch.Root
                 checked={enabled}
-                aria-label={`${PLATFORM_LABELS[platform]} moderation for ${name}`}
+                aria-label={t('moderation.row.platformToggleLabel', {
+                  platform: platformLabel(t, platform),
+                  name,
+                })}
                 onCheckedChange={(next: boolean) => onToggleLeg(platform, next)}
               >
                 <Switch.Thumb />
               </Switch.Root>
               <div className="min-w-0">
-                <span className="text-xs text-text-sub">{PLATFORM_LABELS[platform]}</span>
+                <span className="text-xs text-text-sub">{platformLabel(t, platform)}</span>
                 {enabled && note !== null && <p className="text-xs text-text-dim">{note}</p>}
               </div>
             </li>
@@ -456,6 +480,7 @@ interface InviteDialogProps {
 }
 
 function InviteDialog({ overlayId, open, onOpenChange }: InviteDialogProps) {
+  const t = useTranslations()
   const [actions, setActions] = useState<ModerationAction[]>(['delete', 'timeout'])
   const [platforms, setPlatforms] = useState<DelegatablePlatform[]>([])
   const [label, setLabel] = useState('')
@@ -496,13 +521,13 @@ function InviteDialog({ overlayId, open, onOpenChange }: InviteDialogProps) {
         // Sticky and inline, not a toast: this is something the streamer has to act on.
         setGateBlocked(true)
       } else if (code === 'moderator_cap_reached') {
-        setError('This overlay already has the maximum number of moderators.')
+        setError(t('moderation.invite.capReached'))
       } else {
         const bound = boundInviteAccount(err)
         setError(
           bound === null
-            ? 'Could not create the invite. Try again.'
-            : `That invite belongs to ${bound.account}.`
+            ? t('moderation.invite.createFailed')
+            : t('moderation.invite.boundToAccount', { account: bound.account })
         )
       }
     } finally {
@@ -522,7 +547,7 @@ function InviteDialog({ overlayId, open, onOpenChange }: InviteDialogProps) {
       await navigator.clipboard.writeText(inviteLink)
       setCopied(true)
     } catch {
-      setError('Could not copy. Select the link and copy it manually.')
+      setError(t('moderation.invite.copyFailed'))
     }
   }
 
@@ -535,47 +560,55 @@ function InviteDialog({ overlayId, open, onOpenChange }: InviteDialogProps) {
       }}
     >
       <Dialog.Content size="sm">
-        <Dialog.Title className="text-sm font-medium">Invite a moderator</Dialog.Title>
+        <Dialog.Title className="text-sm font-medium">{t('moderation.invite.title')}</Dialog.Title>
 
         {created !== null ? (
           <div className="space-y-3">
             <Dialog.Description className="text-xs">
-              Send this link to the person you want to moderate. It works once, expires in 7 days,
-              and <strong>won&apos;t be shown again</strong> — if it gets lost, create a new invite.
+              {emphasise(
+                t('moderation.invite.sendLink', {
+                  emphasis: t('moderation.invite.sendLinkEmphasis'),
+                }),
+                t('moderation.invite.sendLinkEmphasis'),
+                (run) => (
+                  <strong>{run}</strong>
+                )
+              )}
             </Dialog.Description>
             <code className="block overflow-x-auto rounded-lg border border-border bg-surface-2 p-2 text-xs break-all text-text">
               {inviteLink}
             </code>
             <div className="flex justify-end gap-2">
               <Button variant="outline" size="sm" onClick={() => void handleCopy()}>
-                {copied ? 'Copied' : 'Copy link'}
+                {copied ? t('moderation.invite.copied') : t('moderation.invite.copyLink')}
               </Button>
               <Button size="sm" onClick={() => onOpenChange(false)}>
-                Done
+                {t('moderation.invite.done')}
               </Button>
             </div>
           </div>
         ) : (
           <div className="space-y-4">
             <Dialog.Description className="text-xs">
-              They accept with their own All-Chat account, then connect each platform the first time
-              they moderate on it.
+              {t('moderation.invite.acceptExplainer')}
             </Dialog.Description>
 
             <label className="block space-y-1">
-              <span className="text-xs text-text-sub">Who is this for? (optional)</span>
+              <span className="text-xs text-text-sub">{t('moderation.invite.labelPrompt')}</span>
               <input
                 type="text"
                 value={label}
                 maxLength={120}
                 onChange={(e) => setLabel(e.target.value)}
-                placeholder="Sarah, my Twitch mod"
+                placeholder={t('moderation.invite.labelPlaceholder')}
                 className="w-full rounded-lg border border-border bg-surface px-2 py-1 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
               />
             </label>
 
             <fieldset className="space-y-1.5">
-              <legend className="text-xs text-text-sub">What may they do?</legend>
+              <legend className="text-xs text-text-sub">
+                {t('moderation.invite.actionsLegend')}
+              </legend>
               {DELEGATABLE_ACTIONS.map((action) => (
                 <label key={action} className="flex items-center gap-2 text-xs text-text">
                   <input
@@ -588,14 +621,14 @@ function InviteDialog({ overlayId, open, onOpenChange }: InviteDialogProps) {
                     }
                     className="accent-twitch"
                   />
-                  {ACTION_LABELS[action]}
+                  {actionLabel(t, action)}
                 </label>
               ))}
             </fieldset>
 
             <fieldset className="space-y-1.5">
               <legend className="text-xs text-text-sub">
-                On which platforms? Off means they cannot act there.
+                {t('moderation.invite.platformsLegend')}
               </legend>
               {DELEGATABLE_PLATFORMS.map((platform) => (
                 <label key={platform} className="flex items-center gap-2 text-xs text-text">
@@ -609,22 +642,19 @@ function InviteDialog({ overlayId, open, onOpenChange }: InviteDialogProps) {
                     }
                     className="accent-twitch"
                   />
-                  {PLATFORM_LABELS[platform]}
+                  {platformLabel(t, platform)}
                 </label>
               ))}
             </fieldset>
 
             {gateBlocked && (
               <div className="space-y-1 rounded-lg border border-border bg-surface-2 p-2">
-                <p className="text-xs text-text-sub">
-                  Delegating moderation is part of All-Chat premium. Your moderators never pay —
-                  only your own plan matters.
-                </p>
+                <p className="text-xs text-text-sub">{t('moderation.invite.premiumGate')}</p>
                 <a
                   href="/upgrade"
                   className="text-xs text-twitch underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
                 >
-                  Upgrade to invite moderators
+                  {t('moderation.invite.upgradeLink')}
                 </a>
               </div>
             )}
@@ -638,7 +668,7 @@ function InviteDialog({ overlayId, open, onOpenChange }: InviteDialogProps) {
               <Dialog.Close
                 render={
                   <Button variant="outline" size="sm">
-                    Cancel
+                    {t('moderation.invite.cancel')}
                   </Button>
                 }
               />
@@ -647,7 +677,7 @@ function InviteDialog({ overlayId, open, onOpenChange }: InviteDialogProps) {
                 disabled={actions.length === 0 || creating}
                 onClick={() => void handleCreate()}
               >
-                {creating ? 'Creating…' : 'Create invite'}
+                {creating ? t('moderation.invite.creating') : t('moderation.invite.create')}
               </Button>
             </div>
           </div>

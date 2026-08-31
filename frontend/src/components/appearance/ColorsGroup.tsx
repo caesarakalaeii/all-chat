@@ -19,6 +19,7 @@
  */
 
 import React from 'react'
+import { useTranslations } from '@/lib/i18n'
 import type { VisualSettings } from '@/lib/types/visual-settings'
 import { ColorPickerControl } from './ColorPickerControl'
 
@@ -28,20 +29,22 @@ export interface ColorsGroupProps {
 }
 
 export function ColorsGroup({ visualSettings, onChange }: ColorsGroupProps): React.ReactElement {
+  const t = useTranslations()
+
   return (
     <div className="space-y-3">
       <ColorPickerControl
-        label="Message color"
+        label={t('overlayEditor.colors.message')}
         value={visualSettings.messageColor ?? '#ffffff'}
         onChange={(hex) => onChange({ messageColor: hex })}
       />
       <ColorPickerControl
-        label="Username color"
+        label={t('overlayEditor.colors.username')}
         value={visualSettings.usernameColor ?? '#a0a0ff'}
         onChange={(hex) => onChange({ usernameColor: hex })}
       />
       <ColorPickerControl
-        label="Timestamp color"
+        label={t('overlayEditor.colors.timestamp')}
         value={visualSettings.timestampColor ?? '#888888'}
         onChange={(hex) => onChange({ timestampColor: hex })}
       />

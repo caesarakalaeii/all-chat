@@ -36,6 +36,8 @@ import {
   isAuthError,
   isPlatformApiError,
 } from '@/lib/types/errors'
+import { formatTimestamp, useTranslations } from '@/lib/i18n'
+import { emphasise } from '@/lib/i18n/emphasise'
 
 interface ErrorDisplayProps {
   error: ChatError
@@ -50,6 +52,7 @@ export default function ErrorDisplay({
   onDismiss,
   className = '',
 }: ErrorDisplayProps) {
+  const t = useTranslations()
   const [showDetails, setShowDetails] = useState(false)
   const [countdown, setCountdown] = useState<number | null>(null)
 
@@ -153,7 +156,7 @@ export default function ErrorDisplay({
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-1 items-start gap-3">
-          <span className="text-2xl" role="img" aria-label="Error icon">
+          <span className="text-2xl" role="img" aria-label={t('errors.display.iconLabel')}>
             {style.icon}
           </span>
           <div className="min-w-0 flex-1">
@@ -162,35 +165,46 @@ export default function ErrorDisplay({
             {/* Rate limit countdown */}
             {isRateLimitedError(error) && countdown !== null && (
               <p className={clsx('mb-2 text-sm', style.text)}>
-                You can send another message in <strong>{formatCountdown(countdown)}</strong>
+                {emphasise(
+                  t('errors.display.rateLimitCountdown', {
+                    countdown: formatCountdown(countdown),
+                  }),
+                  formatCountdown(countdown),
+                  (run) => (
+                    <strong>{run}</strong>
+                  )
+                )}
               </p>
             )}
 
             {/* Ban reason */}
             {isBannedError(error) && error.reason && (
               <p className={clsx('mb-2 text-sm', style.text)}>
-                <strong>Reason:</strong> {error.reason}
+                <strong>{t('errors.display.reasonLabel')}</strong> {error.reason}
               </p>
             )}
 
             {/* Ban expiration */}
             {isBannedError(error) && error.expiresAt && (
               <p className={clsx('mb-2 text-sm', style.text)}>
-                <strong>Expires:</strong> {new Date(error.expiresAt).toLocaleString()}
+                <strong>{t('errors.display.expiresLabel')}</strong>{' '}
+                {formatTimestamp(new Date(error.expiresAt))}
               </p>
             )}
 
             {/* Platform message */}
             {isPlatformApiError(error) && error.platformMessage && (
               <p className={clsx('mb-2 text-sm italic', style.text)}>
-                Platform message: {error.platformMessage}
+                {t('errors.display.platformMessage', { message: error.platformMessage })}
               </p>
             )}
 
             {/* Actionable steps */}
             {error.actionableSteps.length > 0 && (
               <div className="mt-3">
-                <p className={clsx('mb-1 text-sm font-medium', style.text)}>What you can do:</p>
+                <p className={clsx('mb-1 text-sm font-medium', style.text)}>
+                  {t('errors.display.whatYouCanDo')}
+                </p>
                 <ul className={clsx('list-inside list-disc space-y-1 text-sm', style.text)}>
                   {error.actionableSteps.map((step, index) => (
                     <li key={index}>{step}</li>
@@ -211,7 +225,7 @@ export default function ErrorDisplay({
                   )}
                   disabled={countdown !== null}
                 >
-                  Try Again
+                  {t('errors.display.tryAgain')}
                 </button>
               )}
 
@@ -225,7 +239,9 @@ export default function ErrorDisplay({
                     style.border
                   )}
                 >
-                  Sign in with {capitalizeFirst(error.platform)}
+                  {t('errors.display.signInWith', {
+                    platform: capitalizeFirst(error.platform),
+                  })}
                 </a>
               )}
 
@@ -239,7 +255,7 @@ export default function ErrorDisplay({
                     style.border
                   )}
                 >
-                  {showDetails ? 'Hide' : 'Show'} Details
+                  {showDetails ? t('errors.display.hideDetails') : t('errors.display.showDetails')}
                 </button>
               )}
             </div>
@@ -258,7 +274,7 @@ export default function ErrorDisplay({
           <button
             onClick={onDismiss}
             className={clsx('flex-shrink-0 text-xl hover:opacity-70', style.text)}
-            aria-label="Dismiss error"
+            aria-label={t('errors.display.dismissLabel')}
           >
             &times;
           </button>

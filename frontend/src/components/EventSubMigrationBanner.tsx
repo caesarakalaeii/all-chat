@@ -24,6 +24,7 @@ import { safeExternalRedirect } from '@/lib/auth/redirect-allowlist'
 import { startAddSourceReflow } from '@/lib/api/add-source'
 import { toastManager } from '@/lib/toast'
 import type { ChatSource } from '@/lib/types/overlay'
+import { useTranslations } from '@/lib/i18n'
 
 const DISMISS_KEY = 'eventsub-migration-banner-dismissed'
 
@@ -68,6 +69,7 @@ export function EventSubMigrationBanner({
 }: {
   sourcesByOverlay: Record<string, ChatSource[]>
 }) {
+  const t = useTranslations()
   const [dismissed, setDismissed] = useState(
     () => typeof window !== 'undefined' && window.localStorage.getItem(DISMISS_KEY) === '1'
   )
@@ -88,12 +90,12 @@ export function EventSubMigrationBanner({
     if (result.kind === 'added') {
       // Already authorized with the chat scopes — the channel is moving to
       // EventSub; hide the nudge.
-      toastManager.add({ title: 'Twitch chat connected', type: 'success' })
+      toastManager.add({ title: t('common.eventSubMigration.connectedToast'), type: 'success' })
       setDismissed(true)
       return
     }
     toastManager.add({
-      title: 'Could not start the upgrade',
+      title: t('common.eventSubMigration.failedToast'),
       description: result.message,
       type: 'error',
     })
@@ -120,21 +122,18 @@ export function EventSubMigrationBanner({
             ? 'Your Twitch chat uses the legacy connection'
             : `${count} of your Twitch channels use the legacy connection`}
         </p>
-        <p className="mt-0.5 text-text-sub">
-          The old IRC chat connection is being retired and can drop messages when many streams are
-          live. Reconnect to move to the new connection and keep your chat reliable.
-        </p>
+        <p className="mt-0.5 text-text-sub">{t('common.eventSubMigration.body')}</p>
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <button
           onClick={handleUpgrade}
           className="rounded-md bg-twitch px-3 py-1.5 text-xs font-semibold text-bg transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
         >
-          Reconnect now
+          {t('common.eventSubMigration.reconnectButton')}
         </button>
         <button
           onClick={handleDismiss}
-          aria-label="Dismiss"
+          aria-label={t('common.eventSubMigration.dismissLabel')}
           className="rounded p-0.5 text-text-sub opacity-60 transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:ring-current focus-visible:outline-none"
         >
           <X className="size-3.5" />

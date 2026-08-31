@@ -19,6 +19,7 @@
  */
 
 import React from 'react'
+import { useTranslations } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import {
   EDITOR_GROUPS,
@@ -45,9 +46,10 @@ export function EditorNav({
   onSelect,
   sections = EDITOR_SECTIONS,
 }: EditorNavProps): React.ReactElement {
+  const t = useTranslations()
   return (
     <nav
-      aria-label="Overlay settings"
+      aria-label={t('overlayEditor.nav.settingsLabel')}
       className="flex shrink-0 gap-1 overflow-x-auto pb-2 @md:w-40 @md:flex-col @md:gap-0 @md:overflow-visible @md:border-r @md:border-border @md:pr-3 @md:pb-0"
     >
       {EDITOR_GROUPS.map((group) => {

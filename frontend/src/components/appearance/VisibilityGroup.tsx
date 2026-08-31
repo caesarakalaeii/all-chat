@@ -20,6 +20,7 @@
 
 import React from 'react'
 import { cn } from '@/lib/utils'
+import { useTranslations } from '@/lib/i18n'
 import type { VisualSettings } from '@/lib/types/visual-settings'
 import { ToggleSwitch } from './ToggleSwitch'
 import { ColorPickerControl } from './ColorPickerControl'
@@ -43,13 +44,11 @@ function toDisplayValue(field: keyof VisualSettings, checked: boolean): DisplayV
   return 'inline'
 }
 
-const ROWS: Array<{ field: keyof VisualSettings; label: string }> = [
-  { field: 'showAvatars', label: 'Show avatars' },
-  { field: 'showBadges', label: 'Show badges' },
-  { field: 'showTimestamps', label: 'Show timestamps' },
-  { field: 'showEmotes', label: 'Show emotes' },
-  { field: 'showUsername', label: 'Show username' },
-]
+// The toggle's label lives in the catalog keyed by the field, so a new field
+// without a key fails tsc rather than shipping an unlabelled toggle.
+const ROWS: ReadonlyArray<
+  'showAvatars' | 'showBadges' | 'showTimestamps' | 'showEmotes' | 'showUsername'
+> = ['showAvatars', 'showBadges', 'showTimestamps', 'showEmotes', 'showUsername']
 
 interface RadioOption<T extends string> {
   value: T
@@ -92,26 +91,24 @@ function RadioGroup<T extends string>({
   )
 }
 
-const POSITION_OPTIONS: ReadonlyArray<RadioOption<'before' | 'after'>> = [
-  { value: 'before', label: 'Before username' },
-  { value: 'after', label: 'After username' },
-]
-
-const STYLE_OPTIONS: ReadonlyArray<RadioOption<'text' | 'icon'>> = [
-  { value: 'text', label: 'Text' },
-  { value: 'icon', label: 'Icon' },
-]
-
-const PRONOUN_POSITION_OPTIONS: ReadonlyArray<RadioOption<'before' | 'after'>> = [
-  { value: 'before', label: 'Before username' },
-  { value: 'after', label: 'After username' },
-]
-
 export function VisibilityGroup({
   visualSettings,
   onChange,
   visibilityDefaults = {},
 }: VisibilityGroupProps): React.ReactElement {
+  const t = useTranslations()
+
+  // Built here rather than at module scope because the labels come from the
+  // catalog, which is read through a hook.
+  const positionOptions: ReadonlyArray<RadioOption<'before' | 'after'>> = [
+    { value: 'before', label: t('overlayEditor.visibility.beforeUsername') },
+    { value: 'after', label: t('overlayEditor.visibility.afterUsername') },
+  ]
+  const styleOptions: ReadonlyArray<RadioOption<'text' | 'icon'>> = [
+    { value: 'text', label: t('overlayEditor.visibility.styleText') },
+    { value: 'icon', label: t('overlayEditor.visibility.styleIcon') },
+  ]
+
   const platformBadgeVisible = isVisible(
     (visualSettings as Record<string, DisplayValue | undefined>)['showPlatformBadge'],
     isVisible(
@@ -143,18 +140,18 @@ export function VisibilityGroup({
 
   return (
     <div className="space-y-3">
-      {ROWS.map((row) => {
+      {ROWS.map((field) => {
         const settings = visualSettings as Record<string, DisplayValue | undefined>
         const defaults = visibilityDefaults as Record<string, DisplayValue | undefined>
-        const defaultChecked = isVisible(defaults[row.field], true)
-        const checked = isVisible(settings[row.field], defaultChecked)
+        const defaultChecked = isVisible(defaults[field], true)
+        const checked = isVisible(settings[field], defaultChecked)
         return (
           // data-setting-anchor: jump target for the editor settings search (ADR-0042)
-          <div key={row.field} data-setting-anchor={row.field}>
+          <div key={field} data-setting-anchor={field}>
             <ToggleSwitch
-              label={row.label}
+              label={t(`overlayEditor.visibility.${field}`)}
               checked={checked}
-              onChange={(next) => onChange({ [row.field]: toDisplayValue(row.field, next) })}
+              onChange={(next) => onChange({ [field]: toDisplayValue(field, next) })}
             />
           </div>
         )
@@ -163,7 +160,7 @@ export function VisibilityGroup({
       {/* Platform Badge */}
       <div className="border-t border-border pt-3" data-setting-anchor="showPlatformBadge">
         <ToggleSwitch
-          label="Show platform badge"
+          label={t('overlayEditor.visibility.showPlatformBadge')}
           checked={platformBadgeVisible}
           onChange={(next) => onChange({ showPlatformBadge: next ? 'inline' : 'none' })}
         />
@@ -174,20 +171,20 @@ export function VisibilityGroup({
           )}
         >
           <div>
-            <p className="mb-1 text-xs text-text-sub">Position</p>
+            <p className="mb-1 text-xs text-text-sub">{t('overlayEditor.visibility.position')}</p>
             <RadioGroup
               name="platformBadgePosition"
-              options={POSITION_OPTIONS}
+              options={positionOptions}
               value={badgePosition}
               onChange={(val) => onChange({ platformBadgePosition: val })}
               disabled={!platformBadgeVisible}
             />
           </div>
           <div>
-            <p className="mb-1 text-xs text-text-sub">Style</p>
+            <p className="mb-1 text-xs text-text-sub">{t('overlayEditor.visibility.style')}</p>
             <RadioGroup
               name="platformBadgeStyle"
-              options={STYLE_OPTIONS}
+              options={styleOptions}
               value={badgeStyle}
               onChange={(val) => onChange({ platformBadgeStyle: val })}
               disabled={!platformBadgeVisible}
@@ -199,7 +196,7 @@ export function VisibilityGroup({
       {/* Platform Indicators */}
       <div className="border-t border-border pt-3" data-setting-anchor="showPlatformIndicators">
         <ToggleSwitch
-          label="Show platform indicators"
+          label={t('overlayEditor.visibility.showPlatformIndicators')}
           checked={platformIndicatorsVisible}
           onChange={(next) => onChange({ showPlatformIndicators: next ? 'block' : 'none' })}
         />
@@ -208,7 +205,7 @@ export function VisibilityGroup({
       {/* Pronouns — Phase 9 */}
       <div className="border-t border-border pt-3" data-setting-anchor="showPronouns">
         <ToggleSwitch
-          label="Show pronouns"
+          label={t('overlayEditor.visibility.showPronouns')}
           checked={pronounsVisible}
           onChange={(next) => onChange({ showPronouns: next ? 'inline' : 'none' })}
         />
@@ -219,10 +216,10 @@ export function VisibilityGroup({
           )}
         >
           <div>
-            <p className="mb-1 text-xs text-text-sub">Position</p>
+            <p className="mb-1 text-xs text-text-sub">{t('overlayEditor.visibility.position')}</p>
             <RadioGroup
               name="pronounPosition"
-              options={PRONOUN_POSITION_OPTIONS}
+              options={positionOptions}
               value={pronounPosition}
               onChange={(val) => onChange({ pronounPosition: val })}
               disabled={!pronounsVisible}
@@ -230,7 +227,7 @@ export function VisibilityGroup({
           </div>
           <div>
             <ColorPickerControl
-              label="Pill color"
+              label={t('overlayEditor.visibility.pronounPillColor')}
               value={pronounColor}
               onChange={(hex) => onChange({ pronounColor: hex })}
             />

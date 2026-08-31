@@ -31,6 +31,7 @@ import { Dialog, DialogTitle } from '@/components/ui/dialog'
 import type { Overlay } from '@/lib/types/overlay'
 import { trackEvent } from '@/lib/analytics'
 import { toastManager } from '@/lib/toast'
+import { useTranslations } from '@/lib/i18n'
 
 interface AddSourceModalProps {
   senderName: string
@@ -45,6 +46,7 @@ export function AddSourceModal({
   onClose,
   onAdded,
 }: AddSourceModalProps) {
+  const t = useTranslations()
   const [overlays, setOverlays] = useState<Overlay[]>([])
   const [selectedOverlay, setSelectedOverlay] = useState<string>('')
   const [loading, setLoading] = useState(false)
@@ -63,7 +65,7 @@ export function AddSourceModal({
         }
       } catch (err) {
         console.error('Failed to fetch overlays:', err)
-        toastManager.add({ title: 'Failed to load overlays', type: 'error' })
+        toastManager.add({ title: t('dashboard.shares.loadOverlaysFailed'), type: 'error' })
       } finally {
         setLoadingOverlays(false)
       }
@@ -85,7 +87,10 @@ export function AddSourceModal({
       })
       trackEvent('source_added', { platform: 'shared_overlay' })
 
-      toastManager.add({ title: `Added ${senderName}'s overlay!`, type: 'success' })
+      toastManager.add({
+        title: t('dashboard.shares.addSourceToast', { sender: senderName }),
+        type: 'success',
+      })
 
       if (onAdded) {
         onAdded()
@@ -105,15 +110,19 @@ export function AddSourceModal({
       <Dialog.Content size="sm">
         {/* Title */}
         <DialogTitle className="mb-4 pr-8 text-xl">
-          Add {senderName}&apos;s overlay to one of yours?
+          {t('dashboard.shares.addSourceTitle', { sender: senderName })}
         </DialogTitle>
 
         {loadingOverlays ? (
-          <div className="py-8 text-center text-text-sub">Loading overlays...</div>
+          <div className="py-8 text-center text-text-sub">
+            {t('dashboard.shares.loadingOverlays')}
+          </div>
         ) : (
           <>
             {/* Preview text */}
-            <p className="mb-4 text-sm text-text-sub">{senderName}&apos;s overlay (shared chat)</p>
+            <p className="mb-4 text-sm text-text-sub">
+              {t('dashboard.shares.addSourcePreview', { sender: senderName })}
+            </p>
 
             {/* Overlay dropdown */}
             <div className="mb-6">
@@ -121,7 +130,7 @@ export function AddSourceModal({
                 htmlFor="target-overlay-select"
                 className="mb-2 block text-sm font-medium text-text-sub"
               >
-                Add to which overlay?
+                {t('dashboard.shares.addSourceSelectLabel')}
               </label>
               <select
                 id="target-overlay-select"
@@ -140,7 +149,7 @@ export function AddSourceModal({
             {/* Action buttons */}
             <div className="flex gap-3">
               <Button variant="ghost" className="flex-1" onClick={onClose} disabled={loading}>
-                Skip
+                {t('dashboard.shares.addSourceSkip')}
               </Button>
               <Button
                 variant="gradient"
@@ -148,7 +157,9 @@ export function AddSourceModal({
                 onClick={handleAdd}
                 disabled={loading || !selectedOverlay}
               >
-                {loading ? 'Adding...' : 'Add'}
+                {loading
+                  ? t('dashboard.shares.addSourceAdding')
+                  : t('dashboard.shares.addSourceAdd')}
               </Button>
             </div>
           </>

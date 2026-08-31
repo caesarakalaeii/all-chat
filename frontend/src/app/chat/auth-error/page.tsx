@@ -32,29 +32,30 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useTrackOnce } from '@/hooks/useTrackOnce'
 import { bucketViewerAuthError, sanitizeViewerPlatform } from '@/lib/analytics-auth'
+import { useTranslations } from '@/lib/i18n'
 
-// Map the backend `platform` query param to a display name. Falls back to a
-// platform-neutral label so the page never misnames the provider that failed
-// (it used to hardcode "Twitch" for every platform).
-const PLATFORM_LABELS: Record<string, string> = {
-  twitch: 'Twitch',
-  youtube: 'YouTube',
-  kick: 'Kick',
-  tiktok: 'TikTok',
-  discord: 'Discord',
-}
+// Not copy: decoration above text that states the failure in words. U+274C.
+const FAILURE_GLYPH = '❌'
+
+// Backend `platform` query values that have a display name in the catalog.
+// Anything else falls back to a platform-neutral label so the page never
+// misnames the provider that failed (it used to hardcode "Twitch" for every
+// platform).
+const NAMEABLE_PLATFORMS = ['twitch', 'youtube', 'kick', 'tiktok', 'discord'] as const
 
 function AuthErrorContent() {
+  const t = useTranslations()
   const searchParams = useSearchParams()
-  const error = searchParams.get('error') || 'Authentication failed'
+  const error = searchParams.get('error') || t('auth.viewerError.defaultError')
   const platform = searchParams.get('platform') ?? ''
-  // Read the label defensively: indexing a plain object with an attacker-supplied
-  // query value (e.g. ?platform=toString) can resolve to an inherited Object
-  // prototype member, so require the resolved value to actually be one of our
-  // string labels before using it — otherwise fall back to a neutral label.
-  const platformLabel = PLATFORM_LABELS[platform]
-  const accountLabel =
-    typeof platformLabel === 'string' ? `${platformLabel} account` : 'streaming account'
+  // Resolve the label defensively. Indexing a plain object with an
+  // attacker-supplied query value (e.g. ?platform=toString) can resolve to an
+  // inherited Object prototype member, so match against the runtime list
+  // instead — otherwise fall back to the neutral label.
+  const nameable = NAMEABLE_PLATFORMS.find((known) => known === platform)
+  const accountLabel = nameable
+    ? t('auth.viewerError.accountNamed', { platform: t(`common.platforms.${nameable}`) })
+    : t('auth.viewerError.accountNeutral')
 
   // Instrument the viewer/extension auth error rate + causes (previously untracked).
   // The raw `error` is bucketed to a non-PII enum before it leaves the browser.
@@ -66,25 +67,24 @@ function AuthErrorContent() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-bg">
       <div className="max-w-md text-center">
-        <div className="mb-6 text-6xl">&#10060;</div>
-        <h1 className="mb-4 text-3xl font-bold text-text">Authentication Failed</h1>
+        <div className="mb-6 text-6xl">{FAILURE_GLYPH}</div>
+        <h1 className="mb-4 text-3xl font-bold text-text">{t('auth.viewerError.title')}</h1>
         <p className="mb-6 text-lg text-youtube">{error}</p>
         <p className="mb-8 text-text-sub">
-          There was an error authenticating with your {accountLabel}. Please try again or contact
-          support if the problem persists.
+          {t('auth.viewerError.body', { account: accountLabel })}
         </p>
         <div className="space-y-4">
           <Link
             href="/"
             className="block rounded-lg bg-twitch px-6 py-3 font-semibold text-bg transition-colors hover:bg-twitch/80"
           >
-            Return to Home
+            {t('auth.viewerError.returnHome')}
           </Link>
           <button
             onClick={() => window.history.back()}
             className="block w-full rounded-lg border border-border bg-surface px-6 py-3 font-semibold text-text transition-colors hover:bg-surface-2"
           >
-            Go Back
+            {t('auth.viewerError.goBack')}
           </button>
         </div>
       </div>

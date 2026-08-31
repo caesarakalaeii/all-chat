@@ -86,6 +86,7 @@ import {
   type ModEntry,
   type ViewItem,
 } from '@/lib/utils/overlayViewModel'
+import { useTranslations, type TFunction } from '@/lib/i18n'
 import { OFFLINE_THRESHOLD } from '@/lib/utils/connectionStatusLabel'
 import { createSoundPlayer, type SoundPlayer, type SoundSettings } from '@/lib/utils/soundPlayer'
 
@@ -112,6 +113,24 @@ const THEME_KEY = 'overlay-view-theme'
 // many gift-sub events); one gentle ping per burst is what a moderator wants.
 const ACTIVITY_SOUND_COOLDOWN_MS = 1500
 
+/**
+ * The missing-scope notice for one source.
+ *
+ * Discord's remedy is a bot re-invite rather than a scope grant, and the channel
+ * name is optional, so the two variables give four whole sentences. The
+ * platform is the raw lowercase wire value, which is what renders today.
+ */
+function missingScopeNotice(t: TFunction, platform: string, channel?: string): string {
+  if (platform === 'discord') {
+    return channel
+      ? t('viewerOverlay.monitor.missingScopeDiscordChannel', { platform, channel })
+      : t('viewerOverlay.monitor.missingScopeDiscord', { platform })
+  }
+  return channel
+    ? t('viewerOverlay.monitor.missingScopeChannel', { platform, channel })
+    : t('viewerOverlay.monitor.missingScope', { platform })
+}
+
 /** Map the moderator's view prefs onto the shared sound-player settings. */
 function toActivitySoundSettings(prefs: MonitorViewPrefs): SoundSettings {
   return {
@@ -123,6 +142,7 @@ function toActivitySoundSettings(prefs: MonitorViewPrefs): SoundSettings {
 }
 
 export default function OverlayMonitorView({ params }: { params: Promise<{ id: string }> }) {
+  const t = useTranslations()
   const { id } = use(params)
 
   const [items, setItems] = useState<ViewItem[]>([])
@@ -338,12 +358,12 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         if (url) window.location.href = url
       } catch {
         toastManager.add({
-          title: 'Could not start moderation setup. Please try again.',
+          title: t('viewerOverlay.monitor.consentStartFailed'),
           type: 'error',
         })
       }
     },
-    [id]
+    [id, t]
   )
 
   // Opt-in for the Twitch moderation log (channel.moderate + AutoMod holds), which is a
@@ -356,11 +376,11 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
       window.location.href = await moderationApi.getTwitchModLogConsentUrl(id)
     } catch {
       toastManager.add({
-        title: 'Could not start Twitch consent. Please try again.',
+        title: t('viewerOverlay.monitor.twitchConsentStartFailed'),
         type: 'error',
       })
     }
-  }, [id])
+  }, [id, t])
 
   // A delegated moderator connecting their OWN account for a platform (ADR-0048).
   //
@@ -376,12 +396,12 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         if (url) window.location.href = url
       } catch {
         toastManager.add({
-          title: `Connecting ${platform} is not available yet. Ask the streamer to moderate there for now.`,
+          title: t('viewerOverlay.monitor.modConnectUnavailable', { platform }),
           type: 'error',
         })
       }
     },
-    []
+    [t]
   )
 
   // Discord's equivalent of connectAsModerator, and deliberately not the same call: the moderator
@@ -392,12 +412,11 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
       await startDiscordAccountLink('moderate')
     } catch {
       toastManager.add({
-        title:
-          'Linking Discord is not available right now. Ask the streamer to moderate there for now.',
+        title: t('viewerOverlay.monitor.discordLinkUnavailable'),
         type: 'error',
       })
     }
-  }, [])
+  }, [t])
 
   // Re-consent when a send fails with `reauth_required` (the streamer's platform
   // send token expired or was revoked). Chat sending requires the advanced-controls
@@ -422,10 +441,13 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         }
         if (url) window.location.href = url
       } catch {
-        toastManager.add({ title: 'Could not start re-login. Please try again.', type: 'error' })
+        toastManager.add({
+          title: t('viewerOverlay.monitor.reloginStartFailed'),
+          type: 'error',
+        })
       }
     },
-    [id]
+    [id, t]
   )
 
   // Restore the saved theme once on mount.
@@ -521,18 +543,18 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
     setRediscovering(true)
     try {
       await moderationApi.forceYouTubeRediscover(id)
-      toastManager.add({ title: 'Re-discovering YouTube stream…', type: 'success' })
+      toastManager.add({ title: t('viewerOverlay.monitor.rediscoverStarted'), type: 'success' })
     } catch (err) {
       const status = err instanceof ApiError ? err.status : 0
       if (status === 429)
-        toastManager.add({ title: 'Please wait a moment before retrying', type: 'error' })
+        toastManager.add({ title: t('viewerOverlay.monitor.rediscoverRateLimited'), type: 'error' })
       else if (status === 403)
-        toastManager.add({ title: 'Not authorized for this overlay', type: 'error' })
-      else toastManager.add({ title: 'Could not trigger re-discovery', type: 'error' })
+        toastManager.add({ title: t('viewerOverlay.monitor.rediscoverForbidden'), type: 'error' })
+      else toastManager.add({ title: t('viewerOverlay.monitor.rediscoverFailed'), type: 'error' })
     } finally {
       setRediscovering(false)
     }
-  }, [id])
+  }, [id, t])
 
   // --- Optimistic moderation actions ---------------------------------------
 
@@ -553,38 +575,38 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         case 'connect_required':
           // Consent is deferred to first use, so for a moderator this is the expected first click,
           // not a fault. The per-source banner already offers the button; this names the reason.
-          return isModerator ? `Connect your own ${platform} account to moderate here` : null
+          return isModerator ? t('viewerOverlay.monitor.connectRequired', { platform }) : null
         case 'owner_channel_unverified':
           // For a moderator, only the streamer can fix this, so the copy stops at the cause rather
           // than offering a button that would do nothing. An owner can hit it too (the anchor gates
           // their own path on YouTube), and there it is theirs to fix by reconnecting the account.
           return isModerator
-            ? `This streamer's ${platform} account isn't connected, so nothing can be moderated here`
-            : `Your ${platform} account isn't connected for this channel — reconnect it to moderate here`
+            ? t('viewerOverlay.monitor.ownerChannelUnverifiedModerator', { platform })
+            : t('viewerOverlay.monitor.ownerChannelUnverifiedOwner', { platform })
         case 'delegation_unsupported':
-          return `Moderators can't act on ${platform} yet — ask the streamer to handle this one`
+          return t('viewerOverlay.monitor.delegationUnsupported', { platform })
         case 'target_not_actionable':
           // Not about the caller at all — the platform protects this person from everyone, so there
           // is no CTA to offer either role.
-          return `${platform} won't let anyone moderate this person — they're the channel owner or another moderator`
+          return t('viewerOverlay.monitor.targetNotActionable', { platform })
         // Discord's five. The shared bot performs every write there, so All-Chat's own check is
         // the only authority and these codes carry the entire explanation — which makes naming
         // the right person to ask the whole job of this copy.
         case 'discord_link_required':
-          return 'Link your Discord account to moderate here'
+          return t('viewerOverlay.monitor.discordLinkRequired')
         case 'mod_not_in_guild':
-          return "You're not in this Discord server — ask the streamer to invite you"
+          return t('viewerOverlay.monitor.modNotInGuild')
         case 'mod_lacks_permission':
-          return "Your Discord roles don't allow this — ask the streamer for a role that does"
+          return t('viewerOverlay.monitor.modLacksPermission')
         case 'mod_below_target':
-          return "Discord's role hierarchy blocks this — your highest role has to sit above theirs"
+          return t('viewerOverlay.monitor.modBelowTarget')
         case 'bot_missing_permission':
-          return "The All-Chat bot wasn't given this Discord permission — ask the streamer to re-invite it"
+          return t('viewerOverlay.monitor.botMissingPermission')
         default:
           return null
       }
     },
-    [isModerator]
+    [isModerator, t]
   )
 
   // Apply an optimistic mark + log entry, fire the API, and roll back on error.
@@ -629,17 +651,17 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
           // recovery banner and a toast pointing at it (mirrors the chat-send reauth path).
           setReauthPrompt({ platform })
           toastManager.add({
-            title: `${platform} needs you to re-authorize moderation`,
+            title: t('viewerOverlay.monitor.reauthNeededToast', { platform }),
             type: 'error',
           })
         } else if (delegated !== null) {
           toastManager.add({ title: delegated, type: 'error' })
         } else {
-          toastManager.add({ title: 'Moderation action failed', type: 'error' })
+          toastManager.add({ title: t('viewerOverlay.monitor.actionFailed'), type: 'error' })
         }
       }
     },
-    [delegatedFailureMessage]
+    [delegatedFailureMessage, t]
   )
 
   const handleDelete = useCallback(
@@ -654,10 +676,10 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         item.platform,
         meta,
         () => moderationApi.deleteMessage(id, req),
-        'Message deleted'
+        t('viewerOverlay.monitor.messageDeleted')
       )
     },
-    [id, runModeration]
+    [id, runModeration, t]
   )
 
   const handleTimeout = useCallback(
@@ -673,10 +695,12 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         item.platform,
         meta,
         () => moderationApi.timeoutUser(id, req),
-        `Timed out ${req.target_username || 'user'}`
+        t('viewerOverlay.monitor.timedOut', {
+          name: req.target_username || t('viewerOverlay.monitor.unnamedTarget'),
+        })
       )
     },
-    [id, runModeration]
+    [id, runModeration, t]
   )
 
   const handleBan = useCallback(
@@ -692,35 +716,45 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         item.platform,
         meta,
         () => moderationApi.banUser(id, req),
-        `Banned ${req.target_username || 'user'}`
+        t('viewerOverlay.monitor.banned', {
+          name: req.target_username || t('viewerOverlay.monitor.unnamedTarget'),
+        })
       )
     },
-    [id, runModeration]
+    [id, runModeration, t]
   )
 
   // Unban has no message-level visual mark; just fire and toast.
   const handleUnban = useCallback(
     (item: ViewItem) => {
-      const name = item.user?.display_name || item.user?.username || 'user'
+      const name =
+        item.user?.display_name || item.user?.username || t('viewerOverlay.monitor.unnamedTarget')
       moderationApi
         .unbanUser(id, buildUnbanRequest(item))
-        .then(() => toastManager.add({ title: `Unbanned ${name}`, type: 'success' }))
+        .then(() =>
+          toastManager.add({
+            title: t('viewerOverlay.monitor.unbanned', { name }),
+            type: 'success',
+          })
+        )
         .catch((err) => {
           const delegated = delegatedFailureMessage(err, item.platform)
           if (isModerationReauthError(err)) {
             setReauthPrompt({ platform: item.platform })
             toastManager.add({
-              title: `${item.platform} needs you to re-authorize moderation`,
+              title: t('viewerOverlay.monitor.reauthNeededToast', {
+                platform: item.platform,
+              }),
               type: 'error',
             })
           } else if (delegated !== null) {
             toastManager.add({ title: delegated, type: 'error' })
           } else {
-            toastManager.add({ title: 'Unban failed', type: 'error' })
+            toastManager.add({ title: t('viewerOverlay.monitor.unbanFailed'), type: 'error' })
           }
         })
     },
-    [id, delegatedFailureMessage]
+    [id, delegatedFailureMessage, t]
   )
 
   // Only owners in the rollout cohort get live action callbacks; everyone else
@@ -773,13 +807,13 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
             )}
           >
             <SlidersHorizontal className="h-3.5 w-3.5" />
-            Details
+            {t('viewerOverlay.monitor.details')}
           </button>
           {isOwner && (
             <button
               onClick={() => setShowEngagement((v) => !v)}
               aria-pressed={showEngagement}
-              title="Run polls and predictions for this overlay"
+              title={t('viewerOverlay.monitor.engagementTitle')}
               className={clsx(
                 'flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none',
                 showEngagement
@@ -788,7 +822,7 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
               )}
             >
               <BarChart3 className="h-3.5 w-3.5" />
-              Engagement
+              {t('viewerOverlay.monitor.engagement')}
             </button>
           )}
           <LayoutPicker layout={layout} onChange={updateLayout} />
@@ -802,11 +836,11 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
             <button
               onClick={handleYouTubeRediscover}
               disabled={rediscovering}
-              title="Force YouTube to re-discover the live stream — use if chat stopped after a stream crash or restart"
+              title={t('viewerOverlay.monitor.rediscoverYouTubeTitle')}
               className="flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-sub transition-colors hover:border-border-md hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
             >
               <RotateCw className={clsx('h-3.5 w-3.5', rediscovering && 'animate-spin')} />
-              Re-discover YouTube
+              {t('viewerOverlay.monitor.rediscoverYouTube')}
             </button>
           )}
           <Link
@@ -816,7 +850,7 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
             className="flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-sub transition-colors hover:border-border-md hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
           >
             <ExternalLink className="h-3.5 w-3.5" />
-            OBS overlay
+            {t('viewerOverlay.monitor.obsOverlay')}
           </Link>
         </div>
       </header>
@@ -831,8 +865,7 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
       {connectionStatus === 'reconnecting' && reconnectAttempts >= OFFLINE_THRESHOLD && (
         <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-xs text-text-sub">
           <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
-          Still reconnecting — this recovers on its own, and messages sent meanwhile replay when the
-          connection returns. Closing this page is what loses them.
+          {t('viewerOverlay.monitor.stillReconnecting')}
         </div>
       )}
 
@@ -842,8 +875,7 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
       {replayTruncated && (
         <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-xs text-text-sub">
           <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
-          Some earlier messages may be missing — the disconnection outlasted the replay buffer, so
-          the oldest part of the gap could not be recovered.
+          {t('viewerOverlay.monitor.replayTruncated')}
         </div>
       )}
 
@@ -853,7 +885,7 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
       {capabilities && !hasRole && (
         <div className="flex items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-xs text-text-sub">
           <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
-          You can view this monitor, but you don&apos;t moderate here — moderation is disabled.
+          {t('viewerOverlay.monitor.noRole')}
         </div>
       )}
 
@@ -864,21 +896,18 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         (isOwner ? (
           <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-xs text-text-sub">
             <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
-            <span>Chat moderation is a premium feature.</span>
+            <span>{t('viewerOverlay.monitor.featureGatedOwner')}</span>
             <Link
               href="/upgrade"
               className="font-medium text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
             >
-              Upgrade to moderate from your overlay
+              {t('viewerOverlay.monitor.featureGatedUpgrade')}
             </Link>
           </div>
         ) : (
           <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-xs text-text-sub">
             <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
-            <span>
-              This streamer&apos;s plan doesn&apos;t include moderation right now, so your actions
-              are unavailable until they renew it.
-            </span>
+            <span>{t('viewerOverlay.monitor.featureGatedModerator')}</span>
           </div>
         ))}
 
@@ -894,8 +923,12 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
           >
             <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
             <span>
-              Connect your own {s.platform} account to moderate
-              {s.channel_name ? ` ${s.channel_name}` : ''}.
+              {s.channel_name
+                ? t('viewerOverlay.monitor.needsConsentChannel', {
+                    platform: s.platform,
+                    channel: s.channel_name,
+                  })
+                : t('viewerOverlay.monitor.needsConsent', { platform: s.platform })}
             </span>
             {s.platform === 'twitch' || s.platform === 'kick' || s.platform === 'youtube' ? (
               <button
@@ -908,7 +941,7 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
                 }
                 className="font-medium text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
               >
-                Connect {s.platform}
+                {t('viewerOverlay.monitor.connectPlatform', { platform: s.platform })}
               </button>
             ) : null}
           </div>
@@ -920,16 +953,13 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
       {moderationEnabled && isModerator && needsDiscordLinkSources.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-xs text-text-sub">
           <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
-          <span>
-            Link your Discord account to moderate Discord here — All-Chat checks your own server
-            permissions before acting.
-          </span>
+          <span>{t('viewerOverlay.monitor.needsDiscordLink')}</span>
           <button
             type="button"
             onClick={() => void linkDiscordAccount()}
             className="font-medium text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
           >
-            Link Discord
+            {t('viewerOverlay.monitor.linkDiscord')}
           </button>
         </div>
       )}
@@ -945,12 +975,7 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
             className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-xs text-text-sub"
           >
             <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
-            <span>
-              {s.platform === 'discord'
-                ? `Re-invite the bot with moderation permissions to enable mod actions for ${s.platform}`
-                : `Grant moderation permissions to enable mod actions for ${s.platform}`}
-              {s.channel_name ? ` (${s.channel_name})` : ''}.
-            </span>
+            <span>{missingScopeNotice(t, s.platform, s.channel_name)}</span>
             {s.platform === 'twitch' ||
             s.platform === 'kick' ||
             s.platform === 'youtube' ||
@@ -961,11 +986,13 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
                 className="font-medium text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
               >
                 {s.platform === 'discord'
-                  ? 'Re-invite the bot'
-                  : 'Enable moderation & chat sending'}
+                  ? t('viewerOverlay.monitor.reinviteBot')
+                  : t('viewerOverlay.monitor.enableModeration')}
               </button>
             ) : (
-              <span className="text-text-dim">(coming soon for {s.platform})</span>
+              <span className="text-text-dim">
+                {t('viewerOverlay.monitor.comingSoonFor', { platform: s.platform })}
+              </span>
             )}
           </div>
         ))}
@@ -977,17 +1004,13 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
       {isOwner && hasTwitchSource && (
         <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-xs text-text-sub">
           <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
-          <span>
-            Show Twitch moderation actions and AutoMod holds in this activity feed. Twitch requires
-            an AutoMod &ldquo;manage&rdquo; permission to send us held messages at all — All-Chat
-            only reads them; there are no approve/deny buttons yet.
-          </span>
+          <span>{t('viewerOverlay.monitor.modLogOptIn')}</span>
           <button
             type="button"
             onClick={() => void enableModLog()}
             className="font-medium text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
           >
-            Show moderation &amp; AutoMod events
+            {t('viewerOverlay.monitor.enableModLog')}
           </button>
         </div>
       )}
@@ -1001,8 +1024,9 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-xs text-text-sub">
           <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
           <span>
-            Your {reauthPrompt.platform} moderation permission expired or was never granted —
-            re-authorize to keep moderating {isOwner ? 'from your overlay' : 'here'}.
+            {isOwner
+              ? t('viewerOverlay.monitor.reauthOwner', { platform: reauthPrompt.platform })
+              : t('viewerOverlay.monitor.reauthModerator', { platform: reauthPrompt.platform })}
           </span>
           <button
             type="button"
@@ -1021,10 +1045,12 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
             className="font-medium text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
           >
             {reauthPrompt.platform === 'discord'
-              ? 'Re-invite the bot'
+              ? t('viewerOverlay.monitor.reinviteBot')
               : isModerator
-                ? `Reconnect ${reauthPrompt.platform}`
-                : 'Re-authorize moderation & chat sending'}
+                ? t('viewerOverlay.monitor.reconnectPlatform', {
+                    platform: reauthPrompt.platform,
+                  })
+                : t('viewerOverlay.monitor.reauthorizeModeration')}
           </button>
         </div>
       )}
