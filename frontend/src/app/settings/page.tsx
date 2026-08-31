@@ -470,7 +470,7 @@ function SettingsContent() {
 
         {/* Danger zone */}
         <Card className="border-destructive/20 p-6">
-          <h2 className="text-destructive mb-2 text-lg font-semibold">
+          <h2 className="mb-2 text-lg font-semibold text-destructive">
             {t('settings.index.dangerHeading')}
           </h2>
           <p className="mb-4 text-sm text-text-sub">{t('settings.index.dangerBody')}</p>

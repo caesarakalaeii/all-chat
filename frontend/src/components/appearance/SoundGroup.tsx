@@ -96,7 +96,7 @@ export function SoundGroup({
             <button
               type="button"
               onClick={onPreview}
-              className="hover:bg-surface-alt rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text"
+              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text hover:bg-surface-2"
             >
               {t('overlayEditor.sounds.test')}
             </button>

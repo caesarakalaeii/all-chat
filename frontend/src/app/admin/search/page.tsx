@@ -171,7 +171,7 @@ export default function AdminSearchPage() {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         aria-label={t('admin.search.inputLabel')}
-        className="focus-visible:ring-ring mb-6 w-full rounded-lg border border-border bg-surface-2 px-4 py-3 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none"
+        className="mb-6 w-full rounded-lg border border-border bg-surface-2 px-4 py-3 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
       />
 
       {!debounced ? (
@@ -212,7 +212,7 @@ export default function AdminSearchPage() {
                       </span>
                     )}
                     {u.is_banned && (
-                      <span className="bg-destructive/10 text-destructive rounded px-2 py-0.5 text-xs font-medium">
+                      <span className="rounded bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">
                         {t('admin.search.badgeBanned')}
                       </span>
                     )}

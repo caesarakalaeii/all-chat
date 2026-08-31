@@ -171,7 +171,7 @@ export function BubbleColorsGroup({
               type="button"
               disabled={locked}
               onClick={() => writePalette([...palette, NEW_SWATCH])}
-              className="hover:bg-surface-alt flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text transition-colors disabled:cursor-not-allowed"
+              className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text transition-colors hover:bg-surface-2 disabled:cursor-not-allowed"
             >
               <Plus className="h-3.5 w-3.5" />
               {t('overlayEditor.bubbleColors.addSwatch')}

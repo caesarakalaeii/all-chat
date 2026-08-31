@@ -113,7 +113,7 @@ export function ThemeContent({ onApply, isAdmin = false }: ThemeContentProps): R
                   clearCache()
                   refreshThemes()
                 }}
-                className="hover:bg-subtle flex items-center gap-1 rounded px-2 py-1 text-xs text-text-dim transition-colors hover:text-text"
+                className="flex items-center gap-1 rounded px-2 py-1 text-xs text-text-dim transition-colors hover:bg-surface-2 hover:text-text"
                 title={t('overlayEditor.themeMarketplace.syncTitleInline')}
               >
                 <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

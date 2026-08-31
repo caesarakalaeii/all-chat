@@ -296,7 +296,7 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
           </Card>
         ) : !settings ? (
           <Card className="p-6 text-center">
-            <p className="text-destructive mb-4">{t('overlayEditor.eventSettings.loadFailed')}</p>
+            <p className="mb-4 text-destructive">{t('overlayEditor.eventSettings.loadFailed')}</p>
             <Button variant="outline" onClick={() => router.push(`/overlays/${id}`)}>
               {t('overlayEditor.eventSettings.back')}
             </Button>

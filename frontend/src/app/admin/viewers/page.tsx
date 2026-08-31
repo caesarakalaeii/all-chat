@@ -424,7 +424,7 @@ export default function AdminViewersPage() {
               placeholder={t('admin.viewers.searchPlaceholder')}
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              className="focus-visible:ring-ring block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none sm:text-sm"
+              className="block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:text-sm"
             />
           </div>
           <div>
@@ -438,7 +438,7 @@ export default function AdminViewersPage() {
                 setPlatformFilter(e.target.value)
                 setOffset(0)
               }}
-              className="focus-visible:ring-ring block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text focus-visible:ring-2 focus-visible:outline-none sm:text-sm"
+              className="block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:text-sm"
             >
               <option value="all">{t('admin.viewers.platformAll')}</option>
               <option value="twitch">{t('common.platforms.twitch')}</option>
@@ -459,7 +459,7 @@ export default function AdminViewersPage() {
                   setStatusFilter(e.target.value as typeof statusFilter)
                   setOffset(0)
                 }}
-                className="focus-visible:ring-ring block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text focus-visible:ring-2 focus-visible:outline-none sm:text-sm"
+                className="block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:text-sm"
               >
                 <option value="all">{t('admin.viewers.statusAny')}</option>
                 <option value="active">{t('admin.viewers.statusActive')}</option>
@@ -477,7 +477,7 @@ export default function AdminViewersPage() {
                   setPremiumFilter(e.target.value as typeof premiumFilter)
                   setOffset(0)
                 }}
-                className="focus-visible:ring-ring block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text focus-visible:ring-2 focus-visible:outline-none sm:text-sm"
+                className="block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:text-sm"
               >
                 <option value="all">{t('admin.viewers.premiumAny')}</option>
                 <option value="premium">{t('admin.viewers.premiumOnly')}</option>
@@ -545,7 +545,7 @@ export default function AdminViewersPage() {
                       <td className="px-4 py-3">
                         {viewer.is_banned ? (
                           <div>
-                            <span className="bg-destructive/10 text-destructive inline-flex items-center rounded px-2 py-0.5 text-xs font-medium">
+                            <span className="inline-flex items-center rounded bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">
                               {t('admin.viewers.badgeBanned')}
                             </span>
                             {viewer.banned_reason && (
@@ -575,7 +575,7 @@ export default function AdminViewersPage() {
                 <div className="flex items-start justify-between gap-3">
                   {renderIdentity(viewer)}
                   {viewer.is_banned ? (
-                    <span className="bg-destructive/10 text-destructive inline-flex shrink-0 items-center rounded px-2 py-0.5 text-xs font-medium">
+                    <span className="inline-flex shrink-0 items-center rounded bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">
                       {t('admin.viewers.badgeBanned')}
                     </span>
                   ) : (
@@ -690,7 +690,7 @@ export default function AdminViewersPage() {
                           <div className="min-w-0">
                             <Link
                               href={`/admin/users?user=${s.streamer_user_id}`}
-                              className="text-primary text-sm font-medium hover:underline"
+                              className="text-sm font-medium text-primary hover:underline"
                             >
                               {s.streamer_username
                                 ? `@${s.streamer_username}`
@@ -848,7 +848,7 @@ export default function AdminViewersPage() {
               value={banReason}
               onChange={(e) => setBanReason(e.target.value)}
               placeholder={t('admin.viewers.banReasonPlaceholder')}
-              className="focus-visible:ring-ring w-full resize-none rounded-lg border border-border bg-surface-2 px-3 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none"
+              className="w-full resize-none rounded-lg border border-border bg-surface-2 px-3 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
               rows={3}
             />
           </div>

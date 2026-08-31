@@ -278,7 +278,7 @@ export default function SourcesPage() {
               placeholder={t('admin.sources.searchPlaceholder')}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="focus-visible:ring-ring block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:outline-none sm:text-sm"
+              className="block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text placeholder:text-text-dim focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:text-sm"
             />
           </div>
           <div>
@@ -292,7 +292,7 @@ export default function SourcesPage() {
               id={platformFilterId}
               value={platformFilter}
               onChange={(e) => setPlatformFilter(e.target.value)}
-              className="focus-visible:ring-ring block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text focus-visible:ring-2 focus-visible:outline-none sm:text-sm"
+              className="block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:text-sm"
             >
               <option value="all">{t('admin.sources.platformAll')}</option>
               <option value="twitch">{t('common.platforms.twitch')}</option>
@@ -312,7 +312,7 @@ export default function SourcesPage() {
               id={statusFilterId}
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="focus-visible:ring-ring block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text focus-visible:ring-2 focus-visible:outline-none sm:text-sm"
+              className="block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:text-sm"
             >
               <option value="all">{t('admin.sources.statusAll')}</option>
               <option value="active">{t('admin.sources.statusActive')}</option>

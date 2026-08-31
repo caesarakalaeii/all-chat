@@ -313,7 +313,7 @@ function DashboardContent() {
                         size="icon"
                         onClick={(e: React.MouseEvent) => e.stopPropagation()}
                         aria-label={t('dashboard.overlays.deleteLabel', { name: overlay.name })}
-                        className="hover:text-destructive shrink-0 text-text-dim"
+                        className="shrink-0 text-text-dim hover:text-destructive"
                       >
                         <Trash2 className="size-4" />
                       </Button>
@@ -341,7 +341,7 @@ function DashboardContent() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="hover:text-destructive -mr-2 gap-1.5 text-xs text-text-sub"
+                        className="-mr-2 gap-1.5 text-xs text-text-sub hover:text-destructive"
                         onClick={(e: React.MouseEvent) => {
                           e.stopPropagation()
                           handleUnsetPublic(overlay.id)

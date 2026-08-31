@@ -52,7 +52,7 @@ function SettingsPagePreview() {
         </Card>
 
         <Card className="border-destructive/20 p-6">
-          <h2 className="text-destructive mb-2 text-lg font-semibold">Danger Zone</h2>
+          <h2 className="mb-2 text-lg font-semibold text-destructive">Danger Zone</h2>
           <p className="mb-4 text-sm text-text-sub">
             Deleting your account is permanent and cannot be undone.
           </p>
