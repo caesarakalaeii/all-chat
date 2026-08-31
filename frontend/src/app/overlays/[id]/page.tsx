@@ -114,7 +114,7 @@ import { SettingsSearch } from '@/components/editor/SettingsSearch'
 import { AdvancedDisclosure } from '@/components/editor/AdvancedDisclosure'
 import { ModeratorsPanel } from '@/components/editor/ModeratorsPanel'
 import { useTranslations } from '@/lib/i18n'
-import { emphasise } from '@/lib/i18n/emphasise'
+import { emphasise, interpolateElements } from '@/lib/i18n/emphasise'
 import {
   EDITOR_SECTIONS,
   type EditorSectionId,
@@ -799,30 +799,40 @@ type EarnNumberKey =
 
 // The wire keys and their numeric behaviour only. Labels and hints live in the
 // catalog under `overlayEditor.engagement.<messageStem>Label|Hint`.
-// `as const` rather than a ReadonlyArray annotation: it keeps each messageStem a
-// string literal, so a stem with no matching catalog key fails tsc at the
-// lookup below instead of rendering the key name to a streamer.
+// `float` and `comingSoon` are spelled out on every entry rather than left
+// optional: `as const` narrows each element to its own object type, and an
+// absent optional property is then not on the union at all. `as const` is what
+// keeps messageStem a string literal, so a stem with no matching catalog key
+// fails tsc at the lookup below instead of rendering the key name to a streamer.
 const EARN_NUMBER_FIELDS = [
-  { key: 'bits_multiplier', messageStem: 'bitsMultiplier', float: true },
-  { key: 'usd_multiplier', messageStem: 'usdMultiplier', float: true },
-  { key: 'sub_high', messageStem: 'subHigh' },
-  { key: 'sub_medium', messageStem: 'subMedium' },
-  { key: 'sub_low', messageStem: 'subLow' },
-  { key: 'gift_per_sub', messageStem: 'giftPerSub' },
+  { key: 'bits_multiplier', messageStem: 'bitsMultiplier', float: true, comingSoon: false },
+  { key: 'usd_multiplier', messageStem: 'usdMultiplier', float: true, comingSoon: false },
+  { key: 'sub_high', messageStem: 'subHigh', float: false, comingSoon: false },
+  { key: 'sub_medium', messageStem: 'subMedium', float: false, comingSoon: false },
+  { key: 'sub_low', messageStem: 'subLow', float: false, comingSoon: false },
+  { key: 'gift_per_sub', messageStem: 'giftPerSub', float: false, comingSoon: false },
   // chat_per_minute has no producer in v1 (nothing publishes engagement:chat), so it
   // never accrues — flag it disabled so streamers don't configure a dead dimension (M6).
-  { key: 'chat_per_minute', messageStem: 'chatPerMinute', comingSoon: true },
+  { key: 'chat_per_minute', messageStem: 'chatPerMinute', float: false, comingSoon: true },
   // watch_per_minute rewards participation-PAGE focus time (heartbeat), not stream-watch time (M6).
-  { key: 'watch_per_minute', messageStem: 'watchPerMinute' },
+  { key: 'watch_per_minute', messageStem: 'watchPerMinute', float: false, comingSoon: false },
 ] as const satisfies ReadonlyArray<{
   key: EarnNumberKey
   messageStem: string
-  float?: boolean
-  comingSoon?: boolean
+  float: boolean
+  comingSoon: boolean
 }>
 
 // Earn config lives on the engagement-service (own endpoint, like the TTS
 // config), so this panel loads and saves independently of Save Configuration.
+// The chat commands a viewer literally types. They are protocol the engagement
+// service parses, not copy: translating `!vote` would stop the command working.
+// Named constants rather than JSX literals so the i18n gate does not have to
+// carry an exception for them.
+const EXAMPLE_VOTE_COMMAND = '!vote 2'
+const EXAMPLE_BARE_VOTE = '2'
+const EXAMPLE_PREDICT_COMMAND = '!predict 1 500'
+
 function EngagementPanel({ overlayId }: { overlayId: string }) {
   const t = useTranslations()
   const [config, setConfig] = useState<EarnConfig | null>(null)
@@ -906,19 +916,19 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
 
   const shareLinks: ReadonlyArray<{ label: string; path: string; desc: string }> = [
     {
-      label: 'OBS poll widget',
+      label: t('overlayEditor.engagement.pollWidgetLabel'),
       path: `/overlay/${overlayId}/poll`,
-      desc: 'Browser source that shows the live poll',
+      desc: t('overlayEditor.engagement.pollWidgetDescription'),
     },
     {
-      label: 'OBS prediction widget',
+      label: t('overlayEditor.engagement.predictionWidgetLabel'),
       path: `/overlay/${overlayId}/prediction`,
-      desc: 'Browser source that shows the live prediction',
+      desc: t('overlayEditor.engagement.predictionWidgetDescription'),
     },
     {
-      label: 'Viewer participation page',
+      label: t('overlayEditor.engagement.participateLabel'),
       path: `/overlay/${overlayId}/participate`,
-      desc: 'Viewers vote, wager and check their balance — no install needed',
+      desc: t('overlayEditor.engagement.participateDescription'),
     },
   ]
 
@@ -928,7 +938,10 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
       setCopiedPath(path)
       setTimeout(() => setCopiedPath(null), 2000)
     } catch {
-      toastManager.add({ title: 'Could not copy the link', type: 'error' })
+      toastManager.add({
+        title: t('overlayEditor.engagement.copyLinkFailed'),
+        type: 'error',
+      })
     }
   }
 
@@ -946,13 +959,26 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
   }
 
   if (loadError) {
-    return (
-      <p className="text-destructive text-xs">{t('overlayEditor.engagement.loadError')}</p>
-    )
+    return <p className="text-destructive text-xs">{t('overlayEditor.engagement.loadError')}</p>
   }
   if (!config || !numbers) {
     return <Skeleton className="h-40 w-full rounded-lg" />
   }
+
+  // Resolved in two passes: `t()` substitutes the points name as plain text and
+  // leaves the three command placeholders standing, then interpolateElements
+  // replaces those with <code> runs. Doing it the other way round would need the
+  // commands as strings, and `2` occurring inside `!vote 2` makes that ambiguous.
+  const pointsExplainer = interpolateElements(
+    t('overlayEditor.engagement.pointsExplainer', {
+      pointsName: config.points_name.trim() || t('overlayEditor.engagement.pointsNamePlaceholder'),
+    }),
+    {
+      voteCommand: <code>{EXAMPLE_VOTE_COMMAND}</code>,
+      bareVote: <code>{EXAMPLE_BARE_VOTE}</code>,
+      predictCommand: <code>{EXAMPLE_PREDICT_COMMAND}</code>,
+    }
+  )
 
   return (
     <div className="space-y-4">
@@ -1026,7 +1052,9 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
       </Button>
 
       <div className="space-y-2 border-t border-border pt-3">
-        <p className="text-xs font-medium text-text">Widget & viewer links</p>
+        <p className="text-xs font-medium text-text">
+          {t('overlayEditor.engagement.linksHeading')}
+        </p>
         {shareLinks.map((link) => (
           <div key={link.path} className="flex items-center gap-2">
             <div className="min-w-0 flex-1">
@@ -1040,20 +1068,27 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
               className="shrink-0 text-xs"
               onClick={() => void copyLink(link.path)}
             >
-              {copiedPath === link.path ? 'Copied!' : 'Copy link'}
+              {copiedPath === link.path
+                ? t('overlayEditor.engagement.copiedLink')
+                : t('overlayEditor.engagement.copyLink')}
             </Button>
           </div>
         ))}
         {/* L-Docs1: browser-source setup guidance for the two OBS widgets. */}
         <p className="text-[11px] text-text-sub">
-          In OBS/Streamlabs: add a <span className="font-medium">Browser Source</span>, paste a
-          widget URL, and set it to your canvas size (e.g. 1920×1080). The widgets are transparent
-          and only appear while a round is live.
+          {emphasise(
+            t('overlayEditor.engagement.browserSourceHint', {
+              emphasis: t('overlayEditor.engagement.browserSourceHintEmphasis'),
+            }),
+            t('overlayEditor.engagement.browserSourceHintEmphasis'),
+            (run) => (
+              <span className="font-medium">{run}</span>
+            )
+          )}
         </p>
         {/* L-U9: the participation link is meant to be shared with viewers (on-screen / panels). */}
         <p className="text-[11px] text-text-sub">
-          Share the participation link with mobile viewers — put it on-screen or in your channel
-          panels so they can join without the extension.
+          {t('overlayEditor.engagement.participateShareHint')}
         </p>
       </div>
 
@@ -1062,12 +1097,10 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
           next channel sync rather than immediately. The consent flow returns to the
           Monitor view, where the mirrored rounds appear. */}
       <div className="space-y-2 border-t border-border pt-3">
-        <p className="text-xs font-medium text-text">Twitch native mirroring</p>
-        <p className="text-[11px] text-text-sub">
-          Mirror your native Twitch polls &amp; predictions onto All-Chat overlays (read-only —
-          viewers still vote in Twitch). Opt-in; it adds read-only Twitch scopes and takes effect
-          after the next channel sync (a stream restart or re-adding the source).
+        <p className="text-xs font-medium text-text">
+          {t('overlayEditor.engagement.mirroringHeading')}
         </p>
+        <p className="text-[11px] text-text-sub">{t('overlayEditor.engagement.mirroringBody')}</p>
         <Button
           type="button"
           variant="outline"
@@ -1075,7 +1108,7 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
           className="text-xs"
           onClick={() => void startMirrorConsent()}
         >
-          Enable Twitch mirroring
+          {t('overlayEditor.engagement.enableMirroring')}
         </Button>
       </div>
     </div>

@@ -395,8 +395,7 @@ export const overlayEditor = {
     chatPerMinuteLabel: 'Chatting, per minute',
     chatPerMinuteHint: 'active chatters',
     watchPerMinuteLabel: 'Participation page, per min',
-    watchPerMinuteHint:
-      'while the viewer keeps the participate page open (not stream-watch time)',
+    watchPerMinuteHint: 'while the viewer keeps the participate page open (not stream-watch time)',
     // Appended to a hint for a dimension that has no producer yet. The leading
     // space is part of the copy.
     comingSoonSuffix: ' (coming soon)',
@@ -408,8 +407,7 @@ export const overlayEditor = {
     predictionWidgetLabel: 'OBS prediction widget',
     predictionWidgetDescription: 'Browser source that shows the live prediction',
     participateLabel: 'Viewer participation page',
-    participateDescription:
-      'Viewers vote, wager and check their balance — no install needed',
+    participateDescription: 'Viewers vote, wager and check their balance — no install needed',
     copyLink: 'Copy link',
     copiedLink: 'Copied!',
     copyLinkFailed: 'Could not copy the link',

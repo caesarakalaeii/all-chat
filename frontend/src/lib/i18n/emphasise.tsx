@@ -16,7 +16,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import type React from 'react'
+import React from 'react'
 
 /**
  * Render a catalog sentence with one run of it wrapped in an element.
@@ -54,4 +54,49 @@ export function emphasise(
       {sentence.slice(at + emphasis.length)}
     </>
   )
+}
+
+/** Matches a `{name}` placeholder, capturing the name. Mirrors translate.ts. */
+const PLACEHOLDER = /\{(\w+)\}/g
+
+/**
+ * Render a catalog sentence with each named placeholder replaced by an element.
+ *
+ * `emphasise` covers the common case of one emphasised run. Some copy has
+ * several — the engagement panel's points explainer interleaves four <code>
+ * chat commands — and `emphasise` cannot be applied repeatedly for it, because
+ * one placeholder's value can occur inside another's (`2` inside `!vote 2`), so
+ * resolving the sentence first and searching for the values afterwards wraps
+ * the wrong run.
+ *
+ * The split is therefore done on the UNRESOLVED template, where the
+ * placeholder names are unambiguous. Pass the template straight from the
+ * catalog, without calling `t()` with these parameters:
+ *
+ *   interpolateElements(t('ns.explainer'), { cmd: <code>!vote 2</code> })
+ *
+ * A placeholder with no entry in `elements` is left in the output verbatim,
+ * braces included, for the same reason `t()` never throws: the reader keeps the
+ * rest of the sentence, and the stray braces name the missing key.
+ *
+ * @param template The catalog sentence, placeholders unresolved.
+ * @param elements The element to render for each placeholder name.
+ */
+export function interpolateElements(
+  template: string,
+  elements: Readonly<Record<string, React.ReactNode>>
+): React.ReactNode {
+  const parts: React.ReactNode[] = []
+  let cursor = 0
+  for (const match of template.matchAll(PLACEHOLDER)) {
+    const name = match[1]
+    if (!(name in elements)) continue
+    parts.push(template.slice(cursor, match.index))
+    // Keyed by name: the names are unique within a template, and React needs a
+    // stable key for each element in the array.
+    parts.push(<React.Fragment key={name}>{elements[name]}</React.Fragment>)
+    cursor = match.index + match[0].length
+  }
+  parts.push(template.slice(cursor))
+  return <>{parts}</>
 }
