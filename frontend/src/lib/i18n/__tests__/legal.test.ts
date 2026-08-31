@@ -169,3 +169,189 @@ describe('impressum fallback copy', () => {
     )
   })
 })
+
+describe('terms of service headings', () => {
+  it('keeps the page title, the effective date and the metadata', () => {
+    expect(t('legal.terms.title')).toBe('Terms of Service (Nutzungsbedingungen)')
+    expect(t('legal.terms.lastUpdated')).toBe('July 30, 2026')
+    expect(t('metadata.terms.title')).toBe('Terms of Service | All-Chat')
+    expect(t('metadata.terms.description')).toBe(
+      'Understand the rules and responsibilities for using All-Chat.'
+    )
+  })
+
+  it('keeps all sixteen section headings, ampersands included', () => {
+    expect(t('legal.terms.acceptanceHeading')).toBe('1. Acceptance of Terms')
+    expect(t('legal.terms.descriptionHeading')).toBe('2. Description of Service')
+    expect(t('legal.terms.accountsHeading')).toBe('3. Accounts & Authentication')
+    expect(t('legal.terms.acceptableUseHeading')).toBe('4. Acceptable Use')
+    expect(t('legal.terms.thirdPartyHeading')).toBe('5. Third-Party Integrations')
+    expect(t('legal.terms.privacyHeading')).toBe('6. Privacy')
+    expect(t('legal.terms.licenseHeading')).toBe('7. Open Source License')
+    expect(t('legal.terms.availabilityHeading')).toBe('8. Availability & Support')
+    expect(t('legal.terms.liabilityHeading')).toBe('9. Limitation of Liability')
+    expect(t('legal.terms.indemnityHeading')).toBe('10. Indemnification')
+    expect(t('legal.terms.premiumHeading')).toBe(
+      '11. Premium Subscriptions & Right of Withdrawal (Widerrufsrecht)'
+    )
+    expect(t('legal.terms.changesHeading')).toBe('12. Changes to Terms')
+    expect(t('legal.terms.terminationHeading')).toBe('13. Termination')
+    expect(t('legal.terms.governingLawHeading')).toBe('14. Governing Law & Jurisdiction')
+    expect(t('legal.terms.legalNoticeHeading')).toBe('15. Legal Notice')
+    expect(t('legal.terms.contactHeading')).toBe('16. Contact')
+  })
+})
+
+describe('terms of service body copy', () => {
+  it('keeps each sentence containing a link whole, with the link text as a param', () => {
+    // These sentences wrap a <Link> or an <a> around a run in the middle. The
+    // catalog keeps the whole sentence with a placeholder and a sibling key for
+    // the link text, so a translator can move the link within the sentence.
+    expect(t('legal.terms.acceptanceBody', { privacy: 'Privacy Policy' })).toBe(
+      'By accessing or using All-Chat you agree to these Terms of Service and our Privacy Policy. If you disagree with any part, you should discontinue use immediately.'
+    )
+    expect(t('legal.terms.privacyLinkText')).toBe('Privacy Policy')
+    expect(t('legal.terms.legalNoticeBody', { impressum: 'Impressum' })).toBe(
+      "The operator's identity and contact details are available in the Impressum."
+    )
+    expect(t('legal.terms.impressumLinkText')).toBe('Impressum')
+    expect(t('legal.terms.contactBody', { email: 'all.chat.support@gmail.com' })).toBe(
+      'Questions? Reach us at all.chat.support@gmail.com. Hosted community forks should contact their own administrators.'
+    )
+    expect(t('legal.terms.supportEmail')).toBe('all.chat.support@gmail.com')
+  })
+
+  it('keeps section 2 and the acceptable-use list', () => {
+    expect(t('legal.terms.descriptionBody')).toBe(
+      'All-Chat aggregates real-time chat from Twitch, YouTube, Kick, TikTok, and Discord into a single overlay so you can display cross-platform conversation on your stream. You can customize overlays, connect sources, and broadcast them via OBS or browser sources.'
+    )
+    expect(t('legal.terms.acceptableUseIntro')).toBe(
+      'You agree not to misuse the Service, including but not limited to:'
+    )
+    expect(t('legal.terms.acceptableUseLaws')).toBe(
+      'Breaking local, national, or international laws'
+    )
+    expect(t('legal.terms.acceptableUseIp')).toBe(
+      'Infringing intellectual property or privacy rights of others'
+    )
+    expect(t('legal.terms.acceptableUseMalware')).toBe('Uploading malware, spam, or malicious code')
+    expect(t('legal.terms.acceptableUseBypass')).toBe(
+      'Attempting to bypass authentication, rate limits, or security controls'
+    )
+    expect(t('legal.terms.acceptableUseHarassment')).toBe('Harassing or abusing other users')
+    expect(t('legal.terms.acceptableUsePartner')).toBe(
+      'Using All-Chat in a way that violates partner platform policies'
+    )
+  })
+
+  it('keeps the account responsibilities list, including the emailed row', () => {
+    expect(t('legal.terms.accountsIntro')).toBe(
+      'You are responsible for all activity that happens under your account. You agree to:'
+    )
+    expect(t('legal.terms.accountsAccurate')).toBe('Provide accurate registration details')
+    expect(t('legal.terms.accountsSecurity')).toBe(
+      'Maintain the security of your credentials and OAuth grants'
+    )
+    expect(t('legal.terms.accountsNotify', { email: 'all.chat.support@gmail.com' })).toBe(
+      'Notify us at all.chat.support@gmail.com if you suspect compromise'
+    )
+    expect(t('legal.terms.accountsComply')).toBe(
+      'Comply with the terms of Twitch, YouTube, TikTok, Kick, Discord, and any other connected platform'
+    )
+  })
+
+  it('keeps the third-party section and the YouTube binding notice', () => {
+    expect(t('legal.terms.thirdPartyIntro')).toBe(
+      'All-Chat relies on third-party APIs. Their availability, scopes, and rate limits may change.'
+    )
+    expect(t('legal.terms.thirdPartyComply')).toBe(
+      "You must comply with each platform's terms of service"
+    )
+    expect(t('legal.terms.thirdPartyOutages')).toBe(
+      'We are not accountable for outages or policy shifts by those platforms'
+    )
+    expect(t('legal.terms.thirdPartyQuotas')).toBe(
+      'Platform-specific quotas can impact overlay functionality'
+    )
+    expect(t('legal.terms.youtubeBinding', { youtubeTerms: 'YouTube Terms of Service' })).toBe(
+      'YouTube Integration: By using All-Chat to connect to YouTube, you agree to be bound by the YouTube Terms of Service.'
+    )
+    expect(t('legal.terms.youtubeTermsLinkText')).toBe('YouTube Terms of Service')
+  })
+
+  it('keeps the privacy section with its link, its emphasis and its nbsp', () => {
+    // Three runs in one sentence: a <Link>, a <strong> and a section reference
+    // whose space is a U+00A0 no-break space from an &nbsp; entity.
+    expect(
+      t('legal.terms.privacyBody', {
+        privacy: 'Privacy Policy',
+        analytics: 'self-hosted, cookieless analytics',
+      })
+    ).toBe(
+      'Your use of All-Chat is also governed by our Privacy Policy, which explains what we collect, how it is used, and your rights under the DSGVO. For transparency: All-Chat measures aggregate usage with self-hosted, cookieless analytics (Umami) that set nothing on your device and store no personal identifier \u2013 see Section\u00A05.6 of the Privacy Policy.'
+    )
+    expect(t('legal.terms.privacyAnalyticsEmphasis')).toBe('self-hosted, cookieless analytics')
+  })
+
+  it('keeps both license paragraphs', () => {
+    expect(
+      t('legal.terms.licenseBody', { license: 'GNU Affero General Public License v3.0' })
+    ).toBe(
+      'All-Chat is released under the GNU Affero General Public License v3.0. That means you may use, study, modify, and distribute the software as long as your derivative works also inherit the AGPL-3.0 terms. If you run a modified version of All-Chat as a hosted service, you must provide the source to your users.'
+    )
+    expect(t('legal.terms.licenseLinkText')).toBe(
+      'GNU Affero General Public License v3.0 (AGPL-3.0)'
+    )
+    expect(t('legal.terms.licenseRepository', { github: 'GitHub' })).toBe(
+      'The canonical repository is available on GitHub.'
+    )
+    expect(t('legal.terms.githubLinkText')).toBe('GitHub')
+  })
+
+  it('keeps the availability section and its host emphasis', () => {
+    expect(t('legal.terms.availabilityIntro')).toBe('We aim for high uptime but do not guarantee:')
+    expect(t('legal.terms.availabilityUptime')).toBe('Uninterrupted access or zero bugs')
+    expect(t('legal.terms.availabilityCompat')).toBe(
+      'Compatibility with every browser or streamer setup'
+    )
+    expect(t('legal.terms.availabilityFixes')).toBe('Immediate fixes or feature requests')
+    expect(t('legal.terms.availabilitySupport', { host: 'allch.at' })).toBe(
+      'Support for the hosted service at allch.at is best-effort. Community/self-hosted deployments must rely on their own maintainers or the open source community for assistance.'
+    )
+    expect(t('legal.terms.hostedDomain')).toBe('allch.at')
+  })
+
+  it('keeps all three liability paragraphs, including the German umlaut', () => {
+    expect(t('legal.terms.liabilityGross')).toBe(
+      'We are liable without limitation for damages caused intentionally or by gross negligence, for injury to life, body, or health, and under the German Product Liability Act (Produkthaftungsgesetz).'
+    )
+    expect(t('legal.terms.liabilitySlight')).toBe(
+      'In cases of slight negligence, we are liable only for the breach of essential contractual obligations (Kardinalpflichten): obligations whose fulfilment makes the proper performance of the contract possible in the first place and on whose fulfilment you may regularly rely. In such cases, our liability is limited to the damage that is foreseeable and typical for this type of service. Any further liability is excluded.'
+    )
+    // &uuml; in the source: the u-umlaut must survive transcription.
+    expect(t('legal.terms.liabilityAgents')).toBe(
+      'These limitations also apply in favour of our legal representatives and vicarious agents (Erf\u00FCllungsgehilfen).'
+    )
+  })
+
+  it('keeps the indemnity, premium, changes, termination and jurisdiction paragraphs', () => {
+    expect(t('legal.terms.indemnityBody')).toBe(
+      'You agree to indemnify All-Chat against third-party claims, including the reasonable costs of legal defence, arising from your culpable violation of these Terms, applicable law, or the rights of others. This does not apply to the extent you are not responsible for the violation.'
+    )
+    expect(t('legal.terms.premiumBody', { patreon: 'Patreon' })).toBe(
+      "The core All-Chat service is free of charge. Premium features are unlocked through a paid membership on Patreon: you subscribe to our campaign on patreon.com and then connect your Patreon account to All-Chat. The subscription contract, billing, cancellation, and any statutory right of withdrawal for the paid membership are handled by Patreon under Patreon's own terms. All-Chat itself does not charge you and does not process payments."
+    )
+    expect(t('legal.terms.premiumCancellation')).toBe(
+      'You may stop using All-Chat and delete your account at any time via the Settings page. Upon deletion, your personal data is removed as described in our Privacy Policy. Note that deleting your All-Chat account does not cancel a Patreon membership; cancel it directly on Patreon.'
+    )
+    expect(t('legal.terms.changesBody')).toBe(
+      'We may update these Terms over time. Material changes will be announced in the dashboard, and the new version will be posted here with an updated effective date.'
+    )
+    expect(t('legal.terms.terminationBody')).toBe(
+      'We reserve the right to suspend or terminate your access for any breach of these Terms or abusive behavior. You may stop using the Service at any time by deleting your account in the Settings page.'
+    )
+    expect(t('legal.terms.governingLawBody')).toBe(
+      'These Terms are governed by the laws of the Federal Republic of Germany, excluding the UN Convention on Contracts for the International Sale of Goods (CISG). If you are a consumer, the mandatory consumer protection provisions of the country in which you habitually reside remain unaffected. If you are a merchant (Kaufmann), a legal entity under public law, or a special fund under public law, the exclusive place of jurisdiction is the domicile of the operator.'
+    )
+  })
+})
