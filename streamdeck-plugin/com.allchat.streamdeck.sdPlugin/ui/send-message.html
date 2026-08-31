@@ -4,6 +4,13 @@
 		<meta charset="utf-8" />
 		<title>All-Chat — Send Chat Message</title>
 		<script src="https://sdpi-components.dev/releases/v4/sdpi-components.js"></script>
+		<!--
+			sdpi-components styles only its own custom elements, and declares its palette
+			inside their shadow roots, so every native element on this page (h4, p, span,
+			code, summary, a) rendered as black text on the dark property-inspector panel.
+			allchat-pi.css owns the page palette; see the comment at the top of it.
+		-->
+		<link rel="stylesheet" href="allchat-pi.css" />
 	</head>
 	<body>
 		<sdpi-item label="Message">
@@ -43,12 +50,15 @@
 		-->
 		<sdpi-item label="Linking">
 			<button id="allchat-link">Link with All-Chat</button>
-		</sdpi-item>
+			<!--
+				The status sits inside this row, under the button it belongs to, rather
+				than in a separate `label="Status"` row that read as an independent
+				setting instead of as feedback from the button.
 
-		<sdpi-item label="Status">
-			<!-- aria-live so a screen reader announces the pairing code and the
-			     outcome without the user having to hunt for it. -->
-			<span id="allchat-link-status" role="status" aria-live="polite"
+				aria-live so a screen reader announces the pairing code and the outcome
+				without the user having to hunt for it.
+			-->
+			<span id="allchat-link-status" role="status" aria-live="polite" data-state="idle"
 				>Not linked yet.</span
 			>
 		</sdpi-item>
@@ -96,36 +106,6 @@
 			<p>Sending chat messages is free on every All-Chat account.</p>
 		</details>
 
-		<script>
-			/*
-				The Link button's only job is to ask the plugin to run the flow and to
-				render what comes back. It never sees a credential: the plugin writes
-				the device token straight into this key's settings, so there is nothing
-				here to display, copy or leak.
-			*/
-			const linkButton = document.getElementById("allchat-link");
-			const linkStatus = document.getElementById("allchat-link-status");
-
-			linkButton.addEventListener("click", () => {
-				linkStatus.textContent = "Starting…";
-				SDPIComponents.streamDeckClient.send("sendToPlugin", { event: "link" });
-			});
-
-			SDPIComponents.streamDeckClient.didReceivePropertyInspectorMessage.subscribe(
-				(message) => {
-					const payload = message?.payload;
-					if (!payload || payload.event !== "link-status") {
-						return;
-					}
-					if (payload.status === "code" && payload.userCode) {
-						linkStatus.textContent =
-							`Enter this code at allch.at/link: ${payload.userCode}. ` +
-							(payload.detail ?? "");
-						return;
-					}
-					linkStatus.textContent = payload.detail ?? payload.status ?? "";
-				},
-			);
-		</script>
+		<script src="allchat-link.js"></script>
 	</body>
 </html>

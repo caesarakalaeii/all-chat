@@ -217,10 +217,18 @@ const resolveDeviceTokenSQL = `
 // polling the active poll every second does not write on every request. The throttle
 // costs nothing in expiry terms: skipping a renewal for up to a minute out of a 90-day
 // window is not observable.
+//
+// The lifetime is MULTIPLIED into an interval, not concatenated into one. `||` has only
+// a text overload, so `($2 || ' seconds')::INTERVAL` types $2 as text and pgx v5 then
+// refuses to encode the int64 lifetime into it. Because this statement is best-effort
+// and its error is only logged at Debug, that failure was SILENT: last_used_at was never
+// recorded and the expiry never slid, so a device token quietly expired 90 days after it
+// was minted no matter how much the deck was used — the opposite of what the comment
+// above promises. Do not reintroduce the concatenation.
 const touchDeviceTokenSQL = `
 	UPDATE device_tokens
 	   SET last_used_at = NOW(),
-	       expires_at   = NOW() + ($2 || ' seconds')::INTERVAL
+	       expires_at   = NOW() + $2 * INTERVAL '1 second'
 	 WHERE id = $1
 	   AND (last_used_at IS NULL OR last_used_at < NOW() - INTERVAL '1 minute')`
 
