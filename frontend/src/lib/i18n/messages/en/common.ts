@@ -85,4 +85,17 @@ export const common = {
     statusFormer: 'Ended',
     statusNotSubscribed: 'Not subscribed',
   },
+  // Compact elapsed durations, read by formatCompactDuration in lib/utils.ts.
+  // They sit here rather than in a surface namespace because that helper is
+  // generic infrastructure: a lib module reaching into admin.* would invert the
+  // dependency. The unit letters are copy — a language that does not abbreviate
+  // days as 'd' has nowhere else to say so.
+  duration: {
+    justNow: 'just now',
+    minutes: '{minutes}m',
+    hours: '{hours}h',
+    hoursAndMinutes: '{hours}h {minutes}m',
+    days: '{days}d',
+    daysAndHours: '{days}d {hours}h',
+  },
 } as const

@@ -19,6 +19,8 @@
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 
+import type { TFunction } from '@/lib/i18n'
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
@@ -28,18 +30,30 @@ export function cn(...inputs: ClassValue[]) {
  * string suitable for dense admin tables: "3d 4h", "5h 12m", "8m", "just now".
  * Shows the two most significant non-zero units and never renders seconds
  * beyond the sub-minute "just now" case. Negative inputs are treated as zero.
+ *
+ * Takes the translator as its first argument because a plain module cannot call
+ * a hook. Each of the six shapes is a whole catalog string rather than a number
+ * with a unit letter appended, so a language can put the unit where it belongs.
  */
-export function formatCompactDuration(ms: number): string {
-  if (!Number.isFinite(ms) || ms < 60_000) return 'just now'
+export function formatCompactDuration(t: TFunction, ms: number): string {
+  if (!Number.isFinite(ms) || ms < 60_000) return t('common.duration.justNow')
 
   const totalMinutes = Math.floor(ms / 60_000)
   const days = Math.floor(totalMinutes / 1440)
   const hours = Math.floor((totalMinutes % 1440) / 60)
   const minutes = totalMinutes % 60
 
-  if (days > 0) return hours > 0 ? `${days}d ${hours}h` : `${days}d`
-  if (hours > 0) return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`
-  return `${minutes}m`
+  if (days > 0) {
+    return hours > 0
+      ? t('common.duration.daysAndHours', { days, hours })
+      : t('common.duration.days', { days })
+  }
+  if (hours > 0) {
+    return minutes > 0
+      ? t('common.duration.hoursAndMinutes', { hours, minutes })
+      : t('common.duration.hours', { hours })
+  }
+  return t('common.duration.minutes', { minutes })
 }
 
 /**
@@ -48,11 +62,12 @@ export function formatCompactDuration(ms: number): string {
  * input so callers can omit the label entirely.
  */
 export function formatConnectedFor(
+  t: TFunction,
   startedAt: string | null | undefined,
   now: number = Date.now()
 ): string | null {
   if (!startedAt) return null
   const started = Date.parse(startedAt)
   if (Number.isNaN(started)) return null
-  return formatCompactDuration(now - started)
+  return formatCompactDuration(t, now - started)
 }

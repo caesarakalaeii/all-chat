@@ -184,4 +184,53 @@ export const admin = {
     flairAdded: 'Flair added',
     addError: 'Add failed',
   },
+  overlays: {
+    heading: 'Overlays',
+    intro: 'Manage overlays and their connected chat sources',
+    loadError: 'Failed to load overlays',
+    // The typographic quotes were entities around the phrase and travel with
+    // the copy: a language that quotes with guillemets replaces the pair.
+    statusUnavailable:
+      'Live connection status is currently unavailable, so overlays may show as “not connected” even if they are live.',
+    // Two whole headings rather than an ' of N' tail the render site appends: a
+    // language wording "8 of 30" differently cannot reorder a fragment it does
+    // not own.
+    listHeadingAll: 'All Overlays ({count})',
+    listHeadingFiltered: 'All Overlays ({shown} of {total})',
+    searchPlaceholder: 'Search by overlay name, ID, or owner...',
+    connectedFilter: 'Connected ({count})',
+    emptyNone: 'No overlays found.',
+    emptyFiltered: 'No overlays match your search or filter.',
+    rowSourceCount: '{count} sources',
+    rowIdPrefix: 'ID: {id}',
+    rowCreated: 'Created {date}',
+    openInNewTabLabel: 'Open overlay {name} in a new tab',
+    // The connection dot's tooltip and the elapsed label each either name a
+    // time or do not, so each is two whole strings.
+    dotConnectedSince: 'Connected since {timestamp}',
+    dotConnected: 'Connected',
+    connectedFor: 'Connected {duration}',
+    connected: 'Connected',
+    detailHeading: 'Overlay Details',
+    detailName: 'Name',
+    detailId: 'ID',
+    detailOwner: 'Owner',
+    // Four whole owner link texts. The link read a handle-or-fallback plus an
+    // optional ' (Display Name)' tail; a fragment beginning with a space is not
+    // translatable, and the parenthesis convention is language-specific.
+    ownerHandle: '@{username}',
+    ownerHandleNamed: '@{username} ({displayName})',
+    ownerFallback: 'View user',
+    ownerFallbackNamed: 'View user ({displayName})',
+    ownerUnknown: 'Unknown',
+    detailConnection: 'Connection',
+    notConnected: 'Not connected',
+    connectedSinceRow: 'Since {timestamp}',
+    selectPrompt: 'Select an overlay to view details',
+    sourcesHeading: 'Connected Sources ({count})',
+    sourceActive: 'Active',
+    sourceInactive: 'Inactive',
+    sourceAdded: 'Added {date}',
+    sourcesEmpty: 'No sources connected',
+  },
 } as const

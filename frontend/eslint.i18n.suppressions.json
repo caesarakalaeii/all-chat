@@ -1,12 +1,4 @@
 {
-  "src/app/admin/overlays/page.tsx": {
-    "no-restricted-syntax": {
-      "count": 1
-    },
-    "react/jsx-no-literals": {
-      "count": 22
-    }
-  },
   "src/app/admin/sources/page.tsx": {
     "no-restricted-syntax": {
       "count": 1
