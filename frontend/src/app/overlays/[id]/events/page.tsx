@@ -30,6 +30,8 @@ import { toastManager } from '@/lib/toast'
 import { ChevronLeft } from 'lucide-react'
 import { PLATFORM_COLORS } from '@/lib/platform-colors'
 import { cn } from '@/lib/utils'
+import { useTranslations } from '@/lib/i18n'
+import { interpolateElements } from '@/lib/i18n/emphasise'
 
 interface EventSettings {
   id: string
@@ -67,13 +69,7 @@ interface EventSettings {
 
 type Tab = 'global' | 'twitch' | 'youtube' | 'kick' | 'tiktok'
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'global', label: 'Global' },
-  { id: 'twitch', label: 'Twitch' },
-  { id: 'youtube', label: 'YouTube' },
-  { id: 'kick', label: 'Kick' },
-  { id: 'tiktok', label: 'TikTok' },
-]
+const TAB_IDS: readonly Tab[] = ['global', 'twitch', 'youtube', 'kick', 'tiktok']
 
 const TAB_COLOR: Record<Tab, string> = {
   global: 'text-text',
@@ -82,6 +78,64 @@ const TAB_COLOR: Record<Tab, string> = {
   kick: PLATFORM_COLORS.kick.text,
   tiktok: PLATFORM_COLORS.tiktok.text,
 }
+
+/**
+ * The event toggles per platform tab, in render order.
+ *
+ * `messageStem` is a catalog key stem, not copy: the label is
+ * overlayEditor.eventSettings.<stem>Label and the description is
+ * <stem>Description. `as const satisfies` rather than a type annotation keeps
+ * the stems literal, so a typo fails tsc at the t() call instead of resolving
+ * to its own key name at runtime.
+ */
+const EVENT_TOGGLES = {
+  twitch: [
+    { key: 'enable_twitch_subs', messageStem: 'twitchSubs' },
+    { key: 'enable_twitch_resubs', messageStem: 'twitchResubs' },
+    { key: 'enable_twitch_gift_subs', messageStem: 'twitchGiftSubs' },
+    { key: 'enable_twitch_bits', messageStem: 'twitchBits' },
+    { key: 'enable_twitch_raids', messageStem: 'twitchRaids' },
+    { key: 'enable_twitch_channel_points', messageStem: 'twitchChannelPoints' },
+    { key: 'enable_twitch_follows', messageStem: 'twitchFollows' },
+    { key: 'enable_twitch_watch_streaks', messageStem: 'twitchWatchStreaks' },
+  ],
+  youtube: [
+    { key: 'enable_youtube_super_chat', messageStem: 'youtubeSuperChat' },
+    { key: 'enable_youtube_super_sticker', messageStem: 'youtubeSuperSticker' },
+    { key: 'enable_youtube_members', messageStem: 'youtubeMembers' },
+    { key: 'enable_youtube_member_milestones', messageStem: 'youtubeMemberMilestones' },
+    { key: 'enable_youtube_member_gifts', messageStem: 'youtubeMemberGifts' },
+  ],
+  kick: [
+    { key: 'enable_kick_subs', messageStem: 'kickSubs' },
+    { key: 'enable_kick_gifts', messageStem: 'kickGifts' },
+  ],
+  tiktok: [
+    { key: 'enable_tiktok_likes', messageStem: 'tiktokLikes' },
+    { key: 'enable_tiktok_gifts', messageStem: 'tiktokGifts' },
+    { key: 'enable_tiktok_follows', messageStem: 'tiktokFollows' },
+    { key: 'enable_tiktok_shares', messageStem: 'tiktokShares' },
+    // Honest description rather than a promise. TikTok has not been observed
+    // delivering the ENVELOPE frame a coin chest rides on: no chest reached us
+    // across ~75 minutes of monitoring eight live rooms, one of them with 61
+    // gifts, and no undecodable message resembling an envelope appeared either.
+    // The cause is upstream and still unknown, so the toggle stays (it works the
+    // moment a frame does arrive) but must not claim a feature we have never once
+    // delivered. Drop the caveat from tiktokTreasureChestsDescription once a
+    // chest is confirmed end to end.
+    { key: 'enable_tiktok_treasure_chests', messageStem: 'tiktokTreasureChests' },
+  ],
+} as const satisfies Record<
+  Exclude<Tab, 'global'>,
+  ReadonlyArray<{ key: keyof EventSettings; messageStem: string }>
+>
+
+/**
+ * The two CSS class names the tier explainer names. Protocol, not copy: they
+ * are selectors a streamer writes in their own stylesheet.
+ */
+const TIER_CLASS = '.event-tier-high'
+const EVENT_TYPE_CLASS = '.event-type-raid'
 
 // ---------------------------------------------------------------------------
 // EventToggle
@@ -165,6 +219,7 @@ function NumberInput({
 // ---------------------------------------------------------------------------
 export default function EventSettingsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
+  const t = useTranslations()
   const { user } = useAuthStore()
   const router = useRouter()
   const [settings, setSettings] = useState<EventSettings | null>(null)
@@ -181,9 +236,11 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
     fetch(`/api/v1/overlays/${id}/event-settings`)
       .then((res) => (res.ok ? res.json() : Promise.reject('Failed to load')))
       .then(setSettings)
-      .catch(() => toastManager.add({ title: 'Failed to load event settings', type: 'error' }))
+      .catch(() =>
+        toastManager.add({ title: t('overlayEditor.eventSettings.loadFailed'), type: 'error' })
+      )
       .finally(() => setLoading(false))
-  }, [id, user, router])
+  }, [id, user, router, t])
 
   const update = (key: keyof EventSettings, value: boolean | number) => {
     if (!settings) return
@@ -220,11 +277,13 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
             className="mb-3 flex items-center gap-1 rounded text-sm text-text-sub hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
           >
             <ChevronLeft className="size-4" />
-            Back to Overlay
+            {t('overlayEditor.eventSettings.back')}
           </button>
-          <h1 className="text-2xl font-bold text-text">Event Display Settings</h1>
+          <h1 className="text-2xl font-bold text-text">
+            {t('overlayEditor.eventSettings.heading')}
+          </h1>
           <p className="mt-1 text-sm text-text-sub">
-            Control which platform events appear on your overlay.
+            {t('overlayEditor.eventSettings.subheading')}
           </p>
         </div>
 
@@ -237,27 +296,29 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
           </Card>
         ) : !settings ? (
           <Card className="p-6 text-center">
-            <p className="text-destructive mb-4">Failed to load event settings</p>
+            <p className="text-destructive mb-4">{t('overlayEditor.eventSettings.loadFailed')}</p>
             <Button variant="outline" onClick={() => router.push(`/overlays/${id}`)}>
-              Back to Overlay
+              {t('overlayEditor.eventSettings.back')}
             </Button>
           </Card>
         ) : (
           <Card className="overflow-hidden">
             {/* Platform tabs */}
             <div className="flex overflow-x-auto border-b border-border">
-              {TABS.map((tab) => (
+              {TAB_IDS.map((tab) => (
                 <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
                   className={cn(
                     'shrink-0 border-b-2 px-4 py-3 text-sm font-medium transition-colors focus-visible:outline-none',
-                    activeTab === tab.id
-                      ? cn(TAB_COLOR[tab.id], 'border-current')
+                    activeTab === tab
+                      ? cn(TAB_COLOR[tab], 'border-current')
                       : 'border-transparent text-text-sub hover:text-text'
                   )}
                 >
-                  {tab.label}
+                  {tab === 'global'
+                    ? t('overlayEditor.eventSettings.tabGlobal')
+                    : t(`common.platforms.${tab}`)}
                 </button>
               ))}
             </div>
@@ -267,20 +328,20 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
               {activeTab === 'global' && (
                 <div>
                   <p className="mb-3 text-xs font-semibold tracking-wide text-text-sub uppercase">
-                    System Events
+                    {t('overlayEditor.eventSettings.systemEventsHeading')}
                   </p>
                   <EventToggle
-                    label="Token Warnings"
-                    description="Display OAuth authentication errors on overlay (requires token-refresh-service)"
+                    label={t('overlayEditor.eventSettings.tokenWarningsLabel')}
+                    description={t('overlayEditor.eventSettings.tokenWarningsDescription')}
                     value={settings.enable_token_warnings}
                     onChange={(v) => update('enable_token_warnings', v)}
                   />
                   <p className="mt-6 mb-3 text-xs font-semibold tracking-wide text-text-sub uppercase">
-                    Display Settings
+                    {t('overlayEditor.eventSettings.displaySettingsHeading')}
                   </p>
                   <NumberInput
-                    label="Event Duration Multiplier"
-                    description="Multiply all event display durations (0.5 = half time, 2.0 = double time)"
+                    label={t('overlayEditor.eventSettings.durationMultiplierLabel')}
+                    description={t('overlayEditor.eventSettings.durationMultiplierDescription')}
                     value={settings.event_display_duration_multiplier}
                     min={0.1}
                     max={5}
@@ -288,23 +349,43 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
                     onChange={(v) => update('event_display_duration_multiplier', v)}
                   />
                   <div className="mt-6 space-y-1.5 rounded-lg border border-border bg-surface-2 p-4 text-xs text-text-sub">
-                    <p className="mb-2 font-semibold text-text">About event tiers</p>
-                    <p>
-                      • <strong className="text-text">High-value</strong> — subs, large donations,
-                      raids: 30+ seconds
+                    <p className="mb-2 font-semibold text-text">
+                      {t('overlayEditor.eventSettings.tiersHeading')}
                     </p>
                     <p>
-                      • <strong className="text-text">Medium-value</strong> — follows, small gifts:
-                      15 seconds
+                      {interpolateElements(t('overlayEditor.eventSettings.tierHigh'), {
+                        tier: (
+                          <strong className="text-text">
+                            {t('overlayEditor.eventSettings.tierHighName')}
+                          </strong>
+                        ),
+                      })}
                     </p>
                     <p>
-                      • <strong className="text-text">Low-value</strong> — likes, shares: 5–10
-                      seconds
+                      {interpolateElements(t('overlayEditor.eventSettings.tierMedium'), {
+                        tier: (
+                          <strong className="text-text">
+                            {t('overlayEditor.eventSettings.tierMediumName')}
+                          </strong>
+                        ),
+                      })}
                     </p>
                     <p>
-                      • Style with CSS classes:{' '}
-                      <code className="rounded bg-surface px-1">.event-tier-high</code>,{' '}
-                      <code className="rounded bg-surface px-1">.event-type-raid</code>
+                      {interpolateElements(t('overlayEditor.eventSettings.tierLow'), {
+                        tier: (
+                          <strong className="text-text">
+                            {t('overlayEditor.eventSettings.tierLowName')}
+                          </strong>
+                        ),
+                      })}
+                    </p>
+                    <p>
+                      {interpolateElements(t('overlayEditor.eventSettings.tierStyling'), {
+                        tierClass: <code className="rounded bg-surface px-1">{TIER_CLASS}</code>,
+                        typeClass: (
+                          <code className="rounded bg-surface px-1">{EVENT_TYPE_CLASS}</code>
+                        ),
+                      })}
                     </p>
                   </div>
                 </div>
@@ -313,54 +394,13 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
               {/* Twitch tab */}
               {activeTab === 'twitch' && (
                 <div>
-                  {[
-                    {
-                      key: 'enable_twitch_subs',
-                      label: 'Subscriptions',
-                      desc: 'New subscriptions and resubscriptions',
-                    },
-                    {
-                      key: 'enable_twitch_resubs',
-                      label: 'Resubscriptions',
-                      desc: 'Monthly resubscription notices with streak information',
-                    },
-                    {
-                      key: 'enable_twitch_gift_subs',
-                      label: 'Gift Subscriptions',
-                      desc: 'Gift subs and mystery gift bombs',
-                    },
-                    {
-                      key: 'enable_twitch_bits',
-                      label: 'Bits / Cheers',
-                      desc: 'Bits cheered in chat',
-                    },
-                    {
-                      key: 'enable_twitch_raids',
-                      label: 'Raids',
-                      desc: 'Incoming raids from other channels',
-                    },
-                    {
-                      key: 'enable_twitch_channel_points',
-                      label: 'Channel Points',
-                      desc: 'Channel point reward redemptions (requires EventSub service)',
-                    },
-                    {
-                      key: 'enable_twitch_follows',
-                      label: 'Follows',
-                      desc: 'New channel followers (requires EventSub service)',
-                    },
-                    {
-                      key: 'enable_twitch_watch_streaks',
-                      label: 'Watch Streaks',
-                      desc: "Returning viewers' watch-streak milestones. Turning this off hides the milestone only — their chat message still shows",
-                    },
-                  ].map(({ key, label, desc }) => (
+                  {EVENT_TOGGLES.twitch.map(({ key, messageStem }) => (
                     <EventToggle
                       key={key}
-                      label={label}
-                      description={desc}
-                      value={settings[key as keyof EventSettings] as boolean}
-                      onChange={(v) => update(key as keyof EventSettings, v)}
+                      label={t(`overlayEditor.eventSettings.${messageStem}Label`)}
+                      description={t(`overlayEditor.eventSettings.${messageStem}Description`)}
+                      value={settings[key] as boolean}
+                      onChange={(v) => update(key, v)}
                     />
                   ))}
                 </div>
@@ -369,39 +409,13 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
               {/* YouTube tab */}
               {activeTab === 'youtube' && (
                 <div>
-                  {[
-                    {
-                      key: 'enable_youtube_super_chat',
-                      label: 'Super Chat',
-                      desc: 'Paid Super Chat messages',
-                    },
-                    {
-                      key: 'enable_youtube_super_sticker',
-                      label: 'Super Stickers',
-                      desc: 'Paid Super Sticker purchases',
-                    },
-                    {
-                      key: 'enable_youtube_members',
-                      label: 'New Members',
-                      desc: 'New channel memberships',
-                    },
-                    {
-                      key: 'enable_youtube_member_milestones',
-                      label: 'Member Milestones',
-                      desc: 'Membership anniversary celebrations',
-                    },
-                    {
-                      key: 'enable_youtube_member_gifts',
-                      label: 'Membership Gifts',
-                      desc: 'Gifted memberships',
-                    },
-                  ].map(({ key, label, desc }) => (
+                  {EVENT_TOGGLES.youtube.map(({ key, messageStem }) => (
                     <EventToggle
                       key={key}
-                      label={label}
-                      description={desc}
-                      value={settings[key as keyof EventSettings] as boolean}
-                      onChange={(v) => update(key as keyof EventSettings, v)}
+                      label={t(`overlayEditor.eventSettings.${messageStem}Label`)}
+                      description={t(`overlayEditor.eventSettings.${messageStem}Description`)}
+                      value={settings[key] as boolean}
+                      onChange={(v) => update(key, v)}
                     />
                   ))}
                 </div>
@@ -410,28 +424,17 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
               {/* Kick tab */}
               {activeTab === 'kick' && (
                 <div>
-                  {[
-                    {
-                      key: 'enable_kick_subs',
-                      label: 'Subscriptions',
-                      desc: 'Kick channel subscriptions',
-                    },
-                    {
-                      key: 'enable_kick_gifts',
-                      label: 'Gifts & Donations',
-                      desc: 'Gift subscriptions and donations',
-                    },
-                  ].map(({ key, label, desc }) => (
+                  {EVENT_TOGGLES.kick.map(({ key, messageStem }) => (
                     <EventToggle
                       key={key}
-                      label={label}
-                      description={desc}
-                      value={settings[key as keyof EventSettings] as boolean}
-                      onChange={(v) => update(key as keyof EventSettings, v)}
+                      label={t(`overlayEditor.eventSettings.${messageStem}Label`)}
+                      description={t(`overlayEditor.eventSettings.${messageStem}Description`)}
+                      value={settings[key] as boolean}
+                      onChange={(v) => update(key, v)}
                     />
                   ))}
                   <p className="mt-4 border-t border-border pt-4 text-xs text-text-sub">
-                    ⚠️ Kick events require reverse-engineering and may not be available yet.
+                    {t('overlayEditor.eventSettings.kickCaveat')}
                   </p>
                 </div>
               )}
@@ -439,54 +442,21 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
               {/* TikTok tab */}
               {activeTab === 'tiktok' && (
                 <div>
-                  {[
-                    {
-                      key: 'enable_tiktok_likes',
-                      label: 'Likes',
-                      desc: 'Likes sent during stream (aggregated)',
-                    },
-                    {
-                      key: 'enable_tiktok_gifts',
-                      label: 'Gifts',
-                      desc: 'Virtual gifts sent with diamond values',
-                    },
-                    {
-                      key: 'enable_tiktok_follows',
-                      label: 'Follows',
-                      desc: 'New followers during stream',
-                    },
-                    {
-                      key: 'enable_tiktok_shares',
-                      label: 'Shares',
-                      desc: 'Stream shares to other platforms',
-                    },
-                    {
-                      // Honest description rather than a promise. TikTok has not been observed
-                      // delivering the ENVELOPE frame a coin chest rides on: no chest reached us
-                      // across ~75 minutes of monitoring eight live rooms, one of them with 61
-                      // gifts, and no undecodable message resembling an envelope appeared either.
-                      // The cause is upstream and still unknown, so the toggle stays (it works the
-                      // moment a frame does arrive) but must not claim a feature we have never once
-                      // delivered. Drop the caveat once a chest is confirmed end to end.
-                      key: 'enable_tiktok_treasure_chests',
-                      label: 'Coin Chests',
-                      desc: 'Treasure boxes of coins dropped by viewers. Best effort: TikTok does not reliably send these to third-party tools, so they may not appear.',
-                    },
-                  ].map(({ key, label, desc }) => (
+                  {EVENT_TOGGLES.tiktok.map(({ key, messageStem }) => (
                     <EventToggle
                       key={key}
-                      label={label}
-                      description={desc}
-                      value={settings[key as keyof EventSettings] as boolean}
-                      onChange={(v) => update(key as keyof EventSettings, v)}
+                      label={t(`overlayEditor.eventSettings.${messageStem}Label`)}
+                      description={t(`overlayEditor.eventSettings.${messageStem}Description`)}
+                      value={settings[key] as boolean}
+                      onChange={(v) => update(key, v)}
                     />
                   ))}
                   <p className="mt-6 mb-3 text-xs font-semibold tracking-wide text-text-sub uppercase">
-                    Advanced
+                    {t('overlayEditor.eventSettings.advancedHeading')}
                   </p>
                   <NumberInput
-                    label="Like Aggregation Window (seconds)"
-                    description="Likes are collected in this window to prevent spam"
+                    label={t('overlayEditor.eventSettings.likeWindowLabel')}
+                    description={t('overlayEditor.eventSettings.likeWindowDescription')}
                     value={settings.tiktok_like_aggregation_window_seconds}
                     min={10}
                     max={60}
@@ -498,10 +468,12 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
               {/* Actions */}
               <div className="mt-6 flex gap-3 border-t border-border pt-6">
                 <Button onClick={handleSave} disabled={saving}>
-                  {saving ? 'Saving…' : 'Save Settings'}
+                  {saving
+                    ? t('overlayEditor.eventSettings.saving')
+                    : t('overlayEditor.eventSettings.save')}
                 </Button>
                 <Button variant="outline" onClick={() => router.push(`/overlays/${id}`)}>
-                  Cancel
+                  {t('overlayEditor.eventSettings.cancel')}
                 </Button>
               </div>
             </div>

@@ -214,14 +214,6 @@
       "count": 20
     }
   },
-  "src/app/overlays/[id]/events/page.tsx": {
-    "no-restricted-syntax": {
-      "count": 3
-    },
-    "react/jsx-no-literals": {
-      "count": 20
-    }
-  },
   "src/app/overlays/[id]/preview/embed/page.tsx": {
     "react/jsx-no-literals": {
       "count": 3

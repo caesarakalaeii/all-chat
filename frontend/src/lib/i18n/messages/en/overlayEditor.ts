@@ -697,4 +697,90 @@ export const overlayEditor = {
     footerHeading: 'Thank you! ❤️',
     footerBody: 'See you next stream!',
   },
+  // The /overlays/[id]/events page: which platform events reach the overlay.
+  // Distinct from `events` above, which is the appearance group that sizes them.
+  //
+  // Each toggle's label and description are keyed by the EventSettings field it
+  // writes, with the enable_ prefix dropped and the rest camel-cased, so the
+  // render site's tables carry a key stem instead of copy.
+  eventSettings: {
+    back: 'Back to Overlay',
+    heading: 'Event Display Settings',
+    subheading: 'Control which platform events appear on your overlay.',
+    loadFailed: 'Failed to load event settings',
+    save: 'Save Settings',
+    saving: 'Saving…',
+    cancel: 'Cancel',
+    // The four platform tabs read common.platforms.*; only this one is local.
+    tabGlobal: 'Global',
+    systemEventsHeading: 'System Events',
+    tokenWarningsLabel: 'Token Warnings',
+    tokenWarningsDescription:
+      'Display OAuth authentication errors on overlay (requires token-refresh-service)',
+    displaySettingsHeading: 'Display Settings',
+    durationMultiplierLabel: 'Event Duration Multiplier',
+    durationMultiplierDescription:
+      'Multiply all event display durations (0.5 = half time, 2.0 = double time)',
+    tiersHeading: 'About event tiers',
+    // {tier} is emphasised at the render site. Each bullet stays one sentence:
+    // the em dash is mid-clause, not a join between two independent fragments.
+    tierHigh: '• {tier} — subs, large donations, raids: 30+ seconds',
+    tierHighName: 'High-value',
+    tierMedium: '• {tier} — follows, small gifts: 15 seconds',
+    tierMediumName: 'Medium-value',
+    tierLow: '• {tier} — likes, shares: 5–10 seconds',
+    tierLowName: 'Low-value',
+    // The two class names are protocol, so they arrive as placeholders.
+    tierStyling: '• Style with CSS classes: {tierClass}, {typeClass}',
+    twitchSubsLabel: 'Subscriptions',
+    twitchSubsDescription: 'New subscriptions and resubscriptions',
+    twitchResubsLabel: 'Resubscriptions',
+    twitchResubsDescription: 'Monthly resubscription notices with streak information',
+    twitchGiftSubsLabel: 'Gift Subscriptions',
+    twitchGiftSubsDescription: 'Gift subs and mystery gift bombs',
+    twitchBitsLabel: 'Bits / Cheers',
+    twitchBitsDescription: 'Bits cheered in chat',
+    twitchRaidsLabel: 'Raids',
+    twitchRaidsDescription: 'Incoming raids from other channels',
+    twitchChannelPointsLabel: 'Channel Points',
+    twitchChannelPointsDescription:
+      'Channel point reward redemptions (requires EventSub service)',
+    twitchFollowsLabel: 'Follows',
+    twitchFollowsDescription: 'New channel followers (requires EventSub service)',
+    twitchWatchStreaksLabel: 'Watch Streaks',
+    twitchWatchStreaksDescription:
+      "Returning viewers' watch-streak milestones. Turning this off hides the milestone only — their chat message still shows",
+    youtubeSuperChatLabel: 'Super Chat',
+    youtubeSuperChatDescription: 'Paid Super Chat messages',
+    youtubeSuperStickerLabel: 'Super Stickers',
+    youtubeSuperStickerDescription: 'Paid Super Sticker purchases',
+    youtubeMembersLabel: 'New Members',
+    youtubeMembersDescription: 'New channel memberships',
+    youtubeMemberMilestonesLabel: 'Member Milestones',
+    youtubeMemberMilestonesDescription: 'Membership anniversary celebrations',
+    youtubeMemberGiftsLabel: 'Membership Gifts',
+    youtubeMemberGiftsDescription: 'Gifted memberships',
+    kickSubsLabel: 'Subscriptions',
+    kickSubsDescription: 'Kick channel subscriptions',
+    // The render site spelled the ampersand &amp;; a catalog string is not HTML.
+    kickGiftsLabel: 'Gifts & Donations',
+    kickGiftsDescription: 'Gift subscriptions and donations',
+    kickCaveat: '⚠️ Kick events require reverse-engineering and may not be available yet.',
+    tiktokLikesLabel: 'Likes',
+    tiktokLikesDescription: 'Likes sent during stream (aggregated)',
+    tiktokGiftsLabel: 'Gifts',
+    tiktokGiftsDescription: 'Virtual gifts sent with diamond values',
+    tiktokFollowsLabel: 'Follows',
+    tiktokFollowsDescription: 'New followers during stream',
+    tiktokSharesLabel: 'Shares',
+    tiktokSharesDescription: 'Stream shares to other platforms',
+    tiktokTreasureChestsLabel: 'Coin Chests',
+    // The "best effort" caveat is load bearing — see the comment on the toggle
+    // at the render site for what has and has not been observed.
+    tiktokTreasureChestsDescription:
+      'Treasure boxes of coins dropped by viewers. Best effort: TikTok does not reliably send these to third-party tools, so they may not appear.',
+    advancedHeading: 'Advanced',
+    likeWindowLabel: 'Like Aggregation Window (seconds)',
+    likeWindowDescription: 'Likes are collected in this window to prevent spam',
+  },
 } as const
