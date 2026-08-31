@@ -716,3 +716,9 @@ describe('chat send bar platform pill copy', () => {
     )
   })
 })
+
+describe('chat send bar form label', () => {
+  it('names the send form itself', () => {
+    expect(t('viewerOverlay.chatSend.formLabel')).toBe('Send a chat message')
+  })
+})
