@@ -91,6 +91,14 @@ export const admin = {
     endsAtLabel: 'Ends at',
     cancelButton: 'Cancel',
     submittingButton: 'Scheduling…',
+    // Toasts.
+    loadFailedToast: 'Failed to load maintenance windows',
+    // Validation, raised before anything is sent.
+    invalidRangeToast: 'Start time must be before end time',
+    scheduledToast: 'Maintenance scheduled',
+    scheduleFailedToast: 'Failed to schedule maintenance',
+    deletedToast: 'Maintenance window deleted',
+    deleteFailedToast: 'Failed to delete maintenance window',
   },
   features: {
     heading: 'Features',

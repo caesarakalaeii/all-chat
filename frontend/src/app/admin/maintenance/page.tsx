@@ -80,7 +80,7 @@ export default function AdminMaintenancePage() {
         .list()
         .then(setMaintenances)
         .catch(() => {
-          toastManager.add({ title: 'Failed to load maintenance windows', type: 'error' })
+          toastManager.add({ title: t('admin.maintenance.loadFailedToast'), type: 'error' })
         })
         .finally(() => setLoading(false)),
     []
@@ -113,19 +113,19 @@ export default function AdminMaintenancePage() {
     }
 
     if (new Date(req.starts_at) >= new Date(req.ends_at)) {
-      toastManager.add({ title: 'Start time must be before end time', type: 'error' })
+      toastManager.add({ title: t('admin.maintenance.invalidRangeToast'), type: 'error' })
       return
     }
 
     setSubmitting(true)
     try {
       await maintenanceApi.create(req)
-      toastManager.add({ title: 'Maintenance scheduled', type: 'success' })
+      toastManager.add({ title: t('admin.maintenance.scheduledToast'), type: 'success' })
       setShowCreate(false)
       resetForm()
       await fetchMaintenances()
     } catch {
-      toastManager.add({ title: 'Failed to schedule maintenance', type: 'error' })
+      toastManager.add({ title: t('admin.maintenance.scheduleFailedToast'), type: 'error' })
     } finally {
       setSubmitting(false)
     }
@@ -135,10 +135,10 @@ export default function AdminMaintenancePage() {
     if (!window.confirm(t('admin.maintenance.deleteConfirm'))) return
     try {
       await maintenanceApi.remove(id)
-      toastManager.add({ title: 'Maintenance window deleted', type: 'success' })
+      toastManager.add({ title: t('admin.maintenance.deletedToast'), type: 'success' })
       await fetchMaintenances()
     } catch {
-      toastManager.add({ title: 'Failed to delete maintenance window', type: 'error' })
+      toastManager.add({ title: t('admin.maintenance.deleteFailedToast'), type: 'error' })
     }
   }
 
