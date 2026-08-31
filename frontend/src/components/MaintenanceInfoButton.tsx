@@ -108,16 +108,20 @@ export function MaintenanceInfoButton() {
               return (
                 <div key={mw.id} className="text-xs">
                   <p className={clsx('font-semibold', active ? 'text-amber-300' : 'text-blue-300')}>
-                    {active ? 'Maintenance in progress' : 'Scheduled maintenance'}
+                    {active
+                      ? t('maintenanceBanner.popoverActiveHeading')
+                      : t('maintenanceBanner.popoverScheduledHeading')}
                   </p>
                   <p className="mt-0.5 font-medium text-text">{mw.title}</p>
                   <p className="mt-0.5 text-text-sub">
                     {active
-                      ? `Expected completion: ${formatDateTime(new Date(mw.ends_at), DATE_FORMAT_OPTIONS)}`
-                      : `${formatDateTime(new Date(mw.starts_at), DATE_FORMAT_OPTIONS)} to ${formatDateTime(
-                          new Date(mw.ends_at),
-                          DATE_FORMAT_OPTIONS
-                        )}`}
+                      ? t('maintenanceBanner.popoverExpectedCompletion', {
+                          endsAt: formatDateTime(new Date(mw.ends_at), DATE_FORMAT_OPTIONS),
+                        })
+                      : t('maintenanceBanner.popoverRange', {
+                          startsAt: formatDateTime(new Date(mw.starts_at), DATE_FORMAT_OPTIONS),
+                          endsAt: formatDateTime(new Date(mw.ends_at), DATE_FORMAT_OPTIONS),
+                        })}
                   </p>
                   {mw.description && (
                     <p className="mt-1 leading-relaxed text-text-sub">{mw.description}</p>

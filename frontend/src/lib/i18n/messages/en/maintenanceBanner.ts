@@ -17,7 +17,11 @@
  */
 
 /**
- * The site-wide maintenance banner.
+ * The site-wide maintenance banner and the monitor header's info popover.
+ *
+ * The two surfaces show the same announcements but not the same strings: the
+ * banner's labels prefix the title on one line and end in a colon, while the
+ * popover's sit on a line of their own and do not.
  */
 
 export const maintenanceBanner = {
@@ -26,4 +30,10 @@ export const maintenanceBanner = {
   scheduledLabel: 'Scheduled maintenance:',
   rangeSeparator: 'to',
   dismissLabel: 'Dismiss maintenance banner: {title}',
+  popoverActiveHeading: 'Maintenance in progress',
+  popoverScheduledHeading: 'Scheduled maintenance',
+  // Whole sentences with the formatted times as placeholders, so a language
+  // that orders or separates them differently can say so.
+  popoverExpectedCompletion: 'Expected completion: {endsAt}',
+  popoverRange: '{startsAt} to {endsAt}',
 } as const
