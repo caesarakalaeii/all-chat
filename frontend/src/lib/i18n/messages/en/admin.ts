@@ -149,4 +149,39 @@ export const admin = {
     overlaySourceCount: '{count} sources',
     sourceInOverlay: 'in {overlay}',
   },
+  cosmetics: {
+    heading: 'Cosmetics Catalog',
+    intro: 'Manage avatar frames and flairs',
+    // The tab bar rendered the wire values 'frames'/'flairs' through a CSS
+    // `capitalize`, so the visible text was never in the source. It is copy now.
+    tabFrames: 'Frames',
+    tabFlairs: 'Flairs',
+    // `itemLabel` was concatenated into these sentences, once via toLowerCase().
+    // Whole sentences per entry kind instead: a noun spliced in by the render
+    // site cannot inflect, and its lowercase form is not always the visible one.
+    emptyFrames: 'No frames in catalog yet',
+    emptyFlairs: 'No flairs in catalog yet',
+    addFrameHeading: 'Add Frame',
+    addFlairHeading: 'Add Flair',
+    nameLabel: 'Name',
+    framePlaceholder: 'Frame name',
+    flairPlaceholder: 'Flair name',
+    imageUrlLabel: 'Image URL',
+    imageUrlPlaceholder: 'https://example.com/frame.png',
+    previewAlt: 'Preview',
+    premiumOnlyLabel: 'Premium only',
+    submitFrame: 'Add Frame',
+    submitFlair: 'Add Flair',
+    submittingButton: 'Adding…',
+    badgePremium: 'Premium',
+    deleteLabel: 'Delete {name}',
+    loadFramesError: 'Failed to load frames',
+    loadFlairsError: 'Failed to load flairs',
+    frameDeleted: 'Frame deleted',
+    flairDeleted: 'Flair deleted',
+    deleteError: 'Delete failed',
+    frameAdded: 'Frame added',
+    flairAdded: 'Flair added',
+    addError: 'Add failed',
+  },
 } as const

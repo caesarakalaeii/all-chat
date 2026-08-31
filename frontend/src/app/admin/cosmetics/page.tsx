@@ -41,6 +41,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toastManager } from '@/lib/toast'
+import { useTranslations } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 interface CatalogEntry {
@@ -55,9 +56,14 @@ interface CatalogListResponse {
   flairs?: CatalogEntry[]
 }
 
+// The multiplication sign the delete button draws. Decoration beside an
+// aria-label that says the same thing in words, so not copy.
+const DELETE_GLYPH = '\u00D7'
+
 export default function AdminCosmeticsPage() {
   const router = useRouter()
   const { user } = useAuthStore()
+  const t = useTranslations()
 
   const [activeTab, setActiveTab] = useState<'frames' | 'flairs'>('frames')
   const [frames, setFrames] = useState<CatalogEntry[]>([])
@@ -76,18 +82,18 @@ export default function AdminCosmeticsPage() {
       const response = await apiClient.get<CatalogListResponse>('/api/v1/admin/cosmetics/frames')
       setFrames(response.frames ?? [])
     } catch {
-      toastManager.add({ title: 'Failed to load frames', type: 'error' })
+      toastManager.add({ title: t('admin.cosmetics.loadFramesError'), type: 'error' })
     }
-  }, [])
+  }, [t])
 
   const fetchFlairs = useCallback(async () => {
     try {
       const response = await apiClient.get<CatalogListResponse>('/api/v1/admin/cosmetics/flairs')
       setFlairs(response.flairs ?? [])
     } catch {
-      toastManager.add({ title: 'Failed to load flairs', type: 'error' })
+      toastManager.add({ title: t('admin.cosmetics.loadFlairsError'), type: 'error' })
     }
-  }, [])
+  }, [t])
 
   // Stable identity (both fetchers are dependency-free useCallbacks) so the
   // guard effect below can depend on it without refetching every render.
@@ -115,15 +121,15 @@ export default function AdminCosmeticsPage() {
     try {
       if (activeTab === 'frames') {
         await apiClient.delete(`/api/v1/admin/cosmetics/frames/${id}`)
-        toastManager.add({ title: 'Frame deleted', type: 'success' })
+        toastManager.add({ title: t('admin.cosmetics.frameDeleted'), type: 'success' })
         await fetchFrames()
       } else {
         await apiClient.delete(`/api/v1/admin/cosmetics/flairs/${id}`)
-        toastManager.add({ title: 'Flair deleted', type: 'success' })
+        toastManager.add({ title: t('admin.cosmetics.flairDeleted'), type: 'success' })
         await fetchFlairs()
       }
     } catch {
-      toastManager.add({ title: 'Delete failed', type: 'error' })
+      toastManager.add({ title: t('admin.cosmetics.deleteError'), type: 'error' })
     }
   }
 
@@ -139,7 +145,7 @@ export default function AdminCosmeticsPage() {
           image_url: addImageUrl.trim(),
           is_premium: addIsPremium,
         })
-        toastManager.add({ title: 'Frame added', type: 'success' })
+        toastManager.add({ title: t('admin.cosmetics.frameAdded'), type: 'success' })
         await fetchFrames()
       } else {
         await apiClient.post('/api/v1/admin/cosmetics/flairs', {
@@ -147,7 +153,7 @@ export default function AdminCosmeticsPage() {
           image_url: addImageUrl.trim(),
           is_premium: addIsPremium,
         })
-        toastManager.add({ title: 'Flair added', type: 'success' })
+        toastManager.add({ title: t('admin.cosmetics.flairAdded'), type: 'success' })
         await fetchFlairs()
       }
       // Clear form
@@ -156,21 +162,23 @@ export default function AdminCosmeticsPage() {
       setAddPreviewUrl('')
       setAddIsPremium(false)
     } catch {
-      toastManager.add({ title: 'Add failed', type: 'error' })
+      toastManager.add({ title: t('admin.cosmetics.addError'), type: 'error' })
     } finally {
       setSubmitting(false)
     }
   }
 
   const currentEntries = activeTab === 'frames' ? frames : flairs
-  const itemLabel = activeTab === 'frames' ? 'Frame' : 'Flair'
+  // Whole keys per entry kind rather than one noun spliced into a sentence:
+  // 'Frame' has to inflect and cannot if the render site owns the sentence.
+  const isFrames = activeTab === 'frames'
 
   return (
     <div className="min-h-screen bg-bg">
       <div className="mx-auto max-w-4xl px-4 py-8">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-text">Cosmetics Catalog</h1>
-          <p className="mt-1 text-sm text-text-sub">Manage avatar frames and flairs</p>
+          <h1 className="text-2xl font-bold text-text">{t('admin.cosmetics.heading')}</h1>
+          <p className="mt-1 text-sm text-text-sub">{t('admin.cosmetics.intro')}</p>
         </div>
 
         {/* Tab bar */}
@@ -180,13 +188,13 @@ export default function AdminCosmeticsPage() {
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={cn(
-                'px-4 py-2 text-sm font-medium capitalize transition-colors',
+                'px-4 py-2 text-sm font-medium transition-colors',
                 activeTab === tab
                   ? 'border-primary border-b-2 text-text'
                   : 'text-text-sub hover:text-text'
               )}
             >
-              {tab}
+              {tab === 'frames' ? t('admin.cosmetics.tabFrames') : t('admin.cosmetics.tabFlairs')}
             </button>
           ))}
         </div>
@@ -202,7 +210,7 @@ export default function AdminCosmeticsPage() {
           <Card className="mb-6 overflow-hidden">
             {currentEntries.length === 0 ? (
               <div className="px-4 py-8 text-center text-sm text-text-sub">
-                No {itemLabel.toLowerCase()}s in catalog yet
+                {isFrames ? t('admin.cosmetics.emptyFrames') : t('admin.cosmetics.emptyFlairs')}
               </div>
             ) : (
               <div className="divide-y divide-border">
@@ -222,7 +230,9 @@ export default function AdminCosmeticsPage() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <span className="truncate text-sm font-medium text-text">{entry.name}</span>
-                        {entry.is_premium && <Badge className="text-xs">Premium</Badge>}
+                        {entry.is_premium && (
+                          <Badge className="text-xs">{t('admin.cosmetics.badgePremium')}</Badge>
+                        )}
                       </div>
                     </div>
 
@@ -232,9 +242,9 @@ export default function AdminCosmeticsPage() {
                       size="sm"
                       onClick={() => handleDelete(entry.id)}
                       className="hover:text-destructive text-text-sub"
-                      aria-label={`Delete ${entry.name}`}
+                      aria-label={t('admin.cosmetics.deleteLabel', { name: entry.name })}
                     >
-                      ×
+                      {DELETE_GLYPH}
                     </Button>
                   </div>
                 ))}
@@ -245,24 +255,30 @@ export default function AdminCosmeticsPage() {
 
         {/* Add form */}
         <Card className="p-6">
-          <h2 className="mb-4 text-base font-semibold text-text">Add {itemLabel}</h2>
+          <h2 className="mb-4 text-base font-semibold text-text">
+            {isFrames ? t('admin.cosmetics.addFrameHeading') : t('admin.cosmetics.addFlairHeading')}
+          </h2>
           <form onSubmit={handleAdd} className="space-y-4">
             <div>
               <label className="mb-1 block text-xs text-text-sub" htmlFor="add-name">
-                Name
+                {t('admin.cosmetics.nameLabel')}
               </label>
               <Input
                 id="add-name"
                 value={addName}
                 onChange={(e) => setAddName(e.target.value)}
-                placeholder={`${itemLabel} name`}
+                placeholder={
+                  isFrames
+                    ? t('admin.cosmetics.framePlaceholder')
+                    : t('admin.cosmetics.flairPlaceholder')
+                }
                 required
               />
             </div>
 
             <div>
               <label className="mb-1 block text-xs text-text-sub" htmlFor="add-image-url">
-                Image URL
+                {t('admin.cosmetics.imageUrlLabel')}
               </label>
               <div className="flex items-center gap-3">
                 <Input
@@ -270,7 +286,7 @@ export default function AdminCosmeticsPage() {
                   value={addImageUrl}
                   onChange={(e) => setAddImageUrl(e.target.value)}
                   onBlur={() => setAddPreviewUrl(addImageUrl)}
-                  placeholder="https://example.com/frame.png"
+                  placeholder={t('admin.cosmetics.imageUrlPlaceholder')}
                   required
                   className="flex-1"
                 />
@@ -279,7 +295,7 @@ export default function AdminCosmeticsPage() {
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={addPreviewUrl}
-                      alt="Preview"
+                      alt={t('admin.cosmetics.previewAlt')}
                       className="h-16 w-16 rounded object-contain"
                     />
                   </div>
@@ -296,12 +312,16 @@ export default function AdminCosmeticsPage() {
                 className="rounded border-border"
               />
               <label htmlFor="add-is-premium" className="text-sm text-text">
-                Premium only
+                {t('admin.cosmetics.premiumOnlyLabel')}
               </label>
             </div>
 
             <Button type="submit" disabled={submitting || !addName.trim() || !addImageUrl.trim()}>
-              {submitting ? 'Adding…' : `Add ${itemLabel}`}
+              {submitting
+                ? t('admin.cosmetics.submittingButton')
+                : isFrames
+                  ? t('admin.cosmetics.submitFrame')
+                  : t('admin.cosmetics.submitFlair')}
             </Button>
           </form>
         </Card>

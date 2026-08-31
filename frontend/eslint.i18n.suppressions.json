@@ -1,12 +1,4 @@
 {
-  "src/app/admin/cosmetics/page.tsx": {
-    "no-restricted-syntax": {
-      "count": 2
-    },
-    "react/jsx-no-literals": {
-      "count": 9
-    }
-  },
   "src/app/admin/overlays/page.tsx": {
     "no-restricted-syntax": {
       "count": 1
