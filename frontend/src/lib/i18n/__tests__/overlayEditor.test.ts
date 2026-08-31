@@ -1011,3 +1011,108 @@ describe('testing and danger zone copy', () => {
     expect(t('overlayEditor.page.savingConfiguration')).toBe('Saving...')
   })
 })
+
+describe('credit roll settings copy', () => {
+  it('keeps the load states and the page header', () => {
+    expect(t('overlayEditor.credits.loadingEditor')).toBe('Loading editor...')
+    expect(t('overlayEditor.credits.notFound')).toBe('Overlay not found')
+    expect(t('overlayEditor.credits.returnToDashboard')).toBe('Return to Dashboard')
+    expect(t('overlayEditor.credits.backToOverlay')).toBe('Back to Overlay')
+    expect(t('overlayEditor.credits.heading')).toBe('Credit Roll Settings')
+    expect(t('overlayEditor.credits.intro')).toBe(
+      'Configure end-of-stream credits to showcase viewers who supported your stream with subs, donations, raids, and more.'
+    )
+  })
+
+  it('keeps the OBS URL control', () => {
+    expect(t('overlayEditor.credits.copyObsUrl')).toBe('Copy Credits OBS URL')
+    expect(t('overlayEditor.credits.copiedObsUrl')).toBe('Copied!')
+    expect(t('overlayEditor.credits.obsUrlHint')).toBe(
+      'Add this URL as a Browser Source in OBS to display credits at end of stream'
+    )
+  })
+
+  it('keeps the enable toggle and the event-type picker', () => {
+    expect(t('overlayEditor.credits.enableHeading')).toBe('Enable Credit Roll')
+    expect(t('overlayEditor.credits.enableHint')).toBe(
+      'Show end-of-stream credits with leaderboards and highlights'
+    )
+    expect(t('overlayEditor.credits.eventTypesHeading')).toBe('Event Types to Include')
+    expect(t('overlayEditor.credits.eventTypesHint')).toBe(
+      'Select which types of events should appear in the credit roll leaderboards'
+    )
+  })
+
+  it('keeps every event-type label', () => {
+    expect(t('overlayEditor.credits.eventSubs')).toBe('Subscriptions')
+    expect(t('overlayEditor.credits.eventResubs')).toBe('Resubscriptions')
+    expect(t('overlayEditor.credits.eventGiftSubs')).toBe('Gift Subs')
+    expect(t('overlayEditor.credits.eventBits')).toBe('Bits/Cheers')
+    expect(t('overlayEditor.credits.eventRaids')).toBe('Raids')
+    expect(t('overlayEditor.credits.eventSuperChats')).toBe('Super Chats')
+    expect(t('overlayEditor.credits.eventMemberships')).toBe('Memberships')
+    expect(t('overlayEditor.credits.eventFollows')).toBe('Follows')
+  })
+
+  it('keeps the leaderboard settings', () => {
+    expect(t('overlayEditor.credits.leaderboardHeading')).toBe('Leaderboard Settings')
+    expect(t('overlayEditor.credits.topNLabel')).toBe('Top N Users per Category')
+    expect(t('overlayEditor.credits.topNHint')).toBe(
+      'Show top 1-50 users in each leaderboard category'
+    )
+    expect(t('overlayEditor.credits.sortByLabel')).toBe('Sort By')
+    expect(t('overlayEditor.credits.sortByTotalValue')).toBe('Total Value (monetary amount)')
+    expect(t('overlayEditor.credits.sortByCount')).toBe('Count (number of events)')
+  })
+
+  it('keeps the display settings', () => {
+    expect(t('overlayEditor.credits.displayHeading')).toBe('Display Settings')
+    expect(t('overlayEditor.credits.themeLabel')).toBe('Theme')
+    expect(t('overlayEditor.credits.themeClassic')).toBe('Classic')
+    expect(t('overlayEditor.credits.themeCinematic')).toBe('Cinematic')
+    expect(t('overlayEditor.credits.themeModern')).toBe('Modern')
+    expect(t('overlayEditor.credits.scrollSpeedLabel')).toBe('Scroll Speed (1-100)')
+    // One key with the value in it, shared by the two sliders below it, rather
+    // than a bare 'Current:' label glued to a number at the render site.
+    expect(t('overlayEditor.credits.currentValue', { value: 50 })).toBe('Current: 50')
+    expect(t('overlayEditor.credits.durationLabel')).toBe('Display Duration (seconds)')
+    expect(t('overlayEditor.credits.durationHint')).toBe(
+      'How long to show the credit roll (10-300 seconds)'
+    )
+    expect(t('overlayEditor.credits.opacityLabel')).toBe('Background Opacity (0-1)')
+  })
+
+  it('keeps the Twitch clips settings', () => {
+    expect(t('overlayEditor.credits.clipsHeading')).toBe('Twitch Clips')
+    expect(t('overlayEditor.credits.clipsHint')).toBe('Show clips during credit roll')
+    expect(t('overlayEditor.credits.maxClipsLabel')).toBe('Maximum Clips')
+    expect(t('overlayEditor.credits.fallbackDaysLabel')).toBe('Fallback Days')
+    expect(t('overlayEditor.credits.fallbackDaysHint')).toBe(
+      'If no clips from this stream, show clips from last N days'
+    )
+    expect(t('overlayEditor.credits.muteClipsLabel')).toBe('Mute Clips Audio')
+    expect(t('overlayEditor.credits.muteClipsHint')).toBe(
+      'Required for browser autoplay. Unmuting may require viewer interaction.'
+    )
+  })
+
+  it('keeps the custom CSS editor section', () => {
+    expect(t('overlayEditor.credits.cssHeading')).toBe('Custom CSS Editor')
+    expect(t('overlayEditor.credits.cssEnable')).toBe('Enable Custom CSS')
+    expect(t('overlayEditor.credits.cssBrowseThemes')).toBe('Browse Themes')
+    expect(t('overlayEditor.credits.cssReset')).toBe('Reset')
+    expect(t('overlayEditor.credits.cssEditorPlaceholder')).toBe(
+      '/* Enter your custom CSS for credit roll */'
+    )
+    expect(t('overlayEditor.credits.cssHint', { docsLink: 'credit roll theme docs' })).toBe(
+      'Customize your credit roll appearance with CSS. Browse themes or write your own styles. See credit roll theme docs for examples and CSS selectors.'
+    )
+    expect(t('overlayEditor.credits.cssDocsLink')).toBe('credit roll theme docs')
+  })
+
+  it('keeps the save and cancel actions', () => {
+    expect(t('overlayEditor.credits.save')).toBe('Save Settings')
+    expect(t('overlayEditor.credits.saving')).toBe('Saving...')
+    expect(t('overlayEditor.credits.cancel')).toBe('Cancel')
+  })
+})
