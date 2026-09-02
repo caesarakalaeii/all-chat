@@ -530,6 +530,30 @@ export const viewerOverlay = {
       "Discord's role hierarchy blocks this \u2014 your highest role has to sit above theirs",
     botMissingPermission:
       "The All-Chat bot wasn't given this Discord permission \u2014 ask the streamer to re-invite it",
+
+    // Dock mode (`?dock=1`): the monitor rendered as an OBS/Streamlabs custom
+    // browser dock, roughly 300-450px wide with no browser chrome.
+    dock: {
+      // Written out, unlike common.brand.wordmark: this is the only thing that
+      // names the product inside the dock, where there is no nav to do it.
+      productName: 'All-Chat',
+      signInExplanation:
+        'This dock has its own sign-in, separate from your browser. Sign in once and it stays signed in.',
+      signInWith: 'Sign in with {platform}',
+      signInFailed: 'Could not start sign-in',
+      signInFailedBody: 'Signing in with {platform} failed. Please try again.',
+
+      // The two dock panels. Short because they label a two-tab switcher at dock
+      // width, not the wide view's panel headings.
+      chatTab: 'Chat',
+      activityTab: 'Activity',
+      // The single overflow menu the header's controls collapse into.
+      menuLabel: 'Monitor controls',
+      // The one compact status row the wide view's stacked notice strips
+      // collapse into.
+      noticesLabel: 'Monitor notices',
+      noticesSummary: '{count} notices',
+    },
   },
 
   // Streamer-facing system notices rendered inside an event body. The event's
