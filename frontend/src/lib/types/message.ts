@@ -106,6 +106,23 @@ export interface EventInfo {
   metadata: Record<string, unknown> // Use DeletionMetadata interface for message_deletion events
 }
 
+/**
+ * The typed keys of a message's otherwise open `metadata` bag.
+ *
+ * Twitch shared chat only: a message relayed from another channel in the session
+ * carries the origin broadcaster (`is_shared_chat` plus `source_room_id`, set by the
+ * normalizer), and the message-processor's avatar enricher resolves that id into the
+ * two renderable fields below. Both are absent when the Helix lookup failed, when the
+ * origin channel has no picture of its own, or on messages that predate the enricher —
+ * so a reader must handle absence, not assume it.
+ */
+export interface MessageMetadata {
+  is_shared_chat?: boolean
+  source_room_id?: string
+  source_avatar_url?: string
+  source_display_name?: string
+}
+
 export interface ChatMessage {
   id: string
   overlay_id: string
@@ -121,7 +138,9 @@ export interface ChatMessage {
   user: UserInfo
   message: MessageInfo
   timestamp: string
-  metadata: Record<string, unknown>
+  // Open by design: platforms keep adding keys, and consumers read them by name.
+  // MessageMetadata types only the ones the frontend renders.
+  metadata: MessageMetadata & Record<string, unknown>
   event?: EventInfo // Present for events, absent for regular chat
 }
 

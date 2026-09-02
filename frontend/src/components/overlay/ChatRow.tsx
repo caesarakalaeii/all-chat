@@ -25,12 +25,13 @@ import { PremiumBadge } from '@/components/PremiumBadge'
 import { UserAvatar } from '@/components/UserAvatar'
 import { MessageAttachments } from '@/components/overlay/MessageAttachments'
 import { PlatformGlyph, PlatformGlyphs } from '@/components/overlay/PlatformGlyph'
+import { SharedChatOrigin } from '@/components/overlay/SharedChatOrigin'
 import {
   ModerationControls,
   type ModerationControlsProps,
 } from '@/components/overlay/ModerationControls'
 import { DEFAULT_VIEW_PREFS, type MonitorViewPrefs } from '@/app/overlay/[id]/view/viewPrefs'
-import { TIME_ONLY, formatDateTime, useTranslations } from '@/lib/i18n'
+import { TIME_ONLY, formatDateTime } from '@/lib/i18n'
 import { renderMessageContent } from '@/lib/renderMessage'
 import type { SourceCapability } from '@/lib/types/moderation'
 import { buildGradientCSS } from '@/lib/utils/gradient'
@@ -77,7 +78,6 @@ export function ChatRow({
   moderation?: ChatRowModeration
   onUserClick?: (item: ViewItem) => void
 }) {
-  const t = useTranslations()
   const mod = item._moderated
   const displayName = item.user?.display_name || item.user?.username
   const time = formatDateTime(new Date(item.timestamp), TIME_ONLY)
@@ -184,9 +184,10 @@ export function ChatRow({
           </span>
         )}
         {isShared && (
-          <span className="ml-1 rounded bg-twitch/20 px-1 text-[10px] font-medium text-twitch uppercase">
-            {t('viewerOverlay.chatPanel.sharedBadge')}
-          </span>
+          <SharedChatOrigin
+            avatarUrl={item.metadata?.source_avatar_url}
+            displayName={item.metadata?.source_display_name}
+          />
         )}
         <span className="text-text-dim">: </span>
         <span className={clsx('text-text', mod && 'line-through')}>
