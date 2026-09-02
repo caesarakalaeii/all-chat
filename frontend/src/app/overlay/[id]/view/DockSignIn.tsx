@@ -61,8 +61,8 @@ export function DockSignIn() {
   // auth_url: from the streamer's side both are "that button did nothing".
   const reportFailure = (platform: StreamerPlatform) => {
     toastManager.add({
-      title: t('viewerOverlay.monitor.dock.signInFailed'),
-      description: t('viewerOverlay.monitor.dock.signInFailedBody', {
+      title: t('viewerOverlay.dock.signInFailed'),
+      description: t('viewerOverlay.dock.signInFailedBody', {
         platform: platformName(t, platform),
       }),
       type: 'error',
@@ -91,13 +91,13 @@ export function DockSignIn() {
     <div className="flex h-screen flex-col items-center justify-center gap-3 bg-bg px-4 text-center">
       <InfinityLogo size={40} />
       <p className="text-sm font-semibold text-text">
-        {t('viewerOverlay.monitor.dock.productName')}
+        {t('viewerOverlay.dock.productName')}
       </p>
-      <p className="text-xs text-text-sub">{t('viewerOverlay.monitor.dock.signInExplanation')}</p>
+      <p className="text-xs text-text-sub">{t('viewerOverlay.dock.signInExplanation')}</p>
       <div className="flex w-full max-w-56 flex-col gap-2">
         {STREAMER_PLATFORMS.map((platform) => (
           <Button key={platform} variant="outline" size="sm" onClick={() => void signIn(platform)}>
-            {t('viewerOverlay.monitor.dock.signInWith', {
+            {t('viewerOverlay.dock.signInWith', {
               platform: platformName(t, platform),
             })}
           </Button>

@@ -42,8 +42,8 @@ export function DockTabPicker({
 }) {
   const t = useTranslations()
   const tabs: ReadonlyArray<{ value: DockTab; label: string }> = [
-    { value: 'chat', label: t('viewerOverlay.monitor.dock.chatTab') },
-    { value: 'activity', label: t('viewerOverlay.monitor.dock.activityTab') },
+    { value: 'chat', label: t('viewerOverlay.dock.chatTab') },
+    { value: 'activity', label: t('viewerOverlay.dock.activityTab') },
   ]
 
   return (

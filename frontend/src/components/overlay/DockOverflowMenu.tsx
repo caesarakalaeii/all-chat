@@ -57,7 +57,7 @@ export function DockOverflowMenu({ children }: { children: React.ReactNode }) {
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        aria-label={t('viewerOverlay.monitor.dock.menuLabel')}
+        aria-label={t('viewerOverlay.dock.menuLabel')}
         variant="outline"
         size="icon-sm"
       >

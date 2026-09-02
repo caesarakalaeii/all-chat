@@ -79,6 +79,21 @@ describe('OBS instructions', () => {
       'Size the source to the area chat should fill (a tall, narrow box like 450×800 works well, not your full canvas), then drag it into place. Chat appears as soon as the overlay connects.'
     )
   })
+
+  it('keeps the add-as-a-dock steps separate from the browser-source ones', () => {
+    expect(t('onboarding.obsDock.heading')).toBe('In OBS:')
+    // The whole menu path is one emphasised run: it is a single affordance, and
+    // a language that renames those menus renames all three together.
+    expect(t('onboarding.obsDock.step1')).toBe('In OBS, open {menu}.')
+    expect(t('onboarding.obsDock.step1Menu')).toBe('View → Docks → Custom Browser Docks')
+    expect(t('onboarding.obsDock.step2')).toBe(
+      'Give the dock a name, paste the copied dock link into the URL field, then click Apply and close the dialog.'
+    )
+    // The separate sign-in leads the step because it is the surprise.
+    expect(t('onboarding.obsDock.step3')).toBe(
+      'The dock has its own sign-in — sign in once inside the panel and it stays signed in. Drag the panel where you want it; a narrow column beside Scenes and Sources works well.'
+    )
+  })
 })
 
 describe('optional extras', () => {

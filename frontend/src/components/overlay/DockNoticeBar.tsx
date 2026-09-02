@@ -64,7 +64,7 @@ export function DockNoticeBar({
         className="flex w-full items-center gap-2 px-4 py-2 text-xs text-text-sub focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
       >
         <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
-        <span>{t('viewerOverlay.monitor.dock.noticesSummary', { count })}</span>
+        <span>{t('viewerOverlay.dock.noticesSummary', { count })}</span>
         {expanded ? (
           <ChevronUp className="ml-auto h-3.5 w-3.5 shrink-0" />
         ) : (
@@ -75,7 +75,7 @@ export function DockNoticeBar({
           the panel either. */}
       {expanded && (
         <div
-          aria-label={t('viewerOverlay.monitor.dock.noticesLabel')}
+          aria-label={t('viewerOverlay.dock.noticesLabel')}
           className="max-h-48 overflow-y-auto"
         >
           {children}
