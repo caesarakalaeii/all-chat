@@ -21,7 +21,7 @@ import '@testing-library/jest-dom/vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { DockTabPicker } from '@/components/overlay/DockTabPicker'
+import { DOCK_PANEL_ID, DockTabPicker } from '@/components/overlay/DockTabPicker'
 
 afterEach(() => cleanup())
 
@@ -37,6 +37,21 @@ describe('DockTabPicker', () => {
     render(<DockTabPicker tab="chat" onChange={onChange} />)
     fireEvent.click(screen.getByRole('tab', { name: 'Activity' }))
     expect(onChange).toHaveBeenCalledWith('activity')
+  })
+
+  // Both tabs name the one panel the page swaps content into, so a screen
+  // reader is told what the switcher operates rather than being handed two
+  // tabs that control nothing.
+  it('points both tabs at the panel the page renders', () => {
+    render(<DockTabPicker tab="chat" onChange={vi.fn()} />)
+    expect(screen.getByRole('tab', { name: 'Chat' })).toHaveAttribute(
+      'aria-controls',
+      DOCK_PANEL_ID
+    )
+    expect(screen.getByRole('tab', { name: 'Activity' })).toHaveAttribute(
+      'aria-controls',
+      DOCK_PANEL_ID
+    )
   })
 
   it('does not report a change when the selected tab is clicked again', () => {
