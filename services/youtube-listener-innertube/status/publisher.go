@@ -19,6 +19,7 @@ package status
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -26,6 +27,19 @@ import (
 )
 
 const PlatformStatusChannel = "platform:status"
+
+// SnapshotTTL is how long a last-known status survives without a refresh. Long enough
+// to outlive an overnight discovery park (the state a streamer needs to see the next
+// morning), short enough that a status nobody has re-published expires instead of
+// misreporting a channel forever.
+const SnapshotTTL = 48 * time.Hour
+
+// SnapshotKey is where the last-known status for one channel is stored, for readers
+// that were not subscribed when it was published — the overlay source list uses it to
+// show a parked YouTube channel on the dashboard.
+func SnapshotKey(platform, channelID string) string {
+	return fmt.Sprintf("platform:status:%s:%s", platform, channelID)
+}
 
 // Message represents a platform connection status update
 type Message struct {
@@ -37,13 +51,16 @@ type Message struct {
 	ErrorMessage string     `json:"error_message,omitempty"`
 }
 
-// Publisher publishes platform status updates to Redis Pub/Sub
+// Publisher publishes platform status updates to Redis Pub/Sub and stores a
+// last-known snapshot of each one.
 type Publisher struct {
-	redisClient *redis.Client
+	// redis.Cmdable rather than *redis.Client so a test can fail the snapshot write on
+	// its own; *redis.Client satisfies it.
+	redisClient redis.Cmdable
 	logger      *zap.Logger
 }
 
-func NewPublisher(redisClient *redis.Client, logger *zap.Logger) *Publisher {
+func NewPublisher(redisClient redis.Cmdable, logger *zap.Logger) *Publisher {
 	return &Publisher{redisClient: redisClient, logger: logger}
 }
 
@@ -55,5 +72,15 @@ func (p *Publisher) Publish(ctx context.Context, msg Message) {
 	}
 	if err := p.redisClient.Publish(ctx, PlatformStatusChannel, string(data)).Err(); err != nil {
 		p.logger.Warn("Failed to publish platform status", zap.String("status", msg.Status), zap.Error(err))
+	}
+	// Pub/Sub only reaches whoever is subscribed at that instant, and the statuses that
+	// matter most (a discovery park) fire when nobody is watching. The snapshot is what a
+	// later reader sees. It is deliberately best-effort and after the publish: Redis runs
+	// HA with min-replicas-to-write 1, so this write can pause under node loss and must
+	// never delay or fail the live path.
+	key := SnapshotKey(msg.Platform, msg.ChannelID)
+	if err := p.redisClient.Set(ctx, key, data, SnapshotTTL).Err(); err != nil {
+		p.logger.Warn("Failed to store platform status snapshot",
+			zap.String("key", key), zap.String("status", msg.Status), zap.Error(err))
 	}
 }

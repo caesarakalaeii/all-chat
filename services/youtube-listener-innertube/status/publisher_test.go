@@ -18,6 +18,7 @@ package status
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -89,30 +90,38 @@ func TestPublishStillDeliversToSubscribers(t *testing.T) {
 	}
 }
 
-// Redis runs HA with min-replicas-to-write 1, so a write can pause or fail under node
-// loss. Status persistence is best-effort: a failed snapshot must warn and nothing else,
-// so the live PUBLISH still reaches an open monitor.
+// refusingSnapshotWrites is a Redis whose SET fails and whose PUBLISH does not, which
+// no real server does on demand. It stands in for the HA failure mode that matters:
+// min-replicas-to-write 1 means a write can be rejected under node loss while the rest
+// of the connection still works.
+type refusingSnapshotWrites struct {
+	redis.Cmdable
+	published []string
+}
+
+func (r *refusingSnapshotWrites) Set(ctx context.Context, key string, value any, ttl time.Duration) *redis.StatusCmd {
+	cmd := redis.NewStatusCmd(ctx, "set", key)
+	cmd.SetErr(errors.New("NOREPLICAS not enough good replicas to write"))
+	return cmd
+}
+
+func (r *refusingSnapshotWrites) Publish(ctx context.Context, channel string, message any) *redis.IntCmd {
+	r.published = append(r.published, message.(string))
+	return redis.NewIntCmd(ctx, "publish", channel)
+}
+
+// Status persistence is best-effort: a failed snapshot must warn and nothing else, so a
+// monitor that is already open keeps getting live updates through a Redis that has
+// stopped accepting writes.
 func TestPublishWarnsButStillDeliversWhenSnapshotWriteFails(t *testing.T) {
-	publisher, _, client, logs := newTestPublisher(t)
-	ctx := context.Background()
+	redisClient := &refusingSnapshotWrites{}
+	core, logs := observer.New(zap.WarnLevel)
+	publisher := NewPublisher(redisClient, zap.New(core))
 
-	subscription := client.Subscribe(ctx, PlatformStatusChannel)
-	t.Cleanup(func() { _ = subscription.Close() })
-	_, err := subscription.Receive(ctx)
-	require.NoError(t, err)
+	publisher.Publish(context.Background(), Message{Platform: "youtube", ChannelID: "UCabc123", Status: "paused"})
 
-	// A list at the snapshot key makes SET fail with WRONGTYPE — a rejected snapshot
-	// write, without breaking the connection the PUBLISH also uses.
-	require.NoError(t, client.RPush(ctx, "platform:status:youtube:UCabc123", "not-a-string").Err())
-
-	publisher.Publish(ctx, Message{Platform: "youtube", ChannelID: "UCabc123", Status: "paused"})
-
-	select {
-	case msg := <-subscription.Channel():
-		assert.JSONEq(t, `{"platform":"youtube","channel_id":"UCabc123","status":"paused"}`, msg.Payload)
-	case <-time.After(2 * time.Second):
-		t.Fatal("snapshot failure suppressed the publish on " + PlatformStatusChannel)
-	}
+	require.Len(t, redisClient.published, 1, "snapshot failure suppressed the publish")
+	assert.JSONEq(t, `{"platform":"youtube","channel_id":"UCabc123","status":"paused"}`, redisClient.published[0])
 
 	require.Len(t, logs.All(), 1)
 	entry := logs.All()[0]
