@@ -462,7 +462,7 @@ func (h *SourcesHandler) HandleListSources(c *gin.Context) {
 // platformStatusSnapshotKey is where a listener stores a channel's last-known connection
 // status. Pinned here rather than imported: overlay-manager does not depend on the
 // listener modules, and each listener owns its own copy of the status package.
-// Producer: services/youtube-listener-innertube/status.SnapshotKey.
+// Producer: snapshotKey in services/youtube-listener-innertube/status/publisher.go.
 func platformStatusSnapshotKey(platform, channelID string) string {
 	return fmt.Sprintf("platform:status:%s:%s", platform, channelID)
 }

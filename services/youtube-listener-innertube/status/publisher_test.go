@@ -66,7 +66,7 @@ func TestPublishWritesSnapshotWithTTL(t *testing.T) {
 		"error_message": "No live stream found after 1h"
 	}`, snapshot)
 
-	assert.Equal(t, SnapshotTTL, server.TTL(key))
+	assert.Equal(t, snapshotTTL, server.TTL(key))
 }
 
 // The PUBLISH is the live path and must be untouched by the snapshot work: a monitor

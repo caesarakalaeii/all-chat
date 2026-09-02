@@ -28,16 +28,18 @@ import (
 
 const PlatformStatusChannel = "platform:status"
 
-// SnapshotTTL is how long a last-known status survives without a refresh. Long enough
+// snapshotTTL is how long a last-known status survives without a refresh. Long enough
 // to outlive an overnight discovery park (the state a streamer needs to see the next
 // morning), short enough that a status nobody has re-published expires instead of
 // misreporting a channel forever.
-const SnapshotTTL = 48 * time.Hour
+const snapshotTTL = 48 * time.Hour
 
-// SnapshotKey is where the last-known status for one channel is stored, for readers
-// that were not subscribed when it was published — the overlay source list uses it to
-// show a parked YouTube channel on the dashboard.
-func SnapshotKey(platform, channelID string) string {
+// snapshotKey is where the last-known status for one channel is stored, for readers
+// that were not subscribed when it was published. Consumer: platformStatusSnapshotKey
+// in services/overlay-manager/handlers/sources.go, which reads it to show a parked
+// YouTube channel on the dashboard. The format is duplicated there because the two
+// services share no Go module, so changing it here needs the same change there.
+func snapshotKey(platform, channelID string) string {
 	return fmt.Sprintf("platform:status:%s:%s", platform, channelID)
 }
 
@@ -78,8 +80,8 @@ func (p *Publisher) Publish(ctx context.Context, msg Message) {
 	// later reader sees. It is deliberately best-effort and after the publish: Redis runs
 	// HA with min-replicas-to-write 1, so this write can pause under node loss and must
 	// never delay or fail the live path.
-	key := SnapshotKey(msg.Platform, msg.ChannelID)
-	if err := p.redisClient.Set(ctx, key, data, SnapshotTTL).Err(); err != nil {
+	key := snapshotKey(msg.Platform, msg.ChannelID)
+	if err := p.redisClient.Set(ctx, key, data, snapshotTTL).Err(); err != nil {
 		p.logger.Warn("Failed to store platform status snapshot",
 			zap.String("key", key), zap.String("status", msg.Status), zap.Error(err))
 	}
