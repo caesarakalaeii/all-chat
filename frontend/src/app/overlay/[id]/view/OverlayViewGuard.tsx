@@ -26,12 +26,35 @@
  * logged-in user without becoming a client component itself: it simply renders
  * its children inside `ProtectedRoute`, which redirects anonymous visitors home.
  *
+ * In dock mode (`?dock=1`) the redirect is replaced by an in-place sign-in
+ * panel: an OBS custom browser dock has its own cookie jar and no browser
+ * chrome, so sending it to the homepage strands the streamer in a ~320px panel
+ * with no way back. See `DockSignIn`.
+ *
  * NOTE: the OBS embed route (`/overlay/[id]`) stays public — only this nested
  * monitor view is gated.
  */
 
+import { Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
+
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 
+import { DockSignIn } from './DockSignIn'
+import { isDockMode } from './dockMode'
+
+function DockAwareGuard({ children }: { children: React.ReactNode }) {
+  const dock = isDockMode(useSearchParams())
+  return <ProtectedRoute fallback={dock ? <DockSignIn /> : undefined}>{children}</ProtectedRoute>
+}
+
 export function OverlayViewGuard({ children }: { children: React.ReactNode }) {
-  return <ProtectedRoute>{children}</ProtectedRoute>
+  // useSearchParams opts this subtree out of static rendering, so it needs its
+  // own boundary (same reason as /moderate). The gate renders nothing of its
+  // own while suspended — the page below paints the monitor chrome.
+  return (
+    <Suspense fallback={null}>
+      <DockAwareGuard>{children}</DockAwareGuard>
+    </Suspense>
+  )
 }

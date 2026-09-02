@@ -772,6 +772,15 @@ describe('editor page chrome copy', () => {
     expect(t('overlayEditor.page.resetToThemeDefaults')).toBe('Reset to theme defaults')
   })
 
+  it('keeps the dock URL controls distinct from the OBS URL ones', () => {
+    // Two different destinations — the public overlay for a browser source, the
+    // monitor for a browser dock — so the labels must not read alike.
+    expect(t('overlayEditor.page.copyDockUrl')).toBe('Copy dock URL')
+    expect(t('overlayEditor.page.copiedDockUrl')).toBe('Copied!')
+    expect(t('overlayEditor.page.dockHelpTrigger')).toBe('How do I dock chat in OBS?')
+    expect(t('overlayEditor.page.dockHelpTitle')).toBe('Add the chat monitor as an OBS dock')
+  })
+
   it('keeps the browser-extension card', () => {
     expect(t('overlayEditor.page.extensionHeading')).toBe('Browser Extension Overlay')
     expect(t('overlayEditor.page.extensionActive')).toBe('Active')
