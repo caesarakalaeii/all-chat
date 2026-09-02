@@ -131,14 +131,19 @@ class Violation(NamedTuple):
 
 
 class Comment(NamedTuple):
-    """A single-line comment, with what the rules need to judge it."""
+    """A single-line comment, with what the rules need to judge it.
+
+    `indented` stands in for "inside a function or method body": an unindented
+    comment is at file scope, which in Go and TypeScript alike means it is a
+    declaration doc comment. That is a cheap proxy for a parse, and it errs
+    towards NOT firing, which is the safe direction for `restate`.
+    """
 
     line: int
     raw: str  # the whole source line, for directive prefixes
     content: str  # comment text with the marker and whitespace stripped
     in_block: bool  # has a comment line directly above or below
-    indented: bool  # the comment is indented, i.e. inside a body and not a
-    # top-level declaration doc comment
+    indented: bool  # sits inside a body rather than at file scope
     next_code: str | None  # next non-blank, non-comment source line
 
 
