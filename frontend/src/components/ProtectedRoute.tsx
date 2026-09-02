@@ -65,6 +65,9 @@ export function ProtectedRoute({ children, requireAdmin = false, fallback }: Pro
   const router = useRouter()
   const { user, loading, init } = useAuthStore()
   const isHydrated = useHydrated()
+  // A JSX element is a fresh object every render, so the effect below depends on
+  // whether a fallback was passed rather than on the node itself.
+  const hasFallback = fallback !== undefined
 
   useEffect(() => {
     if (isHydrated) {
@@ -80,14 +83,14 @@ export function ProtectedRoute({ children, requireAdmin = false, fallback }: Pro
     if (!user) {
       // A caller with a fallback renders it in place; navigating away would
       // discard the surface that explains how to sign in.
-      if (fallback === undefined) {
+      if (!hasFallback) {
         router.push('/')
       }
       return
     }
-  }, [user, loading, isHydrated, router, fallback])
+  }, [user, loading, isHydrated, router, hasFallback])
 
-  if (isHydrated && !loading && !user && fallback !== undefined) {
+  if (isHydrated && !loading && !user && hasFallback) {
     return <>{fallback}</>
   }
 
