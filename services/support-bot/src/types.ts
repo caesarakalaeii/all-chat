@@ -19,8 +19,10 @@ export interface InfraVerdict {
 
 export interface QueryResult {
   answer: string;
-  issueProposal: IssueProposal | null;
-  commentProposal: CommentProposal | null;
+  /** Every issue the model asked to open, in the order it emitted them. Empty when none. */
+  issueProposals: IssueProposal[];
+  /** Every comment the model asked to post, in the order it emitted them. Empty when none. */
+  commentProposals: CommentProposal[];
   infraVerdict: InfraVerdict | null;
   memoryMarker: ParsedMemoryMarker | null;
   updateMemoryMarker: ParsedUpdateMemoryMarker | null;
