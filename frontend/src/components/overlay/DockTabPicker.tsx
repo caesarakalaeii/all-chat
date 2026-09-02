@@ -33,6 +33,13 @@ import { useTranslations } from '@/lib/i18n'
  * `--color-*` in `.overlay-view.light`, which the primitive's
  * `muted`/`foreground` tokens do not follow.
  */
+/**
+ * The id of the panel both tabs control. The page renders ONE panel and swaps
+ * its content, so the relationship is a constant rather than a prop — exported
+ * so the page cannot drift from the `aria-controls` written here.
+ */
+export const DOCK_PANEL_ID = 'overlay-view-dock-panel'
+
 export function DockTabPicker({
   tab,
   onChange,
@@ -56,6 +63,7 @@ export function DockTabPicker({
             type="button"
             role="tab"
             aria-selected={selected}
+            aria-controls={DOCK_PANEL_ID}
             // Re-selecting the current tab is not a change; reporting it would
             // make the page persist the same value on every stray click.
             onClick={() => !selected && onChange(value)}

@@ -58,7 +58,7 @@ import { ChatSendBar } from '@/components/overlay/ChatSendBar'
 import { ConnectionBadge } from '@/components/overlay/ConnectionBadge'
 import { DockNoticeBar } from '@/components/overlay/DockNoticeBar'
 import { DockOverflowMenu } from '@/components/overlay/DockOverflowMenu'
-import { DockTabPicker } from '@/components/overlay/DockTabPicker'
+import { DOCK_PANEL_ID, DockTabPicker } from '@/components/overlay/DockTabPicker'
 import { EngagementControls } from '@/components/overlay/EngagementControls'
 import { LayoutPicker } from '@/components/overlay/LayoutPicker'
 import { ObservabilitySummary } from '@/components/overlay/ObservabilitySummary'
@@ -1166,7 +1166,7 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
           <DockTabPicker tab={dockTab} onChange={updateDockTab} />
           {/* Same box ResizableSplit gives each panel: both are `h-full min-h-0`
               and need a sized parent to scroll inside instead of growing. */}
-          <div className="min-h-0 flex-1 overflow-hidden">
+          <div id={DOCK_PANEL_ID} role="tabpanel" className="min-h-0 flex-1 overflow-hidden">
             {dockTab === 'chat' ? (
               <ChatPanel
                 items={chat}
