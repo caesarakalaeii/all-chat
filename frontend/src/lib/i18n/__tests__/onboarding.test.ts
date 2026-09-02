@@ -81,7 +81,6 @@ describe('OBS instructions', () => {
   })
 
   it('keeps the add-as-a-dock steps separate from the browser-source ones', () => {
-    expect(t('onboarding.obsDock.heading')).toBe('In OBS:')
     // The whole menu path is one emphasised run: it is a single affordance, and
     // a language that renames those menus renames all three together.
     expect(t('onboarding.obsDock.step1')).toBe('In OBS, open {menu}.')

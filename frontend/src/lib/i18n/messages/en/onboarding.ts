@@ -59,7 +59,6 @@ export const onboarding = {
   // the browser source above: it renders beside the mixer for the streamer, not
   // on stream for viewers. Streamlabs takes the same URL through the same menu.
   obsDock: {
-    heading: 'In OBS:',
     // One whole sentence with the menu path as a single emphasised run, for the
     // reason obs.step1 gives: a second language rearranges the words around it.
     step1: 'In OBS, open {menu}.',
