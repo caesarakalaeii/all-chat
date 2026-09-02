@@ -53,6 +53,7 @@ import type { DiscordGuild, ChannelCategory } from '@/lib/api/discord'
 import { ApiError } from '@/lib/api/client'
 import { DISCORD_INVITE_URL } from '@/lib/constants'
 import { OnboardingChecklist } from '@/components/onboarding/OnboardingChecklist'
+import { ObsDockHelpContent } from '@/components/onboarding/ObsDockHelpContent'
 import { ObsHelpContent } from '@/components/onboarding/ObsHelpContent'
 import { deriveSteps, useOnboardingStore } from '@/lib/stores/onboarding-store'
 import { engagementApi } from '@/lib/api/engagement'
@@ -1960,6 +1961,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
 
   // --- OBS URL copy state ---
   const [copiedObs, setCopiedObs] = useState(false)
+  const [copiedDock, setCopiedDock] = useState(false)
 
   // --- Discord relay state ---
   const [relayExpandedSourceId, setRelayExpandedSourceId] = useState<string | null>(null)
@@ -2758,6 +2760,19 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     })
   }
 
+  // The monitor as an OBS/Streamlabs custom browser DOCK, which is a different
+  // destination from the URL above: that one is the public overlay a browser
+  // source renders on stream, this one is the auth-gated moderator monitor in a
+  // narrow docked panel. `dock=1` is what makes it fit one.
+  function handleCopyDockUrl() {
+    const url = `${window.location.origin}/overlay/${id}/view?dock=1`
+    navigator.clipboard.writeText(url).then(() => {
+      trackEvent('obs_url_copied', { surface: 'editor_dock' })
+      setCopiedDock(true)
+      setTimeout(() => setCopiedDock(false), 2000)
+    })
+  }
+
   function handleShareClick() {
     if (!user?.is_premium) {
       setShowPremiumRequired(true)
@@ -3126,35 +3141,90 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
             </div>
           </div>
 
-          {/* 2. Copy OBS URL */}
-          <Button
-            variant="outline"
-            className="flex w-full items-center justify-center gap-2"
-            onClick={handleCopyObsUrl}
-          >
-            <Clipboard className="size-4" />
-            {copiedObs ? t('overlayEditor.page.copiedObsUrl') : t('overlayEditor.page.copyObsUrl')}
-          </Button>
-          <Dialog.Root>
-            <Dialog.Trigger
-              render={
-                <Button
-                  type="button"
-                  variant="link"
-                  size="xs"
-                  className="mx-auto h-auto p-0 text-text-sub hover:text-text"
-                >
-                  {t('overlayEditor.page.obsHelpTrigger')}
-                </Button>
-              }
-            />
-            <Dialog.Content size="sm">
-              <Dialog.Title>{t('overlayEditor.page.obsHelpTitle')}</Dialog.Title>
-              <div className="mt-3">
-                <ObsHelpContent />
-              </div>
-            </Dialog.Content>
-          </Dialog.Root>
+          {/* 2. The two URLs this overlay hands out, side by side because they
+              are the same kind of action on different destinations: the OBS URL
+              is the public overlay a browser SOURCE renders on stream, the dock
+              URL is the auth-gated monitor a browser DOCK renders beside the
+              mixer.
+
+              One row of two, rather than a second stacked button-plus-link
+              pair, so this block stays the height it was. Everything below it
+              in this scrolling column — including the settings nav — slides
+              under the sticky Save footer, and axe reports a nav item that
+              straddles the footer's top edge as partially obscured (WCAG
+              2.5.8). Growing the block moves that edge onto a nav item; keeping
+              the height fixed leaves it in the gap above one, where it is on
+              main. */}
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="flex flex-1 items-center justify-center gap-2"
+              onClick={handleCopyObsUrl}
+            >
+              <Clipboard className="size-4" />
+              {copiedObs
+                ? t('overlayEditor.page.copiedObsUrl')
+                : t('overlayEditor.page.copyObsUrl')}
+            </Button>
+            <Button
+              variant="outline"
+              className="flex flex-1 items-center justify-center gap-2"
+              onClick={handleCopyDockUrl}
+            >
+              <Clipboard className="size-4" />
+              {copiedDock
+                ? t('overlayEditor.page.copiedDockUrl')
+                : t('overlayEditor.page.copyDockUrl')}
+            </Button>
+          </div>
+          {/* Both help triggers centred on one line. They stay inline (rather
+              than becoming flex items) so the line box is the height a single
+              trigger occupied before, per the note above, and so a narrow
+              column wraps them instead of pushing them past its edges. mx-4 on
+              each keeps 32px between two link-height targets, over the 24px
+              WCAG 2.5.8 spacing floor. */}
+          <div className="text-center">
+            <Dialog.Root>
+              <Dialog.Trigger
+                render={
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="xs"
+                    className="mx-4 h-auto p-0 text-text-sub hover:text-text"
+                  >
+                    {t('overlayEditor.page.obsHelpTrigger')}
+                  </Button>
+                }
+              />
+              <Dialog.Content size="sm">
+                <Dialog.Title>{t('overlayEditor.page.obsHelpTitle')}</Dialog.Title>
+                <div className="mt-3">
+                  <ObsHelpContent />
+                </div>
+              </Dialog.Content>
+            </Dialog.Root>
+            <Dialog.Root>
+              <Dialog.Trigger
+                render={
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="xs"
+                    className="mx-4 h-auto p-0 text-text-sub hover:text-text"
+                  >
+                    {t('overlayEditor.page.dockHelpTrigger')}
+                  </Button>
+                }
+              />
+              <Dialog.Content size="sm">
+                <Dialog.Title>{t('overlayEditor.page.dockHelpTitle')}</Dialog.Title>
+                <div className="mt-3">
+                  <ObsDockHelpContent />
+                </div>
+              </Dialog.Content>
+            </Dialog.Root>
+          </div>
 
           {/* 2b. Share overlay */}
           <Button

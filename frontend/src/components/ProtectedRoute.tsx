@@ -26,6 +26,9 @@
  *   <ProtectedRoute>
  *     <YourProtectedContent />
  *   </ProtectedRoute>
+ *
+ * A caller that must not send an anonymous visitor to the homepage passes a
+ * `fallback` to render in place of the redirect — see the prop's comment.
  */
 
 'use client'
@@ -41,17 +44,30 @@ import { useTranslations } from '@/lib/i18n'
 interface ProtectedRouteProps {
   children: React.ReactNode
   requireAdmin?: boolean
+  /**
+   * What to render for an anonymous visitor INSTEAD of redirecting home.
+   *
+   * Exists for surfaces where the homepage is not reachable copy: an OBS custom
+   * browser dock is a chromeless ~320px panel with its own cookie jar, so the
+   * redirect lands the streamer on the marketing page with no back button and
+   * no sign-in affordance. Absent (the default for every other protected
+   * route), the redirect is unchanged.
+   */
+  fallback?: React.ReactNode
 }
 
 // The no-entry sign shown above the 403 heading. Decoration beside copy that
 // says the same thing in words, so not part of the catalog.
 const FORBIDDEN_GLYPH = '\u{1F6AB}'
 
-export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRouteProps) {
+export function ProtectedRoute({ children, requireAdmin = false, fallback }: ProtectedRouteProps) {
   const t = useTranslations()
   const router = useRouter()
   const { user, loading, init } = useAuthStore()
   const isHydrated = useHydrated()
+  // A JSX element is a fresh object every render, so the effect below depends on
+  // whether a fallback was passed rather than on the node itself.
+  const hasFallback = fallback !== undefined
 
   useEffect(() => {
     if (isHydrated) {
@@ -65,10 +81,18 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
     }
 
     if (!user) {
-      router.push('/')
+      // A caller with a fallback renders it in place; navigating away would
+      // discard the surface that explains how to sign in.
+      if (!hasFallback) {
+        router.push('/')
+      }
       return
     }
-  }, [user, loading, isHydrated, router])
+  }, [user, loading, isHydrated, router, hasFallback])
+
+  if (isHydrated && !loading && !user && hasFallback) {
+    return <>{fallback}</>
+  }
 
   // Show loading state while initializing or checking auth
   if (!isHydrated || loading || !user) {

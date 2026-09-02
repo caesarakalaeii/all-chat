@@ -211,3 +211,47 @@ describe('overlay editor preview handshake', () => {
     })
   })
 })
+
+/**
+ * The two URLs the editor hands out are not interchangeable: the OBS URL is the
+ * public overlay a browser SOURCE renders on stream, and the dock URL is the
+ * auth-gated monitor a browser DOCK renders beside the mixer. Pasting one where
+ * the other belongs is a support ticket, so each has its own button and the
+ * dock's carries the `dock=1` flag that makes the monitor fit a narrow panel.
+ */
+describe('overlay editor OBS and dock URLs', () => {
+  const writeText = vi.fn().mockResolvedValue(undefined)
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    api.get.mockResolvedValue({ id: 'o1', name: 'Main overlay', is_public_for_viewers: false })
+    api.getSources.mockResolvedValue([])
+    api.getConfig.mockResolvedValue({ display_settings: {} })
+    api.getTTSConfig.mockResolvedValue({})
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    })
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.restoreAllMocks()
+  })
+
+  it('copies the public overlay URL, with no dock flag on it', async () => {
+    await renderEditor()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy OBS URL' }))
+
+    expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/overlay/o1`)
+  })
+
+  it('copies the monitor URL with dock=1 for a browser dock', async () => {
+    await renderEditor()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy dock URL' }))
+
+    expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/overlay/o1/view?dock=1`)
+  })
+})

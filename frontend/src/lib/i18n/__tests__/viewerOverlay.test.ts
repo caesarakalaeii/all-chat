@@ -738,6 +738,28 @@ describe('monitor view header copy', () => {
   })
 })
 
+describe('dock mode copy', () => {
+  it('keeps the dock chrome labels', () => {
+    expect(t('viewerOverlay.dock.chatTab')).toBe('Chat')
+    expect(t('viewerOverlay.dock.activityTab')).toBe('Activity')
+    expect(t('viewerOverlay.dock.menuLabel')).toBe('Monitor controls')
+    expect(t('viewerOverlay.dock.noticesLabel')).toBe('Monitor notices')
+    expect(t('viewerOverlay.dock.noticesSummary', { count: '3' })).toBe('3 notices')
+  })
+
+  it('keeps the sign-in panel copy, including why the dock asks again', () => {
+    expect(t('viewerOverlay.dock.productName')).toBe('All-Chat')
+    expect(t('viewerOverlay.dock.signInExplanation')).toBe(
+      'This dock has its own sign-in, separate from your browser. Sign in once and it stays signed in.'
+    )
+    expect(t('viewerOverlay.dock.signInWith', { platform: 'Twitch' })).toBe('Sign in with Twitch')
+    expect(t('viewerOverlay.dock.signInFailed')).toBe('Could not start sign-in')
+    expect(t('viewerOverlay.dock.signInFailedBody', { platform: 'Kick' })).toBe(
+      'Signing in with Kick failed. Please try again.'
+    )
+  })
+})
+
 describe('monitor view notice copy', () => {
   it('keeps both connection notices whole', () => {
     expect(t('viewerOverlay.monitor.stillReconnecting')).toBe(
