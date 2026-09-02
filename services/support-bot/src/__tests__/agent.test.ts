@@ -5,6 +5,7 @@ vi.mock('execa', () => ({
   execa: vi.fn(),
 }));
 
+import { access, readFile } from 'node:fs/promises';
 import { execa } from 'execa';
 import { queryCodebase } from '../claude/agent.js';
 
@@ -31,7 +32,7 @@ describe('queryCodebase', () => {
     const result = await queryCodebase('how does twitch work?', ['/repos/all-chat']);
 
     expect(result.answer).toBe('Twitch IRC is used for chat messages.');
-    expect(result.issueProposal).toBeNull();
+    expect(result.issueProposals).toEqual([]);
     expect(result.infraVerdict).toBeNull();
   });
 
@@ -78,18 +79,38 @@ describe('queryCodebase', () => {
     expect(allowedToolsValue).not.toContain('Edit');
   });
 
-  it('includes --mcp-config with grafana-caesar server when Grafana env vars are set', async () => {
-    mockExeca.mockResolvedValueOnce({
-      stdout: JSON.stringify({ result: 'Some answer' }),
-    } as ReturnType<typeof execa> extends Promise<infer T> ? T : never);
+  /**
+   * Reads whatever --mcp-config points at DURING the subprocess call, because the file is
+   * removed as soon as execa settles. Returns the path too, so a test can assert it is gone.
+   */
+  async function runCapturingMcpConfig(): Promise<{ path: string; contents: string }> {
+    let captured = { path: '', contents: '' };
+    mockExeca.mockImplementationOnce((async (_file: unknown, args: unknown) => {
+      const list = args as string[];
+      const path = list[list.indexOf('--mcp-config') + 1];
+      captured = { path, contents: await readFile(path, 'utf8') };
+      return { stdout: JSON.stringify({ result: 'Some answer' }) };
+    }) as unknown as typeof execa);
 
     await queryCodebase('some question', ['/repos/all-chat']);
+    return captured;
+  }
+
+  it('passes --mcp-config as a file path and keeps the Grafana token out of argv', async () => {
+    const { contents } = await runCapturingMcpConfig();
 
     const [, args] = mockExeca.mock.calls[0];
-    const mcpConfigIndex = (args as string[]).indexOf('--mcp-config');
+    const list = args as string[];
+    const mcpConfigIndex = list.indexOf('--mcp-config');
     expect(mcpConfigIndex).toBeGreaterThan(-1);
-    const mcpConfigValue = (args as string[])[mcpConfigIndex + 1];
-    const mcpConfig = JSON.parse(mcpConfigValue) as {
+
+    // The argument is a PATH, never the config itself. execa embeds the whole argv in
+    // every error it throws, so an inline config wrote the Grafana service-account token
+    // into the pod log on each subprocess failure. Nothing on the command line may carry it.
+    expect(list[mcpConfigIndex + 1]).toMatch(/mcp\.json$/);
+    expect(list.join(' ')).not.toContain('test-grafana-token');
+
+    const mcpConfig = JSON.parse(contents) as {
       mcpServers: {
         'grafana-caesar': {
           command: string;
@@ -101,6 +122,28 @@ describe('queryCodebase', () => {
     expect(mcpConfig.mcpServers['grafana-caesar']).toBeDefined();
     expect(mcpConfig.mcpServers['grafana-caesar'].env['GRAFANA_URL']).toBe('https://grafana.caes.ar');
     expect(mcpConfig.mcpServers['grafana-caesar'].env['GRAFANA_SERVICE_ACCOUNT_TOKEN']).toBe('test-grafana-token');
+  });
+
+  it('removes the temporary MCP config after the subprocess finishes', async () => {
+    const { path } = await runCapturingMcpConfig();
+
+    expect(path).not.toBe('');
+    await expect(access(path)).rejects.toThrow();
+  });
+
+  it('removes the temporary MCP config even when the subprocess fails', async () => {
+    let path = '';
+    mockExeca.mockImplementationOnce((async (_file: unknown, args: unknown) => {
+      const list = args as string[];
+      path = list[list.indexOf('--mcp-config') + 1];
+      throw Object.assign(new Error('Command timed out'), { timedOut: true });
+    }) as unknown as typeof execa);
+
+    await expect(queryCodebase('some question', ['/repos/all-chat'])).rejects.toThrow();
+
+    // A token-bearing file left behind by the failure path would defeat the whole change.
+    expect(path).not.toBe('');
+    await expect(access(path)).rejects.toThrow();
   });
 
   it('omits --mcp-config entirely when GRAFANA_URL is missing', async () => {
@@ -226,11 +269,101 @@ describe('queryCodebase', () => {
 
     const result = await queryCodebase('there is a bug', ['/repos/all-chat']);
 
-    expect(result.issueProposal).not.toBeNull();
-    expect(result.issueProposal?.repo).toBe('all-chat');
-    expect(result.issueProposal?.title).toBe('Fix the bug');
-    expect(result.issueProposal?.body).toBe('## Details\nThis bug needs fixing.');
+    expect(result.issueProposals).toHaveLength(1);
+    expect(result.issueProposals[0].repo).toBe('all-chat');
+    expect(result.issueProposals[0].title).toBe('Fix the bug');
+    expect(result.issueProposals[0].body).toBe('## Details\nThis bug needs fixing.');
     expect(result.answer).toContain('The fix is straightforward.');
+  });
+
+  it('parses EVERY PROPOSE_ISSUE marker, not just the first', async () => {
+    // The regression this covers: the old parser took indexOf() once and read the payload
+    // to the end of the string, so asking for four issues filed one whose body had the
+    // other three glued onto it. A user who lists four problems gets four issues.
+    const responseText = [
+      'Filing these now.',
+      '',
+      'PROPOSE_ISSUE:all-chat|||First issue|||## Context\nBody one, which has\nseveral lines.',
+      'PROPOSE_ISSUE:all-chat|||Second issue|||## Context\nBody two.',
+      'PROPOSE_ISSUE:all-chat-extension|||Third issue|||## Context\nBody three.',
+    ].join('\n');
+    mockExeca.mockResolvedValueOnce({
+      stdout: JSON.stringify({ result: responseText }),
+    } as ReturnType<typeof execa> extends Promise<infer T> ? T : never);
+
+    const result = await queryCodebase('file these', ['/repos/all-chat']);
+
+    expect(result.issueProposals).toHaveLength(3);
+    expect(result.issueProposals.map(p => p.title)).toEqual([
+      'First issue',
+      'Second issue',
+      'Third issue',
+    ]);
+    expect(result.issueProposals[0].body).toBe('## Context\nBody one, which has\nseveral lines.');
+    expect(result.issueProposals[2].repo).toBe('all-chat-extension');
+    expect(result.answer).toBe('Filing these now.');
+    expect(result.answer).not.toContain('PROPOSE_ISSUE:');
+  });
+
+  it('parses issue and comment markers that are interleaved with each other', async () => {
+    const responseText = [
+      'Done.',
+      'PROPOSE_ISSUE:all-chat|||An issue|||Issue body.',
+      'PROPOSE_COMMENT:all-chat|||447|||Comment body.',
+      'PROPOSE_ISSUE:all-chat|||Another issue|||Another body.',
+    ].join('\n');
+    mockExeca.mockResolvedValueOnce({
+      stdout: JSON.stringify({ result: responseText }),
+    } as ReturnType<typeof execa> extends Promise<infer T> ? T : never);
+
+    const result = await queryCodebase('do things', ['/repos/all-chat']);
+
+    expect(result.issueProposals).toHaveLength(2);
+    expect(result.commentProposals).toHaveLength(1);
+    expect(result.issueProposals[1].title).toBe('Another issue');
+    expect(result.issueProposals[0].body).toBe('Issue body.');
+    expect(result.commentProposals[0].issueNumber).toBe(447);
+  });
+
+  it('drops a PROPOSE_ISSUE naming an unknown repo instead of passing it to GitHub', async () => {
+    const responseText =
+      'Sure.\nPROPOSE_ISSUE:some-other-repo|||Title|||Body\nPROPOSE_ISSUE:all-chat|||Real one|||Body';
+    mockExeca.mockResolvedValueOnce({
+      stdout: JSON.stringify({ result: responseText }),
+    } as ReturnType<typeof execa> extends Promise<infer T> ? T : never);
+
+    const result = await queryCodebase('file it', ['/repos/all-chat']);
+
+    expect(result.issueProposals).toHaveLength(1);
+    expect(result.issueProposals[0].title).toBe('Real one');
+  });
+
+  it('drops a PROPOSE_ISSUE with an empty title', async () => {
+    mockExeca.mockResolvedValueOnce({
+      stdout: JSON.stringify({ result: 'Hm.\nPROPOSE_ISSUE:all-chat|||   |||Body' }),
+    } as ReturnType<typeof execa> extends Promise<infer T> ? T : never);
+
+    const result = await queryCodebase('file it', ['/repos/all-chat']);
+
+    expect(result.issueProposals).toEqual([]);
+  });
+
+  it('keeps INFRA_VERDICT parseable when it precedes several issue markers', async () => {
+    const responseText = [
+      'Prose.',
+      'INFRA_VERDICT:code|||A code problem.',
+      'PROPOSE_ISSUE:all-chat|||One|||Body one.',
+      'PROPOSE_ISSUE:all-chat|||Two|||Body two.',
+    ].join('\n');
+    mockExeca.mockResolvedValueOnce({
+      stdout: JSON.stringify({ result: responseText }),
+    } as ReturnType<typeof execa> extends Promise<infer T> ? T : never);
+
+    const result = await queryCodebase('check', ['/repos/all-chat']);
+
+    expect(result.infraVerdict).toEqual({ type: 'code', summary: 'A code problem.' });
+    expect(result.issueProposals).toHaveLength(2);
+    expect(result.answer).toBe('Prose.');
   });
 
   it('parses PROPOSE_COMMENT in the response into a CommentProposal', async () => {
@@ -242,22 +375,22 @@ describe('queryCodebase', () => {
 
     const result = await queryCodebase('any update on 447?', ['/repos/all-chat']);
 
-    expect(result.commentProposal).not.toBeNull();
-    expect(result.commentProposal?.repo).toBe('all-chat');
-    expect(result.commentProposal?.issueNumber).toBe(447);
-    expect(result.commentProposal?.body).toBe('## Update\nThis is now fixed in main.');
+    expect(result.commentProposals).toHaveLength(1);
+    expect(result.commentProposals[0].repo).toBe('all-chat');
+    expect(result.commentProposals[0].issueNumber).toBe(447);
+    expect(result.commentProposals[0].body).toBe('## Update\nThis is now fixed in main.');
     expect(result.answer).toContain('I\'ll follow up on the issue.');
     expect(result.answer).not.toContain('PROPOSE_COMMENT:');
   });
 
-  it('returns commentProposal: null when no PROPOSE_COMMENT marker is present', async () => {
+  it('returns an empty commentProposals array when no PROPOSE_COMMENT marker is present', async () => {
     mockExeca.mockResolvedValueOnce({
       stdout: JSON.stringify({ result: 'Just a normal answer.' }),
     } as ReturnType<typeof execa> extends Promise<infer T> ? T : never);
 
     const result = await queryCodebase('some question', ['/repos/all-chat']);
 
-    expect(result.commentProposal).toBeNull();
+    expect(result.commentProposals).toEqual([]);
   });
 
   it('ignores PROPOSE_COMMENT with a non-numeric issue number', async () => {
@@ -269,7 +402,7 @@ describe('queryCodebase', () => {
 
     const result = await queryCodebase('comment please', ['/repos/all-chat']);
 
-    expect(result.commentProposal).toBeNull();
+    expect(result.commentProposals).toEqual([]);
   });
 
   it('system prompt contains PROPOSE_COMMENT: instruction text', async () => {
