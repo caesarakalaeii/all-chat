@@ -77,6 +77,18 @@ describe('dashboard copy', () => {
     expect(t('dashboard.overlays.deleteLabel', { name: 'Main chat' })).toBe('Delete Main chat')
   })
 
+  it('keeps the parked-discovery warning reading as action needed', () => {
+    // Nothing has failed here, so no word in this copy may suggest a fault. It
+    // also has to say what clears the state: only Rediscover from the monitor
+    // does, and a browser-source refresh does not — which is the mistake the
+    // whole warning exists to prevent.
+    expect(t('dashboard.discoveryPaused.title')).toBe('YouTube discovery paused')
+    expect(t('dashboard.discoveryPaused.body')).toBe(
+      'No live stream was found for an hour, so All-Chat stopped looking. Re-discover from the chat monitor when you go live.'
+    )
+    expect(t('dashboard.discoveryPaused.action')).toBe('Open chat monitor')
+  })
+
   it('keeps the overlay mutation toasts', () => {
     expect(t('dashboard.toasts.overlayDeleted')).toBe('Overlay deleted')
     expect(t('dashboard.toasts.overlayDeleteFailed')).toBe('Failed to delete overlay')

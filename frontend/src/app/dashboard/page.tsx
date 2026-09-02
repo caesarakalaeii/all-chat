@@ -34,6 +34,7 @@ import { PlatformBadge } from '@/components/ui/badge'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { MaintenanceBanner } from '@/components/MaintenanceBanner'
 import { EventSubMigrationBanner } from '@/components/EventSubMigrationBanner'
+import { DiscoveryPausedNotice } from '@/components/DiscoveryPausedNotice'
 import { ModeratingElsewhereCard } from '@/components/ModeratingElsewhereCard'
 import { OnboardingChecklist } from '@/components/onboarding/OnboardingChecklist'
 import { CreateOverlayDialog } from '@/components/onboarding/CreateOverlayDialog'
@@ -319,6 +320,9 @@ function DashboardContent() {
                       </Button>
                     </DeleteOverlayDialog>
                   </div>
+                  {/* A parked YouTube channel, which nothing on this page used to show.
+                      Above the badges so it is the first thing read on the card. */}
+                  <DiscoveryPausedNotice overlayId={overlay.id} sources={overlay.sources} />
                   <div className="mb-4 flex flex-wrap gap-1.5">
                     {overlay.sources?.map((source) => (
                       <PlatformBadge
