@@ -43,9 +43,17 @@ type ChatSource struct {
 	// users row (username == channel_id) or a linked twitch_oauth_tokens row (ADR-0016).
 	// Computed per-requester; only populated by ListByOverlayIDForUser (false otherwise).
 	// Drives the IRC→EventSub re-consent nudge. Independent of ChatViaEventSub/token validity.
-	IsOwnChannel bool      `json:"is_own_channel"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	IsOwnChannel bool `json:"is_own_channel"`
+	// DiscoveryStatus is "paused" when this channel's stream discovery has parked itself
+	// and needs the streamer to hit Rediscover — today only YouTube produces it, after
+	// polling for an hour without finding a live stream. Empty (and so omitted from JSON)
+	// means no such state is known, which is NOT the same as healthy: the last-known
+	// status snapshot may have expired, never been written, or be unreadable. Callers must
+	// render nothing for the empty case. Computed (not stored); only populated by the
+	// overlay source list handler.
+	DiscoveryStatus string    `json:"discovery_status,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 // Valid platforms

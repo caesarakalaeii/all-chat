@@ -34,6 +34,15 @@ export const dashboard = {
     sourceCountOne: '{count} source',
     sourceCountOther: '{count} sources',
   },
+  // The overlay-card warning for a YouTube channel whose stream discovery parked
+  // itself after an hour of finding nothing live. Reads as "action needed", not
+  // "broken", matching viewerOverlay.statusIndicator.discoveryPaused — nothing has
+  // failed, but only Rediscover clears it, and a browser-source refresh will not.
+  discoveryPaused: {
+    title: 'YouTube discovery paused',
+    body: 'No live stream was found for an hour, so All-Chat stopped looking. Re-discover from the chat monitor when you go live.',
+    action: 'Open chat monitor',
+  },
   empty: {
     heading: 'No overlays yet',
     body: 'Create your first overlay to see chat from all your platforms in one place.',
