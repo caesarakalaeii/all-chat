@@ -1,0 +1,667 @@
+{
+  "frontend/playwright.config.ts": {
+    "restate": 2
+  },
+  "frontend/src/app/HomeClient.tsx": {
+    "banner": 6
+  },
+  "frontend/src/app/__tests__/token-contrast.test.ts": {
+    "banner": 3
+  },
+  "frontend/src/app/admin/users/page.tsx": {
+    "restate": 1
+  },
+  "frontend/src/app/dashboard/shares/components/ShareRequestCard.tsx": {
+    "step": 1
+  },
+  "frontend/src/app/dashboard/shares/components/__tests__/AcceptModal.test.tsx": {
+    "restate": 1
+  },
+  "frontend/src/app/link/page.tsx": {
+    "banner": 6
+  },
+  "frontend/src/app/overlay/[id]/page.tsx": {
+    "banner": 2,
+    "filler": 1,
+    "step": 13
+  },
+  "frontend/src/app/overlay/[id]/view/page.tsx": {
+    "banner": 3
+  },
+  "frontend/src/app/overlays/[id]/events/page.tsx": {
+    "banner": 6
+  },
+  "frontend/src/app/overlays/[id]/page.tsx": {
+    "banner": 5,
+    "restate": 2,
+    "step": 7
+  },
+  "frontend/src/app/overlays/[id]/preview/embed/page.tsx": {
+    "banner": 3,
+    "step": 18
+  },
+  "frontend/src/app/settings/api-tokens/__tests__/page.test.tsx": {
+    "step": 6
+  },
+  "frontend/src/app/settings/api-tokens/page.tsx": {
+    "banner": 10
+  },
+  "frontend/src/app/settings/devices/page.tsx": {
+    "banner": 6
+  },
+  "frontend/src/app/settings/viewer/__tests__/page.test.tsx": {
+    "banner": 4
+  },
+  "frontend/src/app/settings/viewer/page.tsx": {
+    "banner": 12
+  },
+  "frontend/src/components/MonacoCSSEditor.tsx": {
+    "restate": 1
+  },
+  "frontend/src/components/appearance/TTSGroup.tsx": {
+    "banner": 4
+  },
+  "frontend/src/components/appearance/__tests__/TTSGroup.test.tsx": {
+    "banner": 2,
+    "restate": 1
+  },
+  "frontend/src/components/overlay/EngagementControls.tsx": {
+    "banner": 4
+  },
+  "frontend/src/core/overlayStreamCore.ts": {
+    "banner": 18
+  },
+  "frontend/src/hooks/__tests__/useNotificationSocket.test.tsx": {
+    "banner": 1
+  },
+  "frontend/src/hooks/__tests__/useOverlayStream.test.ts": {
+    "banner": 1
+  },
+  "frontend/src/hooks/useThemeMarketplace.ts": {
+    "restate": 2
+  },
+  "frontend/src/lib/api/__tests__/add-source.test.ts": {
+    "step": 3
+  },
+  "frontend/src/lib/api/moderation.ts": {
+    "banner": 1
+  },
+  "frontend/src/lib/errorParser.ts": {
+    "step": 8
+  },
+  "frontend/src/lib/types/message.ts": {
+    "step": 1
+  },
+  "frontend/src/lib/types/moderation.ts": {
+    "banner": 2
+  },
+  "frontend/src/lib/types/visual-settings.ts": {
+    "step": 1
+  },
+  "frontend/src/lib/utils/__tests__/filterMessage.test.ts": {
+    "restate": 1
+  },
+  "frontend/src/lib/utils/__tests__/ttsPlayer.test.ts": {
+    "banner": 14
+  },
+  "frontend/src/lib/utils/__tests__/visual-settings-to-css.test.ts": {
+    "step": 1
+  },
+  "frontend/tests/e2e/dashboard.spec.ts": {
+    "restate": 1
+  },
+  "scripts/check-plugin-parity.py": {
+    "banner": 10,
+    "step": 2
+  },
+  "scripts/comment-lint.py": {
+    "banner": 6
+  },
+  "services/api-gateway/cmd/main.go": {
+    "restate": 3,
+    "step": 2
+  },
+  "services/api-gateway/handlers/health_test.go": {
+    "restate": 2
+  },
+  "services/api-gateway/handlers/proxy.go": {
+    "restate": 3
+  },
+  "services/api-gateway/handlers/proxy_test.go": {
+    "restate": 2
+  },
+  "services/api-gateway/handlers/websocket.go": {
+    "restate": 2,
+    "step": 6
+  },
+  "services/api-gateway/models/service_config.go": {
+    "filler": 1,
+    "restate": 3
+  },
+  "services/api-gateway/replay/buffer_test.go": {
+    "restate": 1
+  },
+  "services/api-gateway/sessions/manager.go": {
+    "restate": 1
+  },
+  "services/api-gateway/subscription/subscriber_test.go": {
+    "filler": 1
+  },
+  "services/api-gateway/websocket/manager.go": {
+    "restate": 6
+  },
+  "services/auth-service/cmd/key-rotator/sweeper_test.go": {
+    "step": 1
+  },
+  "services/auth-service/cmd/main.go": {
+    "restate": 5
+  },
+  "services/auth-service/handlers/admin.go": {
+    "filler": 1,
+    "restate": 3
+  },
+  "services/auth-service/handlers/auth_handler.go": {
+    "restate": 4
+  },
+  "services/auth-service/handlers/chat_send.go": {
+    "restate": 7,
+    "step": 8
+  },
+  "services/auth-service/handlers/chat_send_test.go": {
+    "filler": 2,
+    "restate": 1
+  },
+  "services/auth-service/handlers/device_link.go": {
+    "banner": 2
+  },
+  "services/auth-service/handlers/device_link_test.go": {
+    "banner": 8
+  },
+  "services/auth-service/handlers/devices_test.go": {
+    "banner": 6
+  },
+  "services/auth-service/handlers/mod_consent_test.go": {
+    "banner": 2
+  },
+  "services/auth-service/handlers/platform_auth.go": {
+    "restate": 3
+  },
+  "services/auth-service/handlers/platform_auth_v2.go": {
+    "restate": 7
+  },
+  "services/auth-service/handlers/risc_handler.go": {
+    "restate": 1
+  },
+  "services/auth-service/handlers/viewer_auth.go": {
+    "restate": 9
+  },
+  "services/auth-service/handlers/viewer_cosmetics.go": {
+    "step": 7
+  },
+  "services/auth-service/handlers/viewer_cosmetics_test.go": {
+    "step": 2
+  },
+  "services/auth-service/handlers/viewer_exchange.go": {
+    "restate": 7
+  },
+  "services/auth-service/handlers/viewer_resolve_test.go": {
+    "banner": 8
+  },
+  "services/auth-service/oauth/viewer_twitch.go": {
+    "filler": 1
+  },
+  "services/auth-service/repository/api_token_repository.go": {
+    "step": 2
+  },
+  "services/auth-service/repository/device_token_repository.go": {
+    "step": 4
+  },
+  "services/auth-service/repository/device_token_repository_test.go": {
+    "step": 3
+  },
+  "services/auth-service/repository/migrations_source_notify_test.go": {
+    "step": 4
+  },
+  "services/auth-service/repository/viewer_identity_repository.go": {
+    "step": 4
+  },
+  "services/auth-service/repository/viewer_identity_repository_test.go": {
+    "restate": 1
+  },
+  "services/discord-listener/gateway/client.go": {
+    "restate": 1,
+    "step": 14
+  },
+  "services/discord-listener/relay/webhook_provisioner.go": {
+    "step": 4
+  },
+  "services/emote-service/clients/bttv.go": {
+    "restate": 2
+  },
+  "services/emote-service/clients/seventv.go": {
+    "restate": 1,
+    "step": 3
+  },
+  "services/emote-service/cmd/main.go": {
+    "restate": 3
+  },
+  "services/emote-service/handlers/cheermote.go": {
+    "restate": 1
+  },
+  "services/kick-listener/channels/manager.go": {
+    "restate": 1
+  },
+  "services/kick-listener/cmd/main.go": {
+    "restate": 7
+  },
+  "services/kick-listener/handlers/health.go": {
+    "step": 1
+  },
+  "services/kick-listener/websocket/client.go": {
+    "restate": 2
+  },
+  "services/message-processor/cmd/main.go": {
+    "restate": 3,
+    "step": 1
+  },
+  "services/message-processor/consumer/stream_consumer.go": {
+    "restate": 2
+  },
+  "services/message-processor/consumer/stream_consumer_test.go": {
+    "restate": 3
+  },
+  "services/message-processor/enricher/pronoun_enricher.go": {
+    "step": 7
+  },
+  "services/message-processor/enricher/viewer_badge_enricher.go": {
+    "step": 12
+  },
+  "services/message-processor/enricher/viewer_badge_enricher_test.go": {
+    "step": 12
+  },
+  "services/message-processor/integration/event_flow_test.go": {
+    "step": 10
+  },
+  "services/message-processor/normalizer/normalizer.go": {
+    "restate": 1
+  },
+  "services/message-processor/normalizer/system_normalizer.go": {
+    "restate": 1
+  },
+  "services/message-processor/normalizer/tiktok_normalizer.go": {
+    "restate": 6
+  },
+  "services/message-processor/normalizer/twitch_normalizer.go": {
+    "restate": 6
+  },
+  "services/message-processor/normalizer/youtube_normalizer.go": {
+    "restate": 6
+  },
+  "services/message-processor/publisher/pubsub_publisher.go": {
+    "restate": 1
+  },
+  "services/message-processor/registry/registry_test.go": {
+    "restate": 1
+  },
+  "services/message-processor/sessions/capture.go": {
+    "restate": 1
+  },
+  "services/moderation-service/dispatch/kick.go": {
+    "step": 1
+  },
+  "services/moderation-service/handler/grants.go": {
+    "banner": 2
+  },
+  "services/moderation-service/handler/grants_test.go": {
+    "banner": 18
+  },
+  "services/moderation-service/handler/moderation.go": {
+    "step": 2
+  },
+  "services/moderation-service/handler/moderation_test.go": {
+    "banner": 1
+  },
+  "services/moderation-service/models/discord_authority.go": {
+    "filler": 1
+  },
+  "services/moderation-service/models/grant.go": {
+    "banner": 4
+  },
+  "services/moderation-service/models/moderation.go": {
+    "banner": 2
+  },
+  "services/moderation-service/tokens/mod_kick_test.go": {
+    "banner": 1
+  },
+  "services/moderation-service/tokens/mod_test.go": {
+    "banner": 1
+  },
+  "services/moderation-service/tokens/mod_youtube_test.go": {
+    "banner": 1
+  },
+  "services/overlay-manager/clients/youtube_quota_client.go": {
+    "banner": 1
+  },
+  "services/overlay-manager/cmd/main.go": {
+    "restate": 1,
+    "step": 5
+  },
+  "services/overlay-manager/creditroll/handler.go": {
+    "restate": 4
+  },
+  "services/overlay-manager/handlers/sources.go": {
+    "restate": 1,
+    "step": 4
+  },
+  "services/overlay-manager/handlers/tts.go": {
+    "banner": 13,
+    "step": 2
+  },
+  "services/overlay-manager/handlers/tts_test.go": {
+    "banner": 5,
+    "restate": 1,
+    "step": 2
+  },
+  "services/overlay-manager/handlers/youtube.go": {
+    "restate": 1
+  },
+  "services/overlay-manager/models/credit_roll.go": {
+    "restate": 1
+  },
+  "services/overlay-manager/repository/overlay_repo_test.go": {
+    "restate": 2
+  },
+  "services/payment-service/integrationtest/integration_test.go": {
+    "banner": 1
+  },
+  "services/payment-service/patreon/oauth.go": {
+    "filler": 1
+  },
+  "services/payment-service/patreon/types.go": {
+    "banner": 1
+  },
+  "services/share-service/cmd/main.go": {
+    "restate": 1
+  },
+  "services/share-service/handlers/admin.go": {
+    "filler": 1
+  },
+  "services/share-service/handlers/ambassador_test.go": {
+    "banner": 4
+  },
+  "services/share-service/handlers/shares.go": {
+    "restate": 2
+  },
+  "services/share-service/handlers/shares_accept_test.go": {
+    "step": 8
+  },
+  "services/share-service/jobs/expiry_test.go": {
+    "restate": 3
+  },
+  "services/share-service/models/share_request_test.go": {
+    "restate": 1
+  },
+  "services/source-manager/cmd/main.go": {
+    "restate": 5
+  },
+  "services/source-manager/demand/subscriber.go": {
+    "step": 5
+  },
+  "services/source-manager/election/leader.go": {
+    "restate": 2
+  },
+  "services/source-manager/election/leader_test.go": {
+    "restate": 4
+  },
+  "services/source-manager/handlers/sources.go": {
+    "restate": 2
+  },
+  "services/source-manager/registry/registry.go": {
+    "restate": 1
+  },
+  "services/support-bot/src/__tests__/index.test.ts": {
+    "filler": 1
+  },
+  "services/tiktok-listener/src/connection-pool/pool-manager.ts": {
+    "restate": 2
+  },
+  "services/tiktok-listener/src/index.ts": {
+    "banner": 2,
+    "restate": 7,
+    "step": 2
+  },
+  "services/tiktok-listener/src/livestream/poller.ts": {
+    "restate": 1
+  },
+  "services/tiktok-listener/src/reliability/heartbeat-monitor.ts": {
+    "restate": 2
+  },
+  "services/tiktok-listener/src/sign/config.test.ts": {
+    "step": 1
+  },
+  "services/tiktok-listener/src/tracing.ts": {
+    "restate": 1
+  },
+  "services/token-refresh-service/refresher/manager.go": {
+    "restate": 2
+  },
+  "services/token-refresh-service/refresher/manager_test.go": {
+    "banner": 6
+  },
+  "services/token-refresh-service/repository/token_repository_test.go": {
+    "banner": 1
+  },
+  "services/twitch-eventsub-listener/channels/manager.go": {
+    "restate": 1
+  },
+  "services/twitch-eventsub-listener/cmd/main.go": {
+    "restate": 1
+  },
+  "services/twitch-eventsub-listener/eventsub/subscription_manager.go": {
+    "restate": 1
+  },
+  "services/twitch-eventsub-listener/webhooks/handler.go": {
+    "restate": 2
+  },
+  "services/twitch-listener/channels/manager.go": {
+    "restate": 1
+  },
+  "services/twitch-listener/channels/manager_test.go": {
+    "restate": 3
+  },
+  "services/twitch-listener/cmd/main.go": {
+    "restate": 2
+  },
+  "services/twitch-listener/irc/connection.go": {
+    "restate": 1,
+    "step": 1
+  },
+  "services/twitch-listener/irc/event_parser.go": {
+    "restate": 2
+  },
+  "services/twitch-listener/irc/parser.go": {
+    "restate": 1
+  },
+  "services/twitch-listener/publisher/stream_publisher_test.go": {
+    "restate": 2
+  },
+  "services/youtube-listener-innertube/cmd/main.go": {
+    "step": 9
+  },
+  "services/youtube-listener-innertube/deletion/batch_detector.go": {
+    "restate": 1
+  },
+  "services/youtube-listener-innertube/deletion/buffer_test.go": {
+    "restate": 1
+  },
+  "services/youtube-listener-innertube/handlers/health_test.go": {
+    "restate": 1
+  },
+  "services/youtube-listener-innertube/innertube/client.go": {
+    "restate": 1
+  },
+  "services/youtube-listener-innertube/innertube/discovery.go": {
+    "step": 2
+  },
+  "services/youtube-listener-innertube/innertube/parser_test.go": {
+    "restate": 2
+  },
+  "services/youtube-listener-innertube/poller/lifecycle.go": {
+    "step": 4
+  },
+  "services/youtube-listener-innertube/poller/poller.go": {
+    "restate": 2,
+    "step": 5
+  },
+  "services/youtube-listener-innertube/streams/manager.go": {
+    "restate": 1
+  },
+  "services/youtube-listener-innertube/streams/manager_test.go": {
+    "restate": 1
+  },
+  "services/youtube-listener-innertube/streams/repository_test.go": {
+    "restate": 3
+  },
+  "services/youtube-listener/api/client.go": {
+    "restate": 1,
+    "step": 14
+  },
+  "services/youtube-listener/api/grpc_client.go": {
+    "restate": 1,
+    "step": 3
+  },
+  "services/youtube-listener/api/parser.go": {
+    "restate": 3
+  },
+  "services/youtube-listener/api/proto/stream_list.pb.go": {
+    "restate": 2
+  },
+  "services/youtube-listener/cmd/main.go": {
+    "restate": 5
+  },
+  "services/youtube-listener/handlers/quota.go": {
+    "banner": 3,
+    "filler": 1,
+    "restate": 2
+  },
+  "services/youtube-listener/metrics/youtube_metrics.go": {
+    "restate": 1
+  },
+  "services/youtube-listener/notifications/quota_notifier.go": {
+    "restate": 2
+  },
+  "services/youtube-listener/oauth/manager.go": {
+    "restate": 1
+  },
+  "services/youtube-listener/quota/coordinator.go": {
+    "restate": 3
+  },
+  "services/youtube-listener/quota/tracker.go": {
+    "banner": 1,
+    "step": 3
+  },
+  "services/youtube-listener/streams/detection.go": {
+    "restate": 5
+  },
+  "services/youtube-listener/streams/manager.go": {
+    "restate": 8,
+    "step": 3
+  },
+  "services/youtube-listener/streams/poller.go": {
+    "restate": 1,
+    "step": 4
+  },
+  "shared/auth/jwt.go": {
+    "step": 5
+  },
+  "shared/encryption/encryption.go": {
+    "step": 3
+  },
+  "shared/encryption/versioned.go": {
+    "step": 2
+  },
+  "shared/listener/shutdown.go": {
+    "step": 6
+  },
+  "shared/metrics/gateway.go": {
+    "restate": 2
+  },
+  "shared/middleware/apitoken.go": {
+    "step": 2
+  },
+  "shared/middleware/auth_test.go": {
+    "restate": 1
+  },
+  "shared/middleware/cors.go": {
+    "filler": 1
+  },
+  "shared/middleware/devicetoken.go": {
+    "step": 3
+  },
+  "shared/middleware/early_access.go": {
+    "step": 6
+  },
+  "shared/middleware/premium.go": {
+    "step": 6
+  },
+  "shared/ratelimit/ratelimit_test.go": {
+    "restate": 1
+  },
+  "shared/signing/signing.go": {
+    "restate": 3
+  },
+  "shared/signing/signing_test.go": {
+    "restate": 3
+  },
+  "streamcontroller-plugin/actions/base.py": {
+    "banner": 4
+  },
+  "streamcontroller-plugin/actions/poll_control.py": {
+    "banner": 1
+  },
+  "streamcontroller-plugin/actions/prediction_control.py": {
+    "banner": 1
+  },
+  "streamcontroller-plugin/allchat/api.py": {
+    "banner": 3
+  },
+  "streamcontroller-plugin/allchat/errors.py": {
+    "banner": 1
+  },
+  "test/contract/deletion/deletion_emission_test.go": {
+    "restate": 1
+  },
+  "test/contract/deletion/single_deletion_test.go": {
+    "restate": 1
+  },
+  "test/contract/dual-listener/artifacts.go": {
+    "restate": 4
+  },
+  "test/contract/dual-listener/comparator.go": {
+    "restate": 1
+  },
+  "test/contract/dual-listener/comparator_test.go": {
+    "restate": 2
+  },
+  "test/contract/dual-listener/main.go": {
+    "restate": 1
+  },
+  "test/contract/lifecycle/connection_test.go": {
+    "step": 3
+  },
+  "test/contract/lifecycle/offline_test.go": {
+    "step": 3
+  },
+  "test/contract/lifecycle/testcontainers_suite.go": {
+    "restate": 4
+  },
+  "test/contract/lifecycle/testcontainers_test.go": {
+    "restate": 3
+  },
+  "test/contract/schema/schema_test.go": {
+    "restate": 1
+  },
+  "test/youtube-stream-test/main.go": {
+    "restate": 3
+  }
+}
