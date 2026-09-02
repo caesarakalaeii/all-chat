@@ -53,6 +53,7 @@ import type { DiscordGuild, ChannelCategory } from '@/lib/api/discord'
 import { ApiError } from '@/lib/api/client'
 import { DISCORD_INVITE_URL } from '@/lib/constants'
 import { OnboardingChecklist } from '@/components/onboarding/OnboardingChecklist'
+import { ObsDockHelpContent } from '@/components/onboarding/ObsDockHelpContent'
 import { ObsHelpContent } from '@/components/onboarding/ObsHelpContent'
 import { deriveSteps, useOnboardingStore } from '@/lib/stores/onboarding-store'
 import { engagementApi } from '@/lib/api/engagement'
@@ -1960,6 +1961,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
 
   // --- OBS URL copy state ---
   const [copiedObs, setCopiedObs] = useState(false)
+  const [copiedDock, setCopiedDock] = useState(false)
 
   // --- Discord relay state ---
   const [relayExpandedSourceId, setRelayExpandedSourceId] = useState<string | null>(null)
@@ -2758,6 +2760,19 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     })
   }
 
+  // The monitor as an OBS/Streamlabs custom browser DOCK, which is a different
+  // destination from the URL above: that one is the public overlay a browser
+  // source renders on stream, this one is the auth-gated moderator monitor in a
+  // narrow docked panel. `dock=1` is what makes it fit one.
+  function handleCopyDockUrl() {
+    const url = `${window.location.origin}/overlay/${id}/view?dock=1`
+    navigator.clipboard.writeText(url).then(() => {
+      trackEvent('obs_url_copied', { surface: 'editor_dock' })
+      setCopiedDock(true)
+      setTimeout(() => setCopiedDock(false), 2000)
+    })
+  }
+
   function handleShareClick() {
     if (!user?.is_premium) {
       setShowPremiumRequired(true)
@@ -3152,6 +3167,39 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
               <Dialog.Title>{t('overlayEditor.page.obsHelpTitle')}</Dialog.Title>
               <div className="mt-3">
                 <ObsHelpContent />
+              </div>
+            </Dialog.Content>
+          </Dialog.Root>
+
+          {/* 2a. Copy dock URL — the monitor in a docked panel, for the streamer,
+              as opposed to the overlay on stream for viewers. */}
+          <Button
+            variant="outline"
+            className="flex w-full items-center justify-center gap-2"
+            onClick={handleCopyDockUrl}
+          >
+            <Clipboard className="size-4" />
+            {copiedDock
+              ? t('overlayEditor.page.copiedDockUrl')
+              : t('overlayEditor.page.copyDockUrl')}
+          </Button>
+          <Dialog.Root>
+            <Dialog.Trigger
+              render={
+                <Button
+                  type="button"
+                  variant="link"
+                  size="xs"
+                  className="mx-auto h-auto p-0 text-text-sub hover:text-text"
+                >
+                  {t('overlayEditor.page.dockHelpTrigger')}
+                </Button>
+              }
+            />
+            <Dialog.Content size="sm">
+              <Dialog.Title>{t('overlayEditor.page.dockHelpTitle')}</Dialog.Title>
+              <div className="mt-3">
+                <ObsDockHelpContent />
               </div>
             </Dialog.Content>
           </Dialog.Root>

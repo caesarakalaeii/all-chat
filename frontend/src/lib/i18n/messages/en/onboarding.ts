@@ -55,6 +55,22 @@ export const onboarding = {
     step3:
       'Size the source to the area chat should fill (a tall, narrow box like 450×800 works well, not your full canvas), then drag it into place. Chat appears as soon as the overlay connects.',
   },
+  // The chat MONITOR as a docked panel, which is a different OBS feature from
+  // the browser source above: it renders beside the mixer for the streamer, not
+  // on stream for viewers. Streamlabs takes the same URL through the same menu.
+  obsDock: {
+    heading: 'In OBS:',
+    // One whole sentence with the menu path as a single emphasised run, for the
+    // reason obs.step1 gives: a second language rearranges the words around it.
+    step1: 'In OBS, open {menu}.',
+    step1Menu: 'View \u2192 Docks \u2192 Custom Browser Docks',
+    step2:
+      'Give the dock a name, paste the copied dock link into the URL field, then click Apply and close the dialog.',
+    // The separate sign-in is the whole reason this step exists: the dock is its
+    // own browser profile, so an already-signed-in browser does not count.
+    step3:
+      'The dock has its own sign-in \u2014 sign in once inside the panel and it stays signed in. Drag the panel where you want it; a narrow column beside Scenes and Sources works well.',
+  },
   extras: {
     heading: 'Optional: go further',
     ttsTitle: 'Text-to-speech',

@@ -493,6 +493,13 @@ export const overlayEditor = {
     copiedObsUrl: 'Copied!',
     obsHelpTrigger: 'How do I add this to OBS?',
     obsHelpTitle: 'Add the overlay to OBS',
+    // The monitor as a docked panel. "Dock" rather than "OBS" because
+    // Streamlabs takes the same URL, and the distinction that matters here is
+    // panel-beside-the-mixer versus source-on-stream.
+    copyDockUrl: 'Copy dock URL',
+    copiedDockUrl: 'Copied!',
+    dockHelpTrigger: 'How do I dock chat in OBS?',
+    dockHelpTitle: 'Add the chat monitor as an OBS dock',
     shareOverlay: 'Share Overlay',
     resetToThemeDefaults: 'Reset to theme defaults',
     extensionHeading: 'Browser Extension Overlay',
