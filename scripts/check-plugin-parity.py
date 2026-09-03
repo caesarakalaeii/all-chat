@@ -50,6 +50,7 @@ TS_SETTINGS = TS / "src" / "allchat" / "settings.ts"
 PY_SETTINGS = PY / "allchat" / "settings.py"
 TS_LINKING = TS / "src" / "allchat" / "linking.ts"
 PY_LINKING = PY / "allchat" / "linking.py"
+TS_ACTION_BASE = TS / "src" / "actions" / "base.ts"
 TS_UI = TS / "com.allchat.streamdeck.sdPlugin" / "ui"
 TS_SEND_UI = TS_UI / "send-message.html"
 TS_LINK_SCRIPT = TS_UI / "allchat-link.js"
@@ -68,6 +69,11 @@ TS_INSPECTORS: tuple[Path, ...] = (
 #: are on — issue #816: the #797 client fix had shipped in the repo and never reached
 #: anyone, and nothing in the panel could have revealed that.
 VERSION_ELEMENT_ID = "allchat-plugin-version"
+
+#: How the plugin refers to its own version in a log line. `streamDeck.info` carries
+#: the registration info the Stream Deck app sends at connect, so this is the version
+#: of the build that is loaded rather than of a manifest on disk.
+PLUGIN_VERSION_EXPRESSION = "streamDeck.info.plugin.version"
 
 # ---------------------------------------------------------------------------
 # 1. The action list. THIS is the contract ADR-0049 asks for: adding a button
@@ -401,12 +407,17 @@ def check_inspector_watchdogs() -> None:
 
 
 def check_version_stamp() -> None:
-    """The running plugin version must be visible in every property inspector.
+    """The running plugin version must be identifiable from the panel and from a log.
 
     Checked here rather than in a unit test because no compiler or test runner in
     this repo opens these HTML files: the three inspectors are hand-maintained
     copies of one Linking block, so an id added to one and forgotten in the other
     two is invisible until a streamer on that action reports a blank panel.
+
+    Both surfaces are asserted together because they answer one question. A streamer
+    reading the panel and a maintainer reading the log they were sent both need the
+    build number, and issue #816 is what happens when neither has it: the #797 fix
+    sat unreleased for days and no report could have revealed that.
     """
     if VERSION_ELEMENT_ID not in read(TS_LINK_SCRIPT):
         fail(
@@ -420,6 +431,24 @@ def check_version_stamp() -> None:
                 f"{page.relative_to(REPO)} has no element with id=\"{VERSION_ELEMENT_ID}\". "
                 f"All three property inspectors carry the version stamp, or a support "
                 f"report from that action cannot say which build it came from."
+            )
+
+    # Every "linking failed" the plugin logs has to carry the build, so a log file a
+    # streamer attaches identifies it without a follow-up question. Matched on the
+    # line rather than on a helper name so it cannot be satisfied by declaring one.
+    base_src = strip_ts_comments(read(TS_ACTION_BASE))
+    failure_logs = re.findall(r"^.*logger\.error\(.*linking failed.*$", base_src, re.MULTILINE)
+    if not failure_logs:
+        fail(
+            f"{TS_ACTION_BASE.relative_to(REPO)} logs no `linking failed` error. If the "
+            f"wording changed, change it here too."
+        )
+    for line in failure_logs:
+        if PLUGIN_VERSION_EXPRESSION not in line:
+            fail(
+                f"{TS_ACTION_BASE.relative_to(REPO)} logs a linking failure without "
+                f"`{PLUGIN_VERSION_EXPRESSION}`: {line.strip()}. A log a streamer sends in "
+                f"has to name the build, or the first reply is always 'which version?'."
             )
 
 
