@@ -102,6 +102,7 @@ import { OFFLINE_THRESHOLD } from '@/lib/utils/connectionStatusLabel'
 import { createSoundPlayer, type SoundPlayer, type SoundSettings } from '@/lib/utils/soundPlayer'
 
 import { DEFAULT_DOCK_TAB, isDockMode, loadDockTab, saveDockTab, type DockTab } from './dockMode'
+import { shouldOfferModLogOptIn } from './modLogOptIn'
 import {
   DEFAULT_VIEW_LAYOUT,
   LAYOUT_CONFIG,
@@ -563,9 +564,9 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
     [sources]
   )
 
-  // Whether the mod-log opt-in is worth offering at all. Only Twitch produces these
-  // events, and capabilities carries no flag for the grant, so the CTA stays visible
-  // like the engagement-mirror one rather than pretending to know it is already given.
+  // Only Twitch produces mod-log events, so a Twitch source is the precondition for
+  // offering the opt-in at all; whether the grant already exists is capabilities'
+  // mod_log_granted (see shouldOfferModLogOptIn).
   const hasTwitchSource = useMemo(
     () => Array.from(sources.values()).some((s) => s.platform === 'twitch'),
     [sources]
@@ -891,7 +892,11 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
   const consentNotices = moderationEnabled && isModerator ? needsConsentSources : []
   const showDiscordLink = moderationEnabled && isModerator && needsDiscordLinkSources.length > 0
   const missingScopeNotices = moderationEnabled && isOwner ? missingScopeSources : []
-  const showModLogOptIn = isOwner && hasTwitchSource
+  const showModLogOptIn = shouldOfferModLogOptIn({
+    isOwner,
+    hasTwitchSource,
+    modLogGranted: capabilities?.mod_log_granted,
+  })
   const noticeCount =
     Number(showStillReconnecting) +
     Number(replayTruncated) +
