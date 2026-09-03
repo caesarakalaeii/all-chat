@@ -523,12 +523,10 @@
     "restate": 3
   },
   "services/youtube-listener/api/client.go": {
-    "restate": 1,
-    "step": 14
+    "restate": 1
   },
   "services/youtube-listener/api/grpc_client.go": {
-    "restate": 1,
-    "step": 3
+    "restate": 1
   },
   "services/youtube-listener/api/parser.go": {
     "restate": 3
@@ -540,8 +538,6 @@
     "restate": 5
   },
   "services/youtube-listener/handlers/quota.go": {
-    "banner": 3,
-    "filler": 1,
     "restate": 2
   },
   "services/youtube-listener/metrics/youtube_metrics.go": {
@@ -556,20 +552,14 @@
   "services/youtube-listener/quota/coordinator.go": {
     "restate": 3
   },
-  "services/youtube-listener/quota/tracker.go": {
-    "banner": 1,
-    "step": 3
-  },
   "services/youtube-listener/streams/detection.go": {
     "restate": 5
   },
   "services/youtube-listener/streams/manager.go": {
-    "restate": 8,
-    "step": 3
+    "restate": 8
   },
   "services/youtube-listener/streams/poller.go": {
-    "restate": 1,
-    "step": 4
+    "restate": 1
   },
   "shared/metrics/gateway.go": {
     "restate": 2
