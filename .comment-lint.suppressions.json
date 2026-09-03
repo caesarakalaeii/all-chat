@@ -28,21 +28,6 @@
     "restate": 2,
     "step": 7
   },
-  "frontend/src/app/settings/api-tokens/__tests__/page.test.tsx": {
-    "step": 6
-  },
-  "frontend/src/app/settings/api-tokens/page.tsx": {
-    "banner": 10
-  },
-  "frontend/src/app/settings/devices/page.tsx": {
-    "banner": 6
-  },
-  "frontend/src/app/settings/viewer/__tests__/page.test.tsx": {
-    "banner": 4
-  },
-  "frontend/src/app/settings/viewer/page.tsx": {
-    "banner": 12
-  },
   "frontend/src/components/MonacoCSSEditor.tsx": {
     "restate": 1
   },

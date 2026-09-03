@@ -82,10 +82,6 @@ function formatDayOrUnknown(t: TFunction, value: string | null): string {
   return formatDateTime(parsed, { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
-// ---------------------------------------------------------------------------
-// MintedTokenReveal — the one-and-only sighting of a plaintext token
-// ---------------------------------------------------------------------------
-
 /**
  * `token` arrives as a prop and leaves with the component. Nothing here writes
  * it anywhere but the DOM node the user is looking at and, on explicit request,
@@ -145,10 +141,6 @@ function MintedTokenReveal({
     </Card>
   )
 }
-
-// ---------------------------------------------------------------------------
-// CreateTokenForm — name + scopes
-// ---------------------------------------------------------------------------
 
 /**
  * Scopes are multi-select. There is no `checkbox.tsx` primitive in this repo, so
@@ -266,10 +258,6 @@ function CreateTokenForm({
   )
 }
 
-// ---------------------------------------------------------------------------
-// EmptyState — what tokens are for, and where the plugins live
-// ---------------------------------------------------------------------------
-
 function EmptyState() {
   const t = useTranslations()
   return (
@@ -302,10 +290,11 @@ function EmptyState() {
   )
 }
 
-// ---------------------------------------------------------------------------
-// TokenRow — metadata only
-// ---------------------------------------------------------------------------
-
+/**
+ * Renders metadata only. The list endpoint never returns a token's plaintext
+ * — it exists once, in MintedTokenReveal, and is unrecoverable after that — so
+ * there is nothing secret here to leak into the DOM.
+ */
 function TokenRow({ token, onRevoke }: { token: ApiToken; onRevoke: (token: ApiToken) => void }) {
   const t = useTranslations()
   return (
@@ -342,10 +331,6 @@ function TokenRow({ token, onRevoke }: { token: ApiToken; onRevoke: (token: ApiT
     </li>
   )
 }
-
-// ---------------------------------------------------------------------------
-// Page content
-// ---------------------------------------------------------------------------
 
 function ApiTokensContent() {
   const t = useTranslations()
