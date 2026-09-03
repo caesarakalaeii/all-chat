@@ -533,8 +533,16 @@ type Capabilities struct {
 	// It is what a source's "Connect to moderate" must request scopes for: a source that needs
 	// consent reports no usable actions yet, so without this the consent screen would have to
 	// guess — and guessing high would ask a volunteer for ban scope the streamer never delegated.
-	DelegatedActions []Action           `json:"delegated_actions,omitempty"`
-	Sources          []SourceCapability `json:"sources"`
+	DelegatedActions []Action `json:"delegated_actions,omitempty"`
+	// ModLogGranted reports whether the OWNER's Twitch credential already holds every mod-log
+	// scope, so the monitor can stop re-offering an opt-in that has been completed (#815).
+	//
+	// False is the safe answer and means "offer the opt-in": it covers a moderator (the scopes
+	// are the broadcaster's and are not delegatable), a caller with no role, and any lookup that
+	// could not determine the scopes. Hiding the CTA on a cannot-tell would leave a streamer
+	// with no route to the mod log at all.
+	ModLogGranted bool               `json:"mod_log_granted"`
+	Sources       []SourceCapability `json:"sources"`
 }
 
 // ActionsForModeratorScopes maps a delegated moderator's OWN granted scopes to the actions they

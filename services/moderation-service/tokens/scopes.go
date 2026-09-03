@@ -76,6 +76,20 @@ func (c *TwitchScopeChecker) CanSend(ctx context.Context, userID, platform, chan
 	return models.CanSendForTwitchScopes(cred.GrantedScopes), nil
 }
 
+// ModLogGranted reports whether the owner's Twitch credential for this channel already holds
+// every scope the moderation-log opt-in grants. A missing credential yields false, mirroring
+// GrantedActions: there is nothing granted to find.
+func (c *TwitchScopeChecker) ModLogGranted(ctx context.Context, userID, channelID string) (bool, error) {
+	cred, err := c.src.Resolve(ctx, userID, channelID)
+	if errors.Is(err, ErrNoCredential) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return models.ModLogGranted(cred.GrantedScopes), nil
+}
+
 // kickCredentialResolver is the subset of KickSource the scope checker needs.
 type kickCredentialResolver interface {
 	Resolve(ctx context.Context, userID, channelID string) (*KickCredential, error)
