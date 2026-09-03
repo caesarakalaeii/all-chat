@@ -1,0 +1,59 @@
+name: Comment Lint Gate
+
+# The gate that keeps machine-written comment slop out of the tree. A comment
+# earns its place by saying *why*; a comment that restates the code is deleted
+# rather than reworded. Four rules (`banner`, `step`, `filler`, `restate`) live
+# in scripts/comment-lint.py, the policy and the exemptions in CONTRIBUTING.md.
+#
+# Deliberately SEPARATE from frontend-quality.yml (dispatch-only/dead because of
+# pre-existing lint debt) and from the frontend-i18n.yml / frontend-a11y.yml
+# gates: this workflow contains ONLY the comment lint, so it stays green
+# independently of that debt and can gate PRs immediately. Same reasoning as
+# frontend-i18n.yml, one rung wider in scope.
+#
+# NO `paths:` filter and NO skip shim, unlike its two frontend siblings. The
+# lint covers Go, TypeScript and Python, which is nearly every source file in
+# the repo, so there is no meaningful set of PRs it could be skipped on. That
+# also keeps it clear of the trap in ADR-0033 / PR #577: a workflow gated by a
+# top-level `paths:` filter is skipped ENTIRELY on non-matching PRs, its
+# required contexts are never reported, and the PR sits permanently "Expected"
+# (blocked) with no signal at all.
+#
+# Ratchet (may only shrink, never grow):
+#   - .comment-lint.suppressions.json
+#
+# A rule count below its recorded allowance fails naming the lower number, and
+# an entry that reaches 0 must be deleted. Same contract as
+# frontend/eslint.i18n.suppressions.json, enforced inside the script rather than
+# by diffing against main, so it holds locally too.
+#
+# The job sets `timeout-minutes`. Without it a job inherits GitHub's 6-hour
+# default, and on 2026-08-19 two jobs on PR #729 hung for ~4 hours on an install
+# step. A hang is worse than a failure here: the required context never reports,
+# so the PR is blocked with nothing to read.
+
+on:
+  pull_request:
+
+jobs:
+  comment-lint:
+    name: comment lint (no restated comments)
+    runs-on: ubuntu-latest
+    # Observed 0.8s over ~1400 files, standard library only, no install step
+    # beyond the interpreter itself.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      # Runs first: it pins both directions of every rule on inline fixtures, so
+      # a rule that has been loosened or broken says so before the repo-wide run
+      # buries it in a diff of counts.
+      - name: Comment-lint selftest (flagged and kept fixtures)
+        run: python3 scripts/comment-lint.py --selftest
+
+      - name: Comment lint (shrink-only suppressions ratchet)
+        run: python3 scripts/comment-lint.py
