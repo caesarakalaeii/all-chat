@@ -108,6 +108,7 @@ export const overlayEditor = {
     textShadowStrong: 'Strong shadow',
     textShadowOutline: 'Outline',
     textShadowCustom: 'Custom',
+    outlineThickness: 'Outline thickness',
     textShadowNote:
       'Keeps chat readable over bright gameplay. Try it with a light preview backdrop.',
     lineHeight: 'Line Height',

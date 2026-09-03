@@ -21,6 +21,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import React from 'react'
 import { render, screen, cleanup, fireEvent } from '@testing-library/react'
 import type { VisualSettings } from '@/lib/types/visual-settings'
+import { buildOutlineShadow } from '@/lib/utils/text-outline'
 import { TypographyGroup } from '../TypographyGroup'
 
 afterEach(() => {
@@ -88,6 +89,47 @@ describe('TypographyGroup', () => {
     const select = screen.getByLabelText(/text shadow/i) as HTMLSelectElement
     expect(select.value).toBe('2px 2px 0 #ff00ff')
     expect(screen.getByText('Custom')).toBeDefined()
+  })
+
+  it('selecting Outline writes a 2px outline, thicker than the old 1px shape', () => {
+    const onChange = vi.fn()
+    render(<TypographyGroup visualSettings={defaultSettings} onChange={onChange} />)
+    const select = screen.getByLabelText(/text shadow/i) as HTMLSelectElement
+    const outline = Array.from(select.options).find((o) => o.text === 'Outline')!
+    fireEvent.change(select, { target: { value: outline.value } })
+    expect(onChange).toHaveBeenCalledWith({ textShadow: buildOutlineShadow(2) })
+  })
+
+  it('hides the outline thickness slider for the non-outline presets', () => {
+    const onChange = vi.fn()
+    for (const textShadow of [undefined, '0 1px 2px rgba(0, 0, 0, 0.6)']) {
+      const { unmount } = render(
+        <TypographyGroup visualSettings={{ textShadow }} onChange={onChange} />
+      )
+      expect(screen.queryByLabelText(/outline thickness/i)).toBeNull()
+      unmount()
+    }
+  })
+
+  it('reports the new width when the outline thickness slider moves', () => {
+    const onChange = vi.fn()
+    render(
+      <TypographyGroup visualSettings={{ textShadow: buildOutlineShadow(2) }} onChange={onChange} />
+    )
+    const slider = screen.getByLabelText(/outline thickness/i)
+    fireEvent.change(slider, { target: { value: '5' } })
+    expect(onChange).toHaveBeenCalledWith({ textShadow: buildOutlineShadow(5) })
+  })
+
+  it('keeps Outline selected for a stored non-default width', () => {
+    const onChange = vi.fn()
+    render(
+      <TypographyGroup visualSettings={{ textShadow: buildOutlineShadow(3) }} onChange={onChange} />
+    )
+    const select = screen.getByLabelText(/text shadow/i) as HTMLSelectElement
+    expect(select.selectedOptions[0].text).toBe('Outline')
+    expect(screen.queryByText('Custom')).toBeNull()
+    expect((screen.getByLabelText(/outline thickness/i) as HTMLInputElement).value).toBe('3')
   })
 
   // The font-weight dropdown is portalled, so it must out-stack the overlay

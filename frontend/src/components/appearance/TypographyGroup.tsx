@@ -23,6 +23,13 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@base-ui/react/select'
 import { useTranslations } from '@/lib/i18n'
 import type { VisualSettings } from '@/lib/types/visual-settings'
+import {
+  buildOutlineShadow,
+  parseOutlineWidth,
+  DEFAULT_OUTLINE_WIDTH_PX,
+  MIN_OUTLINE_WIDTH_PX,
+  MAX_OUTLINE_WIDTH_PX,
+} from '@/lib/utils/text-outline'
 import { FontFamilyCombobox } from './FontFamilyCombobox'
 import { SliderControl } from './SliderControl'
 import { AdvancedDisclosure } from '@/components/editor/AdvancedDisclosure'
@@ -35,8 +42,11 @@ const FONT_WEIGHT_VALUES = ['100', '300', '400', '500', '600', '700', '800', '90
 // text-shadow declarations applied via --chat-text-shadow (inherited from the
 // overlay container). '' = unset the field, falling back to the theme/none.
 // `name` keys the label in the catalog.
+//
+// Outline is absent here because its value carries a user-chosen width; the
+// select builds that one option from the stored setting, see outlineWidth.
 const TEXT_SHADOW_PRESETS: ReadonlyArray<{
-  name: 'None' | 'Soft' | 'Strong' | 'Outline'
+  name: 'None' | 'Soft' | 'Strong'
   value: string
 }> = [
   { name: 'None', value: '' },
@@ -44,11 +54,6 @@ const TEXT_SHADOW_PRESETS: ReadonlyArray<{
   {
     name: 'Strong',
     value: '0 1px 2px rgba(0, 0, 0, 0.9), 0 2px 6px rgba(0, 0, 0, 0.7)',
-  },
-  {
-    name: 'Outline',
-    value:
-      '1px 1px 0 rgba(0, 0, 0, 0.85), -1px 1px 0 rgba(0, 0, 0, 0.85), 1px -1px 0 rgba(0, 0, 0, 0.85), -1px -1px 0 rgba(0, 0, 0, 0.85)',
   },
 ]
 
@@ -65,6 +70,14 @@ export function TypographyGroup({
   const fieldId = useId()
   const lineHeight = parseFloat(visualSettings.lineHeight ?? '1.5')
   const letterSpacing = parseFloat(visualSettings.letterSpacing?.replace('px', '') ?? '0')
+  // Non-null exactly when the stored shadow is an outline. The Outline option
+  // then has to carry that stored string verbatim as its value, or the select
+  // would fail to match it and silently fall through to the read-only Custom
+  // entry — at width 3, or on a legacy four-direction value.
+  const storedShadow = visualSettings.textShadow ?? ''
+  const outlineWidth = parseOutlineWidth(storedShadow)
+  const outlineValue =
+    outlineWidth === null ? buildOutlineShadow(DEFAULT_OUTLINE_WIDTH_PX) : storedShadow
 
   return (
     <div className="space-y-3">
@@ -216,7 +229,7 @@ export function TypographyGroup({
         </label>
         <select
           id={`${fieldId}-text-shadow`}
-          value={visualSettings.textShadow ?? ''}
+          value={storedShadow}
           onChange={(e) =>
             onChange({ textShadow: e.target.value === '' ? undefined : e.target.value })
           }
@@ -227,15 +240,26 @@ export function TypographyGroup({
               {t(`overlayEditor.typography.textShadow${preset.name}`)}
             </option>
           ))}
-          {visualSettings.textShadow !== undefined &&
-            !TEXT_SHADOW_PRESETS.some((p) => p.value === visualSettings.textShadow) && (
-              <option value={visualSettings.textShadow}>
-                {t('overlayEditor.typography.textShadowCustom')}
-              </option>
-            )}
+          <option value={outlineValue}>{t('overlayEditor.typography.textShadowOutline')}</option>
+          {outlineWidth === null && !TEXT_SHADOW_PRESETS.some((p) => p.value === storedShadow) && (
+            <option value={storedShadow}>{t('overlayEditor.typography.textShadowCustom')}</option>
+          )}
         </select>
         <p className="text-xs text-text-dim">{t('overlayEditor.typography.textShadowNote')}</p>
       </div>
+
+      {/* Outline thickness — only meaningful while the outline is selected */}
+      {outlineWidth !== null && (
+        <SliderControl
+          label={t('overlayEditor.typography.outlineThickness')}
+          value={outlineWidth}
+          min={MIN_OUTLINE_WIDTH_PX}
+          max={MAX_OUTLINE_WIDTH_PX}
+          step={1}
+          unit="px"
+          onChange={(v) => onChange({ textShadow: buildOutlineShadow(v) })}
+        />
+      )}
 
       {/* Low-traffic fine-tuning lives behind Advanced (ADR-0042) */}
       <AdvancedDisclosure count={2}>
