@@ -30,6 +30,42 @@ Thank you for contributing to All-Chat! This guide will help you submit high-qua
 - Follow React hooks patterns
 - Use Next.js App Router conventions
 
+### Comments
+
+A comment earns its place by saying *why*. A comment that restates the code is
+deleted rather than reworded: the reader already has the code. `make
+lint-comments` (CI: `.github/workflows/comment-lint.yml`) enforces that with
+four rules over every tracked `*.go`, `*.ts`, `*.tsx` and `*.py` file. Only
+single-line comments are scanned; block comments (`/* */`, `"""`) are prose by
+construction and are where the why-docs belong.
+
+| rule | fires on |
+|------|----------|
+| `banner` | decoration: 6 or more repeats of `= - * # _ ~`, alone or wrapping a title (`// ===== FOO =====`). Keep the title as an ordinary comment when it says something the code does not. |
+| `step` | a leading `Step 3`, `Phase 2`, `4.` or `5)`. Numbering a procedure in comments goes stale the first time the procedure changes. |
+| `filler` | a pinned phrase list: `helper function to`, `utility function`, `as mentioned above`, `this function is responsible for`, `this function will`, `for clarity`, `we need to`, `note that we`, `magic number`. |
+| `restate` | a comment whose content words all appear in the identifiers of the next line of code: `// set the retry limit` above `retryLimit = 5`. `// 5 because Pusher drops the 6th silently` is kept, because that is the *why*. |
+
+Exempt from all four rules:
+
+- The AGPL license header at the top of every file.
+- Any comment carrying context that is not in the code: a URL, an issue
+  reference (`#123`), `ADR-`, or `ponytail:`.
+- Machine directives (`//go:`, `// +build`, `//nolint`, `// eslint-`, `// @ts-`,
+  `// prettier-`, `// istanbul `, `# noqa`, `# type:`, `# pylint`).
+- `TODO(`, `FIXME(`, `XXX(` with an owner in the parens. An unowned one is slop.
+
+`restate` additionally only fires on a lone comment inside a function body. It
+never fires on a declaration doc comment (godoc requires `// GetUser returns the
+user`, a restatement by construction) and never on a block of 2 or more comment
+lines, because a block is prose and prose is the goal.
+
+Today's violations are recorded in `.comment-lint.suppressions.json` so the gate
+went green on merge. **That file may only shrink.** A file whose count drops
+below its allowance fails the lint naming the lower number, and an entry that
+reaches 0 must be deleted. Never raise a count to land a change: fix the
+comment, or delete it.
+
 ### Testing
 
 **Required**:
@@ -132,6 +168,7 @@ See #724 and #728 for worked examples.
 - [ ] Tests pass: `make test`
 - [ ] Code formatted: `gofmt -w .` (frontend: `cd frontend && npm run format`)
 - [ ] Lint passes: `golangci-lint run` (frontend: `cd frontend && npm run lint`)
+- [ ] Comment lint passes: `make lint-comments` (suppressions may only shrink)
 - [ ] Commit messages follow format
 - [ ] Documentation updated (if applicable)
 

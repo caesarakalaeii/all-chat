@@ -1,4 +1,4 @@
-.PHONY: help build build-all test clean docker-up docker-down migrate deps frontend-dev test-stream test-stream-stop
+.PHONY: help build build-all test lint-comments clean docker-up docker-down migrate deps frontend-dev test-stream test-stream-stop
 
 # Default target
 help:
@@ -9,6 +9,7 @@ help:
 	@echo "  make build         - Build all services"
 	@echo "  make test          - Run all tests"
 	@echo "  make test-coverage - Run tests with coverage"
+	@echo "  make lint-comments - Lint comment slop (banner/step/filler/restate)"
 	@echo ""
 	@echo "Docker Compose:"
 	@echo "  make docker-up     - Start all services with Docker Compose"
@@ -147,6 +148,14 @@ test-coverage:
 test-auth:
 	@echo "Testing auth-service..."
 	cd services/auth-service && go test -v ./...
+
+# Comment lint. Gated in CI by .github/workflows/comment-lint.yml; the policy and
+# the exemptions are in CONTRIBUTING.md. Counts in .comment-lint.suppressions.json
+# may only shrink, so a file that drops below its allowance fails here too.
+lint-comments:
+	@echo "Linting comments..."
+	python3 scripts/comment-lint.py --selftest
+	python3 scripts/comment-lint.py
 
 # Clean build artifacts
 clean:
