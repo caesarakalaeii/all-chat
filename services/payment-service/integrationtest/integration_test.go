@@ -463,8 +463,6 @@ func TestEarlyAccessGate(t *testing.T) {
 	assert.Equal(t, http.StatusOK, serve(graduated, plainUser), "graduated feature is open to all authenticated users")
 }
 
-// ---- helpers -------------------------------------------------------------------
-
 func signMD5(secret, body string) string {
 	mac := hmac.New(md5.New, []byte(secret))
 	mac.Write([]byte(body))

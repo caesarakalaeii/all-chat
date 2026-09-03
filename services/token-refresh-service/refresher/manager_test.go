@@ -31,10 +31,6 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// ---------------------------------------------------------------------------
-// Fakes / test doubles
-// ---------------------------------------------------------------------------
-
 // fakeProvider is an OAuthProvider that returns a configurable response.
 type fakeProvider struct {
 	platform authOAuth.Platform
@@ -179,10 +175,6 @@ func (r *fakeRepo) MarkTwitchLinkTokenPermanentlyFailed(_ context.Context, userI
 	return nil
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 func newTestManager(repo refresher.TokenRepo, providers map[authOAuth.Platform]authOAuth.OAuthProvider) *refresher.Manager {
 	logger := zap.NewNop()
 	// Use an isolated Prometheus registry per manager instance so that parallel
@@ -200,10 +192,6 @@ func newTestManager(repo refresher.TokenRepo, providers map[authOAuth.Platform]a
 		reg,
 	)
 }
-
-// ---------------------------------------------------------------------------
-// Tests — non-retryable errors mark the token in the DB
-// ---------------------------------------------------------------------------
 
 // TestRefreshPlatform_NonRetryableError_MarksUserToken verifies that when a user
 // token refresh fails with a non-retryable OAuth error (e.g. invalid_grant), the

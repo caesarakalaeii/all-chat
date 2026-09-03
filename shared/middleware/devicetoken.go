@@ -37,15 +37,15 @@ package middleware
 //
 // The two invariants from apitoken.go hold verbatim, and one is added:
 //
-//  1. AUTHENTICATION ONLY. A resolved device token populates exactly the same request
+//   - AUTHENTICATION ONLY. A resolved device token populates exactly the same request
 //     identity a session JWT would, so every ownership check and premium gate behaves
 //     identically. Scopes and the overlay binding NARROW what the token may do; they
 //     never authorize anything the owning session could not do.
 //
-//  2. THE PLAINTEXT IS NEVER PERSISTED OR LOGGED. Only a SHA-256 digest reaches
+//   - THE PLAINTEXT IS NEVER PERSISTED OR LOGGED. Only a SHA-256 digest reaches
 //     device_tokens.token_hash (migration 088).
 //
-//  3. THE PLAINTEXT IS NEVER SHOWN TO A HUMAN EITHER. This is the difference that
+//   - THE PLAINTEXT IS NEVER SHOWN TO A HUMAN EITHER. This is the difference that
 //     justifies a second credential type at all: the secret goes from the exchange
 //     endpoint straight to the plugin over the loopback redirect, so it cannot be read
 //     aloud, screenshotted or leaked on camera — the failure mode ADR-0049 rejected

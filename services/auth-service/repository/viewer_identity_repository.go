@@ -43,17 +43,11 @@ func NewViewerIdentityRepository(db *pgxpool.Pool, recomputer *premium.Recompute
 // GetOrCreateViewerByPlatform looks up or creates a viewer record for the given
 // (platform, platformUserID). Returns the durable viewer_id UUID.
 //
-// Flow:
-//  1. SELECT viewer_id FROM viewer_platform_identities WHERE platform=$1 AND platform_user_id=$2
-//  2. If found: return that viewer_id
-//  3. If not found:
-//     a. INSERT INTO viewers DEFAULT VALUES RETURNING id  → newViewerID
-//     b. INSERT INTO viewer_platform_identities (viewer_id, platform, platform_user_id)
-//     c. INSERT INTO viewer_cosmetics (viewer_id) ON CONFLICT DO NOTHING
-//     d. UPDATE viewer_sessions SET viewer_id=$1 WHERE platform=$2 AND platform_user_id=$3
-//     e. Return newViewerID
+// The create path issues its four statements without a surrounding transaction,
+// so a failure part-way through leaves an orphaned `viewers` row behind: the
+// identity mapping that makes it findable is the second statement, and only a
+// successful mapping lets a later call take the lookup path.
 func (r *ViewerIdentityRepository) GetOrCreateViewerByPlatform(ctx context.Context, platform, platformUserID string) (uuid.UUID, error) {
-	// Step 1: try to find existing mapping
 	var viewerID uuid.UUID
 	err := r.db.QueryRow(ctx,
 		`SELECT viewer_id FROM viewer_platform_identities WHERE platform = $1 AND platform_user_id = $2`,

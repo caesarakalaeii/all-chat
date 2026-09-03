@@ -53,10 +53,6 @@ const mockFetch = vi.fn().mockResolvedValue({
 })
 global.fetch = mockFetch
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 /**
  * Build a fake base64-encoded JWT payload.
  * We only need the claims payload (middle part of JWT).
@@ -84,10 +80,6 @@ function stubLocalStorage(initialValues: Record<string, string> = {}) {
     },
   })
 }
-
-// ---------------------------------------------------------------------------
-// Test suite
-// ---------------------------------------------------------------------------
 
 describe('Viewer Settings Page — Viewer Identity section', () => {
   beforeEach(() => {

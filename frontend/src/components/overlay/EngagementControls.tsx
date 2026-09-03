@@ -273,8 +273,6 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
     [busy]
   )
 
-  // --- Poll actions ----------------------------------------------------------
-
   // NOTE: a round's question/title and options are immutable once started — there is
   // no edit endpoint — so proofread before Start; fixing a typo means close/cancel +
   // recreate (costly for a prediction that already has wagers) (L-U8).
@@ -308,8 +306,6 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
       setPoll(await engagementApi.closePoll(overlayId, pollId))
       toastManager.add({ title: t('viewerOverlay.engagement.pollClosedToast'), type: 'success' })
     }, t('viewerOverlay.engagement.pollCloseFailed'))
-
-  // --- Prediction actions ----------------------------------------------------
 
   const startPrediction = () => {
     const labels = outcomes.map((o) => o.trim()).filter(Boolean)
@@ -396,8 +392,6 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
       }
     }, t('viewerOverlay.engagement.predictionCancelFailed'))
 
-  // --- Twitch mirroring opt-in ------------------------------------------------
-
   const startMirrorConsent = useCallback(async () => {
     try {
       window.location.href = await engagementApi.getTwitchMirrorConsentUrl(overlayId)
@@ -435,8 +429,6 @@ export function EngagementControls({ overlayId }: { overlayId: string }) {
     setConfirmResolve(false)
     setConfirmCancel(false)
   }
-
-  // --- Render ----------------------------------------------------------------
 
   const pollTotal = poll?.options.reduce((s, o) => s + o.votes, 0) ?? 0
   const predTotal = prediction?.outcomes.reduce((s, o) => s + o.total_points, 0) ?? 0

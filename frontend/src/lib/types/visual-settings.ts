@@ -147,7 +147,7 @@ export interface VisualSettings {
   // applied as a .msg-anim-* class on the chat bubble)
   messageAnimation?: MessageAnimation
 
-  // Phase 9: Pronoun display — all three are read into React state and applied
+  // Pronoun display — all three are read into React state and applied
   // by conditional render / inline style. None is in PROPERTY_MAP, so no
   // `--chat-show-pronouns` variable is ever emitted; do not write CSS against one.
   showPronouns?: 'inline' | 'none'

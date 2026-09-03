@@ -53,9 +53,8 @@ from .settings import (
     UPGRADE_URL,
 )
 
-# --- kinds -----------------------------------------------------------------
-# Plain strings rather than an enum so a kind survives a round-trip through
-# StreamController's JSON settings store unchanged.
+# Error kinds. Plain strings rather than an enum so a kind survives a round-trip
+# through StreamController's JSON settings store unchanged.
 
 #: No token configured on the action at all.
 NO_TOKEN = "no-token"

@@ -58,10 +58,10 @@ func NewAESEncryptor(key []byte) (*AESEncryptor, error) {
 // 16, 24, or 32 bytes (AES-128, AES-192, or AES-256).
 //
 // Behavior (audit L8):
-//  1. If the input is valid standard base64 AND decodes to a valid key length,
+//   - If the input is valid standard base64 AND decodes to a valid key length,
 //     the decoded bytes are used (base64 path).
-//  2. Otherwise, the raw string bytes are used if they are a valid key length.
-//  3. If neither path yields a valid key length, an error is returned.
+//   - Otherwise, the raw string bytes are used if they are a valid key length.
+//   - If neither path yields a valid key length, an error is returned.
 //
 // Ambiguity note: a 16/24/32-character ASCII string that also happens to be
 // valid base64 will be treated as base64. To avoid ambiguity in production,

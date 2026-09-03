@@ -641,7 +641,9 @@ func main() {
 				}
 				processorMetrics.StageDuration.WithLabelValues("message-processor", rawMsg.Platform, "viewer_identity_enrichment").Observe(time.Since(startViewer).Seconds())
 
-				// Phase 9: Enrich with pronouns (after viewer identity for TwitchUsername availability)
+				// Must run after the viewer-identity enricher: that is what populates
+				// User.TwitchUsername, which the pronoun lookup keys off for
+				// non-Twitch platforms.
 				startPronoun := time.Now()
 				if err := pronounEnricher.Enrich(ctx, unified); err != nil {
 					log.Warn("Failed to enrich pronouns",

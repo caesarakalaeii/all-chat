@@ -192,21 +192,15 @@ function UnauthenticatedState() {
   )
 }
 
-// ---------------------------------------------------------------------------
-// ColorGradientCard — full two-tab card replacing Phase 28 stub
-// ---------------------------------------------------------------------------
-
 function ColorGradientCard({ claims }: { claims: ViewerJWTClaims }) {
   const t = useTranslations()
   const [activeTab, setActiveTab] = useState<'solid' | 'gradient'>('solid')
   const angleId = useId()
 
-  // ------ Solid Color state ------
   const [nameColor, setNameColor] = useState<string>(claims.name_color ?? '#9146ff')
   const [savedFeedback, setSavedFeedback] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // ------ Gradient state ------
   const [gradientStops, setGradientStops] = useState<string[]>(['#9146ff', '#00b5ad'])
   const [gradientAngle, setGradientAngle] = useState<number>(90)
 
@@ -517,10 +511,6 @@ function ColorGradientCard({ claims }: { claims: ViewerJWTClaims }) {
   )
 }
 
-// ---------------------------------------------------------------------------
-// AvatarCosmeticsCard — frame and flair picker
-// ---------------------------------------------------------------------------
-
 interface CatalogItem {
   id: string | null
   name: string
@@ -792,10 +782,6 @@ function AvatarCosmeticsCard({ claims }: { claims: ViewerJWTClaims }) {
   )
 }
 
-// ---------------------------------------------------------------------------
-// LinkedPlatformsCard — shows connected platforms and lets users link more
-// ---------------------------------------------------------------------------
-
 function LinkedPlatformsCard({ claims }: { claims: ViewerJWTClaims }) {
   const t = useTranslations()
   const [connecting, setConnecting] = useState<string | null>(null)
@@ -928,10 +914,6 @@ function LinkedPlatformsCard({ claims }: { claims: ViewerJWTClaims }) {
   )
 }
 
-// ---------------------------------------------------------------------------
-// ViewerSettingsContent — main authenticated view
-// ---------------------------------------------------------------------------
-
 function ViewerSettingsContent({ claims }: { claims: ViewerJWTClaims }) {
   const t = useTranslations()
   return (
@@ -983,10 +965,6 @@ function ViewerSettingsContent({ claims }: { claims: ViewerJWTClaims }) {
     </div>
   )
 }
-
-// ---------------------------------------------------------------------------
-// Page root — three-state hydration guard
-// ---------------------------------------------------------------------------
 
 export default function ViewerSettingsPage() {
   const [claims, setClaims] = useState<ViewerJWTClaims | null | undefined>(undefined)

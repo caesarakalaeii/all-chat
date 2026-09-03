@@ -244,8 +244,6 @@ const SPOTLIGHT_SECTION: Record<SpotlightSection, EditorSectionId> = {
   moderators: 'moderators',
 }
 
-// ---- Types -----------------------------------------------------------------
-
 type MockMessageFormState = {
   platform: ChatMessage['platform']
   displayName: string
@@ -381,8 +379,6 @@ const SAMPLE_EVENT_MESSAGES: Array<Omit<ChatMessage, 'id' | 'timestamp' | 'overl
     metadata: { mock: true, event: true },
   },
 ]
-
-// ---- Sub-components --------------------------------------------------------
 
 function SourceCard({
   source,
@@ -580,8 +576,6 @@ function SourceCard({
   )
 }
 
-// ---- StreamSelectionPanel ---------------------------------------------------
-
 // The wire values only. Their labels and descriptions live in the catalog under
 // `overlayEditor.streamSelection.<camelCasedValue>Label|Description`, so this
 // list stays the single source of the API contract and holds no copy.
@@ -730,8 +724,6 @@ function StreamSelectionPanel({
     </Card>
   )
 }
-
-// ---- RelayPanel ------------------------------------------------------------
 
 function RelayPanel({
   source,
@@ -1715,8 +1707,6 @@ function AddSourceForm({
   )
 }
 
-// ---- Page ------------------------------------------------------------------
-
 export default function OverlayEditorPage({ params }: { params: Promise<{ id: string }> }) {
   const t = useTranslations()
   const { id } = use(params)
@@ -2125,7 +2115,6 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     [sendTtsSettingsToIframe]
   )
 
-  // Phase 13 Plan 03 — ElevenLabs flow handlers (wired via TTSGroup props)
   const handleSaveTTSKey = useCallback(
     async (apiKey: string, voiceId: string): Promise<void> => {
       await overlaysApi.saveTTSKey(id, apiKey, voiceId)
@@ -2288,7 +2277,6 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
       sendFilterSettingsToIframe(filterSettingsRef.current)
       // Also send current sound settings to the embed on ready
       sendSoundSettingsToIframe(soundSettingsRef.current)
-      // Phase 13: send current TTS settings to the embed on ready (D-22)
       sendTtsSettingsToIframe(ttsSettingsRef.current)
     }
     window.addEventListener('message', handleEmbedReady)
@@ -2470,12 +2458,10 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           setVisualSettings(merged)
           sendCssToIframe(merged)
 
-          // Phase 11: Load filter settings
           if (config.filter_settings) {
             setFilterSettings(config.filter_settings)
           }
 
-          // Phase 12: Load sound settings from display_settings
           if (config.display_settings) {
             const d = config.display_settings
             const loaded: Partial<DisplaySettings> = {}
@@ -2492,7 +2478,6 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
             setSoundSettings(loaded)
           }
 
-          // Phase 13: Load TTS display_settings (Plan 01 fields — 20 total)
           if (config.display_settings) {
             const d = config.display_settings
             const tts: Partial<DisplaySettings> = {}
@@ -2539,7 +2524,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
             setTtsSettings(tts)
           }
 
-          // Phase 13 Plan 03: Load ElevenLabs config metadata (has-key + OBS URL).
+          // Load ElevenLabs config metadata (has-key + OBS URL).
           // Non-fatal — a 404 on first edit or a non-premium user simply leaves
           // the Advanced block in its unsaved-empty state.
           try {
@@ -2961,7 +2946,8 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           ...(soundSettings.notification_sound_url
             ? { notification_sound_url: soundSettings.notification_sound_url }
             : {}),
-          // Phase 13: persist all 20 tts_* fields (ElevenLabs key/voice live in overlay_tts_configs, NOT here)
+          // The ElevenLabs API key and voice id are deliberately absent: they
+          // live in overlay_tts_configs, not in display_settings.
           ...ttsSettings,
         },
         enable_7tv: enable7tv,

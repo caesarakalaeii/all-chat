@@ -54,7 +54,6 @@ func NewAdminHandler(premiumRepo userEntitlementWriter, logger *zap.Logger) *Adm
 // Body: {"is_premium": true, "duration_seconds": 604800}  // duration optional
 // A positive duration_seconds makes the grant time-limited (ADR-0027); omit it (or
 // send null) for a permanent grant. duration_seconds is ignored when revoking.
-// User decision: Dedicated endpoint for clarity (not generic PATCH)
 func (h *AdminHandler) SetUserPremium(c *gin.Context) {
 	adminUserID := c.GetString("user_id") // From JWTAuth middleware
 	targetUserID := c.Param("id")

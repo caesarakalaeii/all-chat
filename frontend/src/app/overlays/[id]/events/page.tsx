@@ -144,9 +144,6 @@ const EVENT_TOGGLES = {
 const TIER_CLASS = '.event-tier-high'
 const EVENT_TYPE_CLASS = '.event-type-raid'
 
-// ---------------------------------------------------------------------------
-// EventToggle
-// ---------------------------------------------------------------------------
 function EventToggle({
   label,
   description,
@@ -182,9 +179,6 @@ function EventToggle({
   )
 }
 
-// ---------------------------------------------------------------------------
-// NumberInput
-// ---------------------------------------------------------------------------
 function NumberInput({
   label,
   description,
@@ -221,9 +215,6 @@ function NumberInput({
   )
 }
 
-// ---------------------------------------------------------------------------
-// Page
-// ---------------------------------------------------------------------------
 export default function EventSettingsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const t = useTranslations()

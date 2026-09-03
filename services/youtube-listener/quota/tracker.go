@@ -358,9 +358,9 @@ func (t *Tracker) checkDateRollover() {
 
 	// CRITICAL FIX: Load today's usage from database instead of just resetting to 0
 	// This handles cases where:
-	// 1. Another pod made API calls between midnight and now
-	// 2. Database has pre-existing data for today
-	// 3. This pod crashed/restarted and missed the rollover
+	//   - Another pod made API calls between midnight and now
+	//   - Database has pre-existing data for today
+	//   - This pod crashed/restarted and missed the rollover
 	ctx := context.Background()
 	if err := t.loadTodayUsage(ctx); err != nil {
 		t.logger.Error("Failed to reload today's usage after date rollover",
@@ -980,8 +980,6 @@ func (t *Tracker) loadTodayUsage(ctx context.Context) error {
 
 	return nil
 }
-
-// =============== AUDIT LOGGING ===============
 
 // AuditEntry represents a minimal audit log entry for YouTube API calls.
 type AuditEntry struct {

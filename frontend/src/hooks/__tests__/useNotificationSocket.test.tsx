@@ -23,7 +23,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useNotificationSocket } from '@/hooks/useNotificationSocket'
 import { HEARTBEAT_INTERVAL_MS, LIVENESS_TIMEOUT_MS } from '@/core/overlayStreamCore'
 
-// --- Mock WebSocket -------------------------------------------------------
 class MockWebSocket {
   static OPEN = 1
   static CONNECTING = 0

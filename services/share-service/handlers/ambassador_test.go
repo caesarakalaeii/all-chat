@@ -120,8 +120,6 @@ func doReq(r *gin.Engine, method, path, body string) *httptest.ResponseRecorder 
 
 func strptr(s string) *string { return &s }
 
-// --- Admin assign/revoke -----------------------------------------------------
-
 func TestSetUserAmbassador_GrantWithCard(t *testing.T) {
 	repo := &mockAmbassadorStore{}
 	w := doReq(ambassadorAdminRouter(repo), http.MethodPost, "/admin/ambassadors/users/u-42",
@@ -183,8 +181,6 @@ func TestSetUserAmbassador_InternalError(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
 
-// --- Self-service read -------------------------------------------------------
-
 func TestGetMyShowcase_Ambassador(t *testing.T) {
 	repo := &mockAmbassadorStore{showcase: &repository.Showcase{
 		IsAmbassador: true, Tagline: strptr("hi"), SortOrder: 5, FeaturedConsent: true,
@@ -213,8 +209,6 @@ func TestGetMyShowcase_Unauthenticated(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
-// --- Self-service consent ----------------------------------------------------
-
 func TestUpdateMyConsent_Ambassador(t *testing.T) {
 	repo := &mockAmbassadorStore{showcase: &repository.Showcase{IsAmbassador: true}}
 	w := doReq(selfRouter(repo, "u-1"), http.MethodPut, "/ambassadors/me/showcase", `{"featured_consent":true}`)
@@ -240,8 +234,6 @@ func TestUpdateMyConsent_BadBody(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 	assert.False(t, repo.consentCalled)
 }
-
-// --- Public list -------------------------------------------------------------
 
 func TestListPublic(t *testing.T) {
 	repo := &mockAmbassadorStore{listResult: []repository.PublicAmbassador{

@@ -35,7 +35,8 @@ package models
 const DiscordPermManageGuild uint64 = 1 << 5
 
 // DiscordPermViewChannel permits seeing a channel. Not a moderation permission; named here
-// so a member who holds only base permissions can be described without a magic number.
+// so a member who holds only base permissions can be described without an unexplained
+// literal at the call site.
 const DiscordPermViewChannel uint64 = 1 << 10
 
 // DiscordMemberAuthority is a point-in-time read of what one Discord user may do in one

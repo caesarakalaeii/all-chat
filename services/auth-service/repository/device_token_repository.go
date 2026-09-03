@@ -22,15 +22,15 @@ package repository
 // The rules from api_token_repository.go carry over unchanged, plus two more that are
 // specific to a linking flow:
 //
-//  1. No plaintext, ever. Every function takes a digest the caller computed
+//   - No plaintext, ever. Every function takes a digest the caller computed
 //     (middleware.HashDeviceToken / sha256 of the user code); nothing here can return,
 //     log or store a secret.
-//  2. No projection selects token_hash, user_code_hash or auth_code_hash. A digest that
+//   - No projection selects token_hash, user_code_hash or auth_code_hash. A digest that
 //     never leaves this file cannot be serialised into a response by accident.
-//  3. State transitions are single SQL statements with the guard in the WHERE clause,
+//   - State transitions are single SQL statements with the guard in the WHERE clause,
 //     not read-then-write. "Consume this code if it is still unconsumed" has to be one
 //     atomic step or a replay wins the race.
-//  4. The attempts counter is incremented IN SQL. That counter is the brute-force bound
+//   - The attempts counter is incremented IN SQL. That counter is the brute-force bound
 //     for the typed pairing code (ADR-0049 flags it as the security-review item), and a
 //     count read in Go and written back would let two concurrent guesses both see the
 //     same value.

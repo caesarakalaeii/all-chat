@@ -368,9 +368,9 @@ func (m *Manager) periodicSync(ctx context.Context) {
 		case <-ticker.C:
 			// Try to acquire global sync leadership
 			// Note: No callback is needed for global sync leadership because:
-			// 1. Losing leadership just means another replica will take over syncing
-			// 2. There's no local state to clean up (unlike per-stream pollers)
-			// 3. The next periodic sync will re-acquire leadership if available
+			//   - Losing leadership just means another replica will take over syncing
+			//   - There's no local state to clean up (unlike per-stream pollers)
+			//   - The next periodic sync will re-acquire leadership if available
 			if m.syncLeader != nil {
 				isLeader, err := m.syncLeader.EnsureLeadership(ctx, m.syncLeaderStreamID, nil)
 				if err != nil {

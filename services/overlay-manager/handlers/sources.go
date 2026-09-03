@@ -251,7 +251,6 @@ func (h *SourcesHandler) delDiscordChannelRegistry(ctx context.Context, channelI
 // copyYouTubeTokenForChannel copies the admin's YouTube OAuth token to a new channel
 // This allows admins to add YouTube channels manually (by link) without OAuth flow
 func (h *SourcesHandler) copyYouTubeTokenForChannel(ctx context.Context, adminUserID, newChannelID string) error {
-	// Step 1: Find the best YouTube token for this admin.
 	// Prefer non-expired tokens first, but fall back to any token because the
 	// youtube-listener will use the refresh_token to get a fresh access_token on
 	// first use. Excluding expired tokens here prevents copy when the access_token
@@ -285,7 +284,6 @@ func (h *SourcesHandler) copyYouTubeTokenForChannel(ctx context.Context, adminUs
 		return fmt.Errorf("admin has no YouTube OAuth token - please authorize YouTube first: %w", err)
 	}
 
-	// Step 2: Copy token to new channel_id (insert or update)
 	insertQuery := `
 		INSERT INTO youtube_oauth_tokens (
 			user_id, channel_id, access_token, refresh_token,
@@ -327,7 +325,6 @@ func (h *SourcesHandler) copyYouTubeTokenForChannel(ctx context.Context, adminUs
 // If a cipher is configured, the access_token is encrypted before write and
 // encryption_version=1 is stored; otherwise plaintext is written with encryption_version=0.
 func (h *SourcesHandler) copyKickTokenForChannel(ctx context.Context, adminUserID, newChannelID string) error {
-	// Step 1: Find the best Kick token for this admin.
 	// Prefer non-expired tokens first, but fall back to any token because the
 	// kick-listener will use the refresh_token to get a fresh access_token on
 	// first use. Excluding expired tokens here prevents copy when the access_token
@@ -383,7 +380,6 @@ func (h *SourcesHandler) copyKickTokenForChannel(ctx context.Context, adminUserI
 		encryptionVersion = 1
 	}
 
-	// Step 2: Copy token to new channel_id (insert or update)
 	insertQuery := `
 		INSERT INTO kick_oauth_tokens (
 			user_id, channel_id, access_token, refresh_token,

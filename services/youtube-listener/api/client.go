@@ -119,7 +119,6 @@ func (c *Client) GetLiveStreams(ctx context.Context, channelID string, audit *qu
 		audit.ChannelID = channelID
 	}
 
-	// STEP 1: RESERVE quota for search.list (100 units)
 	var searchReservationID string
 	var err error
 	if c.quotaTracker != nil {
@@ -129,7 +128,6 @@ func (c *Client) GetLiveStreams(ctx context.Context, channelID string, audit *qu
 		}
 	}
 
-	// STEP 2: Make Search.List API call
 	call := c.service.Search.List([]string{"id", "snippet"}).
 		ChannelId(channelID).
 		EventType("live").
@@ -138,7 +136,6 @@ func (c *Client) GetLiveStreams(ctx context.Context, channelID string, audit *qu
 
 	response, apiErr := call.Do()
 
-	// STEP 3: CONFIRM or ROLLBACK search.list quota
 	chargedUnits := 0
 	if c.quotaTracker != nil && searchReservationID != "" {
 		if shouldChargeQuota(apiErr) {
@@ -155,7 +152,6 @@ func (c *Client) GetLiveStreams(ctx context.Context, channelID string, audit *qu
 	}
 	c.logAPICall(ctx, "Search.List", chargedUnits, audit)
 
-	// STEP 4: Check for search errors
 	if apiErr != nil {
 		c.logger.Error("Failed to fetch live streams",
 			zap.String("channel_id", channelID),
@@ -165,7 +161,6 @@ func (c *Client) GetLiveStreams(ctx context.Context, channelID string, audit *qu
 		return nil, fmt.Errorf("failed to fetch live streams: %w", apiErr)
 	}
 
-	// STEP 5: Process each video found (each costs 1 unit)
 	streams := make([]*models.YouTubeStream, 0, len(response.Items))
 
 	for _, item := range response.Items {
@@ -265,7 +260,6 @@ func (c *Client) GetLiveStreams(ctx context.Context, channelID string, audit *qu
 func (c *Client) GetChatMessages(ctx context.Context, liveChatID, pageToken string, audit *quota.AuditContext) (*youtube.LiveChatMessageListResponse, error) {
 	const cost = quota.QuotaCostLiveChatMessages
 
-	// STEP 1: RESERVE quota BEFORE making API call
 	var reservationID string
 	var err error
 	if c.quotaTracker != nil {
@@ -275,10 +269,8 @@ func (c *Client) GetChatMessages(ctx context.Context, liveChatID, pageToken stri
 		}
 	}
 
-	// STEP 2: Make YouTube API call (streamList)
 	response, apiErr := c.getChatMessagesStream(ctx, liveChatID, pageToken)
 
-	// STEP 3: CONFIRM or ROLLBACK based on result
 	chargedUnits := 0
 	if c.quotaTracker != nil && reservationID != "" {
 		if shouldChargeQuota(apiErr) {
@@ -297,7 +289,6 @@ func (c *Client) GetChatMessages(ctx context.Context, liveChatID, pageToken stri
 	}
 	c.logAPICall(ctx, "LiveChatMessages.StreamList", chargedUnits, audit)
 
-	// STEP 4: Process response
 	if apiErr != nil {
 		c.logger.Error("Failed to fetch chat messages",
 			zap.String("live_chat_id", liveChatID),
@@ -361,7 +352,6 @@ func (c *Client) streamChatMessagesHTTP(ctx context.Context, liveChatID, pageTok
 		)
 	}()
 
-	// STEP 1: RESERVE quota BEFORE making API call
 	var reservationID string
 	if c.quotaTracker != nil {
 		reservationID, err = c.quotaTracker.ReserveQuota(ctx, cost)
@@ -665,7 +655,6 @@ func (c *Client) CheckStreamStatus(ctx context.Context, videoID string, audit *q
 		audit.VideoID = videoID
 	}
 
-	// STEP 1: RESERVE quota BEFORE making API call
 	var reservationID string
 	var err error
 	if c.quotaTracker != nil {
@@ -675,12 +664,10 @@ func (c *Client) CheckStreamStatus(ctx context.Context, videoID string, audit *q
 		}
 	}
 
-	// STEP 2: Make YouTube API call
 	// Request both liveStreamingDetails AND snippet in a single call
 	call := c.service.Videos.List([]string{"liveStreamingDetails", "snippet"}).Id(videoID)
 	response, apiErr := call.Do()
 
-	// STEP 3: CONFIRM or ROLLBACK based on result
 	chargedUnits := 0
 	if c.quotaTracker != nil && reservationID != "" {
 		if shouldChargeQuota(apiErr) {
@@ -697,7 +684,6 @@ func (c *Client) CheckStreamStatus(ctx context.Context, videoID string, audit *q
 	}
 	c.logAPICall(ctx, "Videos.List", chargedUnits, audit)
 
-	// STEP 4: Process response
 	if apiErr != nil {
 		c.logger.Error("Failed to check stream status",
 			zap.String("video_id", videoID),

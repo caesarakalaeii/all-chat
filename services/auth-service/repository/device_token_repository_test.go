@@ -222,8 +222,8 @@ func TestDeviceLinkTTLsExecuteAgainstRealPostgres(t *testing.T) {
 
 	repo := NewDeviceTokenRepository(pool)
 
-	// 1. CreateLinkRequest — the statement behind POST /device/link/start, the one the
-	//    bug report was filed against.
+	// CreateLinkRequest — the statement behind POST /device/link/start, the one
+	// the bug report was filed against.
 	req, err := repo.CreateLinkRequest(ctx, FlowLoopback, nil,
 		"a-pkce-challenge", "S256", "http://127.0.0.1:41234/callback",
 		"Stream Deck", []string{"chat:write", "engagement:write"}, LinkRequestTTL)
@@ -236,7 +236,7 @@ func TestDeviceLinkTTLsExecuteAgainstRealPostgres(t *testing.T) {
 		          ((expires_at AT TIME ZONE current_setting('TimeZone')) - NOW()))
 		   FROM device_link_requests WHERE id = $1`, req.ID)
 
-	// 2. ApproveLinkRequest — the streamer pressing Approve.
+	// ApproveLinkRequest — the streamer pressing Approve.
 	authCode := sha256.Sum256([]byte("an-auth-code"))
 	approved, err := repo.ApproveLinkRequest(ctx, req.ID, userID, overlayID,
 		[]string{"chat:write"}, "Stream Deck", authCode[:], AuthCodeTTL)
@@ -248,8 +248,8 @@ func TestDeviceLinkTTLsExecuteAgainstRealPostgres(t *testing.T) {
 		          ((auth_code_expires_at AT TIME ZONE current_setting('TimeZone')) - NOW()))
 		   FROM device_link_requests WHERE id = $1`, approved.ID)
 
-	// 3. CreateDeviceToken — minting the credential the plugin ends up holding, with the
-	//    lifetime the production caller passes.
+	// CreateDeviceToken — minting the credential the plugin ends up holding,
+	// with the lifetime the production caller passes.
 	tokenHash := sha256.Sum256([]byte("a-device-token"))
 	device, err := repo.CreateDeviceToken(ctx, userID, overlayID, "Stream Deck",
 		tokenHash[:], []string{"chat:write"}, middleware.DeviceTokenLifetime, req.ID)

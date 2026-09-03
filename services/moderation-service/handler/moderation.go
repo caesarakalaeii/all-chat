@@ -20,9 +20,9 @@
 // publishes a reflect-back message_deletion so the message vanishes from overlays
 // and the dashboard.
 //
-// Phase 0 performs no platform API calls: actions are "dry-run" (reflect-back only).
-// Phase 1 introduces per-platform clients (starting with Twitch) that replace the
-// dry-run path with real Helix/etc. calls.
+// In phase 0 there are no platform API calls at all: actions are "dry-run",
+// reflect-back only. Phase 1 introduces per-platform clients (starting with
+// Twitch) that replace the dry-run path with real Helix/etc. calls.
 package handler
 
 import (

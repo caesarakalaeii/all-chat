@@ -30,8 +30,7 @@ import (
 )
 
 // fakeViewerDB is a test double for the DB pool, executing a callback per query.
-// Phase 31: callback returns isAdmin and isPremium bools.
-// Phase 9: callback also returns twitchUsername string.
+// The callback returns isAdmin and isPremium bools, and twitchUsername.
 type fakeViewerDB struct {
 	queryFn func(platform, userID string) (viewerID string, nameColor *string, nameGradient []byte, avatarFrameURL string, avatarFlairURL string, isAdmin bool, isPremium bool, twitchUsername string, err error)
 }
@@ -73,37 +72,37 @@ func (r *fakeRow) Scan(dest ...interface{}) error {
 			*sp = r.result.nameColor
 		}
 	}
-	// Phase 29: third dest arg is *[]byte for name_gradient
+	// third dest arg is *[]byte for name_gradient
 	if len(dest) >= 3 {
 		if bp, ok := dest[2].(*[]byte); ok {
 			*bp = r.result.nameGradient
 		}
 	}
-	// Phase 30: fourth dest arg is *string for avatar_frame_url
+	// fourth dest arg is *string for avatar_frame_url
 	if len(dest) >= 4 {
 		if sp, ok := dest[3].(*string); ok {
 			*sp = r.result.avatarFrameURL
 		}
 	}
-	// Phase 30: fifth dest arg is *string for avatar_flair_url
+	// fifth dest arg is *string for avatar_flair_url
 	if len(dest) >= 5 {
 		if sp, ok := dest[4].(*string); ok {
 			*sp = r.result.avatarFlairURL
 		}
 	}
-	// Phase 31: sixth dest arg is *bool for is_admin
+	// sixth dest arg is *bool for is_admin
 	if len(dest) >= 6 {
 		if bp, ok := dest[5].(*bool); ok {
 			*bp = r.result.isAdmin
 		}
 	}
-	// Phase 31: seventh dest arg is *bool for is_premium
+	// seventh dest arg is *bool for is_premium
 	if len(dest) >= 7 {
 		if bp, ok := dest[6].(*bool); ok {
 			*bp = r.result.isPremium
 		}
 	}
-	// Phase 9: eighth dest arg is *string for twitch_username
+	// eighth dest arg is *string for twitch_username
 	if len(dest) >= 8 {
 		if sp, ok := dest[7].(*string); ok {
 			*sp = r.result.twitchUsername
@@ -319,8 +318,6 @@ func TestViewerBadgeEnricher_PlatformPreservesColor(t *testing.T) {
 	}
 }
 
-// Phase 29: gradient propagation test
-
 func TestEnrich_PropagatesNameGradient(t *testing.T) {
 	mr := miniredis.RunT(t)
 	gradientJSON := []byte(`{"type":"linear","colors":["#ff0000","#0000ff"],"angle":90}`)
@@ -386,8 +383,6 @@ func TestEnrich_PropagatesNameGradient_FromCache(t *testing.T) {
 		t.Errorf("expected NameGradient %q from cache, got %q", string(gradientJSON), msg.User.NameGradient)
 	}
 }
-
-// Phase 30: avatar frame and flair URL injection tests
 
 func TestEnrichWithAvatarFrameURL(t *testing.T) {
 	mr := miniredis.RunT(t)
@@ -457,8 +452,6 @@ func TestEnrichCacheHitWithFrameURL(t *testing.T) {
 		t.Errorf("expected AvatarFrameURL %q from cache, got %q", "https://cdn.example.com/frame2.png", msg.User.AvatarFrameURL)
 	}
 }
-
-// Phase 31: All-Chat badge injection tests
 
 func TestEnrich_AdminBadge(t *testing.T) {
 	mr := miniredis.RunT(t)
@@ -541,8 +534,6 @@ func TestEnrich_NoBadgesForNonRegisteredViewer(t *testing.T) {
 		t.Errorf("expected no badges for non-registered viewer, got %d", len(msg.User.Badges))
 	}
 }
-
-// Phase 9: TwitchUsername resolution tests
 
 func TestViewerBadgeEnricher_TwitchUsername(t *testing.T) {
 	mr := miniredis.RunT(t)

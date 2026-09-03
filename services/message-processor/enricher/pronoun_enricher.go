@@ -156,9 +156,8 @@ func (e *PronounEnricher) fetchPronounsMap(ctx context.Context) map[string]alejo
 // Enrich looks up the Twitch user's pronouns from the Alejo API, caches the result,
 // and sets msg.User.Pronouns if found. Returns nil on all soft failures (D-05).
 func (e *PronounEnricher) Enrich(ctx context.Context, msg *models.UnifiedChatMessage) error {
-	// 1. Resolve Twitch username for the lookup.
-	//    For Twitch messages: use the message's own username.
-	//    For non-Twitch: use the linked TwitchUsername populated by ViewerBadgeEnricher.
+	// Twitch messages carry their own username; a non-Twitch message uses the
+	// linked TwitchUsername that ViewerBadgeEnricher populated upstream.
 	var twitchLogin string
 	if msg.Platform == "twitch" {
 		twitchLogin = strings.ToLower(msg.User.Username)
@@ -171,7 +170,6 @@ func (e *PronounEnricher) Enrich(ctx context.Context, msg *models.UnifiedChatMes
 
 	cacheKey := PronounCacheKeyPrefix + twitchLogin
 
-	// 2. Check Redis cache.
 	cached, err := e.redisClient.Get(ctx, cacheKey).Result()
 	if err == nil {
 		// Cache hit — empty string means "no pronouns" sentinel
@@ -182,7 +180,6 @@ func (e *PronounEnricher) Enrich(ctx context.Context, msg *models.UnifiedChatMes
 	}
 	// On redis.Nil (cache miss) fall through to fetch; on any other error also fall through.
 
-	// 3. Fetch from Alejo API.
 	userURL := fmt.Sprintf("%s/users/%s", e.baseURL, twitchLogin)
 	req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, userURL, nil)
 	if reqErr != nil {
@@ -224,7 +221,6 @@ func (e *PronounEnricher) Enrich(ctx context.Context, msg *models.UnifiedChatMes
 		return nil // D-05: silent skip
 	}
 
-	// 4. Parse response.
 	body, readErr := io.ReadAll(resp.Body)
 	if readErr != nil {
 		e.logger.Warn("PronounEnricher: failed to read Alejo API response",
@@ -243,13 +239,12 @@ func (e *PronounEnricher) Enrich(ctx context.Context, msg *models.UnifiedChatMes
 		return nil
 	}
 
-	// 5. Build display text from pronoun IDs.
 	displayText := buildDisplayText(userResp.PronounID, userResp.AltPronounID, e.pronounsMap)
 
-	// 6. Cache the display text (even if empty, to avoid future fetches for users with no pronouns).
+	// Cached even when empty, so a user with no pronouns is not re-fetched on
+	// every message.
 	e.redisClient.Set(ctx, cacheKey, displayText, PronounCacheTTL)
 
-	// 7. Set on message if non-empty.
 	if displayText != "" {
 		msg.User.Pronouns = displayText
 	}

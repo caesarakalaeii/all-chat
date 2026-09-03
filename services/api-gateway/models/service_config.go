@@ -307,8 +307,8 @@ func NewServiceRegistry() (*ServiceRegistry, error) {
 
 // GetServiceForPath finds the service that should handle the given request path
 func (sr *ServiceRegistry) GetServiceForPath(path string) *ServiceConfig {
-	// Try to match each service's path prefix
-	// We need to match the longest prefix first to handle overlapping paths
+	// Longest prefix wins, so overlapping prefixes resolve to the more
+	// specific service.
 	var matched *ServiceConfig
 	longestMatch := 0
 

@@ -100,8 +100,6 @@ class PollControlAction(AllChatActionBase):
         self.remember("last_poll_id", "")
         return "Poll closed"
 
-    # -- small settings-store helpers ---------------------------------------
-
     def remember(self, key: str, value: str) -> None:
         """Persists a value into this key's own settings, best-effort."""
         try:
