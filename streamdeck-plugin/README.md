@@ -45,7 +45,61 @@ code; the gate lives in `services/engagement-service`.
 
 ---
 
-## Install
+## Installing and updating
+
+This section is for someone who wants to *use* the plugin. Building it from
+source is [further down](#install-from-source).
+
+**There is no auto-update.** The plugin installs from a `.streamDeckPlugin` file
+that you download and double-click, and nothing in it ever checks whether a newer
+one exists. A build installed in June is still running in September, bug fixes
+and all. This is the single most common cause of "the fix you shipped didn't work
+for me": it shipped, and it never reached the machine.
+
+### Getting a build
+
+Download the newest `com.allchat.streamdeck.streamDeckPlugin` from
+<https://github.com/caesarakalaeii/all-chat/releases>, then double-click it. The
+Stream Deck app installs it and replaces any older copy in place; your keys and
+their settings, including a linked device, survive the replacement.
+
+The plugin is **not** on the Elgato Marketplace, so it does not appear in the
+Stream Deck app's own plugin browser and cannot be updated from there.
+
+> If a release is not available yet, the alternative is a CI run artifact — see
+> [Packaging](#packaging). Run artifacts expire and are only reachable from a
+> workflow run page, which is exactly why releases exist.
+
+### Which version am I running?
+
+Drop any All-Chat action onto a key and open its settings. Under the **Link with
+All-Chat** button the panel prints `Plugin version 0.1.1.0` — that is the build
+that is loaded, read from the Stream Deck app rather than from a file on disk.
+
+Quote that number in any bug report. The plugin also writes it into every
+linking failure in its own log, so attaching the log answers the question too:
+
+```
+Send Chat Message: linking failed on plugin version 0.1.1.0 — <reason>
+```
+
+The log lives at `~/Library/Logs/ElgatoStreamDeck/` on macOS and
+`%APPDATA%\Elgato\StreamDeck\logs\` on Windows.
+
+### Linking hangs and the panel says the build may be out of date
+
+That message means the property inspector asked the plugin to link and heard
+nothing back for fifteen seconds. The likeliest reason is a build old enough that
+its panel cannot report a status at all — installs from before 2026-08-31 have
+that fault, and no update mechanism has moved anyone off them. Install a current
+build as above and press **Link with All-Chat** again.
+
+If a current build does the same thing, the flow itself is failing; see
+[Troubleshooting](../docs/guides/streamdeck.md#troubleshooting) in the guide.
+
+---
+
+## Install from source
 
 Requires Node 20.5.1 or newer and the Stream Deck app 6.9+.
 
@@ -114,8 +168,11 @@ npx --yes @elgato/cli@1.9.0 pack com.allchat.streamdeck.sdPlugin --output dist
 > thrown away) but shows up as an unrelated diff locally, so
 > `git checkout com.allchat.streamdeck.sdPlugin/manifest.json` after packing.
 
-The plugin is not published to the Elgato Marketplace yet; the artifact is the
-only distribution today.
+The plugin is not published to the Elgato Marketplace yet, so a GitHub Release is
+the distribution a streamer should use — see [Installing and
+updating](#installing-and-updating). The run artifact stays what it always was:
+the way to test an unmerged branch on real hardware. It expires, and it is only
+reachable from a workflow run page, so it is not something to hand to a user.
 
 ---
 

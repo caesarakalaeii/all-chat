@@ -12,7 +12,7 @@ Two plugins ship the same buttons in two languages: `streamdeck-plugin/`
 
 This script is that single source, made executable. It is deliberately not a
 string-diff of the two files: they are different languages and are *supposed*
-to read differently. It pins the three things that must not diverge:
+to read differently. It pins the things that must not diverge:
 
 1.  **The action list.** Every entry below must exist in both API modules, and
     neither module may carry a route-bearing public function the other lacks —
@@ -24,6 +24,9 @@ to read differently. It pins the three things that must not diverge:
 3.  **The keep-in-sync pointers are mutual.** The convention CLAUDE.md uses for
     OnboardingChecklist.tsx / upgrade only works when both ends point at each
     other; a one-way pointer rots the moment someone edits the unmarked file.
+4.  **The version stamp is in every property inspector.** Three HTML files carry
+    one hand-maintained Linking block that nothing else in the repo parses, so an
+    element the shared script needs can silently exist in only one of them.
 
 Standard library only, so it runs in the flake dev shell, in CI, and in the
 Caterpillar sandbox without an install step:
@@ -47,7 +50,30 @@ TS_SETTINGS = TS / "src" / "allchat" / "settings.ts"
 PY_SETTINGS = PY / "allchat" / "settings.py"
 TS_LINKING = TS / "src" / "allchat" / "linking.ts"
 PY_LINKING = PY / "allchat" / "linking.py"
-TS_SEND_UI = TS / "com.allchat.streamdeck.sdPlugin" / "ui" / "send-message.html"
+TS_ACTION_BASE = TS / "src" / "actions" / "base.ts"
+TS_UI = TS / "com.allchat.streamdeck.sdPlugin" / "ui"
+TS_SEND_UI = TS_UI / "send-message.html"
+TS_LINK_SCRIPT = TS_UI / "allchat-link.js"
+
+#: The three property inspectors. They are three files carrying one Linking block,
+#: which is the drift ADR-0049 names; anything the shared script reaches for has to
+#: exist in all three or it works on one action and not the others.
+TS_INSPECTORS: tuple[Path, ...] = (
+    TS_SEND_UI,
+    TS_UI / "poll-control.html",
+    TS_UI / "prediction-control.html",
+)
+
+#: Element the shared script writes the running plugin version into. Pinned because
+#: it is the only thing that tells a streamer, or a support reply, WHICH build they
+#: are on — issue #816: the #797 client fix had shipped in the repo and never reached
+#: anyone, and nothing in the panel could have revealed that.
+VERSION_ELEMENT_ID = "allchat-plugin-version"
+
+#: How the plugin refers to its own version in a log line. `streamDeck.info` carries
+#: the registration info the Stream Deck app sends at connect, so this is the version
+#: of the build that is loaded rather than of a manifest on disk.
+PLUGIN_VERSION_EXPRESSION = "streamDeck.info.plugin.version"
 
 # ---------------------------------------------------------------------------
 # 1. The action list. THIS is the contract ADR-0049 asks for: adding a button
@@ -114,6 +140,12 @@ LINKING_TIMEOUTS: tuple[tuple[str, str, float], ...] = (
     ("CODE_FLOW_TIMEOUT_MS", "CODE_FLOW_TIMEOUT_SECONDS", 600.0),
     ("REQUEST_TIMEOUT_MS", "REQUEST_TIMEOUT_SECONDS", 15.0),
 )
+
+#: Longest total silence the property inspector may present as progress before it
+#: warns. Not a flow timeout: it bounds the case where the plugin never answers at
+#: all, which is the shape of issue #816. Past roughly this long a streamer has
+#: already concluded the button is broken, so a longer wait buys no information.
+MAX_SILENCE_MS = 20_000
 
 #: Scopes both plugins request at link time. The streamer narrows this on the
 #: approve screen; asking for different sets per platform would mean the same button
@@ -316,6 +348,117 @@ def _unsendable_literal(src: str) -> str:
     return match.group(1) if match else ""
 
 
+def check_inspector_watchdogs() -> None:
+    """The panel's own give-up timers must bracket the flows they are waiting on.
+
+    These live in JavaScript that nothing in this repo compiles or runs, and they are
+    the difference between "linking failed" and the report that opened issue #816:
+    "nothing actually happens, it just stays like that". Three properties, each of
+    which has been wrong at some point:
+
+      * The silence budget must be short enough that a human is still watching. It
+        was 660s for every path, which is not a timeout, it is an abandonment.
+      * The loopback watchdog must OUTLAST LOOPBACK_TIMEOUT_MS, or the panel gives
+        up on a flow that is still running and would have succeeded.
+      * The code watchdog must OUTLAST CODE_FLOW_TIMEOUT_MS, because the pairing
+        code really is valid that long and the user is typing it on another device.
+
+    Read out of linking.ts rather than restated here, so tuning the flow timeout
+    cannot silently leave the panel giving up first.
+    """
+    ui_src = read(TS_LINK_SCRIPT)
+    flow_src = strip_ts_comments(read(TS_LINKING))
+
+    def milliseconds(src: str, name: str) -> float | None:
+        """Value of `const NAME = 123_000;`, or None having recorded a failure."""
+        match = re.search(rf"^\s*const {name}\s*=\s*([0-9_]+)", src, re.MULTILINE)
+        if not match:
+            fail(f"`{name}` is not declared as a plain millisecond constant")
+            return None
+        return float(match.group(1).replace("_", ""))
+
+    silence = milliseconds(ui_src, "SILENCE_MS")
+    watchdog = milliseconds(ui_src, "WATCHDOG_MS")
+    code_watchdog = milliseconds(ui_src, "CODE_WATCHDOG_MS")
+    loopback_flow = milliseconds(flow_src, "LOOPBACK_TIMEOUT_MS")
+    code_flow = milliseconds(flow_src, "CODE_FLOW_TIMEOUT_MS")
+
+    if silence is not None and silence > MAX_SILENCE_MS:
+        fail(
+            f"SILENCE_MS is {silence / 1000:g}s. A streamer will not watch a spinner that "
+            f"long — they report it as 'nothing happens' (issue #816). Keep it at or under "
+            f"{MAX_SILENCE_MS / 1000:g}s."
+        )
+
+    if watchdog is not None and loopback_flow is not None and watchdog <= loopback_flow:
+        fail(
+            f"WATCHDOG_MS ({watchdog / 1000:g}s) does not outlast LOOPBACK_TIMEOUT_MS "
+            f"({loopback_flow / 1000:g}s) in {TS_LINKING.relative_to(REPO)}. The panel would "
+            f"give up on a loopback flow that is still running."
+        )
+
+    if code_watchdog is not None and code_flow is not None and code_watchdog <= code_flow:
+        fail(
+            f"CODE_WATCHDOG_MS ({code_watchdog / 1000:g}s) does not outlast "
+            f"CODE_FLOW_TIMEOUT_MS ({code_flow / 1000:g}s) in "
+            f"{TS_LINKING.relative_to(REPO)}. The pairing code is valid that long and the "
+            f"user is typing it on another device."
+        )
+
+
+def check_version_stamp() -> None:
+    """The running plugin version must be identifiable from the panel and from a log.
+
+    Checked here rather than in a unit test because no compiler or test runner in
+    this repo opens these HTML files: the three inspectors are hand-maintained
+    copies of one Linking block, so an id added to one and forgotten in the other
+    two is invisible until a streamer on that action reports a blank panel.
+
+    Both surfaces are asserted together because they answer one question. A streamer
+    reading the panel and a maintainer reading the log they were sent both need the
+    build number, and issue #816 is what happens when neither has it: the #797 fix
+    sat unreleased for days and no report could have revealed that.
+    """
+    if VERSION_ELEMENT_ID not in read(TS_LINK_SCRIPT):
+        fail(
+            f"{TS_LINK_SCRIPT.relative_to(REPO)} does not write to `{VERSION_ELEMENT_ID}`. "
+            f"The version stamp belongs in the shared script, not three times in the HTML."
+        )
+
+    for page in TS_INSPECTORS:
+        if f'id="{VERSION_ELEMENT_ID}"' not in read(page):
+            fail(
+                f"{page.relative_to(REPO)} has no element with id=\"{VERSION_ELEMENT_ID}\". "
+                f"All three property inspectors carry the version stamp, or a support "
+                f"report from that action cannot say which build it came from."
+            )
+
+    # Every "linking failed" the plugin logs has to carry the build, so a log file a
+    # streamer attaches identifies it without a follow-up question. Matched on the
+    # whole logger.error call rather than on a helper name, so it cannot be satisfied
+    # by declaring a version constant that nothing interpolates. Non-greedy up to the
+    # closing `);` because the call spans lines once the version is in it.
+    base_src = strip_ts_comments(read(TS_ACTION_BASE))
+    failure_logs = [
+        call
+        for call in re.findall(r"logger\.error\(.*?\n?\s*\);", base_src, re.DOTALL)
+        if "linking failed" in call
+    ]
+    if not failure_logs:
+        fail(
+            f"{TS_ACTION_BASE.relative_to(REPO)} logs no `linking failed` error. If the "
+            f"wording changed, change it here too."
+        )
+    for call in failure_logs:
+        if PLUGIN_VERSION_EXPRESSION not in call:
+            fail(
+                f"{TS_ACTION_BASE.relative_to(REPO)} logs a linking failure without "
+                f"`{PLUGIN_VERSION_EXPRESSION}`: {' '.join(call.split())}. A log a streamer "
+                f"sends in has to name the build, or the first reply is always "
+                f"'which version?'."
+            )
+
+
 def check_sync_pointers() -> None:
     pointers: dict[Path, set[str]] = {}
     for path in PLUGIN_SOURCES:
@@ -409,6 +552,8 @@ def main() -> int:
     check_action_list()
     check_constants()
     check_send_platforms()
+    check_version_stamp()
+    check_inspector_watchdogs()
     check_linking()
     check_sync_pointers()
 
@@ -427,7 +572,7 @@ def main() -> int:
         f"Desktop plugin parity OK: {len(ACTIONS)} actions, "
         f"{len(SHARED_CONSTANTS)} shared constants, {len(SEND_PLATFORMS)} send "
         f"platforms (picker included), {len(LINKING_TIMEOUTS)} linking timeouts, "
-        f"pointers mutual."
+        f"version stamp in {len(TS_INSPECTORS)} inspectors, pointers mutual."
     )
     return 0
 

@@ -99,6 +99,15 @@
 			<span id="allchat-link-status" role="status" aria-live="polite" data-state="idle"
 				>Not linked yet.</span
 			>
+			<!--
+				The build this panel is running, filled in by allchat-link.js from the
+				version Stream Deck reports for the plugin. Empty in the markup on
+				purpose: an unfilled literal would be a lie about which build is
+				installed, which is exactly the confusion it exists to remove
+				(issue #816). Not aria-live — it never changes, so announcing it would
+				interrupt the status above for nothing.
+			-->
+			<span id="allchat-plugin-version"></span>
 		</sdpi-item>
 
 		<h4>Or paste a token instead</h4>

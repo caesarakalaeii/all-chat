@@ -202,6 +202,23 @@ will not.
 
 ## Troubleshooting
 
+**Check which plugin version you are running, first.** There is no auto-update on
+either plugin — both install from a file you download — so a bug that was fixed
+months ago is still present on a build from before the fix, and nothing has moved
+you off it. On the **Stream Deck plugin**, open any All-Chat key's settings: under
+**Link with All-Chat** the panel prints `Plugin version …`, which is the build
+actually loaded. On **StreamController**, read `version` out of `manifest.json`
+in the installed plugin's folder.
+
+This matters most when **linking hangs**. Stream Deck plugin installs from before
+2026-08-31 have a property inspector that cannot render a status at all: the
+button still starts the flow, but nothing it reports back can ever replace
+"Starting…", whether the flow succeeded or failed. If the panel warns that the
+plugin has not answered and the build may be out of date, that is this. Install a current build — see [Installing and
+updating](../../streamdeck-plugin/README.md#installing-and-updating) — and try
+again. Quote the version in any bug report; the Stream Deck plugin also writes it
+into every linking failure in its log.
+
 **`401` — the credential is the problem.** The server did not accept it at all.
 Which fix applies depends on how the key was set up:
 
@@ -234,7 +251,9 @@ The distinction to keep hold of is that **401 means re-link or re-mint** and
 **403 means the credential is working** — so re-doing it will not help, and the
 answer is upgrading, re-scoping, or fixing the overlay.
 
-**Link does nothing, or hangs.** The browser could not be opened, or the plugin
+**Link does nothing, or hangs.** Check the plugin version first, as above — an
+old build is the most common cause and the one you cannot diagnose from the
+panel. On a current build it means the browser could not be opened, or the plugin
 could not open a local port — a sandboxed host, a locked-down container, a
 machine with no desktop. The plugin should fall back to the pairing code on its
 own; if it does not, use <https://allch.at/link> with the code it shows, or paste
