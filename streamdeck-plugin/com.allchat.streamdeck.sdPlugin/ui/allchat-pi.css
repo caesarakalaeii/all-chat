@@ -147,18 +147,41 @@ summary:hover {
 	color: var(--allchat-success);
 }
 
-#allchat-link-status[data-state="failed"] {
+#allchat-link-status[data-state="failed"],
+#allchat-link-status[data-state="stale"] {
 	color: var(--allchat-error);
 }
 
 /* A marker as well as a colour, so the failure state is not signalled by hue alone
-   (WCAG 1.4.1). */
-#allchat-link-status[data-state="failed"]::before {
+   (WCAG 1.4.1).
+
+   `stale` shares the failure treatment on purpose. It is not a failure — the flow may
+   still be running and the button stays disabled — but it is the state that needs
+   acting on, and a third colour meaning "probably broken" would make the panel harder
+   to read rather than more precise. */
+#allchat-link-status[data-state="failed"]::before,
+#allchat-link-status[data-state="stale"]::before {
 	content: "⚠ ";
 }
 
 #allchat-link-status[data-state="linked"]::before {
 	content: "✓ ";
+}
+
+/*
+	The running plugin version, filled in by allchat-link.js.
+
+	Small and muted: nobody needs to read it while linking works, and it is only there
+	so that when linking does NOT work, the streamer and whoever reads their bug report
+	can both name the build (issue #816). --allchat-fg-muted is 4.66:1 on the panel, so
+	it still passes WCAG AA at this size — dim is a de-emphasis, not an excuse to drop
+	below the contrast floor.
+*/
+#allchat-plugin-version {
+	display: block;
+	margin-top: 6px;
+	font-size: 0.85em;
+	color: var(--allchat-fg-muted);
 }
 
 /*

@@ -38,6 +38,13 @@ export default tseslint.config(
 		files: ["com.allchat.streamdeck.sdPlugin/ui/**/*.js"],
 		languageOptions: {
 			globals: {
+				// `console` here and NOT in src/: the `no-console: error` rule above
+				// exists because the plugin's stdout is the SDK's own transport in some
+				// hosts. A property inspector runs in the embedded browser instead,
+				// where the panel devtools console is the only diagnostic there is, and
+				// swallowing a failure to read the plugin version would leave a blank
+				// label with nothing explaining it.
+				console: "readonly",
 				document: "readonly",
 				setTimeout: "readonly",
 				clearTimeout: "readonly",

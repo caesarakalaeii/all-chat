@@ -117,6 +117,12 @@ export abstract class AllChatAction<
 	 * Nothing here logs the credential. `report` sends progress to the property
 	 * inspector, and the only thing that ever carries the token is the settings
 	 * write at the end.
+	 *
+	 * Both failure logs name the running plugin version. The plugin has no
+	 * auto-update and ships as a file somebody double-clicks, so a streamer can be
+	 * running a build from before the fix for their own bug — which is what happened
+	 * on issue #816 — and the log is usually all a maintainer gets. Without the
+	 * version the first reply is always "which version are you on?".
 	 */
 	override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, T>): Promise<void> {
 		const payload = ev.payload;
@@ -176,13 +182,19 @@ export abstract class AllChatAction<
 					// streamer can act on. See linkFailureMessage.
 					const reason =
 						fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
-					logger.error(`${this.label}: linking failed — ${reason}`);
+					logger.error(
+						`${this.label}: linking failed on plugin version ` +
+							`${streamDeck.info.plugin.version} — ${reason}`,
+					);
 					report("failed", linkFailureMessage(fallbackError));
 					return;
 				}
 			}
 			const reason = error instanceof Error ? error.message : String(error);
-			logger.error(`${this.label}: linking failed — ${reason}`);
+			logger.error(
+				`${this.label}: linking failed on plugin version ` +
+					`${streamDeck.info.plugin.version} — ${reason}`,
+			);
 			report("failed", linkFailureMessage(error));
 		}
 	}
