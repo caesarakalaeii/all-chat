@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-// We need to test validateEnv and shutdown which are exported from index.ts
-// We mock process.exit and process.env to test behavior
+// validateEnv and shutdown are exported from index.ts; process.exit and
+// process.env are mocked so importing the module does not kill the test run.
 
 describe('validateEnv', () => {
   const originalEnv = process.env;

@@ -101,7 +101,7 @@ func (h *HealthHandler) ReadinessProbe(c *gin.Context) {
 	}
 
 	// Check 3: Active subscriptions match filtered demand count.
-	// Phase 06 uses demand-based coordination: channels are only subscribed when an overlay
+	// Demand-based coordination means channels are only subscribed when an overlay
 	// is actively watching. Zero subscriptions is valid when no overlays are connected.
 	// We only gate readiness on subscription count when demand is non-nil and > 0
 	// (i.e. there are sources with active viewers that we should be subscribed to).

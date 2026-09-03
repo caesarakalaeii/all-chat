@@ -126,7 +126,6 @@ func (s *LifecycleTestSuite) TestConnectionGating_MultipleOverlays() {
 		zap.String("channel_id", channelID),
 	)
 
-	// PHASE 1: Activate all 3 overlays
 	for i, sourceID := range sources {
 		s.UpdateSourceStatus(ctx, sourceID, true)
 		s.logger.Info("Activated overlay", zap.Int("overlay_num", i+1))
@@ -141,8 +140,7 @@ func (s *LifecycleTestSuite) TestConnectionGating_MultipleOverlays() {
 	s.NoError(err)
 	s.Equal(3, activeCount, "All 3 sources should be active")
 
-	// PHASE 2: Disconnect 1 overlay
-	// Channel should remain active (2 overlays still connected)
+	// The channel must remain active while 2 overlays are still connected.
 	s.UpdateSourceStatus(ctx, sources[0], false)
 
 	err = s.postgresClient.QueryRow(ctx,
@@ -154,8 +152,7 @@ func (s *LifecycleTestSuite) TestConnectionGating_MultipleOverlays() {
 
 	s.logger.Info("First overlay disconnected, channel still active")
 
-	// PHASE 3: Disconnect remaining overlays
-	// Only after ALL overlays disconnect should cleanup occur
+	// Cleanup must happen only once ALL overlays have disconnected.
 	s.UpdateSourceStatus(ctx, sources[1], false)
 	s.UpdateSourceStatus(ctx, sources[2], false)
 

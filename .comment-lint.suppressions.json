@@ -93,8 +93,7 @@
     "restate": 2
   },
   "services/emote-service/clients/seventv.go": {
-    "restate": 1,
-    "step": 3
+    "restate": 1
   },
   "services/emote-service/cmd/main.go": {
     "restate": 3
@@ -107,9 +106,6 @@
   },
   "services/kick-listener/cmd/main.go": {
     "restate": 7
-  },
-  "services/kick-listener/handlers/health.go": {
-    "step": 1
   },
   "services/kick-listener/websocket/client.go": {
     "restate": 2
@@ -168,15 +164,6 @@
   "services/overlay-manager/repository/overlay_repo_test.go": {
     "restate": 2
   },
-  "services/payment-service/integrationtest/integration_test.go": {
-    "banner": 1
-  },
-  "services/payment-service/patreon/oauth.go": {
-    "filler": 1
-  },
-  "services/payment-service/patreon/types.go": {
-    "banner": 1
-  },
   "services/share-service/cmd/main.go": {
     "restate": 1
   },
@@ -192,9 +179,6 @@
   "services/source-manager/cmd/main.go": {
     "restate": 5
   },
-  "services/source-manager/demand/subscriber.go": {
-    "step": 5
-  },
   "services/source-manager/election/leader.go": {
     "restate": 2
   },
@@ -207,16 +191,11 @@
   "services/source-manager/registry/registry.go": {
     "restate": 1
   },
-  "services/support-bot/src/__tests__/index.test.ts": {
-    "filler": 1
-  },
   "services/tiktok-listener/src/connection-pool/pool-manager.ts": {
     "restate": 2
   },
   "services/tiktok-listener/src/index.ts": {
-    "banner": 2,
-    "restate": 7,
-    "step": 2
+    "restate": 7
   },
   "services/tiktok-listener/src/livestream/poller.ts": {
     "restate": 1
@@ -224,20 +203,11 @@
   "services/tiktok-listener/src/reliability/heartbeat-monitor.ts": {
     "restate": 2
   },
-  "services/tiktok-listener/src/sign/config.test.ts": {
-    "step": 1
-  },
   "services/tiktok-listener/src/tracing.ts": {
     "restate": 1
   },
   "services/token-refresh-service/refresher/manager.go": {
     "restate": 2
-  },
-  "services/token-refresh-service/refresher/manager_test.go": {
-    "banner": 6
-  },
-  "services/token-refresh-service/repository/token_repository_test.go": {
-    "banner": 1
   },
   "services/twitch-eventsub-listener/channels/manager.go": {
     "restate": 1
@@ -261,8 +231,7 @@
     "restate": 2
   },
   "services/twitch-listener/irc/connection.go": {
-    "restate": 1,
-    "step": 1
+    "restate": 1
   },
   "services/twitch-listener/irc/event_parser.go": {
     "restate": 2
@@ -371,12 +340,6 @@
   },
   "test/contract/dual-listener/main.go": {
     "restate": 1
-  },
-  "test/contract/lifecycle/connection_test.go": {
-    "step": 3
-  },
-  "test/contract/lifecycle/offline_test.go": {
-    "step": 3
   },
   "test/contract/lifecycle/testcontainers_suite.go": {
     "restate": 4
