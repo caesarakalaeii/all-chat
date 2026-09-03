@@ -122,6 +122,10 @@ func main() {
 	// configures the credentials and gets real platform calls.
 	dispatchers := map[string]dispatch.PlatformDispatcher{}
 	scopeCheckers := map[string]handler.ScopeChecker{}
+	// modLogChecker answers whether the owner already completed the Twitch mod-log opt-in, so
+	// the monitor stops offering it (#815). Nil until the Twitch credential source is wired;
+	// capabilities then keep reporting the grant as absent, which shows the CTA.
+	var modLogChecker handler.ModLogChecker
 	// sendCheckers parallels scopeCheckers: the same per-platform checker instances
 	// also report the chat-send capability (can_send) for the monitor view's send bar.
 	sendCheckers := map[string]handler.SendChecker{}
@@ -147,6 +151,10 @@ func main() {
 		twitchScopes := tokens.NewTwitchScopeChecker(twitchSource)
 		scopeCheckers["twitch"] = twitchScopes
 		sendCheckers["twitch"] = twitchScopes
+		// Same checker again for the mod-log opt-in: it reads the same broadcaster credential,
+		// asking whether the nine mod-log scopes are all present rather than which actions the
+		// scopes allow. Twitch-only, so there is no per-platform map to route through.
+		modLogChecker = twitchScopes
 		log.Info("Twitch moderation enabled (real Helix calls, owner + delegated moderator)")
 	}
 
@@ -228,6 +236,9 @@ func main() {
 	modHandler.SetFeatureGate(gate)
 	// Wire the chat-send capability checker so capabilities report can_send per source.
 	modHandler.SetSendChecker(handler.MultiSendChecker(sendCheckers))
+	if modLogChecker != nil {
+		modHandler.SetModLogChecker(modLogChecker)
+	}
 	// Wire the YouTube stream re-discovery publisher (owner-triggered recovery from /view).
 	modHandler.SetRediscoverPublisher(publisher.NewRediscoverPublisher(redisClient, log))
 
