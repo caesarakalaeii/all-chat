@@ -39,10 +39,8 @@ EXCLUDED_DIRS = ("vendor", "node_modules")
 # live inside a Go/TS string and are not comments at all.
 COMMENT_PREFIX = {".go": "//", ".ts": "//", ".tsx": "//", ".py": "#"}
 
-# ---------------------------------------------------------------------------
 # Exemptions. These are checked before any rule: without them the linter
 # deletes the good comments.
-# ---------------------------------------------------------------------------
 
 # A citation, a tracked issue, a decision record or a note to the ponytail
 # tooling is a pointer to context that is not in the code.
@@ -66,10 +64,6 @@ MACHINE_DIRECTIVES = (
 OWNED_MARKER = re.compile(r"\b(TODO|FIXME|XXX)\(")
 
 LICENSE_FIRST_LINE = "This file is part of All-Chat."
-
-# ---------------------------------------------------------------------------
-# Rules
-# ---------------------------------------------------------------------------
 
 # Decoration: six or more repeats of one character, alone or wrapping a title.
 # Deleting the banner keeps the title as an ordinary comment when it says
@@ -362,8 +356,7 @@ def seed() -> int:
     return 0
 
 
-# ---------------------------------------------------------------------------
-# Selftest
+# Selftest.
 #
 # Every case below is quoted from, or directly modelled on, the examples pinned
 # in issue #822. It asserts BOTH directions, because a linter that only proves
@@ -377,7 +370,6 @@ def seed() -> int:
 # algorithm leaves them alone.
 #
 # The fixtures are inline on purpose — no framework, no fixtures directory.
-# ---------------------------------------------------------------------------
 
 # (rule, filename, source). The source is a whole file: `restate` needs the
 # following line of code, the license-header exemption needs the top of a file,

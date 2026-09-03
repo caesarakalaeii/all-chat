@@ -94,10 +94,6 @@ func doJSON(router *gin.Engine, method, path, body string) *httptest.ResponseRec
 	return w
 }
 
-// ---------------------------------------------------------------------------
-// session-only
-// ---------------------------------------------------------------------------
-
 func TestDeviceRoutes_RefuseTokenAuthenticatedRequests(t *testing.T) {
 	// A device token authenticating against the device-management surface would be a
 	// self-renewing foothold: mint a fresh device, then revoke the streamer's others so
@@ -138,10 +134,6 @@ func TestDeviceRoutes_RefuseImpersonation(t *testing.T) {
 		t.Fatalf("revoke status = %d, want 403 while impersonating", w.Code)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// pending / approve
-// ---------------------------------------------------------------------------
 
 func TestGetPendingLink_LabelsTheDeviceNameAsSelfReported(t *testing.T) {
 	// The name comes from the plugin, so it is a claim, not a fact. The JSON field name
@@ -344,10 +336,6 @@ func TestApproveDevice_UnknownTypedCodeIs404(t *testing.T) {
 		t.Fatalf("status = %d, want 404; body=%s", w.Code, w.Body.String())
 	}
 }
-
-// ---------------------------------------------------------------------------
-// list / revoke
-// ---------------------------------------------------------------------------
 
 func TestListDevices_ExposesMetadataAndNeverASecret(t *testing.T) {
 	last := time.Now().Add(-2 * time.Hour)

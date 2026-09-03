@@ -33,10 +33,6 @@ import type {
   PlatformStatus,
 } from '@/lib/types/message'
 
-// ---------------------------------------------------------------------------
-// Source identity
-// ---------------------------------------------------------------------------
-
 /**
  * The key that identifies one configured chat source across every map and set
  * in the stream pipeline.
@@ -55,10 +51,6 @@ export function sourceKey(platform: string, channelId: string): string {
   return `${platform}:${channelId}`
 }
 
-// ---------------------------------------------------------------------------
-// Reconnect backoff
-// ---------------------------------------------------------------------------
-
 /**
  * Exponential backoff with jitter, identical to the overlay page's onclose
  * handler: min(1000 * 1.5^attempts, 30000) + [0,1000) ms of jitter. `rng` is
@@ -71,9 +63,7 @@ export function computeBackoffDelay(attempts: number, rng: () => number = Math.r
   return Math.min(baseDelay * Math.pow(1.5, attempts), maxDelay) + jitter
 }
 
-// ---------------------------------------------------------------------------
-// Liveness / heartbeat
-// ---------------------------------------------------------------------------
+// Liveness / heartbeat.
 //
 // Browsers never surface the WebSocket's protocol-level ping/pong to JS, so a
 // half-open connection (Wi-Fi blip, NAT/proxy idle timeout, sleep/wake) leaves
@@ -110,10 +100,6 @@ export function isConnectionStale(
   return nowMs - lastActivityMs > timeoutMs
 }
 
-// ---------------------------------------------------------------------------
-// Replay watermark (?since=)
-// ---------------------------------------------------------------------------
-
 /**
  * Advance the last-seen watermark from a message timestamp. Newer wins; older,
  * out-of-order, or malformed timestamps leave it unchanged.
@@ -123,10 +109,6 @@ export function advanceWatermark(current: number, timestampIso: string): number 
   if (Number.isFinite(tsMs) && tsMs > current) return tsMs
   return current
 }
-
-// ---------------------------------------------------------------------------
-// Bounded seen-id dedup cache
-// ---------------------------------------------------------------------------
 
 export interface SeenIdCache {
   /** Returns true if this id was already seen; records it otherwise. Empty ids never dedup. */
@@ -159,10 +141,6 @@ export function makeSeenIdCache(capacity: number): SeenIdCache {
   }
 }
 
-// ---------------------------------------------------------------------------
-// name_gradient parse guard
-// ---------------------------------------------------------------------------
-
 /**
  * Server may send `name_gradient` as a JSON string; parse it in place to a
  * NameGradient object. Objects and undefined are left untouched (no re-parse).
@@ -173,9 +151,7 @@ export function parseNameGradientGuard(user: { name_gradient?: NameGradient | st
   }
 }
 
-// ---------------------------------------------------------------------------
-// Source-recovery self-heal
-// ---------------------------------------------------------------------------
+// Source-recovery self-heal.
 //
 // The client transport can stay perfectly alive (heartbeat pongs + other sources'
 // frames keep the watchdog satisfied) while ONE source silently stops delivering —
@@ -205,10 +181,6 @@ const DOWN_STATUSES: ReadonlySet<string> = new Set(['offline', 'error', 'paused'
 export function isSourceRecovery(prevStatus: string | undefined, nextStatus: string): boolean {
   return prevStatus !== undefined && DOWN_STATUSES.has(prevStatus) && nextStatus === 'connected'
 }
-
-// ---------------------------------------------------------------------------
-// platform_status reducer
-// ---------------------------------------------------------------------------
 
 /** Both collections are keyed by `sourceKey()`, never by a bare channel id. */
 export interface PlatformStatusState {
@@ -267,10 +239,6 @@ export function platformStatusReducer(
   }
   return { activeChannels, channelStatuses }
 }
-
-// ---------------------------------------------------------------------------
-// Envelope classification
-// ---------------------------------------------------------------------------
 
 /** `data` of the gateway's `connected` welcome frame. */
 export interface ConnectedData {

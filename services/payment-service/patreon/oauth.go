@@ -29,8 +29,8 @@ import (
 )
 
 // identityURL returns the current patron's identity plus their memberships, with
-// the member fields we need to decide entitlement. We filter the returned
-// memberships to all-chat's campaign in parseIdentity.
+// the member fields entitlement is decided from. parseIdentity filters the
+// returned memberships down to all-chat's campaign.
 const identityURL = "https://www.patreon.com/api/oauth2/v2/identity"
 
 // patreonEndpoint is the OAuth 2.0 endpoint. golang.org/x/oauth2 has no built-in

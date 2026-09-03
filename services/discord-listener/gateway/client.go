@@ -479,13 +479,12 @@ func (c *GatewayClient) IsStale() bool {
 
 // HandleMessageCreate processes a MESSAGE_CREATE dispatch event.
 // It applies the following filters and enrichments before publishing:
-//  1. Bot messages (author.bot == true) are silently dropped.
-//  2. Messages from channels not in the registry are dropped at DEBUG.
-//  3. The first MESSAGE_CREATE with empty content causes a service-halting error,
+//   - Bot messages (author.bot == true) are silently dropped.
+//   - Messages from channels not in the registry are dropped at DEBUG.
+//   - The first MESSAGE_CREATE with empty content causes a service-halting error,
 //     which indicates the MESSAGE_CONTENT privileged intent is not enabled.
-//  4. Valid messages are enriched with tags and published to Redis Streams.
+//   - Valid messages are enriched with tags and published to Redis Streams.
 func (c *GatewayClient) HandleMessageCreate(ctx context.Context, msg MessageCreateData) error {
-	// 1. Bot filter
 	if msg.Author.Bot {
 		if c.log != nil {
 			c.log.Debug("Bot message filtered",
@@ -496,7 +495,6 @@ func (c *GatewayClient) HandleMessageCreate(ctx context.Context, msg MessageCrea
 		return nil
 	}
 
-	// 2. Channel registry lookup
 	overlayID, found, err := c.registry.GetOverlayForChannel(ctx, msg.ChannelID)
 	if err != nil {
 		if c.log != nil {
@@ -527,7 +525,6 @@ func (c *GatewayClient) HandleMessageCreate(ctx context.Context, msg MessageCrea
 		return nil
 	}
 
-	// 3. Empty content check (first message only)
 	c.mu.Lock()
 	firstSeen := c.firstMessageSeen
 	c.mu.Unlock()
@@ -560,7 +557,6 @@ func (c *GatewayClient) HandleMessageCreate(ctx context.Context, msg MessageCrea
 		c.mu.Unlock()
 	}
 
-	// 4. Build tags
 	tags := map[string]string{
 		"author_id":  msg.Author.ID,
 		"avatar_url": discordAvatarURL(msg.Author.ID, msg.Author.Avatar, msg.GuildID, msg.Member),
@@ -574,19 +570,19 @@ func (c *GatewayClient) HandleMessageCreate(ctx context.Context, msg MessageCrea
 		// making a blocking REST call per message.
 	}
 
-	// 5. Resolve mentions in message text
 	text := msg.Content
 	if c.guildCache != nil {
 		text = ResolveMentions(ctx, text, msg.Mentions, c.guildCache, c.log)
 	}
 
-	// 6. Parse timestamp
 	ts, parseErr := time.Parse(time.RFC3339, msg.Timestamp)
 	if parseErr != nil {
 		ts = time.Now()
 	}
 
-	// 7. Build RawMessage (using interface{} to avoid circular import with publisher package)
+	// An untyped map, not publisher.RawMessage: this package does not import
+	// publisher. cmd/main.go re-marshals the map through JSON into the typed
+	// struct before publishing.
 	rawMsg := map[string]interface{}{
 		"message_id":   msg.ID,
 		"platform":     "discord",
@@ -802,7 +798,6 @@ func ResolveMentions(ctx context.Context, text string, mentions []DiscordUser, c
 		mentionMap[u.ID] = u
 	}
 
-	// 1. Resolve user mentions: <@USER_ID> and <@!USER_ID>
 	text = reUserMention.ReplaceAllStringFunc(text, func(match string) string {
 		sub := reUserMention.FindStringSubmatch(match)
 		if len(sub) < 2 {
@@ -822,7 +817,6 @@ func ResolveMentions(ctx context.Context, text string, mentions []DiscordUser, c
 		return "@unknown"
 	})
 
-	// 2. Resolve channel mentions: <#CHANNEL_ID>
 	text = reChannelMention.ReplaceAllStringFunc(text, func(match string) string {
 		sub := reChannelMention.FindStringSubmatch(match)
 		if len(sub) < 2 {
@@ -840,7 +834,6 @@ func ResolveMentions(ctx context.Context, text string, mentions []DiscordUser, c
 		return "#channel"
 	})
 
-	// 3. Resolve role mentions: <@&ROLE_ID>
 	text = reRoleMention.ReplaceAllStringFunc(text, func(match string) string {
 		sub := reRoleMention.FindStringSubmatch(match)
 		if len(sub) < 2 {

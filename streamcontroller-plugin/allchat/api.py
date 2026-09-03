@@ -63,8 +63,6 @@ def _premium(exc: AllChatError, what: str) -> AllChatError:
     return exc
 
 
-# --- chat ------------------------------------------------------------------
-
 
 def send_chat_message(conn: Connection, message: str, platform: str) -> Any:
     """Sends a chat message as the token's owner.
@@ -84,8 +82,6 @@ def send_chat_message(conn: Connection, message: str, platform: str) -> Any:
         body={"message": message, "platform": platform},
     )
 
-
-# --- polls -----------------------------------------------------------------
 
 
 def start_poll(
@@ -138,8 +134,6 @@ def active_poll(conn: Connection, overlay_id: str) -> Any:
         path=f"{_overlay_path(overlay_id)}/active-poll",
     )
 
-
-# --- predictions -----------------------------------------------------------
 
 
 def start_prediction(

@@ -251,25 +251,20 @@ func TestAcceptShareRequest_HandlerLogicFlow(t *testing.T) {
 			Status:          models.StatusPending,
 		}
 
-		// Step 1: Validate request is pending
 		assert.True(t, shareRequest.IsPending())
 
-		// Step 2: Check authorization
 		currentUser := "recipient"
 		assert.Equal(t, shareRequest.RecipientUserID, currentUser)
 
-		// Step 3: Check for cycles (mock)
 		detector := &mockCycleDetector{shouldDetectCycle: false}
 		hasCycle, err := detector.HasCycle(context.Background(), shareRequest.SenderUserID, shareRequest.RecipientUserID)
 		require.NoError(t, err)
 		assert.False(t, hasCycle)
 
-		// Step 4: Update status (simulated)
 		shareRequest.Status = models.StatusAccepted
 		now := time.Now()
 		shareRequest.RespondedAt = &now
 
-		// Step 5: Verify final state
 		assert.Equal(t, models.StatusAccepted, shareRequest.Status)
 		assert.NotNil(t, shareRequest.RespondedAt)
 
@@ -285,16 +280,13 @@ func TestAcceptShareRequest_HandlerLogicFlow(t *testing.T) {
 			Status:          models.StatusPending,
 		}
 
-		// Step 1: Validate request is pending
 		assert.True(t, shareRequest.IsPending())
 
-		// Step 2: Check for cycles (mock - cycle detected!)
 		detector := &mockCycleDetector{shouldDetectCycle: true}
 		hasCycle, err := detector.HasCycle(context.Background(), shareRequest.SenderUserID, shareRequest.RecipientUserID)
 		require.NoError(t, err)
 		assert.True(t, hasCycle, "Cycle should be detected")
 
-		// Step 3: Acceptance should be blocked
 		// Status remains pending, responded_at stays nil
 		assert.Equal(t, models.StatusPending, shareRequest.Status)
 		assert.Nil(t, shareRequest.RespondedAt)

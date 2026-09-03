@@ -177,10 +177,6 @@ function PlatformChipRow({ platforms, onToggle }: PlatformChipRowProps): React.R
   )
 }
 
-// ==========================================================================
-// Advanced (ElevenLabs) sub-components — Plan 03
-// ==========================================================================
-
 interface ApiKeyInputProps {
   hasSavedKey: boolean
   onSave: (key: string, voiceId: string) => Promise<void>
@@ -660,10 +656,6 @@ function ElevenLabsVoicePicker({
     </div>
   )
 }
-
-// ==========================================================================
-// TTSGroup — main component
-// ==========================================================================
 
 export function TTSGroup(props: TTSGroupProps): React.ReactElement {
   const { displaySettings: d, onChange, isPremium, onPreview } = props

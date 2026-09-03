@@ -103,24 +103,21 @@ func (s *OverlayDemandSubscriber) SetDB(db *pgxpool.Pool) {
 // initial DemandUpdate, then subscribes to overlay:connections for live events.
 // Must be called AFTER hydration so the initial snapshot is not empty on restart.
 func (s *OverlayDemandSubscriber) Start(ctx context.Context) error {
-	// Step 1: hydrate from existing keys before subscribing to live events.
 	if err := s.hydrate(ctx); err != nil {
 		s.logger.Warn("Startup hydration failed; continuing with empty demand", zap.Error(err))
 	}
 
-	// Step 2: publish initial snapshot.
 	s.publishDemandUpdate(ctx)
 
-	// Step 3: start PostgreSQL LISTEN/NOTIFY watcher for source changes.
 	if s.db != nil {
 		go s.listenForSourceChanges(ctx)
 	}
 
-	// Step 4: periodically reconcile against the source-of-truth keys so a replica that missed
-	// a Pub/Sub event converges back instead of leaving listeners stuck on a stale snapshot.
+	// Reconciles against the source-of-truth keys so a replica that missed a
+	// Pub/Sub event converges back instead of leaving listeners stuck on a stale
+	// snapshot.
 	go s.reconcileLoop(ctx)
 
-	// Step 5: subscribe to live events with retry loop.
 	return s.subscribeLoop(ctx)
 }
 

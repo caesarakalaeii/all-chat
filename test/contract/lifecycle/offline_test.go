@@ -215,7 +215,6 @@ func (s *LifecycleTestSuite) TestOfflineDetection_StreamReactivation() {
 
 	repository := poller.NewRepository(s.redisClient, s.logger)
 
-	// PHASE 1: Active stream (cache populated)
 	err := repository.SetChannelVideoMapping(ctx, channelID, oldVideoID)
 	s.NoError(err)
 
@@ -223,7 +222,6 @@ func (s *LifecycleTestSuite) TestOfflineDetection_StreamReactivation() {
 		zap.String("video_id", oldVideoID),
 	)
 
-	// PHASE 2: Stream goes offline (cleanup)
 	err = poller.HandleStreamOffline(ctx, channelID, oldVideoID, repository, s.logger)
 	s.Error(err)
 
@@ -234,8 +232,7 @@ func (s *LifecycleTestSuite) TestOfflineDetection_StreamReactivation() {
 
 	s.logger.Info("Phase 2: Stream offline, cache cleared")
 
-	// PHASE 3: Streamer starts new stream (fresh discovery)
-	// Simulate discovery finding new video ID
+	// Simulate discovery finding the new video ID after a fresh stream start.
 	err = repository.SetChannelVideoMapping(ctx, channelID, newVideoID)
 	s.NoError(err)
 

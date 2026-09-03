@@ -538,11 +538,11 @@ func (p *Poller) poll(ctx context.Context, pageToken string) (string, error) {
 
 	// CRITICAL UNDERSTANDING: pageToken is for RESUMING across reconnections
 	//
-	// How YouTube StreamList Works:
-	// 1. First connection (no token): YouTube sends ~80 messages (history buffer)
-	// 2. After 10s: YouTube closes stream with EOF (signals "caught up, reconnect")
-	// 3. Reconnect WITH token: YouTube resumes from last position (only NEW messages)
-	// 4. Without token: YouTube re-sends same 80 messages → sees as scraper → 10s timeout
+	// How YouTube StreamList works, in the order it happens:
+	//   - First connection (no token): YouTube sends ~80 messages (history buffer)
+	//   - After 10s: YouTube closes stream with EOF (signals "caught up, reconnect")
+	//   - Reconnect WITH token: YouTube resumes from last position (only NEW messages)
+	//   - Without token: YouTube re-sends same 80 messages → sees as scraper → 10s timeout
 	//
 	// The 10-second disconnect was caused by CLEARING the token (see line 212 comment)
 	// which caused us to re-fetch the same history every 10 seconds.

@@ -83,7 +83,6 @@ import type { SoundPlayer, SoundSettings } from '@/lib/utils/soundPlayer'
 import { createTTSPlayer } from '@/lib/utils/ttsPlayer'
 import type { TTSPlayer, TTSSettings } from '@/lib/utils/ttsPlayer'
 
-// ---- Font loader ----------------------------------------------------------
 // Fonts are proxied through /font-proxy/css so end-user IPs never reach Google
 // (DSGVO / "Google Fonts Urteil" LG München 2022-01-20, Az. 3 O 17493/20).
 
@@ -197,7 +196,6 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
     cooldownMs: 500,
   })
 
-  // Phase 13: TTS player state (D-41, D-42)
   const ttsPlayerRef = useRef<TTSPlayer | null>(null)
   const ttsSettingsRef = useRef<TTSSettings>({
     enabled: false,
@@ -244,7 +242,6 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
     filterSettingsRef.current = filterSettings
   }, [filterSettings])
 
-  // Phase 12: Destroy sound player on unmount
   useEffect(() => {
     return () => {
       soundPlayerRef.current?.destroy()
@@ -252,14 +249,12 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
     }
   }, [])
 
-  // Phase 13: ElevenLabs session fallback callback (D-38)
   const handleTTSFallback = useCallback(() => {
     if (ttsFallbackToastShownRef.current) return
     ttsFallbackToastShownRef.current = true
     toastManager.add({ title: t('common.toast.elevenLabsFallback') })
   }, [])
 
-  // Phase 13: Destroy TTS player on unmount
   useEffect(() => {
     return () => {
       ttsPlayerRef.current?.destroy()
@@ -267,16 +262,14 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
     }
   }, [])
 
-  // --- Stream callbacks ----------------------------------------------------
   // useOverlayStream owns the connection, replay, dedup and enrichment; the
   // overlay applies its own filter → sound → TTS → append+fade policy here.
 
   const onChat = useCallback((message: ChatMessage) => {
-    // Phase 11: apply filter settings before adding to render queue (D-01, D-02)
     if (shouldFilterMessage(message, filterSettingsRef.current)) return
-    // Phase 12: play notification sound for messages that pass the filter (D-05)
+    // Sound and TTS are independent: both fire for a message that survives the
+    // filter, neither fires for one that does not (D-42).
     soundPlayerRef.current?.play()
-    // Phase 13: speak the message via TTS (D-41, D-42 — independent of sound; both fire on non-filtered)
     ttsPlayerRef.current?.speak(message)
     // Arrival order for the bubble palette (idempotent per id, so a
     // double-invoked updater cannot burn a number).
@@ -391,7 +384,6 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
     setInvertMessageOrder(display.invert_message_order === true)
     setFeedAnchor(parseFeedAnchor(display.feed_anchor))
 
-    // Phase 9: Pronoun settings from display_settings
     if (typeof display.show_pronouns === 'boolean') {
       setShowPronouns(display.show_pronouns)
     }
@@ -450,7 +442,6 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
       if (vs.showUsername !== undefined) {
         setShowUsername(isDisplayVisible(vs.showUsername))
       }
-      // Phase 9: Pronoun visual_settings overrides
       if (vs.showPronouns !== undefined) {
         setShowPronouns(vs.showPronouns !== 'none')
       }
@@ -462,13 +453,11 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
       }
     }
 
-    // Phase 11: Load filter settings
     if (config.filter_settings) {
       setFilterSettings(config.filter_settings)
       filterSettingsRef.current = config.filter_settings
     }
 
-    // Phase 12: Load sound settings from display_settings
     const soundEnabled = display.notification_sound_enabled === true
     const soundPreset =
       typeof display.notification_sound_preset === 'string'
@@ -502,7 +491,6 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
       soundPlayerRef.current = createSoundPlayer(newSoundSettings)
     }
 
-    // Phase 13: Load TTS settings from display_settings (D-24)
     const ttsLoaded: TTSSettings = {
       enabled: display.tts_enabled === true,
       provider: display.tts_provider === 'elevenlabs' ? 'elevenlabs' : 'browser',
@@ -538,7 +526,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
         : ['twitch', 'youtube', 'kick', 'tiktok', 'discord'],
     }
 
-    // Phase 13 Plan 03: For the ElevenLabs branch, hydrate the runtime fetch
+    // For the ElevenLabs branch, hydrate the runtime fetch
     // endpoint + tts_token JWT (read from the URL query string produced by
     // Plan 02's rotate-token / GET /tts-config). Voice-fallback contract:
     // when `voiceId` is empty, Plan 02's HandleTTS substitutes cfg.VoiceID
@@ -616,7 +604,6 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
     return () => clearTimeout(timer)
   }, [messages, messageDuration, disableMessageFade])
 
-  // Helper function to render event-specific content
   const renderEventContent = (message: ChatMessage): React.ReactNode => (
     <EventContent message={message} />
   )

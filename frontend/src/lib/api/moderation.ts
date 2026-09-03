@@ -158,8 +158,7 @@ function targetName(item: ViewItem): string {
   return item.user?.display_name || item.user?.username || ''
 }
 
-// --- Request builders (pure) -------------------------------------------------
-// Derive a request body straight off a rendered ChatMessage. Kept pure so the
+// Request builders derive a body straight off a rendered ChatMessage. Kept pure so the
 // monitor page and its tests construct identical payloads.
 
 export function buildDeleteRequest(item: ViewItem): DeleteMessageRequest {

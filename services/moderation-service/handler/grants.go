@@ -419,10 +419,6 @@ func (h *GrantHandler) HandleAcceptInvite(c *gin.Context) {
 	})
 }
 
-// ---------------------------------------------------------------------------
-// Shared plumbing
-// ---------------------------------------------------------------------------
-
 // requireOwner resolves the caller's role and admits only the overlay owner.
 //
 // Every refusal — no role, a delegated moderator reaching for an owner power, or an overlay that

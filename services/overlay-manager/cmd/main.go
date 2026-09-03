@@ -152,7 +152,7 @@ func main() {
 		log.Fatal("Failed to start feature gate cache", zap.Error(err))
 	}
 
-	// Phase 13+14: Multi-key AES-GCM cipher for overlay_tts_configs.encrypted_api_key.
+	// Multi-key AES-GCM cipher for overlay_tts_configs.encrypted_api_key.
 	// Reads TOKEN_ENCRYPTION_KEY_V1 (required) plus TOKEN_ENCRYPTION_KEY (legacy fallback).
 	// Same unified chain used by auth-service (D-04).
 	tokenCipher, err := encryption.NewMultiKeyEncryptorFromEnvWithLogger(log)
@@ -237,7 +237,7 @@ func main() {
 	creditRollHandler := creditroll.NewHandler(creditRollRepo, overlayRepo, sourceRepo, redisClient, log, twitchClipsClient)
 	maintenanceHandler := handlers.NewMaintenanceHandler(maintenanceRepo, log)
 
-	// Phase 13: TTS — repository + handler. The repo uses the existing
+	// TTS repository + handler. The repo uses the existing
 	// pgxpool.Pool; the handler owns the AES cipher and the per-overlay
 	// in-memory rate limiter. OVERLAY_PUBLIC_BASE_URL is the external URL
 	// the browser reaches (for building obs_url links).
@@ -289,7 +289,7 @@ func main() {
 	router.GET("/public/:id/creditroll", creditRollHandler.HandleGetPublicConfig)
 	router.GET("/public/:id/credit-roll", creditRollHandler.HandleGetCreditRoll)
 
-	// Phase 13 TTS streaming proxy (D-16). Uses per-overlay tts_token JWT
+	// The TTS streaming proxy uses per-overlay tts_token JWT
 	// verification inside the handler rather than the user-JWT auth
 	// middleware, because OBS browser sources cannot carry a session.
 	router.POST("/:id/tts", ttsHandler.HandleTTS)
@@ -321,12 +321,12 @@ func main() {
 		protected.POST("/:id/creditroll", creditRollHandler.HandleUpdateConfig)
 		protected.POST("/:id/mock-messages", mockHandler.HandleSendMockMessage)
 
-		// Phase 13 TTS — authed, NOT premium-gated. Exposed so users whose
+		// Authed, NOT premium-gated. Exposed so users whose
 		// subscription lapsed can still see whether a config exists and
 		// grab the OBS URL (graceful-downgrade visibility).
 		protected.GET("/:id/tts-config", ttsHandler.HandleGetTTSConfig)
 
-		// Phase 13 TTS — authed + RequirePremium("tts") gated endpoints
+		// Authed + RequirePremium("tts") gated endpoints
 		// (D-11..D-15). Same protected group, extra middleware layer.
 		ttsPremium := protected.Group("")
 		ttsPremium.Use(middleware.RequirePremium(dbPool, gateCache, "tts", log))

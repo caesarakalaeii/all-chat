@@ -128,8 +128,6 @@ class PredictionControlAction(AllChatActionBase):
             "set. Start a prediction first, or paste a specific ID into the key's settings."
         )
 
-    # -- small settings-store helpers ---------------------------------------
-
     def remember(self, key: str, value: str) -> None:
         try:
             settings = dict(self.get_settings_safe())

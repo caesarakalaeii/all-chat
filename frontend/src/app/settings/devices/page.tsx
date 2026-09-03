@@ -81,10 +81,6 @@ function statusOf(t: TFunction, device: PairedDevice): string {
   return t('settings.devices.statusActive', { date: formatDayOrUnknown(t, device.expires_at) })
 }
 
-// ---------------------------------------------------------------------------
-// EmptyState — how linking actually starts
-// ---------------------------------------------------------------------------
-
 function EmptyState() {
   const t = useTranslations()
   return (
@@ -120,10 +116,10 @@ function EmptyState() {
   )
 }
 
-// ---------------------------------------------------------------------------
-// DeviceRow — metadata only, by construction
-// ---------------------------------------------------------------------------
-
+/**
+ * Renders metadata only. `PairedDevice` carries no secret field, so no device
+ * credential can reach the DOM through this row.
+ */
 function DeviceRow({
   device,
   onRevoke,
@@ -181,10 +177,6 @@ function DeviceRow({
     </li>
   )
 }
-
-// ---------------------------------------------------------------------------
-// Page content
-// ---------------------------------------------------------------------------
 
 function DevicesContent() {
   const t = useTranslations()

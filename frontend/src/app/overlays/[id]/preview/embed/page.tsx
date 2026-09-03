@@ -92,7 +92,8 @@ import { formatTime, useTranslations } from '@/lib/i18n'
  */
 const KICK_GLYPH = 'K'
 
-// ---- Platform helpers (identical to preview/page.tsx) ---------------------
+// Duplicated from the live overlay at app/overlay/[id]/page.tsx, where the same
+// two helpers are declared inside the component. Change one, change the other.
 
 const getPlatformColor = (platform: string): string => {
   switch (platform) {
@@ -159,7 +160,6 @@ const PlatformIcon = ({ platform }: { platform: string }) => {
   }
 }
 
-// ---- Font loader ----------------------------------------------------------
 // Fonts are proxied through /font-proxy/css so end-user IPs never reach Google
 // (DSGVO / "Google Fonts Urteil" LG München 2022-01-20, Az. 3 O 17493/20).
 
@@ -187,8 +187,6 @@ function ensureGoogleFontLoaded(fontFamily: string): void {
   link.href = `/font-proxy/css?family=${family}`
   document.head.appendChild(link)
 }
-
-// ---- Page -----------------------------------------------------------------
 
 export default function OverlayEmbedPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -225,11 +223,9 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
   const [invertMessageOrder, setInvertMessageOrder] = useState(false)
   const [feedAnchor, setFeedAnchor] = useState<FeedAnchor>(DEFAULT_FEED_ANCHOR)
 
-  // Phase 11: Filter settings state
   const [filterSettings, setFilterSettings] = useState<FilterSettings>({})
   const filterSettingsRef = useRef<FilterSettings>({})
 
-  // Phase 12: Sound player state
   const soundPlayerRef = useRef<SoundPlayer | null>(null)
   const soundSettingsRef = useRef<SoundSettings>({
     enabled: false,
@@ -238,7 +234,6 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
     cooldownMs: 500,
   })
 
-  // Phase 13: TTS player state (D-41, D-42)
   const ttsPlayerRef = useRef<TTSPlayer | null>(null)
   const ttsSettingsRef = useRef<TTSSettings>({
     enabled: false,
@@ -263,17 +258,16 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
   })
   const ttsFallbackToastShownRef = useRef(false)
 
-  // Phase 13 Plan 03: cache ElevenLabs runtime params (endpoint / token / voice_id)
-  // loaded once from GET /tts-config. The TTS_SETTINGS_UPDATE postMessage from the
-  // editor only carries display_settings; these runtime fields must survive those
-  // updates so the fetch path continues to work after the editor tweaks settings.
+  // Cached ElevenLabs runtime params (endpoint / token / voice_id), loaded once
+  // from GET /tts-config. The TTS_SETTINGS_UPDATE postMessage from the editor
+  // only carries display_settings; these runtime fields must survive those
+  // updates so the fetch path keeps working after the editor tweaks settings.
   const elevenLabsRuntimeRef = useRef<{
     ttsEndpoint?: string
     ttsToken?: string
     voiceId?: string
   }>({})
 
-  // Phase 13: ElevenLabs session fallback callback (D-38)
   const handleTTSFallback = useCallback(() => {
     if (ttsFallbackToastShownRef.current) return
     ttsFallbackToastShownRef.current = true
@@ -355,14 +349,12 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
         setUseCustomCss(Boolean(css.trim().length))
         return
       }
-      // Phase 11: Real-time filter settings from editor (D-07 WYSIWYG)
       if (event.data?.type === 'FILTER_SETTINGS_UPDATE') {
         const settings = event.data.filterSettings as FilterSettings
         setFilterSettings(settings)
         filterSettingsRef.current = settings
         return
       }
-      // Phase 12: Real-time sound settings from editor
       if (event.data?.type === 'SOUND_SETTINGS_UPDATE') {
         const s = event.data.soundSettings as Partial<import('@/lib/types/overlay').DisplaySettings>
         const newSettings: SoundSettings = {
@@ -380,7 +372,6 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
         }
         return
       }
-      // Phase 13: Real-time TTS settings from editor (D-22)
       if (event.data?.type === 'TTS_SETTINGS_UPDATE') {
         const s = event.data.ttsSettings as Partial<import('@/lib/types/overlay').DisplaySettings>
         const prev = ttsSettingsRef.current
@@ -408,9 +399,9 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
           enabled_platforms: Array.isArray(s.tts_enabled_platforms)
             ? s.tts_enabled_platforms
             : prev.enabled_platforms,
-          // Phase 13 Plan 03: preserve ElevenLabs runtime params across settings
-          // updates. The editor only sends display_settings; the endpoint/token
-          // comes from the one-shot /tts-config GET on mount.
+          // Preserve the ElevenLabs runtime params across settings updates. The
+          // editor only sends display_settings; the endpoint/token comes from
+          // the one-shot /tts-config GET on mount.
           ttsEndpoint: elevenLabsRuntimeRef.current.ttsEndpoint ?? prev.ttsEndpoint,
           ttsToken: elevenLabsRuntimeRef.current.ttsToken ?? prev.ttsToken,
           voiceId: elevenLabsRuntimeRef.current.voiceId ?? prev.voiceId,
@@ -494,13 +485,11 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
         if (isMessageAnimation(vs.messageAnimation)) {
           setMessageAnimation(vs.messageAnimation)
         }
-        // Phase 11: Load filter settings from config
         if (config.filter_settings) {
           setFilterSettings(config.filter_settings)
           filterSettingsRef.current = config.filter_settings
         }
 
-        // Phase 12: Load sound settings from display_settings
         const soundEnabled = display.notification_sound_enabled === true
         const soundPreset =
           typeof display.notification_sound_preset === 'string'
@@ -533,7 +522,6 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
           soundPlayerRef.current = createSoundPlayer(newSoundSettings)
         }
 
-        // Phase 13: Load TTS settings from display_settings (D-24)
         const ttsLoaded: TTSSettings = {
           enabled: display.tts_enabled === true,
           provider: display.tts_provider === 'elevenlabs' ? 'elevenlabs' : 'browser',
@@ -573,8 +561,8 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
             : ['twitch', 'youtube', 'kick', 'tiktok', 'discord'],
         }
 
-        // Phase 13 Plan 03: For the ElevenLabs branch, hydrate the runtime fetch
-        // endpoint + tts_token JWT. The editor preview is authed (user JWT in
+        // For the ElevenLabs branch, hydrate the runtime fetch endpoint +
+        // tts_token JWT. The editor preview is authed (user JWT in
         // localStorage), so we can call GET /tts-config to recover the obs_url
         // and extract the token query param — mirroring the live overlay's
         // URLSearchParams read.
@@ -636,12 +624,11 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
       }
       const message = sortMessageBadges(await resolveTwitchBadgeIcons(incoming))
 
-      // Phase 11: apply filter settings before adding to render queue (D-07 WYSIWYG)
       if (shouldFilterMessage(message, filterSettingsRef.current)) return
 
-      // Phase 12: play notification sound for messages that pass the filter
       soundPlayerRef.current?.play()
-      // Phase 13: speak the message via TTS (D-41, D-42 — independent of sound; both fire on non-filtered)
+      // Independent of the notification sound: both fire for a message that
+      // survives the filter, neither fires for one that does not (D-42).
       ttsPlayerRef.current?.speak(message)
 
       // Arrival order for the bubble palette (idempotent per id)
@@ -666,7 +653,6 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
     setMessages((prev) => (prev.length > maxMessages ? prev.slice(-maxMessages) : prev))
   }, [maxMessages])
 
-  // Phase 12: Destroy sound player on unmount
   useEffect(() => {
     return () => {
       soundPlayerRef.current?.destroy()
@@ -674,7 +660,6 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
     }
   }, [])
 
-  // Phase 13: Destroy TTS player on unmount
   useEffect(() => {
     return () => {
       ttsPlayerRef.current?.destroy()

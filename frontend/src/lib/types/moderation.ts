@@ -136,9 +136,7 @@ export const TIMEOUT_PRESETS: ReadonlyArray<{ label: string; seconds: number }> 
   { label: '1h', seconds: 3600 },
 ]
 
-// ---------------------------------------------------------------------------
-// Delegated moderators (ADR-0048)
-// ---------------------------------------------------------------------------
+// The delegated-moderator types below implement ADR-0048.
 
 /**
  * Lifecycle state of a delegation grant. `revoked` never reaches the client —

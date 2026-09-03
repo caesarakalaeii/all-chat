@@ -332,9 +332,10 @@ func (d *Discovery) checkIsLiveViaPlayer(ctx context.Context, videoID string) (b
 // browse response. Supports two schemas YouTube emits side-by-side during their
 // migration to "view models":
 //
-//  1. Legacy videoRenderer schema — videoId + thumbnailOverlays[].thumbnailOverlayTimeStatusRenderer.style == "LIVE".
-//  2. New lockupViewModel schema (rolled out cluster-wide in 2026) — contentId
-//     + contentType == "LOCKUP_CONTENT_TYPE_VIDEO" + a nested badge with
+//   - Legacy videoRenderer schema — videoId plus
+//     thumbnailOverlays[].thumbnailOverlayTimeStatusRenderer.style == "LIVE".
+//   - New lockupViewModel schema (rolled out cluster-wide in 2026) — contentId
+//     plus contentType == "LOCKUP_CONTENT_TYPE_VIDEO" plus a nested badge with
 //     thumbnailBadgeViewModel.badgeStyle == "THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE".
 //
 // Without the lockupViewModel path, discovery returns zero candidates for every

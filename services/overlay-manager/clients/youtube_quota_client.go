@@ -199,8 +199,6 @@ func (c *YouTubeQuotaClient) GetQuotaStatus(ctx context.Context) (*QuotaStatus, 
 	return &response.Global, nil
 }
 
-// =============== NEW RESERVE-CONFIRM PATTERN FOR ZERO DRIFT ===============
-
 // ReserveQuotaRequest represents a quota reservation request
 type ReserveQuotaRequest struct {
 	Units         int    `json:"units"`

@@ -69,13 +69,11 @@ func (a *metricsAdapter) RecordOverflow(channelID string) {
 }
 
 func main() {
-	// 1. Environment variables
 	logLevel := listener.Env("LOG_LEVEL", "info")
 	redisHost := listener.Env("REDIS_HOST", "localhost")
 	redisPort := listener.Env("REDIS_PORT", "6379")
 	httpPort := listener.Env("HTTP_PORT", "8080")
 
-	// 2. Logger initialization
 	logger := newLogger("youtube-listener-innertube", logLevel)
 	defer logger.Sync()
 
@@ -86,11 +84,9 @@ func main() {
 
 	ctx := context.Background()
 
-	// 3. Initialize Prometheus metrics
 	innertubeMetrics := metrics.NewInnerTubeMetrics()
 	logger.Info("Initialized Prometheus metrics")
 
-	// 3.5. Initialize batch deletion detector
 	batchThresholdStr := listener.Env("BATCH_DELETION_THRESHOLD", "5")
 	batchThreshold, err := strconv.Atoi(batchThresholdStr)
 	if err != nil {
@@ -106,7 +102,6 @@ func main() {
 		zap.Int("threshold", batchThreshold),
 	)
 
-	// 4. Redis client
 	// Connect to Redis, retrying with backoff so a transient Redis outage
 	// (e.g. the pod being rescheduled onto another node) does not crash-loop
 	// this service. The retry is cancelled on shutdown signals so SIGTERM still
@@ -132,7 +127,6 @@ func main() {
 
 	logger.Info("Connected to Redis", zap.String("addr", redisAddr))
 
-	// 5. Initialize components
 	// Fetch current InnerTube client version + API key from YouTube at startup.
 	// Falls back to compiled-in defaults if the fetch fails.
 	innertubeConfig := innertube.FetchClientConfig(ctx, logger)
@@ -197,7 +191,6 @@ func main() {
 		logger.Fatal("Failed to initialize leadership listener", zap.Error(err))
 	}
 
-	// 6. Initialize and start stream manager
 	streamManager := streams.NewManager(
 		ll.LeadershipCoordinator(),
 		ll.SMClient(),
@@ -217,7 +210,7 @@ func main() {
 		logger.Fatal("Failed to start stream manager", zap.Error(err))
 	}
 
-	// 6.5. Canary poller.
+	// Canary poller.
 	//
 	// Polls channels that are live 24/7 with continuously busy chat, through the
 	// same GetInitialContinuation + poll path as production traffic, counts what
@@ -339,7 +332,6 @@ func main() {
 		}
 	}()
 
-	// 7. HTTP server with metrics and health checks
 	if logLevel == "debug" {
 		gin.SetMode(gin.DebugMode)
 	} else {
@@ -366,7 +358,6 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// 8. Start HTTP server in goroutine
 	go func() {
 		logger.Info("HTTP server listening",
 			zap.String("port", httpPort),
@@ -377,7 +368,6 @@ func main() {
 		}
 	}()
 
-	// 9. Wait for interrupt signal for graceful shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
 	<-quit

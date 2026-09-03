@@ -117,16 +117,11 @@ func buildAllowedOrigins(cfg CORSConfig) []string {
 		origins = append(origins, cfg.AllowedOrigins...)
 	}
 
-	// Add browser extension origins if specified
+	// gin-contrib/cors matches origins exactly — no `chrome-extension://*`
+	// pattern — so an extension has to name its own ID here, in every
+	// environment including development.
 	if extensionID := os.Getenv("BROWSER_EXTENSION_ID"); extensionID != "" {
 		origins = append(origins, "chrome-extension://"+extensionID)
-	}
-
-	// Support wildcard chrome-extension in development
-	if cfg.Environment == "development" || cfg.Environment == "dev" || cfg.Environment == "" {
-		// In development, we can't use wildcard, but we can allow a pattern
-		// Note: gin-contrib/cors doesn't support wildcards, so we need to allow specific extension IDs
-		// For now, we'll document that extension ID must be provided
 	}
 
 	return origins

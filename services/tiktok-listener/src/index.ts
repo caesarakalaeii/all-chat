@@ -1502,9 +1502,6 @@ class TikTokListenerService {
         const windowAge = now.getTime() - agg.window_start.getTime();
         const timeSinceLastPublish = now.getTime() - agg.last_published.getTime();
 
-        // Publish if:
-        // 1. Window is closed (30s elapsed), OR
-        // 2. 5 seconds since last publish AND likes accumulated
         const shouldPublish =
           windowAge >= this.LIKE_AGGREGATION_WINDOW_MS || // 30s window closed
           (timeSinceLastPublish >= this.LIKE_PUBLISH_INTERVAL_MS && agg.like_count > 0); // 5s update interval
@@ -1573,10 +1570,6 @@ class TikTokListenerService {
       logger.info('Like aggregation publisher stopped');
     }
   }
-  // ============================================================================
-  // State Inspection and Control Methods (for API endpoints)
-  // ============================================================================
-
   /**
    * Get channel state for a username
    */

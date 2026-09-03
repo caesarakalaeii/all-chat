@@ -124,7 +124,6 @@ export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
             size="sm"
             className="flex-1"
             onClick={() => {
-              // Phase 15: Reject action (implement in future plan)
               console.log('Reject not implemented yet (Phase 15)')
             }}
           >

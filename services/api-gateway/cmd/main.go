@@ -666,7 +666,7 @@ func main() {
 		publicAPI.GET("/overlays/public/:id/creditroll", proxyHandler.ForwardRequest)
 		publicAPI.GET("/overlays/public/:id/credit-roll", proxyHandler.ForwardRequest)
 
-		// Phase 13: TTS streaming proxy — uses per-overlay tts_token JWT (not user JWT).
+		// The TTS streaming proxy uses a per-overlay tts_token JWT, not the user JWT.
 		// Auth is enforced downstream in overlay-manager via the tts_token query param.
 		// NOTE (L15 defense-in-depth): this endpoint is public at the gateway level
 		// (no user JWT). The downstream tts_token provides the only auth layer, and
@@ -798,7 +798,7 @@ func main() {
 		protectedAPI.POST("/overlays/:id/creditroll", proxyHandler.ForwardRequest)
 		protectedAPI.GET("/overlays/:id/credit-roll", proxyHandler.ForwardRequest)
 
-		// Phase 13: TTS endpoints on overlay-manager.
+		// TTS endpoints on overlay-manager.
 		// POST /overlays/:id/tts is NOT listed here — it uses per-overlay tts_token JWT
 		// (not user JWT) and must be forwarded as a public endpoint (added above).
 		protectedAPI.GET("/overlays/:id/tts-config", proxyHandler.ForwardRequest)

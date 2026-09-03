@@ -59,7 +59,10 @@ export function parseApiError(response: Response, data?: any): ChatError {
   // Combine message sources for pattern matching
   const fullErrorText = `${errorMessage} ${errorDetails}`.toLowerCase()
 
-  // 1. Check for authentication errors (401, 403)
+  // Order matters below: the checks run as a first-match chain, so a narrower
+  // condition has to precede any broader one that would also match. The
+  // platform-API check must stay ahead of the network check, whose
+  // `statusCode >= 500` would otherwise swallow 502/503/504.
   if (
     statusCode === 401 ||
     fullErrorText.includes('unauthorized') ||
@@ -72,7 +75,6 @@ export function parseApiError(response: Response, data?: any): ChatError {
     return createUnauthorizedError(errorMessage, platform, statusCode)
   }
 
-  // 2. Check for rate limiting (429)
   if (
     statusCode === 429 ||
     fullErrorText.includes('rate limit') ||
@@ -83,7 +85,6 @@ export function parseApiError(response: Response, data?: any): ChatError {
     return createRateLimitedError(errorMessage, resetTime, retryAfter, statusCode)
   }
 
-  // 3. Check for banned status (403 with ban reason)
   if (
     (statusCode === 403 && fullErrorText.includes('banned')) ||
     fullErrorText.includes('you are banned') ||
@@ -94,7 +95,6 @@ export function parseApiError(response: Response, data?: any): ChatError {
     return createBannedError(errorMessage, reason, expiresAt, statusCode)
   }
 
-  // 4. Check for streamer offline / not live
   if (
     fullErrorText.includes('not currently live') ||
     fullErrorText.includes('stream is offline') ||
@@ -105,7 +105,6 @@ export function parseApiError(response: Response, data?: any): ChatError {
     return createStreamerOfflineError(errorMessage, platform, streamerName, statusCode)
   }
 
-  // 5. Check for platform API errors (502, 503, 504)
   if (
     statusCode === 502 ||
     statusCode === 503 ||
@@ -119,7 +118,6 @@ export function parseApiError(response: Response, data?: any): ChatError {
     return createPlatformApiError(errorMessage, platform, platformMessage, statusCode)
   }
 
-  // 6. Check for validation errors (400)
   if (
     statusCode === 400 ||
     fullErrorText.includes('invalid') ||
@@ -132,7 +130,6 @@ export function parseApiError(response: Response, data?: any): ChatError {
     return createValidationError(errorMessage, field, constraint, statusCode)
   }
 
-  // 7. Check for network errors (0, 5xx)
   if (
     statusCode === 0 ||
     statusCode >= 500 ||
@@ -143,7 +140,6 @@ export function parseApiError(response: Response, data?: any): ChatError {
     return createNetworkError(errorMessage, statusCode)
   }
 
-  // 8. Unknown error (fallback)
   return createUnknownError(errorMessage || statusText, data, statusCode)
 }
 

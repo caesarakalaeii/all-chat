@@ -120,7 +120,6 @@ func (e *ViewerBadgeEnricher) Enrich(ctx context.Context, msg *models.UnifiedCha
 
 	cacheKey := fmt.Sprintf("%s%s:%s", viewerIdentityCachePrefix, msg.Platform, msg.User.ID)
 
-	// 1. Check Redis cache
 	cached, err := e.redis.Get(ctx, cacheKey).Result()
 	if err == nil {
 		if cached == viewerNullSentinel {
@@ -135,18 +134,15 @@ func (e *ViewerBadgeEnricher) Enrich(ctx context.Context, msg *models.UnifiedCha
 			if identity.NameColor != nil {
 				msg.User.Color = *identity.NameColor
 			}
-			// Phase 29: propagate gradient from cache
 			if len(identity.NameGradient) > 0 {
 				msg.User.NameGradient = string(identity.NameGradient)
 			}
-			// Phase 30: propagate frame/flair from cache
 			if identity.AvatarFrameURL != "" {
 				msg.User.AvatarFrameURL = identity.AvatarFrameURL
 			}
 			if identity.AvatarFlairURL != "" {
 				msg.User.AvatarFlairURL = identity.AvatarFlairURL
 			}
-			// Phase 31: inject All-Chat badges from cache
 			// Prepend premium first so allchat ends up at index 0 in final slice
 			if identity.IsPremium {
 				msg.User.Badges = append([]models.Badge{{Name: "allchat-premium", Version: "1", IconURL: ""}}, msg.User.Badges...)
@@ -154,7 +150,6 @@ func (e *ViewerBadgeEnricher) Enrich(ctx context.Context, msg *models.UnifiedCha
 			if identity.IsAdmin {
 				msg.User.Badges = append([]models.Badge{{Name: "allchat", Version: "1", IconURL: ""}}, msg.User.Badges...)
 			}
-			// Phase 9: propagate TwitchUsername from cache for pronoun enricher
 			if identity.TwitchUsername != "" {
 				msg.User.TwitchUsername = identity.TwitchUsername
 			}
@@ -163,7 +158,7 @@ func (e *ViewerBadgeEnricher) Enrich(ctx context.Context, msg *models.UnifiedCha
 		// Malformed cache entry — fall through to DB
 	}
 
-	// 2. Cache miss — query DB (Phase 31: include is_admin/is_premium via LATERAL viewer_sessions JOIN)
+	// Cache miss, or a malformed entry: fall back to the source of truth.
 	var viewerID string
 	var nameColor *string
 	var nameGradientBytes []byte
@@ -215,7 +210,6 @@ func (e *ViewerBadgeEnricher) Enrich(ctx context.Context, msg *models.UnifiedCha
 		autoColorKey = viewerID
 	}
 
-	// 3. Cache the result
 	identity := viewerIdentityCache{
 		ViewerID:       viewerID,
 		NameColor:      nameColor,
@@ -230,17 +224,16 @@ func (e *ViewerBadgeEnricher) Enrich(ctx context.Context, msg *models.UnifiedCha
 		e.redis.Set(ctx, cacheKey, string(jsonBytes), ViewerIdentityCacheTTL)
 	}
 
-	// 4. Inject color if set
 	if nameColor != nil {
 		msg.User.Color = *nameColor
 	}
 
-	// 5. Phase 29: inject gradient if set (guard against nil to avoid empty string pollution)
+	// Length-checked rather than nil-checked, so an empty gradient does not
+	// overwrite the field with "".
 	if len(nameGradientBytes) > 0 {
 		msg.User.NameGradient = string(nameGradientBytes)
 	}
 
-	// 6. Phase 30: inject avatar frame/flair URL if set
 	if avatarFrameURL != "" {
 		msg.User.AvatarFrameURL = avatarFrameURL
 	}
@@ -248,7 +241,6 @@ func (e *ViewerBadgeEnricher) Enrich(ctx context.Context, msg *models.UnifiedCha
 		msg.User.AvatarFlairURL = avatarFlairURL
 	}
 
-	// 7. Phase 31: inject All-Chat badges for resolved viewers
 	// Prepend premium first so allchat ends up at index 0 in final slice
 	if isPremium {
 		msg.User.Badges = append([]models.Badge{{Name: "allchat-premium", Version: "1", IconURL: ""}}, msg.User.Badges...)
@@ -257,7 +249,8 @@ func (e *ViewerBadgeEnricher) Enrich(ctx context.Context, msg *models.UnifiedCha
 		msg.User.Badges = append([]models.Badge{{Name: "allchat", Version: "1", IconURL: ""}}, msg.User.Badges...)
 	}
 
-	// 8. Phase 9: inject TwitchUsername for pronoun enricher (pipeline-internal, never serialized)
+	// Pipeline-internal, for the pronoun enricher downstream: the field is
+	// json:"-", so it never reaches a client.
 	if twitchUsername != "" {
 		msg.User.TwitchUsername = twitchUsername
 	}

@@ -54,10 +54,10 @@ func NewViewerTwitchOAuth(clientID, clientSecret, redirectURL string) *ViewerTwi
 	}
 }
 
-// ValidateScope checks if the token has the required scope
+// ValidateScope always succeeds. Twitch enforces the requested scopes on the
+// consent screen, so a token that reached us already carries them; re-checking
+// would cost a /oauth2/validate round trip per call to learn nothing.
 func (v *ViewerTwitchOAuth) ValidateScope(ctx context.Context, accessToken string) error {
-	// Twitch validates scopes during the OAuth flow, so we can assume the token is valid
-	// If we need to verify, we can call the /oauth2/validate endpoint
 	return nil
 }
 

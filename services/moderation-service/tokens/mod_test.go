@@ -137,8 +137,6 @@ func TestModRefresh_LeavesGrantedScopesAlone(t *testing.T) {
 	assert.Equal(t, []string{"moderator:manage:chat_messages"}, reread.GrantedScopes)
 }
 
-// --- Owner-reach anchor ------------------------------------------------------
-
 // The anchor yields the numeric broadcaster id for a channel the owner controls. A Twitch
 // source's channel_id IS the login, which is what makes this answerable.
 func TestOwnerAnchor_ResolvesTheBroadcasterID(t *testing.T) {

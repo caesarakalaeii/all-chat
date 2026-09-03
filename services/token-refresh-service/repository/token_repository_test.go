@@ -116,8 +116,6 @@ func TestMarkYouTubeTokenPermanentlyFailed_MethodExists(t *testing.T) {
 	var _ permanentFailMarker = (*repository.TokenRepository)(nil)
 }
 
-// ---- helpers ----------------------------------------------------------------
-
 func assertNoBoundedExpiredClause(t *testing.T, name, query string) {
 	t.Helper()
 	// The old unbounded form that must NOT appear in the query.

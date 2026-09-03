@@ -41,8 +41,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// ---- Test doubles ----------------------------------------------------------
-
 // mockTTSRepo is an in-memory implementation of ttsConfigStore used across
 // the handler test suite. Not goroutine-safe; tests are sequential.
 type mockTTSRepo struct {
@@ -143,8 +141,6 @@ type mockGateChecker struct {
 func (m *mockGateChecker) IsPremium(_ string) bool     { return m.isPremiumResult }
 func (m *mockGateChecker) IsEarlyAccess(_ string) bool { return m.isEarlyAccessResult }
 
-// ---- Shared fixtures -------------------------------------------------------
-
 func testCipher(t *testing.T) *encryption.AESEncryptor {
 	t.Helper()
 	key := bytes.Repeat([]byte{0x01}, 32)
@@ -222,8 +218,6 @@ func newRouter(t *testing.T, h *TTSHandler, gates sharedMiddleware.GateChecker, 
 	r.POST("/:id/tts", h.HandleTTS)
 	return r
 }
-
-// ---- Tests -----------------------------------------------------------------
 
 // TestSaveTTSConfigRequiresPremium — non-premium user hitting POST
 // /tts-config gets 403 from the middleware.
@@ -867,7 +861,6 @@ func TestHandleTTSStillWorksForDowngradedPremium(t *testing.T) {
 	defer f.upstreamTS.Close()
 
 	gates := &mockGateChecker{isPremiumResult: true}
-	// Step 1: save as premium.
 	rPremium := newRouter(t, f.handler, gates, true, "user-1")
 	rPremium.ServeHTTP(httptest.NewRecorder(),
 		httptest.NewRequest(http.MethodPost, "/overlay-graceful/tts-config",
@@ -876,8 +869,8 @@ func TestHandleTTSStillWorksForDowngradedPremium(t *testing.T) {
 	token, err := ttspkg.SignOverlayToken("overlay-graceful", f.repo.row.SigningSecret)
 	require.NoError(t, err)
 
-	// Step 2: user downgrades (userPremium=false) — POST /tts still serves
-	// because POST /tts does NOT go through the premium gate.
+	// After the downgrade, POST /tts still serves: it does NOT go through the
+	// premium gate.
 	rDowngraded := newRouter(t, f.handler, gates, false, "user-1")
 	url := fmt.Sprintf("/overlay-graceful/tts?text=hi&tts_token=%s", token)
 	req := httptest.NewRequest(http.MethodPost, url, nil)
@@ -1126,7 +1119,7 @@ func TestPublicConfigHidesTTSKey(t *testing.T) {
 	assert.NotContains(t, body, "api_key")
 }
 
-// ---- Stubs for TestPublicConfigHidesTTSKey ---------------------------------
+// Stubs for TestPublicConfigHidesTTSKey.
 //
 // These stubs implement the full OverlayRepository / SourceRepository /
 // OverlayConfigRepository interfaces so NewConfigHandler accepts them. Only
@@ -1185,8 +1178,6 @@ func (s *stubSourceRepo) Delete(_ context.Context, _ string) error { return nil 
 func (s *stubSourceRepo) UpdateConfig(_ context.Context, _ string, _ map[string]interface{}) error {
 	return nil
 }
-
-// ---- L8: voiceID validation + body bounding (audit L8) ------------------
 
 // TestHandleTTSRejectsMaliciousVoiceID verifies that a voiceID containing
 // path-traversal characters (e.g. "../") in the JSON body is rejected with

@@ -183,8 +183,6 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
     itemsRef.current = items
   }, [items])
 
-  // --- Stream callbacks ----------------------------------------------------
-
   // Per-browser player for the activity sound. Created after mount (client
   // only) and kept in sync with prefs by the effects below; onChat plays
   // through it and the player itself gates on enabled/cooldown/volume, so
@@ -501,8 +499,6 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
     }
   }, [light])
 
-  // --- Moderation capability lookups ---------------------------------------
-
   const isOwner = capabilities?.is_owner === true
   // A delegated moderator (ADR-0048). They get the moderation controls their grant allows
   // and nothing else: no engagement, no send bar, no stream re-discovery — those are
@@ -588,8 +584,6 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
       setRediscovering(false)
     }
   }, [id, t])
-
-  // --- Optimistic moderation actions ---------------------------------------
 
   // A moderation action that failed because the platform token can no longer perform
   // it (missing/lapsed scope, or a Helix 401 a refresh couldn't fix). The backend asked

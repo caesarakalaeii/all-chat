@@ -29,7 +29,6 @@ import (
 
 // TestEventFlow_TwitchSubscription tests the complete flow from raw event to unified message
 func TestEventFlow_TwitchSubscription(t *testing.T) {
-	// Step 1: Raw event from Twitch Listener (simulates IRC USERNOTICE)
 	rawEvent := &models.RawChatMessage{
 		MessageID: "test-sub-1",
 		Platform:  "twitch",
@@ -51,46 +50,38 @@ func TestEventFlow_TwitchSubscription(t *testing.T) {
 		},
 	}
 
-	// Step 2: Normalize event (Message Processor)
 	twitchNormalizer := normalizer.NewTwitchNormalizer()
 	unified, err := twitchNormalizer.NormalizeEvent(rawEvent, "overlay-test-1")
 	require.NoError(t, err)
 	require.NotNil(t, unified)
 
-	// Step 3: Verify unified message structure
 	assert.Equal(t, "test-sub-1", unified.ID)
 	assert.Equal(t, "overlay-test-1", unified.OverlayID)
 	assert.Equal(t, "twitch", unified.Platform)
 	assert.Equal(t, "xqc", unified.ChannelID)
 
-	// Step 4: Verify user info
 	assert.Equal(t, "12345", unified.User.ID)
 	assert.Equal(t, "viewer123", unified.User.Username)
 
-	// Step 5: Verify event info exists
 	require.NotNil(t, unified.Event)
 	assert.Equal(t, "subscription", unified.Event.Type)
 	assert.Equal(t, "high", unified.Event.Tier)
 	assert.Equal(t, 30, unified.Event.Duration)
 
-	// Step 6: Verify event value
 	require.NotNil(t, unified.Event.Value)
 	assert.Equal(t, float64(12), unified.Event.Value.Amount)
 	assert.Equal(t, "months", unified.Event.Value.Currency)
 	assert.Contains(t, unified.Event.Value.DisplayText, "12 months")
 
-	// Step 7: Verify event metadata preserved
 	assert.Equal(t, rawEvent.EventData, unified.Event.Metadata)
 
-	// Step 8: Verify message doesn't have emotes (events skip emote enrichment)
+	// Events skip emote enrichment.
 	assert.Empty(t, unified.Message.Emotes)
 
-	// Step 9: Verify JSON serialization works
 	jsonBytes, err := unified.ToJSON()
 	require.NoError(t, err)
 	assert.NotEmpty(t, jsonBytes)
 
-	// Step 10: Verify deserialization
 	decoded, err := models.FromJSON(jsonBytes)
 	require.NoError(t, err)
 	assert.Equal(t, unified.ID, decoded.ID)

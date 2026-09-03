@@ -186,8 +186,8 @@ func TestSubscriberResubscribeMetric(t *testing.T) {
 
 	overlayID := "overlay-metric"
 
-	// Directly invoke resubscribe to check metric increment without network disruption
-	// First we need to set up the internal state manually
+	// Directly invoke resubscribe to check metric increment without network disruption.
+	// The internal state has to be seeded by hand to do that.
 	sub.mu.Lock()
 	sub.subscriptions[overlayID] = client.Subscribe(context.Background(), "overlay:"+overlayID)
 	sub.refCounts[overlayID] = 1

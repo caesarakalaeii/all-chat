@@ -144,7 +144,7 @@ export interface ChatMessage {
   event?: EventInfo // Present for events, absent for regular chat
 }
 
-// Phase 29: NameGradient represents a CSS linear-gradient definition stored server-side.
+// NameGradient represents a CSS linear-gradient definition stored server-side.
 export interface NameGradient {
   type: 'linear'
   colors: string[]

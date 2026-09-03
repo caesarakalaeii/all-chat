@@ -276,10 +276,6 @@ func postJSON(router *gin.Engine, path, body string) *httptest.ResponseRecorder 
 	return w
 }
 
-// ---------------------------------------------------------------------------
-// start
-// ---------------------------------------------------------------------------
-
 func TestStartDeviceLink_LoopbackFlow(t *testing.T) {
 	store := &fakeDeviceLinkStore{}
 	body := `{"flow":"loopback","device_name":"Stream Deck (studio)","scopes":["engagement:write"],` +
@@ -413,10 +409,6 @@ func TestStartDeviceLink_Validation(t *testing.T) {
 		})
 	}
 }
-
-// ---------------------------------------------------------------------------
-// exchange
-// ---------------------------------------------------------------------------
 
 func approvedLoopbackRequest() *repository.LinkRequest {
 	now := time.Now()
@@ -599,10 +591,6 @@ func TestExchangeDeviceLink_Validation(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// callback
-// ---------------------------------------------------------------------------
-
 func getCallback(router *gin.Engine, query string) *httptest.ResponseRecorder {
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/device/link/callback?"+query, nil))
@@ -672,10 +660,6 @@ func TestDeviceLinkCallback_RefusesACodeFlowRequest(t *testing.T) {
 		t.Fatalf("status = %d, want 400; body=%s", w.Code, w.Body.String())
 	}
 }
-
-// ---------------------------------------------------------------------------
-// helpers
-// ---------------------------------------------------------------------------
 
 func TestNormalizeUserCode(t *testing.T) {
 	// A streamer reading a code off a screen may or may not type the hyphen and may type

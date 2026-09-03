@@ -20,10 +20,10 @@ package repository
 //
 // Two rules govern every query in this file:
 //
-//  1. The plaintext token never appears here. Create takes a digest the caller
+//   - The plaintext token never appears here. Create takes a digest the caller
 //     computed with middleware.HashAPIToken; nothing in this file can return, log or
 //     store a token.
-//  2. No projection selects token_hash. A digest that never leaves this file cannot be
+//   - No projection selects token_hash. A digest that never leaves this file cannot be
 //     serialised into a response by accident — the same reasoning as
 //     moderation-service's grantColumns comment for invite_token_hash.
 

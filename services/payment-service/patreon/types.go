@@ -89,7 +89,8 @@ func SubscriptionStatusFor(snap MembershipSnapshot, minCents int) string {
 	}
 }
 
-// ---- JSON:API wire types (Patreon API v2) --------------------------------------
+// The types below mirror Patreon API v2's JSON:API envelope, so their shape is
+// fixed by the upstream response rather than by anything all-chat needs.
 
 type apiRelRef struct {
 	Type string `json:"type"`
