@@ -16,7 +16,7 @@ The app UI targets **WCAG 2.2 AA**. This is a living reference for the conforman
 
 | Job | What it enforces |
 |---|---|
-| A11y lint + token contrast | `eslint.a11y.config.mjs` (jsx-a11y **strict**, inline disables ignored) with an **empty** suppressions file — any violation fails. Plus the design-token contrast lock (`frontend/src/app/__tests__/token-contrast.test.ts`): text tokens ≥4.5:1 on every surface tier, platform colors ≥3:1, conversion math pinned to the rendered `#020204` background. |
+| A11y lint + token contrast | `eslint.a11y.config.mjs` (jsx-a11y **strict**, inline disables ignored) with an **empty** suppressions file — any violation fails. Plus the design-token contrast lock (`frontend/src/app/__tests__/token-contrast.test.ts`): text tokens ≥4.5:1 on every surface tier, platform colors ≥3:1, conversion math pinned to the rendered `#020204` background. Plus, since ADR-0057, the **whole `vitest --project unit` suite** — it lives in this job because no frontend unit test ran on a PR at all before that, so a green test file next to a broken feature proved nothing. |
 | Storybook axe | Every story runs axe with violations as errors (`.storybook/preview.ts`, `a11y: { test: 'error' }`). New primitives and components need stories. |
 | Axe page smoke | `frontend/tests/e2e/a11y.spec.ts` scans the main pages (WCAG 2.2 AA tags) against `a11y-baseline.json` — a **shrink-only** baseline of pre-existing rule ids. New rule ids fail immediately; prune entries in the PR that fixes them (the spec logs prunable entries). |
 

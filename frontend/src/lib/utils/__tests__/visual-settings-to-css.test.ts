@@ -23,6 +23,7 @@ import {
   visualSettingsToCss,
 } from '../visual-settings-to-css'
 import type { VisualSettings } from '@/lib/types/visual-settings'
+import { buildOutlineShadow } from '../text-outline'
 
 describe('visualSettingsToCss', () => {
   it('returns empty string for empty input', () => {
@@ -307,5 +308,43 @@ describe('visualSettingsToCss bubble fills', () => {
     for (const rule of rules) {
       expect(rule).toContain(':not(.event-message)')
     }
+  })
+})
+
+/**
+ * The outline's thickness is the setting; the `text-shadow` declaration is only
+ * a rendering of it (see text-outline.ts). Re-deriving the declaration here is
+ * what let the #833 geometry be fixed for overlays that had already saved a
+ * value, with no migration and no second visit to the editor — so it is the
+ * emitter, not the stored string, that has to be asserted.
+ */
+describe('visualSettingsToCss outline geometry', () => {
+  // Exactly what #833 wrote to visual_settings at 4px: eight compass points at
+  // radius 4, which rendered as detached copies of the text.
+  const GHOSTED_833_4PX = [
+    '4px 0px 0 rgba(0, 0, 0, 0.85)',
+    '0px 4px 0 rgba(0, 0, 0, 0.85)',
+    '-4px 0px 0 rgba(0, 0, 0, 0.85)',
+    '0px -4px 0 rgba(0, 0, 0, 0.85)',
+    '4px 4px 0 rgba(0, 0, 0, 0.85)',
+    '-4px 4px 0 rgba(0, 0, 0, 0.85)',
+    '-4px -4px 0 rgba(0, 0, 0, 0.85)',
+    '4px -4px 0 rgba(0, 0, 0, 0.85)',
+  ].join(', ')
+
+  it('re-emits a stored outline at the same width in the current geometry', () => {
+    const result = visualSettingsToCss({ textShadow: GHOSTED_833_4PX })
+
+    expect(result).toContain(`--chat-text-shadow: ${buildOutlineShadow(4)};`)
+    expect(result).toContain(`text-shadow: ${buildOutlineShadow(4)} !important;`)
+    expect(result).not.toContain(GHOSTED_833_4PX)
+  })
+
+  it('leaves a shadow that is not an outline exactly as the user wrote it', () => {
+    const glow = '0 0 8px #00ffff, 0 0 16px #00ffff'
+    const result = visualSettingsToCss({ textShadow: glow })
+
+    expect(result).toContain(`--chat-text-shadow: ${glow};`)
+    expect(result).toContain(`text-shadow: ${glow} !important;`)
   })
 })
