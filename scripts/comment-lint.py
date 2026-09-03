@@ -371,6 +371,11 @@ def seed() -> int:
 # comment the repo wants to keep, and one of them (`feedAnchor.ts`-style prose,
 # the license header, a godoc line) is why the corresponding exemption exists.
 #
+# Two of the issue's `restate` examples are quoted with the identifier they
+# would need in order to fire, not the one actually on that line of the repo.
+# NOT_FLAGGED_BY_DESIGN below carries the real lines and explains why the pinned
+# algorithm leaves them alone.
+#
 # The fixtures are inline on purpose — no framework, no fixtures directory.
 # ---------------------------------------------------------------------------
 
@@ -428,6 +433,40 @@ FLAGGED: tuple[tuple[str, str, str], ...] = (
         "restate",
         "signing.py",
         "def f():\n    # Add headers\n    add_headers(req)\n",
+    ),
+)
+
+# Issue #822 cites two lines as `restate` that the algorithm it pins in the same
+# breath does not flag, because "every content word must appear in the next
+# line" is not satisfied:
+#
+#   services/api-gateway/handlers/proxy.go:51
+#     // Get the full request path   above   path := c.Request.URL.Path
+#     "full" appears in the comment and nowhere in the code.
+#
+#   shared/signing/signing.go:109
+#     // Add headers                 above   req.Header.Set(HeaderSignature, ...)
+#     "headers" is plural; the code says "Header".
+#
+# The algorithm wins: the issue pins it verbatim and warns against substituting
+# a variant. Stemming plurals or accepting a partial match would flag these two,
+# but it would also start firing on comments that add a word the code does not
+# have — the one thing the `restate` rule must never do, since that word is
+# usually the *why*. Both lines are real slop and #B deletes them by hand.
+#
+# Asserted so the divergence is a checked property rather than a footnote: if a
+# later change makes these fire, the laxer variant has been substituted and this
+# test fails.
+NOT_FLAGGED_BY_DESIGN: tuple[tuple[str, str, str], ...] = (
+    (
+        "issue #822 cites proxy.go:51, but 'full' is not in the code",
+        "proxy.go",
+        "package p\n\nfunc f() {\n\t// Get the full request path\n\tpath := c.Request.URL.Path\n}\n",
+    ),
+    (
+        "issue #822 cites signing.go:109, but 'headers' is plural",
+        "signing.go",
+        "package p\n\nfunc f() {\n\t// Add headers\n\treq.Header.Set(HeaderSignature, signature)\n}\n",
     ),
 )
 
@@ -528,12 +567,24 @@ def selftest() -> int:
             got = ", ".join(f"{v.rule}: {v.text}" for v in found)
             failures.append(f"{name}: expected no violation ({why}), got {got}")
 
+    for why, name, source in NOT_FLAGGED_BY_DESIGN:
+        found = lint_source(name, source.splitlines())
+        if found:
+            got = ", ".join(f"{v.rule}: {v.text}" for v in found)
+            failures.append(
+                f"{name}: expected no violation ({why}) — a laxer `restate` "
+                f"variant has been substituted, got {got}"
+            )
+
     for line in failures:
         print(f"selftest FAIL {line}", file=sys.stderr)
     if failures:
         print(f"{len(failures)} selftest failure(s)", file=sys.stderr)
         return 1
-    print(f"selftest ok: {len(FLAGGED)} flagged, {len(KEPT)} kept")
+    print(
+        f"selftest ok: {len(FLAGGED)} flagged, {len(KEPT)} kept, "
+        f"{len(NOT_FLAGGED_BY_DESIGN)} not flagged by design"
+    )
     return 0
 
 
