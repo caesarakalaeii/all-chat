@@ -37,12 +37,20 @@ describe('buildOutlineShadow', () => {
     }
   })
 
+  // Four axis-aligned offsets plus four diagonals. Counted by matching the
+  // offset pairs rather than splitting on ',' because the rgba() colour of each
+  // layer contains commas of its own.
   it('emits eight layers, one per compass direction', () => {
-    const layers = buildOutlineShadow(2).split(',')
-    expect(layers).toHaveLength(8)
+    const shadow = buildOutlineShadow(2)
+    const offsets = shadow.match(/-?\d+px -?\d+px 0 /g) ?? []
+    expect(offsets).toHaveLength(8)
+    expect(new Set(offsets).size).toBe(8)
   })
 
-  it('uses no stroke-based outline technique (ADR-0044)', () => {
+  // Never hyphenate after "stroke" in this file: design-tokens.test.ts scans
+  // src/ with the real Tailwind scanner, and `stroke-<word>` in prose is picked
+  // up as a dead `stroke-*` utility.
+  it('uses no stroke to draw the outline (ADR-0044)', () => {
     for (const width of WIDTHS) {
       const shadow = buildOutlineShadow(width)
       expect(shadow).not.toMatch(/-webkit-text-stroke/)
