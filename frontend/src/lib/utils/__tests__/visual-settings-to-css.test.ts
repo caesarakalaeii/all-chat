@@ -112,7 +112,7 @@ describe('visualSettingsToCss', () => {
       platformBadgeStyle: 'text',
       // Message entry animation (not CSS-driven, not emitted as CSS properties)
       messageAnimation: 'fly-left',
-      // Phase 9: Pronoun display (not CSS-driven, not emitted as CSS properties)
+      // Pronoun display (not CSS-driven, not emitted as CSS properties)
       showPronouns: 'inline',
       pronounPosition: 'after',
       pronounColor: '#7B68EE',

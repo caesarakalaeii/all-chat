@@ -39,7 +39,9 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-// --- minimal color math (no deps) -------------------------------------------
+// Colour maths is done by hand rather than pulled from a library: this test
+// guards the design tokens, so a dependency of its own would be one more thing
+// that can drift away from what the browser actually computes.
 
 type LinearRGB = [number, number, number]
 
@@ -90,8 +92,6 @@ function contrast(a: LinearRGB, b: LinearRGB): number {
   const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x)
   return (hi + 0.05) / (lo + 0.05)
 }
-
-// --- @theme token parser ------------------------------------------------------
 
 /**
  * Resolves `--color-*` tokens from the @theme block. Handles the forms the
@@ -160,8 +160,6 @@ function token(name: string): LinearRGB {
   if (!rgb) throw new Error(`token ${name} missing or unresolvable — did the @theme block change?`)
   return rgb
 }
-
-// --- assertions ---------------------------------------------------------------
 
 const AA_TEXT = 4.5
 const AA_UI = 3.0

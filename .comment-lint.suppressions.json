@@ -2,80 +2,26 @@
   "frontend/playwright.config.ts": {
     "restate": 2
   },
-  "frontend/src/app/HomeClient.tsx": {
-    "banner": 6
-  },
-  "frontend/src/app/__tests__/token-contrast.test.ts": {
-    "banner": 3
-  },
   "frontend/src/app/admin/users/page.tsx": {
     "restate": 1
-  },
-  "frontend/src/app/dashboard/shares/components/ShareRequestCard.tsx": {
-    "step": 1
   },
   "frontend/src/app/dashboard/shares/components/__tests__/AcceptModal.test.tsx": {
     "restate": 1
   },
-  "frontend/src/app/link/page.tsx": {
-    "banner": 6
-  },
-  "frontend/src/app/overlays/[id]/events/page.tsx": {
-    "banner": 6
-  },
   "frontend/src/app/overlays/[id]/page.tsx": {
-    "banner": 5,
-    "restate": 2,
-    "step": 7
+    "restate": 2
   },
   "frontend/src/components/MonacoCSSEditor.tsx": {
     "restate": 1
   },
-  "frontend/src/components/appearance/TTSGroup.tsx": {
-    "banner": 4
-  },
   "frontend/src/components/appearance/__tests__/TTSGroup.test.tsx": {
-    "banner": 2,
     "restate": 1
-  },
-  "frontend/src/components/overlay/EngagementControls.tsx": {
-    "banner": 4
-  },
-  "frontend/src/hooks/__tests__/useNotificationSocket.test.tsx": {
-    "banner": 1
-  },
-  "frontend/src/hooks/__tests__/useOverlayStream.test.ts": {
-    "banner": 1
   },
   "frontend/src/hooks/useThemeMarketplace.ts": {
     "restate": 2
   },
-  "frontend/src/lib/api/__tests__/add-source.test.ts": {
-    "step": 3
-  },
-  "frontend/src/lib/api/moderation.ts": {
-    "banner": 1
-  },
-  "frontend/src/lib/errorParser.ts": {
-    "step": 8
-  },
-  "frontend/src/lib/types/message.ts": {
-    "step": 1
-  },
-  "frontend/src/lib/types/moderation.ts": {
-    "banner": 2
-  },
-  "frontend/src/lib/types/visual-settings.ts": {
-    "step": 1
-  },
   "frontend/src/lib/utils/__tests__/filterMessage.test.ts": {
     "restate": 1
-  },
-  "frontend/src/lib/utils/__tests__/ttsPlayer.test.ts": {
-    "banner": 14
-  },
-  "frontend/src/lib/utils/__tests__/visual-settings-to-css.test.ts": {
-    "step": 1
   },
   "frontend/tests/e2e/dashboard.spec.ts": {
     "restate": 1

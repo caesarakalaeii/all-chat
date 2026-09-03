@@ -98,10 +98,6 @@ function scopeLabel(t: TFunction, scope: string): { title: string; description: 
   }
 }
 
-// ---------------------------------------------------------------------------
-// CodeEntry — the fallback path's first step
-// ---------------------------------------------------------------------------
-
 /**
  * The typed-code form. Reached when the plugin could not bind a loopback port or
  * could not open a browser — a Stream Deck driving a second PC, or a headless
@@ -186,10 +182,6 @@ function CodeEntry({
     </Card>
   )
 }
-
-// ---------------------------------------------------------------------------
-// ApproveForm — what is being granted
-// ---------------------------------------------------------------------------
 
 function ApproveForm({
   pending,
@@ -398,10 +390,6 @@ function ApproveForm({
     </form>
   )
 }
-
-// ---------------------------------------------------------------------------
-// Page content
-// ---------------------------------------------------------------------------
 
 function LinkDeviceContent() {
   const t = useTranslations()

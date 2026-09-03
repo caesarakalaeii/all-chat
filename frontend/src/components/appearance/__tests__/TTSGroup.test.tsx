@@ -330,10 +330,6 @@ describe('TTSGroup', () => {
     expect(screen.getByText(/This browser does not support text-to-speech/i)).toBeDefined()
   })
 
-  // ========================================================================
-  // Plan 03 — ElevenLabs Advanced block tests (A1..A20)
-  // ========================================================================
-
   // Test A1: API-key input + Save button rendered with helper copy when no saved key
   it('A1: premium + elevenlabs + no saved key renders password input with Save key button', () => {
     renderTTSGroup({

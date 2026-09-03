@@ -57,9 +57,6 @@ import { safeExternalRedirect } from '@/lib/auth/redirect-allowlist'
 import { dashStyleFor } from '@/lib/dashboard-button-styles'
 import { type TFunction, formatNumber, useTranslations } from '@/lib/i18n'
 
-// ---------------------------------------------------------------------------
-// Platform stat data
-// ---------------------------------------------------------------------------
 const PLATFORMS = ['twitch', 'youtube', 'kick', 'tiktok'] as const
 type Platform = (typeof PLATFORMS)[number]
 
@@ -88,9 +85,8 @@ function formatCount(n: number): string {
   return formatNumber(n)
 }
 
-// ---------------------------------------------------------------------------
-// Feature card data (logged-out "Why All-Chat" band)
-// ---------------------------------------------------------------------------
+// Feature card data for the logged-out "Why All-Chat" band.
+//
 // Each row names its pair of `marketing.why.*Title` / `*Body` leaves rather
 // than carrying the copy. `as const satisfies` rather than a plain annotation:
 // an annotation widens the stems to string, and a typo would then resolve to a
@@ -119,9 +115,6 @@ const STAT_GRID_COLS: Record<number, string> = {
   4: 'grid-cols-2 sm:grid-cols-4',
 }
 
-// ---------------------------------------------------------------------------
-// LandingPage
-// ---------------------------------------------------------------------------
 export default function HomeClient() {
   const t = useTranslations()
   const { user, init } = useAuthStore()
