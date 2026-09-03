@@ -1,3 +1,5 @@
+> **Deprecated (2026-09-02)** — superseded as a description of current behaviour by `shared/auth/cookie.go` and `docs/security/RESIDUALS.md` (row H3). Kept for history only: this is still the fullest record of *why* cookie auth is shaped the way it is, including why the viewer token was deliberately left out.
+
 # H3 — Streamer/Admin Cookie-Based Auth Migration
 
 **Date:** 2026-06-23
