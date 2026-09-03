@@ -166,8 +166,6 @@ func TestModKickRefresh_LeavesGrantedScopesAlone(t *testing.T) {
 	assert.Equal(t, []string{"user:read", "moderation:ban"}, reread.GrantedScopes)
 }
 
-// --- Owner-reach anchor ------------------------------------------------------
-
 // A Kick source's channel_id is the channel slug, and the anchor turns it into the numeric
 // broadcaster_user_id the moderation API needs — the one id a moderator's credential cannot
 // supply.

@@ -157,10 +157,6 @@ func TrimInviteeLabel(label string) string {
 	return label
 }
 
-// ---------------------------------------------------------------------------
-// Owner-facing request/response DTOs.
-// ---------------------------------------------------------------------------
-
 // CreateInviteRequest mints an invite for one moderator.
 type CreateInviteRequest struct {
 	// Actions to delegate. Absent = DefaultDelegatedActions; [] = 400.
@@ -242,10 +238,6 @@ type UpdateGrantRequest struct {
 	// can send one toggle without restating the rest.
 	Platforms map[string]bool `json:"platforms"`
 }
-
-// ---------------------------------------------------------------------------
-// Moderator-facing DTOs.
-// ---------------------------------------------------------------------------
 
 // InviteTokenRequest carries an invite secret. It is a POST body rather than a path parameter on
 // purpose: a secret in a URL ends up in access logs, proxy logs and Referer headers.

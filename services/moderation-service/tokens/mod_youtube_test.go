@@ -103,8 +103,6 @@ func TestModYouTubeRefresh_PersistsAndKeepsTheRefreshToken(t *testing.T) {
 	assert.Equal(t, []string{ytForceSSL}, reread.GrantedScopes, "a refresh never touches the granted scopes")
 }
 
-// --- Owner-reach anchor ------------------------------------------------------
-
 // The per-channel token row IS the evidence: it exists because Google issued a token for that
 // channel's own account.
 func TestOwnerYouTubeAnchor_AcceptsAPerChannelCredential(t *testing.T) {

@@ -156,7 +156,6 @@ func RequiredTwitchScope(a Action) string {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // Chat-send capability (advanced-controls opt-in).
 //
 // Sending a chat message from the monitor view needs a DIFFERENT OAuth scope than
@@ -164,7 +163,6 @@ func RequiredTwitchScope(a Action) string {
 // scope (ScopeYouTubeModeration) it already grants for bans. These scopes ride along
 // on the same opt-in re-consent that grants moderation, so a source is "sendable"
 // exactly when its granted scopes include the send scope.
-// ---------------------------------------------------------------------------
 
 // ScopeTwitchSend authorizes the Helix Send Chat Message API (user token).
 const ScopeTwitchSend = "user:write:chat"

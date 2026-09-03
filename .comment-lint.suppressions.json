@@ -302,39 +302,6 @@
   "services/message-processor/sessions/capture.go": {
     "restate": 1
   },
-  "services/moderation-service/dispatch/kick.go": {
-    "step": 1
-  },
-  "services/moderation-service/handler/grants.go": {
-    "banner": 2
-  },
-  "services/moderation-service/handler/grants_test.go": {
-    "banner": 18
-  },
-  "services/moderation-service/handler/moderation.go": {
-    "step": 2
-  },
-  "services/moderation-service/handler/moderation_test.go": {
-    "banner": 1
-  },
-  "services/moderation-service/models/discord_authority.go": {
-    "filler": 1
-  },
-  "services/moderation-service/models/grant.go": {
-    "banner": 4
-  },
-  "services/moderation-service/models/moderation.go": {
-    "banner": 2
-  },
-  "services/moderation-service/tokens/mod_kick_test.go": {
-    "banner": 1
-  },
-  "services/moderation-service/tokens/mod_test.go": {
-    "banner": 1
-  },
-  "services/moderation-service/tokens/mod_youtube_test.go": {
-    "banner": 1
-  },
   "services/overlay-manager/clients/youtube_quota_client.go": {
     "banner": 1
   },

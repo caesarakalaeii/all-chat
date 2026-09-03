@@ -49,8 +49,9 @@ type kickAPI interface {
 }
 
 // Kick dispatches moderation commands to the Kick public API. It mirrors the Twitch
-// dispatcher: scope pre-check, proactive + reactive refresh, and a single retry after a
-// 401. Authorization (role, grant, source membership) has already happened in the handler.
+// dispatcher: scope pre-check, proactive + reactive refresh, and a single retry
+// after a 401. Authorization (role, grant, source membership) has already
+// happened in the handler.
 type Kick struct {
 	tokens kickTokenSource
 	mod    modTokenSource // nil ⇒ delegation unsupported for this deployment
