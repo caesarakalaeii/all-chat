@@ -216,6 +216,10 @@ describe('typography and visibility group copy', () => {
     )
   })
 
+  it('keeps the outline thickness slider label', () => {
+    expect(t('overlayEditor.typography.outlineThickness')).toBe('Outline thickness')
+  })
+
   it('keeps the advanced typography sliders', () => {
     expect(t('overlayEditor.typography.lineHeight')).toBe('Line Height')
     expect(t('overlayEditor.typography.letterSpacing')).toBe('Letter Spacing')
