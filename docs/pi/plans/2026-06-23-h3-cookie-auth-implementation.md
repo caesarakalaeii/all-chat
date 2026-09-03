@@ -1,3 +1,5 @@
+> **Deprecated (2026-09-02)** — the migration this plan sequences has shipped; `shared/auth/cookie.go`, the gateway's `CookieToBearer`/`AuthCookieForward` middlewares and `docs/security/RESIDUALS.md` (row H3) describe what actually runs. Kept for history only.
+
 # H3 Streamer/Admin Cookie Auth Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

@@ -73,8 +73,10 @@ Audit all existing Grafana dashboards and Prometheus metrics against what the pl
 - `shared/metrics/shard_metrics.go` — Sharding/load balancing metric definitions
 
 ### Metrics rollout status
-- `docs/METRICS_ROLLOUT_COMPLETE.md` — Current state: infrastructure complete, wiring incomplete; lists per-service integration points
-- `docs/METRICS_IMPLEMENTATION_PLAN.md` — Original implementation plan with phased rollout
+- The two 2025-11 rollout write-ups this section used to cite were deleted on
+  2026-09-02 as point-in-time docs; recover them from git history if needed.
+  For per-service wiring, read `shared/metrics/` and each service's own
+  `metrics` package instead — those are current by construction.
 
 ### Existing Grafana/alerting config
 - `deployments/k8s/monitoring/grafana-alerts/grafana-allchat-alerts.yaml` — Current alert rules (YouTube quota, sharding)
