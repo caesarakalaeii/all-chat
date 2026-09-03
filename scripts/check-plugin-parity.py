@@ -135,6 +135,12 @@ LINKING_TIMEOUTS: tuple[tuple[str, str, float], ...] = (
     ("REQUEST_TIMEOUT_MS", "REQUEST_TIMEOUT_SECONDS", 15.0),
 )
 
+#: Longest total silence the property inspector may present as progress before it
+#: warns. Not a flow timeout: it bounds the case where the plugin never answers at
+#: all, which is the shape of issue #816. Past roughly this long a streamer has
+#: already concluded the button is broken, so a longer wait buys no information.
+MAX_SILENCE_MS = 20_000
+
 #: Scopes both plugins request at link time. The streamer narrows this on the
 #: approve screen; asking for different sets per platform would mean the same button
 #: works on Windows and 403s on Linux.
@@ -336,6 +342,64 @@ def _unsendable_literal(src: str) -> str:
     return match.group(1) if match else ""
 
 
+def check_inspector_watchdogs() -> None:
+    """The panel's own give-up timers must bracket the flows they are waiting on.
+
+    These live in JavaScript that nothing in this repo compiles or runs, and they are
+    the difference between "linking failed" and the report that opened issue #816:
+    "nothing actually happens, it just stays like that". Three properties, each of
+    which has been wrong at some point:
+
+      * The silence budget must be short enough that a human is still watching. It
+        was 660s for every path, which is not a timeout, it is an abandonment.
+      * The loopback watchdog must OUTLAST LOOPBACK_TIMEOUT_MS, or the panel gives
+        up on a flow that is still running and would have succeeded.
+      * The code watchdog must OUTLAST CODE_FLOW_TIMEOUT_MS, because the pairing
+        code really is valid that long and the user is typing it on another device.
+
+    Read out of linking.ts rather than restated here, so tuning the flow timeout
+    cannot silently leave the panel giving up first.
+    """
+    ui_src = read(TS_LINK_SCRIPT)
+    flow_src = strip_ts_comments(read(TS_LINKING))
+
+    def milliseconds(src: str, name: str) -> float | None:
+        """Value of `const NAME = 123_000;`, or None having recorded a failure."""
+        match = re.search(rf"^\s*const {name}\s*=\s*([0-9_]+)", src, re.MULTILINE)
+        if not match:
+            fail(f"`{name}` is not declared as a plain millisecond constant")
+            return None
+        return float(match.group(1).replace("_", ""))
+
+    silence = milliseconds(ui_src, "SILENCE_MS")
+    watchdog = milliseconds(ui_src, "WATCHDOG_MS")
+    code_watchdog = milliseconds(ui_src, "CODE_WATCHDOG_MS")
+    loopback_flow = milliseconds(flow_src, "LOOPBACK_TIMEOUT_MS")
+    code_flow = milliseconds(flow_src, "CODE_FLOW_TIMEOUT_MS")
+
+    if silence is not None and silence > MAX_SILENCE_MS:
+        fail(
+            f"SILENCE_MS is {silence / 1000:g}s. A streamer will not watch a spinner that "
+            f"long — they report it as 'nothing happens' (issue #816). Keep it at or under "
+            f"{MAX_SILENCE_MS / 1000:g}s."
+        )
+
+    if watchdog is not None and loopback_flow is not None and watchdog <= loopback_flow:
+        fail(
+            f"WATCHDOG_MS ({watchdog / 1000:g}s) does not outlast LOOPBACK_TIMEOUT_MS "
+            f"({loopback_flow / 1000:g}s) in {TS_LINKING.relative_to(REPO)}. The panel would "
+            f"give up on a loopback flow that is still running."
+        )
+
+    if code_watchdog is not None and code_flow is not None and code_watchdog <= code_flow:
+        fail(
+            f"CODE_WATCHDOG_MS ({code_watchdog / 1000:g}s) does not outlast "
+            f"CODE_FLOW_TIMEOUT_MS ({code_flow / 1000:g}s) in "
+            f"{TS_LINKING.relative_to(REPO)}. The pairing code is valid that long and the "
+            f"user is typing it on another device."
+        )
+
+
 def check_version_stamp() -> None:
     """The running plugin version must be visible in every property inspector.
 
@@ -453,6 +517,7 @@ def main() -> int:
     check_constants()
     check_send_platforms()
     check_version_stamp()
+    check_inspector_watchdogs()
     check_linking()
     check_sync_pointers()
 
