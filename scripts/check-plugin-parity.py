@@ -12,7 +12,7 @@ Two plugins ship the same buttons in two languages: `streamdeck-plugin/`
 
 This script is that single source, made executable. It is deliberately not a
 string-diff of the two files: they are different languages and are *supposed*
-to read differently. It pins the three things that must not diverge:
+to read differently. It pins the things that must not diverge:
 
 1.  **The action list.** Every entry below must exist in both API modules, and
     neither module may carry a route-bearing public function the other lacks —
@@ -24,6 +24,9 @@ to read differently. It pins the three things that must not diverge:
 3.  **The keep-in-sync pointers are mutual.** The convention CLAUDE.md uses for
     OnboardingChecklist.tsx / upgrade only works when both ends point at each
     other; a one-way pointer rots the moment someone edits the unmarked file.
+4.  **The version stamp is in every property inspector.** Three HTML files carry
+    one hand-maintained Linking block that nothing else in the repo parses, so an
+    element the shared script needs can silently exist in only one of them.
 
 Standard library only, so it runs in the flake dev shell, in CI, and in the
 Caterpillar sandbox without an install step:
@@ -468,7 +471,7 @@ def main() -> int:
         f"Desktop plugin parity OK: {len(ACTIONS)} actions, "
         f"{len(SHARED_CONSTANTS)} shared constants, {len(SEND_PLATFORMS)} send "
         f"platforms (picker included), {len(LINKING_TIMEOUTS)} linking timeouts, "
-        f"pointers mutual."
+        f"version stamp in {len(TS_INSPECTORS)} inspectors, pointers mutual."
     )
     return 0
 

@@ -75,6 +75,36 @@
 		render(state, detail);
 	};
 
+	/*
+		The running plugin version, shown next to the Link button.
+
+		This is the whole of issue #816 in one line. The #797 client fix was in the repo
+		and in CI artifacts for days while every streamer who had already installed the
+		plugin kept running the broken build, and neither they nor anyone reading their
+		bug report could tell — the panel said nothing about which build it was. It is
+		read from the registration info Stream Deck hands the property inspector, which
+		carries manifest.json's `Version` for the plugin that is ACTUALLY loaded. Parsing
+		manifest.json here would report what is on disk, which is the same thing right up
+		to the moment it is not.
+
+		Failure is silent past a console line: an unknown version is a worse panel, not a
+		broken one, and refusing to render the Link button because a cosmetic label could
+		not be filled in would be the wrong trade.
+	*/
+	const versionSlot = document.getElementById("allchat-plugin-version");
+
+	SDPIComponents.streamDeckClient
+		.getConnectionInfo()
+		.then((connection) => {
+			const version = connection?.info?.plugin?.version;
+			if (version && versionSlot) {
+				versionSlot.textContent = `Plugin version ${version}`;
+			}
+		})
+		.catch((error) => {
+			console.error("All-Chat: could not read the plugin version", error);
+		});
+
 	button.addEventListener("click", () => {
 		// Guard as well as disable: a queued click on an already-disabled button would
 		// otherwise start a second concurrent flow, and two flows racing to write the

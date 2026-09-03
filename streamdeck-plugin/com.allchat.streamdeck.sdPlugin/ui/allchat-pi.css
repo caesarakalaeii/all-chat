@@ -162,6 +162,22 @@ summary:hover {
 }
 
 /*
+	The running plugin version, filled in by allchat-link.js.
+
+	Small and muted: nobody needs to read it while linking works, and it is only there
+	so that when linking does NOT work, the streamer and whoever reads their bug report
+	can both name the build (issue #816). --allchat-fg-muted is 4.66:1 on the panel, so
+	it still passes WCAG AA at this size — dim is a de-emphasis, not an excuse to drop
+	below the contrast floor.
+*/
+#allchat-plugin-version {
+	display: block;
+	margin-top: 6px;
+	font-size: 0.85em;
+	color: var(--allchat-fg-muted);
+}
+
+/*
 	The pairing code is the one thing on the page a user has to read off the screen and
 	retype, so it gets a line of its own, a monospace face and letter spacing. White
 	rather than --allchat-fg: it is the payload, not prose.
