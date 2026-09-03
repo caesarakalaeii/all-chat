@@ -272,7 +272,7 @@ Delay imposed by join rate limiter (20 joins per 10s).
 
 ### 2.2 YouTube Listener (HTTP Polling)
 
-**Use metrics from YOUTUBE_METRICS_PLAN.md**, plus:
+Quota accounting for the YouTube path lives in `services/youtube-quota-monitor`; see that service's README for the metrics it exports. In addition:
 
 #### Histogram: `youtube_poll_interval_seconds`
 Actual polling intervals used (from API response).
