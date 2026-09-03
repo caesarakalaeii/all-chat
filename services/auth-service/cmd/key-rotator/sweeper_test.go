@@ -476,7 +476,8 @@ func TestSweeper_TTSBytea(t *testing.T) {
 	require.NoError(t, err)
 	legacyBlob, err := legacyCipher.EncryptString("elevenlabs-api-key-secret")
 	require.NoError(t, err)
-	// Phase 13 stored string bytes into BYTEA
+	// Reproduces how phase 13 wrote these rows: the base64 blob's string bytes
+	// straight into a BYTEA column, not the decoded ciphertext.
 	byteaValue := []byte(legacyBlob)
 
 	// Our current encryptor has legacyKey as fallback

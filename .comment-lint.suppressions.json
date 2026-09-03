@@ -150,9 +150,6 @@
   "services/api-gateway/websocket/manager.go": {
     "restate": 6
   },
-  "services/auth-service/cmd/key-rotator/sweeper_test.go": {
-    "step": 1
-  },
   "services/auth-service/cmd/main.go": {
     "restate": 5
   },
@@ -182,24 +179,6 @@
   },
   "services/auth-service/handlers/viewer_exchange.go": {
     "restate": 7
-  },
-  "services/auth-service/oauth/viewer_twitch.go": {
-    "filler": 1
-  },
-  "services/auth-service/repository/api_token_repository.go": {
-    "step": 2
-  },
-  "services/auth-service/repository/device_token_repository.go": {
-    "step": 4
-  },
-  "services/auth-service/repository/device_token_repository_test.go": {
-    "step": 3
-  },
-  "services/auth-service/repository/migrations_source_notify_test.go": {
-    "step": 4
-  },
-  "services/auth-service/repository/viewer_identity_repository.go": {
-    "step": 4
   },
   "services/auth-service/repository/viewer_identity_repository_test.go": {
     "restate": 1
