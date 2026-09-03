@@ -26,13 +26,6 @@
   "frontend/tests/e2e/dashboard.spec.ts": {
     "restate": 1
   },
-  "scripts/check-plugin-parity.py": {
-    "banner": 10,
-    "step": 2
-  },
-  "scripts/comment-lint.py": {
-    "banner": 6
-  },
   "services/api-gateway/cmd/main.go": {
     "restate": 3
   },
@@ -360,21 +353,6 @@
   },
   "shared/signing/signing_test.go": {
     "restate": 3
-  },
-  "streamcontroller-plugin/actions/base.py": {
-    "banner": 4
-  },
-  "streamcontroller-plugin/actions/poll_control.py": {
-    "banner": 1
-  },
-  "streamcontroller-plugin/actions/prediction_control.py": {
-    "banner": 1
-  },
-  "streamcontroller-plugin/allchat/api.py": {
-    "banner": 3
-  },
-  "streamcontroller-plugin/allchat/errors.py": {
-    "banner": 1
   },
   "test/contract/deletion/deletion_emission_test.go": {
     "restate": 1

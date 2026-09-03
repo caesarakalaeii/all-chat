@@ -75,12 +75,10 @@ VERSION_ELEMENT_ID = "allchat-plugin-version"
 #: of the build that is loaded rather than of a manifest on disk.
 PLUGIN_VERSION_EXPRESSION = "streamDeck.info.plugin.version"
 
-# ---------------------------------------------------------------------------
-# 1. The action list. THIS is the contract ADR-0049 asks for: adding a button
-#    means adding a row here and implementing it on both sides, in one change.
-#    The route column is documentation for the reader, not something this script
-#    can verify against a running server.
-# ---------------------------------------------------------------------------
+# The action list. THIS is the contract ADR-0049 asks for: adding a button means
+# adding a row here and implementing it on both sides, in one change. The route
+# column is documentation for the reader, not something this script can verify
+# against a running server.
 ACTIONS: tuple[tuple[str, str, str], ...] = (
     ("sendChatMessage", "send_chat_message", "POST /api/v1/auth/chat/send"),
     ("startPoll", "start_poll", "POST /api/v1/engagement/overlays/:id/polls  (premium)"),
@@ -102,9 +100,7 @@ PY_ONLY_ALLOWED: dict[str, str] = {
     "extract_id": "response-shape helper with no TypeScript counterpart (TS has typed responses)",
 }
 
-# ---------------------------------------------------------------------------
-# 2. Constants that are user-visible and must be identical in both plugins.
-# ---------------------------------------------------------------------------
+# Constants that are user-visible and must be identical in both plugins.
 SHARED_CONSTANTS: tuple[tuple[Path, Path, str], ...] = (
     (TS_API, PY_API, "CHAT_SEND_PATH"),
     (TS_SETTINGS, PY_SETTINGS, "DEFAULT_BASE_URL"),
@@ -125,15 +121,13 @@ SHARED_CONSTANTS: tuple[tuple[Path, Path, str], ...] = (
     (TS_SETTINGS, PY_SETTINGS, "LOOPBACK_HOST"),
 )
 
-# ---------------------------------------------------------------------------
-# 2b. Linking parameters that must not drift.
+# Linking parameters that must not drift.
 #
-#     The two plugins run the same state machine against the same server, so a
-#     timeout or a scope set that differs between them means one platform gives up
-#     while the other is still waiting, or one asks for a permission the other does
-#     not. Compared as NUMBERS/LISTS rather than strings, because the two languages
-#     spell them differently (`180_000` ms vs `180.0` s, an array vs a tuple).
-# ---------------------------------------------------------------------------
+# The two plugins run the same state machine against the same server, so a
+# timeout or a scope set that differs between them means one platform gives up
+# while the other is still waiting, or one asks for a permission the other does
+# not. Compared as NUMBERS/LISTS rather than strings, because the two languages
+# spell them differently (`180_000` ms vs `180.0` s, an array vs a tuple).
 LINKING_TIMEOUTS: tuple[tuple[str, str, float], ...] = (
     # (TS name in ms, Python name in seconds, expected seconds)
     ("LOOPBACK_TIMEOUT_MS", "LOOPBACK_TIMEOUT_SECONDS", 180.0),
@@ -152,20 +146,18 @@ MAX_SILENCE_MS = 20_000
 #: works on Windows and 403s on Linux.
 LINKING_SCOPES: tuple[str, ...] = ("chat:write", "engagement:write")
 
-# ---------------------------------------------------------------------------
-# 2c. The send surface.
+# The send surface.
 #
-#     `POST /api/v1/auth/chat/send` posts to Twitch, YouTube and Kick, and `all`
-#     fans out to exactly those (handleStreamerSendToAll in
-#     services/auth-service/handlers/chat_send.go). It is NARROWER than the set of
-#     platforms All-Chat reads chat from, and that gap is the trap: both plugins
-#     shipped `tiktok` in their pickers while auth-service answered 501 to it, so
-#     the button silently did nothing and a streamer had to ask why.
+# `POST /api/v1/auth/chat/send` posts to Twitch, YouTube and Kick, and `all`
+# fans out to exactly those (handleStreamerSendToAll in
+# services/auth-service/handlers/chat_send.go). It is NARROWER than the set of
+# platforms All-Chat reads chat from, and that gap is the trap: both plugins
+# shipped `tiktok` in their pickers while auth-service answered 501 to it, so
+# the button silently did nothing and a streamer had to ask why.
 #
-#     Checked in three places rather than one, because the Elgato picker is a
-#     fourth source of truth written in HTML that no compiler or test reads: the
-#     TS constant, the Python constant, and the <option> list must agree.
-# ---------------------------------------------------------------------------
+# Checked in three places rather than one, because the Elgato picker is a
+# fourth source of truth written in HTML that no compiler or test reads: the
+# TS constant, the Python constant, and the <option> list must agree.
 SEND_PLATFORMS: tuple[str, ...] = ("all", "twitch", "youtube", "kick")
 
 #: Platforms All-Chat reads but cannot post to. Both plugins must refuse these with
@@ -173,12 +165,10 @@ SEND_PLATFORMS: tuple[str, ...] = ("all", "twitch", "youtube", "kick")
 #: unknown value, because keys configured before the removal still carry them.
 UNSENDABLE: tuple[str, ...] = ("tiktok", "discord")
 
-# ---------------------------------------------------------------------------
-# 3. Keep-in-sync pointers, e.g.
-#       KEEP IN SYNC with ``streamdeck-plugin/src/allchat/api.ts`` (ADR-0049).
-#    Matched in either language's comment syntax; the quoting around the path is
-#    whatever the surrounding docstring/JSDoc uses, so it is skipped over.
-# ---------------------------------------------------------------------------
+# Keep-in-sync pointers, e.g.
+#     KEEP IN SYNC with ``streamdeck-plugin/src/allchat/api.ts`` (ADR-0049).
+# Matched in either language's comment syntax; the quoting around the path is
+# whatever the surrounding docstring/JSDoc uses, so it is skipped over.
 POINTER = re.compile(r"KEEP IN SYNC with[`'\"\s]+([A-Za-z0-9_./-]+\.(?:ts|py))")
 
 PLUGIN_SOURCES = sorted(

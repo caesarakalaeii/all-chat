@@ -139,8 +139,6 @@ class AllChatActionBase(ActionBase):
     #: Overridden per action for the settings UI.
     ACTION_NAME = "All-Chat"
 
-    # -- StreamController lifecycle -----------------------------------------
-
     def on_ready(self) -> None:
         """Called by the host once the key is on screen."""
         self.set_bottom_label(self.ACTION_NAME)
@@ -149,8 +147,6 @@ class AllChatActionBase(ActionBase):
         """Called by the host when the physical key is pressed."""
         self.run_action()
 
-
-    # -- settings UI --------------------------------------------------------
 
     def get_config_rows(self) -> list[Any]:
         """Builds the action's settings rows, including the Link affordance.
@@ -302,8 +298,6 @@ class AllChatActionBase(ActionBase):
         """
         return f"StreamController \u2014 {self.ACTION_NAME}"
 
-    # -- plumbing -----------------------------------------------------------
-
     def get_settings_safe(self) -> Mapping[str, Any]:
         """Returns this key's settings, tolerating a host that has none yet."""
         try:
@@ -355,7 +349,6 @@ class AllChatActionBase(ActionBase):
             self.log_info(message)
             self.set_key_label(message[:12] if message else LABEL_FOR_STATE[STATE_OK])
 
-    # -- thin wrappers over host APIs ---------------------------------------
     # Wrapped rather than called directly so the stand-in host in host.py can
     # record them, and so a host-version rename lands in one place.
 
