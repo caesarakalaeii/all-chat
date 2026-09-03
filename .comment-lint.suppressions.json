@@ -34,8 +34,7 @@
     "banner": 6
   },
   "services/api-gateway/cmd/main.go": {
-    "restate": 3,
-    "step": 2
+    "restate": 3
   },
   "services/api-gateway/handlers/health_test.go": {
     "restate": 2
@@ -47,11 +46,9 @@
     "restate": 2
   },
   "services/api-gateway/handlers/websocket.go": {
-    "restate": 2,
-    "step": 6
+    "restate": 2
   },
   "services/api-gateway/models/service_config.go": {
-    "filler": 1,
     "restate": 3
   },
   "services/api-gateway/replay/buffer_test.go": {
@@ -59,9 +56,6 @@
   },
   "services/api-gateway/sessions/manager.go": {
     "restate": 1
-  },
-  "services/api-gateway/subscription/subscriber_test.go": {
-    "filler": 1
   },
   "services/api-gateway/websocket/manager.go": {
     "restate": 6
@@ -193,17 +187,8 @@
   "services/share-service/cmd/main.go": {
     "restate": 1
   },
-  "services/share-service/handlers/admin.go": {
-    "filler": 1
-  },
-  "services/share-service/handlers/ambassador_test.go": {
-    "banner": 4
-  },
   "services/share-service/handlers/shares.go": {
     "restate": 2
-  },
-  "services/share-service/handlers/shares_accept_test.go": {
-    "step": 8
   },
   "services/share-service/jobs/expiry_test.go": {
     "restate": 3
