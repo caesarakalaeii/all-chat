@@ -23,10 +23,18 @@ import {
   LEGACY_OUTLINE_SHADOW,
   MIN_OUTLINE_WIDTH_PX,
   MAX_OUTLINE_WIDTH_PX,
+  OUTLINE_COLOR,
 } from '../text-outline'
 
 const SOFT_PRESET = '0 1px 2px rgba(0, 0, 0, 0.6)'
 const STRONG_PRESET = '0 1px 2px rgba(0, 0, 0, 0.9), 0 2px 6px rgba(0, 0, 0, 0.7)'
+
+// Spelled out here rather than imported: this is the value real overlays have
+// stored in their visual settings, so the test has to fail if the module's
+// constant ever drifts away from it. Asserting parseOutlineWidth against the
+// imported constant would only prove the module agrees with itself.
+const LEGACY_OUTLINE_AS_STORED =
+  '1px 1px 0 rgba(0, 0, 0, 0.85), -1px 1px 0 rgba(0, 0, 0, 0.85), 1px -1px 0 rgba(0, 0, 0, 0.85), -1px -1px 0 rgba(0, 0, 0, 0.85)'
 
 const WIDTHS = [1, 2, 3, 4, 5, 6]
 
@@ -62,11 +70,21 @@ describe('buildOutlineShadow', () => {
     expect(MIN_OUTLINE_WIDTH_PX).toBe(1)
     expect(MAX_OUTLINE_WIDTH_PX).toBe(6)
   })
+
+  // Pins the colour as well as the layout: switching widths must not shift hue,
+  // and an outline is only legible if it is actually near-opaque black.
+  it('paints every layer in the original preset black', () => {
+    expect(buildOutlineShadow(1)).toBe(
+      '1px 0px 0 rgba(0, 0, 0, 0.85), 0px 1px 0 rgba(0, 0, 0, 0.85), -1px 0px 0 rgba(0, 0, 0, 0.85), 0px -1px 0 rgba(0, 0, 0, 0.85), 1px 1px 0 rgba(0, 0, 0, 0.85), -1px 1px 0 rgba(0, 0, 0, 0.85), -1px -1px 0 rgba(0, 0, 0, 0.85), 1px -1px 0 rgba(0, 0, 0, 0.85)'
+    )
+    expect(OUTLINE_COLOR).toBe('rgba(0, 0, 0, 0.85)')
+  })
 })
 
 describe('parseOutlineWidth', () => {
   it('reads the legacy four-direction 1px outline as width 1', () => {
-    expect(parseOutlineWidth(LEGACY_OUTLINE_SHADOW)).toBe(1)
+    expect(parseOutlineWidth(LEGACY_OUTLINE_AS_STORED)).toBe(1)
+    expect(LEGACY_OUTLINE_SHADOW).toBe(LEGACY_OUTLINE_AS_STORED)
   })
 
   it('returns null for values that are not outlines', () => {
