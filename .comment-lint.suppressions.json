@@ -128,26 +128,13 @@
     "restate": 2
   },
   "services/message-processor/cmd/main.go": {
-    "restate": 3,
-    "step": 1
+    "restate": 3
   },
   "services/message-processor/consumer/stream_consumer.go": {
     "restate": 2
   },
   "services/message-processor/consumer/stream_consumer_test.go": {
     "restate": 3
-  },
-  "services/message-processor/enricher/pronoun_enricher.go": {
-    "step": 7
-  },
-  "services/message-processor/enricher/viewer_badge_enricher.go": {
-    "step": 12
-  },
-  "services/message-processor/enricher/viewer_badge_enricher_test.go": {
-    "step": 12
-  },
-  "services/message-processor/integration/event_flow_test.go": {
-    "step": 10
   },
   "services/message-processor/normalizer/normalizer.go": {
     "restate": 1
