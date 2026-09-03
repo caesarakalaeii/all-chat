@@ -16,7 +16,7 @@ All require a user JWT (forwarded by the gateway; re-validated here). Mounted un
 
 | Method | Path | Body |
 |---|---|---|
-| `GET`  | `/overlays/:id/capabilities` | — → `{ role, is_owner, enabled, can_moderate, delegated_actions?, sources: [{platform, channel_id, channel_name, moderatable, reason?, actions[]}] }` |
+| `GET`  | `/overlays/:id/capabilities` | — → `{ role, is_owner, enabled, can_moderate, delegated_actions?, mod_log_granted, sources: [{platform, channel_id, channel_name, moderatable, reason?, actions[]}] }` |
 | `POST` | `/overlays/:id/delete`  | `{ platform, channel_id, native_message_id, target_uuid }` |
 | `POST` | `/overlays/:id/timeout` | `{ platform, channel_id, target_user_id, target_username, duration_seconds, reason? }` |
 | `POST` | `/overlays/:id/ban`     | `{ platform, channel_id, target_user_id, target_username, reason? }` |
@@ -42,6 +42,13 @@ the bot's cached guild permissions, and leaves the moderator's own standing to t
 mirrors Twitch, where capabilities checks the scope and Helix decides whether they moderate the channel.
 `delegated_actions` echoes the grant's action set so a `needs_consent` source can request scopes for
 exactly what was delegated rather than guessing high.
+
+`mod_log_granted` reports whether the **owner's** Twitch credential already holds all nine scopes the
+moderation-log opt-in grants, so the monitor stops offering a consent that is done (issue #815). True
+only for an owner; a moderator gets false, because those scopes sit on the broadcaster credential and
+auth-service refuses to delegate them. A partial grant is false too — a credential one scope short
+cannot create the EventSub subscriptions — as is any lookup that could not read the credential, since
+false is what keeps the opt-in reachable.
 
 A caller with **no role** and an overlay that **does not exist** produce a byte-identical body, so this
 endpoint is not an overlay-existence oracle either.
