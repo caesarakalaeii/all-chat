@@ -157,31 +157,16 @@
     "restate": 5
   },
   "services/auth-service/handlers/admin.go": {
-    "filler": 1,
     "restate": 3
   },
   "services/auth-service/handlers/auth_handler.go": {
     "restate": 4
   },
   "services/auth-service/handlers/chat_send.go": {
-    "restate": 7,
-    "step": 8
+    "restate": 7
   },
   "services/auth-service/handlers/chat_send_test.go": {
-    "filler": 2,
     "restate": 1
-  },
-  "services/auth-service/handlers/device_link.go": {
-    "banner": 2
-  },
-  "services/auth-service/handlers/device_link_test.go": {
-    "banner": 8
-  },
-  "services/auth-service/handlers/devices_test.go": {
-    "banner": 6
-  },
-  "services/auth-service/handlers/mod_consent_test.go": {
-    "banner": 2
   },
   "services/auth-service/handlers/platform_auth.go": {
     "restate": 3
@@ -195,17 +180,8 @@
   "services/auth-service/handlers/viewer_auth.go": {
     "restate": 9
   },
-  "services/auth-service/handlers/viewer_cosmetics.go": {
-    "step": 7
-  },
-  "services/auth-service/handlers/viewer_cosmetics_test.go": {
-    "step": 2
-  },
   "services/auth-service/handlers/viewer_exchange.go": {
     "restate": 7
-  },
-  "services/auth-service/handlers/viewer_resolve_test.go": {
-    "banner": 8
   },
   "services/auth-service/oauth/viewer_twitch.go": {
     "filler": 1
