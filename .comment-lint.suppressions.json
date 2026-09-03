@@ -485,9 +485,6 @@
   "services/twitch-listener/publisher/stream_publisher_test.go": {
     "restate": 2
   },
-  "services/youtube-listener-innertube/cmd/main.go": {
-    "step": 9
-  },
   "services/youtube-listener-innertube/deletion/batch_detector.go": {
     "restate": 1
   },
@@ -500,18 +497,11 @@
   "services/youtube-listener-innertube/innertube/client.go": {
     "restate": 1
   },
-  "services/youtube-listener-innertube/innertube/discovery.go": {
-    "step": 2
-  },
   "services/youtube-listener-innertube/innertube/parser_test.go": {
     "restate": 2
   },
-  "services/youtube-listener-innertube/poller/lifecycle.go": {
-    "step": 4
-  },
   "services/youtube-listener-innertube/poller/poller.go": {
-    "restate": 2,
-    "step": 5
+    "restate": 2
   },
   "services/youtube-listener-innertube/streams/manager.go": {
     "restate": 1

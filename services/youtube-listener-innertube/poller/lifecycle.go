@@ -146,12 +146,11 @@ func DetectOffline(resp *innertube.LiveChatResponse) bool {
 	return false
 }
 
-// HandleStreamOffline handles the stream offline event.
-// Actions:
-//  1. Log offline detection
-//  2. Delete Redis mapping to force rediscovery
-//  3. Publish lifecycle event to Redis (if publisher is non-nil)
-//  4. Return error to signal manager to stop polling
+// HandleStreamOffline tears down the per-stream state for a channel that has
+// gone offline. The returned error is always non-nil and is a signal rather than
+// a failure: it is how the caller's poll loop learns to stop polling. Every
+// intermediate failure is logged and swallowed, because a stream that has ended
+// must stop being polled whether or not the cleanup succeeded.
 func HandleStreamOffline(ctx context.Context, channelID string, videoID string, repository *Repository, publisher LifecyclePublisher, logger *zap.Logger) error {
 	logger.Info("Stream went offline",
 		zap.String("channel_id", channelID),
