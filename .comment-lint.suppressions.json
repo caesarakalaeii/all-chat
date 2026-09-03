@@ -20,14 +20,6 @@
   "frontend/src/app/link/page.tsx": {
     "banner": 6
   },
-  "frontend/src/app/overlay/[id]/page.tsx": {
-    "banner": 2,
-    "filler": 1,
-    "step": 13
-  },
-  "frontend/src/app/overlay/[id]/view/page.tsx": {
-    "banner": 3
-  },
   "frontend/src/app/overlays/[id]/events/page.tsx": {
     "banner": 6
   },
