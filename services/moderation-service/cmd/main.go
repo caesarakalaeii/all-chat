@@ -123,9 +123,10 @@ func main() {
 	dispatchers := map[string]dispatch.PlatformDispatcher{}
 	scopeCheckers := map[string]handler.ScopeChecker{}
 	// modLogChecker answers whether the owner already completed the Twitch mod-log opt-in, so
-	// the monitor stops offering it (#815). Nil until the Twitch credential source is wired;
-	// capabilities then keep reporting the grant as absent, which shows the CTA.
-	var modLogChecker handler.ModLogChecker
+	// the monitor stops offering it (#815). Stays NoModLogChecker unless the Twitch credential
+	// source is wired below: with no credential to read, capabilities report the grant as absent
+	// and the CTA stays on screen.
+	var modLogChecker handler.ModLogChecker = handler.NoModLogChecker{}
 	// sendCheckers parallels scopeCheckers: the same per-platform checker instances
 	// also report the chat-send capability (can_send) for the monitor view's send bar.
 	sendCheckers := map[string]handler.SendChecker{}
@@ -236,9 +237,8 @@ func main() {
 	modHandler.SetFeatureGate(gate)
 	// Wire the chat-send capability checker so capabilities report can_send per source.
 	modHandler.SetSendChecker(handler.MultiSendChecker(sendCheckers))
-	if modLogChecker != nil {
-		modHandler.SetModLogChecker(modLogChecker)
-	}
+	// Wire the mod-log grant checker so capabilities report mod_log_granted for the owner.
+	modHandler.SetModLogChecker(modLogChecker)
 	// Wire the YouTube stream re-discovery publisher (owner-triggered recovery from /view).
 	modHandler.SetRediscoverPublisher(publisher.NewRediscoverPublisher(redisClient, log))
 
