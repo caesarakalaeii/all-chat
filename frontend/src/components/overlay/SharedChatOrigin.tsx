@@ -33,9 +33,17 @@ import { useTranslations } from '@/lib/i18n'
 export function SharedChatOrigin({
   avatarUrl,
   displayName,
+  size = '14px',
 }: {
   avatarUrl?: string
   displayName?: string
+  /**
+   * Any CSS length. The default puts the avatar on the chat panel's badge-row
+   * scale, about one emote of width; the OBS overlay passes `1em` because the
+   * streamer configures that row's font size and a fixed pixel box looks wrong
+   * at both ends of the range.
+   */
+  size?: string
 }) {
   const t = useTranslations()
 
@@ -62,12 +70,12 @@ export function SharedChatOrigin({
       src={avatarUrl}
       alt={label}
       title={label}
-      // 14px: on the badge row's scale, so the origin costs about one emote of width.
-      width={14}
-      height={14}
+      // Inline, not Tailwind: an arbitrary value has to be literal in the class name,
+      // so h-[${size}] would compile to no CSS at all.
+      style={{ width: size, height: size }}
       referrerPolicy="no-referrer"
       onError={() => setFailedUrl(avatarUrl)}
-      className="ml-1 inline-block h-[14px] w-[14px] shrink-0 rounded-full object-cover align-text-bottom"
+      className="ml-1 inline-block shrink-0 rounded-full object-cover align-text-bottom"
     />
   )
 }

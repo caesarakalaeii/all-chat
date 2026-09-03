@@ -27,10 +27,14 @@ import { SharedChatOrigin } from '@/components/overlay/SharedChatOrigin'
 afterEach(() => cleanup())
 
 describe('SharedChatOrigin avatar sizing', () => {
+  // Asserting on the inline style declaration, not getComputedStyle: jsdom resolves a
+  // relative length such as 1em to a pixel value, which would hide whether the prop
+  // reached the element at all.
   it('sizes the avatar at 14px when size is omitted', () => {
     render(<SharedChatOrigin avatarUrl="https://cdn.example/origin.png" displayName="Origin" />)
     const avatar = screen.getByRole('img', { name: 'Origin' })
-    expect(avatar).toHaveStyle({ width: '14px', height: '14px' })
+    expect(avatar.style.width).toBe('14px')
+    expect(avatar.style.height).toBe('14px')
   })
 
   it('sizes the avatar at the given size', () => {
@@ -42,7 +46,8 @@ describe('SharedChatOrigin avatar sizing', () => {
       />
     )
     const avatar = screen.getByRole('img', { name: 'Origin' })
-    expect(avatar).toHaveStyle({ width: '1em', height: '1em' })
+    expect(avatar.style.width).toBe('1em')
+    expect(avatar.style.height).toBe('1em')
   })
 
   it('renders the text pill and no sized box without an avatar url', () => {
