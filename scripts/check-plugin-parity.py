@@ -47,7 +47,24 @@ TS_SETTINGS = TS / "src" / "allchat" / "settings.ts"
 PY_SETTINGS = PY / "allchat" / "settings.py"
 TS_LINKING = TS / "src" / "allchat" / "linking.ts"
 PY_LINKING = PY / "allchat" / "linking.py"
-TS_SEND_UI = TS / "com.allchat.streamdeck.sdPlugin" / "ui" / "send-message.html"
+TS_UI = TS / "com.allchat.streamdeck.sdPlugin" / "ui"
+TS_SEND_UI = TS_UI / "send-message.html"
+TS_LINK_SCRIPT = TS_UI / "allchat-link.js"
+
+#: The three property inspectors. They are three files carrying one Linking block,
+#: which is the drift ADR-0049 names; anything the shared script reaches for has to
+#: exist in all three or it works on one action and not the others.
+TS_INSPECTORS: tuple[Path, ...] = (
+    TS_SEND_UI,
+    TS_UI / "poll-control.html",
+    TS_UI / "prediction-control.html",
+)
+
+#: Element the shared script writes the running plugin version into. Pinned because
+#: it is the only thing that tells a streamer, or a support reply, WHICH build they
+#: are on — issue #816: the #797 client fix had shipped in the repo and never reached
+#: anyone, and nothing in the panel could have revealed that.
+VERSION_ELEMENT_ID = "allchat-plugin-version"
 
 # ---------------------------------------------------------------------------
 # 1. The action list. THIS is the contract ADR-0049 asks for: adding a button
@@ -316,6 +333,29 @@ def _unsendable_literal(src: str) -> str:
     return match.group(1) if match else ""
 
 
+def check_version_stamp() -> None:
+    """The running plugin version must be visible in every property inspector.
+
+    Checked here rather than in a unit test because no compiler or test runner in
+    this repo opens these HTML files: the three inspectors are hand-maintained
+    copies of one Linking block, so an id added to one and forgotten in the other
+    two is invisible until a streamer on that action reports a blank panel.
+    """
+    if VERSION_ELEMENT_ID not in read(TS_LINK_SCRIPT):
+        fail(
+            f"{TS_LINK_SCRIPT.relative_to(REPO)} does not write to `{VERSION_ELEMENT_ID}`. "
+            f"The version stamp belongs in the shared script, not three times in the HTML."
+        )
+
+    for page in TS_INSPECTORS:
+        if f'id="{VERSION_ELEMENT_ID}"' not in read(page):
+            fail(
+                f"{page.relative_to(REPO)} has no element with id=\"{VERSION_ELEMENT_ID}\". "
+                f"All three property inspectors carry the version stamp, or a support "
+                f"report from that action cannot say which build it came from."
+            )
+
+
 def check_sync_pointers() -> None:
     pointers: dict[Path, set[str]] = {}
     for path in PLUGIN_SOURCES:
@@ -409,6 +449,7 @@ def main() -> int:
     check_action_list()
     check_constants()
     check_send_platforms()
+    check_version_stamp()
     check_linking()
     check_sync_pointers()
 
