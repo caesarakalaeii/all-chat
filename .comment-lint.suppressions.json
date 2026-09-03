@@ -36,10 +36,6 @@
     "restate": 2,
     "step": 7
   },
-  "frontend/src/app/overlays/[id]/preview/embed/page.tsx": {
-    "banner": 3,
-    "step": 18
-  },
   "frontend/src/app/settings/api-tokens/__tests__/page.test.tsx": {
     "step": 6
   },
@@ -67,9 +63,6 @@
   },
   "frontend/src/components/overlay/EngagementControls.tsx": {
     "banner": 4
-  },
-  "frontend/src/core/overlayStreamCore.ts": {
-    "banner": 18
   },
   "frontend/src/hooks/__tests__/useNotificationSocket.test.tsx": {
     "banner": 1
