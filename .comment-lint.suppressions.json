@@ -160,28 +160,17 @@
   "services/message-processor/sessions/capture.go": {
     "restate": 1
   },
-  "services/overlay-manager/clients/youtube_quota_client.go": {
-    "banner": 1
-  },
   "services/overlay-manager/cmd/main.go": {
-    "restate": 1,
-    "step": 5
+    "restate": 1
   },
   "services/overlay-manager/creditroll/handler.go": {
     "restate": 4
   },
   "services/overlay-manager/handlers/sources.go": {
-    "restate": 1,
-    "step": 4
-  },
-  "services/overlay-manager/handlers/tts.go": {
-    "banner": 13,
-    "step": 2
+    "restate": 1
   },
   "services/overlay-manager/handlers/tts_test.go": {
-    "banner": 5,
-    "restate": 1,
-    "step": 2
+    "restate": 1
   },
   "services/overlay-manager/handlers/youtube.go": {
     "restate": 1
