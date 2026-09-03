@@ -67,7 +67,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
-    # Observed ~30-40s. No browser involved.
+    # Observed ~30-40s for the lint and token gates, plus ~40s for the unit
+    # project added below. No browser involved.
     timeout-minutes: 15
     defaults:
       run:
@@ -104,6 +105,28 @@ jobs:
           npx vitest --project unit --run
           src/__tests__/design-tokens.test.ts
           src/__tests__/no-broken-tailwind-utilities.test.ts
+
+      # The whole frontend unit project, and the reason it is HERE: until this
+      # step existed, no frontend unit test ran on a pull request at all. The
+      # required contexts are `test (<go service>)`, `test-node` (support-bot
+      # only) and this workflow's three jobs, and the two steps above name
+      # three files by path. So PR #833 shipped an overlay text outline that
+      # rendered as eight detached copies of the chat text WITH a green
+      # 97-line unit test beside it — the tests were never executed by CI, and
+      # would not have failed the merge if they had been.
+      #
+      # It runs after the two steps above rather than replacing them: those
+      # gates carry their own rationale (ADR-0056) and a failure attributed to
+      # a named step is the difference between "the token contrast lock broke"
+      # and "something in 145 files broke". Re-running three fast files is a
+      # cheaper price than losing that.
+      #
+      # `--project unit` is the non-browser project. The browser one (real
+      # Chromium via Playwright) is the a11y-storybook job below; it cannot run
+      # on a NixOS dev host, which is why the outline gate this step exists for
+      # is a pure rasterisation check runnable by anyone (ADR-0057).
+      - name: Frontend unit tests
+        run: npx vitest --project unit --run
 
   a11y-storybook:
     name: Storybook axe (components + pages)
