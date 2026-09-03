@@ -222,15 +222,12 @@ We've added comprehensive debug logging to identify the root cause:
 - `liveChatMessages.streamList` reference: https://developers.google.com/youtube/v3/live/docs/liveChatMessages/streamList
 - Python streaming-client demo: https://developers.google.com/youtube/v3/live/guides/streaming-live-chat
 
-  This guide used to cite offline copies of those two pages. They were deleted
-  because they went nine months without a refresh while the upstream pages moved
-  on. If you need a local copy to diff against, take a fresh one rather than
-  trusting an old one:
-
-  ```bash
-  curl -sL https://developers.google.com/youtube/v3/live/docs/liveChatMessages/streamList \
-    | pandoc -f html -t plain -o /tmp/streamlist-$(date +%F).txt
-  ```
+  This guide used to cite offline copies of those two pages, checked into
+  `docs/`. They were deleted: both went nine months without a refresh while the
+  upstream pages moved on, and a stale copy of a reference is worse than no copy
+  because it reads as authoritative. Read the URLs above instead. If you need a
+  snapshot to diff against, save the page from your browser into a scratch
+  directory outside the repo, not back into `docs/`.
 
 - gRPC keepalive: https://github.com/grpc/grpc/blob/master/doc/keepalive.md
 - YouTube API quota: https://developers.google.com/youtube/v3/determine_quota_cost
