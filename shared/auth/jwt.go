@@ -331,12 +331,12 @@ func (kc *KeyChain) LatestSecret() []byte { return kc.byKid[kc.latestKid] }
 // KeyFunc is a jwt.Keyfunc that selects the correct HS256 secret based on the
 // token's kid header.
 //
-// Dispatch logic:
-//  1. Reject any non-HMAC signing method (alg-confusion defence, D-12).
-//  2. If kid header is absent or empty → use legacy secret (backwards compat).
-//  3. If kid is present and known → use that version's secret.
-//  4. If kid is present but unknown → fall back to legacy (future-version tolerance).
-//  5. If both lookup paths miss AND legacy is nil → return ErrUnknownKidNoLegacy.
+// Dispatch logic, first match wins:
+//   - Reject any non-HMAC signing method (alg-confusion defence, D-12).
+//   - If kid header is absent or empty → use legacy secret (backwards compat).
+//   - If kid is present and known → use that version's secret.
+//   - If kid is present but unknown → fall back to legacy (future-version tolerance).
+//   - If both lookup paths miss AND legacy is nil → return ErrUnknownKidNoLegacy.
 func (kc *KeyChain) KeyFunc(token *jwt.Token) (interface{}, error) {
 	if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 		return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])

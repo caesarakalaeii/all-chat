@@ -571,38 +571,11 @@
     "restate": 1,
     "step": 4
   },
-  "shared/auth/jwt.go": {
-    "step": 5
-  },
-  "shared/encryption/encryption.go": {
-    "step": 3
-  },
-  "shared/encryption/versioned.go": {
-    "step": 2
-  },
-  "shared/listener/shutdown.go": {
-    "step": 6
-  },
   "shared/metrics/gateway.go": {
     "restate": 2
   },
-  "shared/middleware/apitoken.go": {
-    "step": 2
-  },
   "shared/middleware/auth_test.go": {
     "restate": 1
-  },
-  "shared/middleware/cors.go": {
-    "filler": 1
-  },
-  "shared/middleware/devicetoken.go": {
-    "step": 3
-  },
-  "shared/middleware/early_access.go": {
-    "step": 6
-  },
-  "shared/middleware/premium.go": {
-    "step": 6
   },
   "shared/ratelimit/ratelimit_test.go": {
     "restate": 1
