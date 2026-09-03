@@ -25,6 +25,7 @@ import { useTranslations } from '@/lib/i18n'
 import type { VisualSettings } from '@/lib/types/visual-settings'
 import {
   buildOutlineShadow,
+  canonicalizeTextShadow,
   parseOutlineWidth,
   DEFAULT_OUTLINE_WIDTH_PX,
   MIN_OUTLINE_WIDTH_PX,
@@ -70,14 +71,19 @@ export function TypographyGroup({
   const fieldId = useId()
   const lineHeight = parseFloat(visualSettings.lineHeight ?? '1.5')
   const letterSpacing = parseFloat(visualSettings.letterSpacing?.replace('px', '') ?? '0')
-  // Non-null exactly when the stored shadow is an outline. The Outline option
-  // then has to carry that stored string verbatim as its value, or the select
-  // would fail to match it and silently fall through to the read-only Custom
-  // entry — at width 3, or on a legacy four-direction value.
+  // Non-null exactly when the stored shadow is an outline.
   const storedShadow = visualSettings.textShadow ?? ''
   const outlineWidth = parseOutlineWidth(storedShadow)
-  const outlineValue =
-    outlineWidth === null ? buildOutlineShadow(DEFAULT_OUTLINE_WIDTH_PX) : storedShadow
+  // The picker speaks the CANONICAL form of whatever is stored, on both sides:
+  // a <select> matches by value, so an outline stored in a historic geometry
+  // (#833's compass, or the older four-direction 1px string) has to select the
+  // Outline entry rather than silently falling through to the read-only Custom
+  // entry, AND re-selecting Outline has to write the current geometry rather
+  // than writing that old string straight back. Canonicalising both is what
+  // makes the two agree; for anything that is not an outline it is identity,
+  // so presets and custom values are untouched.
+  const selectedShadow = canonicalizeTextShadow(storedShadow)
+  const outlineValue = buildOutlineShadow(outlineWidth ?? DEFAULT_OUTLINE_WIDTH_PX)
 
   return (
     <div className="space-y-3">
@@ -229,7 +235,7 @@ export function TypographyGroup({
         </label>
         <select
           id={`${fieldId}-text-shadow`}
-          value={storedShadow}
+          value={selectedShadow}
           onChange={(e) =>
             onChange({ textShadow: e.target.value === '' ? undefined : e.target.value })
           }
@@ -241,9 +247,12 @@ export function TypographyGroup({
             </option>
           ))}
           <option value={outlineValue}>{t('overlayEditor.typography.textShadowOutline')}</option>
-          {outlineWidth === null && !TEXT_SHADOW_PRESETS.some((p) => p.value === storedShadow) && (
-            <option value={storedShadow}>{t('overlayEditor.typography.textShadowCustom')}</option>
-          )}
+          {outlineWidth === null &&
+            !TEXT_SHADOW_PRESETS.some((p) => p.value === selectedShadow) && (
+              <option value={selectedShadow}>
+                {t('overlayEditor.typography.textShadowCustom')}
+              </option>
+            )}
         </select>
         <p className="text-xs text-text-dim">{t('overlayEditor.typography.textShadowNote')}</p>
       </div>
