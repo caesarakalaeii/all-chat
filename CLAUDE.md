@@ -133,18 +133,21 @@ Each service has a detailed README:
 
 ## Documentation Conventions
 
-Keep documentation from rotting. The repo root repeatedly accumulated stale, point-in-time docs; these rules exist to stop that recurring.
+Keep documentation from rotting. The repo root repeatedly accumulated stale, point-in-time docs; these rules exist to stop that recurring. **There are no point-in-time docs anywhere under docs/.** The ban is on the pattern, not on a directory: it applies to the whole tree, including `docs/` and its subdirectories, `services/*/`, and `.github/`.
 
 **The repo root holds only three markdown docs:** `README.md`, `CLAUDE.md`, and `CONTRIBUTING.md`. Everything else lives under `docs/` (`docs/GETTING_STARTED.md`, `docs/frontend/`, `docs/security/`, `docs/adr/`, `docs/architecture/`, and so on). Do **not** add new markdown files to the repo root, and never add point-in-time documents anywhere:
 
 - No `*-FIX-SUMMARY.md`, `*_IMPLEMENTATION.md`, `*-CHECKLIST.md`, `*_COMPLETE.md`, `*_STATUS.md`, or one-off audit/TODO trackers. Each describes a single past change, goes stale within weeks, and becomes clutter. (On 2026-07-15 this pattern was cleaned out: seven such docs were deleted, COORDINATOR-FILTERING-FIX-SUMMARY, CREDIT_ROLL_IMPLEMENTATION, DEPLOYMENT-CHECKLIST, DOC_AUDIT, GOOGLE_OAUTH_TODO, YOUTUBE_DETECTION_FIX_SUMMARY and Roadmap; the remaining root guides were relocated into `docs/` subdirs.)
-- Point-in-time write-ups belong in the PR description / commit body, or in `docs/phase-reports/` if a lasting record is genuinely needed. If it will not be maintained, do not commit it to the root.
+- The same reasoning applies one directory down, which is where this rule was learned the hard way. Written as a rule about the repo root, it moved the problem rather than solving it: the identical documents reappeared in `docs/` and reached roughly 9,000 lines. They lasted because they cross-link almost only to each other, so the cluster looks referenced from the inside while nothing living points at it. (On 2026-09-02 that cluster was deleted: 18 files — metrics and events write-ups, a documentation-refactoring report, a quota checkpoint, an OAuth checklist, two service-level implementation summaries, and five stale `.txt` files that were either raw YouTube API dumps or offline copies of Google's own docs pages. Their names are deliberately not listed here, because a rule that recites the banned filenames is itself a file that matches them; recover them from git history if you need them. No index of them was left behind, on purpose.)
+- **The default answer is the PR description, not a committed file.** Write the point-in-time account in the pull request or the commit body, where it is dated, attributed and never has to be maintained. `docs/phase-reports/` is the one exception, for a lasting record that genuinely needs to outlive the PR — and it is an exception to argue for, not a default to reach for. If it will not be maintained, it does not go in the tree.
+- Three questions decide what to do with an existing doc. Does it describe a single past change? Delete it. Does it state facts about how the system works today? Fix those facts in place. Does it record a decision and why it was taken? Leave it alone — and if it is stale but still the only record of a rationale, give it a dated deprecation banner as its first line instead of deleting it.
+- `docs/adr/` is exempt and off-limits. ADRs are the historical record by design; a superseded one has its `Status:` updated at most. Never delete one, never banner one.
 
 **Update docs in the same change as the code.** When you change behavior, update the living docs it affects in the same PR: `README.md`, `CLAUDE.md`, `docs/GETTING_STARTED.md`, the relevant `services/*/README.md`, and the ADR index. A doc that contradicts the code is worse than no doc.
 
 **Do not hardcode volatile counts.** Prefer "see `services/`" over "17 services" and "see `docs/adr/`" over "12 ADRs": exact counts drift every time something is added. Where a count is unavoidable, treat it as something to re-verify, not to trust.
 
-**When a root doc goes stale:** fix the facts in place if it is a living reference; move it to `docs/phase-reports/` or `git rm` it (recoverable via history) if it is a completed point-in-time artifact.
+**When a doc goes stale, anywhere in the tree:** fix the facts in place if it is a living reference; `git rm` it (recoverable via history) if it is a completed point-in-time artifact. Deleting is the normal outcome and needs no ceremony — no deprecation banner, no tombstone file, no note in an index. When you delete one, fix every inbound link in the same change: use `git grep`, and leave no "see X" pointing at a file that is gone.
 
 ---
 

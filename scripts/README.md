@@ -383,7 +383,6 @@ docker stats allchat-frontend-gateway allchat-frontend-processor
 
 - [FRONTEND_QUICK_START.md](../docs/frontend/FRONTEND_QUICK_START.md) - Quick start guide
 - [FRONTEND_DEV_SETUP.md](../docs/frontend/FRONTEND_DEV_SETUP.md) - Complete setup guide
-- [.github/FRONTEND_DEV_SUMMARY.md](../.github/FRONTEND_DEV_SUMMARY.md) - Architecture and design
 
 ---
 
