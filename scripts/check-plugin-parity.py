@@ -435,20 +435,27 @@ def check_version_stamp() -> None:
 
     # Every "linking failed" the plugin logs has to carry the build, so a log file a
     # streamer attaches identifies it without a follow-up question. Matched on the
-    # line rather than on a helper name so it cannot be satisfied by declaring one.
+    # whole logger.error call rather than on a helper name, so it cannot be satisfied
+    # by declaring a version constant that nothing interpolates. Non-greedy up to the
+    # closing `);` because the call spans lines once the version is in it.
     base_src = strip_ts_comments(read(TS_ACTION_BASE))
-    failure_logs = re.findall(r"^.*logger\.error\(.*linking failed.*$", base_src, re.MULTILINE)
+    failure_logs = [
+        call
+        for call in re.findall(r"logger\.error\(.*?\n?\s*\);", base_src, re.DOTALL)
+        if "linking failed" in call
+    ]
     if not failure_logs:
         fail(
             f"{TS_ACTION_BASE.relative_to(REPO)} logs no `linking failed` error. If the "
             f"wording changed, change it here too."
         )
-    for line in failure_logs:
-        if PLUGIN_VERSION_EXPRESSION not in line:
+    for call in failure_logs:
+        if PLUGIN_VERSION_EXPRESSION not in call:
             fail(
                 f"{TS_ACTION_BASE.relative_to(REPO)} logs a linking failure without "
-                f"`{PLUGIN_VERSION_EXPRESSION}`: {line.strip()}. A log a streamer sends in "
-                f"has to name the build, or the first reply is always 'which version?'."
+                f"`{PLUGIN_VERSION_EXPRESSION}`: {' '.join(call.split())}. A log a streamer "
+                f"sends in has to name the build, or the first reply is always "
+                f"'which version?'."
             )
 
 
