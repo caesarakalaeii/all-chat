@@ -229,11 +229,7 @@
     "restate": 1
   },
   "services/discord-listener/gateway/client.go": {
-    "restate": 1,
-    "step": 14
-  },
-  "services/discord-listener/relay/webhook_provisioner.go": {
-    "step": 4
+    "restate": 1
   },
   "services/emote-service/clients/bttv.go": {
     "restate": 2
