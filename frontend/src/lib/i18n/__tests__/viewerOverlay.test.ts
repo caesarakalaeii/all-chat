@@ -372,12 +372,6 @@ describe('credit roll copy', () => {
   })
 })
 
-describe('OBS chat overlay copy', () => {
-  it('keeps the shared-chat indicator', () => {
-    expect(t('viewerOverlay.chatOverlay.sharedChat')).toBe('Shared Chat')
-  })
-})
-
 describe('activity panel copy', () => {
   it('keeps the panel chrome', () => {
     expect(t('viewerOverlay.activity.heading')).toBe('Activity & Events')

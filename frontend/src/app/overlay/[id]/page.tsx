@@ -116,6 +116,7 @@ import { AllChatBadge } from '@/components/AllChatBadge'
 import { PremiumBadge } from '@/components/PremiumBadge'
 import { EventContent } from '@/components/overlay/EventContent'
 import { MessageAttachments } from '@/components/overlay/MessageAttachments'
+import { SharedChatOrigin } from '@/components/overlay/SharedChatOrigin'
 import { formatTime, useTranslations } from '@/lib/i18n'
 import { resolveUsernameColor } from '@/lib/utils/usernameColor'
 import '@/styles/events.css'
@@ -955,9 +956,11 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
 
                     {/* Shared Chat Indicator */}
                     {isSharedChat && (
-                      <span className="rounded border border-purple-400/50 bg-purple-600/80 px-1.5 py-0.5 text-xs font-semibold text-purple-100 uppercase">
-                        {t('viewerOverlay.chatOverlay.sharedChat')}
-                      </span>
+                      <SharedChatOrigin
+                        avatarUrl={message.metadata?.source_avatar_url}
+                        displayName={message.metadata?.source_display_name}
+                        size="1em"
+                      />
                     )}
 
                     {/* Regular Badges (after username when position is 'after') */}
