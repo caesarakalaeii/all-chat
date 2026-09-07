@@ -4,6 +4,13 @@
 		<meta charset="utf-8" />
 		<title>All-Chat — Send Chat Message</title>
 		<script src="https://sdpi-components.dev/releases/v4/sdpi-components.js"></script>
+		<!--
+			sdpi-components styles only its own custom elements, and declares its palette
+			inside their shadow roots, so every native element on this page (h4, p, span,
+			code, summary, a) rendered as black text on the dark property-inspector panel.
+			allchat-pi.css owns the page palette; see the comment at the top of it.
+		-->
+		<link rel="stylesheet" href="allchat-pi.css" />
 	</head>
 	<body>
 		<sdpi-item label="Message">
@@ -15,13 +22,21 @@
 			></sdpi-textarea>
 		</sdpi-item>
 
+		<!--
+			These four and no others. The option list is the SEND surface, which is
+			narrower than the platforms All-Chat reads chat from: TikTok publishes no
+			API for posting into a live chat and Discord sources are a one-way relay,
+			so neither can be a target here. TikTok was offered until a streamer asked
+			why the button did nothing — the server had been answering 501 to it all
+			along. KEEP IN SYNC with PLATFORMS in src/allchat/settings.ts; the parity
+			script asserts these match.
+		-->
 		<sdpi-item label="Platform">
 			<sdpi-select setting="platform" default="all">
 				<option value="all">All connected platforms</option>
 				<option value="twitch">Twitch</option>
 				<option value="youtube">YouTube</option>
 				<option value="kick">Kick</option>
-				<option value="tiktok">TikTok</option>
 			</sdpi-select>
 		</sdpi-item>
 
@@ -43,14 +58,26 @@
 		-->
 		<sdpi-item label="Linking">
 			<button id="allchat-link">Link with All-Chat</button>
-		</sdpi-item>
+			<!--
+				The status sits inside this row, under the button it belongs to, rather
+				than in a separate `label="Status"` row that read as an independent
+				setting instead of as feedback from the button.
 
-		<sdpi-item label="Status">
-			<!-- aria-live so a screen reader announces the pairing code and the
-			     outcome without the user having to hunt for it. -->
-			<span id="allchat-link-status" role="status" aria-live="polite"
+				aria-live so a screen reader announces the pairing code and the outcome
+				without the user having to hunt for it.
+			-->
+			<span id="allchat-link-status" role="status" aria-live="polite" data-state="idle"
 				>Not linked yet.</span
 			>
+			<!--
+				The build this panel is running, filled in by allchat-link.js from the
+				version Stream Deck reports for the plugin. Empty in the markup on
+				purpose: an unfilled literal would be a lie about which build is
+				installed, which is exactly the confusion it exists to remove
+				(issue #816). Not aria-live — it never changes, so announcing it would
+				interrupt the status above for nothing.
+			-->
+			<span id="allchat-plugin-version"></span>
 		</sdpi-item>
 
 		<h4>Or paste a token instead</h4>
@@ -96,36 +123,6 @@
 			<p>Sending chat messages is free on every All-Chat account.</p>
 		</details>
 
-		<script>
-			/*
-				The Link button's only job is to ask the plugin to run the flow and to
-				render what comes back. It never sees a credential: the plugin writes
-				the device token straight into this key's settings, so there is nothing
-				here to display, copy or leak.
-			*/
-			const linkButton = document.getElementById("allchat-link");
-			const linkStatus = document.getElementById("allchat-link-status");
-
-			linkButton.addEventListener("click", () => {
-				linkStatus.textContent = "Starting…";
-				SDPIComponents.streamDeckClient.send("sendToPlugin", { event: "link" });
-			});
-
-			SDPIComponents.streamDeckClient.didReceivePropertyInspectorMessage.subscribe(
-				(message) => {
-					const payload = message?.payload;
-					if (!payload || payload.event !== "link-status") {
-						return;
-					}
-					if (payload.status === "code" && payload.userCode) {
-						linkStatus.textContent =
-							`Enter this code at allch.at/link: ${payload.userCode}. ` +
-							(payload.detail ?? "");
-						return;
-					}
-					linkStatus.textContent = payload.detail ?? payload.status ?? "";
-				},
-			);
-		</script>
+		<script src="allchat-link.js"></script>
 	</body>
 </html>

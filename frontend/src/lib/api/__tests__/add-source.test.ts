@@ -62,13 +62,13 @@ describe('startAddSourceReflow', () => {
   it('refreshes the expired access cookie and retries once (the H3 fix)', async () => {
     const fetchMock = vi
       .spyOn(globalThis, 'fetch')
-      // 1) original request: access cookie expired -> 401
+      // Original request: access cookie expired -> 401
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ error: 'token expired' }), { status: 401 })
       )
-      // 2) apiClient's cookie refresh succeeds
+      // Then apiClient's cookie refresh succeeds
       .mockResolvedValueOnce(new Response(null, { status: 200 }))
-      // 3) retried request now succeeds
+      // Then the retried request succeeds
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ auth_url: 'https://id.twitch.tv/oauth' }), { status: 200 })
       )

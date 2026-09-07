@@ -637,9 +637,9 @@ func (h *DeviceLinkHandler) resolveExchangeTarget(c *gin.Context, req *exchangeR
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Code generation and hashing. Nothing here logs or returns a secret.
-// ---------------------------------------------------------------------------
+// Everything from here to the end of the file mints or digests a secret, and
+// none of it logs or returns one. Keep it that way: a user code in a log line is
+// a pairing anyone reading the log can complete.
 
 // generateUserCode mints a typed pairing code from userCodeAlphabet.
 //

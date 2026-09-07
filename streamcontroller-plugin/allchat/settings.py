@@ -63,8 +63,31 @@ LOOPBACK_PATH = "/allchat/device-callback"
 LOOPBACK_HOST = "127.0.0.1"
 
 #: Platforms accepted by ``POST /api/v1/auth/chat/send``. ``all`` fans the message
-#: out to every connected platform and returns a per-platform result.
-PLATFORMS = ("all", "twitch", "youtube", "kick", "tiktok")
+#: out to every connected platform and returns a per-platform result -- and fans out
+#: to exactly these three, see ``handleStreamerSendToAll`` in
+#: ``services/auth-service/handlers/chat_send.go``.
+#:
+#: This list is the SEND surface, which is narrower than the set of platforms
+#: All-Chat reads chat from. Keep it that way: an entry here that the server cannot
+#: post to is a button that fails on press, which is how ``tiktok`` shipped in both
+#: plugins' pickers while auth-service answered 501 to it.
+PLATFORMS = ("all", "twitch", "youtube", "kick")
+
+#: Platforms All-Chat READS but cannot POST to, with the reason. These are offered
+#: nowhere, but a key configured before they were removed still has one saved, so the
+#: value must be explained rather than reported as a typo.
+#:
+#: KEEP IN SYNC with ``streamdeck-plugin/src/allchat/settings.ts`` (ADR-0049).
+UNSENDABLE_PLATFORMS = {
+    "tiktok": (
+        "TikTok publishes no API for posting into a live chat, so All-Chat can show "
+        "TikTok chat on your overlay but cannot send to it."
+    ),
+    "discord": (
+        "A Discord source is a one-way relay into your overlay. All-Chat has no send "
+        "path back into a Discord channel."
+    ),
+}
 
 #: Scopes a PAT must carry for these actions, mirroring the constants in
 #: ``shared/middleware/apitoken.go``. Shown in error text so a user who minted a

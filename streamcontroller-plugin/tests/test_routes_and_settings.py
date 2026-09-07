@@ -169,6 +169,37 @@ class ValidationTest(unittest.TestCase):
             self.assertEqual(base.STATE_ERROR, action.run_action())
         urlopen.assert_not_called()
 
+    def test_send_platforms_are_the_ones_the_server_posts_to(self) -> None:
+        """Narrower than the platforms All-Chat READS, deliberately.
+
+        auth-service posts to Twitch, YouTube and Kick; ``all`` fans out to exactly
+        those (``handleStreamerSendToAll``). TikTok answers 501 and Discord 400, so
+        offering either is a key that fails on press -- which is what shipped, until
+        a streamer asked why TikTok did nothing.
+        """
+        self.assertEqual(("all", "twitch", "youtube", "kick"), settings.PLATFORMS)
+        for platform in ("tiktok", "discord"):
+            self.assertNotIn(platform, settings.PLATFORMS)
+            self.assertIn(platform, settings.UNSENDABLE_PLATFORMS)
+
+    def test_read_only_platform_is_refused_with_the_reason(self) -> None:
+        """A key saved while TikTok was still offered must explain itself.
+
+        The generic "not a platform All-Chat sends to" would read as a typo for a
+        value this plugin's own picker used to contain, so the refusal names the
+        cause instead. Still local: no request is made.
+        """
+        action = make_action(SendMessageAction, message="hi", platform="tiktok")
+        with mock.patch.object(action, "show_state") as show_state:
+            with mock.patch("urllib.request.urlopen") as urlopen:
+                self.assertEqual(base.STATE_ERROR, action.run_action())
+        urlopen.assert_not_called()
+
+        message = show_state.call_args[0][1]
+        self.assertIn("TikTok", message)
+        self.assertIn("no API", message)
+        self.assertNotIn("is not a platform", message)
+
     def test_missing_overlay_id_is_rejected_locally(self) -> None:
         action = make_action(PollControlAction, mode="close")
         with mock.patch("urllib.request.urlopen") as urlopen:

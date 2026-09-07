@@ -37,8 +37,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// ---- Constants -------------------------------------------------------------
-
 const (
 	// ttsRateLimitPerMinute caps per-overlay POST /tts calls. 60/min/overlay
 	// is a billing-abuse safety net; if legitimate traffic hits this ceiling
@@ -89,8 +87,6 @@ func validateAndEscapeVoiceID(voiceID string) (escaped string, ok bool) {
 	return url.PathEscape(voiceID), true
 }
 
-// ---- Narrow interfaces (test seams) ----------------------------------------
-
 // ttsConfigStore is the narrow surface of repository.TTSConfigRepository
 // that the handler needs. Kept minimal so the test suite can mock without
 // touching pgx.
@@ -114,8 +110,6 @@ type aesCipher interface {
 	EncryptString(plaintext string) (string, error)
 	DecryptString(ciphertext string) (string, error)
 }
-
-// ---- Handler ---------------------------------------------------------------
 
 // TTSHandler implements the seven Phase 13 TTS endpoints:
 //
@@ -169,8 +163,6 @@ func NewTTSHandler(repo ttsConfigStore, overlays overlayOwnershipChecker, cipher
 	}
 }
 
-// ---- Helpers ---------------------------------------------------------------
-
 // checkOwnership returns (userID, overlayID, ok). On failure it writes the
 // appropriate 401/400/404 response and returns ok=false.
 func (h *TTSHandler) checkOwnership(c *gin.Context) (string, string, bool) {
@@ -215,8 +207,6 @@ func (h *TTSHandler) checkRateLimit(overlayID string) bool {
 func (h *TTSHandler) buildOBSURL(overlayID string, jwtToken string) string {
 	return fmt.Sprintf("%s/overlay/%s?tts_token=%s", strings.TrimRight(h.publicBaseURL, "/"), overlayID, jwtToken)
 }
-
-// ---- ElevenLabs error mapping ----------------------------------------------
 
 // elevenLabsErrorBody mirrors ElevenLabs' /detail error envelope. The shape is:
 //
@@ -268,8 +258,6 @@ func elevenLabsAuthErrorResponse(ev elevenLabsErrorBody) gin.H {
 		return gin.H{"error": msg, "code": ev.Detail.Status}
 	}
 }
-
-// ---- HandleSaveTTSConfig (D-11) --------------------------------------------
 
 // HandleSaveTTSConfig handles POST /:id/tts-config. Body {api_key, voice_id}.
 // The api_key is encrypted server-side before persistence (T-13-01).
@@ -369,8 +357,6 @@ func (h *TTSHandler) HandleSaveVoice(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "saved", "voice_id": voiceID})
 }
 
-// ---- HandleDeleteTTSConfig (D-12) ------------------------------------------
-
 // HandleDeleteTTSConfig handles DELETE /:id/tts-config.
 func (h *TTSHandler) HandleDeleteTTSConfig(c *gin.Context) {
 	_, overlayID, ok := h.checkOwnership(c)
@@ -389,8 +375,6 @@ func (h *TTSHandler) HandleDeleteTTSConfig(c *gin.Context) {
 	h.logger.Info("tts config deleted", zap.String("overlay_id", overlayID))
 	c.Status(http.StatusNoContent)
 }
-
-// ---- HandleRotateToken (D-13) ----------------------------------------------
 
 // HandleRotateToken handles POST /:id/tts-config/rotate-token. Rotates the
 // per-overlay signing secret (invalidating every previously-issued
@@ -424,8 +408,6 @@ func (h *TTSHandler) HandleRotateToken(c *gin.Context) {
 	h.logger.Info("tts signing secret rotated", zap.String("overlay_id", overlayID))
 	c.JSON(http.StatusOK, gin.H{"obs_url": h.buildOBSURL(overlayID, token)})
 }
-
-// ---- HandleGetVoices (D-14) ------------------------------------------------
 
 // HandleGetVoices handles GET /:id/tts-voices by proxying to ElevenLabs'
 // voice list using the decrypted stored api key.
@@ -491,8 +473,6 @@ func (h *TTSHandler) HandleGetVoices(c *gin.Context) {
 	_, _ = io.Copy(c.Writer, resp.Body)
 }
 
-// ---- HandleGetVoicesPreview (chicken-and-egg break) ------------------------
-
 // HandleGetVoicesPreview handles POST /:id/tts-voices/preview. Body
 // {api_key}. The supplied key is used for a one-shot ElevenLabs /v1/voices
 // proxy call and is NOT persisted. This breaks the chicken-and-egg between
@@ -554,8 +534,6 @@ func (h *TTSHandler) HandleGetVoicesPreview(c *gin.Context) {
 	_, _ = io.Copy(c.Writer, resp.Body)
 }
 
-// ---- HandleTestKey (D-15) --------------------------------------------------
-
 // HandleTestKey handles POST /:id/tts-config/test. It first validates the
 // key via GET /v1/user/subscription, then (on success) streams a 2-second
 // sample back to the browser with audio/mpeg Content-Type and
@@ -582,7 +560,6 @@ func (h *TTSHandler) HandleTestKey(c *gin.Context) {
 		return
 	}
 
-	// Step 1: GET /v1/user/subscription to validate the key + fetch quota.
 	subReq, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet,
 		h.elevenLabsBaseURL+"/v1/user/subscription", nil)
 	if err != nil {
@@ -636,7 +613,6 @@ func (h *TTSHandler) HandleTestKey(c *gin.Context) {
 		remaining = 0
 	}
 
-	// Step 2: POST /v1/text-to-speech/{voice}/stream with the sample text.
 	// L8: validate + escape the stored voice ID before interpolating into the
 	// upstream URL path (defense-in-depth: the save handlers now validate on
 	// write, but pre-existing rows may predate that check).
@@ -681,8 +657,6 @@ func (h *TTSHandler) HandleTestKey(c *gin.Context) {
 	c.Status(http.StatusOK)
 	_, _ = io.Copy(c.Writer, ttsResp.Body)
 }
-
-// ---- HandleTTS (D-16) ------------------------------------------------------
 
 // HandleTTS handles POST /:id/tts?text=...&voice=...&tts_token=... — the
 // streaming proxy used by OBS browser sources. tts_token JWT auth; no user
@@ -823,8 +797,6 @@ func (h *TTSHandler) HandleTTS(c *gin.Context) {
 	c.Status(http.StatusOK)
 	_, _ = io.Copy(c.Writer, resp.Body)
 }
-
-// ---- HandleGetTTSConfig (Research Open Question 3) -------------------------
 
 // HandleGetTTSConfig handles GET /:id/tts-config. Returns
 //

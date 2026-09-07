@@ -393,11 +393,8 @@ kubectl logs -n monitoring -l app.kubernetes.io/name=grafana
 
 ## 📚 Related Documentation
 
-- **Metrics Implementation**: `/home/caesar/git/all-chat/docs/METRICS_COMPLETE.md`
-- **Recording Plan**: `/home/caesar/git/all-chat/docs/METRICS_RECORDING_PLAN.md`
-- **Shared Metrics Package**: `/home/caesar/git/all-chat/shared/metrics/README.md`
-- **Twitch Implementation Example**: `/home/caesar/git/all-chat/services/twitch-listener/METRICS_IMPLEMENTED.md`
-- **Observability Strategy**: `/home/caesar/git/all-chat/docs/OBSERVABILITY_STRATEGY.md`
+- **Shared Metrics Package**: [`shared/metrics/README.md`](../shared/metrics/README.md) — the recorders every service uses, and the metric names they register
+- **Observability Strategy**: [`OBSERVABILITY_STRATEGY.md`](OBSERVABILITY_STRATEGY.md)
 
 ---
 

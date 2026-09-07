@@ -26,27 +26,30 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Dialog } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
+import { type TFunction, formatDate, useTranslations } from '@/lib/i18n'
+import { interpolateElements } from '@/lib/i18n/emphasise'
 import { toastManager } from '@/lib/toast'
 import { viewerApi } from '@/lib/api/viewer'
 import { PATREON_JOIN_URL } from '@/lib/constants'
 import type { PaymentStatus } from '@/lib/api/payment'
 
-function statusLabel(status?: string): string {
+function statusLabel(t: TFunction, status?: string): string {
   switch (status) {
     case 'active':
-      return 'Active'
+      return t('common.patreon.statusActive')
     case 'declined':
-      return 'Payment declined'
+      return t('common.patreon.statusDeclined')
     case 'former':
-      return 'Ended'
+      return t('common.patreon.statusFormer')
     case 'expired':
-      return 'Below viewer tier'
+      return t('settings.viewerPremium.statusExpired')
     default:
-      return 'Not subscribed'
+      return t('common.patreon.statusNotSubscribed')
   }
 }
 
 function ViewerPremiumContent() {
+  const t = useTranslations()
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -74,15 +77,15 @@ function ViewerPremiumContent() {
   useEffect(() => {
     const result = searchParams.get('patreon')
     if (result === 'connected') {
-      toastManager.add({ title: 'Patreon connected!', type: 'success' })
+      toastManager.add({ title: t('common.patreon.connectedToast'), type: 'success' })
       router.replace('/settings/viewer/premium')
       void (async () => {
         await fetchStatus()
       })()
     } else if (result === 'error') {
       toastManager.add({
-        title: 'Could not connect Patreon',
-        description: 'Please try again.',
+        title: t('common.patreon.connectFailedToast'),
+        description: t('common.toast.tryAgain'),
         type: 'error',
       })
       router.replace('/settings/viewer/premium')
@@ -95,17 +98,17 @@ function ViewerPremiumContent() {
       await viewerApi.startPatreonConnect()
     } catch {
       setConnecting(false)
-      toastManager.add({ title: 'Could not start Patreon connect', type: 'error' })
+      toastManager.add({ title: t('common.patreon.connectStartFailedToast'), type: 'error' })
     }
   }
 
   async function handleDisconnect() {
     try {
       await viewerApi.disconnectPatreon()
-      toastManager.add({ title: 'Patreon disconnected', type: 'success' })
+      toastManager.add({ title: t('common.patreon.disconnectedToast'), type: 'success' })
       fetchStatus()
     } catch {
-      toastManager.add({ title: 'Failed to disconnect', type: 'error' })
+      toastManager.add({ title: t('common.patreon.disconnectFailedToast'), type: 'error' })
     }
   }
 
@@ -120,84 +123,85 @@ function ViewerPremiumContent() {
             href="/settings/viewer"
             className="text-sm text-text-sub transition-colors hover:text-text"
           >
-            ← Back to Viewer Identity
+            {t('settings.viewerPremium.back')}
           </Link>
-          <h1 className="text-2xl font-bold text-text">Viewer Premium</h1>
-          <p className="text-sm text-text-sub">
-            A cheaper subscription that unlocks viewer cosmetics — your premium chat badge and name
-            gradient — across every overlay you appear in.
-          </p>
+          <h1 className="text-2xl font-bold text-text">{t('settings.viewerPremium.heading')}</h1>
+          <p className="text-sm text-text-sub">{t('settings.viewerPremium.subheading')}</p>
         </div>
 
         <Card className="p-6">
-          <h2 className="mb-4 text-lg font-semibold text-text">Patreon</h2>
+          <h2 className="mb-4 text-lg font-semibold text-text">{t('common.patreon.heading')}</h2>
 
           {loading ? (
             <Skeleton className="h-10 w-full" />
           ) : !status?.connected ? (
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-4">
-                <p className="text-sm text-text-sub">
-                  Back All-Chat on Patreon to unlock your viewer premium cosmetics automatically.
-                </p>
+                <p className="text-sm text-text-sub">{t('settings.viewerPremium.connectPitch')}</p>
                 <Button onClick={handleConnect} disabled={connecting}>
-                  {connecting ? 'Redirecting…' : 'Connect Patreon'}
+                  {connecting ? t('common.patreon.connecting') : t('common.patreon.connect')}
                 </Button>
               </div>
               <p className="text-sm text-text-sub">
-                Not a patron yet?{' '}
-                <a
-                  href={PATREON_JOIN_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-medium text-twitch hover:underline"
-                >
-                  Subscribe on Patreon
-                </a>{' '}
-                (viewer tier from €2), then connect.
+                {interpolateElements(t('settings.viewerPremium.notAPatronSuffix'), {
+                  link: (
+                    <a
+                      href={PATREON_JOIN_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-twitch hover:underline"
+                    >
+                      {t('common.patreon.subscribe')}
+                    </a>
+                  ),
+                })}
               </p>
             </div>
           ) : (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-text-sub">Viewer premium</span>
-                <span className="font-medium text-text">{isPremium ? 'Active' : 'Inactive'}</span>
+                <span className="text-sm text-text-sub">
+                  {t('settings.viewerPremium.premiumRow')}
+                </span>
+                <span className="font-medium text-text">
+                  {isPremium ? t('common.patreon.active') : t('common.patreon.inactive')}
+                </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-text-sub">Subscription</span>
-                <span className="font-medium text-text">{statusLabel(status.status)}</span>
+                <span className="text-sm text-text-sub">{t('common.patreon.subscriptionRow')}</span>
+                <span className="font-medium text-text">{statusLabel(t, status.status)}</span>
               </div>
               {status.renews_at && (
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-text-sub">Renews</span>
+                  <span className="text-sm text-text-sub">{t('common.patreon.renewsRow')}</span>
                   <span className="font-medium text-text">
-                    {new Date(status.renews_at).toLocaleDateString()}
+                    {formatDate(new Date(status.renews_at))}
                   </span>
                 </div>
               )}
 
               {!isPremium && (
-                <p className="text-sm text-text-sub">
-                  Your Patreon is linked but not granting viewer premium. Make sure your pledge is
-                  active and at or above the viewer tier.
-                </p>
+                <p className="text-sm text-text-sub">{t('settings.viewerPremium.notGranting')}</p>
               )}
 
               <div className="flex justify-end pt-2">
                 <Dialog.Root>
                   <Dialog.Trigger
-                    render={<Button variant="destructive">Disconnect Patreon</Button>}
+                    render={<Button variant="destructive">{t('common.patreon.disconnect')}</Button>}
                   />
                   <Dialog.Content showCloseButton={false}>
-                    <Dialog.Title>Disconnect Patreon?</Dialog.Title>
+                    <Dialog.Title>{t('common.patreon.disconnectTitle')}</Dialog.Title>
                     <Dialog.Description>
-                      This unlinks your Patreon account. Viewer premium granted by your subscription
-                      will be removed.
+                      {t('settings.viewerPremium.disconnectBody')}
                     </Dialog.Description>
                     <div className="mt-6 flex justify-end gap-3">
-                      <Dialog.Close render={<Button variant="outline">Cancel</Button>} />
+                      <Dialog.Close
+                        render={
+                          <Button variant="outline">{t('common.patreon.disconnectCancel')}</Button>
+                        }
+                      />
                       <Button variant="destructive" onClick={handleDisconnect}>
-                        Yes, disconnect
+                        {t('common.patreon.disconnectConfirm')}
                       </Button>
                     </div>
                   </Dialog.Content>
@@ -212,22 +216,22 @@ function ViewerPremiumContent() {
 }
 
 function ViewerPremiumUnauthenticated() {
+  const t = useTranslations()
   return (
     <div className="min-h-screen bg-bg">
       <AppNav />
       <main id="main-content" tabIndex={-1} className="mx-auto max-w-2xl space-y-6 px-4 py-12">
-        <h1 className="text-2xl font-bold text-text">Viewer Premium</h1>
+        <h1 className="text-2xl font-bold text-text">{t('settings.viewerPremium.heading')}</h1>
         <Card className="p-6">
-          <h2 className="mb-2 text-lg font-semibold text-text">Sign in to manage viewer premium</h2>
-          <p className="mb-6 text-sm text-text-sub">
-            Sign in with your streaming platform account, then back All-Chat on Patreon to unlock
-            your premium chat badge and cosmetics.
-          </p>
+          <h2 className="mb-2 text-lg font-semibold text-text">
+            {t('settings.viewerPremium.signInHeading')}
+          </h2>
+          <p className="mb-6 text-sm text-text-sub">{t('settings.viewerPremium.signInBody')}</p>
           <Link
             href="/settings/viewer"
             className="text-sm font-medium text-text transition-colors hover:text-text-sub"
           >
-            Go to viewer sign-in →
+            {t('settings.viewerPremium.signInLink')}
           </Link>
         </Card>
       </main>

@@ -437,5 +437,50 @@ class StartLinkingWritesOnlySettingsTest(unittest.TestCase):
         self.assertNotIn("zzz", settings.redact(DEVICE_TOKEN))
 
 
+class LinkFailureMessageTest(unittest.TestCase):
+    """What the Link row says when a link attempt fails.
+
+    The row used to render raw exception text: ``exc.message`` for an
+    :class:`AllChatError` (a URL, an errno, an HTTP status, sometimes a
+    server-supplied string) and ``f"{type(exc).__name__}: {exc}"`` for anything
+    else. Both are log material, not something to show a streamer mid-stream.
+
+    These assertions pin the two halves of the rule: detail-bearing failures are
+    translated, and authored copy is left alone.
+    """
+
+    def test_a_plain_exception_never_shows_its_class_name(self) -> None:
+        message = errors.link_failure_message(TypeError("cannot read property of undefined"))
+        self.assertNotIn("TypeError", message)
+        self.assertNotIn("undefined", message)
+        self.assertIn("Link with All-Chat", message)
+
+    def test_a_transport_failure_does_not_leak_the_url_or_errno(self) -> None:
+        exc = AllChatError(
+            errors.NETWORK,
+            "Could not reach All-Chat at https://allch.at/api/v1/x: ECONNREFUSED",
+        )
+        message = errors.link_failure_message(exc)
+        self.assertNotIn("ECONNREFUSED", message)
+        self.assertNotIn("/api/v1/", message)
+        self.assertIn("internet connection", message)
+
+    def test_a_server_error_is_named_as_the_servers_fault(self) -> None:
+        # The bug this whole change came from: POST /device/link/start answered 500
+        # for every user. "Try again in a few minutes" is the only useful advice, and
+        # blaming the user's connection for it would be wrong.
+        exc = AllChatError(errors.HTTP_ERROR, "All-Chat refused to start linking (HTTP 500)", 500)
+        message = errors.link_failure_message(exc)
+        self.assertIn("500", message)
+        self.assertIn("server", message)
+        self.assertNotIn("internet connection", message)
+
+    def test_authored_copy_with_no_status_survives_verbatim(self) -> None:
+        # This one is already the right thing to show. Replacing it with a generic
+        # "linking failed" would lose the only sentence that tells the user what to do.
+        authored = "The pairing code expired before it was approved. Start linking again."
+        self.assertEqual(authored, errors.link_failure_message(AllChatError(errors.HTTP_ERROR, authored)))
+
+
 if __name__ == "__main__":
     unittest.main()

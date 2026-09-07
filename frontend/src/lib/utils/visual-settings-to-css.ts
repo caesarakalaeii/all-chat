@@ -17,6 +17,7 @@
  */
 
 import type { VisualSettings } from '@/lib/types/visual-settings'
+import { canonicalizeTextShadow } from './text-outline'
 
 /**
  * Authoritative mapping from VisualSettings field names to CSS custom property names.
@@ -281,14 +282,27 @@ function bubbleFillRules(settings: Partial<VisualSettings>): string[] {
   return blocks
 }
 
+/**
+ * The value to emit for a field, which is not always the value that was
+ * stored. `textShadow` carries the outline's thickness inside the declaration
+ * (see text-outline.ts), so the declaration is re-derived from that thickness
+ * on the way out: an overlay saved while a broken sampling was live renders
+ * correctly on the next deploy, with no migration and no second visit to the
+ * editor. Every other field is emitted verbatim.
+ */
+function resolveValue(field: keyof VisualSettings, value: string): string {
+  return field === 'textShadow' ? canonicalizeTextShadow(value) : value
+}
+
 /** Renders the set OVERRIDE_RULES as CSS rule blocks; empty when none apply. */
 function overrideRules(settings: Partial<VisualSettings>): string[] {
   const blocks: string[] = []
 
   for (const { field, targets, properties } of OVERRIDE_RULES) {
-    const value = settings[field]
-    if (typeof value !== 'string' || value === '') continue
-    if (!hasBalancedParens(value)) continue
+    const stored = settings[field]
+    if (typeof stored !== 'string' || stored === '') continue
+    if (!hasBalancedParens(stored)) continue
+    const value = resolveValue(field, stored)
 
     const selectors = FEED_SCOPES.flatMap((scope) =>
       targets.map((target) => (target === '' ? scope : `${scope} ${target}`))
@@ -317,10 +331,10 @@ export function visualSettingsToCss(settings: Partial<VisualSettings>): string {
   const declarations: string[] = []
 
   for (const [field, cssVar] of PROPERTY_MAP) {
-    const value = settings[field]
-    if (typeof value !== 'string') continue
-    if (!hasBalancedParens(value)) continue
-    declarations.push(`    ${cssVar}: ${value};`)
+    const stored = settings[field]
+    if (typeof stored !== 'string') continue
+    if (!hasBalancedParens(stored)) continue
+    declarations.push(`    ${cssVar}: ${resolveValue(field, stored)};`)
   }
 
   for (const [field, cssVar] of PRESENCE_FLAGS) {

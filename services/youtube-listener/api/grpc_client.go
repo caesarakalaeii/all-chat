@@ -146,7 +146,6 @@ func (g *GRPCStreamClient) StreamChatMessagesGRPC(
 		)
 	}()
 
-	// STEP 1: RESERVE quota BEFORE making API call
 	var reservationID string
 	var err error
 	if g.quotaTracker != nil {
@@ -218,7 +217,6 @@ func (g *GRPCStreamClient) StreamChatMessagesGRPC(
 		)
 	}
 
-	// STEP 2: CONFIRM quota - we successfully started the stream
 	if g.quotaTracker != nil && reservationID != "" {
 		if confirmErr := g.quotaTracker.ConfirmReservation(ctx, reservationID, cost); confirmErr != nil {
 			g.logger.Warn("Failed to confirm quota reservation", zap.Error(confirmErr))
@@ -235,7 +233,6 @@ func (g *GRPCStreamClient) StreamChatMessagesGRPC(
 		zap.Bool("with_page_token", pageToken != ""),
 	)
 
-	// STEP 3: Receive streaming responses
 	var lastResponseTime time.Time
 	var lastPageToken string
 	var consecutiveEmptyResponses int

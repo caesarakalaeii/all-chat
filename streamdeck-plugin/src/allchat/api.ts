@@ -59,8 +59,11 @@ export type Prediction = {
 /**
  * Sends a chat message as the token's owner.
  *
- * `platform` is one of `twitch`, `youtube`, `kick`, `tiktok`, or `all` to fan
- * out to every connected platform. Not premium-gated.
+ * `platform` is one of `twitch`, `youtube`, `kick`, or `all` to fan out to every
+ * connected one of those three. Not premium-gated.
+ *
+ * TikTok and Discord are NOT valid here even though All-Chat reads their chat:
+ * the server answers 501 and 400 respectively. See `UNSENDABLE_PLATFORMS`.
  */
 export async function sendChatMessage(
 	conn: Connection,

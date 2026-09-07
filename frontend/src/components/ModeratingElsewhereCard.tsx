@@ -35,8 +35,27 @@ import Link from 'next/link'
 import { ShieldCheck } from 'lucide-react'
 
 import { moderationApi } from '@/lib/api/moderation'
+import { useTranslations, type TFunction } from '@/lib/i18n'
+import { emphasise } from '@/lib/i18n/emphasise'
+
+/**
+ * The card's one sentence, with the channel count bolded inside it. Two whole
+ * sentences would repeat the surrounding words, so the count phrase is a param
+ * and emphasise wraps it wherever the language puts it. Takes the translator
+ * first because it is a plain module function.
+ */
+function moderatingSentence(t: TFunction, count: number): React.ReactNode {
+  const channels =
+    count === 1
+      ? t('common.moderatingElsewhere.channelOne', { count })
+      : t('common.moderatingElsewhere.channelMany', { count })
+  return emphasise(t('common.moderatingElsewhere.sentence', { channels }), channels, (run) => (
+    <span className="font-semibold text-text">{run}</span>
+  ))
+}
 
 export function ModeratingElsewhereCard() {
+  const t = useTranslations()
   const [count, setCount] = useState(0)
 
   // Set from the promise callback, not the effect body: a synchronous setState in an
@@ -64,14 +83,10 @@ export function ModeratingElsewhereCard() {
       className="flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3 text-sm transition-colors hover:border-border-md focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
     >
       <ShieldCheck className="size-5 shrink-0 text-twitch" aria-hidden="true" />
-      <span className="text-text-sub">
-        You moderate{' '}
-        <span className="font-semibold text-text">
-          {count} {count === 1 ? 'channel' : 'channels'}
-        </span>{' '}
-        for other streamers.
+      <span className="text-text-sub">{moderatingSentence(t, count)}</span>
+      <span className="ml-auto font-medium text-twitch">
+        {t('common.moderatingElsewhere.openLink')}
       </span>
-      <span className="ml-auto font-medium text-twitch">Open</span>
     </Link>
   )
 }

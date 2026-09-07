@@ -19,10 +19,12 @@
  */
 
 import clsx from 'clsx'
+import { Button } from '@/components/ui/button'
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { useHydrated } from '@/hooks/useHydrated'
+import { useTranslations } from '@/lib/i18n'
 
 /**
  * Layout orientation for the split on desktop.
@@ -62,9 +64,6 @@ const BUTTON_STEP = 10
 const KEY_STEP = 5
 
 /** 24px (WCAG 2.5.8) chevron buttons floating on the divider. */
-const STEP_BUTTON_CLASS =
-  'flex h-6 w-6 items-center justify-center rounded-md border border-border bg-surface text-text-sub shadow-sm hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none'
-
 /**
  * Two-pane resizable split: side-by-side (or stacked, via `orientation`) with a
  * draggable divider on desktop, stacked (no divider) on mobile. Keyboard-accessible
@@ -82,6 +81,7 @@ export function ResizableSplit({
   orientation = 'horizontal',
   reversed = false,
 }: ResizableSplitProps) {
+  const t = useTranslations()
   const hydrated = useHydrated()
   const containerRef = useRef<HTMLDivElement>(null)
   const [firstPct, setFirstPct] = useState(initial)
@@ -231,7 +231,7 @@ export function ResizableSplit({
       >
         <div
           role="slider"
-          aria-label="Resize panels"
+          aria-label={t('common.splitPane.resizeLabel')}
           aria-orientation={isVertical ? 'vertical' : 'horizontal'}
           aria-valuemin={min}
           aria-valuemax={max}
@@ -258,30 +258,32 @@ export function ResizableSplit({
             isVertical ? 'flex-row' : 'flex-col'
           )}
         >
-          <button
+          <Button
             type="button"
             aria-label={isVertical ? 'Shrink top panel' : 'Shrink left panel'}
             onClick={() => stepBy(-BUTTON_STEP)}
-            className={STEP_BUTTON_CLASS}
+            variant="outline"
+            size="icon-xs"
           >
             {isVertical ? (
               <ChevronUp className="h-4 w-4" aria-hidden="true" />
             ) : (
               <ChevronLeft className="h-4 w-4" aria-hidden="true" />
             )}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             aria-label={isVertical ? 'Grow top panel' : 'Grow left panel'}
             onClick={() => stepBy(BUTTON_STEP)}
-            className={STEP_BUTTON_CLASS}
+            variant="outline"
+            size="icon-xs"
           >
             {isVertical ? (
               <ChevronDown className="h-4 w-4" aria-hidden="true" />
             ) : (
               <ChevronRight className="h-4 w-4" aria-hidden="true" />
             )}
-          </button>
+          </Button>
         </div>
       </div>
 

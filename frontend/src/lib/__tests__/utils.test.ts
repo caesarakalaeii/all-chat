@@ -17,7 +17,13 @@
  */
 
 import { describe, it, expect } from 'vitest'
+import { getTranslations } from '@/lib/i18n'
 import { formatCompactDuration, formatConnectedFor } from '@/lib/utils'
+
+// Both helpers now resolve their unit strings through the catalog, so they take
+// the translator as their first argument. The assertions below are unchanged:
+// they still pin the rendered text, which is the behaviour callers depend on.
+const t = getTranslations()
 
 const MIN = 60_000
 const HOUR = 60 * MIN
@@ -25,32 +31,32 @@ const DAY = 24 * HOUR
 
 describe('formatCompactDuration', () => {
   it('renders sub-minute durations as "just now"', () => {
-    expect(formatCompactDuration(0)).toBe('just now')
-    expect(formatCompactDuration(59_000)).toBe('just now')
+    expect(formatCompactDuration(t, 0)).toBe('just now')
+    expect(formatCompactDuration(t, 59_000)).toBe('just now')
   })
 
   it('renders minute-only durations', () => {
-    expect(formatCompactDuration(MIN)).toBe('1m')
-    expect(formatCompactDuration(8 * MIN)).toBe('8m')
-    expect(formatCompactDuration(59 * MIN)).toBe('59m')
+    expect(formatCompactDuration(t, MIN)).toBe('1m')
+    expect(formatCompactDuration(t, 8 * MIN)).toBe('8m')
+    expect(formatCompactDuration(t, 59 * MIN)).toBe('59m')
   })
 
   it('renders hours with minutes, dropping zero minutes', () => {
-    expect(formatCompactDuration(HOUR)).toBe('1h')
-    expect(formatCompactDuration(5 * HOUR + 12 * MIN)).toBe('5h 12m')
-    expect(formatCompactDuration(3 * HOUR)).toBe('3h')
+    expect(formatCompactDuration(t, HOUR)).toBe('1h')
+    expect(formatCompactDuration(t, 5 * HOUR + 12 * MIN)).toBe('5h 12m')
+    expect(formatCompactDuration(t, 3 * HOUR)).toBe('3h')
   })
 
   it('renders days with hours, dropping zero hours', () => {
-    expect(formatCompactDuration(DAY)).toBe('1d')
-    expect(formatCompactDuration(3 * DAY + 4 * HOUR)).toBe('3d 4h')
-    expect(formatCompactDuration(2 * DAY + 30 * MIN)).toBe('2d') // minutes hidden at day scale
+    expect(formatCompactDuration(t, DAY)).toBe('1d')
+    expect(formatCompactDuration(t, 3 * DAY + 4 * HOUR)).toBe('3d 4h')
+    expect(formatCompactDuration(t, 2 * DAY + 30 * MIN)).toBe('2d') // minutes hidden at day scale
   })
 
   it('treats negative and non-finite input as zero', () => {
-    expect(formatCompactDuration(-5000)).toBe('just now')
-    expect(formatCompactDuration(Number.NaN)).toBe('just now')
-    expect(formatCompactDuration(Number.POSITIVE_INFINITY)).toBe('just now')
+    expect(formatCompactDuration(t, -5000)).toBe('just now')
+    expect(formatCompactDuration(t, Number.NaN)).toBe('just now')
+    expect(formatCompactDuration(t, Number.POSITIVE_INFINITY)).toBe('just now')
   })
 })
 
@@ -58,21 +64,21 @@ describe('formatConnectedFor', () => {
   const now = Date.parse('2026-07-13T12:00:00Z')
 
   it('returns null for missing input', () => {
-    expect(formatConnectedFor(null, now)).toBeNull()
-    expect(formatConnectedFor(undefined, now)).toBeNull()
-    expect(formatConnectedFor('', now)).toBeNull()
+    expect(formatConnectedFor(t, null, now)).toBeNull()
+    expect(formatConnectedFor(t, undefined, now)).toBeNull()
+    expect(formatConnectedFor(t, '', now)).toBeNull()
   })
 
   it('returns null for unparseable timestamps', () => {
-    expect(formatConnectedFor('not-a-date', now)).toBeNull()
+    expect(formatConnectedFor(t, 'not-a-date', now)).toBeNull()
   })
 
   it('formats a valid RFC3339 start relative to now', () => {
-    expect(formatConnectedFor('2026-07-13T08:48:00Z', now)).toBe('3h 12m')
-    expect(formatConnectedFor('2026-07-10T12:00:00Z', now)).toBe('3d')
+    expect(formatConnectedFor(t, '2026-07-13T08:48:00Z', now)).toBe('3h 12m')
+    expect(formatConnectedFor(t, '2026-07-10T12:00:00Z', now)).toBe('3d')
   })
 
   it('clamps a future start to "just now"', () => {
-    expect(formatConnectedFor('2026-07-13T12:05:00Z', now)).toBe('just now')
+    expect(formatConnectedFor(t, '2026-07-13T12:05:00Z', now)).toBe('just now')
   })
 })

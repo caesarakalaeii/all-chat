@@ -1,5 +1,16 @@
 import { execa } from 'execa';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { QueryResult, IssueProposal, CommentProposal, InfraVerdict, StoredMemory, ParsedMemoryMarker, ParsedUpdateMemoryMarker, MemoryType } from '../types.js';
+
+/**
+ * How long the `claude` subprocess gets before it is killed.
+ *
+ * Exported because the Discord layer needs the same number to tell a user how long
+ * it waited; two copies of "10 minutes" drift the moment one is tuned.
+ */
+export const CLAUDE_TIMEOUT_MS = 600_000;
 
 export async function queryCodebase(
   question: string,
@@ -21,7 +32,9 @@ export async function queryCodebase(
     "repo_name must be 'all-chat' or 'all-chat-extension'.",
     'issue_number is the numeric issue or PR number (GitHub treats PR comments as issue comments, so the same number works for either). body is the full Markdown comment.',
     'Only emit PROPOSE_COMMENT when you have an explicit issue or PR number from the user or the conversation -- never guess or invent a number, and never claim you commented if you did not emit the marker.',
-    'Emit at most one of PROPOSE_ISSUE or PROPOSE_COMMENT per response.',
+    'You may emit SEVERAL markers in one response -- one per issue or comment. If the user lists four problems and asks for issues, emit four PROPOSE_ISSUE markers, not one covering all four. Put every marker at the very end, each starting on its own line, after all of your prose.',
+    'Issue templates live in .github/ISSUE_TEMPLATE/ in each repo. The Caterpillar / agent-task template is .github/ISSUE_TEMPLATE/agent_task.md -- read it directly by path when a template is requested rather than searching the repo for it.',
+    'Filing several issues is expensive. Budget your research: skim what you need to make each issue concrete and stop there, rather than fully investigating every one. An answer that arrives is worth more than one that times out.',
     '',
     'IMPORTANT -- Infrastructure data handling rules:',
     '1. NEVER include raw log lines, stack traces, or raw error messages in your response.',
@@ -75,7 +88,16 @@ export async function queryCodebase(
   const grafanaToken = process.env['GRAFANA_SERVICE_ACCOUNT_TOKEN'];
   const hasGrafana = Boolean(grafanaUrl) && Boolean(grafanaToken);
 
+  // The MCP config carries the Grafana service-account token, so it goes to the
+  // subprocess as a FILE rather than on the command line.
+  //
+  // execa embeds the full argv in every error it throws, and that error is what the
+  // catch-all logs. With the config inline, one subprocess timeout printed
+  // `"GRAFANA_SERVICE_ACCOUNT_TOKEN":"glsa_..."` in plaintext into the pod log — and
+  // from there into any log aggregation scraping this pod. A 0600 file in a private
+  // temp dir keeps the secret out of argv, out of the error, and out of `ps`.
   let mcpConfigArg: string[] = [];
+  let mcpConfigDir: string | null = null;
   if (hasGrafana) {
     const mcpConfig = JSON.stringify({
       mcpServers: {
@@ -89,7 +111,10 @@ export async function queryCodebase(
         },
       },
     });
-    mcpConfigArg = ['--mcp-config', mcpConfig];
+    mcpConfigDir = await mkdtemp(join(tmpdir(), 'support-bot-mcp-'));
+    const mcpConfigPath = join(mcpConfigDir, 'mcp.json');
+    await writeFile(mcpConfigPath, mcpConfig, { mode: 0o600 });
+    mcpConfigArg = ['--mcp-config', mcpConfigPath];
   }
 
   const baseTools = ['Read', 'Glob', 'Grep', 'Bash(kubectl:*)'];
@@ -106,114 +131,167 @@ export async function queryCodebase(
     : [];
   const allowedTools = [...baseTools, ...grafanaTools].join(',');
 
-  console.log('[claude] Starting subprocess (timeout: 600s)');
-  const { stdout } = await execa(
-    'claude',
-    [
-      '-p', fullPrompt,
-      '--model', 'claude-sonnet-4-6',
-      '--allowedTools', allowedTools,
-      ...mcpConfigArg,
-      '--output-format', 'json',
-    ],
-    {
-      stdin: 'ignore',
-      env: { ...process.env },
-      timeout: 600_000,
-    },
-  );
+  console.log(`[claude] Starting subprocess (timeout: ${CLAUDE_TIMEOUT_MS / 1000}s)`);
+  let stdout: string;
+  try {
+    ({ stdout } = await execa(
+      'claude',
+      [
+        '-p', fullPrompt,
+        '--model', 'claude-sonnet-4-6',
+        '--allowedTools', allowedTools,
+        ...mcpConfigArg,
+        '--output-format', 'json',
+      ],
+      {
+        stdin: 'ignore',
+        env: { ...process.env },
+        timeout: CLAUDE_TIMEOUT_MS,
+      },
+    ));
+  } finally {
+    // Unconditional, and only AFTER the subprocess has exited: claude reads the config
+    // at startup, so removing it earlier would race the read. Losing the cleanup would
+    // leave a token-bearing file behind, which is the thing this whole detour avoids.
+    if (mcpConfigDir !== null) {
+      await rm(mcpConfigDir, { recursive: true, force: true }).catch((err: unknown) => {
+        console.warn('[claude] Failed to remove temporary MCP config dir:', err);
+      });
+    }
+  }
   console.log('[claude] Subprocess completed, parsing response');
 
   const parsed = JSON.parse(stdout) as { result: string };
-  const resultText = parsed.result;
+  return parseMarkers(parsed.result);
+}
 
-  // Parse and strip INFRA_VERDICT marker
+/** The repos the bot is allowed to act on. Anything else is dropped, not guessed at. */
+const KNOWN_REPOS = ['all-chat', 'all-chat-extension'] as const;
+type KnownRepo = (typeof KNOWN_REPOS)[number];
+
+function isKnownRepo(value: string): value is KnownRepo {
+  return (KNOWN_REPOS as readonly string[]).includes(value);
+}
+
+/** Every trailing marker the model may append. Order here is irrelevant; position in the text decides. */
+const MARKERS = [
+  'INFRA_VERDICT:',
+  'PROPOSE_ISSUE:',
+  'PROPOSE_COMMENT:',
+  'STORE_MEMORY:',
+  'UPDATE_MEMORY:',
+] as const;
+
+type Marker = (typeof MARKERS)[number];
+
+interface MarkerSegment {
+  marker: Marker;
+  payload: string;
+}
+
+/**
+ * Splits a response into its prose and its trailing marker segments.
+ *
+ * A segment runs from the end of its marker to the start of the NEXT marker, which is
+ * what makes multiple markers parseable at all: an issue body is Markdown and contains
+ * newlines, so a marker's payload cannot be delimited by the end of a line. The previous
+ * parser took `indexOf` of each marker once and read the payload to the end of the
+ * string, so a second PROPOSE_ISSUE was swallowed into the first one's body and only one
+ * issue was ever filed no matter how many the user asked for.
+ *
+ * Single-line markers (INFRA_VERDICT, STORE_MEMORY, UPDATE_MEMORY) take the first line of
+ * their segment, which preserves the old behaviour for them.
+ */
+function splitMarkers(text: string): { prose: string; segments: MarkerSegment[] } {
+  const hits: Array<{ index: number; marker: Marker }> = [];
+  for (const marker of MARKERS) {
+    let from = 0;
+    for (;;) {
+      const index = text.indexOf(marker, from);
+      if (index === -1) break;
+      hits.push({ index, marker });
+      from = index + marker.length;
+    }
+  }
+  hits.sort((a, b) => a.index - b.index);
+
+  const segments = hits.map((hit, i) => ({
+    marker: hit.marker,
+    payload: text.slice(hit.index + hit.marker.length, i + 1 < hits.length ? hits[i + 1].index : text.length),
+  }));
+
+  return {
+    prose: hits.length > 0 ? text.slice(0, hits[0].index).trimEnd() : text,
+    segments,
+  };
+}
+
+/** Parses a model response into prose plus whatever actions it asked for. */
+export function parseMarkers(resultText: string): QueryResult {
+  const { prose, segments } = splitMarkers(resultText);
+
+  const issueProposals: IssueProposal[] = [];
+  const commentProposals: CommentProposal[] = [];
   let infraVerdict: InfraVerdict | null = null;
-  const verdictMarker = 'INFRA_VERDICT:';
-  const verdictIndex = resultText.indexOf(verdictMarker);
-  if (verdictIndex !== -1) {
-    const verdictString = resultText.slice(verdictIndex + verdictMarker.length).split('\n')[0];
-    const parts = verdictString.split('|||');
-    if (parts.length >= 2) {
-      const type = parts[0].trim() as 'infrastructure' | 'code';
-      const summary = parts[1].trim();
-      infraVerdict = { type, summary };
-    }
-  }
-
-  let cleanAnswer = resultText;
-  if (verdictIndex !== -1) {
-    cleanAnswer = resultText.slice(0, verdictIndex).trimEnd();
-  }
-
-  // Parse and strip PROPOSE_ISSUE marker
-  let issueProposal: IssueProposal | null = null;
-  const proposeMarker = 'PROPOSE_ISSUE:';
-  const proposeIndex = cleanAnswer.indexOf(proposeMarker);
-  if (proposeIndex !== -1) {
-    const proposeString = cleanAnswer.slice(proposeIndex + proposeMarker.length);
-    const parts = proposeString.split('|||');
-    if (parts.length >= 3) {
-      const repoName = parts[0].trim() as 'all-chat' | 'all-chat-extension';
-      const title = parts[1].trim();
-      const body = parts.slice(2).join('|||').trim();
-      issueProposal = { repo: repoName, title, body };
-    }
-    cleanAnswer = cleanAnswer.slice(0, proposeIndex).trimEnd();
-  }
-
-  // Parse and strip PROPOSE_COMMENT marker
-  let commentProposal: CommentProposal | null = null;
-  const commentMarker = 'PROPOSE_COMMENT:';
-  const commentIndex = cleanAnswer.indexOf(commentMarker);
-  if (commentIndex !== -1) {
-    const commentString = cleanAnswer.slice(commentIndex + commentMarker.length);
-    const parts = commentString.split('|||');
-    if (parts.length >= 3) {
-      const repoName = parts[0].trim();
-      const issueNumber = parseInt(parts[1].trim(), 10);
-      const body = parts.slice(2).join('|||').trim();
-      if ((repoName === 'all-chat' || repoName === 'all-chat-extension') && !isNaN(issueNumber)) {
-        commentProposal = { repo: repoName, issueNumber, body };
-      }
-    }
-    cleanAnswer = cleanAnswer.slice(0, commentIndex).trimEnd();
-  }
-
-  // Parse and strip STORE_MEMORY marker
-  const storeMarker = 'STORE_MEMORY:';
-  const storeIndex = cleanAnswer.indexOf(storeMarker);
   let memoryMarker: ParsedMemoryMarker | null = null;
-  if (storeIndex !== -1) {
-    const markerString = cleanAnswer.slice(storeIndex + storeMarker.length).split('\n')[0];
-    const parts = markerString.split('|||');
-    if (parts.length >= 3) {
-      const type = parts[0].trim() as MemoryType;
-      const tags = parts[1].trim().split(',').map(t => t.trim()).filter(Boolean);
-      const content = parts.slice(2).join('|||').trim();
-      if (['error_pattern', 'correction', 'codebase_insight'].includes(type)) {
-        memoryMarker = { type, tags, content };
-      }
-    }
-    cleanAnswer = cleanAnswer.slice(0, storeIndex).trimEnd();
-  }
-
-  // Parse and strip UPDATE_MEMORY marker
-  const updateMarker = 'UPDATE_MEMORY:';
-  const updateIndex = cleanAnswer.indexOf(updateMarker);
   let updateMemoryMarker: ParsedUpdateMemoryMarker | null = null;
-  if (updateIndex !== -1) {
-    const markerString = cleanAnswer.slice(updateIndex + updateMarker.length).split('\n')[0];
-    const parts = markerString.split('|||');
-    if (parts.length >= 2) {
-      const id = parseInt(parts[0].trim(), 10);
-      const content = parts.slice(1).join('|||').trim();
-      if (!isNaN(id)) {
-        updateMemoryMarker = { id, content };
+
+  for (const { marker, payload } of segments) {
+    switch (marker) {
+      case 'PROPOSE_ISSUE:': {
+        const parts = payload.split('|||');
+        if (parts.length < 3) break;
+        const repo = parts[0].trim();
+        // Validated rather than cast. The old code asserted the repo name was one of the
+        // two without checking, so a typo went straight to the GitHub API as a 404.
+        if (!isKnownRepo(repo)) break;
+        const title = parts[1].trim();
+        const body = parts.slice(2).join('|||').trim();
+        if (!title) break;
+        issueProposals.push({ repo, title, body });
+        break;
+      }
+      case 'PROPOSE_COMMENT:': {
+        const parts = payload.split('|||');
+        if (parts.length < 3) break;
+        const repo = parts[0].trim();
+        const issueNumber = parseInt(parts[1].trim(), 10);
+        const body = parts.slice(2).join('|||').trim();
+        if (!isKnownRepo(repo) || isNaN(issueNumber)) break;
+        commentProposals.push({ repo, issueNumber, body });
+        break;
+      }
+      case 'INFRA_VERDICT:': {
+        if (infraVerdict !== null) break;
+        const parts = payload.split('\n')[0].split('|||');
+        if (parts.length < 2) break;
+        infraVerdict = { type: parts[0].trim() as 'infrastructure' | 'code', summary: parts[1].trim() };
+        break;
+      }
+      case 'STORE_MEMORY:': {
+        if (memoryMarker !== null) break;
+        const parts = payload.split('\n')[0].split('|||');
+        if (parts.length < 3) break;
+        const type = parts[0].trim() as MemoryType;
+        if (!['error_pattern', 'correction', 'codebase_insight'].includes(type)) break;
+        memoryMarker = {
+          type,
+          tags: parts[1].trim().split(',').map(t => t.trim()).filter(Boolean),
+          content: parts.slice(2).join('|||').trim(),
+        };
+        break;
+      }
+      case 'UPDATE_MEMORY:': {
+        if (updateMemoryMarker !== null) break;
+        const parts = payload.split('\n')[0].split('|||');
+        if (parts.length < 2) break;
+        const id = parseInt(parts[0].trim(), 10);
+        if (isNaN(id)) break;
+        updateMemoryMarker = { id, content: parts.slice(1).join('|||').trim() };
+        break;
       }
     }
-    cleanAnswer = cleanAnswer.slice(0, updateIndex).trimEnd();
   }
 
-  return { answer: cleanAnswer, issueProposal, commentProposal, infraVerdict, memoryMarker, updateMemoryMarker };
+  return { answer: prose, issueProposals, commentProposals, infraVerdict, memoryMarker, updateMemoryMarker };
 }

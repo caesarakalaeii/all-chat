@@ -17,7 +17,8 @@
  */
 
 /**
- * FaqSection — the visible landing-page FAQ. Renders the shared `FAQ_ITEMS` as a
+ * FaqSection — the visible landing-page FAQ. Renders the shared
+ * `FAQ_MESSAGE_STEMS` as a
  * collapsed <details>/<summary> accordion to keep the page compact; the matching
  * FAQPage JSON-LD is emitted from the home route (`app/page.tsx`).
  *
@@ -26,23 +27,27 @@
  * Google requires is unaffected.
  */
 import { ChevronDown } from 'lucide-react'
-import { FAQ_ITEMS } from '@/lib/faq'
+import { FAQ_MESSAGE_STEMS } from '@/lib/faq'
+import { getTranslations } from '@/lib/i18n'
 
 export function FaqSection() {
+  const t = getTranslations()
   return (
     <section className="mx-auto max-w-3xl px-4 py-16">
-      <h2 className="mb-8 text-center text-2xl font-bold text-text">Frequently asked questions</h2>
+      <h2 className="mb-8 text-center text-2xl font-bold text-text">
+        {t('marketing.faq.heading')}
+      </h2>
       <div className="space-y-3">
-        {FAQ_ITEMS.map((item) => (
-          <details key={item.question} className="group rounded-xl border border-border bg-surface">
+        {FAQ_MESSAGE_STEMS.map((stem) => (
+          <details key={stem} className="group rounded-xl border border-border bg-surface">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-5 font-semibold text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none [&::-webkit-details-marker]:hidden">
-              {item.question}
+              {t(`marketing.faq.${stem}Question`)}
               <ChevronDown
                 className="h-4 w-4 shrink-0 text-text-sub transition-transform group-open:rotate-180"
                 aria-hidden="true"
               />
             </summary>
-            <p className="px-5 pb-5 text-sm text-text-sub">{item.answer}</p>
+            <p className="px-5 pb-5 text-sm text-text-sub">{t(`marketing.faq.${stem}Answer`)}</p>
           </details>
         ))}
       </div>

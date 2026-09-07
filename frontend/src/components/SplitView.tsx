@@ -19,8 +19,10 @@
  */
 
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { useRef, useState, useCallback } from 'react'
 import { PreviewBackdropPicker } from '@/components/editor/PreviewBackdropPicker'
+import { useTranslations } from '@/lib/i18n'
 
 const MIN_LEFT = 25
 const MAX_LEFT = 70
@@ -44,9 +46,6 @@ const BUTTON_STEP = 10
 const KEY_STEP = 5
 
 /** 24px (WCAG 2.5.8) chevron buttons floating on the divider (mirrors ResizableSplit). */
-const STEP_BUTTON_CLASS =
-  'flex h-6 w-6 items-center justify-center rounded-md border border-border bg-surface text-text-sub shadow-sm hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none'
-
 const clampLeft = (pct: number) => Math.min(MAX_LEFT, Math.max(MIN_LEFT, pct))
 
 export function SplitView({
@@ -58,6 +57,7 @@ export function SplitView({
   children: React.ReactNode
   onIframeReady?: (iframe: HTMLIFrameElement) => void
 }) {
+  const t = useTranslations()
   const containerRef = useRef<HTMLDivElement>(null)
   const [leftPct, setLeftPct] = useState(40)
   const isDragging = useRef(false)
@@ -127,7 +127,7 @@ export function SplitView({
       <div className="relative hidden w-1 flex-shrink-0 md:block">
         <div
           role="slider"
-          aria-label="Resize panels"
+          aria-label={t('common.splitPane.resizeLabel')}
           aria-orientation="horizontal"
           aria-valuemin={MIN_LEFT}
           aria-valuemax={MAX_LEFT}
@@ -144,22 +144,24 @@ export function SplitView({
             2.5.7) — each click moves the split by 10%. Siblings of the slider
             (not children) because role=slider makes descendants presentational. */}
         <div className="absolute top-1/2 left-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 flex-col gap-1">
-          <button
+          <Button
             type="button"
-            aria-label="Shrink config panel"
+            aria-label={t('common.splitPane.shrinkConfigLabel')}
             onClick={() => stepBy(-BUTTON_STEP)}
-            className={STEP_BUTTON_CLASS}
+            variant="outline"
+            size="icon-xs"
           >
             <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            aria-label="Grow config panel"
+            aria-label={t('common.splitPane.growConfigLabel')}
             onClick={() => stepBy(BUTTON_STEP)}
-            className={STEP_BUTTON_CLASS}
+            variant="outline"
+            size="icon-xs"
           >
             <ChevronRight className="h-4 w-4" aria-hidden="true" />
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -182,7 +184,7 @@ export function SplitView({
           )}
           src={`/overlays/${overlayId}/preview/embed`}
           className="h-full w-full border-0"
-          title="Overlay live preview"
+          title={t('common.splitPane.previewTitle')}
           sandbox="allow-scripts allow-same-origin"
         />
       </div>

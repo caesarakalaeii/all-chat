@@ -212,8 +212,6 @@ func TestPatchCosmetics_InvalidViewerIDFormat(t *testing.T) {
 	}
 }
 
-// Phase 29: gradient tests
-
 func TestPatchCosmetics_GradientAccepted(t *testing.T) {
 	viewerID := uuid.New()
 	router, mock := setupCosmeticsTestWithPremium(t, viewerID.String(), "twitch", "12345", true)
@@ -277,8 +275,6 @@ func TestPatchCosmetics_MutualExclusion(t *testing.T) {
 		t.Errorf("response name_color should be null when gradient is set, got %v", resp["name_color"])
 	}
 }
-
-// Phase 30: avatar frame / flair tests
 
 func TestPatchCosmetics_AvatarFrameID_PremiumAccepted(t *testing.T) {
 	viewerID := uuid.New()

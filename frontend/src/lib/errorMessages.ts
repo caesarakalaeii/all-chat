@@ -19,10 +19,15 @@
 /**
  * Error Message Catalog
  *
- * Centralized user-friendly messages and actionable guidance for each error type.
- * Designed for easy internationalization in the future.
+ * Centralized user-friendly messages and actionable guidance for each error
+ * type. The copy itself lives in the i18n catalog under `errors.*` (#799); this
+ * module keeps its Record shape and its two accessors because errorParser.ts
+ * calls them from ten places, and issue #799 requires those call sites not to
+ * change. See src/lib/__tests__/errorMessages.test.ts, which is the guard on
+ * that surface.
  */
 
+import { getTranslations } from './i18n'
 import { ChatErrorType } from './types/errors'
 
 export interface ErrorMessageTemplate {
@@ -31,101 +36,54 @@ export interface ErrorMessageTemplate {
   actionableSteps: string[]
 }
 
+const t = getTranslations()
+
+/**
+ * Error type to its `errors.*` namespace, and how many numbered step keys that
+ * namespace has. PLATFORM_API_ERROR is the only one with four.
+ *
+ * `as const satisfies` rather than a plain annotation: an annotation widens the
+ * namespaces to string, and a typo would then resolve to a missing key at
+ * runtime instead of failing tsc where the key is built.
+ */
+const ERROR_NAMESPACES = {
+  [ChatErrorType.UNAUTHORIZED]: { namespace: 'unauthorized', steps: 3 },
+  [ChatErrorType.TOKEN_EXPIRED]: { namespace: 'tokenExpired', steps: 3 },
+  [ChatErrorType.RATE_LIMITED]: { namespace: 'rateLimited', steps: 3 },
+  [ChatErrorType.BANNED]: { namespace: 'banned', steps: 3 },
+  [ChatErrorType.STREAMER_OFFLINE]: { namespace: 'streamerOffline', steps: 3 },
+  [ChatErrorType.PLATFORM_API_ERROR]: { namespace: 'platformApiError', steps: 4 },
+  [ChatErrorType.NETWORK_ERROR]: { namespace: 'networkError', steps: 3 },
+  [ChatErrorType.VALIDATION_ERROR]: { namespace: 'validationError', steps: 3 },
+  [ChatErrorType.UNKNOWN_ERROR]: { namespace: 'unknownError', steps: 3 },
+} as const satisfies Record<ChatErrorType, { namespace: string; steps: 3 | 4 }>
+
+function resolveTemplate(errorType: ChatErrorType): ErrorMessageTemplate {
+  const { namespace, steps } = ERROR_NAMESPACES[errorType]
+  // Each step is resolved on its own so word order stays the catalog's
+  // business; joining them here would be the fragment concatenation
+  // docs/frontend/I18N.md forbids.
+  const actionableSteps = [
+    t(`errors.${namespace}.step1`),
+    t(`errors.${namespace}.step2`),
+    t(`errors.${namespace}.step3`),
+  ]
+  if (steps === 4) {
+    actionableSteps.push(t(`errors.${namespace}.step4`))
+  }
+  return {
+    title: t(`errors.${namespace}.title`),
+    message: t(`errors.${namespace}.message`),
+    actionableSteps,
+  }
+}
+
 /**
  * Error message templates for each error type
  */
-export const ERROR_MESSAGES: Record<ChatErrorType, ErrorMessageTemplate> = {
-  [ChatErrorType.UNAUTHORIZED]: {
-    title: 'Authentication Required',
-    message: 'You need to sign in to send messages.',
-    actionableSteps: [
-      'Click the "Sign in with {platform}" button',
-      'Authorize the application to send messages on your behalf',
-      'Try sending your message again',
-    ],
-  },
-
-  [ChatErrorType.TOKEN_EXPIRED]: {
-    title: 'Session Expired',
-    message: 'Your authentication session has expired.',
-    actionableSteps: [
-      'Sign in again to refresh your session',
-      'Make sure to authorize the application',
-      'Try sending your message again',
-    ],
-  },
-
-  [ChatErrorType.RATE_LIMITED]: {
-    title: 'Rate Limit Reached',
-    message: "You're sending messages too quickly. Please slow down.",
-    actionableSteps: [
-      'Wait a moment before sending another message',
-      'Avoid sending messages in rapid succession',
-      'The rate limit will reset automatically',
-    ],
-  },
-
-  [ChatErrorType.BANNED]: {
-    title: 'Unable to Send Messages',
-    message: 'You are currently banned from sending messages.',
-    actionableSteps: [
-      'Check the reason for the ban below',
-      'Contact the streamer or moderators if you believe this is an error',
-      "Wait for the ban to expire if it's temporary",
-    ],
-  },
-
-  [ChatErrorType.STREAMER_OFFLINE]: {
-    title: 'Stream Not Live',
-    message: 'This streamer is not currently live.',
-    actionableSteps: [
-      'Check if the stream has ended or not started yet',
-      'Try refreshing the page to update the stream status',
-      'You can only send messages when the stream is live',
-    ],
-  },
-
-  [ChatErrorType.PLATFORM_API_ERROR]: {
-    title: 'Platform Error',
-    message: 'The streaming platform encountered an error.',
-    actionableSteps: [
-      'This is likely a temporary issue with the platform',
-      'Wait a moment and try again',
-      'Check if the platform is experiencing outages',
-      'Try sending your message again in a few moments',
-    ],
-  },
-
-  [ChatErrorType.NETWORK_ERROR]: {
-    title: 'Connection Error',
-    message: 'Failed to connect to the server.',
-    actionableSteps: [
-      'Check your internet connection',
-      'Try refreshing the page',
-      'If the problem persists, the server may be experiencing issues',
-    ],
-  },
-
-  [ChatErrorType.VALIDATION_ERROR]: {
-    title: 'Invalid Message',
-    message: 'Your message did not meet the requirements.',
-    actionableSteps: [
-      'Check that your message is not empty',
-      'Make sure your message is not too long',
-      'Avoid using prohibited characters or content',
-    ],
-  },
-
-  [ChatErrorType.UNKNOWN_ERROR]: {
-    title: 'Unexpected Error',
-    message: 'An unexpected error occurred while sending your message.',
-    actionableSteps: [
-      'Try sending your message again',
-      'Refresh the page if the problem persists',
-      'Contact support if this error continues',
-    ],
-  },
-}
+export const ERROR_MESSAGES: Record<ChatErrorType, ErrorMessageTemplate> = Object.fromEntries(
+  Object.values(ChatErrorType).map((errorType) => [errorType, resolveTemplate(errorType)])
+) as Record<ChatErrorType, ErrorMessageTemplate>
 
 /**
  * Get error message template for a specific error type

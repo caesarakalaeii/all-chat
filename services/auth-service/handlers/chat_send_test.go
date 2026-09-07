@@ -454,21 +454,16 @@ func TestGetYouTubeLiveChatIDFromVideoID_Success(t *testing.T) {
 		httpClient:    ts.Client(),
 	}
 
-	// Monkey-patch: we need to override the URL. Since we can't easily do that
-	// with the current code structure, we'll test the method indirectly via
-	// getYouTubeLiveChatIDWithVideoID which respects the strategy order.
-	// For a direct test, we need a test server. Let's test the orchestrator instead.
-
-	// Test that video ID strategy is tried when Redis has no state
+	// The server above is never reached: getYouTubeLiveChatIDFromVideoID formats
+	// an absolute googleapis.com URL, so overriding httpClient cannot redirect it
+	// at a test server. Until that URL is injectable, the only leg of the
+	// strategy order this can assert is that Redis is consulted first.
 	mr := miniredis.RunT(t)
 	rc := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	defer rc.Close()
 
 	handler.redisClient = rc
 
-	// Don't set any Redis state — Redis will return empty, triggering video ID path
-	// But we can't easily intercept the real YouTube API call here.
-	// Instead, test the Redis->VideoID->API ordering by verifying Redis is checked first.
 	chatID, err := handler.getYouTubeLiveChatIDFromRedis(context.Background(), "UC_missing")
 	assert.NoError(t, err)
 	assert.Empty(t, chatID) // No Redis state → empty, would proceed to video ID
@@ -528,12 +523,9 @@ func TestGetYouTubeLiveChatIDWithVideoID_NoRedis_UsesVideoID(t *testing.T) {
 		httpClient:    ts.Client(),
 	}
 
-	// No Redis state set — will fall through to video ID strategy
-	// But the httpClient points to our test server, not googleapis.com
-	// We need to override the URL construction. Since we can't do that directly,
-	// let's verify the method signature and Redis priority work correctly.
-
-	// Verify Redis miss returns empty
+	// Same limitation as TestGetYouTubeLiveChatIDFromVideoID_Success: the video-ID
+	// leg formats an absolute googleapis.com URL, so the test server above cannot
+	// intercept it. Only the Redis miss is assertable here.
 	chatID, err := handler.getYouTubeLiveChatIDFromRedis(context.Background(), "UC_no_state")
 	assert.NoError(t, err)
 	assert.Empty(t, chatID)

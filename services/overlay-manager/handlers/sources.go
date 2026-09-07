@@ -251,7 +251,6 @@ func (h *SourcesHandler) delDiscordChannelRegistry(ctx context.Context, channelI
 // copyYouTubeTokenForChannel copies the admin's YouTube OAuth token to a new channel
 // This allows admins to add YouTube channels manually (by link) without OAuth flow
 func (h *SourcesHandler) copyYouTubeTokenForChannel(ctx context.Context, adminUserID, newChannelID string) error {
-	// Step 1: Find the best YouTube token for this admin.
 	// Prefer non-expired tokens first, but fall back to any token because the
 	// youtube-listener will use the refresh_token to get a fresh access_token on
 	// first use. Excluding expired tokens here prevents copy when the access_token
@@ -285,7 +284,6 @@ func (h *SourcesHandler) copyYouTubeTokenForChannel(ctx context.Context, adminUs
 		return fmt.Errorf("admin has no YouTube OAuth token - please authorize YouTube first: %w", err)
 	}
 
-	// Step 2: Copy token to new channel_id (insert or update)
 	insertQuery := `
 		INSERT INTO youtube_oauth_tokens (
 			user_id, channel_id, access_token, refresh_token,
@@ -327,7 +325,6 @@ func (h *SourcesHandler) copyYouTubeTokenForChannel(ctx context.Context, adminUs
 // If a cipher is configured, the access_token is encrypted before write and
 // encryption_version=1 is stored; otherwise plaintext is written with encryption_version=0.
 func (h *SourcesHandler) copyKickTokenForChannel(ctx context.Context, adminUserID, newChannelID string) error {
-	// Step 1: Find the best Kick token for this admin.
 	// Prefer non-expired tokens first, but fall back to any token because the
 	// kick-listener will use the refresh_token to get a fresh access_token on
 	// first use. Excluding expired tokens here prevents copy when the access_token
@@ -383,7 +380,6 @@ func (h *SourcesHandler) copyKickTokenForChannel(ctx context.Context, adminUserI
 		encryptionVersion = 1
 	}
 
-	// Step 2: Copy token to new channel_id (insert or update)
 	insertQuery := `
 		INSERT INTO kick_oauth_tokens (
 			user_id, channel_id, access_token, refresh_token,
@@ -454,7 +450,63 @@ func (h *SourcesHandler) HandleListSources(c *gin.Context) {
 		sources = []*models.ChatSource{}
 	}
 
+	h.annotateParkedDiscovery(c.Request.Context(), sources)
+
 	c.JSON(http.StatusOK, sources)
+}
+
+// platformStatusSnapshotKey is where a listener stores a channel's last-known connection
+// status. Pinned here rather than imported: overlay-manager does not depend on the
+// listener modules, and each listener owns its own copy of the status package.
+// Producer: snapshotKey in services/youtube-listener-innertube/status/publisher.go.
+func platformStatusSnapshotKey(platform, channelID string) string {
+	return fmt.Sprintf("platform:status:%s:%s", platform, channelID)
+}
+
+// platformStatusSnapshot is the subset of a stored status message this handler reads.
+type platformStatusSnapshot struct {
+	Status string `json:"status"`
+}
+
+// annotateParkedDiscovery fills in DiscoveryStatus for every source whose last-known
+// status snapshot says its discovery is parked. Only "paused" is propagated: it is the
+// one state the streamer has to act on (chat monitor → Rediscover), and the ordinary
+// connected/offline lifecycle would be dashboard noise.
+//
+// Every failure leaves the field empty and the request succeeds. The sources come from
+// Postgres and are useful on their own, while Redis is HA behind Sentinel and can refuse
+// reads under node loss — losing the annotation is much cheaper than losing the list.
+func (h *SourcesHandler) annotateParkedDiscovery(ctx context.Context, sources []*models.ChatSource) {
+	if h.redis == nil || len(sources) == 0 {
+		return
+	}
+
+	keys := make([]string, len(sources))
+	for i, source := range sources {
+		keys[i] = platformStatusSnapshotKey(source.Platform, source.ChannelID)
+	}
+
+	snapshots, err := h.redis.MGet(ctx, keys...).Result()
+	if err != nil {
+		h.logger.Warn("Failed to read platform status snapshots", zap.Error(err))
+		return
+	}
+
+	for i, raw := range snapshots {
+		value, ok := raw.(string)
+		if !ok {
+			continue // no snapshot for this channel: state unknown, leave it omitted
+		}
+		var snapshot platformStatusSnapshot
+		if err := json.Unmarshal([]byte(value), &snapshot); err != nil {
+			h.logger.Warn("Failed to parse platform status snapshot",
+				zap.String("key", keys[i]), zap.Error(err))
+			continue
+		}
+		if snapshot.Status == "paused" {
+			sources[i].DiscoveryStatus = snapshot.Status
+		}
+	}
 }
 
 // HandleAddSource handles POST /:id/sources

@@ -17,6 +17,7 @@
  */
 
 import Image from 'next/image'
+import { Button } from '@/components/ui/button'
 import clsx from 'clsx'
 
 import { AllChatBadge } from '@/components/AllChatBadge'
@@ -24,11 +25,13 @@ import { PremiumBadge } from '@/components/PremiumBadge'
 import { UserAvatar } from '@/components/UserAvatar'
 import { MessageAttachments } from '@/components/overlay/MessageAttachments'
 import { PlatformGlyph, PlatformGlyphs } from '@/components/overlay/PlatformGlyph'
+import { SharedChatOrigin } from '@/components/overlay/SharedChatOrigin'
 import {
   ModerationControls,
   type ModerationControlsProps,
 } from '@/components/overlay/ModerationControls'
 import { DEFAULT_VIEW_PREFS, type MonitorViewPrefs } from '@/app/overlay/[id]/view/viewPrefs'
+import { TIME_ONLY, formatDateTime } from '@/lib/i18n'
 import { renderMessageContent } from '@/lib/renderMessage'
 import type { SourceCapability } from '@/lib/types/moderation'
 import { buildGradientCSS } from '@/lib/utils/gradient'
@@ -77,7 +80,7 @@ export function ChatRow({
 }) {
   const mod = item._moderated
   const displayName = item.user?.display_name || item.user?.username
-  const time = new Date(item.timestamp).toLocaleTimeString()
+  const time = formatDateTime(new Date(item.timestamp), TIME_ONLY)
   const isShared = item.metadata?.is_shared_chat === true
   // Gradient names render with a transparent text color, so a hover underline
   // alone would be invisible on them — the opacity dip covers that case.
@@ -159,14 +162,19 @@ export function ChatRow({
             ) : null
           )}
         {onUserClick && item.user ? (
-          <button
+          <Button
             type="button"
             onClick={() => onUserClick(item)}
             title={`Show only messages from ${displayName}`}
-            className="cursor-pointer rounded-sm align-baseline hover:underline hover:opacity-75 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+            variant="link"
+            size="xs"
+            // Inline text inside a chat line, not a control with chrome: the
+            // height, padding and text colour all have to come off so the name
+            // keeps the user's own colour and sits on the surrounding baseline.
+            className="h-auto p-0 align-baseline text-inherit hover:opacity-75"
           >
             {nameEl}
-          </button>
+          </Button>
         ) : (
           nameEl
         )}
@@ -176,9 +184,10 @@ export function ChatRow({
           </span>
         )}
         {isShared && (
-          <span className="ml-1 rounded bg-twitch/20 px-1 text-[10px] font-medium text-twitch uppercase">
-            shared
-          </span>
+          <SharedChatOrigin
+            avatarUrl={item.metadata?.source_avatar_url}
+            displayName={item.metadata?.source_display_name}
+          />
         )}
         <span className="text-text-dim">: </span>
         <span className={clsx('text-text', mod && 'line-through')}>

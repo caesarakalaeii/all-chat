@@ -121,16 +121,16 @@ describe('Settings → API tokens page', () => {
 
     await submitCreateForm()
 
-    // 1. The plaintext is shown exactly once, right after creation.
+    // The plaintext is shown exactly once, right after creation.
     const reveal = await screen.findByTestId('minted-token-value')
     expect(reveal).toHaveTextContent(PLAINTEXT)
     expect(screen.getAllByText(PLAINTEXT)).toHaveLength(1)
 
-    // 2. …with the "you will not see this again" warning beside it.
+    // …with the "you will not see this again" warning beside it.
     expect(screen.getByText(/only time/i)).toBeInTheDocument()
 
-    // 3. Nothing wrote the token to localStorage. Storage.prototype.setItem
-    //    covers localStorage AND sessionStorage, so this catches either.
+    // Nothing wrote the token to localStorage. Storage.prototype.setItem
+    // covers localStorage AND sessionStorage, so this catches either.
     for (const call of localSet.mock.calls) {
       expect(String(call[1])).not.toContain(PLAINTEXT)
       expect(String(call[0])).not.toContain(PLAINTEXT)
@@ -139,19 +139,19 @@ describe('Settings → API tokens page', () => {
       expect(String(call[1])).not.toContain(PLAINTEXT)
     }
 
-    // 4. …and, belt and braces, the stores are actually empty of it.
+    // …and, belt and braces, the stores are actually empty of it.
     expect(JSON.stringify(window.localStorage)).not.toContain(PLAINTEXT)
     expect(JSON.stringify(window.sessionStorage)).not.toContain(PLAINTEXT)
     expect(window.localStorage.getItem('allchat_pat')).toBeNull()
 
-    // 5. Not in the URL (path, query or hash) and not in a cookie either.
+    // Not in the URL (path, query or hash) and not in a cookie either.
     expect(window.location.href).not.toContain(PLAINTEXT)
     expect(window.location.search).not.toContain(PLAINTEXT)
     expect(window.location.hash).not.toContain(PLAINTEXT)
     expect(document.cookie).toBe(cookieBefore)
     expect(document.cookie).not.toContain(PLAINTEXT)
 
-    // 6. Dismissing the reveal discards the only copy that existed.
+    // Dismissing the reveal discards the only copy that existed.
     fireEvent.click(screen.getByRole('button', { name: /saved it/i }))
     await waitFor(() => expect(screen.queryByTestId('minted-token-value')).not.toBeInTheDocument())
     expect(screen.queryByText(PLAINTEXT)).not.toBeInTheDocument()

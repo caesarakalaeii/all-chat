@@ -19,10 +19,16 @@
  */
 
 import { InfinityLogo } from '@/components/InfinityLogo'
+import { useTranslations } from '@/lib/i18n'
 
 export function AllChatBadge({ size = 18, title }: { size?: number; title?: string }) {
+  const t = useTranslations()
   return (
-    <span title={title} aria-label="All-Chat badge" className="inline-flex shrink-0 items-center">
+    <span
+      title={title}
+      aria-label={t('common.badges.allChatLabel')}
+      className="inline-flex shrink-0 items-center"
+    >
       <InfinityLogo size={size} />
     </span>
   )

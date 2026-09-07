@@ -19,6 +19,7 @@
 import Link from 'next/link'
 import { AppNav } from '@/components/AppNav'
 import { LegalThemeToggle } from '@/components/legal/LegalThemeToggle'
+import { getTranslations } from '@/lib/i18n'
 
 interface LegalLayoutProps {
   title: string
@@ -27,6 +28,8 @@ interface LegalLayoutProps {
 }
 
 export default function LegalLayout({ title, lastUpdated, children }: LegalLayoutProps) {
+  // getTranslations, not the hook: the legal routes are Server Components.
+  const t = getTranslations()
   return (
     <div id="legal-wrapper" className="min-h-screen bg-bg transition-colors duration-300">
       <AppNav />
@@ -35,10 +38,12 @@ export default function LegalLayout({ title, lastUpdated, children }: LegalLayou
           <div className="mb-8 flex items-start justify-between">
             <div className="space-y-2">
               <p className="text-xs font-semibold tracking-[0.2em] text-twitch uppercase">
-                All-Chat Legal
+                {t('legal.layout.eyebrow')}
               </p>
               <h1 className="text-3xl font-bold text-text">{title}</h1>
-              <p className="text-sm text-text-dim">Last updated: {lastUpdated}</p>
+              <p className="text-sm text-text-dim">
+                {t('legal.layout.lastUpdated', { date: lastUpdated })}
+              </p>
             </div>
             <LegalThemeToggle />
           </div>
@@ -46,19 +51,19 @@ export default function LegalLayout({ title, lastUpdated, children }: LegalLayou
           <div className="legal-prose space-y-10 leading-relaxed text-text-sub">{children}</div>
 
           <div className="mt-12 flex flex-col gap-3 border-t border-border pt-6 text-sm text-text-dim sm:flex-row sm:items-center sm:justify-between">
-            <span>&copy; {new Date().getFullYear()} All-Chat</span>
+            <span>{t('legal.layout.copyright', { year: new Date().getFullYear() })}</span>
             <div className="flex flex-wrap items-center gap-4">
               <Link href="/" className="transition-colors hover:text-text">
-                Home
+                {t('legal.layout.homeLink')}
               </Link>
               <Link href="/legal/privacy" className="transition-colors hover:text-text">
-                Privacy Policy
+                {t('legal.layout.privacyLink')}
               </Link>
               <Link href="/legal/terms" className="transition-colors hover:text-text">
-                Terms of Service
+                {t('legal.layout.termsLink')}
               </Link>
               <Link href="/legal/impressum" className="transition-colors hover:text-text">
-                Impressum
+                {t('legal.layout.impressumLink')}
               </Link>
             </div>
           </div>

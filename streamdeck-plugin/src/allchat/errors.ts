@@ -24,7 +24,7 @@
  * token", the other says "this is premium", and swapping them costs money.
  */
 
-import { UPGRADE_URL, ACCOUNT_TOKENS_URL } from "./settings.js";
+import { UPGRADE_URL, ACCOUNT_TOKENS_URL, DEFAULT_BASE_URL } from "./settings.js";
 
 /** Discriminator for the states a caller may want to react to differently. */
 export type AllChatErrorKind =
@@ -109,6 +109,71 @@ export function missingTokenMessage(): string {
 		`On a second machine or a headless host, paste a personal access token from ` +
 		`${ACCOUNT_TOKENS_URL} instead.`
 	);
+}
+
+/**
+ * The message the property inspector shows when a link attempt fails.
+ *
+ * The Link button used to render `error.message` verbatim. Most of those strings are
+ * built for the plugin log, not for a streamer looking at a settings panel: they carry a
+ * URL, an errno, an HTTP status and sometimes a server-supplied string. The worst case
+ * was a raw JavaScript error message for anything that was not an AllChatError at all.
+ *
+ * This translates only the messages that leak detail, and deliberately passes the others
+ * through — several of them are already good user-facing copy ("The pairing code expired
+ * before it was approved. Start linking again.") and replacing them with something
+ * generic would be a downgrade. The rule is: an authored message with no status attached
+ * is copy and survives; anything carrying transport or HTTP detail gets replaced.
+ *
+ * The raw message is still logged by the caller, so nothing is lost for debugging.
+ *
+ * Mirrored by `link_failure_message` in the StreamController plugin's `errors.py` (this
+ * module's header carries the file-level sync pointer). ADR-0049 counts "what the button
+ * surfaces on failure" as part of the action contract, so the two plugins must not tell a
+ * user two different things about one failure.
+ */
+export function linkFailureMessage(error: unknown): string {
+    if (!(error instanceof AllChatError)) {
+        // A TypeError or similar: implementation detail with no user-actionable content.
+        return (
+            `Linking did not complete. Press "Link with All-Chat" to try again, or paste a ` +
+            `personal access token from ${ACCOUNT_TOKENS_URL} instead.`
+        );
+    }
+    switch (error.kind) {
+        case "network":
+            // Covers an unreachable host, DNS, TLS, a timeout and a loopback port that
+            // could not be bound. All of them carry an errno or a URL in the message.
+            return (
+                `Could not reach All-Chat. Check your internet connection and try again. If you ` +
+                `self-host, check the Server field in this key's settings.`
+            );
+        case "forbidden":
+            return (
+                `The approval could not be verified, so nothing was linked. Press "Link with ` +
+                `All-Chat" and approve the device again.`
+            );
+        case "unauthorized":
+            return unauthorizedMessage();
+        default:
+            break;
+    }
+    if (error.status !== undefined && error.status >= 500) {
+        return (
+            `All-Chat could not complete the link because the server returned an error (HTTP ` +
+            `${error.status}). That is a fault on the server, not on this machine: try again in ` +
+            `a few minutes, and report it if it keeps happening.`
+        );
+    }
+    if (error.status !== undefined) {
+        return (
+            `All-Chat refused the link (HTTP ${error.status}). Make sure you are signed in at ` +
+            `${DEFAULT_BASE_URL} as the account you want this key to control, then press "Link ` +
+            `with All-Chat" again.`
+        );
+    }
+    // No status: an authored message, e.g. the expired pairing code. Show it as written.
+    return error.message;
 }
 
 /** The message shown/logged when the configured string is not an All-Chat credential. */

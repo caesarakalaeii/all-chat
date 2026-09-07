@@ -262,8 +262,8 @@ func (m *MultiKeyEncryptor) EncryptString(plaintext string) (string, error) {
 // DecryptString auto-detects the ciphertext format and decrypts accordingly.
 //
 // Versioned path (D-01): tried first when both conditions hold:
-//  1. len(decoded) >= 1+12+16 (minimum valid versioned blob size)
-//  2. decoded[0] is a registered kid byte
+//   - len(decoded) >= 1+12+16 (minimum valid versioned blob size)
+//   - decoded[0] is a registered kid byte
 //
 // If AEAD authentication fails on the versioned path (e.g. false-positive kid byte —
 // a legacy blob whose first decoded byte coincidentally equals a registered kid;

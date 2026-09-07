@@ -39,51 +39,63 @@ import {
 import type { LucideIcon } from 'lucide-react'
 import { InfinityLogo } from '@/components/InfinityLogo'
 import { Dialog } from '@/components/ui/dialog'
+import { Button, buttonVariants } from '@/components/ui/button'
+import { useTranslations } from '@/lib/i18n'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { cn } from '@/lib/utils'
 
+/**
+ * A stem, not resolved copy: this table is module-scope data and so cannot call
+ * a hook. `admin.nav.<stem>Label` is rendered by every consumer;
+ * `admin.nav.<stem>Description` only by the dashboard home grid.
+ *
+ * The union is written out rather than left as `string` so a typo'd stem is a
+ * `tsc` error at the render site instead of a catalog key echoed at an admin.
+ */
+type DescribedStem =
+  'search' | 'users' | 'overlays' | 'sources' | 'viewers' | 'cosmetics' | 'features' | 'maintenance'
+
+// 'dashboard' is the only stem with no description: the dashboard home grid, the
+// sole surface that renders descriptions, is itself that page and omits its own
+// entry. Keeping it out of DescribedStem is what makes the grid's
+// `admin.nav.<stem>Description` lookup total, with no key that resolves to
+// nothing.
+type AdminLinkStem = 'dashboard' | DescribedStem
+
 export interface AdminLink {
   href: string
-  label: string
+  messageStem: AdminLinkStem
   icon: LucideIcon
   exact?: boolean
-  // Shown on the dashboard home nav grid (not the rail).
-  description?: string
+}
+
+/** An entry the dashboard home grid renders, so its description key exists. */
+export interface DescribedAdminLink extends AdminLink {
+  messageStem: DescribedStem
 }
 
 // Single source of truth for admin navigation, shared by the sidebar rail and
 // the dashboard home grid so the two can never drift apart.
 export const ADMIN_LINKS: AdminLink[] = [
-  { href: '/admin', label: 'Dashboard', icon: LayoutDashboard, exact: true },
-  {
-    href: '/admin/search',
-    label: 'Search',
-    icon: Search,
-    description: 'Find any user, overlay, source, or viewer',
-  },
-  { href: '/admin/users', label: 'Users', icon: Users, description: 'View and manage users' },
-  {
-    href: '/admin/overlays',
-    label: 'Overlays',
-    icon: LayoutGrid,
-    description: 'Overlays and their owners',
-  },
-  { href: '/admin/sources', label: 'Sources', icon: Radio, description: 'Every chat source' },
-  { href: '/admin/viewers', label: 'Viewers', icon: Eye, description: 'Viewer sessions and bans' },
-  {
-    href: '/admin/cosmetics',
-    label: 'Cosmetics',
-    icon: Sparkles,
-    description: 'Avatar frames and flairs',
-  },
-  { href: '/admin/features', label: 'Features', icon: Flag, description: 'Premium feature gates' },
-  {
-    href: '/admin/maintenance',
-    label: 'Maintenance',
-    icon: Wrench,
-    description: 'Maintenance mode and ops',
-  },
+  { href: '/admin', messageStem: 'dashboard', icon: LayoutDashboard, exact: true },
+  { href: '/admin/search', messageStem: 'search', icon: Search },
+  { href: '/admin/users', messageStem: 'users', icon: Users },
+  { href: '/admin/overlays', messageStem: 'overlays', icon: LayoutGrid },
+  { href: '/admin/sources', messageStem: 'sources', icon: Radio },
+  { href: '/admin/viewers', messageStem: 'viewers', icon: Eye },
+  { href: '/admin/cosmetics', messageStem: 'cosmetics', icon: Sparkles },
+  { href: '/admin/features', messageStem: 'features', icon: Flag },
+  { href: '/admin/maintenance', messageStem: 'maintenance', icon: Wrench },
 ]
+
+/**
+ * The rail entries that are not the dashboard itself, in rail order. The grid on
+ * /admin renders these; deriving it from ADMIN_LINKS rather than repeating the
+ * list is what stops the rail and the grid drifting.
+ */
+export const DESCRIBED_ADMIN_LINKS: DescribedAdminLink[] = ADMIN_LINKS.filter(
+  (link): link is DescribedAdminLink => link.messageStem !== 'dashboard'
+)
 
 function isActive(pathname: string | null, href: string, exact?: boolean): boolean {
   if (!pathname) return false
@@ -92,6 +104,7 @@ function isActive(pathname: string | null, href: string, exact?: boolean): boole
 
 /** Shared list of navigation links, used by both the desktop rail and the mobile drawer. */
 function NavLinks({ pathname, onNavigate }: { pathname: string | null; onNavigate?: () => void }) {
+  const t = useTranslations()
   return (
     <nav className="flex flex-col gap-0.5">
       {ADMIN_LINKS.map((link) => {
@@ -112,7 +125,7 @@ function NavLinks({ pathname, onNavigate }: { pathname: string | null; onNavigat
             )}
           >
             <Icon className="size-4 shrink-0" aria-hidden="true" />
-            <span className="truncate">{link.label}</span>
+            <span className="truncate">{t(`admin.nav.${link.messageStem}Label`)}</span>
           </Link>
         )
       })}
@@ -122,6 +135,7 @@ function NavLinks({ pathname, onNavigate }: { pathname: string | null; onNavigat
 
 function SidebarFooter({ onNavigate }: { onNavigate?: () => void }) {
   const router = useRouter()
+  const t = useTranslations()
   const { logout } = useAuthStore()
 
   function handleLogout() {
@@ -132,27 +146,37 @@ function SidebarFooter({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <div className="flex flex-col gap-0.5 border-t border-border pt-3">
+      {/* Styled with buttonVariants rather than <Button> because this navigates:
+          it must stay an <a> for middle-click, copy-link and keyboard Enter.
+          Sharing the variant is what keeps it pixel-identical to the Log out
+          row directly below it. */}
       <Link
         href="/dashboard"
         onClick={onNavigate}
-        className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-text-sub transition-colors hover:bg-surface-2/60 hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+        className={cn(
+          buttonVariants({ variant: 'ghost', size: 'lg' }),
+          'w-full justify-start gap-3'
+        )}
       >
         <ArrowLeft className="size-4 shrink-0" aria-hidden="true" />
-        <span className="truncate">Back to app</span>
+        <span className="truncate">{t('admin.sidebar.backToApp')}</span>
       </Link>
-      <button
+      <Button
         type="button"
         onClick={handleLogout}
-        className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-text-sub transition-colors hover:bg-surface-2/60 hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+        variant="ghost"
+        size="lg"
+        className="w-full justify-start gap-3"
       >
         <LogOut className="size-4 shrink-0" aria-hidden="true" />
-        <span className="truncate">Log out</span>
-      </button>
+        <span className="truncate">{t('admin.sidebar.logOut')}</span>
+      </Button>
     </div>
   )
 }
 
 function SidebarBrand() {
+  const t = useTranslations()
   return (
     <Link
       href="/dashboard"
@@ -160,8 +184,10 @@ function SidebarBrand() {
     >
       <InfinityLogo size={28} />
       <span className="flex flex-col leading-tight">
-        <span className="text-base font-extrabold tracking-tight text-text">all-chat</span>
-        <span className="text-xs text-text-sub">Admin</span>
+        <span className="text-base font-extrabold tracking-tight text-text">
+          {t('common.brand.wordmark')}
+        </span>
+        <span className="text-xs text-text-sub">{t('admin.sidebar.brandSuffix')}</span>
       </span>
     </Link>
   )
@@ -169,6 +195,7 @@ function SidebarBrand() {
 
 export function AdminSidebar() {
   const pathname = usePathname()
+  const t = useTranslations()
   const [open, setOpen] = useState(false)
 
   // Close the mobile drawer whenever the route changes. Done during render via
@@ -206,15 +233,17 @@ export function AdminSidebar() {
 
       {/* Mobile top bar */}
       <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-border bg-nav-bg px-4 backdrop-blur-[20px] lg:hidden">
-        <button
+        <Button
           type="button"
           onClick={() => setOpen(true)}
-          aria-label="Open admin menu"
+          aria-label={t('admin.sidebar.openMenuLabel')}
           aria-expanded={open}
-          className="-ml-2 rounded-lg p-2 text-text-sub transition-colors hover:bg-surface-2 hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+          variant="ghost"
+          size="icon"
+          className="-ml-2"
         >
           <Menu className="size-5" aria-hidden="true" />
-        </button>
+        </Button>
         <SidebarBrand />
       </header>
 
@@ -222,13 +251,13 @@ export function AdminSidebar() {
       <Dialog.Root open={open} onOpenChange={setOpen}>
         <Dialog.Content
           showCloseButton={false}
-          aria-label="Admin menu"
+          aria-label={t('admin.sidebar.menuLabel')}
           className="top-0 left-0 flex h-full w-72 max-w-[85%] translate-x-0 translate-y-0 flex-col rounded-none border-0 border-r border-border bg-bg p-0 px-4 py-5 lg:hidden"
         >
           <div className="flex items-center justify-between">
             <SidebarBrand />
             <Dialog.Close
-              aria-label="Close admin menu"
+              aria-label={t('admin.sidebar.closeMenuLabel')}
               className="rounded-lg p-2 text-text-sub transition-colors hover:bg-surface-2 hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
             >
               <X className="size-5" aria-hidden="true" />

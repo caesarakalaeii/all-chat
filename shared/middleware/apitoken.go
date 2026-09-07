@@ -23,13 +23,13 @@ package middleware
 //
 // Two invariants hold this file together:
 //
-//  1. AUTHENTICATION ONLY. A resolved PAT populates exactly the same request context
+//   - AUTHENTICATION ONLY. A resolved PAT populates exactly the same request context
 //     identity a valid session JWT would (user_id, username, roles, …), so every
 //     downstream handler, ownership check and premium gate behaves identically. A PAT
 //     must never be an authorization bypass: scopes NARROW what a token may do and are
 //     enforced IN ADDITION to gates such as RequirePremium, never instead of them.
 //
-//  2. THE PLAINTEXT IS NEVER PERSISTED OR LOGGED. Only a SHA-256 digest reaches the
+//   - THE PLAINTEXT IS NEVER PERSISTED OR LOGGED. Only a SHA-256 digest reaches the
 //     database (api_tokens.token_hash BYTEA, migration 086 — the same convention as
 //     overlay_moderators.invite_token_hash from migration 080). Nothing in this package
 //     puts a token, or any prefix of one, into a log field.

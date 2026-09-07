@@ -293,11 +293,12 @@ func (c *SevenTVClient) FetchUserEmotes(ctx context.Context, platform, userID st
 // fetchEmotesForPlatform fetches 7TV emotes with platform awareness.
 // For Twitch, it fetches both channel-specific and global emotes.
 // For non-Twitch platforms, the lookup order is:
-//  1. If a twitchChannel hint is provided (from a sibling Twitch source on the same
-//     overlay), use it via the Twitch connection — best coverage when available.
-//  2. Otherwise try the platform's own 7TV connection (/v3/users/{platform}/{id}) —
-//     works for streamers who linked 7TV to YouTube or Kick directly.
-//  3. Otherwise return globals only.
+//   - If a twitchChannel hint is provided (from a sibling Twitch source on the
+//     same overlay), use it via the Twitch connection — best coverage when
+//     available.
+//   - Otherwise try the platform's own 7TV connection (/v3/users/{platform}/{id})
+//     — works for streamers who linked 7TV to YouTube or Kick directly.
+//   - Otherwise return globals only.
 func (c *SevenTVClient) fetchEmotesForPlatform(ctx context.Context, channel, platform, twitchChannel string) ([]models.Emote, error) {
 	if platform == "twitch" {
 		return c.FetchEmotes(ctx, channel)

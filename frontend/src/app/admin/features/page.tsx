@@ -39,6 +39,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { DialogRoot, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { toastManager } from '@/lib/toast'
+import { useTranslations } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 interface FeatureGate {
@@ -57,6 +58,7 @@ interface PendingToggle {
 
 export default function AdminFeaturesPage() {
   const router = useRouter()
+  const t = useTranslations()
   const { user } = useAuthStore()
 
   const [gates, setGates] = useState<FeatureGate[]>([])
@@ -76,13 +78,13 @@ export default function AdminFeaturesPage() {
         setGates(data)
         setError(null)
       } catch {
-        setError('Failed to load feature gates. Refresh the page to try again.')
+        setError(t('admin.features.loadError'))
       } finally {
         setLoading(false)
       }
     }
     fetchGates()
-  }, [user, router])
+  }, [user, router, t])
 
   const handleToggle = async () => {
     if (!confirm) return
@@ -110,7 +112,7 @@ export default function AdminFeaturesPage() {
       })
     } catch {
       toastManager.add({
-        title: `Failed to update ${key}. Please try again.`,
+        title: t('admin.features.updateFailed', { flag: key }),
         type: 'error',
       })
     } finally {
@@ -121,30 +123,30 @@ export default function AdminFeaturesPage() {
   const dialogText = (): { title: string; description: string; confirmLabel: string } => {
     if (!confirm) return { title: '', description: '', confirmLabel: '' }
     const { gate, dimension } = confirm
+    const feature = gate.feature_key
     if (dimension === 'premium') {
       return gate.is_premium
         ? {
-            title: `Make ${gate.feature_key} free for all users?`,
-            description:
-              'All authenticated users will gain access immediately. No code deploy required.',
-            confirmLabel: 'Make Free',
+            title: t('admin.features.makeFreeTitle', { feature }),
+            description: t('admin.features.makeFreeBody'),
+            confirmLabel: t('admin.features.makeFreeConfirm'),
           }
         : {
-            title: `Restrict ${gate.feature_key} to premium users?`,
-            description: 'Only users with premium access will be able to use this feature.',
-            confirmLabel: 'Make Premium',
+            title: t('admin.features.makePremiumTitle', { feature }),
+            description: t('admin.features.makePremiumBody'),
+            confirmLabel: t('admin.features.makePremiumConfirm'),
           }
     }
     return gate.early_access
       ? {
-          title: `Graduate ${gate.feature_key} from early access?`,
-          description: 'Beta-tester-only access is lifted; the feature defers to its premium gate.',
-          confirmLabel: 'Graduate',
+          title: t('admin.features.graduateTitle', { feature }),
+          description: t('admin.features.graduateBody'),
+          confirmLabel: t('admin.features.graduateConfirm'),
         }
       : {
-          title: `Restrict ${gate.feature_key} to beta testers?`,
-          description: 'Only beta testers will be able to use this early-access feature.',
-          confirmLabel: 'Make Early Access',
+          title: t('admin.features.makeEarlyAccessTitle', { feature }),
+          description: t('admin.features.makeEarlyAccessBody'),
+          confirmLabel: t('admin.features.makeEarlyAccessConfirm'),
         }
   }
 
@@ -154,11 +156,8 @@ export default function AdminFeaturesPage() {
     <div className="mx-auto max-w-3xl px-4 py-8">
       {/* Page header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-text">Features</h1>
-        <p className="mt-1 text-sm text-text-sub">
-          Manage capability-level gates. Premium controls paid access; early access restricts a
-          feature to beta testers. Both toggle without a code deploy.
-        </p>
+        <h1 className="text-2xl font-bold text-text">{t('admin.features.heading')}</h1>
+        <p className="mt-1 text-sm text-text-sub">{t('admin.features.intro')}</p>
       </div>
 
       {/* Gate list */}
@@ -174,16 +173,15 @@ export default function AdminFeaturesPage() {
         </Card>
       ) : gates.length === 0 ? (
         <Card className="p-6 text-center">
-          <p className="mb-1 text-base font-bold text-text">No feature gates configured</p>
-          <p className="text-sm text-text-sub">
-            Feature gates are added automatically when new features ship. Check back after the next
-            deployment.
-          </p>
+          <p className="mb-1 text-base font-bold text-text">{t('admin.features.emptyTitle')}</p>
+          <p className="text-sm text-text-sub">{t('admin.features.emptyBody')}</p>
         </Card>
       ) : (
         <Card className="overflow-hidden">
           <div className="border-b border-border px-4 py-3">
-            <h2 className="text-base font-bold text-text">Feature Gates ({gates.length})</h2>
+            <h2 className="text-base font-bold text-text">
+              {t('admin.features.listHeading', { count: gates.length })}
+            </h2>
           </div>
           <div className="divide-y divide-border">
             {gates.map((gate) => {
@@ -211,22 +209,26 @@ export default function AdminFeaturesPage() {
                       className={cn(
                         'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-bold',
                         gate.is_premium
-                          ? 'border-amber-500/20 bg-amber-500/10 text-amber-400'
+                          ? 'border-premium/20 bg-premium/10 text-premium'
                           : 'border-green-500/20 bg-green-500/10 text-green-400'
                       )}
                     >
-                      {gate.is_premium ? 'Premium only' : 'Free for all'}
+                      {gate.is_premium
+                        ? t('admin.features.badgePremiumOnly')
+                        : t('admin.features.badgeFreeForAll')}
                     </span>
                     <button
                       role="switch"
                       aria-checked={gate.is_premium}
-                      aria-label={`Toggle premium for ${gate.feature_key}`}
+                      aria-label={t('admin.features.togglePremiumLabel', {
+                        feature: gate.feature_key,
+                      })}
                       onClick={() => setConfirm({ gate, dimension: 'premium' })}
                       disabled={premiumBusy}
                       className={cn(
                         // eslint-disable-next-line tailwindcss/no-unnecessary-arbitrary-value -- the 28x52px track and its 44px tap target are fixed physical dimensions: 44px is the WCAG 2.5.8 minimum, and the knob inside travels a hard-coded translate-x-[26px]. h-7/min-h-11/w-13 are rem-relative, so at any non-default root font size the track would resize while the knob's travel would not, and the knob would stop short of or overshoot the far end
                         'relative inline-flex h-[28px] min-h-[44px] w-[52px] items-center rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none',
-                        gate.is_premium ? 'bg-amber-500/20' : 'bg-green-500/20',
+                        gate.is_premium ? 'bg-premium/20' : 'bg-green-500/20',
                         premiumBusy ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
                       )}
                     >
@@ -250,12 +252,16 @@ export default function AdminFeaturesPage() {
                           : 'border-border bg-badge-bg text-text-sub'
                       )}
                     >
-                      {gate.early_access ? 'Early access' : 'Standard'}
+                      {gate.early_access
+                        ? t('admin.features.badgeEarlyAccess')
+                        : t('admin.features.badgeStandard')}
                     </span>
                     <button
                       role="switch"
                       aria-checked={gate.early_access}
-                      aria-label={`Toggle early access for ${gate.feature_key}`}
+                      aria-label={t('admin.features.toggleEarlyAccessLabel', {
+                        feature: gate.feature_key,
+                      })}
                       onClick={() => setConfirm({ gate, dimension: 'early_access' })}
                       disabled={earlyAccessBusy}
                       className={cn(
@@ -288,7 +294,7 @@ export default function AdminFeaturesPage() {
           <DialogDescription>{text.description}</DialogDescription>
           <div className="mt-4 flex justify-end gap-3">
             <Button variant="outline" onClick={() => setConfirm(null)}>
-              No, keep as-is
+              {t('admin.features.dialogCancel')}
             </Button>
             <Button onClick={handleToggle}>{text.confirmLabel}</Button>
           </div>

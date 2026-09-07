@@ -210,10 +210,16 @@ confirmed as `FRONTEND_URL` in `deployments/k8s/base/configmap.yaml`).
 | Setting    | Meaning                                                         |
 | ---------- | --------------------------------------------------------------- |
 | `message`  | The text to send. Max 500 characters.                           |
-| `platform` | `all` (default), `twitch`, `youtube`, `kick` or `tiktok`.       |
+| `platform` | `all` (default), `twitch`, `youtube` or `kick`.                 |
 
 `all` fans the message out to every connected platform in one press — the reason
 the action exists. Free; needs `chat:write`.
+
+**TikTok and Discord are not send targets.** All-Chat reads their chat onto your
+overlay, but TikTok publishes no API for posting into a live chat and a Discord
+source is a one-way relay, so neither can be posted to and neither is included in
+`all`. A key still set to `tiktok` from an earlier version says so when pressed
+instead of failing silently.
 
 ### Poll control
 

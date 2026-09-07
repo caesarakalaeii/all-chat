@@ -214,7 +214,6 @@ func normalizeClearUUID(id *uuid.UUID) *uuid.UUID {
 // handlePatchCosmeticsLogic contains the core business logic for PATCH cosmetics.
 // Extracted to allow unit testing with a mock repository.
 func handlePatchCosmeticsLogic(c *gin.Context, repo cosmeticsUpsertRepo, logger *zap.Logger) {
-	// Step 1: Extract viewer_id from JWT claims (set by middleware)
 	viewerIDVal, exists := c.Get("viewer_id")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "viewer identity not established — please sign in again"})
@@ -227,14 +226,12 @@ func handlePatchCosmeticsLogic(c *gin.Context, repo cosmeticsUpsertRepo, logger 
 		return
 	}
 
-	// Step 2: Parse viewer_id string to uuid.UUID
 	viewerID, err := uuid.Parse(viewerIDStr)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "viewer identity not established — please sign in again"})
 		return
 	}
 
-	// Step 3: Parse request body using raw JSON to distinguish absent fields from null.
 	var raw patchCosmeticsRaw
 	if err := c.ShouldBindJSON(&raw); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
@@ -295,7 +292,6 @@ func handlePatchCosmeticsLogic(c *gin.Context, repo cosmeticsUpsertRepo, logger 
 		}
 	}
 
-	// Step 4: Validate name_color if non-null
 	if req.NameColor != nil {
 		if !hexColorRegex.MatchString(*req.NameColor) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "name_color must be a 7-character hex color (#rrggbb)"})
@@ -303,7 +299,6 @@ func handlePatchCosmeticsLogic(c *gin.Context, repo cosmeticsUpsertRepo, logger 
 		}
 	}
 
-	// Step 5: Validate gradient if present
 	var nameGradientBytes []byte
 	if req.NameGradient != nil {
 		g := req.NameGradient
@@ -397,7 +392,7 @@ func handlePatchCosmeticsLogic(c *gin.Context, repo cosmeticsUpsertRepo, logger 
 		avatarFlairID = normalizeClearUUID(req.AvatarFlairID)
 	}
 
-	// Step 6: Persist only the column groups the request actually addressed (PATCH is
+	// Persist only the column groups the request actually addressed (PATCH is
 	// a partial update) and report the persisted result. Writing untouched columns
 	// would clobber cosmetics the request never referenced:
 	//   - setName:  a name_color or name_gradient field was present (the two move
@@ -444,7 +439,7 @@ func handlePatchCosmeticsLogic(c *gin.Context, repo cosmeticsUpsertRepo, logger 
 		return
 	}
 
-	// Step 7: Report the actual persisted state returned by the upsert, so the
+	// Report the actual persisted state returned by the upsert, so the
 	// response never diverges from what was stored (untouched columns, or a zero-UUID
 	// normalized to NULL).
 	c.JSON(http.StatusOK, cosmeticsResponse(persisted))

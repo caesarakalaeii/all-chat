@@ -134,6 +134,63 @@ describe('ChatRow pref gating', () => {
   })
 })
 
+describe('ChatRow shared-chat origin', () => {
+  function sharedItem(metadata: Record<string, unknown>): ViewItem {
+    return { ...makeItem(), metadata: { is_shared_chat: true, ...metadata } }
+  }
+
+  it('renders the origin channel avatar when source_avatar_url is present', () => {
+    render(
+      <ChatRow
+        item={sharedItem({
+          source_avatar_url: 'https://cdn.example/origin.png',
+          source_display_name: 'OriginChan',
+        })}
+      />
+    )
+    const avatar = screen.getByRole('img', { name: 'OriginChan' })
+    expect(avatar).toHaveAttribute('title', 'OriginChan')
+    expect(screen.queryByText('shared')).not.toBeInTheDocument()
+  })
+
+  it('renders the text pill when source_avatar_url is absent', () => {
+    render(<ChatRow item={sharedItem({ source_display_name: 'OriginChan' })} />)
+    expect(screen.getByText('shared')).toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: 'OriginChan' })).not.toBeInTheDocument()
+  })
+
+  it('falls back to the text pill when the origin avatar fails to load', () => {
+    render(
+      <ChatRow
+        item={sharedItem({
+          source_avatar_url: 'https://cdn.example/dead.png',
+          source_display_name: 'OriginChan',
+        })}
+      />
+    )
+    fireEvent.error(screen.getByRole('img', { name: 'OriginChan' }))
+    expect(screen.getByText('shared')).toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: 'OriginChan' })).not.toBeInTheDocument()
+  })
+
+  it('renders neither avatar nor pill when is_shared_chat is false', () => {
+    render(
+      <ChatRow
+        item={{
+          ...makeItem(),
+          metadata: {
+            is_shared_chat: false,
+            source_avatar_url: 'https://cdn.example/origin.png',
+            source_display_name: 'OriginChan',
+          },
+        }}
+      />
+    )
+    expect(screen.queryByText('shared')).not.toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: 'OriginChan' })).not.toBeInTheDocument()
+  })
+})
+
 describe('ChatRow username click', () => {
   it('renders the username as a button and reports the clicked item', () => {
     const onUserClick = vi.fn()

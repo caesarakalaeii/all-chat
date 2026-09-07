@@ -21,23 +21,28 @@
 import { useState } from 'react'
 import clsx from 'clsx'
 import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { useTranslations, type MessageKey } from '@/lib/i18n'
 
 export const DAY_SECONDS = 86400
 // Mirrors the backend cap (~10 years) in share-service / auth-service.
 export const MAX_DAYS = 3650
 
 interface Preset {
-  label: string
+  labelKey: MessageKey
   seconds: number | null // null = permanent
 }
 
-const PRESETS: Preset[] = [
-  { label: 'Permanent', seconds: null },
-  { label: '1 day', seconds: 1 * DAY_SECONDS },
-  { label: '7 days', seconds: 7 * DAY_SECONDS },
-  { label: '30 days', seconds: 30 * DAY_SECONDS },
-  { label: '90 days', seconds: 90 * DAY_SECONDS },
-]
+// The preset chips. `as const satisfies` rather than an annotation: an
+// annotation widens labelKey to string, and a mistyped catalog key would then
+// resolve at runtime to a key that echoes itself instead of failing tsc.
+const PRESETS = [
+  { labelKey: 'admin.premiumDuration.presetPermanent', seconds: null },
+  { labelKey: 'admin.premiumDuration.preset1Day', seconds: 1 * DAY_SECONDS },
+  { labelKey: 'admin.premiumDuration.preset7Days', seconds: 7 * DAY_SECONDS },
+  { labelKey: 'admin.premiumDuration.preset30Days', seconds: 30 * DAY_SECONDS },
+  { labelKey: 'admin.premiumDuration.preset90Days', seconds: 90 * DAY_SECONDS },
+] as const satisfies readonly Preset[]
 
 function presetKey(seconds: number | null): string {
   return seconds === null ? 'permanent' : String(seconds)
@@ -73,10 +78,11 @@ export interface PremiumDurationChooserProps {
  * dialog that unmounts on close) to reset it.
  */
 export function PremiumDurationChooser({ onChange, disabled }: PremiumDurationChooserProps) {
+  const t = useTranslations()
   const [choice, setChoice] = useState<string>('permanent')
   const [customDays, setCustomDays] = useState('')
 
-  function selectPreset(preset: Preset) {
+  function selectPreset(preset: (typeof PRESETS)[number]) {
     setChoice(presetKey(preset.seconds))
     onChange(preset.seconds, true)
   }
@@ -88,37 +94,48 @@ export function PremiumDurationChooser({ onChange, disabled }: PremiumDurationCh
     onChange(seconds, valid)
   }
 
+  // Layout and focus come from <Button variant="outline" size="xs">; this only
+  // carries the selected/unselected colour.
+  //
+  // The amber is "premium" — the same amber the premium pill in
+  // settings/viewer uses — and it is a raw palette colour because the design
+  // system has no premium token yet (ADR-0056 left the 329 raw palette classes
+  // for a semantic pass). Kept literal rather than mapped onto `warning`, which
+  // means something else.
   const chipClass = (active: boolean) =>
     clsx(
-      'rounded border px-3 py-1 text-sm transition-colors',
       active
-        ? 'border-amber-400 bg-amber-400/10 text-amber-400'
-        : 'border-border text-text-sub hover:border-amber-500/40 hover:text-text'
+        ? 'border-premium bg-premium/10 text-premium'
+        : 'border-border text-text-sub hover:border-premium/40 hover:text-text'
     )
 
   return (
     <div className="mt-4">
-      <p className="mb-2 text-xs font-medium text-text-sub">Duration</p>
+      <p className="mb-2 text-xs font-medium text-text-sub">{t('admin.premiumDuration.label')}</p>
       <div className="flex flex-wrap gap-2">
         {PRESETS.map((preset) => (
-          <button
+          <Button
             key={presetKey(preset.seconds)}
             type="button"
             disabled={disabled}
             onClick={() => selectPreset(preset)}
+            variant="outline"
+            size="xs"
             className={chipClass(choice === presetKey(preset.seconds))}
           >
-            {preset.label}
-          </button>
+            {t(preset.labelKey)}
+          </Button>
         ))}
-        <button
+        <Button
           type="button"
           disabled={disabled}
           onClick={() => selectCustom(customDays)}
+          variant="outline"
+          size="xs"
           className={chipClass(choice === 'custom')}
         >
-          Custom
-        </button>
+          {t('admin.premiumDuration.presetCustom')}
+        </Button>
       </div>
       {choice === 'custom' && (
         <div className="mt-3 flex items-center gap-2">
@@ -129,12 +146,14 @@ export function PremiumDurationChooser({ onChange, disabled }: PremiumDurationCh
             size="sm"
             value={customDays}
             disabled={disabled}
-            placeholder="days"
-            aria-label="Custom duration in days"
+            placeholder={t('admin.premiumDuration.customPlaceholder')}
+            aria-label={t('admin.premiumDuration.customFieldLabel')}
             onChange={(e) => selectCustom(e.target.value)}
             className="w-24"
           />
-          <span className="text-xs text-text-dim">days (1&ndash;{MAX_DAYS})</span>
+          <span className="text-xs text-text-dim">
+            {t('admin.premiumDuration.customRange', { max: MAX_DAYS })}
+          </span>
         </div>
       )}
     </div>

@@ -26,7 +26,10 @@ import { SliderControl } from './SliderControl'
 import { PremiumBadge } from '@/components/PremiumBadge'
 import { PremiumUpsellLink } from '@/components/PremiumUpsellLink'
 import { AlertDialog } from '@/components/ui/alert-dialog'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 import { useBrowserVoices } from '@/lib/hooks/useBrowserVoices'
+import { formatNumber, useTranslations } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import type { DisplaySettings } from '@/lib/types/overlay'
 
@@ -85,14 +88,9 @@ export interface TTSGroupProps {
   onPreviewVoices?: (apiKey: string) => Promise<ElevenLabsVoice[]>
 }
 
-const ALL_PLATFORMS: readonly string[] = ['twitch', 'youtube', 'kick', 'tiktok', 'discord'] as const
-const PLATFORM_LABELS: Record<string, string> = {
-  twitch: 'Twitch',
-  youtube: 'YouTube',
-  kick: 'Kick',
-  tiktok: 'TikTok',
-  discord: 'Discord',
-}
+// The platform display names live in common.platforms.*, keyed by these same
+// identifiers, so the chip row looks each label up from the value it has.
+const ALL_PLATFORMS = ['twitch', 'youtube', 'kick', 'tiktok', 'discord'] as const
 
 interface SubHeaderProps {
   label: string
@@ -129,7 +127,7 @@ function NumberControl({
   return (
     <div className="flex items-center gap-2">
       <span className="w-40 shrink-0 text-sm text-text-sub">{label}</span>
-      <input
+      <Input
         type="number"
         aria-label={label}
         value={value}
@@ -140,7 +138,7 @@ function NumberControl({
           const parsed = parseFloat(e.target.value)
           if (Number.isFinite(parsed)) onChange(parsed)
         }}
-        className="w-24 rounded-lg border border-border bg-surface px-2 py-1 text-sm text-text"
+        className="w-24"
       />
       {unit && <span className="text-xs text-text-dim">{unit}</span>}
     </div>
@@ -153,6 +151,8 @@ interface PlatformChipRowProps {
 }
 
 function PlatformChipRow({ platforms, onToggle }: PlatformChipRowProps): React.ReactElement {
+  const t = useTranslations()
+
   return (
     <div className="flex flex-wrap gap-2">
       {ALL_PLATFORMS.map((p) => {
@@ -165,21 +165,17 @@ function PlatformChipRow({ platforms, onToggle }: PlatformChipRowProps): React.R
             className={
               active
                 ? 'rounded-full border border-twitch bg-twitch/15 px-3 py-1 text-xs text-text'
-                : 'bg-surface-alt rounded-full border border-border px-3 py-1 text-xs text-text-sub'
+                : 'rounded-full border border-border bg-surface-2 px-3 py-1 text-xs text-text-sub'
             }
             aria-pressed={active}
           >
-            {PLATFORM_LABELS[p] ?? p}
+            {t(`common.platforms.${p}`)}
           </button>
         )
       })}
     </div>
   )
 }
-
-// ==========================================================================
-// Advanced (ElevenLabs) sub-components — Plan 03
-// ==========================================================================
 
 interface ApiKeyInputProps {
   hasSavedKey: boolean
@@ -206,6 +202,7 @@ function ApiKeyInput({
   apiKey,
   onApiKeyChange,
 }: ApiKeyInputProps): React.ReactElement {
+  const t = useTranslations()
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [testing, setTesting] = useState(false)
@@ -226,11 +223,11 @@ function ApiKeyInput({
 
   async function handleSave(): Promise<void> {
     if (apiKey.trim() === '') {
-      setError('API key cannot be empty.')
+      setError(t('overlayEditor.tts.apiKeyEmptyError'))
       return
     }
     if (voiceId.trim() === '') {
-      setError('Pick a voice before saving.')
+      setError(t('overlayEditor.tts.pickVoiceError'))
       return
     }
     setSaving(true)
@@ -239,12 +236,12 @@ function ApiKeyInput({
       await onSave(apiKey, voiceId)
       // T-13-07 mitigation: clear key from state immediately after POST resolves.
       onApiKeyChange('')
-      toastManager.add({ title: 'API key saved.', type: 'success' })
+      toastManager.add({ title: t('overlayEditor.tts.apiKeySavedToast'), type: 'success' })
     } catch (e) {
-      setError('Could not save. Try again.')
+      setError(t('overlayEditor.tts.saveKeyError'))
       toastManager.add({
-        title: 'Could not save key',
-        description: e instanceof Error ? e.message : 'network error',
+        title: t('overlayEditor.tts.apiKeySaveFailedToast'),
+        description: e instanceof Error ? e.message : t('overlayEditor.tts.networkErrorDetail'),
         type: 'error',
       })
     } finally {
@@ -269,22 +266,28 @@ function ApiKeyInput({
         } else {
           switch (r.errorCode) {
             case 401:
-              toastManager.add({ title: 'Invalid API key', type: 'error' })
+              toastManager.add({ title: t('overlayEditor.tts.testInvalidKeyToast'), type: 'error' })
               break
             case 422:
-              toastManager.add({ title: 'Invalid API key', type: 'error' })
+              toastManager.add({ title: t('overlayEditor.tts.testInvalidKeyToast'), type: 'error' })
               break
             case 429:
-              toastManager.add({ title: 'Rate-limited — try again in a minute', type: 'error' })
+              toastManager.add({
+                title: t('overlayEditor.tts.testRateLimitedToast'),
+                type: 'error',
+              })
               break
             case 0:
               toastManager.add({
-                title: 'Could not reach ElevenLabs. Check your connection.',
+                title: t('overlayEditor.tts.testUnreachableToast'),
                 type: 'error',
               })
               break
             default:
-              toastManager.add({ title: 'ElevenLabs service unavailable', type: 'error' })
+              toastManager.add({
+                title: t('overlayEditor.tts.testUnavailableToast'),
+                type: 'error',
+              })
           }
         }
       }
@@ -310,10 +313,13 @@ function ApiKeyInput({
     setRemoving(true)
     try {
       await onRemove()
-      toastManager.add({ title: 'API key removed.', type: 'success' })
+      toastManager.add({ title: t('overlayEditor.tts.apiKeyRemovedToast'), type: 'success' })
       setQuota(null)
     } catch {
-      toastManager.add({ title: 'Could not remove key. Try again.', type: 'error' })
+      toastManager.add({
+        title: t('overlayEditor.tts.apiKeyRemoveFailedToast'),
+        type: 'error',
+      })
     } finally {
       setRemoving(false)
       setRemoveArmed(false)
@@ -328,35 +334,36 @@ function ApiKeyInput({
         <div>
           <p className="mb-1 text-xs text-text-dim">
             {isPremium ? (
-              'Your key is encrypted server-side and never returned.'
+              t('overlayEditor.tts.apiKeyEncrypted')
             ) : (
               <>
-                <PremiumUpsellLink /> to use ElevenLabs voices.
+                <PremiumUpsellLink /> {t('overlayEditor.tts.upsellSuffix')}
               </>
             )}
           </p>
           <div className="flex gap-2">
-            <input
+            <Input
               type="password"
               value={apiKey}
               onChange={(e) => onApiKeyChange(e.target.value)}
-              placeholder="sk-..."
+              placeholder={t('overlayEditor.tts.apiKeyPlaceholder')}
               autoComplete="off"
               spellCheck={false}
-              aria-label="ElevenLabs API key"
+              aria-label={t('overlayEditor.tts.apiKeyLabel')}
               disabled={disabled || saving}
-              className="flex-1 rounded-lg border border-border bg-surface px-3 py-1.5 font-mono text-sm text-text placeholder:text-text-dim disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex-1 font-mono"
             />
-            <button
+            <Button
               type="button"
               onClick={() => {
                 void handleSave()
               }}
               disabled={disabled || saving}
-              className="hover:bg-surface-alt rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text disabled:cursor-not-allowed disabled:opacity-50"
+              variant="outline"
+              size="sm"
             >
-              {saving ? 'Saving…' : 'Save key'}
-            </button>
+              {saving ? t('overlayEditor.tts.savingKey') : t('overlayEditor.tts.saveKey')}
+            </Button>
           </div>
           {error && (
             <p role="alert" className="mt-1 text-xs font-medium text-red-400">
@@ -368,44 +375,48 @@ function ApiKeyInput({
 
       {hasSavedKey && (
         <>
-          <p className="text-xs text-text-dim">
-            Key saved and encrypted. Click Test key to verify.
-          </p>
-          <button
+          <p className="text-xs text-text-dim">{t('overlayEditor.tts.keySaved')}</p>
+          <Button
             type="button"
             onClick={() => {
               void handleTest()
             }}
             disabled={disabled || testing}
-            className="hover:bg-surface-alt rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text disabled:cursor-not-allowed disabled:opacity-50"
+            variant="outline"
+            size="sm"
           >
-            {testing ? 'Testing…' : 'Test key'}
-          </button>
+            {testing ? t('overlayEditor.tts.testingKey') : t('overlayEditor.tts.testKey')}
+          </Button>
 
           {quota ? (
             <p className="text-xs text-text-dim">
-              {quota.remaining.toLocaleString()} / {quota.limit.toLocaleString()} characters this
-              month ({quotaPct}%)
+              {t('overlayEditor.tts.quota', {
+                remaining: formatNumber(quota.remaining),
+                limit: formatNumber(quota.limit),
+                percent: quotaPct ?? 0,
+              })}
             </p>
           ) : (
-            <p className="text-xs text-text-dim">Click Test key to see your remaining quota.</p>
+            <p className="text-xs text-text-dim">{t('overlayEditor.tts.quotaUnknown')}</p>
           )}
 
-          <button
+          {/* Two-state control: arming it switches the whole button to the
+              destructive variant rather than hand-painting red over an outline. */}
+          <Button
             type="button"
             onClick={() => {
               void handleRemoveClick()
             }}
             disabled={disabled || removing}
-            className={cn(
-              'hover:bg-surface-alt rounded-lg border px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-50',
-              removeArmed
-                ? 'border-red-500 bg-red-500/10 text-red-400'
-                : 'border-border bg-surface text-text-sub'
-            )}
+            variant={removeArmed ? 'destructive' : 'outline'}
+            size="sm"
           >
-            {removing ? 'Removing…' : removeArmed ? 'Confirm remove' : 'Remove key'}
-          </button>
+            {removing
+              ? t('overlayEditor.tts.removingKey')
+              : removeArmed
+                ? t('overlayEditor.tts.confirmRemoveKey')
+                : t('overlayEditor.tts.removeKey')}
+          </Button>
         </>
       )}
     </div>
@@ -419,6 +430,7 @@ interface ObsUrlPanelProps {
 }
 
 function ObsUrlPanel({ obsUrl, onCopy, onRegenerate }: ObsUrlPanelProps): React.ReactElement {
+  const t = useTranslations()
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [rotating, setRotating] = useState(false)
 
@@ -434,55 +446,55 @@ function ObsUrlPanel({ obsUrl, onCopy, onRegenerate }: ObsUrlPanelProps): React.
 
   return (
     <div className="space-y-2">
-      <p className="text-xs text-text-dim">
-        Paste this URL into OBS as your browser source to enable ElevenLabs TTS.
-      </p>
-      <input
+      <p className="text-xs text-text-dim">{t('overlayEditor.tts.obsUrlNote')}</p>
+      <Input
         type="text"
         readOnly
         value={obsUrl}
         onFocus={(e) => e.target.select()}
-        aria-label="OBS URL — copy and paste into OBS browser source"
-        className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text select-all"
+        aria-label={t('overlayEditor.tts.obsUrlLabel')}
+        className="select-all"
       />
       <div className="flex gap-2">
-        <button
+        <Button
           type="button"
           onClick={() => {
             void onCopy()
           }}
-          className="hover:bg-surface-alt rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text"
+          variant="outline"
+          size="sm"
         >
-          Copy OBS URL
-        </button>
-        <button
-          type="button"
-          onClick={() => setConfirmOpen(true)}
-          className="hover:bg-surface-alt rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text"
-        >
-          Regenerate URL
-        </button>
+          {t('overlayEditor.tts.copyObsUrl')}
+        </Button>
+        <Button type="button" onClick={() => setConfirmOpen(true)} variant="outline" size="sm">
+          {t('overlayEditor.tts.regenerateObsUrl')}
+        </Button>
       </div>
       <AlertDialog.Root open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialog.Content size="sm">
-          <AlertDialog.Title className="text-sm font-medium">Regenerate OBS URL?</AlertDialog.Title>
+          <AlertDialog.Title className="text-sm font-medium">
+            {t('overlayEditor.tts.regenerateConfirmTitle')}
+          </AlertDialog.Title>
           <AlertDialog.Description className="text-xs">
-            This invalidates the current OBS URL. You&apos;ll need to paste the new URL into OBS.
+            {t('overlayEditor.tts.regenerateConfirmBody')}
           </AlertDialog.Description>
           <div className="mt-4 flex justify-end gap-2">
-            <AlertDialog.Close className="hover:bg-surface-alt rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text-sub focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none">
-              Cancel
+            <AlertDialog.Close render={<Button variant="outline" size="sm" />}>
+              {t('overlayEditor.tts.cancel')}
             </AlertDialog.Close>
-            <button
+            <Button
               type="button"
               onClick={() => {
                 void handleConfirm()
               }}
               disabled={rotating}
-              className="rounded-lg border border-red-500 bg-red-500/10 px-3 py-1.5 text-sm text-red-400 hover:bg-red-500/20 focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+              variant="destructive"
+              size="sm"
             >
-              {rotating ? 'Regenerating…' : 'Regenerate URL'}
-            </button>
+              {rotating
+                ? t('overlayEditor.tts.regeneratingObsUrl')
+                : t('overlayEditor.tts.regenerateObsUrl')}
+            </Button>
           </div>
         </AlertDialog.Content>
       </AlertDialog.Root>
@@ -517,6 +529,7 @@ function ElevenLabsVoicePicker({
   typedApiKey,
   disabled,
 }: ElevenLabsVoicePickerProps): React.ReactElement {
+  const t = useTranslations()
   // A fingerprint of the key the loader would send: '__saved__' for the saved
   // key, `typed:<key>` for a typed one, and '' when there is nothing long enough
   // to be worth a round-trip. Both the result and the "already asked" guard are
@@ -612,25 +625,27 @@ function ElevenLabsVoicePicker({
   return (
     <div>
       <label htmlFor="tts-elevenlabs-voice" className="mb-1 block text-sm text-text-sub">
-        ElevenLabs voice
+        {t('overlayEditor.tts.elevenLabsVoice')}
       </label>
       <select
         id="tts-elevenlabs-voice"
-        aria-label="ElevenLabs voice"
+        aria-label={t('overlayEditor.tts.elevenLabsVoice')}
         value={selected}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
         className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {showLoading && <option value="">Loading voices…</option>}
-        {error && <option value="">Could not load voices</option>}
+        {showLoading && <option value="">{t('overlayEditor.tts.voicesLoading')}</option>}
+        {error && <option value="">{t('overlayEditor.tts.voicesError')}</option>}
         {!showLoading && !error && voices === null && (
           <option value="">
-            {hasSavedKey ? 'Voices will load shortly…' : 'Enter your API key above to load voices.'}
+            {hasSavedKey
+              ? t('overlayEditor.tts.voicesPending')
+              : t('overlayEditor.tts.voicesNeedKey')}
           </option>
         )}
         {!showLoading && !error && voices !== null && voices.length === 0 && (
-          <option value="">No voices available</option>
+          <option value="">{t('overlayEditor.tts.voicesEmpty')}</option>
         )}
         {voices?.map((v) => (
           <option key={v.voice_id} value={v.voice_id}>
@@ -642,13 +657,10 @@ function ElevenLabsVoicePicker({
   )
 }
 
-// ==========================================================================
-// TTSGroup — main component
-// ==========================================================================
-
 export function TTSGroup(props: TTSGroupProps): React.ReactElement {
   const { displaySettings: d, onChange, isPremium, onPreview } = props
 
+  const t = useTranslations()
   const voices = useBrowserVoices()
 
   // Detect Web Speech API availability. In jsdom the global may or may not
@@ -700,14 +712,14 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
   const advancedBlock =
     provider === 'elevenlabs' ? (
       <>
-        <SubSectionHeader label="ADVANCED (ELEVENLABS)" />
+        <SubSectionHeader label={t('overlayEditor.tts.sectionAdvanced')} />
         <div className={cn('space-y-3', !isPremium && 'relative')}>
           {!isPremium && (
             <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-surface/80">
               <div className="flex flex-col items-center gap-2 text-center">
                 <PremiumBadge />
                 <span className="text-xs text-text-dim">
-                  <PremiumUpsellLink /> to use ElevenLabs voices.
+                  <PremiumUpsellLink /> {t('overlayEditor.tts.upsellSuffix')}
                 </span>
               </div>
             </div>
@@ -741,7 +753,7 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
             props.onSaveVoice &&
             pickedVoiceId !== '' &&
             pickedVoiceId !== (props.savedVoiceId ?? '') && (
-              <button
+              <Button
                 type="button"
                 disabled={!isPremium || savingVoice}
                 onClick={() => {
@@ -750,11 +762,17 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
                   void (async (): Promise<void> => {
                     try {
                       await props.onSaveVoice!(pickedVoiceId)
-                      toastManager.add({ title: 'Voice updated.', type: 'success' })
+                      toastManager.add({
+                        title: t('overlayEditor.tts.voiceUpdatedToast'),
+                        type: 'success',
+                      })
                     } catch (e) {
                       toastManager.add({
-                        title: 'Could not save voice',
-                        description: e instanceof Error ? e.message : 'network error',
+                        title: t('overlayEditor.tts.voiceSaveFailedToast'),
+                        description:
+                          e instanceof Error
+                            ? e.message
+                            : t('overlayEditor.tts.networkErrorDetail'),
                         type: 'error',
                       })
                     } finally {
@@ -762,10 +780,13 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
                     }
                   })()
                 }}
-                className="hover:bg-surface-alt rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text disabled:cursor-not-allowed disabled:opacity-50"
+                variant="outline"
+                size="sm"
               >
-                {savingVoice ? 'Saving voice…' : 'Save voice'}
-              </button>
+                {savingVoice
+                  ? t('overlayEditor.tts.savingVoice')
+                  : t('overlayEditor.tts.saveVoice')}
+              </Button>
             )}
           {props.hasElevenLabsConfig && props.obsUrl && (
             <ObsUrlPanel
@@ -774,9 +795,15 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
                 if (!props.obsUrl) return
                 try {
                   await navigator.clipboard.writeText(props.obsUrl)
-                  toastManager.add({ title: 'OBS URL copied.', type: 'success' })
+                  toastManager.add({
+                    title: t('overlayEditor.tts.obsUrlCopiedToast'),
+                    type: 'success',
+                  })
                 } catch {
-                  toastManager.add({ title: 'Could not copy URL.', type: 'error' })
+                  toastManager.add({
+                    title: t('overlayEditor.tts.obsUrlCopyFailedToast'),
+                    type: 'error',
+                  })
                 }
               }}
               onRegenerate={async (): Promise<void> => {
@@ -789,9 +816,15 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
                     // Clipboard permission missing — toast still surfaces success,
                     // but on failure we fall through to the catch below.
                   }
-                  toastManager.add({ title: 'New OBS URL copied to clipboard.', type: 'success' })
+                  toastManager.add({
+                    title: t('overlayEditor.tts.obsUrlRegeneratedToast'),
+                    type: 'success',
+                  })
                 } catch {
-                  toastManager.add({ title: 'Could not regenerate URL. Try again.', type: 'error' })
+                  toastManager.add({
+                    title: t('overlayEditor.tts.obsUrlRegenerateFailedToast'),
+                    type: 'error',
+                  })
                 }
               }}
             />
@@ -803,7 +836,7 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
   return (
     <div className="space-y-4">
       <ToggleSwitch
-        label="Enable text-to-speech"
+        label={t('overlayEditor.tts.enable')}
         checked={enabled && supportsSpeech}
         onChange={(checked) => {
           if (!supportsSpeech) return
@@ -812,16 +845,16 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
         }}
       />
       {!supportsSpeech && (
-        <p className="text-xs text-text-dim">This browser does not support text-to-speech.</p>
+        <p className="text-xs text-text-dim">{t('overlayEditor.tts.unsupported')}</p>
       )}
 
       {enabled && supportsSpeech && (
         <>
           {/* ---------- VOICE ---------- */}
-          <SubSectionHeader label="VOICE" first />
+          <SubSectionHeader label={t('overlayEditor.tts.sectionVoice')} first />
 
           <fieldset className="space-y-2">
-            <legend className="text-sm text-text-sub">Voice provider</legend>
+            <legend className="text-sm text-text-sub">{t('overlayEditor.tts.provider')}</legend>
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="radio"
@@ -830,7 +863,7 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
                 checked={provider === 'browser'}
                 onChange={() => onChange({ tts_provider: 'browser' })}
               />
-              <span>Browser (free)</span>
+              <span>{t('overlayEditor.tts.providerBrowser')}</span>
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input
@@ -841,12 +874,12 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
                 onChange={() => onChange({ tts_provider: 'elevenlabs' })}
                 disabled={!isPremium}
               />
-              <span>ElevenLabs (premium)</span>
+              <span>{t('overlayEditor.tts.providerElevenLabs')}</span>
               {!isPremium && <PremiumBadge />}
             </label>
             {!isPremium && (
               <p className="text-xs text-text-dim">
-                <PremiumUpsellLink /> to use ElevenLabs voices.
+                <PremiumUpsellLink /> {t('overlayEditor.tts.upsellSuffix')}
               </p>
             )}
           </fieldset>
@@ -857,7 +890,7 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
           {advancedBlock}
 
           <SliderControl
-            label="Volume"
+            label={t('overlayEditor.tts.volume')}
             value={d.tts_volume ?? 0.8}
             min={0}
             max={1}
@@ -868,14 +901,14 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
           {provider !== 'elevenlabs' && (
             <div>
               <label className="mb-1 block text-sm text-text-sub">
-                Voice
+                {t('overlayEditor.tts.browserVoice')}
                 <select
-                  aria-label="Voice"
+                  aria-label={t('overlayEditor.tts.browserVoice')}
                   value={d.tts_voice_uri ?? ''}
                   onChange={(e) => onChange({ tts_voice_uri: e.target.value })}
                   className="mt-1 block w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text"
                 >
-                  <option value="">Default</option>
+                  <option value="">{t('overlayEditor.tts.browserVoiceDefault')}</option>
                   {voices.map((v) => (
                     <option key={v.voiceURI} value={v.voiceURI}>
                       {v.name} ({v.lang})
@@ -883,14 +916,12 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
                   ))}
                 </select>
               </label>
-              <p className="text-xs text-text-dim">
-                Browser voice — list depends on your OS/browser.
-              </p>
+              <p className="text-xs text-text-dim">{t('overlayEditor.tts.browserVoiceNote')}</p>
             </div>
           )}
 
           <SliderControl
-            label="Speech rate"
+            label={t('overlayEditor.tts.rate')}
             value={d.tts_rate ?? 1.0}
             min={0.5}
             max={2}
@@ -900,7 +931,7 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
 
           {provider !== 'elevenlabs' && (
             <SliderControl
-              label="Pitch"
+              label={t('overlayEditor.tts.pitch')}
               value={d.tts_pitch ?? 1.0}
               min={0}
               max={2}
@@ -910,20 +941,16 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
           )}
 
           {onPreview && (
-            <button
-              type="button"
-              onClick={onPreview}
-              className="hover:bg-surface-alt rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text"
-            >
-              Test voice
-            </button>
+            <Button type="button" onClick={onPreview} variant="outline" size="sm">
+              {t('overlayEditor.tts.test')}
+            </Button>
           )}
 
           {/* ---------- THROTTLING ---------- */}
-          <SubSectionHeader label="THROTTLING" />
+          <SubSectionHeader label={t('overlayEditor.tts.sectionThrottling')} />
 
           <fieldset className="space-y-2">
-            <legend className="text-sm text-text-sub">Which messages are spoken</legend>
+            <legend className="text-sm text-text-sub">{t('overlayEditor.tts.filterMode')}</legend>
             {(['all', 'sample', 'priority_only'] as const).map((mode) => (
               <label key={mode} className="flex items-center gap-2 text-sm">
                 <input
@@ -934,9 +961,9 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
                   onChange={() => onChange({ tts_filter_mode: mode })}
                 />
                 <span>
-                  {mode === 'all' && 'All'}
-                  {mode === 'sample' && 'Sample'}
-                  {mode === 'priority_only' && 'Priority-only'}
+                  {mode === 'all' && t('overlayEditor.tts.filterModeAll')}
+                  {mode === 'sample' && t('overlayEditor.tts.filterModeSample')}
+                  {mode === 'priority_only' && t('overlayEditor.tts.filterModePriorityOnly')}
                 </span>
               </label>
             ))}
@@ -945,96 +972,96 @@ export function TTSGroup(props: TTSGroupProps): React.ReactElement {
           {filterMode === 'sample' && (
             <div>
               <SliderControl
-                label="Sample rate"
+                label={t('overlayEditor.tts.sampleRate')}
                 value={d.tts_sample_rate ?? 0.25}
                 min={0}
                 max={1}
                 step={0.05}
                 onChange={(v) => onChange({ tts_sample_rate: v })}
               />
-              <p className="text-xs text-text-dim">Chance a non-priority message is spoken.</p>
+              <p className="text-xs text-text-dim">{t('overlayEditor.tts.sampleRateNote')}</p>
             </div>
           )}
 
           <NumberControl
-            label="Max queue length"
+            label={t('overlayEditor.tts.maxQueue')}
             value={d.tts_max_queue ?? 5}
             min={1}
             max={50}
             onChange={(v) => onChange({ tts_max_queue: v })}
           />
           <NumberControl
-            label="Messages per minute"
+            label={t('overlayEditor.tts.messagesPerMinute')}
             value={d.tts_messages_per_minute ?? 8}
             min={1}
             max={120}
             onChange={(v) => onChange({ tts_messages_per_minute: v })}
           />
           <NumberControl
-            label="Per-user cooldown"
+            label={t('overlayEditor.tts.userCooldown')}
             value={d.tts_user_cooldown_seconds ?? 30}
             min={0}
             max={600}
-            unit=" s"
+            unit={t('overlayEditor.tts.secondsUnit')}
             onChange={(v) => onChange({ tts_user_cooldown_seconds: v })}
           />
           <NumberControl
-            label="Drop messages older than"
+            label={t('overlayEditor.tts.staleness')}
             value={d.tts_staleness_seconds ?? 15}
             min={1}
             max={300}
-            unit=" s"
+            unit={t('overlayEditor.tts.secondsUnit')}
             onChange={(v) => onChange({ tts_staleness_seconds: v })}
           />
 
           {/* ---------- CONTENT ---------- */}
-          <SubSectionHeader label="CONTENT" />
+          <SubSectionHeader label={t('overlayEditor.tts.sectionContent')} />
 
           <ToggleSwitch
-            label="Read username"
+            label={t('overlayEditor.tts.readUsername')}
             checked={d.tts_read_username ?? true}
             onChange={(v) => onChange({ tts_read_username: v })}
           />
           <ToggleSwitch
-            label="Read platform name"
+            label={t('overlayEditor.tts.readPlatform')}
             checked={d.tts_read_platform ?? false}
             onChange={(v) => onChange({ tts_read_platform: v })}
           />
           <NumberControl
-            label="Max message length"
+            label={t('overlayEditor.tts.maxMessageLength')}
             value={d.tts_max_message_chars ?? 200}
             min={20}
             max={1000}
-            unit=" chars"
+            unit={t('overlayEditor.tts.charsUnit')}
             onChange={(v) => onChange({ tts_max_message_chars: v })}
           />
           <ToggleSwitch
-            label="Skip emote-only messages"
+            label={t('overlayEditor.tts.skipEmoteOnly')}
             checked={d.tts_skip_emote_only ?? true}
             onChange={(v) => onChange({ tts_skip_emote_only: v })}
           />
           <ToggleSwitch
-            label="Skip link-only messages"
+            label={t('overlayEditor.tts.skipLinks')}
             checked={d.tts_skip_links ?? true}
             onChange={(v) => onChange({ tts_skip_links: v })}
           />
 
           <div>
-            <p className="mb-2 text-sm text-text-sub">Platforms</p>
+            <p className="mb-2 text-sm text-text-sub">{t('overlayEditor.tts.platforms')}</p>
             <PlatformChipRow platforms={platforms} onToggle={handlePlatformToggle} />
           </div>
 
           {/* ---------- PRIORITY ---------- */}
-          <SubSectionHeader label="PRIORITY" />
+          <SubSectionHeader label={t('overlayEditor.tts.sectionPriority')} />
 
           <ToggleSwitch
-            label="Announce priority events"
+            label={t('overlayEditor.tts.priorityEvents')}
             checked={d.tts_priority_events ?? true}
             onChange={(v) => onChange({ tts_priority_events: v })}
           />
           {(d.tts_priority_events ?? true) && (
             <NumberControl
-              label="Minimum bits to announce"
+              label={t('overlayEditor.tts.priorityBitsMin')}
               value={d.tts_priority_bits_min ?? 0}
               min={0}
               max={100000}

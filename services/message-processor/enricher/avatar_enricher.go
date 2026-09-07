@@ -40,8 +40,17 @@ const (
 	// AvatarImageCacheKeyPrefix is the Redis key prefix for cached avatar image bytes
 	AvatarImageCacheKeyPrefix = "avatar:img:"
 
+	// AvatarNameCacheKeyPrefix is the Redis key prefix for cached Twitch display names.
+	// A sibling of the avatar URL cache under the same prefix and TTL, needed because a
+	// shared-chat origin channel is rendered with its name as well as its picture.
+	AvatarNameCacheKeyPrefix = "avatar:name:"
+
 	// AvatarImageMaxBytes is the maximum size of a cached avatar image
 	AvatarImageMaxBytes = 256 * 1024 // 256KB
+
+	// twitchDefaultAvatarURL is the grey placeholder Twitch serves for accounts with no
+	// uploaded picture. It is a picture of nobody, so it counts as "no avatar".
+	twitchDefaultAvatarURL = "https://static-cdn.jtvnw.net/jtv_user_pictures/-profile_image-70x70.png"
 )
 
 // TwitchHelixUser represents the Twitch Helix API user response
@@ -130,8 +139,10 @@ func (e *AvatarEnricher) Enrich(ctx context.Context, msg *models.UnifiedChatMess
 }
 
 func (e *AvatarEnricher) enrichTwitch(ctx context.Context, msg *models.UnifiedChatMessage) error {
+	e.enrichSharedChatOrigin(ctx, msg)
+
 	// Check if already has avatar
-	if msg.User.AvatarURL != "" && msg.User.AvatarURL != "https://static-cdn.jtvnw.net/jtv_user_pictures/-profile_image-70x70.png" {
+	if msg.User.AvatarURL != "" && msg.User.AvatarURL != twitchDefaultAvatarURL {
 		return nil
 	}
 
@@ -144,7 +155,7 @@ func (e *AvatarEnricher) enrichTwitch(ctx context.Context, msg *models.UnifiedCh
 	}
 
 	// Fetch from Twitch Helix API
-	avatarURL, err := e.fetchAvatarFromTwitch(ctx, msg.User.ID)
+	profile, err := e.fetchTwitchProfile(ctx, msg.User.ID)
 	if err != nil {
 		e.logger.Warn("Failed to fetch avatar from Twitch",
 			zap.String("user_id", msg.User.ID),
@@ -155,12 +166,75 @@ func (e *AvatarEnricher) enrichTwitch(ctx context.Context, msg *models.UnifiedCh
 	}
 
 	// Update message
-	msg.User.AvatarURL = avatarURL
+	msg.User.AvatarURL = profile.AvatarURL
 
 	// Cache for 24 hours
-	e.redisClient.Set(ctx, cacheKey, avatarURL, AvatarCacheTTL)
+	e.redisClient.Set(ctx, cacheKey, profile.AvatarURL, AvatarCacheTTL)
 
 	return nil
+}
+
+// enrichSharedChatOrigin resolves the broadcaster a shared-chat message originated in
+// and records the pair the overlay renders in place of a "shared" text pill:
+// source_avatar_url and source_display_name. Both key names are a contract with the
+// frontend (issue #814).
+//
+// A shared-chat origin is a channel, and a channel id is a user id, so this is the same
+// Helix users lookup and the same avatar: cache the chatter's own avatar uses — a channel
+// that also chats is resolved once for both.
+//
+// Every failure is silent: a key stays unset and the frontend falls back to the text
+// pill. An origin avatar is decoration, never a reason to drop or delay a message.
+func (e *AvatarEnricher) enrichSharedChatOrigin(ctx context.Context, msg *models.UnifiedChatMessage) {
+	if msg.Metadata == nil || msg.Metadata["is_shared_chat"] != true {
+		return
+	}
+	sourceRoomID, ok := msg.Metadata["source_room_id"].(string)
+	if !ok || sourceRoomID == "" {
+		return
+	}
+
+	avatarURL, displayName, err := e.lookupTwitchProfileCached(ctx, sourceRoomID)
+	if err != nil {
+		e.logger.Warn("Failed to resolve shared chat origin channel",
+			zap.String("source_room_id", sourceRoomID),
+			zap.Error(err),
+		)
+		return
+	}
+
+	// The grey default is a picture of nobody: leaving the key unset gets the truthful
+	// text pill from the frontend instead of the same placeholder on every origin.
+	if avatarURL != "" && avatarURL != twitchDefaultAvatarURL {
+		msg.Metadata["source_avatar_url"] = avatarURL
+	}
+	if displayName != "" {
+		msg.Metadata["source_display_name"] = displayName
+	}
+}
+
+// lookupTwitchProfileCached returns a Twitch user's avatar URL and display name,
+// serving both from the avatar: cache when present and filling it on a miss. An empty
+// avatar URL means the account has no picture of its own; that is not an error.
+func (e *AvatarEnricher) lookupTwitchProfileCached(ctx context.Context, userID string) (avatarURL, displayName string, err error) {
+	urlKey := AvatarCacheKeyPrefix + userID
+	nameKey := AvatarNameCacheKeyPrefix + userID
+
+	cachedURL, urlErr := e.redisClient.Get(ctx, urlKey).Result()
+	cachedName, nameErr := e.redisClient.Get(ctx, nameKey).Result()
+	if urlErr == nil && nameErr == nil && cachedName != "" {
+		return cachedURL, cachedName, nil
+	}
+
+	profile, err := e.fetchTwitchProfile(ctx, userID)
+	if err != nil {
+		return "", "", err
+	}
+
+	e.redisClient.Set(ctx, urlKey, profile.AvatarURL, AvatarCacheTTL)
+	e.redisClient.Set(ctx, nameKey, profile.DisplayName, AvatarCacheTTL)
+
+	return profile.AvatarURL, profile.DisplayName, nil
 }
 
 func (e *AvatarEnricher) enrichTikTok(ctx context.Context, msg *models.UnifiedChatMessage) error {
@@ -220,12 +294,19 @@ func (e *AvatarEnricher) fetchAndCacheImage(ctx context.Context, cacheKey, image
 	return e.redisClient.Set(ctx, cacheKey, imgBytes, AvatarCacheTTL).Err()
 }
 
-// fetchAvatarFromTwitch fetches avatar URL from Twitch Helix API
-func (e *AvatarEnricher) fetchAvatarFromTwitch(ctx context.Context, userID string) (string, error) {
+// twitchProfile is the renderable part of a Twitch Helix user, exactly as Helix
+// reported it — AvatarURL may be twitchDefaultAvatarURL.
+type twitchProfile struct {
+	AvatarURL   string
+	DisplayName string
+}
+
+// fetchTwitchProfile fetches a user's avatar URL and display name from the Twitch Helix API
+func (e *AvatarEnricher) fetchTwitchProfile(ctx context.Context, userID string) (twitchProfile, error) {
 	// Ensure we have an access token
 	if e.token() == "" {
 		if err := e.refreshAccessToken(ctx); err != nil {
-			return "", fmt.Errorf("failed to get access token: %w", err)
+			return twitchProfile{}, fmt.Errorf("failed to get access token: %w", err)
 		}
 	}
 
@@ -233,7 +314,7 @@ func (e *AvatarEnricher) fetchAvatarFromTwitch(ctx context.Context, userID strin
 	url := fmt.Sprintf("%s?id=%s", e.helixUsersURL, userID)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return "", err
+		return twitchProfile{}, err
 	}
 
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", e.token()))
@@ -241,32 +322,35 @@ func (e *AvatarEnricher) fetchAvatarFromTwitch(ctx context.Context, userID strin
 
 	resp, err := e.httpClient.Do(req)
 	if err != nil {
-		return "", err
+		return twitchProfile{}, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		// Token expired, refresh and retry
 		if err := e.refreshAccessToken(ctx); err != nil {
-			return "", fmt.Errorf("failed to refresh token: %w", err)
+			return twitchProfile{}, fmt.Errorf("failed to refresh token: %w", err)
 		}
-		return e.fetchAvatarFromTwitch(ctx, userID)
+		return e.fetchTwitchProfile(ctx, userID)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("twitch API returned status %d", resp.StatusCode)
+		return twitchProfile{}, fmt.Errorf("twitch API returned status %d", resp.StatusCode)
 	}
 
 	var helixResp TwitchHelixUser
 	if err := json.NewDecoder(resp.Body).Decode(&helixResp); err != nil {
-		return "", fmt.Errorf("failed to decode response: %w", err)
+		return twitchProfile{}, fmt.Errorf("failed to decode response: %w", err)
 	}
 
 	if len(helixResp.Data) == 0 {
-		return "", fmt.Errorf("user not found")
+		return twitchProfile{}, fmt.Errorf("user not found")
 	}
 
-	return helixResp.Data[0].ProfileImageURL, nil
+	return twitchProfile{
+		AvatarURL:   helixResp.Data[0].ProfileImageURL,
+		DisplayName: helixResp.Data[0].DisplayName,
+	}, nil
 }
 
 // refreshAccessToken gets a new app access token from Twitch. The HTTP round-trip is

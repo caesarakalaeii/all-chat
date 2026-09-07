@@ -19,10 +19,13 @@
  */
 
 import React, { useState } from 'react'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 import { X } from 'lucide-react'
 import { ToggleSwitch } from './ToggleSwitch'
 import { SliderControl } from './SliderControl'
 import { AdvancedDisclosure } from '@/components/editor/AdvancedDisclosure'
+import { getTranslations, useTranslations } from '@/lib/i18n'
 import type { FilterSettings } from '@/lib/types/overlay'
 
 export interface FilterGroupProps {
@@ -33,8 +36,11 @@ export interface FilterGroupProps {
 /**
  * Label of the say-hi toggle, exported because sectionRegistry must index the
  * exact string this component renders or the editor search cannot find it.
+ *
+ * Read at module scope through getTranslations() rather than through the hook,
+ * so importers outside a component still see the one string the toggle renders.
  */
-export const SAY_HI_TOGGLE_LABEL = 'Hide YouTube "said hi" greetings'
+export const SAY_HI_TOGGLE_LABEL = getTranslations()('overlayEditor.filters.hideSayHi')
 
 const COMMON_BOTS = [
   'nightbot',
@@ -60,6 +66,7 @@ function TagInput({
   onRemove: (tag: string) => void
   placeholder: string
 }) {
+  const t = useTranslations()
   const [draft, setDraft] = useState('')
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -81,18 +88,25 @@ function TagInput({
       {tags.map((tag) => (
         <span
           key={tag}
-          className="bg-surface-alt flex items-center gap-1 rounded px-2 py-0.5 text-xs text-text"
+          className="flex items-center gap-1 rounded bg-surface-2 px-2 py-0.5 text-xs text-text"
         >
           {tag}
-          <button type="button" onClick={() => onRemove(tag)} aria-label={`Remove ${tag}`}>
+          <Button
+            type="button"
+            onClick={() => onRemove(tag)}
+            aria-label={t('overlayEditor.filters.removeTag', { tag })}
+            variant="ghost"
+            size="icon-xs"
+          >
             <X className="h-3 w-3" />
-          </button>
+          </Button>
         </span>
       ))}
-      <input
+      <Input
+        size="sm"
         className={
           // eslint-disable-next-line tailwindcss/no-unnecessary-arbitrary-value -- px is intentional here: this is a fixed-size caret floor for the tag input, sized against the customiser panel rather than the 12px label text beside it, sized to the layout it sits in rather than to the reading text, so it must not grow with the root font size the way the suggested rem-relative utility would
-          'min-w-[120px] flex-1 bg-transparent text-xs text-text outline-none placeholder:text-text-dim'
+          'min-w-[120px] flex-1 border-0 bg-transparent focus-visible:ring-0'
         }
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
@@ -104,6 +118,8 @@ function TagInput({
 }
 
 export function FilterGroup({ filterSettings, onChange }: FilterGroupProps): React.ReactElement {
+  const t = useTranslations()
+
   function handleAddUser(username: string) {
     onChange({ banned_users: [...(filterSettings.banned_users ?? []), username] })
   }
@@ -136,32 +152,34 @@ export function FilterGroup({ filterSettings, onChange }: FilterGroupProps): Rea
   return (
     <div className="space-y-4">
       <div>
-        <p className="mb-1 text-sm text-text-sub">Blocked usernames</p>
+        <p className="mb-1 text-sm text-text-sub">{t('overlayEditor.filters.blockedUsernames')}</p>
         <TagInput
           tags={filterSettings.banned_users ?? []}
           onAdd={handleAddUser}
           onRemove={handleRemoveUser}
-          placeholder="Type username, press Enter"
+          placeholder={t('overlayEditor.filters.blockedUsernamesPlaceholder')}
         />
-        <button
+        <Button
           type="button"
-          className="mt-1 text-xs text-twitch hover:underline"
+          variant="link"
+          size="xs"
+          className="mt-1 h-auto p-0"
           onClick={handleAddCommonBots}
         >
-          Add common bots
-        </button>
+          {t('overlayEditor.filters.addCommonBots')}
+        </Button>
       </div>
       <div>
-        <p className="mb-1 text-sm text-text-sub">Blocked keywords</p>
+        <p className="mb-1 text-sm text-text-sub">{t('overlayEditor.filters.blockedKeywords')}</p>
         <TagInput
           tags={filterSettings.banned_words ?? []}
           onAdd={handleAddWord}
           onRemove={handleRemoveWord}
-          placeholder="Type keyword or regex, press Enter"
+          placeholder={t('overlayEditor.filters.blockedKeywordsPlaceholder')}
         />
       </div>
       <ToggleSwitch
-        label="Hide bot commands (!)"
+        label={t('overlayEditor.filters.hideCommands')}
         checked={filterSettings.hide_commands ?? false}
         onChange={(checked) => onChange({ hide_commands: checked })}
       />
@@ -171,36 +189,32 @@ export function FilterGroup({ filterSettings, onChange }: FilterGroupProps): Rea
           checked={filterSettings.hide_youtube_say_hi ?? false}
           onChange={(checked) => onChange({ hide_youtube_say_hi: checked })}
         />
-        <p className="mt-1 text-xs text-text-dim">
-          Only YouTube messages whose entire text is the greeting posted by the vertical-stream
-          &ldquo;Say hi!&rdquo; button. Hidden messages also make no sound and are not read by TTS.
-        </p>
+        <p className="mt-1 text-xs text-text-dim">{t('overlayEditor.filters.hideSayHiNote')}</p>
       </div>
       {/* Only offered while the filter is on: the phrases do nothing on their own. */}
       {(filterSettings.hide_youtube_say_hi ?? false) && (
         <div>
-          <p className="mb-1 text-sm text-text-sub">Extra &ldquo;said hi&rdquo; phrases</p>
+          <p className="mb-1 text-sm text-text-sub">{t('overlayEditor.filters.sayHiPhrases')}</p>
           <TagInput
             tags={filterSettings.say_hi_extra_phrases ?? []}
             onAdd={handleAddSayHiPhrase}
             onRemove={handleRemoveSayHiPhrase}
-            placeholder="Type phrase, press Enter"
+            placeholder={t('overlayEditor.filters.sayHiPhrasesPlaceholder')}
           />
           <p className="mt-1 text-xs text-text-dim">
-            The button&rsquo;s text is localised, so add what it posts in your language — for
-            example the German phrase.
+            {t('overlayEditor.filters.sayHiPhrasesNote')}
           </p>
         </div>
       )}
       {/* Low-traffic fine-tuning lives behind Advanced (ADR-0042) */}
       <AdvancedDisclosure count={1}>
         <SliderControl
-          label="Min message length"
+          label={t('overlayEditor.filters.minMessageLength')}
           value={filterSettings.min_message_length ?? 0}
           min={0}
           max={200}
           step={1}
-          unit=" chars"
+          unit={t('overlayEditor.filters.charsUnit')}
           onChange={(v) => onChange({ min_message_length: v })}
         />
       </AdvancedDisclosure>

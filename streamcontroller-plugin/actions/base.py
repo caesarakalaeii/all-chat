@@ -37,7 +37,7 @@ from typing import Any, Mapping
 
 from allchat import errors
 from allchat.api import Connection
-from allchat.errors import AllChatError
+from allchat.errors import AllChatError, link_failure_message
 # Imported as a MODULE, not as names: the two flows are patched wholesale in the
 # tests, and `from ... import link_via_loopback` would bind the original function
 # into this namespace where a patch cannot reach it.
@@ -139,8 +139,6 @@ class AllChatActionBase(ActionBase):
     #: Overridden per action for the settings UI.
     ACTION_NAME = "All-Chat"
 
-    # -- StreamController lifecycle -----------------------------------------
-
     def on_ready(self) -> None:
         """Called by the host once the key is on screen."""
         self.set_bottom_label(self.ACTION_NAME)
@@ -149,8 +147,6 @@ class AllChatActionBase(ActionBase):
         """Called by the host when the physical key is pressed."""
         self.run_action()
 
-
-    # -- settings UI --------------------------------------------------------
 
     def get_config_rows(self) -> list[Any]:
         """Builds the action's settings rows, including the Link affordance.
@@ -196,10 +192,11 @@ class AllChatActionBase(ActionBase):
             def work() -> None:
                 try:
                     self.start_linking(on_status)
-                except AllChatError as exc:
-                    on_status("failed", exc.message)
                 except Exception as exc:  # noqa: BLE001
-                    on_status("failed", f"Linking failed: {type(exc).__name__}: {exc}")
+                    # One handler for both cases: link_failure_message decides what a
+                    # streamer should read, including for a non-AllChatError, where the
+                    # old branch showed the exception's class name.
+                    on_status("failed", link_failure_message(exc))
                 finally:
                     button.set_sensitive(True)
 
@@ -301,8 +298,6 @@ class AllChatActionBase(ActionBase):
         """
         return f"StreamController \u2014 {self.ACTION_NAME}"
 
-    # -- plumbing -----------------------------------------------------------
-
     def get_settings_safe(self) -> Mapping[str, Any]:
         """Returns this key's settings, tolerating a host that has none yet."""
         try:
@@ -354,7 +349,6 @@ class AllChatActionBase(ActionBase):
             self.log_info(message)
             self.set_key_label(message[:12] if message else LABEL_FOR_STATE[STATE_OK])
 
-    # -- thin wrappers over host APIs ---------------------------------------
     # Wrapped rather than called directly so the stand-in host in host.py can
     # record them, and so a host-version rename lands in one place.
 

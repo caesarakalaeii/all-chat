@@ -98,10 +98,6 @@ func newResolveTestHandler(repo ViewerIdentityRepo) *ViewerAuthHandler {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Tests for resolveViewerID
-// ---------------------------------------------------------------------------
-
 func TestResolveViewerID_NoLinkParam_CallsGetOrCreate(t *testing.T) {
 	expectedID := uuid.New()
 	called := false
@@ -256,10 +252,6 @@ func TestResolveViewerID_EmptyLinkParam_FallsBackToGetOrCreate(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Tests for HandleGetLinkedPlatforms
-// ---------------------------------------------------------------------------
-
 func newLinkedPlatformsRouter(mock ViewerIdentityRepo) (*gin.Engine, *ViewerAuthHandler) {
 	gin.SetMode(gin.TestMode)
 	h := &ViewerAuthHandler{
@@ -330,10 +322,6 @@ func TestHandleGetLinkedPlatforms_MissingViewerID_Returns401(t *testing.T) {
 		t.Errorf("expected 401, got %d body=%s", w.Code, w.Body.String())
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Tests for HandleUnlinkPlatform
-// ---------------------------------------------------------------------------
 
 func TestHandleUnlinkPlatform_Success(t *testing.T) {
 	viewerID := uuid.New()
@@ -420,10 +408,6 @@ func TestHandleUnlinkPlatform_NotLinked_Returns404(t *testing.T) {
 		t.Errorf("expected 404, got %d body=%s", w.Code, w.Body.String())
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Tests for MigratePlatformUserID (interface contract)
-// ---------------------------------------------------------------------------
 
 // TestMockViewerIdentityRepo_MigratePlatformUserID verifies that the mock correctly
 // calls the provided migratePlatformUserID function and returns nil by default.

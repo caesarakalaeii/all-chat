@@ -23,10 +23,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const push = vi.fn()
 
+// The query string under test. Mutable so a case can turn dock mode on without
+// re-mocking the module.
+let searchParams = new URLSearchParams()
+
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push, replace: vi.fn(), prefetch: vi.fn() }),
   usePathname: () => '/overlay/abc/view',
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => searchParams,
 }))
 
 // Hydration completes immediately so ProtectedRoute evaluates auth synchronously.
@@ -51,6 +55,7 @@ import { OverlayViewGuard } from '../OverlayViewGuard'
 afterEach(() => {
   cleanup()
   push.mockClear()
+  searchParams = new URLSearchParams()
 })
 
 describe('OverlayViewGuard', () => {
@@ -63,5 +68,37 @@ describe('OverlayViewGuard', () => {
 
     await waitFor(() => expect(push).toHaveBeenCalledWith('/'))
     expect(screen.queryByTestId('protected-child')).not.toBeInTheDocument()
+  })
+
+  // An OBS custom browser dock has its own cookie jar, so the streamer's
+  // dashboard session does not carry over. Redirecting home there renders the
+  // marketing homepage in a ~320px chromeless panel with no way back — the dock
+  // is a dead end on first open. Dock mode gets a sign-in panel instead.
+  it('shows the dock sign-in panel instead of redirecting when dock=1', async () => {
+    searchParams = new URLSearchParams('dock=1')
+
+    render(
+      <OverlayViewGuard>
+        <div data-testid="protected-child">secret monitor</div>
+      </OverlayViewGuard>
+    )
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /sign in with twitch/i })).toBeInTheDocument()
+    )
+    expect(push).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('protected-child')).not.toBeInTheDocument()
+  })
+
+  it('still redirects home for a dock value that is not truthy', async () => {
+    searchParams = new URLSearchParams('dock=0')
+
+    render(
+      <OverlayViewGuard>
+        <div data-testid="protected-child">secret monitor</div>
+      </OverlayViewGuard>
+    )
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/'))
   })
 })

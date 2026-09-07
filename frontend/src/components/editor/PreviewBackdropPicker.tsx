@@ -19,6 +19,7 @@
  */
 
 import React from 'react'
+import { useTranslations, type MessageKey } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 export interface PreviewBackdropPickerProps {
@@ -27,11 +28,22 @@ export interface PreviewBackdropPickerProps {
   onChange: (color: string | null) => void
 }
 
-const PRESETS: ReadonlyArray<{ label: string; value: string | null; swatchClass: string }> = [
-  { label: 'Preview on app background', value: null, swatchClass: 'bg-bg' },
-  { label: 'Preview on light background', value: '#f1f1f3', swatchClass: 'bg-[#f1f1f3]' },
-  { label: 'Preview on chroma green', value: '#00b140', swatchClass: 'bg-[#00b140]' },
-]
+// The label is a catalog key, not the text: the array is module level and so
+// cannot call the hook, and copy in a constant is copy a reader cannot find.
+const PRESETS: ReadonlyArray<{ labelKey: MessageKey; value: string | null; swatchClass: string }> =
+  [
+    { labelKey: 'overlayEditor.previewBackdrop.appBackground', value: null, swatchClass: 'bg-bg' },
+    {
+      labelKey: 'overlayEditor.previewBackdrop.lightBackground',
+      value: '#f1f1f3',
+      swatchClass: 'bg-[#f1f1f3]',
+    },
+    {
+      labelKey: 'overlayEditor.previewBackdrop.chromaGreen',
+      value: '#00b140',
+      swatchClass: 'bg-[#00b140]',
+    },
+  ]
 
 /**
  * Editor-only backdrop control for the live preview pane. The overlay embed
@@ -44,18 +56,19 @@ export function PreviewBackdropPicker({
   value,
   onChange,
 }: PreviewBackdropPickerProps): React.ReactElement {
+  const t = useTranslations()
   return (
     <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5 rounded-full border border-border bg-surface/85 px-2.5 py-1.5 shadow-sm backdrop-blur-sm">
       <span className="text-[10px] font-medium tracking-widest text-text-sub uppercase select-none">
-        Backdrop
+        {t('overlayEditor.previewBackdrop.heading')}
       </span>
       {PRESETS.map((preset) => (
         <button
-          key={preset.label}
+          key={preset.labelKey}
           type="button"
-          aria-label={preset.label}
+          aria-label={t(preset.labelKey)}
           aria-pressed={value === preset.value}
-          title={preset.label}
+          title={t(preset.labelKey)}
           onClick={() => onChange(preset.value)}
           className={cn(
             'h-5 w-5 rounded-full border transition-shadow focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none',
@@ -68,8 +81,8 @@ export function PreviewBackdropPicker({
       ))}
       <input
         type="color"
-        aria-label="Custom preview background color"
-        title="Custom preview background color"
+        aria-label={t('overlayEditor.previewBackdrop.customColor')}
+        title={t('overlayEditor.previewBackdrop.customColor')}
         // A null value means "app background": show a neutral dark in the well
         value={value ?? '#020204'}
         onChange={(e) => onChange(e.target.value)}

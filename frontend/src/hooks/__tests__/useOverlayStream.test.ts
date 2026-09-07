@@ -33,7 +33,6 @@ vi.mock('@/lib/twitchBadges', () => ({
 }))
 vi.mock('@/lib/badgeOrder', () => ({ sortMessageBadges: vi.fn((m: ChatMessage) => m) }))
 
-// --- Mock WebSocket -------------------------------------------------------
 class MockWebSocket {
   static OPEN = 1
   static CONNECTING = 0

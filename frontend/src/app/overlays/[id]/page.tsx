@@ -53,6 +53,7 @@ import type { DiscordGuild, ChannelCategory } from '@/lib/api/discord'
 import { ApiError } from '@/lib/api/client'
 import { DISCORD_INVITE_URL } from '@/lib/constants'
 import { OnboardingChecklist } from '@/components/onboarding/OnboardingChecklist'
+import { ObsDockHelpContent } from '@/components/onboarding/ObsDockHelpContent'
 import { ObsHelpContent } from '@/components/onboarding/ObsHelpContent'
 import { deriveSteps, useOnboardingStore } from '@/lib/stores/onboarding-store'
 import { engagementApi } from '@/lib/api/engagement'
@@ -113,12 +114,19 @@ import { EditorSectionHeader } from '@/components/editor/EditorSectionHeader'
 import { SettingsSearch } from '@/components/editor/SettingsSearch'
 import { AdvancedDisclosure } from '@/components/editor/AdvancedDisclosure'
 import { ModeratorsPanel } from '@/components/editor/ModeratorsPanel'
+import { getTranslations, useTranslations, type TFunction } from '@/lib/i18n'
+import { emphasise, interpolateElements } from '@/lib/i18n/emphasise'
 import {
   EDITOR_SECTIONS,
   type EditorSectionId,
   type SpotlightSection,
 } from '@/components/editor/sectionRegistry'
 import dynamic from 'next/dynamic'
+
+// Read through getTranslations() rather than the hook: the dynamic() loading
+// callback below is not a component, so it cannot call one. Same pattern as
+// SAY_HI_TOGGLE_LABEL in components/appearance/FilterGroup.tsx.
+const EDITOR_LOADING_LABEL = getTranslations()('overlayEditor.page.loadingEditor')
 
 // Dynamically import Monaco Editor to avoid SSR issues
 const MonacoCSSEditor = dynamic(() => import('@/components/MonacoCSSEditor'), {
@@ -130,7 +138,7 @@ const MonacoCSSEditor = dynamic(() => import('@/components/MonacoCSSEditor'), {
         'flex h-[300px] items-center justify-center rounded-lg border border-border bg-surface-2'
       }
     >
-      <div className="text-sm text-text-sub">Loading editor...</div>
+      <div className="text-sm text-text-sub">{EDITOR_LOADING_LABEL}</div>
     </div>
   ),
 })
@@ -158,19 +166,71 @@ const PLATFORM_BORDER: Record<string, string> = {
 // open/closed maps (editor-panel-sections-v1 / appearance-panel-sections-v1).
 const ACTIVE_SECTION_STORAGE_KEY = 'editor-active-section-v1'
 
+/**
+ * '3 errors' or '1 warning', in words the catalog owns.
+ *
+ * The pre-migration code appended an 's' when the count was above one. That is
+ * an English rule, so the singular and plural are separate catalog keys and the
+ * choice between them is made here.
+ *
+ * Takes `t` as a parameter because it is not a component and cannot call the hook.
+ */
+function cssProblemCount(t: TFunction, kind: 'error' | 'warning', count: number): string {
+  if (kind === 'error') {
+    return count === 1
+      ? t('overlayEditor.customCss.errorCountOne', { count })
+      : t('overlayEditor.customCss.errorCountMany', { count })
+  }
+  return count === 1
+    ? t('overlayEditor.customCss.warningCountOne', { count })
+    : t('overlayEditor.customCss.warningCountMany', { count })
+}
+
+/** A 7TV reference the API resolved: always a set ID, optionally named and counted. */
+type ResolvedSevenTvReference = {
+  status: 'resolved'
+  setID: string
+  name?: string
+  emoteCount?: number
+}
+
+/**
+ * The notice shown once a 7TV reference resolves.
+ *
+ * The name and the emote count are each optional, so there are four reachable
+ * sentences. They are four separate catalog keys rather than one key plus two
+ * appended fragments: a translator cannot reorder across a fragment boundary,
+ * and the pre-migration code built exactly that kind of sentence.
+ *
+ * Takes `t` as a parameter because it is not a component and cannot call the hook.
+ */
+function resolvedSevenTvNotice(t: TFunction, state: ResolvedSevenTvReference): string {
+  const { name, emoteCount } = state
+  const hasCount = typeof emoteCount === 'number'
+  if (name && hasCount) {
+    return t('overlayEditor.messages.seventvResolvedNamedCounted', { name, count: emoteCount })
+  }
+  if (name) return t('overlayEditor.messages.seventvResolvedNamed', { name })
+  if (hasCount) return t('overlayEditor.messages.seventvResolvedCounted', { count: emoteCount })
+  return t('overlayEditor.messages.seventvResolved')
+}
+
 // Entry-animation choices for new chat messages ('' = default fade + slide up).
 // Values map to .msg-anim-* classes in globals.css via visual_settings.
-const ENTRY_ANIMATION_OPTIONS: ReadonlyArray<{ value: MessageAnimation | ''; label: string }> = [
-  { value: '', label: 'Fade + slide up (default)' },
-  { value: 'fly-left', label: 'Fly in from left' },
-  { value: 'fly-right', label: 'Fly in from right' },
-  { value: 'fly-spring', label: 'Fly in with overshoot' },
-  { value: 'pop', label: 'Pop in' },
-  { value: 'bounce', label: 'Bounce up' },
-  { value: 'flip', label: 'Flip in' },
-  { value: 'swoosh', label: 'Swoosh' },
-  { value: 'soft-focus', label: 'Soft focus' },
-]
+// Labels live in the catalog under `overlayEditor.messages.animation<Stem>`;
+// this list holds only the class-name values. `as const satisfies` keeps each
+// stem a string literal so a typo fails tsc at the lookup.
+const ENTRY_ANIMATION_OPTIONS = [
+  { value: '', messageStem: 'Default' },
+  { value: 'fly-left', messageStem: 'FlyLeft' },
+  { value: 'fly-right', messageStem: 'FlyRight' },
+  { value: 'fly-spring', messageStem: 'FlySpring' },
+  { value: 'pop', messageStem: 'Pop' },
+  { value: 'bounce', messageStem: 'Bounce' },
+  { value: 'flip', messageStem: 'Flip' },
+  { value: 'swoosh', messageStem: 'Swoosh' },
+  { value: 'soft-focus', messageStem: 'SoftFocus' },
+] as const satisfies ReadonlyArray<{ value: MessageAnimation | ''; messageStem: string }>
 
 // Maps onboarding spotlight targets to left-nav sections (ADR-0042). The
 // guide's 'appearance' target predates the flat nav; Typography is the first
@@ -183,8 +243,6 @@ const SPOTLIGHT_SECTION: Record<SpotlightSection, EditorSectionId> = {
   appearance: 'typography',
   moderators: 'moderators',
 }
-
-// ---- Types -----------------------------------------------------------------
 
 type MockMessageFormState = {
   platform: ChatMessage['platform']
@@ -322,8 +380,6 @@ const SAMPLE_EVENT_MESSAGES: Array<Omit<ChatMessage, 'id' | 'timestamp' | 'overl
   },
 ]
 
-// ---- Sub-components --------------------------------------------------------
-
 function SourceCard({
   source,
   onRemove,
@@ -344,6 +400,7 @@ function SourceCard({
   isOwnChannel?: boolean
   onReconnectChat?: () => void
 }) {
+  const t = useTranslations()
   const [confirmOpen, setConfirmOpen] = useState(false)
   const isTwitch = source.platform === 'twitch'
   const isShared = source.platform === 'shared_overlay'
@@ -418,17 +475,19 @@ function SourceCard({
               <div className="mt-1">
                 <span className="inline-flex items-center gap-1 rounded-full border border-green-500/20 bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-400">
                   <span className="size-1.5 rounded-full bg-green-400" />
-                  Chat via EventSub
+                  {t('overlayEditor.sources.chatViaEventsub')}
                 </span>
               </div>
             )}
             {isTwitch && !source.chat_via_eventsub && isOwnChannel && onReconnectChat && (
-              <button
+              <Button
                 onClick={onReconnectChat}
-                className="mt-1 inline-flex items-center gap-1 rounded text-xs text-text-sub underline-offset-2 transition-colors hover:text-text hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                variant="link"
+                size="xs"
+                className="mt-1 h-auto p-0 text-text-sub hover:text-text"
               >
-                Reconnect to enable chat
-              </button>
+                {t('overlayEditor.sources.reconnectChat')}
+              </Button>
             )}
           </div>
         </div>
@@ -437,31 +496,44 @@ function SourceCard({
             <Button
               variant="outline"
               size="sm"
-              className="text-destructive border-destructive/40 hover:bg-destructive/10 text-xs"
+              className="border-destructive/40 text-xs text-destructive hover:bg-destructive/10"
               onClick={() => onRevoke(source)}
             >
-              Revoke
+              {t('overlayEditor.sources.revoke')}
             </Button>
           )}
           <Dialog.Root open={confirmOpen} onOpenChange={setConfirmOpen}>
             <Dialog.Trigger
               render={
-                <button
-                  className="hover:text-destructive rounded text-text-sub transition-colors focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
-                  aria-label={`Remove ${source.channel_name || source.channel_id}`}
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  className="hover:text-destructive"
+                  aria-label={t('overlayEditor.sources.removeLabel', {
+                    channel: source.channel_name || source.channel_id,
+                  })}
                 >
                   <X className="size-4" />
-                </button>
+                </Button>
               }
             />
             <Dialog.Content>
-              <Dialog.Title>Remove source?</Dialog.Title>
+              <Dialog.Title>{t('overlayEditor.sources.removeConfirmTitle')}</Dialog.Title>
               <Dialog.Description>
-                Remove <strong>{source.channel_name || source.channel_id}</strong> from this
-                overlay. Chat messages from this source will stop appearing.
+                {emphasise(
+                  t('overlayEditor.sources.removeConfirmBody', {
+                    emphasis: source.channel_name || source.channel_id,
+                  }),
+                  source.channel_name || source.channel_id,
+                  (run) => (
+                    <strong>{run}</strong>
+                  )
+                )}
               </Dialog.Description>
               <div className="flex justify-end gap-3 pt-2">
-                <Dialog.Close render={<Button variant="outline">Cancel</Button>} />
+                <Dialog.Close
+                  render={<Button variant="outline">{t('overlayEditor.sources.cancel')}</Button>}
+                />
                 <Button
                   variant="destructive"
                   onClick={() => {
@@ -469,7 +541,7 @@ function SourceCard({
                     onRemove(source.id)
                   }}
                 >
-                  Remove
+                  {t('overlayEditor.sources.remove')}
                 </Button>
               </div>
             </Dialog.Content>
@@ -478,61 +550,42 @@ function SourceCard({
       </div>
       {/* Configure relay button — Discord only */}
       {isDiscord && onConfigureRelay && (
-        <button
-          className="mt-2 flex items-center gap-1 rounded text-xs text-text-sub transition-colors hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+        <Button
+          variant="ghost"
+          size="xs"
+          className="mt-2 px-0"
           onClick={() => onConfigureRelay(source)}
         >
           <ChevronRight className="size-3" />
-          Configure relay
-        </button>
+          {t('overlayEditor.sources.configureRelay')}
+        </Button>
       )}
       {/* Stream selection button — YouTube only */}
       {isYoutube && onConfigureStreamSelect && (
-        <button
-          className="mt-2 flex items-center gap-1 rounded text-xs text-text-sub transition-colors hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+        <Button
+          variant="ghost"
+          size="xs"
+          className="mt-2 px-0"
           onClick={() => onConfigureStreamSelect(source)}
         >
           <ChevronRight className="size-3" />
-          Stream selection
-        </button>
+          {t('overlayEditor.sources.streamSelection')}
+        </Button>
       )}
     </Card>
   )
 }
 
-// ---- StreamSelectionPanel ---------------------------------------------------
-
+// The wire values only. Their labels and descriptions live in the catalog under
+// `overlayEditor.streamSelection.<camelCasedValue>Label|Description`, so this
+// list stays the single source of the API contract and holds no copy.
 const STREAM_STRATEGIES = [
-  {
-    value: 'first_found',
-    label: 'First found',
-    description: 'Picks the first live stream (default)',
-  },
-  {
-    value: 'most_viewers',
-    label: 'Most viewers',
-    description: 'Picks the stream with the highest viewer count',
-  },
-  {
-    value: 'fewest_viewers',
-    label: 'Fewest viewers',
-    description: 'Picks the stream with the lowest viewer count',
-  },
-  {
-    value: 'title_match',
-    label: 'Title match',
-    description: 'Picks the first stream whose title contains a keyword',
-  },
-  {
-    value: 'title_match_all',
-    label: 'Title match (all)',
-    description: 'Monitors all streams whose title contains a keyword',
-  },
-  {
-    value: 'all',
-    label: 'All streams',
-    description: 'Monitors all concurrent live streams simultaneously',
-  },
+  { value: 'first_found', messageStem: 'firstFound' },
+  { value: 'most_viewers', messageStem: 'mostViewers' },
+  { value: 'fewest_viewers', messageStem: 'fewestViewers' },
+  { value: 'title_match', messageStem: 'titleMatch' },
+  { value: 'title_match_all', messageStem: 'titleMatchAll' },
+  { value: 'all', messageStem: 'all' },
 ] as const
 
 function StreamSelectionPanel({
@@ -546,9 +599,11 @@ function StreamSelectionPanel({
   isPremium: boolean
   onSaved: () => void
 }) {
+  const t = useTranslations()
   const ytConfig = (source.config ?? {}) as import('@/lib/types/overlay').YouTubeSourceConfig
   const [strategy, setStrategy] = useState(ytConfig.stream_select ?? 'first_found')
   const [matchTerm, setMatchTerm] = useState(ytConfig.stream_match ?? '')
+  const selectedStrategy = STREAM_STRATEGIES.find((s) => s.value === strategy)
   const [saving, setSaving] = useState(false)
   const strategySelectId = useId()
   const strategyHintId = useId()
@@ -571,10 +626,13 @@ function StreamSelectionPanel({
       Object.keys(config).forEach((k) => config[k] === undefined && delete config[k])
       await overlaysApi.updateSourceConfig(overlayId, source.id, config)
       trackEvent('yt_stream_strategy_set', { strategy })
-      toastManager.add({ title: 'Stream selection saved', type: 'success' })
+      toastManager.add({ title: t('overlayEditor.toasts.streamSelectionSaved'), type: 'success' })
       onSaved()
     } catch {
-      toastManager.add({ title: 'Failed to save stream selection', type: 'error' })
+      toastManager.add({
+        title: t('overlayEditor.toasts.streamSelectionSaveFailed'),
+        type: 'error',
+      })
     } finally {
       setSaving(false)
     }
@@ -591,10 +649,10 @@ function StreamSelectionPanel({
             htmlFor={strategySelectId}
             className="mb-1 block text-xs font-medium text-text-sub"
           >
-            Stream selection strategy
+            {t('overlayEditor.streamSelection.strategyLabel')}
           </label>
           <p id={strategyHintId} className="mb-2 text-xs text-text-sub/70">
-            When this channel has multiple concurrent live streams, choose which one to monitor.
+            {t('overlayEditor.streamSelection.strategyHint')}
           </p>
           <select
             id={strategySelectId}
@@ -609,19 +667,22 @@ function StreamSelectionPanel({
                 value={s.value}
                 disabled={!isPremium && s.value !== 'first_found'}
               >
-                {s.label}
-                {!isPremium && s.value !== 'first_found' ? ' (Premium)' : ''}
+                {t(`overlayEditor.streamSelection.${s.messageStem}Label`)}
+                {!isPremium && s.value !== 'first_found'
+                  ? t('overlayEditor.streamSelection.premiumSuffix')
+                  : ''}
               </option>
             ))}
           </select>
-          {STREAM_STRATEGIES.find((s) => s.value === strategy) && (
+          {selectedStrategy && (
             <p className="mt-1 text-xs text-text-sub/60">
-              {STREAM_STRATEGIES.find((s) => s.value === strategy)?.description}
+              {t(`overlayEditor.streamSelection.${selectedStrategy.messageStem}Description`)}
             </p>
           )}
           {!isPremium && (
             <p className="mt-1 text-xs text-text-dim">
-              <PremiumUpsellLink /> to use advanced stream selection.
+              <PremiumUpsellLink />
+              {t('overlayEditor.streamSelection.upsellSuffix')}
             </p>
           )}
         </div>
@@ -629,22 +690,20 @@ function StreamSelectionPanel({
         {(strategy === 'title_match' || strategy === 'title_match_all') && (
           <div>
             <label htmlFor={matchInputId} className="mb-1 block text-xs font-medium text-text-sub">
-              Title keyword
+              {t('overlayEditor.streamSelection.matchLabel')}
             </label>
             <Input
               id={matchInputId}
               value={matchTerm}
               onChange={(e) => setMatchTerm(e.target.value)}
-              placeholder="e.g. synthwave, lofi, jazz"
+              placeholder={t('overlayEditor.streamSelection.matchPlaceholder')}
               className="text-xs"
             />
           </div>
         )}
 
         {locked && (
-          <p className="text-xs text-yellow-400/80">
-            Non-default strategies require a premium subscription.
-          </p>
+          <p className="text-xs text-yellow-400/80">{t('overlayEditor.streamSelection.locked')}</p>
         )}
 
         <Button
@@ -666,8 +725,6 @@ function StreamSelectionPanel({
   )
 }
 
-// ---- RelayPanel ------------------------------------------------------------
-
 function RelayPanel({
   source,
   overlayId,
@@ -677,6 +734,7 @@ function RelayPanel({
   overlayId: string
   onSaved: (updated: ChatSource) => void
 }) {
+  const t = useTranslations()
   const discordConfig = source.config as DiscordSourceConfig
   const [relayEnabled, setRelayEnabled] = useState(discordConfig.relay_enabled ?? false)
   const [relayChannelId, setRelayChannelId] = useState<string>(discordConfig.relay_channel_id ?? '')
@@ -708,10 +766,10 @@ function RelayPanel({
     onSaved({ ...source, config: newConfig })
     try {
       await updateSourceConfig(overlayId, source.id, newConfig)
-      toastManager.add({ title: 'Relay settings saved', type: 'success' })
+      toastManager.add({ title: t('overlayEditor.toasts.relaySaved'), type: 'success' })
     } catch {
       onSaved(source) // rollback
-      toastManager.add({ title: 'Failed to save relay settings', type: 'error' })
+      toastManager.add({ title: t('overlayEditor.toasts.relaySaveFailed'), type: 'error' })
     } finally {
       setSaving(false)
     }
@@ -722,9 +780,7 @@ function RelayPanel({
   return (
     <div className="mt-1 ml-4 space-y-3 rounded-lg border border-border bg-surface-2 p-4">
       {/* Loop filter info — static */}
-      <p className="text-xs text-text-sub">
-        Loop filter: active — Discord messages are never relayed back to Discord.
-      </p>
+      <p className="text-xs text-text-sub">{t('overlayEditor.relay.loopFilter')}</p>
 
       {/* Relay toggle */}
       <label className="flex cursor-pointer items-center gap-2 text-sm text-text">
@@ -734,14 +790,14 @@ function RelayPanel({
           onChange={(e) => setRelayEnabled(e.target.checked)}
           className="size-4 accent-discord"
         />
-        Enable relay
+        {t('overlayEditor.relay.enable')}
       </label>
 
       {/* Outbound channel picker — visible only when relay enabled */}
       {relayEnabled && (
         <div>
           <label htmlFor={relayChannelSelectId} className="mb-1 block text-xs text-text-sub">
-            Outbound channel
+            {t('overlayEditor.relay.outboundChannelLabel')}
           </label>
           {channelsLoading ? (
             <Skeleton className="h-9 w-full rounded-lg" />
@@ -752,7 +808,7 @@ function RelayPanel({
               onChange={(e) => setRelayChannelId(e.target.value)}
               className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
             >
-              <option value="">Select a channel...</option>
+              <option value="">{t('overlayEditor.relay.selectChannel')}</option>
               {channels.map((cat) => (
                 <optgroup key={cat.id || 'uncategorized'} label={cat.name}>
                   {cat.channels.map((ch) => (
@@ -802,38 +858,44 @@ type EarnNumberKey =
   | 'chat_per_minute'
   | 'watch_per_minute'
 
-const EARN_NUMBER_FIELDS: ReadonlyArray<{
-  key: EarnNumberKey
-  label: string
-  hint: string
-  float?: boolean
-  comingSoon?: boolean
-}> = [
-  { key: 'bits_multiplier', label: 'Points per bit', hint: 'Twitch cheers', float: true },
-  { key: 'usd_multiplier', label: 'Points per USD', hint: 'donations & Super Chats', float: true },
-  { key: 'sub_high', label: 'Tier 3 sub', hint: 'Twitch Tier 3' },
-  { key: 'sub_medium', label: 'Tier 2 sub', hint: 'Twitch Tier 2' },
-  { key: 'sub_low', label: 'Base sub / member', hint: 'Tier 1, Prime, Kick & YouTube members' },
-  { key: 'gift_per_sub', label: 'Per gifted sub', hint: 'awarded to the gifter' },
+// The wire keys and their numeric behaviour only. Labels and hints live in the
+// catalog under `overlayEditor.engagement.<messageStem>Label|Hint`.
+// `float` and `comingSoon` are spelled out on every entry rather than left
+// optional: `as const` narrows each element to its own object type, and an
+// absent optional property is then not on the union at all. `as const` is what
+// keeps messageStem a string literal, so a stem with no matching catalog key
+// fails tsc at the lookup below instead of rendering the key name to a streamer.
+const EARN_NUMBER_FIELDS = [
+  { key: 'bits_multiplier', messageStem: 'bitsMultiplier', float: true, comingSoon: false },
+  { key: 'usd_multiplier', messageStem: 'usdMultiplier', float: true, comingSoon: false },
+  { key: 'sub_high', messageStem: 'subHigh', float: false, comingSoon: false },
+  { key: 'sub_medium', messageStem: 'subMedium', float: false, comingSoon: false },
+  { key: 'sub_low', messageStem: 'subLow', float: false, comingSoon: false },
+  { key: 'gift_per_sub', messageStem: 'giftPerSub', float: false, comingSoon: false },
   // chat_per_minute has no producer in v1 (nothing publishes engagement:chat), so it
   // never accrues — flag it disabled so streamers don't configure a dead dimension (M6).
-  {
-    key: 'chat_per_minute',
-    label: 'Chatting, per minute',
-    hint: 'active chatters',
-    comingSoon: true,
-  },
+  { key: 'chat_per_minute', messageStem: 'chatPerMinute', float: false, comingSoon: true },
   // watch_per_minute rewards participation-PAGE focus time (heartbeat), not stream-watch time (M6).
-  {
-    key: 'watch_per_minute',
-    label: 'Participation page, per min',
-    hint: 'while the viewer keeps the participate page open (not stream-watch time)',
-  },
-]
+  { key: 'watch_per_minute', messageStem: 'watchPerMinute', float: false, comingSoon: false },
+] as const satisfies ReadonlyArray<{
+  key: EarnNumberKey
+  messageStem: string
+  float: boolean
+  comingSoon: boolean
+}>
 
 // Earn config lives on the engagement-service (own endpoint, like the TTS
 // config), so this panel loads and saves independently of Save Configuration.
+// The chat commands a viewer literally types. They are protocol the engagement
+// service parses, not copy: translating `!vote` would stop the command working.
+// Named constants rather than JSX literals so the i18n gate does not have to
+// carry an exception for them.
+const EXAMPLE_VOTE_COMMAND = '!vote 2'
+const EXAMPLE_BARE_VOTE = '2'
+const EXAMPLE_PREDICT_COMMAND = '!predict 1 500'
+
 function EngagementPanel({ overlayId }: { overlayId: string }) {
+  const t = useTranslations()
   const [config, setConfig] = useState<EarnConfig | null>(null)
   const [numbers, setNumbers] = useState<Record<EarnNumberKey, string> | null>(null)
   const [loadError, setLoadError] = useState(false)
@@ -868,13 +930,20 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
     for (const f of EARN_NUMBER_FIELDS) {
       if (f.comingSoon) continue // not editable yet; the stored value is preserved via ...config
       const n = Number(numbers[f.key])
+      const fieldLabel = t(`overlayEditor.engagement.${f.messageStem}Label`)
       if (!Number.isFinite(n) || n < 0) {
-        toastManager.add({ title: `Invalid value for "${f.label}"`, type: 'error' })
+        toastManager.add({
+          title: t('overlayEditor.engagement.invalidValue', { field: fieldLabel }),
+          type: 'error',
+        })
         return
       }
       // All point amounts are int64 server-side; only the multipliers take decimals.
       if (!f.float && !Number.isInteger(n)) {
-        toastManager.add({ title: `"${f.label}" must be a whole number`, type: 'error' })
+        toastManager.add({
+          title: t('overlayEditor.engagement.mustBeWhole', { field: fieldLabel }),
+          type: 'error',
+        })
         return
       }
       parsed[f.key] = n
@@ -894,10 +963,10 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
           string
         >
       )
-      toastManager.add({ title: 'Engagement settings saved', type: 'success' })
+      toastManager.add({ title: t('overlayEditor.toasts.engagementSaved'), type: 'success' })
     } catch (err) {
       toastManager.add({
-        title: 'Failed to save engagement settings',
+        title: t('overlayEditor.toasts.engagementSaveFailed'),
         description: err instanceof ApiError ? err.message : undefined,
         type: 'error',
       })
@@ -908,19 +977,19 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
 
   const shareLinks: ReadonlyArray<{ label: string; path: string; desc: string }> = [
     {
-      label: 'OBS poll widget',
+      label: t('overlayEditor.engagement.pollWidgetLabel'),
       path: `/overlay/${overlayId}/poll`,
-      desc: 'Browser source that shows the live poll',
+      desc: t('overlayEditor.engagement.pollWidgetDescription'),
     },
     {
-      label: 'OBS prediction widget',
+      label: t('overlayEditor.engagement.predictionWidgetLabel'),
       path: `/overlay/${overlayId}/prediction`,
-      desc: 'Browser source that shows the live prediction',
+      desc: t('overlayEditor.engagement.predictionWidgetDescription'),
     },
     {
-      label: 'Viewer participation page',
+      label: t('overlayEditor.engagement.participateLabel'),
       path: `/overlay/${overlayId}/participate`,
-      desc: 'Viewers vote, wager and check their balance — no install needed',
+      desc: t('overlayEditor.engagement.participateDescription'),
     },
   ]
 
@@ -930,7 +999,10 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
       setCopiedPath(path)
       setTimeout(() => setCopiedPath(null), 2000)
     } catch {
-      toastManager.add({ title: 'Could not copy the link', type: 'error' })
+      toastManager.add({
+        title: t('overlayEditor.engagement.copyLinkFailed'),
+        type: 'error',
+      })
     }
   }
 
@@ -941,22 +1013,33 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
       window.location.href = await engagementApi.getTwitchMirrorConsentUrl(overlayId)
     } catch {
       toastManager.add({
-        title: 'Could not start Twitch consent. Please try again.',
+        title: t('overlayEditor.toasts.twitchConsentFailed'),
         type: 'error',
       })
     }
   }
 
   if (loadError) {
-    return (
-      <p className="text-destructive text-xs">
-        Could not load engagement settings. Reload the page to try again.
-      </p>
-    )
+    return <p className="text-xs text-destructive">{t('overlayEditor.engagement.loadError')}</p>
   }
   if (!config || !numbers) {
     return <Skeleton className="h-40 w-full rounded-lg" />
   }
+
+  // Resolved in two passes: `t()` substitutes the points name as plain text and
+  // leaves the three command placeholders standing, then interpolateElements
+  // replaces those with <code> runs. Doing it the other way round would need the
+  // commands as strings, and `2` occurring inside `!vote 2` makes that ambiguous.
+  const pointsExplainer = interpolateElements(
+    t('overlayEditor.engagement.pointsExplainer', {
+      pointsName: config.points_name.trim() || t('overlayEditor.engagement.pointsNamePlaceholder'),
+    }),
+    {
+      voteCommand: <code>{EXAMPLE_VOTE_COMMAND}</code>,
+      bareVote: <code>{EXAMPLE_BARE_VOTE}</code>,
+      predictCommand: <code>{EXAMPLE_PREDICT_COMMAND}</code>,
+    }
+  )
 
   return (
     <div className="space-y-4">
@@ -967,15 +1050,9 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
           onChange={(e) => setConfig({ ...config, enabled: e.target.checked })}
           className="size-4 accent-twitch"
         />
-        Enable viewer points
+        {t('overlayEditor.engagement.enablePoints')}
       </label>
-      <p className="text-xs text-text-sub">
-        Viewers earn {config.points_name.trim() || 'Points'} by supporting the stream (subs, bits,
-        donations, gifts) and by keeping the participation page open, and wager them on predictions.
-        Run polls and predictions from the Monitor View; viewers join straight from chat (
-        <code>!vote 2</code> or just <code>2</code>, <code>!predict 1 500</code>) or the
-        participation page — no install required.
-      </p>
+      <p className="text-xs text-text-sub">{pointsExplainer}</p>
 
       <div>
         <label className="flex cursor-pointer items-center gap-2 text-sm text-text">
@@ -985,24 +1062,22 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
             onChange={(e) => setConfig({ ...config, announce_on_start: e.target.checked })}
             className="size-4 accent-twitch"
           />
-          Announce new rounds in chat
+          {t('overlayEditor.engagement.announceRounds')}
         </label>
         <p className="mt-0.5 text-[11px] text-text-sub">
-          Posts the question, numbered options and the participate link to your chat when a round
-          starts. Needs the “advanced controls” send permission (the same grant the Monitor view’s
-          chat sending uses) — without it the announcement is skipped.
+          {t('overlayEditor.engagement.announceRoundsHint')}
         </p>
       </div>
 
       <div>
         <label htmlFor="earn-points-name" className="mb-1 block text-xs text-text-sub">
-          Points name
+          {t('overlayEditor.engagement.pointsNameLabel')}
         </label>
         <Input
           id="earn-points-name"
           value={config.points_name}
           onChange={(e) => setConfig({ ...config, points_name: e.target.value })}
-          placeholder="Points"
+          placeholder={t('overlayEditor.engagement.pointsNamePlaceholder')}
         />
       </div>
 
@@ -1010,9 +1085,9 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
         {EARN_NUMBER_FIELDS.map((f) => (
           <div key={f.key}>
             <label htmlFor={`earn-${f.key}`} className="mb-1 block text-xs text-text-sub">
-              {f.label}
+              {t(`overlayEditor.engagement.${f.messageStem}Label`)}
             </label>
-            <input
+            <Input
               id={`earn-${f.key}`}
               type="number"
               min={0}
@@ -1020,25 +1095,25 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
               value={numbers[f.key]}
               disabled={f.comingSoon}
               onChange={(e) => setNumbers({ ...numbers, [f.key]: e.target.value })}
-              className={cn(
-                'w-full rounded-md border border-border bg-bg px-2 py-1 text-xs text-text',
-                f.comingSoon && 'opacity-50'
-              )}
+              size="sm"
+              className={cn(f.comingSoon && 'opacity-50')}
             />
             <p className="mt-0.5 text-[11px] text-text-sub">
-              {f.hint}
-              {f.comingSoon && ' (coming soon)'}
+              {t(`overlayEditor.engagement.${f.messageStem}Hint`)}
+              {f.comingSoon && t('overlayEditor.engagement.comingSoonSuffix')}
             </p>
           </div>
         ))}
       </div>
 
       <Button size="sm" className="w-full" disabled={saving} onClick={() => void handleSave()}>
-        {saving ? 'Saving...' : 'Save Engagement Settings'}
+        {saving ? t('overlayEditor.engagement.saving') : t('overlayEditor.engagement.save')}
       </Button>
 
       <div className="space-y-2 border-t border-border pt-3">
-        <p className="text-xs font-medium text-text">Widget & viewer links</p>
+        <p className="text-xs font-medium text-text">
+          {t('overlayEditor.engagement.linksHeading')}
+        </p>
         {shareLinks.map((link) => (
           <div key={link.path} className="flex items-center gap-2">
             <div className="min-w-0 flex-1">
@@ -1052,20 +1127,27 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
               className="shrink-0 text-xs"
               onClick={() => void copyLink(link.path)}
             >
-              {copiedPath === link.path ? 'Copied!' : 'Copy link'}
+              {copiedPath === link.path
+                ? t('overlayEditor.engagement.copiedLink')
+                : t('overlayEditor.engagement.copyLink')}
             </Button>
           </div>
         ))}
         {/* L-Docs1: browser-source setup guidance for the two OBS widgets. */}
         <p className="text-[11px] text-text-sub">
-          In OBS/Streamlabs: add a <span className="font-medium">Browser Source</span>, paste a
-          widget URL, and set it to your canvas size (e.g. 1920×1080). The widgets are transparent
-          and only appear while a round is live.
+          {emphasise(
+            t('overlayEditor.engagement.browserSourceHint', {
+              emphasis: t('overlayEditor.engagement.browserSourceHintEmphasis'),
+            }),
+            t('overlayEditor.engagement.browserSourceHintEmphasis'),
+            (run) => (
+              <span className="font-medium">{run}</span>
+            )
+          )}
         </p>
         {/* L-U9: the participation link is meant to be shared with viewers (on-screen / panels). */}
         <p className="text-[11px] text-text-sub">
-          Share the participation link with mobile viewers — put it on-screen or in your channel
-          panels so they can join without the extension.
+          {t('overlayEditor.engagement.participateShareHint')}
         </p>
       </div>
 
@@ -1074,12 +1156,10 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
           next channel sync rather than immediately. The consent flow returns to the
           Monitor view, where the mirrored rounds appear. */}
       <div className="space-y-2 border-t border-border pt-3">
-        <p className="text-xs font-medium text-text">Twitch native mirroring</p>
-        <p className="text-[11px] text-text-sub">
-          Mirror your native Twitch polls &amp; predictions onto All-Chat overlays (read-only —
-          viewers still vote in Twitch). Opt-in; it adds read-only Twitch scopes and takes effect
-          after the next channel sync (a stream restart or re-adding the source).
+        <p className="text-xs font-medium text-text">
+          {t('overlayEditor.engagement.mirroringHeading')}
         </p>
+        <p className="text-[11px] text-text-sub">{t('overlayEditor.engagement.mirroringBody')}</p>
         <Button
           type="button"
           variant="outline"
@@ -1087,7 +1167,7 @@ function EngagementPanel({ overlayId }: { overlayId: string }) {
           className="text-xs"
           onClick={() => void startMirrorConsent()}
         >
-          Enable Twitch mirroring
+          {t('overlayEditor.engagement.enableMirroring')}
         </Button>
       </div>
     </div>
@@ -1110,6 +1190,7 @@ function AddSourceForm({
   onSourceAdded?: () => void
   isAdmin?: boolean
 }) {
+  const t = useTranslations()
   const [tiktokUsername, setTiktokUsername] = useState('')
   const [tiktokDialogOpen, setTiktokDialogOpen] = useState(false)
   const [isAdding, setIsAdding] = useState(false)
@@ -1189,13 +1270,13 @@ function AddSourceForm({
       setSelectedChannelName('')
       onSourceAdded?.()
       trackEvent('source_configured', { platform: 'discord' })
-      toastManager.add({ title: 'Discord source added', type: 'success' })
+      toastManager.add({ title: t('overlayEditor.toasts.discordSourceAdded'), type: 'success' })
     } catch (err) {
       // Surface the server's reason: the Discord source guard (ADR-0048) refuses channels in
       // servers the user has not connected and explains what to do, which a generic failure
       // toast would throw away.
       toastManager.add({
-        title: 'Failed to add Discord source',
+        title: t('overlayEditor.toasts.discordSourceAddFailed'),
         description: err instanceof ApiError ? err.message : undefined,
         type: 'error',
       })
@@ -1220,12 +1301,12 @@ function AddSourceForm({
       // source), so the source was added directly without an OAuth reflow.
       // Refresh the source list instead of silently doing nothing.
       onSourceAdded?.()
-      toastManager.add({ title: 'Source added', type: 'success' })
+      toastManager.add({ title: t('overlayEditor.toasts.sourceAdded'), type: 'success' })
       return
     }
     // Surface the failure rather than failing silently.
     toastManager.add({
-      title: 'Could not connect',
+      title: t('overlayEditor.toasts.oauthConnectFailed'),
       description: result.message,
       type: 'error',
     })
@@ -1256,13 +1337,14 @@ function AddSourceForm({
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-text-sub">Connect a platform to this overlay.</p>
+      <p className="text-xs text-text-sub">{t('overlayEditor.addSource.intro')}</p>
 
       {/* OAuth buttons — fetch auth_url then redirect, same pattern as login */}
       <div className="grid grid-cols-1 gap-2">
-        <button
+        <Button
           onClick={() => startOAuth(`/api/v1/auth/twitch/add-source/${overlayId}`)}
-          className="flex items-center gap-2.5 rounded-lg bg-twitch px-4 py-2.5 text-sm font-semibold text-bg transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
+          size="lg"
+          className="gap-2.5"
         >
           <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
             <path
@@ -1270,12 +1352,13 @@ function AddSourceForm({
               d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z"
             />
           </svg>
-          Connect Twitch
-        </button>
+          {t('overlayEditor.addSource.connectTwitch')}
+        </Button>
 
-        <button
+        <Button
           onClick={() => startOAuth(`/api/v1/auth/youtube/add-source/${overlayId}`)}
-          className="flex items-center gap-2.5 rounded-lg px-4 py-2.5 text-sm font-semibold text-bg transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
+          size="lg"
+          className="gap-2.5 text-bg"
           style={
             { backgroundColor: '#FF0000', '--tw-ring-color': '#FF0000' } as React.CSSProperties
           }
@@ -1286,12 +1369,13 @@ function AddSourceForm({
               d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"
             />
           </svg>
-          Connect YouTube
-        </button>
+          {t('overlayEditor.addSource.connectYoutube')}
+        </Button>
 
-        <button
+        <Button
           onClick={() => startOAuth(`/api/v1/auth/kick/add-source/${overlayId}`)}
-          className="flex items-center gap-2.5 rounded-lg px-4 py-2.5 text-sm font-semibold text-bg transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-kick focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
+          size="lg"
+          className="gap-2.5 text-bg"
           style={{ backgroundColor: 'var(--color-kick)' }}
         >
           <svg className="h-4 w-4 shrink-0" viewBox="0 0 512 512" aria-hidden="true">
@@ -1300,14 +1384,15 @@ function AddSourceForm({
               d="M37 .036h164.448v113.621h54.71v-56.82h54.731V.036h164.448v170.777h-54.73v56.82h-54.711v56.8h54.71v56.82h54.73V512.03H310.89v-56.82h-54.73v-56.8h-54.711v113.62H37V.036z"
             />
           </svg>
-          Connect Kick
-        </button>
+          {t('overlayEditor.addSource.connectKick')}
+        </Button>
 
         {/* TikTok — no OAuth; the button matches the OAuth buttons but opens a
             username dialog, since TikTok Live is keyed on a creator handle. */}
-        <button
+        <Button
           onClick={() => setTiktokDialogOpen(true)}
-          className="flex items-center gap-2.5 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
+          size="lg"
+          className="gap-2.5 text-white"
           style={
             { backgroundColor: '#010101', '--tw-ring-color': '#69C9D0' } as React.CSSProperties
           }
@@ -1318,22 +1403,29 @@ function AddSourceForm({
               d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"
             />
           </svg>
-          Connect TikTok
-        </button>
+          {t('overlayEditor.addSource.connectTiktok')}
+        </Button>
 
         {/* Discord — guild dialog or settings prompt */}
         {guildsLoaded && guilds.length === 0 ? (
           <p className="rounded-lg border border-border bg-surface px-4 py-2.5 text-sm text-text-sub">
-            Connect a Discord server in{' '}
-            <Link href="/settings" className="text-discord underline hover:opacity-80">
-              Settings
-            </Link>{' '}
-            first to add Discord sources.
+            {emphasise(
+              t('overlayEditor.addSource.discordNeedsServer', {
+                emphasis: t('overlayEditor.addSource.discordNeedsServerEmphasis'),
+              }),
+              t('overlayEditor.addSource.discordNeedsServerEmphasis'),
+              (run) => (
+                <Link href="/settings" className="text-discord underline hover:opacity-80">
+                  {run}
+                </Link>
+              )
+            )}
           </p>
         ) : (
-          <button
+          <Button
             onClick={handleDiscordButtonClick}
-            className="flex items-center gap-2.5 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg focus-visible:outline-none"
+            size="lg"
+            className="gap-2.5 text-white"
             style={
               { backgroundColor: '#5865F2', '--tw-ring-color': '#5865F2' } as React.CSSProperties
             }
@@ -1345,8 +1437,8 @@ function AddSourceForm({
                 d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057c.001.022.015.043.03.056a19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"
               />
             </svg>
-            Connect Discord
-          </button>
+            {t('overlayEditor.addSource.connectDiscord')}
+          </Button>
         )}
       </div>
 
@@ -1376,10 +1468,12 @@ function AddSourceForm({
           {discordStep === 1 && (
             <div className="mt-3 space-y-2">
               {guilds.map((guild) => (
-                <button
+                <Button
                   key={guild.guild_id}
                   onClick={() => handleSelectGuild(guild)}
-                  className="flex w-full items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-text transition-colors hover:bg-surface-2 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                  variant="outline"
+                  size="lg"
+                  className="w-full justify-start gap-3"
                 >
                   {guild.guild_icon ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -1395,7 +1489,7 @@ function AddSourceForm({
                   )}
                   <span className="truncate font-medium">{guild.guild_name}</span>
                   <ChevronRight className="ml-auto size-4 shrink-0 text-text-sub" />
-                </button>
+                </Button>
               ))}
             </div>
           )}
@@ -1410,7 +1504,7 @@ function AddSourceForm({
                     htmlFor={discordChannelSelectId}
                     className="mb-1 block text-xs text-text-sub"
                   >
-                    Channel
+                    {t('overlayEditor.addSource.channelLabel')}
                   </label>
                   <select
                     id={discordChannelSelectId}
@@ -1424,7 +1518,7 @@ function AddSourceForm({
                     }}
                     className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
                   >
-                    <option value="">Select a channel...</option>
+                    <option value="">{t('overlayEditor.addSource.selectChannel')}</option>
                     {guildChannels.map((cat) => (
                       <optgroup key={cat.id || 'uncategorized'} label={cat.name}>
                         {cat.channels.map((ch) => (
@@ -1450,16 +1544,20 @@ function AddSourceForm({
                   setSelectedChannelName('')
                 }}
               >
-                Back
+                {t('overlayEditor.addSource.back')}
               </Button>
             )}
-            <Dialog.Close render={<Button variant="outline">Cancel</Button>} />
+            <Dialog.Close
+              render={<Button variant="outline">{t('overlayEditor.addSource.cancel')}</Button>}
+            />
             {discordStep === 2 && (
               <Button
                 disabled={!selectedChannelId || isAddingDiscord}
                 onClick={() => void handleAddDiscordSource()}
               >
-                {isAddingDiscord ? 'Adding...' : 'Add'}
+                {isAddingDiscord
+                  ? t('overlayEditor.addSource.addingEllipsis')
+                  : t('overlayEditor.addSource.add')}
               </Button>
             )}
           </div>
@@ -1475,27 +1573,24 @@ function AddSourceForm({
         }}
       >
         <Dialog.Content>
-          <Dialog.Title>Connect TikTok</Dialog.Title>
-          <Dialog.Description>
-            TikTok has no login step here. Enter the creator&apos;s username and we&apos;ll pull
-            their live chat.
-          </Dialog.Description>
+          <Dialog.Title>{t('overlayEditor.addSource.tiktokTitle')}</Dialog.Title>
+          <Dialog.Description>{t('overlayEditor.addSource.tiktokBody')}</Dialog.Description>
           <form onSubmit={handleTikTokSubmit} className="mt-3">
             <Input
               value={tiktokUsername}
               onChange={(e) => setTiktokUsername(e.target.value)}
-              placeholder="@username"
+              placeholder={t('overlayEditor.addSource.tiktokPlaceholder')}
             />
             <div className="mt-4 flex justify-end gap-2">
               <Dialog.Close
                 render={
                   <Button variant="outline" type="button">
-                    Cancel
+                    {t('overlayEditor.addSource.cancel')}
                   </Button>
                 }
               />
               <Button type="submit" disabled={isAdding || !tiktokUsername.trim()}>
-                {isAdding ? 'Adding…' : 'Add'}
+                {isAdding ? t('overlayEditor.addSource.adding') : t('overlayEditor.addSource.add')}
               </Button>
             </div>
           </form>
@@ -1506,7 +1601,7 @@ function AddSourceForm({
       {isAdmin && onAddManual && (
         <details className="border-t border-border pt-1">
           <summary className="cursor-pointer py-1 text-xs text-text-sub select-none hover:text-text">
-            Admin: manual channel ID
+            {t('overlayEditor.addSource.adminSummary')}
           </summary>
           <form
             className="mt-2 space-y-2"
@@ -1548,10 +1643,10 @@ function AddSourceForm({
                 }}
                 className="rounded-lg border border-border bg-surface px-2 py-1.5 text-xs text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
               >
-                <option value="twitch">Twitch</option>
-                <option value="youtube">YouTube</option>
-                <option value="kick">Kick</option>
-                <option value="tiktok">TikTok</option>
+                <option value="twitch">{t('common.platforms.twitch')}</option>
+                <option value="youtube">{t('common.platforms.youtube')}</option>
+                <option value="kick">{t('common.platforms.kick')}</option>
+                <option value="tiktok">{t('common.platforms.tiktok')}</option>
               </select>
               <Input
                 value={adminChannelId}
@@ -1562,8 +1657,8 @@ function AddSourceForm({
                 }}
                 placeholder={
                   adminPlatform === 'youtube'
-                    ? '@handle, channel URL, or UC…'
-                    : 'Channel ID or username'
+                    ? t('overlayEditor.addSource.adminYoutubePlaceholder')
+                    : t('overlayEditor.addSource.adminChannelPlaceholder')
                 }
                 className="flex-1 text-xs"
               />
@@ -1601,9 +1696,9 @@ function AddSourceForm({
             >
               {isAdminAdding
                 ? adminPlatform === 'youtube'
-                  ? 'Resolving…'
-                  : 'Adding…'
-                : 'Add manually'}
+                  ? t('overlayEditor.addSource.adminResolving')
+                  : t('overlayEditor.addSource.adding')
+                : t('overlayEditor.addSource.adminAdd')}
             </Button>
           </form>
         </details>
@@ -1612,9 +1707,8 @@ function AddSourceForm({
   )
 }
 
-// ---- Page ------------------------------------------------------------------
-
 export default function OverlayEditorPage({ params }: { params: Promise<{ id: string }> }) {
+  const t = useTranslations()
   const { id } = use(params)
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -1683,7 +1777,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   const [seventvResolveState, setSeventvResolveState] = useState<
     | { status: 'idle' }
     | { status: 'resolving' }
-    | { status: 'resolved'; setID: string; name?: string; emoteCount?: number }
+    | ResolvedSevenTvReference
     | { status: 'error'; message: string }
   >({ status: 'idle' })
   const [seventvRemoving, setSeventvRemoving] = useState(false)
@@ -1857,6 +1951,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
 
   // --- OBS URL copy state ---
   const [copiedObs, setCopiedObs] = useState(false)
+  const [copiedDock, setCopiedDock] = useState(false)
 
   // --- Discord relay state ---
   const [relayExpandedSourceId, setRelayExpandedSourceId] = useState<string | null>(null)
@@ -2020,7 +2115,6 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     [sendTtsSettingsToIframe]
   )
 
-  // Phase 13 Plan 03 — ElevenLabs flow handlers (wired via TTSGroup props)
   const handleSaveTTSKey = useCallback(
     async (apiKey: string, voiceId: string): Promise<void> => {
       await overlaysApi.saveTTSKey(id, apiKey, voiceId)
@@ -2183,7 +2277,6 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
       sendFilterSettingsToIframe(filterSettingsRef.current)
       // Also send current sound settings to the embed on ready
       sendSoundSettingsToIframe(soundSettingsRef.current)
-      // Phase 13: send current TTS settings to the embed on ready (D-22)
       sendTtsSettingsToIframe(ttsSettingsRef.current)
     }
     window.addEventListener('message', handleEmbedReady)
@@ -2365,12 +2458,10 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           setVisualSettings(merged)
           sendCssToIframe(merged)
 
-          // Phase 11: Load filter settings
           if (config.filter_settings) {
             setFilterSettings(config.filter_settings)
           }
 
-          // Phase 12: Load sound settings from display_settings
           if (config.display_settings) {
             const d = config.display_settings
             const loaded: Partial<DisplaySettings> = {}
@@ -2387,7 +2478,6 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
             setSoundSettings(loaded)
           }
 
-          // Phase 13: Load TTS display_settings (Plan 01 fields — 20 total)
           if (config.display_settings) {
             const d = config.display_settings
             const tts: Partial<DisplaySettings> = {}
@@ -2434,7 +2524,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
             setTtsSettings(tts)
           }
 
-          // Phase 13 Plan 03: Load ElevenLabs config metadata (has-key + OBS URL).
+          // Load ElevenLabs config metadata (has-key + OBS URL).
           // Non-fatal — a 404 on first edit or a non-premium user simply leaves
           // the Advanced block in its unsaved-empty state.
           try {
@@ -2477,10 +2567,11 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   useNotificationSocket(id, undefined, (envelope) => {
     if (envelope.type === 'share_revoked') {
       const data = envelope.data as { revoked_by_username?: string } | undefined
-      const revoker = data?.revoked_by_username || 'someone'
+      const revoker =
+        data?.revoked_by_username || t('overlayEditor.toasts.shareRevokedUnknownRevoker')
       toastManager.add({
-        title: 'Share revoked',
-        description: `Your share with ${revoker} was revoked`,
+        title: t('overlayEditor.toasts.shareRevoked'),
+        description: t('overlayEditor.toasts.shareRevokedBody', { revoker }),
         type: 'error',
       })
       overlaysApi.getSources(id).then(setSources).catch(console.error)
@@ -2494,8 +2585,8 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
 
     if (sourceAdded) {
       toastManager.add({
-        title: 'Source added',
-        description: `Successfully added ${sourceAdded} source!`,
+        title: t('overlayEditor.toasts.sourceAdded'),
+        description: t('overlayEditor.toasts.oauthSourceAddedBody', { platform: sourceAdded }),
         type: 'success',
       })
       overlaysApi.getSources(id).then(setSources).catch(console.error)
@@ -2503,24 +2594,22 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     } else if (error === 'youtube_permission_required') {
       trackEvent('source_add_failed', { platform: 'youtube', reason: 'permission_required' })
       toastManager.add({
-        title: 'YouTube permission required',
-        description:
-          'To add your YouTube channel, you must allow All-Chat to see your YouTube account. Please try again and approve the YouTube permission on the Google screen.',
+        title: t('overlayEditor.toasts.youtubePermissionRequired'),
+        description: t('overlayEditor.toasts.youtubePermissionRequiredBody'),
         type: 'error',
       })
     } else if (error === 'youtube_no_channel') {
       trackEvent('source_add_failed', { platform: 'youtube', reason: 'no_channel' })
       toastManager.add({
-        title: 'No YouTube channel found',
-        description:
-          'We could not find a YouTube channel on that Google account. Make sure the account has a YouTube channel, then try again.',
+        title: t('overlayEditor.toasts.youtubeNoChannel'),
+        description: t('overlayEditor.toasts.youtubeNoChannelBody'),
         type: 'error',
       })
     } else if (error === 'failed_to_add_source') {
       trackEvent('source_add_failed', { reason: 'failed' })
       toastManager.add({
-        title: 'Failed to add source',
-        description: 'Please try again.',
+        title: t('overlayEditor.toasts.oauthSourceAddFailed'),
+        description: t('common.toast.tryAgain'),
         type: 'error',
       })
     }
@@ -2543,11 +2632,11 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     try {
       await overlaysApi.removeSource(id, sourceId)
       setSources((prev) => prev.filter((s) => s.id !== sourceId))
-      toastManager.add({ title: 'Source removed', type: 'success' })
+      toastManager.add({ title: t('overlayEditor.toasts.sourceRemoved'), type: 'success' })
     } catch {
       toastManager.add({
-        title: 'Failed to remove source',
-        description: 'Please try again.',
+        title: t('overlayEditor.toasts.sourceRemoveFailed'),
+        description: t('common.toast.tryAgain'),
         type: 'error',
       })
     }
@@ -2567,11 +2656,11 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
       // Already holds the chat scopes — nothing to re-grant; refresh so the
       // now-migrated source reflects its EventSub state.
       void overlaysApi.getSources(id).then(setSources).catch(console.error)
-      toastManager.add({ title: 'Twitch chat connected', type: 'success' })
+      toastManager.add({ title: t('overlayEditor.toasts.twitchChatConnected'), type: 'success' })
       return
     }
     toastManager.add({
-      title: 'Could not reconnect Twitch chat',
+      title: t('overlayEditor.toasts.twitchChatReconnectFailed'),
       description: result.message,
       type: 'error',
     })
@@ -2585,11 +2674,11 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
       })
       setSources((prev) => [...prev, source])
       trackEvent('source_configured', { platform: 'tiktok' })
-      toastManager.add({ title: 'TikTok source added', type: 'success' })
+      toastManager.add({ title: t('overlayEditor.toasts.tiktokSourceAdded'), type: 'success' })
     } catch {
       toastManager.add({
-        title: 'Failed to add TikTok source',
-        description: 'Check the username and try again.',
+        title: t('overlayEditor.toasts.tiktokSourceAddFailed'),
+        description: t('overlayEditor.toasts.tiktokSourceAddFailedBody'),
         type: 'error',
       })
     }
@@ -2603,11 +2692,11 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
       })
       setSources((prev) => [...prev, source])
       trackEvent('source_configured', { platform })
-      toastManager.add({ title: 'Source added', type: 'success' })
+      toastManager.add({ title: t('overlayEditor.toasts.sourceAdded'), type: 'success' })
     } catch {
       toastManager.add({
-        title: 'Failed to add source',
-        description: 'Verify the channel ID and try again.',
+        title: t('overlayEditor.toasts.manualSourceAddFailed'),
+        description: t('overlayEditor.toasts.manualSourceAddFailedBody'),
         type: 'error',
       })
     }
@@ -2624,14 +2713,16 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
       setSources(updated)
       trackEvent('source_configured', { platform: 'shared_overlay' })
       toastManager.add({
-        title: 'Shared overlay added',
-        description: `Added ${share.sender_display_name}'s overlay`,
+        title: t('overlayEditor.toasts.sharedOverlayAdded'),
+        description: t('overlayEditor.toasts.sharedOverlayAddedBody', {
+          sender: share.sender_display_name,
+        }),
         type: 'success',
       })
     } catch {
       toastManager.add({
-        title: 'Failed to add shared overlay',
-        description: 'Please try again.',
+        title: t('overlayEditor.toasts.sharedOverlayAddFailed'),
+        description: t('common.toast.tryAgain'),
         type: 'error',
       })
     }
@@ -2654,6 +2745,19 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     })
   }
 
+  // The monitor as an OBS/Streamlabs custom browser DOCK, which is a different
+  // destination from the URL above: that one is the public overlay a browser
+  // source renders on stream, this one is the auth-gated moderator monitor in a
+  // narrow docked panel. `dock=1` is what makes it fit one.
+  function handleCopyDockUrl() {
+    const url = `${window.location.origin}/overlay/${id}/view?dock=1`
+    navigator.clipboard.writeText(url).then(() => {
+      trackEvent('obs_url_copied', { surface: 'editor_dock' })
+      setCopiedDock(true)
+      setTimeout(() => setCopiedDock(false), 2000)
+    })
+  }
+
   function handleShareClick() {
     if (!user?.is_premium) {
       setShowPremiumRequired(true)
@@ -2668,10 +2772,10 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     setIsCloning(true)
     try {
       const cloned = await overlaysApi.clone(id)
-      toastManager.add({ title: 'Overlay cloned', type: 'success' })
+      toastManager.add({ title: t('overlayEditor.toasts.cloned'), type: 'success' })
       router.push(`/overlays/${cloned.id}`)
     } catch {
-      toastManager.add({ title: 'Failed to clone overlay', type: 'error' })
+      toastManager.add({ title: t('overlayEditor.toasts.cloneFailed'), type: 'error' })
     } finally {
       setIsCloning(false)
     }
@@ -2685,10 +2789,10 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
         await overlaysApi.update(cloned.id, { name: overlay.name })
       }
       await overlaysApi.delete(id)
-      toastManager.add({ title: 'Overlay ID reset — redirecting…', type: 'success' })
+      toastManager.add({ title: t('overlayEditor.toasts.overlayIdReset'), type: 'success' })
       router.push(`/overlays/${cloned.id}`)
     } catch {
-      toastManager.add({ title: 'Failed to reset overlay ID', type: 'error' })
+      toastManager.add({ title: t('overlayEditor.toasts.overlayIdResetFailed'), type: 'error' })
       setIsResetting(false)
     }
     setShowResetConfirm(false)
@@ -2700,11 +2804,14 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     setShareLoading(true)
     try {
       await sharesApi.createRequest(username, id)
-      toastManager.add({ title: `Share request sent to ${username}`, type: 'success' })
+      toastManager.add({
+        title: t('overlayEditor.toasts.shareRequestSent', { username }),
+        type: 'success',
+      })
       setShowShareModal(false)
       setShareRecipient('')
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to send share request'
+      const msg = err instanceof Error ? err.message : t('overlayEditor.toasts.shareRequestFailed')
       toastManager.add({ title: msg, type: 'error' })
     } finally {
       setShareLoading(false)
@@ -2757,7 +2864,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
       setMockForm((prev) => ({ ...prev, message: '' }))
     } catch (error) {
       console.error('[Editor] Failed to send mock message:', error)
-      toastManager.add({ title: 'Failed to send mock message', type: 'error' })
+      toastManager.add({ title: t('overlayEditor.toasts.mockMessageFailed'), type: 'error' })
     }
   }
 
@@ -2839,7 +2946,8 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           ...(soundSettings.notification_sound_url
             ? { notification_sound_url: soundSettings.notification_sound_url }
             : {}),
-          // Phase 13: persist all 20 tts_* fields (ElevenLabs key/voice live in overlay_tts_configs, NOT here)
+          // The ElevenLabs API key and voice id are deliberately absent: they
+          // live in overlay_tts_configs, not in display_settings.
           ...ttsSettings,
         },
         enable_7tv: enable7tv,
@@ -2890,14 +2998,17 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
       const updated = await overlaysApi.update(id, { is_public_for_viewers: true })
       setOverlay(updated)
       toastManager.add({
-        title: 'Extension overlay set',
-        description: 'This overlay will be shown in the browser extension.',
+        title: t('overlayEditor.toasts.extensionOverlaySet'),
+        description: t('overlayEditor.toasts.extensionOverlaySetBody'),
         type: 'success',
       })
     } catch {
       // Roll back optimistic update on failure
       setIsPublicForViewers(false)
-      toastManager.add({ title: 'Failed to update overlay', type: 'error' })
+      toastManager.add({
+        title: t('overlayEditor.toasts.extensionOverlayUpdateFailed'),
+        type: 'error',
+      })
     }
   }
 
@@ -2907,11 +3018,14 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     try {
       const updated = await overlaysApi.update(id, { is_public_for_viewers: false })
       setOverlay(updated)
-      toastManager.add({ title: 'Extension overlay deactivated', type: 'success' })
+      toastManager.add({ title: t('overlayEditor.toasts.extensionOverlayUnset'), type: 'success' })
     } catch {
       // Roll back optimistic update on failure
       setIsPublicForViewers(true)
-      toastManager.add({ title: 'Failed to update overlay', type: 'error' })
+      toastManager.add({
+        title: t('overlayEditor.toasts.extensionOverlayUpdateFailed'),
+        type: 'error',
+      })
     }
   }
 
@@ -2938,9 +3052,9 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
         <AppNav />
         <div className="flex h-[calc(100vh-60px)] items-center justify-center">
           <div className="text-center">
-            <p className="text-destructive mb-4 text-lg">Overlay not found</p>
+            <p className="mb-4 text-lg text-destructive">{t('overlayEditor.page.notFound')}</p>
             <Button variant="outline" onClick={() => router.push('/dashboard')}>
-              Return to Dashboard
+              {t('overlayEditor.page.returnToDashboard')}
             </Button>
           </div>
         </div>
@@ -2965,13 +3079,15 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           {/* 1. Header */}
           <div className="flex items-start justify-between">
             <div>
-              <button
+              <Button
                 onClick={() => router.push('/dashboard')}
-                className="mb-1 flex items-center gap-1 rounded text-sm text-text-sub hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                variant="ghost"
+                size="sm"
+                className="mb-1 px-0"
               >
                 <ChevronLeft className="size-4" />
-                Back
-              </button>
+                {t('overlayEditor.page.back')}
+              </Button>
               <h1 className="text-xl font-bold text-text">{overlay.name}</h1>
               {overlay.description && (
                 <p className="mt-0.5 text-sm text-text-sub">{overlay.description}</p>
@@ -2982,23 +3098,23 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                 variant="outline"
                 size="sm"
                 onClick={() => window.open(`/overlay/${id}/view`, '_blank', 'noopener,noreferrer')}
-                title="Open the readable chat & activity monitor in a new tab"
+                title={t('overlayEditor.page.monitorViewTitle')}
               >
-                Monitor View
+                {t('overlayEditor.page.monitorView')}
               </Button>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => router.push(`/overlays/${id}/events`)}
               >
-                Event Settings
+                {t('overlayEditor.page.eventSettings')}
               </Button>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => router.push(`/overlays/${id}/credits`)}
               >
-                Credits
+                {t('overlayEditor.page.credits')}
               </Button>
               <Button
                 variant="outline"
@@ -3006,38 +3122,95 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                 disabled={isCloning}
                 onClick={() => void handleCloneOverlay()}
               >
-                {isCloning ? 'Cloning…' : 'Clone'}
+                {isCloning ? t('overlayEditor.page.cloning') : t('overlayEditor.page.clone')}
               </Button>
             </div>
           </div>
 
-          {/* 2. Copy OBS URL */}
-          <Button
-            variant="outline"
-            className="flex w-full items-center justify-center gap-2"
-            onClick={handleCopyObsUrl}
-          >
-            <Clipboard className="size-4" />
-            {copiedObs ? 'Copied!' : 'Copy OBS URL'}
-          </Button>
-          <Dialog.Root>
-            <Dialog.Trigger
-              render={
-                <button
-                  type="button"
-                  className="mx-auto block text-xs text-text-sub underline-offset-2 hover:text-text hover:underline"
-                >
-                  How do I add this to OBS?
-                </button>
-              }
-            />
-            <Dialog.Content size="sm">
-              <Dialog.Title>Add the overlay to OBS</Dialog.Title>
-              <div className="mt-3">
-                <ObsHelpContent />
-              </div>
-            </Dialog.Content>
-          </Dialog.Root>
+          {/* 2. The two URLs this overlay hands out, side by side because they
+              are the same kind of action on different destinations: the OBS URL
+              is the public overlay a browser SOURCE renders on stream, the dock
+              URL is the auth-gated monitor a browser DOCK renders beside the
+              mixer.
+
+              One row of two, rather than a second stacked button-plus-link
+              pair, so this block stays the height it was. Everything below it
+              in this scrolling column — including the settings nav — slides
+              under the sticky Save footer, and axe reports a nav item that
+              straddles the footer's top edge as partially obscured (WCAG
+              2.5.8). Growing the block moves that edge onto a nav item; keeping
+              the height fixed leaves it in the gap above one, where it is on
+              main. */}
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="flex flex-1 items-center justify-center gap-2"
+              onClick={handleCopyObsUrl}
+            >
+              <Clipboard className="size-4" />
+              {copiedObs
+                ? t('overlayEditor.page.copiedObsUrl')
+                : t('overlayEditor.page.copyObsUrl')}
+            </Button>
+            <Button
+              variant="outline"
+              className="flex flex-1 items-center justify-center gap-2"
+              onClick={handleCopyDockUrl}
+            >
+              <Clipboard className="size-4" />
+              {copiedDock
+                ? t('overlayEditor.page.copiedDockUrl')
+                : t('overlayEditor.page.copyDockUrl')}
+            </Button>
+          </div>
+          {/* Both help triggers centred on one line. They stay inline (rather
+              than becoming flex items) so the line box is the height a single
+              trigger occupied before, per the note above, and so a narrow
+              column wraps them instead of pushing them past its edges. mx-4 on
+              each keeps 32px between two link-height targets, over the 24px
+              WCAG 2.5.8 spacing floor. */}
+          <div className="text-center">
+            <Dialog.Root>
+              <Dialog.Trigger
+                render={
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="xs"
+                    className="mx-4 h-auto p-0 text-text-sub hover:text-text"
+                  >
+                    {t('overlayEditor.page.obsHelpTrigger')}
+                  </Button>
+                }
+              />
+              <Dialog.Content size="sm">
+                <Dialog.Title>{t('overlayEditor.page.obsHelpTitle')}</Dialog.Title>
+                <div className="mt-3">
+                  <ObsHelpContent />
+                </div>
+              </Dialog.Content>
+            </Dialog.Root>
+            <Dialog.Root>
+              <Dialog.Trigger
+                render={
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="xs"
+                    className="mx-4 h-auto p-0 text-text-sub hover:text-text"
+                  >
+                    {t('overlayEditor.page.dockHelpTrigger')}
+                  </Button>
+                }
+              />
+              <Dialog.Content size="sm">
+                <Dialog.Title>{t('overlayEditor.page.dockHelpTitle')}</Dialog.Title>
+                <div className="mt-3">
+                  <ObsDockHelpContent />
+                </div>
+              </Dialog.Content>
+            </Dialog.Root>
+          </div>
 
           {/* 2b. Share overlay */}
           <Button
@@ -3046,7 +3219,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
             onClick={handleShareClick}
           >
             <Share2 className="size-4" />
-            Share Overlay
+            {t('overlayEditor.page.shareOverlay')}
           </Button>
 
           {/* 2c. Extension overlay */}
@@ -3055,27 +3228,29 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
               <Puzzle className="mt-0.5 size-4 shrink-0 text-twitch" />
               <div className="min-w-0 flex-1">
                 <div className="mb-0.5 flex items-center gap-2">
-                  <p className="text-sm font-semibold text-text">Browser Extension Overlay</p>
+                  <p className="text-sm font-semibold text-text">
+                    {t('overlayEditor.page.extensionHeading')}
+                  </p>
                   {isPublicForViewers && (
                     <span className="inline-flex items-center rounded border border-twitch/30 bg-twitch/15 px-1.5 py-0.5 text-[10px] font-semibold text-twitch">
-                      Active
+                      {t('overlayEditor.page.extensionActive')}
                     </span>
                   )}
                 </div>
                 <p className="text-xs text-text-sub">
                   {isPublicForViewers
-                    ? 'This overlay is shown to viewers via the browser extension at allch.at/c/caesarlp.'
-                    : 'Set this as the overlay shown to viewers via the browser extension.'}
+                    ? t('overlayEditor.page.extensionActiveBody')
+                    : t('overlayEditor.page.extensionInactiveBody')}
                 </p>
               </div>
               {isPublicForViewers ? (
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="hover:text-destructive shrink-0 text-xs text-text-sub"
+                  className="shrink-0 text-xs text-text-sub hover:text-destructive"
                   onClick={handleUnsetExtensionOverlay}
                 >
-                  Deactivate
+                  {t('overlayEditor.page.extensionDeactivate')}
                 </Button>
               ) : (
                 <Button
@@ -3084,7 +3259,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                   className="shrink-0 text-xs"
                   onClick={handleSetAsExtensionOverlay}
                 >
-                  Set Active
+                  {t('overlayEditor.page.extensionSetActive')}
                 </Button>
               )}
             </div>
@@ -3093,34 +3268,40 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           {/* Premium required dialog */}
           <Dialog.Root open={showPremiumRequired} onOpenChange={setShowPremiumRequired}>
             <Dialog.Content size="sm">
-              <Dialog.Title>Premium Feature</Dialog.Title>
+              <Dialog.Title>{t('overlayEditor.page.premiumRequiredTitle')}</Dialog.Title>
               <Dialog.Description>
-                Sharing your overlay is a premium feature.{' '}
-                <PremiumUpsellLink>Upgrade your account</PremiumUpsellLink> to share your chat with
-                other streamers.
+                {interpolateElements(t('overlayEditor.page.premiumRequiredBody'), {
+                  upgradeLink: (
+                    <PremiumUpsellLink>
+                      {t('overlayEditor.page.premiumUpgradeLink')}
+                    </PremiumUpsellLink>
+                  ),
+                })}
               </Dialog.Description>
               <p className="mt-3 text-sm text-text-sub">
-                Questions? Join our{' '}
-                <a
-                  href={DISCORD_INVITE_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-medium text-twitch hover:underline"
-                >
-                  Discord community
-                </a>
-                .
+                {interpolateElements(t('overlayEditor.page.questionsJoin'), {
+                  discordLink: (
+                    <a
+                      href={DISCORD_INVITE_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-twitch hover:underline"
+                    >
+                      {t('overlayEditor.page.discordCommunityLink')}
+                    </a>
+                  ),
+                })}
               </p>
               <div className="mt-5 flex gap-2">
                 <Dialog.Close
                   render={
                     <Button type="button" variant="outline" className="flex-1">
-                      Close
+                      {t('overlayEditor.page.close')}
                     </Button>
                   }
                 />
                 <Link href="/upgrade" className="flex-1">
-                  <Button className="w-full">Upgrade</Button>
+                  <Button className="w-full">{t('overlayEditor.page.upgrade')}</Button>
                 </Link>
               </div>
             </Dialog.Content>
@@ -3129,25 +3310,28 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           {/* Share overlay modal */}
           <Dialog.Root open={showShareModal} onOpenChange={setShowShareModal}>
             <Dialog.Content size="sm">
-              <Dialog.Title>Share Overlay</Dialog.Title>
+              <Dialog.Title>{t('overlayEditor.page.shareTitle')}</Dialog.Title>
               <Dialog.Description>
-                Enter the Twitch username of the person you want to share{' '}
-                <strong>{overlay?.name}</strong> with. They&apos;ll receive a request they can
-                accept or decline.
+                {emphasise(
+                  t('overlayEditor.page.shareBody', { emphasis: overlay.name }),
+                  overlay.name,
+                  (run) => (
+                    <strong>{run}</strong>
+                  )
+                )}
               </Dialog.Description>
               <div className="mt-4 mb-4">
                 <label htmlFor="share-recipient" className="mb-1 block text-xs text-text-sub">
-                  Twitch username
+                  {t('overlayEditor.page.shareRecipientLabel')}
                 </label>
-                <input
+                <Input
                   id="share-recipient"
                   ref={shareInputRef}
                   type="text"
                   value={shareRecipient}
                   onChange={(e) => setShareRecipient(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSendShareRequest()}
-                  placeholder="e.g. somestreamer"
-                  className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text placeholder:text-text-sub focus-visible:ring-2 focus-visible:ring-twitch/50 focus-visible:outline-none"
+                  placeholder={t('overlayEditor.page.shareRecipientPlaceholder')}
                   disabled={shareLoading}
                 />
               </div>
@@ -3160,7 +3344,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                       className="flex-1"
                       disabled={shareLoading}
                     >
-                      Cancel
+                      {t('overlayEditor.page.shareCancel')}
                     </Button>
                   }
                 />
@@ -3169,7 +3353,9 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                   onClick={handleSendShareRequest}
                   disabled={shareLoading || !shareRecipient.trim()}
                 >
-                  {shareLoading ? 'Sending...' : 'Send Request'}
+                  {shareLoading
+                    ? t('overlayEditor.page.shareSending')
+                    : t('overlayEditor.page.shareSend')}
                 </Button>
               </div>
             </Dialog.Content>
@@ -3188,13 +3374,15 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                   {activeSection === 'theme' && (
                     <div>
                       <ThemeContent onApply={handleThemeApply} isAdmin={user?.is_admin === true} />
-                      <button
+                      <Button
                         type="button"
-                        className="mt-3 text-xs text-text-sub underline-offset-2 hover:text-text hover:underline"
+                        variant="link"
+                        size="xs"
+                        className="mt-3 h-auto p-0 text-text-sub hover:text-text"
                         onClick={handleResetToTheme}
                       >
-                        Reset to theme defaults
-                      </button>
+                        {t('overlayEditor.page.resetToThemeDefaults')}
+                      </Button>
                     </div>
                   )}
 
@@ -3367,7 +3555,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           ))}
                           {sources.length === 0 && (
                             <p className="py-2 text-sm text-text-sub">
-                              No sources added yet. Add a platform below.
+                              {t('overlayEditor.sources.empty')}
                             </p>
                           )}
                         </div>
@@ -3376,17 +3564,27 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                       {/* Accepted shared overlays — add as source */}
                       {acceptedShares.length > 0 && (
                         <div className="mb-4 border-t border-border pt-4">
-                          <h3 className="mb-3 text-sm font-medium text-text">Shared Overlays</h3>
+                          <h3 className="mb-3 text-sm font-medium text-text">
+                            {t('overlayEditor.sources.sharedHeading')}
+                          </h3>
                           <div className="space-y-2">
                             {acceptedShares.map((share) => (
-                              <button
+                              <Button
                                 key={share.share_id}
                                 onClick={() => handleAddSharedOverlay(share)}
-                                className="flex w-full items-center justify-between rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text transition-colors hover:bg-surface-2"
+                                variant="outline"
+                                size="lg"
+                                className="w-full justify-between"
                               >
-                                <span>{share.sender_display_name}&apos;s overlay</span>
-                                <span className="text-xs text-twitch">+ Add</span>
-                              </button>
+                                <span>
+                                  {t('overlayEditor.sources.sharedOwner', {
+                                    owner: share.sender_display_name,
+                                  })}
+                                </span>
+                                <span className="text-xs text-twitch">
+                                  {t('overlayEditor.sources.add')}
+                                </span>
+                              </Button>
                             ))}
                           </div>
                         </div>
@@ -3409,7 +3607,9 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                       {/* Max Messages */}
                       <div data-setting-anchor="maxMessages">
                         <label className="mb-1 block text-xs text-text-sub">
-                          Max Messages: <span className="text-twitch">{maxMessages}</span>
+                          {interpolateElements(t('overlayEditor.messages.maxMessagesLabel'), {
+                            value: <span className="text-twitch">{maxMessages}</span>,
+                          })}
                         </label>
                         <input
                           type="range"
@@ -3424,7 +3624,15 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                       {/* Message Duration */}
                       <div data-setting-anchor="messageDuration">
                         <label className="mb-1 block text-xs text-text-sub">
-                          Message Duration: <span className="text-twitch">{messageDuration}s</span>
+                          {interpolateElements(t('overlayEditor.messages.messageDurationLabel'), {
+                            value: (
+                              <span className="text-twitch">
+                                {t('overlayEditor.messages.durationSeconds', {
+                                  seconds: messageDuration,
+                                })}
+                              </span>
+                            ),
+                          })}
                         </label>
                         <input
                           type="range"
@@ -3446,10 +3654,10 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                             onChange={(e) => setDisableMessageFade(e.target.checked)}
                             className="accent-twitch"
                           />
-                          Disable Message Fade Out
+                          {t('overlayEditor.messages.disableFade')}
                         </label>
                         <p className="mt-1 ml-5 text-xs text-text-sub">
-                          Messages stay visible until max is reached
+                          {t('overlayEditor.messages.disableFadeHint')}
                         </p>
                       </div>
 
@@ -3462,7 +3670,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           htmlFor={feedAnchorSelectId}
                           className="mb-1 block text-xs text-text-sub"
                         >
-                          Feed Anchor
+                          {t('overlayEditor.messages.feedAnchorLabel')}
                         </label>
                         <select
                           id={feedAnchorSelectId}
@@ -3470,12 +3678,13 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           onChange={(e) => setFeedAnchor(parseFeedAnchor(e.target.value))}
                           className="w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-xs text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
                         >
-                          <option value="top">Top edge — feed grows downward</option>
-                          <option value="bottom">Bottom edge — feed grows upward</option>
+                          <option value="top">{t('overlayEditor.messages.feedAnchorTop')}</option>
+                          <option value="bottom">
+                            {t('overlayEditor.messages.feedAnchorBottom')}
+                          </option>
                         </select>
                         <p className="mt-1 text-xs text-text-sub">
-                          Which edge of the overlay the feed sits on when it is not full. Anchor it
-                          to the bottom and each new message pushes the older ones up.
+                          {t('overlayEditor.messages.feedAnchorHint')}
                         </p>
                       </div>
 
@@ -3488,11 +3697,10 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                             onChange={(e) => setInvertMessageOrder(e.target.checked)}
                             className="accent-twitch"
                           />
-                          Invert Message Order
+                          {t('overlayEditor.messages.invertOrder')}
                         </label>
                         <p className="mt-1 ml-5 text-xs text-text-sub">
-                          Reverses the reading order so the newest message is listed first. This is
-                          the order only — use Feed Anchor to move the feed to the other edge.
+                          {t('overlayEditor.messages.invertOrderHint')}
                         </p>
                       </div>
 
@@ -3502,7 +3710,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           htmlFor={entryAnimationSelectId}
                           className="mb-1 block text-xs text-text-sub"
                         >
-                          Entry Animation
+                          {t('overlayEditor.messages.entryAnimationLabel')}
                         </label>
                         <select
                           id={entryAnimationSelectId}
@@ -3518,18 +3726,20 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                         >
                           {ENTRY_ANIMATION_OPTIONS.map((opt) => (
                             <option key={opt.value} value={opt.value}>
-                              {opt.label}
+                              {t(`overlayEditor.messages.animation${opt.messageStem}`)}
                             </option>
                           ))}
                         </select>
                         <p className="mt-1 text-xs text-text-sub">
-                          How new messages appear on the overlay
+                          {t('overlayEditor.messages.entryAnimationHint')}
                         </p>
                       </div>
 
                       {/* Emote Providers */}
                       <div data-setting-anchor="emoteProviders">
-                        <p className="mb-2 text-xs text-text-sub">Emote Providers</p>
+                        <p className="mb-2 text-xs text-text-sub">
+                          {t('overlayEditor.messages.emoteProvidersLabel')}
+                        </p>
                         <div className="space-y-1.5">
                           <label className="flex items-center gap-2 text-xs text-text-sub">
                             <input
@@ -3538,7 +3748,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                               onChange={(e) => setEnable7tv(e.target.checked)}
                               className="accent-twitch"
                             />
-                            7TV
+                            {t('overlayEditor.messages.seventv')}
                           </label>
                           <label className="flex items-center gap-2 text-xs text-text-sub">
                             <input
@@ -3547,7 +3757,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                               onChange={(e) => setEnableBttv(e.target.checked)}
                               className="accent-twitch"
                             />
-                            BetterTTV
+                            {t('overlayEditor.messages.betterttv')}
                           </label>
                           <label className="flex items-center gap-2 text-xs text-text-sub">
                             <input
@@ -3556,7 +3766,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                               onChange={(e) => setEnableFfz(e.target.checked)}
                               className="accent-twitch"
                             />
-                            FrankerFaceZ
+                            {t('overlayEditor.messages.frankerfacez')}
                           </label>
                         </div>
                       </div>
@@ -3564,25 +3774,31 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                       {/* 7TV emote-set override — useful when no Twitch source exists */}
                       <AdvancedDisclosure count={1}>
                         <div data-setting-anchor="seventvOverride">
-                          <p className="mb-1 text-xs text-text-sub">7TV Emote Set</p>
+                          <p className="mb-1 text-xs text-text-sub">
+                            {t('overlayEditor.messages.seventvOverrideLabel')}
+                          </p>
                           <p className="mb-2 text-[11px] text-text-sub/70">
-                            Optional. Paste a 7TV emote-set ID, an emote-set URL, or your 7TV
-                            profile URL to attach those emotes to this overlay regardless of which
-                            platforms you stream on.
+                            {t('overlayEditor.messages.seventvOverrideHint')}
                           </p>
                           {/* Saved-state pill: shows what's actually attached right now,
                         with a one-click Remove. Hidden while nothing is saved. */}
                           {seventvOverrideSavedID !== '' && (
                             <div className="mb-2 flex items-center justify-between gap-2 rounded-md border border-border bg-surface-2 px-2 py-1.5 text-[11px]">
                               <span className="truncate text-text">
-                                <span className="text-text-sub">Currently active: </span>
+                                <span className="text-text-sub">
+                                  {t('overlayEditor.messages.seventvCurrentlyActive')}
+                                </span>
                                 {seventvSavedDescriptor?.name ? (
                                   <>
                                     <span className="font-medium">
-                                      &quot;{seventvSavedDescriptor.name}&quot;
+                                      {t('overlayEditor.messages.seventvQuotedName', {
+                                        name: seventvSavedDescriptor.name,
+                                      })}
                                     </span>
                                     {typeof seventvSavedDescriptor.emoteCount === 'number'
-                                      ? ` (${seventvSavedDescriptor.emoteCount} emotes)`
+                                      ? t('overlayEditor.messages.seventvEmoteCount', {
+                                          count: seventvSavedDescriptor.emoteCount,
+                                        })
                                       : ''}
                                   </>
                                 ) : (
@@ -3607,14 +3823,14 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                                     setSeventvResolveState({ status: 'idle' })
                                     setConfigAlert({
                                       type: 'success',
-                                      message: '7TV emote set removed',
+                                      message: t('overlayEditor.messages.seventvRemoved'),
                                     })
                                     setTimeout(() => setConfigAlert(null), 5000)
                                   } catch (err) {
                                     const message =
                                       err instanceof Error
                                         ? err.message
-                                        : 'Failed to remove 7TV emote set'
+                                        : t('overlayEditor.messages.seventvRemoveFailed')
                                     setConfigAlert({ type: 'error', message })
                                     setTimeout(() => setConfigAlert(null), 5000)
                                   } finally {
@@ -3622,12 +3838,14 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                                   }
                                 }}
                               >
-                                {seventvRemoving ? 'Removing…' : 'Remove'}
+                                {seventvRemoving
+                                  ? t('overlayEditor.messages.seventvRemoving')
+                                  : t('overlayEditor.messages.seventvRemove')}
                               </Button>
                             </div>
                           )}
                           <div className="flex gap-2">
-                            <input
+                            <Input
                               type="text"
                               value={seventvOverrideInput}
                               onChange={(e) => {
@@ -3636,10 +3854,10 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                               }}
                               placeholder={
                                 seventvOverrideSavedID !== ''
-                                  ? 'Paste a new ID/URL to replace…'
-                                  : 'https://7tv.app/users/...'
+                                  ? t('overlayEditor.messages.seventvReplacePlaceholder')
+                                  : t('overlayEditor.messages.seventvUrlPlaceholder')
                               }
-                              className="flex-1 rounded-md border border-border bg-bg px-2 py-1 text-xs text-text"
+                              className="flex-1"
                             />
                             <Button
                               type="button"
@@ -3668,25 +3886,20 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                                   const message =
                                     err instanceof Error
                                       ? err.message
-                                      : 'Could not resolve 7TV reference'
+                                      : t('overlayEditor.messages.seventvResolveFailed')
                                   setSeventvResolveState({ status: 'error', message })
                                 }
                               }}
                             >
-                              {seventvResolveState.status === 'resolving' ? 'Checking…' : 'Verify'}
+                              {seventvResolveState.status === 'resolving'
+                                ? t('overlayEditor.messages.seventvChecking')
+                                : t('overlayEditor.messages.seventvVerify')}
                             </Button>
                           </div>
                           {seventvResolveState.status === 'resolved' &&
                             seventvResolveState.setID !== seventvOverrideSavedID && (
                               <p className="mt-1 text-[11px] text-green-500">
-                                Resolved
-                                {seventvResolveState.name
-                                  ? ` to "${seventvResolveState.name}"`
-                                  : ''}
-                                {typeof seventvResolveState.emoteCount === 'number'
-                                  ? ` (${seventvResolveState.emoteCount} emotes)`
-                                  : ''}
-                                {' — click Save Configuration to apply.'}
+                                {resolvedSevenTvNotice(t, seventvResolveState)}
                               </p>
                             )}
                           {seventvResolveState.status === 'error' && (
@@ -3707,33 +3920,38 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                   {activeSection === 'custom-css' && (
                     <div className="space-y-3">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-xs font-medium text-text">Custom CSS</span>
+                        <span className="text-xs font-medium text-text">
+                          {t('overlayEditor.customCss.heading')}
+                        </span>
                         {(() => {
                           const customized = isCustomCssForked(customCss, pristineThemeCss)
                           if (!customized) {
                             return themeId ? (
                               <span className="inline-flex items-center rounded-full border border-green-500/20 bg-green-500/10 px-2 py-0.5 text-[11px] font-medium text-green-400">
-                                Using “{getBundledTheme(themeId)?.name ?? themeId}” theme ·
-                                auto-updates
+                                {t('overlayEditor.customCss.usingTheme', {
+                                  theme: getBundledTheme(themeId)?.name ?? themeId,
+                                })}
                               </span>
                             ) : (
-                              <span className="text-[11px] text-text-dim">No theme applied</span>
+                              <span className="text-[11px] text-text-dim">
+                                {t('overlayEditor.customCss.noThemeApplied')}
+                              </span>
                             )
                           }
                           if (!themeId) {
                             return (
                               <span className="inline-flex items-center rounded-full border border-border bg-surface-2 px-2 py-0.5 text-[11px] font-medium text-text-sub">
-                                Custom CSS
+                                {t('overlayEditor.customCss.customPill')}
                               </span>
                             )
                           }
                           return customCssMode === 'fork' ? (
                             <span className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-400">
-                              Full copy saved — theme updates paused
+                              {t('overlayEditor.customCss.forkedPill')}
                             </span>
                           ) : (
                             <span className="inline-flex items-center rounded-full border border-green-500/20 bg-green-500/10 px-2 py-0.5 text-[11px] font-medium text-green-400">
-                              Customized — untouched theme rules still auto-update
+                              {t('overlayEditor.customCss.layeredPill')}
                             </span>
                           )
                         })()}
@@ -3744,15 +3962,14 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           className="ml-auto text-xs"
                           onClick={handleResetCustomCss}
                         >
-                          {themeId ? 'Reset to theme' : 'Clear'}
+                          {themeId
+                            ? t('overlayEditor.customCss.resetToTheme')
+                            : t('overlayEditor.customCss.clear')}
                         </Button>
                       </div>
 
                       <p className="text-xs text-text-sub">
-                        Edit the CSS below — the preview updates as you type. Only your changes are
-                        saved, so fixes we ship to the theme still reach the rules you didn’t touch.
-                        Deleting theme rules can’t be layered, so it stores a full copy and pauses
-                        theme updates for this overlay; “Reset to theme” re-links it.
+                        {t('overlayEditor.customCss.explainer')}
                       </p>
 
                       <MonacoCSSEditor
@@ -3760,7 +3977,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                         onChange={handleCustomCssChange}
                         onValidate={setCssIssues}
                         height="320px"
-                        placeholder="/* Enter your custom CSS here */"
+                        placeholder={t('overlayEditor.customCss.editorPlaceholder')}
                       />
 
                       {/* Tips for broken CSS, surfaced from Monaco's CSS language service. */}
@@ -3769,31 +3986,37 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                         const warnings = cssIssues.filter((i) => i.severity === 'warning')
                         if (errors.length === 0 && warnings.length === 0) {
                           return (
-                            <p className="text-xs text-green-400">✓ No CSS problems detected.</p>
+                            <p className="text-xs text-green-400">
+                              {t('overlayEditor.customCss.noProblems')}
+                            </p>
                           )
                         }
                         const parts: string[] = []
                         if (errors.length > 0)
-                          parts.push(`${errors.length} error${errors.length > 1 ? 's' : ''}`)
+                          parts.push(cssProblemCount(t, 'error', errors.length))
                         if (warnings.length > 0)
-                          parts.push(`${warnings.length} warning${warnings.length > 1 ? 's' : ''}`)
+                          parts.push(cssProblemCount(t, 'warning', warnings.length))
                         return (
                           <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2">
                             <p className="text-xs font-medium text-amber-300">
-                              {parts.join(' · ')} — invalid rules are ignored by the browser, so fix
-                              these for your styles to take effect. Incomplete rules aren’t
-                              previewed.
+                              {t('overlayEditor.customCss.problemsAdvice', {
+                                counts: parts.join(t('overlayEditor.customCss.problemsSeparator')),
+                              })}
                             </p>
                             <ul className="mt-1 space-y-0.5">
                               {[...errors, ...warnings].slice(0, 5).map((issue, idx) => (
                                 <li key={idx} className="text-[11px] text-text-sub">
-                                  <span className="font-mono text-text-dim">L{issue.line}:</span>{' '}
+                                  <span className="font-mono text-text-dim">
+                                    {t('overlayEditor.customCss.issueLine', { line: issue.line })}
+                                  </span>{' '}
                                   {issue.message}
                                 </li>
                               ))}
                               {errors.length + warnings.length > 5 && (
                                 <li className="text-[11px] text-text-dim">
-                                  …and {errors.length + warnings.length - 5} more
+                                  {t('overlayEditor.customCss.moreIssues', {
+                                    count: errors.length + warnings.length - 5,
+                                  })}
                                 </li>
                               )}
                             </ul>
@@ -3802,16 +4025,18 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                       })()}
 
                       <p className="text-xs text-text-sub">
-                        Need inspiration? Explore{' '}
-                        <a
-                          href="https://github.com/caesarakalaeii/all-chat/tree/main/docs/overlay-themes"
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-twitch hover:underline"
-                        >
-                          theme docs
-                        </a>
-                        .
+                        {interpolateElements(t('overlayEditor.customCss.inspiration'), {
+                          docsLink: (
+                            <a
+                              href="https://github.com/caesarakalaeii/all-chat/tree/main/docs/overlay-themes"
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-twitch hover:underline"
+                            >
+                              {t('overlayEditor.customCss.themeDocsLink')}
+                            </a>
+                          ),
+                        })}
                       </p>
                     </div>
                   )}
@@ -3823,7 +4048,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           htmlFor={`${mockFieldId}-platform`}
                           className="mb-1 block text-xs text-text-sub"
                         >
-                          Platform
+                          {t('overlayEditor.testing.platformLabel')}
                         </label>
                         <select
                           id={`${mockFieldId}-platform`}
@@ -3836,10 +4061,10 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           }
                           className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
                         >
-                          <option value="twitch">Twitch</option>
-                          <option value="youtube">YouTube</option>
-                          <option value="kick">Kick</option>
-                          <option value="tiktok">TikTok</option>
+                          <option value="twitch">{t('common.platforms.twitch')}</option>
+                          <option value="youtube">{t('common.platforms.youtube')}</option>
+                          <option value="kick">{t('common.platforms.kick')}</option>
+                          <option value="tiktok">{t('common.platforms.tiktok')}</option>
                         </select>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
@@ -3848,14 +4073,13 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                             htmlFor={`${mockFieldId}-display-name`}
                             className="mb-1 block text-xs text-text-sub"
                           >
-                            Display Name
+                            {t('overlayEditor.testing.displayNameLabel')}
                           </label>
-                          <input
+                          <Input
                             id={`${mockFieldId}-display-name`}
                             type="text"
                             value={mockForm.displayName}
                             onChange={(e) => handleMockInputChange('displayName', e.target.value)}
-                            className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
                           />
                         </div>
                         <div>
@@ -3863,14 +4087,13 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                             htmlFor={`${mockFieldId}-username`}
                             className="mb-1 block text-xs text-text-sub"
                           >
-                            Username
+                            {t('overlayEditor.testing.usernameLabel')}
                           </label>
-                          <input
+                          <Input
                             id={`${mockFieldId}-username`}
                             type="text"
                             value={mockForm.username}
                             onChange={(e) => handleMockInputChange('username', e.target.value)}
-                            className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
                           />
                         </div>
                       </div>
@@ -3880,15 +4103,14 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                             htmlFor={`${mockFieldId}-avatar-url`}
                             className="mb-1 block text-xs text-text-sub"
                           >
-                            Avatar URL
+                            {t('overlayEditor.testing.avatarUrlLabel')}
                           </label>
-                          <input
+                          <Input
                             id={`${mockFieldId}-avatar-url`}
                             type="text"
                             value={mockForm.avatarUrl}
                             onChange={(e) => handleMockInputChange('avatarUrl', e.target.value)}
-                            placeholder="https://..."
-                            className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                            placeholder={t('overlayEditor.testing.avatarUrlPlaceholder')}
                           />
                         </div>
                         <div>
@@ -3896,7 +4118,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                             htmlFor={`${mockFieldId}-color`}
                             className="mb-1 block text-xs text-text-sub"
                           >
-                            Name Color
+                            {t('overlayEditor.testing.nameColorLabel')}
                           </label>
                           <input
                             id={`${mockFieldId}-color`}
@@ -3912,14 +4134,14 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           htmlFor={`${mockFieldId}-message`}
                           className="mb-1 block text-xs text-text-sub"
                         >
-                          Message
+                          {t('overlayEditor.testing.messageLabel')}
                         </label>
                         <textarea
                           id={`${mockFieldId}-message`}
                           value={mockForm.message}
                           onChange={(e) => handleMockInputChange('message', e.target.value)}
                           className="h-16 w-full resize-none rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
-                          placeholder="Type something fun..."
+                          placeholder={t('overlayEditor.testing.messagePlaceholder')}
                         />
                       </div>
                       <Button
@@ -3928,7 +4150,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                         disabled={!mockForm.message.trim()}
                         className="w-full"
                       >
-                        Inject Message
+                        {t('overlayEditor.testing.injectMessage')}
                       </Button>
                       <div className="flex gap-2">
                         <Button
@@ -3939,7 +4161,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           data-setting-anchor="sampleChat"
                           onClick={() => void handleAddSampleTranscript()}
                         >
-                          💬 Sample Chat
+                          {t('overlayEditor.testing.sampleChat')}
                         </Button>
                         <Button
                           type="button"
@@ -3949,7 +4171,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           data-setting-anchor="sampleEvents"
                           onClick={() => void handleAddSampleEvents()}
                         >
-                          ⭐ Sample Events
+                          {t('overlayEditor.testing.sampleEvents')}
                         </Button>
                       </div>
                     </div>
@@ -3958,18 +4180,18 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                   {activeSection === 'danger-zone' && (
                     <div className="space-y-3">
                       <p className="text-xs text-text-sub">
-                        Reset your overlay ID to revoke any leaked OBS URLs. A new overlay with the
-                        same configuration will be created and you will be redirected to it. The old
-                        overlay and its URL will be permanently deleted.
+                        {t('overlayEditor.dangerZone.explainer')}
                       </p>
                       <Button
                         type="button"
                         variant="outline"
-                        className="border-destructive/50 text-destructive hover:bg-destructive/10 w-full"
+                        className="w-full border-destructive/50 text-destructive hover:bg-destructive/10"
                         onClick={() => setShowResetConfirm(true)}
                         disabled={isResetting}
                       >
-                        {isResetting ? 'Resetting…' : 'Reset Overlay ID'}
+                        {isResetting
+                          ? t('overlayEditor.dangerZone.resetting')
+                          : t('overlayEditor.dangerZone.resetOverlayId')}
                       </Button>
                     </div>
                   )}
@@ -3984,7 +4206,9 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                 disabled={!configLoaded || isSavingConfig}
                 className="w-full"
               >
-                {isSavingConfig ? 'Saving...' : 'Save Configuration'}
+                {isSavingConfig
+                  ? t('overlayEditor.page.savingConfiguration')
+                  : t('overlayEditor.page.saveConfiguration')}
               </Button>
               {/* Always-mounted live region so save success/failure announces
                   to screen readers (WCAG 4.1.3) — conditionally mounting the
@@ -4020,15 +4244,13 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
       {/* Theme apply confirm dialog */}
       <Dialog.Root open={showThemeConfirm} onOpenChange={setShowThemeConfirm}>
         <Dialog.Content size="sm" showCloseButton={false}>
-          <Dialog.Title>Apply theme?</Dialog.Title>
-          <Dialog.Description>
-            Loading this theme will reset your visual customizations. Continue?
-          </Dialog.Description>
+          <Dialog.Title>{t('overlayEditor.page.applyThemeTitle')}</Dialog.Title>
+          <Dialog.Description>{t('overlayEditor.page.applyThemeBody')}</Dialog.Description>
           <div className="mt-4 flex justify-end gap-2">
             <Dialog.Close
               render={
                 <Button type="button" variant="outline" size="sm">
-                  Cancel
+                  {t('overlayEditor.page.applyThemeCancel')}
                 </Button>
               }
             />
@@ -4043,7 +4265,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                 setShowThemeConfirm(false)
               }}
             >
-              Continue
+              {t('overlayEditor.page.applyThemeContinue')}
             </Button>
           </div>
         </Dialog.Content>
@@ -4052,16 +4274,13 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
       {/* Reset Overlay ID confirm dialog */}
       <Dialog.Root open={showResetConfirm} onOpenChange={setShowResetConfirm}>
         <Dialog.Content size="sm" showCloseButton={false}>
-          <Dialog.Title>Reset Overlay ID?</Dialog.Title>
-          <Dialog.Description>
-            This will create a new overlay with a fresh ID and permanently delete this one. Any
-            existing OBS URLs will stop working — update your browser source after the reset.
-          </Dialog.Description>
+          <Dialog.Title>{t('overlayEditor.dangerZone.confirmTitle')}</Dialog.Title>
+          <Dialog.Description>{t('overlayEditor.dangerZone.confirmBody')}</Dialog.Description>
           <div className="mt-4 flex justify-end gap-2">
             <Dialog.Close
               render={
                 <Button type="button" variant="outline" size="sm">
-                  Cancel
+                  {t('overlayEditor.dangerZone.cancel')}
                 </Button>
               }
             />
@@ -4072,7 +4291,9 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
               disabled={isResetting}
               onClick={() => void handleConfirmResetOverlayId()}
             >
-              {isResetting ? 'Resetting…' : 'Reset ID'}
+              {isResetting
+                ? t('overlayEditor.dangerZone.resetting')
+                : t('overlayEditor.dangerZone.confirmReset')}
             </Button>
           </div>
         </Dialog.Content>

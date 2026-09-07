@@ -38,10 +38,6 @@ import (
 // strangerUserID holds no role on the overlay at all.
 const strangerUserID = "44444444-4444-4444-8444-444444444444"
 
-// ---------------------------------------------------------------------------
-// Fakes
-// ---------------------------------------------------------------------------
-
 type fakeGrantStore struct {
 	created     []repository.InviteParams
 	createErr   error
@@ -138,10 +134,6 @@ func (g delegationGateFor) DelegationEnabled(_ context.Context, userID string) (
 	return g[userID], nil
 }
 
-// ---------------------------------------------------------------------------
-// Harness
-// ---------------------------------------------------------------------------
-
 func grantHandler(t *testing.T, role string, store *fakeGrantStore, gate FeatureGate) *GrantHandler {
 	t.Helper()
 	access := &repository.OverlayAccess{OwnerUserID: ownerID, OwnerIsPremium: true, Role: role}
@@ -186,10 +178,6 @@ func decode(t *testing.T, resp *httptest.ResponseRecorder) map[string]any {
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &body))
 	return body
 }
-
-// ---------------------------------------------------------------------------
-// Owner-only authorization
-// ---------------------------------------------------------------------------
 
 // Managing the mod team is an ownership power, not a moderation power. A delegated moderator must
 // not be able to invite more moderators, widen their own grant, or revoke a colleague — and the
@@ -239,10 +227,6 @@ func TestGrantEndpoints_RequireAuthentication(t *testing.T) {
 	resp := do(grantRouter(grantHandler(t, repository.RoleOwner, store, nil), ""), http.MethodGet, modsPath(), "")
 	assert.Equal(t, http.StatusUnauthorized, resp.Code)
 }
-
-// ---------------------------------------------------------------------------
-// Invite creation
-// ---------------------------------------------------------------------------
 
 func TestCreateInvite_ReturnsTheSecretExactlyOnce(t *testing.T) {
 	store := &fakeGrantStore{}
@@ -458,10 +442,6 @@ func TestRevocation_IsNeverGated(t *testing.T) {
 	})
 }
 
-// ---------------------------------------------------------------------------
-// Listing
-// ---------------------------------------------------------------------------
-
 func TestListModerators_ReportsRosterWithCapUsage(t *testing.T) {
 	accepted := time.Now().Add(-time.Hour)
 	store := &fakeGrantStore{grants: []repository.Grant{
@@ -499,10 +479,6 @@ func TestListModerators_ReportsRosterWithCapUsage(t *testing.T) {
 		assert.Contains(t, resp.Body.String(), `"moderators":[]`)
 	})
 }
-
-// ---------------------------------------------------------------------------
-// Update
-// ---------------------------------------------------------------------------
 
 func TestUpdateGrant(t *testing.T) {
 	t.Run("actions and legs are passed through", func(t *testing.T) {
@@ -560,10 +536,6 @@ func TestUpdateGrant(t *testing.T) {
 	})
 }
 
-// ---------------------------------------------------------------------------
-// Revoke
-// ---------------------------------------------------------------------------
-
 func TestRevokeGrant(t *testing.T) {
 	t.Run("a live grant", func(t *testing.T) {
 		store := &fakeGrantStore{revokedOK: true}
@@ -581,10 +553,6 @@ func TestRevokeGrant(t *testing.T) {
 		assert.Equal(t, "grant_not_found", decode(t, resp)["code"])
 	})
 }
-
-// ---------------------------------------------------------------------------
-// Preview
-// ---------------------------------------------------------------------------
 
 func TestPreviewInvite(t *testing.T) {
 	expires := time.Now().Add(invites.TTL)
@@ -652,10 +620,6 @@ func TestPreviewInvite(t *testing.T) {
 		assert.Empty(t, store.seenHashes)
 	})
 }
-
-// ---------------------------------------------------------------------------
-// Accept
-// ---------------------------------------------------------------------------
 
 func TestAcceptInvite(t *testing.T) {
 	accepted := repository.InviteDetails{

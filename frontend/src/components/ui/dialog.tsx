@@ -22,6 +22,7 @@ import { Dialog as DialogPrimitive } from '@base-ui/react/dialog'
 import { X } from 'lucide-react'
 import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
+import { useTranslations } from '@/lib/i18n'
 
 const dialogContentVariants = cva(
   'fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-full rounded-xl border border-border bg-surface p-6 shadow-xl text-text',
@@ -91,6 +92,7 @@ function DialogContent({
   VariantProps<typeof dialogContentVariants> & {
     showCloseButton?: boolean
   }) {
+  const t = useTranslations()
   return (
     <DialogPrimitive.Portal>
       <DialogBackdrop />
@@ -102,7 +104,7 @@ function DialogContent({
         {showCloseButton && (
           <DialogPrimitive.Close
             className="absolute top-4 right-4 rounded-md p-1 text-text-sub transition-colors hover:bg-surface-2 hover:text-text"
-            aria-label="Close dialog"
+            aria-label={t('common.dialog.closeLabel')}
           >
             <X className="size-4" />
           </DialogPrimitive.Close>

@@ -541,7 +541,7 @@ For alerts: The sidecar picks up `grafana_alert: "1"` labeled ConfigMaps (hot-re
 | One large monolithic dashboard | Tiered dashboards by audience | This phase | Operations team can focus on relevant panels |
 
 **Deprecated/outdated:**
-- The `docs/METRICS_ROLLOUT_COMPLETE.md` status table lists 9 services — it predates discord-listener, innertube, and twitch-eventsub additions
+- The 2025-11 metrics rollout status table listed 9 services — it predated discord-listener, innertube, and twitch-eventsub, and the doc holding it was deleted on 2026-09-02 as a point-in-time artifact
 - The prometheus scrape config example in `shared/metrics/README.md` uses `static_configs` — the production setup uses ServiceMonitor CRDs instead
 
 ---
@@ -611,7 +611,7 @@ None — existing test infrastructure (per-service `go test ./...`, `make test`)
 - Codebase inspection: `servicemonitor.yaml` — ServiceMonitor coverage gaps confirmed
 
 ### Secondary (MEDIUM confidence)
-- `docs/METRICS_ROLLOUT_COMPLETE.md` — historical wiring status (some services added after this doc was written)
+- The 2025-11 metrics rollout write-up (deleted 2026-09-02, in git history) — historical wiring status, already missing services added after it was written
 - `shared/metrics/README.md` — usage patterns confirmed match code
 - Helm values inspection — provisioning mechanism confirmed
 

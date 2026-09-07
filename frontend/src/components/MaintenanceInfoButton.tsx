@@ -19,18 +19,23 @@
  */
 
 import clsx from 'clsx'
+import { Button } from '@/components/ui/button'
 import { Info } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import { maintenanceApi } from '@/lib/api/maintenance'
 import type { MaintenanceWindow } from '@/lib/types/maintenance'
+import { formatDateTime, useTranslations } from '@/lib/i18n'
 
-const DATE_FORMAT = new Intl.DateTimeFormat(undefined, {
+// Not a module-level Intl.DateTimeFormat: that formats with whatever locale the
+// machine has, and this popover renders inside OBS as well as a browser.
+// formatDateTime pins the UI locale and caches the constructor itself.
+const DATE_FORMAT_OPTIONS: Intl.DateTimeFormatOptions = {
   month: 'short',
   day: 'numeric',
   hour: '2-digit',
   minute: '2-digit',
-})
+}
 
 function isActive(mw: MaintenanceWindow): boolean {
   const now = Date.now()
@@ -44,6 +49,7 @@ function isActive(mw: MaintenanceWindow): boolean {
  * click. Shown to everyone viewing the monitor (owners and moderators alike).
  */
 export function MaintenanceInfoButton() {
+  const t = useTranslations()
   const [windows, setWindows] = useState<MaintenanceWindow[]>([])
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -74,28 +80,25 @@ export function MaintenanceInfoButton() {
 
   return (
     <div className="relative" ref={containerRef}>
-      <button
+      <Button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        aria-label="Service announcements"
-        title="Service announcements"
+        aria-label={t('common.maintenanceInfo.buttonLabel')}
+        title={t('common.maintenanceInfo.buttonLabel')}
+        variant="outline"
+        size="icon-sm"
         className={clsx(
-          'flex items-center justify-center rounded-lg border p-1.5 transition-colors focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none',
-          open
-            ? 'border-border-md bg-surface-2 text-text'
-            : hasActive
-              ? 'border-amber-500/30 text-amber-300 hover:border-amber-500/50'
-              : 'border-border text-text-sub hover:border-border-md hover:text-text'
+          !open && hasActive && 'border-amber-500/30 text-amber-300 hover:border-amber-500/50'
         )}
       >
         <Info className="h-3.5 w-3.5" />
-      </button>
+      </Button>
 
       {open && (
         <div className="absolute right-0 z-50 mt-2 w-72 rounded-lg border border-border bg-surface p-3 shadow-lg">
           <p className="mb-2 text-[10px] font-semibold tracking-wide text-text-dim uppercase">
-            Service announcements
+            {t('common.maintenanceInfo.popoverHeading')}
           </p>
           <div className="flex flex-col gap-3">
             {windows.map((mw) => {
@@ -103,15 +106,20 @@ export function MaintenanceInfoButton() {
               return (
                 <div key={mw.id} className="text-xs">
                   <p className={clsx('font-semibold', active ? 'text-amber-300' : 'text-blue-300')}>
-                    {active ? 'Maintenance in progress' : 'Scheduled maintenance'}
+                    {active
+                      ? t('maintenanceBanner.popoverActiveHeading')
+                      : t('maintenanceBanner.popoverScheduledHeading')}
                   </p>
                   <p className="mt-0.5 font-medium text-text">{mw.title}</p>
                   <p className="mt-0.5 text-text-sub">
                     {active
-                      ? `Expected completion: ${DATE_FORMAT.format(new Date(mw.ends_at))}`
-                      : `${DATE_FORMAT.format(new Date(mw.starts_at))} to ${DATE_FORMAT.format(
-                          new Date(mw.ends_at)
-                        )}`}
+                      ? t('maintenanceBanner.popoverExpectedCompletion', {
+                          endsAt: formatDateTime(new Date(mw.ends_at), DATE_FORMAT_OPTIONS),
+                        })
+                      : t('maintenanceBanner.popoverRange', {
+                          startsAt: formatDateTime(new Date(mw.starts_at), DATE_FORMAT_OPTIONS),
+                          endsAt: formatDateTime(new Date(mw.ends_at), DATE_FORMAT_OPTIONS),
+                        })}
                   </p>
                   {mw.description && (
                     <p className="mt-1 leading-relaxed text-text-sub">{mw.description}</p>

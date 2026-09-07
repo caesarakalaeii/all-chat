@@ -38,7 +38,42 @@ import Image from 'next/image'
 import { use, useEffect, useState, useRef } from 'react'
 import clsx from 'clsx'
 import Script from 'next/script'
+import { type TFunction, formatDate, formatNumber, useTranslations } from '@/lib/i18n'
 import type { CreditRollResponse, CreditRollConfig, LeaderboardEntry } from '@/lib/types/overlay'
+
+// Decoration: the warning triangle sits above copy naming the failure, and the
+// film clapper and camera each precede a heading that says the same in words.
+const WARNING_GLYPH = '⚠️'
+const CAMERA_GLYPH = '🎥'
+
+/**
+ * Render the session length the way the roll header does: hours and minutes if
+ * both are non-zero, one of them alone otherwise, and a fallback for a session
+ * that has only just begun.
+ *
+ * English pluralisation is a per-language rule, so each form is its own catalog
+ * key rather than an 's' appended at the render site.
+ */
+function sessionDuration(t: TFunction, totalSeconds: number): string {
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const hourText =
+    hours === 1
+      ? t('viewerOverlay.credits.durationHourOne', { hours })
+      : t('viewerOverlay.credits.durationHourMany', { hours })
+  const minuteText =
+    minutes === 1
+      ? t('viewerOverlay.credits.durationMinuteOne', { minutes })
+      : t('viewerOverlay.credits.durationMinuteMany', { minutes })
+  if (hours > 0 && minutes > 0)
+    return t('viewerOverlay.credits.durationHoursAndMinutes', {
+      hours: hourText,
+      minutes: minuteText,
+    })
+  if (hours > 0) return hourText
+  if (minutes > 0) return minuteText
+  return t('viewerOverlay.credits.durationJustStarted')
+}
 
 declare global {
   interface Window {
@@ -47,6 +82,7 @@ declare global {
 }
 
 export default function CreditRollPage({ params }: { params: Promise<{ id: string }> }) {
+  const t = useTranslations()
   const { id } = use(params)
   const [creditData, setCreditData] = useState<CreditRollResponse | null>(null)
   const [config, setConfig] = useState<CreditRollConfig | null>(null)
@@ -73,21 +109,21 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
         const dataResponse = await fetch(`/api/v1/overlays/public/${id}/credit-roll`)
         if (!dataResponse.ok) {
           const errorData = await dataResponse.json()
-          throw new Error(errorData.error || 'Failed to load credit roll')
+          throw new Error(errorData.error || t('viewerOverlay.credits.loadFailed'))
         }
 
         const data = await dataResponse.json()
         setCreditData(data)
       } catch (err) {
         console.error('Failed to load credit roll:', err)
-        setError(err instanceof Error ? err.message : 'Failed to load credit roll')
+        setError(err instanceof Error ? err.message : t('viewerOverlay.credits.loadFailed'))
       } finally {
         setLoading(false)
       }
     }
 
     loadCreditRoll()
-  }, [id])
+  }, [id, t])
 
   // Initialize Twitch Player when clip changes
   useEffect(() => {
@@ -207,7 +243,7 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
       <div className="flex min-h-screen items-center justify-center bg-linear-to-b from-slate-900 to-black">
         <div className="text-center">
           <div className="mx-auto mb-4 h-16 w-16 animate-spin rounded-full border-b-4 border-white"></div>
-          <p className="text-xl text-white">Loading Credits...</p>
+          <p className="text-xl text-white">{t('viewerOverlay.credits.loading')}</p>
         </div>
       </div>
     )
@@ -217,12 +253,10 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
     return (
       <div className="flex min-h-screen items-center justify-center bg-linear-to-b from-slate-900 to-black">
         <div className="text-center">
-          <div className="mb-4 text-6xl">⚠️</div>
-          <p className="mb-2 text-xl text-white">Unable to Load Credit Roll</p>
+          <div className="mb-4 text-6xl">{WARNING_GLYPH}</div>
+          <p className="mb-2 text-xl text-white">{t('viewerOverlay.credits.errorHeading')}</p>
           <p className="text-sm text-slate-400">{error}</p>
-          <p className="mt-4 text-xs text-slate-500">
-            Make sure you have an active streaming session
-          </p>
+          <p className="mt-4 text-xs text-slate-500">{t('viewerOverlay.credits.errorHint')}</p>
         </div>
       </div>
     )
@@ -232,7 +266,7 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
     return (
       <div className="flex min-h-screen items-center justify-center bg-linear-to-b from-slate-900 to-black">
         <div className="text-center">
-          <p className="text-xl text-white">No credit roll data available</p>
+          <p className="text-xl text-white">{t('viewerOverlay.credits.empty')}</p>
         </div>
       </div>
     )
@@ -291,38 +325,60 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
           {/* Header */}
           <div className="mb-16 text-center">
             <h1 className="animate-fade-in mb-4 text-6xl font-bold text-white">
-              🎬 Stream Credits
+              {t('viewerOverlay.credits.heading')}
             </h1>
-            <p className="text-2xl text-slate-300">
-              Thank you to everyone who supported the stream!
-            </p>
+            <p className="text-2xl text-slate-300">{t('viewerOverlay.credits.subheading')}</p>
             <div className="mt-4 text-slate-400">
-              <p>Session: {new Date(creditData.session_started_at).toLocaleDateString()}</p>
               <p>
-                Duration:{' '}
-                {(() => {
-                  const totalSeconds = creditData.session_duration_seconds
-                  const hours = Math.floor(totalSeconds / 3600)
-                  const minutes = Math.floor((totalSeconds % 3600) / 60)
-                  if (hours > 0 && minutes > 0)
-                    return `${hours} hour${hours !== 1 ? 's' : ''} ${minutes} minute${minutes !== 1 ? 's' : ''}`
-                  if (hours > 0) return `${hours} hour${hours !== 1 ? 's' : ''}`
-                  if (minutes > 0) return `${minutes} minute${minutes !== 1 ? 's' : ''}`
-                  return 'just started'
-                })()}
+                {t('viewerOverlay.credits.session', {
+                  date: formatDate(new Date(creditData.session_started_at)),
+                })}
+              </p>
+              <p>
+                {t('viewerOverlay.credits.duration', {
+                  duration: sessionDuration(t, creditData.session_duration_seconds),
+                })}
               </p>
             </div>
           </div>
 
           {/* Leaderboards */}
           <div className="mx-auto max-w-4xl">
-            {renderLeaderboard('Top Subscribers', creditData.leaderboards.subs, '⭐')}
-            {renderLeaderboard('Top Gifters', creditData.leaderboards.gifts, '🎁')}
-            {renderLeaderboard('Top Cheerers', creditData.leaderboards.bits, '💎')}
-            {renderLeaderboard('Top Channel Points', creditData.leaderboards.points, '🎯')}
-            {renderLeaderboard('Top Raiders', creditData.leaderboards.raids, '⚔️')}
-            {renderLeaderboard('Top Super Chats', creditData.leaderboards.super_chats, '💰')}
-            {renderLeaderboard('New Followers', creditData.leaderboards.follows, '❤️')}
+            {renderLeaderboard(
+              t('viewerOverlay.credits.topSubscribers'),
+              creditData.leaderboards.subs,
+              '⭐'
+            )}
+            {renderLeaderboard(
+              t('viewerOverlay.credits.topGifters'),
+              creditData.leaderboards.gifts,
+              '🎁'
+            )}
+            {renderLeaderboard(
+              t('viewerOverlay.credits.topCheerers'),
+              creditData.leaderboards.bits,
+              '💎'
+            )}
+            {renderLeaderboard(
+              t('viewerOverlay.credits.topChannelPoints'),
+              creditData.leaderboards.points,
+              '🎯'
+            )}
+            {renderLeaderboard(
+              t('viewerOverlay.credits.topRaiders'),
+              creditData.leaderboards.raids,
+              '⚔️'
+            )}
+            {renderLeaderboard(
+              t('viewerOverlay.credits.topSuperChats'),
+              creditData.leaderboards.super_chats,
+              '💰'
+            )}
+            {renderLeaderboard(
+              t('viewerOverlay.credits.newFollowers'),
+              creditData.leaderboards.follows,
+              '❤️'
+            )}
           </div>
 
           {/* Now Playing Indicator */}
@@ -330,14 +386,23 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
             <div className="fixed right-8 bottom-8 z-50">
               <div className="max-w-sm rounded-lg border border-slate-700 bg-black/80 p-4 shadow-2xl backdrop-blur-sm">
                 <div className="mb-2 flex items-center gap-3">
-                  <span className="text-2xl">🎥</span>
-                  <span className="font-semibold text-white">Now Playing</span>
+                  <span className="text-2xl">{CAMERA_GLYPH}</span>
+                  <span className="font-semibold text-white">
+                    {t('viewerOverlay.credits.nowPlaying')}
+                  </span>
                 </div>
                 <div className="mb-1 text-lg font-medium text-white">{currentClip.title}</div>
                 <div className="flex items-center justify-between text-sm text-slate-400">
-                  <span>{currentClip.view_count.toLocaleString()} views</span>
                   <span>
-                    Clip {currentClipIndex + 1}/{creditData?.clips?.length || 0}
+                    {t('viewerOverlay.credits.clipViews', {
+                      views: formatNumber(currentClip.view_count),
+                    })}
+                  </span>
+                  <span>
+                    {t('viewerOverlay.credits.clipCounter', {
+                      index: currentClipIndex + 1,
+                      total: creditData?.clips?.length || 0,
+                    })}
                   </span>
                 </div>
               </div>
@@ -346,13 +411,26 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
 
           {/* Footer */}
           <div className="mt-24 mb-12 text-center">
-            <div className="mb-4 text-4xl font-bold text-white">Thank you for watching! ❤️</div>
-            <p className="text-xl text-slate-300">See you next stream!</p>
+            <div className="mb-4 text-4xl font-bold text-white">
+              {t('viewerOverlay.credits.thanks')}
+            </div>
+            <p className="text-xl text-slate-300">{t('viewerOverlay.credits.seeYou')}</p>
           </div>
         </div>
       </div>
 
-      <style jsx global>{`
+      {/*
+       * The roll header's entrance animation. Injected the way the sibling
+       * overlay routes inject their global CSS (see overlay/layout.tsx and
+       * overlay/[id]/view/layout.tsx) rather than through styled-jsx: both emit
+       * the same global rules, and this shape keeps the stylesheet out of a JSX
+       * text node, which the i18n gate reads as copy. Hoisting the styled-jsx
+       * template to a constant is not an option — styled-jsx only transforms an
+       * inline literal, so a hoisted one ships unscoped and unminified.
+       */}
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
         @keyframes fade-in {
           from {
             opacity: 0;
@@ -367,7 +445,9 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
         .animate-fade-in {
           animation: fade-in 1s ease-out;
         }
-      `}</style>
+      `,
+        }}
+      />
     </>
   )
 }

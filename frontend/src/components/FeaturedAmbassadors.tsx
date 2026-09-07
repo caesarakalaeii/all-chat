@@ -34,6 +34,7 @@ import { useEffect, useState } from 'react'
 import { UserAvatar } from './UserAvatar'
 import { ChannelLink } from './ChannelLink'
 import { PlatformBadge } from './ui/badge'
+import { useTranslations } from '@/lib/i18n'
 
 interface Ambassador {
   username: string
@@ -44,6 +45,7 @@ interface Ambassador {
 }
 
 export function FeaturedAmbassadors() {
+  const t = useTranslations()
   const [ambassadors, setAmbassadors] = useState<Ambassador[] | null>(null)
 
   useEffect(() => {
@@ -62,10 +64,10 @@ export function FeaturedAmbassadors() {
   return (
     <section className="mx-auto max-w-5xl border-t border-border px-4 py-16">
       <p className="mb-3 text-center text-xs font-bold tracking-widest text-text-sub uppercase">
-        Ambassadors
+        {t('marketing.ambassadors.eyebrow')}
       </p>
       <h2 className="mb-10 text-center text-2xl font-bold text-text">
-        Streamers who run on All-Chat
+        {t('marketing.ambassadors.title')}
       </h2>
       <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {ambassadors.map((a) => (

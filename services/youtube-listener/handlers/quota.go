@@ -232,8 +232,8 @@ func (h *QuotaHandler) GetQuotaHistory(c *gin.Context) {
 		}
 	}
 
-	// Query database for historical data
-	// For now, return mock data since we need to implement the database query
+	// Mock data: the per-day quota history is not persisted yet, so there is
+	// nothing to query. The shape is real so callers can be written against it.
 	// TODO: Implement actual database query
 	history := make([]QuotaHistoryEntry, 0)
 
@@ -369,8 +369,6 @@ func parseIntParam(param string) (int, error) {
 	return result, err
 }
 
-// =============== CIRCUIT BREAKER VISIBILITY ===============
-
 // CircuitBreakerGetter defines interface for getting circuit breakers
 type CircuitBreakerGetter interface {
 	GetAllCircuitBreakers() map[string]map[string]interface{}
@@ -403,8 +401,6 @@ func (h *QuotaHandler) GetCircuitBreakers(c *gin.Context) {
 		zap.Int("breaker_count", len(breakers)),
 	)
 }
-
-// =============== ADMIN OVERRIDE ENDPOINTS ===============
 
 // CircuitBreakerResetter defines interface for resetting circuit breakers
 type CircuitBreakerResetter interface {
@@ -479,8 +475,6 @@ func (h *QuotaHandler) ResetAllCircuitBreakers(c *gin.Context) {
 		"message": "all circuit breakers reset successfully",
 	})
 }
-
-// =============== CROSS-SERVICE QUOTA COORDINATION API ===============
 
 // CheckQuotaRequest represents a request to check if quota is available
 type CheckQuotaRequest struct {

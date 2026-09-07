@@ -32,13 +32,21 @@
  *
  * Auth is enforced by the route's layout (ProtectedRoute via OverlayViewGuard);
  * moderation is further gated on overlay ownership + per-source capabilities.
+ *
+ * With `?dock=1` the same route renders in DOCK MODE for an OBS/Streamlabs
+ * custom browser dock: a ~320-450px chromeless panel. Same data path, same
+ * moderation, narrower chrome — a single non-wrapping header row with one
+ * overflow menu, the notice strips collapsed into one status row, and Chat |
+ * Activity as two tabs instead of a split. See ./dockMode.
  */
 
 'use client'
 
 import clsx from 'clsx'
+import { Button } from '@/components/ui/button'
 import { BarChart3, ExternalLink, Info, RotateCw, SlidersHorizontal } from 'lucide-react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toastManager } from '@/lib/toast'
 
@@ -48,6 +56,9 @@ import { ActivityPanel } from '@/components/overlay/ActivityPanel'
 import { ChatPanel, type ChatPanelModeration } from '@/components/overlay/ChatPanel'
 import { ChatSendBar } from '@/components/overlay/ChatSendBar'
 import { ConnectionBadge } from '@/components/overlay/ConnectionBadge'
+import { DockNoticeBar } from '@/components/overlay/DockNoticeBar'
+import { DockOverflowMenu } from '@/components/overlay/DockOverflowMenu'
+import { DOCK_PANEL_ID, DockTabPicker } from '@/components/overlay/DockTabPicker'
 import { EngagementControls } from '@/components/overlay/EngagementControls'
 import { LayoutPicker } from '@/components/overlay/LayoutPicker'
 import { ObservabilitySummary } from '@/components/overlay/ObservabilitySummary'
@@ -86,9 +97,12 @@ import {
   type ModEntry,
   type ViewItem,
 } from '@/lib/utils/overlayViewModel'
+import { useTranslations, type TFunction } from '@/lib/i18n'
 import { OFFLINE_THRESHOLD } from '@/lib/utils/connectionStatusLabel'
 import { createSoundPlayer, type SoundPlayer, type SoundSettings } from '@/lib/utils/soundPlayer'
 
+import { DEFAULT_DOCK_TAB, isDockMode, loadDockTab, saveDockTab, type DockTab } from './dockMode'
+import { shouldOfferModLogOptIn } from './modLogOptIn'
 import {
   DEFAULT_VIEW_LAYOUT,
   LAYOUT_CONFIG,
@@ -112,6 +126,24 @@ const THEME_KEY = 'overlay-view-theme'
 // many gift-sub events); one gentle ping per burst is what a moderator wants.
 const ACTIVITY_SOUND_COOLDOWN_MS = 1500
 
+/**
+ * The missing-scope notice for one source.
+ *
+ * Discord's remedy is a bot re-invite rather than a scope grant, and the channel
+ * name is optional, so the two variables give four whole sentences. The
+ * platform is the raw lowercase wire value, which is what renders today.
+ */
+function missingScopeNotice(t: TFunction, platform: string, channel?: string): string {
+  if (platform === 'discord') {
+    return channel
+      ? t('viewerOverlay.monitor.missingScopeDiscordChannel', { platform, channel })
+      : t('viewerOverlay.monitor.missingScopeDiscord', { platform })
+  }
+  return channel
+    ? t('viewerOverlay.monitor.missingScopeChannel', { platform, channel })
+    : t('viewerOverlay.monitor.missingScope', { platform })
+}
+
 /** Map the moderator's view prefs onto the shared sound-player settings. */
 function toActivitySoundSettings(prefs: MonitorViewPrefs): SoundSettings {
   return {
@@ -123,7 +155,11 @@ function toActivitySoundSettings(prefs: MonitorViewPrefs): SoundSettings {
 }
 
 export default function OverlayMonitorView({ params }: { params: Promise<{ id: string }> }) {
+  const t = useTranslations()
   const { id } = use(params)
+  // Presentation only. Every hook below runs identically in both modes; dock
+  // mode changes what the return statement wraps them in.
+  const dock = isDockMode(useSearchParams())
 
   const [items, setItems] = useState<ViewItem[]>([])
   const [moderationLog, setModerationLog] = useState<ModEntry[]>([])
@@ -134,6 +170,7 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
   const [showEngagement, setShowEngagement] = useState(false)
   const [prefs, setPrefs] = useState<MonitorViewPrefs>(DEFAULT_VIEW_PREFS)
   const [layout, setLayout] = useState<ViewLayout>(DEFAULT_VIEW_LAYOUT)
+  const [dockTab, setDockTab] = useState<DockTab>(DEFAULT_DOCK_TAB)
   const [capabilities, setCapabilities] = useState<ModerationCapabilities | null>(null)
   const modSeqRef = useRef(0)
   // Signatures of deletions we applied optimistically, awaiting their WS echo —
@@ -145,8 +182,6 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
   useEffect(() => {
     itemsRef.current = items
   }, [items])
-
-  // --- Stream callbacks ----------------------------------------------------
 
   // Per-browser player for the activity sound. Created after mount (client
   // only) and kept in sync with prefs by the effects below; onChat plays
@@ -310,6 +345,22 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
     [id]
   )
 
+  // Same one-time-restore shape as the layout above. Unconditional so the tab a
+  // streamer left the dock on survives a dock reload, which is the only way OBS
+  // gives them to reopen the panel.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time restore from localStorage
+    setDockTab(loadDockTab(id))
+  }, [id])
+
+  const updateDockTab = useCallback(
+    (next: DockTab) => {
+      setDockTab(next)
+      saveDockTab(id, next)
+    },
+    [id]
+  )
+
   // Start the opt-in moderation setup (ADR-0017). For the OAuth platforms this fetches a
   // consent URL (auth-service requests only the minimal moderation scopes for the actions
   // the platform supports) and redirects to it: Twitch and Kick grant all four actions
@@ -338,12 +389,12 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         if (url) window.location.href = url
       } catch {
         toastManager.add({
-          title: 'Could not start moderation setup. Please try again.',
+          title: t('viewerOverlay.monitor.consentStartFailed'),
           type: 'error',
         })
       }
     },
-    [id]
+    [id, t]
   )
 
   // Opt-in for the Twitch moderation log (channel.moderate + AutoMod holds), which is a
@@ -356,11 +407,11 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
       window.location.href = await moderationApi.getTwitchModLogConsentUrl(id)
     } catch {
       toastManager.add({
-        title: 'Could not start Twitch consent. Please try again.',
+        title: t('viewerOverlay.monitor.twitchConsentStartFailed'),
         type: 'error',
       })
     }
-  }, [id])
+  }, [id, t])
 
   // A delegated moderator connecting their OWN account for a platform (ADR-0048).
   //
@@ -376,12 +427,12 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         if (url) window.location.href = url
       } catch {
         toastManager.add({
-          title: `Connecting ${platform} is not available yet. Ask the streamer to moderate there for now.`,
+          title: t('viewerOverlay.monitor.modConnectUnavailable', { platform }),
           type: 'error',
         })
       }
     },
-    []
+    [t]
   )
 
   // Discord's equivalent of connectAsModerator, and deliberately not the same call: the moderator
@@ -392,12 +443,11 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
       await startDiscordAccountLink('moderate')
     } catch {
       toastManager.add({
-        title:
-          'Linking Discord is not available right now. Ask the streamer to moderate there for now.',
+        title: t('viewerOverlay.monitor.discordLinkUnavailable'),
         type: 'error',
       })
     }
-  }, [])
+  }, [t])
 
   // Re-consent when a send fails with `reauth_required` (the streamer's platform
   // send token expired or was revoked). Chat sending requires the advanced-controls
@@ -422,10 +472,13 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         }
         if (url) window.location.href = url
       } catch {
-        toastManager.add({ title: 'Could not start re-login. Please try again.', type: 'error' })
+        toastManager.add({
+          title: t('viewerOverlay.monitor.reloginStartFailed'),
+          type: 'error',
+        })
       }
     },
-    [id]
+    [id, t]
   )
 
   // Restore the saved theme once on mount.
@@ -445,8 +498,6 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
       /* storage unavailable */
     }
   }, [light])
-
-  // --- Moderation capability lookups ---------------------------------------
 
   const isOwner = capabilities?.is_owner === true
   // A delegated moderator (ADR-0048). They get the moderation controls their grant allows
@@ -509,9 +560,9 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
     [sources]
   )
 
-  // Whether the mod-log opt-in is worth offering at all. Only Twitch produces these
-  // events, and capabilities carries no flag for the grant, so the CTA stays visible
-  // like the engagement-mirror one rather than pretending to know it is already given.
+  // Only Twitch produces mod-log events, so a Twitch source is the precondition for
+  // offering the opt-in at all; whether the grant already exists is capabilities'
+  // mod_log_granted (see shouldOfferModLogOptIn).
   const hasTwitchSource = useMemo(
     () => Array.from(sources.values()).some((s) => s.platform === 'twitch'),
     [sources]
@@ -521,20 +572,18 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
     setRediscovering(true)
     try {
       await moderationApi.forceYouTubeRediscover(id)
-      toastManager.add({ title: 'Re-discovering YouTube stream…', type: 'success' })
+      toastManager.add({ title: t('viewerOverlay.monitor.rediscoverStarted'), type: 'success' })
     } catch (err) {
       const status = err instanceof ApiError ? err.status : 0
       if (status === 429)
-        toastManager.add({ title: 'Please wait a moment before retrying', type: 'error' })
+        toastManager.add({ title: t('viewerOverlay.monitor.rediscoverRateLimited'), type: 'error' })
       else if (status === 403)
-        toastManager.add({ title: 'Not authorized for this overlay', type: 'error' })
-      else toastManager.add({ title: 'Could not trigger re-discovery', type: 'error' })
+        toastManager.add({ title: t('viewerOverlay.monitor.rediscoverForbidden'), type: 'error' })
+      else toastManager.add({ title: t('viewerOverlay.monitor.rediscoverFailed'), type: 'error' })
     } finally {
       setRediscovering(false)
     }
-  }, [id])
-
-  // --- Optimistic moderation actions ---------------------------------------
+  }, [id, t])
 
   // A moderation action that failed because the platform token can no longer perform
   // it (missing/lapsed scope, or a Helix 401 a refresh couldn't fix). The backend asked
@@ -553,38 +602,38 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         case 'connect_required':
           // Consent is deferred to first use, so for a moderator this is the expected first click,
           // not a fault. The per-source banner already offers the button; this names the reason.
-          return isModerator ? `Connect your own ${platform} account to moderate here` : null
+          return isModerator ? t('viewerOverlay.monitor.connectRequired', { platform }) : null
         case 'owner_channel_unverified':
           // For a moderator, only the streamer can fix this, so the copy stops at the cause rather
           // than offering a button that would do nothing. An owner can hit it too (the anchor gates
           // their own path on YouTube), and there it is theirs to fix by reconnecting the account.
           return isModerator
-            ? `This streamer's ${platform} account isn't connected, so nothing can be moderated here`
-            : `Your ${platform} account isn't connected for this channel — reconnect it to moderate here`
+            ? t('viewerOverlay.monitor.ownerChannelUnverifiedModerator', { platform })
+            : t('viewerOverlay.monitor.ownerChannelUnverifiedOwner', { platform })
         case 'delegation_unsupported':
-          return `Moderators can't act on ${platform} yet — ask the streamer to handle this one`
+          return t('viewerOverlay.monitor.delegationUnsupported', { platform })
         case 'target_not_actionable':
           // Not about the caller at all — the platform protects this person from everyone, so there
           // is no CTA to offer either role.
-          return `${platform} won't let anyone moderate this person — they're the channel owner or another moderator`
+          return t('viewerOverlay.monitor.targetNotActionable', { platform })
         // Discord's five. The shared bot performs every write there, so All-Chat's own check is
         // the only authority and these codes carry the entire explanation — which makes naming
         // the right person to ask the whole job of this copy.
         case 'discord_link_required':
-          return 'Link your Discord account to moderate here'
+          return t('viewerOverlay.monitor.discordLinkRequired')
         case 'mod_not_in_guild':
-          return "You're not in this Discord server — ask the streamer to invite you"
+          return t('viewerOverlay.monitor.modNotInGuild')
         case 'mod_lacks_permission':
-          return "Your Discord roles don't allow this — ask the streamer for a role that does"
+          return t('viewerOverlay.monitor.modLacksPermission')
         case 'mod_below_target':
-          return "Discord's role hierarchy blocks this — your highest role has to sit above theirs"
+          return t('viewerOverlay.monitor.modBelowTarget')
         case 'bot_missing_permission':
-          return "The All-Chat bot wasn't given this Discord permission — ask the streamer to re-invite it"
+          return t('viewerOverlay.monitor.botMissingPermission')
         default:
           return null
       }
     },
-    [isModerator]
+    [isModerator, t]
   )
 
   // Apply an optimistic mark + log entry, fire the API, and roll back on error.
@@ -629,17 +678,17 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
           // recovery banner and a toast pointing at it (mirrors the chat-send reauth path).
           setReauthPrompt({ platform })
           toastManager.add({
-            title: `${platform} needs you to re-authorize moderation`,
+            title: t('viewerOverlay.monitor.reauthNeededToast', { platform }),
             type: 'error',
           })
         } else if (delegated !== null) {
           toastManager.add({ title: delegated, type: 'error' })
         } else {
-          toastManager.add({ title: 'Moderation action failed', type: 'error' })
+          toastManager.add({ title: t('viewerOverlay.monitor.actionFailed'), type: 'error' })
         }
       }
     },
-    [delegatedFailureMessage]
+    [delegatedFailureMessage, t]
   )
 
   const handleDelete = useCallback(
@@ -654,10 +703,10 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         item.platform,
         meta,
         () => moderationApi.deleteMessage(id, req),
-        'Message deleted'
+        t('viewerOverlay.monitor.messageDeleted')
       )
     },
-    [id, runModeration]
+    [id, runModeration, t]
   )
 
   const handleTimeout = useCallback(
@@ -673,10 +722,12 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         item.platform,
         meta,
         () => moderationApi.timeoutUser(id, req),
-        `Timed out ${req.target_username || 'user'}`
+        t('viewerOverlay.monitor.timedOut', {
+          name: req.target_username || t('viewerOverlay.monitor.unnamedTarget'),
+        })
       )
     },
-    [id, runModeration]
+    [id, runModeration, t]
   )
 
   const handleBan = useCallback(
@@ -692,35 +743,45 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         item.platform,
         meta,
         () => moderationApi.banUser(id, req),
-        `Banned ${req.target_username || 'user'}`
+        t('viewerOverlay.monitor.banned', {
+          name: req.target_username || t('viewerOverlay.monitor.unnamedTarget'),
+        })
       )
     },
-    [id, runModeration]
+    [id, runModeration, t]
   )
 
   // Unban has no message-level visual mark; just fire and toast.
   const handleUnban = useCallback(
     (item: ViewItem) => {
-      const name = item.user?.display_name || item.user?.username || 'user'
+      const name =
+        item.user?.display_name || item.user?.username || t('viewerOverlay.monitor.unnamedTarget')
       moderationApi
         .unbanUser(id, buildUnbanRequest(item))
-        .then(() => toastManager.add({ title: `Unbanned ${name}`, type: 'success' }))
+        .then(() =>
+          toastManager.add({
+            title: t('viewerOverlay.monitor.unbanned', { name }),
+            type: 'success',
+          })
+        )
         .catch((err) => {
           const delegated = delegatedFailureMessage(err, item.platform)
           if (isModerationReauthError(err)) {
             setReauthPrompt({ platform: item.platform })
             toastManager.add({
-              title: `${item.platform} needs you to re-authorize moderation`,
+              title: t('viewerOverlay.monitor.reauthNeededToast', {
+                platform: item.platform,
+              }),
               type: 'error',
             })
           } else if (delegated !== null) {
             toastManager.add({ title: delegated, type: 'error' })
           } else {
-            toastManager.add({ title: 'Unban failed', type: 'error' })
+            toastManager.add({ title: t('viewerOverlay.monitor.unbanFailed'), type: 'error' })
           }
         })
     },
-    [id, delegatedFailureMessage]
+    [id, delegatedFailureMessage, t]
   )
 
   // Only owners in the rollout cohort get live action callbacks; everyone else
@@ -738,89 +799,113 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
   const sourceNames = Array.from(sources.values()).map((s) => s.channelName)
   const title = sourceNames.length > 0 ? sourceNames.join(' · ') : 'Overlay Monitor'
 
-  return (
-    <div
-      id="overlay-view-root"
-      className={clsx('overlay-view flex h-screen min-h-0 flex-col', light && 'light')}
-    >
-      {/* Header */}
-      <header className="flex flex-wrap items-center gap-3 border-b border-border bg-surface px-4 py-2">
-        <div className="flex min-w-0 items-center gap-3">
-          <h1 className="min-w-0 truncate text-sm font-semibold text-text" title={title}>
-            {title}
-          </h1>
-          <ConnectionBadge status={connectionStatus} attempts={reconnectAttempts} />
-        </div>
+  // The header's controls, identical in both modes. The wide header lays them
+  // out with flex-wrap; the dock header puts the same nodes inside one overflow
+  // menu, minus LayoutPicker — with no split there is no layout to pick.
+  const headerControls = (
+    <>
+      {sources.size > 0 && (
+        <PlatformStatusIndicators
+          configuredSources={sources}
+          activeChannels={activeChannels}
+          channelStatuses={channelStatuses}
+          variant="inline"
+        />
+      )}
+      <MaintenanceInfoButton />
+      <button
+        onClick={() => setShowDetails((v) => !v)}
+        aria-pressed={showDetails}
+        className={clsx(
+          'flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none',
+          showDetails
+            ? 'border-border-md bg-surface-2 text-text'
+            : 'border-border text-text-sub hover:border-border-md hover:text-text'
+        )}
+      >
+        <SlidersHorizontal className="h-3.5 w-3.5" />
+        {t('viewerOverlay.monitor.details')}
+      </button>
+      {isOwner && (
+        <button
+          onClick={() => setShowEngagement((v) => !v)}
+          aria-pressed={showEngagement}
+          title={t('viewerOverlay.monitor.engagementTitle')}
+          className={clsx(
+            'flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none',
+            showEngagement
+              ? 'border-border-md bg-surface-2 text-text'
+              : 'border-border text-text-sub hover:border-border-md hover:text-text'
+          )}
+        >
+          <BarChart3 className="h-3.5 w-3.5" />
+          {t('viewerOverlay.monitor.engagement')}
+        </button>
+      )}
+      {!dock && <LayoutPicker layout={layout} onChange={updateLayout} />}
+      <ViewSettingsBar
+        prefs={prefs}
+        onChange={updatePrefs}
+        onTestActivitySound={testActivitySound}
+      />
+      <OverlayViewThemeToggle light={light} onToggle={() => setLight((v) => !v)} />
+      {isOwner && hasYouTubeSource && (
+        <Button
+          onClick={handleYouTubeRediscover}
+          disabled={rediscovering}
+          title={t('viewerOverlay.monitor.rediscoverYouTubeTitle')}
+          variant="outline"
+          size="sm"
+        >
+          <RotateCw className={clsx('h-3.5 w-3.5', rediscovering && 'animate-spin')} />
+          {t('viewerOverlay.monitor.rediscoverYouTube')}
+        </Button>
+      )}
+      {/* Leaves the monitor. In a dock that is a chromeless panel with no back
+          button, so it must open a real browser window rather than replace the
+          panel; noopener is explicit because OBS embeds an older CEF. */}
+      <Link
+        href={`/overlay/${id}`}
+        target="_blank"
+        rel={dock ? 'noopener noreferrer' : 'noreferrer'}
+        className="flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-sub transition-colors hover:border-border-md hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+      >
+        <ExternalLink className="h-3.5 w-3.5" />
+        {t('viewerOverlay.monitor.obsOverlay')}
+      </Link>
+    </>
+  )
 
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          {sources.size > 0 && (
-            <PlatformStatusIndicators
-              configuredSources={sources}
-              activeChannels={activeChannels}
-              channelStatuses={channelStatuses}
-              variant="inline"
-            />
-          )}
-          <MaintenanceInfoButton />
-          <button
-            onClick={() => setShowDetails((v) => !v)}
-            aria-pressed={showDetails}
-            className={clsx(
-              'flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none',
-              showDetails
-                ? 'border-border-md bg-surface-2 text-text'
-                : 'border-border text-text-sub hover:border-border-md hover:text-text'
-            )}
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5" />
-            Details
-          </button>
-          {isOwner && (
-            <button
-              onClick={() => setShowEngagement((v) => !v)}
-              aria-pressed={showEngagement}
-              title="Run polls and predictions for this overlay"
-              className={clsx(
-                'flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none',
-                showEngagement
-                  ? 'border-border-md bg-surface-2 text-text'
-                  : 'border-border text-text-sub hover:border-border-md hover:text-text'
-              )}
-            >
-              <BarChart3 className="h-3.5 w-3.5" />
-              Engagement
-            </button>
-          )}
-          <LayoutPicker layout={layout} onChange={updateLayout} />
-          <ViewSettingsBar
-            prefs={prefs}
-            onChange={updatePrefs}
-            onTestActivitySound={testActivitySound}
-          />
-          <OverlayViewThemeToggle light={light} onToggle={() => setLight((v) => !v)} />
-          {isOwner && hasYouTubeSource && (
-            <button
-              onClick={handleYouTubeRediscover}
-              disabled={rediscovering}
-              title="Force YouTube to re-discover the live stream — use if chat stopped after a stream crash or restart"
-              className="flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-sub transition-colors hover:border-border-md hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <RotateCw className={clsx('h-3.5 w-3.5', rediscovering && 'animate-spin')} />
-              Re-discover YouTube
-            </button>
-          )}
-          <Link
-            href={`/overlay/${id}`}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-sub transition-colors hover:border-border-md hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
-          >
-            <ExternalLink className="h-3.5 w-3.5" />
-            OBS overlay
-          </Link>
-        </div>
-      </header>
+  // Which notice strips apply right now. Hoisted out of the JSX below so the
+  // dock's collapsed status row can count them without restating a single one of
+  // these conditions — two copies of "is this notice showing?" is how a notice
+  // ends up counted but not rendered, or rendered but not counted.
+  const showStillReconnecting =
+    connectionStatus === 'reconnecting' && reconnectAttempts >= OFFLINE_THRESHOLD
+  const showNoRole = capabilities !== null && !hasRole
+  const consentNotices = moderationEnabled && isModerator ? needsConsentSources : []
+  const showDiscordLink = moderationEnabled && isModerator && needsDiscordLinkSources.length > 0
+  const missingScopeNotices = moderationEnabled && isOwner ? missingScopeSources : []
+  const showModLogOptIn = shouldOfferModLogOptIn({
+    isOwner,
+    hasTwitchSource,
+    modLogGranted: capabilities?.mod_log_granted,
+  })
+  const noticeCount =
+    Number(showStillReconnecting) +
+    Number(replayTruncated) +
+    Number(showNoRole) +
+    Number(featureGated) +
+    consentNotices.length +
+    Number(showDiscordLink) +
+    missingScopeNotices.length +
+    Number(showModLogOptIn) +
+    Number(reauthPrompt !== null)
 
+  // Every notice the wide view would stack, unchanged. The dock renders the same
+  // fragment inside one collapsed status row instead of eight full-width bars.
+  const notices = (
+    <>
       {/* Sustained-reconnect reassurance. The badge escalates to red at four
           consecutive failures (~13s), which a redeploy routinely outlasts. The
           badge has room for two words; this is where the sentence goes, and it
@@ -828,11 +913,10 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
           overlay and reopen it — discards the watermark and causes exactly the
           loss the badge is warning about. Monitor only: the OBS overlay is a
           chat feed on a live stream, not a diagnostics surface. */}
-      {connectionStatus === 'reconnecting' && reconnectAttempts >= OFFLINE_THRESHOLD && (
+      {showStillReconnecting && (
         <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-xs text-text-sub">
           <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
-          Still reconnecting — this recovers on its own, and messages sent meanwhile replay when the
-          connection returns. Closing this page is what loses them.
+          {t('viewerOverlay.monitor.stillReconnecting')}
         </div>
       )}
 
@@ -842,18 +926,17 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
       {replayTruncated && (
         <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-xs text-text-sub">
           <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
-          Some earlier messages may be missing — the disconnection outlasted the replay buffer, so
-          the oldest part of the gap could not be recovered.
+          {t('viewerOverlay.monitor.replayTruncated')}
         </div>
       )}
 
       {/* No-role notice: viewing is allowed, moderation is not. Says nothing about the
           overlay itself — the payload behind it is identical for an overlay that does not
           exist, so it must not be phrased as a fact about this one. */}
-      {capabilities && !hasRole && (
+      {showNoRole && (
         <div className="flex items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-xs text-text-sub">
           <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
-          You can view this monitor, but you don&apos;t moderate here — moderation is disabled.
+          {t('viewerOverlay.monitor.noRole')}
         </div>
       )}
 
@@ -864,131 +947,122 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         (isOwner ? (
           <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-xs text-text-sub">
             <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
-            <span>Chat moderation is a premium feature.</span>
+            <span>{t('viewerOverlay.monitor.featureGatedOwner')}</span>
             <Link
               href="/upgrade"
               className="font-medium text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
             >
-              Upgrade to moderate from your overlay
+              {t('viewerOverlay.monitor.featureGatedUpgrade')}
             </Link>
           </div>
         ) : (
           <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-xs text-text-sub">
             <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
-            <span>
-              This streamer&apos;s plan doesn&apos;t include moderation right now, so your actions
-              are unavailable until they renew it.
-            </span>
+            <span>{t('viewerOverlay.monitor.featureGatedModerator')}</span>
           </div>
         ))}
 
       {/* Connect-to-moderate notices: a delegated moderator acts with their OWN account,
           and consent is deferred to the first time they need it — so this is the normal
           state on a fresh grant rather than an error. */}
-      {moderationEnabled &&
-        isModerator &&
-        needsConsentSources.map((s) => (
-          <div
-            key={s.channel_id}
-            className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-xs text-text-sub"
-          >
-            <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
-            <span>
-              Connect your own {s.platform} account to moderate
-              {s.channel_name ? ` ${s.channel_name}` : ''}.
-            </span>
-            {s.platform === 'twitch' || s.platform === 'kick' || s.platform === 'youtube' ? (
-              <button
-                type="button"
-                onClick={() =>
-                  void connectAsModerator(
-                    s.platform as DelegatablePlatform,
-                    capabilities?.delegated_actions ?? []
-                  )
-                }
-                className="font-medium text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
-              >
-                Connect {s.platform}
-              </button>
-            ) : null}
-          </div>
-        ))}
+      {consentNotices.map((s) => (
+        <div
+          key={s.channel_id}
+          className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-xs text-text-sub"
+        >
+          <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
+          <span>
+            {s.channel_name
+              ? t('viewerOverlay.monitor.needsConsentChannel', {
+                  platform: s.platform,
+                  channel: s.channel_name,
+                })
+              : t('viewerOverlay.monitor.needsConsent', { platform: s.platform })}
+          </span>
+          {s.platform === 'twitch' || s.platform === 'kick' || s.platform === 'youtube' ? (
+            <Button
+              type="button"
+              onClick={() =>
+                void connectAsModerator(
+                  s.platform as DelegatablePlatform,
+                  capabilities?.delegated_actions ?? []
+                )
+              }
+              variant="link"
+              className="h-auto p-0 font-medium"
+            >
+              {t('viewerOverlay.monitor.connectPlatform', { platform: s.platform })}
+            </Button>
+          ) : null}
+        </div>
+      ))}
 
       {/* Discord account-link notices. One banner for the whole overlay rather than one per
           source: the link is per PERSON, not per server, so repeating it per channel would offer
           the same one-time action several times over. */}
-      {moderationEnabled && isModerator && needsDiscordLinkSources.length > 0 && (
+      {showDiscordLink && (
         <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-xs text-text-sub">
           <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
-          <span>
-            Link your Discord account to moderate Discord here — All-Chat checks your own server
-            permissions before acting.
-          </span>
-          <button
+          <span>{t('viewerOverlay.monitor.needsDiscordLink')}</span>
+          <Button
             type="button"
             onClick={() => void linkDiscordAccount()}
-            className="font-medium text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+            variant="link"
+            className="h-auto p-0 font-medium"
           >
-            Link Discord
-          </button>
+            {t('viewerOverlay.monitor.linkDiscord')}
+          </Button>
         </div>
       )}
 
       {/* Missing-scope notices: owner must grant permissions per platform. Owner-only —
           the flow behind it re-consents the STREAMER's broadcaster credential, which is
           not a moderator's to re-consent. */}
-      {moderationEnabled &&
-        isOwner &&
-        missingScopeSources.map((s) => (
-          <div
-            key={s.channel_id}
-            className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-xs text-text-sub"
-          >
-            <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
-            <span>
+      {missingScopeNotices.map((s) => (
+        <div
+          key={s.channel_id}
+          className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-xs text-text-sub"
+        >
+          <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
+          <span>{missingScopeNotice(t, s.platform, s.channel_name)}</span>
+          {s.platform === 'twitch' ||
+          s.platform === 'kick' ||
+          s.platform === 'youtube' ||
+          s.platform === 'discord' ? (
+            <Button
+              type="button"
+              onClick={() => enableModeration(s.platform)}
+              variant="link"
+              className="h-auto p-0 font-medium"
+            >
               {s.platform === 'discord'
-                ? `Re-invite the bot with moderation permissions to enable mod actions for ${s.platform}`
-                : `Grant moderation permissions to enable mod actions for ${s.platform}`}
-              {s.channel_name ? ` (${s.channel_name})` : ''}.
+                ? t('viewerOverlay.monitor.reinviteBot')
+                : t('viewerOverlay.monitor.enableModeration')}
+            </Button>
+          ) : (
+            <span className="text-text-dim">
+              {t('viewerOverlay.monitor.comingSoonFor', { platform: s.platform })}
             </span>
-            {s.platform === 'twitch' ||
-            s.platform === 'kick' ||
-            s.platform === 'youtube' ||
-            s.platform === 'discord' ? (
-              <button
-                type="button"
-                onClick={() => enableModeration(s.platform)}
-                className="font-medium text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
-              >
-                {s.platform === 'discord'
-                  ? 'Re-invite the bot'
-                  : 'Enable moderation & chat sending'}
-              </button>
-            ) : (
-              <span className="text-text-dim">(coming soon for {s.platform})</span>
-            )}
-          </div>
-        ))}
+          )}
+        </div>
+      ))}
 
       {/* Twitch moderation-log opt-in. The scope note is not padding: the consent screen
           asks for moderator:manage:automod, which on a read-only feature looks like a
           mistake and gets declined — Twitch requires it to create the AutoMod hold
           subscription and offers no read-only alternative. */}
-      {isOwner && hasTwitchSource && (
+      {showModLogOptIn && (
         <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-xs text-text-sub">
           <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
-          <span>
-            Show Twitch moderation actions and AutoMod holds in this activity feed. Twitch requires
-            an AutoMod &ldquo;manage&rdquo; permission to send us held messages at all — All-Chat
-            only reads them; there are no approve/deny buttons yet.
-          </span>
-          <button
+          <span>{t('viewerOverlay.monitor.modLogOptIn')}</span>
+          <Button
             type="button"
             onClick={() => void enableModLog()}
-            className="font-medium text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+            variant="link"
+            className="h-auto p-0 font-medium"
           >
-            Show moderation &amp; AutoMod events
-          </button>
+            {t('viewerOverlay.monitor.enableModLog')}
+          </Button>
         </div>
       )}
 
@@ -1001,10 +1075,11 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
         <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-xs text-text-sub">
           <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
           <span>
-            Your {reauthPrompt.platform} moderation permission expired or was never granted —
-            re-authorize to keep moderating {isOwner ? 'from your overlay' : 'here'}.
+            {isOwner
+              ? t('viewerOverlay.monitor.reauthOwner', { platform: reauthPrompt.platform })
+              : t('viewerOverlay.monitor.reauthModerator', { platform: reauthPrompt.platform })}
           </span>
-          <button
+          <Button
             type="button"
             onClick={() => {
               const platform = reauthPrompt.platform
@@ -1018,16 +1093,52 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
               }
               void enableModeration(platform)
             }}
-            className="font-medium text-twitch hover:underline focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+            variant="link"
+            className="h-auto p-0 font-medium"
           >
             {reauthPrompt.platform === 'discord'
-              ? 'Re-invite the bot'
+              ? t('viewerOverlay.monitor.reinviteBot')
               : isModerator
-                ? `Reconnect ${reauthPrompt.platform}`
-                : 'Re-authorize moderation & chat sending'}
-          </button>
+                ? t('viewerOverlay.monitor.reconnectPlatform', {
+                    platform: reauthPrompt.platform,
+                  })
+                : t('viewerOverlay.monitor.reauthorizeModeration')}
+          </Button>
         </div>
       )}
+    </>
+  )
+
+  return (
+    <div
+      id="overlay-view-root"
+      className={clsx('overlay-view flex h-screen min-h-0 flex-col', light && 'light')}
+    >
+      {/* Header. Dock mode keeps ONE non-wrapping row: at dock width the wide
+          header's flex-wrap gives roughly one control per line, and the panel is
+          then all header and no chat. */}
+      {dock ? (
+        <header className="flex items-center gap-2 border-b border-border bg-surface px-3 py-2">
+          <h1 className="min-w-0 flex-1 truncate text-xs font-semibold text-text" title={title}>
+            {title}
+          </h1>
+          <ConnectionBadge status={connectionStatus} attempts={reconnectAttempts} />
+          <DockOverflowMenu>{headerControls}</DockOverflowMenu>
+        </header>
+      ) : (
+        <header className="flex flex-wrap items-center gap-3 border-b border-border bg-surface px-4 py-2">
+          <div className="flex min-w-0 items-center gap-3">
+            <h1 className="min-w-0 truncate text-sm font-semibold text-text" title={title}>
+              {title}
+            </h1>
+            <ConnectionBadge status={connectionStatus} attempts={reconnectAttempts} />
+          </div>
+
+          <div className="ml-auto flex flex-wrap items-center gap-2">{headerControls}</div>
+        </header>
+      )}
+
+      {dock ? <DockNoticeBar count={noticeCount}>{notices}</DockNoticeBar> : notices}
 
       {showDetails && (
         <ObservabilitySummary
@@ -1044,21 +1155,45 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
           across overlays (L-C5). */}
       {isOwner && showEngagement && <EngagementControls key={id} overlayId={id} />}
 
-      {/* Resizable Chat | Activity — orientation/order driven by the layout picker. */}
-      <ResizableSplit
-        storageKey={`overlay-view-split-${id}`}
-        orientation={LAYOUT_CONFIG[layout].orientation}
-        reversed={LAYOUT_CONFIG[layout].reversed}
-        left={
-          <ChatPanel
-            items={chat}
-            prefs={prefs}
-            capabilities={capabilitiesByChannel}
-            moderation={moderation}
-          />
-        }
-        right={<ActivityPanel events={events} system={system} moderationLog={moderationLog} />}
-      />
+      {/* Chat | Activity. Two side-by-side columns are ~150px each at dock width,
+          so the dock switches between them instead of splitting. Only the active
+          panel is mounted: its scrollback comes from `items` and is rebuilt on
+          return, and keeping the other one alive behind `hidden` would leave it
+          measuring a zero-height box. */}
+      {dock ? (
+        <>
+          <DockTabPicker tab={dockTab} onChange={updateDockTab} />
+          {/* Same box ResizableSplit gives each panel: both are `h-full min-h-0`
+              and need a sized parent to scroll inside instead of growing. */}
+          <div id={DOCK_PANEL_ID} role="tabpanel" className="min-h-0 flex-1 overflow-hidden">
+            {dockTab === 'chat' ? (
+              <ChatPanel
+                items={chat}
+                prefs={prefs}
+                capabilities={capabilitiesByChannel}
+                moderation={moderation}
+              />
+            ) : (
+              <ActivityPanel events={events} system={system} moderationLog={moderationLog} />
+            )}
+          </div>
+        </>
+      ) : (
+        <ResizableSplit
+          storageKey={`overlay-view-split-${id}`}
+          orientation={LAYOUT_CONFIG[layout].orientation}
+          reversed={LAYOUT_CONFIG[layout].reversed}
+          left={
+            <ChatPanel
+              items={chat}
+              prefs={prefs}
+              capabilities={capabilitiesByChannel}
+              moderation={moderation}
+            />
+          }
+          right={<ActivityPanel events={events} system={system} moderationLog={moderationLog} />}
+        />
+      )}
 
       {/* Send bar — owner only, and only when ≥1 platform source can send. */}
       {isOwner && hasSendableSource && capabilities && (

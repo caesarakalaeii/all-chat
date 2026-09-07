@@ -19,8 +19,12 @@
 import { ImageResponse } from 'next/og'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { getTranslations } from '@/lib/i18n'
 
-export const alt = 'All-Chat — Every chat. One overlay.'
+// Module scope, so getTranslations rather than the hook.
+const t = getTranslations()
+
+export const alt = t('metadata.socialCard.alt')
 
 export const size = {
   width: 1200,
@@ -57,7 +61,7 @@ export default async function Image() {
           lineHeight: 1,
         }}
       >
-        All-Chat
+        {t('metadata.socialCard.title')}
       </div>
 
       {/* Subtitle */}
@@ -70,7 +74,7 @@ export default async function Image() {
           letterSpacing: '0.5px',
         }}
       >
-        Every chat. One overlay.
+        {t('metadata.socialCard.subtitle')}
       </div>
 
       {/* Platform badges */}
@@ -93,7 +97,7 @@ export default async function Image() {
             letterSpacing: '0.5px',
           }}
         >
-          Twitch
+          {t('common.platforms.twitch')}
         </div>
         <div
           style={{
@@ -106,7 +110,7 @@ export default async function Image() {
             letterSpacing: '0.5px',
           }}
         >
-          YouTube
+          {t('common.platforms.youtube')}
         </div>
         <div
           style={{
@@ -119,7 +123,7 @@ export default async function Image() {
             letterSpacing: '0.5px',
           }}
         >
-          Kick
+          {t('common.platforms.kick')}
         </div>
         <div
           style={{
@@ -132,7 +136,7 @@ export default async function Image() {
             letterSpacing: '0.5px',
           }}
         >
-          TikTok
+          {t('common.platforms.tiktok')}
         </div>
       </div>
 
@@ -146,7 +150,7 @@ export default async function Image() {
           letterSpacing: '0.5px',
         }}
       >
-        7TV + BTTV + FFZ Emotes
+        {t('metadata.socialCard.emoteProviders')}
       </div>
 
       {/* Bottom tagline */}
@@ -158,7 +162,7 @@ export default async function Image() {
           letterSpacing: '0.5px',
         }}
       >
-        One overlay. Every chat. All platforms.
+        {t('metadata.socialCard.tagline')}
       </div>
     </div>,
     {

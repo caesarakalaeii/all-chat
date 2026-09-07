@@ -182,12 +182,9 @@ func TestHandleModConsent_DropsModlogFromAMix(t *testing.T) {
 	}
 }
 
-// --- Kick ------------------------------------------------------------------
-//
 // Kick's leg differs from Twitch's in two visible ways: PKCE is mandatory, and the consent screen
 // legitimately carries `user:read` — the identity read that tells the callback which Kick account
 // consented, without which the credential cannot be attributed to anyone.
-
 func TestHandleModConsent_KickRequestsIdentityPlusTheDelegatedScopes(t *testing.T) {
 	h := modConsentTestHandler(t)
 
@@ -233,8 +230,6 @@ func TestHandleModConsent_KickStashesThePKCEVerifier(t *testing.T) {
 	require.NoError(t, err, "the callback reads the verifier under this exact key")
 	assert.NotEmpty(t, verifier)
 }
-
-// --- YouTube ----------------------------------------------------------------
 
 // youtubeModConsentHandler adds the YouTube provider, which the base fixture leaves out so the
 // "platform not configured" case stays testable.

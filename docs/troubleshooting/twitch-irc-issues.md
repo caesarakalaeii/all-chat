@@ -1,3 +1,5 @@
+> **Deprecated (2026-09-02)** — the Twitch IRC listener is being retired per ADR-0026 and chat now runs on EventSub; see [`services/twitch-eventsub-listener/README.md`](../../services/twitch-eventsub-listener/README.md). Kept for history only.
+
 # Troubleshooting: Twitch IRC Issues
 
 Twitch IRC connection, channel join, and message parsing issues.

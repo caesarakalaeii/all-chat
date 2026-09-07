@@ -105,6 +105,16 @@ export interface ModerationCapabilities {
    * ban scope the streamer never delegated.
    */
   delegated_actions?: ModerationAction[]
+  /**
+   * Whether the OWNER's Twitch credential already holds every scope the mod-log opt-in
+   * grants, so the monitor can stop offering a consent that is done.
+   *
+   * Only `true` means granted. `false` covers a moderator (the scopes are the
+   * broadcaster's and are not delegatable), a caller with no role, and a backend that
+   * could not read the credential; absent means the same. Every one of those has to keep
+   * the opt-in visible.
+   */
+  mod_log_granted?: boolean
   sources: SourceCapability[]
 }
 
@@ -126,9 +136,7 @@ export const TIMEOUT_PRESETS: ReadonlyArray<{ label: string; seconds: number }> 
   { label: '1h', seconds: 3600 },
 ]
 
-// ---------------------------------------------------------------------------
-// Delegated moderators (ADR-0048)
-// ---------------------------------------------------------------------------
+// The delegated-moderator types below implement ADR-0048.
 
 /**
  * Lifecycle state of a delegation grant. `revoked` never reaches the client —

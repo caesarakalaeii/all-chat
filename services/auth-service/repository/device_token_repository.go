@@ -22,15 +22,15 @@ package repository
 // The rules from api_token_repository.go carry over unchanged, plus two more that are
 // specific to a linking flow:
 //
-//  1. No plaintext, ever. Every function takes a digest the caller computed
+//   - No plaintext, ever. Every function takes a digest the caller computed
 //     (middleware.HashDeviceToken / sha256 of the user code); nothing here can return,
 //     log or store a secret.
-//  2. No projection selects token_hash, user_code_hash or auth_code_hash. A digest that
+//   - No projection selects token_hash, user_code_hash or auth_code_hash. A digest that
 //     never leaves this file cannot be serialised into a response by accident.
-//  3. State transitions are single SQL statements with the guard in the WHERE clause,
+//   - State transitions are single SQL statements with the guard in the WHERE clause,
 //     not read-then-write. "Consume this code if it is still unconsumed" has to be one
 //     atomic step or a replay wins the race.
-//  4. The attempts counter is incremented IN SQL. That counter is the brute-force bound
+//   - The attempts counter is incremented IN SQL. That counter is the brute-force bound
 //     for the typed pairing code (ADR-0049 flags it as the security-review item), and a
 //     count read in Go and written back would let two concurrent guesses both see the
 //     same value.
@@ -228,11 +228,19 @@ func (r *DeviceTokenRepository) CreateLinkRequest(
 	if redirectURI != "" {
 		redirect = &redirectURI
 	}
+	// The TTL is multiplied into an interval rather than concatenated into one.
+	// `($8 || ' seconds')::INTERVAL` reads fine but types $8 as `text`, because `||`
+	// only has a text overload — and pgx v5 refuses to encode an int64 into a text
+	// parameter ("cannot find encode plan"), so EVERY call failed with a 500 and
+	// device linking could not be started at all. Multiplication takes the numeric
+	// straight through. Do not reintroduce the concatenation: it is not a style
+	// preference, it is the difference between working and a hard failure, and
+	// TestTTLIntervalsAreNotStringConcatenated pins it.
 	row := r.db.QueryRow(ctx, `
 		INSERT INTO device_link_requests
 			(flow, user_code_hash, pkce_challenge, pkce_method, redirect_uri,
 			 device_name, requested_scopes, expires_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, NOW() + ($8 || ' seconds')::INTERVAL)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NOW() + $8 * INTERVAL '1 second')
 		RETURNING `+linkRequestColumns,
 		flow, userCodeHash, pkceChallenge, pkceMethod, redirect,
 		deviceName, requestedScopes, int64(ttl/time.Second))
@@ -351,7 +359,7 @@ func (r *DeviceTokenRepository) ApproveLinkRequest(
 		       device_name = COALESCE(NULLIF($5, ''), device_name),
 		       approved_at = NOW(),
 		       auth_code_hash = $6,
-		       auth_code_expires_at = NOW() + ($7 || ' seconds')::INTERVAL
+		       auth_code_expires_at = NOW() + $7 * INTERVAL '1 second'
 		 WHERE id = $1
 		   AND user_id IS NULL
 		   AND consumed_at IS NULL
@@ -548,7 +556,7 @@ func (r *DeviceTokenRepository) CreateDeviceToken(
 	var id string
 	err = tx.QueryRow(ctx, `
 		INSERT INTO device_tokens (user_id, overlay_id, name, token_hash, scopes, expires_at)
-		VALUES ($1, $2, $3, $4, $5, NOW() + ($6 || ' seconds')::INTERVAL)
+		VALUES ($1, $2, $3, $4, $5, NOW() + $6 * INTERVAL '1 second')
 		RETURNING id::text`,
 		userID, overlayID, name, tokenHash, scopes, int64(lifetime/time.Second)).Scan(&id)
 	if err != nil {

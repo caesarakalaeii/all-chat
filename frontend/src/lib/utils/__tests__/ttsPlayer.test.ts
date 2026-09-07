@@ -21,8 +21,6 @@ import { createTTSPlayer, PRIORITY_EVENTS } from '../ttsPlayer'
 import type { TTSSettings } from '../ttsPlayer'
 import type { ChatMessage, EventType } from '@/lib/types/message'
 
-// ---- Mocks ---------------------------------------------------------------
-
 interface MockVoice {
   voiceURI: string
   name: string
@@ -91,8 +89,6 @@ vi.stubGlobal('window', {
     removeEventListener: mockRemoveEventListener,
   },
 })
-
-// ---- Helpers -------------------------------------------------------------
 
 const defaultSettings: TTSSettings = {
   enabled: true,
@@ -195,8 +191,6 @@ afterEach(() => {
   })
 })
 
-// =========================================================================
-
 describe('createTTSPlayer - basic API', () => {
   // Test 1
   it('returns an object with speak, updateSettings, destroy methods', () => {
@@ -222,8 +216,6 @@ describe('createTTSPlayer - basic API', () => {
     expect(mockSpeak).toHaveBeenCalledTimes(1)
   })
 })
-
-// =========================================================================
 
 describe('D-25..D-30 formatContent', () => {
   // Test 4 — D-25 username prefix
@@ -338,8 +330,6 @@ describe('D-25..D-30 formatContent', () => {
     expect(mockSpeak).not.toHaveBeenCalled()
   })
 })
-
-// =========================================================================
 
 describe('D-31 priority events', () => {
   // Test 12 — sampling
@@ -458,8 +448,6 @@ describe('D-31 priority events', () => {
   })
 })
 
-// =========================================================================
-
 describe('D-35 cooldown', () => {
   // Test 17
   it('same username within tts_user_cooldown_seconds is suppressed', async () => {
@@ -495,8 +483,6 @@ describe('D-35 cooldown', () => {
     expect(mockSpeak).toHaveBeenCalledTimes(2)
   })
 })
-
-// =========================================================================
 
 describe('D-36 token bucket', () => {
   // Test 19
@@ -551,8 +537,6 @@ describe('D-36 token bucket', () => {
     expect(mockSpeak).toHaveBeenCalledTimes(1)
   })
 })
-
-// =========================================================================
 
 describe('D-33 queue overflow', () => {
   // Test 22 — non-priority full: drop
@@ -655,8 +639,6 @@ describe('D-33 queue overflow', () => {
   })
 })
 
-// =========================================================================
-
 describe('D-34 FIFO', () => {
   // Test 24 — FIFO ordering when both priority and non-priority fit
   it('priority and non-priority are spoken in insertion order when queue has room', async () => {
@@ -704,8 +686,6 @@ describe('D-34 FIFO', () => {
   })
 })
 
-// =========================================================================
-
 describe('D-37 staleness', () => {
   // Test 25
   it('message with timestamp older than staleness_seconds is dropped silently', async () => {
@@ -716,8 +696,6 @@ describe('D-37 staleness', () => {
     expect(mockSpeak).not.toHaveBeenCalled()
   })
 })
-
-// =========================================================================
 
 describe('D-38 session fallback (ElevenLabs)', () => {
   // Test 26
@@ -916,8 +894,6 @@ describe('D-38 session fallback (ElevenLabs)', () => {
   })
 })
 
-// =========================================================================
-
 describe('voice uri fallback D-28', () => {
   // Test 31
   it('persisted voice_uri not in current voice list → console.warn + no voice on utterance', async () => {
@@ -938,8 +914,6 @@ describe('voice uri fallback D-28', () => {
   })
 })
 
-// =========================================================================
-
 describe('utterance properties', () => {
   // Test 32
   it('speak() applies volume, rate, pitch from settings', async () => {
@@ -956,8 +930,6 @@ describe('utterance properties', () => {
     expect(lastUtterance?.pitch).toBe(0.75)
   })
 })
-
-// =========================================================================
 
 describe('destroy + updateSettings', () => {
   // Test 33

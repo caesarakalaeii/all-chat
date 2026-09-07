@@ -22,31 +22,36 @@ import clsx from 'clsx'
 import { PlatformGlyph } from '@/components/overlay/PlatformGlyph'
 import type { SourceInfo } from '@/components/PlatformStatusIndicators'
 import { sourceKey } from '@/core/overlayStreamCore'
+import { useTranslations } from '@/lib/i18n'
 import type { EventSettings, PublicOverlayConfig } from '@/lib/types/overlay'
 
-const EVENT_TOGGLES: Array<{ key: keyof EventSettings; label: string }> = [
-  { key: 'enable_twitch_subs', label: 'Twitch Subs' },
-  { key: 'enable_twitch_resubs', label: 'Twitch Resubs' },
-  { key: 'enable_twitch_gift_subs', label: 'Twitch Gift Subs' },
-  { key: 'enable_twitch_bits', label: 'Twitch Bits' },
-  { key: 'enable_twitch_raids', label: 'Twitch Raids' },
-  { key: 'enable_twitch_channel_points', label: 'Channel Points' },
-  { key: 'enable_twitch_follows', label: 'Twitch Follows' },
-  { key: 'enable_twitch_watch_streaks', label: 'Watch Streaks' },
-  { key: 'enable_youtube_super_chat', label: 'YouTube Super Chat' },
-  { key: 'enable_youtube_super_sticker', label: 'Super Sticker' },
-  { key: 'enable_youtube_members', label: 'YouTube Members' },
-  { key: 'enable_youtube_member_milestones', label: 'Member Milestones' },
-  { key: 'enable_youtube_member_gifts', label: 'Member Gifts' },
-  { key: 'enable_kick_subs', label: 'Kick Subs' },
-  { key: 'enable_kick_gifts', label: 'Kick Gifts' },
-  { key: 'enable_tiktok_likes', label: 'TikTok Likes' },
-  { key: 'enable_tiktok_gifts', label: 'TikTok Gifts' },
-  { key: 'enable_tiktok_follows', label: 'TikTok Follows' },
-  { key: 'enable_tiktok_shares', label: 'TikTok Shares' },
-  { key: 'enable_tiktok_treasure_chests', label: 'TikTok Coin Chests' },
-  { key: 'enable_token_warnings', label: 'Token Warnings' },
-]
+// The wire flag paired with the stem of its catalog key, so the label is looked
+// up as t(`viewerOverlay.observability.event${stem}`). `as const satisfies`
+// rather than a type annotation: an annotation widens the stems to string and a
+// typo would stop failing tsc.
+const EVENT_TOGGLES = [
+  { key: 'enable_twitch_subs', messageStem: 'TwitchSubs' },
+  { key: 'enable_twitch_resubs', messageStem: 'TwitchResubs' },
+  { key: 'enable_twitch_gift_subs', messageStem: 'TwitchGiftSubs' },
+  { key: 'enable_twitch_bits', messageStem: 'TwitchBits' },
+  { key: 'enable_twitch_raids', messageStem: 'TwitchRaids' },
+  { key: 'enable_twitch_channel_points', messageStem: 'TwitchChannelPoints' },
+  { key: 'enable_twitch_follows', messageStem: 'TwitchFollows' },
+  { key: 'enable_twitch_watch_streaks', messageStem: 'TwitchWatchStreaks' },
+  { key: 'enable_youtube_super_chat', messageStem: 'YoutubeSuperChat' },
+  { key: 'enable_youtube_super_sticker', messageStem: 'YoutubeSuperSticker' },
+  { key: 'enable_youtube_members', messageStem: 'YoutubeMembers' },
+  { key: 'enable_youtube_member_milestones', messageStem: 'YoutubeMemberMilestones' },
+  { key: 'enable_youtube_member_gifts', messageStem: 'YoutubeMemberGifts' },
+  { key: 'enable_kick_subs', messageStem: 'KickSubs' },
+  { key: 'enable_kick_gifts', messageStem: 'KickGifts' },
+  { key: 'enable_tiktok_likes', messageStem: 'TiktokLikes' },
+  { key: 'enable_tiktok_gifts', messageStem: 'TiktokGifts' },
+  { key: 'enable_tiktok_follows', messageStem: 'TiktokFollows' },
+  { key: 'enable_tiktok_shares', messageStem: 'TiktokShares' },
+  { key: 'enable_tiktok_treasure_chests', messageStem: 'TiktokTreasureChests' },
+  { key: 'enable_token_warnings', messageStem: 'TokenWarnings' },
+] as const satisfies ReadonlyArray<{ key: keyof EventSettings; messageStem: string }>
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -74,14 +79,15 @@ export function ObservabilitySummary({
   eventSettings,
   observedEventTypes,
 }: ObservabilitySummaryProps) {
+  const t = useTranslations()
   const filter = config?.filter_settings ?? {}
   const sourceList = Array.from(sources.values())
 
   return (
     <div className="grid gap-3 border-b border-border bg-bg p-3 md:grid-cols-2 lg:grid-cols-4">
-      <Card title={`Sources (${sourceList.length})`}>
+      <Card title={t('viewerOverlay.observability.sources', { count: sourceList.length })}>
         {sourceList.length === 0 ? (
-          <p className="text-sm text-text-dim">No sources configured.</p>
+          <p className="text-sm text-text-dim">{t('viewerOverlay.observability.noSources')}</p>
         ) : (
           <ul className="space-y-1">
             {sourceList.map((s) => {
@@ -97,7 +103,9 @@ export function ObservabilitySummary({
                       isLive ? 'bg-kick/15 text-kick' : 'bg-surface-2 text-text-dim'
                     )}
                   >
-                    {isLive ? 'live' : 'idle'}
+                    {isLive
+                      ? t('viewerOverlay.observability.sourceLive')
+                      : t('viewerOverlay.observability.sourceIdle')}
                   </span>
                 </li>
               )
@@ -106,11 +114,12 @@ export function ObservabilitySummary({
         )}
       </Card>
 
-      <Card title="Configured Events">
+      <Card title={t('viewerOverlay.observability.configuredEvents')}>
         {eventSettings ? (
           <ul className="grid grid-cols-1 gap-x-3 gap-y-0.5 sm:grid-cols-2">
-            {EVENT_TOGGLES.map(({ key, label }) => {
+            {EVENT_TOGGLES.map(({ key, messageStem }) => {
               const on = eventSettings[key] === true
+              const label = t(`viewerOverlay.observability.event${messageStem}`)
               return (
                 <li key={key} className="flex items-center gap-1.5 text-xs">
                   {on ? (
@@ -136,46 +145,54 @@ export function ObservabilitySummary({
           </div>
         ) : (
           <p className="text-sm text-text-dim">
-            Event configuration unavailable; events appear here as they arrive.
+            {t('viewerOverlay.observability.eventsUnavailable')}
           </p>
         )}
       </Card>
 
-      <Card title="Emotes">
+      <Card title={t('viewerOverlay.observability.emotes')}>
         <dl className="space-y-1 text-sm">
           <div className="flex justify-between gap-2">
-            <dt className="text-text-sub">7TV set</dt>
+            <dt className="text-text-sub">{t('viewerOverlay.observability.sevenTvSet')}</dt>
             <dd className="min-w-0 truncate text-text">
-              {config?.seventv_emote_set_id || 'per-source default'}
+              {config?.seventv_emote_set_id || t('viewerOverlay.observability.sevenTvDefault')}
             </dd>
           </div>
         </dl>
       </Card>
 
-      <Card title="Filters">
+      <Card title={t('viewerOverlay.observability.filters')}>
         <dl className="space-y-1 text-sm">
           <div className="flex justify-between gap-2">
-            <dt className="text-text-sub">Banned words</dt>
+            <dt className="text-text-sub">{t('viewerOverlay.observability.bannedWords')}</dt>
             <dd className="text-text tabular-nums">{filter.banned_words?.length ?? 0}</dd>
           </div>
           <div className="flex justify-between gap-2">
-            <dt className="text-text-sub">Banned users</dt>
+            <dt className="text-text-sub">{t('viewerOverlay.observability.bannedUsers')}</dt>
             <dd className="text-text tabular-nums">{filter.banned_users?.length ?? 0}</dd>
           </div>
           <div className="flex justify-between gap-2">
-            <dt className="text-text-sub">Min length</dt>
+            <dt className="text-text-sub">{t('viewerOverlay.observability.minLength')}</dt>
             <dd className="text-text tabular-nums">{filter.min_message_length ?? 0}</dd>
           </div>
           <div className="flex justify-between gap-2">
-            <dt className="text-text-sub">Hide commands</dt>
-            <dd className="text-text">{filter.hide_commands ? 'yes' : 'no'}</dd>
+            <dt className="text-text-sub">{t('viewerOverlay.observability.hideCommands')}</dt>
+            <dd className="text-text">
+              {filter.hide_commands
+                ? t('viewerOverlay.observability.yes')
+                : t('viewerOverlay.observability.no')}
+            </dd>
           </div>
           <div className="flex justify-between gap-2">
-            <dt className="text-text-sub">Say hi filter</dt>
-            <dd className="text-text">{filter.hide_youtube_say_hi ? 'yes' : 'no'}</dd>
+            <dt className="text-text-sub">{t('viewerOverlay.observability.sayHiFilter')}</dt>
+            <dd className="text-text">
+              {filter.hide_youtube_say_hi
+                ? t('viewerOverlay.observability.yes')
+                : t('viewerOverlay.observability.no')}
+            </dd>
           </div>
           <p className="pt-1 text-[10px] text-text-dim">
-            Filters are shown for reference; this view displays all messages.
+            {t('viewerOverlay.observability.filtersNote')}
           </p>
         </dl>
       </Card>

@@ -8,6 +8,8 @@
 
 A streamer asked for Stream Deck buttons that drive All-Chat directly: start or close a poll, and send a canned message to every connected chat from the monitor view. The reasoning is the one All-Chat exists for. A multistreamer already has both hands busy, and the dashboard is one more window competing for attention on a second monitor. A physical button that fans a message out to Twitch, YouTube, Kick, TikTok and Discord at once is the shortest path between an intent and five platforms.
 
+> **Correction, 2026-08-31.** The sentence above overstates the send surface, and both plugins copied it into their pickers and READMEs before anyone checked. All-Chat *reads* five platforms but can only *post* to three: `POST /api/v1/auth/chat/send` answers 501 for TikTok (no public API exists for posting into a TikTok live chat) and 400 for Discord (a Discord source is a one-way relay), and `all` fans out to Twitch, YouTube and Kick only. The picker offered TikTok until a streamer asked why the button did nothing. The list is now pinned in `scripts/check-plugin-parity.py` and asserted against both plugins *and* the Elgato HTML picker.
+
 Two questions had to be answered before this is worth planning, and the first is settled:
 
 **Is the Stream Deck platform open, and does it cost us anything?** No cost. Elgato's SDK is free, plugin development is free, and publishing a free plugin to the Elgato Marketplace is free. A plugin is ordinary local software: a Node.js backend for logic plus an optional Chromium-rendered settings panel, talking to the Stream Deck app over a local WebSocket, on Windows 10+ and macOS 10.15+. Nothing about it requires a commercial relationship with Elgato.

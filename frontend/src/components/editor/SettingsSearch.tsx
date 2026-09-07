@@ -19,7 +19,10 @@
  */
 
 import React, { useId, useRef, useState } from 'react'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 import { Search, X } from 'lucide-react'
+import { useTranslations } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import {
   EDITOR_GROUPS,
@@ -50,6 +53,7 @@ function crumbFor(hit: SearchHit): string {
  * can name ("badge", "fade", "banned words") without knowing our grouping.
  */
 export function SettingsSearch({ onNavigate }: SettingsSearchProps): React.ReactElement {
+  const t = useTranslations()
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -93,11 +97,11 @@ export function SettingsSearch({ onNavigate }: SettingsSearchProps): React.React
         aria-hidden="true"
         className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-text-sub"
       />
-      <input
+      <Input
         ref={inputRef}
         type="text"
         role="combobox"
-        aria-label="Search settings"
+        aria-label={t('overlayEditor.settingsSearch.label')}
         aria-expanded={open}
         // Only reference the listbox while it is actually mounted — a dangling
         // aria-controls id is an axe violation (aria-valid-attr-value)
@@ -106,7 +110,7 @@ export function SettingsSearch({ onNavigate }: SettingsSearchProps): React.React
           open && hits.length > 0 ? `${listboxId}-option-${selectedIndex}` : undefined
         }
         aria-autocomplete="list"
-        placeholder="Search settings… (e.g. badge, fade, banned words)"
+        placeholder={t('overlayEditor.settingsSearch.placeholder')}
         autoComplete="off"
         value={query}
         onChange={(e) => {
@@ -114,31 +118,33 @@ export function SettingsSearch({ onNavigate }: SettingsSearchProps): React.React
           setSelectedIndex(0)
         }}
         onKeyDown={handleKeyDown}
-        className="w-full rounded-lg border border-border bg-surface-2 py-2 pr-8 pl-9 text-sm text-text placeholder:text-text-sub focus-visible:ring-2 focus-visible:ring-twitch/50 focus-visible:outline-none"
+        className="pr-8 pl-9"
       />
       {query !== '' && (
-        <button
+        <Button
           type="button"
-          aria-label="Clear search"
+          aria-label={t('overlayEditor.settingsSearch.clearLabel')}
           onClick={() => {
             reset()
             inputRef.current?.focus()
           }}
-          className="absolute top-1/2 right-2 -translate-y-1/2 rounded p-1 text-text-sub hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+          variant="ghost"
+          size="icon-xs"
+          className="absolute top-1/2 right-2 -translate-y-1/2"
         >
           <X aria-hidden="true" className="size-3.5" />
-        </button>
+        </Button>
       )}
       {open && (
         <div
           id={listboxId}
           role="listbox"
-          aria-label="Matching settings"
+          aria-label={t('overlayEditor.settingsSearch.resultsLabel')}
           className="absolute top-full right-0 left-0 z-30 mt-1 overflow-hidden rounded-lg border border-border bg-surface p-1 shadow-lg"
         >
           {hits.length === 0 ? (
             <p className="px-3 py-2 text-sm text-text-sub">
-              No settings match &ldquo;{query.trim()}&rdquo;
+              {t('overlayEditor.settingsSearch.noResults', { query: query.trim() })}
             </p>
           ) : (
             hits.map((hit, index) => (

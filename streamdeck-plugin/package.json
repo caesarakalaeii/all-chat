@@ -1,6 +1,6 @@
 {
   "name": "allchat-streamdeck-plugin",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "Elgato Stream Deck plugin for All-Chat: send chat messages and drive polls / predictions from hardware keys.",

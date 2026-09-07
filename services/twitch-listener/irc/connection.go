@@ -619,7 +619,7 @@ func (cm *ConnectionManager) handleNotice(message twitch.NoticeMessage) {
 //
 // Two failure modes have been observed in production:
 //
-//  1. *Per-channel*: a specific channel name (deleted, suspended, renamed,
+//   - *Per-channel*: a specific channel name (deleted, suspended, renamed,
 //     mod-only-chat without our mod status, …) silently never acks. The
 //     pendingJoins entry ages past joinAckTimeout but every other JOIN on the
 //     same connection works fine. Forcing a reconnect here is destructive —
@@ -627,7 +627,7 @@ func (cm *ConnectionManager) handleNotice(message twitch.NoticeMessage) {
 //     ban the stuck channel(s) so they're skipped on the next sync, leaving the
 //     connection intact.
 //
-//  2. *Connection-wide* (the original PR #279 motivation): the gempir client's
+//   - *Connection-wide* (the original PR #279 motivation): the gempir client's
 //     internal map shows channels as joined but Twitch silently dropped *all*
 //     new JOINs since some point. The fix here is a fresh client. We detect
 //     this by stuck-count threshold — a single bad channel doesn't trigger a

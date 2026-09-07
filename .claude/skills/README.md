@@ -1,6 +1,7 @@
-# All-Chat Documentation Skills
+# All-Chat Skills
 
-Custom Claude Code skills for automating documentation tasks.
+Custom Claude Code skills for this repo: documentation generators, plus
+workflow skills for building UI and announcing releases.
 
 ---
 
@@ -178,6 +179,29 @@ To create a new documentation skill:
 4. Provide examples and success criteria
 5. Update this README with new skill
 
+### /shadcn-ui
+
+**Purpose**: Build or change frontend UI without it drifting — pick the right
+shadcn primitive, use design tokens, verify nothing compiles to dead CSS
+
+**Use when**: touching any styled markup under `frontend/`, adding a shadcn
+component, or reviewing a frontend diff for design drift
+
+**→ Details**: [shadcn-ui/SKILL.md](./shadcn-ui/SKILL.md) · reference:
+[frontend/DESIGN_SYSTEM.md](../../frontend/DESIGN_SYSTEM.md) · rationale:
+[ADR-0056](../../docs/adr/0056-shadcn-token-vocabulary-as-the-design-system-contract.md)
+
+---
+
+### /announce-feature
+
+**Purpose**: Publish a shipped feature to Patreon and cross-post to X and Bluesky
+(release checklist step 3)
+
+**→ Details**: [announce-feature/SKILL.md](./announce-feature/SKILL.md)
+
+---
+
 ---
 
 ## Related Documentation
@@ -191,8 +215,7 @@ To create a new documentation skill:
 
 ## Summary
 
-**Total Skills**: 6
-**Purpose**: Automate documentation generation and maintenance
-**Status**: All skills complete and ready to use
+**Purpose**: Automate documentation generation, UI work and release announcements
+**Inventory**: see the files in this directory — do not hardcode a count here
 
 **Using these skills ensures consistency, completeness, and adherence to All-Chat documentation standards.**

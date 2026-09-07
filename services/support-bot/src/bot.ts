@@ -9,7 +9,7 @@ import {
   type ThreadChannel,
 } from 'discord.js';
 import type { Octokit } from '@octokit/rest';
-import { queryCodebase } from './claude/agent.js';
+import { CLAUDE_TIMEOUT_MS, queryCodebase } from './claude/agent.js';
 import { createComment, createIssue, createOctokitClient } from './github/issues.js';
 import { MemoryRepository, extractTagsFromQuestion } from './memory/repository.js';
 import { CrossChannelSpamDetector } from './moderation/cross-channel-spam.js';
@@ -51,6 +51,61 @@ async function fetchThreadHistory(thread: ThreadChannel): Promise<string[]> {
     .map(m => `[${m.author.bot ? 'Bot' : m.author.username}]: ${m.content}`);
 }
 
+/** Cap on how much of one error reaches the log. An ExecaError carries the whole argv. */
+const MAX_ERROR_LOG_CHARS = 4000;
+
+/** Credential shapes that must never be logged, whatever dragged them in. */
+const SECRET_PATTERNS: readonly RegExp[] = [
+  /glsa_[A-Za-z0-9_]+/g, // Grafana service-account token
+  /gh[pousr]_[A-Za-z0-9]{20,}/g, // GitHub token
+  /sk-ant-[A-Za-z0-9_-]{20,}/g, // Anthropic API key
+];
+
+function redactSecrets(text: string): string {
+  return SECRET_PATTERNS.reduce((acc, pattern) => acc.replace(pattern, '[REDACTED]'), text);
+}
+
+/**
+ * Logs a failure without re-leaking what the error dragged along.
+ *
+ * execa embeds the full argv in every error it throws. For this bot that argv is the
+ * entire system prompt plus every flag -- thousands of lines per failure -- and until the
+ * MCP config was moved out of the command line it also carried the Grafana
+ * service-account token in plaintext, which is how that token ended up in the pod log.
+ * The file-based config fixes the source; this is the belt to that pair of braces, so a
+ * secret reaching here by some future route still does not reach the log.
+ */
+function logHandlingError(context: string, err: unknown): void {
+  if (typeof err === 'object' && err !== null && (err as { timedOut?: boolean }).timedOut === true) {
+    console.error(`${context}: claude subprocess timed out after ${CLAUDE_TIMEOUT_MS}ms`);
+    return;
+  }
+  const text = err instanceof Error ? (err.stack ?? err.message) : String(err);
+  console.error(`${context}: ${redactSecrets(text).slice(0, MAX_ERROR_LOG_CHARS)}`);
+}
+
+/**
+ * Turns a subprocess failure into a reply the asker can act on.
+ *
+ * A timeout is the common failure and it is not random: an expensive request (several
+ * issues at once, a wide sweep of a 137MB checkout) simply does not finish inside the
+ * budget. The old catch-all answered "something went wrong, check the bot logs" for every
+ * case, which is useless to the streamer who asked and misleading to everyone else --
+ * nothing "went wrong", the work was too big. Naming the limit and how to get under it is
+ * the difference between a dead end and a retry that succeeds.
+ */
+function failureReply(err: unknown): string {
+  if (typeof err === 'object' && err !== null && (err as { timedOut?: boolean }).timedOut === true) {
+    const minutes = Math.round(CLAUDE_TIMEOUT_MS / 60_000);
+    return (
+      `I ran out of time on this one and stopped after ${minutes} minutes. ` +
+      'That usually means the request needed too much digging at once. ' +
+      'Try splitting it up: ask for one issue or one area at a time, and name the file or service if you know it.'
+    );
+  }
+  return 'Sorry, something went wrong while processing your question. Check the bot logs for details.';
+}
+
 async function handleQuestion(
   question: string,
   repoPaths: string[],
@@ -76,32 +131,51 @@ async function handleQuestion(
     await memoryRepo.updateMemory(result.updateMemoryMarker.id, result.updateMemoryMarker.content);
   }
 
-  if (result.issueProposal !== null) {
-    const issueUrl = await createIssue(
-      octokit,
-      config.githubOwner,
-      result.issueProposal.repo,
-      result.issueProposal.title,
-      result.issueProposal.body,
-    );
-    answer = `${answer}\n\nI've created a GitHub issue for this proposed change: ${issueUrl}`;
+  // Each proposal is created independently and a failure is reported rather than thrown:
+  // when the model files four issues, one rejected by the GitHub API must not discard the
+  // three that succeeded, and the user needs to know which of the four is missing.
+  const created: string[] = [];
+
+  for (const proposal of result.issueProposals) {
+    try {
+      const issueUrl = await createIssue(
+        octokit,
+        config.githubOwner,
+        proposal.repo,
+        proposal.title,
+        proposal.body,
+      );
+      created.push(`Created **${proposal.title}**: ${issueUrl}`);
+    } catch (err) {
+      logHandlingError(`Failed to create issue "${proposal.title}" in ${proposal.repo}`, err);
+      created.push(`Could NOT create **${proposal.title}** in ${proposal.repo} (see bot logs).`);
+    }
   }
 
-  if (result.commentProposal !== null) {
-    const commentUrl = await createComment(
-      octokit,
-      config.githubOwner,
-      result.commentProposal.repo,
-      result.commentProposal.issueNumber,
-      result.commentProposal.body,
-    );
-    answer = `${answer}\n\nI've posted a comment on ${result.commentProposal.repo} #${result.commentProposal.issueNumber}: ${commentUrl}`;
+  for (const proposal of result.commentProposals) {
+    try {
+      const commentUrl = await createComment(
+        octokit,
+        config.githubOwner,
+        proposal.repo,
+        proposal.issueNumber,
+        proposal.body,
+      );
+      created.push(`Commented on ${proposal.repo} #${proposal.issueNumber}: ${commentUrl}`);
+    } catch (err) {
+      logHandlingError(`Failed to comment on ${proposal.repo} #${proposal.issueNumber}`, err);
+      created.push(`Could NOT comment on ${proposal.repo} #${proposal.issueNumber} (see bot logs).`);
+    }
+  }
+
+  if (created.length > 0) {
+    answer = `${answer}\n\n${created.map(line => `- ${line}`).join('\n')}`;
   }
 
   const shouldPingLeadDev =
     result.infraVerdict?.type === 'infrastructure' ||
-    result.issueProposal !== null ||
-    result.commentProposal !== null;
+    result.issueProposals.length > 0 ||
+    result.commentProposals.length > 0;
 
   if (shouldPingLeadDev && config.leadDeveloperDiscordId) {
     answer = `<@${config.leadDeveloperDiscordId}> ${answer}`;
@@ -248,8 +322,8 @@ export async function startBot(config: BotConfig, memoryRepo: MemoryRepository):
         }
       } catch (err) {
         clearInterval(typingInterval);
-        console.error('Error handling message:', err);
-        await message.reply('Sorry, something went wrong while processing your question. Check the bot logs for details.');
+        logHandlingError('Error handling message', err);
+        await message.reply(failureReply(err));
       }
     });
   });
@@ -269,8 +343,8 @@ export async function startBot(config: BotConfig, memoryRepo: MemoryRepository):
       answer = await handleQuestion(question, repoPaths, config, octokit, [], memoryRepo);
       console.log('[interaction] Claude responded successfully');
     } catch (err) {
-      console.error('[interaction] Error handling interaction:', err);
-      await interaction.editReply('Sorry, something went wrong while processing your question. Check the bot logs for details.');
+      logHandlingError('[interaction] Error handling interaction', err);
+      await interaction.editReply(failureReply(err));
       return;
     }
     // Note: deferReply keeps the "thinking..." indicator alive until editReply is called, no interval needed.

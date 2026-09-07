@@ -236,6 +236,13 @@ export interface ChatSource {
    *  enable EventSub chat (Twitch-login or linked credentials). Computed server-side per
    *  requester; drives the IRC→EventSub migration nudge. */
   is_own_channel?: boolean
+  /** 'paused' when this channel's stream discovery has parked itself and needs the
+   *  streamer to hit Rediscover — today only YouTube produces it, after an hour of
+   *  finding nothing live. Computed server-side on the overlay source list, from the
+   *  last-known platform status snapshot. Undefined means the state is NOT KNOWN (no
+   *  snapshot, expired, or Redis unreadable), which must render as nothing at all —
+   *  never as a healthy state. */
+  discovery_status?: 'paused'
 }
 
 export type StreamSelectionStrategy =

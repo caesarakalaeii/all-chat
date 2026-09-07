@@ -40,6 +40,12 @@ import { useViewerAuthStore } from '@/lib/stores/viewer-auth-store'
 import { viewerApi } from '@/lib/api/viewer'
 import { isAllowedExternalRedirect } from '@/lib/auth/redirect-allowlist'
 import { trackEvent } from '@/lib/analytics'
+import { useTranslations } from '@/lib/i18n'
+
+// Not copy: decoration above text that states the outcome in words. U+2713
+// CHECK MARK and U+26A0 WARNING SIGN with its emoji variation selector.
+const SUCCESS_GLYPH = '✓'
+const WARNING_GLYPH = '⚠️'
 
 /*
  * SECURITY (audit H4 + #10): postMessage targetOrigin must be an explicit
@@ -68,6 +74,7 @@ function postToOpener(opener: Window, payload: Record<string, unknown>) {
 }
 
 function AuthSuccessContent() {
+  const t = useTranslations()
   const router = useRouter()
   const searchParams = useSearchParams()
   const { setViewerToken, setViewerInfo } = useViewerAuthStore()
@@ -82,10 +89,17 @@ function AuthSuccessContent() {
 
       if (!code) {
         trackEvent('viewer_signin_failed', { reason: 'no_code' })
-        setError('No authentication code received')
+        setError(t('auth.viewerSuccess.noCode'))
         setLoading(false)
 
-        // Notify opener (extension) about error
+        // Notify opener (extension) about error.
+        //
+        // This `error` string stays a literal deliberately: it crosses a process
+        // boundary into the browser extension, which is versioned and shipped
+        // separately and may compare against it. Translating it would change a
+        // value another program reads. It happens to match the rendered copy
+        // above today; that is a coincidence of history, not a contract, and the
+        // extension gets the stable English either way.
         if (window.opener) {
           postToOpener(window.opener, {
             type: 'ALLCHAT_AUTH_ERROR',
@@ -120,7 +134,7 @@ function AuthSuccessContent() {
       } catch (err) {
         console.error('Token exchange failed:', err)
         trackEvent('viewer_signin_failed', { reason: 'exchange_failed' })
-        setError('Authentication failed. The code may have expired — please try again.')
+        setError(t('auth.viewerSuccess.exchangeFailed'))
         setLoading(false)
         return
       }
@@ -167,37 +181,37 @@ function AuthSuccessContent() {
         router.push('/')
       } catch (err) {
         console.error('Failed to fetch viewer info:', err)
-        setError('Failed to complete authentication. Please try again.')
+        setError(t('auth.viewerSuccess.viewerInfoFailed'))
         setLoading(false)
       }
     }
 
     handleSuccess()
-  }, [searchParams, setViewerToken, setViewerInfo, router])
+  }, [searchParams, setViewerToken, setViewerInfo, router, t])
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-bg">
       {loading ? (
         <div className="text-center">
           <div className="mx-auto mb-4 h-16 w-16 animate-spin rounded-full border-b-2 border-twitch"></div>
-          <p className="text-lg text-text">Completing authentication...</p>
-          <p className="mt-2 text-sm text-text-sub">Please wait</p>
+          <p className="text-lg text-text">{t('auth.viewerSuccess.completing')}</p>
+          <p className="mt-2 text-sm text-text-sub">{t('auth.viewerSuccess.pleaseWait')}</p>
         </div>
       ) : !error && window.opener ? (
         <div className="text-center">
-          <div className="mb-4 text-6xl">&#10003;</div>
-          <p className="mb-4 text-lg text-kick">Authentication successful!</p>
-          <p className="text-sm text-text-sub">You can close this window</p>
+          <div className="mb-4 text-6xl">{SUCCESS_GLYPH}</div>
+          <p className="mb-4 text-lg text-kick">{t('auth.viewerSuccess.succeeded')}</p>
+          <p className="text-sm text-text-sub">{t('auth.viewerSuccess.closeWindow')}</p>
         </div>
       ) : error ? (
         <div className="text-center">
-          <div className="mb-4 text-6xl">&#9888;&#65039;</div>
+          <div className="mb-4 text-6xl">{WARNING_GLYPH}</div>
           <p className="mb-4 text-lg text-youtube">{error}</p>
           <Link
             href="/"
             className="inline-block rounded-lg bg-twitch px-6 py-2 font-semibold text-bg transition-colors hover:bg-twitch/80"
           >
-            Return to Home
+            {t('auth.callback.returnHome')}
           </Link>
         </div>
       ) : null}

@@ -42,8 +42,16 @@ import { overlaysApi } from '@/lib/api/overlays'
 import { trackEvent } from '@/lib/analytics'
 import { AppNav } from '@/components/AppNav'
 import { Card } from '@/components/ui/card'
+import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import type { Overlay, CreditRollConfig } from '@/lib/types/overlay'
+import { getTranslations, useTranslations } from '@/lib/i18n'
+import { interpolateElements } from '@/lib/i18n/emphasise'
+
+// Read through getTranslations() rather than the hook: dynamic()'s `loading`
+// callback is not a component, so it cannot call one.
+const EDITOR_LOADING_LABEL = getTranslations()('overlayEditor.credits.loadingEditor')
 
 const MonacoCSSEditor = dynamic(() => import('@/components/MonacoCSSEditor'), {
   ssr: false,
@@ -54,10 +62,29 @@ const MonacoCSSEditor = dynamic(() => import('@/components/MonacoCSSEditor'), {
         'flex h-[400px] items-center justify-center rounded-lg border border-border bg-bg'
       }
     >
-      <div className="text-sm text-text-dim">Loading editor...</div>
+      <div className="text-sm text-text-dim">{EDITOR_LOADING_LABEL}</div>
     </div>
   ),
 })
+
+// Which event kinds can feed the credit-roll leaderboards. The config key and
+// the icon live here; the labels are in the catalog under
+// `overlayEditor.credits.event<Stem>`. `as const satisfies` keeps each stem a
+// string literal so a typo fails tsc at the lookup rather than at runtime.
+const CREDIT_EVENT_TYPES = [
+  { key: 'include_subs', messageStem: 'Subs', icon: '⭐' },
+  { key: 'include_resubs', messageStem: 'Resubs', icon: '🔄' },
+  { key: 'include_gift_subs', messageStem: 'GiftSubs', icon: '🎁' },
+  { key: 'include_bits', messageStem: 'Bits', icon: '💎' },
+  { key: 'include_raids', messageStem: 'Raids', icon: '⚔️' },
+  { key: 'include_super_chats', messageStem: 'SuperChats', icon: '💰' },
+  { key: 'include_memberships', messageStem: 'Memberships', icon: '👑' },
+  { key: 'include_follows', messageStem: 'Follows', icon: '❤️' },
+] as const satisfies ReadonlyArray<{
+  key: keyof CreditRollConfig
+  messageStem: string
+  icon: string
+}>
 
 const ThemeMarketplaceModal = dynamic(
   () => import('@/components/theme-marketplace/ThemeMarketplaceModal'),
@@ -65,6 +92,7 @@ const ThemeMarketplaceModal = dynamic(
 )
 
 export default function CreditRollConfigPage({ params }: { params: Promise<{ id: string }> }) {
+  const t = useTranslations()
   const { id } = use(params)
   const router = useRouter()
   const { user } = useAuthStore()
@@ -179,9 +207,9 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
         <AppNav />
         <div className="flex items-center justify-center pt-32">
           <div className="text-center">
-            <p className="text-lg text-youtube">Overlay not found</p>
+            <p className="text-lg text-youtube">{t('overlayEditor.credits.notFound')}</p>
             <a href="/dashboard" className="mt-4 inline-block text-twitch hover:underline">
-              Return to Dashboard
+              {t('overlayEditor.credits.returnToDashboard')}
             </a>
           </div>
         </div>
@@ -235,9 +263,11 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                 </svg>
               )}
               <p className="font-medium">{notification.message}</p>
-              <button
+              <Button
                 onClick={() => setNotification(null)}
-                className="ml-2 text-text-dim transition-colors hover:text-text"
+                variant="ghost"
+                size="icon-xs"
+                className="ml-2"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
@@ -247,7 +277,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                     d="M6 18L18 6M6 6l12 12"
                   />
                 </svg>
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -269,13 +299,10 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                 d="M10 19l-7-7m0 0l7-7m-7 7h18"
               />
             </svg>
-            Back to Overlay
+            {t('overlayEditor.credits.backToOverlay')}
           </a>
-          <h1 className="text-3xl font-bold text-text">Credit Roll Settings</h1>
-          <p className="mt-2 text-text-sub">
-            Configure end-of-stream credits to showcase viewers who supported your stream with subs,
-            donations, raids, and more.
-          </p>
+          <h1 className="text-3xl font-bold text-text">{t('overlayEditor.credits.heading')}</h1>
+          <p className="mt-2 text-text-sub">{t('overlayEditor.credits.intro')}</p>
           <div className="mt-4">
             <Button
               variant="outline"
@@ -297,11 +324,11 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                   d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"
                 />
               </svg>
-              {copiedCreditsUrl ? 'Copied!' : 'Copy Credits OBS URL'}
+              {copiedCreditsUrl
+                ? t('overlayEditor.credits.copiedObsUrl')
+                : t('overlayEditor.credits.copyObsUrl')}
             </Button>
-            <p className="mt-1 text-xs text-text-dim">
-              Add this URL as a Browser Source in OBS to display credits at end of stream
-            </p>
+            <p className="mt-1 text-xs text-text-dim">{t('overlayEditor.credits.obsUrlHint')}</p>
           </div>
         </div>
 
@@ -309,25 +336,18 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
         <Card className="mb-6 p-6">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-xl font-semibold text-text">Enable Credit Roll</h2>
-              <p className="mt-1 text-sm text-text-sub">
-                Show end-of-stream credits with leaderboards and highlights
-              </p>
+              <h2 className="text-xl font-semibold text-text">
+                {t('overlayEditor.credits.enableHeading')}
+              </h2>
+              <p className="mt-1 text-sm text-text-sub">{t('overlayEditor.credits.enableHint')}</p>
             </div>
-            <button
-              onClick={() => setConfig({ ...config, enabled: !config.enabled })}
-              className={clsx(
-                'relative inline-flex h-8 w-14 items-center rounded-full transition-colors',
-                config.enabled ? 'bg-kick' : 'bg-surface-2'
-              )}
+            <Switch.Root
+              checked={config.enabled}
+              onCheckedChange={(enabled) => setConfig({ ...config, enabled })}
+              aria-label={t('overlayEditor.credits.enableHeading')}
             >
-              <span
-                className={clsx(
-                  'inline-block h-6 w-6 transform rounded-full bg-white transition-transform',
-                  config.enabled ? 'translate-x-7' : 'translate-x-1'
-                )}
-              />
-            </button>
+              <Switch.Thumb />
+            </Switch.Root>
           </div>
         </Card>
 
@@ -335,33 +355,28 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
           <>
             {/* Event Types */}
             <Card className="mb-6 p-6">
-              <h3 className="mb-4 text-lg font-semibold text-text">Event Types to Include</h3>
+              <h3 className="mb-4 text-lg font-semibold text-text">
+                {t('overlayEditor.credits.eventTypesHeading')}
+              </h3>
               <p className="mb-4 text-sm text-text-sub">
-                Select which types of events should appear in the credit roll leaderboards
+                {t('overlayEditor.credits.eventTypesHint')}
               </p>
               <div className="grid grid-cols-2 gap-4">
-                {[
-                  { key: 'include_subs', label: 'Subscriptions', icon: '⭐' },
-                  { key: 'include_resubs', label: 'Resubscriptions', icon: '🔄' },
-                  { key: 'include_gift_subs', label: 'Gift Subs', icon: '🎁' },
-                  { key: 'include_bits', label: 'Bits/Cheers', icon: '💎' },
-                  { key: 'include_raids', label: 'Raids', icon: '⚔️' },
-                  { key: 'include_super_chats', label: 'Super Chats', icon: '💰' },
-                  { key: 'include_memberships', label: 'Memberships', icon: '👑' },
-                  { key: 'include_follows', label: 'Follows', icon: '❤️' },
-                ].map(({ key, label, icon }) => (
+                {CREDIT_EVENT_TYPES.map(({ key, messageStem, icon }) => (
                   <label
                     key={key}
                     className="flex cursor-pointer items-center gap-3 rounded-lg border border-border bg-bg p-3 transition-colors hover:border-border-md"
                   >
                     <input
                       type="checkbox"
-                      checked={config[key as keyof typeof config] as boolean}
+                      checked={config[key] as boolean}
                       onChange={(e) => setConfig({ ...config, [key]: e.target.checked })}
                       className="h-5 w-5 rounded border-border bg-surface-2 text-twitch accent-twitch focus-visible:ring-twitch"
                     />
                     <span className="text-2xl">{icon}</span>
-                    <span className="font-medium text-text">{label}</span>
+                    <span className="font-medium text-text">
+                      {t(`overlayEditor.credits.event${messageStem}`)}
+                    </span>
                   </label>
                 ))}
               </div>
@@ -369,16 +384,18 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
 
             {/* Leaderboard Settings */}
             <Card className="mb-6 p-6">
-              <h3 className="mb-4 text-lg font-semibold text-text">Leaderboard Settings</h3>
+              <h3 className="mb-4 text-lg font-semibold text-text">
+                {t('overlayEditor.credits.leaderboardHeading')}
+              </h3>
               <div className="space-y-4">
                 <div>
                   <label
                     htmlFor={`${fieldId}-top-n`}
                     className="mb-2 block text-sm font-medium text-text"
                   >
-                    Top N Users per Category
+                    {t('overlayEditor.credits.topNLabel')}
                   </label>
-                  <input
+                  <Input
                     id={`${fieldId}-top-n`}
                     type="number"
                     min="1"
@@ -388,10 +405,9 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                       setConfig({ ...config, leaderboard_top_n: parseInt(e.target.value) })
                     }
                     aria-describedby={`${fieldId}-top-n-hint`}
-                    className="w-full rounded-lg border border-border bg-bg px-4 py-2 text-text focus-visible:border-twitch focus-visible:ring-3 focus-visible:ring-twitch/50 focus-visible:outline-none"
                   />
                   <p id={`${fieldId}-top-n-hint`} className="mt-1 text-xs text-text-dim">
-                    Show top 1-50 users in each leaderboard category
+                    {t('overlayEditor.credits.topNHint')}
                   </p>
                 </div>
                 <div>
@@ -399,7 +415,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                     htmlFor={`${fieldId}-sort-by`}
                     className="mb-2 block text-sm font-medium text-text"
                   >
-                    Sort By
+                    {t('overlayEditor.credits.sortByLabel')}
                   </label>
                   <select
                     id={`${fieldId}-sort-by`}
@@ -412,8 +428,8 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                     }
                     className="w-full rounded-lg border border-border bg-bg px-4 py-2 text-text focus-visible:border-twitch focus-visible:ring-3 focus-visible:ring-twitch/50 focus-visible:outline-none"
                   >
-                    <option value="value">Total Value (monetary amount)</option>
-                    <option value="count">Count (number of events)</option>
+                    <option value="value">{t('overlayEditor.credits.sortByTotalValue')}</option>
+                    <option value="count">{t('overlayEditor.credits.sortByCount')}</option>
                   </select>
                 </div>
               </div>
@@ -421,14 +437,16 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
 
             {/* Display Settings */}
             <Card className="mb-6 p-6">
-              <h3 className="mb-4 text-lg font-semibold text-text">Display Settings</h3>
+              <h3 className="mb-4 text-lg font-semibold text-text">
+                {t('overlayEditor.credits.displayHeading')}
+              </h3>
               <div className="space-y-4">
                 <div>
                   <label
                     htmlFor={`${fieldId}-theme`}
                     className="mb-2 block text-sm font-medium text-text"
                   >
-                    Theme
+                    {t('overlayEditor.credits.themeLabel')}
                   </label>
                   <select
                     id={`${fieldId}-theme`}
@@ -441,9 +459,9 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                     }
                     className="w-full rounded-lg border border-border bg-bg px-4 py-2 text-text focus-visible:border-twitch focus-visible:ring-3 focus-visible:ring-twitch/50 focus-visible:outline-none"
                   >
-                    <option value="classic">Classic</option>
-                    <option value="cinematic">Cinematic</option>
-                    <option value="modern">Modern</option>
+                    <option value="classic">{t('overlayEditor.credits.themeClassic')}</option>
+                    <option value="cinematic">{t('overlayEditor.credits.themeCinematic')}</option>
+                    <option value="modern">{t('overlayEditor.credits.themeModern')}</option>
                   </select>
                 </div>
                 <div>
@@ -451,7 +469,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                     htmlFor={`${fieldId}-scroll-speed`}
                     className="mb-2 block text-sm font-medium text-text"
                   >
-                    Scroll Speed (1-100)
+                    {t('overlayEditor.credits.scrollSpeedLabel')}
                   </label>
                   <input
                     id={`${fieldId}-scroll-speed`}
@@ -464,16 +482,20 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                     }
                     className="w-full accent-twitch"
                   />
-                  <p className="mt-1 text-xs text-text-dim">Current: {config.scroll_speed || 50}</p>
+                  <p className="mt-1 text-xs text-text-dim">
+                    {t('overlayEditor.credits.currentValue', {
+                      value: config.scroll_speed || 50,
+                    })}
+                  </p>
                 </div>
                 <div>
                   <label
                     htmlFor={`${fieldId}-duration`}
                     className="mb-2 block text-sm font-medium text-text"
                   >
-                    Display Duration (seconds)
+                    {t('overlayEditor.credits.durationLabel')}
                   </label>
-                  <input
+                  <Input
                     id={`${fieldId}-duration`}
                     type="number"
                     min="10"
@@ -483,10 +505,9 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                       setConfig({ ...config, display_duration_seconds: parseInt(e.target.value) })
                     }
                     aria-describedby={`${fieldId}-duration-hint`}
-                    className="w-full rounded-lg border border-border bg-bg px-4 py-2 text-text focus-visible:border-twitch focus-visible:ring-3 focus-visible:ring-twitch/50 focus-visible:outline-none"
                   />
                   <p id={`${fieldId}-duration-hint`} className="mt-1 text-xs text-text-dim">
-                    How long to show the credit roll (10-300 seconds)
+                    {t('overlayEditor.credits.durationHint')}
                   </p>
                 </div>
                 <div>
@@ -494,7 +515,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                     htmlFor={`${fieldId}-opacity`}
                     className="mb-2 block text-sm font-medium text-text"
                   >
-                    Background Opacity (0-1)
+                    {t('overlayEditor.credits.opacityLabel')}
                   </label>
                   <input
                     id={`${fieldId}-opacity`}
@@ -509,7 +530,9 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                     className="w-full accent-twitch"
                   />
                   <p className="mt-1 text-xs text-text-dim">
-                    Current: {config.background_opacity || 0.8}
+                    {t('overlayEditor.credits.currentValue', {
+                      value: config.background_opacity || 0.8,
+                    })}
                   </p>
                 </div>
               </div>
@@ -519,23 +542,20 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
             <Card className="mb-6 p-6">
               <div className="mb-4 flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold text-text">Twitch Clips</h3>
-                  <p className="mt-1 text-sm text-text-sub">Show clips during credit roll</p>
+                  <h3 className="text-lg font-semibold text-text">
+                    {t('overlayEditor.credits.clipsHeading')}
+                  </h3>
+                  <p className="mt-1 text-sm text-text-sub">
+                    {t('overlayEditor.credits.clipsHint')}
+                  </p>
                 </div>
-                <button
-                  onClick={() => setConfig({ ...config, clips_enabled: !config.clips_enabled })}
-                  className={clsx(
-                    'relative inline-flex h-8 w-14 items-center rounded-full transition-colors',
-                    config.clips_enabled ? 'bg-kick' : 'bg-surface-2'
-                  )}
+                <Switch.Root
+                  checked={config.clips_enabled}
+                  onCheckedChange={(clips_enabled) => setConfig({ ...config, clips_enabled })}
+                  aria-label={t('overlayEditor.credits.clipsHeading')}
                 >
-                  <span
-                    className={clsx(
-                      'inline-block h-6 w-6 transform rounded-full bg-white transition-transform',
-                      config.clips_enabled ? 'translate-x-7' : 'translate-x-1'
-                    )}
-                  />
-                </button>
+                  <Switch.Thumb />
+                </Switch.Root>
               </div>
 
               {config.clips_enabled && (
@@ -545,9 +565,9 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                       htmlFor={`${fieldId}-clips-max`}
                       className="mb-2 block text-sm font-medium text-text"
                     >
-                      Maximum Clips
+                      {t('overlayEditor.credits.maxClipsLabel')}
                     </label>
-                    <input
+                    <Input
                       id={`${fieldId}-clips-max`}
                       type="number"
                       min="1"
@@ -556,7 +576,6 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                       onChange={(e) =>
                         setConfig({ ...config, clips_max_count: parseInt(e.target.value) })
                       }
-                      className="w-full rounded-lg border border-border bg-bg px-4 py-2 text-text focus-visible:border-twitch focus-visible:ring-3 focus-visible:ring-twitch/50 focus-visible:outline-none"
                     />
                   </div>
                   <div>
@@ -564,9 +583,9 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                       htmlFor={`${fieldId}-clips-fallback`}
                       className="mb-2 block text-sm font-medium text-text"
                     >
-                      Fallback Days
+                      {t('overlayEditor.credits.fallbackDaysLabel')}
                     </label>
-                    <input
+                    <Input
                       id={`${fieldId}-clips-fallback`}
                       type="number"
                       min="1"
@@ -576,10 +595,9 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                         setConfig({ ...config, clips_fallback_days: parseInt(e.target.value) })
                       }
                       aria-describedby={`${fieldId}-clips-fallback-hint`}
-                      className="w-full rounded-lg border border-border bg-bg px-4 py-2 text-text focus-visible:border-twitch focus-visible:ring-3 focus-visible:ring-twitch/50 focus-visible:outline-none"
                     />
                     <p id={`${fieldId}-clips-fallback-hint`} className="mt-1 text-xs text-text-dim">
-                      If no clips from this stream, show clips from last N days
+                      {t('overlayEditor.credits.fallbackDaysHint')}
                     </p>
                   </div>
                   <div>
@@ -591,9 +609,9 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                         className="h-5 w-5 rounded border-border bg-surface-2 text-twitch accent-twitch focus-visible:ring-twitch"
                       />
                       <span className="flex-1 font-medium text-text">
-                        Mute Clips Audio
+                        {t('overlayEditor.credits.muteClipsLabel')}
                         <span className="mt-1 block text-xs font-normal text-text-dim">
-                          Required for browser autoplay. Unmuting may require viewer interaction.
+                          {t('overlayEditor.credits.muteClipsHint')}
                         </span>
                       </span>
                     </label>
@@ -608,7 +626,9 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
         <Card className="mb-6 p-6">
           <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <h3 className="text-lg font-semibold text-text">Custom CSS Editor</h3>
+              <h3 className="text-lg font-semibold text-text">
+                {t('overlayEditor.credits.cssHeading')}
+              </h3>
               <label className="flex items-center gap-2 text-sm text-text-sub">
                 <input
                   type="checkbox"
@@ -616,7 +636,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                   onChange={(e) => setUseCustomCss(e.target.checked)}
                   className="h-5 w-5 rounded border-border bg-surface-2 text-twitch accent-twitch focus-visible:ring-twitch"
                 />
-                Enable Custom CSS
+                {t('overlayEditor.credits.cssEnable')}
               </label>
             </div>
             <div className="flex gap-2">
@@ -629,7 +649,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                     d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"
                   />
                 </svg>
-                Browse Themes
+                {t('overlayEditor.credits.cssBrowseThemes')}
               </Button>
               <Button
                 variant="outline"
@@ -638,7 +658,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                   setUseCustomCss(false)
                 }}
               >
-                Reset
+                {t('overlayEditor.credits.cssReset')}
               </Button>
             </div>
           </div>
@@ -647,31 +667,32 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
             value={customCss}
             onChange={setCustomCss}
             height="400px"
-            placeholder="/* Enter your custom CSS for credit roll */"
+            placeholder={t('overlayEditor.credits.cssEditorPlaceholder')}
           />
 
           <p className="mt-4 text-sm text-text-sub">
-            Customize your credit roll appearance with CSS. Browse themes or write your own styles.
-            See{' '}
-            <a
-              href="https://github.com/caesarakalaeii/all-chat/tree/main/docs/credit-roll-themes"
-              target="_blank"
-              rel="noreferrer"
-              className="text-twitch hover:underline"
-            >
-              credit roll theme docs
-            </a>{' '}
-            for examples and CSS selectors.
+            {interpolateElements(t('overlayEditor.credits.cssHint'), {
+              docsLink: (
+                <a
+                  href="https://github.com/caesarakalaeii/all-chat/tree/main/docs/credit-roll-themes"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-twitch hover:underline"
+                >
+                  {t('overlayEditor.credits.cssDocsLink')}
+                </a>
+              ),
+            })}
           </p>
         </Card>
 
         {/* Action Buttons */}
         <div className="flex gap-4">
           <Button className="flex-1" variant="gradient" onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving...' : 'Save Settings'}
+            {saving ? t('overlayEditor.credits.saving') : t('overlayEditor.credits.save')}
           </Button>
           <Button variant="outline" onClick={() => router.push(`/overlays/${id}`)}>
-            Cancel
+            {t('overlayEditor.credits.cancel')}
           </Button>
         </div>
       </div>

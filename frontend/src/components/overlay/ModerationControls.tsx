@@ -22,6 +22,8 @@ import clsx from 'clsx'
 import { Ban, Clock, ShieldOff, Trash2 } from 'lucide-react'
 
 import { Popover } from '@/components/ui/popover'
+import { Button } from '@/components/ui/button'
+import { useTranslations, type TFunction } from '@/lib/i18n'
 import { MODERATABLE_PLATFORMS, TIMEOUT_PRESETS } from '@/lib/types/moderation'
 import type { SourceCapability } from '@/lib/types/moderation'
 import type { ViewItem } from '@/lib/utils/overlayViewModel'
@@ -62,6 +64,7 @@ export function ModerationControls({
   onBan,
   onUnban,
 }: ModerationControlsProps) {
+  const t = useTranslations()
   const platformSupported = MODERATABLE_PLATFORMS.has(item.platform)
   // A source is actionable only when its platform has a mod API, the viewer owns
   // the overlay (capability present) and the backend reports it moderatable.
@@ -84,41 +87,47 @@ export function ModerationControls({
   // someone at a fix that is not theirs to make is the failure mode the reason vocabulary exists
   // to prevent (ADR-0048).
   const disabledReason = !platformSupported
-    ? `${platformLabel(item.platform)} has no moderation API`
+    ? t('viewerOverlay.moderationControls.noModerationApi', {
+        platform: platformLabel(t, item.platform),
+      })
     : !capability
-      ? 'Moderation is unavailable for this source'
+      ? t('viewerOverlay.moderationControls.unavailable')
       : capability.reason === 'missing_scope'
-        ? 'Grant moderation permissions to enable mod actions'
+        ? t('viewerOverlay.moderationControls.missingScope')
         : capability.reason === 'unsupported_platform'
-          ? `${platformLabel(item.platform)} has no moderation API`
+          ? t('viewerOverlay.moderationControls.noModerationApi', {
+              platform: platformLabel(t, item.platform),
+            })
           : capability.reason === 'needs_discord_link'
-            ? 'Link your Discord account to moderate here'
+            ? t('viewerOverlay.moderationControls.needsDiscordLink')
             : capability.reason === 'owner_channel_unverified'
-              ? "This streamer's Discord account isn't connected, so nothing can be moderated here"
+              ? t('viewerOverlay.moderationControls.ownerChannelUnverified')
               : capability.reason === 'bot_missing_permission'
-                ? "The All-Chat bot wasn't given this Discord permission — ask the streamer to re-invite it"
-                : 'Moderation is unavailable for this source'
+                ? t('viewerOverlay.moderationControls.botMissingPermission')
+                : t('viewerOverlay.moderationControls.unavailable')
 
   return (
     <div className="ml-1 inline-flex shrink-0 items-center gap-1 align-text-bottom">
       {/* Delete — revealed on row hover. Hidden for moderatable sources that don't
           support single-message delete (Kick/YouTube). */}
       {showDelete && (
-        <button
+        <Button
           type="button"
           onClick={() => onDelete(item)}
           disabled={!can('delete')}
-          title={disabled ? disabledReason : 'Delete message'}
-          aria-label="Delete message"
+          title={disabled ? disabledReason : t('viewerOverlay.moderationControls.deleteMessage')}
+          aria-label={t('viewerOverlay.moderationControls.deleteMessage')}
+          variant="ghost"
+          size="icon-xs"
           className={clsx(
-            'rounded p-0.5 opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none',
+            'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
             can('delete')
-              ? 'text-text-dim hover:bg-red-500/10 hover:text-red-400'
-              : 'cursor-not-allowed text-text-dim/50'
+              ? 'text-text-dim hover:bg-destructive/10 hover:text-destructive'
+              : 'text-text-dim/50'
           )}
         >
           <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        </Button>
       )}
 
       {/* Per-user actions trigger. Hidden for moderatable sources with no per-user
@@ -127,42 +136,46 @@ export function ModerationControls({
         <Popover.Root>
           <Popover.Trigger
             render={
-              <button
+              <Button
                 type="button"
                 disabled={disabled}
-                title={disabled ? disabledReason : 'Moderate user'}
-                aria-label="Moderate user"
+                title={disabled ? disabledReason : t('viewerOverlay.moderationControls.menuLabel')}
+                aria-label={t('viewerOverlay.moderationControls.menuLabel')}
+                variant="ghost"
+                size="icon-xs"
                 className={clsx(
-                  'rounded p-0.5 opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none',
-                  disabled
-                    ? 'cursor-not-allowed text-text-dim/50'
-                    : 'text-text-dim hover:bg-surface-2 hover:text-text'
+                  'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
+                  disabled ? 'text-text-dim/50' : 'text-text-dim'
                 )}
               >
                 <Clock className="h-3.5 w-3.5" />
-              </button>
+              </Button>
             }
           />
           <Popover.Content className="w-44 border-border bg-surface p-2">
-            <Popover.Title className="sr-only">Moderate user</Popover.Title>
+            <Popover.Title className="sr-only">
+              {t('viewerOverlay.moderationControls.menuLabel')}
+            </Popover.Title>
             {can('timeout') && (
               <div className="mb-1">
                 <p className="mb-1 px-1 text-[10px] font-semibold tracking-wide text-text-dim uppercase">
-                  Timeout
+                  {t('viewerOverlay.moderationControls.timeout')}
                 </p>
                 <div className="flex gap-1">
                   {TIMEOUT_PRESETS.map((preset) => (
                     <Popover.Close
                       key={preset.seconds}
                       render={
-                        <button
+                        <Button
                           type="button"
                           onClick={() => onTimeout(item, preset.seconds)}
-                          className="flex flex-1 items-center justify-center gap-1 rounded border border-border px-1.5 py-1 text-xs font-medium text-text-sub transition-colors hover:border-border-md hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                          variant="outline"
+                          size="xs"
+                          className="flex-1"
                         >
                           <Clock className="h-3 w-3" />
                           {preset.label}
-                        </button>
+                        </Button>
                       }
                     />
                   ))}
@@ -173,14 +186,16 @@ export function ModerationControls({
             {can('ban') && (
               <Popover.Close
                 render={
-                  <button
+                  <Button
                     type="button"
                     onClick={() => onBan(item)}
-                    className="flex w-full items-center gap-2 rounded border border-red-500/20 bg-red-500/10 px-2 py-1.5 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/20 focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:outline-none"
+                    variant="destructive"
+                    size="xs"
+                    className="w-full justify-start gap-2"
                   >
                     <Ban className="h-3.5 w-3.5" />
-                    Ban user
-                  </button>
+                    {t('viewerOverlay.moderationControls.ban')}
+                  </Button>
                 }
               />
             )}
@@ -188,14 +203,16 @@ export function ModerationControls({
             {can('unban') && (
               <Popover.Close
                 render={
-                  <button
+                  <Button
                     type="button"
                     onClick={() => onUnban(item)}
-                    className="mt-1 flex w-full items-center gap-2 rounded border border-border px-2 py-1.5 text-xs font-medium text-text-sub transition-colors hover:border-border-md hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                    variant="outline"
+                    size="xs"
+                    className="mt-1 w-full justify-start gap-2"
                   >
                     <ShieldOff className="h-3.5 w-3.5" />
-                    Unban user
-                  </button>
+                    {t('viewerOverlay.moderationControls.unban')}
+                  </Button>
                 }
               />
             )}
@@ -206,20 +223,16 @@ export function ModerationControls({
   )
 }
 
-/** Human-readable platform name for tooltips. */
-function platformLabel(platform: string): string {
-  switch (platform) {
-    case 'tiktok':
-      return 'TikTok'
-    case 'youtube':
-      return 'YouTube'
-    case 'twitch':
-      return 'Twitch'
-    case 'kick':
-      return 'Kick'
-    case 'discord':
-      return 'Discord'
-    default:
-      return platform
-  }
+/**
+ * Display name for a platform, from the shared catalog.
+ *
+ * A message can arrive from a platform this build does not know about, so an
+ * unrecognised value falls through as-is rather than rendering a key that echoes
+ * itself.
+ */
+function platformLabel(t: TFunction, platform: string): string {
+  const known = NAMEABLE_PLATFORMS.find((name) => name === platform)
+  return known ? t(`common.platforms.${known}`) : platform
 }
+
+const NAMEABLE_PLATFORMS = ['twitch', 'youtube', 'kick', 'tiktok', 'discord'] as const

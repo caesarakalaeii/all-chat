@@ -499,7 +499,8 @@ func (h *AdminHandler) GetDashboardStats(c *gin.Context) {
 	c.JSON(http.StatusOK, stats)
 }
 
-// Helper function to parse integers safely
+// parseInt parses a decimal integer, returning an error rather than panicking
+// on input that is not one.
 func parseInt(s string) (int, error) {
 	var i int
 	_, err := fmt.Sscanf(s, "%d", &i)

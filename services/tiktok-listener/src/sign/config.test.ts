@@ -33,7 +33,7 @@ describe('loadSignConfiguration', () => {
   });
 
   it('defaults to skipping the Euler fallback on the composites', () => {
-    // Step 4 of the issue's sequence is called out as "worth doing on its own merits even if we
+    // The issue calls its step 4 "worth doing on its own merits even if we
     // never finish the signing work". The composites try TikTok directly first, so Euler was
     // only ever the last resort here and dropping it cannot lose us a capability.
     expect(loadSignConfiguration({}).disableEulerFallbacks).toBe(true);

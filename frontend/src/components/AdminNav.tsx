@@ -21,16 +21,35 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { InfinityLogo } from '@/components/InfinityLogo'
+import { useTranslations } from '@/lib/i18n'
 
-const ADMIN_LINKS = [
-  { href: '/admin', label: 'Dashboard', exact: true },
-  { href: '/admin/users', label: 'Users' },
-  { href: '/admin/overlays', label: 'Overlays' },
-  { href: '/admin/sources', label: 'Sources' },
-  { href: '/admin/viewers', label: 'Viewers' },
-  { href: '/admin/cosmetics', label: 'Cosmetics' },
-  { href: '/admin/features', label: 'Features' },
-  { href: '/admin/maintenance', label: 'Maintenance' },
+interface AdminNavLink {
+  href: string
+  // Resolves admin.nav.<messageStem>Label, the same keys AdminSidebar's rail
+  // renders. Sharing the keys is what keeps the two navs reading identically.
+  messageStem:
+    | 'dashboard'
+    | 'users'
+    | 'overlays'
+    | 'sources'
+    | 'viewers'
+    | 'cosmetics'
+    | 'features'
+    | 'maintenance'
+  exact?: boolean
+}
+
+// A subset of AdminSidebar's ADMIN_LINKS (no /admin/search) carrying no icons,
+// so it stays its own table.
+const ADMIN_LINKS: AdminNavLink[] = [
+  { href: '/admin', messageStem: 'dashboard', exact: true },
+  { href: '/admin/users', messageStem: 'users' },
+  { href: '/admin/overlays', messageStem: 'overlays' },
+  { href: '/admin/sources', messageStem: 'sources' },
+  { href: '/admin/viewers', messageStem: 'viewers' },
+  { href: '/admin/cosmetics', messageStem: 'cosmetics' },
+  { href: '/admin/features', messageStem: 'features' },
+  { href: '/admin/maintenance', messageStem: 'maintenance' },
 ]
 
 const activeClass =
@@ -45,6 +64,7 @@ const inactiveClass =
 
 export function AdminNav() {
   const pathname = usePathname()
+  const t = useTranslations()
 
   function isActive(href: string, exact?: boolean) {
     return exact ? pathname === href : (pathname?.startsWith(href) ?? false)
@@ -62,9 +82,11 @@ export function AdminNav() {
         className="mr-6 flex items-center gap-2.5 rounded-sm focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
       >
         <InfinityLogo size={28} />
-        <span className="text-base font-extrabold tracking-tight text-text">all-chat</span>
+        <span className="text-base font-extrabold tracking-tight text-text">
+          {t('common.brand.wordmark')}
+        </span>
       </Link>
-      <span className="mr-6 text-sm text-text-sub">Admin</span>
+      <span className="mr-6 text-sm text-text-sub">{t('admin.sidebar.brandSuffix')}</span>
       <div className="flex h-full gap-0.5">
         {ADMIN_LINKS.map((link) => (
           <Link
@@ -72,7 +94,7 @@ export function AdminNav() {
             href={link.href}
             className={isActive(link.href, link.exact) ? activeClass : inactiveClass}
           >
-            {link.label}
+            {t(`admin.nav.${link.messageStem}Label`)}
           </Link>
         ))}
       </div>

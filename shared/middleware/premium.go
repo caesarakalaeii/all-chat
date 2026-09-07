@@ -50,10 +50,10 @@ func newDBQuerier(db *pgxpool.Pool) premiumQuerier {
 // RequirePremium returns middleware that checks whether a feature gate requires
 // premium access, then enforces user premium status if needed.
 //
-// Decision flow (D-11, D-15, D-16):
-//  1. Check user is authenticated (user_id in context) — returns 401 if missing.
-//  2. If gates.IsPremium(featureKey) returns false: feature is free, allow all authenticated users.
-//  3. If gates.IsPremium(featureKey) returns true: query DB and require user.is_premium=true.
+// Decision flow (D-11, D-15, D-16), in the order the body runs it:
+//   - Check user is authenticated (user_id in context) — returns 401 if missing.
+//   - If gates.IsPremium(featureKey) returns false: feature is free, allow all authenticated users.
+//   - If gates.IsPremium(featureKey) returns true: query DB and require user.is_premium=true.
 //
 // Note: Authentication check happens before gate check to ensure only authenticated
 // users can access even free-gated features (standard AuthN/AuthZ ordering).
@@ -72,7 +72,6 @@ func RequirePremiumWithQuerier(gates GateChecker, featureKey string, querier pre
 // RequirePremiumWithQuerier.
 func requirePremiumCore(gates GateChecker, featureKey string, querier premiumQuerier, logger *zap.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Step 1: Authentication check — user must be authenticated regardless of gate state.
 		userID := c.GetString("user_id")
 		if userID == "" {
 			if logger != nil {
@@ -85,14 +84,12 @@ func requirePremiumCore(gates GateChecker, featureKey string, querier premiumQue
 			return
 		}
 
-		// Step 2: Gate check — if feature is free, skip premium user check.
 		if !gates.IsPremium(featureKey) {
 			// Feature is free for all authenticated users (D-15).
 			c.Next()
 			return
 		}
 
-		// Step 3: Gate says premium required — check user premium status (D-16).
 		isPremium, err := querier(c.Request.Context(), userID)
 		if err != nil {
 			if logger != nil {

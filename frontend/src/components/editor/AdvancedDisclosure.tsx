@@ -20,6 +20,7 @@
 
 import React from 'react'
 import { ChevronRight } from 'lucide-react'
+import { useTranslations } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 export interface AdvancedDisclosureProps {
@@ -41,6 +42,7 @@ export function AdvancedDisclosure({
   children,
   className,
 }: AdvancedDisclosureProps): React.ReactElement {
+  const t = useTranslations()
   return (
     <details className={cn('group mt-5 border-t border-border', className)}>
       <summary className="flex cursor-pointer list-none items-center gap-1.5 py-2.5 text-[11px] font-medium tracking-widest text-text-sub uppercase select-none hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none [&::-webkit-details-marker]:hidden">
@@ -48,7 +50,7 @@ export function AdvancedDisclosure({
           aria-hidden="true"
           className="size-3 transition-transform duration-150 group-open:rotate-90"
         />
-        Advanced ({count})
+        {t('overlayEditor.nav.advancedCount', { count })}
       </summary>
       <div className="space-y-5 pt-1 pb-1">{children}</div>
     </details>

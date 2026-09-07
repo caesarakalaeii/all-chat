@@ -230,12 +230,11 @@ func NewPoller(
 
 // Start begins the polling loop in a background goroutine
 //
-// The loop:
-//  1. Waits for interval ticker
-//  2. Calls InnerTube API with current continuation token
-//  3. Parses messages and updates continuation
-//  4. Handles errors (transient → backoff, fatal → stop)
-//  5. Repeats until context is cancelled
+// Each iteration calls the InnerTube API with the continuation token from the
+// previous response, parses out messages and stores the next token, then sleeps
+// for the interval YouTube asked for. A transient error backs off and retries;
+// a fatal one exits the loop. The loop otherwise runs until the context is
+// cancelled.
 //
 // Returns immediately. Call Stop() to gracefully shut down.
 func (p *Poller) Start(ctx context.Context) error {

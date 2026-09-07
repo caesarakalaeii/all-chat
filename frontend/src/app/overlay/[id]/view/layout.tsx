@@ -28,11 +28,17 @@
 
 import type { Metadata } from 'next'
 
+import { getTranslations } from '@/lib/i18n'
+
+// getTranslations, not the hook: a layout's metadata is evaluated on the
+// server, outside any component.
+const t = getTranslations()
+
 import { OverlayViewGuard } from './OverlayViewGuard'
 
 export const metadata: Metadata = {
-  title: 'All-Chat Monitor',
-  description: 'Readable chat & activity monitor for streamers',
+  title: t('metadata.overlayMonitor.title'),
+  description: t('metadata.overlayMonitor.description'),
 }
 
 export default function OverlayViewLayout({ children }: { children: React.ReactNode }) {

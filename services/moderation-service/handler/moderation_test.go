@@ -397,8 +397,6 @@ func TestCapabilities_FeatureGateErrorFailsClosed(t *testing.T) {
 
 func strangerID() string { return "22222222-2222-2222-2222-222222222222" }
 
-// --- Real-platform dispatch paths (Phase 1) ---------------------------------
-
 func TestDelete_PerformedEmitsReflectBackAndAuditsSuccess(t *testing.T) {
 	auth := &fakeAuthorizer{owns: true, isSource: map[string]bool{"twitch|somestreamer": true}}
 	emitter := &fakeEmitter{}

@@ -19,12 +19,14 @@
  */
 
 import clsx from 'clsx'
+import { Button } from '@/components/ui/button'
 import { Settings } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import { SliderControl } from '@/components/appearance/SliderControl'
 import { ToggleSwitch } from '@/components/appearance/ToggleSwitch'
 import type { MonitorViewPrefs } from '@/app/overlay/[id]/view/viewPrefs'
+import { useTranslations } from '@/lib/i18n'
 import { PRESET_NAMES } from '@/lib/utils/soundPlayer'
 
 interface ViewSettingsBarProps {
@@ -44,18 +46,14 @@ type BooleanPrefKey = {
  * `MonitorViewPrefs` keys only; the activity-sound controls are rendered
  * separately below because they carry volume/preset, not just on/off.
  */
-const TOGGLES: ReadonlyArray<{ key: BooleanPrefKey; label: string }> = [
-  { key: 'showAvatars', label: 'Avatars' },
-  { key: 'showBadges', label: 'Badges' },
-  { key: 'showPronouns', label: 'Pronouns' },
-  { key: 'showTimestamps', label: 'Timestamps' },
-  { key: 'showPlatformGlyph', label: 'Platform icon' },
-  { key: 'showModeration', label: 'Moderation controls' },
-]
-
-function capitalize(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1)
-}
+const TOGGLES = [
+  'showAvatars',
+  'showBadges',
+  'showPronouns',
+  'showTimestamps',
+  'showPlatformGlyph',
+  'showModeration',
+] as const satisfies ReadonlyArray<BooleanPrefKey>
 
 /**
  * Gear button + popover of view-local display toggles for the overlay monitor.
@@ -63,6 +61,7 @@ function capitalize(s: string): string {
  * the page) and never touch the overlay's saved visual settings.
  */
 export function ViewSettingsBar({ prefs, onChange, onTestActivitySound }: ViewSettingsBarProps) {
+  const t = useTranslations()
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -79,32 +78,28 @@ export function ViewSettingsBar({ prefs, onChange, onTestActivitySound }: ViewSe
 
   return (
     <div className="relative" ref={containerRef}>
-      <button
+      <Button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        aria-label="Display settings"
-        className={clsx(
-          'flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none',
-          open
-            ? 'border-border-md bg-surface-2 text-text'
-            : 'border-border text-text-sub hover:border-border-md hover:text-text'
-        )}
+        aria-label={t('viewerOverlay.viewSettings.buttonLabel')}
+        variant="outline"
+        size="sm"
       >
         <Settings className="h-3.5 w-3.5" />
-        Display
-      </button>
+        {t('viewerOverlay.viewSettings.buttonText')}
+      </Button>
 
       {open && (
         <div className="absolute right-0 z-50 mt-2 w-64 rounded-lg border border-border bg-surface p-3 shadow-lg">
           <p className="mb-2 text-[10px] font-semibold tracking-wide text-text-dim uppercase">
-            View settings
+            {t('viewerOverlay.viewSettings.heading')}
           </p>
           <div className="flex flex-col gap-2.5">
-            {TOGGLES.map(({ key, label }) => (
+            {TOGGLES.map((key) => (
               <ToggleSwitch
                 key={key}
-                label={label}
+                label={t(`viewerOverlay.viewSettings.${key}`)}
                 checked={prefs[key]}
                 onChange={(checked) => onChange({ ...prefs, [key]: checked })}
               />
@@ -113,25 +108,24 @@ export function ViewSettingsBar({ prefs, onChange, onTestActivitySound }: ViewSe
 
           <div className="mt-3 border-t border-border pt-3">
             <p className="mb-2 text-[10px] font-semibold tracking-wide text-text-dim uppercase">
-              Chat order
+              {t('viewerOverlay.viewSettings.chatOrderHeading')}
             </p>
             <ToggleSwitch
-              label="Newest messages first"
+              label={t('viewerOverlay.viewSettings.newestFirst')}
               checked={prefs.newestFirst}
               onChange={(checked) => onChange({ ...prefs, newestFirst: checked })}
             />
             <p className="mt-2.5 text-xs text-text-dim">
-              Puts the newest message at the top of the Chat panel, so you can read chat without
-              looking down. Only affects this browser.
+              {t('viewerOverlay.viewSettings.newestFirstNote')}
             </p>
           </div>
 
           <div className="mt-3 border-t border-border pt-3">
             <p className="mb-2 text-[10px] font-semibold tracking-wide text-text-dim uppercase">
-              Activity sound
+              {t('viewerOverlay.viewSettings.activitySoundHeading')}
             </p>
             <ToggleSwitch
-              label="Sound on new activity"
+              label={t('viewerOverlay.viewSettings.activitySoundEnabled')}
               checked={prefs.activitySoundEnabled}
               onChange={(checked) => onChange({ ...prefs, activitySoundEnabled: checked })}
             />
@@ -143,7 +137,7 @@ export function ViewSettingsBar({ prefs, onChange, onTestActivitySound }: ViewSe
                     htmlFor="activity-sound-preset"
                     className="mb-1 block text-sm text-text-sub"
                   >
-                    Sound
+                    {t('viewerOverlay.viewSettings.soundPresetLabel')}
                   </label>
                   <select
                     id="activity-sound-preset"
@@ -159,14 +153,14 @@ export function ViewSettingsBar({ prefs, onChange, onTestActivitySound }: ViewSe
                   >
                     {PRESET_NAMES.map((name) => (
                       <option key={name} value={name}>
-                        {capitalize(name)}
+                        {t(`common.soundPresets.${name}`)}
                       </option>
                     ))}
                   </select>
                 </div>
 
                 <SliderControl
-                  label="Volume"
+                  label={t('viewerOverlay.viewSettings.volume')}
                   value={prefs.activitySoundVolume}
                   min={0}
                   max={1}
@@ -176,21 +170,21 @@ export function ViewSettingsBar({ prefs, onChange, onTestActivitySound }: ViewSe
                 />
 
                 {onTestActivitySound && (
-                  <button
+                  <Button
                     type="button"
                     onClick={onTestActivitySound}
-                    className="self-start rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-text hover:bg-surface-2 focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
+                    variant="outline"
+                    size="sm"
+                    className="self-start"
                   >
-                    Test sound
-                  </button>
+                    {t('viewerOverlay.viewSettings.testSound')}
+                  </Button>
                 )}
               </div>
             )}
 
             <p className="mt-2.5 text-xs text-text-dim">
-              Plays only here, in this browser, so you notice easy-to-miss activity like
-              channel-point redeems or a TikTok Rose. This is separate from your overlay&apos;s
-              on-stream notification sounds.
+              {t('viewerOverlay.viewSettings.activitySoundNote')}
             </p>
           </div>
         </div>

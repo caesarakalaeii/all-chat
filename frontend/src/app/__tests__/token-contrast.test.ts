@@ -39,7 +39,9 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-// --- minimal color math (no deps) -------------------------------------------
+// Colour maths is done by hand rather than pulled from a library: this test
+// guards the design tokens, so a dependency of its own would be one more thing
+// that can drift away from what the browser actually computes.
 
 type LinearRGB = [number, number, number]
 
@@ -90,8 +92,6 @@ function contrast(a: LinearRGB, b: LinearRGB): number {
   const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x)
   return (hi + 0.05) / (lo + 0.05)
 }
-
-// --- @theme token parser ------------------------------------------------------
 
 /**
  * Resolves `--color-*` tokens from the @theme block. Handles the forms the
@@ -161,8 +161,6 @@ function token(name: string): LinearRGB {
   return rgb
 }
 
-// --- assertions ---------------------------------------------------------------
-
 const AA_TEXT = 4.5
 const AA_UI = 3.0
 
@@ -214,4 +212,101 @@ describe('design token contrast (WCAG 2.2 AA)', () => {
       expect(contrast(token(platform), token('--color-bg'))).toBeGreaterThanOrEqual(AA_TEXT)
     })
   }
+})
+
+/**
+ * Status colors and the shadcn compatibility layer (ADR-0056).
+ *
+ * `--color-destructive` and friends are the tokens that replace the 300-odd
+ * raw palette classes (`text-red-400`, `text-amber-300`, …) the codebase grew
+ * while no status token existed. They are used as *text* on all three
+ * backdrops, so they carry the same AA floor as the text tokens above.
+ *
+ * The alias block below is what makes an unmodified shadcn registry component
+ * render correctly here: the registry ships `bg-primary` / `text-muted-
+ * foreground` / `border-input`, this maps those names onto the tokens the
+ * design system actually defines. Every alias is asserted, so an alias that
+ * points at a missing or renamed token fails here rather than compiling to an
+ * empty rule — the exact failure mode ADR-0056 was written to end.
+ */
+describe('status token contrast (WCAG 2.2 AA)', () => {
+  const STATUS_TOKENS = [
+    '--color-destructive',
+    '--color-success',
+    '--color-warning',
+    '--color-info',
+    '--color-premium',
+  ] as const
+
+  for (const status of STATUS_TOKENS) {
+    for (const backdrop of BACKDROPS) {
+      it(`${status} as text on ${backdrop} ≥ ${AA_TEXT}:1`, () => {
+        expect(contrast(token(status), token(backdrop))).toBeGreaterThanOrEqual(AA_TEXT)
+      })
+    }
+  }
+
+  it('--color-premium is visually distinct from --color-warning', () => {
+    // Both are golds, and before the token existed "premium" was written as
+    // amber-400 — which is very nearly the warning colour. Two tokens carrying
+    // different meanings must not resolve to the same paint, or a "paid
+    // feature" marker and a "something may go wrong" marker become
+    // indistinguishable wherever they sit near each other.
+    expect(token('--color-premium')).not.toEqual(token('--color-warning'))
+  })
+})
+
+describe('shadcn compatibility layer', () => {
+  // name -> the token it must alias. Keep in sync with the alias block in
+  // globals.css; a rename on either side fails the resolution assertion.
+  const ALIASES: Record<string, string> = {
+    '--color-background': '--color-bg',
+    '--color-foreground': '--color-text',
+    '--color-card': '--color-surface',
+    '--color-card-foreground': '--color-text',
+    '--color-popover': '--color-surface',
+    '--color-popover-foreground': '--color-text',
+    '--color-primary': '--color-twitch',
+    '--color-primary-foreground': '--color-bg',
+    '--color-secondary': '--color-surface-2',
+    '--color-secondary-foreground': '--color-text',
+    '--color-muted': '--color-surface-2',
+    '--color-muted-foreground': '--color-text-sub',
+    '--color-accent': '--color-surface-2',
+    '--color-accent-foreground': '--color-text',
+    '--color-destructive-foreground': '--color-bg',
+    '--color-ring': '--color-twitch',
+  }
+
+  for (const [alias, target] of Object.entries(ALIASES)) {
+    it(`${alias} resolves to ${target}`, () => {
+      expect(token(alias)).toEqual(token(target))
+    })
+  }
+
+  // Foreground/background pairs a shadcn component puts together by default.
+  // These are filled surfaces, so the text on them needs the full text floor.
+  const PAIRS: [string, string][] = [
+    ['--color-foreground', '--color-background'],
+    ['--color-card-foreground', '--color-card'],
+    ['--color-popover-foreground', '--color-popover'],
+    ['--color-primary-foreground', '--color-primary'],
+    ['--color-secondary-foreground', '--color-secondary'],
+    ['--color-muted-foreground', '--color-muted'],
+    ['--color-accent-foreground', '--color-accent'],
+    ['--color-destructive-foreground', '--color-destructive'],
+  ]
+
+  for (const [fg, bg] of PAIRS) {
+    it(`${fg} on ${bg} ≥ ${AA_TEXT}:1`, () => {
+      expect(contrast(token(fg), token(bg))).toBeGreaterThanOrEqual(AA_TEXT)
+    })
+  }
+
+  it('--color-ring is discernible as a focus indicator on every backdrop', () => {
+    // WCAG 2.2 SC 1.4.11 — the focus ring is a non-text UI component.
+    for (const backdrop of BACKDROPS) {
+      expect(contrast(token('--color-ring'), token(backdrop))).toBeGreaterThanOrEqual(AA_UI)
+    }
+  })
 })

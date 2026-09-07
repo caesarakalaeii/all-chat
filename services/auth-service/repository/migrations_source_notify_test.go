@@ -95,8 +95,8 @@ func TestSourceChangeNotifyIgnoresHeartbeat(t *testing.T) {
 		return n.Payload, nil
 	}
 
-	// 1. Heartbeat write: is_active already true, only updated_at changes.
-	//    MUST NOT notify.
+	// Heartbeat write: is_active already true, only updated_at changes.
+	// MUST NOT notify.
 	if _, err := pool.Exec(ctx,
 		`UPDATE overlay_chat_sources SET is_active = true, updated_at = NOW() WHERE id = $1`,
 		sourceID); err != nil {
@@ -108,7 +108,7 @@ func TestSourceChangeNotifyIgnoresHeartbeat(t *testing.T) {
 		t.Fatalf("unexpected error waiting for (absent) notification: %v", err)
 	}
 
-	// 2. Real config change: channel_name. MUST notify.
+	// Real config change: channel_name. MUST notify.
 	if _, err := pool.Exec(ctx,
 		`UPDATE overlay_chat_sources SET channel_name = 'Renamed' WHERE id = $1`,
 		sourceID); err != nil {
@@ -122,7 +122,7 @@ func TestSourceChangeNotifyIgnoresHeartbeat(t *testing.T) {
 		t.Errorf("expected UPDATE action in payload, got: %s", payload)
 	}
 
-	// 3. is_active flip (what the cleanup job does to stale sources). MUST notify.
+	// is_active flip (what the cleanup job does to stale sources). MUST notify.
 	if _, err := pool.Exec(ctx,
 		`UPDATE overlay_chat_sources SET is_active = false WHERE id = $1`,
 		sourceID); err != nil {
@@ -132,7 +132,7 @@ func TestSourceChangeNotifyIgnoresHeartbeat(t *testing.T) {
 		t.Fatalf("is_active flip did not notify: %v", err)
 	}
 
-	// 4. DELETE. MUST notify.
+	// DELETE. MUST notify.
 	if _, err := pool.Exec(ctx,
 		`DELETE FROM overlay_chat_sources WHERE id = $1`, sourceID); err != nil {
 		t.Fatalf("delete failed: %v", err)

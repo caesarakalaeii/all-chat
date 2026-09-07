@@ -34,11 +34,13 @@ import { PlatformBadge } from '@/components/ui/badge'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { MaintenanceBanner } from '@/components/MaintenanceBanner'
 import { EventSubMigrationBanner } from '@/components/EventSubMigrationBanner'
+import { DiscoveryPausedNotice } from '@/components/DiscoveryPausedNotice'
 import { ModeratingElsewhereCard } from '@/components/ModeratingElsewhereCard'
 import { OnboardingChecklist } from '@/components/onboarding/OnboardingChecklist'
 import { CreateOverlayDialog } from '@/components/onboarding/CreateOverlayDialog'
 import { useOnboardingStore } from '@/lib/stores/onboarding-store'
 import { useAuthStore } from '@/lib/stores/auth-store'
+import { useTranslations } from '@/lib/i18n'
 import type { ChatSource } from '@/lib/types/overlay'
 
 // Extended overlay type that includes sources when available
@@ -83,9 +85,10 @@ function getTopBorderStyle(sources: Array<{ platform: string }>): React.CSSPrope
 // --- Skeleton loading state (3 placeholder cards) ---
 
 function OverlayGridSkeleton() {
+  const t = useTranslations()
   return (
     <div role="status" className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-      <VisuallyHidden>Loading overlays</VisuallyHidden>
+      <VisuallyHidden>{t('dashboard.overlays.loading')}</VisuallyHidden>
       {Array.from({ length: 3 }).map((_, i) => (
         <div key={i} className="overflow-hidden rounded-xl border border-border bg-surface">
           <div className="h-[3px] w-full bg-surface-2" />
@@ -107,20 +110,19 @@ function OverlayGridSkeleton() {
 // --- Empty state ---
 
 function DashboardEmptyState({ onCreateClick }: { onCreateClick: () => void }) {
+  const t = useTranslations()
   return (
     <div className="flex flex-col items-center gap-4 py-24 text-center">
       <MonitorPlay className="size-16 text-text-dim" strokeWidth={1} aria-hidden="true" />
-      <h2 className="text-xl font-semibold text-text">No overlays yet</h2>
-      <p className="max-w-sm text-sm text-text-sub">
-        Create your first overlay to see chat from all your platforms in one place.
-      </p>
+      <h2 className="text-xl font-semibold text-text">{t('dashboard.empty.heading')}</h2>
+      <p className="max-w-sm text-sm text-text-sub">{t('dashboard.empty.body')}</p>
       <div className="mt-2 flex gap-1.5" aria-hidden="true">
         {(['twitch', 'youtube', 'kick', 'tiktok'] as const).map((p) => (
           <PlatformBadge key={p} platform={p} size="sm" />
         ))}
       </div>
       <Button variant="gradient" size="lg" onClick={onCreateClick} className="mt-4">
-        Create your first overlay
+        {t('dashboard.empty.createFirst')}
       </Button>
     </div>
   )
@@ -137,18 +139,19 @@ function DeleteOverlayDialog({
   onDelete: () => void
   children: React.ReactNode
 }) {
+  const t = useTranslations()
   return (
     <Dialog.Root>
       <Dialog.Trigger render={children as React.ReactElement} />
       <Dialog.Content showCloseButton={false}>
-        <Dialog.Title>Delete &ldquo;{overlayName}&rdquo;?</Dialog.Title>
-        <Dialog.Description>
-          This action cannot be undone. All sources will be removed.
-        </Dialog.Description>
+        <Dialog.Title>{t('dashboard.deleteOverlay.title', { name: overlayName })}</Dialog.Title>
+        <Dialog.Description>{t('dashboard.deleteOverlay.description')}</Dialog.Description>
         <div className="mt-6 flex justify-end gap-3">
-          <Dialog.Close render={<Button variant="outline">Cancel</Button>} />
+          <Dialog.Close
+            render={<Button variant="outline">{t('dashboard.deleteOverlay.cancel')}</Button>}
+          />
           <Button variant="destructive" onClick={onDelete}>
-            Delete
+            {t('dashboard.deleteOverlay.confirm')}
           </Button>
         </div>
       </Dialog.Content>
@@ -159,6 +162,7 @@ function DeleteOverlayDialog({
 // --- Dashboard content ---
 
 function DashboardContent() {
+  const t = useTranslations()
   const router = useRouter()
   const { overlays, loading, fetchOverlays, deleteOverlay } = useOverlayStore()
   const [sourcesByOverlay, setSourcesByOverlay] = useState<Record<string, ChatSource[]>>({})
@@ -211,11 +215,11 @@ function DashboardContent() {
   async function handleDelete(id: string) {
     try {
       await deleteOverlay(id)
-      toastManager.add({ title: 'Overlay deleted', type: 'success' })
+      toastManager.add({ title: t('dashboard.toasts.overlayDeleted'), type: 'success' })
     } catch {
       toastManager.add({
-        title: 'Failed to delete overlay',
-        description: 'Please try again.',
+        title: t('dashboard.toasts.overlayDeleteFailed'),
+        description: t('common.toast.tryAgain'),
         type: 'error',
       })
     }
@@ -225,9 +229,9 @@ function DashboardContent() {
     try {
       await overlaysApi.update(id, { is_public_for_viewers: true })
       await fetchOverlays()
-      toastManager.add({ title: 'Extension overlay updated', type: 'success' })
+      toastManager.add({ title: t('dashboard.toasts.extensionOverlayUpdated'), type: 'success' })
     } catch {
-      toastManager.add({ title: 'Failed to update overlay', type: 'error' })
+      toastManager.add({ title: t('dashboard.toasts.overlayUpdateFailed'), type: 'error' })
     }
   }
 
@@ -235,9 +239,12 @@ function DashboardContent() {
     try {
       await overlaysApi.update(id, { is_public_for_viewers: false })
       await fetchOverlays()
-      toastManager.add({ title: 'Extension overlay deactivated', type: 'success' })
+      toastManager.add({
+        title: t('dashboard.toasts.extensionOverlayDeactivated'),
+        type: 'success',
+      })
     } catch {
-      toastManager.add({ title: 'Failed to update overlay', type: 'error' })
+      toastManager.add({ title: t('dashboard.toasts.overlayUpdateFailed'), type: 'error' })
     }
   }
 
@@ -258,10 +265,10 @@ function DashboardContent() {
           <ModeratingElsewhereCard />
         </div>
         <div className="mb-8 flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-text">Overlays</h1>
+          <h1 className="text-2xl font-bold text-text">{t('dashboard.overlays.heading')}</h1>
           <Button variant="gradient" onClick={() => router.push('/overlays/new')}>
             <Plus className="mr-2 size-4" />
-            New Overlay
+            {t('dashboard.overlays.newOverlay')}
           </Button>
         </div>
 
@@ -294,7 +301,7 @@ function DashboardContent() {
                       {overlay.is_public_for_viewers && (
                         <span className="inline-flex shrink-0 items-center gap-1 rounded border border-twitch/30 bg-twitch/15 px-1.5 py-0.5 text-[10px] font-semibold text-twitch">
                           <Puzzle className="size-2.5" />
-                          Extension
+                          {t('dashboard.overlays.extensionBadge')}
                         </span>
                       )}
                     </div>
@@ -306,13 +313,16 @@ function DashboardContent() {
                         variant="ghost"
                         size="icon"
                         onClick={(e: React.MouseEvent) => e.stopPropagation()}
-                        aria-label={`Delete ${overlay.name}`}
-                        className="hover:text-destructive shrink-0 text-text-dim"
+                        aria-label={t('dashboard.overlays.deleteLabel', { name: overlay.name })}
+                        className="shrink-0 text-text-dim hover:text-destructive"
                       >
                         <Trash2 className="size-4" />
                       </Button>
                     </DeleteOverlayDialog>
                   </div>
+                  {/* A parked YouTube channel, which nothing on this page used to show.
+                      Above the badges so it is the first thing read on the card. */}
+                  <DiscoveryPausedNotice overlayId={overlay.id} sources={overlay.sources} />
                   <div className="mb-4 flex flex-wrap gap-1.5">
                     {overlay.sources?.map((source) => (
                       <PlatformBadge
@@ -324,20 +334,24 @@ function DashboardContent() {
                   </div>
                   <div className="flex items-center justify-between">
                     <p className="text-xs text-text-dim">
-                      {overlay.sources?.length ?? 0} source
-                      {(overlay.sources?.length ?? 0) !== 1 ? 's' : ''}
+                      {t(
+                        (overlay.sources?.length ?? 0) === 1
+                          ? 'dashboard.overlays.sourceCountOne'
+                          : 'dashboard.overlays.sourceCountOther',
+                        { count: overlay.sources?.length ?? 0 }
+                      )}
                     </p>
                     {overlay.is_public_for_viewers ? (
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="hover:text-destructive -mr-2 gap-1.5 text-xs text-text-sub"
+                        className="-mr-2 gap-1.5 text-xs text-text-sub hover:text-destructive"
                         onClick={(e: React.MouseEvent) => {
                           e.stopPropagation()
                           handleUnsetPublic(overlay.id)
                         }}
                       >
-                        Deactivate Extension
+                        {t('dashboard.overlays.deactivateExtension')}
                       </Button>
                     ) : (
                       <Button
@@ -350,7 +364,7 @@ function DashboardContent() {
                         }}
                       >
                         <Puzzle className="size-3" />
-                        Set as Extension Overlay
+                        {t('dashboard.overlays.setAsExtension')}
                       </Button>
                     )}
                   </div>

@@ -49,12 +49,12 @@ func newBetaTesterDBQuerier(db *pgxpool.Pool) betaTesterQuerier {
 // and fresh on grant (no stale-JWT window) — but the dimension is early_access and
 // the entitlement is users.is_beta_tester rather than is_premium.
 //
-// Decision flow:
-//  1. Check the user is authenticated (user_id in context) — 401 if missing.
-//  2. If gates.IsEarlyAccess(featureKey) is false: the feature is not early-access
+// Decision flow, in the order the body runs it:
+//   - Check the user is authenticated (user_id in context) — 401 if missing.
+//   - If gates.IsEarlyAccess(featureKey) is false: the feature is not early-access
 //     (or has graduated), so allow through. Any premium requirement on the same
 //     route is enforced separately by RequirePremium.
-//  3. If gates.IsEarlyAccess(featureKey) is true: query the DB and require
+//   - If gates.IsEarlyAccess(featureKey) is true: query the DB and require
 //     early-access eligibility (is_beta_tester OR is_ambassador, ADR-0041), else 403.
 //
 // Note: beta-testers and ambassadors are also premium (shared/premium.Recompute
@@ -74,7 +74,6 @@ func RequireEarlyAccessWithQuerier(gates GateChecker, featureKey string, querier
 // requireEarlyAccessCore is the shared implementation behind both constructors.
 func requireEarlyAccessCore(gates GateChecker, featureKey string, querier betaTesterQuerier, logger *zap.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Step 1: Authentication check — user must be authenticated regardless of gate state.
 		userID := c.GetString("user_id")
 		if userID == "" {
 			if logger != nil {
@@ -87,13 +86,11 @@ func requireEarlyAccessCore(gates GateChecker, featureKey string, querier betaTe
 			return
 		}
 
-		// Step 2: Gate check — if the feature is not early-access, allow through.
 		if !gates.IsEarlyAccess(featureKey) {
 			c.Next()
 			return
 		}
 
-		// Step 3: Gate says early-access — require beta-tester status.
 		isBetaTester, err := querier(c.Request.Context(), userID)
 		if err != nil {
 			if logger != nil {

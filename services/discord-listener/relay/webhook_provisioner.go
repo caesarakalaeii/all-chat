@@ -102,13 +102,11 @@ func (p *WebhookProvisioner) ProvisionPending(ctx context.Context) error {
 // ensureWebhook checks for an existing "AllChat Relay" webhook in the channel
 // and creates one if not found, then stores the URL in the database.
 func (p *WebhookProvisioner) ensureWebhook(ctx context.Context, cfg pendingRelayConfig) error {
-	// 1. List existing webhooks in the channel.
 	webhooks, err := p.listChannelWebhooks(ctx, cfg.ChannelID)
 	if err != nil {
 		return err
 	}
 
-	// 2. Check if an AllChat Relay webhook already exists.
 	var webhookURL string
 	for _, wh := range webhooks {
 		if wh.Name == webhookName && wh.Token != "" {
@@ -124,7 +122,6 @@ func (p *WebhookProvisioner) ensureWebhook(ctx context.Context, cfg pendingRelay
 		}
 	}
 
-	// 3. Create a new webhook if none found.
 	if webhookURL == "" {
 		wh, err := p.createWebhook(ctx, cfg.ChannelID)
 		if err != nil {
@@ -140,7 +137,6 @@ func (p *WebhookProvisioner) ensureWebhook(ctx context.Context, cfg pendingRelay
 		}
 	}
 
-	// 4. Store the webhook URL in the database.
 	if err := p.repo.StoreWebhookURL(ctx, cfg.SourceID, webhookURL); err != nil {
 		return fmt.Errorf("failed to store webhook URL: %w", err)
 	}
