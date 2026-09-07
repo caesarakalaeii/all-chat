@@ -15,10 +15,10 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "declaration": false,
-    "sourceMap": true,
-    "outDir": "com.allchat.streamdeck.sdPlugin/bin",
-    "rootDir": "src"
+    // tsc type-checks only. scripts/build.mjs (esbuild) owns emit and source
+    // maps: the shipped .sdPlugin folder has no node_modules, so it needs a
+    // bundle with the SDK inlined, not transpiled modules with bare imports.
+    "noEmit": true
   },
   "include": ["src/**/*.ts"]
 }

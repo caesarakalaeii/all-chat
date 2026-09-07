@@ -73,18 +73,28 @@ Stream Deck app's own plugin browser and cannot be updated from there.
 ### Which version am I running?
 
 Drop any All-Chat action onto a key and open its settings. Under the **Link with
-All-Chat** button the panel prints `Plugin version 0.1.1.0` — that is the build
+All-Chat** button the panel prints `Plugin version 0.1.2.0` — that is the build
 that is loaded, read from the Stream Deck app rather than from a file on disk.
 
 Quote that number in any bug report. The plugin also writes it into every
 linking failure in its own log, so attaching the log answers the question too:
 
 ```
-Send Chat Message: linking failed on plugin version 0.1.1.0 — <reason>
+Send Chat Message: linking failed on plugin version 0.1.2.0 — <reason>
 ```
 
 The log lives at `~/Library/Logs/ElgatoStreamDeck/` on macOS and
 `%APPDATA%\Elgato\StreamDeck\logs\` on Windows.
+
+### Stream Deck says the plugin "is unstable" and disabled it
+
+Builds 0.1.1.x and older crashed the moment the Stream Deck app launched them
+(exit code 1): they were shipped unbundled, so `bin/plugin.js` imported
+`@elgato/streamdeck` from a `node_modules` that exists in a development
+checkout but not in an installed plugin. The app retried for about two minutes,
+then disabled the plugin. Install 0.1.2.0 or newer — the build is bundled and
+self-contained — and re-enable the plugin by dragging a fresh All-Chat action
+onto a key.
 
 ### Linking hangs and the panel says the build may be out of date
 
@@ -115,7 +125,7 @@ npm ci
 npm run build
 ```
 
-`npm run build` compiles `src/` into
+`npm run build` type-checks `src/` and bundles it into the single file
 `com.allchat.streamdeck.sdPlugin/bin/plugin.js`. That `.sdPlugin` folder *is* the
 plugin; to install it, copy or symlink it into the Stream Deck plugins directory
 and restart the Stream Deck app:
@@ -138,29 +148,59 @@ instead use `streamdeck link com.allchat.streamdeck.sdPlugin`, then
 | Script          | What it does                                          |
 | --------------- | ----------------------------------------------------- |
 | `npm ci`        | Installs from the lockfile.                           |
-| `npm run build` | Type-checks and compiles to `…sdPlugin/bin/`.         |
+| `npm run build` | Type-checks with `tsc`, then bundles to `…sdPlugin/bin/plugin.js`. |
 | `npm run lint`  | ESLint over `src/`, plus a `tsc --noEmit` type check.  |
-| `npm run watch` | Recompiles on change, for plugin development.          |
+| `npm run smoke` | Launches the built plugin as the Stream Deck app does and asserts it registers. |
+| `npm run watch` | Rebundles on change, for plugin development. Does **not** type-check. |
 
-> The build toolchain (`typescript`, `eslint`) is listed under `dependencies`
-> rather than `devDependencies` on purpose: this package is private and never
-> published, and CI runs with `NODE_ENV=production`, where `npm ci` drops dev
-> dependencies and the build would fail with `tsc: not found`.
+> The build toolchain (`typescript`, `esbuild`, `eslint`) is listed under
+> `dependencies` rather than `devDependencies` on purpose: this package is
+> private and never published, and CI runs with `NODE_ENV=production`, where
+> `npm ci` drops dev dependencies and the build would fail with `tsc: not
+> found`.
+
+#### Why the build bundles
+
+The shipped `.sdPlugin` folder contains **no `node_modules`**, so anything
+`bin/plugin.js` still imports by bare specifier at runtime is unresolvable on the
+machine that installs it. `tsc` transpiles but rewrites no imports, so a
+`tsc`-only build left `import streamDeck from "@elgato/streamdeck"` in the
+entrypoint and the plugin died on startup with `ERR_MODULE_NOT_FOUND` — everywhere
+except a dev checkout, where the sibling `streamdeck-plugin/node_modules/` happens
+to satisfy it, which is exactly why it went unnoticed.
+
+`scripts/build.mjs` therefore runs esbuild and inlines the SDK and its transitive
+dependencies (`ws`, `@elgato/schemas`, `@elgato/utils`), leaving only Node
+builtins external. `tsc` is kept as the type-checker (esbuild does not type-check).
+
+`npm run smoke` is the guard: lint, build, `validate` and `pack` all pass happily
+on a plugin that cannot start, because none of them start it. The smoke test
+spawns the plugin exactly as the Stream Deck app does — `-port`, `-pluginUUID`,
+`-registerEvent`, `-info` — and fails unless it connects back and registers. It
+runs against a copy staged outside the repo on purpose: run in place, Node's
+upward module resolution finds the SDK in `streamdeck-plugin/node_modules/` and an
+unbundled plugin passes.
 
 ### Packaging
 
-`.github/workflows/plugins.yml` lints, builds, validates the manifest and packs
-this plugin on every PR that touches it, and uploads the resulting
-`com.allchat.streamdeck.streamDeckPlugin` as a run artifact. That artifact is
-how a reviewer installs a branch on real hardware without a local toolchain:
-download it from the run page, unzip, double-click.
+`.github/workflows/plugins.yml` lints, builds, smoke-tests, validates the
+manifest and packs this plugin on every PR that touches it, then smoke-tests the
+packed artifact again — unzipped, so what runs is the bytes that get uploaded —
+and publishes `com.allchat.streamdeck.streamDeckPlugin` as a run artifact. That
+artifact is how a reviewer installs a branch on real hardware without a local
+toolchain: download it from the run page, unzip, double-click.
 
-The same two commands work locally, with the Elgato CLI pinned to the version CI
-uses:
+The same steps work locally, with the Elgato CLI pinned to the version CI uses:
 
 ```bash
+npm run build
+npm run smoke
 npx --yes @elgato/cli@1.9.0 validate com.allchat.streamdeck.sdPlugin
 npx --yes @elgato/cli@1.9.0 pack com.allchat.streamdeck.sdPlugin --output dist
+
+# What a tester actually receives — check it starts before sending it.
+unzip -q dist/com.allchat.streamdeck.streamDeckPlugin -d dist/unpacked
+npm run smoke -- dist/unpacked/com.allchat.streamdeck.sdPlugin
 ```
 
 > **Gotcha:** the Elgato CLI **rewrites `manifest.json` in place**, reformatting
@@ -332,6 +372,9 @@ Plugin logs live next to the plugin:
 
 ```
 streamdeck-plugin/
+├── scripts/
+│   ├── build.mjs                     type-check + esbuild bundle (and --watch)
+│   └── smoke.mjs                     launches the built plugin, asserts it registers
 ├── src/
 │   ├── plugin.ts                     entry point; registers the three actions
 │   ├── actions/
@@ -349,7 +392,7 @@ streamdeck-plugin/
     ├── manifest.json
     ├── ui/                           property inspectors
     ├── imgs/                         key and category art
-    └── bin/                          build output (git-ignored)
+    └── bin/                          bundled output (git-ignored)
 ```
 
 `src/allchat/api.ts` is the single place recording which routes the server gates;
