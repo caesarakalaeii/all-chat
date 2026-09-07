@@ -72,8 +72,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.streamdeck == 'true'
     runs-on: ubuntu-latest
-    # Observed ~1min end to end locally (npm ci ~5s, build ~3s, pack ~15s).
-    # The headroom is for a slow npm mirror; past this it is stuck, not slow.
+    # Observed ~1min end to end locally (npm ci ~5s, build ~3s, each smoke test
+    # ~2s, pack ~15s). The headroom is for a slow npm mirror; past this it is
+    # stuck, not slow.
     timeout-minutes: 20
     defaults:
       run:
@@ -100,13 +101,26 @@ jobs:
       - name: Lint and type-check
         run: npm run lint
 
-      - name: Build (tsc -> com.allchat.streamdeck.sdPlugin/bin)
+      - name: Build (bundle -> com.allchat.streamdeck.sdPlugin/bin)
         run: npm run build
 
       # The .sdPlugin folder IS the plugin, so an empty bin/ is a silent
-      # non-build: tsc can succeed having emitted nothing if the config drifts.
+      # non-build: the bundler can succeed having emitted nothing if the config
+      # drifts.
       - name: Assert the compiled entrypoint exists
         run: test -s com.allchat.streamdeck.sdPlugin/bin/plugin.js
+
+      # The only step that LAUNCHES the plugin. Lint, build, validate and pack
+      # all pass on a plugin that cannot start, which is how a .sdPlugin whose
+      # imports were unresolvable off the dev machine once got as far as being
+      # packaged for a tester: `tsc` transpiled but did not bundle, so
+      # bin/plugin.js still imported "@elgato/streamdeck" by bare specifier and
+      # the shipped folder has no node_modules to resolve it against. This
+      # spawns the plugin the way the Stream Deck app does, from a copy staged
+      # outside the repo so nothing resolves through streamdeck-plugin/
+      # node_modules, and asserts it registers over the WebSocket.
+      - name: Smoke test (launch the built plugin)
+        run: npm run smoke
 
       # Elgato's own manifest validator. Pinned to an exact version rather than
       # @latest: this is a network fetch on every run and an unpinned tool that
@@ -117,6 +131,15 @@ jobs:
 
       - name: Package (.streamDeckPlugin)
         run: npx --yes @elgato/cli@1.9.0 pack com.allchat.streamdeck.sdPlugin --output dist
+
+      # Same smoke test, now against the artifact itself rather than the build
+      # directory: unzip what gets uploaded and launch that. `pack` chooses what
+      # to include, so a packaging rule that dropped a needed file would pass
+      # every check above and fail only on the tester's machine.
+      - name: Smoke test the packaged artifact
+        run: |
+          unzip -q dist/com.allchat.streamdeck.streamDeckPlugin -d dist/unpacked
+          npm run smoke -- dist/unpacked/com.allchat.streamdeck.sdPlugin
 
       # Downloadable from the run page: unzip, double-click, and the Stream Deck
       # app installs it. This is how a reviewer tests a PR on real hardware.
