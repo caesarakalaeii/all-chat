@@ -73,18 +73,28 @@ Stream Deck app's own plugin browser and cannot be updated from there.
 ### Which version am I running?
 
 Drop any All-Chat action onto a key and open its settings. Under the **Link with
-All-Chat** button the panel prints `Plugin version 0.1.1.0` — that is the build
+All-Chat** button the panel prints `Plugin version 0.1.2.0` — that is the build
 that is loaded, read from the Stream Deck app rather than from a file on disk.
 
 Quote that number in any bug report. The plugin also writes it into every
 linking failure in its own log, so attaching the log answers the question too:
 
 ```
-Send Chat Message: linking failed on plugin version 0.1.1.0 — <reason>
+Send Chat Message: linking failed on plugin version 0.1.2.0 — <reason>
 ```
 
 The log lives at `~/Library/Logs/ElgatoStreamDeck/` on macOS and
 `%APPDATA%\Elgato\StreamDeck\logs\` on Windows.
+
+### Stream Deck says the plugin "is unstable" and disabled it
+
+Builds 0.1.1.x and older crashed the moment the Stream Deck app launched them
+(exit code 1): they were shipped unbundled, so `bin/plugin.js` imported
+`@elgato/streamdeck` from a `node_modules` that exists in a development
+checkout but not in an installed plugin. The app retried for about two minutes,
+then disabled the plugin. Install 0.1.2.0 or newer — the build is bundled and
+self-contained — and re-enable the plugin by dragging a fresh All-Chat action
+onto a key.
 
 ### Linking hangs and the panel says the build may be out of date
 
