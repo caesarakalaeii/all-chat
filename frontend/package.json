@@ -79,7 +79,7 @@
     "@types/react-dom": "^19.2.5",
     "@typescript-eslint/parser": "^8.68.0",
     "@vitejs/plugin-react": "^6.1.1",
-    "@vitest/browser-playwright": "^4.1.11",
+    "@vitest/browser-playwright": "^5.0.0",
     "@vitest/coverage-v8": "^4.1.0",
     "autoprefixer": "^10.5.2",
     "eslint": "^10.9.1",
