@@ -146,8 +146,9 @@ describe('visualSettingsToCss', () => {
     // messageAnimation is applied as a .msg-anim-* class, never as a CSS property
     expect(result).not.toContain('messageAnimation')
     expect(result).not.toContain('fly-left')
-    // All 62 CSS properties present (excludes non-CSS fields)
-    expect((result.match(/--chat-|--platform-/g) ?? []).length).toBe(62)
+    // All 57 CSS properties present (52 + 5 new platform accents; the platform
+    // bubble fills are rules-only and never counted here)
+    expect((result.match(/--chat-|--platform-/g) ?? []).length).toBe(57)
   })
 
   it('wraps output in correct cascade layer syntax', () => {
