@@ -64,6 +64,7 @@ var validPlatforms = map[string]bool{
 	"tiktok":         true,
 	"shared_overlay": true, // Phase 16: shared overlay sources
 	"discord":        true, // Phase 27: Discord Listener
+	"owncast":        true, // ADR-0058: Owncast instance URL as the channel
 }
 
 // Validate validates the chat source fields
