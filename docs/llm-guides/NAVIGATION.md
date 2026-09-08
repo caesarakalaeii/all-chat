@@ -35,12 +35,12 @@
 
 ### Auth Service (`:8081`) ✅
 
-**Purpose**: OAuth flows (Twitch, YouTube, Kick) + JWT token issuance
+**Purpose**: OAuth flows (Twitch, YouTube, Kick, Facebook) + JWT token issuance
 
 **Key Files**:
 - `services/auth-service/cmd/main.go` - Entry point, route registration
 - `services/auth-service/handlers/auth.go` - OAuth callbacks, login/logout
-- `services/auth-service/oauth/` - Platform-specific OAuth logic (twitch.go, youtube.go, kick.go)
+- `services/auth-service/oauth/` - Platform-specific OAuth logic (twitch.go, youtube.go, kick.go, facebook.go)
 - `services/auth-service/repository/` - User and token persistence
 
 **Read When**: Working on OAuth flows, JWT tokens, user authentication.
@@ -119,6 +119,22 @@
 
 ---
 
+### New Platform Listeners (`:8095`-`:8099`) 🚧
+
+Five rollout listeners, each premium-gated per ADR-0008 (`platform_*` feature gates, migrations 091-095) until graduated via the feature-gate admin endpoint:
+
+- **Owncast Listener** (`:8095`, ADR-0058) — one websocket per self-hosted instance URL. Key files: `services/owncast-listener/channels/manager.go` (per-instance connections, offline = normal state), `websocket/client.go`.
+- **GoodGame Listener** (`:8096`) — GoodGame.ru chat websocket; resolves the channel key to a numeric chat id via the public API. Key files: `services/goodgame-listener/websocket/`, `channels/manager.go`.
+- **Picarto Listener** (`:8097`, ADR-0059) — unofficial pop-out chat websocket, defensively parsed (unknown frames logged and dropped). Key files: `services/picarto-listener/websocket/client.go`, `token/fetcher.go`.
+- **Facebook Listener** (`:8099`, ADR-0060) — Graph API polling of the streamer's Page live-video comments + moderation write path; Page tokens stored non-expiring by auth-service. Key files: `services/facebook-listener/client/client.go`, `services/facebook-listener/channels/manager.go`, `services/moderation-service/clients/facebook.go`.
+- **Rumble Listener** (`:8098`, ADR-0061) — Rumble's internal chat pop-up SSE (spike decision recorded in the ADR); parsing isolated to one file. Key files: `services/rumble-listener/websocket/parser.go`.
+
+**Read When**: Working on any of the five expansion platforms.
+
+**→ Full Docs**: each `services/<platform>-listener/README.md`
+
+---
+
 ### Message Processor (`:8087`) ✅
 
 **Purpose**: Normalize, enrich, and route messages from all platforms
@@ -127,7 +143,7 @@
 - `services/message-processor/cmd/main.go` - Consumer group initialization
 - `services/message-processor/consumer/stream_consumer.go` - Redis Streams XREADGROUP consumer
 - `services/message-processor/consumer/dlq.go` / `retry.go` - DLQ and retry handling
-- `services/message-processor/normalizer/` - Platform-specific normalizers (twitch, youtube, kick, tiktok, discord)
+- `services/message-processor/normalizer/` - Platform-specific normalizers (twitch, youtube, kick, tiktok, discord, owncast, goodgame, picarto, facebook, rumble)
 - `services/message-processor/enricher/emote_enricher.go` - Emote enrichment pipeline
 - `services/message-processor/enricher/pronoun_enricher.go` - Alejo pronoun enricher (ADR-0010)
 - `services/message-processor/publisher/pubsub_publisher.go` - Publish to Redis Pub/Sub `overlay:{id}`

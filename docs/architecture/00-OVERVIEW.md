@@ -227,12 +227,42 @@ All-Chat is a **cloud-native microservices platform** for aggregating and displa
 - **Protocol**: HTTP polling (InnerTube internal API)
 - **→ Documentation**: [services/youtube-listener-innertube/README.md](../../services/youtube-listener-innertube/README.md)
 
+**Owncast Listener** (`:8095`) — ADR-0058
+- **Purpose**: Read chat from self-hosted Owncast instances (one connection per instance URL; offline instances are a normal state)
+- **Protocol**: Owncast chat websocket (`/api/chat/register` → `/ws`)
+- **Rollout**: premium-gated (`platform_owncast`, migration 091) until graduated via the feature-gate admin endpoint
+- **→ Documentation**: [services/owncast-listener/README.md](../../services/owncast-listener/README.md)
+
+**GoodGame Listener** (`:8096`)
+- **Purpose**: Read chat from GoodGame.ru channels (channel key resolves to a numeric chat id via the public API)
+- **Protocol**: GoodGame chat websocket
+- **Rollout**: premium-gated (`platform_goodgame`, migration 092)
+- **→ Documentation**: [services/goodgame-listener/README.md](../../services/goodgame-listener/README.md)
+
+**Picarto Listener** (`:8097`) — ADR-0059
+- **Purpose**: Read chat from Picarto channels via the undocumented pop-out chat websocket (defensive parsing, log-and-drop unknown frames)
+- **Protocol**: `wss://chat.picarto.tv/chat/token=<jwt>` (anonymous token via the GraphQL endpoint)
+- **Rollout**: premium-gated (`platform_picarto`, migration 093)
+- **→ Documentation**: [services/picarto-listener/README.md](../../services/picarto-listener/README.md)
+
+**Rumble Listener** (`:8098`) — ADR-0061
+- **Purpose**: Read chat from Rumble live streams via the internal chat pop-up API (parser isolated to one file; anonymous reads)
+- **Protocol**: Server-Sent Events (chat pop-up stream)
+- **Rollout**: premium-gated (`platform_rumble`, migration 095)
+- **→ Documentation**: [services/rumble-listener/README.md](../../services/rumble-listener/README.md)
+
+**Facebook Listener** (`:8099`) — ADR-0060
+- **Purpose**: Poll the streamer's Facebook Page live-video comments; moderation write path (delete/hide comment, ban/unban viewer) via moderation-service with the stored Page token
+- **Protocol**: Graph API HTTP polling (no public realtime comment API)
+- **Rollout**: premium-gated (`platform_facebook`, migration 094); requires the operator's Meta app to pass App Review for Advanced Access
+- **→ Documentation**: [services/facebook-listener/README.md](../../services/facebook-listener/README.md)
+
 ### Processing Layer
 
 **Message Processor** (`:8087`)
 - **Purpose**: Normalize, enrich, and route messages
 - **Features**:
-  - Platform-specific normalizers (Twitch, YouTube, Kick, TikTok)
+  - Platform-specific normalizers (Twitch, YouTube, Kick, TikTok, Discord, Owncast, GoodGame, Picarto, Facebook, Rumble)
   - Emote enrichment (7TV, BTTV, FFZ)
   - Message age filtering (60s cutoff)
   - Publish to overlay-specific Redis Pub/Sub channels
@@ -254,8 +284,7 @@ All-Chat is a **cloud-native microservices platform** for aggregating and displa
 - **Features**: Platform-specific refresh flows, retry logic, error handling
 - **Scaling**: 1 replica (CronJob)
 - **→ Documentation**: [services/token-refresh-service/README.md](../../services/token-refresh-service/README.md)
-
-**Share Service** (`:8094`)
+**Share Service** (`:8090`)
 - **Purpose**: Generate and serve shareable overlay links for viewers
 - **→ Documentation**: [services/share-service/README.md](../../services/share-service/README.md)
 
