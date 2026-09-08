@@ -307,6 +307,8 @@ func (c *Client) handleFrame(channelName string, data []byte) {
 			zap.String("channel", channelName),
 			zap.Int("size", len(data)),
 		)
+		metrics.IncDropped("unparseable")
+		return
 	}
 
 	switch {
