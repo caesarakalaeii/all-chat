@@ -1402,9 +1402,27 @@ html:has(.lanes-home) {
   padding: 10px 12px;
 }
 
+/* Long-form prose (docs, legal): the mono face belongs to chrome, code and
+ * tables; paragraphs read in Barlow at full contrast. The 70%/50% text-sub
+ * and text-dim the app chrome uses are fine for labels and punishing for a
+ * page of reading. */
+.lanes-app .legal-prose {
+  font-family: var(--font-barlow), sans-serif;
+  color: var(--lanes-text);
+}
+.lanes-app .legal-prose p,
+.lanes-app .legal-prose li {
+  color: var(--lanes-text);
+  /* Reading measure: the panel runs ~90ch wide, tables and code want that
+   * width, paragraphs don't. */
+  max-width: 72ch;
+}
+
 /* Status chip: bordered mono pill, tinted per platform or status. */
 .lanes-chip {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
   font-family: var(--font-space-mono), monospace;
   font-size: 11px;
   font-weight: 700;

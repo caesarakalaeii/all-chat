@@ -398,7 +398,7 @@ export default function DeveloperDocsPage() {
           <div className="mb-8 space-y-2">
             <p className="mono-label text-xs">{t('docs.api.eyebrow')}</p>
             <h1 className="text-3xl">{t('docs.api.heading')}</h1>
-            <p className="text-dim text-sm">{t('docs.api.intro')}</p>
+            <p className="text-sub text-sm">{t('docs.api.intro')}</p>
             <p className="text-sub text-sm">
               {interpolateElements(t('docs.api.guidePrompt'), {
                 guide: <Link href="/docs">{t('docs.api.guideLinkText')}</Link>,
@@ -421,7 +421,7 @@ export default function DeveloperDocsPage() {
             </ul>
           </nav>
 
-          <div className="legal-prose text-sub space-y-10 leading-relaxed">
+          <div className="legal-prose space-y-10 leading-relaxed">
             {/* Connect a tool */}
             <section id="connect-a-tool">
               <h2>{t('docs.api.connectHeading')}</h2>

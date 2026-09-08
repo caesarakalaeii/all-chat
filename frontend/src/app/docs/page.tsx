@@ -308,7 +308,7 @@ export default function DocsPage() {
           <div className="mb-8 space-y-2">
             <p className="mono-label text-xs">{t('docs.guide.eyebrow')}</p>
             <h1 className="text-3xl">{t('docs.guide.heading')}</h1>
-            <p className="text-dim text-sm">{t('docs.guide.intro')}</p>
+            <p className="text-sub text-sm">{t('docs.guide.intro')}</p>
             <p className="text-sub text-sm">
               {interpolateElements(t('docs.guide.apiPrompt'), {
                 api: <Link href="/docs/api">{t('docs.guide.apiLinkText')}</Link>,
@@ -332,7 +332,7 @@ export default function DocsPage() {
             </ul>
           </nav>
 
-          <div className="legal-prose text-sub space-y-10 leading-relaxed">
+          <div className="legal-prose space-y-10 leading-relaxed">
             {/* What is All-Chat */}
             <section id="what-is-all-chat">
               <h2>{t('docs.guide.whatIsHeading')}</h2>
