@@ -221,7 +221,18 @@ export interface FilterSettings {
 export interface ChatSource {
   id: string
   overlay_id: string
-  platform: 'twitch' | 'youtube' | 'kick' | 'tiktok' | 'shared_overlay' | 'discord'
+  platform:
+    | 'twitch'
+    | 'youtube'
+    | 'kick'
+    | 'tiktok'
+    | 'owncast'
+    | 'goodgame'
+    | 'picarto'
+    | 'facebook'
+    | 'rumble'
+    | 'shared_overlay'
+    | 'discord'
   channel_id: string
   channel_name?: string
   config?: Record<string, unknown>
@@ -275,7 +286,18 @@ export interface UpdateOverlayRequest {
 }
 
 export interface AddSourceRequest {
-  platform: 'twitch' | 'youtube' | 'kick' | 'tiktok' | 'shared_overlay' | 'discord'
+  platform:
+    | 'twitch'
+    | 'youtube'
+    | 'kick'
+    | 'tiktok'
+    | 'owncast'
+    | 'goodgame'
+    | 'picarto'
+    | 'facebook'
+    | 'rumble'
+    | 'shared_overlay'
+    | 'discord'
   channel_id: string
   channel_name?: string
   config?: Record<string, unknown>

@@ -52,13 +52,28 @@ const NEW_SWATCH = '#1e293b'
 // moderator roster rather than duplicated here.
 const PLATFORMS: ReadonlyArray<{
   field: keyof VisualSettings
-  platform: 'twitch' | 'youtube' | 'kick' | 'tiktok' | 'discord'
+  platform:
+    | 'twitch'
+    | 'youtube'
+    | 'kick'
+    | 'tiktok'
+    | 'owncast'
+    | 'goodgame'
+    | 'picarto'
+    | 'facebook'
+    | 'rumble'
+    | 'discord'
   sample: string
 }> = [
   { field: 'twitchBubbleBg', platform: 'twitch', sample: '#2a1b3d' },
   { field: 'youtubeBubbleBg', platform: 'youtube', sample: '#3d1b1b' },
   { field: 'kickBubbleBg', platform: 'kick', sample: '#1b3d22' },
   { field: 'tiktokBubbleBg', platform: 'tiktok', sample: '#1b333d' },
+  { field: 'owncastBubbleBg', platform: 'owncast', sample: '#241b3d' },
+  { field: 'goodgameBubbleBg', platform: 'goodgame', sample: '#1b2a3d' },
+  { field: 'picartoBubbleBg', platform: 'picarto', sample: '#1b3d26' },
+  { field: 'facebookBubbleBg', platform: 'facebook', sample: '#1b2940' },
+  { field: 'rumbleBubbleBg', platform: 'rumble', sample: '#2b3d1b' },
   { field: 'discordBubbleBg', platform: 'discord', sample: '#22253d' },
 ]
 

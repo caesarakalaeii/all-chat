@@ -24,12 +24,11 @@
  *   - twitch: `channelId` is the lowercased login  -> twitch.tv/{login}
  *   - kick:   `channelId` is the slug (non-numeric) -> kick.com/{slug}
  *   - tiktok: `channelId` is the username           -> tiktok.com/@{username}
- *   - youtube: ambiguous. Prefer a real @handle when we have one; otherwise
- *     only build a /channel/ link when `channelId` is a genuine `UC…` channel
- *     id. The account-linked `youtube_id` elsewhere is a Google account id, not
- *     a channel id, so callers must pass the SOURCE channel id here, never that.
- *   - discord: `channelId` is a numeric snowflake (not web-addressable) -> null
- *   - shared_overlay / anything else: not a real channel -> null
+ *   - owncast: `channelId` is the instance base URL -> that URL as given
+ *   - goodgame: `channelId` is the numeric stream id -> goodgame.ru/{id}
+ *   - picarto: `channelId` is the channel name      -> picarto.tv/{name}
+ *   - rumble: `channelId` is the channel name       -> rumble.com/c/{name}
+ *   - facebook: the source is the connected Page; no public chat URL -> null
  *
  * Returns `null` when no trustworthy public URL can be built; callers render
  * plain text in that case.
@@ -54,6 +53,23 @@ export function channelUrl(
     case 'tiktok': {
       const username = (id || handle).replace(/^@+/, '')
       return username ? `https://www.tiktok.com/@${encodeURIComponent(username)}` : null
+    }
+    case 'owncast': {
+      // Stored as the instance's base URL; only forward https(s) back out.
+      if (/^https:\/\/[^\s]+$/i.test(id)) return id
+      return null
+    }
+    case 'goodgame': {
+      const streamId = id || handle
+      return streamId ? `https://goodgame.ru/${encodeURIComponent(streamId)}` : null
+    }
+    case 'picarto': {
+      const name = id || handle
+      return name ? `https://picarto.tv/${encodeURIComponent(name)}` : null
+    }
+    case 'rumble': {
+      const name = id || handle
+      return name ? `https://rumble.com/c/${encodeURIComponent(name)}` : null
     }
     case 'youtube': {
       if (handle) {

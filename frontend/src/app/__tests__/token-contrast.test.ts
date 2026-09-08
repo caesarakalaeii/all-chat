@@ -171,6 +171,11 @@ const PLATFORMS = [
   '--color-youtube',
   '--color-kick',
   '--color-tiktok',
+  '--color-owncast',
+  '--color-goodgame',
+  '--color-picarto',
+  '--color-facebook',
+  '--color-rumble',
   '--color-discord',
 ] as const
 
