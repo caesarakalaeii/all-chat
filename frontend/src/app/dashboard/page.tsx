@@ -58,6 +58,11 @@ const PLATFORM_HEX: Record<string, string> = {
   youtube: '#FF4444',
   kick: '#53FC18',
   tiktok: '#69C9D0',
+  owncast: '#9B7FF5',
+  goodgame: '#7FA3D1',
+  picarto: '#27B756',
+  facebook: '#3B93F5',
+  rumble: '#85C742',
 }
 
 function getTopBorderStyle(sources: Array<{ platform: string }>): React.CSSProperties {
@@ -117,7 +122,19 @@ function DashboardEmptyState({ onCreateClick }: { onCreateClick: () => void }) {
       <h2 className="text-xl">{t('dashboard.empty.heading')}</h2>
       <p className="text-sub max-w-sm text-sm">{t('dashboard.empty.body')}</p>
       <div className="mt-2 flex gap-1.5" aria-hidden="true">
-        {(['twitch', 'youtube', 'kick', 'tiktok'] as const).map((p) => (
+        {(
+          [
+            'twitch',
+            'youtube',
+            'kick',
+            'tiktok',
+            'owncast',
+            'goodgame',
+            'picarto',
+            'facebook',
+            'rumble',
+          ] as const
+        ).map((p) => (
           <PlatformBadge key={p} platform={p} size="sm" />
         ))}
       </div>
@@ -331,8 +348,7 @@ function DashboardContent() {
                   <div className="mb-4 flex flex-wrap gap-1.5">
                     {overlay.sources?.map((source) => (
                       <PlatformBadge
-                        key={source.id}
-                        platform={source.platform as 'twitch' | 'youtube' | 'kick' | 'tiktok'}
+                        platform={source.platform as string}
                         size="sm"
                       />
                     ))}
