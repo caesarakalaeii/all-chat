@@ -1227,6 +1227,235 @@ html:has(.lanes-home) {
 .lanes-footer {
   scroll-snap-align: start;
 }
+/* ============================================================
+   LANES APP — the lanes art direction on product pages
+   (dashboard, settings, docs, legal, upgrade, overlays). Pages opt in by
+   wrapping themselves in .lanes-app plus the next/font variable classes.
+   Same palette and type as .lanes-home; the primitives below are the
+   product-page vocabulary: panels, buttons, inputs, tables, chips.
+   ============================================================ */
+.lanes-app {
+  --lanes-bg: #050508;
+  --lanes-text: #f4f3ef;
+  --lanes-twitch: #9146ff;
+  --lanes-youtube: #ff3b30;
+  --lanes-tiktok: #69c9d0;
+  --lanes-kick: #53fc18;
+  --lanes-discord: #5865f2;
+  background: var(--lanes-bg);
+  color: var(--lanes-text);
+  font-family: var(--font-space-mono), monospace;
+}
+
+/* The kicker/eyebrow label above a heading. Same cut as the homepage's
+ * mono-label but self-contained so app pages don't import hero CSS. */
+.lanes-app .mono-label {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--lanes-youtube);
+  border: 2px solid var(--lanes-youtube);
+  padding: 6px 12px;
+}
+
+/* Panel: the black card with the hard white border and offset shadow. */
+.lanes-panel {
+  background: #000;
+  color: var(--lanes-text);
+  border: 3px solid #fff;
+  border-radius: 0;
+  box-shadow: 8px 8px 0 rgba(0, 0, 0, 0.55);
+}
+
+/* Buttons. Primary inverts to white; hover goes kick-green like the
+ * homepage cta-go. Ghost is an outlined mono button. */
+.lanes-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: var(--font-space-mono), monospace;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  padding: 10px 20px;
+  border: 2px solid #fff;
+  border-radius: 0;
+  background: #fff;
+  color: #000;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s;
+}
+.lanes-btn:hover {
+  background: var(--lanes-kick);
+  border-color: var(--lanes-kick);
+}
+.lanes-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.lanes-btn:focus-visible {
+  outline: 2px solid var(--lanes-kick);
+  outline-offset: 2px;
+}
+.lanes-btn.ghost {
+  background: transparent;
+  color: #fff;
+}
+.lanes-btn.ghost:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: #fff;
+}
+.lanes-btn.danger {
+  background: var(--lanes-youtube);
+  border-color: var(--lanes-youtube);
+  color: #fff;
+}
+.lanes-btn.danger:hover {
+  background: #c0261d;
+  border-color: #c0261d;
+}
+.lanes-btn.sm {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+/* Inputs and selects: black field, white border, mono text. */
+.lanes-input,
+.lanes-app input:not([type='checkbox']):not([type='radio']),
+.lanes-app select,
+.lanes-app textarea {
+  background: #000;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  border-radius: 0;
+  color: #fff;
+  font-family: var(--font-space-mono), monospace;
+  font-size: 14px;
+  padding: 10px 12px;
+}
+.lanes-app input:focus-visible,
+.lanes-app select:focus-visible,
+.lanes-app textarea:focus-visible {
+  outline: 2px solid var(--lanes-kick);
+  outline-offset: 1px;
+  border-color: var(--lanes-kick);
+}
+.lanes-app input::placeholder,
+.lanes-app textarea::placeholder {
+  color: rgba(244, 243, 239, 0.4);
+}
+
+/* Headings: Archivo Black, uppercase, tight. Sizes come from utilities. */
+.lanes-app h1,
+.lanes-app h2,
+.lanes-app h3 {
+  font-family: var(--font-archivo-black), sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  color: #fff;
+}
+
+/* Links inside app copy: white with a red underline accent, matching the
+ * banner treatment. */
+.lanes-app a {
+  color: #fff;
+  text-decoration-color: var(--lanes-youtube);
+}
+.lanes-app a:hover {
+  color: var(--lanes-kick);
+}
+/* .lanes-app a outranks .lanes-btn on <a class="lanes-btn"> (class+element
+ * beats class), which would paint the primary button white-on-white. */
+.lanes-app a.lanes-btn {
+  color: #000;
+}
+.lanes-app a.lanes-btn.ghost,
+.lanes-app a.lanes-btn.danger {
+  color: #fff;
+}
+.lanes-app a.lanes-btn:hover {
+  color: #000;
+}
+.lanes-app a.lanes-btn.ghost:hover,
+.lanes-app a.lanes-btn.danger:hover {
+  color: #fff;
+}
+
+/* Tables: mono, white rules, no radius. */
+.lanes-app table {
+  border-collapse: collapse;
+  font-family: var(--font-space-mono), monospace;
+}
+.lanes-app th {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 11px;
+  text-align: left;
+  border-bottom: 2px solid #fff;
+  padding: 8px 12px;
+}
+.lanes-app td {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 10px 12px;
+}
+
+/* Status chip: bordered mono pill, tinted per platform or status. */
+.lanes-chip {
+  display: inline-block;
+  font-family: var(--font-space-mono), monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 2px solid currentColor;
+  padding: 3px 10px;
+}
+
+/* Muted text ramp. */
+.lanes-app .text-sub {
+  color: rgba(244, 243, 239, 0.7);
+}
+.lanes-app .text-dim {
+  color: rgba(244, 243, 239, 0.5);
+}
+
+/* The shared AppNav, restyled when it sits inside .lanes-app. The nav
+ * itself is unchanged for routes that don't opt in (link, moderate). */
+.lanes-app .app-nav {
+  background: #000;
+  border-bottom: 3px solid #fff;
+  backdrop-filter: none;
+  font-family: var(--font-space-mono), monospace;
+}
+.lanes-app .app-nav .app-wordmark {
+  font-family: var(--font-archivo-black), sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: #fff;
+}
+.lanes-app .app-nav a {
+  text-decoration: none;
+}
+.lanes-app .app-nav .nav-link {
+  color: rgba(244, 243, 239, 0.65);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.lanes-app .app-nav .nav-link:hover {
+  color: #fff;
+}
+.lanes-app .app-nav .nav-link.active {
+  background: #fff;
+  color: #000;
+}
+.lanes-app .app-nav .nav-link.active::after {
+  display: none;
+}
 
 /* Cookie banner restyled for the lanes homepage. The banner mounts in the
  * root layout outside .lanes-home, so the variant is opt-in: CookieBanner

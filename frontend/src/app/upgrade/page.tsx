@@ -19,8 +19,8 @@
 import { Check, MessagesSquare, Radio, ShieldCheck, Sparkles, Users, Volume2 } from 'lucide-react'
 import Link from 'next/link'
 import { AppNav } from '@/components/AppNav'
-import { Card } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
+import { archivoBlack, spaceMono } from '@/lib/fonts'
 import { PATREON_JOIN_URL } from '@/lib/constants'
 import { getTranslations } from '@/lib/i18n'
 import { interpolateElements } from '@/lib/i18n/emphasise'
@@ -57,61 +57,53 @@ const features = [
 
 export default function UpgradePage() {
   return (
-    <div className="min-h-screen bg-bg">
+    <div className={cn('lanes-app min-h-screen', archivoBlack.variable, spaceMono.variable)}>
       <AppNav />
       <main id="main-content" tabIndex={-1} className="mx-auto max-w-3xl space-y-10 px-4 py-12">
         {/* Hero */}
         <header className="space-y-4 text-center">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-3 py-1 text-xs font-medium text-text-sub">
-            <Sparkles className="h-3.5 w-3.5 text-twitch" />
+          <span className="mono-label inline-flex items-center gap-1.5">
+            <Sparkles className="h-3.5 w-3.5" />
             {t('marketing.upgrade.badge')}
           </span>
-          <h1 className="text-3xl font-bold text-text sm:text-4xl">
-            {t('marketing.upgrade.title')}
-          </h1>
-          <p className="mx-auto max-w-xl text-text-sub">{t('marketing.upgrade.body')}</p>
+          <h1 className="text-3xl sm:text-4xl">{t('marketing.upgrade.title')}</h1>
+          <p className="text-sub mx-auto max-w-xl">{t('marketing.upgrade.body')}</p>
           <div className="flex flex-col items-center justify-center gap-3 pt-2 sm:flex-row">
-            <Button
-              variant="gradient"
-              size="lg"
-              render={
-                // The label lives on the anchor itself so the link has
-                // screen-reader-accessible content (jsx-a11y/anchor-has-content);
-                // Base UI renders the anchor with the Button's styling.
-                <a href={PATREON_JOIN_URL} target="_blank" rel="noopener noreferrer">
-                  {t('marketing.upgrade.subscribe')}
-                </a>
-              }
-            />
-            <Button variant="outline" size="lg" render={<Link href="/settings/premium" />}>
+            <a
+              href={PATREON_JOIN_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="lanes-btn"
+            >
+              {t('marketing.upgrade.subscribe')}
+            </a>
+            <Link href="/settings/premium" className="lanes-btn ghost">
               {t('marketing.upgrade.connectPatreon')}
-            </Button>
+            </Link>
           </div>
         </header>
 
         {/* Feature list */}
-        <Card className="divide-y divide-border p-0">
+        <div className="lanes-panel divide-y divide-white/20 p-0">
           {features.map(({ icon: Icon, messageStem }) => (
             <div key={messageStem} className="flex items-start gap-4 p-5">
-              <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface-2 text-twitch">
+              <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center border-2 border-white text-white">
                 <Icon className="h-5 w-5" />
               </span>
               <div className="space-y-1">
-                <h2 className="font-semibold text-text">
-                  {t(`marketing.upgrade.${messageStem}Title`)}
-                </h2>
-                <p className="text-sm text-text-sub">{t(`marketing.upgrade.${messageStem}Body`)}</p>
+                <h2 className="text-base">{t(`marketing.upgrade.${messageStem}Title`)}</h2>
+                <p className="text-sub text-sm">{t(`marketing.upgrade.${messageStem}Body`)}</p>
               </div>
             </div>
           ))}
-        </Card>
+        </div>
 
         {/* How it works */}
-        <Card className="space-y-4 p-6">
-          <h2 className="text-lg font-semibold text-text">{t('marketing.upgrade.howItWorks')}</h2>
+        <div className="lanes-panel space-y-4 p-6">
+          <h2 className="text-lg">{t('marketing.upgrade.howItWorks')}</h2>
           <ol className="space-y-3 text-sm text-text-sub">
             <li className="flex gap-3">
-              <Check className="mt-0.5 h-4 w-4 shrink-0 text-twitch" />
+              <Check className="mt-0.5 h-4 w-4 shrink-0 text-white" />
               <span>
                 {interpolateElements(t('marketing.upgrade.step1'), {
                   patreon: (
@@ -119,7 +111,7 @@ export default function UpgradePage() {
                       href={PATREON_JOIN_URL}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="font-medium text-twitch underline underline-offset-2"
+                      className="font-medium underline underline-offset-2"
                     >
                       {t('marketing.upgrade.step1Patreon')}
                     </a>
@@ -128,13 +120,13 @@ export default function UpgradePage() {
               </span>
             </li>
             <li className="flex gap-3">
-              <Check className="mt-0.5 h-4 w-4 shrink-0 text-twitch" />
+              <Check className="mt-0.5 h-4 w-4 shrink-0 text-white" />
               <span>
                 {interpolateElements(t('marketing.upgrade.step2'), {
                   settings: (
                     <Link
                       href="/settings/premium"
-                      className="font-medium text-twitch underline underline-offset-2"
+                      className="font-medium underline underline-offset-2"
                     >
                       {t('marketing.upgrade.step2Settings')}
                     </Link>
@@ -143,19 +135,16 @@ export default function UpgradePage() {
               </span>
             </li>
             <li className="flex gap-3">
-              <Check className="mt-0.5 h-4 w-4 shrink-0 text-twitch" />
+              <Check className="mt-0.5 h-4 w-4 shrink-0 text-white" />
               <span>{t('marketing.upgrade.step3')}</span>
             </li>
           </ol>
-        </Card>
+        </div>
 
         <p className="text-center text-xs text-text-dim">
           {interpolateElements(t('marketing.upgrade.viewerFootnote'), {
             link: (
-              <Link
-                href="/settings/viewer/premium"
-                className="text-text-sub underline underline-offset-2"
-              >
+              <Link href="/settings/viewer/premium" className="underline underline-offset-2">
                 {t('marketing.upgrade.viewerFootnoteLink')}
               </Link>
             ),

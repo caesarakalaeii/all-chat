@@ -23,11 +23,11 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { AppNav } from '@/components/AppNav'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { Dialog } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { type TFunction, formatDate, useTranslations } from '@/lib/i18n'
+import { cn } from '@/lib/utils'
+import { archivoBlack, spaceMono } from '@/lib/fonts'
 import { interpolateElements } from '@/lib/i18n/emphasise'
 import { toastManager } from '@/lib/toast'
 import { PATREON_JOIN_URL } from '@/lib/constants'
@@ -120,33 +120,30 @@ function PremiumContent() {
   const isPremium = status?.is_premium === true
 
   return (
-    <div className="min-h-screen bg-bg">
+    <div className={cn('lanes-app min-h-screen', archivoBlack.variable, spaceMono.variable)}>
       <AppNav />
       <main id="main-content" tabIndex={-1} className="mx-auto max-w-2xl space-y-6 px-4 py-12">
         <div className="space-y-1">
-          <Link
-            href="/settings"
-            className="text-sm text-text-sub transition-colors hover:text-text"
-          >
+          <Link href="/settings" className="text-sub text-sm transition-colors hover:text-white">
             {t('settings.premium.back')}
           </Link>
-          <h1 className="text-2xl font-bold text-text">{t('settings.premium.heading')}</h1>
+          <h1 className="text-2xl">{t('settings.premium.heading')}</h1>
         </div>
 
-        <Card className="p-6">
-          <h2 className="mb-4 text-lg font-semibold text-text">{t('common.patreon.heading')}</h2>
+        <div className="lanes-panel p-6">
+          <h2 className="mb-4 text-lg">{t('common.patreon.heading')}</h2>
 
           {loading ? (
-            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full rounded-none" />
           ) : !status?.connected ? (
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-4">
-                <p className="text-sm text-text-sub">{t('settings.premium.connectPitch')}</p>
-                <Button onClick={handleConnect} disabled={connecting}>
+                <p className="text-sub text-sm">{t('settings.premium.connectPitch')}</p>
+                <button className="lanes-btn" onClick={handleConnect} disabled={connecting}>
                   {connecting ? t('common.patreon.connecting') : t('common.patreon.connect')}
-                </Button>
+                </button>
               </div>
-              <p className="text-sm text-text-sub">
+              <p className="text-sub text-sm">
                 {interpolateElements(t('settings.premium.notAPatronSuffix'), {
                   link: (
                     <a
@@ -164,52 +161,57 @@ function PremiumContent() {
           ) : (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-text-sub">{t('settings.premium.premiumRow')}</span>
-                <span className="font-medium text-text">
+                <span className="text-sub text-sm">{t('settings.premium.premiumRow')}</span>
+                <span className="font-medium">
                   {isPremium ? t('common.patreon.active') : t('common.patreon.inactive')}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-text-sub">{t('common.patreon.subscriptionRow')}</span>
-                <span className="font-medium text-text">{statusLabel(t, status.status)}</span>
+                <span className="text-sub text-sm">{t('common.patreon.subscriptionRow')}</span>
+                <span className="font-medium">{statusLabel(t, status.status)}</span>
               </div>
               {status.renews_at && (
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-text-sub">{t('common.patreon.renewsRow')}</span>
-                  <span className="font-medium text-text">
-                    {formatDate(new Date(status.renews_at))}
-                  </span>
+                  <span className="text-sub text-sm">{t('common.patreon.renewsRow')}</span>
+                  <span className="font-medium">{formatDate(new Date(status.renews_at))}</span>
                 </div>
               )}
 
               {!isPremium && (
-                <p className="text-sm text-text-sub">{t('settings.premium.notGranting')}</p>
+                <p className="text-sub text-sm">{t('settings.premium.notGranting')}</p>
               )}
 
               <div className="flex justify-end pt-2">
                 <Dialog.Root>
                   <Dialog.Trigger
-                    render={<Button variant="destructive">{t('common.patreon.disconnect')}</Button>}
+                    render={
+                      <button className="lanes-btn danger">{t('common.patreon.disconnect')}</button>
+                    }
                   />
-                  <Dialog.Content showCloseButton={false}>
+                  <Dialog.Content
+                    showCloseButton={false}
+                    className="rounded-none border-white bg-black text-[#f4f3ef]"
+                  >
                     <Dialog.Title>{t('common.patreon.disconnectTitle')}</Dialog.Title>
                     <Dialog.Description>{t('settings.premium.disconnectBody')}</Dialog.Description>
                     <div className="mt-6 flex justify-end gap-3">
                       <Dialog.Close
                         render={
-                          <Button variant="outline">{t('common.patreon.disconnectCancel')}</Button>
+                          <button className="lanes-btn ghost">
+                            {t('common.patreon.disconnectCancel')}
+                          </button>
                         }
                       />
-                      <Button variant="destructive" onClick={handleDisconnect}>
+                      <button className="lanes-btn danger" onClick={handleDisconnect}>
                         {t('common.patreon.disconnectConfirm')}
-                      </Button>
+                      </button>
                     </div>
                   </Dialog.Content>
                 </Dialog.Root>
               </div>
             </div>
           )}
-        </Card>
+        </div>
       </main>
     </div>
   )

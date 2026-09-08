@@ -17,13 +17,14 @@
  */
 
 /**
- * Local PlatformBadge re-export.
+ * Local PlatformBadge.
  *
- * Adapts the shares-domain `source` object shape to the shared
- * PlatformBadge component from @/components/ui/badge.
+ * Shares-domain restyle: renders a .lanes-chip in the platform color instead
+ * of the shared rounded badge, whose old-token palette fights the lanes
+ * direction. Text-only chip; platform identity is read from the label.
  */
-import { PlatformBadge as SharedPlatformBadge } from '@/components/ui/badge'
-import type { Platform } from '@/lib/platform-colors'
+import { cn } from '@/lib/utils'
+import { PLATFORM_COLORS, type Platform } from '@/lib/platform-colors'
 
 interface PlatformBadgeProps {
   source: {
@@ -38,5 +39,15 @@ export function PlatformBadge({ source }: PlatformBadgeProps) {
     ? (source.platform as Platform)
     : 'system'
 
-  return <SharedPlatformBadge platform={platform} />
+  const colorClass = platform === 'system' ? 'text-sub' : PLATFORM_COLORS[platform].text
+
+  return (
+    <span
+      data-slot="platform-badge"
+      data-platform={source.platform}
+      className={cn('lanes-chip', colorClass)}
+    >
+      {source.platform.replace(/_/g, ' ').toUpperCase()}
+    </span>
+  )
 }

@@ -24,6 +24,8 @@ import { JsonLd } from '@/components/JsonLd'
 import { DISCORD_INVITE_URL } from '@/lib/constants'
 import { getTranslations, type MessageKey } from '@/lib/i18n'
 import { interpolateElements } from '@/lib/i18n/emphasise'
+import { cn } from '@/lib/utils'
+import { archivoBlack, spaceMono } from '@/lib/fonts'
 
 // getTranslations, not useTranslations: this is a Server Component.
 const t = getTranslations()
@@ -86,23 +88,23 @@ interface CssVar {
 }
 function CssVarTable({ rows }: { rows: readonly CssVar[] }) {
   return (
-    <div className="my-4 overflow-x-auto rounded-lg border border-border">
+    <div className="my-4 overflow-x-auto border-2 border-white">
       <table className="w-full border-collapse text-left text-sm">
         <thead>
-          <tr className="bg-surface-2 text-text">
-            <th className="px-4 py-2 font-semibold">{t('docs.guide.cssVarsColumnVariable')}</th>
-            <th className="px-4 py-2 font-semibold">{t('docs.guide.cssVarsColumnDefault')}</th>
-            <th className="px-4 py-2 font-semibold">{t('docs.guide.cssVarsColumnEffect')}</th>
+          <tr>
+            <th className="px-4 py-2 font-bold">{t('docs.guide.cssVarsColumnVariable')}</th>
+            <th className="px-4 py-2 font-bold">{t('docs.guide.cssVarsColumnDefault')}</th>
+            <th className="px-4 py-2 font-bold">{t('docs.guide.cssVarsColumnEffect')}</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.name} className="border-t border-border align-top">
+            <tr key={r.name} className="align-top">
               <td className="px-4 py-2">
-                <span className="font-mono text-text">{r.name}</span>
+                <span className="text-white">{r.name}</span>
               </td>
-              <td className="px-4 py-2 font-mono text-text-dim">{r.default}</td>
-              <td className="px-4 py-2 text-text-sub">{t(r.effectKey)}</td>
+              <td className="text-dim px-4 py-2">{r.default}</td>
+              <td className="text-sub px-4 py-2">{t(r.effectKey)}</td>
             </tr>
           ))}
         </tbody>
@@ -122,23 +124,23 @@ interface Hook {
 }
 function HookTable({ rows }: { rows: readonly Hook[] }) {
   return (
-    <div className="my-4 overflow-x-auto rounded-lg border border-border">
+    <div className="my-4 overflow-x-auto border-2 border-white">
       <table className="w-full border-collapse text-left text-sm">
         <thead>
-          <tr className="bg-surface-2 text-text">
-            <th className="px-4 py-2 font-semibold">{t('docs.guide.cssHooksColumnSelector')}</th>
-            <th className="px-4 py-2 font-semibold">{t('docs.guide.cssHooksColumnKind')}</th>
-            <th className="px-4 py-2 font-semibold">{t('docs.guide.cssHooksColumnTargets')}</th>
+          <tr>
+            <th className="px-4 py-2 font-bold">{t('docs.guide.cssHooksColumnSelector')}</th>
+            <th className="px-4 py-2 font-bold">{t('docs.guide.cssHooksColumnKind')}</th>
+            <th className="px-4 py-2 font-bold">{t('docs.guide.cssHooksColumnTargets')}</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.selector} className="border-t border-border align-top">
+            <tr key={r.selector} className="align-top">
               <td className="px-4 py-2">
-                <span className="font-mono text-text">{r.selector}</span>
+                <span className="text-white">{r.selector}</span>
               </td>
-              <td className="px-4 py-2 font-mono text-text-dim">{r.kind}</td>
-              <td className="px-4 py-2 text-text-sub">{t(r.targetsKey)}</td>
+              <td className="text-dim px-4 py-2">{r.kind}</td>
+              <td className="text-sub px-4 py-2">{t(r.targetsKey)}</td>
             </tr>
           ))}
         </tbody>
@@ -146,13 +148,8 @@ function HookTable({ rows }: { rows: readonly Hook[] }) {
     </div>
   )
 }
-
 function DevCallout({ children }: { children: ReactNode }) {
-  return (
-    <div className="rounded-lg border border-border bg-surface-2 p-5 text-sm text-text-sub">
-      {children}
-    </div>
-  )
+  return <div className="lanes-panel text-sub p-5 text-sm">{children}</div>
 }
 
 const CSS_VARIABLES: readonly CssVar[] = [
@@ -302,38 +299,32 @@ const PREMIUM_PERKS = [
 
 export default function DocsPage() {
   return (
-    <div className="min-h-screen bg-bg transition-colors duration-300">
+    <div className={cn('lanes-app min-h-screen', archivoBlack.variable, spaceMono.variable)}>
       <JsonLd data={howToLd} />
       <JsonLd data={breadcrumbLd} />
       <AppNav />
       <main id="main-content" tabIndex={-1} className="mx-auto max-w-4xl px-4 py-12">
-        <div className="rounded-xl border border-border bg-surface p-8 transition-colors duration-300 md:p-12">
+        <div className="lanes-panel p-8 md:p-12">
           <div className="mb-8 space-y-2">
-            <p className="text-xs font-semibold tracking-[0.2em] text-twitch uppercase">
-              {t('docs.guide.eyebrow')}
-            </p>
-            <h1 className="text-3xl font-bold text-text">{t('docs.guide.heading')}</h1>
-            <p className="text-sm text-text-dim">{t('docs.guide.intro')}</p>
-            <p className="text-sm text-text-sub">
+            <p className="mono-label text-xs">{t('docs.guide.eyebrow')}</p>
+            <h1 className="text-3xl">{t('docs.guide.heading')}</h1>
+            <p className="text-dim text-sm">{t('docs.guide.intro')}</p>
+            <p className="text-sub text-sm">
               {interpolateElements(t('docs.guide.apiPrompt'), {
-                api: (
-                  <Link href="/docs/api" className="text-twitch underline underline-offset-2">
-                    {t('docs.guide.apiLinkText')}
-                  </Link>
-                ),
+                api: <Link href="/docs/api">{t('docs.guide.apiLinkText')}</Link>,
               })}
             </p>
           </div>
 
           {/* Table of contents */}
-          <nav className="mb-10 rounded-lg border border-border bg-surface-2 p-5">
-            <p className="mb-2 text-xs font-semibold tracking-[0.15em] text-text-dim uppercase">
+          <nav className="mb-10 border-2 border-white p-5">
+            <p className="text-dim mb-2 text-xs tracking-[0.15em] uppercase">
               {t('docs.guide.tocHeading')}
             </p>
             <ul className="grid gap-1 sm:grid-cols-2">
               {toc.map(({ id, labelKey }) => (
                 <li key={id}>
-                  <a href={`#${id}`} className="text-sm text-twitch hover:underline">
+                  <a href={`#${id}`} className="text-sm underline underline-offset-2">
                     {t(labelKey)}
                   </a>
                 </li>
@@ -341,7 +332,7 @@ export default function DocsPage() {
             </ul>
           </nav>
 
-          <div className="legal-prose space-y-10 leading-relaxed text-text-sub">
+          <div className="legal-prose text-sub space-y-10 leading-relaxed">
             {/* What is All-Chat */}
             <section id="what-is-all-chat">
               <h2>{t('docs.guide.whatIsHeading')}</h2>
@@ -359,7 +350,7 @@ export default function DocsPage() {
             {/* Getting started */}
             <section id="getting-started">
               <h2>{t('docs.guide.startHeading')}</h2>
-              <ol className="list-decimal space-y-2 pl-6 text-text-sub">
+              <ol className="text-sub list-decimal space-y-2 pl-6">
                 <li>
                   {interpolateElements(t('docs.guide.startSignIn'), {
                     home: <Link href="/">{t('docs.guide.startSignInLinkText')}</Link>,
@@ -395,7 +386,7 @@ export default function DocsPage() {
                 })}
               </p>
               <h3>{t('docs.guide.irlWhenLiveHeading')}</h3>
-              <ol className="list-decimal space-y-2 pl-6 text-text-sub">
+              <ol className="text-sub list-decimal space-y-2 pl-6">
                 <li>{t('docs.guide.irlStepPassiveUrl')}</li>
                 <li>
                   {interpolateElements(t('docs.guide.irlStepOpenMonitor'), {
@@ -557,7 +548,7 @@ export default function DocsPage() {
                   noCss: <strong>{t('docs.guide.themesNoCssEmphasis')}</strong>,
                 })}
               </p>
-              <ol className="list-decimal space-y-2 pl-6 text-text-sub">
+              <ol className="text-sub list-decimal space-y-2 pl-6">
                 <li>{t('docs.guide.themesStepOpen')}</li>
                 <li>
                   {interpolateElements(t('docs.guide.themesStepApply'), {
@@ -642,7 +633,7 @@ export default function DocsPage() {
                       href="https://github.com/caesarakalaeii/all-chat/tree/main/docs/overlay-themes"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-twitch hover:underline"
+                      className="underline underline-offset-2"
                     >
                       {t('docs.guide.cssCalloutGithubLinkText')}
                     </a>
@@ -652,7 +643,7 @@ export default function DocsPage() {
                       href={DISCORD_INVITE_URL}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-twitch hover:underline"
+                      className="underline underline-offset-2"
                     >
                       {t(DISCORD_LINK_KEY)}
                     </a>
@@ -669,7 +660,7 @@ export default function DocsPage() {
                   importRule: <Code>{IMPORT_AT_RULE}</Code>,
                 })}
               </p>
-              <p className="text-sm text-text-sub">{t('docs.guide.fontsFamilies')}</p>
+              <p className="text-sub text-sm">{t('docs.guide.fontsFamilies')}</p>
               <Pre lang="css">{FONT_IMPORT_EXAMPLE}</Pre>
               <p>{t('docs.guide.fontsOutro')}</p>
             </section>
@@ -695,18 +686,12 @@ export default function DocsPage() {
           </div>
 
           {/* Footer */}
-          <div className="mt-12 flex flex-col gap-3 border-t border-border pt-6 text-sm text-text-dim sm:flex-row sm:items-center sm:justify-between">
+          <div className="text-dim mt-12 flex flex-col gap-3 border-t border-white/20 pt-6 text-sm sm:flex-row sm:items-center sm:justify-between">
             <span>{t('docs.guide.footerCopyright', { year: new Date().getFullYear() })}</span>
             <div className="flex flex-wrap items-center gap-4">
-              <Link href="/docs/api" className="transition-colors hover:text-text">
-                {t('docs.guide.footerApiLink')}
-              </Link>
-              <Link href="/legal/privacy" className="transition-colors hover:text-text">
-                {t('docs.guide.footerPrivacyLink')}
-              </Link>
-              <Link href="/legal/terms" className="transition-colors hover:text-text">
-                {t('docs.guide.footerTermsLink')}
-              </Link>
+              <Link href="/docs/api">{t('docs.guide.footerApiLink')}</Link>
+              <Link href="/legal/privacy">{t('docs.guide.footerPrivacyLink')}</Link>
+              <Link href="/legal/terms">{t('docs.guide.footerTermsLink')}</Link>
             </div>
           </div>
         </div>

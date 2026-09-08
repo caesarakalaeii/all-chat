@@ -26,8 +26,6 @@ import { StatusBadge } from './StatusBadge'
 import { AcceptModal } from './AcceptModal'
 import { AddSourceModal } from './AddSourceModal'
 import { RevocationConfirmModal } from './RevocationConfirmModal'
-import { Card } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import { useTranslations } from '@/lib/i18n'
 
 interface ShareRequestCardProps {
@@ -47,12 +45,7 @@ export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
   } | null>(null)
 
   return (
-    <Card
-      className={
-        // eslint-disable-next-line tailwindcss/no-unnecessary-arbitrary-value -- the bare-decimal scale utility the plugin suggests matches nothing in Tailwind v4 and emits no CSS at all, so taking the fix would delete this hover lift outright rather than restate it. See src/__tests__/no-broken-tailwind-utilities.test.ts
-        'p-4 shadow-lg transition-all duration-200 hover:scale-[1.02] hover:shadow-xl'
-      }
-    >
+    <div className="lanes-panel p-4">
       {/* User info */}
       <div className="mb-3 flex items-center">
         {request.sender && (
@@ -61,19 +54,19 @@ export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
             <img
               src={request.sender.profile_image_url || '/default-avatar.png'}
               alt={request.sender.username}
-              className="h-10 w-10 rounded-full"
+              className="h-10 w-10 border-2 border-white object-cover"
             />
             <div className="ml-3">
-              <p className="font-medium text-text">{request.sender.display_name}</p>
-              <p className="text-sm text-text-sub">@{request.sender.username}</p>
+              <p className="font-medium">{request.sender.display_name}</p>
+              <p className="text-sub text-sm">@{request.sender.username}</p>
             </div>
           </>
         )}
         {!request.sender && (
           <div className="flex items-center">
-            <div className="h-10 w-10 rounded-full bg-surface-2"></div>
+            <div className="h-10 w-10 border-2 border-white bg-white/10"></div>
             <div className="ml-3">
-              <p className="text-sm text-text-sub">{t('dashboard.shares.loadingUser')}</p>
+              <p className="text-sub text-sm">{t('dashboard.shares.loadingUser')}</p>
             </div>
           </div>
         )}
@@ -88,47 +81,37 @@ export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
         </div>
       )}
 
-      {/* Timestamp */}
-      <p className="text-xs text-text-dim">
+      <p className="text-dim text-xs">
         {formatDistanceToNow(new Date(request.created_at), { addSuffix: true })}
       </p>
 
       {/* Status indicator */}
-      <div className="mt-3 border-t border-border pt-3">
+      <div className="mt-3 border-t border-white/20 pt-3">
         <StatusBadge status={request.status} />
         {request.status === 'accepted' && (
-          <Button
-            variant="destructive"
-            size="sm"
-            className="mt-2 w-full"
+          <button
+            className="lanes-btn danger sm mt-2 w-full"
             onClick={() => setShowRevokeModal(true)}
           >
             {t('dashboard.shares.revoke')}
-          </Button>
+          </button>
         )}
       </div>
 
       {/* Action buttons (for pending requests) */}
       {request.status === 'pending' && (
         <div className="mt-3 flex gap-2">
-          <Button
-            variant="gradient"
-            size="sm"
-            className="flex-1"
-            onClick={() => setShowAcceptModal(true)}
-          >
+          <button className="lanes-btn sm flex-1" onClick={() => setShowAcceptModal(true)}>
             {t('dashboard.shares.accept')}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="flex-1"
+          </button>
+          <button
+            className="lanes-btn ghost sm flex-1"
             onClick={() => {
               console.log('Reject not implemented yet (Phase 15)')
             }}
           >
             {t('dashboard.shares.reject')}
-          </Button>
+          </button>
         </div>
       )}
 
@@ -179,6 +162,6 @@ export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
           }}
         />
       )}
-    </Card>
+    </div>
   )
 }

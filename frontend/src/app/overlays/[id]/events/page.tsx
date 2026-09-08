@@ -23,14 +23,13 @@ import { use, useEffect, useId, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { AppNav } from '@/components/AppNav'
-import { Card } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
 import { toastManager } from '@/lib/toast'
 import { ChevronLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { archivoBlack, spaceMono } from '@/lib/fonts'
 import { useTranslations } from '@/lib/i18n'
 import { interpolateElements } from '@/lib/i18n/emphasise'
 
@@ -79,7 +78,7 @@ const TAB_IDS: readonly Tab[] = ['global', 'twitch', 'youtube', 'kick', 'tiktok'
 // (ADR-0056). `after:bg-current` makes the line-variant underline follow
 // whatever colour won, so the two can never drift apart.
 const TAB_ACTIVE_COLOR: Record<Tab, string> = {
-  global: 'data-active:text-text data-active:after:bg-current',
+  global: 'data-active:text-white data-active:after:bg-current',
   twitch: 'data-active:text-twitch data-active:after:bg-current',
   youtube: 'data-active:text-youtube data-active:after:bg-current',
   kick: 'data-active:text-kick data-active:after:bg-current',
@@ -157,10 +156,10 @@ function EventToggle({
 }) {
   const descriptionId = useId()
   return (
-    <div className="flex items-center justify-between border-b border-border py-3.5 last:border-0">
+    <div className="flex items-center justify-between border-b border-white/20 py-3.5 last:border-0">
       <div className="flex-1 pr-4">
-        <p className="text-sm font-medium text-text">{label}</p>
-        <p id={descriptionId} className="mt-0.5 text-xs text-text-sub">
+        <p className="text-sm font-medium">{label}</p>
+        <p id={descriptionId} className="text-sub mt-0.5 text-xs">
           {description}
         </p>
       </div>
@@ -173,7 +172,7 @@ function EventToggle({
           aria-describedby={descriptionId}
           className="peer sr-only"
         />
-        <div className="peer h-5 w-10 rounded-full border border-border bg-surface-2 peer-checked:bg-twitch peer-focus-visible:ring-2 peer-focus-visible:ring-twitch after:absolute after:top-[3px] after:left-[3px] after:h-3.5 after:w-3.5 after:rounded-full after:bg-white after:transition-transform after:content-[''] peer-checked:after:translate-x-5" />
+        <div className="peer h-5 w-10 border-2 border-white bg-black peer-checked:border-kick peer-checked:bg-kick peer-focus-visible:ring-2 peer-focus-visible:ring-kick after:absolute after:top-[3px] after:left-[3px] after:h-3 after:w-3 after:bg-white after:transition-transform after:content-[''] peer-checked:after:translate-x-4" />
       </label>
     </div>
   )
@@ -197,9 +196,9 @@ function NumberInput({
   onChange: (value: number) => void
 }) {
   return (
-    <div className="border-b border-border py-3 last:border-0">
-      <label className="mb-0.5 block text-sm font-medium text-text">{label}</label>
-      <p className="mb-2 text-xs text-text-sub">{description}</p>
+    <div className="border-b border-white/20 py-3 last:border-0">
+      <label className="mb-0.5 block text-sm font-medium">{label}</label>
+      <p className="text-sub mb-2 text-xs">{description}</p>
       <Input
         type="number"
         min={min}
@@ -265,52 +264,50 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
   }
 
   return (
-    <div className="min-h-screen bg-bg">
+    <div className={cn('lanes-app min-h-screen', archivoBlack.variable, spaceMono.variable)}>
       <AppNav />
       <div className="mx-auto max-w-3xl px-4 py-8">
         {/* Header */}
         <div className="mb-6">
-          <Button
+          <button
             onClick={() => router.push(`/overlays/${id}`)}
-            variant="ghost"
-            size="sm"
-            className="mb-3 px-0"
+            className="lanes-btn sm ghost mb-3 px-0"
           >
             <ChevronLeft className="size-4" />
             {t('overlayEditor.eventSettings.back')}
-          </Button>
-          <h1 className="text-2xl font-bold text-text">
-            {t('overlayEditor.eventSettings.heading')}
-          </h1>
-          <p className="mt-1 text-sm text-text-sub">
-            {t('overlayEditor.eventSettings.subheading')}
-          </p>
+          </button>
+          <h1 className="text-2xl">{t('overlayEditor.eventSettings.heading')}</h1>
+          <p className="text-sub mt-1 text-sm">{t('overlayEditor.eventSettings.subheading')}</p>
         </div>
 
         {loading ? (
-          <Card className="space-y-4 p-6">
-            <Skeleton className="h-5 w-40" />
+          <div className="lanes-panel space-y-4 p-6">
+            <Skeleton className="h-5 w-40 bg-white/20" />
             {[0, 1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-14 w-full" />
+              <Skeleton key={i} className="h-14 w-full bg-white/20" />
             ))}
-          </Card>
+          </div>
         ) : !settings ? (
-          <Card className="p-6 text-center">
+          <div className="lanes-panel p-6 text-center">
             <p className="mb-4 text-destructive">{t('overlayEditor.eventSettings.loadFailed')}</p>
-            <Button variant="outline" onClick={() => router.push(`/overlays/${id}`)}>
+            <button className="lanes-btn ghost" onClick={() => router.push(`/overlays/${id}`)}>
               {t('overlayEditor.eventSettings.back')}
-            </Button>
-          </Card>
+            </button>
+          </div>
         ) : (
-          <Card className="overflow-hidden">
+          <div className="lanes-panel overflow-hidden">
             {/* Platform tabs */}
             <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as Tab)}>
               <TabsList
                 variant="line"
-                className="w-full justify-start overflow-x-auto border-b border-border"
+                className="h-auto w-full justify-start overflow-x-auto border-b border-white/20"
               >
                 {TAB_IDS.map((tab) => (
-                  <TabsTrigger key={tab} value={tab} className={TAB_ACTIVE_COLOR[tab]}>
+                  <TabsTrigger
+                    key={tab}
+                    value={tab}
+                    className={cn('rounded-none', TAB_ACTIVE_COLOR[tab])}
+                  >
                     {tab === 'global'
                       ? t('overlayEditor.eventSettings.tabGlobal')
                       : t(`common.platforms.${tab}`)}
@@ -323,7 +320,7 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
               {/* Global tab */}
               {activeTab === 'global' && (
                 <div>
-                  <p className="mb-3 text-xs font-semibold tracking-wide text-text-sub uppercase">
+                  <p className="text-sub mb-3 text-xs font-semibold tracking-wide uppercase">
                     {t('overlayEditor.eventSettings.systemEventsHeading')}
                   </p>
                   <EventToggle
@@ -332,7 +329,7 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
                     value={settings.enable_token_warnings}
                     onChange={(v) => update('enable_token_warnings', v)}
                   />
-                  <p className="mt-6 mb-3 text-xs font-semibold tracking-wide text-text-sub uppercase">
+                  <p className="text-sub mt-6 mb-3 text-xs font-semibold tracking-wide uppercase">
                     {t('overlayEditor.eventSettings.displaySettingsHeading')}
                   </p>
                   <NumberInput
@@ -344,43 +341,29 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
                     step={0.1}
                     onChange={(v) => update('event_display_duration_multiplier', v)}
                   />
-                  <div className="mt-6 space-y-1.5 rounded-lg border border-border bg-surface-2 p-4 text-xs text-text-sub">
-                    <p className="mb-2 font-semibold text-text">
+                  <div className="text-sub mt-6 space-y-1.5 border border-white/20 p-4 text-xs">
+                    <p className="mb-2 font-semibold">
                       {t('overlayEditor.eventSettings.tiersHeading')}
                     </p>
                     <p>
                       {interpolateElements(t('overlayEditor.eventSettings.tierHigh'), {
-                        tier: (
-                          <strong className="text-text">
-                            {t('overlayEditor.eventSettings.tierHighName')}
-                          </strong>
-                        ),
+                        tier: <strong>{t('overlayEditor.eventSettings.tierHighName')}</strong>,
                       })}
                     </p>
                     <p>
                       {interpolateElements(t('overlayEditor.eventSettings.tierMedium'), {
-                        tier: (
-                          <strong className="text-text">
-                            {t('overlayEditor.eventSettings.tierMediumName')}
-                          </strong>
-                        ),
+                        tier: <strong>{t('overlayEditor.eventSettings.tierMediumName')}</strong>,
                       })}
                     </p>
                     <p>
                       {interpolateElements(t('overlayEditor.eventSettings.tierLow'), {
-                        tier: (
-                          <strong className="text-text">
-                            {t('overlayEditor.eventSettings.tierLowName')}
-                          </strong>
-                        ),
+                        tier: <strong>{t('overlayEditor.eventSettings.tierLowName')}</strong>,
                       })}
                     </p>
                     <p>
                       {interpolateElements(t('overlayEditor.eventSettings.tierStyling'), {
-                        tierClass: <code className="rounded bg-surface px-1">{TIER_CLASS}</code>,
-                        typeClass: (
-                          <code className="rounded bg-surface px-1">{EVENT_TYPE_CLASS}</code>
-                        ),
+                        tierClass: <code className="bg-white/20 px-1">{TIER_CLASS}</code>,
+                        typeClass: <code className="bg-white/20 px-1">{EVENT_TYPE_CLASS}</code>,
                       })}
                     </p>
                   </div>
@@ -429,7 +412,7 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
                       onChange={(v) => update(key, v)}
                     />
                   ))}
-                  <p className="mt-4 border-t border-border pt-4 text-xs text-text-sub">
+                  <p className="text-sub mt-4 border-t border-white/20 pt-4 text-xs">
                     {t('overlayEditor.eventSettings.kickCaveat')}
                   </p>
                 </div>
@@ -447,7 +430,7 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
                       onChange={(v) => update(key, v)}
                     />
                   ))}
-                  <p className="mt-6 mb-3 text-xs font-semibold tracking-wide text-text-sub uppercase">
+                  <p className="text-sub mt-6 mb-3 text-xs font-semibold tracking-wide uppercase">
                     {t('overlayEditor.eventSettings.advancedHeading')}
                   </p>
                   <NumberInput
@@ -461,19 +444,18 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
                 </div>
               )}
 
-              {/* Actions */}
-              <div className="mt-6 flex gap-3 border-t border-border pt-6">
-                <Button onClick={handleSave} disabled={saving}>
+              <div className="mt-6 flex gap-3 border-t border-white/20 pt-6">
+                <button className="lanes-btn" onClick={handleSave} disabled={saving}>
                   {saving
                     ? t('overlayEditor.eventSettings.saving')
                     : t('overlayEditor.eventSettings.save')}
-                </Button>
-                <Button variant="outline" onClick={() => router.push(`/overlays/${id}`)}>
+                </button>
+                <button className="lanes-btn ghost" onClick={() => router.push(`/overlays/${id}`)}>
                   {t('overlayEditor.eventSettings.cancel')}
-                </Button>
+                </button>
               </div>
             </div>
-          </Card>
+          </div>
         )}
       </div>
     </div>
