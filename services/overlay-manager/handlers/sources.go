@@ -75,6 +75,7 @@ type SourcesHandler struct {
 	// and adding one fails closed.
 	discordChannels discordChannelGuildResolver
 	discordGuilds   discordGuildOwnership
+	platformGate    PlatformSourceGate
 }
 
 // SetDiscordGuard wires the Discord source guard. Injected separately from the constructor
@@ -83,6 +84,41 @@ type SourcesHandler struct {
 func (h *SourcesHandler) SetDiscordGuard(channels discordChannelGuildResolver, guilds discordGuildOwnership) {
 	h.discordChannels = channels
 	h.discordGuilds = guilds
+}
+
+// PlatformSourceGate decides whether a user may add a source on a rollout
+// platform (ADR-0008, the platform_* gate keys). Keyed on the caller, the
+// overlay owner by construction of this route. The default is
+// OpenPlatformSourceGate so local/dry-run deployments stay fully usable;
+// production wires the real gate via SetPlatformGate once the cache is up.
+type PlatformSourceGate interface {
+	// PlatformSourceAllowed reports whether adding a source on this platform
+	// is allowed for this user. Errors fail CLOSED at the call site.
+	PlatformSourceAllowed(ctx context.Context, userID, platform string) (bool, error)
+}
+
+// OpenPlatformSourceGate allows every source add. The default when no
+// feature-gate cache is wired.
+type OpenPlatformSourceGate struct{}
+
+// PlatformSourceAllowed always reports allowed.
+func (OpenPlatformSourceGate) PlatformSourceAllowed(context.Context, string, string) (bool, error) {
+	return true, nil
+}
+
+// SetPlatformGate overrides the rollout-platform source gate (ADR-0008).
+// Call once at startup before serving.
+func (h *SourcesHandler) SetPlatformGate(g PlatformSourceGate) {
+	h.platformGate = g
+}
+
+// platformSourceAllowed applies the rollout gate. A nil gate (direct struct
+// construction, e.g. in tests) reads as open rather than panicking.
+func (h *SourcesHandler) platformSourceAllowed(ctx context.Context, userID, platform string) (bool, error) {
+	if h.platformGate == nil {
+		return true, nil
+	}
+	return h.platformGate.PlatformSourceAllowed(ctx, userID, platform)
 }
 
 // discordChannelEntry is the JSON value stored at discord:channels:{channel_id}.
@@ -99,13 +135,14 @@ type discordChannelEntry struct {
 // TOKEN_ENCRYPTION_KEY_V1 is not configured (tokens stored as plaintext with encryption_version=0).
 func NewSourcesHandler(sourceRepo SourceRepository, overlayRepo OverlayRepository, db *pgxpool.Pool, logger *zap.Logger, redisClient redis.Cmdable, bm *metrics.BusinessMetrics, cipher *encryption.MultiKeyEncryptor) *SourcesHandler {
 	return &SourcesHandler{
-		sourceRepo:  sourceRepo,
-		overlayRepo: overlayRepo,
-		db:          db,
-		redis:       redisClient,
-		logger:      logger,
-		bm:          bm,
-		cipher:      cipher,
+		sourceRepo:   sourceRepo,
+		overlayRepo:  overlayRepo,
+		db:           db,
+		redis:        redisClient,
+		logger:       logger,
+		bm:           bm,
+		cipher:       cipher,
+		platformGate: OpenPlatformSourceGate{},
 	}
 }
 
@@ -575,6 +612,20 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 		channelName = req.ChannelID
 	}
 
+	// Rollout gate (ADR-0008): the expansion platforms (owncast, goodgame, picarto,
+	// facebook, rumble) ship behind a per-platform feature_gates row seeded
+	// premium-only, so a new listener rolls out to a cohort instead of every
+	// overlay at once. Fail closed on a lookup error: "cannot verify" must never
+	// read as "allowed".
+	if allowed, gateErr := h.platformSourceAllowed(c.Request.Context(), userID.(string), req.Platform); gateErr != nil {
+		h.logger.Warn("platform source gate check failed; refusing",
+			zap.String("platform", req.Platform), zap.Error(gateErr))
+		c.JSON(http.StatusForbidden, gin.H{"error": "cannot verify platform availability"})
+		return
+	} else if !allowed {
+		c.JSON(http.StatusForbidden, gin.H{"error": req.Platform + " sources are currently premium-only"})
+		return
+	}
 	// For Twitch, validate that channel_id is a valid username (lowercase alphanumeric + underscore)
 	// This prevents display names from being stored (e.g., "شوشو" instead of "shahin200x")
 	channelID := req.ChannelID
@@ -957,6 +1008,17 @@ func (h *SourcesHandler) HandleAddSourceAuto(c *gin.Context) {
 		channelName = req.ChannelID
 	}
 
+	// Rollout gate (ADR-0008), same check as HandleAddSource: the OAuth-driven
+	// auto-add must clear the same per-platform gate a manual add does.
+	if allowed, gateErr := h.platformSourceAllowed(c.Request.Context(), userID.(string), req.Platform); gateErr != nil {
+		h.logger.Warn("platform source gate check failed; refusing",
+			zap.String("platform", req.Platform), zap.Error(gateErr))
+		c.JSON(http.StatusForbidden, gin.H{"error": "cannot verify platform availability"})
+		return
+	} else if !allowed {
+		c.JSON(http.StatusForbidden, gin.H{"error": req.Platform + " sources are currently premium-only"})
+		return
+	}
 	// For Twitch, validate that channel_id is a valid username (lowercase alphanumeric + underscore)
 	// This prevents display names from being stored (e.g., "شوشو" instead of "shahin200x")
 	channelID := req.ChannelID

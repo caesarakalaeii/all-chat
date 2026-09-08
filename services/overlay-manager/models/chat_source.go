@@ -66,6 +66,9 @@ var validPlatforms = map[string]bool{
 	"discord":        true, // Phase 27: Discord Listener
 	"facebook":       true, // ADR-0060: Facebook Live comments via Graph API; the source IS the streamer's Page
 	"owncast":        true, // ADR-0058: Owncast instance URL as the channel
+	"goodgame":       true, // GoodGame.ru chat websocket; channel key resolves to a numeric chat id
+	"picarto":        true, // ADR-0059: unofficial Picarto pop-out chat websocket
+	"rumble":         true, // ADR-0061: Rumble internal chat pop-up SSE; channel is the numeric chat id
 }
 
 // Validate validates the chat source fields
