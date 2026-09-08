@@ -21,7 +21,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/caesar/all-chat/services/overlay-manager/clients"
@@ -67,6 +69,7 @@ type SourcesHandler struct {
 	logger      *zap.Logger
 	bm          *metrics.BusinessMetrics
 	cipher      *encryption.MultiKeyEncryptor // Encrypts kick_oauth_tokens on write (D-16; nil = no encryption)
+	httpClient  *http.Client                  // Owncast /api/config name resolution (ADR-0058); nil falls back to hostname
 
 	// Discord source guard (ADR-0048). Both nil means Discord sources cannot be validated,
 	// and adding one fails closed.
@@ -647,6 +650,25 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 		// If fetch fails, channelName retains the fallback value (channel_id) — acceptable
 	}
 
+	// Owncast sources carry the INSTANCE URL, not a channel name (ADR-0058):
+	// an Owncast instance serves one stream, so the URL is the channel.
+	// Validate and normalize it, then resolve the display name from the
+	// instance's own /api/config. A fetch failure falls back to the URL
+	// hostname and does NOT fail the add — instances go offline independently
+	// and a temporarily-down server must still be addable.
+	if req.Platform == "owncast" {
+		normalized, normErr := normalizeOwncastInstanceURL(channelID)
+		if normErr != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": normErr.Error()})
+			return
+		}
+		channelID = normalized
+
+		if channelName == "" || channelName == req.ChannelID {
+			channelName = h.resolveOwncastName(c.Request.Context(), normalized)
+		}
+	}
+
 	// Discord sources are acted on by the shared bot, which Discord authorizes instead of the
 	// caller — so nothing upstream refuses a channel the caller has no claim to. Verify guild
 	// ownership here, fail closed. (ADR-0048.)
@@ -1041,4 +1063,79 @@ func (h *SourcesHandler) RegisterRoutes(router gin.IRouter) {
 // RegisterInternalRoutes registers internal source routes (called by other services)
 func (h *SourcesHandler) RegisterInternalRoutes(router gin.IRouter) {
 	router.POST("/sources/auto", h.HandleAddSourceAuto)
+}
+
+// owncastConfigResponse is the subset of /api/config the name resolution uses.
+type owncastConfigResponse struct {
+	Name string `json:"name"`
+}
+
+// normalizeOwncastInstanceURL validates that a channel_id is an http(s) base
+// URL and normalizes it: lowercase host, no trailing slash, no path, no
+// fragment, no credentials. Anything else is rejected with 400 (ADR-0058).
+func normalizeOwncastInstanceURL(input string) (string, error) {
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return "", fmt.Errorf("Owncast instance URL is required")
+	}
+	lower := strings.ToLower(input)
+	if !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "https://") {
+		return "", fmt.Errorf("invalid Owncast instance URL '%s': must start with http:// or https://", input)
+	}
+	u, err := url.Parse(input)
+	if err != nil {
+		return "", fmt.Errorf("invalid Owncast instance URL '%s': %w", input, err)
+	}
+	if u.Host == "" {
+		return "", fmt.Errorf("invalid Owncast instance URL '%s': missing host", input)
+	}
+	if u.Fragment != "" {
+		return "", fmt.Errorf("invalid Owncast instance URL '%s': must not carry a fragment", input)
+	}
+	if u.Path != "" && u.Path != "/" {
+		return "", fmt.Errorf("invalid Owncast instance URL '%s': must be a bare base URL without a path", input)
+	}
+	if u.User != nil {
+		return "", fmt.Errorf("invalid Owncast instance URL '%s': must not carry credentials", input)
+	}
+	return u.Scheme + "://" + strings.ToLower(u.Host), nil
+}
+
+// resolveOwncastName fetches <instance>/api/config and returns its server
+// name. On any failure it falls back to the URL hostname and never errors:
+// a down instance must not block adding the source (ADR-0058).
+func (h *SourcesHandler) resolveOwncastName(ctx context.Context, instanceURL string) string {
+	fallback := instanceURL
+	if u, err := url.Parse(instanceURL); err == nil && u.Host != "" {
+		fallback = u.Host
+	}
+	if h.httpClient == nil {
+		return fallback
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, instanceURL+"/api/config", nil)
+	if err != nil {
+		h.logger.Warn("Owncast /api/config request invalid; using hostname as channel name",
+			zap.String("instance", instanceURL), zap.Error(err))
+		return fallback
+	}
+	resp, err := h.httpClient.Do(req)
+	if err != nil {
+		h.logger.Warn("Owncast /api/config unreachable; using hostname as channel name",
+			zap.String("instance", instanceURL), zap.Error(err))
+		return fallback
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		h.logger.Warn("Owncast /api/config returned non-200; using hostname as channel name",
+			zap.String("instance", instanceURL), zap.Int("status", resp.StatusCode))
+		return fallback
+	}
+	var cfg owncastConfigResponse
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 64*1024)).Decode(&cfg); err != nil || cfg.Name == "" {
+		h.logger.Warn("Owncast /api/config response unusable; using hostname as channel name",
+			zap.String("instance", instanceURL), zap.Error(err))
+		return fallback
+	}
+	return cfg.Name
 }

@@ -65,6 +65,7 @@ var validPlatforms = map[string]bool{
 	"shared_overlay": true, // Phase 16: shared overlay sources
 	"discord":        true, // Phase 27: Discord Listener
 	"facebook":       true, // ADR-0060: Facebook Live comments via Graph API; the source IS the streamer's Page
+	"owncast":        true, // ADR-0058: Owncast instance URL as the channel
 }
 
 // Validate validates the chat source fields
