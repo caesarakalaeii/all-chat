@@ -47,6 +47,9 @@ resources:
   - discord-listener/hpa.yaml
   - discord-listener/servicemonitor.yaml
 
+  # Phase 6 - Facebook Listener (ADR-0060)
+  - facebook-listener/deployment.yaml
+
 commonLabels:
   project: allchat
   managed-by: kustomize
@@ -88,4 +91,7 @@ images:
     newTag: main
   - name: allchat-discord-listener:latest
     newName: ghcr.io/caesarakalaeii/allchat-discord-listener
+    newTag: main
+  - name: allchat-facebook-listener:latest
+    newName: ghcr.io/caesarakalaeii/allchat-facebook-listener
     newTag: main
