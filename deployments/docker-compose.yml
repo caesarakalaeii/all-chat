@@ -364,6 +364,38 @@ services:
       - allchat
     restart: unless-stopped
 
+  # GoodGame Listener (goodgame.ru)
+  goodgame-listener:
+    build:
+      context: ../
+      dockerfile: services/goodgame-listener/Dockerfile
+    container_name: allchat-goodgame-listener
+    environment:
+      PORT: "8096"
+      LOG_LEVEL: "info"
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: allchat
+      DATABASE_USER: allchat
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      SOURCE_MANAGER_URL: http://source-manager:8088
+      SOURCE_MANAGER_SECRET: ${SERVICE_JWT_SECRET:?SERVICE_JWT_SECRET is required}
+    ports:
+      - "127.0.0.1:8096:8096"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      source-manager:
+        condition: service_started
+    networks:
+      - allchat
+    restart: unless-stopped
+
   # Frontend (Phase 5)
   frontend:
     build:

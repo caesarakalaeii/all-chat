@@ -47,6 +47,10 @@ resources:
   - discord-listener/hpa.yaml
   - discord-listener/servicemonitor.yaml
 
+  # GoodGame (goodgame.ru) Listener
+  - goodgame-listener/deployment.yaml
+  - goodgame-listener/hpa.yaml
+
 commonLabels:
   project: allchat
   managed-by: kustomize
@@ -88,4 +92,7 @@ images:
     newTag: main
   - name: allchat-discord-listener:latest
     newName: ghcr.io/caesarakalaeii/allchat-discord-listener
+    newTag: main
+  - name: allchat-goodgame-listener:latest
+    newName: ghcr.io/caesarakalaeii/allchat-goodgame-listener
     newTag: main
