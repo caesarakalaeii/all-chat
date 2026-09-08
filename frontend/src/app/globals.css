@@ -1215,17 +1215,28 @@ span.font-semibold.text-sm.username-gradient {
   }
 }
 
-/* Scroll snap: each "frame" (hero stage, sections, final, footer) snaps to
- * the top edge. proximity, not mandatory: sections are taller than the
- * viewport on mobile, and mandatory would lock scrolling inside them. */
+/* Scroll snap: hero, every lanes-section, final and footer are the scroll
+ * frames. end-aligned snapping closes the gap above each frame (tops-only
+ * left dead zones with no snap point, which read as random stops) and makes
+ * consecutive frames chain together at both edges, like a social feed.
+ * proximity, not mandatory: FAQ/ambassadors sections and the theme showcase
+ * can be taller than the viewport, and mandatory would lock scrolling inside
+ * them. Non-frame sections (FAQ, ambassadors) carry no snap alignment, so the
+ * browser falls back to free scrolling around them. */
 html:has(.lanes-home) {
   scroll-snap-type: y proximity;
+  /* The snap area must match what the user sees as the section start, or
+   * snapped sections sit under the fixed hero chrome. */
+  scroll-padding-top: 0;
 }
 .lanes-stage,
 .lanes-section,
 .final,
 .lanes-footer {
-  scroll-snap-align: start;
+  scroll-snap-align: start end;
+  /* No negative margins, no forced heights: sections below the fold scroll
+   * naturally and snap at their boundaries. */
+  scroll-margin-top: 0;
 }
 /* ============================================================
    LANES APP — the lanes art direction on product pages
