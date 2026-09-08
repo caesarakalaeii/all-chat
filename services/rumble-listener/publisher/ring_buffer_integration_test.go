@@ -44,7 +44,7 @@ func TestStreamPublisherPublishWithRingBuffer(t *testing.T) {
 
 	msg := &RawMessage{
 		MessageID:   "test-rb-1",
-		Platform:    "kick",
+		Platform:    "rumble",
 		OverlayID:   "overlay-1",
 		ChannelID:   "xqc",
 		ChannelName: "xqc",
@@ -80,7 +80,7 @@ func TestStreamPublisherStopDrainsBuffer(t *testing.T) {
 
 	msg := &RawMessage{
 		MessageID: "test-stop-1",
-		Platform:  "kick",
+		Platform:  "rumble",
 		OverlayID: "overlay-1",
 		ChannelID: "test",
 		Timestamp: time.Now().UTC(),

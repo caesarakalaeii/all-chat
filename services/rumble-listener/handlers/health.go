@@ -66,9 +66,9 @@ func (h *HealthHandler) LivenessProbe(c *gin.Context) {
 	if h.wsConn.IsStale() {
 		lastAct := h.wsConn.LastActivityAt()
 		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"status":  "dead",
-			"service": "rumble-listener",
-			"reason":  "Pusher WebSocket zombie — no activity for over 5 minutes",
+			"status":                    "dead",
+			"service":                   "rumble-listener",
+			"reason":                    "Pusher WebSocket zombie — no activity for over 5 minutes",
 			"last_activity_seconds_ago": int(time.Since(lastAct).Seconds()),
 		})
 		return

@@ -204,7 +204,7 @@ func main() {
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// Get port
-	port := listener.Env("PORT", "8089")
+	port := listener.Env("PORT", "8098")
 
 	// Create HTTP server
 	srv := &http.Server{

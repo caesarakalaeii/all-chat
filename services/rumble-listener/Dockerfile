@@ -36,11 +36,11 @@ RUN addgroup -g 1000 appuser && \
 USER appuser
 
 # Expose health check port
-EXPOSE 8089
+EXPOSE 8098
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8089/health/live \
-    && wget --no-verbose --tries=1 --spider http://localhost:8089/health/ready || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8098/health/live \
+    && wget --no-verbose --tries=1 --spider http://localhost:8098/health/ready || exit 1
 
 CMD ["./rumble-listener"]

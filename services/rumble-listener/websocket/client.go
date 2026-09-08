@@ -86,12 +86,12 @@ type chatStream struct {
 // NewClient creates an SSE stream client.
 func NewClient(cfg Config, messageHandler MessageHandler, logger *zap.Logger) *Client {
 	return &Client{
-		config:          cfg,
-		messageHandler:  messageHandler,
-		log:             logger,
-		httpClient:      &http.Client{Timeout: defaultHTTPTimeout},
-		streams:         make(map[string]*chatStream),
-		reconnectCh:     make(chan struct{}, 16),
+		config:         cfg,
+		messageHandler: messageHandler,
+		log:            logger,
+		httpClient:     &http.Client{Timeout: defaultHTTPTimeout},
+		streams:        make(map[string]*chatStream),
+		reconnectCh:    make(chan struct{}, 16),
 	}
 }
 

@@ -21,8 +21,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -72,15 +72,15 @@ type Manager struct {
 	httpClient      *http.Client
 	dbConn          DBConnInterface
 	leader          *sourcemanager.LeadershipCoordinator
-	redisClient     *redis.Client               // Redis client for migration confirmations
-	podID           string                      // Pod ID for migration confirmations
-	statusPublisher *status.Publisher           // Publishes platform status to Redis Pub/Sub
+	redisClient     *redis.Client     // Redis client for migration confirmations
+	podID           string            // Pod ID for migration confirmations
+	statusPublisher *status.Publisher // Publishes platform status to Redis Pub/Sub
 	// Coordinator integration
 	assignedSourceIDs       map[string]bool                    // From coordinator
 	demandedSourceIDs       map[string]listener.DemandedSource // nil = no demand filtering
 	filteredAssignmentCount int                                // Number of assigned sources that have database channels
 	migrationMu             sync.RWMutex                       // Protects migration state
-	firstMessageChan        map[int]chan struct{}               // Per-chatroom first message signal (key: chatroom ID)
+	firstMessageChan        map[int]chan struct{}              // Per-chatroom first message signal (key: chatroom ID)
 
 	// Track active subscriptions
 	subscriptions map[string]*trackedChannel // key: channel_slug
@@ -94,7 +94,7 @@ type Manager struct {
 }
 
 // NewManager creates a new channel manager. Rumble chat is read-only and
-// anonymous, so unlike kick-listener there is no OAuth token path.
+// anonymous, so there is no OAuth token path.
 func NewManager(
 	repo *Repository,
 	wsClient WebSocketClient,
@@ -323,7 +323,7 @@ func (m *Manager) listenAndWait(poolInterface interface{}) error {
 		}
 
 		// Only sync when the notification concerns a Kick source.
-		if !isKickNotification(notification.Payload) {
+		if !isRumbleNotification(notification.Payload) {
 			m.logger.Debug("Ignoring source change notification for other platform",
 				zap.String("payload", notification.Payload),
 			)
@@ -348,14 +348,14 @@ type sourceChangePayload struct {
 }
 
 // isKickNotification returns true when the notification payload either cannot be
-// parsed (fail-open: sync anyway) or explicitly belongs to the "kick" platform.
-func isKickNotification(payload string) bool {
+// parsed (fail-open: sync anyway) or explicitly belongs to the "rumble" platform.
+func isRumbleNotification(payload string) bool {
 	var p sourceChangePayload
 	if err := json.Unmarshal([]byte(payload), &p); err != nil {
 		// Unparseable payload — sync to be safe.
 		return true
 	}
-	return p.Platform == "" || p.Platform == "kick"
+	return p.Platform == "" || p.Platform == "rumble"
 }
 
 // sleepWithContext waits for the provided duration or exits if context is canceled
@@ -476,7 +476,7 @@ func (m *Manager) syncChannels() error {
 			// Publish offline status to overlay status indicators
 			if m.statusPublisher != nil {
 				m.statusPublisher.Publish(m.ctx, status.Message{
-					Platform:  "kick",
+					Platform:  "rumble",
 					ChannelID: slug,
 					Status:    "offline",
 				})
@@ -566,7 +566,7 @@ func (m *Manager) syncChannels() error {
 		// Publish connected status to overlay status indicators
 		if m.statusPublisher != nil {
 			m.statusPublisher.Publish(m.ctx, status.Message{
-				Platform:  "kick",
+				Platform:  "rumble",
 				ChannelID: slug,
 				Status:    "connected",
 			})
@@ -764,7 +764,6 @@ func (m *Manager) GetOverlayTargetsForChatroom(chatroomID int) ([]OverlayTarget,
 	return targets, true
 }
 
-
 // SignalFirstMessage should be called when a message is received for a chatroom
 // This is used during migrations to confirm connectivity
 func (m *Manager) SignalFirstMessage(chatroomID int) {
@@ -873,7 +872,7 @@ func (m *Manager) reconcileDemand() {
 
 			if m.statusPublisher != nil {
 				m.statusPublisher.Publish(m.ctx, status.Message{
-					Platform:  "kick",
+					Platform:  "rumble",
 					ChannelID: slug,
 					Status:    "offline",
 				})

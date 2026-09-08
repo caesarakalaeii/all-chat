@@ -25,38 +25,38 @@ import (
 
 var (
 	socketState = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "kick_listener_socket_state",
-		Help: "Current Kick WebSocket connection state (1=connected, 0=disconnected)",
+		Name: "rumble_listener_socket_state",
+		Help: "Current Rumble chat stream connection state (1=connected, 0=disconnected)",
 	})
 
 	reconnectsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "kick_listener_reconnects_total",
+		Name: "rumble_listener_reconnects_total",
 		Help: "Number of WebSocket reconnect attempts",
 	}, []string{"reason"})
 
 	subscriptionEvents = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "kick_listener_subscription_events_total",
+		Name: "rumble_listener_subscription_events_total",
 		Help: "Subscription lifecycle events processed by the channel manager",
 	}, []string{"action"})
 
 	activeSubscriptionsGauge = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "kick_listener_active_subscriptions",
-		Help: "Number of active Kick chat subscriptions",
+		Name: "rumble_listener_active_subscriptions",
+		Help: "Number of active Rumble chat subscriptions",
 	})
 
 	messagesTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "kick_listener_messages_total",
+		Name: "rumble_listener_messages_total",
 		Help: "Count of messages handled by result",
 	}, []string{"status", "reason"})
 
 	publishLatency = promauto.NewHistogram(prometheus.HistogramOpts{
-		Name:    "kick_listener_publish_latency_seconds",
+		Name:    "rumble_listener_publish_latency_seconds",
 		Help:    "Latency from socket receipt to Redis publish",
 		Buckets: prometheus.DefBuckets,
 	})
 
 	droppedMessages = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "kick_listener_dropped_messages_total",
+		Name: "rumble_listener_dropped_messages_total",
 		Help: "Messages dropped before publishing with reason labels",
 	}, []string{"reason"})
 )

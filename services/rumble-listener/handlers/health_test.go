@@ -32,7 +32,7 @@ type stubWSConn struct {
 	stale          bool
 }
 
-func (s *stubWSConn) IsConnected() bool        { return s.connected }
+func (s *stubWSConn) IsConnected() bool         { return s.connected }
 func (s *stubWSConn) LastActivityAt() time.Time { return s.lastActivityAt }
 func (s *stubWSConn) IsStale() bool             { return s.stale }
 

@@ -70,7 +70,7 @@ func (r *Repository) GetActiveChannels(ctx context.Context) ([]*ActiveChannel, e
 			ocs.is_active
 		FROM overlay_chat_sources ocs
 		JOIN overlays o ON ocs.overlay_id = o.id
-		WHERE ocs.platform = 'kick'
+		WHERE ocs.platform = 'rumble'
 		  AND o.is_active = true
 	`
 
@@ -137,7 +137,7 @@ func (r *Repository) UpdateChatroomID(ctx context.Context, overlayID, channelSlu
 		)
 		WHERE overlay_id = $1
 		  AND (channel_handle = $2 OR channel_name = $2)
-		  AND platform = 'kick'
+		  AND platform = 'rumble'
 	`
 
 	result, err := r.db.Exec(ctx, query, overlayID, channelSlug, chatroomID)
@@ -164,7 +164,7 @@ func (r *Repository) SetSourceActive(ctx context.Context, channelSlug string, is
 	query := `
 		UPDATE overlay_chat_sources
 		SET is_active = $1, updated_at = NOW()
-		WHERE platform = 'kick'
+		WHERE platform = 'rumble'
 		  AND (channel_handle = $2 OR channel_name = $2)
 		  AND is_active != $1
 	`
@@ -203,7 +203,7 @@ func (r *Repository) SetSourceActiveByOverlay(ctx context.Context, overlayID, ch
 	query := `
 		UPDATE overlay_chat_sources
 		SET is_active = $1, updated_at = NOW()
-		WHERE platform = 'kick'
+		WHERE platform = 'rumble'
 		  AND overlay_id = $2
 		  AND (channel_handle = $3 OR channel_name = $3)
 		  AND is_active != $1
