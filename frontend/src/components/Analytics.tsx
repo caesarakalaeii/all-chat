@@ -22,10 +22,12 @@
  * Umami Analytics
  *
  * Privacy-friendly, cookieless web analytics, self-hosted at analytics.allch.at.
- * The Website ID and script host are pinned here directly — they aren't secrets
+ * The Website IDs and script host are pinned here directly — they aren't secrets
  * (the ID is sent in every tracking request), and hardcoding them avoids the
  * Next.js build-time-inlining gotcha that comes with NEXT_PUBLIC_* env vars in
  * client components (a runtime/manifest env would never reach the browser).
+ * Prod and beta use separate Umami websites so beta traffic never mixes into
+ * prod stats (see WEBSITE_IDS below).
  *
  * The tracker is only rendered in production builds, so local dev (`next dev`,
  * NODE_ENV=development) ships without analytics.
@@ -47,8 +49,18 @@ import Script from 'next/script'
 import { usePathname } from 'next/navigation'
 import { umamiBeforeSend } from '@/lib/umami-sanitize'
 
-const WEBSITE_ID = 'c7a2e7ad-be45-4de3-954f-f15fd8e7dc97'
 const SRC = 'https://analytics.allch.at/script.js'
+
+// Beta traffic must never land in the prod stats, so each host gets its own
+// Umami website. The beta ID stays empty until a second website is created in
+// the Umami instance — an empty ID means no tracking on that host at all,
+// which already guarantees the separation.
+const PROD_WEBSITE_ID = 'c7a2e7ad-be45-4de3-954f-f15fd8e7dc97'
+const BETA_WEBSITE_ID = ''
+const WEBSITE_IDS: Record<string, string> = {
+  'allch.at': PROD_WEBSITE_ID,
+  'beta.allch.at': BETA_WEBSITE_ID,
+}
 
 // Install the URL sanitiser at module-eval time — this runs during the client
 // bundle bootstrap, before the tracker's `afterInteractive` script can fire its
@@ -63,6 +75,10 @@ export default function Analytics() {
 
   // Local dev / non-production builds → no-op, so dev traffic stays out of stats.
   if (process.env.NODE_ENV !== 'production') return null
+  // Unknown host, or beta without its own Umami website yet → no tracking.
+  if (typeof window === 'undefined') return null
+  const websiteId = WEBSITE_IDS[window.location.hostname]
+  if (!websiteId) return null
 
   // Tag public overlay loads so OBS browser-source traffic stays filterable
   // against real visitors (the path itself collapses to /overlay/:id).
@@ -71,7 +87,7 @@ export default function Analytics() {
   return (
     <Script
       src={SRC}
-      data-website-id={WEBSITE_ID}
+      data-website-id={websiteId}
       data-before-send="__umamiBeforeSend"
       data-exclude-hash="true"
       data-tag={isOverlay ? 'overlay' : undefined}
