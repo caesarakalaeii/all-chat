@@ -88,12 +88,30 @@ func stateOrigin(state *oauth.OAuthState) string {
 	if state == nil {
 		return canonicalFrontendURL()
 	}
-	if origin := normalizeOrigin(state.Origin); origin != "" {
+	if origin := allowlistedOrigin(state.Origin); origin != "" {
+		return origin
+	}
+	return canonicalFrontendURL()
+}
+
+// allowlistedOrigin returns raw as a normalized origin when it is currently
+// allowlisted, "" otherwise. The shared re-check behind stateOrigin and the
+// Discord flow-origin lookup: a stored origin is server-written, but the
+// allowlist may have shrunk between authorize and callback.
+func allowlistedOrigin(raw string) string {
+	if origin := normalizeOrigin(raw); origin != "" {
 		if _, ok := allowedFrontendOrigins()[origin]; ok {
 			return origin
 		}
 	}
-	return canonicalFrontendURL()
+	return ""
+}
+
+// originCallbackURL is the auth callback URI registered at the platform for
+// origin: every allowlisted frontend origin has its own callback registration
+// there, at the same path on its own host.
+func originCallbackURL(origin string, platform oauth.Platform) string {
+	return fmt.Sprintf("%s/api/v1/auth/%s/callback", origin, platform)
 }
 
 // providerForOrigin returns a provider whose redirect_uri points at origin's
@@ -105,7 +123,7 @@ func providerForOrigin(provider oauth.OAuthProvider, platform oauth.Platform, or
 	if origin == canonicalFrontendURL() {
 		return provider
 	}
-	redirectURL := fmt.Sprintf("%s/api/v1/auth/%s/callback", origin, platform)
+	redirectURL := originCallbackURL(origin, platform)
 	switch p := provider.(type) {
 	case *oauth.TwitchOAuth:
 		return p.WithRedirectURL(redirectURL)
