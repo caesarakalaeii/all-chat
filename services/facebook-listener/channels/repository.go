@@ -141,10 +141,3 @@ type PollerState struct {
 	LastSince   string    `json:"last_since"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
-
-// StateStore persists poller state across restarts/replicas.
-type StateStore interface {
-	Get(ctx context.Context, sourceID string) (*PollerState, error)
-	Set(ctx context.Context, sourceID string, state *PollerState) error
-	Clear(ctx context.Context, sourceID string) error
-}
