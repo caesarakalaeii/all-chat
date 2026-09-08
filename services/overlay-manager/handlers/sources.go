@@ -198,6 +198,32 @@ func (h *SourcesHandler) authorizeDiscordChannels(ctx context.Context, userID, c
 	return 0, ""
 }
 
+// authorizeFacebookSource verifies the user has connected Facebook — i.e. a
+// facebook_oauth_tokens row exists for this exact Page (ADR-0060). Fail closed
+// on both the missing row and any DB error: "cannot verify" must never read
+// as "allowed". Returns (0, "") when allowed, or an HTTP status plus message.
+func (h *SourcesHandler) authorizeFacebookSource(ctx context.Context, userID, pageID string) (int, string) {
+	if pageID == "" {
+		return http.StatusBadRequest, "facebook requires a page_id (connect your Facebook Page first)"
+	}
+	if h.db == nil {
+		return http.StatusForbidden, "cannot verify Facebook page ownership"
+	}
+	var exists bool
+	err := h.db.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM facebook_oauth_tokens WHERE user_id = $1 AND page_id = $2)`,
+		userID, pageID,
+	).Scan(&exists)
+	if err != nil {
+		h.logger.Error("Facebook page ownership check failed", zap.String("user_id", userID), zap.String("page_id", pageID), zap.Error(err))
+		return http.StatusForbidden, "cannot verify Facebook page ownership"
+	}
+	if !exists {
+		return http.StatusBadRequest, "connect your Facebook Page before adding a Facebook source"
+	}
+	return 0, ""
+}
+
 // setDiscordChannelRegistry writes the channel registry Redis key and publishes an invalidation event.
 // The key is set BEFORE the Pub/Sub publish so discord-listener always sees a consistent state.
 func (h *SourcesHandler) setDiscordChannelRegistry(ctx context.Context, channelID, overlayID, sourceID string) {
@@ -631,6 +657,20 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 		}
 	}
 
+	// Facebook sources are the streamer's own Page (ADR-0060): channel_id is
+	// the Page id resolved at OAuth callback time, and the write path acts
+	// with the stored Page token. A caller with no facebook_oauth_tokens row
+	// has no provable claim on the Page, so the add fails closed — same shape
+	// as the other OAuth platforms' "connect first" state, but checked here
+	// rather than at the platform, because Graph would happily accept a call
+	// for any Page id with any valid token of the same app.
+	if req.Platform == "facebook" {
+		if status, msg := h.authorizeFacebookSource(c.Request.Context(), userID.(string), channelID); status != 0 {
+			c.JSON(status, gin.H{"error": msg})
+			return
+		}
+	}
+
 	var channelHandle *string
 	if req.ChannelHandle != "" {
 		channelHandle = &req.ChannelHandle
@@ -944,6 +984,14 @@ func (h *SourcesHandler) HandleAddSourceAuto(c *gin.Context) {
 		return
 	}
 
+	// Facebook: same fail-closed ownership check as HandleAddSource (ADR-0060).
+	if req.Platform == "facebook" {
+		if status, msg := h.authorizeFacebookSource(c.Request.Context(), userID.(string), channelID); status != 0 {
+			c.JSON(status, gin.H{"error": msg})
+			return
+		}
+	}
+
 	var channelHandle *string
 	if req.ChannelHandle != "" {
 		channelHandle = &req.ChannelHandle
@@ -955,7 +1003,7 @@ func (h *SourcesHandler) HandleAddSourceAuto(c *gin.Context) {
 		ChannelID:     channelID,
 		ChannelName:   channelName,
 		ChannelHandle: channelHandle,
-		AuthRequired:  req.Platform == "youtube" || req.Platform == "kick",
+		AuthRequired:  req.Platform == "youtube" || req.Platform == "kick" || req.Platform == "facebook",
 		Config:        make(map[string]interface{}),
 		IsActive:      true,
 	}
