@@ -26,7 +26,7 @@
  * Structure:
  *   - LanesHero: five proportional platform lanes under fixed mono chrome.
  *   - Logged-out visitors get the full funnel (convergence, wedge, numbers,
- *     steps, FAQ, ambassadors) ending in the sign-in band; logged-in users
+ *     steps, theme showcase, FAQ, ambassadors) ending in the sign-in band; logged-in users
  *     get the hero's dashboard CTA plus a collapsed "Explore" row, so
  *     discovery stays one click away without re-showing the whole pitch.
  *   - The two display faces (Archivo Black / Space Mono) are scoped here via
@@ -50,6 +50,7 @@ import { FinalSection } from '@/components/home/FinalSection'
 import { LanesHero } from '@/components/home/LanesHero'
 import { NumbersSection } from '@/components/home/NumbersSection'
 import { StepsSection } from '@/components/home/StepsSection'
+import { ThemeShowcaseSection } from '@/components/home/ThemeShowcaseSection'
 import { WedgeSection } from '@/components/home/WedgeSection'
 import { toastManager } from '@/lib/toast'
 import { DISCORD_INVITE_URL } from '@/lib/constants'
@@ -242,6 +243,7 @@ export default function HomeClient() {
               overlaysLive={overlaysLive}
             />
             <StepsSection />
+            <ThemeShowcaseSection />
             <FaqSection />
             <FeaturedAmbassadors />
           </>
