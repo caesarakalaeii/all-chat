@@ -208,11 +208,17 @@ describe('visual customizer property coverage', () => {
       'youtubeBubbleBg',
       'kickBubbleBg',
       'tiktokBubbleBg',
+      'owncastBubbleBg',
+      'goodgameBubbleBg',
+      'picartoBubbleBg',
+      'facebookBubbleBg',
+      'rumbleBubbleBg',
       'discordBubbleBg',
     ] as const) {
       expect(mapped.has(field), `${field} must not be in PROPERTY_MAP`).toBe(false)
     }
   })
+
 
   /**
    * `data-bubble-slot` is assigned from arrival order by BubbleSlotTracker, so a
@@ -235,6 +241,11 @@ describe('visual customizer property coverage', () => {
       'youtubeAccent',
       'kickAccent',
       'tiktokAccent',
+      'owncastAccent',
+      'goodgameAccent',
+      'picartoAccent',
+      'facebookAccent',
+      'rumbleAccent',
       'discordAccent',
     ] as const) {
       expect(OVERRIDDEN_FIELDS.has(field), `${field} must stay forced`).toBe(true)
