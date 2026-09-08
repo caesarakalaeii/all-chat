@@ -298,6 +298,34 @@ services:
       - allchat
     restart: unless-stopped
 
+  # Picarto Listener (unofficial pop-out chat WebSocket, ADR-0059)
+  picarto-listener:
+    build:
+      context: ../
+      dockerfile: services/picarto-listener/Dockerfile
+    container_name: allchat-picarto-listener
+    environment:
+      PORT: "8097"
+      LOG_LEVEL: "info"
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: allchat
+      DATABASE_USER: allchat
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    ports:
+      - "127.0.0.1:8097:8097"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - allchat
+    restart: unless-stopped
+
   # YouTube Listener (Phase 4)
   youtube-listener:
     build:

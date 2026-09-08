@@ -52,6 +52,9 @@ resources:
   # GoodGame (goodgame.ru) Listener
   - goodgame-listener/deployment.yaml
   - goodgame-listener/hpa.yaml
+  # Picarto Listener (unofficial pop-out WebSocket, ADR-0059)
+  - picarto-listener/deployment.yaml
+  - picarto-listener/hpa.yaml
 
 commonLabels:
   project: allchat
@@ -100,4 +103,7 @@ images:
     newTag: main
   - name: allchat-goodgame-listener:latest
     newName: ghcr.io/caesarakalaeii/allchat-goodgame-listener
+    newTag: main
+  - name: allchat-picarto-listener:latest
+    newName: ghcr.io/caesarakalaeii/allchat-picarto-listener
     newTag: main
