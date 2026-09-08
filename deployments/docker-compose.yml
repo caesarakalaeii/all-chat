@@ -364,6 +364,38 @@ services:
       - allchat
     restart: unless-stopped
 
+  # Rumble Listener (ADR-0061 — internal chat pop-up SSE)
+  rumble-listener:
+    build:
+      context: ../
+      dockerfile: services/rumble-listener/Dockerfile
+    container_name: allchat-rumble-listener
+    environment:
+      PORT: "8098"
+      LOG_LEVEL: "info"
+      RUMBLE_SESSION_COOKIE: ${RUMBLE_SESSION_COOKIE:-}
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: allchat
+      DATABASE_USER: allchat
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      SOURCE_MANAGER_URL: http://source-manager:8088
+      SOURCE_MANAGER_SECRET: ${SERVICE_JWT_SECRET:?SERVICE_JWT_SECRET is required}
+    ports:
+      - "127.0.0.1:8098:8098"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      source-manager:
+        condition: service_started
+    networks:
+      - allchat
+
   # Frontend (Phase 5)
   frontend:
     build:

@@ -46,6 +46,9 @@ resources:
   - discord-listener/deployment.yaml
   - discord-listener/hpa.yaml
   - discord-listener/servicemonitor.yaml
+  # Rumble Listener (ADR-0061, internal chat pop-up SSE)
+  - rumble-listener/deployment.yaml
+  - rumble-listener/hpa.yaml
 
 commonLabels:
   project: allchat
@@ -88,4 +91,7 @@ images:
     newTag: main
   - name: allchat-discord-listener:latest
     newName: ghcr.io/caesarakalaeii/allchat-discord-listener
+    newTag: main
+  - name: allchat-rumble-listener:latest
+    newName: ghcr.io/caesarakalaeii/allchat-rumble-listener
     newTag: main
