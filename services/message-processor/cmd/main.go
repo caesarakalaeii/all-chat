@@ -759,17 +759,22 @@ func main() {
 			}
 		}
 
-		// Increment daily platform message counter once per unique message.
+		// Increment the platform message counters once per unique message.
 		// Placed after the overlay loop so multi-overlay fanout counts as one message.
 		// Uses daily buckets (chat:stats:daily:{platform}:{YYYY-MM-DD}) so the
 		// API can sum the last 7 days for a stable rolling window.
 		if publishedToAnyOverlay {
 			day := time.Now().UTC().Format("2006-01-02")
 			statsKey := "chat:stats:daily:" + rawMsg.Platform + ":" + day
+			// Same increment as the weekly buckets, but for the all-time counter
+			// the homepage hero shows (chat:stats:total). Never expires, best-effort:
+			// a missed tick only loses one message off a very large number.
+			totalStatsKey := "chat:stats:total"
 			if redisClient.Incr(ctx, statsKey).Err() == nil {
 				// Each daily bucket expires after 8 days (7d window + 1d grace).
 				redisClient.ExpireNX(ctx, statsKey, 8*24*time.Hour)
 			}
+			redisClient.Incr(ctx, totalStatsKey)
 		}
 
 		return nil

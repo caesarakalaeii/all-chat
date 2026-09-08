@@ -47,13 +47,13 @@ import { useCallback, useEffect, useState } from 'react'
 import { AppNav } from '@/components/AppNav'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { AlertDialog } from '@/components/ui/alert-dialog'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { listDevices, revokeDevice, type PairedDevice } from '@/lib/api/devices'
 import { type TFunction, formatDateTime, useTranslations } from '@/lib/i18n'
 import { interpolateElements } from '@/lib/i18n/emphasise'
 import { toastManager } from '@/lib/toast'
+import { cn } from '@/lib/utils'
+import { archivoBlack, spaceMono } from '@/lib/fonts'
 
 const STREAMDECK_GUIDE =
   'https://github.com/caesarakalaeii/all-chat/blob/main/docs/guides/streamdeck.md'
@@ -84,18 +84,16 @@ function statusOf(t: TFunction, device: PairedDevice): string {
 function EmptyState() {
   const t = useTranslations()
   return (
-    <div className="rounded-lg border border-dashed border-border p-6 text-center">
-      <p className="text-sm font-medium text-text">{t('settings.devices.emptyHeading')}</p>
-      <p className="mx-auto mt-2 max-w-md text-sm text-text-sub">
+    <div className="rounded-none border border-dashed border-white/40 p-6 text-center">
+      <p className="text-sm font-medium">{t('settings.devices.emptyHeading')}</p>
+      <p className="text-sub mx-auto mt-2 max-w-md text-sm">
         {interpolateElements(t('settings.devices.emptyBody'), {
           linkAction: (
-            <strong className="font-medium text-text">
-              {t('settings.devices.emptyLinkAction')}
-            </strong>
+            <strong className="font-medium">{t('settings.devices.emptyLinkAction')}</strong>
           ),
         })}
       </p>
-      <p className="mt-3 text-sm text-text-sub">
+      <p className="text-sub mt-3 text-sm">
         <Link
           href={STREAMDECK_GUIDE}
           target="_blank"
@@ -130,22 +128,20 @@ function DeviceRow({
   const t = useTranslations()
   const live = isLive(device)
   return (
-    <li className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-border px-4 py-3">
+    <li className="flex flex-wrap items-start justify-between gap-3 rounded-none border border-white/40 px-4 py-3">
       <div className="min-w-0">
-        <p className="truncate text-sm font-medium text-text">{device.name}</p>
-        <p className="mt-0.5 text-xs text-text-sub">
+        <p className="truncate text-sm font-medium">{device.name}</p>
+        <p className="text-sub mt-0.5 text-xs">
           {interpolateElements(
             t('settings.devices.controlsOverlay', { status: statusOf(t, device) }),
             {
               overlay: (
-                <span className="font-medium text-text">
-                  {device.overlay_name || device.overlay_id}
-                </span>
+                <span className="font-medium">{device.overlay_name || device.overlay_id}</span>
               ),
             }
           )}
         </p>
-        <p className="mt-0.5 text-xs text-text-sub">
+        <p className="text-sub mt-0.5 text-xs">
           {t('settings.devices.rowDates', {
             lastUsed: device.last_used_at
               ? formatDayOrUnknown(t, device.last_used_at)
@@ -155,24 +151,20 @@ function DeviceRow({
         </p>
         <p className="mt-1 flex flex-wrap gap-1.5">
           {device.scopes.map((scope) => (
-            <span
-              key={scope}
-              className="rounded-full bg-surface-2 px-2 py-0.5 font-mono text-xs text-text-sub"
-            >
+            <span key={scope} className="lanes-chip">
               {scope}
             </span>
           ))}
         </p>
       </div>
       {live && (
-        <Button
-          variant="outline"
-          size="sm"
+        <button
+          className="lanes-btn ghost sm"
           onClick={() => onRevoke(device)}
           aria-label={t('settings.devices.revokeLabel', { name: device.name })}
         >
           {t('settings.devices.revoke')}
-        </Button>
+        </button>
       )}
     </li>
   )
@@ -224,22 +216,22 @@ function DevicesContent() {
   }
 
   return (
-    <div className="min-h-screen bg-bg">
+    <div className={cn('lanes-app min-h-screen', archivoBlack.variable, spaceMono.variable)}>
       <AppNav />
       <main id="main-content" tabIndex={-1} className="mx-auto max-w-2xl space-y-6 px-4 py-12">
         <div>
-          <h1 className="text-2xl font-bold text-text">{t('settings.devices.heading')}</h1>
-          <p className="mt-1 text-sm text-text-sub">{t('settings.devices.subheading')}</p>
+          <h1 className="text-2xl">{t('settings.devices.heading')}</h1>
+          <p className="text-sub mt-1 text-sm">{t('settings.devices.subheading')}</p>
         </div>
 
-        <Card className="p-6">
-          <h2 className="text-lg font-semibold text-text">{t('settings.devices.listHeading')}</h2>
-          <p className="mt-1 mb-4 text-sm text-text-sub">{t('settings.devices.listBody')}</p>
+        <div className="lanes-panel p-6">
+          <h2 className="text-lg">{t('settings.devices.listHeading')}</h2>
+          <p className="text-sub mt-1 mb-4 text-sm">{t('settings.devices.listBody')}</p>
 
           {loading ? (
             <div className="space-y-2" role="status">
-              <Skeleton className="h-20 w-full" />
-              <Skeleton className="h-20 w-full" />
+              <Skeleton className="h-20 w-full rounded-none" />
+              <Skeleton className="h-20 w-full rounded-none" />
               <span className="sr-only">{t('settings.devices.loadingLabel')}</span>
             </div>
           ) : loadError ? (
@@ -255,13 +247,11 @@ function DevicesContent() {
               ))}
             </ul>
           )}
-        </Card>
+        </div>
 
-        <Card className="p-6">
-          <h2 className="text-lg font-semibold text-text">
-            {t('settings.devices.headlessHeading')}
-          </h2>
-          <p className="mt-1 text-sm text-text-sub">
+        <div className="lanes-panel p-6">
+          <h2 className="text-lg">{t('settings.devices.headlessHeading')}</h2>
+          <p className="text-sub mt-1 text-sm">
             {interpolateElements(t('settings.devices.headlessBody'), {
               tokenLink: (
                 <Link
@@ -281,7 +271,7 @@ function DevicesContent() {
               ),
             })}
           </p>
-        </Card>
+        </div>
       </main>
 
       <AlertDialog.Root
@@ -290,7 +280,10 @@ function DevicesContent() {
           if (!open && !revoking) setRevokeTarget(null)
         }}
       >
-        <AlertDialog.Content size="sm">
+        <AlertDialog.Content
+          size="sm"
+          className="rounded-none border-white bg-black text-[#f4f3ef]"
+        >
           <AlertDialog.Title>{t('settings.devices.revokeConfirmTitle')}</AlertDialog.Title>
           <AlertDialog.Description>
             {revokeTarget
@@ -298,17 +291,20 @@ function DevicesContent() {
               : ''}
           </AlertDialog.Description>
           <div className="mt-6 flex justify-end gap-2">
-            <Button
-              variant="outline"
-              size="sm"
+            <button
+              className="lanes-btn ghost sm"
               disabled={revoking}
               onClick={() => setRevokeTarget(null)}
             >
               {t('settings.devices.revokeCancel')}
-            </Button>
-            <Button size="sm" disabled={revoking} onClick={() => void handleConfirmRevoke()}>
+            </button>
+            <button
+              className="lanes-btn danger sm"
+              disabled={revoking}
+              onClick={() => void handleConfirmRevoke()}
+            >
               {revoking ? t('settings.devices.revoking') : t('settings.devices.revokeConfirm')}
-            </Button>
+            </button>
           </div>
         </AlertDialog.Content>
       </AlertDialog.Root>

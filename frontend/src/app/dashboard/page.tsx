@@ -25,8 +25,8 @@ import { MonitorPlay, Plus, Trash2, Puzzle } from 'lucide-react'
 import { useOverlayStore } from '@/lib/stores/overlay-store'
 import { toastManager } from '@/lib/toast'
 import { AppNav } from '@/components/AppNav'
-import { Card } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
+import { archivoBlack, spaceMono } from '@/lib/fonts'
 import { Skeleton } from '@/components/ui/skeleton'
 import { VisuallyHidden } from '@/components/ui/visually-hidden'
 import { Dialog } from '@/components/ui/dialog'
@@ -90,14 +90,14 @@ function OverlayGridSkeleton() {
     <div role="status" className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
       <VisuallyHidden>{t('dashboard.overlays.loading')}</VisuallyHidden>
       {Array.from({ length: 3 }).map((_, i) => (
-        <div key={i} className="overflow-hidden rounded-xl border border-border bg-surface">
-          <div className="h-[3px] w-full bg-surface-2" />
+        <div key={i} className="overflow-hidden border-2 border-white bg-black">
+          <div className="h-[3px] w-full bg-white/20" />
           <div className="space-y-3 p-6">
             <Skeleton className="h-4 w-1/2" />
             <Skeleton className="h-3 w-3/4" />
             <div className="mt-2 flex gap-1.5">
-              <Skeleton className="h-4 w-12 rounded-full" />
-              <Skeleton className="h-4 w-12 rounded-full" />
+              <Skeleton className="h-4 w-12" />
+              <Skeleton className="h-4 w-12" />
             </div>
             <Skeleton className="mt-3 h-3 w-1/3" />
           </div>
@@ -113,17 +113,17 @@ function DashboardEmptyState({ onCreateClick }: { onCreateClick: () => void }) {
   const t = useTranslations()
   return (
     <div className="flex flex-col items-center gap-4 py-24 text-center">
-      <MonitorPlay className="size-16 text-text-dim" strokeWidth={1} aria-hidden="true" />
-      <h2 className="text-xl font-semibold text-text">{t('dashboard.empty.heading')}</h2>
-      <p className="max-w-sm text-sm text-text-sub">{t('dashboard.empty.body')}</p>
+      <MonitorPlay className="text-dim size-16" strokeWidth={1} aria-hidden="true" />
+      <h2 className="text-xl">{t('dashboard.empty.heading')}</h2>
+      <p className="text-sub max-w-sm text-sm">{t('dashboard.empty.body')}</p>
       <div className="mt-2 flex gap-1.5" aria-hidden="true">
         {(['twitch', 'youtube', 'kick', 'tiktok'] as const).map((p) => (
           <PlatformBadge key={p} platform={p} size="sm" />
         ))}
       </div>
-      <Button variant="gradient" size="lg" onClick={onCreateClick} className="mt-4">
+      <button onClick={onCreateClick} className="lanes-btn mt-4">
         {t('dashboard.empty.createFirst')}
-      </Button>
+      </button>
     </div>
   )
 }
@@ -143,16 +143,25 @@ function DeleteOverlayDialog({
   return (
     <Dialog.Root>
       <Dialog.Trigger render={children as React.ReactElement} />
-      <Dialog.Content showCloseButton={false}>
-        <Dialog.Title>{t('dashboard.deleteOverlay.title', { name: overlayName })}</Dialog.Title>
-        <Dialog.Description>{t('dashboard.deleteOverlay.description')}</Dialog.Description>
+      <Dialog.Content
+        showCloseButton={false}
+        className="lanes-app rounded-none border-white bg-black"
+      >
+        <Dialog.Title className="text-lg">
+          {t('dashboard.deleteOverlay.title', { name: overlayName })}
+        </Dialog.Title>
+        <Dialog.Description className="text-sub mt-2 text-sm">
+          {t('dashboard.deleteOverlay.description')}
+        </Dialog.Description>
         <div className="mt-6 flex justify-end gap-3">
           <Dialog.Close
-            render={<Button variant="outline">{t('dashboard.deleteOverlay.cancel')}</Button>}
+            render={
+              <button className="lanes-btn ghost">{t('dashboard.deleteOverlay.cancel')}</button>
+            }
           />
-          <Button variant="destructive" onClick={onDelete}>
+          <button className="lanes-btn danger" onClick={onDelete}>
             {t('dashboard.deleteOverlay.confirm')}
-          </Button>
+          </button>
         </div>
       </Dialog.Content>
     </Dialog.Root>
@@ -254,7 +263,7 @@ function DashboardContent() {
   }))
 
   return (
-    <div className="min-h-screen bg-bg">
+    <div className={cn('lanes-app min-h-screen', archivoBlack.variable, spaceMono.variable)}>
       <AppNav />
       <main id="main-content" tabIndex={-1} className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="mb-4 space-y-4">
@@ -265,11 +274,11 @@ function DashboardContent() {
           <ModeratingElsewhereCard />
         </div>
         <div className="mb-8 flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-text">{t('dashboard.overlays.heading')}</h1>
-          <Button variant="gradient" onClick={() => router.push('/overlays/new')}>
+          <h1 className="text-2xl">{t('dashboard.overlays.heading')}</h1>
+          <button className="lanes-btn" onClick={() => router.push('/overlays/new')}>
             <Plus className="mr-2 size-4" />
             {t('dashboard.overlays.newOverlay')}
-          </Button>
+          </button>
         </div>
 
         {loading ? (
@@ -287,19 +296,17 @@ function DashboardContent() {
         ) : (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
             {overlaysWithSources.map((overlay) => (
-              <Card
+              <div
                 key={overlay.id}
-                interactive
-                className="group cursor-pointer overflow-hidden"
+                className="lanes-panel group cursor-pointer overflow-hidden"
                 onClick={() => router.push(`/overlays/${overlay.id}`)}
               >
-                <div style={{ height: '3px', ...getTopBorderStyle(overlay.sources ?? []) }} />
                 <div className="p-6">
                   <div className="mb-3 flex items-start justify-between">
                     <div className="flex min-w-0 items-center gap-2">
-                      <h3 className="truncate font-semibold text-text">{overlay.name}</h3>
+                      <h3 className="truncate">{overlay.name}</h3>
                       {overlay.is_public_for_viewers && (
-                        <span className="inline-flex shrink-0 items-center gap-1 rounded border border-twitch/30 bg-twitch/15 px-1.5 py-0.5 text-[10px] font-semibold text-twitch">
+                        <span className="lanes-chip shrink-0 text-twitch">
                           <Puzzle className="size-2.5" />
                           {t('dashboard.overlays.extensionBadge')}
                         </span>
@@ -309,15 +316,13 @@ function DashboardContent() {
                       overlayName={overlay.name}
                       onDelete={() => handleDelete(overlay.id)}
                     >
-                      <Button
-                        variant="ghost"
-                        size="icon"
+                      <button
+                        className="lanes-btn ghost sm shrink-0"
                         onClick={(e: React.MouseEvent) => e.stopPropagation()}
                         aria-label={t('dashboard.overlays.deleteLabel', { name: overlay.name })}
-                        className="shrink-0 text-text-dim hover:text-destructive"
                       >
                         <Trash2 className="size-4" />
-                      </Button>
+                      </button>
                     </DeleteOverlayDialog>
                   </div>
                   {/* A parked YouTube channel, which nothing on this page used to show.
@@ -333,7 +338,7 @@ function DashboardContent() {
                     ))}
                   </div>
                   <div className="flex items-center justify-between">
-                    <p className="text-xs text-text-dim">
+                    <p className="text-dim text-xs">
                       {t(
                         (overlay.sources?.length ?? 0) === 1
                           ? 'dashboard.overlays.sourceCountOne'
@@ -342,22 +347,18 @@ function DashboardContent() {
                       )}
                     </p>
                     {overlay.is_public_for_viewers ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="-mr-2 gap-1.5 text-xs text-text-sub hover:text-destructive"
+                      <button
+                        className="lanes-btn ghost -mr-2 px-3 py-1 text-xs text-youtube"
                         onClick={(e: React.MouseEvent) => {
                           e.stopPropagation()
                           handleUnsetPublic(overlay.id)
                         }}
                       >
                         {t('dashboard.overlays.deactivateExtension')}
-                      </Button>
+                      </button>
                     ) : (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="-mr-2 gap-1.5 text-xs text-text-sub hover:text-twitch"
+                      <button
+                        className="lanes-btn ghost -mr-2 px-3 py-1 text-xs text-twitch"
                         onClick={(e: React.MouseEvent) => {
                           e.stopPropagation()
                           handleSetPublic(overlay.id)
@@ -365,11 +366,11 @@ function DashboardContent() {
                       >
                         <Puzzle className="size-3" />
                         {t('dashboard.overlays.setAsExtension')}
-                      </Button>
+                      </button>
                     )}
                   </div>
                 </div>
-              </Card>
+              </div>
             ))}
           </div>
         )}

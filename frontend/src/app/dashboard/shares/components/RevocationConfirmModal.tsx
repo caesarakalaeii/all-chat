@@ -21,7 +21,6 @@
 import { useState } from 'react'
 import { toastManager } from '@/lib/toast'
 import { sharesApi } from '@/lib/api/shares'
-import { Button } from '@/components/ui/button'
 import { AlertDialog } from '@/components/ui/alert-dialog'
 import { useTranslations } from '@/lib/i18n'
 
@@ -54,10 +53,9 @@ export function RevocationConfirmModal({
       setLoading(false)
     }
   }
-
   return (
     <AlertDialog.Root open onOpenChange={(open) => !open && onClose()}>
-      <AlertDialog.Content>
+      <AlertDialog.Content className="lanes-app rounded-none border-white bg-black">
         <AlertDialog.Title className="mb-4 text-xl">
           {t('dashboard.shares.revokeTitle', { partner: partnerName })}
         </AlertDialog.Title>
@@ -66,17 +64,12 @@ export function RevocationConfirmModal({
         </AlertDialog.Description>
         {/* Cancel first in DOM order: least-destructive action receives initial focus */}
         <div className="flex gap-3">
-          <Button variant="outline" className="flex-1" onClick={onClose} disabled={loading}>
+          <button className="lanes-btn ghost flex-1" onClick={onClose} disabled={loading}>
             {t('dashboard.shares.revokeCancel')}
-          </Button>
-          <Button
-            variant="destructive"
-            className="flex-1"
-            onClick={handleRevoke}
-            disabled={loading}
-          >
+          </button>
+          <button className="lanes-btn danger flex-1" onClick={handleRevoke} disabled={loading}>
             {loading ? t('dashboard.shares.revoking') : t('dashboard.shares.revokeConfirm')}
-          </Button>
+          </button>
         </div>
       </AlertDialog.Content>
     </AlertDialog.Root>

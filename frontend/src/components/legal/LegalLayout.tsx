@@ -20,6 +20,8 @@ import Link from 'next/link'
 import { AppNav } from '@/components/AppNav'
 import { LegalThemeToggle } from '@/components/legal/LegalThemeToggle'
 import { getTranslations } from '@/lib/i18n'
+import { cn } from '@/lib/utils'
+import { archivoBlack, spaceMono } from '@/lib/fonts'
 
 interface LegalLayoutProps {
   title: string
@@ -31,40 +33,33 @@ export default function LegalLayout({ title, lastUpdated, children }: LegalLayou
   // getTranslations, not the hook: the legal routes are Server Components.
   const t = getTranslations()
   return (
-    <div id="legal-wrapper" className="min-h-screen bg-bg transition-colors duration-300">
+    <div
+      id="legal-wrapper"
+      className={cn('lanes-app min-h-screen', archivoBlack.variable, spaceMono.variable)}
+    >
       <AppNav />
       <div className="mx-auto max-w-4xl px-4 py-12">
-        <div className="rounded-xl border border-border bg-surface p-8 transition-colors duration-300 md:p-12">
+        <div className="lanes-panel p-8 md:p-12">
           <div className="mb-8 flex items-start justify-between">
             <div className="space-y-2">
-              <p className="text-xs font-semibold tracking-[0.2em] text-twitch uppercase">
-                {t('legal.layout.eyebrow')}
-              </p>
-              <h1 className="text-3xl font-bold text-text">{title}</h1>
-              <p className="text-sm text-text-dim">
+              <span className="mono-label">{t('legal.layout.eyebrow')}</span>
+              <h1 className="text-3xl">{title}</h1>
+              <p className="text-dim text-sm">
                 {t('legal.layout.lastUpdated', { date: lastUpdated })}
               </p>
             </div>
             <LegalThemeToggle />
           </div>
 
-          <div className="legal-prose space-y-10 leading-relaxed text-text-sub">{children}</div>
+          <div className="legal-prose text-sub space-y-10 leading-relaxed">{children}</div>
 
-          <div className="mt-12 flex flex-col gap-3 border-t border-border pt-6 text-sm text-text-dim sm:flex-row sm:items-center sm:justify-between">
+          <div className="text-dim mt-12 flex flex-col gap-3 border-t border-white/20 pt-6 text-sm sm:flex-row sm:items-center sm:justify-between">
             <span>{t('legal.layout.copyright', { year: new Date().getFullYear() })}</span>
             <div className="flex flex-wrap items-center gap-4">
-              <Link href="/" className="transition-colors hover:text-text">
-                {t('legal.layout.homeLink')}
-              </Link>
-              <Link href="/legal/privacy" className="transition-colors hover:text-text">
-                {t('legal.layout.privacyLink')}
-              </Link>
-              <Link href="/legal/terms" className="transition-colors hover:text-text">
-                {t('legal.layout.termsLink')}
-              </Link>
-              <Link href="/legal/impressum" className="transition-colors hover:text-text">
-                {t('legal.layout.impressumLink')}
-              </Link>
+              <Link href="/">{t('legal.layout.homeLink')}</Link>
+              <Link href="/legal/privacy">{t('legal.layout.privacyLink')}</Link>
+              <Link href="/legal/terms">{t('legal.layout.termsLink')}</Link>
+              <Link href="/legal/impressum">{t('legal.layout.impressumLink')}</Link>
             </div>
           </div>
         </div>

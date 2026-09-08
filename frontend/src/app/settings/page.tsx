@@ -26,8 +26,6 @@ import { authApi } from '@/lib/api/auth'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { useOnboardingStore } from '@/lib/stores/onboarding-store'
 import { AppNav } from '@/components/AppNav'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { Dialog } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { VisuallyHidden } from '@/components/ui/visually-hidden'
@@ -44,6 +42,8 @@ import {
 } from '@/lib/api/discord'
 import type { DiscordGuild, DiscordIdentity } from '@/lib/api/discord'
 import { useTranslations } from '@/lib/i18n'
+import { cn } from '@/lib/utils'
+import { archivoBlack, spaceMono } from '@/lib/fonts'
 
 function SettingsContent() {
   const t = useTranslations()
@@ -204,16 +204,14 @@ function SettingsContent() {
   if (!user) return null
 
   return (
-    <div className="min-h-screen bg-bg">
+    <div className={cn('lanes-app min-h-screen', archivoBlack.variable, spaceMono.variable)}>
       <AppNav />
       <main id="main-content" tabIndex={-1} className="mx-auto max-w-2xl space-y-6 px-4 py-12">
-        <h1 className="text-2xl font-bold text-text">{t('settings.index.heading')}</h1>
+        <h1 className="text-2xl">{t('settings.index.heading')}</h1>
 
         {/* Profile section */}
-        <Card className="p-6">
-          <h2 className="mb-4 text-lg font-semibold text-text">
-            {t('settings.index.profileHeading')}
-          </h2>
+        <div className="lanes-panel p-6">
+          <h2 className="mb-4 text-lg">{t('settings.index.profileHeading')}</h2>
           <div className="space-y-3">
             {user.profile_image_url && (
               <div className="mb-4 flex items-center gap-3">
@@ -224,142 +222,113 @@ function SettingsContent() {
                   height={48}
                   className="rounded-full object-cover"
                 />
-                <span className="text-lg font-medium text-text">{user.display_name}</span>
+                <span className="text-lg font-medium">{user.display_name}</span>
               </div>
             )}
             <div>
-              <span className="text-sm text-text-sub">{t('settings.index.usernameLabel')}</span>
-              <p className="font-medium text-text">{user.username}</p>
+              <span className="text-sub text-sm">{t('settings.index.usernameLabel')}</span>
+              <p className="font-medium">{user.username}</p>
             </div>
             <div>
-              <span className="text-sm text-text-sub">
-                {t('settings.index.primaryPlatformLabel')}
-              </span>
-              <p className="font-medium text-text capitalize">
+              <span className="text-sub text-sm">{t('settings.index.primaryPlatformLabel')}</span>
+              <p className="font-medium capitalize">
                 {user.auth_provider ?? t('settings.index.primaryPlatformUnknown')}
               </p>
             </div>
           </div>
-        </Card>
+        </div>
 
         {/* Setup guide section */}
-        <Card className="p-6">
-          <h2 className="mb-4 text-lg font-semibold text-text">
-            {t('settings.index.setupGuideHeading')}
-          </h2>
+        <div className="lanes-panel p-6">
+          <h2 className="mb-4 text-lg">{t('settings.index.setupGuideHeading')}</h2>
           <div className="flex items-center justify-between gap-4">
-            <p className="text-sm text-text-sub">{t('settings.index.setupGuideBody')}</p>
-            <Button
-              variant="outline"
+            <p className="text-sub text-sm">{t('settings.index.setupGuideBody')}</p>
+            <button
+              className="lanes-btn ghost"
               disabled={restartingGuide}
               onClick={() => void handleRestartGuide()}
             >
               {restartingGuide
                 ? t('settings.index.setupGuideRestarting')
                 : t('settings.index.setupGuideRestart')}
-            </Button>
+            </button>
           </div>
-        </Card>
+        </div>
 
         {/* Premium section */}
-        <Card className="p-6">
-          <h2 className="mb-4 text-lg font-semibold text-text">
-            {t('settings.index.premiumHeading')}
-          </h2>
+        <div className="lanes-panel p-6">
+          <h2 className="mb-4 text-lg">{t('settings.index.premiumHeading')}</h2>
           <div className="flex items-center justify-between gap-4">
-            <p className="text-sm text-text-sub">{t('settings.index.premiumBody')}</p>
-            <Link
-              href="/settings/premium"
-              className="inline-flex items-center justify-center rounded-lg border border-border px-4 py-2 text-sm text-text transition-colors hover:bg-surface-2"
-            >
+            <p className="text-sub text-sm">{t('settings.index.premiumBody')}</p>
+            <Link href="/settings/premium" className="lanes-btn ghost">
               {t('settings.index.premiumManage')}
             </Link>
           </div>
-        </Card>
+        </div>
 
         {/* Paired devices (ADR-0049) — the primary way a Stream Deck or
             StreamController is connected: linking starts in the plugin, is approved at
             /link, and nothing is ever copied or pasted. Listed ABOVE the token card
             because this is the path a streamer should reach for first. */}
-        <Card className="p-6">
-          <h2 className="mb-4 text-lg font-semibold text-text">
-            {t('settings.index.devicesHeading')}
-          </h2>
+        <div className="lanes-panel p-6">
+          <h2 className="mb-4 text-lg">{t('settings.index.devicesHeading')}</h2>
           <div className="flex items-center justify-between gap-4">
-            <p className="text-sm text-text-sub">{t('settings.index.devicesBody')}</p>
-            <Link
-              href="/settings/devices"
-              className="inline-flex shrink-0 items-center justify-center rounded-lg border border-border px-4 py-2 text-sm text-text transition-colors hover:bg-surface-2"
-            >
+            <p className="text-sub text-sm">{t('settings.index.devicesBody')}</p>
+            <Link href="/settings/devices" className="lanes-btn ghost">
               {t('settings.index.devicesManage')}
             </Link>
           </div>
-        </Card>
+        </div>
 
         {/* API tokens section — personal access tokens for the Stream Deck and
             StreamController plugins. Linked from here because a token page nobody
             can find is a token page nobody revokes. Still the supported path for a
             headless box or a second PC, which a loopback redirect cannot reach. */}
-        <Card className="p-6">
-          <h2 className="mb-4 text-lg font-semibold text-text">
-            {t('settings.index.tokensHeading')}
-          </h2>
+        <div className="lanes-panel p-6">
+          <h2 className="mb-4 text-lg">{t('settings.index.tokensHeading')}</h2>
           <div className="flex items-center justify-between gap-4">
-            <p className="text-sm text-text-sub">{t('settings.index.tokensBody')}</p>
-            <Link
-              href="/settings/api-tokens"
-              className="inline-flex shrink-0 items-center justify-center rounded-lg border border-border px-4 py-2 text-sm text-text transition-colors hover:bg-surface-2"
-            >
+            <p className="text-sub text-sm">{t('settings.index.tokensBody')}</p>
+            <Link href="/settings/api-tokens" className="lanes-btn ghost">
               {t('settings.index.tokensManage')}
             </Link>
           </div>
-        </Card>
+        </div>
 
         {/* Ambassador section (ADR-0041) — only for ambassadors; opt in/out of the
             public homepage showcase. */}
         {user.is_ambassador && <AmbassadorSettingsCard />}
 
         {/* Data & Privacy section */}
-        <Card className="p-6">
-          <h2 className="mb-4 text-lg font-semibold text-text">
-            {t('settings.index.privacyHeading')}
-          </h2>
-          <p className="mb-4 text-sm text-text-sub">{t('settings.index.privacyBody')}</p>
+        <div className="lanes-panel p-6">
+          <h2 className="mb-4 text-lg">{t('settings.index.privacyHeading')}</h2>
+          <p className="text-sub mb-4 text-sm">{t('settings.index.privacyBody')}</p>
           <div className="flex flex-col gap-3">
-            <Link
-              href="/legal/privacy"
-              className="inline-flex items-center justify-between rounded-lg border border-border px-4 py-3 text-sm text-text transition-colors hover:bg-surface-2"
-            >
+            <Link href="/legal/privacy" className="lanes-btn ghost justify-between">
               <span>{t('settings.index.privacyPolicyLink')}</span>
               <span aria-hidden="true">→</span>
             </Link>
-            <Link
-              href="/legal/terms"
-              className="inline-flex items-center justify-between rounded-lg border border-border px-4 py-3 text-sm text-text transition-colors hover:bg-surface-2"
-            >
+            <Link href="/legal/terms" className="lanes-btn ghost justify-between">
               <span>{t('settings.index.termsLink')}</span>
               <span aria-hidden="true">→</span>
             </Link>
           </div>
-        </Card>
+        </div>
 
         {/* Discord section */}
-        <Card className="p-6">
-          <h2 className="mb-4 text-lg font-semibold text-text">
-            {t('settings.index.discordHeading')}
-          </h2>
+        <div className="lanes-panel p-6">
+          <h2 className="mb-4 text-lg">{t('settings.index.discordHeading')}</h2>
 
           {guildsLoading ? (
             <div role="status">
               <VisuallyHidden>{t('settings.index.discordServersLoading')}</VisuallyHidden>
-              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full rounded-none" />
             </div>
           ) : guilds.length === 0 ? (
             <div className="flex items-center justify-between">
-              <p className="text-sm text-text-sub">{t('settings.index.discordNoServer')}</p>
-              <Button onClick={startDiscordOAuth}>
+              <p className="text-sub text-sm">{t('settings.index.discordNoServer')}</p>
+              <button className="lanes-btn" onClick={startDiscordOAuth}>
                 {t('settings.index.discordConnectServer')}
-              </Button>
+              </button>
             </div>
           ) : (
             <div className="space-y-3">
@@ -375,11 +344,11 @@ function SettingsContent() {
                         className="rounded-full object-cover"
                       />
                     ) : (
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-surface text-sm font-medium text-text-sub">
+                      <div className="text-sub flex h-8 w-8 items-center justify-center rounded-full border border-white/40 text-sm font-medium">
                         {guild.guild_name.charAt(0).toUpperCase()}
                       </div>
                     )}
-                    <span className="font-medium text-text">{guild.guild_name}</span>
+                    <span className="font-medium">{guild.guild_name}</span>
                   </div>
                   <Dialog.Root
                     open={disconnectTarget?.guild_id === guild.guild_id}
@@ -389,12 +358,18 @@ function SettingsContent() {
                   >
                     <Dialog.Trigger
                       render={
-                        <Button variant="destructive" onClick={() => setDisconnectTarget(guild)}>
+                        <button
+                          className="lanes-btn danger"
+                          onClick={() => setDisconnectTarget(guild)}
+                        >
                           {t('settings.index.discordDisconnect')}
-                        </Button>
+                        </button>
                       }
                     />
-                    <Dialog.Content showCloseButton={false}>
+                    <Dialog.Content
+                      showCloseButton={false}
+                      className="rounded-none border-white bg-black text-[#f4f3ef]"
+                    >
                       <Dialog.Title>
                         {t('settings.index.discordDisconnectTitle', {
                           guild: guild.guild_name,
@@ -408,23 +383,23 @@ function SettingsContent() {
                       <div className="mt-6 flex justify-end gap-3">
                         <Dialog.Close
                           render={
-                            <Button variant="outline">
+                            <button className="lanes-btn ghost">
                               {t('settings.index.discordDisconnectCancel')}
-                            </Button>
+                            </button>
                           }
                         />
-                        <Button variant="destructive" onClick={handleDisconnectGuild}>
+                        <button className="lanes-btn danger" onClick={handleDisconnectGuild}>
                           {t('settings.index.discordDisconnectConfirm')}
-                        </Button>
+                        </button>
                       </div>
                     </Dialog.Content>
                   </Dialog.Root>
                 </div>
               ))}
               <div className="pt-2">
-                <Button variant="ghost" className="text-sm" onClick={startDiscordOAuth}>
+                <button className="lanes-btn ghost" onClick={startDiscordOAuth}>
                   {t('settings.index.discordConnectAnother')}
-                </Button>
+                </button>
               </div>
             </div>
           )}
@@ -434,18 +409,16 @@ function SettingsContent() {
               records who you are on Discord. Moderation needs both — Discord has no per-user
               moderation API, so the shared bot writes and All-Chat checks real people's server
               permissions itself (ADR-0048). No token is kept. */}
-          <div className="mt-6 border-t border-border pt-4">
-            <h3 className="text-sm font-semibold text-text">
-              {t('settings.index.discordAccountHeading')}
-            </h3>
+          <div className="mt-6 border-t border-white/20 pt-4">
+            <h3 className="text-sm font-semibold">{t('settings.index.discordAccountHeading')}</h3>
             {identityLoading ? (
               <div role="status" className="mt-3">
                 <VisuallyHidden>{t('settings.index.discordAccountLoading')}</VisuallyHidden>
-                <Skeleton className="h-9 w-full" />
+                <Skeleton className="h-9 w-full rounded-none" />
               </div>
             ) : (
               <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-                <p className="text-sm text-text-sub">
+                <p className="text-sub text-sm">
                   {identity?.linked
                     ? t('settings.index.discordAccountLinked', {
                         username:
@@ -455,43 +428,51 @@ function SettingsContent() {
                     : t('settings.index.discordAccountUnlinked')}
                 </p>
                 {identity?.linked ? (
-                  <Button variant="outline" onClick={handleUnlinkDiscordAccount}>
+                  <button className="lanes-btn ghost" onClick={handleUnlinkDiscordAccount}>
                     {t('settings.index.discordAccountUnlink')}
-                  </Button>
+                  </button>
                 ) : (
-                  <Button onClick={() => void startDiscordAccountLink('settings')}>
+                  <button
+                    className="lanes-btn"
+                    onClick={() => void startDiscordAccountLink('settings')}
+                  >
                     {t('settings.index.discordAccountLink')}
-                  </Button>
+                  </button>
                 )}
               </div>
             )}
           </div>
-        </Card>
+        </div>
 
         {/* Danger zone */}
-        <Card className="border-destructive/20 p-6">
-          <h2 className="mb-2 text-lg font-semibold text-destructive">
-            {t('settings.index.dangerHeading')}
-          </h2>
-          <p className="mb-4 text-sm text-text-sub">{t('settings.index.dangerBody')}</p>
+        <div className="lanes-panel p-6">
+          <h2 className="mb-2 text-lg text-[#ff3b30]">{t('settings.index.dangerHeading')}</h2>
+          <p className="text-sub mb-4 text-sm">{t('settings.index.dangerBody')}</p>
           <Dialog.Root>
             <Dialog.Trigger
-              render={<Button variant="destructive">{t('settings.index.deleteAccount')}</Button>}
+              render={
+                <button className="lanes-btn danger">{t('settings.index.deleteAccount')}</button>
+              }
             />
-            <Dialog.Content showCloseButton={false}>
+            <Dialog.Content
+              showCloseButton={false}
+              className="rounded-none border-white bg-black text-[#f4f3ef]"
+            >
               <Dialog.Title>{t('settings.index.deleteConfirmTitle')}</Dialog.Title>
               <Dialog.Description>{t('settings.index.deleteConfirmBody')}</Dialog.Description>
               <div className="mt-6 flex justify-end gap-3">
                 <Dialog.Close
-                  render={<Button variant="outline">{t('settings.index.deleteCancel')}</Button>}
+                  render={
+                    <button className="lanes-btn ghost">{t('settings.index.deleteCancel')}</button>
+                  }
                 />
-                <Button variant="destructive" onClick={handleDeleteAccount}>
+                <button className="lanes-btn danger" onClick={handleDeleteAccount}>
                   {t('settings.index.deleteConfirm')}
-                </Button>
+                </button>
               </div>
             </Dialog.Content>
           </Dialog.Root>
-        </Card>
+        </div>
       </main>
     </div>
   )
