@@ -298,6 +298,15 @@ func main() {
 	defer stopUsageSampler()
 	go usageSampler.Run(usageCtx)
 
+	// Public "streamers on board" figure for the landing page: a small ticker
+	// writing stats:users:total to the shared Redis, read by the gateway's
+	// /api/v1/stats. Same shape as the usage sampler above.
+	userStatsPublisher := usage.NewUserStatsPublisher(userRepo, redisClient, log,
+		time.Duration(getEnvAsIntOrDefault("USER_STATS_INTERVAL_SECONDS", int(usage.UserStatsInterval.Seconds())))*time.Second)
+	userStatsCtx, stopUserStats := context.WithCancel(context.Background())
+	defer stopUserStats()
+	go userStatsPublisher.Run(userStatsCtx)
+
 	healthHandler := handlers.NewHealthHandler(db, redisClient)
 	// audit #20: impersonation tokens are short-lived (default 2h), independent of
 	// the 24h session JWT, so a leaked impersonation token has a small window.

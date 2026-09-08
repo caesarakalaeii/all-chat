@@ -17,7 +17,9 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/caesar/all-chat/services/api-gateway/sessions"
@@ -30,6 +32,15 @@ import (
 type StatsHandler struct {
 	redis  *redis.Client
 	logger *zap.Logger
+
+	// In-process memo for the connected-overlay count. The /stats endpoint is
+	// unauthenticated and hit by every landing-page visit, while the SCAN it
+	// needs is O(keyspace); a short TTL bounds both costs without making the
+	// number meaningfully stale ("live right now" survives 30s of lag).
+	overlayCount     int64
+	overlayCountAt   time.Time
+	overlayCountTTL  time.Duration
+	overlayCountLock sync.Mutex
 }
 
 // NewStatsHandler creates a StatsHandler.
@@ -37,15 +48,27 @@ func NewStatsHandler(redis *redis.Client, logger *zap.Logger) *StatsHandler {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	return &StatsHandler{redis: redis, logger: logger}
+	return &StatsHandler{redis: redis, logger: logger, overlayCountTTL: 30 * time.Second}
 }
 
-// GetPlatformStats returns message counts per platform for the last 7 days.
+// PlatformStats is the public /stats response: per-platform message volumes
+// for the last 7 days plus the landing-page counters.
+type PlatformStats struct {
+	Platforms map[string]int64 `json:"platforms"`
+	AllTime   int64            `json:"all_time"`
+	Users     int64            `json:"users"`
+	// OverlaysLive is the number of overlays with an active WebSocket
+	// connection right now (memoized briefly, see StatsHandler).
+	OverlaysLive int64 `json:"overlays_live"`
+}
+
+// GetPlatformStats returns message counts per platform for the last 7 days
+// plus the all-time, user and live-overlay counters.
 // GET /api/v1/stats — public, no auth required.
 func (h *StatsHandler) GetPlatformStats(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	platforms := []string{"twitch", "youtube", "kick", "tiktok"}
+	platforms := []string{"twitch", "youtube", "kick", "tiktok", "discord"}
 	result := make(map[string]int64, len(platforms))
 
 	// Build list of the last 7 daily bucket suffixes (YYYY-MM-DD).
@@ -66,7 +89,47 @@ func (h *StatsHandler) GetPlatformStats(c *gin.Context) {
 		result[platform] = total
 	}
 
-	c.JSON(http.StatusOK, result)
+	stats := PlatformStats{
+		Platforms:    result,
+		AllTime:      h.redisGetInt(ctx, "chat:stats:total"),
+		Users:        h.redisGetInt(ctx, "stats:users:total"),
+		OverlaysLive: h.connectedOverlayCount(ctx),
+	}
+
+	c.JSON(http.StatusOK, stats)
+}
+
+// redisGetInt reads a counter key, treating missing and unreadable alike as 0:
+// these are decorative landing-page numbers, and a Redis blip must not 500 the
+// page over them.
+func (h *StatsHandler) redisGetInt(ctx context.Context, key string) int64 {
+	val, err := h.redis.Get(ctx, key).Int64()
+	if err != nil {
+		return 0
+	}
+	return val
+}
+
+// connectedOverlayCount returns the number of overlays with an active
+// WebSocket connection, memoized for overlayCountTTL.
+func (h *StatsHandler) connectedOverlayCount(ctx context.Context) int64 {
+	h.overlayCountLock.Lock()
+	defer h.overlayCountLock.Unlock()
+
+	if time.Since(h.overlayCountAt) < h.overlayCountTTL {
+		return h.overlayCount
+	}
+
+	ids, err := h.scanActiveOverlayIDs(ctx)
+	if err != nil {
+		// Keep the last good value on failure; before the first success that
+		// is 0, which is honest ("we could not count") rather than alarming.
+		h.logger.Warn("failed to scan connected overlays; keeping last count", zap.Error(err))
+		return h.overlayCount
+	}
+	h.overlayCount = int64(len(ids))
+	h.overlayCountAt = time.Now()
+	return h.overlayCount
 }
 
 // ActiveOverlay describes an overlay with a live WebSocket connection.
@@ -86,34 +149,10 @@ type ActiveOverlay struct {
 func (h *StatsHandler) GetActiveOverlays(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	// SCAN guarantees full coverage but not uniqueness (a key can repeat across
-	// batches during rehashing), so de-duplicate to avoid duplicate rows and
-	// redundant lookups.
-	var activeIDs []string
-	seen := make(map[string]struct{})
-	var cursor uint64
-	for {
-		keys, next, err := h.redis.Scan(ctx, cursor, "overlay:connected:*", 100).Result()
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to scan active overlays"})
-			return
-		}
-		for _, key := range keys {
-			// key format: "overlay:connected:{id}"
-			id := key[len("overlay:connected:"):]
-			if id == "" {
-				continue
-			}
-			if _, dup := seen[id]; dup {
-				continue
-			}
-			seen[id] = struct{}{}
-			activeIDs = append(activeIDs, id)
-		}
-		cursor = next
-		if cursor == 0 {
-			break
-		}
+	activeIDs, err := h.scanActiveOverlayIDs(ctx)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to scan active overlays"})
+		return
 	}
 
 	overlays := make([]ActiveOverlay, 0, len(activeIDs))
@@ -156,4 +195,38 @@ func (h *StatsHandler) GetActiveOverlays(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, overlays)
+}
+
+// scanActiveOverlayIDs returns the de-duplicated overlay IDs that currently
+// have an overlay:connected:* key (i.e. a live WebSocket connection).
+func (h *StatsHandler) scanActiveOverlayIDs(ctx context.Context) ([]string, error) {
+	// SCAN guarantees full coverage but not uniqueness (a key can repeat across
+	// batches during rehashing), so de-duplicate to avoid duplicate rows and
+	// redundant lookups.
+	var activeIDs []string
+	seen := make(map[string]struct{})
+	var cursor uint64
+	for {
+		keys, next, err := h.redis.Scan(ctx, cursor, "overlay:connected:*", 100).Result()
+		if err != nil {
+			return nil, err
+		}
+		for _, key := range keys {
+			// key format: "overlay:connected:{id}"
+			id := key[len("overlay:connected:"):]
+			if id == "" {
+				continue
+			}
+			if _, dup := seen[id]; dup {
+				continue
+			}
+			seen[id] = struct{}{}
+			activeIDs = append(activeIDs, id)
+		}
+		cursor = next
+		if cursor == 0 {
+			break
+		}
+	}
+	return activeIDs, nil
 }
