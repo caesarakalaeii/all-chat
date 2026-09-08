@@ -82,6 +82,11 @@ FRONTEND_URL=http://localhost:3000
 PORT=8081
 LOG_LEVEL=info  # debug, info, warn, error
 
+# Extra first-party frontend origins (e.g. the beta deployment), comma-separated.
+# OAuth flows started from one of these hosts use its registered callback URI
+# and redirect back to it; FRONTEND_URL stays the canonical fallback.
+# FRONTEND_URLS=https://allch.at,https://beta.allch.at
+
 # OpenTelemetry tracing
 OTEL_ENABLED=false
 OTEL_EXPORTER_OTLP_ENDPOINT=localhost:4317

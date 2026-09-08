@@ -264,3 +264,47 @@ func TestProxyHandler_BackendUnavailable(t *testing.T) {
 	assert.Equal(t, http.StatusBadGateway, w.Code)
 	assert.Contains(t, w.Body.String(), "backend service unavailable")
 }
+
+// The gateway rebuilds the request, so the original Host would be lost without
+// X-Forwarded-Host. The auth-service picks the OAuth redirect target from it.
+func TestProxyHandler_ForwardsOriginalHost(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	var gotForwardedHost string
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotForwardedHost = r.Header.Get("X-Forwarded-Host")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	registry := &models.ServiceRegistry{
+		Services: map[string]*models.ServiceConfig{
+			"auth-service": {
+				Name:       "auth-service",
+				BaseURL:    backend.URL,
+				PathPrefix: "/api/v1/auth",
+			},
+		},
+	}
+
+	handler := NewProxyHandler(registry)
+	router := gin.New()
+	router.Any("/api/v1/*path", handler.ForwardRequest)
+
+	// Original host wins…
+	req := httptest.NewRequest(http.MethodGet, "http://allch.at/api/v1/auth/twitch/login", nil)
+	req.Host = "allch.at"
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "allch.at", gotForwardedHost)
+
+	// …and a client-supplied X-Forwarded-Host can never override it.
+	req = httptest.NewRequest(http.MethodGet, "http://allch.at/api/v1/auth/twitch/login", nil)
+	req.Host = "allch.at"
+	req.Header.Set("X-Forwarded-Host", "evil.example.com")
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "allch.at", gotForwardedHost)
+}

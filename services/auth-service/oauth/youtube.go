@@ -76,6 +76,15 @@ func NewYouTubeOAuth(clientID, clientSecret, redirectURL string) *YouTubeOAuth {
 	}
 }
 
+// WithRedirectURL returns a copy that redirects to redirectURL instead. Used to
+// point one deployment's OAuth flow at a second frontend origin (beta.allch.at)
+// whose callback URI is registered separately with the provider.
+func (y *YouTubeOAuth) WithRedirectURL(redirectURL string) *YouTubeOAuth {
+	config := *y.config
+	config.RedirectURL = redirectURL
+	return &YouTubeOAuth{config: &config, client: y.client}
+}
+
 // GetAuthURL generates the OAuth authorization URL
 // Uses "select_account" prompt to support incremental authorization.
 // This allows users to choose their account without forcing re-consent on every login,

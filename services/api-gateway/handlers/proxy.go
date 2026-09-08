@@ -110,6 +110,12 @@ func (p *ProxyHandler) ForwardRequest(c *gin.Context) {
 	// Copy headers from original request (strips sensitive client headers: L17)
 	copyHeaders(backendReq.Header, c.Request.Header)
 
+	// backendReq was built fresh, so its Host is the backend's — the original
+	// host is lost. Backends that serve more than one frontend origin (the
+	// auth-service picking an OAuth redirect target) recover it from here. Set
+	// after copyHeaders so a client-supplied X-Forwarded-Host cannot win.
+	backendReq.Header.Set("X-Forwarded-Host", c.Request.Host)
+
 	// Forward request to backend
 	backendResp, err := p.client.Do(backendReq)
 	if err != nil {

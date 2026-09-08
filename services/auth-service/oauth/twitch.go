@@ -70,6 +70,15 @@ func NewTwitchOAuth(clientID, clientSecret, redirectURL string) *TwitchOAuth {
 	}
 }
 
+// WithRedirectURL returns a copy that redirects to redirectURL instead. Used to
+// point one deployment's OAuth flow at a second frontend origin (beta.allch.at)
+// whose callback URI is registered separately with the provider.
+func (t *TwitchOAuth) WithRedirectURL(redirectURL string) *TwitchOAuth {
+	config := *t.config
+	config.RedirectURL = redirectURL
+	return &TwitchOAuth{config: &config, client: t.client}
+}
+
 // GetAuthURL generates the OAuth authorization URL
 func (t *TwitchOAuth) GetAuthURL(state string) string {
 	return t.config.AuthCodeURL(state)
