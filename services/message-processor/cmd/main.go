@@ -167,6 +167,7 @@ func main() {
 	kickNormalizer := normalizer.NewKickNormalizer()
 	systemNormalizer := normalizer.NewSystemNormalizer()
 	discordNormalizer := normalizer.NewDiscordNormalizer()
+	rumbleNormalizer := normalizer.NewRumbleNormalizer()
 
 	// Map of platform-specific normalizers
 	normalizers := map[string]normalizer.Normalizer{
@@ -176,6 +177,7 @@ func main() {
 		"kick":    kickNormalizer,
 		"system":  systemNormalizer,
 		"discord": discordNormalizer,
+		"rumble":  rumbleNormalizer,
 	}
 
 	emoteServiceURL := getEnvOrDefault("EMOTE_SERVICE_URL", "http://localhost:8083")
