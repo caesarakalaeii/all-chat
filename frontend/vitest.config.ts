@@ -22,6 +22,7 @@ export default defineConfig({
           include: ['src/**/__tests__/**/*.test.ts', 'src/**/__tests__/**/*.test.tsx'],
           alias: {
             '@': path.join(dirname, 'src'),
+            'next/font/google': path.join(dirname, 'src/__tests__/__mocks__/next-font-google.ts'),
           },
         },
       },

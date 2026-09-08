@@ -30,8 +30,8 @@ export const metadata = {
   alternates: { canonical: '/legal/terms' },
 }
 
-const listClasses = 'list-disc pl-6 space-y-1 text-text-sub'
-const linkClasses = 'text-twitch underline decoration-twitch/30 underline-offset-4'
+const listClasses = 'list-disc pl-6 space-y-1 text-sub'
+const linkClasses = 'underline decoration-white/40 underline-offset-4'
 
 const SUPPORT_MAILTO = 'mailto:all.chat.support@gmail.com'
 
@@ -53,7 +53,7 @@ export default function TermsOfServicePage() {
   return (
     <LegalLayout title={t('legal.terms.title')} lastUpdated={t('legal.terms.lastUpdated')}>
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">{t('legal.terms.acceptanceHeading')}</h2>
+        <h2 className="text-2xl">{t('legal.terms.acceptanceHeading')}</h2>
         <p>
           {emphasise(
             t('legal.terms.acceptanceBody', { privacy: privacyLinkText }),
@@ -64,12 +64,12 @@ export default function TermsOfServicePage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">{t('legal.terms.descriptionHeading')}</h2>
+        <h2 className="text-2xl">{t('legal.terms.descriptionHeading')}</h2>
         <p>{t('legal.terms.descriptionBody')}</p>
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">{t('legal.terms.accountsHeading')}</h2>
+        <h2 className="text-2xl">{t('legal.terms.accountsHeading')}</h2>
         <p>{t('legal.terms.accountsIntro')}</p>
         <ul className={listClasses}>
           <li>{t('legal.terms.accountsAccurate')}</li>
@@ -86,9 +86,7 @@ export default function TermsOfServicePage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">
-          {t('legal.terms.acceptableUseHeading')}
-        </h2>
+        <h2 className="text-2xl">{t('legal.terms.acceptableUseHeading')}</h2>
         <p>{t('legal.terms.acceptableUseIntro')}</p>
         <ul className={listClasses}>
           <li>{t('legal.terms.acceptableUseLaws')}</li>
@@ -101,14 +99,14 @@ export default function TermsOfServicePage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">{t('legal.terms.thirdPartyHeading')}</h2>
+        <h2 className="text-2xl">{t('legal.terms.thirdPartyHeading')}</h2>
         <p>{t('legal.terms.thirdPartyIntro')}</p>
         <ul className={listClasses}>
           <li>{t('legal.terms.thirdPartyComply')}</li>
           <li>{t('legal.terms.thirdPartyOutages')}</li>
           <li>{t('legal.terms.thirdPartyQuotas')}</li>
         </ul>
-        <p className="font-semibold text-text">
+        <p className="font-semibold">
           {interpolateElements(t('legal.terms.youtubeBinding'), {
             youtubeTerms: (
               <a
@@ -125,21 +123,19 @@ export default function TermsOfServicePage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">{t('legal.terms.privacyHeading')}</h2>
+        <h2 className="text-2xl">{t('legal.terms.privacyHeading')}</h2>
         {/* Two runs in one sentence, so interpolateElements rather than two
             nested emphasise calls. */}
         <p>
           {interpolateElements(t('legal.terms.privacyBody'), {
             privacy: privacyLink,
-            analytics: (
-              <strong className="text-text">{t('legal.terms.privacyAnalyticsEmphasis')}</strong>
-            ),
+            analytics: <strong>{t('legal.terms.privacyAnalyticsEmphasis')}</strong>,
           })}
         </p>
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">{t('legal.terms.licenseHeading')}</h2>
+        <h2 className="text-2xl">{t('legal.terms.licenseHeading')}</h2>
         <p>
           {interpolateElements(t('legal.terms.licenseBody'), {
             license: (
@@ -171,7 +167,7 @@ export default function TermsOfServicePage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">{t('legal.terms.availabilityHeading')}</h2>
+        <h2 className="text-2xl">{t('legal.terms.availabilityHeading')}</h2>
         <p>{t('legal.terms.availabilityIntro')}</p>
         <ul className={listClasses}>
           <li>{t('legal.terms.availabilityUptime')}</li>
@@ -183,26 +179,26 @@ export default function TermsOfServicePage() {
             t('legal.terms.availabilitySupport', { host: t('legal.terms.hostedDomain') }),
             t('legal.terms.hostedDomain'),
             (run) => (
-              <strong className="text-text">{run}</strong>
+              <strong>{run}</strong>
             )
           )}
         </p>
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">{t('legal.terms.liabilityHeading')}</h2>
+        <h2 className="text-2xl">{t('legal.terms.liabilityHeading')}</h2>
         <p>{t('legal.terms.liabilityGross')}</p>
         <p>{t('legal.terms.liabilitySlight')}</p>
         <p>{t('legal.terms.liabilityAgents')}</p>
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">{t('legal.terms.indemnityHeading')}</h2>
+        <h2 className="text-2xl">{t('legal.terms.indemnityHeading')}</h2>
         <p>{t('legal.terms.indemnityBody')}</p>
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">{t('legal.terms.premiumHeading')}</h2>
+        <h2 className="text-2xl">{t('legal.terms.premiumHeading')}</h2>
         <p>
           {interpolateElements(t('legal.terms.premiumBody'), {
             patreon: (
@@ -221,22 +217,22 @@ export default function TermsOfServicePage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">{t('legal.terms.changesHeading')}</h2>
+        <h2 className="text-2xl">{t('legal.terms.changesHeading')}</h2>
         <p>{t('legal.terms.changesBody')}</p>
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">{t('legal.terms.terminationHeading')}</h2>
+        <h2 className="text-2xl">{t('legal.terms.terminationHeading')}</h2>
         <p>{t('legal.terms.terminationBody')}</p>
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">{t('legal.terms.governingLawHeading')}</h2>
+        <h2 className="text-2xl">{t('legal.terms.governingLawHeading')}</h2>
         <p>{t('legal.terms.governingLawBody')}</p>
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">{t('legal.terms.legalNoticeHeading')}</h2>
+        <h2 className="text-2xl">{t('legal.terms.legalNoticeHeading')}</h2>
         <p>
           {interpolateElements(t('legal.terms.legalNoticeBody'), {
             impressum: (
@@ -249,7 +245,7 @@ export default function TermsOfServicePage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">{t('legal.terms.contactHeading')}</h2>
+        <h2 className="text-2xl">{t('legal.terms.contactHeading')}</h2>
         <p>
           {emphasise(
             t('legal.terms.contactBody', { email: supportEmail }),

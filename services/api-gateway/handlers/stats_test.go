@@ -91,6 +91,61 @@ func TestGetActiveOverlays_ReturnsConnectedIDs(t *testing.T) {
 	}
 }
 
+func TestGetPlatformStats_ShapeAndCounters(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	client, mr := setupStatsTestRedis(t)
+	handler := NewStatsHandler(client, nil)
+
+	// One daily bucket for twitch (today), none for the other platforms —
+	// days with no key must read as 0, and discord must appear in the map.
+	today := time.Now().UTC().Format("2006-01-02")
+	mr.Set("chat:stats:daily:twitch:"+today, "421")
+	mr.Set("chat:stats:total", "48291803")
+	mr.Set("stats:users:total", "12408")
+	mr.Set("overlay:connected:abc-123", "1")
+	mr.Set("overlay:connected:def-456", "1")
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/stats", nil)
+
+	handler.GetPlatformStats(c)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var stats PlatformStats
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &stats))
+	assert.Equal(t, map[string]int64{
+		"twitch": 421, "youtube": 0, "kick": 0, "tiktok": 0, "discord": 0,
+	}, stats.Platforms)
+	assert.Equal(t, int64(48291803), stats.AllTime)
+	assert.Equal(t, int64(12408), stats.Users)
+	assert.Equal(t, int64(2), stats.OverlaysLive)
+}
+
+func TestGetPlatformStats_MissingCountersAreZero(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	client, _ := setupStatsTestRedis(t)
+	handler := NewStatsHandler(client, nil)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/stats", nil)
+
+	handler.GetPlatformStats(c)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var stats PlatformStats
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &stats))
+	assert.Equal(t, int64(0), stats.AllTime)
+	assert.Equal(t, int64(0), stats.Users)
+	assert.Equal(t, int64(0), stats.OverlaysLive)
+	// Fresh handler: memo is empty, so a missing-scan failure path must not
+	// leak an error value into the response.
+	for _, p := range stats.Platforms {
+		assert.Equal(t, int64(0), p)
+	}
+}
+
 func TestGetActiveOverlays_IncludesConnectedSince(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	client, mr := setupStatsTestRedis(t)

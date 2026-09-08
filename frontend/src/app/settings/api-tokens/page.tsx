@@ -42,8 +42,6 @@ import { useCallback, useEffect, useId, useState } from 'react'
 import { AppNav } from '@/components/AppNav'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { AlertDialog } from '@/components/ui/alert-dialog'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -60,6 +58,8 @@ import {
 import { type TFunction, formatDateTime, useTranslations } from '@/lib/i18n'
 import { interpolateElements } from '@/lib/i18n/emphasise'
 import { toastManager } from '@/lib/toast'
+import { cn } from '@/lib/utils'
+import { archivoBlack, spaceMono } from '@/lib/fonts'
 
 const STREAMDECK_README = 'https://github.com/caesarakalaeii/all-chat/tree/main/streamdeck-plugin'
 const STREAMCONTROLLER_README =
@@ -107,15 +107,14 @@ function MintedTokenReveal({
       setCopyError(t('settings.apiTokens.copyFailed'))
     }
   }, [minted.token, t])
-
   return (
-    <Card
-      className="border-twitch/60 p-6"
+    <div
+      className="lanes-panel p-6"
       role="region"
       aria-label={t('settings.apiTokens.revealRegionLabel', { name: minted.name })}
       data-testid="minted-token-reveal"
     >
-      <h2 className="text-lg font-semibold text-text">{t('settings.apiTokens.revealHeading')}</h2>
+      <h2 className="text-lg">{t('settings.apiTokens.revealHeading')}</h2>
       <p className="mt-1 text-sm text-amber-400">
         {interpolateElements(t('settings.apiTokens.revealWarning'), {
           name: <strong>{minted.name}</strong>,
@@ -124,21 +123,21 @@ function MintedTokenReveal({
 
       <code
         data-testid="minted-token-value"
-        className="mt-4 block overflow-x-auto rounded-lg border border-border bg-surface-2 p-3 font-mono text-sm break-all text-text"
+        className="mt-4 block overflow-x-auto rounded-none border border-white/40 bg-transparent p-3 font-mono text-sm break-all text-white"
       >
         {minted.token}
       </code>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <Button variant="outline" size="sm" onClick={() => void handleCopy()}>
+        <button className="lanes-btn ghost sm" onClick={() => void handleCopy()}>
           {copied ? t('settings.apiTokens.copied') : t('settings.apiTokens.copyToken')}
-        </Button>
-        <Button size="sm" onClick={onDismiss}>
+        </button>
+        <button className="lanes-btn sm" onClick={onDismiss}>
           {t('settings.apiTokens.dismissReveal')}
-        </Button>
+        </button>
       </div>
       {copyError && <p className="mt-2 text-xs text-red-400">{copyError}</p>}
-    </Card>
+    </div>
   )
 }
 
@@ -195,9 +194,9 @@ function CreateTokenForm({
   }
 
   return (
-    <Card className="p-6">
-      <h2 className="text-lg font-semibold text-text">{t('settings.apiTokens.createHeading')}</h2>
-      <p className="mt-1 mb-4 text-sm text-text-sub">{t('settings.apiTokens.createBody')}</p>
+    <div className="lanes-panel p-6">
+      <h2 className="text-lg">{t('settings.apiTokens.createHeading')}</h2>
+      <p className="text-sub mt-1 mb-4 text-sm">{t('settings.apiTokens.createBody')}</p>
 
       <form onSubmit={handleSubmit} className="space-y-5">
         <Field.Root>
@@ -219,9 +218,7 @@ function CreateTokenForm({
         </Field.Root>
 
         <fieldset className="space-y-3">
-          <legend className="text-sm font-medium text-text">
-            {t('settings.apiTokens.scopesLegend')}
-          </legend>
+          <legend className="text-sm font-medium">{t('settings.apiTokens.scopesLegend')}</legend>
           {API_TOKEN_SCOPES.map((scope) => {
             const title = t(`settings.apiTokens.${SCOPE_MESSAGE_STEMS[scope]}Title`)
             return (
@@ -237,7 +234,7 @@ function CreateTokenForm({
                   <Field.Label className="cursor-pointer">{title}</Field.Label>
                   <Field.Description className="text-xs">
                     {t(`settings.apiTokens.${SCOPE_MESSAGE_STEMS[scope]}Description`)}{' '}
-                    <code className="text-text-dim">{scope}</code>
+                    <code className="text-dim">{scope}</code>
                   </Field.Description>
                 </div>
               </Field.Root>
@@ -250,23 +247,21 @@ function CreateTokenForm({
 
         {error && <p className="text-sm text-red-400">{error}</p>}
 
-        <Button type="submit" disabled={!canSubmit}>
+        <button type="submit" className="lanes-btn" disabled={!canSubmit}>
           {creating ? t('settings.apiTokens.creating') : t('settings.apiTokens.create')}
-        </Button>
+        </button>
       </form>
-    </Card>
+    </div>
   )
 }
 
 function EmptyState() {
   const t = useTranslations()
   return (
-    <div className="rounded-lg border border-dashed border-border p-6 text-center">
-      <p className="text-sm font-medium text-text">{t('settings.apiTokens.emptyHeading')}</p>
-      <p className="mx-auto mt-2 max-w-md text-sm text-text-sub">
-        {t('settings.apiTokens.emptyBody')}
-      </p>
-      <p className="mt-3 text-sm text-text-sub">
+    <div className="rounded-none border border-dashed border-white/40 p-6 text-center">
+      <p className="text-sm font-medium">{t('settings.apiTokens.emptyHeading')}</p>
+      <p className="text-sub mx-auto mt-2 max-w-md text-sm">{t('settings.apiTokens.emptyBody')}</p>
+      <p className="text-sub mt-3 text-sm">
         {t('settings.apiTokens.setupGuides')}{' '}
         <Link
           href={STREAMDECK_README}
@@ -298,10 +293,10 @@ function EmptyState() {
 function TokenRow({ token, onRevoke }: { token: ApiToken; onRevoke: (token: ApiToken) => void }) {
   const t = useTranslations()
   return (
-    <li className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-border px-4 py-3">
+    <li className="flex flex-wrap items-start justify-between gap-3 rounded-none border border-white/40 px-4 py-3">
       <div className="min-w-0">
-        <p className="truncate text-sm font-medium text-text">{token.name}</p>
-        <p className="mt-0.5 text-xs text-text-sub">
+        <p className="truncate text-sm font-medium">{token.name}</p>
+        <p className="text-sub mt-0.5 text-xs">
           {t('settings.apiTokens.tokenDates', {
             created: formatDayOrUnknown(t, token.created_at),
             lastUsed: token.last_used_at
@@ -311,23 +306,19 @@ function TokenRow({ token, onRevoke }: { token: ApiToken; onRevoke: (token: ApiT
         </p>
         <p className="mt-1 flex flex-wrap gap-1.5">
           {token.scopes.map((scope) => (
-            <span
-              key={scope}
-              className="rounded-full bg-surface-2 px-2 py-0.5 font-mono text-xs text-text-sub"
-            >
+            <span key={scope} className="lanes-chip">
               {scope}
             </span>
           ))}
         </p>
       </div>
-      <Button
-        variant="outline"
-        size="sm"
+      <button
+        className="lanes-btn ghost sm"
         onClick={() => onRevoke(token)}
         aria-label={t('settings.apiTokens.revokeLabel', { name: token.name })}
       >
         {t('settings.apiTokens.revoke')}
-      </Button>
+      </button>
     </li>
   )
 }
@@ -395,26 +386,26 @@ function ApiTokensContent() {
   }
 
   return (
-    <div className="min-h-screen bg-bg">
+    <div className={cn('lanes-app min-h-screen', archivoBlack.variable, spaceMono.variable)}>
       <AppNav />
       <main id="main-content" tabIndex={-1} className="mx-auto max-w-2xl space-y-6 px-4 py-12">
         <div>
-          <h1 className="text-2xl font-bold text-text">{t('settings.apiTokens.heading')}</h1>
-          <p className="mt-1 text-sm text-text-sub">{t('settings.apiTokens.subheading')}</p>
+          <h1 className="text-2xl">{t('settings.apiTokens.heading')}</h1>
+          <p className="text-sub mt-1 text-sm">{t('settings.apiTokens.subheading')}</p>
         </div>
 
         {minted && <MintedTokenReveal minted={minted} onDismiss={() => setMinted(null)} />}
 
         <CreateTokenForm onCreated={handleCreated} disabled={loading} />
 
-        <Card className="p-6">
-          <h2 className="text-lg font-semibold text-text">{t('settings.apiTokens.listHeading')}</h2>
-          <p className="mt-1 mb-4 text-sm text-text-sub">{t('settings.apiTokens.listBody')}</p>
+        <div className="lanes-panel p-6">
+          <h2 className="text-lg">{t('settings.apiTokens.listHeading')}</h2>
+          <p className="text-sub mt-1 mb-4 text-sm">{t('settings.apiTokens.listBody')}</p>
 
           {loading ? (
             <div className="space-y-2">
-              <Skeleton className="h-16 w-full" />
-              <Skeleton className="h-16 w-full" />
+              <Skeleton className="h-16 w-full rounded-none" />
+              <Skeleton className="h-16 w-full rounded-none" />
             </div>
           ) : loadError ? (
             <p className="text-sm text-red-400">{loadError}</p>
@@ -427,7 +418,7 @@ function ApiTokensContent() {
               ))}
             </ul>
           )}
-        </Card>
+        </div>
       </main>
 
       <AlertDialog.Root
@@ -436,7 +427,10 @@ function ApiTokensContent() {
           if (!open && !revoking) setRevokeTarget(null)
         }}
       >
-        <AlertDialog.Content size="sm">
+        <AlertDialog.Content
+          size="sm"
+          className="rounded-none border-white bg-black text-[#f4f3ef]"
+        >
           <AlertDialog.Title>{t('settings.apiTokens.revokeConfirmTitle')}</AlertDialog.Title>
           <AlertDialog.Description>
             {revokeTarget
@@ -444,17 +438,20 @@ function ApiTokensContent() {
               : ''}
           </AlertDialog.Description>
           <div className="mt-6 flex justify-end gap-2">
-            <Button
-              variant="outline"
-              size="sm"
+            <button
+              className="lanes-btn ghost sm"
               disabled={revoking}
               onClick={() => setRevokeTarget(null)}
             >
               {t('settings.apiTokens.revokeCancel')}
-            </Button>
-            <Button size="sm" disabled={revoking} onClick={() => void handleConfirmRevoke()}>
+            </button>
+            <button
+              className="lanes-btn danger sm"
+              disabled={revoking}
+              onClick={() => void handleConfirmRevoke()}
+            >
               {revoking ? t('settings.apiTokens.revoking') : t('settings.apiTokens.revokeConfirm')}
-            </Button>
+            </button>
           </div>
         </AlertDialog.Content>
       </AlertDialog.Root>
