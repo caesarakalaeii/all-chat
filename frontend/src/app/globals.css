@@ -26,8 +26,18 @@
   --color-youtube: #ff4444;
   --color-kick: #53fc18;
   --color-tiktok: #69c9d0;
+  /* Owncast #9B7FF5 (lightened from favicon purple #6544E9 for 4.5:1),
+     GoodGame #7FA3D1 (lightened from brand steel blue #52709C),
+     Picarto #27B756 (brand green from the picarto logo icon, lifted one step),
+     Facebook #3B93F5 (lightened from brand #1877F2 — the raw brand lands at
+     ~2.9:1 over surface-2, below AA),
+     Rumble #85C742 (brand green from the rumble play glyph, passes as-is). */
+  --color-owncast: #9b7ff5;
+  --color-goodgame: #7fa3d1;
+  --color-picarto: #27b756;
+  --color-facebook: #3b93f5;
+  --color-rumble: #85c742;
   --color-discord: #5865f2;
-
   /* Neutral scale — oklch with constant chroma ~0.007, hue 270 */
   --color-neutral-950: oklch(0.09 0.007 270); /* #020204 — bg */
   --color-neutral-900: oklch(0.11 0.009 270); /* #040407 — surface */
