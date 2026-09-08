@@ -49,6 +49,9 @@ resources:
 
   # Phase 6 - Facebook Listener (ADR-0060)
   - facebook-listener/deployment.yaml
+  # GoodGame (goodgame.ru) Listener
+  - goodgame-listener/deployment.yaml
+  - goodgame-listener/hpa.yaml
 
 commonLabels:
   project: allchat
@@ -94,4 +97,7 @@ images:
     newTag: main
   - name: allchat-facebook-listener:latest
     newName: ghcr.io/caesarakalaeii/allchat-facebook-listener
+    newTag: main
+  - name: allchat-goodgame-listener:latest
+    newName: ghcr.io/caesarakalaeii/allchat-goodgame-listener
     newTag: main
