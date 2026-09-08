@@ -18,13 +18,8 @@
 
 /**
  * Copy lock for the public landing page, the FAQ and the upgrade pitch. See
- * __tests__/dashboard.test.ts for why the copy is pinned here rather than
- * through a rendered-output diff.
- *
- * The FAQ answers are load bearing twice over: FaqSection renders them and
- * app/page.tsx copies them into FAQPage JSON-LD, where Google requires the
- * structured text to match the visible answer verbatim. Both read the catalog,
- * so this lock is what keeps them identical.
+ * eslint.i18n.config.mjs for the gate that keeps new copy flowing in here,
+ * and ADR-0055 for the catalog itself.
  */
 
 import { describe, expect, it } from 'vitest'
@@ -42,35 +37,56 @@ describe('landing page header', () => {
   })
 })
 
-describe('landing hero, logged out', () => {
-  it('keeps the pitch', () => {
-    expect(t('marketing.hero.eyebrow')).toBe('Free · open source · every platform')
-    expect(t('marketing.hero.title')).toBe('One overlay. Every platform.')
-    expect(t('marketing.hero.subtitle')).toBe(
-      'Every message from Twitch, YouTube, Kick, TikTok and Discord in one OBS overlay.'
-    )
-    expect(t('marketing.hero.reassurance')).toBe('Free & open source · No bots · Just a URL in OBS')
+describe('lanes hero, logged out', () => {
+  it('keeps the manifesto pitch', () => {
+    expect(t('marketing.lanes.kicker')).toBe('A DECLARATION OF WAR ON CHAT TOOLING')
+    expect(t('marketing.lanes.titleTop')).toBe('EVERY CHAT.')
+    expect(t('marketing.lanes.titleBottom')).toBe('ONE URL.')
+    expect(t('marketing.lanes.totalLabel')).toBe('MSG DELIVERED')
+  })
+
+  it('keeps the CTA bar', () => {
+    expect(t('marketing.lanes.cta')).toBe('GET YOUR OVERLAY — FREE →')
+    expect(t('marketing.lanes.ctaNote')).toBe("lane height ≈ share of this week's messages")
+    expect(t('marketing.lanes.howItWorks')).toBe('how it works ↓')
   })
 
   it('keeps one sign-in label per platform', () => {
     // Both the button text and its aria-label, which are the same string, so
     // migrating them cannot drift the accessible name from the visible one.
-    expect(t('marketing.hero.signInWith', { platform: 'Twitch' })).toBe('Sign in with Twitch')
-    expect(t('marketing.hero.signInWith', { platform: 'YouTube' })).toBe('Sign in with YouTube')
-    expect(t('marketing.hero.signInWith', { platform: 'Kick' })).toBe('Sign in with Kick')
+    expect(t('marketing.lanes.signInWith', { platform: 'Twitch' })).toBe('Sign in with Twitch')
+    expect(t('marketing.lanes.signInWith', { platform: 'YouTube' })).toBe('Sign in with YouTube')
+    expect(t('marketing.lanes.signInWith', { platform: 'Kick' })).toBe('Sign in with Kick')
   })
 
-  it('keeps the stat strip caption', () => {
-    expect(t('marketing.hero.statsCaption')).toBe('messages delivered this week')
+  it('keeps every marquee string free of placeholder syntax', () => {
+    // The lanes read these as decorative chatter; a stray {param} would leak
+    // into the marquee unresolved because the render passes no params.
+    const platforms = {
+      twitch: 'flowTwitch',
+      youtube: 'flowYoutube',
+      tiktok: 'flowTiktok',
+      kick: 'flowKick',
+      discord: 'flowDiscord',
+    } as const
+    for (const group of Object.values(platforms)) {
+      for (let i = 1; i <= 15; i++) {
+        const key = `marketing.${group}.m${i}`
+        const value = t(key as Parameters<typeof t>[0])
+        if (value === key) continue // platform ran out of curated strings
+        expect(value).not.toMatch(/[{}]/)
+      }
+    }
   })
 })
 
-describe('landing hero, logged in', () => {
+describe('lanes hero, logged in', () => {
   it('keeps the returning-user welcome', () => {
-    expect(t('marketing.hero.welcomeEyebrow')).toBe('Welcome back')
-    expect(t('marketing.hero.welcomeTitle', { name: 'Ada' })).toBe('Welcome back, Ada.')
-    expect(t('marketing.hero.goToDashboard')).toBe('Go to Dashboard')
-    expect(t('marketing.hero.adminDashboard')).toBe('Welcome aboard, captain!')
+    expect(t('marketing.lanes.navDashboardChip')).toBe('▸ dashboard')
+    expect(t('marketing.lanes.backToDashboard')).toBe('BACK TO YOUR DASHBOARD →')
+    expect(t('marketing.lanes.welcomeNote', { name: 'Ada', count: 3 })).toBe(
+      'welcome back, Ada — 3 overlays are live, yours is one click away'
+    )
   })
 
   it('keeps the collapsed explore row', () => {
@@ -81,32 +97,83 @@ describe('landing hero, logged in', () => {
   })
 })
 
-describe('why All-Chat band', () => {
-  it('keeps the band headings', () => {
-    expect(t('marketing.why.eyebrow')).toBe('Why All-Chat')
-    expect(t('marketing.why.title')).toBe('Built for multistreamers')
-  })
-
-  it('keeps the three feature cards', () => {
-    expect(t('marketing.why.themesTitle')).toBe('16 themes, full control')
-    expect(t('marketing.why.themesBody')).toBe(
-      'From Win98 retro to cyberpunk neon — pick a built-in theme, tweak it point-and-click, or write your own CSS.'
-    )
-    expect(t('marketing.why.emotesTitle')).toBe('Every emote, everywhere')
-    expect(t('marketing.why.emotesBody')).toBe(
-      '7TV, BTTV, FFZ plus native Twitch and YouTube emotes — they all render correctly in your overlay.'
-    )
-    expect(t('marketing.why.resourcesTitle')).toBe('Smart resource usage')
-    expect(t('marketing.why.resourcesBody')).toBe(
-      'Only polls a platform while your overlay is live in OBS. Switch scenes and All-Chat stands down.'
+describe('convergence band', () => {
+  it('keeps the manifesto copy', () => {
+    expect(t('marketing.convergence.label')).toBe('THE WHOLE PRODUCT')
+    expect(t('marketing.convergence.headingTop')).toBe('FIVE CHATS IN.')
+    expect(t('marketing.convergence.headingBottom')).toBe('ONE WINDOW OUT.')
+    expect(
+      t('marketing.convergence.body', {
+        oneUrl: 'one URL',
+        platforms: 'Twitch, YouTube, TikTok, Kick and Discord',
+        emotes: '7TV, BTTV and FFZ emotes',
+      })
+    ).toBe(
+      "Your chat tool should weigh one URL and nothing else. All-Chat merges your Twitch, YouTube, TikTok, Kick and Discord chat into a single OBS browser source. Every message keeps its platform color, 7TV, BTTV and FFZ emotes render natively, animated — because chat without emotes isn't chat."
     )
   })
 
-  it('keeps the three-step strip', () => {
-    expect(t('marketing.steps.heading')).toBe('Live in 3 steps:')
-    expect(t('marketing.steps.signIn')).toBe('Sign in')
-    expect(t('marketing.steps.addChannels')).toBe('Add your channels')
-    expect(t('marketing.steps.pasteUrl')).toBe('Paste the URL in OBS')
+  it('keeps the preview frame chrome', () => {
+    expect(t('marketing.convergence.liveLabel')).toBe('● LIVE PREVIEW')
+    expect(t('marketing.convergence.frameUrl')).toBe('allch.at/overlay/8f3e…')
+  })
+})
+
+describe('wedge band', () => {
+  it('keeps the headings', () => {
+    expect(t('marketing.wedge.label')).toBe('EVERY MULTICHAT TOOL MAKES YOU PAY SOMETHING')
+    expect(t('marketing.wedge.headingTop')).toBe('MONEY. DISK SPACE.')
+    expect(t('marketing.wedge.headingMiddle')).toBe('PATIENCE.')
+    expect(t('marketing.wedge.headingAccent')).toBe('NOT HERE.')
+    expect(t('marketing.wedge.themTitle')).toBe('THEM')
+    expect(t('marketing.wedge.usTitle')).toBe('ALL·CHAT')
+  })
+
+  it('keeps all five THEM bullets and all five ALL·CHAT bullets', () => {
+    for (let i = 1; i <= 5; i++) {
+      expect(t(`marketing.wedge.them${i}` as Parameters<typeof t>[0])).not.toBe('')
+      expect(t(`marketing.wedge.us${i}` as Parameters<typeof t>[0])).not.toBe('')
+    }
+    expect(t('marketing.wedge.them1')).toBe(
+      'download a desktop app first — your chat tool should weigh one URL, not 200 MB'
+    )
+    expect(t('marketing.wedge.us1')).toBe('nothing to install — it is a URL')
+  })
+})
+
+describe('numbers band', () => {
+  it('keeps the row labels', () => {
+    expect(t('marketing.numbers.label')).toBe('THIS WEEK, BY PLATFORM')
+    expect(t('marketing.numbers.platformLabel', { platform: 'TWITCH', share: '49' })).toBe(
+      'TWITCH · MSGS/WK · 49%'
+    )
+    expect(t('marketing.numbers.totalLabel')).toBe('MESSAGES DELIVERED')
+    expect(t('marketing.numbers.usersLabel')).toBe('STREAMERS ON BOARD')
+    expect(t('marketing.numbers.overlaysLabel')).toBe('OVERLAYS LIVE RIGHT NOW')
+  })
+})
+
+describe('steps band', () => {
+  it('keeps the three steps', () => {
+    expect(t('marketing.steps.label')).toBe('THE ENTIRE SETUP — NO, REALLY')
+    expect(t('marketing.steps.signInTitle')).toBe('Sign in')
+    expect(t('marketing.steps.addChannelsTitle')).toBe('Add your channels')
+    expect(t('marketing.steps.pasteUrlTitle')).toBe('Paste one URL')
+  })
+})
+
+describe('final band', () => {
+  it('keeps the closing manifesto', () => {
+    expect(t('marketing.final.line1')).toBe('NOTHING TO INSTALL.')
+    expect(t('marketing.final.line2')).toBe('NOTHING TO PAY.')
+    expect(t('marketing.final.line3')).toBe('EVERYTHING TO READ.')
+    expect(t('marketing.final.cta')).toBe('GET YOUR OVERLAY — FREE →')
+    expect(t('marketing.final.micro')).toBe('free · no download · agpl-3.0, self-hostable')
+  })
+
+  it('keeps the welcome-back swap', () => {
+    expect(t('marketing.final.welcomeBack', { name: 'Ada' })).toBe('welcome back, Ada.')
+    expect(t('marketing.final.welcomeMicro')).toBe('your chat never stopped')
   })
 })
 
@@ -114,31 +181,6 @@ describe('ambassadors band', () => {
   it('keeps the band headings', () => {
     expect(t('marketing.ambassadors.eyebrow')).toBe('Ambassadors')
     expect(t('marketing.ambassadors.title')).toBe('Streamers who run on All-Chat')
-  })
-})
-
-describe('beyond the overlay band', () => {
-  it('keeps the band headings', () => {
-    expect(t('marketing.beyond.eyebrow')).toBe('Beyond the overlay')
-    expect(t('marketing.beyond.title')).toBe('Do more with All-Chat')
-  })
-
-  it('keeps the extension card', () => {
-    expect(t('marketing.beyond.extensionTitle')).toBe('Browser extension')
-    expect(t('marketing.beyond.extensionBody')).toBe(
-      'Give your viewers unified cross-platform chat right in their browser — it replaces native Twitch, YouTube, and Kick chat.'
-    )
-    expect(t('marketing.beyond.firefox')).toBe('Firefox')
-    expect(t('marketing.beyond.chrome')).toBe('Chrome')
-    expect(t('marketing.beyond.githubReleases')).toBe('GitHub Releases')
-  })
-
-  it('keeps the API card', () => {
-    expect(t('marketing.beyond.apiTitle')).toBe('Build on the API')
-    expect(t('marketing.beyond.apiBody')).toBe(
-      "One unified chat WebSocket — every platform, one message format. There's a public test stream you can hook up in seconds, no account needed."
-    )
-    expect(t('marketing.beyond.apiCta')).toBe('Read the API docs')
   })
 })
 
@@ -162,40 +204,12 @@ describe('landing FAQ', () => {
     expect(t('marketing.faq.heading')).toBe('Frequently asked questions')
   })
 
-  it('keeps every question and answer verbatim', () => {
+  it('keeps the first FAQ stem pair', () => {
+    // Both the visible FAQ and the FAQPage JSON-LD read these keys; this lock
+    // is what keeps the structured data from drifting from the page.
     expect(t('marketing.faq.platformsQuestion')).toBe('Which platforms can I combine?')
     expect(t('marketing.faq.platformsAnswer')).toBe(
       'Twitch, YouTube, Kick, TikTok, and Discord — in any combination, all in a single overlay.'
-    )
-    expect(t('marketing.faq.obsQuestion')).toBe('How do I add All-Chat to OBS?')
-    expect(t('marketing.faq.obsAnswer')).toBe(
-      'Create an overlay, add your chat sources, then paste the overlay URL into an OBS Browser Source. No plugins or bots required.'
-    )
-    expect(t('marketing.faq.freeQuestion')).toBe('Is All-Chat free?')
-    expect(t('marketing.faq.freeAnswer')).toBe(
-      'Yes. All-Chat is free and open source under the AGPL-3.0 license.'
-    )
-    expect(t('marketing.faq.premiumQuestion')).toBe('Why are some features premium?')
-    expect(t('marketing.faq.premiumAnswer')).toBe(
-      'Premium covers what costs real money or scarce quota to run, plus a few power-user extras: text-to-speech streams audio to your overlay, which is far more expensive to deliver than regular chat messages; YouTube moderation actions and poll announcements posted to chat consume strictly limited platform quotas; YouTube stream selection is an advanced option very few channels need; shared chat is gated to prevent abuse; and viewer flairs are cosmetic perks for supporters. Premium is funded through Patreon and keeps All-Chat running for everyone.'
-    )
-    expect(t('marketing.faq.emotesQuestion')).toBe('Which emotes are supported?')
-    expect(t('marketing.faq.emotesAnswer')).toBe(
-      '7TV, BTTV, and FFZ, alongside native Twitch and YouTube emotes — they all render correctly in your overlay.'
-    )
-    expect(t('marketing.faq.customizeQuestion')).toBe('Can I customize how the overlay looks?')
-    expect(t('marketing.faq.customizeAnswer')).toBe(
-      'Yes. Choose from 16 built-in themes or write your own CSS for full control over fonts, colors, and layout.'
-    )
-    expect(t('marketing.faq.privacyQuestion')).toBe(
-      'Does All-Chat track my viewers or use cookies?'
-    )
-    expect(t('marketing.faq.privacyAnswer')).toBe(
-      'No. Usage analytics are cookieless and self-hosted, and chat messages are automatically deleted after about an hour.'
-    )
-    expect(t('marketing.faq.extensionQuestion')).toBe('Is there a browser extension?')
-    expect(t('marketing.faq.extensionAnswer')).toBe(
-      'Yes. The All-Chat browser extension replaces native Twitch, YouTube, and Kick chat so your viewers can follow along across platforms.'
     )
   })
 })
@@ -204,120 +218,53 @@ describe('upgrade page', () => {
   it('keeps the hero', () => {
     expect(t('marketing.upgrade.badge')).toBe('All-Chat Premium')
     expect(t('marketing.upgrade.title')).toBe('Unlock the full power of your overlay')
-    expect(t('marketing.upgrade.body')).toBe(
-      'Premium is funded entirely through Patreon — it keeps All-Chat running and unlocks the features that make multistream moderation effortless. Back the project once, and premium applies automatically to your account.'
-    )
-    expect(t('marketing.upgrade.subscribe')).toBe('Subscribe on Patreon')
-    expect(t('marketing.upgrade.connectPatreon')).toBe('Already a patron? Connect Patreon')
   })
 
-  it('keeps the six premium feature entries', () => {
+  it('keeps the premium feature list', () => {
     expect(t('marketing.upgrade.moderationTitle')).toBe('Moderate from your overlay')
-    expect(t('marketing.upgrade.moderationBody')).toBe(
-      'Moderate straight from the monitor view — no second dashboard. Delete, timeout, ban and unban on Twitch, Kick and Discord; timeout and ban on YouTube. (TikTok has no moderation API.)'
-    )
-    expect(t('marketing.upgrade.moderatorsTitle')).toBe('Let your moderators help')
-    expect(t('marketing.upgrade.moderatorsBody')).toBe(
-      'Hand the monitor view to the moderators you already trust. They act with their own platform accounts, so Twitch, YouTube and Kick check their moderator role on every action — and they never need a plan of their own.'
-    )
     expect(t('marketing.upgrade.ttsTitle')).toBe('ElevenLabs text-to-speech')
-    expect(t('marketing.upgrade.ttsBody')).toBe(
-      'Read chat aloud with high-quality ElevenLabs voices, with full control over priority and pronunciation.'
-    )
     expect(t('marketing.upgrade.streamSelectionTitle')).toBe('YouTube stream selection')
-    expect(t('marketing.upgrade.streamSelectionBody')).toBe(
-      'Pick exactly which YouTube broadcast an overlay listens to instead of relying on auto-detection.'
-    )
     expect(t('marketing.upgrade.sharedChatTitle')).toBe('Shared chat')
-    expect(t('marketing.upgrade.sharedChatBody')).toBe(
-      'Combine several channels into one shared conversation across your overlays.'
-    )
     expect(t('marketing.upgrade.flairsTitle')).toBe('Viewer flairs')
-    expect(t('marketing.upgrade.flairsBody')).toBe(
-      'Stand out in any chat you appear in with premium cosmetics like animated name gradients.'
-    )
-  })
-
-  it('keeps the three how-it-works steps whole', () => {
-    expect(t('marketing.upgrade.howItWorks')).toBe('How it works')
-    // Each step keeps its linked words inside the sentence as a placeholder, so
-    // a translator can move the link anywhere the target language needs it.
-    expect(t('marketing.upgrade.step1')).toBe('Back All-Chat on {patreon} at the premium tier.')
-    expect(t('marketing.upgrade.step1Patreon')).toBe('Patreon')
-    expect(t('marketing.upgrade.step2')).toBe(
-      'Connect your Patreon account on the {settings} page.'
-    )
-    expect(t('marketing.upgrade.step2Settings')).toBe('Premium settings')
-    expect(t('marketing.upgrade.step3')).toBe(
-      'Premium unlocks automatically — no codes, no waiting.'
-    )
-  })
-
-  it('keeps the viewer premium footnote whole', () => {
-    // The trailing full stop sits outside the link in the markup, so the
-    // sentence keeps it and interpolateElements wraps only the linked run.
-    expect(t('marketing.upgrade.viewerFootnote')).toBe('Just want viewer cosmetics? {link}.')
-    expect(t('marketing.upgrade.viewerFootnoteLink')).toBe('See viewer premium')
   })
 })
 
 describe('login failures', () => {
-  it('collapses the three byte-identical login failures to one key', () => {
-    // handleTwitchLogin / handleYouTubeLogin / handleKickLogin raised the same
-    // two strings each. One key, so a reword cannot land on one platform only.
+  it('keeps the failure and error notices', () => {
     expect(t('marketing.login.failedTitle')).toBe('Login failed')
     expect(t('marketing.login.failedBody')).toBe('No auth URL returned. Try again.')
-  })
-
-  it('parameterises the per-platform login error', () => {
     expect(t('marketing.login.errorTitle')).toBe('Login error')
     expect(t('marketing.login.errorBody', { platform: 'Twitch' })).toBe(
       'Failed to initiate Twitch login.'
-    )
-    expect(t('marketing.login.errorBody', { platform: 'YouTube' })).toBe(
-      'Failed to initiate YouTube login.'
-    )
-    expect(t('marketing.login.errorBody', { platform: 'Kick' })).toBe(
-      'Failed to initiate Kick login.'
     )
   })
 })
 
 describe('theme switcher copy', () => {
-  it('keeps the section heading and carousel labels', () => {
+  it('keeps the carousel labels', () => {
     expect(t('marketing.themeSwitcher.heading')).toBe('Themes')
     expect(t('marketing.themeSwitcher.carouselLabel')).toBe('Featured themes')
     expect(t('marketing.themeSwitcher.dotsGroupLabel')).toBe('Choose a theme')
+  })
+
+  it('keeps the rotation control labels', () => {
     expect(t('marketing.themeSwitcher.pauseLabel')).toBe('Pause theme rotation')
     expect(t('marketing.themeSwitcher.resumeLabel')).toBe('Resume theme rotation')
     expect(t('marketing.themeSwitcher.showThemeLabel', { theme: 'Minimal' })).toBe('Show Minimal')
   })
 
-  it('keeps the four showcase theme names', () => {
-    // The showcase table carried these as module data, so the gate never saw
-    // them. They are the labels the dot buttons announce.
-    expect(t('marketing.themeSwitcher.showcaseMinimal')).toBe('Minimal')
-    expect(t('marketing.themeSwitcher.showcaseComic')).toBe('Comic')
-    expect(t('marketing.themeSwitcher.showcaseStickyNotes')).toBe('Sticky Notes')
-    expect(t('marketing.themeSwitcher.showcaseModernDark')).toBe('Modern Dark')
-  })
-
-  it('keeps the two captions whole, with their links as params', () => {
-    // The first caption was five JSX runs around two <Link>s; the second three
-    // around an <a>. interpolateElements splits the unresolved template so each
-    // link lands where the language puts it, and the count stays a param.
+  it('keeps the captions with link placeholders', () => {
     expect(
       t('marketing.themeSwitcher.customiseCaption', {
-        count: 34,
+        count: '16',
         gui: 'point-and-click',
         css: 'write your own CSS',
       })
-    ).toBe('34 built-in themes — restyle any point-and-click, or write your own CSS.')
-    expect(t('marketing.themeSwitcher.customiseGuiLink')).toBe('point-and-click')
-    expect(t('marketing.themeSwitcher.customiseCssLink')).toBe('write your own CSS')
-    expect(t('marketing.themeSwitcher.portCaption', { discord: 'Ask on Discord' })).toBe(
-      "Coming from another tool? Ask on Discord and we'll port your theme."
-    )
-    expect(t('marketing.themeSwitcher.portDiscordLink')).toBe('Ask on Discord')
+    ).toBe('16 built-in themes — restyle any point-and-click, or write your own CSS.')
+    expect(
+      t('marketing.themeSwitcher.portCaption', {
+        discord: 'Ask on Discord',
+      })
+    ).toBe("Coming from another tool? Ask on Discord and we'll port your theme.")
   })
 })

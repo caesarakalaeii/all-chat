@@ -36,10 +36,13 @@
  */
 
 import { useState, useEffect } from 'react'
+import { usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { useHydrated } from '@/hooks/useHydrated'
 import { useTranslations } from '@/lib/i18n'
 import { interpolateElements } from '@/lib/i18n/emphasise'
+import { archivoBlack, spaceMono } from '@/lib/fonts'
+import { cn } from '@/lib/utils'
 
 // Not copy: the glyphs the list draws beside an affirmed or denied row. They
 // are U+2713 CHECK MARK and U+2717 BALLOT X, rendered as decoration next to
@@ -55,6 +58,11 @@ export default function CookieBanner() {
   const t = useTranslations()
   const isHydrated = useHydrated()
   const [showBanner, setShowBanner] = useState(false)
+  const pathname = usePathname()
+  // The lanes homepage has its own art direction; the banner picks it up so
+  // it doesn't clash with the design. Root layout mounts us outside the
+  // .lanes-home wrapper, so the variant is applied here directly.
+  const lanes = pathname === '/'
 
   useEffect(() => {
     if (!isHydrated) return // Wait for hydration
@@ -85,7 +93,12 @@ export default function CookieBanner() {
       <div
         role="region"
         aria-label={t('legal.cookieBanner.regionLabel')}
-        className="animate-slide-up pointer-events-auto w-full max-w-4xl rounded-xl border border-border bg-surface shadow-2xl"
+        className={cn(
+          'animate-slide-up pointer-events-auto w-full max-w-4xl rounded-xl border border-border bg-surface shadow-2xl',
+          lanes && 'lanes-cookie',
+          lanes && archivoBlack.variable,
+          lanes && spaceMono.variable
+        )}
       >
         {/* Main Banner */}
         <div className="p-6">
@@ -249,14 +262,21 @@ export default function CookieBanner() {
 
               {/* Action Buttons */}
               <div className="flex flex-wrap gap-3">
-                <Button onClick={acknowledgeBanner} size="lg">
+                <Button
+                  onClick={acknowledgeBanner}
+                  size="lg"
+                  className={cn(lanes && 'lanes-cookie-ack')}
+                >
                   {t('legal.cookieBanner.acknowledge')}
                 </Button>
                 <a
                   href="/legal/privacy"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center rounded-lg border border-border bg-surface-2 px-6 py-2.5 font-medium text-text transition-colors hover:bg-surface-2/80 focus-visible:ring-3 focus-visible:ring-twitch/50 focus-visible:outline-none"
+                  className={cn(
+                    'inline-flex items-center justify-center rounded-lg border border-border bg-surface-2 px-6 py-2.5 font-medium text-text transition-colors hover:bg-surface-2/80 focus-visible:ring-3 focus-visible:ring-twitch/50 focus-visible:outline-none',
+                    lanes && 'lanes-cookie-more'
+                  )}
                 >
                   {t('legal.cookieBanner.learnMore')}
                 </a>
@@ -266,7 +286,12 @@ export default function CookieBanner() {
         </div>
 
         {/* Footer */}
-        <div className="rounded-b-xl border-t border-border bg-bg px-6 py-3">
+        <div
+          className={cn(
+            'rounded-b-xl border-t border-border bg-bg px-6 py-3',
+            lanes && 'lanes-cookie-foot'
+          )}
+        >
           <p className="text-center text-xs text-text-dim">{t('legal.cookieBanner.footer')}</p>
         </div>
       </div>
