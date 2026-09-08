@@ -62,6 +62,16 @@ func NewKickOAuth(clientID, clientSecret, redirectURL string) *KickOAuth {
 	}
 }
 
+// WithRedirectURL returns a copy that redirects to redirectURL instead. Used to
+// point one deployment's OAuth flow at a second frontend origin (beta.allch.at)
+// whose callback URI is registered separately with the provider. The tokenURL
+// test seam carries over.
+func (k *KickOAuth) WithRedirectURL(redirectURL string) *KickOAuth {
+	copy := *k
+	copy.redirectURL = redirectURL
+	return &copy
+}
+
 // GetAuthURL generates the OAuth authorization URL with PKCE
 // Kick requires OAuth 2.1 with PKCE (Proof Key for Code Exchange)
 // Scopes: chat:read, chat:write, channel:read, user:read, etc.
