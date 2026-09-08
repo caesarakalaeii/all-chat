@@ -38,8 +38,8 @@ func NewRumbleNormalizer() *RumbleNormalizer {
 // itself plus the users array of the same batch, which carries the sender's
 // username, colour, badges and avatar (fields the message entry omits).
 type rumbleRawMessage struct {
-	Message rumbleSSEMessage  `json:"message"`
-	Users   []rumbleSSEUser   `json:"users"`
+	Message rumbleSSEMessage `json:"message"`
+	Users   []rumbleSSEUser  `json:"users"`
 }
 
 type rumbleSSEMessage struct {

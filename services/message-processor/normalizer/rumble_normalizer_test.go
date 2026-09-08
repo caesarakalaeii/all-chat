@@ -33,12 +33,12 @@ func rumbleFixture(t *testing.T, msgJSON, usersJSON string) *models.RawChatMessa
 	t.Helper()
 	envelope := `{"message":` + msgJSON + `,"users":` + usersJSON + `}`
 	return &models.RawChatMessage{
-		MessageID:  "",
-		Platform:   "rumble",
-		OverlayID:  "overlay-1",
-		ChannelID:  "445201096",
+		MessageID:   "",
+		Platform:    "rumble",
+		OverlayID:   "overlay-1",
+		ChannelID:   "445201096",
 		ChannelName: "445201096",
-		RawMessage: json.RawMessage(envelope),
+		RawMessage:  json.RawMessage(envelope),
 		Tags: map[string]string{
 			"chatroom_id":  "445201096",
 			"channel_slug": "psbnews",
