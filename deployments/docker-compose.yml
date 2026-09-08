@@ -334,6 +334,39 @@ services:
       - allchat
     restart: unless-stopped
 
+  # Facebook Listener (ADR-0060): Graph API polling of the streamer's Page
+  # live-video comments. Needs no app credentials — it uses the stored Page
+  # tokens from facebook_oauth_tokens.
+  facebook-listener:
+    build:
+      context: ../
+      dockerfile: services/facebook-listener/Dockerfile
+    container_name: allchat-facebook-listener
+    environment:
+      PORT: "8099"
+      LOG_LEVEL: "info"
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: allchat
+      DATABASE_USER: allchat
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:?TOKEN_ENCRYPTION_KEY is required}
+      FACEBOOK_POLLING_INTERVAL_MS: "10000"
+      FACEBOOK_SOURCE_SYNC_SECONDS: "30"
+    ports:
+      - "127.0.0.1:8099:8099"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - allchat
+    restart: unless-stopped
+
   # YouTube Quota Monitor (ADR-0023): reads the shared youtube_quota_usage table,
   # exports the Prometheus quota metric, and publishes quota:alerts for the discord-bot.
   youtube-quota-monitor:

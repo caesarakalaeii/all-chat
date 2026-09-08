@@ -108,6 +108,10 @@ func main() {
 	discordBotToken := os.Getenv("DISCORD_BOT_TOKEN")
 	discordRedirectURL := defaultCallbackURL(frontendURL, "http://localhost:8080", "/api/v1/auth/discord/callback")
 
+	facebookAppID := os.Getenv("FACEBOOK_APP_ID")
+	facebookAppSecret := os.Getenv("FACEBOOK_APP_SECRET")
+	facebookRedirectURL := defaultCallbackURL(frontendURL, "http://localhost:8080", "/api/v1/auth/facebook/callback")
+
 	jwtExpiryHours := getEnvAsIntOrDefault("JWT_EXPIRY_HOURS", 24)
 
 	if twitchClientID == "" || twitchClientSecret == "" {
@@ -128,6 +132,10 @@ func main() {
 
 	if discordClientID == "" || discordClientSecret == "" || discordBotToken == "" {
 		log.Warn("DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DISCORD_BOT_TOKEN not set — Discord integration disabled")
+	}
+
+	if facebookAppID == "" || facebookAppSecret == "" {
+		log.Warn("FACEBOOK_APP_ID/FACEBOOK_APP_SECRET not set, Facebook OAuth will not be available")
 	}
 
 	userKeyChain, err := sharedAuth.NewKeyChainFromEnv("JWT_SECRET")
@@ -231,6 +239,11 @@ func main() {
 		kickOAuth = oauth.NewKickOAuth(kickClientID, kickClientSecret, kickRedirectURL)
 	}
 
+	var facebookOAuth *oauth.FacebookOAuth
+	if facebookAppID != "" && facebookAppSecret != "" {
+		facebookOAuth = oauth.NewFacebookOAuth(facebookAppID, facebookAppSecret, facebookRedirectURL)
+	}
+
 	var discordHandler *handlers.DiscordHandler
 	if discordClientID != "" && discordClientSecret != "" && discordBotToken != "" {
 		discordOAuth := oauth.NewDiscordOAuth(discordClientID, discordClientSecret, discordRedirectURL).
@@ -249,6 +262,9 @@ func main() {
 	}
 	if kickOAuth != nil {
 		providers[oauth.PlatformKick] = kickOAuth
+	}
+	if facebookOAuth != nil {
+		providers[oauth.PlatformFacebook] = facebookOAuth
 	}
 
 	overlayManagerURL := getEnvOrDefault("OVERLAY_MANAGER_URL", "http://localhost:8082")
@@ -406,6 +422,9 @@ func main() {
 	router.GET("/kick/login", platformAuthHandlerV2.HandleLogin(oauth.PlatformKick))
 	router.GET("/kick/callback", platformAuthHandlerV2.HandleCallback(oauth.PlatformKick))
 
+	router.GET("/facebook/login", platformAuthHandlerV2.HandleLogin(oauth.PlatformFacebook))
+	router.GET("/facebook/callback", platformAuthHandlerV2.HandleCallback(oauth.PlatformFacebook))
+
 	// Discord bot OAuth callback (public — no JWT required; the CSRF state encodes the user identity)
 	router.GET("/discord/callback", func(c *gin.Context) {
 		if discordHandler == nil {
@@ -503,6 +522,7 @@ func main() {
 		protected.GET("/twitch/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformTwitch))
 		protected.GET("/youtube/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformYouTube))
 		protected.GET("/kick/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformKick))
+		protected.GET("/facebook/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformFacebook))
 
 		// Opt-in moderation re-consent (ADR-0017): requests only the moderation scopes
 		// for the ?actions= being enabled, on top of the existing grant. Twitch + Kick.
