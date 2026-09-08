@@ -348,6 +348,7 @@ function DashboardContent() {
                   <div className="mb-4 flex flex-wrap gap-1.5">
                     {overlay.sources?.map((source) => (
                       <PlatformBadge
+                        key={source.id}
                         platform={source.platform as string}
                         size="sm"
                       />
