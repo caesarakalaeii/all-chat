@@ -46,6 +46,9 @@ resources:
   - discord-listener/deployment.yaml
   - discord-listener/hpa.yaml
   - discord-listener/servicemonitor.yaml
+  # Rumble Listener (ADR-0061, internal chat pop-up SSE)
+  - rumble-listener/deployment.yaml
+  - rumble-listener/hpa.yaml
 
   # Phase 6 - Facebook Listener (ADR-0060)
   - facebook-listener/deployment.yaml
@@ -106,4 +109,7 @@ images:
     newTag: main
   - name: allchat-picarto-listener:latest
     newName: ghcr.io/caesarakalaeii/allchat-picarto-listener
+    newTag: main
+  - name: allchat-rumble-listener:latest
+    newName: ghcr.io/caesarakalaeii/allchat-rumble-listener
     newTag: main

@@ -170,6 +170,7 @@ func main() {
 	facebookNormalizer := normalizer.NewFacebookNormalizer()
 	goodgameNormalizer := normalizer.NewGoodGameNormalizer()
 	picartoNormalizer := normalizer.NewPicartoNormalizer()
+	rumbleNormalizer := normalizer.NewRumbleNormalizer()
 
 	// Map of platform-specific normalizers
 	normalizers := map[string]normalizer.Normalizer{
@@ -182,6 +183,7 @@ func main() {
 		"facebook": facebookNormalizer,
 		"goodgame": goodgameNormalizer,
 		"picarto":  picartoNormalizer,
+		"rumble":   rumbleNormalizer,
 	}
 
 	emoteServiceURL := getEnvOrDefault("EMOTE_SERVICE_URL", "http://localhost:8083")
