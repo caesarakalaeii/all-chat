@@ -22,6 +22,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -315,4 +316,114 @@ func TestHandleDeleteIdentity_RequiresAuth(t *testing.T) {
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 	assert.False(t, r.deleteIdentityCalled)
+}
+
+// --- Frontend-origin behaviour (beta.allch.at) ---
+
+// authedFromHost is authed plus the api-gateway's X-Forwarded-Host stamp — the only way
+// the originating frontend host reaches the auth-service behind the proxy.
+func authedFromHost(h *DiscordHandler, method, target, forwardedHost, userID string, fn func(*DiscordHandler, *gin.Context)) *httptest.ResponseRecorder {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(method, target, nil)
+	c.Request.Header.Set("X-Forwarded-Host", forwardedHost)
+	c.Set("user_id", userID)
+	fn(h, c)
+	return w
+}
+
+// TestHandleIdentityConnect_BetaOriginSwapsRedirectURI: the consent URL must carry the
+// beta callback URI and the state must remember the beta origin for the shared callback.
+func TestHandleIdentityConnect_BetaOriginSwapsRedirectURI(t *testing.T) {
+	t.Setenv("FRONTEND_URL", "https://allch.at")
+	t.Setenv("FRONTEND_URLS", "https://beta.allch.at")
+
+	provider := oauth.NewDiscordOAuth("id", "secret", "https://allch.at/api/v1/auth/discord/callback")
+	h := newTestDiscordHandlerNoRedis(provider, &mockDiscordRepo{}, "https://allch.at")
+	store := h.stateStore.(*memStateStore)
+
+	w := authedFromHost(h, http.MethodGet, "/discord/identity/connect?return=moderate",
+		"beta.allch.at", "user-1", (*DiscordHandler).HandleIdentityConnect)
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var body map[string]string
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	authURL, err := url.Parse(body["auth_url"])
+	require.NoError(t, err)
+	assert.Equal(t, "https://beta.allch.at/api/v1/auth/discord/callback",
+		authURL.Query().Get("redirect_uri"))
+
+	require.Len(t, store.states, 1, "exactly one state is issued")
+	for _, stored := range store.states {
+		flow := parseDiscordFlowState(stored)
+		assert.Equal(t, "https://beta.allch.at", flow.Origin)
+	}
+}
+
+// TestCallback_BotInviteRedirectsToFlowOrigin: the invite callback must land the browser
+// back on the frontend the state was issued for, not the canonical one.
+func TestCallback_BotInviteRedirectsToFlowOrigin(t *testing.T) {
+	t.Setenv("FRONTEND_URL", "https://allch.at")
+	t.Setenv("FRONTEND_URLS", "https://beta.allch.at")
+
+	r := &mockDiscordRepo{}
+	h := identityHandler(&mockDiscordOAuth{exchangeToken: &oauth2.Token{AccessToken: "tok"}}, r)
+
+	stored, err := encodeDiscordFlowState(discordFlowState{UserID: "user-1", Origin: "https://beta.allch.at"})
+	require.NoError(t, err)
+	w := callback(t, h, stored, "&code=abc&guild_id=g-1")
+
+	assert.Equal(t, http.StatusFound, w.Code)
+	assert.Equal(t, "https://beta.allch.at/settings?discord=connected", w.Header().Get("Location"))
+	assert.True(t, r.upsertCalled, "the invite branch must still record the guild")
+}
+
+// TestCallback_IdentityFlowRedirectsToFlowOrigin: the account link lands the browser back
+// on its own return path, on the origin it started from.
+func TestCallback_IdentityFlowRedirectsToFlowOrigin(t *testing.T) {
+	t.Setenv("FRONTEND_URL", "https://allch.at")
+	t.Setenv("FRONTEND_URLS", "https://beta.allch.at")
+
+	o := &mockDiscordOAuth{
+		exchangeToken: &oauth2.Token{AccessToken: "user-token"},
+		identity:      &oauth.DiscordIdentity{ID: "42424242", Username: "volunteer"},
+	}
+	h := identityHandler(o, &mockDiscordRepo{})
+
+	stored, err := encodeDiscordFlowState(discordFlowState{
+		Kind:   discordFlowIdentity,
+		UserID: "user-1",
+		Return: "moderate",
+		Origin: "https://beta.allch.at",
+	})
+	require.NoError(t, err)
+	w := callback(t, h, stored, "&code=abc")
+
+	assert.Equal(t, http.StatusFound, w.Code)
+	assert.Equal(t, "https://beta.allch.at/moderate?discord_account=linked", w.Header().Get("Location"))
+}
+
+// TestCallback_UnknownStateOriginStaysCanonical: a state origin that is not on the
+// allowlist must never become a redirect target, even though the state is server-written.
+func TestCallback_UnknownStateOriginStaysCanonical(t *testing.T) {
+	t.Setenv("FRONTEND_URL", "https://allch.at")
+	t.Setenv("FRONTEND_URLS", "https://beta.allch.at")
+
+	o := &mockDiscordOAuth{
+		exchangeToken: &oauth2.Token{AccessToken: "user-token"},
+		identity:      &oauth.DiscordIdentity{ID: "42", Username: "v"},
+	}
+	h := identityHandler(o, &mockDiscordRepo{})
+
+	stored, err := encodeDiscordFlowState(discordFlowState{
+		Kind:   discordFlowIdentity,
+		UserID: "user-1",
+		Origin: "https://evil.example.com",
+	})
+	require.NoError(t, err)
+	w := callback(t, h, stored, "&code=abc")
+
+	assert.Equal(t, http.StatusFound, w.Code)
+	assert.Equal(t, "https://allch.at/settings?discord_account=linked", w.Header().Get("Location"))
 }

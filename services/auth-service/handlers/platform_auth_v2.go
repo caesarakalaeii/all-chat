@@ -109,8 +109,13 @@ func (h *PlatformAuthHandlerV2) HandleLogin(platform oauth.Platform) gin.Handler
 			return
 		}
 
-		// Create login state
+		// Create login state. The allowlisted origin the flow started from decides
+		// which registered callback URI the provider sees and which frontend the
+		// user returns to (beta.allch.at vs allch.at).
+		origin := requestFrontendOrigin(c)
+		provider = providerForOrigin(provider, platform, origin)
 		oauthState := oauth.NewLoginState(csrfToken)
+		oauthState.Origin = origin
 		if err := oauthState.Validate(); err != nil {
 			h.logger.Error("Invalid OAuth state", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
@@ -293,8 +298,12 @@ func (h *PlatformAuthHandlerV2) HandleAddSource(platform oauth.Platform) gin.Han
 			return
 		}
 
-		// Create add-source state with current user_id for account linking
+		// Create add-source state with current user_id for account linking.
+		// Origin handling: see HandleLogin.
+		origin := requestFrontendOrigin(c)
+		provider = providerForOrigin(provider, platform, origin)
 		oauthState := oauth.NewAddSourceState(csrfToken, overlayID, userIDStr)
+		oauthState.Origin = origin
 		if err := oauthState.Validate(); err != nil {
 			h.logger.Error("Invalid OAuth state", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
@@ -420,7 +429,10 @@ func (h *PlatformAuthHandlerV2) HandleEnableModeration(platform oauth.Platform) 
 			return
 		}
 
+		origin := requestFrontendOrigin(c)
+		provider = providerForOrigin(provider, platform, origin)
 		oauthState := oauth.NewModerationState(csrfToken, overlayID, userIDStr)
+		oauthState.Origin = origin
 		if err := oauthState.Validate(); err != nil {
 			h.logger.Error("Invalid OAuth state", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
@@ -659,6 +671,11 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 
 		// State was already deleted atomically by GetDel (audit L5).
 
+		// The origin is trusted: the query state byte-matched the server-stored
+		// copy, and stateOrigin re-checks the allowlist before use.
+		origin := stateOrigin(oauthState)
+		provider = providerForOrigin(provider, platform, origin)
+
 		// Exchange code for token (handle PKCE for Kick)
 		token, err := h.exchangeCodeForToken(c.Request.Context(), provider, platform, code, oauthState.CSRFToken)
 		if err != nil {
@@ -696,7 +713,7 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 				zap.String("platform", string(platform)),
 				zap.String("platform_id", platformUser.GetID()),
 			)
-			h.redirectWithTombstone(c, platform, oauthState.CSRFToken, fmt.Sprintf("%s/auth/banned", h.frontendURL))
+			h.redirectWithTombstone(c, platform, oauthState.CSRFToken, fmt.Sprintf("%s/auth/banned", origin))
 			return
 		}
 
@@ -807,7 +824,7 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 						zap.String("existing_username", dupErr.ExistingUsername),
 					)
 					redirectURL := fmt.Sprintf("%s/auth/callback?error=duplicate_account&existing_username=%s&platform=%s",
-						h.frontendURL,
+						origin,
 						dupErr.ExistingUsername,
 						dupErr.Platform,
 					)
@@ -843,9 +860,9 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 				)
 				// Redirect with error. Moderation re-consent returns to the overlay
 				// monitor it was launched from, not the overlay settings page.
-				errRedirect := fmt.Sprintf("%s/overlays/%s?error=failed_to_add_source", h.frontendURL, oauthState.OverlayID)
+				errRedirect := fmt.Sprintf("%s/overlays/%s?error=failed_to_add_source", origin, oauthState.OverlayID)
 				if oauthState.IsModeration() {
-					errRedirect = fmt.Sprintf("%s/overlay/%s/view?error=moderation_setup_failed", h.frontendURL, oauthState.OverlayID)
+					errRedirect = fmt.Sprintf("%s/overlay/%s/view?error=moderation_setup_failed", origin, oauthState.OverlayID)
 				}
 				h.redirectWithTombstone(c, platform, oauthState.CSRFToken, errRedirect)
 				return
@@ -884,7 +901,7 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate redirect"})
 				return
 			}
-			redirectURL := fmt.Sprintf("%s/auth/callback?code=%s", h.frontendURL, code)
+			redirectURL := fmt.Sprintf("%s/auth/callback?code=%s", origin, code)
 
 			h.logger.Info("Source added successfully via OAuth",
 				zap.String("platform", string(platform)),
@@ -912,7 +929,7 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate redirect"})
 				return
 			}
-			redirectURL := fmt.Sprintf("%s/auth/callback?code=%s", h.frontendURL, code)
+			redirectURL := fmt.Sprintf("%s/auth/callback?code=%s", origin, code)
 
 			h.logger.Info("User authenticated successfully",
 				zap.String("platform", string(platform)),
@@ -1468,10 +1485,11 @@ func (h *PlatformAuthHandlerV2) addSourceToOverlay(
 // failure, returning the user to the page the flow was launched from: the overlay
 // monitor for a moderation re-consent (ADR-0017), otherwise overlay settings.
 func (h *PlatformAuthHandlerV2) youtubeAddSourceErrorURL(state *oauth.OAuthState, errCode string) string {
+	origin := stateOrigin(state)
 	if state.IsModeration() {
-		return fmt.Sprintf("%s/overlay/%s/view?error=%s", h.frontendURL, state.OverlayID, errCode)
+		return fmt.Sprintf("%s/overlay/%s/view?error=%s", origin, state.OverlayID, errCode)
 	}
-	return fmt.Sprintf("%s/overlays/%s?error=%s", h.frontendURL, state.OverlayID, errCode)
+	return fmt.Sprintf("%s/overlays/%s?error=%s", origin, state.OverlayID, errCode)
 }
 
 // redirectWithTombstone performs an OAuth redirect and stores an idempotency tombstone in Redis.

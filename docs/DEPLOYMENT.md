@@ -289,6 +289,7 @@ SOURCE_MANAGER_PORT=8088
 # Frontend
 NEXT_PUBLIC_API_URL=http://localhost:8080
 FRONTEND_URL=https://your-domain.example  # Used to auto-generate OAuth redirect URLs
+FRONTEND_URLS=  # Optional: extra first-party origins (e.g. beta), comma-separated; default is FRONTEND_URL alone
 
 # Logging
 LOG_LEVEL=info  # debug, info, warn, error

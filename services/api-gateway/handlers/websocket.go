@@ -511,19 +511,33 @@ func loadAllowedOrigins() []string {
 }
 
 // loadFirstPartyWSOrigins returns the exact same-origin app origin(s) from
-// FRONTEND_URL — the only origin that may authenticate the owner socket via the
-// ambient access cookie (audit #8). Returns nil when unset (e.g. local dev),
+// FRONTEND_URL + FRONTEND_URLS — the only origins that may authenticate the
+// owner socket via the ambient access cookie (audit #8). Returns nil when unset
+// (e.g. local dev),
 // in which case originAllowedForWS falls back to the permissive WS allowlist so
 // the monitor view keeps working.
 func loadFirstPartyWSOrigins() []string {
-	v := strings.TrimSpace(os.Getenv("FRONTEND_URL"))
-	if v == "" {
-		return nil
+	// FRONTEND_URL is the canonical origin; FRONTEND_URLS (comma-separated)
+	// adds secondary origins like the beta deployment. All of them are
+	// first-party: the same backend serves them, so each one's ambient cookie
+	// is equally trusted on the owner socket.
+	values := []string{os.Getenv("FRONTEND_URL")}
+	if extra := strings.TrimSpace(os.Getenv("FRONTEND_URLS")); extra != "" {
+		values = append(values, strings.Split(extra, ",")...)
 	}
-	if u, err := url.Parse(v); err == nil && u.Scheme != "" && u.Host != "" {
-		return []string{u.Scheme + "://" + u.Host}
+	var result []string
+	for _, v := range values {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			continue
+		}
+		if u, err := url.Parse(v); err == nil && u.Scheme != "" && u.Host != "" {
+			result = append(result, u.Scheme+"://"+u.Host)
+		} else {
+			result = append(result, v)
+		}
 	}
-	return []string{v}
+	return result
 }
 
 // originAllowedForWS is the pure origin-check logic extracted from checkOrigin

@@ -167,10 +167,39 @@ func (m *memStateStore) Del(_ context.Context, state string) error {
 	return nil
 }
 
-// HandleConnect generates a CSRF state token, stores it in Redis (state -> userID), and
+// flowOrigin returns the allowlisted frontend origin a Discord flow started from. States
+// written before the field existed — and legacy bare-user-id states still in flight across
+// a deploy — resolve to the handler's canonical frontend. The Discord counterpart of
+// stateOrigin for the V2 flows.
+func (h *DiscordHandler) flowOrigin(flow discordFlowState) string {
+	if origin := allowlistedOrigin(flow.Origin); origin != "" {
+		return origin
+	}
+	return strings.TrimSuffix(h.frontendURL, "/")
+}
+
+// originProvider returns the provider a flow bound to origin builds its authorize URL
+// and exchanges its code with: the shared instance for the canonical origin, else a copy
+// whose redirect_uri points at that origin's registered callback — the same swap
+// providerForOrigin applies to the V2 flows. Discord keeps its own because the handler's
+// provider interface (invite, guild and identity methods) is not oauth.OAuthProvider.
+// A non-concrete provider (tests) is returned unchanged.
+func (h *DiscordHandler) originProvider(origin string) DiscordOAuthProvider {
+	if origin == strings.TrimSuffix(h.frontendURL, "/") {
+		return h.oauth
+	}
+	if p, ok := h.oauth.(*oauth.DiscordOAuth); ok {
+		return p.WithRedirectURL(originCallbackURL(origin, oauth.PlatformDiscord))
+	}
+	return h.oauth
+}
+
+// HandleConnect generates a CSRF state token, stores it in Redis (state -> flow), and
 // returns the Discord bot invite URL for the authenticated user. When ?moderation=true,
 // it returns the elevated moderation re-invite URL (ADR-0017): re-authorizing on an
 // existing guild upgrades the bot's permissions in place so the streamer can moderate.
+// The invite URL and the stored state both carry the originating frontend's origin, so
+// a beta.allch.at user is sent back to beta (see originProvider and flowOrigin).
 // Route: GET /discord/connect (JWT required)
 func (h *DiscordHandler) HandleConnect(c *gin.Context) {
 	userIDRaw, exists := c.Get("user_id")
@@ -180,6 +209,8 @@ func (h *DiscordHandler) HandleConnect(c *gin.Context) {
 	}
 	userID := fmt.Sprintf("%v", userIDRaw)
 
+	origin := requestFrontendOrigin(c)
+
 	state, err := generateRandomString(32)
 	if err != nil {
 		h.log.Error("discord: failed to generate state", zap.Error(err))
@@ -187,15 +218,22 @@ func (h *DiscordHandler) HandleConnect(c *gin.Context) {
 		return
 	}
 
-	if err := h.stateStore.Set(c.Request.Context(), state, userID, 10*time.Minute); err != nil {
+	stored, err := encodeDiscordFlowState(discordFlowState{UserID: userID, Origin: origin})
+	if err != nil {
+		h.log.Error("discord: failed to encode state", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		return
+	}
+	if err := h.stateStore.Set(c.Request.Context(), state, stored, 10*time.Minute); err != nil {
 		h.log.Error("discord: failed to store OAuth state", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
 
-	inviteURL := h.oauth.GetAuthURL(state)
+	provider := h.originProvider(origin)
+	inviteURL := provider.GetAuthURL(state)
 	if c.Query("moderation") == "true" {
-		inviteURL = h.oauth.GetModerationAuthURL(state)
+		inviteURL = provider.GetModerationAuthURL(state)
 	}
 	c.JSON(http.StatusOK, gin.H{"bot_invite_url": inviteURL})
 }
@@ -240,6 +278,7 @@ func (h *DiscordHandler) HandleCallback(c *gin.Context) {
 		return
 	}
 	userID := flow.UserID
+	origin := h.flowOrigin(flow)
 
 	// Only the bot invite carries a guild; the account link never does.
 	if guildID == "" {
@@ -248,7 +287,7 @@ func (h *DiscordHandler) HandleCallback(c *gin.Context) {
 	}
 
 	// Exchange code for token (stored for audit only — not used for subsequent calls)
-	_, err = h.oauth.ExchangeCode(ctx, code)
+	_, err = h.originProvider(origin).ExchangeCode(ctx, code)
 	if err != nil {
 		h.log.Error("discord: code exchange failed", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to exchange authorization code"})
@@ -294,7 +333,7 @@ func (h *DiscordHandler) HandleCallback(c *gin.Context) {
 		zap.String("guild_name", guildName),
 	)
 
-	redirectURL := strings.TrimSuffix(h.frontendURL, "/") + "/settings?discord=connected"
+	redirectURL := origin + "/settings?discord=connected"
 	c.Redirect(http.StatusFound, redirectURL)
 }
 

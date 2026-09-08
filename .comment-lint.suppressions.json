@@ -72,7 +72,7 @@
     "restate": 3
   },
   "services/auth-service/handlers/platform_auth_v2.go": {
-    "restate": 7
+    "restate": 6
   },
   "services/auth-service/handlers/risc_handler.go": {
     "restate": 1

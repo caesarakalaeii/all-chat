@@ -61,6 +61,10 @@ func (h *PlatformAuthHandlerV2) HandleModConsent(platform oauth.Platform) gin.Ha
 			return
 		}
 
+		// Origin handling: see HandleLogin.
+		origin := requestFrontendOrigin(c)
+		provider = providerForOrigin(provider, platform, origin)
+
 		userID, exists := c.Get("user_id")
 		if !exists {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized - please log in first"})
@@ -117,6 +121,7 @@ func (h *PlatformAuthHandlerV2) HandleModConsent(platform oauth.Platform) gin.Ha
 		}
 
 		oauthState := oauth.NewModConsentState(csrfToken, userIDStr)
+		oauthState.Origin = origin
 		if err := oauthState.Validate(); err != nil {
 			h.logger.Error("Invalid mod-consent OAuth state", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
@@ -214,7 +219,7 @@ func (h *PlatformAuthHandlerV2) completeModConsent(
 	// moderator and an empty user id must never reach the store.
 	if state.UserID == "" {
 		h.logger.Error("mod-consent callback without a user id", zap.String("platform", string(platform)))
-		h.redirectModConsent(c, platform, state.CSRFToken, "", "invalid_state")
+		h.redirectModConsent(c, platform, state.CSRFToken, stateOrigin(state), "", "invalid_state")
 		return
 	}
 
@@ -232,7 +237,7 @@ func (h *PlatformAuthHandlerV2) completeModConsent(
 			zap.String("platform", string(platform)),
 			zap.String("user_id", state.UserID),
 			zap.Error(err))
-		h.redirectModConsent(c, platform, state.CSRFToken, "", "credential_store_failed")
+		h.redirectModConsent(c, platform, state.CSRFToken, stateOrigin(state), "", "credential_store_failed")
 		return
 	}
 
@@ -242,7 +247,7 @@ func (h *PlatformAuthHandlerV2) completeModConsent(
 		zap.String("platform_user_id", platformUser.GetID()),
 		zap.Strings("granted_scopes", granted))
 
-	h.redirectModConsent(c, platform, state.CSRFToken, string(platform), "")
+	h.redirectModConsent(c, platform, state.CSRFToken, stateOrigin(state), string(platform), "")
 }
 
 // redirectModConsent returns the moderator to the moderation area.
@@ -251,8 +256,8 @@ func (h *PlatformAuthHandlerV2) completeModConsent(
 // moderator was already signed in when they started, and this flow deliberately does not
 // re-issue a session — it grants a capability to an existing account rather than establishing
 // one.
-func (h *PlatformAuthHandlerV2) redirectModConsent(c *gin.Context, platform oauth.Platform, csrfToken, connected, errCode string) {
-	target := fmt.Sprintf("%s/moderate", h.frontendURL)
+func (h *PlatformAuthHandlerV2) redirectModConsent(c *gin.Context, platform oauth.Platform, csrfToken, origin, connected, errCode string) {
+	target := fmt.Sprintf("%s/moderate", origin)
 	switch {
 	case errCode != "":
 		target = fmt.Sprintf("%s?error=%s&platform=%s", target, errCode, platform)

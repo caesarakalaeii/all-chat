@@ -97,6 +97,23 @@ func (d *DiscordOAuth) WithBotToken(botToken string) *DiscordOAuth {
 	return d
 }
 
+// WithRedirectURL returns a provider that redirects to redirectURL instead. Used to
+// point the invite and identity flows at a second frontend origin (beta.allch.at)
+// whose callback URI is registered separately with the Discord app; both authorize
+// URLs and the code exchange must agree on it. Built field-wise rather than by struct
+// copy: the botID cache's mutex must not be copied (go vet copylocks), and the
+// swapped copy simply resolves its own botID if it ever needs one.
+func (d *DiscordOAuth) WithRedirectURL(redirectURL string) *DiscordOAuth {
+	return &DiscordOAuth{
+		clientID:     d.clientID,
+		clientSecret: d.clientSecret,
+		redirectURL:  redirectURL,
+		botToken:     d.botToken,
+		client:       d.client,
+		apiBase:      d.apiBase,
+	}
+}
+
 // GetAuthURL returns the base Discord bot invite URL. This shows a guild picker (not a
 // user login page) because scope=bot signals Discord to use the bot authorization flow.
 // The base permissions are VIEW_CHANNEL | SEND_MESSAGES | READ_MESSAGE_HISTORY (68608).
