@@ -546,6 +546,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
             'rumble',
             'discord',
           ],
+      skip_links: display.tts_skip_links !== false,
     }
 
     // For the ElevenLabs branch, hydrate the runtime fetch
