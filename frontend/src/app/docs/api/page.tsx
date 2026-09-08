@@ -22,6 +22,8 @@ import { Code, Pre, FieldTable, type Field } from '@/components/docs/prose'
 import { JsonLd } from '@/components/JsonLd'
 import { getTranslations, type MessageKey } from '@/lib/i18n'
 import { interpolateElements } from '@/lib/i18n/emphasise'
+import { cn } from '@/lib/utils'
+import { archivoBlack, spaceMono } from '@/lib/fonts'
 
 // getTranslations, not useTranslations: this is a Server Component.
 const t = getTranslations()
@@ -387,38 +389,31 @@ function EventTypeList({
 
 export default function DeveloperDocsPage() {
   return (
-    <div className="min-h-screen bg-bg transition-colors duration-300">
+    <div className={cn('lanes-app min-h-screen', archivoBlack.variable, spaceMono.variable)}>
       <JsonLd data={techArticleLd} />
       <JsonLd data={breadcrumbLd} />
       <AppNav />
       <div className="mx-auto max-w-4xl px-4 py-12">
-        <div className="rounded-xl border border-border bg-surface p-8 transition-colors duration-300 md:p-12">
+        <div className="lanes-panel p-8 md:p-12">
           <div className="mb-8 space-y-2">
-            <p className="text-xs font-semibold tracking-[0.2em] text-twitch uppercase">
-              {t('docs.api.eyebrow')}
-            </p>
-            <h1 className="text-3xl font-bold text-text">{t('docs.api.heading')}</h1>
-            <p className="text-sm text-text-dim">{t('docs.api.intro')}</p>
-            <p className="text-sm text-text-sub">
+            <p className="mono-label text-xs">{t('docs.api.eyebrow')}</p>
+            <h1 className="text-3xl">{t('docs.api.heading')}</h1>
+            <p className="text-dim text-sm">{t('docs.api.intro')}</p>
+            <p className="text-sub text-sm">
               {interpolateElements(t('docs.api.guidePrompt'), {
-                guide: (
-                  <Link href="/docs" className="text-twitch hover:underline">
-                    {t('docs.api.guideLinkText')}
-                  </Link>
-                ),
+                guide: <Link href="/docs">{t('docs.api.guideLinkText')}</Link>,
               })}
             </p>
           </div>
 
-          {/* Table of contents */}
-          <nav className="mb-10 rounded-lg border border-border bg-surface-2 p-5">
-            <p className="mb-2 text-xs font-semibold tracking-[0.15em] text-text-dim uppercase">
+          <nav className="mb-10 border-2 border-white p-5">
+            <p className="text-dim mb-2 text-xs tracking-[0.15em] uppercase">
               {t('docs.api.tocHeading')}
             </p>
             <ul className="grid gap-1 sm:grid-cols-2">
               {toc.map(({ id, labelKey }) => (
                 <li key={id}>
-                  <a href={`#${id}`} className="text-sm text-twitch hover:underline">
+                  <a href={`#${id}`} className="text-sm underline underline-offset-2">
                     {t(labelKey)}
                   </a>
                 </li>
@@ -426,7 +421,7 @@ export default function DeveloperDocsPage() {
             </ul>
           </nav>
 
-          <div className="legal-prose space-y-10 leading-relaxed text-text-sub">
+          <div className="legal-prose text-sub space-y-10 leading-relaxed">
             {/* Connect a tool */}
             <section id="connect-a-tool">
               <h2>{t('docs.api.connectHeading')}</h2>
@@ -588,18 +583,12 @@ export default function DeveloperDocsPage() {
           </div>
 
           {/* Footer */}
-          <div className="mt-12 flex flex-col gap-3 border-t border-border pt-6 text-sm text-text-dim sm:flex-row sm:items-center sm:justify-between">
+          <div className="text-dim mt-12 flex flex-col gap-3 border-t border-white/20 pt-6 text-sm sm:flex-row sm:items-center sm:justify-between">
             <span>{t('docs.api.footerCopyright', { year: new Date().getFullYear() })}</span>
             <div className="flex flex-wrap items-center gap-4">
-              <Link href="/docs" className="transition-colors hover:text-text">
-                {t('docs.api.footerGuideLink')}
-              </Link>
-              <Link href="/legal/privacy" className="transition-colors hover:text-text">
-                {t('docs.api.footerPrivacyLink')}
-              </Link>
-              <Link href="/legal/terms" className="transition-colors hover:text-text">
-                {t('docs.api.footerTermsLink')}
-              </Link>
+              <Link href="/docs">{t('docs.api.footerGuideLink')}</Link>
+              <Link href="/legal/privacy">{t('docs.api.footerPrivacyLink')}</Link>
+              <Link href="/legal/terms">{t('docs.api.footerTermsLink')}</Link>
             </div>
           </div>
         </div>

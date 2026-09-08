@@ -21,8 +21,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AppNav } from '@/components/AppNav'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toastManager } from '@/lib/toast'
@@ -30,6 +28,8 @@ import { useAuthStore } from '@/lib/stores/auth-store'
 import { useOverlayStore } from '@/lib/stores/overlay-store'
 import { trackEvent } from '@/lib/analytics'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
+import { cn } from '@/lib/utils'
+import { archivoBlack, spaceMono } from '@/lib/fonts'
 import { useTranslations } from '@/lib/i18n'
 
 function NewOverlayContent() {
@@ -69,15 +69,15 @@ function NewOverlayContent() {
   }
 
   return (
-    <div className="min-h-screen bg-bg">
+    <div className={cn('lanes-app min-h-screen', archivoBlack.variable, spaceMono.variable)}>
       <AppNav />
       <main id="main-content" tabIndex={-1} className="mx-auto max-w-lg px-4 py-12">
-        <Card className="p-8">
-          <h1 className="mb-2 text-2xl font-bold text-text">{t('overlayEditor.create.heading')}</h1>
-          <p className="mb-8 text-sm text-text-sub">{t('overlayEditor.create.body')}</p>
+        <div className="lanes-panel p-8">
+          <h1 className="mb-2 text-2xl">{t('overlayEditor.create.heading')}</h1>
+          <p className="text-sub mb-8 text-sm">{t('overlayEditor.create.body')}</p>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
-              <label htmlFor="overlay-name" className="text-sm font-medium text-text">
+              <label htmlFor="overlay-name" className="text-sm font-medium">
                 {t('overlayEditor.create.nameLabel')}
               </label>
               <Input
@@ -98,21 +98,21 @@ function NewOverlayContent() {
               )}
             </div>
             <div className="flex justify-end gap-3">
-              <Button variant="outline" type="button" onClick={() => router.back()}>
+              <button type="button" className="lanes-btn ghost" onClick={() => router.back()}>
                 {t('overlayEditor.create.cancel')}
-              </Button>
-              <Button variant="gradient" type="submit" disabled={isSubmitting || !name.trim()}>
+              </button>
+              <button type="submit" className="lanes-btn" disabled={isSubmitting || !name.trim()}>
                 {isSubmitting ? (
                   <span className="flex items-center gap-2">
-                    <Skeleton className="h-4 w-24 rounded" />
+                    <Skeleton className="h-4 w-24 rounded-none bg-white/20" />
                   </span>
                 ) : (
                   t('overlayEditor.create.submit')
                 )}
-              </Button>
+              </button>
             </div>
           </form>
-        </Card>
+        </div>
       </main>
     </div>
   )

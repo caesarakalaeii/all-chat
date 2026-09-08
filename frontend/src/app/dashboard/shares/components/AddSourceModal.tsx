@@ -26,7 +26,6 @@
 
 import { useState, useEffect } from 'react'
 import { overlaysApi } from '@/lib/api/overlays'
-import { Button } from '@/components/ui/button'
 import { Dialog, DialogTitle } from '@/components/ui/dialog'
 import type { Overlay } from '@/lib/types/overlay'
 import { trackEvent } from '@/lib/analytics'
@@ -107,20 +106,18 @@ export function AddSourceModal({
 
   return (
     <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
-      <Dialog.Content size="sm">
+      <Dialog.Content size="sm" className="lanes-app rounded-none border-white bg-black">
         {/* Title */}
         <DialogTitle className="mb-4 pr-8 text-xl">
           {t('dashboard.shares.addSourceTitle', { sender: senderName })}
         </DialogTitle>
 
         {loadingOverlays ? (
-          <div className="py-8 text-center text-text-sub">
-            {t('dashboard.shares.loadingOverlays')}
-          </div>
+          <div className="text-sub py-8 text-center">{t('dashboard.shares.loadingOverlays')}</div>
         ) : (
           <>
             {/* Preview text */}
-            <p className="mb-4 text-sm text-text-sub">
+            <p className="text-sub mb-4 text-sm">
               {t('dashboard.shares.addSourcePreview', { sender: senderName })}
             </p>
 
@@ -128,7 +125,7 @@ export function AddSourceModal({
             <div className="mb-6">
               <label
                 htmlFor="target-overlay-select"
-                className="mb-2 block text-sm font-medium text-text-sub"
+                className="text-sub mb-2 block text-sm font-medium"
               >
                 {t('dashboard.shares.addSourceSelectLabel')}
               </label>
@@ -136,7 +133,7 @@ export function AddSourceModal({
                 id="target-overlay-select"
                 value={selectedOverlay}
                 onChange={(e) => setSelectedOverlay(e.target.value)}
-                className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text transition-all duration-200 focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500/20 focus-visible:outline-none"
+                className="lanes-input w-full px-3 py-2 text-sm"
               >
                 {overlays.map((overlay) => (
                   <option key={overlay.id} value={overlay.id}>
@@ -148,19 +145,18 @@ export function AddSourceModal({
 
             {/* Action buttons */}
             <div className="flex gap-3">
-              <Button variant="ghost" className="flex-1" onClick={onClose} disabled={loading}>
+              <button className="lanes-btn ghost flex-1" onClick={onClose} disabled={loading}>
                 {t('dashboard.shares.addSourceSkip')}
-              </Button>
-              <Button
-                variant="gradient"
-                className="flex-1"
+              </button>
+              <button
+                className="lanes-btn flex-1"
                 onClick={handleAdd}
                 disabled={loading || !selectedOverlay}
               >
                 {loading
                   ? t('dashboard.shares.addSourceAdding')
                   : t('dashboard.shares.addSourceAdd')}
-              </Button>
+              </button>
             </div>
           </>
         )}

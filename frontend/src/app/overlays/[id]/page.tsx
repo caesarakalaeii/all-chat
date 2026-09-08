@@ -83,6 +83,7 @@ import { computeThemeCssDiff, reconstructEditorCss } from '@/lib/utils/theme-css
 import type { CustomCssMode } from '@/lib/utils/theme-css-diff'
 import type { Theme } from '@/lib/theme-marketplace/types'
 import { toastManager } from '@/lib/toast'
+import { archivoBlack, spaceMono } from '@/lib/fonts'
 import { safeExternalRedirect } from '@/lib/auth/redirect-allowlist'
 import { trackEvent } from '@/lib/analytics'
 import { useTrackOnce } from '@/hooks/useTrackOnce'
@@ -3033,7 +3034,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-bg">
+      <div className={cn('lanes-app min-h-screen', archivoBlack.variable, spaceMono.variable)}>
         <AppNav />
         <div className="flex h-[calc(100vh-60px)] items-center justify-center">
           <div className="w-64 space-y-3">
@@ -3048,7 +3049,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
 
   if (!overlay) {
     return (
-      <div className="min-h-screen bg-bg">
+      <div className={cn('lanes-app min-h-screen', archivoBlack.variable, spaceMono.variable)}>
         <AppNav />
         <div className="flex h-[calc(100vh-60px)] items-center justify-center">
           <div className="text-center">
@@ -3063,7 +3064,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   }
 
   return (
-    <div className="min-h-screen bg-bg">
+    <div className={cn('lanes-app min-h-screen', archivoBlack.variable, spaceMono.variable)}>
       <AppNav />
       <SplitView overlayId={id} onIframeReady={handleIframeReady}>
         {/* Config panel content */}

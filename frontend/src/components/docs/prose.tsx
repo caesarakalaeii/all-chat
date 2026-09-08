@@ -40,26 +40,24 @@ export type CodeLang = 'javascript' | 'python' | 'json' | 'css'
 
 export function Code({ children }: { children: ReactNode }) {
   return (
-    <code className="rounded bg-surface-2 px-1.5 py-0.5 font-mono text-[0.85em] text-text">
-      {children}
-    </code>
+    <code className="border-2 border-white bg-black px-1.5 py-0.5 text-[0.85em]">{children}</code>
   )
 }
 
 export function Pre({ children, lang }: { children: string; lang?: CodeLang }) {
   const className =
-    'my-4 overflow-x-auto rounded-lg border border-border bg-surface-2 p-4 text-sm leading-relaxed text-text-sub'
+    'my-4 overflow-x-auto border-2 border-white bg-black p-4 text-sm leading-relaxed'
   if (!lang) {
     return (
       <pre className={className}>
-        <code className="font-mono">{children}</code>
+        <code>{children}</code>
       </pre>
     )
   }
   const highlighted = hljs.highlight(children, { language: lang, ignoreIllegals: true }).value
   return (
     <pre className={className}>
-      <code className="hljs font-mono" dangerouslySetInnerHTML={{ __html: highlighted }} />
+      <code className="hljs" dangerouslySetInnerHTML={{ __html: highlighted }} />
     </pre>
   )
 }
@@ -77,23 +75,23 @@ export function FieldTable({ rows }: { rows: readonly Field[] }) {
   // getTranslations, not useTranslations: these are Server Components.
   const t = getTranslations()
   return (
-    <div className="my-4 overflow-x-auto rounded-lg border border-border">
+    <div className="my-4 overflow-x-auto border-2 border-white">
       <table className="w-full border-collapse text-left text-sm">
         <thead>
-          <tr className="bg-surface-2 text-text">
-            <th className="px-4 py-2 font-semibold">{t('docs.fieldTable.columnField')}</th>
-            <th className="px-4 py-2 font-semibold">{t('docs.fieldTable.columnType')}</th>
-            <th className="px-4 py-2 font-semibold">{t('docs.fieldTable.columnDescription')}</th>
+          <tr>
+            <th className="px-4 py-2 font-bold">{t('docs.fieldTable.columnField')}</th>
+            <th className="px-4 py-2 font-bold">{t('docs.fieldTable.columnType')}</th>
+            <th className="px-4 py-2 font-bold">{t('docs.fieldTable.columnDescription')}</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.name} className="border-t border-border align-top">
+            <tr key={r.name} className="align-top">
               <td className="px-4 py-2">
-                <span className="font-mono text-text">{r.name}</span>
+                <span className="text-white">{r.name}</span>
               </td>
-              <td className="px-4 py-2 font-mono text-text-dim">{r.type}</td>
-              <td className="px-4 py-2 text-text-sub">{t(r.descKey)}</td>
+              <td className="text-dim px-4 py-2">{r.type}</td>
+              <td className="text-sub px-4 py-2">{t(r.descKey)}</td>
             </tr>
           ))}
         </tbody>

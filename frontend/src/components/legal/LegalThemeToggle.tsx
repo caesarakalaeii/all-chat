@@ -66,6 +66,7 @@ export function LegalThemeToggle() {
       variant="outline"
       size="sm"
       aria-label={light ? 'Switch to dark mode' : 'Switch to light mode'}
+      className="lanes-btn ghost sm"
     >
       {light ? (
         <svg

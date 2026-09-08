@@ -21,6 +21,8 @@
 import { useEffect, useState } from 'react'
 import clsx from 'clsx'
 import { sharesApi } from '@/lib/api/shares'
+import { cn } from '@/lib/utils'
+import { archivoBlack, spaceMono } from '@/lib/fonts'
 import { ShareRequest } from '@/lib/types/share'
 import { ShareRequestCard } from './components/ShareRequestCard'
 import { AddSourceModal } from './components/AddSourceModal'
@@ -121,59 +123,63 @@ export default function ShareRequestsPage() {
   const historyCount = requests.length - pendingCount
 
   return (
-    <div className="px-4 py-6">
-      {/* Add Source Modal for unseen acceptances */}
-      {showUnseenPrompt && unseenAcceptances.length > 0 && (
-        <AddSourceModal
-          senderName={unseenAcceptances[0].sender_display_name || t('dashboard.shares.unknownUser')}
-          senderOverlayId={unseenAcceptances[0].sender_overlay_id}
-          onClose={handleCloseUnseenPrompt}
-          onAdded={handleAddedSource}
-        />
-      )}
+    <div className={cn('lanes-app min-h-screen', archivoBlack.variable, spaceMono.variable)}>
+      <div className="mx-auto max-w-6xl px-4 py-6">
+        {/* Add Source Modal for unseen acceptances */}
+        {showUnseenPrompt && unseenAcceptances.length > 0 && (
+          <AddSourceModal
+            senderName={
+              unseenAcceptances[0].sender_display_name || t('dashboard.shares.unknownUser')
+            }
+            senderOverlayId={unseenAcceptances[0].sender_overlay_id}
+            onClose={handleCloseUnseenPrompt}
+            onAdded={handleAddedSource}
+          />
+        )}
 
-      <h1 className="mb-6 text-2xl font-semibold text-text">{t('dashboard.shares.heading')}</h1>
+        <h1 className="mb-6 text-2xl">{t('dashboard.shares.heading')}</h1>
 
-      {/* Tab Filters */}
-      <Tabs
-        value={filter}
-        onValueChange={(value) => setFilter(value as 'pending' | 'history')}
-        className="mb-6"
-      >
-        <TabsList variant="line" className="w-full justify-start border-b border-border">
-          <TabsTrigger value="pending">
-            {t('dashboard.shares.tabPending', { count: pendingCount })}
-          </TabsTrigger>
-          <TabsTrigger value="history">
-            {t('dashboard.shares.tabHistory', { count: historyCount })}
-          </TabsTrigger>
-        </TabsList>
-      </Tabs>
+        {/* Tab Filters */}
+        <Tabs
+          value={filter}
+          onValueChange={(value) => setFilter(value as 'pending' | 'history')}
+          className="mb-6"
+        >
+          <TabsList variant="line" className="w-full justify-start border-b border-white/20">
+            <TabsTrigger value="pending">
+              {t('dashboard.shares.tabPending', { count: pendingCount })}
+            </TabsTrigger>
+            <TabsTrigger value="history">
+              {t('dashboard.shares.tabHistory', { count: historyCount })}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
 
-      {/* Loading state */}
-      {loading && (
-        <div role="status" className="py-8 text-center text-text-sub">
-          {t('dashboard.shares.loading')}
-        </div>
-      )}
+        {/* Loading state */}
+        {loading && (
+          <div role="status" className="text-sub py-8 text-center">
+            {t('dashboard.shares.loading')}
+          </div>
+        )}
 
-      {/* Empty state */}
-      {!loading && sortedRequests.length === 0 && (
-        <div className="py-8 text-center text-text-sub">
-          {filter === 'pending'
-            ? t('dashboard.shares.emptyPending')
-            : t('dashboard.shares.emptyHistory')}
-        </div>
-      )}
+        {/* Empty state */}
+        {!loading && sortedRequests.length === 0 && (
+          <div className="text-sub py-8 text-center">
+            {filter === 'pending'
+              ? t('dashboard.shares.emptyPending')
+              : t('dashboard.shares.emptyHistory')}
+          </div>
+        )}
 
-      {/* Card Grid */}
-      {!loading && sortedRequests.length > 0 && (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {sortedRequests.map((request) => (
-            <ShareRequestCard key={request.id} request={request} onUpdate={fetchRequests} />
-          ))}
-        </div>
-      )}
+        {/* Card Grid */}
+        {!loading && sortedRequests.length > 0 && (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {sortedRequests.map((request) => (
+              <ShareRequestCard key={request.id} request={request} onUpdate={fetchRequests} />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

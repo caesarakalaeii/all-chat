@@ -40,27 +40,27 @@ export function StatusBadge({ status, size = 'md' }: StatusBadgeProps) {
     {
       pending: {
         messageStem: 'statusPending',
-        className: 'bg-amber-500/10 text-amber-400 border border-amber-500/20',
+        className: 'text-amber-300',
         icon: '⏳',
       },
       accepted: {
         messageStem: 'statusAccepted',
-        className: 'bg-green-500/10 text-green-400 border border-green-500/20',
+        className: 'text-kick',
         icon: '✓',
       },
       expired: {
         messageStem: 'statusExpired',
-        className: 'bg-surface-2/40 text-text-sub border border-border',
+        className: 'text-dim',
         icon: '⏱',
       },
       revoked: {
         messageStem: 'statusRevoked',
-        className: 'bg-red-500/10 text-red-400 border border-red-500/20',
+        className: 'text-youtube',
         icon: '✗',
       },
       rejected: {
         messageStem: 'statusRejected',
-        className: 'bg-red-500/10 text-red-400 border border-red-500/20',
+        className: 'text-youtube',
         icon: '✗',
       },
     } as const
@@ -69,13 +69,7 @@ export function StatusBadge({ status, size = 'md' }: StatusBadgeProps) {
   const sizeClasses = size === 'sm' ? 'text-xs px-2 py-0.5' : 'text-xs px-2.5 py-0.5'
 
   return (
-    <span
-      className={clsx(
-        'inline-flex items-center gap-1 rounded-full font-medium',
-        config.className,
-        sizeClasses
-      )}
-    >
+    <span className={clsx('lanes-chip', config.className, sizeClasses)}>
       <span>{config.icon}</span>
       <span>{t(`dashboard.shares.${config.messageStem}`)}</span>
     </span>

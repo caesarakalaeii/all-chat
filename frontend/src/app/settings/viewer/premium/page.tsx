@@ -22,8 +22,6 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { AppNav } from '@/components/AppNav'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { Dialog } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { type TFunction, formatDate, useTranslations } from '@/lib/i18n'
@@ -32,6 +30,8 @@ import { toastManager } from '@/lib/toast'
 import { viewerApi } from '@/lib/api/viewer'
 import { PATREON_JOIN_URL } from '@/lib/constants'
 import type { PaymentStatus } from '@/lib/api/payment'
+import { cn } from '@/lib/utils'
+import { archivoBlack, spaceMono } from '@/lib/fonts'
 
 function statusLabel(t: TFunction, status?: string): string {
   switch (status) {
@@ -115,34 +115,31 @@ function ViewerPremiumContent() {
   const isPremium = status?.is_premium === true
 
   return (
-    <div className="min-h-screen bg-bg">
+    <div className={cn('lanes-app min-h-screen', archivoBlack.variable, spaceMono.variable)}>
       <AppNav />
       <main id="main-content" tabIndex={-1} className="mx-auto max-w-2xl space-y-6 px-4 py-12">
         <div className="space-y-1">
           <Link
             href="/settings/viewer"
-            className="text-sm text-text-sub transition-colors hover:text-text"
+            className="text-sub text-sm transition-colors hover:text-white"
           >
             {t('settings.viewerPremium.back')}
           </Link>
-          <h1 className="text-2xl font-bold text-text">{t('settings.viewerPremium.heading')}</h1>
-          <p className="text-sm text-text-sub">{t('settings.viewerPremium.subheading')}</p>
         </div>
 
-        <Card className="p-6">
-          <h2 className="mb-4 text-lg font-semibold text-text">{t('common.patreon.heading')}</h2>
-
+        <div className="lanes-panel p-6">
+          <h2 className="mb-4 text-lg">{t('common.patreon.heading')}</h2>
           {loading ? (
-            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full rounded-none" />
           ) : !status?.connected ? (
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-4">
-                <p className="text-sm text-text-sub">{t('settings.viewerPremium.connectPitch')}</p>
-                <Button onClick={handleConnect} disabled={connecting}>
+                <p className="text-sub text-sm">{t('settings.viewerPremium.connectPitch')}</p>
+                <button className="lanes-btn" onClick={handleConnect} disabled={connecting}>
                   {connecting ? t('common.patreon.connecting') : t('common.patreon.connect')}
-                </Button>
+                </button>
               </div>
-              <p className="text-sm text-text-sub">
+              <p className="text-sub text-sm">
                 {interpolateElements(t('settings.viewerPremium.notAPatronSuffix'), {
                   link: (
                     <a
@@ -160,36 +157,37 @@ function ViewerPremiumContent() {
           ) : (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-text-sub">
-                  {t('settings.viewerPremium.premiumRow')}
-                </span>
-                <span className="font-medium text-text">
+                <span className="text-sub text-sm">{t('settings.viewerPremium.premiumRow')}</span>
+                <span className="font-medium">
                   {isPremium ? t('common.patreon.active') : t('common.patreon.inactive')}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-text-sub">{t('common.patreon.subscriptionRow')}</span>
-                <span className="font-medium text-text">{statusLabel(t, status.status)}</span>
+                <span className="text-sub text-sm">{t('common.patreon.subscriptionRow')}</span>
+                <span className="font-medium">{statusLabel(t, status.status)}</span>
               </div>
               {status.renews_at && (
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-text-sub">{t('common.patreon.renewsRow')}</span>
-                  <span className="font-medium text-text">
-                    {formatDate(new Date(status.renews_at))}
-                  </span>
+                  <span className="text-sub text-sm">{t('common.patreon.renewsRow')}</span>
+                  <span className="font-medium">{formatDate(new Date(status.renews_at))}</span>
                 </div>
               )}
 
               {!isPremium && (
-                <p className="text-sm text-text-sub">{t('settings.viewerPremium.notGranting')}</p>
+                <p className="text-sub text-sm">{t('settings.viewerPremium.notGranting')}</p>
               )}
 
               <div className="flex justify-end pt-2">
                 <Dialog.Root>
                   <Dialog.Trigger
-                    render={<Button variant="destructive">{t('common.patreon.disconnect')}</Button>}
+                    render={
+                      <button className="lanes-btn danger">{t('common.patreon.disconnect')}</button>
+                    }
                   />
-                  <Dialog.Content showCloseButton={false}>
+                  <Dialog.Content
+                    showCloseButton={false}
+                    className="rounded-none border-white bg-black text-[#f4f3ef]"
+                  >
                     <Dialog.Title>{t('common.patreon.disconnectTitle')}</Dialog.Title>
                     <Dialog.Description>
                       {t('settings.viewerPremium.disconnectBody')}
@@ -197,19 +195,21 @@ function ViewerPremiumContent() {
                     <div className="mt-6 flex justify-end gap-3">
                       <Dialog.Close
                         render={
-                          <Button variant="outline">{t('common.patreon.disconnectCancel')}</Button>
+                          <button className="lanes-btn ghost">
+                            {t('common.patreon.disconnectCancel')}
+                          </button>
                         }
                       />
-                      <Button variant="destructive" onClick={handleDisconnect}>
+                      <button className="lanes-btn danger" onClick={handleDisconnect}>
                         {t('common.patreon.disconnectConfirm')}
-                      </Button>
+                      </button>
                     </div>
                   </Dialog.Content>
                 </Dialog.Root>
               </div>
             </div>
           )}
-        </Card>
+        </div>
       </main>
     </div>
   )
@@ -218,22 +218,20 @@ function ViewerPremiumContent() {
 function ViewerPremiumUnauthenticated() {
   const t = useTranslations()
   return (
-    <div className="min-h-screen bg-bg">
+    <div className={cn('lanes-app min-h-screen', archivoBlack.variable, spaceMono.variable)}>
       <AppNav />
       <main id="main-content" tabIndex={-1} className="mx-auto max-w-2xl space-y-6 px-4 py-12">
-        <h1 className="text-2xl font-bold text-text">{t('settings.viewerPremium.heading')}</h1>
-        <Card className="p-6">
-          <h2 className="mb-2 text-lg font-semibold text-text">
-            {t('settings.viewerPremium.signInHeading')}
-          </h2>
-          <p className="mb-6 text-sm text-text-sub">{t('settings.viewerPremium.signInBody')}</p>
+        <h1 className="text-2xl">{t('settings.viewerPremium.heading')}</h1>
+        <div className="lanes-panel p-6">
+          <h2 className="mb-2 text-lg">{t('settings.viewerPremium.signInHeading')}</h2>
+          <p className="text-sub mb-6 text-sm">{t('settings.viewerPremium.signInBody')}</p>
           <Link
             href="/settings/viewer"
-            className="text-sm font-medium text-text transition-colors hover:text-text-sub"
+            className="text-sm font-medium underline underline-offset-2"
           >
             {t('settings.viewerPremium.signInLink')}
           </Link>
-        </Card>
+        </div>
       </main>
     </div>
   )
@@ -254,7 +252,7 @@ export default function ViewerPremiumPage() {
 
   if (signedIn === undefined) {
     return (
-      <div className="min-h-screen bg-bg">
+      <div className={cn('lanes-app min-h-screen', archivoBlack.variable, spaceMono.variable)}>
         <AppNav />
       </div>
     )
