@@ -127,4 +127,3 @@ func (p *StreamPublisher) IsHealthy(ctx context.Context) bool {
 	_, err := p.redis.Ping(ctx).Result()
 	return err == nil
 }
-
