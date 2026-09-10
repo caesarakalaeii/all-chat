@@ -26,7 +26,6 @@
 
 'use client'
 
-import { Button } from '@/components/ui/button'
 import { useTranslations } from '@/lib/i18n'
 
 export interface FinalSectionProps {
@@ -73,17 +72,11 @@ export function FinalSection({
         <span className="accent">{t('marketing.final.line3')}</span>
       </h2>
 
-      {/* Sign-in buttons — the same three providers and brand colours as the
-          old hero, so returning OAuth users see a familiar login row. */}
-      <div className="flex flex-wrap justify-center gap-3">
-        <Button
-          onClick={onTwitchLogin}
-          size="lg"
-          className="gap-2.5 px-6 py-3"
-          aria-label={t('marketing.lanes.signInWith', {
-            platform: t('common.platforms.twitch'),
-          })}
-        >
+      {/* Sign-in buttons — same three providers as before, restyled into the
+          lanes vocabulary (square mono buttons, brand-colored fills) so the
+          band matches the rest of the redesigned homepage. */}
+      <div className="final-signins">
+        <button type="button" className="final-signin" data-p="twitch" onClick={onTwitchLogin}>
           <svg
             className="h-5 w-5 shrink-0"
             viewBox="0 0 24 24"
@@ -96,25 +89,9 @@ export function FinalSection({
             />
           </svg>
           {t('marketing.lanes.signInWith', { platform: t('common.platforms.twitch') })}
-        </Button>
+        </button>
 
-        {/* YouTube — exact brand red #FF0000; dark label for WCAG AA (white on
-            #FF0000 is ~4.0:1), official white-on-red icon kept (logo exemption) */}
-        <Button
-          onClick={onYouTubeLogin}
-          size="lg"
-          className="gap-2.5 px-6 py-3 text-bg"
-          style={
-            {
-              backgroundColor: '#FF0000',
-              '--tw-ring-color': '#FF0000',
-            } as React.CSSProperties
-          }
-          aria-label={t('marketing.lanes.signInWith', {
-            platform: t('common.platforms.youtube'),
-          })}
-        >
-          {/* Official YouTube icon — white play button on brand red */}
+        <button type="button" className="final-signin" data-p="youtube" onClick={onYouTubeLogin}>
           <svg
             className="h-5 w-5 shrink-0"
             viewBox="0 0 24 24"
@@ -122,23 +99,14 @@ export function FinalSection({
             aria-hidden="true"
           >
             <path
-              fill="#FFFFFF"
+              fill="currentColor"
               d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"
             />
           </svg>
           {t('marketing.lanes.signInWith', { platform: t('common.platforms.youtube') })}
-        </Button>
+        </button>
 
-        {/* Kick — brand green, dark text + official block-K logo */}
-        <Button
-          onClick={onKickLogin}
-          size="lg"
-          className="gap-2.5 px-6 py-3 text-bg"
-          style={{ backgroundColor: 'var(--color-kick)' }}
-          aria-label={t('marketing.lanes.signInWith', {
-            platform: t('common.platforms.kick'),
-          })}
-        >
+        <button type="button" className="final-signin" data-p="kick" onClick={onKickLogin}>
           <svg
             className="h-5 w-5 shrink-0"
             viewBox="0 0 512 512"
@@ -151,7 +119,7 @@ export function FinalSection({
             />
           </svg>
           {t('marketing.lanes.signInWith', { platform: t('common.platforms.kick') })}
-        </Button>
+        </button>
       </div>
 
       <p className="micro">{t('marketing.final.micro')}</p>

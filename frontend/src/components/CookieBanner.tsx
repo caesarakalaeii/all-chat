@@ -260,12 +260,13 @@ export default function CookieBanner() {
                 })}
               </p>
 
-              {/* Action Buttons */}
+              {/* Action Buttons — same box on both: h-12, 2px border, mono.
+                  The lanes overrides repaint them (fill vs ghost), but the
+                  shared geometry here is what keeps the pair the same size. */}
               <div className="flex flex-wrap gap-3">
                 <Button
                   onClick={acknowledgeBanner}
-                  size="lg"
-                  className={cn(lanes && 'lanes-cookie-ack')}
+                  className={cn('h-12 px-6 py-0 text-base', lanes && 'lanes-cookie-ack')}
                 >
                   {t('legal.cookieBanner.acknowledge')}
                 </Button>
@@ -274,7 +275,7 @@ export default function CookieBanner() {
                   target="_blank"
                   rel="noopener noreferrer"
                   className={cn(
-                    'inline-flex items-center justify-center rounded-lg border border-border bg-surface-2 px-6 py-2.5 font-medium text-text transition-colors hover:bg-surface-2/80 focus-visible:ring-3 focus-visible:ring-twitch/50 focus-visible:outline-none',
+                    'inline-flex h-12 items-center justify-center rounded-lg border border-border bg-surface-2 px-6 font-medium text-text transition-colors hover:bg-surface-2/80 focus-visible:ring-3 focus-visible:ring-twitch/50 focus-visible:outline-none',
                     lanes && 'lanes-cookie-more'
                   )}
                 >

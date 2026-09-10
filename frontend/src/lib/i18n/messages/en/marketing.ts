@@ -218,6 +218,7 @@ export const marketing = {
   // home route. Google requires the structured text to match the visible
   // answer exactly, so both read these keys and neither restates them.
   faq: {
+    label: 'FAQ',
     heading: 'Frequently asked questions',
     platformsQuestion: 'Which platforms can I combine?',
     platformsAnswer:

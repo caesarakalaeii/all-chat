@@ -998,8 +998,7 @@ span.font-semibold.text-sm.username-gradient {
   max-width: 560px;
   border-radius: 14px;
   overflow: hidden;
-  background:
-    repeating-conic-gradient(#15151f 0% 25%, #0d0d14 0% 50%) 0 0 / 26px 26px;
+  background: repeating-conic-gradient(#15151f 0% 25%, #0d0d14 0% 50%) 0 0 / 26px 26px;
   outline: 1px solid rgba(244, 243, 239, 0.15);
 }
 .frame-head {
@@ -1192,6 +1191,61 @@ span.font-semibold.text-sm.username-gradient {
   text-transform: uppercase;
 }
 
+.final-signins {
+  margin-top: 44px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px;
+}
+.final-signin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-family: var(--font-space-mono), monospace;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  padding: 14px 24px;
+  border: 2px solid #fff;
+  border-radius: 0;
+  cursor: pointer;
+  color: #fff;
+  background: transparent;
+  transition: background 0.15s;
+}
+.final-signin:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+.final-signin:focus-visible {
+  outline: 2px solid var(--lanes-kick);
+  outline-offset: 2px;
+}
+.final-signin[data-p='twitch'] {
+  border-color: var(--lanes-twitch);
+  color: var(--lanes-twitch);
+}
+.final-signin[data-p='twitch']:hover {
+  background: var(--lanes-twitch);
+  color: #fff;
+}
+.final-signin[data-p='youtube'] {
+  border-color: var(--lanes-youtube);
+  color: var(--lanes-youtube);
+}
+.final-signin[data-p='youtube']:hover {
+  background: var(--lanes-youtube);
+  color: #fff;
+}
+.final-signin[data-p='kick'] {
+  border-color: var(--lanes-kick);
+  color: var(--lanes-kick);
+}
+.final-signin[data-p='kick']:hover {
+  background: var(--lanes-kick);
+  color: #000;
+}
 @media (max-width: 800px) {
   .numbers,
   .numbers.five,
@@ -1199,8 +1253,11 @@ span.font-semibold.text-sm.username-gradient {
   .wedge-grid {
     grid-template-columns: 1fr;
   }
+  /* The tone-on-tone wordmarks are decorative; at phone widths the Archivo
+   * Black platform name overflows its lane and reads as clipped text. Scale
+   * by the lane, not the viewport height, and let it hide what does not fit. */
   .wordmark {
-    font-size: 12vh;
+    font-size: 13vw;
   }
   .ctabar {
     grid-template-columns: 1fr;
@@ -1213,16 +1270,149 @@ span.font-semibold.text-sm.username-gradient {
     order: -1;
     width: 100%;
   }
+  .ambassador-grid {
+    grid-template-columns: 1fr;
+  }
+  .final-signins {
+    flex-direction: column;
+    align-items: stretch;
+    max-width: 360px;
+    margin-left: auto;
+    margin-right: auto;
+  }
 }
 
-/* Scroll snap: hero, every lanes-section, final and footer are the scroll
- * frames. end-aligned snapping closes the gap above each frame (tops-only
- * left dead zones with no snap point, which read as random stops) and makes
- * consecutive frames chain together at both edges, like a social feed.
- * proximity, not mandatory: FAQ/ambassadors sections and the theme showcase
- * can be taller than the viewport, and mandatory would lock scrolling inside
- * them. Non-frame sections (FAQ, ambassadors) carry no snap alignment, so the
- * browser falls back to free scrolling around them. */
+/* FAQ (lanes restyle): hard-bordered accordion, no rounded cards. */
+.faq h2 {
+  font-family: var(--font-archivo-black), sans-serif;
+  font-size: clamp(26px, 4vw, 52px);
+  line-height: 1.02;
+  margin-top: 28px;
+}
+.faq-list {
+  margin-top: 44px;
+  border-top: 3px solid #fff;
+}
+.faq-item {
+  border-bottom: 3px solid #fff;
+}
+.faq-item summary {
+  display: flex;
+  cursor: pointer;
+  list-style: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 22px 4px;
+  font-weight: 700;
+  font-size: 15px;
+}
+.faq-item summary::-webkit-details-marker {
+  display: none;
+}
+.faq-item summary:focus-visible {
+  outline: 2px solid var(--lanes-kick);
+  outline-offset: 2px;
+}
+.faq-item summary:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.04);
+}
+.faq-item[open] summary {
+  color: #fff;
+}
+.faq-item p {
+  padding: 0 4px 26px;
+  max-width: 72ch;
+  font-size: 13.5px;
+  line-height: 1.75;
+  color: rgba(244, 243, 239, 0.75);
+}
+
+/* Ambassadors (lanes restyle): black panels, hard borders, offset shadow. */
+.ambassadors h2 {
+  font-family: var(--font-archivo-black), sans-serif;
+  font-size: clamp(26px, 4vw, 52px);
+  line-height: 1.02;
+  margin-top: 28px;
+}
+.ambassadors .dim {
+  color: rgba(244, 243, 239, 0.65);
+}
+.ambassador-grid {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  margin-top: 44px;
+  padding: 0;
+}
+.ambassador-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  background: #000;
+  border: 3px solid #fff;
+  box-shadow: 8px 8px 0 rgba(0, 0, 0, 0.55);
+  padding: 20px;
+}
+.ambassador-card a {
+  color: #fff;
+  text-decoration-color: var(--lanes-youtube);
+}
+
+/* Theme showcase (lanes restyle): the carousel frame becomes a black panel
+ * with the hard border + offset shadow, square dots, no rounding. Selectors
+ * target the ThemeSwitcher's structural classes (it owns its own markup). */
+.theme-showcase .rounded-xl {
+  border-radius: 0;
+  border-width: 3px;
+  border-color: #fff;
+  background: #000;
+  box-shadow: 8px 8px 0 rgba(0, 0, 0, 0.55);
+}
+.theme-showcase .rounded-full {
+  border-radius: 0;
+}
+/* ...but the preview's avatars stay round — they are a user's actual avatar
+ * image rendered inside the theme preview, part of the product, not chrome. */
+.theme-showcase img.rounded-full {
+  border-radius: 9999px;
+}
+.theme-showcase .bg-twitch {
+  /* Active carousel dot: white on black instead of the twitch purple the
+   * app-wide token would give here. */
+  background: #fff !important;
+}
+.theme-showcase .border-t {
+  border-top-width: 3px;
+  border-color: #fff;
+}
+.theme-showcase p,
+.theme-showcase h2 {
+  color: #fff;
+}
+.theme-showcase .text-text-sub,
+.theme-showcase .text-text-sub * {
+  color: rgba(244, 243, 239, 0.7) !important;
+}
+.theme-showcase .text-text {
+  color: #fff !important;
+}
+.ambassador-card a:hover {
+  color: var(--lanes-youtube);
+}
+
+/* Scroll snap: hero, every lanes-section (FAQ included), final and footer
+ * are the scroll frames. Frames start-align so each stop shows a section's
+ * top edge; a frame taller than the viewport also end-aligns so its bottom
+ * boundary chains into the next frame without a dead zone. The final band
+ * deliberately start-aligns ONLY: its end edge sits closer to the document
+ * end than one viewport, and that snap point yanked the viewport out of the
+ * preceding FAQ's scroll range while the band top itself was unreachable —
+ * the classic "snap breaks near the login section".
+ * proximity, not mandatory: any frame can outgrow the viewport on a small
+ * screen, and mandatory would lock scrolling inside it. */
 html:has(.lanes-home) {
   scroll-snap-type: y proximity;
   /* The snap area must match what the user sees as the section start, or
@@ -1231,11 +1421,21 @@ html:has(.lanes-home) {
 }
 .lanes-stage,
 .lanes-section,
-.final,
 .lanes-footer {
   scroll-snap-align: start end;
-  /* No negative margins, no forced heights: sections below the fold scroll
-   * naturally and snap at their boundaries. */
+  scroll-margin-top: 0;
+}
+.final {
+  scroll-snap-align: start;
+  scroll-margin-top: 0;
+}
+.faq {
+  /* start-only (after the group rule so it wins the cascade): the section is
+   * only slightly taller than a viewport, so a second end-edge snap point
+   * lands within a viewport of the start point and every rest inside the FAQ
+   * collapses onto the pair, which reads as sticky, jumpy scrolling. One
+   * anchor at the section top is enough; the final band picks up from there. */
+  scroll-snap-align: start;
   scroll-margin-top: 0;
 }
 /* ============================================================
@@ -1327,14 +1527,7 @@ html:has(.lanes-home) {
 }
 .lanes-btn.danger:hover {
   background: #c0261d;
-  border-color: #c0261d;
 }
-.lanes-btn.sm {
-  padding: 6px 12px;
-  font-size: 12px;
-}
-
-/* Inputs and selects: black field, white border, mono text. */
 .lanes-input,
 .lanes-app input:not([type='checkbox']):not([type='radio']),
 .lanes-app select,
@@ -1526,8 +1719,10 @@ html:has(.lanes-home) {
   background: #fff !important;
   color: #000 !important;
   border-radius: 0 !important;
+  border: 2px solid #fff !important;
   font-family: var(--font-space-mono), monospace;
   font-weight: 700;
+  font-size: 16px;
   letter-spacing: 0.02em;
 }
 .lanes-cookie .lanes-cookie-ack:hover {
@@ -1539,6 +1734,8 @@ html:has(.lanes-home) {
   background: transparent !important;
   color: #fff !important;
   font-family: var(--font-space-mono), monospace;
+  font-weight: 700;
+  font-size: 16px;
 }
 .lanes-cookie .lanes-cookie-more:hover {
   background: rgba(255, 255, 255, 0.12) !important;
