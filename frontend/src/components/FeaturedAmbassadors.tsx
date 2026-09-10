@@ -3,8 +3,8 @@
  * Copyright (C) 2026 caesarakalaeii
  *
  * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
@@ -26,6 +26,9 @@
  * avoids the apiClient refresh/redirect machinery. Renders nothing until data
  * arrives and nothing when the list is empty, so the section never shows an empty
  * shell.
+ *
+ * Lanes restyle: a .lanes-section with black panels, hard white borders and
+ * offset shadows instead of the rounded shadcn cards.
  */
 
 'use client'
@@ -62,31 +65,24 @@ export function FeaturedAmbassadors() {
   if (!ambassadors || ambassadors.length === 0) return null
 
   return (
-    <section className="mx-auto max-w-5xl border-t border-border px-4 py-16">
-      <p className="mb-3 text-center text-xs font-bold tracking-widest text-text-sub uppercase">
-        {t('marketing.ambassadors.eyebrow')}
-      </p>
-      <h2 className="mb-10 text-center text-2xl font-bold text-text">
-        {t('marketing.ambassadors.title')}
-      </h2>
-      <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <section className="lanes-section ambassadors">
+      <span className="mono-label">{t('marketing.ambassadors.eyebrow')}</span>
+      <h2>{t('marketing.ambassadors.title')}</h2>
+      <ul className="ambassador-grid">
         {ambassadors.map((a) => (
-          <li
-            key={a.username}
-            className="flex items-start gap-4 rounded-xl border border-border bg-surface p-5"
-          >
+          <li key={a.username} className="ambassador-card">
             <UserAvatar avatarUrl={a.avatar_url} displayName={a.display_name} size={48} />
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <span className="truncate font-semibold text-text">{a.display_name}</span>
+                <span className="truncate font-bold">{a.display_name}</span>
                 <PlatformBadge platform={a.platform} size="sm" />
               </div>
-              {a.tagline && <p className="mt-1 text-sm text-text-sub">{a.tagline}</p>}
+              {a.tagline && <p className="mt-1 text-sm dim">{a.tagline}</p>}
               <ChannelLink
                 platform={a.platform}
                 channelId={a.username}
                 channelHandle={a.username}
-                className="mt-2 text-sm text-text-sub"
+                className="mt-2 text-sm dim"
               />
             </div>
           </li>

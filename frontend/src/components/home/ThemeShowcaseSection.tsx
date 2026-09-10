@@ -17,11 +17,11 @@
  */
 
 /**
- * ThemeShowcaseSection — the theme preview carousel the pre-lanes landing
- * showed under the hero. The lanes redesign dropped it for a /docs#themes
- * link; a user missed the live preview, so it is back as its own section
- * between setup and FAQ. The carousel itself (ThemeSwitcher) is untouched:
- * it carries its own heading, copy and accessibility semantics.
+ * ThemeShowcaseSection — the theme preview carousel section between setup
+ * and FAQ. The carousel itself (ThemeSwitcher) is untouched: it carries its
+ * own heading, copy and accessibility semantics. The section wrapper adds the
+ * lanes vocabulary (mono label, panel chrome) via the .theme-showcase class
+ * in globals.css.
  */
 
 'use client'
@@ -30,7 +30,7 @@ import { ThemeSwitcher } from '@/components/ThemeSwitcher'
 
 export function ThemeShowcaseSection() {
   return (
-    <section className="lanes-section">
+    <section className="lanes-section theme-showcase">
       <ThemeSwitcher />
     </section>
   )
