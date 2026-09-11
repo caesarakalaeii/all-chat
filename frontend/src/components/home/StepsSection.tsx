@@ -35,7 +35,7 @@ export function StepsSection() {
   const t = useTranslations()
 
   return (
-    <section className="lanes-section">
+    <section className="lanes-section" data-reveal>
       <span className="mono-label">{t('marketing.steps.label')}</span>
       <div className="steps">
         {STEPS.map((step) => (

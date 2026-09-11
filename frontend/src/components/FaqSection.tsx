@@ -36,7 +36,7 @@ import { getTranslations } from '@/lib/i18n'
 export function FaqSection() {
   const t = getTranslations()
   return (
-    <section className="lanes-section faq">
+    <section className="lanes-section faq" data-reveal>
       <span className="mono-label">{t('marketing.faq.label')}</span>
       <h2>{t('marketing.faq.heading')}</h2>
       <div className="faq-list">

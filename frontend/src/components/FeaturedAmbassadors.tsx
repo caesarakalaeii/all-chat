@@ -65,12 +65,12 @@ export function FeaturedAmbassadors() {
   if (!ambassadors || ambassadors.length === 0) return null
 
   return (
-    <section className="lanes-section ambassadors">
+    <section className="lanes-section ambassadors" data-reveal>
       <span className="mono-label">{t('marketing.ambassadors.eyebrow')}</span>
       <h2>{t('marketing.ambassadors.title')}</h2>
       <ul className="ambassador-grid">
         {ambassadors.map((a) => (
-          <li key={a.username} className="ambassador-card">
+          <li key={a.username} className="ambassador-card panel-fill">
             <UserAvatar avatarUrl={a.avatar_url} displayName={a.display_name} size={48} />
             <div className="min-w-0">
               <div className="flex items-center gap-2">

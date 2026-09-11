@@ -30,7 +30,7 @@ import { ThemeSwitcher } from '@/components/ThemeSwitcher'
 
 export function ThemeShowcaseSection() {
   return (
-    <section className="lanes-section theme-showcase">
+    <section className="lanes-section theme-showcase" data-reveal>
       <ThemeSwitcher />
     </section>
   )
