@@ -52,7 +52,7 @@ export const marketing = {
     manifesto: 'YOUR CHATS? MERGED. YOUR COMMUNITY? UNITED.',
     totalLabel: 'MSG DELIVERED',
     cta: 'GET YOUR OVERLAY — FREE →',
-    ctaNote: "lane height ≈ share of this week's messages",
+    ctaNote: 'lane height ≈ live share of messages',
     howItWorks: 'how it works ↓',
     backToDashboard: 'BACK TO YOUR DASHBOARD →',
     welcomeNote: 'welcome back, {name} — {count} overlays are live, yours is one click away',

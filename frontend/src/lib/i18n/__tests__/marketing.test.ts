@@ -47,7 +47,7 @@ describe('lanes hero, logged out', () => {
 
   it('keeps the CTA bar', () => {
     expect(t('marketing.lanes.cta')).toBe('GET YOUR OVERLAY — FREE →')
-    expect(t('marketing.lanes.ctaNote')).toBe("lane height ≈ share of this week's messages")
+    expect(t('marketing.lanes.ctaNote')).toBe('lane height ≈ live share of messages')
     expect(t('marketing.lanes.howItWorks')).toBe('how it works ↓')
   })
 
