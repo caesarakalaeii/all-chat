@@ -60,7 +60,11 @@ import {
 } from '@/lib/utils/bubbleSlot'
 import { getBundledTheme } from '@/lib/theme-marketplace/bundled-themes'
 import { rewriteThemeFontImports } from '@/lib/theme-marketplace/font-proxy'
-import { chatBubbleStyle, overlayContainerStyle } from '@/lib/utils/visual-inline-styles'
+import {
+  chatBubbleStyle,
+  overlayContainerStyle,
+  userBubbleStyle,
+} from '@/lib/utils/visual-inline-styles'
 import { isDisplayVisible } from '@/lib/utils/displayVisibility'
 import {
   DEFAULT_FEED_ANCHOR,
@@ -71,6 +75,7 @@ import {
   type FeedAnchor,
 } from '@/lib/utils/feedAnchor'
 import {
+  isBubbleColorFromUser,
   isMessageAnimation,
   MESSAGE_ANIMATION_CLASS,
   type MessageAnimation,
@@ -169,6 +174,12 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   // Entry animation for new chat bubbles; null keeps the default fade + slide-up
   const [messageAnimation, setMessageAnimation] = useState<MessageAnimation | null>(null)
   const [showPlatformBadge, setShowPlatformBadge] = useState(true)
+  // Bubble colour from the username colour. The CSS rule (userBubbleRules) and
+  // the per-row values (userBubbleStyle) both key off this mode + opacity.
+  const [bubbleColorFromUser, setBubbleColorFromUser] = useState<'none' | 'background' | 'border'>(
+    'none'
+  )
+  const [bubbleUserColorOpacity, setBubbleUserColorOpacity] = useState('0.85')
   const [showPlatformIndicators, setShowPlatformIndicators] = useState(true)
   // Visibility toggles whose CSS rules are scoped to `.overlay-preview-body`
   // (preview/embed only). The live OBS overlay lacks that scope hook, so it
@@ -401,7 +412,6 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
         ? rewriteThemeFontImports(getBundledTheme(config.theme_id)?.css ?? '')
         : ''
     )
-
     if (config.visual_settings && typeof config.visual_settings === 'object') {
       const vs = config.visual_settings as Partial<VisualSettings>
       setVisualSettingsCss(visualSettingsToCss(vs))
@@ -412,6 +422,14 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
       setBubbleStyle(chatBubbleStyle(vs))
       // Unconditional: clearing the palette has to drop the slot attributes too.
       setBubblePalette(resolveBubblePalette(vs))
+      // Same for the by-username mode; also cleared unconditionally so a
+      // saved 'none'/absence restores plain bubbles on reload.
+      setBubbleColorFromUser(
+        isBubbleColorFromUser(vs.bubbleColorFromUser) ? vs.bubbleColorFromUser : 'none'
+      )
+      if (typeof vs.bubbleUserColorOpacity === 'string') {
+        setBubbleUserColorOpacity(vs.bubbleUserColorOpacity)
+      }
       for (const key of ['fontFamily', 'usernameFontFamily', 'timestampFontFamily'] as const) {
         if (typeof vs[key] === 'string') ensureGoogleFontLoaded(vs[key]!)
       }
@@ -816,6 +834,10 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                 [BUBBLE_SLOT_ATTR]: isEvent
                   ? undefined
                   : bubbleSlot(bubbleSlots, message.id, bubblePalette.length),
+                // Marks the row for the by-username bubble rule
+                // (userBubbleRules); the colour itself rides in the style
+                // below as custom properties.
+                'data-user-bubble': isEvent || bubbleColorFromUser === 'none' ? undefined : '',
               }}
               className={clsx(
                 isEvent
@@ -830,7 +852,20 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                         : 'bg-slate-900/90',
                     ]
               )}
-              style={isEvent ? undefined : bubbleStyle}
+              style={
+                isEvent
+                  ? undefined
+                  : {
+                      ...bubbleStyle,
+                      ...(bubbleColorFromUser !== 'none'
+                        ? userBubbleStyle(
+                            message.user,
+                            { bubbleUserColorOpacity },
+                            bubbleColorFromUser
+                          )
+                        : {}),
+                    }
+              }
             >
               <div className="flex items-start gap-3">
                 {/* Avatar */}
@@ -932,7 +967,9 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                         <span
                           className="chat-username text-sm font-semibold"
                           style={{
-                            color: resolveUsernameColor(message.user),
+                            color: resolveUsernameColor(message.user, {
+                              staticColor: bubbleColorFromUser !== 'none',
+                            }),
                           }}
                         >
                           {message.user?.display_name || message.user?.username}
