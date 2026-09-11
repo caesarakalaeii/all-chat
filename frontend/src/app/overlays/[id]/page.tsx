@@ -2061,6 +2061,8 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           // The palette's CSS rules key on a per-row attribute the preview has
           // to render itself, so it needs the list, not just the CSS.
           bubblePalette: settings.bubblePalette,
+          bubbleColorFromUser: settings.bubbleColorFromUser,
+          bubbleUserColorOpacity: settings.bubbleUserColorOpacity,
         },
       },
       '*'

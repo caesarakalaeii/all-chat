@@ -388,10 +388,12 @@ per-row variety on the shadow and the foil border respectively, which are
 colour-independent and need none of this.
 
 Separately, the streamer can set **differently-coloured bubbles** (Appearance →
-Bubble colors): a fill per platform, and/or a palette cycled down the feed. Those
-are enforced like the table above, as `!important` rules on
-`[data-platform='<p>']` and `[data-bubble-slot='<n>']` rows, so they replace your
-bubble fill when configured and emit nothing when not. Events are never painted.
+Bubble colors): a fill per platform, a palette cycled down the feed, and/or each
+message taking its chatter's username colour (fill or 2px outline, keyed on the
+row's `data-user-bubble` attribute). Those are enforced like the table above, as
+`!important` rules on `[data-platform='<p>']`, `[data-bubble-slot='<n>']` and
+`[data-user-bubble]` rows, so they replace your bubble fill when configured and
+emit nothing when not. Events are never painted.
 
 Do not key any theme rule off `data-bubble-slot`. It is assigned from **arrival
 order**, not position, so that a row keeps its colour as the feed scrolls — a

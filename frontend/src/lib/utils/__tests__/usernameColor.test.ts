@@ -60,4 +60,19 @@ describe('resolveUsernameColor', () => {
   it('tolerates an undefined user', () => {
     expect(resolveUsernameColor(undefined)).toBe('var(--chat-username-color, #FFFFFF)')
   })
+
+  it('goes static when the bubble takes the username colour (swap mode)', () => {
+    // The bubble already carries the chatter's colour, so the name must not
+    // repeat it: staticColor skips the viewer-colour short-circuit and returns
+    // the var chain unconditionally — streamer's picker, else auto, else white.
+    expect(
+      resolveUsernameColor({ color: '#DAA520', auto_color: '#5B8DEF' }, { staticColor: true })
+    ).toBe('var(--chat-username-color, #5B8DEF)')
+    expect(resolveUsernameColor({ color: '#DAA520' }, { staticColor: true })).toBe(
+      'var(--chat-username-color, #FFFFFF)'
+    )
+    expect(resolveUsernameColor(undefined, { staticColor: true })).toBe(
+      'var(--chat-username-color, #FFFFFF)'
+    )
+  })
 })
