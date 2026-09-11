@@ -28,8 +28,8 @@ spec:
           type: RuntimeDefault
       containers:
       - name: owncast-listener
-        image: localhost:5000/allchat-owncast-listener:latest
-        imagePullPolicy: IfNotPresent
+        image: ghcr.io/caesarakalaeii/allchat-owncast-listener:latest
+        imagePullPolicy: Always
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -74,7 +74,7 @@ spec:
           valueFrom:
             secretKeyRef:
               name: allchat-secrets
-              key: DATABASE_PASSWORD
+              key: database-password
         - name: REDIS_HOST
           valueFrom:
             configMapKeyRef:
@@ -85,11 +85,6 @@ spec:
             configMapKeyRef:
               name: allchat-config
               key: REDIS_PORT
-        - name: REDIS_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: redis-auth
-              key: redis-password
         - name: SOURCE_MANAGER_URL
           valueFrom:
             configMapKeyRef:
@@ -99,7 +94,7 @@ spec:
           valueFrom:
             secretKeyRef:
               name: allchat-secrets
-              key: SERVICE_JWT_SECRET
+              key: service-jwt-secret
         resources:
           requests:
             memory: "64Mi"

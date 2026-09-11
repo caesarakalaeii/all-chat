@@ -32,8 +32,8 @@ spec:
           type: RuntimeDefault
       containers:
       - name: facebook-listener
-        image: localhost:5000/allchat-facebook-listener:latest
-        imagePullPolicy: IfNotPresent
+        image: ghcr.io/caesarakalaeii/allchat-facebook-listener:latest
+        imagePullPolicy: Always
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -78,7 +78,7 @@ spec:
           valueFrom:
             secretKeyRef:
               name: allchat-secrets
-              key: DATABASE_PASSWORD
+              key: database-password
         - name: REDIS_HOST
           valueFrom:
             configMapKeyRef:
@@ -89,16 +89,13 @@ spec:
             configMapKeyRef:
               name: allchat-config
               key: REDIS_PORT
-        - name: REDIS_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: redis-auth
-              key: redis-password
+        # Decrypts stored Page tokens (Phase 14 KeyChain V1). Live key name
+        # is lowercase in allchat-secrets.
         - name: TOKEN_ENCRYPTION_KEY_V1
           valueFrom:
             secretKeyRef:
               name: allchat-secrets
-              key: TOKEN_ENCRYPTION_KEY_V1
+              key: token-encryption-key-v1
         - name: FACEBOOK_POLLING_INTERVAL_MS
           value: "10000"
         - name: FACEBOOK_SOURCE_SYNC_SECONDS
