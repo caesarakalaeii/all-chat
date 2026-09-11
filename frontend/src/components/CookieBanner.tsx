@@ -94,18 +94,18 @@ export default function CookieBanner() {
         role="region"
         aria-label={t('legal.cookieBanner.regionLabel')}
         className={cn(
-          'animate-slide-up pointer-events-auto w-full max-w-4xl rounded-xl border border-border bg-surface shadow-2xl',
+          'animate-slide-up pointer-events-auto w-full rounded-xl border border-border bg-surface shadow-2xl sm:max-w-4xl',
           lanes && 'lanes-cookie',
           lanes && archivoBlack.variable,
           lanes && spaceMono.variable
         )}
       >
         {/* Main Banner */}
-        <div className="p-6">
+        <div className="p-4 sm:p-6">
           <div className="flex items-start gap-4">
             {/* Cookie Icon */}
             <div
-              className="flex-shrink-0 text-4xl"
+              className="flex-shrink-0 text-2xl sm:text-4xl"
               role="img"
               aria-label={t('legal.cookieBanner.iconLabel')}
             >
@@ -200,38 +200,40 @@ export default function CookieBanner() {
                       })}
                     </div>
                   </div>
-                  <div className="mt-3 border-t border-border pt-2">
-                    <p className="text-xs text-text-dim">
-                      {interpolateElements(t('legal.cookieBanner.fontsNote'), {
-                        label: (
-                          <strong className="text-text">
-                            {t('legal.cookieBanner.fontsLabel')}
-                          </strong>
-                        ),
-                      })}
-                    </p>
-                    <p className="mt-2 text-xs text-text-dim">
-                      {interpolateElements(t('legal.cookieBanner.thirdPartyNote'), {
-                        label: (
-                          <strong className="text-text">
-                            {t('legal.cookieBanner.thirdPartyLabel')}
-                          </strong>
-                        ),
-                        avatars: <strong>{t('legal.cookieBanner.thirdPartyAvatars')}</strong>,
-                        github: <strong>{t('legal.cookieBanner.thirdPartyGithub')}</strong>,
-                        privacy: (
-                          <a
-                            href="/legal/privacy"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-twitch underline underline-offset-2"
-                          >
-                            {t('legal.cookieBanner.privacyPolicy')}
-                          </a>
-                        ),
-                      })}
-                    </p>
-                  </div>
+                  {/* Feedback: fine print used to sit in its own bordered box,
+                      which read as a highlighted callout. Same text, no box —
+                      it flows on from the rows above like the rest of the
+                      details list. */}
+                  <p className="text-xs text-text-dim">
+                    {interpolateElements(t('legal.cookieBanner.fontsNote'), {
+                      label: (
+                        <strong className="text-text">
+                          {t('legal.cookieBanner.fontsLabel')}
+                        </strong>
+                      ),
+                    })}
+                  </p>
+                  <p className="mt-2 text-xs text-text-dim">
+                    {interpolateElements(t('legal.cookieBanner.thirdPartyNote'), {
+                      label: (
+                        <strong className="text-text">
+                          {t('legal.cookieBanner.thirdPartyLabel')}
+                        </strong>
+                      ),
+                      avatars: <strong>{t('legal.cookieBanner.thirdPartyAvatars')}</strong>,
+                      github: <strong>{t('legal.cookieBanner.thirdPartyGithub')}</strong>,
+                      privacy: (
+                        <a
+                          href="/legal/privacy"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-twitch underline underline-offset-2"
+                        >
+                          {t('legal.cookieBanner.privacyPolicy')}
+                        </a>
+                      ),
+                    })}
+                  </p>
                 </div>
               </details>
 
@@ -263,10 +265,10 @@ export default function CookieBanner() {
               {/* Action Buttons — same box on both: h-12, 2px border, mono.
                   The lanes overrides repaint them (fill vs ghost), but the
                   shared geometry here is what keeps the pair the same size. */}
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                 <Button
                   onClick={acknowledgeBanner}
-                  className={cn('h-12 px-6 py-0 text-base', lanes && 'lanes-cookie-ack')}
+                  className={cn('h-12 w-full px-6 py-0 text-base sm:w-auto', lanes && 'lanes-cookie-ack')}
                 >
                   {t('legal.cookieBanner.acknowledge')}
                 </Button>
@@ -275,7 +277,7 @@ export default function CookieBanner() {
                   target="_blank"
                   rel="noopener noreferrer"
                   className={cn(
-                    'inline-flex h-12 items-center justify-center rounded-lg border border-border bg-surface-2 px-6 font-medium text-text transition-colors hover:bg-surface-2/80 focus-visible:ring-3 focus-visible:ring-twitch/50 focus-visible:outline-none',
+                    'inline-flex h-12 w-full items-center justify-center rounded-lg border border-border bg-surface-2 px-6 font-medium text-text transition-colors hover:bg-surface-2/80 focus-visible:ring-3 focus-visible:ring-twitch/50 focus-visible:outline-none sm:w-auto',
                     lanes && 'lanes-cookie-more'
                   )}
                 >
@@ -289,7 +291,7 @@ export default function CookieBanner() {
         {/* Footer */}
         <div
           className={cn(
-            'rounded-b-xl border-t border-border bg-bg px-6 py-3',
+            'rounded-b-xl border-t border-border bg-bg px-4 py-3 sm:px-6',
             lanes && 'lanes-cookie-foot'
           )}
         >

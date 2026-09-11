@@ -51,7 +51,7 @@ export function NumbersSection({
   const weeklyTotal = active.reduce((sum, platform) => sum + (platforms?.[platform] ?? 0), 0)
 
   return (
-    <section className="lanes-section">
+    <section className="lanes-section" data-reveal>
       <span className="mono-label">{t('marketing.numbers.label')}</span>
       {active.length > 0 && (
         <div className="numbers five">

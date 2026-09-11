@@ -692,11 +692,14 @@ span.font-semibold.text-sm.username-gradient {
 .lanes-home {
   --lanes-bg: #050508;
   --lanes-text: #f4f3ef;
-  --lanes-twitch: #9146ff;
-  --lanes-youtube: #ff3b30;
-  --lanes-tiktok: #69c9d0;
-  --lanes-kick: #53fc18;
-  --lanes-discord: #5865f2;
+  /* Feedback: brand colors desaturated ~25% — at full saturation the five
+   * lanes side by side read as neon stripes. These are page-local constants,
+   * NOT design tokens (comment at the top of this block). */
+  --lanes-twitch: #8464d6;
+  --lanes-youtube: #d95c50;
+  --lanes-tiktok: #62aeb4;
+  --lanes-kick: #56b847;
+  --lanes-discord: #6a72c9;
   background: var(--lanes-bg);
   color: var(--lanes-text);
   font-family: var(--font-space-mono), monospace;
@@ -711,13 +714,11 @@ span.font-semibold.text-sm.username-gradient {
 .lanes-chrome {
   position: fixed;
   z-index: 30;
-  font-size: 11px;
-  letter-spacing: 0.08em;
   mix-blend-mode: difference;
-  color: #fff;
+  color: #f4f3ef;
 }
 .lanes-chrome a {
-  color: #fff;
+  color: #f4f3ef;
   text-decoration: none;
 }
 .lanes-chrome a:hover,
@@ -725,7 +726,7 @@ span.font-semibold.text-sm.username-gradient {
   text-decoration: underline;
 }
 .lanes-chrome:focus-visible {
-  outline: 2px solid #fff;
+  outline: 2px solid #f4f3ef;
   outline-offset: 2px;
 }
 .lanes-tl {
@@ -740,9 +741,9 @@ span.font-semibold.text-sm.username-gradient {
   display: flex;
   gap: 20px;
 }
-/* Logged-in dashboard chip: white on black, out of the blend. */
+/* Logged-in dashboard chip: warm white on black, out of the blend. */
 .lanes-tr .dash-chip {
-  background: #fff;
+  background: #f4f3ef;
   color: #000;
   padding: 5px 12px;
   font-weight: 700;
@@ -755,6 +756,15 @@ span.font-semibold.text-sm.username-gradient {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  /* Hero scroll effect: LanesHero sets --hero-progress (0 at rest, 1 once
+   * the stage has scrolled one viewport height) and the two properties
+   * below carry the stage away — translate is capped so the lanes never
+   * reveal a gap above the first section, and opacity bottoms out above 0
+   * so the fade never looks like a pop-in on the way back up. The stage
+   * sits below the fold boundary, so no transition is needed: every frame
+   * is driven by scroll position. */
+  transform: translateY(calc(var(--hero-progress, 0) * -60px));
+  opacity: calc(1 - var(--hero-progress, 0) * 0.55);
 }
 .lane {
   position: relative;
@@ -763,39 +773,40 @@ span.font-semibold.text-sm.username-gradient {
   flex-direction: column;
   justify-content: center;
   min-height: 28px;
+  /* Lane heights morph from the component (real weekly shares + decorative
+   * jitter, see LanesHero.tsx); flex-grow transitions so the morph reads
+   * as breathing rather than snapping. */
+  transition: flex-grow 2.5s ease-in-out;
 }
 .lane[data-p='twitch'] {
-  background: var(--lanes-twitch);
-  flex-grow: 40;
+  background: color-mix(in oklab, var(--lanes-twitch) 24%, transparent);
 }
 .lane[data-p='youtube'] {
-  background: var(--lanes-youtube);
-  flex-grow: 26;
+  background: color-mix(in oklab, var(--lanes-youtube) 24%, transparent);
 }
 .lane[data-p='tiktok'] {
-  background: var(--lanes-tiktok);
-  flex-grow: 14;
+  background: color-mix(in oklab, var(--lanes-tiktok) 24%, transparent);
 }
 .lane[data-p='kick'] {
-  background: var(--lanes-kick);
-  flex-grow: 10;
+  background: color-mix(in oklab, var(--lanes-kick) 24%, transparent);
 }
 .lane[data-p='discord'] {
-  background: var(--lanes-discord);
-  flex-grow: 7;
+  background: color-mix(in oklab, var(--lanes-discord) 24%, transparent);
 }
 
-/* Marquee chat inside each lane. */
+/* Marquee chat inside each lane. Feedback: denser and dimmer — the rows
+ * are texture, not copy, so they shrink to 11px and none stays readable
+ * at a glance. */
 .flow {
   white-space: nowrap;
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 11px;
+  line-height: 1.45;
   will-change: transform;
   width: max-content;
   animation: drift linear infinite;
 }
 .flow + .flow {
-  margin-top: 0.35em;
+  margin-top: 0.3em;
 }
 @keyframes drift {
   to {
@@ -804,26 +815,34 @@ span.font-semibold.text-sm.username-gradient {
 }
 .lane[data-p='twitch'] .flow,
 .lane[data-p='youtube'] .flow {
-  color: rgba(255, 255, 255, 0.85);
+  color: color-mix(in oklab, var(--lanes-twitch) 55%, #f4f3ef);
+}
+.lane[data-p='youtube'] .flow {
+  color: color-mix(in oklab, var(--lanes-youtube) 55%, #f4f3ef);
 }
 .lane[data-p='discord'] .flow {
-  color: rgba(255, 255, 255, 0.8);
+  color: color-mix(in oklab, var(--lanes-discord) 55%, #f4f3ef);
 }
 .lane[data-p='tiktok'] .flow {
-  color: rgba(0, 20, 24, 0.75);
+  color: color-mix(in oklab, var(--lanes-tiktok) 65%, #f4f3ef);
 }
 .lane[data-p='kick'] .flow {
-  color: rgba(0, 20, 0, 0.75);
+  color: color-mix(in oklab, var(--lanes-kick) 65%, #f4f3ef);
 }
 .flow b {
   font-weight: 700;
 }
 .flow .sep {
-  opacity: 0.4;
+  opacity: 0.35;
   margin: 0 1.2em;
 }
+.flow .emote {
+  margin-left: 0.35em;
+  opacity: 0.75;
+}
 
-/* Giant tone-on-tone wordmark per lane. */
+/* Giant tone-on-tone wordmark per lane. Brighter than the old solid-fill
+ * values because it now sits on a translucent band, not a solid brand fill. */
 .wordmark {
   position: absolute;
   right: -0.05em;
@@ -836,18 +855,14 @@ span.font-semibold.text-sm.username-gradient {
   pointer-events: none;
   user-select: none;
 }
-.lane[data-p='twitch'] .wordmark {
-  color: rgba(0, 0, 0, 0.22);
-}
-.lane[data-p='youtube'] .wordmark {
-  color: rgba(0, 0, 0, 0.2);
-}
+.lane[data-p='twitch'] .wordmark,
+.lane[data-p='youtube'] .wordmark,
 .lane[data-p='discord'] .wordmark {
-  color: rgba(255, 255, 255, 0.28);
+  color: color-mix(in oklab, var(--lanes-text) 30%, transparent);
 }
 .lane[data-p='tiktok'] .wordmark,
 .lane[data-p='kick'] .wordmark {
-  color: rgba(255, 255, 255, 0.55);
+  color: color-mix(in oklab, var(--lanes-text) 45%, transparent);
 }
 
 /* Headline chips across the lanes. */
@@ -860,7 +875,7 @@ span.font-semibold.text-sm.username-gradient {
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  color: #fff;
+  color: var(--lanes-text);
   text-align: center;
   padding: 0 16px;
 }
@@ -876,13 +891,11 @@ span.font-semibold.text-sm.username-gradient {
   box-decoration-break: clone;
 }
 .warkicker {
-  display: inline-block;
   background: var(--lanes-youtube);
-  color: #fff;
+  color: #0a0a0e;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.22em;
-  padding: 9px 16px;
   margin-bottom: 2.2vh;
 }
 .lanes-total {
@@ -910,9 +923,8 @@ span.font-semibold.text-sm.username-gradient {
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 16px;
-  padding: 0 24px;
   background: #000;
-  color: #fff;
+  color: #f4f3ef;
 }
 /* Grid, not space-between: the note and the trailing link have different
  * widths, so space-between leaves the button off-center. */
@@ -930,7 +942,7 @@ span.font-semibold.text-sm.username-gradient {
   font-family: var(--font-space-mono), monospace;
   font-weight: 700;
   font-size: 14px;
-  background: #fff;
+  background: #f4f3ef;
   color: #000;
   border: none;
   padding: 14px 28px;
@@ -947,7 +959,7 @@ span.font-semibold.text-sm.username-gradient {
   outline-offset: 2px;
 }
 .ctabar a {
-  color: #fff;
+  color: #f4f3ef;
   font-size: 12px;
 }
 
@@ -1105,15 +1117,17 @@ span.font-semibold.text-sm.username-gradient {
   color: var(--lanes-youtube);
 }
 .wcol.good {
-  background: #fff;
-  color: #000;
+  /* Feedback: was solid #fff with black text — a spotlight that out-shouted
+   * the heading. Now a translucent warm panel like the other surfaces. */
+  background: rgba(244, 243, 239, 0.08);
+  color: var(--lanes-text);
 }
 .wcol.good li {
   font-weight: 700;
 }
 .wcol.good li::before {
   content: '✓';
-  color: #1a9c00;
+  color: var(--lanes-kick);
 }
 
 /* Numbers rows. */
@@ -1208,11 +1222,10 @@ span.font-semibold.text-sm.username-gradient {
   font-size: 13px;
   letter-spacing: 0.02em;
   padding: 14px 24px;
-  border: 2px solid #fff;
+  border: 1px solid rgba(244, 243, 239, 0.4);
   border-radius: 0;
   cursor: pointer;
-  color: #fff;
-  background: transparent;
+  color: #f4f3ef;
   transition: background 0.15s;
 }
 .final-signin:hover {
@@ -1228,7 +1241,7 @@ span.font-semibold.text-sm.username-gradient {
 }
 .final-signin[data-p='twitch']:hover {
   background: var(--lanes-twitch);
-  color: #fff;
+  color: #0a0a0e;
 }
 .final-signin[data-p='youtube'] {
   border-color: var(--lanes-youtube);
@@ -1236,7 +1249,7 @@ span.font-semibold.text-sm.username-gradient {
 }
 .final-signin[data-p='youtube']:hover {
   background: var(--lanes-youtube);
-  color: #fff;
+  color: #0a0a0e;
 }
 .final-signin[data-p='kick'] {
   border-color: var(--lanes-kick);
@@ -1291,10 +1304,10 @@ span.font-semibold.text-sm.username-gradient {
 }
 .faq-list {
   margin-top: 44px;
-  border-top: 3px solid #fff;
+  border-top: 1px solid rgba(244, 243, 239, 0.28);
 }
 .faq-item {
-  border-bottom: 3px solid #fff;
+  border-bottom: 1px solid rgba(244, 243, 239, 0.28);
 }
 .faq-item summary {
   display: flex;
@@ -1315,11 +1328,11 @@ span.font-semibold.text-sm.username-gradient {
   outline-offset: 2px;
 }
 .faq-item summary:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.04);
+  color: #f4f3ef;
+  background: rgba(244, 243, 239, 0.04);
 }
 .faq-item[open] summary {
-  color: #fff;
+  color: #f4f3ef;
 }
 .faq-item p {
   padding: 0 4px 26px;
@@ -1352,24 +1365,24 @@ span.font-semibold.text-sm.username-gradient {
   align-items: flex-start;
   gap: 16px;
   background: #000;
-  border: 3px solid #fff;
-  box-shadow: 8px 8px 0 rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(244, 243, 239, 0.28);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   padding: 20px;
 }
 .ambassador-card a {
-  color: #fff;
+  color: #f4f3ef;
   text-decoration-color: var(--lanes-youtube);
 }
 
 /* Theme showcase (lanes restyle): the carousel frame becomes a black panel
- * with the hard border + offset shadow, square dots, no rounding. Selectors
- * target the ThemeSwitcher's structural classes (it owns its own markup). */
+ * with a soft border, square dots, no rounding. Selectors target the
+ * ThemeSwitcher's structural classes (it owns its own markup). */
 .theme-showcase .rounded-xl {
   border-radius: 0;
-  border-width: 3px;
-  border-color: #fff;
+  border-width: 1px;
+  border-color: rgba(244, 243, 239, 0.28);
   background: #000;
-  box-shadow: 8px 8px 0 rgba(0, 0, 0, 0.55);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 .theme-showcase .rounded-full {
   border-radius: 0;
@@ -1382,61 +1395,52 @@ span.font-semibold.text-sm.username-gradient {
 .theme-showcase .bg-twitch {
   /* Active carousel dot: white on black instead of the twitch purple the
    * app-wide token would give here. */
-  background: #fff !important;
+  background: #f4f3ef !important;
 }
 .theme-showcase .border-t {
-  border-top-width: 3px;
-  border-color: #fff;
+  border-top-width: 1px;
+  border-color: rgba(244, 243, 239, 0.28);
 }
 .theme-showcase p,
 .theme-showcase h2 {
-  color: #fff;
+  color: #f4f3ef;
 }
 .theme-showcase .text-text-sub,
 .theme-showcase .text-text-sub * {
-  color: rgba(244, 243, 239, 0.7) !important;
+  color: rgba(244, 243, 239, 0.65) !important;
 }
 .theme-showcase .text-text {
-  color: #fff !important;
+  color: #f4f3ef !important;
 }
 .ambassador-card a:hover {
   color: var(--lanes-youtube);
 }
 
-/* Scroll snap: hero, every lanes-section (FAQ included), final and footer
- * are the scroll frames. Frames start-align so each stop shows a section's
- * top edge; a frame taller than the viewport also end-aligns so its bottom
- * boundary chains into the next frame without a dead zone. The final band
- * deliberately start-aligns ONLY: its end edge sits closer to the document
- * end than one viewport, and that snap point yanked the viewport out of the
- * preceding FAQ's scroll range while the band top itself was unreachable —
- * the classic "snap breaks near the login section".
- * proximity, not mandatory: any frame can outgrow the viewport on a small
- * screen, and mandatory would lock scrolling inside it. */
-html:has(.lanes-home) {
-  scroll-snap-type: y proximity;
-  /* The snap area must match what the user sees as the section start, or
-   * snapped sections sit under the fixed hero chrome. */
-  scroll-padding-top: 0;
+/* Scroll-activated reveal (feedback round 1): the old scroll-snap anchors
+ * are gone; sections instead animate in as they enter the viewport. The
+ * observer lives in useReveal.ts and sets [data-revealed] on the section
+ * once, so the pair below is a one-way transition, not a scroll-linked
+ * effect — the observer unregisters itself after firing. */
+.lanes-home [data-reveal] {
+  opacity: 0;
+  transform: translateY(24px);
+  transition:
+    opacity 0.6s ease-out,
+    transform 0.6s ease-out;
 }
-.lanes-stage,
-.lanes-section,
-.lanes-footer {
-  scroll-snap-align: start end;
-  scroll-margin-top: 0;
+.lanes-home [data-revealed='true'] {
+  opacity: 1;
+  transform: none;
 }
-.final {
-  scroll-snap-align: start;
-  scroll-margin-top: 0;
+/* Panels wipe their background fill in on first reveal: clip-path insets
+ * animate on the same one-way transition as the section fade above. */
+.lanes-home [data-revealed='true'] .panel-fill,
+.lanes-home[data-revealed='true'].panel-fill {
+  clip-path: inset(0 0 0 0);
 }
-.faq {
-  /* start-only (after the group rule so it wins the cascade): the section is
-   * only slightly taller than a viewport, so a second end-edge snap point
-   * lands within a viewport of the start point and every rest inside the FAQ
-   * collapses onto the pair, which reads as sticky, jumpy scrolling. One
-   * anchor at the section top is enough; the final band picks up from there. */
-  scroll-snap-align: start;
-  scroll-margin-top: 0;
+.lanes-home .panel-fill {
+  clip-path: inset(0 100% 0 0);
+  transition: clip-path 0.7s cubic-bezier(0.16, 1, 0.3, 1);
 }
 /* ============================================================
    LANES APP — the lanes art direction on product pages
@@ -1448,11 +1452,12 @@ html:has(.lanes-home) {
 .lanes-app {
   --lanes-bg: #050508;
   --lanes-text: #f4f3ef;
-  --lanes-twitch: #9146ff;
-  --lanes-youtube: #ff3b30;
-  --lanes-tiktok: #69c9d0;
-  --lanes-kick: #53fc18;
-  --lanes-discord: #5865f2;
+  /* Same desaturated palette as .lanes-home (see comment there). */
+  --lanes-twitch: #8464d6;
+  --lanes-youtube: #d95c50;
+  --lanes-tiktok: #62aeb4;
+  --lanes-kick: #56b847;
+  --lanes-discord: #6a72c9;
   background: var(--lanes-bg);
   color: var(--lanes-text);
   font-family: var(--font-space-mono), monospace;
@@ -1471,13 +1476,15 @@ html:has(.lanes-home) {
   padding: 6px 12px;
 }
 
-/* Panel: the black card with the hard white border and offset shadow. */
+/* Panel: the black card. Feedback: borders and shadows softened — the
+ * 3px hard white border with an 8px offset shadow read as brutalist
+ * chrome on every surface, which is why it was cut. */
 .lanes-panel {
   background: #000;
   color: var(--lanes-text);
-  border: 3px solid #fff;
+  border: 1px solid rgba(244, 243, 239, 0.28);
   border-radius: 0;
-  box-shadow: 8px 8px 0 rgba(0, 0, 0, 0.55);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 
 /* Buttons. Primary inverts to white; hover goes kick-green like the
@@ -1492,9 +1499,9 @@ html:has(.lanes-home) {
   font-size: 13px;
   letter-spacing: 0.02em;
   padding: 10px 20px;
-  border: 2px solid #fff;
+  border: 1px solid rgba(244, 243, 239, 0.4);
   border-radius: 0;
-  background: #fff;
+  background: #f4f3ef;
   color: #000;
   cursor: pointer;
   text-decoration: none;
@@ -1533,10 +1540,9 @@ html:has(.lanes-home) {
 .lanes-app select,
 .lanes-app textarea {
   background: #000;
-  border: 2px solid rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(244, 243, 239, 0.35);
   border-radius: 0;
-  color: #fff;
-  font-family: var(--font-space-mono), monospace;
+  color: #f4f3ef;
   font-size: 14px;
   padding: 10px 12px;
 }
@@ -1686,40 +1692,44 @@ html:has(.lanes-home) {
   background: #000 !important;
   /* The --lanes-* palette is scoped to .lanes-home, which the banner mounts
    * outside of; it redeclares the two accents its hover rules use. */
-  --lanes-youtube: #ff3b30;
-  --lanes-kick: #53fc18;
+  --lanes-youtube: #d95c50;
+  --lanes-kick: #56b847;
   color: #f4f3ef !important;
-  border: 3px solid #fff !important;
+  border: 1px solid rgba(244, 243, 239, 0.28) !important;
   border-radius: 0 !important;
-  box-shadow: 8px 8px 0 rgba(0, 0, 0, 0.55) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4) !important;
   font-family: var(--font-space-mono), monospace;
 }
 .lanes-cookie h2 {
   font-family: var(--font-archivo-black), sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.02em;
-  color: #fff !important;
+  color: #f4f3ef !important;
 }
 .lanes-cookie p,
 .lanes-cookie summary,
 .lanes-cookie details {
   color: rgba(244, 243, 239, 0.85) !important;
 }
+/* Feedback: strong labels used to pop full white, which is exactly the
+ * "highlighted too much" complaint. Emphasis stays typographic (weight),
+ * same tint as the body text. */
 .lanes-cookie strong {
-  color: #fff !important;
+  color: inherit !important;
+  font-weight: 700;
 }
 .lanes-cookie a {
-  color: #fff !important;
+  color: #f4f3ef !important;
   text-decoration-color: var(--lanes-youtube) !important;
 }
 .lanes-cookie a:hover {
   color: var(--lanes-youtube) !important;
 }
 .lanes-cookie .lanes-cookie-ack {
-  background: #fff !important;
+  background: #f4f3ef !important;
   color: #000 !important;
   border-radius: 0 !important;
-  border: 2px solid #fff !important;
+  border: 1px solid #f4f3ef !important;
   font-family: var(--font-space-mono), monospace;
   font-weight: 700;
   font-size: 16px;
@@ -1729,20 +1739,20 @@ html:has(.lanes-home) {
   background: var(--lanes-kick) !important;
 }
 .lanes-cookie .lanes-cookie-more {
-  border: 2px solid #fff !important;
+  border: 1px solid rgba(244, 243, 239, 0.4) !important;
   border-radius: 0 !important;
   background: transparent !important;
-  color: #fff !important;
+  color: #f4f3ef !important;
   font-family: var(--font-space-mono), monospace;
   font-weight: 700;
   font-size: 16px;
 }
 .lanes-cookie .lanes-cookie-more:hover {
-  background: rgba(255, 255, 255, 0.12) !important;
+  background: rgba(244, 243, 239, 0.1) !important;
 }
 .lanes-cookie .lanes-cookie-foot {
   background: #050508 !important;
-  border-top: 2px solid #fff !important;
+  border-top: 1px solid rgba(244, 243, 239, 0.28) !important;
   border-radius: 0 !important;
   color: rgba(244, 243, 239, 0.55) !important;
 }

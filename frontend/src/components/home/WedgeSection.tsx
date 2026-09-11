@@ -32,7 +32,7 @@ export function WedgeSection() {
   const t = useTranslations()
 
   return (
-    <section className="lanes-section wedge">
+    <section className="lanes-section wedge" data-reveal>
       <span className="mono-label">{t('marketing.wedge.label')}</span>
       <h2>
         {t('marketing.wedge.headingTop')}
@@ -49,7 +49,7 @@ export function WedgeSection() {
             ))}
           </ul>
         </div>
-        <div className="wcol good">
+        <div className="wcol good panel-fill">
           <h3>{t('marketing.wedge.usTitle')}</h3>
           <ul>
             {US_STEMS.map((stem) => (

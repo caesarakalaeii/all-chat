@@ -49,7 +49,7 @@ export function FinalSection({
 
   if (isLoggedIn) {
     return (
-      <div className="final welcome">
+      <div className="final welcome" data-reveal>
         <h2>
           {t('marketing.final.welcomeBack', { name: userName })}
           <br />
@@ -63,7 +63,7 @@ export function FinalSection({
   }
 
   return (
-    <div className="final" id="get-started">
+    <div className="final" id="get-started" data-reveal>
       <h2>
         {t('marketing.final.line1')}
         <br />

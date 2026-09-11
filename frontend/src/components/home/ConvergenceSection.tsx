@@ -115,7 +115,7 @@ export function ConvergenceSection() {
   const firstKey = cursor - visibleCount
 
   return (
-    <section className="lanes-section converge" id="how">
+    <section className="lanes-section converge" id="how" data-reveal>
       <span className="mono-label">{t('marketing.convergence.label')}</span>
       <svg viewBox="0 0 640 200" fill="none" aria-hidden="true">
         <path d="M0 15 C 200 15, 320 88, 470 97" stroke="var(--lanes-twitch)" strokeWidth="5" />
@@ -143,7 +143,7 @@ export function ConvergenceSection() {
         })}
       </p>
 
-      <div className="frame">
+      <div className="frame panel-fill">
         <div className="frame-head">
           <span className="live">{t('marketing.convergence.liveLabel')}</span>
           <span>{t('marketing.convergence.frameUrl')}</span>
