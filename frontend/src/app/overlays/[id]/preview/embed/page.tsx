@@ -92,6 +92,10 @@ import { formatTime, useTranslations } from '@/lib/i18n'
  */
 const KICK_GLYPH = 'K'
 
+// GoodGame has no official monogram; the GG the icon's SVG draws is a brand
+// mark, not copy, so it stays out of the catalog.
+const GOODGAME_GLYPH = 'GG'
+
 // Duplicated from the live overlay at app/overlay/[id]/page.tsx, where the same
 // two helpers are declared inside the component. Change one, change the other.
 
@@ -192,7 +196,7 @@ const PlatformIcon = ({ platform }: { platform: string }) => {
             textAnchor="middle"
             fontFamily="monospace"
           >
-            GG
+            {GOODGAME_GLYPH}
           </text>
         </svg>
       )

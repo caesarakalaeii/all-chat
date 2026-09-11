@@ -315,8 +315,17 @@ function DashboardContent() {
             {overlaysWithSources.map((overlay) => (
               <div
                 key={overlay.id}
-                className="lanes-panel group cursor-pointer overflow-hidden"
+                role="link"
+                tabIndex={0}
+                aria-label={t('dashboard.overlays.openLabel', { name: overlay.name })}
+                className="lanes-panel group cursor-pointer overflow-hidden focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
                 onClick={() => router.push(`/overlays/${overlay.id}`)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    router.push(`/overlays/${overlay.id}`)
+                  }
+                }}
               >
                 <div className="p-6">
                   <div className="mb-3 flex items-start justify-between">

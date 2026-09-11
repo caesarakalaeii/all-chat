@@ -197,7 +197,6 @@ func truncate(b []byte, n int) string {
 	return s
 }
 
-// --- Live video discovery -------------------------------------------------
 
 // LiveVideoSummary is the subset of a LiveVideo node the listener needs.
 type LiveVideoSummary struct {
@@ -235,7 +234,6 @@ func (c *Client) LiveVideos(ctx context.Context, pageID, pageToken string) ([]Li
 	return videos, err
 }
 
-// --- Comment polling -------------------------------------------------------
 
 // Comment is the subset of a Comment node read from a live video.
 // from.id is the app-scoped user id; from.name the display name.

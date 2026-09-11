@@ -10,7 +10,7 @@ COPY shared/ ./shared/
 COPY services/picarto-listener/ ./services/picarto-listener/
 
 # Download dependencies
-WORKDIR /app/services/kick-listener
+WORKDIR /app/services/picarto-listener
 RUN go mod download
 
 # Build

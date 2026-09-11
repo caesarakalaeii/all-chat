@@ -134,7 +134,7 @@ const GoodGameIcon = () => (
       textAnchor="middle"
       fontFamily="monospace"
     >
-      GG
+      {GOODGAME_GLYPH}
     </text>
   </svg>
 )
@@ -167,6 +167,9 @@ const RumbleIcon = () => (
 
  // The letter the Kick mark draws. A brand glyph, not copy.
  const KICK_GLYPH = 'K'
+
+// The letters the GoodGame mark draws. A brand glyph, not copy.
+const GOODGAME_GLYPH = 'GG'
  
  // The icon plus the catalog key naming the platform. `as const satisfies` rather
  // than an annotation: an annotation widens the key to string and a typo would

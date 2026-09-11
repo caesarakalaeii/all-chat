@@ -169,7 +169,6 @@ func main() {
 	// Create WebSocket client with message handler
 	wsClient := websocket.NewClient(wsConfig, messageHandler, log)
 
-	// Set deletion handler
 	wsClient.SetDeletionHandler(func(chatID string, messageID string) {
 		handleDeletionEvent(chatID, messageID, streamPublisher, channelMgr, log)
 	})
@@ -203,10 +202,8 @@ func main() {
 	router.GET("/status", healthHandler.Status)
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
-	// Get port
 	port := listener.Env("PORT", "8098")
 
-	// Create HTTP server
 	srv := &http.Server{
 		Addr:         ":" + port,
 		Handler:      router,
@@ -246,7 +243,6 @@ func main() {
 		zap.Int("channel_count", filteredCount),
 	)
 
-	// Handle reconnections
 	go handleReconnections(wsClient, channelMgr, log)
 
 	// Wait for interrupt signal for graceful shutdown
@@ -291,7 +287,6 @@ func handleChatMessage(
 	// Signal first message for migration protocol
 	channelMgr.SignalFirstMessage(chatroomID)
 
-	// Get overlay targets for this chatroom
 	targets, found := channelMgr.GetOverlayTargetsForChatroom(chatroomID)
 	if !found || len(targets) == 0 {
 		log.Warn("Received message for unknown chatroom",
@@ -302,7 +297,6 @@ func handleChatMessage(
 		return
 	}
 
-	// Marshal raw message
 	rawMsg, err := json.Marshal(message)
 	if err != nil {
 		log.Error("Failed to marshal raw message", zap.Error(err))

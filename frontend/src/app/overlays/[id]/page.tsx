@@ -163,6 +163,10 @@ const PLATFORM_BORDER: Record<string, string> = {
   discord: 'border-l-discord',
 }
 
+// The letters the GoodGame mark draws. A brand glyph, not copy, so it stays
+// out of the catalog where a translator would see it as a word.
+const GOODGAME_GLYPH = 'GG'
+
 // Last-active settings section (ADR-0042); replaces the retired per-drawer
 // open/closed maps (editor-panel-sections-v1 / appearance-panel-sections-v1).
 const ACTIVE_SECTION_STORAGE_KEY = 'editor-active-section-v1'
@@ -1488,7 +1492,7 @@ function AddSourceForm({
               textAnchor="middle"
               fontFamily="monospace"
             >
-              GG
+              {GOODGAME_GLYPH}
             </text>
           </svg>
           {t('overlayEditor.addSource.connectGoodgame')}

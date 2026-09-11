@@ -282,8 +282,6 @@ func (f *FacebookOAuth) GetUserInfoFacebook(ctx context.Context, accessToken str
 	return &out, nil
 }
 
-// --- OAuthProvider interface implementation --------------------------------
-
 // facebookUserInfoWrapper adapts FacebookUserInfo to PlatformUserInfo.
 type facebookUserInfoWrapper struct{ u *FacebookUserInfo }
 

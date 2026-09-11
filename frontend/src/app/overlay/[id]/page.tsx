@@ -125,6 +125,10 @@ import '@/styles/events.css'
 // preview embed's constant of the same name.
 const KICK_GLYPH = 'K'
 
+// The letters the GoodGame icon's SVG draws — a brand mark, not text. Matches
+// the preview embed's constant of the same name.
+const GOODGAME_GLYPH = 'GG'
+
 // Default display duration (seconds) for an event based on its tier. Pure
 // helper hoisted to module scope so the fade effect can reference it safely.
 function getTierDuration(tier: EventTier): number {
@@ -729,7 +733,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
               textAnchor="middle"
               fontFamily="monospace"
             >
-              GG
+              {GOODGAME_GLYPH}
             </text>
           </svg>
         )
