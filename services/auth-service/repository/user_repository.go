@@ -498,6 +498,50 @@ func (r *UserRepository) StoreKickToken(ctx context.Context, userID, channelSlug
 	return nil
 }
 
+// StoreFacebookPageToken stores the streamer's Page credential in
+// facebook_oauth_tokens (migration 094), keyed (user_id, page_id). The page
+// token obtained from a long-lived user token does not expire (ADR-0060), so
+// there is no refresh-token column and no expiry to track: expiry is stored
+// NULL and the row is replaced wholesale on every re-consent. granted_scopes
+// is MERGED on conflict so a re-consent that grants fewer permissions never
+// silently drops an earlier moderation grant — same invariant as
+// StoreYouTubeToken.
+func (r *UserRepository) StoreFacebookPageToken(ctx context.Context, userID, pageID, pageName, pageToken string, grantedScopes []string) error {
+	if pageID == "" {
+		return fmt.Errorf("page_id is required for storing Facebook tokens")
+	}
+	if pageToken == "" {
+		return fmt.Errorf("page token is required for storing Facebook tokens")
+	}
+
+	encToken, err := r.encryptToken(pageToken)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt page token: %w", err)
+	}
+	if grantedScopes == nil {
+		grantedScopes = []string{}
+	}
+
+	query := `
+		INSERT INTO facebook_oauth_tokens (
+			user_id, page_id, page_name, access_token, granted_scopes,
+			encryption_version, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, 1, NOW(), NOW())
+		ON CONFLICT (user_id, page_id)
+		DO UPDATE SET
+			page_name = EXCLUDED.page_name,
+			access_token = EXCLUDED.access_token,
+			granted_scopes = ARRAY(SELECT DISTINCT unnest(facebook_oauth_tokens.granted_scopes || EXCLUDED.granted_scopes)),
+			encryption_version = EXCLUDED.encryption_version,
+			updated_at = NOW()
+	`
+
+	if _, err := r.db.Exec(ctx, query, userID, pageID, pageName, encToken, grantedScopes); err != nil {
+		return fmt.Errorf("failed to store Facebook page token: %w", err)
+	}
+	return nil
+}
+
 // GetPlatformGrantedScopes returns the OAuth scopes the user currently holds FOR a
 // specific platform, reading the authoritative source for that platform: the users row
 // when the platform is the user's login provider, otherwise the per-link token table

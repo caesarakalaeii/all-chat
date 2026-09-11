@@ -22,7 +22,7 @@ import "time"
 type ActiveSource struct {
 	ID           string    `json:"id"`            // overlay_chat_source.id (UUID)
 	OverlayID    string    `json:"overlay_id"`    // overlay ID
-	Platform     string    `json:"platform"`      // "twitch", "youtube", "kick", "tiktok"
+	Platform     string    `json:"platform"`      // "twitch", "youtube", "kick", "tiktok", "discord", "facebook"
 	ChannelID    string    `json:"channel_id"`    // Platform-specific channel ID
 	StreamID     string    `json:"stream_id"`     // YouTube live stream ID (empty for Twitch)
 	StreamSelect string    `json:"stream_select"` // Stream selection strategy (e.g. "most_viewers", "title_match")

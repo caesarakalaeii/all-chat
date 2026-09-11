@@ -21,7 +21,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/caesar/all-chat/services/overlay-manager/clients"
@@ -67,11 +69,13 @@ type SourcesHandler struct {
 	logger      *zap.Logger
 	bm          *metrics.BusinessMetrics
 	cipher      *encryption.MultiKeyEncryptor // Encrypts kick_oauth_tokens on write (D-16; nil = no encryption)
+	httpClient  *http.Client                  // Owncast /api/config name resolution (ADR-0058); nil falls back to hostname
 
 	// Discord source guard (ADR-0048). Both nil means Discord sources cannot be validated,
 	// and adding one fails closed.
 	discordChannels discordChannelGuildResolver
 	discordGuilds   discordGuildOwnership
+	platformGate    PlatformSourceGate
 }
 
 // SetDiscordGuard wires the Discord source guard. Injected separately from the constructor
@@ -80,6 +84,41 @@ type SourcesHandler struct {
 func (h *SourcesHandler) SetDiscordGuard(channels discordChannelGuildResolver, guilds discordGuildOwnership) {
 	h.discordChannels = channels
 	h.discordGuilds = guilds
+}
+
+// PlatformSourceGate decides whether a user may add a source on a rollout
+// platform (ADR-0008, the platform_* gate keys). Keyed on the caller, the
+// overlay owner by construction of this route. The default is
+// OpenPlatformSourceGate so local/dry-run deployments stay fully usable;
+// production wires the real gate via SetPlatformGate once the cache is up.
+type PlatformSourceGate interface {
+	// PlatformSourceAllowed reports whether adding a source on this platform
+	// is allowed for this user. Errors fail CLOSED at the call site.
+	PlatformSourceAllowed(ctx context.Context, userID, platform string) (bool, error)
+}
+
+// OpenPlatformSourceGate allows every source add. The default when no
+// feature-gate cache is wired.
+type OpenPlatformSourceGate struct{}
+
+// PlatformSourceAllowed always reports allowed.
+func (OpenPlatformSourceGate) PlatformSourceAllowed(context.Context, string, string) (bool, error) {
+	return true, nil
+}
+
+// SetPlatformGate overrides the rollout-platform source gate (ADR-0008).
+// Call once at startup before serving.
+func (h *SourcesHandler) SetPlatformGate(g PlatformSourceGate) {
+	h.platformGate = g
+}
+
+// platformSourceAllowed applies the rollout gate. A nil gate (direct struct
+// construction, e.g. in tests) reads as open rather than panicking.
+func (h *SourcesHandler) platformSourceAllowed(ctx context.Context, userID, platform string) (bool, error) {
+	if h.platformGate == nil {
+		return true, nil
+	}
+	return h.platformGate.PlatformSourceAllowed(ctx, userID, platform)
 }
 
 // discordChannelEntry is the JSON value stored at discord:channels:{channel_id}.
@@ -96,13 +135,14 @@ type discordChannelEntry struct {
 // TOKEN_ENCRYPTION_KEY_V1 is not configured (tokens stored as plaintext with encryption_version=0).
 func NewSourcesHandler(sourceRepo SourceRepository, overlayRepo OverlayRepository, db *pgxpool.Pool, logger *zap.Logger, redisClient redis.Cmdable, bm *metrics.BusinessMetrics, cipher *encryption.MultiKeyEncryptor) *SourcesHandler {
 	return &SourcesHandler{
-		sourceRepo:  sourceRepo,
-		overlayRepo: overlayRepo,
-		db:          db,
-		redis:       redisClient,
-		logger:      logger,
-		bm:          bm,
-		cipher:      cipher,
+		sourceRepo:   sourceRepo,
+		overlayRepo:  overlayRepo,
+		db:           db,
+		redis:        redisClient,
+		logger:       logger,
+		bm:           bm,
+		cipher:       cipher,
+		platformGate: OpenPlatformSourceGate{},
 	}
 }
 
@@ -195,6 +235,32 @@ func (h *SourcesHandler) authorizeDiscordChannels(ctx context.Context, userID, c
 		}
 	}
 
+	return 0, ""
+}
+
+// authorizeFacebookSource verifies the user has connected Facebook — i.e. a
+// facebook_oauth_tokens row exists for this exact Page (ADR-0060). Fail closed
+// on both the missing row and any DB error: "cannot verify" must never read
+// as "allowed". Returns (0, "") when allowed, or an HTTP status plus message.
+func (h *SourcesHandler) authorizeFacebookSource(ctx context.Context, userID, pageID string) (int, string) {
+	if pageID == "" {
+		return http.StatusBadRequest, "facebook requires a page_id (connect your Facebook Page first)"
+	}
+	if h.db == nil {
+		return http.StatusForbidden, "cannot verify Facebook page ownership"
+	}
+	var exists bool
+	err := h.db.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM facebook_oauth_tokens WHERE user_id = $1 AND page_id = $2)`,
+		userID, pageID,
+	).Scan(&exists)
+	if err != nil {
+		h.logger.Error("Facebook page ownership check failed", zap.String("user_id", userID), zap.String("page_id", pageID), zap.Error(err))
+		return http.StatusForbidden, "cannot verify Facebook page ownership"
+	}
+	if !exists {
+		return http.StatusBadRequest, "connect your Facebook Page before adding a Facebook source"
+	}
 	return 0, ""
 }
 
@@ -546,6 +612,20 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 		channelName = req.ChannelID
 	}
 
+	// Rollout gate (ADR-0008): the expansion platforms (owncast, goodgame, picarto,
+	// facebook, rumble) ship behind a per-platform feature_gates row seeded
+	// premium-only, so a new listener rolls out to a cohort instead of every
+	// overlay at once. Fail closed on a lookup error: "cannot verify" must never
+	// read as "allowed".
+	if allowed, gateErr := h.platformSourceAllowed(c.Request.Context(), userID.(string), req.Platform); gateErr != nil {
+		h.logger.Warn("platform source gate check failed; refusing",
+			zap.String("platform", req.Platform), zap.Error(gateErr))
+		c.JSON(http.StatusForbidden, gin.H{"error": "cannot verify platform availability"})
+		return
+	} else if !allowed {
+		c.JSON(http.StatusForbidden, gin.H{"error": req.Platform + " sources are currently premium-only"})
+		return
+	}
 	// For Twitch, validate that channel_id is a valid username (lowercase alphanumeric + underscore)
 	// This prevents display names from being stored (e.g., "شوشو" instead of "shahin200x")
 	channelID := req.ChannelID
@@ -621,11 +701,44 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 		// If fetch fails, channelName retains the fallback value (channel_id) — acceptable
 	}
 
+	// Owncast sources carry the INSTANCE URL, not a channel name (ADR-0058):
+	// an Owncast instance serves one stream, so the URL is the channel.
+	// Validate and normalize it, then resolve the display name from the
+	// instance's own /api/config. A fetch failure falls back to the URL
+	// hostname and does NOT fail the add — instances go offline independently
+	// and a temporarily-down server must still be addable.
+	if req.Platform == "owncast" {
+		normalized, normErr := normalizeOwncastInstanceURL(channelID)
+		if normErr != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": normErr.Error()})
+			return
+		}
+		channelID = normalized
+
+		if channelName == "" || channelName == req.ChannelID {
+			channelName = h.resolveOwncastName(c.Request.Context(), normalized)
+		}
+	}
+
 	// Discord sources are acted on by the shared bot, which Discord authorizes instead of the
 	// caller — so nothing upstream refuses a channel the caller has no claim to. Verify guild
 	// ownership here, fail closed. (ADR-0048.)
 	if req.Platform == "discord" {
 		if status, msg := h.authorizeDiscordChannels(c.Request.Context(), userID.(string), channelID, req.Config); status != 0 {
+			c.JSON(status, gin.H{"error": msg})
+			return
+		}
+	}
+
+	// Facebook sources are the streamer's own Page (ADR-0060): channel_id is
+	// the Page id resolved at OAuth callback time, and the write path acts
+	// with the stored Page token. A caller with no facebook_oauth_tokens row
+	// has no provable claim on the Page, so the add fails closed — same shape
+	// as the other OAuth platforms' "connect first" state, but checked here
+	// rather than at the platform, because Graph would happily accept a call
+	// for any Page id with any valid token of the same app.
+	if req.Platform == "facebook" {
+		if status, msg := h.authorizeFacebookSource(c.Request.Context(), userID.(string), channelID); status != 0 {
 			c.JSON(status, gin.H{"error": msg})
 			return
 		}
@@ -895,6 +1008,17 @@ func (h *SourcesHandler) HandleAddSourceAuto(c *gin.Context) {
 		channelName = req.ChannelID
 	}
 
+	// Rollout gate (ADR-0008), same check as HandleAddSource: the OAuth-driven
+	// auto-add must clear the same per-platform gate a manual add does.
+	if allowed, gateErr := h.platformSourceAllowed(c.Request.Context(), userID.(string), req.Platform); gateErr != nil {
+		h.logger.Warn("platform source gate check failed; refusing",
+			zap.String("platform", req.Platform), zap.Error(gateErr))
+		c.JSON(http.StatusForbidden, gin.H{"error": "cannot verify platform availability"})
+		return
+	} else if !allowed {
+		c.JSON(http.StatusForbidden, gin.H{"error": req.Platform + " sources are currently premium-only"})
+		return
+	}
 	// For Twitch, validate that channel_id is a valid username (lowercase alphanumeric + underscore)
 	// This prevents display names from being stored (e.g., "شوشو" instead of "shahin200x")
 	channelID := req.ChannelID
@@ -944,6 +1068,14 @@ func (h *SourcesHandler) HandleAddSourceAuto(c *gin.Context) {
 		return
 	}
 
+	// Facebook: same fail-closed ownership check as HandleAddSource (ADR-0060).
+	if req.Platform == "facebook" {
+		if status, msg := h.authorizeFacebookSource(c.Request.Context(), userID.(string), channelID); status != 0 {
+			c.JSON(status, gin.H{"error": msg})
+			return
+		}
+	}
+
 	var channelHandle *string
 	if req.ChannelHandle != "" {
 		channelHandle = &req.ChannelHandle
@@ -955,7 +1087,7 @@ func (h *SourcesHandler) HandleAddSourceAuto(c *gin.Context) {
 		ChannelID:     channelID,
 		ChannelName:   channelName,
 		ChannelHandle: channelHandle,
-		AuthRequired:  req.Platform == "youtube" || req.Platform == "kick",
+		AuthRequired:  req.Platform == "youtube" || req.Platform == "kick" || req.Platform == "facebook",
 		Config:        make(map[string]interface{}),
 		IsActive:      true,
 	}
@@ -993,4 +1125,79 @@ func (h *SourcesHandler) RegisterRoutes(router gin.IRouter) {
 // RegisterInternalRoutes registers internal source routes (called by other services)
 func (h *SourcesHandler) RegisterInternalRoutes(router gin.IRouter) {
 	router.POST("/sources/auto", h.HandleAddSourceAuto)
+}
+
+// owncastConfigResponse is the subset of /api/config the name resolution uses.
+type owncastConfigResponse struct {
+	Name string `json:"name"`
+}
+
+// normalizeOwncastInstanceURL validates that a channel_id is an http(s) base
+// URL and normalizes it: lowercase host, no trailing slash, no path, no
+// fragment, no credentials. Anything else is rejected with 400 (ADR-0058).
+func normalizeOwncastInstanceURL(input string) (string, error) {
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return "", fmt.Errorf("Owncast instance URL is required")
+	}
+	lower := strings.ToLower(input)
+	if !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "https://") {
+		return "", fmt.Errorf("invalid Owncast instance URL '%s': must start with http:// or https://", input)
+	}
+	u, err := url.Parse(input)
+	if err != nil {
+		return "", fmt.Errorf("invalid Owncast instance URL '%s': %w", input, err)
+	}
+	if u.Host == "" {
+		return "", fmt.Errorf("invalid Owncast instance URL '%s': missing host", input)
+	}
+	if u.Fragment != "" {
+		return "", fmt.Errorf("invalid Owncast instance URL '%s': must not carry a fragment", input)
+	}
+	if u.Path != "" && u.Path != "/" {
+		return "", fmt.Errorf("invalid Owncast instance URL '%s': must be a bare base URL without a path", input)
+	}
+	if u.User != nil {
+		return "", fmt.Errorf("invalid Owncast instance URL '%s': must not carry credentials", input)
+	}
+	return u.Scheme + "://" + strings.ToLower(u.Host), nil
+}
+
+// resolveOwncastName fetches <instance>/api/config and returns its server
+// name. On any failure it falls back to the URL hostname and never errors:
+// a down instance must not block adding the source (ADR-0058).
+func (h *SourcesHandler) resolveOwncastName(ctx context.Context, instanceURL string) string {
+	fallback := instanceURL
+	if u, err := url.Parse(instanceURL); err == nil && u.Host != "" {
+		fallback = u.Host
+	}
+	if h.httpClient == nil {
+		return fallback
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, instanceURL+"/api/config", nil)
+	if err != nil {
+		h.logger.Warn("Owncast /api/config request invalid; using hostname as channel name",
+			zap.String("instance", instanceURL), zap.Error(err))
+		return fallback
+	}
+	resp, err := h.httpClient.Do(req)
+	if err != nil {
+		h.logger.Warn("Owncast /api/config unreachable; using hostname as channel name",
+			zap.String("instance", instanceURL), zap.Error(err))
+		return fallback
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		h.logger.Warn("Owncast /api/config returned non-200; using hostname as channel name",
+			zap.String("instance", instanceURL), zap.Int("status", resp.StatusCode))
+		return fallback
+	}
+	var cfg owncastConfigResponse
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 64*1024)).Decode(&cfg); err != nil || cfg.Name == "" {
+		h.logger.Warn("Owncast /api/config response unusable; using hostname as channel name",
+			zap.String("instance", instanceURL), zap.Error(err))
+		return fallback
+	}
+	return cfg.Name
 }

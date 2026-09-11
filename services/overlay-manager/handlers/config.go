@@ -58,6 +58,11 @@ var bubbleColorSettings = []string{
 	"youtubeBubbleBg",
 	"kickBubbleBg",
 	"tiktokBubbleBg",
+	"owncastBubbleBg",
+	"goodgameBubbleBg",
+	"picartoBubbleBg",
+	"facebookBubbleBg",
+	"rumbleBubbleBg",
 	"discordBubbleBg",
 }
 

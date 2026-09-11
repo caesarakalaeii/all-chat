@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  Merge chat from <b>Twitch</b>, <b>YouTube</b>, <b>Kick</b>, <b>TikTok</b>, and <b>Discord</b> into a single feed for OBS — with full <b>7TV</b>, <b>BTTV</b>, and <b>FFZ</b> emote support.
+  Merge chat from <b>Twitch</b>, <b>YouTube</b>, <b>Kick</b>, <b>TikTok</b>, and <b>Discord</b> into a single feed for OBS — with <b>Owncast</b>, <b>GoodGame</b>, <b>Picarto</b>, <b>Facebook</b>, and <b>Rumble</b> rolling out — and full <b>7TV</b>, <b>BTTV</b>, and <b>FFZ</b> emote support.
 </p>
 
 <p align="center">
@@ -14,13 +14,13 @@
 
 ## What is All-Chat?
 
-All-Chat is a **free, open-source chat overlay** that merges Twitch, YouTube, Kick, TikTok, and Discord into a single feed for OBS. Sign in, drop a URL into a Browser Source, go live.
+All-Chat is a **free, open-source chat overlay** that merges Twitch, YouTube, Kick, TikTok, and Discord into a single feed for OBS, with Owncast, GoodGame, Picarto, Facebook, and Rumble rolling out. Sign in, drop a URL into a Browser Source, go live.
 
 No bots. No IRC tokens. No complicated setup.
 
 ### Highlights
 
-- **5 Platforms, One Feed** — Twitch, YouTube, Kick, TikTok, and Discord messages in a single overlay
+- **5 Platforms, One Feed** — Twitch, YouTube, Kick, TikTok, and Discord messages in a single overlay (five more rolling out: Owncast, GoodGame, Picarto, Facebook, Rumble)
 - **No Setup Required** — Sign in, create an overlay, paste the URL into OBS. That's it.
 - **Every Emote Works** — 7TV, BTTV, FFZ, plus native Twitch and YouTube emotes all render correctly
 - **16 Themes + Full CSS** — Built-in themes from Win98 retro to cyberpunk neon, or write your own CSS
@@ -139,6 +139,11 @@ The [All-Chat Browser Extension](https://github.com/caesarakalaeii/all-chat-exte
 | **Kick** | Pusher WebSocket | Chat, emotes, badges, message deletion |
 | **TikTok** | Unofficial live connector library | Chat messages, username-based display |
 | **Discord** | Bot gateway + webhook relay | Channel chat relay to overlay |
+| **Owncast** *(rolling out)* | Chat websocket, one connection per instance | Chat from any self-hosted Owncast instance; add the instance URL as a source |
+| **GoodGame** *(rolling out)* | Chat websocket | Chat from GoodGame.ru channels; add the channel key as a source |
+| **Picarto** *(rolling out)* | Pop-out chat websocket | Chat from Picarto channels |
+| **Facebook** *(rolling out)* | Graph API polling + moderation | Live-video comments from your Facebook Page; delete/hide comments and ban/unban viewers |
+| **Rumble** *(rolling out)* | Internal chat pop-up stream | Chat from Rumble live streams |
 
 > YouTube has two listener modes: the official **YouTube Data API** (quota-tracked with reserve-confirm-rollback) and an **InnerTube poller** that costs zero quota. Both are production-ready.
 >

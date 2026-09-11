@@ -6,14 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-All-Chat is a **cloud-native microservices platform** for aggregating and displaying chat messages from **multiple live streaming platforms** (Twitch, YouTube, Kick, TikTok, Discord) on streaming overlays with support for 7TV, BTTV, and FFZ emotes.
+All-Chat is a **cloud-native microservices platform** for aggregating and displaying chat messages from **multiple live streaming platforms** (Twitch, YouTube, Kick, TikTok, Discord, Owncast, GoodGame, Picarto, Facebook, Rumble) on streaming overlays with support for 7TV, BTTV, and FFZ emotes.
 
-**Core Concept**: Users can create multiple overlays, each configured with one or more chat sources. An overlay can combine messages from Twitch + YouTube + Kick + TikTok + Discord simultaneously, providing full flexibility for streamers who multistream.
+**Core Concept**: Users can create multiple overlays, each configured with one or more chat sources. An overlay can combine messages from every supported platform simultaneously, providing full flexibility for streamers who multistream.
 
 **Architecture**: Standard Go Layout with microservices communicating via Redis Streams (raw messages) → Message Processor (normalization + enrichment) → Redis Pub/Sub (overlay-specific) → API Gateway WebSocket (client delivery).
 
 **Platform Status**:
 - ✅ Twitch (EventSub primary; IRC listener deprecated per ADR-0026) | ✅ YouTube (HTTP polling with quota tracking + InnerTube polling) | ✅ Kick (Pusher WebSocket) | ✅ TikTok (Unofficial library) | ✅ Discord (channel relay)
+- 🚧 Rollout cohort, premium-gated per ADR-0008 (`platform_*` feature gates, seeded `is_premium=TRUE` in migrations 091-095; graduate by flipping the gate via the feature-gate admin endpoint): Owncast (ADR-0058, instance URL as channel) | GoodGame (chat websocket, channel key) | Picarto (ADR-0059, unofficial pop-out websocket) | Facebook (ADR-0060, Graph API polling + moderation write path) | Rumble (ADR-0061, internal chat pop-up SSE)
 
 ---
 
@@ -109,6 +110,11 @@ Each service has a detailed README:
 - [kick-listener](./services/kick-listener/README.md) - Pusher WebSocket client
 - [tiktok-listener](./services/tiktok-listener/README.md) - Unofficial TikTok Live library
 - discord-listener — Discord channel chat relay (`services/discord-listener/`, no README yet)
+- [owncast-listener](./services/owncast-listener/README.md) - Self-hosted Owncast instances; one websocket per instance URL (ADR-0058)
+- [goodgame-listener](./services/goodgame-listener/README.md) - GoodGame.ru chat websocket; resolves channel key to numeric chat id
+- [picarto-listener](./services/picarto-listener/README.md) - Picarto pop-out chat websocket, defensively parsed (ADR-0059)
+- [facebook-listener](./services/facebook-listener/README.md) - Facebook Live comments via Graph API polling + moderation (ADR-0060)
+- [rumble-listener](./services/rumble-listener/README.md) - Rumble chat via the internal chat pop-up SSE (ADR-0061)
 - [message-processor](./services/message-processor/README.md) - Normalization, emote enrichment
 - [overlay-manager](./services/overlay-manager/README.md) - Overlay CRUD, source configuration
 - [source-manager](./services/source-manager/README.md) - Leader election, active source registry
@@ -204,7 +210,7 @@ services/<service-name>/
 ## Message Flow Architecture
 
 ```
-Listeners (Twitch/YouTube/Kick/TikTok/Discord)
+Listeners (Twitch/YouTube/Kick/TikTok/Discord/Owncast/GoodGame/Picarto/Facebook/Rumble)
   ↓ publish raw messages
 Redis Streams (chat:raw)
   ↓ consume via XREADGROUP (group: message-processors)

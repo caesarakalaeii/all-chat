@@ -301,6 +301,16 @@ func (m *Manager) ExposedRefreshPlatform(ctx context.Context, platform oauth.Pla
 
 // refreshPlatform refreshes all tokens for a specific platform
 func (m *Manager) refreshPlatform(ctx context.Context, platform oauth.Platform, tokens []*repository.ExpiringToken) (refreshed, failed int64) {
+	// Facebook (ADR-0060): the stored credential is a Page access token
+	// obtained from a long-lived user token, and per Meta it does not expire.
+	// There is no refresh grant and no provider; a facebook-labeled row would
+	// only appear from a data error, so skip it rather than fail the batch.
+	if platform == oauth.PlatformFacebook {
+		m.logger.Info("Facebook tokens require no refresh (page tokens do not expire, ADR-0060)",
+			zap.Int("rows", len(tokens)))
+		return 0, 0
+	}
+
 	provider, ok := m.providers[platform]
 	if !ok {
 		m.logger.Error("No provider for platform", zap.String("platform", string(platform)))

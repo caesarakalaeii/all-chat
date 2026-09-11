@@ -42,7 +42,14 @@ const FAILURE_GLYPH = '❌'
 // Anything else falls back to a platform-neutral label so the page never
 // misnames the provider that failed (it used to hardcode "Twitch" for every
 // platform).
-const NAMEABLE_PLATFORMS = ['twitch', 'youtube', 'kick', 'tiktok', 'discord'] as const
+const NAMEABLE_PLATFORMS = [
+  'twitch',
+  'youtube',
+  'kick',
+  'tiktok',
+  'facebook',
+  'discord',
+] as const
 
 function AuthErrorContent() {
   const t = useTranslations()

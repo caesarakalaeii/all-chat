@@ -56,9 +56,21 @@ describe('PLATFORM_COLORS', () => {
     expect(PLATFORM_COLORS.system.text).toBe('text-text-sub')
   })
 
-  it('all keys are exactly: twitch, youtube, kick, tiktok, system, discord', () => {
+  it('all keys are exactly the ten platforms plus system', () => {
     const keys = Object.keys(PLATFORM_COLORS).sort()
-    expect(keys).toEqual(['discord', 'kick', 'system', 'tiktok', 'twitch', 'youtube'])
+    expect(keys).toEqual([
+      'discord',
+      'facebook',
+      'goodgame',
+      'kick',
+      'owncast',
+      'picarto',
+      'rumble',
+      'system',
+      'tiktok',
+      'twitch',
+      'youtube',
+    ])
   })
 
   it('discord text class is text-discord', () => {

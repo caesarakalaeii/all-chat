@@ -126,7 +126,18 @@ export interface MessageMetadata {
 export interface ChatMessage {
   id: string
   overlay_id: string
-  platform: 'twitch' | 'youtube' | 'kick' | 'tiktok' | 'discord' | 'system' // Primary platform
+  platform:
+    | 'twitch'
+    | 'youtube'
+    | 'kick'
+    | 'tiktok'
+    | 'owncast'
+    | 'goodgame'
+    | 'picarto'
+    | 'facebook'
+    | 'rumble'
+    | 'discord'
+    | 'system' // Primary platform
   /**
    * All platforms this message was delivered to. Length > 1 for a streamer's
    * "send to all" echo collapsed into one message; absent/length ≤ 1 ⇒ render
@@ -205,7 +216,17 @@ export interface Attachment {
 }
 
 export interface PlatformStatus {
-  platform: 'youtube' | 'twitch' | 'kick' | 'tiktok' | 'discord'
+  platform:
+    | 'youtube'
+    | 'twitch'
+    | 'kick'
+    | 'tiktok'
+    | 'owncast'
+    | 'goodgame'
+    | 'picarto'
+    | 'facebook'
+    | 'rumble'
+    | 'discord'
   channel_id: string
   channel_name?: string
   status: 'connected' | 'reconnecting' | 'offline' | 'quota_exceeded' | 'error' | 'paused'

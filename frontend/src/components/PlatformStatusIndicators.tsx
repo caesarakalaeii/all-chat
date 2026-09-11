@@ -110,19 +110,82 @@ const TikTokIcon = () => (
 
 const DiscordIcon = () => <DiscordMark className="h-5 w-5 text-discord" />
 
-// The letter the Kick mark draws. A brand glyph, not copy.
-const KICK_GLYPH = 'K'
+const OwncastIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-5 w-5">
+    <circle cx="12" cy="17" r="2.5" fill="#9B7FF5" />
+    <path
+      fill="none"
+      stroke="#9B7FF5"
+      strokeWidth="2"
+      strokeLinecap="round"
+      d="M7.8 12.8a6 6 0 0 1 8.4 0M5 10a10 10 0 0 1 14 0"
+    />
+  </svg>
+)
 
-// The icon plus the catalog key naming the platform. `as const satisfies` rather
-// than an annotation: an annotation widens the key to string and a typo would
-// stop failing tsc.
-const platformIcons = {
-  twitch: { icon: TwitchIcon, nameKey: 'common.platforms.twitch' },
-  youtube: { icon: YouTubeIcon, nameKey: 'common.platforms.youtube' },
-  kick: { icon: KickIcon, nameKey: 'common.platforms.kick' },
-  tiktok: { icon: TikTokIcon, nameKey: 'common.platforms.tiktok' },
-  discord: { icon: DiscordIcon, nameKey: 'common.platforms.discord' },
-} as const satisfies Record<string, { icon: React.FC; nameKey: MessageKey }>
+const GoodGameIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-5 w-5">
+    <text
+      x="12"
+      y="17"
+      fontSize="11"
+      fontWeight="bold"
+      fill="#7FA3D1"
+      textAnchor="middle"
+      fontFamily="monospace"
+    >
+      {GOODGAME_GLYPH}
+    </text>
+  </svg>
+)
+
+const PicartoIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-5 w-5">
+    <circle cx="12" cy="12" r="9" fill="#27B756" />
+    <circle cx="9" cy="9" r="1.4" fill="#FFFFFF" />
+    <circle cx="15" cy="9" r="1.4" fill="#FFFFFF" />
+    <circle cx="8" cy="14" r="1.4" fill="#FFFFFF" />
+    <circle cx="14.5" cy="15" r="1.4" fill="#FFFFFF" />
+  </svg>
+)
+
+const FacebookIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-5 w-5">
+    <path
+      fill="#3B93F5"
+      d="M12 2a10 10 0 1 0-1.6 19.9v-7h-2.5V12h2.5V9.8c0-2.5 1.5-3.9 3.8-3.9 1.1 0 2.2.2 2.2.2v2.4h-1.2c-1.2 0-1.6.8-1.6 1.6V12h2.7l-.4 2.9h-2.3v7A10 10 0 0 0 12 2z"
+    />
+  </svg>
+)
+
+const RumbleIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-5 w-5">
+    <circle cx="12" cy="12" r="9" fill="none" stroke="#85C742" strokeWidth="2" />
+    <path fill="#85C742" d="M10 8.5v7l6-3.5z" />
+  </svg>
+)
+
+ // The letter the Kick mark draws. A brand glyph, not copy.
+ const KICK_GLYPH = 'K'
+
+// The letters the GoodGame mark draws. A brand glyph, not copy.
+const GOODGAME_GLYPH = 'GG'
+ 
+ // The icon plus the catalog key naming the platform. `as const satisfies` rather
+ // than an annotation: an annotation widens the key to string and a typo would
+ // stop failing tsc.
+ const platformIcons = {
+   twitch: { icon: TwitchIcon, nameKey: 'common.platforms.twitch' },
+   youtube: { icon: YouTubeIcon, nameKey: 'common.platforms.youtube' },
+   kick: { icon: KickIcon, nameKey: 'common.platforms.kick' },
+   tiktok: { icon: TikTokIcon, nameKey: 'common.platforms.tiktok' },
+  owncast: { icon: OwncastIcon, nameKey: 'common.platforms.owncast' },
+  goodgame: { icon: GoodGameIcon, nameKey: 'common.platforms.goodgame' },
+  picarto: { icon: PicartoIcon, nameKey: 'common.platforms.picarto' },
+  facebook: { icon: FacebookIcon, nameKey: 'common.platforms.facebook' },
+  rumble: { icon: RumbleIcon, nameKey: 'common.platforms.rumble' },
+   discord: { icon: DiscordIcon, nameKey: 'common.platforms.discord' },
+ } as const satisfies Record<string, { icon: React.FC; nameKey: MessageKey }>
 
 type KnownPlatform = keyof typeof platformIcons
 

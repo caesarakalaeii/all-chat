@@ -55,7 +55,18 @@ interface OverlaySource {
   id: string
   // Matches the Sources page union; the badge neutral-styles anything it does
   // not recognize (discord, shared_overlay), so no cast is needed.
-  platform: 'twitch' | 'youtube' | 'kick' | 'tiktok' | 'discord' | 'shared_overlay'
+  platform:
+    | 'twitch'
+    | 'youtube'
+    | 'kick'
+    | 'tiktok'
+    | 'owncast'
+    | 'goodgame'
+    | 'picarto'
+    | 'facebook'
+    | 'rumble'
+    | 'discord'
+    | 'shared_overlay'
   channel_id: string
   channel_name: string
   channel_handle?: string | null

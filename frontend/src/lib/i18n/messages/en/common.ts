@@ -59,6 +59,11 @@ export const common = {
     youtube: 'YouTube',
     kick: 'Kick',
     tiktok: 'TikTok',
+    owncast: 'Owncast',
+    goodgame: 'GoodGame',
+    picarto: 'Picarto',
+    facebook: 'Facebook',
+    rumble: 'Rumble',
     discord: 'Discord',
   },
   // The Patreon connect flow. /settings/premium and /settings/viewer/premium

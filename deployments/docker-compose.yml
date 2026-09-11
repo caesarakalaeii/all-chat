@@ -298,6 +298,34 @@ services:
       - allchat
     restart: unless-stopped
 
+  # Picarto Listener (unofficial pop-out chat WebSocket, ADR-0059)
+  picarto-listener:
+    build:
+      context: ../
+      dockerfile: services/picarto-listener/Dockerfile
+    container_name: allchat-picarto-listener
+    environment:
+      PORT: "8097"
+      LOG_LEVEL: "info"
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: allchat
+      DATABASE_USER: allchat
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    ports:
+      - "127.0.0.1:8097:8097"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - allchat
+    restart: unless-stopped
+
   # YouTube Listener (Phase 4)
   youtube-listener:
     build:
@@ -323,6 +351,73 @@ services:
       SOURCE_MANAGER_SECRET: ${SERVICE_JWT_SECRET:?SERVICE_JWT_SECRET is required}
     ports:
       - "127.0.0.1:8086:8086"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      source-manager:
+        condition: service_started
+    networks:
+      - allchat
+    restart: unless-stopped
+
+  # Facebook Listener (ADR-0060): Graph API polling of the streamer's Page
+  # live-video comments. Needs no app credentials — it uses the stored Page
+  # tokens from facebook_oauth_tokens.
+  facebook-listener:
+    build:
+      context: ../
+      dockerfile: services/facebook-listener/Dockerfile
+    container_name: allchat-facebook-listener
+    environment:
+      PORT: "8099"
+      LOG_LEVEL: "info"
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: allchat
+      DATABASE_USER: allchat
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:?TOKEN_ENCRYPTION_KEY is required}
+      FACEBOOK_POLLING_INTERVAL_MS: "10000"
+      FACEBOOK_SOURCE_SYNC_SECONDS: "30"
+    ports:
+      - "127.0.0.1:8099:8099"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - allchat
+    restart: unless-stopped
+
+  # Owncast Listener (ADR-0058): one websocket per self-hosted instance.
+  # An instance being offline is normal — the listener backs off to 5 minutes
+  # and keeps retrying; no Owncast env vars are required.
+  owncast-listener:
+    build:
+      context: ../
+      dockerfile: services/owncast-listener/Dockerfile
+    container_name: allchat_owncast_listener
+    environment:
+      PORT: "8095"
+      LOG_LEVEL: "info"
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: allchat
+      DATABASE_USER: allchat
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      SOURCE_MANAGER_URL: http://source-manager:8088
+      SOURCE_MANAGER_SECRET: ${SERVICE_JWT_SECRET:?SERVICE_JWT_SECRET is required}
+    ports:
+      - "127.0.0.1:8095:8095"
     depends_on:
       postgres:
         condition: service_healthy
@@ -360,6 +455,71 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - allchat
+    restart: unless-stopped
+
+  # GoodGame Listener (goodgame.ru)
+  goodgame-listener:
+    build:
+      context: ../
+      dockerfile: services/goodgame-listener/Dockerfile
+    container_name: allchat-goodgame-listener
+    environment:
+      PORT: "8096"
+      LOG_LEVEL: "info"
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: allchat
+      DATABASE_USER: allchat
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      SOURCE_MANAGER_URL: http://source-manager:8088
+      SOURCE_MANAGER_SECRET: ${SERVICE_JWT_SECRET:?SERVICE_JWT_SECRET is required}
+    ports:
+      - "127.0.0.1:8096:8096"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      source-manager:
+        condition: service_started
+    networks:
+      - allchat
+    restart: unless-stopped
+
+  # Rumble Listener (ADR-0061 — internal chat pop-up SSE)
+  rumble-listener:
+    build:
+      context: ../
+      dockerfile: services/rumble-listener/Dockerfile
+    container_name: allchat-rumble-listener
+    environment:
+      PORT: "8098"
+      LOG_LEVEL: "info"
+      RUMBLE_SESSION_COOKIE: ${RUMBLE_SESSION_COOKIE:-}
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: allchat
+      DATABASE_USER: allchat
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      SOURCE_MANAGER_URL: http://source-manager:8088
+      SOURCE_MANAGER_SECRET: ${SERVICE_JWT_SECRET:?SERVICE_JWT_SECRET is required}
+    ports:
+      - "127.0.0.1:8098:8098"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      source-manager:
+        condition: service_started
     networks:
       - allchat
     restart: unless-stopped

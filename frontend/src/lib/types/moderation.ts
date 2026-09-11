@@ -27,7 +27,18 @@
  */
 
 /** Platforms a chat source can report. Mirrors ChatMessage['platform']. */
-export type ModerationPlatform = 'twitch' | 'youtube' | 'kick' | 'tiktok' | 'discord' | 'system'
+export type ModerationPlatform =
+  | 'twitch'
+  | 'youtube'
+  | 'kick'
+  | 'tiktok'
+  | 'owncast'
+  | 'goodgame'
+  | 'picarto'
+  | 'facebook'
+  | 'rumble'
+  | 'discord'
+  | 'system'
 
 /** A single moderation action the backend can perform on a source. */
 export type ModerationAction = 'delete' | 'timeout' | 'ban' | 'unban'
@@ -127,6 +138,7 @@ export const MODERATABLE_PLATFORMS: ReadonlySet<string> = new Set([
   'youtube',
   'kick',
   'discord',
+  'facebook',
 ])
 
 /** Preset timeout durations offered in the per-user moderation popover. */

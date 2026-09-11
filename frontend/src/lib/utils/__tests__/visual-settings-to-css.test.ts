@@ -81,6 +81,11 @@ describe('visualSettingsToCss', () => {
       kickBubbleBg: '#1b3d22',
       tiktokBubbleBg: '#1b333d',
       discordBubbleBg: '#22253d',
+      owncastBubbleBg: '#241b3d',
+      goodgameBubbleBg: '#1b2a3d',
+      picartoBubbleBg: '#1b3d26',
+      facebookBubbleBg: '#1b2940',
+      rumbleBubbleBg: '#2b3d1b',
       messageGap: '8px',
       backdropBlur: '0px',
       maxWidth: '100%',
@@ -99,6 +104,11 @@ describe('visualSettingsToCss', () => {
       kickAccent: '#00e701',
       tiktokAccent: '#000000',
       discordAccent: '#5865f2',
+      owncastAccent: '#9b7ff5',
+      goodgameAccent: '#52709c',
+      picartoAccent: '#1aa455',
+      facebookAccent: '#1877f2',
+      rumbleAccent: '#85c742',
       showSuperChat: 'block',
       showSubscriptions: 'block',
       showRaids: 'block',
@@ -125,6 +135,8 @@ describe('visualSettingsToCss', () => {
     expect(result).toContain('--chat-font-family: Inter;')
     expect(result).toContain('--platform-twitch-accent: #9146ff;')
     expect(result).toContain('--platform-discord-accent: #5865f2;')
+    expect(result).toContain('--platform-owncast-accent: #9b7ff5;')
+    expect(result).toContain('--platform-rumble-accent: #85c742;')
     expect(result).toContain('--chat-show-super-chat: block;')
     expect(result).toContain('--chat-bits-size-modifier: 1;')
     expect(result).toContain('--chat-membership-gift-size-modifier: 1.2;')
@@ -134,8 +146,9 @@ describe('visualSettingsToCss', () => {
     // messageAnimation is applied as a .msg-anim-* class, never as a CSS property
     expect(result).not.toContain('messageAnimation')
     expect(result).not.toContain('fly-left')
-    // All 52 CSS properties present (excludes non-CSS fields)
-    expect((result.match(/--chat-|--platform-/g) ?? []).length).toBe(52)
+    // All 57 CSS properties present (52 + 5 new platform accents; the platform
+    // bubble fills are rules-only and never counted here)
+    expect((result.match(/--chat-|--platform-/g) ?? []).length).toBe(57)
   })
 
   it('wraps output in correct cascade layer syntax', () => {
