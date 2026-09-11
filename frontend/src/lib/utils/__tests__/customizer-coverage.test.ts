@@ -209,6 +209,8 @@ describe('visual customizer property coverage', () => {
       'kickBubbleBg',
       'tiktokBubbleBg',
       'discordBubbleBg',
+      'bubbleColorFromUser',
+      'bubbleUserColorOpacity',
     ] as const) {
       expect(mapped.has(field), `${field} must not be in PROPERTY_MAP`).toBe(false)
     }

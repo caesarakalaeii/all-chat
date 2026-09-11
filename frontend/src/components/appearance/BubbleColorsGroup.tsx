@@ -19,21 +19,25 @@
  */
 
 /**
- * Differently-coloured chat bubbles, on two independent axes:
+ * Differently-coloured chat bubbles, on three independent axes:
  *
+ * - By username — each row takes its chatter's username colour, as a fill or
+ *   an outline. The name itself goes static (the streamer's picker / auto
+ *   palette) so it stays readable against its own colour.
  * - Per platform — Twitch rows one fill, YouTube another. Useful for
  *   multistreamers who want to tell sources apart at a glance.
  * - Palette — 2 to MAX_BUBBLE_PALETTE fills cycled down the feed, for rhythm.
  *
- * A platform fill wins over the palette on that platform's rows; the emitted CSS
- * encodes that by source order (see bubbleFillRules).
+ * The username axis wins over a platform fill or the palette on every row
+ * (see userBubbleRules in visual-settings-to-css); the remaining two keep
+ * their source-order precedence.
  *
  * Free to use. `locked` comes from the server-resolved `bubble_colors_locked`
  * flag on the overlay config rather than from `user.is_premium`, so flipping the
  * `bubble_colors` gate to premium in the admin UI locks these controls with no
  * deploy — and until someone does, nothing here mentions Premium.
  */
-
+import clsx from 'clsx'
 import React from 'react'
 import { Button } from '@/components/ui/button'
 import { Plus, RotateCcw, X } from 'lucide-react'
@@ -44,6 +48,8 @@ import { emphasise } from '@/lib/i18n/emphasise'
 import type { VisualSettings } from '@/lib/types/visual-settings'
 import { MAX_BUBBLE_PALETTE } from '@/lib/utils/visual-settings-to-css'
 import { ColorPickerControl } from './ColorPickerControl'
+import { SliderControl } from './SliderControl'
+import { ToggleSwitch } from './ToggleSwitch'
 
 /** Starting colour for a newly added palette entry — a neutral dark bubble. */
 const NEW_SWATCH = '#1e293b'
@@ -103,6 +109,68 @@ export function BubbleColorsGroup({
       )}
 
       <fieldset disabled={locked} className="space-y-5 disabled:opacity-50">
+        <div data-setting-anchor="bubbleColorFromUser" className="space-y-3">
+          <div>
+            <h3 className="text-sm font-medium text-text">
+              {t('overlayEditor.bubbleColors.userColorHeading')}
+            </h3>
+            <p className="text-xs text-text-dim">
+              {t('overlayEditor.bubbleColors.userColorBody')}
+            </p>
+          </div>
+          <ToggleSwitch
+            label={t('overlayEditor.bubbleColors.userColorToggle')}
+            checked={visualSettings.bubbleColorFromUser === 'background' ||
+              visualSettings.bubbleColorFromUser === 'border'}
+            onChange={(checked) =>
+              onChange({ bubbleColorFromUser: checked ? 'background' : undefined })
+            }
+          />
+          <div
+            className={clsx(
+              'mt-2 space-y-2 pl-2',
+              visualSettings.bubbleColorFromUser === 'background' ||
+                visualSettings.bubbleColorFromUser === 'border'
+                ? ''
+                : 'pointer-events-none opacity-40'
+            )}
+          >
+            <div className="flex gap-4">
+              {(['background', 'border'] as const).map((mode) => (
+                <label
+                  key={mode}
+                  className="flex cursor-pointer items-center gap-1.5 text-xs text-text-sub"
+                >
+                  <input
+                    type="radio"
+                    name="bubbleColorFromUserMode"
+                    value={mode}
+                    checked={visualSettings.bubbleColorFromUser === mode}
+                    onChange={() => onChange({ bubbleColorFromUser: mode })}
+                    className="accent-twitch"
+                  />
+                  {t(
+                    mode === 'background'
+                      ? 'overlayEditor.bubbleColors.userColorModeBackground'
+                      : 'overlayEditor.bubbleColors.userColorModeBorder'
+                  )}
+                </label>
+              ))}
+            </div>
+            <SliderControl
+              label={t('overlayEditor.bubbleColors.userColorOpacity')}
+              value={parseFloat(visualSettings.bubbleUserColorOpacity ?? '0.85')}
+              min={0}
+              max={1}
+              step={0.05}
+              onChange={(v) => onChange({ bubbleUserColorOpacity: `${v}` })}
+            />
+            <p className="text-xs text-text-dim">
+              {t('overlayEditor.bubbleColors.userColorOpacityNote')}
+            </p>
+          </div>
+        </div>
+
         <div className="space-y-3">
           <div>
             <h3 className="text-sm font-medium text-text">

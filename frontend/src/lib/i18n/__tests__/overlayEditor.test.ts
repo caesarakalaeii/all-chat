@@ -312,6 +312,20 @@ describe('bubble colours group copy', () => {
     )
   })
 
+  it('keeps the by-username section copy', () => {
+    expect(t('overlayEditor.bubbleColors.userColorHeading')).toBe('Colour bubbles by username')
+    expect(t('overlayEditor.bubbleColors.userColorBody')).toBe(
+      'Each message takes its chatter’s username colour on the bubble. Colourless chatters get an auto-assigned colour.'
+    )
+    expect(t('overlayEditor.bubbleColors.userColorToggle')).toBe('Use username colours')
+    expect(t('overlayEditor.bubbleColors.userColorModeBackground')).toBe('Fill')
+    expect(t('overlayEditor.bubbleColors.userColorModeBorder')).toBe('Outline')
+    expect(t('overlayEditor.bubbleColors.userColorOpacity')).toBe('Fill opacity')
+    expect(t('overlayEditor.bubbleColors.userColorOpacityNote')).toBe(
+      'Applies to flat colours; gradient names fill the bubble opaque. Outline always uses its own 2px width.'
+    )
+   })
+
   it('keeps the palette section copy', () => {
     expect(t('overlayEditor.bubbleColors.paletteHeading')).toBe('Palette')
     expect(t('overlayEditor.bubbleColors.paletteBody')).toBe(

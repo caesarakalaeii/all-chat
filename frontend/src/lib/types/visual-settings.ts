@@ -40,6 +40,11 @@ export function isMessageAnimation(value: unknown): value is MessageAnimation {
   return typeof value === 'string' && (MESSAGE_ANIMATIONS as readonly string[]).includes(value)
 }
 
+/** The two modes that actually colour a bubble (absent/'none' = off). */
+export function isBubbleColorFromUser(value: unknown): value is 'background' | 'border' {
+  return value === 'background' || value === 'border'
+}
+
 /**
  * Static value → class map (no runtime string building; className strings must
  * be statically greppable, see DESIGN_SYSTEM.md). Classes live in globals.css.
@@ -147,12 +152,22 @@ export interface VisualSettings {
   // applied as a .msg-anim-* class on the chat bubble)
   messageAnimation?: MessageAnimation
 
+  // Bubble colour from the username colour — non-CSS settings read into
+  // React state on both overlay surfaces. The CSS half lives in
+  // userBubbleRules (visual-settings-to-css): an !important rule in the
+  // visual-customizer layer keyed on the per-row [data-user-bubble]
+  // attribute, beating palette/platform fills on specificity. Not in
+  // PROPERTY_MAP, so no --chat-* variable is emitted.
+  bubbleColorFromUser?: 'none' | 'background' | 'border'
+  bubbleUserColorOpacity?: string // decimal '0'–'1'; gradients ignore it
+
   // Pronoun display — all three are read into React state and applied
   // by conditional render / inline style. None is in PROPERTY_MAP, so no
   // `--chat-show-pronouns` variable is ever emitted; do not write CSS against one.
   showPronouns?: 'inline' | 'none'
   pronounPosition?: 'before' | 'after'
   pronounColor?: string
+
 
   // Sizing
   avatarSize?: string // --chat-avatar-size

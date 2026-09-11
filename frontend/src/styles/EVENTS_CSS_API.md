@@ -147,7 +147,8 @@ worth knowing:
   `--event-*` tokens or overriding event rules works without ceremony.
 - Unlayered theme CSS **cannot** beat an `!important` rule inside
   `@layer visual-customizer`. That is why event rows are excluded from the
-  bubble-forcing block there: an inescapable rule is the wrong tool for
+  bubble-forcing rules there (the shape block, and the username-colour bubble
+  block keyed on `data-user-bubble`): an inescapable rule is the wrong tool for
   something themes are supposed to restyle.
 - Putting a rule in `@layer user-overrides` raises its priority for normal
   declarations and _lowers_ it for `!important` ones. Pick one or the other, not

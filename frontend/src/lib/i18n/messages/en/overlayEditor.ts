@@ -156,6 +156,15 @@ export const overlayEditor = {
     charsUnit: ' chars',
   },
   bubbleColors: {
+    userColorHeading: 'Colour bubbles by username',
+    userColorBody:
+      'Each message takes its chatter’s username colour on the bubble. Colourless chatters get an auto-assigned colour.',
+    userColorToggle: 'Use username colours',
+    userColorModeBackground: 'Fill',
+    userColorModeBorder: 'Outline',
+    userColorOpacity: 'Fill opacity',
+    userColorOpacityNote:
+      'Applies to flat colours; gradient names fill the bubble opaque. Outline always uses its own 2px width.',
     lockedNotice:
       'Different bubble colours per platform, or a palette cycled down the feed, are a {emphasis} feature.',
     lockedNoticeEmphasis: 'Premium',

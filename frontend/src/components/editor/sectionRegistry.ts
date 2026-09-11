@@ -223,7 +223,11 @@ export const EDITOR_SECTIONS: EditorSection[] = [
     description: 'A different bubble fill per platform, or a palette cycled down the feed.',
     keywords: 'premium multicolour multicolor alternating rotate cycle rainbow per platform',
     entries: [
-      { label: 'Twitch bubble', keywords: 'platform fill purple' },
+      {
+        label: 'Color bubbles by username',
+        keywords: 'user username viewer chatter color fill border outline',
+        anchorId: 'bubbleColorFromUser',
+      },
       { label: 'YouTube bubble', keywords: 'platform fill red' },
       { label: 'Kick bubble', keywords: 'platform fill green' },
       { label: 'TikTok bubble', keywords: 'platform fill cyan' },
