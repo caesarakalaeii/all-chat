@@ -369,6 +369,9 @@ export function LanesHero({
               <span key={i}>{word}</span>
             ))}
           </div>
+          {/* The multistream objection, answered on the spot: one merged
+              chat, one mod queue. Copy lives in the catalog. */}
+          <p className="lanes-manifesto">{t('marketing.lanes.manifesto')}</p>
         </div>
 
         {/* Bottom CTA bar. */}

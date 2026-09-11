@@ -47,6 +47,9 @@ export const marketing = {
     // Two display lines of one headline, not two sentences.
     titleTop: 'EVERY CHAT.',
     titleBottom: 'ONE URL.',
+    // The multistream objection, answered in the same voice: one merged
+    // chat means one community, and one mod queue means no extra load.
+    manifesto: 'YOUR CHATS? MERGED. YOUR COMMUNITY? UNITED.',
     totalLabel: 'MSG DELIVERED',
     cta: 'GET YOUR OVERLAY — FREE →',
     ctaNote: "lane height ≈ share of this week's messages",

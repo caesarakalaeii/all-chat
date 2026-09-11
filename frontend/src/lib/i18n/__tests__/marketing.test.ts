@@ -70,7 +70,7 @@ describe('lanes hero, logged out', () => {
       discord: 'flowDiscord',
     } as const
     for (const group of Object.values(platforms)) {
-      for (let i = 1; i <= 15; i++) {
+      for (let i = 1; i <= 22; i++) {
         const key = `marketing.${group}.m${i}`
         const value = t(key as Parameters<typeof t>[0])
         if (value === key) continue // platform ran out of curated strings
