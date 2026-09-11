@@ -75,9 +75,12 @@ export function laneWeight(base: number, laneIndex: number, seconds: number): nu
 // fallback agree exactly.
 const LANE_COLORS = ['#8464d6', '#d95c50', '#62aeb4', '#56b847', '#6a72c9'] as const
 
-// Band tint opacity, matching the 24% color-mix the CSS fallback paints:
-// over the dark page each band must read as a wash, not a solid brand fill.
-const LANE_ALPHA = 0.24
+// Per-lane tint opacity. 0.24 matches the 24% color-mix the CSS fallback
+// paints, but over near-black every color is worth a different fraction:
+// green and indigo darken to a murmur at the same alpha that leaves red
+// loud. Each lane gets the alpha that paints an equal perceptual wash, and
+// the two curves below are calibrated to that page background.
+const LANE_ALPHAS = [0.24, 0.24, 0.26, 0.3, 0.32] as const
 
 const VERT_SRC = `#version 300 es
 uniform float u_weights[${LANE_COUNT}];
@@ -103,9 +106,10 @@ const FRAG_SRC = `#version 300 es
 precision mediump float;
 flat in float v_lane;
 uniform vec3 u_colors[${LANE_COUNT}];
+uniform float u_alphas[${LANE_COUNT}];
 out vec4 o_color;
 void main() {
-  o_color = vec4(u_colors[int(v_lane)], ${LANE_ALPHA.toFixed(2)});
+  o_color = vec4(u_colors[int(v_lane)], u_alphas[int(v_lane)]);
 }`
 
 export interface LaneWavesOptions {
@@ -172,6 +176,7 @@ export function useLaneWaves(
 
     const uWeights = gl.getUniformLocation(prog, 'u_weights')
     const uColors = gl.getUniformLocation(prog, 'u_colors')
+    const uAlphas = gl.getUniformLocation(prog, 'u_alphas')
     const colors = new Float32Array(LANE_COLORS.length * 3)
     LANE_COLORS.forEach((hex, i) => {
       colors[i * 3] = parseInt(hex.slice(1, 3), 16) / 255
@@ -179,6 +184,7 @@ export function useLaneWaves(
       colors[i * 3 + 2] = parseInt(hex.slice(5, 7), 16) / 255
     })
     gl.uniform3fv(uColors, colors)
+    gl.uniform1fv(uAlphas, LANE_ALPHAS)
 
     const weights = weightsRef.current
     const draw = (seconds: number) => {

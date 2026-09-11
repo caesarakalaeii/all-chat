@@ -739,7 +739,14 @@ span.font-semibold.text-sm.username-gradient {
   top: 20px;
   right: 24px;
   display: flex;
-  gap: 20px;
+  gap: clamp(10px, 3vw, 20px);
+}
+@media (max-width: 480px) {
+  .lanes-tr {
+    top: 44px;
+    right: 24px;
+    gap: 12px;
+  }
 }
 /* Logged-in dashboard chip: warm white on black, out of the blend. */
 .lanes-tr .dash-chip {
