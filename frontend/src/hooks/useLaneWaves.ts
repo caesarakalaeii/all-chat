@@ -20,11 +20,12 @@
  * useLaneWaves — the WebGL lane renderer behind the homepage hero.
  *
  * One fullscreen canvas draws the five platform bands. Their boundaries
- * undulate continuously: each lane's height walks a smooth two-sine time
- * series around its real weekly share (laneWeight), so the stack reads as
- * a live chart instead of stepped ticks. The canvas owns the fills; the
- * DOM keeps every piece of text (marquee, wordmarks), so i18n, selection
- * and crisp text rendering stay untouched.
+ * track live traffic: HomeClient polls /api/v1/stats and turns consecutive
+ * samples into per-platform rate deltas; each lane's target height is its
+ * weekly share scaled by how hot that platform is right now (modulations).
+ * A small two-sine shimmer rides on top so the surface never freezes. The
+ * canvas owns the fills; the DOM keeps every piece of text (marquee,
+ * wordmarks), so i18n, selection and crisp text rendering stay untouched.
  *
  * Geometry: one TRIANGLE_STRIP with two vertices per lane boundary
  * (boundaries 0..5, left/right corners = 12 vertices). Each vertex's
@@ -35,8 +36,8 @@
  *
  * The render loop never calls setState — it mutates the returned
  * weightsRef, which the hero reads from its own rAF loop to size the flex
- * lanes and breathe the counter. Canvas and DOM share one clock, no
- * re-render churn.
+ * lanes. Canvas and DOM share one clock, no re-render churn.
+
  *
  * Degradation: without WebGL2 (or after a context loss) the canvas stays
  * blank and activeRef stays false — the hero keeps the CSS lane
@@ -50,18 +51,17 @@ import { useEffect, useRef } from 'react'
 
 /** Fixed platform count; the shaders hardcode this. */
 export const LANE_COUNT = 5
-
 /** Wave amplitude per lane, relative to its base share. */
-const WAVE_AMPLITUDE = 0.22
+const WAVE_AMPLITUDE = 0.06
 
 /**
- * Smooth pseudo time series around one lane's base share: a slow primary
- * wave plus a faster secondary ripple, phase-shifted per lane so the lanes
- * never breathe in sync. Decorative — no weekly history exists
- * server-side — but the continuous rise-and-fall reads like a live chart.
- * Deterministic in (lane, seconds); sin(0) === 0 keeps the reduced-motion
- * frame and the first animation frame at the exact base shares, so the
- * canvas never disagrees with the server-rendered lane sizes.
+ * The decorative shimmer only: a slow primary wave plus a faster secondary
+ * ripple, phase-shifted per lane so the lanes never breathe in sync. Kept
+ * small (feedback: the ±22% version swamped the real traffic steps and the
+ * graph read as idle oscillation, not a time series). Deterministic in
+ * (lane, seconds); sin(0) === 0 keeps the reduced-motion frame and the
+ * first animation frame at the exact base shares, so the canvas never
+ * disagrees with the server-rendered lane sizes.
  */
 export function laneWeight(base: number, laneIndex: number, seconds: number): number {
   const phase = laneIndex * 1.3
@@ -115,6 +115,12 @@ void main() {
 export interface LaneWavesOptions {
   /** Real (or fallback) weekly share per lane, palette order. */
   bases: readonly number[]
+  /**
+   * Per-lane live-rate modulation, palette order: 1 = platform moving at
+   * its weekly-average pace, >1 hotter, <1 quieter. Derived by HomeClient
+   * from consecutive /api/v1/stats samples.
+   */
+  modulations: readonly number[]
   /** Current prefers-reduced-motion resolution. */
   reducedMotion: boolean
 }
@@ -122,23 +128,32 @@ export interface LaneWavesOptions {
 /**
  * Render the waving lanes and expose their live weights. The returned
  * weights are in bases order, mutated in place every frame; callers that
- * need them (the hero's flex lanes and counter) read the ref from their
- * own rAF loop. activeRef flips true once a frame has actually drawn, so
+ * need them (the hero's flex lanes) read the ref from their own rAF
+ * loop. activeRef flips true once a frame has actually drawn, so
  * the caller can drop its CSS fallback backgrounds behind the canvas.
  */
 export function useLaneWaves(
   canvasRef: React.RefObject<HTMLCanvasElement | null>,
-  { bases, reducedMotion }: LaneWavesOptions
+  { bases, modulations, reducedMotion }: LaneWavesOptions
 ): {
   weightsRef: React.RefObject<number[]>
   activeRef: React.RefObject<boolean>
 } {
   const weightsRef = useRef<number[]>([...bases])
   const activeRef = useRef(false)
-  // bases arrive as a prop; mirror into a ref so a stats refetch never
-  // re-creates the GL context (effect deps stay [canvasRef, reducedMotion]).
+  // bases/modulations arrive as props; mirror them into refs so a stats
+  // poll never re-creates the GL context (effect deps stay [canvasRef,
+  // reducedMotion]).
   const basesRef = useRef(bases)
   basesRef.current = bases
+  const modulationsRef = useRef(modulations)
+  modulationsRef.current = modulations
+  // Weights ease toward modulated targets instead of snapping, so a poll
+  // sample becomes a visible glide rather than a stepped jump.
+  const eased = useRef<number[]>([...bases])
+  // Per-frame lerp factor; ~2s to close most of the gap at 60fps.
+  const EASE = 0.015
+
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -187,9 +202,19 @@ export function useLaneWaves(
     gl.uniform1fv(uAlphas, LANE_ALPHAS)
 
     const weights = weightsRef.current
+    const easedWeights = eased.current
     const draw = (seconds: number) => {
       for (let i = 0; i < LANE_COUNT; i++) {
-        weights[i] = laneWeight(basesRef.current[i] ?? 1, i, seconds)
+        // Target = weekly share × live-rate modulation; the shimmer rides
+        // on top. Weights glide toward the target (EASE per frame) so each
+        // poll sample reads as traffic movement, not a snap.
+        const target = laneWeight(
+          (basesRef.current[i] ?? 1) * (modulationsRef.current[i] ?? 1),
+          i,
+          seconds
+        )
+        easedWeights[i] = easedWeights[i] + (target - easedWeights[i]) * EASE
+        weights[i] = easedWeights[i]
       }
       const w = canvas.clientWidth
       const h = canvas.clientHeight

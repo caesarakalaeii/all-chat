@@ -88,6 +88,43 @@ function reportLoginFailure(t: TFunction, reason: 'noAuthUrl' | 'requestFailed',
   })
 }
 
+/**
+ * Lane order shared with LanesHero's LANES (twitch, youtube, tiktok, kick,
+ * discord) — the modulation array HomeClient derives must line up with
+ * the lanes it modulates. Kept here as strings because /api/v1/stats
+ * reports platforms as a plain record.
+ */
+const LANE_ORDER = ['twitch', 'youtube', 'tiktok', 'kick', 'discord'] as const
+
+/**
+ * Turn two consecutive /api/v1/stats samples into per-lane height
+ * modulation (LANES order): a platform that carried more of the last 30s
+ * of messages than of the whole week grows its lane, a quieter one shrinks.
+ * Ratio-of-shares is self-normalizing, so the result never depends on
+ * overall traffic volume. Neutral (all 1s) while the sample window has no
+ * meaningful traffic — the weekly shares then carry the lanes alone.
+ */
+export function rateModulation(
+  prev: Record<string, number>,
+  next: Record<string, number>,
+  order: readonly string[]
+): number[] {
+  const deltas = order.map((p) => Math.max(0, (next[p] ?? 0) - (prev[p] ?? 0)))
+  const totalDelta = deltas.reduce((sum, d) => sum + d, 0)
+  const weekTotal = order.reduce((sum, p) => sum + (next[p] ?? 0), 0)
+  // Under ~5 messages per 30s the per-platform shares are coin flips.
+  if (totalDelta < 5 || weekTotal === 0) return order.map(() => 1)
+  return order.map((_, i) => {
+    const recentShare = deltas[i] / totalDelta
+    const weekShare = (next[order[i]] ?? 0) / weekTotal
+    // Platform active now but absent from the week: let the lane grow,
+    // but not without bound.
+    if (weekShare <= 0) return recentShare > 0 ? 2 : 1
+    // recentShare === weekShare -> 1 (moving at weekly pace), clamped to
+    // [0.5, 2] so no lane vanishes or dwarfs the stack off one window.
+    return Math.min(2, Math.max(0.5, 0.5 + recentShare / weekShare / 2))
+  })
+}
 export default function HomeClient() {
   const t = useTranslations()
   const router = useRouter()
@@ -95,6 +132,9 @@ export default function HomeClient() {
   const { user, init } = useAuthStore()
   const [stats, setStats] = useState<LandingStats | null>(null)
   const [totalCount, setTotalCount] = useState(0)
+  // Per-lane live-rate modulation (LANE_ORDER order), 1 = neutral. Starts
+  // neutral so first paint matches the server render exactly.
+  const [laneModulations, setLaneModulations] = useState<number[]>(LANE_ORDER.map(() => 1))
   const homeRef = useRef<HTMLDivElement>(null)
 
   // Scroll-activated reveals: one observer for every [data-reveal] section
@@ -106,16 +146,33 @@ export default function HomeClient() {
     init()
   }, [init])
 
+
   useEffect(() => {
-    fetch('/api/v1/stats')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data: LandingStats | null) => {
-        if (!data) return
-        setStats(data)
-        if (data.all_time > 0) setTotalCount(data.all_time)
-      })
-      .catch(() => {}) // fail silently — stats are decorative
+    let prev: Record<string, number> | null = null
+    let closed = false
+    // First sample seeds the counters; every later sample also feeds the
+    // lane modulation. Monotonic merge on the total: the tick can run a
+    // little ahead of the server, and a delivered counter must never move
+    // backwards (feedback: "the messages are counting down sometimes").
+    const sample = () =>
+      fetch('/api/v1/stats')
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data: LandingStats | null) => {
+          if (!data || closed) return
+          setStats(data)
+          if (data.all_time > 0) setTotalCount((count) => Math.max(count, data.all_time))
+          if (prev) setLaneModulations(rateModulation(prev, data.platforms, LANE_ORDER))
+          prev = data.platforms
+        })
+        .catch(() => {}) // fail silently — stats are decorative
+    sample()
+    const timer = window.setInterval(sample, 30_000)
+    return () => {
+      closed = true
+      window.clearInterval(timer)
+    }
   }, [])
+
 
   // All-time counter, ticking. The hero total and the numbers row share this
   // state, so both stay in lockstep; the tick is JS motion, so it stops under
@@ -133,8 +190,9 @@ export default function HomeClient() {
   const totalDisplay = formatNumber(totalCount)
   const overlaysLive = stats?.overlays_live ?? 0
   // Real per-platform weekly shares, handed to the hero so lane heights
-  // reflect live traffic (decorative morphing lives in LanesHero).
+  // reflect live traffic; the live-rate modulation rides on top.
   const platformShares = stats?.platforms ?? null
+
 
   const handleTwitchLogin = async () => {
     trackEvent('signin_started', { platform: 'twitch' })
@@ -206,6 +264,7 @@ export default function HomeClient() {
           userName={user?.display_name}
           overlaysLive={overlaysLive}
           platformShares={platformShares}
+          laneModulations={laneModulations}
           onCta={handleCta}
         />
 

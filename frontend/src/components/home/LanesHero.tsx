@@ -20,11 +20,12 @@
  * LanesHero — the homepage hero (mockup G "lanes").
  *
  * Fixed mono chrome (brand + nav) over five full-width platform lanes whose
- * heights are proportional to each platform's share of this week's messages.
- * A WebGL canvas behind the lanes draws the fills and animates their
- * boundaries as a smooth time series (useLaneWaves); the DOM lanes keep
- * only the text (marquee, wordmarks) and follow the same weights from a
- * shared rAF loop, so bars, boundaries and the counter breathe together.
+ * heights track live traffic: weekly share scaled by each platform's
+ * current message rate (HomeClient polls /api/v1/stats). A WebGL canvas
+ * behind the lanes draws the fills and animates their boundaries with a
+ * small shimmer (useLaneWaves); the DOM lanes keep only the text (marquee,
+ * wordmarks) and follow the same weights from a shared rAF loop. The
+ * counter is React state only — delivered totals must never move down.
  * Without WebGL2 the CSS lane backgrounds remain — color without waves.
  *
  * Marquee rows are generated ONCE at module load: the mockup randomises
@@ -154,6 +155,11 @@ export interface LanesHeroProps {
   overlaysLive: number
   /** Weekly message counts per platform; lane heights follow these. */
   platformShares: Record<string, number> | null
+  /**
+   * Live per-lane rate modulation, LANES order: 1 = platform moving at its
+   * weekly pace. Derived by HomeClient from consecutive stats samples.
+   */
+  laneModulations: number[]
   onCta: () => void
 }
 
@@ -172,13 +178,14 @@ export function LanesHero({
   userName,
   overlaysLive,
   platformShares,
+  laneModulations,
   onCta,
 }: LanesHeroProps) {
   const t = useTranslations()
   const reducedMotion = useReducedMotion()
   const stageRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const counterRef = useRef<HTMLElement>(null)
+
   // Lane elements are addressed by index every frame; a ref array avoids
   // re-querying the DOM from the animation loop.
   const laneRefs = useRef<(HTMLDivElement | null)[]>([])
@@ -196,20 +203,12 @@ export function LanesHero({
     const share = platformShares?.[platform]
     return share !== undefined && share > 0 ? share : FALLBACK_SHARES[platform]
   })
-
   const { weightsRef, activeRef } = useLaneWaves(canvasRef, {
     bases: laneBases,
+    modulations: laneModulations,
     reducedMotion,
   })
 
-  // Props the animation loop reads every frame: mirror them so the effect
-  // runs once per (reducedMotion) instead of restarting on every parent
-  // render (the all-time counter ticks every 1.2s).
-  const basesSum = laneBases.reduce((sum, base) => sum + base, 0)
-  const totalCountRef = useRef(totalCount)
-  totalCountRef.current = totalCount
-  const basesSumRef = useRef(basesSum)
-  basesSumRef.current = basesSum
 
   // Hero scroll effect (feedback: "reveal + hero scroll"): as the hero
   // leaves the viewport the stage sinks and dims — the visitor's scroll
@@ -236,10 +235,10 @@ export function LanesHero({
 
   // DOM half of the lane waves: the canvas fills the bands (useLaneWaves)
   // and mutates weightsRef; this loop applies the same weights to the flex
-  // lanes and breathes the counter by their activity ratio, so bars and
-  // number move as one chart. Direct style/text writes — no setState — so
-  // 60fps costs no React renders; server markup and first frame match the
-  // base shares exactly (laneWeight at t=0 returns the base).
+  // lanes so the text rows track the WebGL boundaries. The counter is
+  // deliberately not touched here: it renders the parent's ticking count
+  // (React state), so a delivered-message total can only ever go up —
+  // multiplying it by the wave scale made it visibly count down.
   useEffect(() => {
     if (reducedMotion) return
     let raf = 0
@@ -248,12 +247,6 @@ export function LanesHero({
       for (let i = 0; i < LANE_COUNT; i++) {
         const lane = laneRefs.current[i]
         if (lane) lane.style.flexGrow = String(weights[i])
-      }
-      if (counterRef.current) {
-        const scale = weights.reduce((sum, w) => sum + w, 0) / Math.max(basesSumRef.current, 1)
-        counterRef.current.textContent = formatNumber(
-          Math.round(totalCountRef.current * scale)
-        )
       }
       // Once the canvas has actually drawn a frame, drop the CSS lane
       // fills — canvas tint would stack on top of them.
@@ -364,7 +357,7 @@ export function LanesHero({
             {t('marketing.lanes.titleBottom')}
           </h1>
           <div className="lanes-total">
-            <b ref={counterRef}>{formatNumber(totalCount)}</b>
+            <b>{formatNumber(totalCount)}</b>
             {totalWords.map((word, i) => (
               <span key={i}>{word}</span>
             ))}
