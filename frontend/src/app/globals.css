@@ -929,7 +929,22 @@ span.font-semibold.text-sm.username-gradient {
   font-size: 20px;
   font-variant-numeric: tabular-nums;
 }
-
+/* The multistream objection, answered inline (feedback: streamers fear a
+ * splintered community and overloaded mods). Same black-plate vocabulary
+ * as the headline so it reads as part of the declaration, not a footnote. */
+.lanes-manifesto {
+  margin-top: 2vh;
+  max-width: 44ch;
+  font-size: clamp(12px, 1.35vw, 15px);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.55;
+  color: var(--lanes-kick);
+  background: #000;
+  padding: 8px 14px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
 /* Bottom CTA bar over the lanes. */
 .ctabar {
   flex: 0 0 52px;
