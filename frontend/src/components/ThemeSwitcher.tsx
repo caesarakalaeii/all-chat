@@ -150,7 +150,7 @@ export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
       </p>
 
       <div
-        className="overflow-hidden rounded-xl border border-border-md bg-surface"
+        className="panel-fill overflow-hidden rounded-xl border border-border-md bg-surface"
         role="group"
         aria-roledescription="carousel"
         aria-label={t('marketing.themeSwitcher.carouselLabel')}

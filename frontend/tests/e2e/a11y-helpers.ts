@@ -61,6 +61,10 @@ export async function expectNoNewA11yViolations(
     style.textContent =
       '*, *::before, *::after { animation: none !important; transition: none !important; }'
     document.head.appendChild(style)
+    // The next dev-server indicator (a fixed <nextjs-portal> in the corner)
+    // is dev chrome that never ships; left in place it overlaps real targets
+    // and target-size reports space the product does not have.
+    document.querySelector('nextjs-portal')?.remove()
   })
   // Let async-hydrating widgets (comboboxes, editors, fetch-gated sections)
   // reach their final DOM so the scan sees the same page every run. Bounded

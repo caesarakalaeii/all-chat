@@ -951,6 +951,34 @@ func (r *UserRepository) CountByAuthProvider(ctx context.Context) (map[string]in
 	return counts, rows.Err()
 }
 
+// GetLendingStat returns the stored value for a landing_stats key, 0 when the
+// row is absent. Implements the usage.allTimeStore port.
+func (r *UserRepository) GetLendingStat(ctx context.Context, key string) (int64, error) {
+	var value int64
+	if err := r.db.QueryRow(ctx,
+		`SELECT value FROM landing_stats WHERE key = $1`, key,
+	).Scan(&value); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("failed to read landing stat %q: %w", key, err)
+	}
+	return value, nil
+}
+
+// SetLandingStat overwrites a landing_stats row. Implements the
+// usage.allTimeStore port.
+func (r *UserRepository) SetLandingStat(ctx context.Context, key string, value int64) error {
+	if _, err := r.db.Exec(ctx, `
+		INSERT INTO landing_stats (key, value, updated_at)
+		VALUES ($1, $2, NOW())
+		ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+	`, key, value); err != nil {
+		return fmt.Errorf("failed to write landing stat %q: %w", key, err)
+	}
+	return nil
+}
+
 // IsPlatformIDBanned checks if a platform ID is banned
 func (r *UserRepository) IsPlatformIDBanned(ctx context.Context, platform, platformID string) (bool, error) {
 	var exists bool

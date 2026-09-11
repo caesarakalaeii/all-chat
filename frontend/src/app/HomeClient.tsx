@@ -26,7 +26,7 @@
  * Structure:
  *   - LanesHero: five proportional platform lanes under fixed mono chrome.
  *   - Logged-out visitors get the full funnel (convergence, wedge, numbers,
- *     steps, FAQ, ambassadors) ending in the sign-in band; logged-in users
+ *     steps, theme showcase, FAQ, ambassadors) ending in the sign-in band; logged-in users
  *     get the hero's dashboard CTA plus a collapsed "Explore" row, so
  *     discovery stays one click away without re-showing the whole pitch.
  *   - The two display faces (Archivo Black / Space Mono) are scoped here via
@@ -39,7 +39,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { archivoBlack, spaceMono } from '@/lib/fonts'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/lib/stores/auth-store'
@@ -50,6 +50,7 @@ import { FinalSection } from '@/components/home/FinalSection'
 import { LanesHero } from '@/components/home/LanesHero'
 import { NumbersSection } from '@/components/home/NumbersSection'
 import { StepsSection } from '@/components/home/StepsSection'
+import { ThemeShowcaseSection } from '@/components/home/ThemeShowcaseSection'
 import { WedgeSection } from '@/components/home/WedgeSection'
 import { toastManager } from '@/lib/toast'
 import { DISCORD_INVITE_URL } from '@/lib/constants'
@@ -58,6 +59,7 @@ import { stashSigninPlatform } from '@/lib/analytics-auth'
 import { safeExternalRedirect } from '@/lib/auth/redirect-allowlist'
 import { type TFunction, formatNumber, useTranslations } from '@/lib/i18n'
 import { useReducedMotion } from '@/hooks/useReducedMotion'
+import { useReveal } from '@/hooks/useReveal'
 
 /** The public /stats payload the counters below read. */
 interface LandingStats {
@@ -93,6 +95,12 @@ export default function HomeClient() {
   const { user, init } = useAuthStore()
   const [stats, setStats] = useState<LandingStats | null>(null)
   const [totalCount, setTotalCount] = useState(0)
+  const homeRef = useRef<HTMLDivElement>(null)
+
+  // Scroll-activated reveals: one observer for every [data-reveal] section
+  // on the page (see useReveal.ts). Scoped from this wrapper so the hook
+  // does not need to run in each section component.
+  useReveal(homeRef)
 
   useEffect(() => {
     init()
@@ -124,6 +132,9 @@ export default function HomeClient() {
   const isLoggedIn = !!user
   const totalDisplay = formatNumber(totalCount)
   const overlaysLive = stats?.overlays_live ?? 0
+  // Real per-platform weekly shares, handed to the hero so lane heights
+  // reflect live traffic (decorative morphing lives in LanesHero).
+  const platformShares = stats?.platforms ?? null
 
   const handleTwitchLogin = async () => {
     trackEvent('signin_started', { platform: 'twitch' })
@@ -188,12 +199,13 @@ export default function HomeClient() {
   }
 
   return (
-    <div className={cn('lanes-home', archivoBlack.variable, spaceMono.variable)}>
+    <div ref={homeRef} className={cn('lanes-home', archivoBlack.variable, spaceMono.variable)}>
       <main id="main-content" tabIndex={-1} className="min-h-screen scroll-smooth">
         <LanesHero
-          totalDisplay={totalDisplay}
+          totalCount={totalCount}
           userName={user?.display_name}
           overlaysLive={overlaysLive}
+          platformShares={platformShares}
           onCta={handleCta}
         />
 
@@ -242,6 +254,7 @@ export default function HomeClient() {
               overlaysLive={overlaysLive}
             />
             <StepsSection />
+            <ThemeShowcaseSection />
             <FaqSection />
             <FeaturedAmbassadors />
           </>

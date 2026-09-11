@@ -4345,34 +4345,38 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                       </Button>
                     </div>
                   )}
+                {/* Sticky Save footer — position:sticky works inside
+                    overflow-y-auto split-view-config container. It pins
+                    inside the panel column, not beside the nav rail: as a
+                    full-width sibling its z-10 bar covered the rail's last
+                    button and shrank its target below the 24px WCAG 2.5.8
+                    floor. */}
+                <div className="sticky bottom-0 z-10 mt-6 border-t border-border bg-bg/95 p-4 backdrop-blur-sm">
+                  <Button
+                    onClick={() => void handleSaveConfiguration()}
+                    disabled={!configLoaded || isSavingConfig}
+                    className="w-full"
+                  >
+                    {isSavingConfig
+                      ? t('overlayEditor.page.savingConfiguration')
+                      : t('overlayEditor.page.saveConfiguration')}
+                  </Button>
+                  {/* Always-mounted live region so save success/failure announces
+                      to screen readers (WCAG 4.1.3) — conditionally mounting the
+                      role="status" element would not announce reliably. */}
+                  <p
+                    role="status"
+                    className={cn(
+                      'text-center text-sm',
+                      configAlert && 'mt-2',
+                      configAlert?.type === 'success' ? 'text-green-400' : 'text-destructive'
+                    )}
+                  >
+                    {configAlert?.message}
+                  </p>
+                </div>
                 </div>
               </div>
-            </div>
-
-            {/* Sticky Save footer — position:sticky works inside overflow-y-auto split-view-config container */}
-            <div className="sticky bottom-0 z-10 -mx-6 border-t border-border bg-bg/95 p-4 backdrop-blur-sm">
-              <Button
-                onClick={() => void handleSaveConfiguration()}
-                disabled={!configLoaded || isSavingConfig}
-                className="w-full"
-              >
-                {isSavingConfig
-                  ? t('overlayEditor.page.savingConfiguration')
-                  : t('overlayEditor.page.saveConfiguration')}
-              </Button>
-              {/* Always-mounted live region so save success/failure announces
-                  to screen readers (WCAG 4.1.3) — conditionally mounting the
-                  role="status" element would not announce reliably. */}
-              <p
-                role="status"
-                className={cn(
-                  'text-center text-sm',
-                  configAlert && 'mt-2',
-                  configAlert?.type === 'success' ? 'text-green-400' : 'text-destructive'
-                )}
-              >
-                {configAlert?.message}
-              </p>
             </div>
           </div>
         </div>

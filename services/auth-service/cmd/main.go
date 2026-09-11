@@ -323,6 +323,16 @@ func main() {
 	defer stopUserStats()
 	go userStatsPublisher.Run(userStatsCtx)
 
+	// Durable all-time message count for the landing hero: message-processor
+	// INCRs chat:stats:total in Redis; this keeper periodically persists the
+	// larger of Redis/PostgreSQL to landing_stats and repairs the key after a
+	// Redis flush. Same shape as the user stats publisher above.
+	allTimeKeeper := usage.NewAllTimeStatsKeeper(redisClient, userRepo, log,
+		time.Duration(getEnvAsIntOrDefault("ALL_TIME_STATS_INTERVAL_SECONDS", int(usage.AllTimeDefaultInterval.Seconds())))*time.Second)
+	allTimeCtx, stopAllTimeKeeper := context.WithCancel(context.Background())
+	defer stopAllTimeKeeper()
+	go allTimeKeeper.Run(allTimeCtx)
+
 	healthHandler := handlers.NewHealthHandler(db, redisClient)
 	// audit #20: impersonation tokens are short-lived (default 2h), independent of
 	// the 24h session JWT, so a leaked impersonation token has a small window.
