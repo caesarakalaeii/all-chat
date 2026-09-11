@@ -17,39 +17,55 @@
  */
 
 /**
- * useLaneWaves — the WebGL lane renderer behind the homepage hero.
+ * useLaneWaves — the WebGL stacked-area graph behind the homepage hero.
  *
- * One fullscreen canvas draws the five platform bands. Their boundaries
- * track live traffic: HomeClient polls /api/v1/stats and turns consecutive
- * samples into per-platform rate deltas; each lane's target height is its
- * weekly share scaled by how hot that platform is right now (modulations).
- * A small two-sine shimmer rides on top so the surface never freezes. The
- * canvas owns the fills; the DOM keeps every piece of text (marquee,
- * wordmarks), so i18n, selection and crisp text rendering stay untouched.
+ * One fullscreen canvas draws the five platform bands as a filled,
+ * stacked time-series chart: the x axis is time (the last
+ * WINDOW_SECONDS slide slowly from right to left — the right edge is
+ * "now"), the y axis is each platform's share of all traffic. Shares
+ * change as traffic changes: HomeClient polls /api/v1/stats and turns
+ * consecutive samples into per-platform rate deltas (modulations), and
+ * each eased share enters the graph at the right edge, then scrolls
+ * left with everything else. A small two-sine shimmer rides on the
+ * targets so the curves never freeze between polls.
  *
- * Geometry: one TRIANGLE_STRIP with two vertices per lane boundary
- * (boundaries 0..5, left/right corners = 12 vertices). Each vertex's
- * clip-space y is its boundary's cumulative share, so the strip tiles all
- * five bands in a single draw call. Band color is flat-shaded from the
- * provoking vertex (last of each triangle = the strip's upper boundary),
- * hence `boundary - 1` as the lane index.
+ * Smoothness: per-lane shares are sampled into a ring at a fixed grid
+ * cadence, and the per-frame columns are interpolated with Catmull-Rom
+ * splines over that grid (plus the live value as the terminal point).
+ * The interpolation runs on the CPU — a few dozen kilobytes of vertex
+ * data per frame — because a spline over a ring buffer is
+ * trivially wrong-or-right in JS, while the same indexing in GLSL is a
+ * debugging session. Each band is one TRIANGLE_STRIP around its
+ * polygon (top boundary left-to-right, bottom boundary right-to-left),
+ * five draw calls with a per-call lane uniform for the color.
  *
  * The render loop never calls setState — it mutates the returned
- * weightsRef, which the hero reads from its own rAF loop to size the flex
- * lanes. Canvas and DOM share one clock, no re-render churn.
-
+ * weightsRef with the live (right-edge) shares, which the hero reads
+ * from its own rAF loop to size the flex lanes, so the DOM text rows
+ * track the graph exactly where they sit (the right edge, under the
+ * wordmarks). Canvas and DOM share one clock, no re-render churn.
  *
- * Degradation: without WebGL2 (or after a context loss) the canvas stays
- * blank and activeRef stays false — the hero keeps the CSS lane
- * backgrounds, so lanes lose their waves but never their color. Reduced
- * motion: one static frame at the exact base shares.
+ * Fills are solid brand colors, deliberately: a stacked chart reads by
+ * its block colors, and the 24% tints the first version aimed for were
+ * never what the canvas actually painted (un-premultiplied rgba with
+ * blending disabled composites at full saturation). Solid fills also
+ * carry the dark marquee ink at AA contrast on every band. If
+ * translucent tints ever come back, premultiply the shader output or
+ * create the context with premultipliedAlpha: false — do not just
+ * lower the alpha again.
+ *
+ * Degradation: without WebGL2 (or after a context loss) the canvas
+ * stays blank and activeRef stays false — the hero keeps the CSS lane
+ * backgrounds (solid brand colors, same vocabulary), so lanes lose
+ * their graph but never their color. Reduced motion: one static frame
+ * at the base shares — no scrolling, no rAF loop.
  */
 
 'use client'
 
 import { useEffect, useRef } from 'react'
 
-/** Fixed platform count; the shaders hardcode this. */
+/** Fixed platform count; the shader and buffers hardcode this. */
 export const LANE_COUNT = 5
 /** Wave amplitude per lane, relative to its base share. */
 const WAVE_AMPLITUDE = 0.06
@@ -59,9 +75,8 @@ const WAVE_AMPLITUDE = 0.06
  * ripple, phase-shifted per lane so the lanes never breathe in sync. Kept
  * small (feedback: the ±22% version swamped the real traffic steps and the
  * graph read as idle oscillation, not a time series). Deterministic in
- * (lane, seconds); sin(0) === 0 keeps the reduced-motion frame and the
- * first animation frame at the exact base shares, so the canvas never
- * disagrees with the server-rendered lane sizes.
+ * (lane, seconds) so the ring can be prefilled with synthetic history at
+ * negative clock values on mount — the graph is full-width immediately.
  */
 export function laneWeight(base: number, laneIndex: number, seconds: number): number {
   const phase = laneIndex * 1.3
@@ -75,41 +90,28 @@ export function laneWeight(base: number, laneIndex: number, seconds: number): nu
 // fallback agree exactly.
 const LANE_COLORS = ['#8464d6', '#d95c50', '#62aeb4', '#56b847', '#6a72c9'] as const
 
-// Per-lane tint opacity. 0.24 matches the 24% color-mix the CSS fallback
-// paints, but over near-black every color is worth a different fraction:
-// green and indigo darken to a murmur at the same alpha that leaves red
-// loud. Each lane gets the alpha that paints an equal perceptual wash, and
-// the two curves below are calibrated to that page background.
-const LANE_ALPHAS = [0.24, 0.24, 0.26, 0.3, 0.32] as const
+/** Seconds of history visible across the canvas width. */
+const WINDOW_SECONDS = 30
+/** Grid cadence the ring samples shares at; the spline smooths between. */
+const SAMPLE_INTERVAL = 1
+/** Ring depth: grid slots covering WINDOW_SECONDS, plus one spare. */
+const SAMPLES = WINDOW_SECONDS / SAMPLE_INTERVAL + 2
+/** Columns drawn across the canvas; one interpolated column per slice. */
+const COLUMNS = 160
 
 const VERT_SRC = `#version 300 es
-uniform float u_weights[${LANE_COUNT}];
-flat out float v_lane;
+in vec2 a_pos;
 void main() {
-  int boundary = gl_VertexID / 2;
-  int corner = gl_VertexID % 2;
-  float total = 0.0;
-  float below = 0.0;
-  for (int i = 0; i < ${LANE_COUNT}; i++) {
-    total += u_weights[i];
-    if (i < boundary) below += u_weights[i];
-  }
-  // Band 0 sits at the top: clip y runs +1 (boundary 0) to -1 (bottom).
-  float y = 1.0 - 2.0 * (below / total);
-  // Provoking vertex of every strip triangle is an upper-boundary corner,
-  // so boundary - 1 names the band the triangle fills.
-  v_lane = clamp(float(boundary) - 1.0, 0.0, float(${LANE_COUNT}) - 1.0);
-  gl_Position = vec4(float(corner) * 2.0 - 1.0, y, 0.0, 1.0);
+  gl_Position = vec4(a_pos, 0.0, 1.0);
 }`
 
 const FRAG_SRC = `#version 300 es
 precision mediump float;
-flat in float v_lane;
 uniform vec3 u_colors[${LANE_COUNT}];
-uniform float u_alphas[${LANE_COUNT}];
+uniform int u_lane;
 out vec4 o_color;
 void main() {
-  o_color = vec4(u_colors[int(v_lane)], u_alphas[int(v_lane)]);
+  o_color = vec4(u_colors[u_lane], 1.0);
 }`
 
 export interface LaneWavesOptions {
@@ -126,11 +128,12 @@ export interface LaneWavesOptions {
 }
 
 /**
- * Render the waving lanes and expose their live weights. The returned
- * weights are in bases order, mutated in place every frame; callers that
- * need them (the hero's flex lanes) read the ref from their own rAF
- * loop. activeRef flips true once a frame has actually drawn, so
- * the caller can drop its CSS fallback backgrounds behind the canvas.
+ * Render the scrolling stacked lane graph and expose its live weights.
+ * The returned weights are in bases order, mutated in place every frame
+ * with the right-edge ("now") shares; callers that need them (the hero's
+ * flex lanes) read the ref from their own rAF loop. activeRef flips true
+ * once a frame has actually drawn, so the caller can drop its CSS
+ * fallback backgrounds behind the canvas.
  */
 export function useLaneWaves(
   canvasRef: React.RefObject<HTMLCanvasElement | null>,
@@ -148,12 +151,6 @@ export function useLaneWaves(
   basesRef.current = bases
   const modulationsRef = useRef(modulations)
   modulationsRef.current = modulations
-  // Weights ease toward modulated targets instead of snapping, so a poll
-  // sample becomes a visible glide rather than a stepped jump.
-  const eased = useRef<number[]>([...bases])
-  // Per-frame lerp factor; ~2s to close most of the gap at 60fps.
-  const EASE = 0.015
-
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -183,15 +180,14 @@ export function useLaneWaves(
 
     const vao = gl.createVertexArray()
     gl.bindVertexArray(vao)
-    // gl_VertexID carries all geometry, so no attributes are enabled; some
-    // drivers want a buffer bound anyway, hence one empty placeholder.
     const buf = gl.createBuffer()
     gl.bindBuffer(gl.ARRAY_BUFFER, buf)
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(12), gl.STATIC_DRAW)
+    const aPos = gl.getAttribLocation(prog, 'a_pos')
+    gl.enableVertexAttribArray(aPos)
+    gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0)
 
-    const uWeights = gl.getUniformLocation(prog, 'u_weights')
+    const uLane = gl.getUniformLocation(prog, 'u_lane')
     const uColors = gl.getUniformLocation(prog, 'u_colors')
-    const uAlphas = gl.getUniformLocation(prog, 'u_alphas')
     const colors = new Float32Array(LANE_COLORS.length * 3)
     LANE_COLORS.forEach((hex, i) => {
       colors[i * 3] = parseInt(hex.slice(1, 3), 16) / 255
@@ -199,23 +195,88 @@ export function useLaneWaves(
       colors[i * 3 + 2] = parseInt(hex.slice(5, 7), 16) / 255
     })
     gl.uniform3fv(uColors, colors)
-    gl.uniform1fv(uAlphas, LANE_ALPHAS)
 
-    const weights = weightsRef.current
-    const easedWeights = eased.current
-    const draw = (seconds: number) => {
-      for (let i = 0; i < LANE_COUNT; i++) {
-        // Target = weekly share × live-rate modulation; the shimmer rides
-        // on top. Weights glide toward the target (EASE per frame) so each
-        // poll sample reads as traffic movement, not a snap.
-        const target = laneWeight(
-          (basesRef.current[i] ?? 1) * (modulationsRef.current[i] ?? 1),
-          i,
-          seconds
-        )
-        easedWeights[i] = easedWeights[i] + (target - easedWeights[i]) * EASE
-        weights[i] = easedWeights[i]
+    const sample = (lane: number, seconds: number) =>
+      laneWeight(
+        (basesRef.current[lane] ?? 1) * (modulationsRef.current[lane] ?? 1),
+        lane,
+        seconds
+      )
+
+    // --- Time-series state -------------------------------------------------
+    // ring[k] holds the shares sampled at time lastSample -
+    // (ring.length - 1 - k) * SAMPLE_INTERVAL; the live value is the chain's
+    // terminal point. Prefilled with synthetic history so the graph is
+    // full-width from the first frame instead of wiping in from the right.
+    const prefill = (atClock: number) => {
+      const rows: number[][] = []
+      for (let k = 0; k < SAMPLES; k++) {
+        const seconds = atClock - (SAMPLES - 1 - k) * SAMPLE_INTERVAL
+        rows.push(Array.from({ length: LANE_COUNT }, (_, lane) => sample(lane, seconds)))
       }
+      return rows
+    }
+    const ring = prefill(0)
+    let lastSample = 0
+
+    // Per-frame scratch, allocated once. chain = ring grid + live edge;
+    // column holds one column's interpolated per-lane shares.
+    const chain: number[][] = Array.from({ length: SAMPLES + 1 }, () => new Array<number>(LANE_COUNT))
+    const column = new Array<number>(LANE_COUNT)
+    // One TRIANGLE_STRIP per band, zigzagging top/bottom vertex per
+    // column: [x,top, x,bottom] repeated COLUMNS times per lane.
+    const vertices = new Float32Array(LANE_COUNT * COLUMNS * 2 * 2)
+
+    /**
+     * Catmull-Rom interpolation of all lanes at chain position c in
+     * [0, SAMPLES], written into `out`. Integers hit grid/live points,
+     * end control points are clamped, tangents are the standard
+     * half-difference of neighbors (0.5 uniform tension).
+     */
+    const splineAt = (c: number, out: number[]) => {
+      const i = Math.max(Math.min(Math.floor(c), SAMPLES - 1), 0)
+      const t = c - i
+      const t2 = t * t
+      const t3 = t2 * t
+      const p0 = chain[i - 1 < 0 ? 0 : i - 1]
+      const p1 = chain[i]
+      const p2 = chain[i + 1]
+      const p3 = chain[i + 2 > SAMPLES ? SAMPLES : i + 2]
+      for (let lane = 0; lane < LANE_COUNT; lane++) {
+        const a = p1[lane]
+        const b = p2[lane]
+        const m1 = 0.5 * (b - p0[lane])
+        const m2 = 0.5 * (p3[lane] - a)
+        out[lane] =
+          (2 * a + m1 - 2 * b - m2) * t3 + (-3 * a - 2 * m1 + 3 * b + m2) * t2 + m1 * t + a
+      }
+    }
+
+    const draw = (clock: number) => {
+      // 1. Commit due grid samples. If the tab slept past the whole window
+      //    (rAF pauses while hidden), drop the stale history and restart
+      //    the ring at now instead of synthesizing dozens of samples.
+      if (clock - lastSample > WINDOW_SECONDS) {
+        ring.length = 0
+        ring.push(...prefill(clock))
+        lastSample = clock
+      }
+      while (clock - lastSample >= SAMPLE_INTERVAL) {
+        lastSample += SAMPLE_INTERVAL
+        ring.push(Array.from({ length: LANE_COUNT }, (_, lane) => sample(lane, lastSample)))
+        ring.shift()
+      }
+
+      // 2. Build the interpolation chain: grid history plus the live
+      //    value as the terminal point. The right edge of the graph is
+      //    "now", so the flex lanes and wordmarks track exactly it.
+      for (let lane = 0; lane < LANE_COUNT; lane++) {
+        const value = sample(lane, clock)
+        chain[SAMPLES][lane] = value
+        weightsRef.current[lane] = value
+      }
+      for (let k = 0; k < SAMPLES; k++) chain[k] = ring[k]
+
       const w = canvas.clientWidth
       const h = canvas.clientHeight
       if (canvas.width !== w || canvas.height !== h) {
@@ -223,11 +284,44 @@ export function useLaneWaves(
         canvas.height = h
         gl.viewport(0, 0, w, h)
       }
-      gl.uniform1fv(uWeights, weights)
       gl.clearColor(0, 0, 0, 0)
       gl.clear(gl.COLOR_BUFFER_BIT)
-      // 12 vertices: boundary pairs 0..5, left/right corners.
-      gl.drawArrays(gl.TRIANGLE_STRIP, 0, LANE_COUNT * 2 + 2)
+
+      // 3. Columns: one spline evaluation per column, then stack each
+      //    lane's share cumulatively into clip-space y. Each band's
+      //    region in the vertex buffer is a TRIANGLE_STRIP that zigzags
+      //    top/bottom per column — that ordering is what fills the band's
+      //    interior (a polygon outline walked as one loop is NOT a strip).
+      //    Band 0 is the top band; clip y is +1 at the top.
+      for (let col = 0; col < COLUMNS; col++) {
+        // c=0 is the left (oldest) edge; c=SAMPLES is the right (now).
+        splineAt((col / (COLUMNS - 1)) * SAMPLES, column)
+        let total = 0
+        for (let lane = 0; lane < LANE_COUNT; lane++) total += column[lane]
+        const x = (col / (COLUMNS - 1)) * 2 - 1
+        let cumulative = 0
+        for (let lane = 0; lane < LANE_COUNT; lane++) {
+          cumulative += column[lane]
+          const top = 1 - (2 * cumulative) / total
+          // Bottom boundary of a band = top boundary of the band above
+          // (clip 1 for the topmost band).
+          const bottom =
+            lane === 0 ? 1 : vertices[(lane - 1) * COLUMNS * 4 + col * 4 + 1]
+          const v = lane * COLUMNS * 4 + col * 4
+          vertices[v] = x
+          vertices[v + 1] = top
+          vertices[v + 2] = x
+          vertices[v + 3] = bottom
+        }
+      }
+
+      // 4. Upload once, draw each band's zigzag strip from its region.
+      gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.DYNAMIC_DRAW)
+      for (let lane = 0; lane < LANE_COUNT; lane++) {
+        gl.uniform1i(uLane, lane)
+        gl.drawArrays(gl.TRIANGLE_STRIP, lane * COLUMNS * 2, COLUMNS * 2)
+      }
+
       activeRef.current = true
     }
 
