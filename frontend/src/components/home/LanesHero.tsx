@@ -237,9 +237,11 @@ export function LanesHero({
   })
 
   // Hero progress: 0 at rest, 1 by the time the stage has scrolled one
-  // viewport height. Drives the sink/dim via CSS custom properties.
-  const stageH = stageRef.current?.offsetHeight ?? window.innerHeight
-  const progress = Math.min(scrollY / Math.max(stageH, 1), 1)
+  // viewport height. Drives the sink/dim via CSS custom properties. The
+  // prerender pass runs this with scrollY 0 on the server, where neither
+  // stageRef nor window exists — both fall back to a safe 0 progress.
+  const stageH = stageRef.current?.offsetHeight ?? 0
+  const progress = scrollY > 0 ? Math.min(scrollY / Math.max(stageH, 1), 1) : 0
 
 
   return (
