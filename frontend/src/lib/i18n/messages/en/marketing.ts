@@ -79,6 +79,13 @@ export const marketing = {
     m13: 'actual cinema',
     m14: 'SourPls SourPls',
     m15: 'OK dude',
+    m16: 'chat is this real',
+    m17: 'POGGERS',
+    m18: 'no way that worked',
+    m19: 'first time here, love it',
+    m20: 'catJAM catJAM catJAM',
+    m21: 'this overlay goes hard',
+    m22: 'monkaS',
   },
   // Marquee chatter for the youtube lane.
   flowYoutube: {
@@ -90,6 +97,14 @@ export const marketing = {
     m6: 'this overlay sold me',
     m7: 'great stream as always',
     m8: 'notification squad',
+    m9: 'the editor is going to eat this VOD',
+    m10: 'chat works here now?',
+    m11: 'lurking from the TV app',
+    m12: 'premiere hype',
+    m13: 'this segment is going in the highlight reel',
+    m14: 'joined from the community post',
+    m15: 'POGGERS it actually merges',
+    m16: 'late but here',
   },
   // Marquee chatter for the tiktok lane.
   flowTiktok: {
@@ -100,6 +115,13 @@ export const marketing = {
     m5: 'fyp fyp fyp',
     m6: 'live rn??',
     m7: 'saving this',
+    m8: 'wait chat is real here',
+    m9: 'typing from the bus',
+    m10: 'my fyp knows me too well',
+    m11: 'this is so satisfying to watch',
+    m12: 'the overlay is so clean',
+    m13: 'no way this is free',
+    m14: 'watching instead of sleeping',
   },
   // Marquee chatter for the kick lane.
   flowKick: {
@@ -109,6 +131,13 @@ export const marketing = {
     m4: 'kick keep it',
     m5: 'W takes',
     m6: 'clip it quick',
+    m7: 'EZ Clap',
+    m8: 'this site actually respects chat',
+    m9: 'no ads just vibes',
+    m10: 'GIGACHAD move',
+    m11: 'signing up after this stream',
+    m12: 'the 95/5 split goes crazy',
+    m13: 'POG',
   },
   // Marquee chatter for the discord lane.
   flowDiscord: {
@@ -118,6 +147,12 @@ export const marketing = {
     m4: 'nice stream',
     m5: 'clips channel is popping off',
     m6: 'GG',
+    m7: 'watching from the server vc',
+    m8: 'the bot announcements are elite',
+    m9: 'lurking while i cook',
+    m10: 'stream ping squad assemble',
+    m11: 'this overlay in our events channel would go hard',
+    m12: 'raid train forming',
   },
   convergence: {
     label: 'THE WHOLE PRODUCT',
