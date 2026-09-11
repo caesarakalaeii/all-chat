@@ -174,11 +174,21 @@ const CSS_VARIABLES: readonly CssVar[] = [
     default: '0.75rem',
     effectKey: 'docs.guideCssVars.chatBubblePadding',
   },
+  {
+    name: '--chat-font-weight',
+    default: 'inherit',
+    effectKey: 'docs.guideCssVars.chatFontWeight',
+  },
   { name: '--chat-avatar-size', default: '2.5rem', effectKey: 'docs.guideCssVars.chatAvatarSize' },
   {
     name: '--chat-username-font-size',
     default: '0.875rem',
     effectKey: 'docs.guideCssVars.chatUsernameFontSize',
+  },
+  {
+    name: '--chat-username-font-weight',
+    default: '600',
+    effectKey: 'docs.guideCssVars.chatUsernameFontWeight',
   },
   { name: '--chat-emote-scale', default: '1', effectKey: 'docs.guideCssVars.chatEmoteScale' },
   { name: '--chat-show-avatars', default: 'block', effectKey: 'docs.guideCssVars.chatShowAvatars' },
@@ -271,6 +281,11 @@ const FEED_ANCHOR_CSS_EXAMPLE = `/* Fade the far end of the feed, whichever end 
 @keyframes my-entry {
   from { opacity: 0; transform: translateY(calc(40px * var(--msg-enter-dir, 1))); }
   to   { opacity: 1; transform: none; }
+}`
+
+const FORCED_VARS_CSS_EXAMPLE = `:root {
+  --chat-font-weight: 800;          /* plain "font-weight: 800" on the message text loses to the overlay's own rule */
+  --chat-bubble-border-radius: 0;    /* so does "border-radius: 0" on the bubble — set the variable instead */
 }`
 
 const PLATFORM_STRIPE_CSS_EXAMPLE = `.chat-message[data-platform="twitch"]  { border-left: 4px solid #9146FF; }
@@ -619,6 +634,8 @@ export default function DocsPage() {
                 })}
               </p>
               <CssVarTable rows={CSS_VARIABLES} />
+              <p>{t('docs.guide.cssVarsForced')}</p>
+              <Pre lang="css">{FORCED_VARS_CSS_EXAMPLE}</Pre>
               <Pre lang="css">{CSS_VARIABLES_EXAMPLE}</Pre>
 
               <h3>{t('docs.guide.cssHooksHeading')}</h3>

@@ -667,6 +667,9 @@ describe('streamer guide copy', () => {
       'The easiest lever needs no knowledge of class names. Set any of these variables on :root and the overlay picks them up:'
     )
     expect(t('docs.guide.cssVarsColumnVariable')).toBe('Variable')
+    expect(t('docs.guide.cssVarsForced')).toBe(
+      "One group of variables is special: font weight, bubble corners, line height, letter spacing, message color and font family are owned by the overlay itself. A plain CSS declaration on them loses even with !important, because the overlay applies its own rule with !important first. Set the variable instead — a value you set here also beats the appearance panel's slider."
+    )
     expect(t('docs.guide.cssVarsColumnDefault')).toBe('Default')
     expect(t('docs.guide.cssVarsColumnEffect')).toBe('What it changes')
     expect(t('docs.guide.cssHooksHeading')).toBe('Finer control: target the chat parts')
@@ -751,9 +754,11 @@ describe('streamer guide copy', () => {
 })
 
 describe('streamer guide CSS reference tables', () => {
-  it('keeps the twelve CSS custom-property descriptions', () => {
+  it('keeps the fourteen CSS custom-property descriptions', () => {
     expect(t('docs.guideCssVars.chatFontSize')).toBe('Message text size.')
+    expect(t('docs.guideCssVars.chatFontWeight')).toBe('Message text weight.')
     expect(t('docs.guideCssVars.chatFontFamily')).toBe('Message text font.')
+    expect(t('docs.guideCssVars.chatUsernameFontWeight')).toBe('Username weight.')
     expect(t('docs.guideCssVars.chatMessageColor')).toBe('Message text color.')
     expect(t('docs.guideCssVars.chatMessageGap')).toBe('Vertical space between messages.')
     expect(t('docs.guideCssVars.chatBubbleBorderRadius')).toBe('Roundness of the message bubble.')
