@@ -90,9 +90,7 @@ export function DockSignIn() {
   return (
     <div className="flex h-screen flex-col items-center justify-center gap-3 bg-bg px-4 text-center">
       <InfinityLogo size={40} />
-      <p className="text-sm font-semibold text-text">
-        {t('viewerOverlay.dock.productName')}
-      </p>
+      <p className="text-sm font-semibold text-text">{t('viewerOverlay.dock.productName')}</p>
       <p className="text-xs text-text-sub">{t('viewerOverlay.dock.signInExplanation')}</p>
       <div className="flex w-full max-w-56 flex-col gap-2">
         {STREAMER_PLATFORMS.map((platform) => (
