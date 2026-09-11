@@ -167,15 +167,23 @@ func main() {
 	kickNormalizer := normalizer.NewKickNormalizer()
 	systemNormalizer := normalizer.NewSystemNormalizer()
 	discordNormalizer := normalizer.NewDiscordNormalizer()
+	facebookNormalizer := normalizer.NewFacebookNormalizer()
+	goodgameNormalizer := normalizer.NewGoodGameNormalizer()
+	picartoNormalizer := normalizer.NewPicartoNormalizer()
+	rumbleNormalizer := normalizer.NewRumbleNormalizer()
 
 	// Map of platform-specific normalizers
 	normalizers := map[string]normalizer.Normalizer{
-		"twitch":  twitchNormalizer,
-		"youtube": youtubeNormalizer,
-		"tiktok":  tiktokNormalizer,
-		"kick":    kickNormalizer,
-		"system":  systemNormalizer,
-		"discord": discordNormalizer,
+		"twitch":   twitchNormalizer,
+		"youtube":  youtubeNormalizer,
+		"tiktok":   tiktokNormalizer,
+		"kick":     kickNormalizer,
+		"system":   systemNormalizer,
+		"discord":  discordNormalizer,
+		"facebook": facebookNormalizer,
+		"goodgame": goodgameNormalizer,
+		"picarto":  picartoNormalizer,
+		"rumble":   rumbleNormalizer,
 	}
 
 	emoteServiceURL := getEnvOrDefault("EMOTE_SERVICE_URL", "http://localhost:8083")

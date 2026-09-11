@@ -26,8 +26,18 @@
   --color-youtube: #ff4444;
   --color-kick: #53fc18;
   --color-tiktok: #69c9d0;
+  /* Owncast #9B7FF5 (lightened from favicon purple #6544E9 for 4.5:1),
+     GoodGame #7FA3D1 (lightened from brand steel blue #52709C),
+     Picarto #27B756 (brand green from the picarto logo icon, lifted one step),
+     Facebook #3B93F5 (lightened from brand #1877F2 — the raw brand lands at
+     ~2.9:1 over surface-2, below AA),
+     Rumble #85C742 (brand green from the rumble play glyph, passes as-is). */
+  --color-owncast: #9b7ff5;
+  --color-goodgame: #7fa3d1;
+  --color-picarto: #27b756;
+  --color-facebook: #3b93f5;
+  --color-rumble: #85c742;
   --color-discord: #5865f2;
-
   /* Neutral scale — oklch with constant chroma ~0.007, hue 270 */
   --color-neutral-950: oklch(0.09 0.007 270); /* #020204 — bg */
   --color-neutral-900: oklch(0.11 0.009 270); /* #040407 — surface */
@@ -1573,12 +1583,16 @@ span.font-semibold.text-sm.username-gradient {
   border-color: #fff;
 }
 .lanes-btn.danger {
-  background: var(--lanes-youtube);
-  border-color: var(--lanes-youtube);
+  /* The brand red --lanes-youtube (#ff3b30) is a lane color, not a text
+   * backdrop: white on it is 3.55:1, below the 4.5:1 the 13px button label
+   * needs. #c0261d clears it (5.94:1); hover steps one shade darker. */
+  background: #c0261d;
+  border-color: #c0261d;
   color: #fff;
 }
 .lanes-btn.danger:hover {
-  background: #c0261d;
+  background: #a02017;
+  border-color: #a02017;
 }
 .lanes-input,
 .lanes-app input:not([type='checkbox']):not([type='radio']),

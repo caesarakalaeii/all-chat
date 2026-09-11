@@ -46,6 +46,21 @@ resources:
   - discord-listener/deployment.yaml
   - discord-listener/hpa.yaml
   - discord-listener/servicemonitor.yaml
+  # Rumble Listener (ADR-0061, internal chat pop-up SSE)
+  - rumble-listener/deployment.yaml
+  - rumble-listener/hpa.yaml
+
+  # Phase 6 - Facebook Listener (ADR-0060)
+  - facebook-listener/deployment.yaml
+  # GoodGame (goodgame.ru) Listener
+  - goodgame-listener/deployment.yaml
+  - goodgame-listener/hpa.yaml
+  # Picarto Listener (unofficial pop-out WebSocket, ADR-0059)
+  - picarto-listener/deployment.yaml
+  - picarto-listener/hpa.yaml
+  # Owncast Listener (ADR-0058, self-hosted instances, URL-as-channel)
+  - owncast-listener/deployment.yaml
+  - owncast-listener/hpa.yaml
 
 commonLabels:
   project: allchat
@@ -88,4 +103,19 @@ images:
     newTag: main
   - name: allchat-discord-listener:latest
     newName: ghcr.io/caesarakalaeii/allchat-discord-listener
+    newTag: main
+  - name: allchat-facebook-listener:latest
+    newName: ghcr.io/caesarakalaeii/allchat-facebook-listener
+    newTag: main
+  - name: allchat-goodgame-listener:latest
+    newName: ghcr.io/caesarakalaeii/allchat-goodgame-listener
+    newTag: main
+  - name: allchat-picarto-listener:latest
+    newName: ghcr.io/caesarakalaeii/allchat-picarto-listener
+    newTag: main
+  - name: allchat-rumble-listener:latest
+    newName: ghcr.io/caesarakalaeii/allchat-rumble-listener
+    newTag: main
+  - name: allchat-owncast-listener:latest
+    newName: ghcr.io/caesarakalaeii/allchat-owncast-listener
     newTag: main

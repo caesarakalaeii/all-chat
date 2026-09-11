@@ -406,6 +406,8 @@ type Config struct {
 	YouTubeClientID     string
 	YouTubeClientSecret string
 	DiscordBotToken     string
+	FacebookAppID       string
+	FacebookAppSecret   string
 }
 
 func loadConfig() *Config {
@@ -424,6 +426,8 @@ func loadConfig() *Config {
 		YouTubeClientID:     getEnv("YOUTUBE_CLIENT_ID", ""),
 		YouTubeClientSecret: getEnv("YOUTUBE_CLIENT_SECRET", ""),
 		DiscordBotToken:     getEnv("DISCORD_BOT_TOKEN", ""),
+		FacebookAppID:       getEnv("FACEBOOK_APP_ID", ""),
+		FacebookAppSecret:   getEnv("FACEBOOK_APP_SECRET", ""),
 	}
 }
 

@@ -163,6 +163,10 @@ const PLATFORM_BORDER: Record<string, string> = {
   discord: 'border-l-discord',
 }
 
+// The letters the GoodGame mark draws. A brand glyph, not copy, so it stays
+// out of the catalog where a translator would see it as a word.
+const GOODGAME_GLYPH = 'GG'
+
 // Last-active settings section (ADR-0042); replaces the retired per-drawer
 // open/closed maps (editor-panel-sections-v1 / appearance-panel-sections-v1).
 const ACTIVE_SECTION_STORAGE_KEY = 'editor-active-section-v1'
@@ -1198,6 +1202,15 @@ function AddSourceForm({
   const [adminPlatform, setAdminPlatform] = useState('twitch')
 
   // Discord dialog state
+  // A channel-name or instance-URL dialog for the no-OAuth platforms:
+  // GoodGame/Picarto/Rumble key a channel; Owncast's "channel" is the base URL
+  // of the instance (one stream per server). One dialog serves all four; the
+  // label and placeholder come from the catalog per platform.
+  const [channelDialog, setChannelDialogOpen] = useState<
+    'owncast' | 'goodgame' | 'picarto' | 'rumble' | null
+  >(null)
+  const [channelValue, setChannelValue] = useState('')
+  // Discord dialog state
   const [guilds, setGuilds] = useState<DiscordGuild[]>([])
   const [guildsLoaded, setGuildsLoaded] = useState(false)
   const [discordDialogOpen, setDiscordDialogOpen] = useState(false)
@@ -1441,6 +1454,96 @@ function AddSourceForm({
             {t('overlayEditor.addSource.connectDiscord')}
           </Button>
         )}
+        {/* Owncast — instance URL dialog; an instance serves one stream, so the
+            "channel" is the base URL of the server, not a username. */}
+        <Button
+          onClick={() => setChannelDialogOpen('owncast')}
+          size="lg"
+          className="gap-2.5 text-bg"
+          style={{ backgroundColor: 'var(--color-owncast)' }}
+        >
+          <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="17" r="2.5" fill="#9B7FF5" />
+            <path
+              fill="none"
+              stroke="#9B7FF5"
+              strokeWidth="2"
+              strokeLinecap="round"
+              d="M7.8 12.8a6 6 0 0 1 8.4 0M5 10a10 10 0 0 1 14 0"
+            />
+          </svg>
+          {t('overlayEditor.addSource.connectOwncast')}
+        </Button>
+
+        {/* GoodGame / Picarto / Rumble — channel-name dialogs, same shape as TikTok. */}
+        <Button
+          onClick={() => setChannelDialogOpen('goodgame')}
+          size="lg"
+          className="gap-2.5 text-bg"
+          style={{ backgroundColor: 'var(--color-goodgame)' }}
+        >
+          <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+            <text
+              x="12"
+              y="17"
+              fontSize="11"
+              fontWeight="bold"
+              fill="#7FA3D1"
+              textAnchor="middle"
+              fontFamily="monospace"
+            >
+              {GOODGAME_GLYPH}
+            </text>
+          </svg>
+          {t('overlayEditor.addSource.connectGoodgame')}
+        </Button>
+
+        <Button
+          onClick={() => setChannelDialogOpen('picarto')}
+          size="lg"
+          className="gap-2.5 text-bg"
+          style={{ backgroundColor: 'var(--color-picarto)' }}
+        >
+          <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" fill="#27B756" />
+            <circle cx="9" cy="9" r="1.4" fill="#FFFFFF" />
+            <circle cx="15" cy="9" r="1.4" fill="#FFFFFF" />
+            <circle cx="8" cy="14" r="1.4" fill="#FFFFFF" />
+            <circle cx="14.5" cy="15" r="1.4" fill="#FFFFFF" />
+          </svg>
+          {t('overlayEditor.addSource.connectPicarto')}
+        </Button>
+
+        <Button
+          onClick={() => setChannelDialogOpen('rumble')}
+          size="lg"
+          className="gap-2.5 text-bg"
+          style={{ backgroundColor: 'var(--color-rumble)' }}
+        >
+          <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" fill="none" stroke="#85C742" strokeWidth="2" />
+            <path fill="#85C742" d="M10 8.5v7l6-3.5z" />
+          </svg>
+          {t('overlayEditor.addSource.connectRumble')}
+        </Button>
+
+        {/* Facebook — connect-first OAuth like YouTube: the source is the
+            streamer's connected Page, so the add flow IS the OAuth flow and the
+            backend refuses when no Page credential exists. */}
+        <Button
+          onClick={() => startOAuth(`/api/v1/auth/facebook/add-source/${overlayId}`)}
+          size="lg"
+          className="gap-2.5 text-white"
+          style={{ backgroundColor: '#1877F2', '--tw-ring-color': '#1877F2' } as React.CSSProperties}
+        >
+          <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              fill="#FFFFFF"
+              d="M12 2a10 10 0 1 0-1.6 19.9v-7h-2.5V12h2.5V9.8c0-2.5 1.5-3.9 3.8-3.9 1.1 0 2.2.2 2.2.2v2.4h-1.2c-1.2 0-1.6.8-1.6 1.6V12h2.7l-.4 2.9h-2.3v7A10 10 0 0 0 12 2z"
+            />
+          </svg>
+          {t('overlayEditor.addSource.connectFacebook')}
+        </Button>
       </div>
 
       {/* Discord 2-step dialog */}
@@ -1565,22 +1668,58 @@ function AddSourceForm({
         </Dialog.Content>
       </Dialog.Root>
 
-      {/* TikTok — username dialog opened from the "Connect TikTok" button above */}
+      {/* No-OAuth platform input dialog — Owncast asks for the instance's base
+          URL, GoodGame/Picarto/Rumble for a channel name. Kept beside the
+          TikTok dialog rather than merged into it so TikTok's copy stays its
+          own (the body copy differs by more than the platform name). */}
       <Dialog.Root
-        open={tiktokDialogOpen}
+        open={channelDialog !== null}
         onOpenChange={(open) => {
-          setTiktokDialogOpen(open)
-          if (!open) setTiktokUsername('')
+          if (!open) {
+            setChannelDialogOpen(null)
+            setChannelValue('')
+          }
         }}
       >
         <Dialog.Content>
-          <Dialog.Title>{t('overlayEditor.addSource.tiktokTitle')}</Dialog.Title>
-          <Dialog.Description>{t('overlayEditor.addSource.tiktokBody')}</Dialog.Description>
-          <form onSubmit={handleTikTokSubmit} className="mt-3">
+          <Dialog.Title>
+            {t('overlayEditor.addSource.channelTitle', {
+              platform: channelDialog ? t(`common.platforms.${channelDialog}`) : '',
+            })}
+          </Dialog.Title>
+          <Dialog.Description>
+            {channelDialog === 'owncast'
+              ? t('overlayEditor.addSource.owncastBody')
+              : t('overlayEditor.addSource.channelBody')}
+          </Dialog.Description>
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault()
+              if (!channelDialog || !channelValue.trim()) return
+              const platform = channelDialog
+              setIsAdding(true)
+              try {
+                if (platform === 'owncast') {
+                  await onAddManual?.(platform, channelValue.trim())
+                } else {
+                  await onAddManual?.(platform, channelValue.trim().replace(/^@/, ''))
+                }
+                setChannelDialogOpen(null)
+                setChannelValue('')
+              } finally {
+                setIsAdding(false)
+              }
+            }}
+            className="mt-3"
+          >
             <Input
-              value={tiktokUsername}
-              onChange={(e) => setTiktokUsername(e.target.value)}
-              placeholder={t('overlayEditor.addSource.tiktokPlaceholder')}
+              value={channelValue}
+              onChange={(e) => setChannelValue(e.target.value)}
+              placeholder={
+                channelDialog === 'owncast'
+                  ? t('overlayEditor.addSource.owncastPlaceholder')
+                  : t('overlayEditor.addSource.channelPlaceholder')
+              }
             />
             <div className="mt-4 flex justify-end gap-2">
               <Dialog.Close
@@ -1590,7 +1729,7 @@ function AddSourceForm({
                   </Button>
                 }
               />
-              <Button type="submit" disabled={isAdding || !tiktokUsername.trim()}>
+              <Button type="submit" disabled={isAdding || !channelValue.trim()}>
                 {isAdding ? t('overlayEditor.addSource.adding') : t('overlayEditor.addSource.add')}
               </Button>
             </div>
@@ -1648,6 +1787,11 @@ function AddSourceForm({
                 <option value="youtube">{t('common.platforms.youtube')}</option>
                 <option value="kick">{t('common.platforms.kick')}</option>
                 <option value="tiktok">{t('common.platforms.tiktok')}</option>
+                <option value="owncast">{t('common.platforms.owncast')}</option>
+                <option value="goodgame">{t('common.platforms.goodgame')}</option>
+                <option value="picarto">{t('common.platforms.picarto')}</option>
+                <option value="facebook">{t('common.platforms.facebook')}</option>
+                <option value="rumble">{t('common.platforms.rumble')}</option>
               </select>
               <Input
                 value={adminChannelId}
@@ -4062,6 +4206,11 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           }
                           className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
                         >
+                          <option value="owncast">{t('common.platforms.owncast')}</option>
+                          <option value="goodgame">{t('common.platforms.goodgame')}</option>
+                          <option value="picarto">{t('common.platforms.picarto')}</option>
+                          <option value="facebook">{t('common.platforms.facebook')}</option>
+                          <option value="rumble">{t('common.platforms.rumble')}</option>
                           <option value="twitch">{t('common.platforms.twitch')}</option>
                           <option value="youtube">{t('common.platforms.youtube')}</option>
                           <option value="kick">{t('common.platforms.kick')}</option>
@@ -4196,34 +4345,38 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                       </Button>
                     </div>
                   )}
+                {/* Sticky Save footer — position:sticky works inside
+                    overflow-y-auto split-view-config container. It pins
+                    inside the panel column, not beside the nav rail: as a
+                    full-width sibling its z-10 bar covered the rail's last
+                    button and shrank its target below the 24px WCAG 2.5.8
+                    floor. */}
+                <div className="sticky bottom-0 z-10 mt-6 border-t border-border bg-bg/95 p-4 backdrop-blur-sm">
+                  <Button
+                    onClick={() => void handleSaveConfiguration()}
+                    disabled={!configLoaded || isSavingConfig}
+                    className="w-full"
+                  >
+                    {isSavingConfig
+                      ? t('overlayEditor.page.savingConfiguration')
+                      : t('overlayEditor.page.saveConfiguration')}
+                  </Button>
+                  {/* Always-mounted live region so save success/failure announces
+                      to screen readers (WCAG 4.1.3) — conditionally mounting the
+                      role="status" element would not announce reliably. */}
+                  <p
+                    role="status"
+                    className={cn(
+                      'text-center text-sm',
+                      configAlert && 'mt-2',
+                      configAlert?.type === 'success' ? 'text-green-400' : 'text-destructive'
+                    )}
+                  >
+                    {configAlert?.message}
+                  </p>
+                </div>
                 </div>
               </div>
-            </div>
-
-            {/* Sticky Save footer — position:sticky works inside overflow-y-auto split-view-config container */}
-            <div className="sticky bottom-0 z-10 -mx-6 border-t border-border bg-bg/95 p-4 backdrop-blur-sm">
-              <Button
-                onClick={() => void handleSaveConfiguration()}
-                disabled={!configLoaded || isSavingConfig}
-                className="w-full"
-              >
-                {isSavingConfig
-                  ? t('overlayEditor.page.savingConfiguration')
-                  : t('overlayEditor.page.saveConfiguration')}
-              </Button>
-              {/* Always-mounted live region so save success/failure announces
-                  to screen readers (WCAG 4.1.3) — conditionally mounting the
-                  role="status" element would not announce reliably. */}
-              <p
-                role="status"
-                className={cn(
-                  'text-center text-sm',
-                  configAlert && 'mt-2',
-                  configAlert?.type === 'success' ? 'text-green-400' : 'text-destructive'
-                )}
-              >
-                {configAlert?.message}
-              </p>
             </div>
           </div>
         </div>

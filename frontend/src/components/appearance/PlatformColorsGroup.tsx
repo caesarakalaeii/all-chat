@@ -34,9 +34,13 @@ const PLATFORMS: Array<{ field: keyof VisualSettings; label: string; brandDefaul
   { field: 'youtubeAccent', label: 'YouTube', brandDefault: '#FF0000' },
   { field: 'kickAccent', label: 'Kick', brandDefault: '#53FC18' },
   { field: 'tiktokAccent', label: 'TikTok', brandDefault: '#000000' },
+  { field: 'owncastAccent', label: 'Owncast', brandDefault: '#9B7FF5' },
+  { field: 'goodgameAccent', label: 'GoodGame', brandDefault: '#52709C' },
+  { field: 'picartoAccent', label: 'Picarto', brandDefault: '#1AA455' },
+  { field: 'facebookAccent', label: 'Facebook', brandDefault: '#1877F2' },
+  { field: 'rumbleAccent', label: 'Rumble', brandDefault: '#85C742' },
   { field: 'discordAccent', label: 'Discord', brandDefault: '#5865F2' },
 ]
-
 export function PlatformColorsGroup({
   visualSettings,
   onChange,

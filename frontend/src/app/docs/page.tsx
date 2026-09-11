@@ -311,7 +311,11 @@ export default function DocsPage() {
             <p className="text-sub text-sm">{t('docs.guide.intro')}</p>
             <p className="text-sub text-sm">
               {interpolateElements(t('docs.guide.apiPrompt'), {
-                api: <Link href="/docs/api">{t('docs.guide.apiLinkText')}</Link>,
+                api: (
+                  <Link href="/docs/api" className="underline">
+                    {t('docs.guide.apiLinkText')}
+                  </Link>
+                ),
               })}
             </p>
           </div>

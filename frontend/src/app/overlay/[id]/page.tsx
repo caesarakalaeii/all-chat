@@ -125,6 +125,10 @@ import '@/styles/events.css'
 // preview embed's constant of the same name.
 const KICK_GLYPH = 'K'
 
+// The letters the GoodGame icon's SVG draws — a brand mark, not text. Matches
+// the preview embed's constant of the same name.
+const GOODGAME_GLYPH = 'GG'
+
 // Default display duration (seconds) for an event based on its tier. Pure
 // helper hoisted to module scope so the fade effect can reference it safely.
 function getTierDuration(tier: EventTier): number {
@@ -217,7 +221,18 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
     max_message_chars: 200,
     skip_emote_only: true,
     skip_links: true,
-    enabled_platforms: ['twitch', 'youtube', 'kick', 'tiktok', 'discord'],
+    enabled_platforms: [
+      'twitch',
+      'youtube',
+      'kick',
+      'tiktok',
+      'owncast',
+      'goodgame',
+      'picarto',
+      'facebook',
+      'rumble',
+      'discord',
+    ],
   })
   const ttsFallbackToastShownRef = useRef(false)
 
@@ -521,10 +536,21 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
       max_message_chars:
         typeof display.tts_max_message_chars === 'number' ? display.tts_max_message_chars : 200,
       skip_emote_only: display.tts_skip_emote_only !== false,
-      skip_links: display.tts_skip_links !== false,
       enabled_platforms: Array.isArray(display.tts_enabled_platforms)
         ? display.tts_enabled_platforms.filter((p: unknown): p is string => typeof p === 'string')
-        : ['twitch', 'youtube', 'kick', 'tiktok', 'discord'],
+        : [
+            'twitch',
+            'youtube',
+            'kick',
+            'tiktok',
+            'owncast',
+            'goodgame',
+            'picarto',
+            'facebook',
+            'rumble',
+            'discord',
+          ],
+      skip_links: display.tts_skip_links !== false,
     }
 
     // For the ElevenLabs branch, hydrate the runtime fetch
@@ -617,6 +643,16 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
         return 'text-red-400'
       case 'kick':
         return 'text-green-400'
+      case 'owncast':
+        return 'text-owncast'
+      case 'goodgame':
+        return 'text-goodgame'
+      case 'picarto':
+        return 'text-picarto'
+      case 'facebook':
+        return 'text-facebook'
+      case 'rumble':
+        return 'text-rumble'
       default:
         return 'text-slate-400'
     }
@@ -668,6 +704,65 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
               fill="#000000"
               d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"
             />
+          </svg>
+        )
+      case 'owncast':
+        // Owncast mark: a broadcast wave over a dot (simple functional glyph,
+        // not the trademarked owl).
+        return (
+          <svg viewBox="0 0 24 24" className={iconClass}>
+            <circle cx="12" cy="17" r="2.5" fill="#9B7FF5" />
+            <path
+              fill="none"
+              stroke="#9B7FF5"
+              strokeWidth="2"
+              strokeLinecap="round"
+              d="M7.8 12.8a6 6 0 0 1 8.4 0M5 10a10 10 0 0 1 14 0"
+            />
+          </svg>
+        )
+      case 'goodgame':
+        return (
+          <svg viewBox="0 0 24 24" className={iconClass} style={{ imageRendering: 'pixelated' }}>
+            <text
+              x="12"
+              y="17"
+              fontSize="11"
+              fontWeight="bold"
+              fill="#7FA3D1"
+              textAnchor="middle"
+              fontFamily="monospace"
+            >
+              {GOODGAME_GLYPH}
+            </text>
+          </svg>
+        )
+      case 'picarto':
+        // Picarto mark: the artist's palette circle (functional glyph).
+        return (
+          <svg viewBox="0 0 24 24" className={iconClass}>
+            <circle cx="12" cy="12" r="9" fill="#27B756" />
+            <circle cx="9" cy="9" r="1.4" fill="#FFFFFF" />
+            <circle cx="15" cy="9" r="1.4" fill="#FFFFFF" />
+            <circle cx="8" cy="14" r="1.4" fill="#FFFFFF" />
+            <circle cx="14.5" cy="15" r="1.4" fill="#FFFFFF" />
+          </svg>
+        )
+      case 'facebook':
+        return (
+          <svg viewBox="0 0 24 24" className={iconClass}>
+            <path
+              fill="#3B93F5"
+              d="M12 2a10 10 0 1 0-1.6 19.9v-7h-2.5V12h2.5V9.8c0-2.5 1.5-3.9 3.8-3.9 1.1 0 2.2.2 2.2.2v2.4h-1.2c-1.2 0-1.6.8-1.6 1.6V12h2.7l-.4 2.9h-2.3v7A10 10 0 0 0 12 2z"
+            />
+          </svg>
+        )
+      case 'rumble':
+        // Rumble mark: play triangle in a ring (functional glyph).
+        return (
+          <svg viewBox="0 0 24 24" className={iconClass}>
+            <circle cx="12" cy="12" r="9" fill="none" stroke="#85C742" strokeWidth="2" />
+            <path fill="#85C742" d="M10 8.5v7l6-3.5z" />
           </svg>
         )
       default:

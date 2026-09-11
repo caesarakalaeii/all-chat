@@ -235,4 +235,11 @@ function platformLabel(t: TFunction, platform: string): string {
   return known ? t(`common.platforms.${known}`) : platform
 }
 
-const NAMEABLE_PLATFORMS = ['twitch', 'youtube', 'kick', 'tiktok', 'discord'] as const
+const NAMEABLE_PLATFORMS = [
+  'twitch',
+  'youtube',
+  'kick',
+  'tiktok',
+  'facebook',
+  'discord',
+] as const

@@ -257,21 +257,22 @@ streams, _ := client.XReadGroup(ctx, &redis.XReadGroupArgs{
 
 ### 2. Route by Platform
 
-**Router**: Detects platform field and routes to appropriate normalizer
+**Router**: a per-platform normalizer map, wired at startup in `cmd/main.go`. An unknown platform is logged and skipped (the map lookup misses) — no hardcoded switch to extend.
 
 ```go
-// router/router.go
-switch platform {
-case "twitch":
-    return normalizer.ParseTwitchMessage(rawMsg)
-case "youtube":
-    return normalizer.ParseYouTubeMessage(rawMsg)
-case "kick":
-    return normalizer.ParseKickMessage(rawMsg)
-case "tiktok":
-    return normalizer.ParseTikTokMessage(rawMsg)
-default:
-    return nil, fmt.Errorf("unsupported platform: %s", platform)
+// cmd/main.go
+normalizers := map[string]normalizer.Normalizer{
+    "twitch":   twitchNormalizer,
+    "youtube":  youtubeNormalizer,
+    "tiktok":   tiktokNormalizer,
+    "kick":     kickNormalizer,
+    "system":   systemNormalizer,
+    "discord":  discordNormalizer,
+    "owncast":  owncastNormalizer,
+    "goodgame": goodgameNormalizer,
+    "picarto":  picartoNormalizer,
+    "facebook": facebookNormalizer,
+    "rumble":   rumbleNormalizer,
 }
 ```
 
@@ -282,6 +283,12 @@ default:
 - `normalizer/youtube_normalizer.go` - Parse YouTube API response (authorDetails, textMessageDetails)
 - `normalizer/kick_normalizer.go` - Parse Pusher WebSocket event (sender, identity, badges)
 - `normalizer/tiktok_normalizer.go` - Parse TikTok Live unofficial library format
+- `normalizer/discord_normalizer.go` - Parse the discord-listener relay payload (member nick, roles)
+- `normalizer/owncast_normalizer.go` - Parse the Owncast CHAT event (instance URL as channel, ADR-0058)
+- `normalizer/goodgame_normalizer.go` - Parse the GoodGame chat websocket message
+- `normalizer/picarto_normalizer.go` - Parse the Picarto pop-out chat batch (ADR-0059)
+- `normalizer/facebook_normalizer.go` - Parse Graph API live-video comments (ADR-0060)
+- `normalizer/rumble_normalizer.go` - Parse the Rumble chat pop-up SSE payload (ADR-0061)
 
 **Output**: `models.UnifiedMessage` (common schema across all platforms)
 

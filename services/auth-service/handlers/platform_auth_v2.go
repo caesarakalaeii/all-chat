@@ -719,6 +719,7 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 
 		var youtubeChannel *oauth.YouTubeChannelInfo
 		var sourceDetails *OverlaySourceDetails
+		var facebookPage *oauth.FacebookPage
 
 		if platform == oauth.PlatformYouTube {
 			youtubeProvider, ok := provider.(*oauth.YouTubeOAuth)
@@ -767,6 +768,35 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 				// For login flow, skip channel resolution to save quota
 				h.logger.Info("Skipping YouTube channel resolution during login (will fetch when adding source)",
 					zap.String("platform_user_id", platformUser.GetID()))
+			}
+		}
+
+		if platform == oauth.PlatformFacebook {
+			facebookProvider, ok := provider.(*oauth.FacebookOAuth)
+			if !ok {
+				h.logger.Error("Facebook provider assertion failed")
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Facebook provider misconfigured"})
+				return
+			}
+
+			// The Page (id, name, non-expiring page token) is resolved at both
+			// login and add-source: it IS the source identity, and storing the
+			// token at callback time is what keeps the later add-source path
+			// from acting on a half-initialized credential.
+			page, pageErr := facebookProvider.GetPrimaryPage(c.Request.Context(), token.AccessToken)
+			if pageErr != nil {
+				h.logger.Warn("Failed to resolve Facebook page (non-fatal, skipping token store)",
+					zap.String("platform_user_id", platformUser.GetID()),
+					zap.Error(pageErr))
+				facebookPage = nil
+			} else {
+				facebookPage = page
+				if oauthState.IsAddSource() {
+					sourceDetails = &OverlaySourceDetails{
+						ChannelID:   page.ID,
+						ChannelName: page.Name,
+					}
+				}
 			}
 		}
 
@@ -938,6 +968,22 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 			)
 
 			h.redirectWithTombstone(c, platform, oauthState.CSRFToken, redirectURL)
+		}
+
+		if platform == oauth.PlatformFacebook && facebookPage != nil {
+			// ADR-0060: the page token from a long-lived user token does not
+			// expire, so this is the whole credential lifecycle: stored here,
+			// replaced on every re-consent, invalidated only by the streamer
+			// disconnecting or revoking the app.
+			if err := h.userRepo.StoreFacebookPageToken(c.Request.Context(),
+				user.ID, facebookPage.ID, facebookPage.Name, facebookPage.AccessToken,
+				oauth.ExtractGrantedScopes(token)); err != nil {
+				h.logger.Warn("Failed to store Facebook page token",
+					zap.String("user_id", user.ID),
+					zap.String("page_id", facebookPage.ID),
+					zap.Error(err),
+				)
+			}
 		}
 
 		if platform == oauth.PlatformYouTube && youtubeChannel != nil {

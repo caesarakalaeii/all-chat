@@ -216,6 +216,7 @@ func main() {
 	seventvResolver := clients.NewSevenTVResolver(log)
 	configHandler := handlers.NewConfigHandler(configRepo, overlayRepo, sourceRepo, seventvResolver, bubbleColorsGate{gates: gateCache, db: dbPool})
 	sourcesHandler := handlers.NewSourcesHandler(sourceRepo, overlayRepo, dbPool, log, redisClient, bm, tokenCipher)
+	sourcesHandler.SetPlatformGate(platformSourceGate{gates: gateCache, db: dbPool})
 
 	// Discord source guard (ADR-0048): a Discord source is acted on by the SHARED bot, so
 	// Discord authorizes the bot rather than the caller and will not refuse a channel the
@@ -423,6 +424,26 @@ type bubbleColorsGate struct {
 
 func (g bubbleColorsGate) BubbleColorsEnabled(ctx context.Context, userID string) (bool, error) {
 	if g.gates == nil || !g.gates.IsPremium(featuregates.GateBubbleColors) {
+		return true, nil
+	}
+	var isPremium bool
+	err := g.db.QueryRow(ctx, "SELECT is_premium FROM users WHERE id = $1", userID).Scan(&isPremium)
+	return isPremium, err
+}
+
+// platformSourceGate combines the feature-gate cache (ADR-0008) with the
+// users.is_premium lookup to decide whether a user may add a source on a
+// rollout platform. Keyed on the caller, the overlay owner by construction of
+// the sources routes. A closed gate (is_premium=TRUE) requires a premium user;
+// once flipped to free the check short-circuits without touching the database.
+type platformSourceGate struct {
+	gates *featuregates.FeatureGateCache
+	db    *pgxpool.Pool
+}
+
+func (g platformSourceGate) PlatformSourceAllowed(ctx context.Context, userID, platform string) (bool, error) {
+	key, gated := featuregates.RolloutPlatformGateKey(platform)
+	if !gated || g.gates == nil || !g.gates.IsPremium(key) {
 		return true, nil
 	}
 	var isPremium bool

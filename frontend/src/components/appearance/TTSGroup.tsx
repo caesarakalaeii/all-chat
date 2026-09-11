@@ -90,7 +90,18 @@ export interface TTSGroupProps {
 
 // The platform display names live in common.platforms.*, keyed by these same
 // identifiers, so the chip row looks each label up from the value it has.
-const ALL_PLATFORMS = ['twitch', 'youtube', 'kick', 'tiktok', 'discord'] as const
+const ALL_PLATFORMS = [
+  'twitch',
+  'youtube',
+  'kick',
+  'tiktok',
+  'owncast',
+  'goodgame',
+  'picarto',
+  'facebook',
+  'rumble',
+  'discord',
+] as const
 
 interface SubHeaderProps {
   label: string
