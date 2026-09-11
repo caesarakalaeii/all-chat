@@ -803,23 +803,28 @@ span.font-semibold.text-sm.username-gradient {
   transition: flex-grow 2.5s ease-in-out;
 }
 .lane[data-p='twitch'] {
-  background: color-mix(in oklab, var(--lanes-twitch) 24%, transparent);
+  background: var(--lanes-twitch);
 }
 .lane[data-p='youtube'] {
-  background: color-mix(in oklab, var(--lanes-youtube) 24%, transparent);
+  background: var(--lanes-youtube);
 }
 .lane[data-p='tiktok'] {
-  background: color-mix(in oklab, var(--lanes-tiktok) 24%, transparent);
+  background: var(--lanes-tiktok);
 }
 .lane[data-p='kick'] {
-  background: color-mix(in oklab, var(--lanes-kick) 24%, transparent);
+  background: var(--lanes-kick);
 }
 .lane[data-p='discord'] {
-  background: color-mix(in oklab, var(--lanes-discord) 24%, transparent);
+  background: var(--lanes-discord);
 }
+/* The lanes are a stacked area chart and read by their block colors, so
+ * the fills are solid brand colors (feedback: the translucent-tint
+ * version rendered at full saturation anyway — un-premultiplied rgba with
+ * blending disabled — and solid carries the dark marquee ink at AA
+ * contrast on every lane). Solid here matches the WebGL graph exactly. */
 /* Once the WebGL canvas has drawn a frame (`.gl` on the stage), its bands
- * already paint the tint — the CSS backgrounds would stack on top and
- * double the opacity, so they clear. The flex-grow transition goes too:
+ * already paint the graph — the CSS backgrounds would stack on top and
+ * double the fill, so they clear. The flex-grow transition goes too:
  * it exists to smooth the stepped fallback, and would lag the canvas by
  * 2.5s if it interpolated every 60fps write. */
 .gl .lane {
@@ -846,21 +851,12 @@ span.font-semibold.text-sm.username-gradient {
     transform: translateX(-50%);
   }
 }
-.lane[data-p='twitch'] .flow,
-.lane[data-p='youtube'] .flow {
-  color: color-mix(in oklab, var(--lanes-twitch) 55%, #f4f3ef);
-}
-.lane[data-p='youtube'] .flow {
-  color: color-mix(in oklab, var(--lanes-youtube) 55%, #f4f3ef);
-}
-.lane[data-p='discord'] .flow {
-  color: color-mix(in oklab, var(--lanes-discord) 55%, #f4f3ef);
-}
-.lane[data-p='tiktok'] .flow {
-  color: color-mix(in oklab, var(--lanes-tiktok) 65%, #f4f3ef);
-}
-.lane[data-p='kick'] .flow {
-  color: color-mix(in oklab, var(--lanes-kick) 65%, #f4f3ef);
+/* Dark ink on the solid bands: the page near-black. #050508 on the
+ * lightest band (twitch #8464d6) is 4.6:1, on discord 4.9:1, on the
+ * others 5.4:1 and up — WCAG AA for the 11px marquee on every lane,
+ * same ink vocabulary as the .warkicker chip. */
+.lane .flow {
+  color: var(--lanes-bg);
 }
 .flow b {
   font-weight: 700;
@@ -874,8 +870,8 @@ span.font-semibold.text-sm.username-gradient {
   opacity: 0.75;
 }
 
-/* Giant tone-on-tone wordmark per lane. Brighter than the old solid-fill
- * values because it now sits on a translucent band, not a solid brand fill. */
+/* Giant tone-on-tone wordmark per lane — the page near-black at a low
+ * alpha so it reads as watermark texture on the solid brand fill. */
 .wordmark {
   position: absolute;
   right: -0.05em;
@@ -883,7 +879,6 @@ span.font-semibold.text-sm.username-gradient {
   transform: translateY(-50%);
   font-family: var(--font-archivo-black), sans-serif;
   font-size: clamp(80px, 16vh, 220px);
-  line-height: 1;
   letter-spacing: -0.02em;
   pointer-events: none;
   user-select: none;
@@ -891,11 +886,11 @@ span.font-semibold.text-sm.username-gradient {
 .lane[data-p='twitch'] .wordmark,
 .lane[data-p='youtube'] .wordmark,
 .lane[data-p='discord'] .wordmark {
-  color: color-mix(in oklab, var(--lanes-text) 30%, transparent);
+  color: color-mix(in oklab, var(--lanes-bg) 55%, transparent);
 }
 .lane[data-p='tiktok'] .wordmark,
 .lane[data-p='kick'] .wordmark {
-  color: color-mix(in oklab, var(--lanes-text) 45%, transparent);
+  color: color-mix(in oklab, var(--lanes-bg) 40%, transparent);
 }
 
 /* Headline chips across the lanes. */
