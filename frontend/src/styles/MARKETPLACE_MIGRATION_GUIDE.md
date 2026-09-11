@@ -13,20 +13,25 @@ This guide is for overlay theme authors who publish CSS themes to the All-Chat m
 
 The most important change in v1.3 is the introduction of CSS cascade layers. This **eliminates the need for `!important` in your theme CSS**.
 
-The full layer order is:
+The overlay's layer order is:
 
 ```
-@layer base, design-system, marketplace-themes, user-overrides;
+@layer base, design-system, marketplace-themes, user-overrides, visual-customizer;
 ```
 
-| Layer                | Priority | Who writes it                          |
-| -------------------- | -------- | -------------------------------------- |
-| `user-overrides`     | Highest  | You — theme authors using this layer   |
-| `marketplace-themes` | High     | `events.css` (platform default styles) |
-| `design-system`      | Medium   | Platform design tokens                 |
-| `base`               | Lowest   | Browser normalization, CSS reset       |
+Theme CSS is injected into `@layer marketplace-themes`. The precedence
+hierarchy, strongest first:
 
-**Action required:** Replace `!important` declarations in your themes with `@layer user-overrides { ... }` wrapping.
+| Rank | Origin                                  | How it is expressed                    |
+| ---- | --------------------------------------- | -------------------------------------- |
+| 1    | Manual custom CSS (the user's editor)   | **Unlayered** — beats every layer      |
+| 2    | GUI visual settings (appearance panels) | `@layer visual-customizer` (top layer) |
+| 3    | Your theme                              | `@layer marketplace-themes`            |
+| 4    | App defaults, design system, Tailwind   | their own layers                       |
+
+**Action required:** write plain, unlayered CSS. `!important` is stripped from
+bundled-theme CSS at injection, and `@layer user-overrides` ranks BELOW the
+GUI layer — neither mechanism helps you.
 
 **Before (v1.2 and earlier):**
 
@@ -36,13 +41,11 @@ The full layer order is:
 }
 ```
 
-**After (v1.3):**
+**Now:**
 
 ```css
-@layer user-overrides {
-  .event-message {
-    border-radius: 0;
-  }
+.event-message {
+  border-radius: 0;
 }
 ```
 
@@ -90,28 +93,27 @@ Minimal v1.3-compatible theme using the cascade layer architecture:
 ```css
 /* my-overlay-theme.css — v1.3 compatible */
 
-/* Import this AFTER the platform's default CSS */
-@layer user-overrides {
-  /* Override event message appearance */
-  .event-message {
-    border-radius: 8px;
-    border-width: 2px;
-  }
+/* Plain unlayered rules — the overlay injects your theme into
+   @layer marketplace-themes, below the user's GUI settings and manual CSS */
+/* Override event message appearance */
+.event-message {
+  border-radius: 8px;
+  border-width: 2px;
+}
 
-  /* Style high-tier events (large Super Chats, raids) */
-  .event-tier-high {
-    border-color: gold;
-    background-color: rgba(255, 215, 0, 0.1);
-  }
+/* Style high-tier events (large Super Chats, raids) */
+.event-tier-high {
+  border-color: gold;
+  background-color: rgba(255, 215, 0, 0.1);
+}
 
-  /* Platform-specific styling */
-  .event-message[data-platform='twitch'] {
-    border-left-color: #9146ff;
-  }
+/* Platform-specific styling */
+.event-message[data-platform='twitch'] {
+  border-left-color: #9146ff;
+}
 
-  .event-message[data-platform='youtube'] {
-    border-left-color: #ff0000;
-  }
+.event-message[data-platform='youtube'] {
+  border-left-color: #ff0000;
 }
 ```
 
@@ -137,7 +139,7 @@ Full token reference: **[docs/overlay-themes/AUTHORING-EVENTS.md](../../../docs/
 
 ## Migration Checklist
 
-- [ ] Replace `!important` rules with `@layer user-overrides { ... }` wrapper
+- [ ] Replace `!important` rules with plain, unlayered declarations
 - [ ] Verify your theme loads AFTER the platform CSS (the overlay page handles this automatically)
 - [ ] Test all event types: subscription, raid, Super Chat, bits, follow
 - [ ] Test all platforms: Twitch, YouTube, Kick, TikTok

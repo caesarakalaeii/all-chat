@@ -60,6 +60,7 @@ import {
 } from '@/lib/utils/bubbleSlot'
 import { getBundledTheme } from '@/lib/theme-marketplace/bundled-themes'
 import { rewriteThemeFontImports } from '@/lib/theme-marketplace/font-proxy'
+import { wrapThemeCss } from '@/lib/theme-marketplace/wrap-theme-css'
 import { chatBubbleStyle, overlayContainerStyle } from '@/lib/utils/visual-inline-styles'
 import { isDisplayVisible } from '@/lib/utils/displayVisibility'
 import {
@@ -145,7 +146,6 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   const { id } = use(params)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [maxMessages, setMaxMessages] = useState(50)
-  const [fontSize, setFontSize] = useState(16)
   const [messageDuration, setMessageDuration] = useState(15)
   const [disableMessageFade, setDisableMessageFade] = useState(false)
   const [customCss, setCustomCss] = useState('')
@@ -154,11 +154,12 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   // (no theme_id) leave this empty and still render via custom_css.
   const [themeCss, setThemeCss] = useState('')
   const [visualSettingsCss, setVisualSettingsCss] = useState('')
-  // Body font-size for message text. Prefer the visual-customizer `fontSize`
-  // (e.g. "18px") when set, otherwise fall back to the legacy display-settings
-  // `font_size` (number, applied as px). Applied inline rather than via CSS var
-  // so it doesn't get clobbered by the layered visual-customizer rules.
-  const [messageFontSizeCss, setMessageFontSizeCss] = useState('')
+  // Legacy display-settings `font_size` (number, applied as px). Emitted as
+  // the `--chat-legacy-font-size` custom property so it feeds the same layered
+  // `.break-words` rule as the GUI `fontSize` control (which arrives via
+  // `--chat-font-size`), instead of an inline style that no manual CSS could
+  // override.
+  const [legacyFontSize, setLegacyFontSize] = useState<number | null>(null)
   // Background fills (overlay container + chat bubbles), shadow and max-width.
   // Applied inline ONLY when set so they don't clobber the per-variant Tailwind
   // defaults (slate/purple bubbles, transparent overlay) — see visual-inline-styles.
@@ -362,7 +363,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
       maxMessagesRef.current = display.max_messages
     }
     if (typeof display.font_size === 'number') {
-      setFontSize(display.font_size)
+      setLegacyFontSize(display.font_size)
     }
     if (typeof display.message_duration === 'number') {
       setMessageDuration(display.message_duration)
@@ -396,17 +397,19 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
     }
 
     setCustomCss(typeof config.custom_css === 'string' ? config.custom_css : '')
+    // The theme ships with `!important` declarations meant to beat other
+    // unlayered styles. Wrapping it into `@layer marketplace-themes` (and
+    // stripping those importants) puts the whole theme one tier below the GUI
+    // layer and two below the user's unlayered manual CSS, where it belongs.
     setThemeCss(
       typeof config.theme_id === 'string' && config.theme_id
-        ? rewriteThemeFontImports(getBundledTheme(config.theme_id)?.css ?? '')
+        ? wrapThemeCss(rewriteThemeFontImports(getBundledTheme(config.theme_id)?.css ?? ''))
         : ''
     )
 
     if (config.visual_settings && typeof config.visual_settings === 'object') {
       const vs = config.visual_settings as Partial<VisualSettings>
       setVisualSettingsCss(visualSettingsToCss(vs))
-      // Body font-size override from the visual customizer (see state decl).
-      setMessageFontSizeCss(typeof vs.fontSize === 'string' && vs.fontSize ? vs.fontSize : '')
       // Background fills / shadow / max-width (see state decl).
       setContainerStyle(overlayContainerStyle(vs))
       setBubbleStyle(chatBubbleStyle(vs))
@@ -753,6 +756,16 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
       {visualSettingsCss.length > 0 && (
         <style dangerouslySetInnerHTML={{ __html: visualSettingsCss }} />
       )}
+      {/* Legacy display-settings font-size as a custom property, consumed by
+          the `.break-words` rule in events.css (same delivery as the GUI
+          font-size control, so manual CSS can override both). */}
+      {legacyFontSize !== null && (
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `:root { --chat-legacy-font-size: ${legacyFontSize}px; }`,
+          }}
+        />
+      )}
       {/* Bundled theme CSS first, then the user's raw custom_css overrides it. */}
       {themeCss.length > 0 && <style dangerouslySetInnerHTML={{ __html: themeCss }} />}
       {customCss.trim().length > 0 && <style dangerouslySetInnerHTML={{ __html: customCss }} />}
@@ -769,15 +782,15 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
       {/* text-shadow inherits to every text node below, which is how the setting
           reaches nodes no rule names (pronoun pill, shared-chat tag, event body).
           It is NOT what makes the setting stick: this is a normal inline style,
-          and every bundled theme declares `text-shadow: … !important` on the
-          message text, which beats it. The authoritative delivery is the
-          `!important` rule visualSettingsToCss emits inside
-          `@layer visual-customizer` (see OVERRIDE_RULES). Gradient usernames
+          so any theme declaration beats it. The authoritative delivery is the
+          rule visualSettingsToCss emits inside `@layer visual-customizer` (see
+          OVERRIDE_RULES), which outranks the theme layer. Gradient usernames
           force the shadow off locally with an important inline style, which
           outranks both. */}
       {/* `mt-auto` (feedAnchor 'bottom') sits on the list itself, never on its
-          children: `.overlay-live-body > * + *` in events.css is `!important`
-          inside a cascade layer and would beat any child-level rule. */}
+          children: `.overlay-live-body > * + *` in events.css shares this
+          layer and would beat any child-level margin rule at equal
+          specificity. */}
       <div
         className={clsx(
           'overlay-live-body space-y-3',
@@ -1021,10 +1034,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                   </div>
 
                   {/* Message Text with Emotes (or Event Content) */}
-                  <div
-                    className="break-words text-white"
-                    style={{ fontSize: messageFontSizeCss || `${fontSize}px` }}
-                  >
+                  <div className="break-words text-white">
                     {message.event ? renderEventContent(message) : renderMessageContent(message)}
                   </div>
 

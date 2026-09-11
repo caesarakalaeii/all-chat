@@ -109,74 +109,73 @@ Structure tokens default to the corresponding `--chat-*` customizer value
 `--chat-bubble-border-radius`, `--event-backdrop-blur` → `--chat-backdrop-blur`),
 so an event follows the overlay's configured look with no theme CSS at all.
 
-Note that `.event-message` is deliberately **excluded** from the
-`@layer visual-customizer` bubble rules that force `border`/`padding`/`radius`
-with `!important`. Those rules are unbeatable by theme CSS (a layered
-`!important` outranks an unlayered one), so while they matched events they
-erased the tier borders and left theme authors with no way in. Events get the
-same values as _defaults_ instead.
+Note that `.event-message` is deliberately **excluded** from the bubble rules in
+`@layer visual-customizer`: those rules outrank theme CSS, so while they
+matched events they erased the tier borders and left theme authors with no way
+in. Events get the same values as _defaults_ instead (see the token fallbacks).
 
 ---
 
 ## Cascade Layer Architecture
 
-`events.css` rules live inside `@layer marketplace-themes`. The full cascade layer order is:
+`events.css` rules live inside `@layer marketplace-themes`. The overlay's layer
+order is:
 
 ```
-@layer base, design-system, marketplace-themes, user-overrides;
+@layer base, design-system, marketplace-themes, user-overrides, visual-customizer;
 ```
 
-Higher layers in this list win over lower layers at equal specificity:
+The precedence hierarchy, strongest first:
 
-| Layer                | Priority | Who writes it                    |
-| -------------------- | -------- | -------------------------------- |
-| `user-overrides`     | Highest  | Theme authors                    |
-| `marketplace-themes` | High     | This file (events.css)           |
-| `design-system`      | Medium   | Design token system              |
-| `base`               | Lowest   | Browser normalization, CSS reset |
+| Rank | Origin                                                | How it is expressed                    |
+| ---- | ----------------------------------------------------- | -------------------------------------- |
+| 1    | Manual custom CSS (`custom_css` editor)               | **Unlayered** — beats every layer      |
+| 2    | GUI visual settings (appearance panels)               | `@layer visual-customizer` (top layer) |
+| 3    | Theme CSS                                             | `@layer marketplace-themes`            |
+| 4    | App defaults incl. this file, design system, Tailwind | their own layers                       |
 
-This means `events.css` rules already win over `design-system` rules without needing `!important`. Theme authors writing overrides should place their CSS in `@layer user-overrides` for the highest cascade priority — no `!important` needed.
+Consequences for theme authors:
 
-**The layer order is inverted for `!important` declarations.** Per the cascade
-spec, important declarations in an _earlier_ layer beat later ones, and
-_unlayered_ important declarations rank below every layered one. Consequences
-worth knowing:
-
-- Unlayered theme CSS (what every bundled theme writes, `!important` included)
-  beats the normal-weight rules in `marketplace-themes` — which is why setting
-  `--event-*` tokens or overriding event rules works without ceremony.
-- Unlayered theme CSS **cannot** beat an `!important` rule inside
-  `@layer visual-customizer`. That is why event rows are excluded from the
-  bubble-forcing block there: an inescapable rule is the wrong tool for
-  something themes are supposed to restyle.
-- Putting a rule in `@layer user-overrides` raises its priority for normal
-  declarations and _lowers_ it for `!important` ones. Pick one or the other, not
-  both.
-
----
+- **Write plain, unlayered CSS.** No `@layer` wrapper and no `!important` are
+  needed. Unlayered declarations outrank every layer, so your rules win over
+  the app defaults in `marketplace-themes` — that is why setting `--event-*`
+  tokens or overriding event rules works without ceremony.
+- Do NOT use `@layer user-overrides` for overrides. It is declared for
+  compatibility, but it ranks BELOW `visual-customizer`: GUI settings a user
+  configures would beat your overrides.
+- The app strips `!important` from bundled-theme CSS at injection (the layer
+  alone provides the ranking), so `!important` in a marketplace theme is
+  inert — write normal declarations.
+- GUI rules in `@layer visual-customizer` are normal-weight, so an unlayered
+  `!important` you write still beats them. The one thing you cannot beat is a
+  user's manual custom CSS: it is unlayered too and, being loaded after, it
+  wins the last-writer contest against unlayered themes of equal weight.
+- `.event-message` is deliberately **excluded** from the bubble rules in
+  `@layer visual-customizer`, so events follow the customizer's _defaults_ via
+  the `--event-*` token fallbacks rather than being forced by GUI rules.
 
 ## Usage Example
 
 Minimal theme override targeting the frozen public API:
 
 ```css
-/* In your custom overlay CSS — use @layer user-overrides for highest priority */
-@layer user-overrides {
-  .event-message {
-    border-radius: 0; /* override the default 16px */
-  }
+/* In your custom overlay CSS — plain unlayered rules already outrank events.css */
+.event-message {
+  border-radius: 0; /* override the default 16px */
+}
 
-  .event-tier-high {
-    border-color: hotpink;
-  }
+.event-tier-high {
+  border-color: hotpink;
+}
 
-  .event-message[data-platform='twitch'] {
-    border-left-color: #9146ff;
-  }
+.event-message[data-platform='twitch'] {
+  border-left-color: #9146ff;
 }
 ```
 
-Do not use `!important` in custom theme CSS — the cascade layer order handles specificity.
+Do not wrap your CSS in `@layer` and do not use `!important` — unlayered rules
+already outrank every layer in the overlay, and `!important` in a marketplace
+theme is stripped at injection.
 
 ---
 

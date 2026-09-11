@@ -453,32 +453,34 @@
 @layer visual-customizer {
   /*
    * Authoritative property map: CSS variables → embed-page elements.
-   * @layer !important beats unlayered !important (CSS cascade layers spec),
-   * so these rules win over Tailwind utilities AND theme !important overrides.
+   * `visual-customizer` is the top computed cascade layer on overlay pages, so
+   * these rules beat Tailwind utilities and theme rules at normal weight — no
+   * `!important` needed. Manual CSS is injected UNLAYERED, which outranks every
+   * layer, so the hierarchy is: manual CSS > this GUI layer > theme.
    */
 
   /* ── Overlay container ─────────────────────────────────────────────── */
   .overlay-preview-body {
-    padding: var(--chat-overlay-padding, 1rem) !important;
-    gap: var(--chat-message-gap, 0.75rem) !important;
+    padding: var(--chat-overlay-padding, 1rem);
+    gap: var(--chat-message-gap, 0.75rem);
   }
   /* `.scroll-anchor` is excluded everywhere in this block. It is the invisible
      auto-scroll sentinel the overlay pages render next to the newest message,
-     and globals.css declares it `height/padding/margin: 0 !important` — but
-     that rule is UNLAYERED, and for IMPORTANT declarations a cascade layer
-     outranks unlayered styles, so this block used to win and dress the sentinel
-     as a chat bubble: 12px of padding on a "zero-height" div plus a message
-     gap, i.e. ~36px of dead space glued to the newest message. Invisible while
-     the feed was always top-anchored and scrolled, very visible once
-     `feed_anchor: 'bottom'` parks the stack on an edge (#729) — and it moves to
-     the TOP of the stack when `invert_message_order` puts the sentinel first. */
+     and globals.css declares it `height/padding/margin: 0 !important` —
+     UNLAYERED, which outranks this whole layer. Without the exclusions every
+     rule below would dress the sentinel as a chat bubble: 12px of padding on a
+     "zero-height" div plus a message gap, i.e. ~36px of dead space glued to the
+     newest message. Invisible while the feed was always top-anchored and
+     scrolled, very visible once `feed_anchor: 'bottom'` parks the stack on an
+     edge (#729) — and it moves to the TOP of the stack when
+     `invert_message_order` puts the sentinel first. */
 
   /* space-y-* uses margin-top on siblings — override message gap.
      Both halves skip the sentinel: it must not take a gap of its own, and the
      message that FOLLOWS it (the newest one, when the order is inverted) must
      not be treated as a second child and pushed away from the edge. */
   .overlay-preview-body > *:not(.scroll-anchor) + *:not(.scroll-anchor) {
-    margin-top: var(--chat-message-gap, var(--theme-message-gap, 0.75rem)) !important;
+    margin-top: var(--chat-message-gap, var(--theme-message-gap, 0.75rem));
   }
 
   /* `space-y-*` applies its gap as margin-BOTTOM on every child except the
@@ -491,56 +493,45 @@
      `:has()` is already used further down this file; on an engine without it
      the rule simply does not match and the old trailing gap comes back. */
   .overlay-preview-body > *:has(+ .scroll-anchor) {
-    margin-bottom: 0 !important;
+    margin-bottom: 0;
   }
 
   /* ── Message bubble ─────────────────────────────────────────────────────
-     Events are excluded on purpose. This block is `!important` inside a
-     cascade layer, which beats a theme's unlayered `!important` — so while it
-     matched `.event-message` it hard-pinned every event to the chat bubble's
-     border/padding, erasing the tier borders AND leaving theme authors with no
-     way to restyle them. Events get the same values as a *default* instead,
-     via `--event-*` in the marketplace-themes layer, where a theme can win. */
+     Events are excluded on purpose. While this block matched `.event-message`
+     it hard-pinned every event to the chat bubble's border/padding, erasing
+     the tier borders AND leaving theme authors with no way to restyle them.
+     Events get the same values as a *default* instead, via `--event-*` in the
+     marketplace-themes layer, where a theme can win. */
   /* Each fallback is a `--theme-*` step, not the platform default directly, so the
-     precedence reads: customizer setting > THEME intent > platform default. These
-     rules are `!important` inside a layer, which beats a theme's unlayered
-     `!important` — correct for a control the user actually set, but it also used
-     to let the platform default outrank a theme when the control was UNSET. A
-     no-bubble theme asking for `padding: 0` still got 12px on every row. A theme
+     precedence reads: customizer setting > THEME intent > platform default. A theme
      states its intent by declaring the `--theme-*` variable; themes that declare
-     nothing are unaffected. */
+     nothing get the platform default. */
   .overlay-preview-body > div:not(.event-message):not(.scroll-anchor) {
-    border-radius: var(
-      --chat-bubble-border-radius,
-      var(--theme-bubble-border-radius, 0.5rem)
-    ) !important;
-    border-width: var(--chat-bubble-border-width, var(--theme-bubble-border-width, 0px)) !important;
-    border-color: var(
-      --chat-bubble-border-color,
-      var(--theme-bubble-border-color, transparent)
-    ) !important;
-    border-style: solid !important;
-    padding: var(--chat-bubble-padding, var(--theme-bubble-padding, 0.75rem)) !important;
-    backdrop-filter: blur(var(--chat-backdrop-blur, var(--theme-backdrop-blur, 0px))) !important;
+    border-radius: var(--chat-bubble-border-radius, var(--theme-bubble-border-radius, 0.5rem));
+    border-width: var(--chat-bubble-border-width, var(--theme-bubble-border-width, 0px));
+    border-color: var(--chat-bubble-border-color, var(--theme-bubble-border-color, transparent));
+    border-style: solid;
+    padding: var(--chat-bubble-padding, var(--theme-bubble-padding, 0.75rem));
+    backdrop-filter: blur(var(--chat-backdrop-blur, var(--theme-backdrop-blur, 0px)));
   }
 
   /* ── Avatar ────────────────────────────────────────────────────────── */
   .overlay-preview-body .flex-shrink-0 {
-    display: var(--chat-show-avatars, block) !important;
+    display: var(--chat-show-avatars, block);
   }
   .overlay-preview-body .flex-shrink-0 img,
   .overlay-preview-body .flex-shrink-0 > div {
-    width: var(--chat-avatar-size, 2.5rem) !important;
-    height: var(--chat-avatar-size, 2.5rem) !important;
-    min-width: var(--chat-avatar-size, 2.5rem) !important;
-    min-height: var(--chat-avatar-size, 2.5rem) !important;
-    max-width: 4rem !important;
-    max-height: 4rem !important;
+    width: var(--chat-avatar-size, 2.5rem);
+    height: var(--chat-avatar-size, 2.5rem);
+    min-width: var(--chat-avatar-size, 2.5rem);
+    min-height: var(--chat-avatar-size, 2.5rem);
+    max-width: 4rem;
+    max-height: 4rem;
   }
 
   /* ── User badges (subscriber/mod/bits icons) ───────────────────────── */
   .overlay-preview-body .flex.gap-1 {
-    display: var(--chat-show-badges, flex) !important;
+    display: var(--chat-show-badges, flex);
   }
   /* Scale badges with --chat-badge-size, but keep the header row's height tied to
      the USERNAME line so a larger badge stays vertically centred on the name
@@ -550,47 +541,43 @@
      grows the row with the badge and the name→message gap drifts with badge size
      (the offset regressed when da636cd5 made platform badges size-responsive). */
   .overlay-preview-body .flex.gap-1 img {
-    width: var(--chat-badge-size, 1rem) !important;
-    height: var(--chat-badge-size, 1rem) !important;
-    margin-top: calc(
-      (var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2
-    ) !important;
+    width: var(--chat-badge-size, 1rem);
+    height: var(--chat-badge-size, 1rem);
+    margin-top: calc((var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2);
     margin-bottom: calc(
       (var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2
-    ) !important;
+    );
   }
 
   /* ── Platform badge (TWITCH/YOUTUBE pill or icon) ──────────────────── */
   .overlay-preview-body .platform-badge-text {
-    font-size: var(--chat-badge-size, 0.75rem) !important;
-    line-height: 1 !important;
+    font-size: var(--chat-badge-size, 0.75rem);
+    line-height: 1;
     margin-top: calc(
       (var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 0.75rem)) / 2
-    ) !important;
+    );
     margin-bottom: calc(
       (var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 0.75rem)) / 2
-    ) !important;
+    );
   }
   .overlay-preview-body .platform-badge-icon svg,
   .overlay-preview-body .platform-badge-icon img {
-    width: var(--chat-badge-size, 1rem) !important;
-    height: var(--chat-badge-size, 1rem) !important;
-    margin-top: calc(
-      (var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2
-    ) !important;
+    width: var(--chat-badge-size, 1rem);
+    height: var(--chat-badge-size, 1rem);
+    margin-top: calc((var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2);
     margin-bottom: calc(
       (var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2
-    ) !important;
+    );
   }
 
   /* ── Username ──────────────────────────────────────────────────────── */
   .overlay-preview-body .font-semibold {
-    display: var(--chat-show-username, inline) !important;
+    display: var(--chat-show-username, inline);
   }
   .overlay-preview-body .chat-username {
-    font-family: var(--chat-username-font-family, inherit) !important;
-    font-weight: var(--chat-username-font-weight, 600) !important;
-    font-size: var(--chat-username-font-size, 0.875rem) !important;
+    font-family: var(--chat-username-font-family, inherit);
+    font-weight: var(--chat-username-font-weight, 600);
+    font-size: var(--chat-username-font-size, 0.875rem);
   }
 
   /* ── Line-box strut (inline-layout themes) ─────────────────────────────
@@ -602,17 +589,20 @@
      variable makes the control symmetric. The 1.5 fallback is preflight's own
      value, so an *unset* Line Height renders exactly as before. */
   .overlay-preview-body .min-w-0.flex-1 {
-    line-height: var(--chat-line-height, 1.5) !important;
+    line-height: var(--chat-line-height, 1.5);
   }
 
   /* ── Message text ──────────────────────────────────────────────────── */
   .overlay-preview-body .break-words {
-    font-size: var(--chat-font-size, 1rem) !important;
-    font-family: var(--chat-font-family, inherit) !important;
-    font-weight: var(--chat-font-weight, inherit) !important;
-    line-height: calc(var(--chat-line-height, 1.5) * 1em) !important;
-    letter-spacing: var(--chat-letter-spacing, normal) !important;
-    color: var(--chat-message-color, inherit) !important;
+    /* --chat-legacy-font-size: legacy display-settings font_size, emitted by
+       the embed page. Same rationale as the live rule below: no inline style,
+       so the GUI control and manual CSS can both override it. */
+    font-size: var(--chat-font-size, var(--chat-legacy-font-size, 1rem));
+    font-family: var(--chat-font-family, inherit);
+    font-weight: var(--chat-font-weight, inherit);
+    line-height: calc(var(--chat-line-height, 1.5) * 1em);
+    letter-spacing: var(--chat-letter-spacing, normal);
+    color: var(--chat-message-color, inherit);
   }
   /* Floor the line box at the (scaled) emote height so a scaled-up emote can't
      bleed into the wrap-line above/below — but ONLY for messages that actually
@@ -624,28 +614,28 @@
     line-height: max(
       calc(var(--chat-line-height, 1.5) * 1em),
       calc(1.4em * var(--chat-emote-scale, 1))
-    ) !important;
+    );
   }
 
   /* ── Timestamp ─────────────────────────────────────────────────────── */
   .overlay-preview-body .text-xs.text-slate-500 {
-    display: var(--chat-show-timestamps, block) !important;
-    font-size: var(--chat-timestamp-font-size, 0.75rem) !important;
-    font-family: var(--chat-timestamp-font-family, inherit) !important;
-    color: var(--chat-timestamp-color, inherit) !important;
+    display: var(--chat-show-timestamps, block);
+    font-size: var(--chat-timestamp-font-size, 0.75rem);
+    font-family: var(--chat-timestamp-font-family, inherit);
+    color: var(--chat-timestamp-color, inherit);
   }
 
   /* ── Emotes (inline images inside message text) ────────────────────── */
   .overlay-preview-body .break-words img {
-    display: var(--chat-show-emotes, inline) !important;
+    display: var(--chat-show-emotes, inline);
     /* Scale via the box, not `transform`. `transform: scale()` grows the emote
        visually without reserving layout space, so a scaled-up emote overlaps the
        neighbouring text and the wrap-lines above/below. Sizing `height` (× the
        emote scale) keeps the layout box in sync, so margins and line-height
        absorb the growth instead of colliding. See issue #438. */
-    height: calc(1.4em * var(--chat-emote-scale, 1)) !important;
-    width: auto !important;
-    vertical-align: middle !important;
+    height: calc(1.4em * var(--chat-emote-scale, 1));
+    width: auto;
+    vertical-align: middle;
   }
 }
 
@@ -662,9 +652,10 @@
  * deliberately the live overlay's own hardcoded defaults (white text, 18px
  * badges, slate-500 timestamps, backdrop-blur-sm) rather than the preview's, so
  * an *unset* control produces no visible change; a *set* control now applies and
- * matches the preview. Body font-size is intentionally absent here — the live
- * overlay applies it inline in React (visual `fontSize` ?? legacy `font_size`)
- * to avoid clobbering the legacy display-settings font-size path.
+ * matches the preview. Body font-size is applied by the same
+ * `.overlay-live-body .break-words` rule as the preview (via
+ * `--chat-font-size`/`--chat-legacy-font-size`) instead of an inline style, so
+ * the customizer's font-size control can also be overridden by manual CSS.
  *
  * NOTE: keep in sync with the `.overlay-preview-body` rules above when adding
  * new customizer properties.
@@ -672,19 +663,19 @@
 @layer visual-customizer {
   /* `.scroll-anchor` is excluded everywhere in this block. It is the invisible
      auto-scroll sentinel the overlay pages render next to the newest message,
-     and globals.css declares it `height/padding/margin: 0 !important` — but
-     that rule is UNLAYERED, and for IMPORTANT declarations a cascade layer
-     outranks unlayered styles, so this block used to win and dress the sentinel
-     as a chat bubble: 12px of padding on a "zero-height" div plus a message
-     gap, i.e. ~36px of dead space glued to the newest message. Invisible while
-     the feed was always top-anchored and scrolled, very visible once
-     `feed_anchor: 'bottom'` parks the stack on an edge (#729) — and it moves to
-     the TOP of the stack when `invert_message_order` puts the sentinel first. */
+     and globals.css declares it `height/padding/margin: 0 !important` —
+     UNLAYERED, which outranks this whole layer. Without the exclusions every
+     rule below would dress the sentinel as a chat bubble: 12px of padding on a
+     "zero-height" div plus a message gap, i.e. ~36px of dead space glued to the
+     newest message. Invisible while the feed was always top-anchored and
+     scrolled, very visible once `feed_anchor: 'bottom'` parks the stack on an
+     edge (#729) — and it moves to the TOP of the stack when
+     `invert_message_order` puts the sentinel first. */
 
   /* ── Message spacing (space-y-3 → message gap) ─────────────────────────
      Both halves skip the sentinel — see the preview block above. */
   .overlay-live-body > *:not(.scroll-anchor) + *:not(.scroll-anchor) {
-    margin-top: var(--chat-message-gap, var(--theme-message-gap, 0.75rem)) !important;
+    margin-top: var(--chat-message-gap, var(--theme-message-gap, 0.75rem));
   }
 
   /* `space-y-*` applies its gap as margin-BOTTOM on every child except the
@@ -697,43 +688,33 @@
      `:has()` is already used further down this file; on an engine without it
      the rule simply does not match and the old trailing gap comes back. */
   .overlay-live-body > *:has(+ .scroll-anchor) {
-    margin-bottom: 0 !important;
+    margin-bottom: 0;
   }
 
   /* ── Message bubble ─────────────────────────────────────────────────────
      `:not(.event-message)` for the same reason as the preview block above. */
   /* Each fallback is a `--theme-*` step, not the platform default directly, so the
-     precedence reads: customizer setting > THEME intent > platform default. These
-     rules are `!important` inside a layer, which beats a theme's unlayered
-     `!important` — correct for a control the user actually set, but it also used
-     to let the platform default outrank a theme when the control was UNSET. A
-     no-bubble theme asking for `padding: 0` still got 12px on every row. A theme
+     precedence reads: customizer setting > THEME intent > platform default. A theme
      states its intent by declaring the `--theme-*` variable; themes that declare
-     nothing are unaffected. */
+     nothing get the platform default. */
   .overlay-live-body > div:not(.event-message):not(.scroll-anchor) {
-    border-radius: var(
-      --chat-bubble-border-radius,
-      var(--theme-bubble-border-radius, 0.5rem)
-    ) !important;
-    border-width: var(--chat-bubble-border-width, var(--theme-bubble-border-width, 0px)) !important;
-    border-color: var(
-      --chat-bubble-border-color,
-      var(--theme-bubble-border-color, transparent)
-    ) !important;
-    border-style: solid !important;
-    padding: var(--chat-bubble-padding, var(--theme-bubble-padding, 0.75rem)) !important;
-    backdrop-filter: blur(var(--chat-backdrop-blur, var(--theme-backdrop-blur, 4px))) !important;
+    border-radius: var(--chat-bubble-border-radius, var(--theme-bubble-border-radius, 0.5rem));
+    border-width: var(--chat-bubble-border-width, var(--theme-bubble-border-width, 0px));
+    border-color: var(--chat-bubble-border-color, var(--theme-bubble-border-color, transparent));
+    border-style: solid;
+    padding: var(--chat-bubble-padding, var(--theme-bubble-padding, 0.75rem));
+    backdrop-filter: blur(var(--chat-backdrop-blur, var(--theme-backdrop-blur, 4px)));
   }
 
   /* ── Avatar ────────────────────────────────────────────────────────── */
   .overlay-live-body .flex-shrink-0 img,
   .overlay-live-body .flex-shrink-0 > div {
-    width: var(--chat-avatar-size, 2.5rem) !important;
-    height: var(--chat-avatar-size, 2.5rem) !important;
-    min-width: var(--chat-avatar-size, 2.5rem) !important;
-    min-height: var(--chat-avatar-size, 2.5rem) !important;
-    max-width: 4rem !important;
-    max-height: 4rem !important;
+    width: var(--chat-avatar-size, 2.5rem);
+    height: var(--chat-avatar-size, 2.5rem);
+    min-width: var(--chat-avatar-size, 2.5rem);
+    min-height: var(--chat-avatar-size, 2.5rem);
+    max-width: 4rem;
+    max-height: 4rem;
   }
 
   /* ── User badges (subscriber/mod/bits icons) ───────────────────────── */
@@ -741,44 +722,40 @@
      size never drifts the name→message gap — see the .overlay-preview-body
      block above for the full rationale. */
   .overlay-live-body .flex.gap-1 img {
-    width: var(--chat-badge-size, 1rem) !important;
-    height: var(--chat-badge-size, 1rem) !important;
-    margin-top: calc(
-      (var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2
-    ) !important;
+    width: var(--chat-badge-size, 1rem);
+    height: var(--chat-badge-size, 1rem);
+    margin-top: calc((var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2);
     margin-bottom: calc(
       (var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2
-    ) !important;
+    );
   }
 
   /* ── Platform badge (TWITCH/YOUTUBE pill or icon) ──────────────────── */
   .overlay-live-body .platform-badge-text {
-    font-size: var(--chat-badge-size, 0.75rem) !important;
-    line-height: 1 !important;
+    font-size: var(--chat-badge-size, 0.75rem);
+    line-height: 1;
     margin-top: calc(
       (var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 0.75rem)) / 2
-    ) !important;
+    );
     margin-bottom: calc(
       (var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 0.75rem)) / 2
-    ) !important;
+    );
   }
   .overlay-live-body .platform-badge-icon svg,
   .overlay-live-body .platform-badge-icon img {
-    width: var(--chat-badge-size, 1rem) !important;
-    height: var(--chat-badge-size, 1rem) !important;
-    margin-top: calc(
-      (var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2
-    ) !important;
+    width: var(--chat-badge-size, 1rem);
+    height: var(--chat-badge-size, 1rem);
+    margin-top: calc((var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2);
     margin-bottom: calc(
       (var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2
-    ) !important;
+    );
   }
 
   /* ── Username ──────────────────────────────────────────────────────── */
   .overlay-live-body .chat-username {
-    font-family: var(--chat-username-font-family, inherit) !important;
-    font-weight: var(--chat-username-font-weight, 600) !important;
-    font-size: var(--chat-username-font-size, 0.875rem) !important;
+    font-family: var(--chat-username-font-family, inherit);
+    font-weight: var(--chat-username-font-weight, 600);
+    font-size: var(--chat-username-font-size, 0.875rem);
   }
 
   /* ── Line-box strut (inline-layout themes) ─────────────────────────────
@@ -790,16 +767,21 @@
      variable makes the control symmetric. The 1.5 fallback is preflight's own
      value, so an *unset* Line Height renders exactly as before. */
   .overlay-live-body .min-w-0.flex-1 {
-    line-height: var(--chat-line-height, 1.5) !important;
+    line-height: var(--chat-line-height, 1.5);
   }
 
   /* ── Message text ──────────────────────────────────────────────────── */
   .overlay-live-body .break-words {
-    font-family: var(--chat-font-family, inherit) !important;
-    font-weight: var(--chat-font-weight, inherit) !important;
-    line-height: calc(var(--chat-line-height, 1.5) * 1em) !important;
-    letter-spacing: var(--chat-letter-spacing, normal) !important;
-    color: var(--chat-message-color, #ffffff) !important;
+    /* The legacy display-settings font-size is emitted as a `--chat-legacy-*
+       variable by the page so it feeds the same rule, not an inline style —
+       inline delivery made the GUI control impossible for manual CSS to
+       override. */
+    font-size: var(--chat-font-size, var(--chat-legacy-font-size, 1rem));
+    font-family: var(--chat-font-family, inherit);
+    font-weight: var(--chat-font-weight, inherit);
+    line-height: calc(var(--chat-line-height, 1.5) * 1em);
+    letter-spacing: var(--chat-letter-spacing, normal);
+    color: var(--chat-message-color, #ffffff);
   }
   /* Floor the line box at the (scaled) emote height so a scaled-up emote can't
      bleed into the wrap-line above/below — but ONLY for messages that actually
@@ -811,24 +793,24 @@
     line-height: max(
       calc(var(--chat-line-height, 1.5) * 1em),
       calc(1.4em * var(--chat-emote-scale, 1))
-    ) !important;
+    );
   }
 
   /* ── Timestamp ─────────────────────────────────────────────────────── */
   .overlay-live-body .text-xs.text-slate-500 {
-    font-size: var(--chat-timestamp-font-size, 0.75rem) !important;
-    font-family: var(--chat-timestamp-font-family, inherit) !important;
-    color: var(--chat-timestamp-color, #64748b) !important;
+    font-size: var(--chat-timestamp-font-size, 0.75rem);
+    font-family: var(--chat-timestamp-font-family, inherit);
+    color: var(--chat-timestamp-color, #64748b);
   }
 
   /* ── Emotes (inline images inside message text) ────────────────────── */
   .overlay-live-body .break-words img {
-    display: var(--chat-show-emotes, inline) !important;
+    display: var(--chat-show-emotes, inline);
     /* Scale via the box, not `transform` — keeps the layout box in sync with the
        visual size so scaled emotes don't overlap text or wrap-lines. See #438. */
-    height: calc(1.4em * var(--chat-emote-scale, 1)) !important;
-    width: auto !important;
-    vertical-align: middle !important;
+    height: calc(1.4em * var(--chat-emote-scale, 1));
+    width: auto;
+    vertical-align: middle;
   }
 }
 

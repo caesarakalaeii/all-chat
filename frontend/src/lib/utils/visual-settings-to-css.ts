@@ -121,9 +121,9 @@ const FEED_SCOPES = ['.overlay-live-body', '.overlay-preview-body'] as const
 /**
  * A chat row. Events are excluded (their chrome is theme-owned through the
  * `--event-*` tokens) and so is `.scroll-anchor`, the invisible auto-scroll
- * sentinel — an `!important` declaration inside a cascade layer outranks the
- * unlayered `!important` reset globals.css gives it, so anything styling rows
- * from inside a layer has to skip it by selector or the sentinel grows a box.
+ * sentinel — globals.css resets it `height/padding/margin: 0 !important`
+ * UNLAYERED, which outranks this whole layer, so anything styling rows from
+ * inside a layer has to skip it by selector or the sentinel grows a box.
  */
 const CHAT_ROW = '> div:not(.event-message):not(.scroll-anchor)'
 
@@ -152,26 +152,27 @@ interface OverrideRule {
 }
 
 /**
- * Customizer properties delivered as an `!important` rule instead of a bare
- * custom property on `:root`.
+ * Customizer properties delivered as a rule instead of a bare custom property
+ * on `:root`.
  *
  * A `--chat-*` variable only reaches the pixels if SOMETHING consumes it —
  * a rule in events.css, or a `var()` in the active theme. These properties have
- * neither, so the overlay pages applied them as plain inline styles: the
+ * neither, so the overlay pages once applied them as plain inline styles: the
  * weakest declaration in the cascade. Every bundled theme declares
- * `text-shadow` / `box-shadow` with `!important`, and an `!important`
- * declaration beats a normal inline style, so the controls were inert on every
- * themed overlay — the Text Shadow control (Soft / Strong / **Outline**) did
- * nothing, and the whole Platform Colors section did nothing anywhere because
- * `--platform-*-accent` had no consumer at all.
+ * `text-shadow` / `box-shadow`, and any declaration beats a normal inline
+ * style, so the controls were inert on every themed overlay — the Text Shadow
+ * control (Soft / Strong / **Outline**) did nothing, and the whole Platform
+ * Colors section did nothing anywhere because `--platform-*-accent` had no
+ * consumer at all.
  *
- * These rules are `!important` inside `@layer visual-customizer`, which beats a
- * theme's unlayered `!important` (CSS Cascade 5 reverses layer order for
- * important declarations and ranks unlayered last) — the same mechanism
- * events.css already uses for every other customizer property.
+ * These rules live in `@layer visual-customizer`, the top computed layer on
+ * overlay pages, so at normal weight they beat every theme rule (themes are
+ * wrapped into `@layer marketplace-themes` at injection) and every Tailwind
+ * utility. Manual CSS is injected unlayered and still outranks them — that is
+ * the intended hierarchy: manual CSS > GUI settings > theme.
  *
- * They are emitted ONLY when the field is set, and that is what makes forcing
- * them safe: no bundled theme declares or reads any of these variables, so a
+ * They are emitted ONLY when the field is set, and that is what makes them
+ * safe: no bundled theme declares or reads any of these variables, so a
  * value here can only have come from the user, and an unset control emits
  * nothing and leaves the theme's own look untouched.
  *
@@ -202,8 +203,7 @@ const OVERRIDE_RULES: readonly OverrideRule[] = [
     },
   ]),
 ]
-
-/** Field names this module forces with an `!important` rule (see OVERRIDE_RULES). */
+/** Field names this module delivers as dedicated rules (see OVERRIDE_RULES). */
 export const OVERRIDDEN_FIELDS: ReadonlySet<keyof VisualSettings> = new Set(
   OVERRIDE_RULES.map((rule) => rule.field)
 )
@@ -246,10 +246,9 @@ export function resolveBubblePalette(settings: Partial<VisualSettings>): string[
  * Differently-coloured bubbles: a palette cycled down the feed, plus per-platform
  * fills that win over it.
  *
- * Emitted as `!important` rules inside the cascade layer for the same reason as
- * OVERRIDE_RULES — a theme's own `background: … !important` on the row would
- * otherwise beat them — and, like those, only when configured, so an unset
- * control leaves the theme's fill alone.
+ * Emitted inside the cascade layer for the same reason as OVERRIDE_RULES, and,
+ * like those, only when configured, so an unset control leaves the theme's
+ * fill alone.
  *
  * Order matters and is the precedence rule: palette first, platform second. Both
  * selectors are one class plus one attribute, so specificity ties and the later
@@ -263,7 +262,7 @@ function bubbleFillRules(settings: Partial<VisualSettings>): string[] {
     [
       FEED_SCOPES.map((scope) => `  ${scope} > div${predicate}:not(.event-message)`).join(',\n') +
         ' {',
-      `    background-color: ${color} !important;`,
+      `    background-color: ${color};`,
       '  }',
     ].join('\n')
 
@@ -310,7 +309,7 @@ function overrideRules(settings: Partial<VisualSettings>): string[] {
     blocks.push(
       [
         selectors.map((selector) => `  ${selector}`).join(',\n') + ' {',
-        ...properties.map((property) => `    ${property}: ${value} !important;`),
+        ...properties.map((property) => `    ${property}: ${value};`),
         '  }',
       ].join('\n')
     )

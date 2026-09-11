@@ -221,11 +221,11 @@ Every chat message follows this structure:
 .space-y-3 div { }
 ```
 
-**Always use `!important`** to override Tailwind defaults:
+**No `!important` needed** — custom CSS is unlayered and outranks the app's
+cascade layers (Tailwind utilities, themes, GUI settings alike):
 ```css
 .space-y-3 > div {
-  background: #000 !important;  /* ✅ CORRECT */
-  background: #000;              /* ❌ May not work */
+  background: #000;
 }
 ```
 

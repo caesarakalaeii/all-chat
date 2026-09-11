@@ -2061,6 +2061,10 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           // The palette's CSS rules key on a per-row attribute the preview has
           // to render itself, so it needs the list, not just the CSS.
           bubblePalette: settings.bubblePalette,
+          // Pronoun pill renders in React on both pages, not from CSS
+          showPronouns: settings.showPronouns,
+          pronounPosition: settings.pronounPosition,
+          pronounColor: settings.pronounColor,
         },
       },
       '*'
@@ -2180,9 +2184,14 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     [id]
   )
 
-  // --- sendCustomCssToIframe: post custom/theme CSS to the embed preview ---
-  const sendCustomCssToIframe = useCallback((css: string) => {
-    iframeRef.current?.contentWindow?.postMessage({ type: 'CUSTOM_CSS_UPDATE', css }, '*')
+  // --- sendCustomCssToIframe: post theme + custom CSS to the embed preview.
+  // Sent as two tiers so the embed can wrap the theme into its cascade layer
+  // while the custom delta/manual CSS stays unlayered (see wrap-theme-css). ---
+  const sendCustomCssToIframe = useCallback((themeCss: string, customCss: string) => {
+    iframeRef.current?.contentWindow?.postMessage(
+      { type: 'CUSTOM_CSS_UPDATE', themeCss, customCss },
+      '*'
+    )
   }, [])
 
   // --- handleCustomCssChange: user typed in the Advanced CSS editor ---
@@ -2197,10 +2206,20 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
         const closes = (value.match(/}/g) ?? []).length
         // Only push when braces balance; otherwise keep the last good preview and
         // let Monaco's inline markers guide the user until the rule is closed.
-        if (opens === closes) sendCustomCssToIframe(value)
-        // Recompute the storage mode (linked / diff / fork) so the status pill tells
-        // the user whether this overlay still tracks theme updates.
-        void computeThemeCssDiff(pristineThemeCss, value).then((d) => setCustomCssMode(d.mode))
+        // The delta is what the user actually changed; the theme ships as the
+        // pristine baseline so the embed can tier it below the delta.
+        if (opens === closes) {
+          void computeThemeCssDiff(pristineThemeCss, value).then((d) => {
+            setCustomCssMode(d.mode)
+            // `stored` is the unlayered delta/manual copy that outranks both
+            // the theme layer and the GUI layer in the embed.
+            sendCustomCssToIframe(pristineThemeCss, d.stored)
+          })
+        } else {
+          // Recompute the storage mode even mid-edit so the status pill stays
+          // truthful; the preview keeps the last good push.
+          void computeThemeCssDiff(pristineThemeCss, value).then((x) => setCustomCssMode(x.mode))
+        }
       }, 300)
     },
     [sendCustomCssToIframe, pristineThemeCss]
@@ -2222,7 +2241,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     setCustomCss(pristineThemeCss)
     setCssIssues([])
     setCustomCssMode('linked')
-    sendCustomCssToIframe(pristineThemeCss)
+    sendCustomCssToIframe(pristineThemeCss, '')
   }, [pristineThemeCss, sendCustomCssToIframe])
 
   // --- applyThemeImmediately: reference the theme by id + apply its parsed
@@ -2241,7 +2260,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
       setVisualSettings(parsed)
       setParsedThemeSettings(parsed)
       sendCssToIframe(parsed)
-      sendCustomCssToIframe(theme.css)
+      sendCustomCssToIframe(theme.css, '')
     },
     [sendCssToIframe, sendCustomCssToIframe]
   )

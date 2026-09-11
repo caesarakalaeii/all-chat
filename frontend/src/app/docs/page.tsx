@@ -284,8 +284,8 @@ const FEED_ANCHOR_CSS_EXAMPLE = `/* Fade the far end of the feed, whichever end 
 }`
 
 const FORCED_VARS_CSS_EXAMPLE = `:root {
-  --chat-font-weight: 800;          /* plain "font-weight: 800" on the message text loses to the overlay's own rule */
-  --chat-bubble-border-radius: 0;    /* so does "border-radius: 0" on the bubble — set the variable instead */
+  --chat-font-weight: 800;          /* the appearance panel's controls read these too — a value you set here wins over the panel */
+  --chat-bubble-border-radius: 0;
 }`
 
 const PLATFORM_STRIPE_CSS_EXAMPLE = `.chat-message[data-platform="twitch"]  { border-left: 4px solid #9146FF; }
