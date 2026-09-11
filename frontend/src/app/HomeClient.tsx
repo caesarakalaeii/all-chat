@@ -202,7 +202,7 @@ export default function HomeClient() {
     <div ref={homeRef} className={cn('lanes-home', archivoBlack.variable, spaceMono.variable)}>
       <main id="main-content" tabIndex={-1} className="min-h-screen scroll-smooth">
         <LanesHero
-          totalDisplay={totalDisplay}
+          totalCount={totalCount}
           userName={user?.display_name}
           overlaysLive={overlaysLive}
           platformShares={platformShares}
