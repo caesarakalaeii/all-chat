@@ -54,6 +54,7 @@ import {
   type BubbleSlotState,
 } from '@/lib/utils/bubbleSlot'
 import {
+  isBubbleColorFromUser,
   isMessageAnimation,
   MESSAGE_ANIMATION_CLASS,
   type MessageAnimation,
@@ -61,7 +62,11 @@ import {
 import { getBundledTheme } from '@/lib/theme-marketplace/bundled-themes'
 import { rewriteThemeFontImports } from '@/lib/theme-marketplace/font-proxy'
 import { wrapThemeCss } from '@/lib/theme-marketplace/wrap-theme-css'
-import { chatBubbleStyle, overlayContainerStyle } from '@/lib/utils/visual-inline-styles'
+import {
+  chatBubbleStyle,
+  overlayContainerStyle,
+  userBubbleStyle,
+} from '@/lib/utils/visual-inline-styles'
 import { AllChatBadge } from '@/components/AllChatBadge'
 import { UserAvatar } from '@/components/UserAvatar'
 import { PremiumBadge } from '@/components/PremiumBadge'
@@ -224,6 +229,13 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
   const [showPronouns, setShowPronouns] = useState(true)
   const [pronounPosition, setPronounPosition] = useState<'before' | 'after'>('after')
   const [pronounColor, setPronounColor] = useState('#7B68EE')
+  // Bubble colour from the username colour, mirroring the live overlay. Arrives
+  // on load from visual_settings and live via VISUAL_SETTINGS_UPDATE (the CSS
+  // rule needs the per-row attribute + custom properties React must write).
+  const [bubbleColorFromUser, setBubbleColorFromUser] = useState<'none' | 'background' | 'border'>(
+    'none'
+  )
+  const [bubbleUserColorOpacity, setBubbleUserColorOpacity] = useState('0.85')
   const [platformBadgePosition, setPlatformBadgePosition] = useState<'before' | 'after'>('before')
   const [platformBadgeStyle, setPlatformBadgeStyle] = useState<'text' | 'icon'>('text')
   const [showPlatformBadge, setShowPlatformBadge] = useState(true)
@@ -364,6 +376,14 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
         }
         if (typeof s.pronounColor === 'string' && s.pronounColor) {
           setPronounColor(s.pronounColor)
+        }
+        // Unconditional too: switching the mode off must drop the per-row
+        // attribute and custom properties, not just the CSS rule.
+        setBubbleColorFromUser(
+          isBubbleColorFromUser(s.bubbleColorFromUser) ? s.bubbleColorFromUser : 'none'
+        )
+        if (typeof s.bubbleUserColorOpacity === 'string') {
+          setBubbleUserColorOpacity(s.bubbleUserColorOpacity)
         }
         return
       }
@@ -518,6 +538,10 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
         setContainerStyle(overlayContainerStyle(vs))
         setBubbleStyle(chatBubbleStyle(vs))
         setBubblePalette(resolveBubblePalette(vs))
+        setBubbleColorFromUser(isBubbleColorFromUser(vs.bubbleColorFromUser) ? vs.bubbleColorFromUser : 'none')
+        if (typeof vs.bubbleUserColorOpacity === 'string') {
+          setBubbleUserColorOpacity(vs.bubbleUserColorOpacity)
+        }
         // Apply non-CSS visual settings
         if (vs.showPlatformBadge !== undefined) {
           setShowPlatformBadge(vs.showPlatformBadge !== 'none')
@@ -841,6 +865,9 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                       [BUBBLE_SLOT_ATTR]: isEvent
                         ? undefined
                         : bubbleSlot(bubbleSlots, message.id, bubblePalette.length),
+                      // Marks the row for the by-username bubble rule; the
+                      // colour rides in the style below.
+                      'data-user-bubble': isEvent || bubbleColorFromUser === 'none' ? undefined : '',
                     }}
                     className={
                       isEvent
@@ -856,7 +883,20 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                               : feedLayout.defaultEntryAnimationClass
                           )
                     }
-                    style={isEvent ? undefined : bubbleStyle}
+                    style={
+                      isEvent
+                        ? undefined
+                        : {
+                            ...bubbleStyle,
+                            ...(bubbleColorFromUser !== 'none'
+                              ? userBubbleStyle(
+                                  message.user,
+                                  { bubbleUserColorOpacity },
+                                  bubbleColorFromUser
+                                )
+                              : {}),
+                          }
+                    }
                   >
                     <div className="flex items-start gap-3">
                       {/* Avatar */}
@@ -980,7 +1020,11 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                           ) : (
                             <span
                               className="chat-username text-sm font-semibold"
-                              style={{ color: resolveUsernameColor(message.user) }}
+                              style={{
+                                color: resolveUsernameColor(message.user, {
+                                  staticColor: bubbleColorFromUser !== 'none',
+                                }),
+                              }}
                             >
                               {message.user.display_name}
                             </span>

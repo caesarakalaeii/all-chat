@@ -2065,6 +2065,8 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           showPronouns: settings.showPronouns,
           pronounPosition: settings.pronounPosition,
           pronounColor: settings.pronounColor,
+          bubbleColorFromUser: settings.bubbleColorFromUser,
+          bubbleUserColorOpacity: settings.bubbleUserColorOpacity,
         },
       },
       '*'

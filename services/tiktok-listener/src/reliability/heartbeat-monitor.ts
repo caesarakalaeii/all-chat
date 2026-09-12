@@ -24,7 +24,7 @@
  * connection state.
  *
  * Only forces reconnection when BOTH conditions are true:
- * 1. Library reports connection is established (isConnected && upgradedToWebsocket)
+ * 1. Library reports connection is established (isConnected)
  * 2. No messages received within timeout period (indicating silent failure)
  *
  * This prevents unnecessary reconnections that trigger TikTok's anti-bot
@@ -32,7 +32,7 @@
  */
 
 import { Logger } from '../types/logger.js';
-import { TikTokLiveConnection } from 'tiktok-live-connector';
+import { TikTokLiveConnection, TikTokLiveConnectionState } from 'tiktok-live-connector';
 import { PrometheusMetrics } from '../metrics/prometheus.js';
 
 interface MonitorState {
@@ -175,10 +175,9 @@ export class HeartbeatMonitor {
 
     if (silenceDuration > this.HEARTBEAT_TIMEOUT) {
       // Check library's internal connection state before forcing reconnection
-      let libraryState: any;
+      let libraryState: TikTokLiveConnectionState;
       try {
-        // Note: getState() exists but isn't in TypeScript definitions, so we cast to any
-        libraryState = (state.connection as any).getState();
+        libraryState = state.connection.state;
       } catch (error) {
         this.logger.warn('Failed to get connection state from library', {
           username,
@@ -190,12 +189,11 @@ export class HeartbeatMonitor {
 
       // Only force reconnection if library thinks it's connected but we know it's not receiving data
       // This prevents unnecessary reconnections during normal disconnections or connection attempts
-      if (!libraryState.isConnected || !libraryState.upgradedToWebsocket) {
+      if (!libraryState.isConnected) {
         this.logger.debug('Heartbeat timeout but library reports connection not established - skipping forced reconnection', {
           username,
           silence_duration_ms: silenceDuration,
-          library_is_connected: libraryState.isConnected,
-          library_upgraded_to_websocket: libraryState.upgradedToWebsocket
+          library_is_connected: libraryState.isConnected
         });
         return;
       }
@@ -209,7 +207,6 @@ export class HeartbeatMonitor {
         timeout_threshold_ms: this.HEARTBEAT_TIMEOUT,
         library_state: {
           is_connected: libraryState.isConnected,
-          upgraded_to_websocket: libraryState.upgradedToWebsocket,
           room_id: libraryState.roomId
         }
       });

@@ -282,6 +282,40 @@ function bubbleFillRules(settings: Partial<VisualSettings>): string[] {
 }
 
 /**
+ * Bubble colour from the username colour. The overlay surfaces write each
+ * row's colour as inline custom properties (userBubbleStyle in
+ * visual-inline-styles) and mark the row with `data-user-bubble`; this rule is
+ * the !important consumer that turns them into a visible fill or border.
+ *
+ * Beats everything else by specificity, not order: three attribute/class
+ * selectors plus the scope class (0,4,0... counting `:not()` arguments —
+ * [data-user-bubble] plus two :not()s) outrank palette and platform fills
+ * (one attribute plus one :not()), so it is emitted after them but wins
+ * regardless. The `:not(.scroll-anchor)` is documentary — the sentinel never
+ * carries the attribute — matching the events.css row rule's shape so the
+ * two selectors stay diffable side by side.
+ *
+ * Both custom properties always consume: in background mode the border pair
+ * falls back to transparent/0px, in border mode the fill pair to transparent,
+ * so a row's unused half is inert without a second rule.
+ */
+function userBubbleRules(settings: Partial<VisualSettings>): string[] {
+  const mode = settings.bubbleColorFromUser
+  if (mode !== 'background' && mode !== 'border') return []
+  return [
+    [
+      FEED_SCOPES.map(
+        (scope) => `  ${scope} > div[data-user-bubble]:not(.event-message):not(.scroll-anchor)`
+      ).join(',\n') + ' {',
+      '    background-color: var(--row-user-bg, var(--row-user-bg-image, transparent)) !important;',
+      '    border-color: var(--row-user-border-color, transparent) !important;',
+      '    border-width: var(--row-user-border-width, 0px) !important;',
+      '  }',
+    ].join('\n'),
+  ]
+}
+
+/**
  * The value to emit for a field, which is not always the value that was
  * stored. `textShadow` carries the outline's thickness inside the declaration
  * (see text-outline.ts), so the declaration is re-derived from that thickness
@@ -346,7 +380,7 @@ export function visualSettingsToCss(settings: Partial<VisualSettings>): string {
   if (declarations.length > 0) {
     blocks.push(['  :root {', ...declarations, '  }'].join('\n'))
   }
-  blocks.push(...overrideRules(settings), ...bubbleFillRules(settings))
+  blocks.push(...overrideRules(settings), ...bubbleFillRules(settings), ...userBubbleRules(settings))
 
   if (blocks.length === 0) {
     return ''

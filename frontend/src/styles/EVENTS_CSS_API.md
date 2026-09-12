@@ -151,8 +151,11 @@ Consequences for theme authors:
   user's manual custom CSS: it is unlayered too and, being loaded after, it
   wins the last-writer contest against unlayered themes of equal weight.
 - `.event-message` is deliberately **excluded** from the bubble rules in
-  `@layer visual-customizer`, so events follow the customizer's _defaults_ via
-  the `--event-*` token fallbacks rather than being forced by GUI rules.
+  `@layer visual-customizer` (the per-platform and palette fills, and the
+  username-colour bubble rule keyed on `data-user-bubble`): an inescapable
+  rule is the wrong tool for something themes are supposed to restyle, so
+  events follow the customizer's _defaults_ via the `--event-*` token
+  fallbacks rather than being forced by GUI rules.
 
 ## Usage Example
 

@@ -48,11 +48,18 @@ const PurposeModeration = "moderation"
 
 // OAuthState represents the state parameter for OAuth flow
 type OAuthState struct {
-	CSRFToken string      `json:"csrf_token"` // Random string for CSRF protection
+	CSRFToken string      `json:"csrf_token"`           // Random string for CSRF protection
 	OverlayID string      `json:"overlay_id,omitempty"` // Target overlay for source addition
-	UserID    string      `json:"user_id,omitempty"` // Current user ID for account linking
-	Action    OAuthAction `json:"action"` // Action to take after callback
-	Purpose   string      `json:"purpose,omitempty"` // Sub-flow marker (e.g. moderation re-consent)
+	UserID    string      `json:"user_id,omitempty"`    // Current user ID for account linking
+	Action    OAuthAction `json:"action"`               // Action to take after callback
+	Purpose   string      `json:"purpose,omitempty"`    // Sub-flow marker (e.g. moderation re-consent)
+	// Origin is the allowlisted frontend origin (e.g. https://beta.allch.at) the
+	// flow was started from. It selects the provider redirect_uri at authorize
+	// and exchange time and the frontend the callback redirects back to. Set
+	// server-side only; the callback byte-compares the query state against the
+	// Redis copy, so a tampered origin never survives validation. Empty means
+	// the canonical FRONTEND_URL (states written before this field existed).
+	Origin string `json:"origin,omitempty"`
 }
 
 // NewLoginState creates a new state for login flow

@@ -107,4 +107,56 @@ describe('BubbleColorsGroup', () => {
     expect(screen.getByLabelText(/remove colour 1/i)).toHaveProperty('disabled', true)
     expect(screen.getByText(/add colour/i)).toHaveProperty('disabled', true)
   })
+
+  describe('by-username bubbles', () => {
+    it('is off by default and the mode controls are dimmed', () => {
+      renderGroup({})
+
+      const toggle = screen.getByRole('switch', { name: 'Use username colours' })
+      expect(toggle.getAttribute('aria-checked')).toBe('false')
+      // Radios are in the tree but unchecked while the toggle is off.
+      expect(screen.getByLabelText('Fill')).toHaveProperty('checked', false)
+      expect(screen.getByLabelText('Outline')).toHaveProperty('checked', false)
+    })
+
+    it('turning the toggle on selects fill mode', () => {
+      const { onChange } = renderGroup({})
+
+      fireEvent.click(screen.getByRole('switch', { name: 'Use username colours' }))
+
+      expect(onChange).toHaveBeenCalledWith({ bubbleColorFromUser: 'background' })
+    })
+
+    it('turning the toggle off unsets the setting', () => {
+      const { onChange } = renderGroup({ bubbleColorFromUser: 'border' })
+
+      fireEvent.click(screen.getByRole('switch', { name: 'Use username colours' }))
+
+      expect(onChange).toHaveBeenCalledWith({ bubbleColorFromUser: undefined })
+    })
+
+
+    it('picking Outline patches the mode without touching the opacity', () => {
+      const { onChange } = renderGroup({
+        bubbleColorFromUser: 'background',
+        bubbleUserColorOpacity: '0.5',
+      })
+
+      fireEvent.click(screen.getByLabelText('Outline'))
+
+      expect(onChange).toHaveBeenCalledWith({ bubbleColorFromUser: 'border' })
+    })
+
+    it('moving the opacity slider patches the setting as a string', () => {
+      const { onChange } = renderGroup({
+        bubbleColorFromUser: 'background',
+        bubbleUserColorOpacity: '0.85',
+      })
+
+      // SliderControl fires change with the numeric value.
+      fireEvent.change(screen.getByLabelText(/fill opacity/i), { target: { value: '0.5' } })
+
+      expect(onChange).toHaveBeenCalledWith({ bubbleUserColorOpacity: '0.5' })
+    })
+  })
 })
