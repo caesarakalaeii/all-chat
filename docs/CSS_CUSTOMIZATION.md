@@ -29,21 +29,22 @@
 ```css
 /* Change message background color and border */
 .space-y-3 > div {
-  background: rgba(20, 20, 30, 0.95) !important;
-  border: 2px solid #9146FF !important;
-  border-radius: 8px !important;
-  padding: 12px !important;
+  background: rgba(20, 20, 30, 0.95);
+  border: 2px solid #9146FF;
+  border-radius: 8px;
+  padding: 12px;
 }
 
 /* Change username color */
 .font-semibold.text-sm {
-  color: #FFD700 !important;
+  color: #FFD700;
 }
 
 /* Change message text color */
 .text-white.break-words {
-  color: #FFFFFF !important;
+  color: #FFFFFF;
 }
+
 ```
 
 **Copy this template, modify colors/sizes, and paste into:**
@@ -221,11 +222,11 @@ Every chat message follows this structure:
 .space-y-3 div { }
 ```
 
-**Always use `!important`** to override Tailwind defaults:
+**No `!important` needed** — custom CSS is unlayered and outranks the app's
+cascade layers (Tailwind utilities, themes, GUI settings alike):
 ```css
 .space-y-3 > div {
-  background: #000 !important;  /* ✅ CORRECT */
-  background: #000;              /* ❌ May not work */
+  background: #000;
 }
 ```
 
@@ -2125,22 +2126,15 @@ A complete Windows 98-themed overlay is available at:
 
 **Possible Causes:**
 
-1. **Missing `!important`**
-   ```css
-   /* ❌ Won't work */
-   .space-y-3 > div { background: red; }
+1. **Typo in the selector** — check the class names against the page markup
 
-   /* ✅ Will work */
-   .space-y-3 > div { background: red !important; }
-   ```
-
-2. **Wrong selector specificity**
+2. **Selector too broad, hits nested elements**
    ```css
    /* ❌ Too broad, may conflict */
-   div { background: red !important; }
+   div { background: red; }
 
    /* ✅ Specific selector */
-   .space-y-3 > div { background: red !important; }
+   .space-y-3 > div { background: red; }
    ```
 
 3. **CSS syntax error** - Check browser console (F12) for errors
@@ -2226,7 +2220,7 @@ A complete Windows 98-themed overlay is available at:
 
 ### ✅ DO
 
-- **Always use `!important`** to override Tailwind styles
+- **Skip `!important`** — custom CSS is unlayered and outranks the app's cascade layers
 - **Test in OBS** after making changes (not just browser)
 - **Use specific selectors** (`.space-y-3 > div`)
 - **Include fallback fonts** for custom fonts
@@ -2236,7 +2230,6 @@ A complete Windows 98-themed overlay is available at:
 ### ❌ DON'T
 
 - **Don't use overly broad selectors** (`div { }`)
-- **Don't forget `!important`** (styles won't apply)
 - **Don't overuse blur effects** (performance killer)
 - **Don't rely on JavaScript** (not supported in CSS field)
 - **Don't use local file paths** (use CDN URLs)

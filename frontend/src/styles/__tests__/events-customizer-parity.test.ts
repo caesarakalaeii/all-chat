@@ -45,9 +45,9 @@ const LIVE_EXCEPTIONS = new Set<string>([
   '--chat-show-badges',
   '--chat-show-username',
   '--chat-show-timestamps',
-  // Body font-size: applied inline in React (visual `fontSize` ?? legacy
-  // `display.font_size`) so it doesn't clobber the legacy display-settings path.
-  '--chat-font-size',
+  // Body font-size used to live here as an exception (inline React delivery);
+  // it is now consumed by the layered `.overlay-live-body .break-words` rule,
+  // so it must stay unlisted for parity to hold.
   // Overlay padding: the live overlay owns its outer padding (`p-4`); this is not
   // a user-facing customizer control.
   '--chat-overlay-padding',
@@ -177,9 +177,10 @@ describe('events.css visual-customizer scope parity', () => {
 
   it('lets plain-text messages use the unfloored line-height', () => {
     const baseLineHeight = CSS.match(
-      /line-height:\s*calc\(var\(--chat-line-height, 1\.5\) \* 1em\)\s*!important/g
+      /line-height:\s*calc\(var\(--chat-line-height, 1\.5\) \* 1em\)/g
     )
-    // one per scope (preview + live), in the base `.break-words` rule
+    // one per scope (preview + live), in the base `.break-words` rule; normal
+    // weight — the layer order, not !important, ranks it above utilities
     expect(baseLineHeight?.length).toBe(2)
   })
 })

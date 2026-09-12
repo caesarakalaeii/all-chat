@@ -74,10 +74,7 @@ export function DockNoticeBar({
       {/* Capped and scrollable: expanding eight notices must not push chat off
           the panel either. */}
       {expanded && (
-        <div
-          aria-label={t('viewerOverlay.dock.noticesLabel')}
-          className="max-h-48 overflow-y-auto"
-        >
+        <div aria-label={t('viewerOverlay.dock.noticesLabel')} className="max-h-48 overflow-y-auto">
           {children}
         </div>
       )}

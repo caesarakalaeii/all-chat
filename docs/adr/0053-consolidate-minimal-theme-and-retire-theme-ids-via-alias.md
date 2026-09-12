@@ -97,10 +97,12 @@ documents: an unset control produces no visible change, a set control applies.
 Fixing the strut was not enough: the rows were still far too tall. The dominant
 cost was **bubble padding the theme had explicitly deleted**.
 
-The visual-customizer rules are `!important` inside `@layer visual-customizer`,
-which beats a theme's *unlayered* `!important`. That is correct for a control the
-user actually set. The defect was that each declaration also carried the
-**platform default as its `var()` fallback**:
+The visual-customizer rules live inside `@layer visual-customizer` (since PR
+#860 they emit at normal weight, no `!important` — the customizer's rank comes
+from the layer order, and a streamer's unlayered manual CSS wins over both).
+That is correct for a control the user actually set. The defect at the time
+was that each declaration also carried the **platform default as its `var()`
+fallback**:
 
 ```css
 padding: var(--chat-bubble-padding, 0.75rem) !important;   /* before */
@@ -115,14 +117,15 @@ Effective precedence was `(customizer OR platform default) > theme`.
 The fallback is now a **theme-intent step**:
 
 ```css
-padding: var(--chat-bubble-padding, var(--theme-bubble-padding, 0.75rem)) !important;
+padding: var(--chat-bubble-padding, var(--theme-bubble-padding, 0.75rem));
 ```
 
 giving the intended order: **customizer setting > theme intent > platform
 default**. A theme opts in by declaring `--theme-*` (`--theme-bubble-padding`,
 `--theme-bubble-border-radius`, `--theme-bubble-border-width`,
-`--theme-backdrop-blur`, `--theme-message-gap`); a theme that declares nothing
-behaves exactly as before, so this is backwards-compatible across the bundle.
+`--theme-backdrop-blur`, `--theme-message-gap`, `--theme-avatar-gap`); a theme
+that declares nothing behaves exactly as before, so this is
+backwards-compatible across the bundle.
 
 Measured on the reporter's saved settings (`lineHeight: 1`, `messageGap: 8px`),
 row pitch went **48px → 24px** — which is now exactly `1 × 16px + 8px`, i.e. the

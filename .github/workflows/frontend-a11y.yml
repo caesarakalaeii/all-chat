@@ -172,6 +172,54 @@ jobs:
       - name: Storybook a11y tests (axe violations = error)
         run: npx vitest --project storybook --run
 
+  cascade-browser:
+    name: Overlay CSS cascade (real Chromium)
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    # Same shape as a11y-storybook: all headroom belongs to the retried
+    # Chromium install; the suite itself is one fixture page.
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Same bounded retry as a11y-storybook: a stalled mirror once produced
+      # an 11-minute install and a ~4-hour hang.
+      - name: Install Playwright Chromium
+        timeout-minutes: 16
+        run: |
+          for attempt in 1 2 3; do
+            if timeout --kill-after=30s 5m npx playwright install --with-deps chromium; then
+              exit 0
+            fi
+            echo "::warning::Chromium install attempt $attempt stalled or failed; retrying"
+            sleep 10
+          done
+          echo "::error::Chromium install failed after 3 attempts"
+          exit 1
+
+      # Real-Chromium guard for the overlay precedence hierarchy
+      # (manual CSS > GUI settings > theme). The unit suite pins the source
+      # shape; this pins the computed styles, because layer order only
+      # becomes observable when Tailwind, events.css, the wrapped theme and
+      # the GUI emitter are all loaded in one document. Cannot run on the
+      # NixOS dev host (flake.nix: downloaded Chromium needs a host ldso), so
+      # CI is its only execution surface.
+      - name: Overlay CSS cascade tests
+        run: npx vitest --project browser --run
+
   a11y-smoke:
     name: Axe page smoke (Playwright)
     needs: changes

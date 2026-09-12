@@ -337,6 +337,8 @@ export const docs = {
     cssVarsHeading: 'Quick wins: style variables',
     cssVarsIntro:
       'The easiest lever needs no knowledge of class names. Set any of these variables on {root} and the overlay picks them up:',
+    cssVarsForced:
+      "One group of variables is special: font weight, bubble corners, line height, letter spacing, message color and font family are read from these variables by the overlay's own styling, so a value you set here also beats the appearance panel's slider.",
     cssVarsColumnVariable: 'Variable',
     cssVarsColumnDefault: 'Default',
     cssVarsColumnEffect: 'What it changes',
@@ -387,9 +389,12 @@ export const docs = {
   // lint gate, so a literal here would have stayed behind silently.
   guideCssVars: {
     chatFontSize: 'Message text size.',
+    chatFontWeight: 'Message text weight.',
     chatFontFamily: 'Message text font.',
+    chatUsernameFontWeight: 'Username weight.',
     chatMessageColor: 'Message text color.',
     chatMessageGap: 'Vertical space between messages.',
+    chatAvatarGap: 'Space between the avatar and the message text.',
     chatBubbleBorderRadius: 'Roundness of the message bubble.',
     chatBubblePadding: 'Padding inside each message.',
     chatAvatarSize: 'Avatar width and height.',

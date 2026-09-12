@@ -31,8 +31,8 @@ properties, so a theme re-skins events from one block:
 }
 ```
 
-Because theme CSS is unlayered and the defaults live in `@layer
-marketplace-themes`, your token values win **without** `!important`.
+Because theme CSS is injected into the same `@layer marketplace-themes` as
+these defaults — after them — your token values win **without** `!important`.
 
 ### Flatten events into ordinary chat rows
 

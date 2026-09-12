@@ -61,6 +61,7 @@ import {
 } from '@/lib/types/visual-settings'
 import { getBundledTheme } from '@/lib/theme-marketplace/bundled-themes'
 import { rewriteThemeFontImports } from '@/lib/theme-marketplace/font-proxy'
+import { wrapThemeCss } from '@/lib/theme-marketplace/wrap-theme-css'
 import {
   chatBubbleStyle,
   overlayContainerStyle,
@@ -203,7 +204,13 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
   // Activation aha-moment: the first real chat message rendering in the editor
   // preview means the overlay is actually working. Fires once per mount.
   useTrackOnce('preview_rendered', undefined, messages.length > 0)
-  const [fontSize, setFontSize] = useState(16)
+  // Legacy display-settings `font_size`, emitted as --chat-legacy-font-size so
+  // it feeds the same layered rule as the GUI control (see the live overlay).
+  const [legacyFontSize, setLegacyFontSize] = useState<number | null>(null)
+  // Theme CSS, already wrapped into @layer marketplace-themes (see
+  // wrapThemeCss) so it ranks below the GUI layer; the user's manual CSS stays
+  // unlayered in customCss and outranks both.
+  const [themeCss, setThemeCss] = useState('')
   const [customCss, setCustomCss] = useState('')
   const [useCustomCss, setUseCustomCss] = useState(false)
   const [visualSettingsCss, setVisualSettingsCss] = useState('')
@@ -216,6 +223,12 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
   // enough — the per-row slot attribute has to be written in React).
   const [bubblePalette, setBubblePalette] = useState<string[]>([])
   const [bubbleSlots, setBubbleSlots] = useState<BubbleSlotState>(EMPTY_BUBBLE_SLOTS)
+  // Entry animation for new chat bubbles; null keeps the default fade + slide-up
+  const [messageAnimation, setMessageAnimation] = useState<MessageAnimation | null>(null)
+  // Pronoun pill, mirroring the live overlay (D-07: default on, after, slate blue)
+  const [showPronouns, setShowPronouns] = useState(true)
+  const [pronounPosition, setPronounPosition] = useState<'before' | 'after'>('after')
+  const [pronounColor, setPronounColor] = useState('#7B68EE')
   // Bubble colour from the username colour, mirroring the live overlay. Arrives
   // on load from visual_settings and live via VISUAL_SETTINGS_UPDATE (the CSS
   // rule needs the per-row attribute + custom properties React must write).
@@ -226,8 +239,6 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
   const [platformBadgePosition, setPlatformBadgePosition] = useState<'before' | 'after'>('before')
   const [platformBadgeStyle, setPlatformBadgeStyle] = useState<'text' | 'icon'>('text')
   const [showPlatformBadge, setShowPlatformBadge] = useState(true)
-  // Entry animation for new chat bubbles; null keeps the default fade + slide-up
-  const [messageAnimation, setMessageAnimation] = useState<MessageAnimation | null>(null)
   // Feed layout, mirroring the live overlay so the preview is a faithful
   // pick-and-compare. Display settings only arrive on load (the editor sends no
   // DISPLAY_SETTINGS_UPDATE postMessage), so a save + iframe reload is needed
@@ -305,16 +316,21 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }, [messages, feedLayout])
 
+  // themeCss is already wrapped into @layer marketplace-themes; customCss is
+  // the user's manual (or diff) CSS and must stay unlayered. scopeCustomCss
+  // scopes selectors inside the layer body without unwrapping it, so one pass
+  // over the joined blob preserves both tiers.
   const scopedPreviewCss = useMemo(() => {
-    if (!useCustomCss || !customCss.trim()) {
+    const blob = [themeCss, customCss].filter((s) => s.trim().length).join('\n')
+    if (!useCustomCss || !blob.trim()) {
       return ''
     }
     return scopeCustomCss(
-      customCss,
+      blob,
       '#overlay-preview-root',
       '#overlay-preview-root .overlay-preview-body'
     )
-  }, [customCss, useCustomCss])
+  }, [themeCss, customCss, useCustomCss])
 
   // postMessage listener for live visual CSS updates from the editor
   useEffect(() => {
@@ -350,6 +366,17 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
         setMessageAnimation(isMessageAnimation(s.messageAnimation) ? s.messageAnimation : null)
         // Same reason: emptying the palette has to drop the slot attributes too
         setBubblePalette(resolveBubblePalette({ bubblePalette: s.bubblePalette }))
+        // Pronoun pill mirrors the live overlay: unconditional reads so an
+        // unset field restores its default instead of freezing the last value.
+        if (s.showPronouns !== undefined) {
+          setShowPronouns(s.showPronouns !== 'none')
+        }
+        if (s.pronounPosition === 'before' || s.pronounPosition === 'after') {
+          setPronounPosition(s.pronounPosition)
+        }
+        if (typeof s.pronounColor === 'string' && s.pronounColor) {
+          setPronounColor(s.pronounColor)
+        }
         // Unconditional too: switching the mode off must drop the per-row
         // attribute and custom properties, not just the CSS rule.
         setBubbleColorFromUser(
@@ -360,13 +387,22 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
         }
         return
       }
-      // Live custom/theme CSS from the editor (theme apply, or typing in the
-      // Advanced editor). Rewrite Google Fonts @imports to the same-origin proxy
-      // so fonts load under CSP during live editing, matching the initial-load path.
+      // Live theme + custom CSS from the editor (theme apply, or typing in the
+      // Advanced editor), sent as separate tiers: themeCss is the pristine
+      // theme (wrapped into its layer here), customCss is the user's stored
+      // delta or manual CSS and stays unlayered. Google Fonts @imports are
+      // rewritten to the same-origin proxy so fonts load under CSP during live
+      // editing, matching the initial-load path.
       if (event.data?.type === 'CUSTOM_CSS_UPDATE') {
-        const css = rewriteThemeFontImports(event.data.css as string)
-        setCustomCss(css)
-        setUseCustomCss(Boolean(css.trim().length))
+        const theme = wrapThemeCss(
+          rewriteThemeFontImports(
+            typeof event.data.themeCss === 'string' ? event.data.themeCss : '',
+          ),
+        )
+        const custom = typeof event.data.customCss === 'string' ? event.data.customCss : ''
+        setThemeCss(theme)
+        setCustomCss(custom)
+        setUseCustomCss(Boolean(theme.trim().length || custom.trim().length))
         return
       }
       if (event.data?.type === 'FILTER_SETTINGS_UPDATE') {
@@ -460,7 +496,7 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
         if (typeof display.max_messages === 'number') setMaxMessages(display.max_messages)
         setInvertMessageOrder(display.invert_message_order === true)
         setFeedAnchor(parseFeedAnchor(display.feed_anchor))
-        if (typeof display.font_size === 'number') setFontSize(display.font_size)
+        if (typeof display.font_size === 'number') setLegacyFontSize(display.font_size)
         if (
           display.platform_badge_position === 'before' ||
           display.platform_badge_position === 'after'
@@ -473,17 +509,27 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
         if (typeof display.show_platform_badge === 'boolean') {
           setShowPlatformBadge(display.show_platform_badge)
         }
+        if (typeof display.show_pronouns === 'boolean') {
+          setShowPronouns(display.show_pronouns)
+        }
+        if (display.pronoun_position === 'before' || display.pronoun_position === 'after') {
+          setPronounPosition(display.pronoun_position)
+        }
+        if (typeof display.pronoun_color === 'string' && display.pronoun_color) {
+          setPronounColor(display.pronoun_color)
+        }
 
-        // Bundled theme CSS (resolved fresh from the build by theme_id) + the
-        // user's raw custom_css overrides. Both are scoped to the preview root
-        // by scopedPreviewCss, mirroring the live overlay's theme→custom order.
-        const themeCss =
+        // Bundled theme CSS (resolved fresh from the build by theme_id),
+        // wrapped into its cascade layer so the preview matches the live
+        // overlay's tiering (GUI layer beats theme; manual CSS beats both).
+        // The user's raw custom_css stays unlayered in its own state.
+        const theme =
           typeof config.theme_id === 'string' && config.theme_id
-            ? rewriteThemeFontImports(getBundledTheme(config.theme_id)?.css ?? '')
+            ? wrapThemeCss(rewriteThemeFontImports(getBundledTheme(config.theme_id)?.css ?? ''))
             : ''
-        const css = [themeCss, config.custom_css || ''].filter((s) => s.trim().length).join('\n')
-        setCustomCss(css)
-        setUseCustomCss(Boolean(css.trim().length))
+        setThemeCss(theme)
+        setCustomCss(typeof config.custom_css === 'string' ? config.custom_css : '')
+        setUseCustomCss(Boolean(theme.trim().length || (config.custom_css ?? '').trim().length))
 
         // Apply saved visual settings (CSS variables) directly — no postMessage needed
         const vs = config.visual_settings ?? {}
@@ -505,6 +551,15 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
         }
         if (vs.platformBadgeStyle === 'text' || vs.platformBadgeStyle === 'icon') {
           setPlatformBadgeStyle(vs.platformBadgeStyle)
+        }
+        if (vs.showPronouns !== undefined) {
+          setShowPronouns(vs.showPronouns !== 'none')
+        }
+        if (vs.pronounPosition === 'before' || vs.pronounPosition === 'after') {
+          setPronounPosition(vs.pronounPosition)
+        }
+        if (typeof vs.pronounColor === 'string' && vs.pronounColor) {
+          setPronounColor(vs.pronounColor)
         }
         if (isMessageAnimation(vs.messageAnimation)) {
           setMessageAnimation(vs.messageAnimation)
@@ -723,6 +778,14 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
           dangerouslySetInnerHTML={{ __html: visualSettingsCss }}
         />
       )}
+      {legacyFontSize !== null && (
+        <style
+          id="overlay-preview-legacy-font-size"
+          dangerouslySetInnerHTML={{
+            __html: `:root { --chat-legacy-font-size: ${legacyFontSize}px; }`,
+          }}
+        />
+      )}
 
       {/* Flex column under feedAnchor 'bottom'; the list below must remain its
           only in-flow child, or the free space the `mt-auto` absorbs is split. */}
@@ -751,11 +814,11 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
             scrollbarColor: '#374151 transparent',
             // text-shadow inherits to every text node below, reaching nodes no
             // rule names (pronoun pill, shared-chat tag, event body). It does
-            // NOT make the setting stick — a normal inline style loses to the
-            // `text-shadow: … !important` every bundled theme declares on the
-            // message text. That is the job of the `!important` rule
-            // visualSettingsToCss emits in `@layer visual-customizer`. The var
-            // arrives via VISUAL_CSS_UPDATE (live) or visual_settings (load).
+            // NOT make the setting stick — an inline style loses to a theme's
+            // unlayered `text-shadow` on the message text. That is the job of
+            // the rule visualSettingsToCss emits in `@layer visual-customizer`
+            // (top layer, so it outranks the theme). The var arrives via
+            // VISUAL_CSS_UPDATE (live) or visual_settings (load).
             textShadow: 'var(--chat-text-shadow, none)',
             ...containerStyle,
           }}
@@ -810,7 +873,9 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                       isEvent
                         ? clsx('event-message', eventTierClass, eventTypeClass)
                         : clsx(
-                            'rounded-lg bg-slate-900/90 p-3 shadow-lg backdrop-blur-sm',
+                            // `chat-message` matches the live overlay; themes and
+                            // manual CSS key their chat rules on it.
+                            'chat-message rounded-lg bg-slate-900/90 p-3 shadow-lg backdrop-blur-sm',
                             // Mirror the live overlay's entry animation so the
                             // editor preview is a faithful pick-and-compare
                             messageAnimation
@@ -906,6 +971,18 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                               </div>
                             )}
 
+                          {/* Pronoun pill before username, mirroring the live overlay */}
+                          {showPronouns &&
+                            message.user?.pronouns &&
+                            pronounPosition === 'before' && (
+                              <span
+                                className="inline-flex items-center rounded-full px-2 py-1 text-[11px] leading-none font-semibold text-white"
+                                style={{ backgroundColor: pronounColor }}
+                              >
+                                {message.user.pronouns}
+                              </span>
+                            )}
+
                           {/* Username */}
                           {message.user.name_gradient ? (
                             <span
@@ -953,6 +1030,17 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                             </span>
                           )}
 
+                          {/* Pronoun pill after username, mirroring the live overlay */}
+                          {showPronouns &&
+                            message.user?.pronouns &&
+                            pronounPosition === 'after' && (
+                              <span
+                                className="inline-flex items-center rounded-full px-2 py-1 text-[11px] leading-none font-semibold text-white"
+                                style={{ backgroundColor: pronounColor }}
+                              >
+                                {message.user.pronouns}
+                              </span>
+                            )}
                           {/* Platform badge after username */}
                           {showPlatformBadge &&
                             platformBadgePosition === 'after' &&
@@ -1010,12 +1098,8 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                               </div>
                             )}
                         </div>
-
                         {/* Message Text or Event Content */}
-                        <div
-                          className="break-words text-white"
-                          style={{ fontSize: `${fontSize}px` }}
-                        >
+                        <div className="break-words text-white">
                           {message.event
                             ? renderEventContent(message)
                             : renderMessageContent(message)}

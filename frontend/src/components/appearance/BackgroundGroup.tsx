@@ -114,6 +114,15 @@ export function BackgroundGroup({
           onChange={(v) => onChange({ messageGap: `${v}px` })}
         />
         <SliderControl
+          label={t('overlayEditor.background.avatarGap')}
+          value={parseFloat(visualSettings.avatarGap ?? '12')}
+          min={0}
+          max={32}
+          step={1}
+          unit="px"
+          onChange={(v) => onChange({ avatarGap: `${v}px` })}
+        />
+        <SliderControl
           label={t('overlayEditor.background.backdropBlur')}
           value={parseFloat(visualSettings.backdropBlur ?? '0')}
           min={0}

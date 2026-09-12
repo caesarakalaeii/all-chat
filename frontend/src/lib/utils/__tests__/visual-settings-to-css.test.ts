@@ -82,6 +82,7 @@ describe('visualSettingsToCss', () => {
       tiktokBubbleBg: '#1b333d',
       discordBubbleBg: '#22253d',
       messageGap: '8px',
+      avatarGap: '4px',
       backdropBlur: '0px',
       maxWidth: '100%',
       showAvatars: 'inline',
@@ -138,15 +139,15 @@ describe('visualSettingsToCss', () => {
     // messageAnimation is applied as a .msg-anim-* class, never as a CSS property
     expect(result).not.toContain('messageAnimation')
     expect(result).not.toContain('fly-left')
-    // All 52 CSS properties present (excludes non-CSS fields)
-    expect((result.match(/--chat-|--platform-/g) ?? []).length).toBe(52)
+    // All 53 CSS properties present (excludes non-CSS fields)
+    expect((result.match(/--chat-|--platform-/g) ?? []).length).toBe(53)
     // The by-username mode emits its [data-user-bubble] rule, not variables
     expect(result).toContain('div[data-user-bubble]:not(.event-message):not(.scroll-anchor)')
     expect(result).toContain(
-      'background-color: var(--row-user-bg, var(--row-user-bg-image, transparent)) !important;'
+      'background-color: var(--row-user-bg, var(--row-user-bg-image, transparent));'
     )
-    expect(result).toContain('border-color: var(--row-user-border-color, transparent) !important;')
-    expect(result).toContain('border-width: var(--row-user-border-width, 0px) !important;')
+    expect(result).toContain('border-color: var(--row-user-border-color, transparent);')
+    expect(result).toContain('border-width: var(--row-user-border-width, 0px);')
   })
 
   it('emits the user-bubble rule unchanged for border mode and nothing when off', () => {
@@ -189,10 +190,12 @@ describe('visualSettingsToCss', () => {
 })
 
 /**
- * A `--chat-*` variable that nothing consumes paints nothing, and the inline
- * styles that used to carry these three settings lose to the `!important`
- * declarations bundled themes use. So they are also emitted as `!important`
- * rules inside the cascade layer — but only when the user actually set them.
+ * A `--chat-*` variable that nothing consumes paints nothing, and plain inline
+ * styles lose to any theme declaration for the same property. So these
+ * settings are also emitted as rules inside `@layer visual-customizer`, the top
+ * computed layer on overlay pages: at normal weight they already beat every
+ * theme rule (themes are wrapped into `@layer marketplace-themes`), while the
+ * user's unlayered manual CSS still outranks them. Emitted only when set.
  */
 describe('visualSettingsToCss forced overrides', () => {
   const OUTLINE = '1px 1px 0 #000, -1px 1px 0 #000'
@@ -205,7 +208,7 @@ describe('visualSettingsToCss forced overrides', () => {
         expect(result).toContain(`${scope} ${node}`)
       }
     }
-    expect(result).toContain(`text-shadow: ${OUTLINE} !important;`)
+    expect(result).toContain(`text-shadow: ${OUTLINE};`)
   })
 
   it('forces box-shadow on chat rows only — never events, never the sentinel', () => {
@@ -213,7 +216,7 @@ describe('visualSettingsToCss forced overrides', () => {
 
     expect(result).toContain('.overlay-live-body > div:not(.event-message):not(.scroll-anchor)')
     expect(result).toContain('.overlay-preview-body > div:not(.event-message):not(.scroll-anchor)')
-    expect(result).toContain('box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5) !important;')
+    expect(result).toContain('box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);')
   })
 
   it('recolours a platform badge via both color and the SVG shape fill', () => {
@@ -222,8 +225,8 @@ describe('visualSettingsToCss forced overrides', () => {
     expect(result).toContain(".overlay-live-body [data-platform='twitch'] .platform-badge,")
     expect(result).toContain(".overlay-preview-body [data-platform='twitch'] .platform-badge {")
     expect(result).toContain(".overlay-live-body [data-platform='twitch'] .platform-badge svg *")
-    expect(result).toContain('color: #9146ff !important;')
-    expect(result).toContain('fill: #9146ff !important;')
+    expect(result).toContain('color: #9146ff;')
+    expect(result).toContain('fill: #9146ff;')
     // Only the platform that was set
     expect(result).not.toContain("data-platform='youtube'")
   })
@@ -268,7 +271,7 @@ describe('visualSettingsToCss bubble fills', () => {
         expect(result).toContain(`${scope} > div[data-bubble-slot='${slot}']:not(.event-message)`)
       }
     }
-    expect(result).toContain('background-color: #333333 !important;')
+    expect(result).toContain('background-color: #333333;')
     expect(result).not.toContain("data-bubble-slot='3'")
   })
 
@@ -300,7 +303,7 @@ describe('visualSettingsToCss bubble fills', () => {
     expect(result).toContain(
       ".overlay-preview-body > div[data-platform='twitch']:not(.event-message)"
     )
-    expect(result).toContain('background-color: #2a1b3d !important;')
+    expect(result).toContain('background-color: #2a1b3d;')
     expect(result).not.toContain("data-platform='youtube'")
   })
 
@@ -359,7 +362,7 @@ describe('visualSettingsToCss outline geometry', () => {
     const result = visualSettingsToCss({ textShadow: GHOSTED_833_4PX })
 
     expect(result).toContain(`--chat-text-shadow: ${buildOutlineShadow(4)};`)
-    expect(result).toContain(`text-shadow: ${buildOutlineShadow(4)} !important;`)
+    expect(result).toContain(`text-shadow: ${buildOutlineShadow(4)};`)
     expect(result).not.toContain(GHOSTED_833_4PX)
   })
 
@@ -368,6 +371,6 @@ describe('visualSettingsToCss outline geometry', () => {
     const result = visualSettingsToCss({ textShadow: glow })
 
     expect(result).toContain(`--chat-text-shadow: ${glow};`)
-    expect(result).toContain(`text-shadow: ${glow} !important;`)
+    expect(result).toContain(`text-shadow: ${glow};`)
   })
 })

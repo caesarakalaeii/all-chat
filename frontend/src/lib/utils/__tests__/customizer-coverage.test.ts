@@ -34,15 +34,18 @@ import { OVERRIDDEN_FIELDS, PROPERTY_MAP, visualSettingsToCss } from '../visual-
  * consumer at all and were shipped as UI controls anyway:
  *
  *  - `--chat-text-shadow` and `--chat-bubble-shadow` were applied as normal
- *    inline styles on the overlay pages, which lose to the
- *    `text-shadow`/`box-shadow` `!important` declarations every bundled theme
- *    carries. Text Shadow (Soft / Strong / Outline) was inert on every theme.
+ *    inline styles on the overlay pages, which lose to any theme declaration
+ *    for the same property. Text Shadow (Soft / Strong / Outline) was inert on
+ *    every theme.
  *  - `--platform-*-accent` had no consumer anywhere: badges take their colour
  *    from hardcoded Tailwind classes and SVG `fill` attributes, so the whole
  *    Platform Colors editor section did nothing.
  *
- * Each of the three is now forced by an `!important` rule inside
- * `@layer visual-customizer` (OVERRIDE_RULES in visual-settings-to-css.ts).
+ * Each of the three is now delivered as a normal-weight rule inside
+ * `@layer visual-customizer` (OVERRIDE_RULES in visual-settings-to-css.ts),
+ * the top computed layer on overlay pages, so it beats every theme rule
+ * (themes are wrapped into `@layer marketplace-themes` at injection) while the
+ * user's unlayered manual CSS still outranks it.
  * This file asserts nothing slips back into "emitted but unconsumed".
  */
 
@@ -104,13 +107,14 @@ describe('visual customizer property coverage', () => {
   })
 
   /**
-   * The forced rules are `!important` inside a cascade layer, so nothing a theme
-   * writes can beat them. That is only safe while "the field is set" means "the
-   * user set it". theme-css-parser back-fills fields from a theme's `--chat-*`
-   * declarations AND from its `var(--chat-*, fallback)` usages, so the moment a
-   * bundled theme mentions one of these variables, loading that theme would pin
-   * every overlay to the theme's own default with no way to override it.
+   * The override rules sit in the TOP computed layer, so no theme rule can beat
+   * them. That is only safe while "the field is set" means "the user set it".
+   * theme-css-parser back-fills fields from a theme's `--chat-*` declarations
+   * AND from its `var(--chat-*, fallback)` usages, so the moment a bundled
+   * theme mentions one of these variables, loading that theme would pin every
+   * overlay to the theme's own default with no way to override it.
    */
+
   it('never forces a variable any bundled theme declares or reads', () => {
     const forcedVars = PROPERTY_MAP.filter(([field]) => OVERRIDDEN_FIELDS.has(field)).map(
       ([, cssVar]) => cssVar
@@ -126,10 +130,11 @@ describe('visual customizer property coverage', () => {
 
     expect(
       collisions,
-      `A bundled theme reads or declares a variable that OVERRIDE_RULES forces ` +
-        `with layered !important. theme-css-parser would back-fill the field from ` +
-        `the theme, and the theme's own value would then be unbeatable. Either ` +
-        `drop the theme's reference or drop the field from OVERRIDE_RULES.`
+      `A bundled theme reads or declares a variable that OVERRIDE_RULES ` +
+        `emits into the top cascade layer. theme-css-parser would back-fill ` +
+        `the field from the theme, and the theme's own value would then be ` +
+        `unbeatable. Either drop the theme's reference or drop the field ` +
+        `from OVERRIDE_RULES.`
     ).toEqual([])
   })
 

@@ -323,9 +323,19 @@ Most `--chat-*` properties are cooperative: read the variable with your own valu
 as the fallback (`font-size: var(--chat-font-size, 15px)`) and the user's control
 wins when they set it, your look wins when they don't.
 
-These are **not** cooperative. When the user sets one, the app emits an
-`!important` rule inside `@layer visual-customizer`, which beats an unlayered
-`!important` — nothing a theme writes can win against it:
+The spacing and bubble-geometry controls also emit a **theme-intent step** in
+the app's own consumer rules — `gap: var(--chat-avatar-gap, var(--theme-avatar-gap,
+0.75rem))` on the avatar row, the same shape as `--chat-message-gap` and the
+bubble set. Declare your stride in `:root` (`--theme-avatar-gap: 16px`) and it
+applies whenever the user has not set the control; declare nothing and the
+platform default is used. Minimal shows the pattern for the bubble and
+message-gap intent set (it hides avatars, so it declares no
+`--theme-avatar-gap`); Comic Speech, Trading Card and Windows 98 Retro show it
+for the avatar stride.
+
+These are **not** cooperative. When the user sets one, the app emits a rule
+inside `@layer visual-customizer` — the top layer, which outranks your theme's
+`@layer marketplace-themes` — so nothing a theme writes can win against it:
 
 | Setting                     | Properties forced | On                                                                   |
 | --------------------------- | ----------------- | -------------------------------------------------------------------- |
@@ -336,8 +346,8 @@ These are **not** cooperative. When the user sets one, the app emits an
 Nothing is emitted when the control is unset, so an unconfigured overlay still
 renders your theme exactly as written. Two consequences for theme authors:
 
-- A hardcoded `text-shadow: … !important` on message text is fine as a default,
-  but expect it to be replaced the moment the user picks a Text Shadow preset.
+- A hardcoded `text-shadow: …` on message text is fine as a default, but
+  expect it to be replaced the moment the user picks a Text Shadow preset.
 - **Never** declare or read `--chat-text-shadow`, `--chat-bubble-shadow` or
   `--platform-*-accent`. The theme-CSS parser back-fills the editor's fields from
   a theme's declarations _and_ from its `var()` fallbacks, so mentioning one of
@@ -391,9 +401,10 @@ Separately, the streamer can set **differently-coloured bubbles** (Appearance �
 Bubble colors): a fill per platform, a palette cycled down the feed, and/or each
 message taking its chatter's username colour (fill or 2px outline, keyed on the
 row's `data-user-bubble` attribute). Those are enforced like the table above, as
-`!important` rules on `[data-platform='<p>']`, `[data-bubble-slot='<n>']` and
-`[data-user-bubble]` rows, so they replace your bubble fill when configured and
-emit nothing when not. Events are never painted.
+rules in `@layer visual-customizer` on `[data-platform='<p>']`,
+`[data-bubble-slot='<n>']` and `[data-user-bubble]` rows, so they replace
+your bubble fill when configured and emit nothing when not. Events are never
+painted.
 
 Do not key any theme rule off `data-bubble-slot`. It is assigned from **arrival
 order**, not position, so that a row keeps its colour as the feed scrolls — a
@@ -453,18 +464,19 @@ copy-paste recipe; a test fails if a bundled theme has no event styling.
 ### Theme Template
 
 ```css
-/* Reset default styles */
+/* Reset default styles — plain declarations; the overlay layers your theme
+   above the app defaults for you */
 body {
-  background: transparent !important;
-  font-family: 'Your Font', sans-serif !important;
+  background: transparent;
+  font-family: 'Your Font', sans-serif;
 }
 
 /* Message container */
 .space-y-3 > div {
-  background: #YOUR_COLOR !important;
-  border: YOUR_BORDER !important;
-  border-radius: YOUR_RADIUS !important;
-  padding: YOUR_PADDING !important;
+  background: #YOUR_COLOR;
+  border: YOUR_BORDER;
+  border-radius: YOUR_RADIUS;
+  padding: YOUR_PADDING;
 }
 
 /* Avatar */
@@ -502,14 +514,14 @@ body {
 }
 
 /* Hide elements (optional) */
-.flex-shrink-0 { display: none !important; } /* Hide avatars */
-.text-xs.font-semibold.uppercase { display: none !important; } /* Hide platform */
-.flex.gap-1 { display: none !important; } /* Hide badges */
+.flex-shrink-0 { display: none; } /* Hide avatars */
+.text-xs.font-semibold.uppercase { display: none; } /* Hide platform */
+.flex.gap-1 { display: none; } /* Hide badges */
 ```
 
 ## Tips & Best Practices
 
-1. **Always use `!important`** - OBS can be finicky with CSS specificity
+1. **Plain rules win** - theme CSS sits above the app defaults by cascade layer, and `!important` is stripped at injection, so write normal declarations
 2. **Test in OBS** - Styles may look different in OBS vs browser
 3. **Use web-safe fonts** - Or include @font-face declarations
 4. **Keep it simple** - Too many animations can impact performance
@@ -519,7 +531,7 @@ body {
 ## Troubleshooting
 
 **CSS not applying?**
-- Make sure you're using `!important` on all rules
+- Custom CSS is unlayered and already outranks the app's layers — `!important` is not needed
 - Check for syntax errors (missing semicolons, brackets)
 - Try refreshing the Browser Source in OBS
 
@@ -535,7 +547,7 @@ body {
 **Elements not hiding?**
 - Ensure you're using the correct class selector
 - Use browser DevTools to inspect and verify class names
-- Add `display: none !important;` to force hiding
+- Add `display: none;` — unlayered custom CSS outranks the utilities layer
 
 ## Contributing Themes
 
