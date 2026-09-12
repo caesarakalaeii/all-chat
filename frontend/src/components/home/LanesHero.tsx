@@ -43,16 +43,22 @@ import { type MessageKey, formatNumber, useTranslations } from '@/lib/i18n'
 import { DISCORD_INVITE_URL } from '@/lib/constants'
 import { useReducedMotion } from '@/hooks/useReducedMotion'
 import { LANE_COUNT, useLaneWaves } from '@/hooks/useLaneWaves'
+import { EMOTE_SRC, type EmoteToken } from '@/components/home/emotes'
+
+// Static self-hosted artwork, not next/image: the hero renders at 17px where
+// optimization buys nothing (next.config disables it globally anyway) and
+// next/image would add client JS to a page that loads with none.
+/* eslint-disable @next/next/no-img-element */
 
 // Marquee chatter: how many `marketing.flow<Platform>.mN` keys each lane
 // draws from. Kept beside the usernames so both stay in sync with the
 // curated pools in marketing.ts.
 const MARQUEE_MESSAGE_COUNTS = {
   twitch: 22,
-  youtube: 16,
-  tiktok: 14,
-  kick: 13,
-  discord: 12,
+  youtube: 22,
+  tiktok: 22,
+  kick: 22,
+  discord: 22,
 } as const
 
 // Catalog group holding each lane's marquee strings. The catalog caps key
@@ -70,11 +76,22 @@ const FLOW_GROUPS = {
 // catalog (translating a username produces a different person, not a
 // translation).
 const MARQUEE_USERS = {
-  twitch: ['xqc', 'forsen', 'ludwig', 'nymn', 'sodapoppin', 'peakd', 'zentreya'],
-  youtube: ['ludwig', 'moistcr1tikal', 'veibae', 'sykkuno', 'filian'],
-  tiktok: ['khaby', 'zachking', 'charli', 'bella', 'spencer'],
-  kick: ['xqc', 'amouranth', 'ross', 'ac7ionman', 'gerard'],
-  discord: ['groque', 'caesar', 'moers', 'lana', 'pixi'],
+  twitch: [
+    'xqc',
+    'forsen',
+    'ludwig',
+    'nymn',
+    'sodapoppin',
+    'peaked',
+    'zentreya',
+    'summit1g',
+    'timthetatman',
+    'shroud',
+  ],
+  youtube: ['ludwig', 'moistcr1tikal', 'veibae', 'sykkuno', 'filian', 'dunkey', 'ersan'],
+  tiktok: ['khaby', 'zachking', 'charli', 'bella', 'spencerx', 'bretman', 'liv'],
+  kick: ['xqc', 'amouranth', 'ross', 'ac7ionman', 'trainwreckstv', 'westcol', 'gerard'],
+  discord: ['groque', 'caesar', 'moers', 'lana', 'pixi', 'erin'],
 } as const
 
 type LanePlatform = keyof typeof MARQUEE_MESSAGE_COUNTS
@@ -84,23 +101,79 @@ type LanePlatform = keyof typeof MARQUEE_MESSAGE_COUNTS
 type LaneMessageKey = Extract<MessageKey, `marketing.${(typeof FLOW_GROUPS)[LanePlatform]}.`>
 
 /** One item of a marquee row: `<b>user</b> message` with an optional emote. */
-type MarqueeItem = { user: string; messageKey: LaneMessageKey; emote?: string }
+type MarqueeItem = { user: string; messageKey: LaneMessageKey; emote?: EmoteToken }
 
 /** One marquee row: items plus its drift duration/direction. */
 type MarqueeRow = { items: MarqueeItem[]; duration: number; reverse: boolean }
 
 // Decorative emote tokens per lane — mockup fixtures like the usernames
-// above, deliberately not in the catalog. Real 7TV emote names (feedback:
-// the emoji read off-platform; the product promises native 7TV/BTTV/FFZ
-// rendering, so the marquee should speak it). Rendered as .emote spans so
-// CSS can dim them below the text (texture, not content).
+// above, deliberately not in the catalog. Real emote names (feedback: the
+// emoji read off-platform; the product promises native 7TV/BTTV/FFZ
+// rendering, so the marquee should speak it), and since the hero now
+// renders actual artwork, every name must be one the emote registry has
+// canonical art for — see emotes.ts for where the PNGs come from.
 const MARQUEE_EMOTES = {
-  twitch: ['KEKW', 'POGGERS', 'catJAM', 'peepoHappy', 'SourPls', 'LULW', 'monkaS', 'pog'],
-  youtube: ['COZYME', 'PogChamp', 'BASED', 'peepoSad', 'heart', 'GIGACHAD'],
-  tiktok: ['pog', 'KEKW', 'catJAM', 'Shy', 'peepoLove'],
-  kick: ['EZ', 'OMEGALUL', 'Crazy', 'GIGACHAD', 'peepoLol', 'Clap'],
-  discord: ['peepoHey', 'catJAM', 'KEKW', 'pogChamp', 'heart'],
-} as const
+  twitch: [
+    'peepoHappy',
+    'peepoSad',
+    'PepePls',
+    'peepoPls',
+    'SourPls',
+    'monkaS',
+    'KEKW',
+    'catJAM',
+    'POGGERS',
+    'forsenPls',
+    'FeelsGoodMan',
+    'Clap',
+  ],
+  youtube: [
+    'BasedGod',
+    'ApuApustaja',
+    'EZ',
+    'Clap',
+    'GIGACHAD',
+    'BibleThump',
+    'POGGERS',
+    'KEKW',
+    'peepoHappy',
+    'FeelsOkayMan',
+  ],
+  tiktok: [
+    'FeelsGoodMan',
+    'FeelsBadMan',
+    'KKona',
+    'haHAA',
+    'AYAYA',
+    'peepoPls',
+    'catJAM',
+    'PartyParrot',
+    'ApuApustaja',
+  ],
+  kick: [
+    'OMEGALUL',
+    'LuL',
+    'gachiBASS',
+    'WAYTOODANK',
+    'PartyParrot',
+    'PETPET',
+    'EZ',
+    'POGGERS',
+    'Stare',
+    'forsenPls',
+  ],
+  discord: [
+    'peepoHey',
+    'Stare',
+    'xdx',
+    'FeelsOkayMan',
+    'RebeccaBlack',
+    'peepoHappy',
+    'SourPls',
+    'haHAA',
+    'peepoPls',
+  ],
+} as const satisfies Record<LanePlatform, readonly EmoteToken[]>
 
 // Lane order and row count: taller lanes carry more marquee rows. Denser
 // than the first pass (feedback: "more text, not readable") — two rows for
@@ -113,9 +186,10 @@ const LANES: ReadonlyArray<{ platform: LanePlatform; rows: number }> = [
   { platform: 'discord', rows: 2 },
 ]
 
-// The seeds below must not be multiples of any pool size (users 7, 5, 5, 5,
-// 5; emotes 8, 6, 5, 6, 5; messages 22, 16, 14, 13, 12), or a stride would
-// cycle through only a fraction of a pool. 137 and 29 are coprime to all.
+// The seeds below must not be multiples of any pool size (users 10, 7, 7, 7,
+// 6; emotes 12, 10, 9, 10, 9; messages 22 everywhere), or a stride would
+// cycle through only a fraction of a pool. 137 is prime and larger than every
+// pool, and 29 is coprime to all, so both strides walk full pools.
 const MARQUEE_ROWS: ReadonlyArray<{ platform: LanePlatform; rows: MarqueeRow[] }> = LANES.map(
   ({ platform, rows }, laneIndex) => {
     const users = MARQUEE_USERS[platform]
@@ -127,13 +201,22 @@ const MARQUEE_ROWS: ReadonlyArray<{ platform: LanePlatform; rows: MarqueeRow[] }
       rows: Array.from({ length: rows }, (_, rowIndex) => {
         // Per-row seed: lane/row indices folded in so every row walks its
         // pools from a different offset (deterministic → hydration-safe).
+        // 60 items ≈ 4-5k px per copy, so the -50% loop always outspans the
+        // viewport — fewer made the lanes read as sparse clumps (feedback:
+        // "only a few messages, none with an emote").
         let itemSeed = (laneIndex + 1) * 53 + (rowIndex + 1) * 29
-        const items = Array.from({ length: 14 }, (_, itemIndex) => {
+        let emoteCursor = laneIndex + rowIndex
+        const items = Array.from({ length: 60 }, (_, itemIndex) => {
           itemSeed += 137
           const user = users[itemSeed % users.length]
-          const messageKey = `marketing.${group}.m${(itemSeed % messageCount) + 1}` as LaneMessageKey
-          // Emote every third item — sparse enough to stay texture.
-          const emote = itemSeed % 3 === 0 ? emotes[itemSeed % emotes.length] : undefined
+          const messageKey =
+            `marketing.${group}.m${(itemSeed % messageCount) + 1}` as LaneMessageKey
+          // Emote every third item — sparse enough to stay texture. The
+          // pool pick walks its own cursor (advance 1 per emote), because
+          // reusing the 137-stride seed here would step the pool by
+          // 3×137≡3 (mod 12) and only a third of the artwork would ever
+          // show (measured: 4 of 12 twitch emotes in the DOM).
+          const emote = itemSeed % 3 === 0 ? emotes[(emoteCursor += 1) % emotes.length] : undefined
           return { user, messageKey, emote }
         })
         return {
@@ -208,7 +291,6 @@ export function LanesHero({
     modulations: laneModulations,
     reducedMotion,
   })
-
 
   // Hero scroll effect (feedback: "reveal + hero scroll"): as the hero
   // leaves the viewport the stage sinks and dims — the visitor's scroll
@@ -296,11 +378,11 @@ export function LanesHero({
         style={
           reducedMotion
             ? undefined
-            : {
+            : ({
                 // Sink + dim as the hero scrolls out; the CSS consumes the
                 // progress value, so the exact curve lives in globals.css.
                 '--hero-progress': progress,
-              } as React.CSSProperties
+              } as React.CSSProperties)
         }
       >
         {/* WebGL lane fills; the DOM lanes below carry only text. */}
@@ -332,7 +414,15 @@ export function LanesHero({
                   <span key={j}>
                     {j > 0 && <span className="sep">·</span>}
                     <b>{item.user}</b> {t(item.messageKey)}
-                    {item.emote !== undefined && <span className="emote">{item.emote}</span>}
+                    {item.emote !== undefined && (
+                      <img
+                        className="emote"
+                        src={EMOTE_SRC[item.emote]}
+                        alt={item.emote}
+                        width={17}
+                        height={17}
+                      />
+                    )}
                   </span>
                 ))}
                 <span className="sep">·</span>
@@ -340,7 +430,15 @@ export function LanesHero({
                   <span key={`d${j}`}>
                     {j > 0 && <span className="sep">·</span>}
                     <b>{item.user}</b> {t(item.messageKey)}
-                    {item.emote !== undefined && <span className="emote">{item.emote}</span>}
+                    {item.emote !== undefined && (
+                      <img
+                        className="emote"
+                        src={EMOTE_SRC[item.emote]}
+                        alt={item.emote}
+                        width={17}
+                        height={17}
+                      />
+                    )}
                   </span>
                 ))}
               </div>
