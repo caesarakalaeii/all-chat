@@ -872,8 +872,17 @@ span.font-semibold.text-sm.username-gradient {
   opacity: 0.35;
   margin: 0 1.2em;
 }
+/* Emote artwork rides inline with the chatter: dimmed like the text so
+ * it reads as texture. display:inline is load-bearing: Tailwind
+ * preflight makes every img a block, and a block box inside the nowrap
+ * marquee line breaks the line at each emote — the row collapsed into
+ * a wrapped, mostly-clipped strip that read as "a few messages, no
+ * emotes". The width/height attrs on the <img> pin the box; this only
+ * restores inline layout. */
 .flow .emote {
+  display: inline;
   margin-left: 0.35em;
+  vertical-align: -0.3em;
   opacity: 0.75;
 }
 
@@ -1111,9 +1120,13 @@ span.font-semibold.text-sm.username-gradient {
   color: #fff;
   word-break: break-word;
 }
+/* Feed emote artwork: inline image sized to the message text.
+ * display:inline counters Tailwind preflight's img{display:block} —
+ * same fix as .flow .emote, for the same broken-line reason. */
 .msg .emote {
-  color: rgba(255, 255, 255, 0.5);
-  font-style: italic;
+  display: inline;
+  vertical-align: -0.3em;
+  margin: 0 0.1em;
 }
 
 /* Wedge (THEM / ALL·CHAT). */
