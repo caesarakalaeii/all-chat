@@ -285,15 +285,19 @@ function bubbleFillRules(settings: Partial<VisualSettings>): string[] {
  * Bubble colour from the username colour. The overlay surfaces write each
  * row's colour as inline custom properties (userBubbleStyle in
  * visual-inline-styles) and mark the row with `data-user-bubble`; this rule is
- * the !important consumer that turns them into a visible fill or border.
+ * the consumer that turns them into a visible fill or border.
  *
- * Beats everything else by specificity, not order: three attribute/class
- * selectors plus the scope class (0,4,0... counting `:not()` arguments —
- * [data-user-bubble] plus two :not()s) outrank palette and platform fills
- * (one attribute plus one :not()), so it is emitted after them but wins
- * regardless. The `:not(.scroll-anchor)` is documentary — the sentinel never
- * carries the attribute — matching the events.css row rule's shape so the
- * two selectors stay diffable side by side.
+ * Normal weight, like every rule in this layer: a layered `!important` would
+ * beat the user's unlayered manual CSS (Cascade 5 inverts the layer order for
+ * important declarations), which is the exact symptom this module avoids.
+ *
+ * Beats palette and platform fills by specificity, not order: three
+ * attribute/class selectors plus the scope class (0,4,0... counting `:not()`
+ * arguments — [data-user-bubble] plus two :not()s) outrank their one attribute
+ * plus one :not(), so it is emitted after them but wins regardless. The
+ * `:not(.scroll-anchor)` is documentary — the sentinel never carries the
+ * attribute — matching the events.css row rule's shape so the two selectors
+ * stay diffable side by side.
  *
  * Both custom properties always consume: in background mode the border pair
  * falls back to transparent/0px, in border mode the fill pair to transparent,
@@ -307,9 +311,9 @@ function userBubbleRules(settings: Partial<VisualSettings>): string[] {
       FEED_SCOPES.map(
         (scope) => `  ${scope} > div[data-user-bubble]:not(.event-message):not(.scroll-anchor)`
       ).join(',\n') + ' {',
-      '    background-color: var(--row-user-bg, var(--row-user-bg-image, transparent)) !important;',
-      '    border-color: var(--row-user-border-color, transparent) !important;',
-      '    border-width: var(--row-user-border-width, 0px) !important;',
+      '    background-color: var(--row-user-bg, var(--row-user-bg-image, transparent));',
+      '    border-color: var(--row-user-border-color, transparent);',
+      '    border-width: var(--row-user-border-width, 0px);',
       '  }',
     ].join('\n'),
   ]

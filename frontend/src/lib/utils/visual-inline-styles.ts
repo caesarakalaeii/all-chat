@@ -86,9 +86,8 @@ export function chatBubbleStyle(vs: Partial<VisualSettings>): CSSProperties {
 /**
  * Per-row custom properties carrying a chatter's username colour onto their
  * bubble. The receiver is the [data-user-bubble] rule userBubbleRules emits in
- * the visual-customizer layer (see visual-settings-to-css): these inline values
- * lose nothing to competing !important rules because inline custom properties
- * are only declarations — the generated rule's !important consumption wins the
+ * the visual-customizer layer (see visual-settings-to-css): these inline
+ * values are only declarations, so the generated rule's consumption wins the
  * cascade the moment the row carries the attribute.
  *
  * Gradients are applied opaque: buildGradientCSS cannot fade a whole gradient,

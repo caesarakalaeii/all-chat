@@ -143,10 +143,10 @@ describe('visualSettingsToCss', () => {
     // The by-username mode emits its [data-user-bubble] rule, not variables
     expect(result).toContain('div[data-user-bubble]:not(.event-message):not(.scroll-anchor)')
     expect(result).toContain(
-      'background-color: var(--row-user-bg, var(--row-user-bg-image, transparent)) !important;'
+      'background-color: var(--row-user-bg, var(--row-user-bg-image, transparent));'
     )
-    expect(result).toContain('border-color: var(--row-user-border-color, transparent) !important;')
-    expect(result).toContain('border-width: var(--row-user-border-width, 0px) !important;')
+    expect(result).toContain('border-color: var(--row-user-border-color, transparent);')
+    expect(result).toContain('border-width: var(--row-user-border-width, 0px);')
   })
 
   it('emits the user-bubble rule unchanged for border mode and nothing when off', () => {
