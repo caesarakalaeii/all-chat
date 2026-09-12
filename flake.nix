@@ -103,6 +103,13 @@
         # scripts/k8s-make-user-admin.sh, plus the kubectl invocations in
         # deployments/ansible/.
         pkgs.kubectl
+        # kubeconform: NOT the manifests verb -- the flake check is
+        # sandboxed without network and kubeconform needs to download
+        # schemas (see the manifests command text). The offline gate is
+        # scripts/validate-manifests.py. kubeconform stays here for
+        # ad-hoc online validation with -strict, which does catch
+        # spec-field drift.
+        pkgs.kubeconform
 
         # ---- shell conveniences ----
         # The Makefile is the repo's documented entrypoint (`make docker-up`,

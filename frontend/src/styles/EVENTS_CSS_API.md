@@ -122,7 +122,7 @@ in. Events get the same values as _defaults_ instead (see the token fallbacks).
 order is:
 
 ```
-@layer base, design-system, marketplace-themes, user-overrides, visual-customizer;
+@layer base, design-system, marketplace-themes, visual-customizer, user-overrides;
 ```
 
 The precedence hierarchy, strongest first:

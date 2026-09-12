@@ -37,10 +37,12 @@
  * grammar requires them to precede all other rules. Run this AFTER
  * {@link rewriteThemeFontImports} so the proxy rewrite sees the original URLs.
  */
-export const THEME_LAYER_NAME = 'marketplace-themes'
+const THEME_LAYER_NAME = 'marketplace-themes'
 
+// `! important` (whitespace between ! and the ident) is spec-legal and would
+// stay layered-important, outranking manual CSS — strip it too.
 function stripImportant(css: string): string {
-  return css.replace(/\s*!important/gi, '')
+  return css.replace(/\s*!\s*important/gi, '')
 }
 
 function extractImports(css: string): { imports: string[]; rest: string } {

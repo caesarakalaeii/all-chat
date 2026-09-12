@@ -16,7 +16,7 @@ The most important change in v1.3 is the introduction of CSS cascade layers. Thi
 The overlay's layer order is:
 
 ```
-@layer base, design-system, marketplace-themes, user-overrides, visual-customizer;
+@layer base, design-system, marketplace-themes, visual-customizer, user-overrides;
 ```
 
 Theme CSS is injected into `@layer marketplace-themes`. The precedence

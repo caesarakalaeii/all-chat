@@ -374,8 +374,12 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
       // rewritten to the same-origin proxy so fonts load under CSP during live
       // editing, matching the initial-load path.
       if (event.data?.type === 'CUSTOM_CSS_UPDATE') {
-        const theme = wrapThemeCss(rewriteThemeFontImports(event.data.themeCss as string))
-        const custom = event.data.customCss as string
+        const theme = wrapThemeCss(
+          rewriteThemeFontImports(
+            typeof event.data.themeCss === 'string' ? event.data.themeCss : '',
+          ),
+        )
+        const custom = typeof event.data.customCss === 'string' ? event.data.customCss : ''
         setThemeCss(theme)
         setCustomCss(custom)
         setUseCustomCss(Boolean(theme.trim().length || custom.trim().length))
