@@ -56,7 +56,7 @@ jobs:
       goodgame-listener: ${{ steps.changes.outputs.goodgame-listener }}
       picarto-listener: ${{ steps.changes.outputs.picarto-listener }}
       rumble-listener: ${{ steps.changes.outputs.rumble-listener }}
-      facebook-listener: ${{ steps.changes.outputs.facebook-listener }}
+      instagram-listener: ${{ steps.changes.outputs.instagram-listener }}
       frontend: ${{ steps.changes.outputs.frontend }}
       shared: ${{ steps.changes.outputs.shared }}
       migrations: ${{ steps.changes.outputs.migrations }}
@@ -146,6 +146,9 @@ jobs:
               - 'shared/**'
             facebook-listener:
               - 'services/facebook-listener/**'
+              - 'shared/**'
+            instagram-listener:
+              - 'services/instagram-listener/**'
               - 'shared/**'
             frontend:
               - 'frontend/**'
@@ -255,6 +258,9 @@ jobs:
           - name: facebook-listener
             changed: ${{ needs.detect-changes.outputs.facebook-listener }}
             path: services/facebook-listener
+          - name: instagram-listener
+            changed: ${{ needs.detect-changes.outputs.instagram-listener }}
+            path: services/instagram-listener
           - name: frontend
             changed: ${{ needs.detect-changes.outputs.frontend }}
             path: frontend
@@ -351,6 +357,7 @@ jobs:
           - discord-listener
           - owncast-listener
           - goodgame-listener
+          - instagram-listener
           - picarto-listener
           - rumble-listener
           - facebook-listener

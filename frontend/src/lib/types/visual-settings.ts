@@ -133,6 +133,7 @@ export interface VisualSettings {
   goodgameBubbleBg?: string
   picartoBubbleBg?: string
   facebookBubbleBg?: string
+  instagramBubbleBg?: string
   rumbleBubbleBg?: string
 
   // Visibility toggles ('inline' | 'none' for inline elements; 'block' | 'none' for block)
@@ -176,6 +177,7 @@ export interface VisualSettings {
   goodgameAccent?: string // --platform-goodgame-accent
   picartoAccent?: string // --platform-picarto-accent
   facebookAccent?: string // --platform-facebook-accent
+  instagramAccent?: string // --platform-instagram-accent
   rumbleAccent?: string // --platform-rumble-accent
 
   // Event visibility

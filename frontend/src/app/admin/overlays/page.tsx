@@ -64,6 +64,7 @@ interface OverlaySource {
     | 'goodgame'
     | 'picarto'
     | 'facebook'
+    | 'instagram'
     | 'rumble'
     | 'discord'
     | 'shared_overlay'

@@ -264,6 +264,33 @@ func (h *SourcesHandler) authorizeFacebookSource(ctx context.Context, userID, pa
 	return 0, ""
 }
 
+// authorizeInstagramSource verifies the user has connected Instagram — i.e. an
+// instagram_oauth_tokens row exists for this exact IG user (ADR-0062). Fail
+// closed on both the missing row and any DB error, mirroring the Facebook
+// ownership check above. Returns (0, "") when allowed, or an HTTP status
+// plus message.
+func (h *SourcesHandler) authorizeInstagramSource(ctx context.Context, userID, igUserID string) (int, string) {
+	if igUserID == "" {
+		return http.StatusBadRequest, "instagram requires an IG user id (connect your Instagram account first)"
+	}
+	if h.db == nil {
+		return http.StatusForbidden, "cannot verify Instagram account ownership"
+	}
+	var exists bool
+	err := h.db.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM instagram_oauth_tokens WHERE user_id = $1 AND ig_user_id = $2)`,
+		userID, igUserID,
+	).Scan(&exists)
+	if err != nil {
+		h.logger.Error("Instagram account ownership check failed", zap.String("user_id", userID), zap.String("ig_user_id", igUserID), zap.Error(err))
+		return http.StatusForbidden, "cannot verify Instagram account ownership"
+	}
+	if !exists {
+		return http.StatusBadRequest, "connect your Instagram account before adding an Instagram source"
+	}
+	return 0, ""
+}
+
 // setDiscordChannelRegistry writes the channel registry Redis key and publishes an invalidation event.
 // The key is set BEFORE the Pub/Sub publish so discord-listener always sees a consistent state.
 func (h *SourcesHandler) setDiscordChannelRegistry(ctx context.Context, channelID, overlayID, sourceID string) {
@@ -739,6 +766,16 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 	// for any Page id with any valid token of the same app.
 	if req.Platform == "facebook" {
 		if status, msg := h.authorizeFacebookSource(c.Request.Context(), userID.(string), channelID); status != 0 {
+			c.JSON(status, gin.H{"error": msg})
+			return
+		}
+	}
+
+	// Instagram sources are the streamer's own IG account (ADR-0062): channel_id
+	// is the IG user id resolved at OAuth callback time. Same fail-closed shape
+	// as the Facebook check above.
+	if req.Platform == "instagram" {
+		if status, msg := h.authorizeInstagramSource(c.Request.Context(), userID.(string), channelID); status != 0 {
 			c.JSON(status, gin.H{"error": msg})
 			return
 		}

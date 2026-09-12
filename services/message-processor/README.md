@@ -273,6 +273,7 @@ normalizers := map[string]normalizer.Normalizer{
     "picarto":  picartoNormalizer,
     "facebook": facebookNormalizer,
     "rumble":   rumbleNormalizer,
+    "instagram": instagramNormalizer,
 }
 ```
 
@@ -289,6 +290,7 @@ normalizers := map[string]normalizer.Normalizer{
 - `normalizer/picarto_normalizer.go` - Parse the Picarto pop-out chat batch (ADR-0059)
 - `normalizer/facebook_normalizer.go` - Parse Graph API live-video comments (ADR-0060)
 - `normalizer/rumble_normalizer.go` - Parse the Rumble chat pop-up SSE payload (ADR-0061)
+- `normalizer/instagram_normalizer.go` - Parse Graph API live_comments payloads (ADR-0062)
 
 **Output**: `models.UnifiedMessage` (common schema across all platforms)
 

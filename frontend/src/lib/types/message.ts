@@ -135,6 +135,7 @@ export interface ChatMessage {
     | 'goodgame'
     | 'picarto'
     | 'facebook'
+    | 'instagram'
     | 'rumble'
     | 'discord'
     | 'system' // Primary platform
@@ -225,6 +226,7 @@ export interface PlatformStatus {
     | 'goodgame'
     | 'picarto'
     | 'facebook'
+    | 'instagram'
     | 'rumble'
     | 'discord'
   channel_id: string

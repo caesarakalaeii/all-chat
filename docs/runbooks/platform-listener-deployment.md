@@ -1,8 +1,8 @@
-# New-Listener Deployment Runbook (Owncast, GoodGame, Picarto, Facebook, Rumble)
+# New-Listener Deployment Runbook (Owncast, GoodGame, Picarto, Facebook, Rumble, Instagram)
 
 **Owner:** Platform / SRE
-**Last reviewed:** 2026-09-11
-**Applies to:** the five platform-expansion listeners (PR to `beta`, ADR-0058–0061)
+**Last reviewed:** 2026-09-12
+**Applies to:** the platform-expansion listeners (PR to `beta`, ADR-0058–0062)
 **Related:** `docs/runbooks/secret-rotation.md` (hazard notes on `allchat-secrets`
 SOPS-vs-live drift apply here unchanged — `kubectl patch` only, never
 `sops set`/`sops edit` on the encrypted file)
@@ -15,6 +15,7 @@ SOPS-vs-live drift apply here unchanged — `kubectl patch` only, never
 |---------|--------|
 | Deploy the four secretless listeners (owncast, goodgame, picarto, rumble) | Section 1 — no new secrets needed, manifests need key-name fixes first |
 | Deploy the facebook listener | Section 2 — requires a Meta app and two new secret keys first |
+| Deploy the instagram listener | Section 2a — same Meta app as facebook plus the Instagram product; separate `instagram-app-id`/`instagram-app-secret` keys |
 | A listener CrashLoops after deploy | Section 4 — the two known failure modes are both key-name drift |
 
 Decision taken 2026-09-11: deploy the secretless four when ready; facebook-listener
@@ -32,8 +33,8 @@ Third-party credentials needed *at the pod*:
 | owncast-listener | none — connects to the streamer's own Owncast instance URL, no API key | deploy as-is |
 | goodgame-listener | none — anonymous chat WebSocket | deploy as-is |
 | picarto-listener | none — unofficial pop-out chat WebSocket | deploy as-is |
-| rumble-listener | none required — anonymous SSE reads work; `RUMBLE_SESSION_COOKIE` is optional (age-gated streams need it, ADR-0061) | deploy as-is |
 | facebook-listener | none *in the pod*, but the platform is dead end-to-end without Meta credentials in auth-service + moderation-service | **do not deploy yet** |
+| instagram-listener | none *in the pod*, but the platform is inert without Meta credentials in auth-service (same Meta app as facebook, plus the Instagram product) | **do not deploy yet** |
 
 Infrastructure secrets every listener needs already exist in
 `allchat-secrets` (verified live 2026-09-11): `database-password`,
@@ -278,6 +279,61 @@ Page tokens from a long-lived user token do not expire (ADR-0060). An
 invalidated token (password change, role removal) surfaces as a Graph 401;
 the streamer reconnects from the dashboard. token-refresh-service
 intentionally skips facebook (commit 6b4f945a). No rotation procedure needed.
+
+---
+
+## Section 2a — Instagram (same Meta app as facebook; add the Instagram product)
+
+instagram-listener (ADR-0062) polls `GET /{ig-user-id}/live_comments` on the
+streamer's IG professional account. Like facebook-listener, the pod needs no
+Meta credentials — it reads stored tokens from `instagram_oauth_tokens`
+(migration 096). The platform is inert until auth-service has Instagram
+credentials (it logs "Instagram OAuth will not be available" when
+`INSTAGRAM_APP_ID`/`INSTAGRAM_APP_SECRET` are unset).
+
+The streamer must hold an **Instagram professional (business/creator)
+account linked to a Facebook Page** — a personal IG account cannot be
+connected. Requested scopes: `instagram_basic`,
+`instagram_manage_comments`, `pages_show_list` (the last gates the
+`/me/accounts` enumeration that resolves the IG user id). Fold these into the
+same Meta App Review cycle as facebook's permissions.
+
+### Instagram secret keys to add (both required, auth-service only)
+
+| Secret key (allchat-secrets) | Env var | Consumer services |
+|---|---|---|
+| `instagram-app-id` | `INSTAGRAM_APP_ID` | auth-service |
+| `instagram-app-secret` | `INSTAGRAM_APP_SECRET` | auth-service |
+
+Values are the same Meta app's ID/secret as facebook's (one app, two products).
+OAuth redirect URI: `<FRONTEND_URL>/api/v1/auth/instagram/callback`.
+
+### Steps
+
+1. **Complete Section 2 first** (the Meta app must exist). Then add the
+   Instagram product to that app and request `instagram_basic` +
+   `instagram_manage_comments` in the next App Review cycle
+   (`pages_show_list` rides along; dev-mode works against the app admins' own
+   accounts before approval).
+2. **Store the credentials** (same `kubectl patch` pattern as Section 2 step 2;
+   same lowercase key convention — keys `instagram-app-id`,
+   `instagram-app-secret`).
+3. **Wire the env into the auth-service deployment** (same secretKeyRef shape
+   as the facebook block in Section 2 step 3), then rolling-restart.
+4. **Deploy the listener** (port 8100, single replica by design — ADR-0062,
+   no HPA). Env: the shared block plus `TOKEN_ENCRYPTION_KEY_V1` (key
+   `token-encryption-key-v1`) for decrypting IG tokens,
+   `INSTAGRAM_POLLING_INTERVAL_MS: "10000"`,
+   `INSTAGRAM_SOURCE_SYNC_SECONDS: "30"`.
+5. **Verify**: dashboard → add Instagram source → consent → poller appears;
+   comments from a live IG broadcast flow to a beta overlay.
+
+### Token lifecycle note
+
+Same chain as facebook (ADR-0060): the stored Page-derived token does not
+expire. An invalidated token surfaces as a Graph 401; the streamer
+reconnects from the dashboard. token-refresh-service has nothing to do for
+Instagram. No rotation procedure needed.
 
 ---
 

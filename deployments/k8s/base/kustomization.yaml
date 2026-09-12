@@ -61,6 +61,8 @@ resources:
   # Owncast Listener (ADR-0058, self-hosted instances, URL-as-channel)
   - owncast-listener/deployment.yaml
   - owncast-listener/hpa.yaml
+  # Instagram Listener (ADR-0062, live-comments polling)
+  - instagram-listener/deployment.yaml
 
 commonLabels:
   project: allchat
@@ -118,4 +120,7 @@ images:
     newTag: main
   - name: allchat-owncast-listener:latest
     newName: ghcr.io/caesarakalaeii/allchat-owncast-listener
+    newTag: main
+  - name: allchat-instagram-listener:latest
+    newName: ghcr.io/caesarakalaeii/allchat-instagram-listener
     newTag: main

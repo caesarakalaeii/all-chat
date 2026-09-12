@@ -77,6 +77,7 @@ export const PROPERTY_MAP: ReadonlyArray<[keyof VisualSettings, string]> = [
   ['goodgameAccent', '--platform-goodgame-accent'],
   ['picartoAccent', '--platform-picarto-accent'],
   ['facebookAccent', '--platform-facebook-accent'],
+  ['instagramAccent', '--platform-instagram-accent'],
   ['rumbleAccent', '--platform-rumble-accent'],
   // Event visibility
   ['showSuperChat', '--chat-show-super-chat'],
@@ -149,6 +150,7 @@ const ACCENT_PLATFORMS: ReadonlyArray<[keyof VisualSettings, string]> = [
   ['goodgameAccent', 'goodgame'],
   ['picartoAccent', 'picarto'],
   ['facebookAccent', 'facebook'],
+  ['instagramAccent', 'instagram'],
   ['rumbleAccent', 'rumble'],
   ['discordAccent', 'discord'],
 ]
@@ -238,6 +240,7 @@ const BUBBLE_TINT_PLATFORMS: ReadonlyArray<[keyof VisualSettings, string]> = [
   ['goodgameBubbleBg', 'goodgame'],
   ['picartoBubbleBg', 'picarto'],
   ['facebookBubbleBg', 'facebook'],
+  ['instagramBubbleBg', 'instagram'],
   ['rumbleBubbleBg', 'rumble'],
   ['discordBubbleBg', 'discord'],
 ]

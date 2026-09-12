@@ -112,6 +112,10 @@ func main() {
 	facebookAppSecret := os.Getenv("FACEBOOK_APP_SECRET")
 	facebookRedirectURL := defaultCallbackURL(frontendURL, "http://localhost:8080", "/api/v1/auth/facebook/callback")
 
+	instagramAppID := os.Getenv("INSTAGRAM_APP_ID")
+	instagramAppSecret := os.Getenv("INSTAGRAM_APP_SECRET")
+	instagramRedirectURL := defaultCallbackURL(frontendURL, "http://localhost:8080", "/api/v1/auth/instagram/callback")
+
 	jwtExpiryHours := getEnvAsIntOrDefault("JWT_EXPIRY_HOURS", 24)
 
 	if twitchClientID == "" || twitchClientSecret == "" {
@@ -136,6 +140,10 @@ func main() {
 
 	if facebookAppID == "" || facebookAppSecret == "" {
 		log.Warn("FACEBOOK_APP_ID/FACEBOOK_APP_SECRET not set, Facebook OAuth will not be available")
+	}
+
+	if instagramAppID == "" || instagramAppSecret == "" {
+		log.Warn("INSTAGRAM_APP_ID/INSTAGRAM_APP_SECRET not set, Instagram OAuth will not be available")
 	}
 
 	userKeyChain, err := sharedAuth.NewKeyChainFromEnv("JWT_SECRET")
@@ -244,6 +252,15 @@ func main() {
 		facebookOAuth = oauth.NewFacebookOAuth(facebookAppID, facebookAppSecret, facebookRedirectURL)
 	}
 
+	// The Instagram listener and this service share the same Meta app as
+	// Facebook (Instagram API with Facebook Login); the Graph URL/version
+	// env vars are override seams, defaulted to the documented endpoints.
+	var instagramOAuth *oauth.InstagramOAuth
+	if instagramAppID != "" && instagramAppSecret != "" {
+		instagramOAuth = oauth.NewInstagramOAuth(instagramAppID, instagramAppSecret, instagramRedirectURL).
+			WithGraphBase(os.Getenv("INSTAGRAM_GRAPH_URL"), os.Getenv("INSTAGRAM_GRAPH_VERSION"))
+	}
+
 	var discordHandler *handlers.DiscordHandler
 	if discordClientID != "" && discordClientSecret != "" && discordBotToken != "" {
 		discordOAuth := oauth.NewDiscordOAuth(discordClientID, discordClientSecret, discordRedirectURL).
@@ -265,6 +282,9 @@ func main() {
 	}
 	if facebookOAuth != nil {
 		providers[oauth.PlatformFacebook] = facebookOAuth
+	}
+	if instagramOAuth != nil {
+		providers[oauth.PlatformInstagram] = instagramOAuth
 	}
 
 	overlayManagerURL := getEnvOrDefault("OVERLAY_MANAGER_URL", "http://localhost:8082")
@@ -435,6 +455,9 @@ func main() {
 	router.GET("/facebook/login", platformAuthHandlerV2.HandleLogin(oauth.PlatformFacebook))
 	router.GET("/facebook/callback", platformAuthHandlerV2.HandleCallback(oauth.PlatformFacebook))
 
+	router.GET("/instagram/login", platformAuthHandlerV2.HandleLogin(oauth.PlatformInstagram))
+	router.GET("/instagram/callback", platformAuthHandlerV2.HandleCallback(oauth.PlatformInstagram))
+
 	// Discord bot OAuth callback (public — no JWT required; the CSRF state encodes the user identity)
 	router.GET("/discord/callback", func(c *gin.Context) {
 		if discordHandler == nil {
@@ -533,6 +556,7 @@ func main() {
 		protected.GET("/youtube/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformYouTube))
 		protected.GET("/kick/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformKick))
 		protected.GET("/facebook/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformFacebook))
+		protected.GET("/instagram/add-source/:overlay_id", platformAuthHandlerV2.HandleAddSource(oauth.PlatformInstagram))
 
 		// Opt-in moderation re-consent (ADR-0017): requests only the moderation scopes
 		// for the ?actions= being enabled, on top of the existing grant. Twitch + Kick.
