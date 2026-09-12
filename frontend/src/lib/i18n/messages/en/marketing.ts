@@ -68,9 +68,9 @@ export const marketing = {
   // MARQUEE_MESSAGE_COUNTS table.
   flowTwitch: {
     m1: 'that clip was INSANE',
-    m2: 'LULW',
+    m2: 'KEKW',
     m3: 'CLIP IT',
-    m4: 'PogChamp',
+    m4: 'GIGACHAD',
     m5: 'W',
     m6: 'been lurking 3 years',
     m7: 'modCheck',
@@ -108,6 +108,12 @@ export const marketing = {
     m14: 'joined from the community post',
     m15: 'POGGERS it actually merges',
     m16: 'late but here',
+    m17: 'SourPls the stream quality',
+    m18: 'chapter 3 is peak',
+    m19: 'PepePls premiere starting',
+    m20: 'replay the intro',
+    m21: 'chat actually synced here',
+    m22: 'this is my Roman Empire',
   },
   // Marquee chatter for the tiktok lane.
   flowTiktok: {
@@ -125,6 +131,14 @@ export const marketing = {
     m12: 'the overlay is so clean',
     m13: 'no way this is free',
     m14: 'watching instead of sleeping',
+    m15: 'AYAYA finally live',
+    m16: 'dropping a follow',
+    m17: 'the vibes are immaculate',
+    m18: 'KKona he actually did it',
+    m19: 'comment section won today',
+    m20: 'no bots just chat',
+    m21: 'zooming to the end',
+    m22: 'been here since 200 views',
   },
   // Marquee chatter for the kick lane.
   flowKick: {
@@ -140,7 +154,16 @@ export const marketing = {
     m10: 'GIGACHAD move',
     m11: 'signing up after this stream',
     m12: 'the 95/5 split goes crazy',
-    m13: 'POG',
+    m13: 'WAYTOODANK',
+    m14: 'PartyParrot kickoff',
+    m15: 'no kick from me',
+    m16: 'the chat speed here is unreal',
+    m17: 'LuL streamer.exe stopped',
+    m18: 'signed up in 30 seconds',
+    m19: 'gambling less, chatting more',
+    m20: 'this lane is my home now',
+    m21: 'ratio the algorithm',
+    m22: 'PETPET the mods',
   },
   // Marquee chatter for the discord lane.
   flowDiscord: {
@@ -156,6 +179,16 @@ export const marketing = {
     m10: 'stream ping squad assemble',
     m11: 'this overlay in our events channel would go hard',
     m12: 'raid train forming',
+    m13: 'peepoHey new here',
+    m14: 'Stare at the chat merge',
+    m15: 'reactor just said that',
+    m16: 'movie night poll is up',
+    m17: 'who else is multitasking',
+    m18: 'the events calendar is stacked',
+    m19: 'first stream on the server',
+    m20: 'xdx the overlay works here',
+    m21: 'lurking with dinner',
+    m22: 'feels like the old internet',
   },
   convergence: {
     label: 'THE WHOLE PRODUCT',
@@ -175,15 +208,15 @@ export const marketing = {
   },
   // The static demo feed below the manifesto; one message per m-key.
   feed: {
-    m1: 'that clip was INSANE PogChamp',
+    m1: 'that clip was INSANE GIGACHAD',
     m2: 'first time catching the stream live!',
-    m3: 'W streamer W takes',
+    m3: 'W streamer W takes POGGERS',
     m4: 'lurking 3 years, this overlay is clean',
     m5: 'came from the fyp, what game is this',
     m6: 'hi from the VOD gang',
     m7: 'CLIP IT OMEGALUL',
     m8: 'peepoHappy the 7tv support!!',
-    m9: 'how is chat from 4 apps in one box',
+    m9: 'how is chat from 4 apps in one box KEKW',
     m10: 'RAID INCOMING — welcome!',
   },
   wedge: {

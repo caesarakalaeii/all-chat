@@ -19,13 +19,14 @@
 /**
  * LanesHero — the homepage hero (mockup G "lanes").
  *
- * Fixed mono chrome (brand + nav) over five full-width platform lanes whose
- * heights are proportional to each platform's share of this week's messages.
- * A WebGL canvas behind the lanes draws the fills and animates their
- * boundaries as a smooth time series (useLaneWaves); the DOM lanes keep
- * only the text (marquee, wordmarks) and follow the same weights from a
- * shared rAF loop, so bars, boundaries and the counter breathe together.
- * Without WebGL2 the CSS lane backgrounds remain — color without waves.
+ * Fixed mono chrome (brand + nav) over a filled stacked line graph: five
+ * platform areas whose thickness tracks each platform's share of this
+ * week's messages. A WebGL canvas paints the curves and fills (useLaneWaves
+ * evaluates a smooth wave field per pixel); the DOM lanes keep only the
+ * text (marquee, wordmarks) and follow the same weights from a shared rAF
+ * loop, so fills, text lanes and the counter breathe together as one
+ * chart. Without WebGL2 the CSS lane backgrounds remain — color without
+ * waves.
  *
  * Marquee rows are generated ONCE at module load: the mockup randomises
  * usernames/messages per row, and React re-rendering (auth store, stats
@@ -41,17 +42,23 @@ import { useEffect, useRef, useState } from 'react'
 import { type MessageKey, formatNumber, useTranslations } from '@/lib/i18n'
 import { DISCORD_INVITE_URL } from '@/lib/constants'
 import { useReducedMotion } from '@/hooks/useReducedMotion'
-import { LANE_COUNT, useLaneWaves } from '@/hooks/useLaneWaves'
+import { LANE_COUNT, laneBaseWeights, useLaneWaves } from '@/hooks/useLaneWaves'
+import { EMOTE_SRC, type EmoteToken } from '@/components/home/emotes'
+
+// Static self-hosted artwork, not next/image: the hero renders at 17px where
+// optimization buys nothing (next.config disables it globally anyway) and
+// next/image would add client JS to a page that loads with none.
+/* eslint-disable @next/next/no-img-element */
 
 // Marquee chatter: how many `marketing.flow<Platform>.mN` keys each lane
 // draws from. Kept beside the usernames so both stay in sync with the
 // curated pools in marketing.ts.
 const MARQUEE_MESSAGE_COUNTS = {
   twitch: 22,
-  youtube: 16,
-  tiktok: 14,
-  kick: 13,
-  discord: 12,
+  youtube: 22,
+  tiktok: 22,
+  kick: 22,
+  discord: 22,
 } as const
 
 // Catalog group holding each lane's marquee strings. The catalog caps key
@@ -69,11 +76,22 @@ const FLOW_GROUPS = {
 // catalog (translating a username produces a different person, not a
 // translation).
 const MARQUEE_USERS = {
-  twitch: ['xqc', 'forsen', 'ludwig', 'nymn', 'sodapoppin', 'peakd', 'zentreya'],
-  youtube: ['ludwig', 'moistcr1tikal', 'veibae', 'sykkuno', 'filian'],
-  tiktok: ['khaby', 'zachking', 'charli', 'bella', 'spencer'],
-  kick: ['xqc', 'amouranth', 'ross', 'ac7ionman', 'gerard'],
-  discord: ['groque', 'caesar', 'moers', 'lana', 'pixi'],
+  twitch: [
+    'xqc',
+    'forsen',
+    'ludwig',
+    'nymn',
+    'sodapoppin',
+    'peaked',
+    'zentreya',
+    'summit1g',
+    'timthetatman',
+    'shroud',
+  ],
+  youtube: ['ludwig', 'moistcr1tikal', 'veibae', 'sykkuno', 'filian', 'dunkey', 'ersan'],
+  tiktok: ['khaby', 'zachking', 'charli', 'bella', 'spencerx', 'bretman', 'liv'],
+  kick: ['xqc', 'amouranth', 'ross', 'ac7ionman', 'trainwreckstv', 'westcol', 'gerard'],
+  discord: ['groque', 'caesar', 'moers', 'lana', 'pixi', 'erin'],
 } as const
 
 type LanePlatform = keyof typeof MARQUEE_MESSAGE_COUNTS
@@ -83,23 +101,79 @@ type LanePlatform = keyof typeof MARQUEE_MESSAGE_COUNTS
 type LaneMessageKey = Extract<MessageKey, `marketing.${(typeof FLOW_GROUPS)[LanePlatform]}.`>
 
 /** One item of a marquee row: `<b>user</b> message` with an optional emote. */
-type MarqueeItem = { user: string; messageKey: LaneMessageKey; emote?: string }
+type MarqueeItem = { user: string; messageKey: LaneMessageKey; emote?: EmoteToken }
 
 /** One marquee row: items plus its drift duration/direction. */
 type MarqueeRow = { items: MarqueeItem[]; duration: number; reverse: boolean }
 
 // Decorative emote tokens per lane — mockup fixtures like the usernames
-// above, deliberately not in the catalog. Real 7TV emote names (feedback:
-// the emoji read off-platform; the product promises native 7TV/BTTV/FFZ
-// rendering, so the marquee should speak it). Rendered as .emote spans so
-// CSS can dim them below the text (texture, not content).
+// above, deliberately not in the catalog. Real emote names (feedback: the
+// emoji read off-platform; the product promises native 7TV/BTTV/FFZ
+// rendering, so the marquee should speak it), and since the hero now
+// renders actual artwork, every name must be one the emote registry has
+// canonical art for — see emotes.ts for where the PNGs come from.
 const MARQUEE_EMOTES = {
-  twitch: ['KEKW', 'POGGERS', 'catJAM', 'peepoHappy', 'SourPls', 'LULW', 'monkaS', 'pog'],
-  youtube: ['COZYME', 'PogChamp', 'BASED', 'peepoSad', 'heart', 'GIGACHAD'],
-  tiktok: ['pog', 'KEKW', 'catJAM', 'Shy', 'peepoLove'],
-  kick: ['EZ', 'OMEGALUL', 'Crazy', 'GIGACHAD', 'peepoLol', 'Clap'],
-  discord: ['peepoHey', 'catJAM', 'KEKW', 'pogChamp', 'heart'],
-} as const
+  twitch: [
+    'peepoHappy',
+    'peepoSad',
+    'PepePls',
+    'peepoPls',
+    'SourPls',
+    'monkaS',
+    'KEKW',
+    'catJAM',
+    'POGGERS',
+    'forsenPls',
+    'FeelsGoodMan',
+    'Clap',
+  ],
+  youtube: [
+    'BasedGod',
+    'ApuApustaja',
+    'EZ',
+    'Clap',
+    'GIGACHAD',
+    'BibleThump',
+    'POGGERS',
+    'KEKW',
+    'peepoHappy',
+    'FeelsOkayMan',
+  ],
+  tiktok: [
+    'FeelsGoodMan',
+    'FeelsBadMan',
+    'KKona',
+    'haHAA',
+    'AYAYA',
+    'peepoPls',
+    'catJAM',
+    'PartyParrot',
+    'ApuApustaja',
+  ],
+  kick: [
+    'OMEGALUL',
+    'LuL',
+    'gachiBASS',
+    'WAYTOODANK',
+    'PartyParrot',
+    'PETPET',
+    'EZ',
+    'POGGERS',
+    'Stare',
+    'forsenPls',
+  ],
+  discord: [
+    'peepoHey',
+    'Stare',
+    'xdx',
+    'FeelsOkayMan',
+    'RebeccaBlack',
+    'peepoHappy',
+    'SourPls',
+    'haHAA',
+    'peepoPls',
+  ],
+} as const satisfies Record<LanePlatform, readonly EmoteToken[]>
 
 // Lane order and row count: taller lanes carry more marquee rows. Denser
 // than the first pass (feedback: "more text, not readable") — two rows for
@@ -112,9 +186,10 @@ const LANES: ReadonlyArray<{ platform: LanePlatform; rows: number }> = [
   { platform: 'discord', rows: 2 },
 ]
 
-// The seeds below must not be multiples of any pool size (users 7, 5, 5, 5,
-// 5; emotes 8, 6, 5, 6, 5; messages 22, 16, 14, 13, 12), or a stride would
-// cycle through only a fraction of a pool. 137 and 29 are coprime to all.
+// The seeds below must not be multiples of any pool size (users 10, 7, 7, 7,
+// 6; emotes 12, 10, 9, 10, 9; messages 22 everywhere), or a stride would
+// cycle through only a fraction of a pool. 137 is prime and larger than every
+// pool, and 29 is coprime to all, so both strides walk full pools.
 const MARQUEE_ROWS: ReadonlyArray<{ platform: LanePlatform; rows: MarqueeRow[] }> = LANES.map(
   ({ platform, rows }, laneIndex) => {
     const users = MARQUEE_USERS[platform]
@@ -126,13 +201,22 @@ const MARQUEE_ROWS: ReadonlyArray<{ platform: LanePlatform; rows: MarqueeRow[] }
       rows: Array.from({ length: rows }, (_, rowIndex) => {
         // Per-row seed: lane/row indices folded in so every row walks its
         // pools from a different offset (deterministic → hydration-safe).
+        // 60 items ≈ 4-5k px per copy, so the -50% loop always outspans the
+        // viewport — fewer made the lanes read as sparse clumps (feedback:
+        // "only a few messages, none with an emote").
         let itemSeed = (laneIndex + 1) * 53 + (rowIndex + 1) * 29
-        const items = Array.from({ length: 14 }, (_, itemIndex) => {
+        let emoteCursor = laneIndex + rowIndex
+        const items = Array.from({ length: 60 }, (_, itemIndex) => {
           itemSeed += 137
           const user = users[itemSeed % users.length]
-          const messageKey = `marketing.${group}.m${(itemSeed % messageCount) + 1}` as LaneMessageKey
-          // Emote every third item — sparse enough to stay texture.
-          const emote = itemSeed % 3 === 0 ? emotes[itemSeed % emotes.length] : undefined
+          const messageKey =
+            `marketing.${group}.m${(itemSeed % messageCount) + 1}` as LaneMessageKey
+          // Emote every third item — sparse enough to stay texture. The
+          // pool pick walks its own cursor (advance 1 per emote), because
+          // reusing the 137-stride seed here would step the pool by
+          // 3×137≡3 (mod 12) and only a third of the artwork would ever
+          // show (measured: 4 of 12 twitch emotes in the DOM).
+          const emote = itemSeed % 3 === 0 ? emotes[(emoteCursor += 1) % emotes.length] : undefined
           return { user, messageKey, emote }
         })
         return {
@@ -189,13 +273,18 @@ export function LanesHero({
   // count and the words; .lanes-total spaces them with a flex gap.
   const totalWords = t('marketing.lanes.totalLabel').split(' ')
 
-  // Real weekly shares, zero-guarded: a platform with no messages this
-  // week falls back to its mockup weight rather than collapsing to zero
-  // (the lane must stay visible; the wordmark carries the brand).
-  const laneBases = LANES.map(({ platform }) => {
-    const share = platformShares?.[platform]
-    return share !== undefined && share > 0 ? share : FALLBACK_SHARES[platform]
-  })
+  // Real weekly counts, zero-guarded: a platform with no messages this
+  // week falls back to its mockup weight rather than collapsing to zero.
+  // laneBaseWeights then normalizes to stage fractions — every lane keeps
+  // a 10% floor, the rest splits by share — so fallback weights (40) and
+  // raw live counts (hundreds of thousands) produce comparable lane sizes
+  // and no lane can be squashed invisible by its siblings' scale.
+  const laneBases = laneBaseWeights(
+    LANES.map(({ platform }) => {
+      const share = platformShares?.[platform]
+      return share !== undefined && share > 0 ? share : FALLBACK_SHARES[platform]
+    })
+  )
 
   const { weightsRef, activeRef } = useLaneWaves(canvasRef, {
     bases: laneBases,
@@ -205,11 +294,10 @@ export function LanesHero({
   // Props the animation loop reads every frame: mirror them so the effect
   // runs once per (reducedMotion) instead of restarting on every parent
   // render (the all-time counter ticks every 1.2s).
-  const basesSum = laneBases.reduce((sum, base) => sum + base, 0)
   const totalCountRef = useRef(totalCount)
   totalCountRef.current = totalCount
-  const basesSumRef = useRef(basesSum)
-  basesSumRef.current = basesSum
+  const laneBasesRef = useRef(laneBases)
+  laneBasesRef.current = laneBases
 
   // Hero scroll effect (feedback: "reveal + hero scroll"): as the hero
   // leaves the viewport the stage sinks and dims — the visitor's scroll
@@ -237,23 +325,42 @@ export function LanesHero({
   // DOM half of the lane waves: the canvas fills the bands (useLaneWaves)
   // and mutates weightsRef; this loop applies the same weights to the flex
   // lanes and breathes the counter by their activity ratio, so bars and
-  // number move as one chart. Direct style/text writes — no setState — so
   // 60fps costs no React renders; server markup and first frame match the
-  // base shares exactly (laneWeight at t=0 returns the base).
+  // base weights exactly (the wave field equals its base at t=0, x=0).
+  //
+  // Before the first canvas frame — and forever without WebGL2 — the loop
+  // eases its own copy of the normalized bases toward the current prop
+  // instead: a late /stats glides the fallback lanes in rather than
+  // snapping, the DOM twin of the easing inside useLaneWaves' draw loop.
   useEffect(() => {
     if (reducedMotion) return
     let raf = 0
-    const step = () => {
-      const weights = weightsRef.current
+    let lastTs = 0
+    const displayed = [...laneBasesRef.current]
+    // Exponential-easing time constant (seconds); the per-frame blend is
+    // derived from the rAF timestamp, so the ease speed is frame-rate
+    // independent.
+    const EASE_TAU = 0.8
+    const step = (ts: number) => {
+      const dt = lastTs === 0 ? 0 : (ts - lastTs) / 1000
+      lastTs = ts
+      const live = activeRef.current
+      if (!live) {
+        const blend = dt > 0 ? 1 - Math.exp(-dt / EASE_TAU) : 1
+        for (let i = 0; i < LANE_COUNT; i++) {
+          displayed[i] += (laneBasesRef.current[i] - displayed[i]) * blend
+        }
+      }
+      const weights = live ? weightsRef.current : displayed
       for (let i = 0; i < LANE_COUNT; i++) {
         const lane = laneRefs.current[i]
         if (lane) lane.style.flexGrow = String(weights[i])
       }
       if (counterRef.current) {
-        const scale = weights.reduce((sum, w) => sum + w, 0) / Math.max(basesSumRef.current, 1)
-        counterRef.current.textContent = formatNumber(
-          Math.round(totalCountRef.current * scale)
-        )
+        // The bases are normalized to sum 1, so the live weights sum IS
+        // the activity ratio — no separate bases sum to divide by.
+        const scale = weights.reduce((sum, w) => sum + w, 0)
+        counterRef.current.textContent = formatNumber(Math.round(totalCountRef.current * scale))
       }
       // Once the canvas has actually drawn a frame, drop the CSS lane
       // fills — canvas tint would stack on top of them.
@@ -303,11 +410,11 @@ export function LanesHero({
         style={
           reducedMotion
             ? undefined
-            : {
+            : ({
                 // Sink + dim as the hero scrolls out; the CSS consumes the
                 // progress value, so the exact curve lives in globals.css.
                 '--hero-progress': progress,
-              } as React.CSSProperties
+              } as React.CSSProperties)
         }
       >
         {/* WebGL lane fills; the DOM lanes below carry only text. */}
@@ -320,6 +427,8 @@ export function LanesHero({
             }}
             className="lane"
             data-p={platform}
+            // Same normalized weights the canvas computes at t=0, so the
+            // server frame, CSS fallback and first animation frame agree.
             style={{ flexGrow: laneBases[laneIndex] }}
           >
             <div className="wordmark" aria-hidden="true">
@@ -339,7 +448,15 @@ export function LanesHero({
                   <span key={j}>
                     {j > 0 && <span className="sep">·</span>}
                     <b>{item.user}</b> {t(item.messageKey)}
-                    {item.emote !== undefined && <span className="emote">{item.emote}</span>}
+                    {item.emote !== undefined && (
+                      <img
+                        className="emote"
+                        src={EMOTE_SRC[item.emote]}
+                        alt={item.emote}
+                        width={17}
+                        height={17}
+                      />
+                    )}
                   </span>
                 ))}
                 <span className="sep">·</span>
@@ -347,7 +464,15 @@ export function LanesHero({
                   <span key={`d${j}`}>
                     {j > 0 && <span className="sep">·</span>}
                     <b>{item.user}</b> {t(item.messageKey)}
-                    {item.emote !== undefined && <span className="emote">{item.emote}</span>}
+                    {item.emote !== undefined && (
+                      <img
+                        className="emote"
+                        src={EMOTE_SRC[item.emote]}
+                        alt={item.emote}
+                        width={17}
+                        height={17}
+                      />
+                    )}
                   </span>
                 ))}
               </div>
