@@ -13,6 +13,10 @@
 /* Message text is theme-controlled; usernames keep their viewer-defined color. */
 :root {
   --chat-message-color: #eef1ff;
+  /* Avatar-gap intent: the card's vertical layout stacks art above text with
+     a 10px stride, which the customizer consumer reads when its slider is
+     unset. */
+  --theme-avatar-gap: 10px;
 }
 
 body {

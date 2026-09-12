@@ -323,6 +323,13 @@ Most `--chat-*` properties are cooperative: read the variable with your own valu
 as the fallback (`font-size: var(--chat-font-size, 15px)`) and the user's control
 wins when they set it, your look wins when they don't.
 
+The spacing and bubble-geometry controls also emit a **theme-intent step** in
+the app's own consumer rules — `gap: var(--chat-avatar-gap, var(--theme-avatar-gap,
+0.75rem))` on the avatar row, the same shape as `--chat-message-gap` and the
+bubble set. Declare your stride in `:root` (`--theme-avatar-gap: 16px`) and it
+applies whenever the user has not set the control; declare nothing and the
+platform default is used. Minimal shows the full pattern.
+
 These are **not** cooperative. When the user sets one, the app emits a rule
 inside `@layer visual-customizer` — the top layer, which outranks your theme's
 `@layer marketplace-themes` — so nothing a theme writes can win against it:

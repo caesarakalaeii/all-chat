@@ -520,7 +520,7 @@
     display: var(--chat-show-avatars, block);
   }
   .overlay-preview-body .flex.items-start.gap-3 {
-    gap: var(--chat-avatar-gap, 0.75rem);
+    gap: var(--chat-avatar-gap, var(--theme-avatar-gap, 0.75rem));
   }
   .overlay-preview-body .flex-shrink-0 img,
   .overlay-preview-body .flex-shrink-0 > div {
@@ -711,7 +711,7 @@
 
   /* ── Avatar ────────────────────────────────────────────────────────── */
   .overlay-live-body .flex.items-start.gap-3 {
-    gap: var(--chat-avatar-gap, 0.75rem);
+    gap: var(--chat-avatar-gap, var(--theme-avatar-gap, 0.75rem));
   }
   .overlay-live-body .flex-shrink-0 img,
   .overlay-live-body .flex-shrink-0 > div {
