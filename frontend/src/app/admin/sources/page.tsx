@@ -44,6 +44,7 @@ interface Source {
     | 'goodgame'
     | 'picarto'
     | 'facebook'
+    | 'instagram'
     | 'rumble'
     | 'discord'
     | 'shared_overlay'
@@ -119,6 +120,7 @@ export default function SourcesPage() {
             'goodgame',
             'picarto',
             'facebook',
+            'instagram',
             'rumble',
             'discord',
             'shared_overlay',
@@ -169,6 +171,7 @@ export default function SourcesPage() {
     goodgame: sources.filter((s) => s.platform === 'goodgame').length,
     picarto: sources.filter((s) => s.platform === 'picarto').length,
     facebook: sources.filter((s) => s.platform === 'facebook').length,
+    instagram: sources.filter((s) => s.platform === 'instagram').length,
     rumble: sources.filter((s) => s.platform === 'rumble').length,
   }
 
@@ -338,6 +341,7 @@ export default function SourcesPage() {
               <option value="goodgame">{t('common.platforms.goodgame')}</option>
               <option value="picarto">{t('common.platforms.picarto')}</option>
               <option value="facebook">{t('common.platforms.facebook')}</option>
+              <option value="instagram">{t('common.platforms.instagram')}</option>
               <option value="rumble">{t('common.platforms.rumble')}</option>
             </select>
           </div>

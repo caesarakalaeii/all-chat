@@ -20,22 +20,22 @@ import "time"
 
 // OverlayConfig represents the persisted configuration for an overlay display
 type OverlayConfig struct {
-	ID                 string         `json:"id"`
-	OverlayID          string         `json:"overlay_id"`
-	DisplaySettings    map[string]any `json:"display_settings"`
-	FilterSettings     map[string]any `json:"filter_settings"`
-	Enable7TV          bool           `json:"enable_7tv"`
-	EnableBTTV         bool           `json:"enable_bttv"`
-	EnableFFZ          bool           `json:"enable_ffz"`
-	CustomCSS          string         `json:"custom_css"`
-	VisualSettings     map[string]any `json:"visual_settings"`
-	SevenTVEmoteSetID  string         `json:"seventv_emote_set_id"`
+	ID                string         `json:"id"`
+	OverlayID         string         `json:"overlay_id"`
+	DisplaySettings   map[string]any `json:"display_settings"`
+	FilterSettings    map[string]any `json:"filter_settings"`
+	Enable7TV         bool           `json:"enable_7tv"`
+	EnableBTTV        bool           `json:"enable_bttv"`
+	EnableFFZ         bool           `json:"enable_ffz"`
+	CustomCSS         string         `json:"custom_css"`
+	VisualSettings    map[string]any `json:"visual_settings"`
+	SevenTVEmoteSetID string         `json:"seventv_emote_set_id"`
 	// ThemeID is the bundled marketplace theme applied to this overlay. The
 	// renderer resolves its CSS fresh from the frontend bundle so theme fixes
 	// propagate on deploy. Empty = no bundled theme (raw custom_css / legacy).
-	ThemeID            string         `json:"theme_id"`
-	CreatedAt          time.Time      `json:"created_at"`
-	UpdatedAt          time.Time      `json:"updated_at"`
+	ThemeID   string    `json:"theme_id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // EnsureMaps initializes map fields when nil

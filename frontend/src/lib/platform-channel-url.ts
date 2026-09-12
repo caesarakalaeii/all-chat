@@ -29,6 +29,7 @@
  *   - picarto: `channelId` is the channel name      -> picarto.tv/{name}
  *   - rumble: `channelId` is the channel name       -> rumble.com/c/{name}
  *   - facebook: the source is the connected Page; no public chat URL -> null
+ *   - instagram: the source is the connected account; no public chat URL -> null
  *
  * Returns `null` when no trustworthy public URL can be built; callers render
  * plain text in that case.

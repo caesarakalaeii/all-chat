@@ -158,6 +158,23 @@ const FacebookIcon = () => (
   </svg>
 )
 
+const InstagramIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-5 w-5">
+    <rect
+      x="3.5"
+      y="3.5"
+      width="17"
+      height="17"
+      rx="5"
+      fill="none"
+      stroke="#ED6FA4"
+      strokeWidth="2"
+    />
+    <circle cx="12" cy="12" r="4" fill="none" stroke="#ED6FA4" strokeWidth="2" />
+    <circle cx="17.2" cy="6.8" r="1.2" fill="#ED6FA4" />
+  </svg>
+)
+
 const RumbleIcon = () => (
   <svg viewBox="0 0 24 24" className="h-5 w-5">
     <circle cx="12" cy="12" r="9" fill="none" stroke="#85C742" strokeWidth="2" />
@@ -183,6 +200,7 @@ const GOODGAME_GLYPH = 'GG'
   goodgame: { icon: GoodGameIcon, nameKey: 'common.platforms.goodgame' },
   picarto: { icon: PicartoIcon, nameKey: 'common.platforms.picarto' },
   facebook: { icon: FacebookIcon, nameKey: 'common.platforms.facebook' },
+  instagram: { icon: InstagramIcon, nameKey: 'common.platforms.instagram' },
   rumble: { icon: RumbleIcon, nameKey: 'common.platforms.rumble' },
    discord: { icon: DiscordIcon, nameKey: 'common.platforms.discord' },
  } as const satisfies Record<string, { icon: React.FC; nameKey: MessageKey }>

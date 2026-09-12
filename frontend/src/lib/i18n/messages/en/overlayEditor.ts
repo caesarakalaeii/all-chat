@@ -459,6 +459,7 @@ export const overlayEditor = {
     connectPicarto: 'Connect Picarto',
     connectRumble: 'Connect Rumble',
     connectFacebook: 'Connect Facebook Page',
+    connectInstagram: 'Connect Instagram',
     channelTitle: 'Connect {platform}',
     owncastBody:
       'An Owncast server streams one channel. Enter its base URL (e.g. https://watch.example.com) and we will follow its chat.',
@@ -857,6 +858,8 @@ export const overlayEditor = {
     engagementSaved: 'Engagement settings saved',
     facebookSourceAdded: 'Facebook source added',
     facebookSourceAddFailed: 'Could not connect Facebook',
+    instagramSourceAdded: 'Instagram source added',
+    instagramSourceAddFailed: 'Could not connect Instagram',
     engagementSaveFailed: 'Failed to save engagement settings',
     twitchConsentFailed: 'Could not start Twitch consent. Please try again.',
     discordSourceAdded: 'Discord source added',

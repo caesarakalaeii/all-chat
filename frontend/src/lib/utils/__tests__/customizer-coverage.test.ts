@@ -212,6 +212,7 @@ describe('visual customizer property coverage', () => {
       'goodgameBubbleBg',
       'picartoBubbleBg',
       'facebookBubbleBg',
+      'instagramBubbleBg',
       'rumbleBubbleBg',
       'discordBubbleBg',
     ] as const) {
@@ -245,6 +246,7 @@ describe('visual customizer property coverage', () => {
       'goodgameAccent',
       'picartoAccent',
       'facebookAccent',
+      'instagramAccent',
       'rumbleAccent',
       'discordAccent',
     ] as const) {

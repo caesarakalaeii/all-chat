@@ -48,6 +48,7 @@ const NAMEABLE_PLATFORMS = [
   'kick',
   'tiktok',
   'facebook',
+  'instagram',
   'discord',
 ] as const
 

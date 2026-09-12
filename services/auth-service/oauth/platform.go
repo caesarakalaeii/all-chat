@@ -27,11 +27,12 @@ import (
 type Platform string
 
 const (
-	PlatformTwitch   Platform = "twitch"
-	PlatformYouTube  Platform = "youtube"
-	PlatformKick     Platform = "kick"
-	PlatformDiscord  Platform = "discord"
-	PlatformFacebook Platform = "facebook"
+	PlatformTwitch    Platform = "twitch"
+	PlatformYouTube   Platform = "youtube"
+	PlatformKick      Platform = "kick"
+	PlatformDiscord   Platform = "discord"
+	PlatformFacebook  Platform = "facebook"
+	PlatformInstagram Platform = "instagram"
 )
 
 // PlatformUserInfo is a generic user info interface

@@ -99,6 +99,7 @@ const ALL_PLATFORMS = [
   'goodgame',
   'picarto',
   'facebook',
+  'instagram',
   'rumble',
   'discord',
 ] as const

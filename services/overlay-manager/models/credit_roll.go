@@ -38,14 +38,14 @@ type CreditRollConfig struct {
 	IncludeFollows       bool `json:"include_follows" db:"include_follows"`
 
 	// Leaderboard settings
-	LeaderboardTopN    int    `json:"leaderboard_top_n" db:"leaderboard_top_n"`
-	LeaderboardSortBy  string `json:"leaderboard_sort_by" db:"leaderboard_sort_by"` // "value" or "count"
+	LeaderboardTopN   int    `json:"leaderboard_top_n" db:"leaderboard_top_n"`
+	LeaderboardSortBy string `json:"leaderboard_sort_by" db:"leaderboard_sort_by"` // "value" or "count"
 
 	// Display settings
-	ScrollSpeed              int     `json:"scroll_speed" db:"scroll_speed"`
-	DisplayDurationSeconds   int     `json:"display_duration_seconds" db:"display_duration_seconds"`
-	BackgroundOpacity        float64 `json:"background_opacity" db:"background_opacity"`
-	Theme                    string  `json:"theme" db:"theme"` // "classic", "cinematic", "modern"
+	ScrollSpeed            int     `json:"scroll_speed" db:"scroll_speed"`
+	DisplayDurationSeconds int     `json:"display_duration_seconds" db:"display_duration_seconds"`
+	BackgroundOpacity      float64 `json:"background_opacity" db:"background_opacity"`
+	Theme                  string  `json:"theme" db:"theme"` // "classic", "cinematic", "modern"
 
 	// Clips settings
 	ClipsEnabled      bool `json:"clips_enabled" db:"clips_enabled"`
@@ -128,9 +128,9 @@ type CreditRollResponse struct {
 
 // SessionInfo represents active session info stored in Redis
 type SessionInfo struct {
-	SessionID    string    `json:"session_id"`
-	StartedAt    time.Time `json:"started_at"`
-	State        string    `json:"state"`
-	EventCount   int       `json:"event_count"`
-	LastEventAt  time.Time `json:"last_event_at,omitempty"`
+	SessionID   string    `json:"session_id"`
+	StartedAt   time.Time `json:"started_at"`
+	State       string    `json:"state"`
+	EventCount  int       `json:"event_count"`
+	LastEventAt time.Time `json:"last_event_at,omitempty"`
 }
