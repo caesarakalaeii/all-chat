@@ -26,8 +26,9 @@
  * full editable CSS at load time.
  *
  * Storage modes (encoded as a leading marker comment in `custom_css`; the overlay
- * render is uniform — bundled theme first, then `custom_css` last with the delta's
- * `!important` winning, so the marker + mode are only used by the editor):
+ * render is uniform — the bundled theme is wrapped into `@layer
+ * marketplace-themes` and the delta is injected unlayered, so the delta wins on
+ * layer order; the marker + mode are only used by the editor):
  *  - 'linked' → editor equals the theme; `custom_css` empty; overlay fully tracks the bundle.
  *  - 'diff'   → only changed/added declarations stored; untouched theme rules keep updating.
  *  - 'fork'   → the user deleted theme declarations (which CSS layering can't express),

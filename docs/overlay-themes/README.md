@@ -328,7 +328,10 @@ the app's own consumer rules — `gap: var(--chat-avatar-gap, var(--theme-avatar
 0.75rem))` on the avatar row, the same shape as `--chat-message-gap` and the
 bubble set. Declare your stride in `:root` (`--theme-avatar-gap: 16px`) and it
 applies whenever the user has not set the control; declare nothing and the
-platform default is used. Minimal shows the full pattern.
+platform default is used. Minimal shows the pattern for the bubble and
+message-gap intent set (it hides avatars, so it declares no
+`--theme-avatar-gap`); Comic Speech, Trading Card and Windows 98 Retro show it
+for the avatar stride.
 
 These are **not** cooperative. When the user sets one, the app emits a rule
 inside `@layer visual-customizer` — the top layer, which outranks your theme's
