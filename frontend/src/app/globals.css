@@ -720,12 +720,17 @@ span.font-semibold.text-sm.username-gradient {
   font-family: var(--font-archivo-black), sans-serif;
 }
 
-/* Fixed mono chrome over the lanes. */
+/* Fixed mono chrome over the lanes. The bands are solid brand colors now,
+ * so the old mix-blend-mode: difference ink turned mid-luminance olive
+ * over the light bands (~1.2:1). Instead each chrome cluster carries a
+ * dark translucent chip: white ink passes AA over it whether the band
+ * boundary, the page background or the marquee sits behind. */
 .lanes-chrome {
   position: fixed;
   z-index: 30;
-  mix-blend-mode: difference;
   color: #f4f3ef;
+  background: rgba(5, 5, 8, 0.62);
+  padding: 6px 12px;
 }
 .lanes-chrome a {
   color: #f4f3ef;
@@ -758,13 +763,12 @@ span.font-semibold.text-sm.username-gradient {
     gap: 12px;
   }
 }
-/* Logged-in dashboard chip: warm white on black, out of the blend. */
+/* Logged-in dashboard chip: solid warm white on black ink. */
 .lanes-tr .dash-chip {
   background: #f4f3ef;
   color: #000;
   padding: 5px 12px;
   font-weight: 700;
-  mix-blend-mode: normal;
 }
 
 /* Proportional platform lanes. */

@@ -35,9 +35,9 @@
  * The interpolation runs on the CPU — a few dozen kilobytes of vertex
  * data per frame — because a spline over a ring buffer is
  * trivially wrong-or-right in JS, while the same indexing in GLSL is a
- * debugging session. Each band is one TRIANGLE_STRIP around its
- * polygon (top boundary left-to-right, bottom boundary right-to-left),
- * five draw calls with a per-call lane uniform for the color.
+ * debugging session. Each band is one TRIANGLE_STRIP zigzagging top and
+ * bottom vertices per column, five draw calls with a per-call lane
+ * uniform for the color.
  *
  * The render loop never calls setState — it mutates the returned
  * weightsRef with the live (right-edge) shares, which the hero reads
@@ -94,8 +94,9 @@ const LANE_COLORS = ['#8464d6', '#d95c50', '#62aeb4', '#56b847', '#6a72c9'] as c
 const WINDOW_SECONDS = 30
 /** Grid cadence the ring samples shares at; the spline smooths between. */
 const SAMPLE_INTERVAL = 1
-/** Ring depth: grid slots covering WINDOW_SECONDS, plus one spare. */
-const SAMPLES = WINDOW_SECONDS / SAMPLE_INTERVAL + 2
+/** Ring depth: enough grid slots that the visible window never reaches
+ * past the oldest spline control point (see the draw loop's column math). */
+const SAMPLES = WINDOW_SECONDS / SAMPLE_INTERVAL + 4
 /** Columns drawn across the canvas; one interpolated column per slice. */
 const COLUMNS = 160
 
@@ -152,6 +153,12 @@ export function useLaneWaves(
   const modulationsRef = useRef(modulations)
   modulationsRef.current = modulations
 
+  // Live shares ease toward their targets instead of snapping, so a
+  // stats-poll step enters the graph as a glide, not a jump at the right
+  // edge. Per-frame lerp factor; ~2 s to close most of the gap at 60fps.
+  const eased = useRef<number[]>([...bases])
+  const EASE = 0.015
+
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -196,7 +203,9 @@ export function useLaneWaves(
     })
     gl.uniform3fv(uColors, colors)
 
-    const sample = (lane: number, seconds: number) =>
+    // Target share for a lane at a time: weekly base × live modulation ×
+    // the decorative shimmer. The live edge eases toward this target.
+    const targetAt = (lane: number, seconds: number) =>
       laneWeight(
         (basesRef.current[lane] ?? 1) * (modulationsRef.current[lane] ?? 1),
         lane,
@@ -212,7 +221,7 @@ export function useLaneWaves(
       const rows: number[][] = []
       for (let k = 0; k < SAMPLES; k++) {
         const seconds = atClock - (SAMPLES - 1 - k) * SAMPLE_INTERVAL
-        rows.push(Array.from({ length: LANE_COUNT }, (_, lane) => sample(lane, seconds)))
+        rows.push(Array.from({ length: LANE_COUNT }, (_, lane) => targetAt(lane, seconds)))
       }
       return rows
     }
@@ -253,29 +262,44 @@ export function useLaneWaves(
     }
 
     const draw = (clock: number) => {
-      // 1. Commit due grid samples. If the tab slept past the whole window
-      //    (rAF pauses while hidden), drop the stale history and restart
-      //    the ring at now instead of synthesizing dozens of samples.
+      // 1. Ease the live shares toward their targets — the graph must
+      //    glide, never step, so a stats-poll jump enters as a curve.
+      //    Both the right edge and the ring snapshots come from the eased
+      //    signal, keeping the whole series one continuous curve.
+      for (let lane = 0; lane < LANE_COUNT; lane++) {
+        const target = targetAt(lane, clock)
+        eased.current[lane] += (target - eased.current[lane]) * EASE
+      }
+
+      // 2. Commit due grid samples from the eased signal. If the tab slept
+      //    past the whole window (rAF pauses while hidden), drop the stale
+      //    history and restart the ring at now instead of synthesizing
+      //    dozens of samples.
       if (clock - lastSample > WINDOW_SECONDS) {
         ring.length = 0
-        ring.push(...prefill(clock))
+        ring.push([...eased.current])
         lastSample = clock
       }
       while (clock - lastSample >= SAMPLE_INTERVAL) {
         lastSample += SAMPLE_INTERVAL
-        ring.push(Array.from({ length: LANE_COUNT }, (_, lane) => sample(lane, lastSample)))
+        ring.push([...eased.current])
         ring.shift()
       }
 
-      // 2. Build the interpolation chain: grid history plus the live
-      //    value as the terminal point. The right edge of the graph is
-      //    "now", so the flex lanes and wordmarks track exactly it.
+      // 3. Build the interpolation chain: grid history plus the live
+      //    eased value as the terminal point. The right edge of the
+      //    graph is "now", so the flex lanes and wordmarks track it.
       for (let lane = 0; lane < LANE_COUNT; lane++) {
-        const value = sample(lane, clock)
-        chain[SAMPLES][lane] = value
-        weightsRef.current[lane] = value
+        chain[SAMPLES][lane] = eased.current[lane]
+        weightsRef.current[lane] = eased.current[lane]
       }
       for (let k = 0; k < SAMPLES; k++) chain[k] = ring[k]
+
+      // Fraction of the current grid interval already elapsed. The
+      // column→chain mapping below adds it, so the graph scrolls by the
+      // exact passage of time each frame instead of jumping one slot
+      // whenever a grid sample commits.
+      const frac = (clock - lastSample) / SAMPLE_INTERVAL
 
       const w = canvas.clientWidth
       const h = canvas.clientHeight
@@ -287,15 +311,20 @@ export function useLaneWaves(
       gl.clearColor(0, 0, 0, 0)
       gl.clear(gl.COLOR_BUFFER_BIT)
 
-      // 3. Columns: one spline evaluation per column, then stack each
+      // 4. Columns: one spline evaluation per column, then stack each
       //    lane's share cumulatively into clip-space y. Each band's
       //    region in the vertex buffer is a TRIANGLE_STRIP that zigzags
       //    top/bottom per column — that ordering is what fills the band's
       //    interior (a polygon outline walked as one loop is NOT a strip).
       //    Band 0 is the top band; clip y is +1 at the top.
+      //    Column col covers (col / COLUMNS) of the last WINDOW_SECONDS,
+      //    mapped onto the chain at time-exact position with +frac; the
+      //    two-slot slack keeps every visible spline segment's control
+      //    points inside the ring, including at frac close to 1.
+      const span = WINDOW_SECONDS / SAMPLE_INTERVAL
       for (let col = 0; col < COLUMNS; col++) {
-        // c=0 is the left (oldest) edge; c=SAMPLES is the right (now).
-        splineAt((col / (COLUMNS - 1)) * SAMPLES, column)
+        const c = SAMPLES - 2 - span + (col / (COLUMNS - 1)) * span + frac
+        splineAt(c, column)
         let total = 0
         for (let lane = 0; lane < LANE_COUNT; lane++) total += column[lane]
         const x = (col / (COLUMNS - 1)) * 2 - 1
