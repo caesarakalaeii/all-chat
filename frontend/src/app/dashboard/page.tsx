@@ -62,6 +62,7 @@ const PLATFORM_HEX: Record<string, string> = {
   goodgame: '#7FA3D1',
   picarto: '#27B756',
   facebook: '#3B93F5',
+  instagram: '#ED6FA4',
   rumble: '#85C742',
 }
 
@@ -132,6 +133,7 @@ function DashboardEmptyState({ onCreateClick }: { onCreateClick: () => void }) {
             'goodgame',
             'picarto',
             'facebook',
+            'instagram',
             'rumble',
           ] as const
         ).map((p) => (

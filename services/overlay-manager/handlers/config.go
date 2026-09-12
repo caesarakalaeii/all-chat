@@ -64,6 +64,7 @@ var bubbleColorSettings = []string{
 	"facebookBubbleBg",
 	"rumbleBubbleBg",
 	"discordBubbleBg",
+	"instagramBubbleBg",
 }
 
 // ConfigHandler manages overlay configuration routes.

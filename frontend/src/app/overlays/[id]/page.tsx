@@ -1544,6 +1544,31 @@ function AddSourceForm({
           </svg>
           {t('overlayEditor.addSource.connectFacebook')}
         </Button>
+
+        {/* Instagram — connect-first OAuth like Facebook: the source is the
+            streamer's connected account, so the add flow IS the OAuth flow. */}
+        <Button
+          onClick={() => startOAuth(`/api/v1/auth/instagram/add-source/${overlayId}`)}
+          size="lg"
+          className="gap-2.5 text-white"
+          style={{ backgroundColor: '#E1306C', '--tw-ring-color': '#E1306C' } as React.CSSProperties}
+        >
+          <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+            <rect
+              x="3.5"
+              y="3.5"
+              width="17"
+              height="17"
+              rx="5"
+              fill="none"
+              stroke="#FFFFFF"
+              strokeWidth="2"
+            />
+            <circle cx="12" cy="12" r="4" fill="none" stroke="#FFFFFF" strokeWidth="2" />
+            <circle cx="17.2" cy="6.8" r="1.2" fill="#FFFFFF" />
+          </svg>
+          {t('overlayEditor.addSource.connectInstagram')}
+        </Button>
       </div>
 
       {/* Discord 2-step dialog */}
@@ -4185,7 +4210,6 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                       </p>
                     </div>
                   )}
-
                   {activeSection === 'testing' && (
                     <div className="space-y-3" data-setting-anchor="mockMessage">
                       <div>
@@ -4210,6 +4234,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           <option value="goodgame">{t('common.platforms.goodgame')}</option>
                           <option value="picarto">{t('common.platforms.picarto')}</option>
                           <option value="facebook">{t('common.platforms.facebook')}</option>
+                          <option value="instagram">{t('common.platforms.instagram')}</option>
                           <option value="rumble">{t('common.platforms.rumble')}</option>
                           <option value="twitch">{t('common.platforms.twitch')}</option>
                           <option value="youtube">{t('common.platforms.youtube')}</option>

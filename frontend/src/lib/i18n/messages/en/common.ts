@@ -63,6 +63,7 @@ export const common = {
     goodgame: 'GoodGame',
     picarto: 'Picarto',
     facebook: 'Facebook',
+    instagram: 'Instagram',
     rumble: 'Rumble',
     discord: 'Discord',
   },

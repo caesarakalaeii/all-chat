@@ -720,6 +720,7 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 		var youtubeChannel *oauth.YouTubeChannelInfo
 		var sourceDetails *OverlaySourceDetails
 		var facebookPage *oauth.FacebookPage
+		var instagramAccount *oauth.InstagramAccount
 
 		if platform == oauth.PlatformYouTube {
 			youtubeProvider, ok := provider.(*oauth.YouTubeOAuth)
@@ -795,6 +796,36 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 					sourceDetails = &OverlaySourceDetails{
 						ChannelID:   page.ID,
 						ChannelName: page.Name,
+					}
+				}
+			}
+		}
+
+		if platform == oauth.PlatformInstagram {
+			instagramProvider, ok := provider.(*oauth.InstagramOAuth)
+			if !ok {
+				h.logger.Error("Instagram provider assertion failed")
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Instagram provider misconfigured"})
+				return
+			}
+
+			// The IG professional account (id, username) and the Page token
+			// are resolved at both login and add-source, mirroring Facebook:
+			// the IG user id IS the source identity, and storing the token at
+			// callback time keeps the later add-source path from acting on a
+			// half-initialized credential.
+			account, accountErr := instagramProvider.GetStreamersInstagramAccount(c.Request.Context(), token.AccessToken)
+			if accountErr != nil {
+				h.logger.Warn("Failed to resolve Instagram account (non-fatal, skipping token store)",
+					zap.String("platform_user_id", platformUser.GetID()),
+					zap.Error(accountErr))
+				instagramAccount = nil
+			} else {
+				instagramAccount = account
+				if oauthState.IsAddSource() {
+					sourceDetails = &OverlaySourceDetails{
+						ChannelID:   account.IGUserID,
+						ChannelName: account.IGUsername,
 					}
 				}
 			}
@@ -986,6 +1017,25 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 			}
 		}
 
+		if platform == oauth.PlatformInstagram && instagramAccount != nil {
+			// The Page token from a long-lived user token does not expire
+			// (same chain as Facebook, ADR-0060): stored here, replaced on
+			// every re-consent, invalidated only by the streamer disconnecting
+			// or revoking the app. The long-lived USER token behind it has its
+			// ~60-day expiry recorded only in the users row via the normal
+			// login write; the listener credential itself never expires.
+			if err := h.userRepo.StoreInstagramToken(c.Request.Context(),
+				user.ID, instagramAccount.IGUserID, instagramAccount.IGUsername,
+				instagramAccount.AccessToken, nil,
+				oauth.ExtractGrantedScopes(token)); err != nil {
+				h.logger.Warn("Failed to store Instagram token",
+					zap.String("user_id", user.ID),
+					zap.String("ig_user_id", instagramAccount.IGUserID),
+					zap.Error(err),
+				)
+			}
+		}
+
 		if platform == oauth.PlatformYouTube && youtubeChannel != nil {
 			// granted_scopes carries the opt-in youtube.force-ssl grant (ADR-0017) for
 			// the moderation service; merged (not replaced) so a plain add-source never
@@ -1131,21 +1181,23 @@ func (h *PlatformAuthHandlerV2) getOrCreateUser(
 	var err error
 
 	// Try to get existing user based on platform
-	switch platform {
-	case oauth.PlatformTwitch:
-		user, err = h.userRepo.GetByTwitchID(ctx, platformUser.GetID())
-	case oauth.PlatformYouTube:
-		user, err = h.userRepo.GetByGoogleID(ctx, platformUser.GetID())
-	case oauth.PlatformKick:
-		user, err = h.userRepo.GetByKickID(ctx, platformUser.GetID())
-	default:
-		return nil, fmt.Errorf("unsupported platform: %s", platform)
+	// Facebook and Instagram logins have no users-table platform ID column
+	// (like Discord); an existing same-provider account is found by
+	// auth_provider + username.
+	if platform == oauth.PlatformFacebook || platform == oauth.PlatformInstagram {
+		user, err = h.userRepo.GetByUsername(ctx, platformUser.GetUsername())
+	} else {
+		switch platform {
+		case oauth.PlatformTwitch:
+			user, err = h.userRepo.GetByTwitchID(ctx, platformUser.GetID())
+		case oauth.PlatformYouTube:
+			user, err = h.userRepo.GetByGoogleID(ctx, platformUser.GetID())
+		case oauth.PlatformKick:
+			user, err = h.userRepo.GetByKickID(ctx, platformUser.GetID())
+		default:
+			return nil, fmt.Errorf("unsupported platform: %s", platform)
+		}
 	}
-
-	if err != nil && !errors.Is(err, repository.ErrUserNotFound) {
-		return nil, fmt.Errorf("failed to look up user: %w", err)
-	}
-
 	if err != nil {
 		// For YouTube login flow, channel info was skipped to save quota.
 		// Now that we know this is a NEW user, fetch it for duplicate detection.
@@ -1203,7 +1255,10 @@ func (h *PlatformAuthHandlerV2) getOrCreateUser(
 			GrantedScopes:   oauth.ExtractGrantedScopes(token),
 		}
 
-		// Set the appropriate platform ID
+		// Set the appropriate platform ID. Facebook and Instagram logins set
+		// none: there is no column for them (see the lookup above); the token
+		// carried on the users row is the long-lived USER token for the next
+		// re-consent.
 		switch platform {
 		case oauth.PlatformTwitch:
 			user.TwitchID = &platformID
@@ -1399,9 +1454,12 @@ func (h *PlatformAuthHandlerV2) linkPlatformToUser(
 		return nil, fmt.Errorf("user account is banned")
 	}
 
-	// Update the user with the new platform ID
 	platformID := platformUser.GetID()
 
+	// Set the user's new platform ID where a column exists. Facebook and
+	// Instagram logins have none (see getOrCreateUser): the link updates the
+	// profile/token fields below and the granted-scopes guard, both of which
+	// already behave correctly for these platforms.
 	switch platform {
 	case oauth.PlatformTwitch:
 		user.TwitchID = &platformID
@@ -1409,8 +1467,6 @@ func (h *PlatformAuthHandlerV2) linkPlatformToUser(
 		user.GoogleID = &platformID
 	case oauth.PlatformKick:
 		user.KickID = &platformID
-	default:
-		return nil, fmt.Errorf("unsupported platform: %s", platform)
 	}
 
 	newScopes := oauth.ExtractGrantedScopes(token)

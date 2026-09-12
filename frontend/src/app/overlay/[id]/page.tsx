@@ -230,6 +230,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
       'goodgame',
       'picarto',
       'facebook',
+      'instagram',
       'rumble',
       'discord',
     ],
@@ -547,6 +548,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
             'goodgame',
             'picarto',
             'facebook',
+            'instagram',
             'rumble',
             'discord',
           ],
@@ -651,6 +653,8 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
         return 'text-picarto'
       case 'facebook':
         return 'text-facebook'
+      case 'instagram':
+        return 'text-instagram'
       case 'rumble':
         return 'text-rumble'
       default:
@@ -755,6 +759,24 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
               fill="#3B93F5"
               d="M12 2a10 10 0 1 0-1.6 19.9v-7h-2.5V12h2.5V9.8c0-2.5 1.5-3.9 3.8-3.9 1.1 0 2.2.2 2.2.2v2.4h-1.2c-1.2 0-1.6.8-1.6 1.6V12h2.7l-.4 2.9h-2.3v7A10 10 0 0 0 12 2z"
             />
+          </svg>
+        )
+      case 'instagram':
+        // Instagram mark: camera outline (functional glyph, no brand path).
+        return (
+          <svg viewBox="0 0 24 24" className={iconClass}>
+            <rect
+              x="3.5"
+              y="3.5"
+              width="17"
+              height="17"
+              rx="5"
+              fill="none"
+              stroke="#ED6FA4"
+              strokeWidth="2"
+            />
+            <circle cx="12" cy="12" r="4" fill="none" stroke="#ED6FA4" strokeWidth="2" />
+            <circle cx="17.2" cy="6.8" r="1.2" fill="#ED6FA4" />
           </svg>
         )
       case 'rumble':

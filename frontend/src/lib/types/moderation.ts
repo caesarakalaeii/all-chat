@@ -36,6 +36,7 @@ export type ModerationPlatform =
   | 'goodgame'
   | 'picarto'
   | 'facebook'
+  | 'instagram'
   | 'rumble'
   | 'discord'
   | 'system'

@@ -542,6 +542,54 @@ func (r *UserRepository) StoreFacebookPageToken(ctx context.Context, userID, pag
 	return nil
 }
 
+// StoreInstagramToken stores the streamer's Instagram credential in
+// instagram_oauth_tokens (migration 096), keyed (user_id, ig_user_id). The
+// stored token is the Page access token of the Page linked to the streamer's
+// IG professional account. Like the Facebook page token (ADR-0060) it is
+// obtained from a long-lived user token and does not expire, so expiresAt is
+// stored NULL and the row is replaced wholesale on every re-consent.
+// granted_scopes is MERGED on conflict so a re-consent that grants fewer
+// permissions never silently drops an earlier grant — same invariant as
+// StoreFacebookPageToken. expiresAt is non-nil only when the caller holds a
+// genuinely expiring credential (e.g. a 60-day long-lived USER token), in
+// which case token-refresh-service must treat the row as refreshable.
+func (r *UserRepository) StoreInstagramToken(ctx context.Context, userID, igUserID, igUsername, accessToken string, expiresAt *time.Time, grantedScopes []string) error {
+	if igUserID == "" {
+		return fmt.Errorf("ig_user_id is required for storing Instagram tokens")
+	}
+	if accessToken == "" {
+		return fmt.Errorf("access token is required for storing Instagram tokens")
+	}
+
+	encToken, err := r.encryptToken(accessToken)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt instagram access token: %w", err)
+	}
+	if grantedScopes == nil {
+		grantedScopes = []string{}
+	}
+
+	query := `
+		INSERT INTO instagram_oauth_tokens (
+			user_id, ig_user_id, ig_username, access_token, expires_at, granted_scopes,
+			encryption_version, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, 1, NOW(), NOW())
+		ON CONFLICT (user_id, ig_user_id)
+		DO UPDATE SET
+			ig_username = EXCLUDED.ig_username,
+			access_token = EXCLUDED.access_token,
+			expires_at = EXCLUDED.expires_at,
+			granted_scopes = ARRAY(SELECT DISTINCT unnest(instagram_oauth_tokens.granted_scopes || EXCLUDED.granted_scopes)),
+			encryption_version = EXCLUDED.encryption_version,
+			updated_at = NOW()
+	`
+
+	if _, err := r.db.Exec(ctx, query, userID, igUserID, igUsername, encToken, expiresAt, grantedScopes); err != nil {
+		return fmt.Errorf("failed to store Instagram token: %w", err)
+	}
+	return nil
+}
+
 // GetPlatformGrantedScopes returns the OAuth scopes the user currently holds FOR a
 // specific platform, reading the authoritative source for that platform: the users row
 // when the platform is the user's login provider, otherwise the per-link token table
