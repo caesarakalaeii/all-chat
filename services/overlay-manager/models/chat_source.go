@@ -79,7 +79,6 @@ func (c *ChatSource) Validate() error {
 	if !c.IsValidPlatform() {
 		return errors.New("invalid platform")
 	}
-	"instagram":      true, // ADR-0062: Instagram Live comments via Graph API; the source IS the streamer's IG account
 
 	if c.ChannelID == "" {
 		return errors.New("channel_id is required")
