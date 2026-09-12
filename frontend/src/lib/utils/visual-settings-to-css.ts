@@ -53,6 +53,7 @@ export const PROPERTY_MAP: ReadonlyArray<[keyof VisualSettings, string]> = [
   ['bubblePadding', '--chat-bubble-padding'],
   ['bubbleShadow', '--chat-bubble-shadow'],
   ['messageGap', '--chat-message-gap'],
+  ['avatarGap', '--chat-avatar-gap'],
   ['backdropBlur', '--chat-backdrop-blur'],
   ['maxWidth', '--chat-max-width'],
   // Visibility

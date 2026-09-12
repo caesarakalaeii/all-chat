@@ -761,6 +761,9 @@ describe('streamer guide CSS reference tables', () => {
     expect(t('docs.guideCssVars.chatUsernameFontWeight')).toBe('Username weight.')
     expect(t('docs.guideCssVars.chatMessageColor')).toBe('Message text color.')
     expect(t('docs.guideCssVars.chatMessageGap')).toBe('Vertical space between messages.')
+    expect(t('docs.guideCssVars.chatAvatarGap')).toBe(
+      'Space between the avatar and the message text.'
+    )
     expect(t('docs.guideCssVars.chatBubbleBorderRadius')).toBe('Roundness of the message bubble.')
     expect(t('docs.guideCssVars.chatBubblePadding')).toBe('Padding inside each message.')
     expect(t('docs.guideCssVars.chatAvatarSize')).toBe('Avatar width and height.')

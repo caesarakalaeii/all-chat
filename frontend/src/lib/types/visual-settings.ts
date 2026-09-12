@@ -111,6 +111,7 @@ export interface VisualSettings {
   // --chat-bubble-shadow; forced on chat rows for the same reason as textShadow.
   bubbleShadow?: string
   messageGap?: string // --chat-message-gap
+  avatarGap?: string // --chat-avatar-gap (avatar→text distance inside a row)
   backdropBlur?: string // --chat-backdrop-blur
   maxWidth?: string // --chat-max-width
 

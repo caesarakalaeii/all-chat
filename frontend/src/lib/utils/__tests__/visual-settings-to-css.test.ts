@@ -82,6 +82,7 @@ describe('visualSettingsToCss', () => {
       tiktokBubbleBg: '#1b333d',
       discordBubbleBg: '#22253d',
       messageGap: '8px',
+      avatarGap: '4px',
       backdropBlur: '0px',
       maxWidth: '100%',
       showAvatars: 'inline',
@@ -138,8 +139,8 @@ describe('visualSettingsToCss', () => {
     // messageAnimation is applied as a .msg-anim-* class, never as a CSS property
     expect(result).not.toContain('messageAnimation')
     expect(result).not.toContain('fly-left')
-    // All 52 CSS properties present (excludes non-CSS fields)
-    expect((result.match(/--chat-|--platform-/g) ?? []).length).toBe(52)
+    // All 53 CSS properties present (excludes non-CSS fields)
+    expect((result.match(/--chat-|--platform-/g) ?? []).length).toBe(53)
     // The by-username mode emits its [data-user-bubble] rule, not variables
     expect(result).toContain('div[data-user-bubble]:not(.event-message):not(.scroll-anchor)')
     expect(result).toContain(

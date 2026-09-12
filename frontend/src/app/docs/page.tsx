@@ -164,6 +164,7 @@ const CSS_VARIABLES: readonly CssVar[] = [
     effectKey: 'docs.guideCssVars.chatMessageColor',
   },
   { name: '--chat-message-gap', default: '0.75rem', effectKey: 'docs.guideCssVars.chatMessageGap' },
+  { name: '--chat-avatar-gap', default: '0.75rem', effectKey: 'docs.guideCssVars.chatAvatarGap' },
   {
     name: '--chat-bubble-border-radius',
     default: '0.5rem',

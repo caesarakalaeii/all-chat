@@ -394,6 +394,7 @@ export const docs = {
     chatUsernameFontWeight: 'Username weight.',
     chatMessageColor: 'Message text color.',
     chatMessageGap: 'Vertical space between messages.',
+    chatAvatarGap: 'Space between the avatar and the message text.',
     chatBubbleBorderRadius: 'Roundness of the message bubble.',
     chatBubblePadding: 'Padding inside each message.',
     chatAvatarSize: 'Avatar width and height.',
