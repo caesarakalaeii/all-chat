@@ -47,7 +47,12 @@ function stripImportant(css: string): string {
 
 function extractImports(css: string): { imports: string[]; rest: string } {
   const imports: string[] = []
-  const rest = css.replace(/@import[^;]+;/g, (statement) => {
+  // A Google Fonts css2 URL carries weight axes as semicolons
+  // (family=Poppins:wght@400;500;600), so the URL body cannot be matched
+  // with `[^;]+` — that truncates the import at the first axis and leaves
+  // the rest as garbage tokens. Match the quoted/url() form first, then
+  // everything up to the statement's semicolon.
+  const rest = css.replace(/@import\s+(?:url\([^)]*\)|"[^"]*"|'[^']*')[^;]*;/g, (statement) => {
     imports.push(statement.trim())
     return ''
   })

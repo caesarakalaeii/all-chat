@@ -61,4 +61,27 @@ describe('wrapThemeCss', () => {
     // body keeps rule order
     expect(out.indexOf('.x')).toBeLessThan(out.indexOf('.y'))
   })
+
+  it('keeps Google Fonts css2 URLs intact (weight-axis semicolons are part of the URL)', () => {
+    const out = wrapThemeCss(
+      "@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap');\n.chat-username { color: red; }"
+    )
+    expect(out).toContain(
+      "@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap');"
+    )
+    expect(out).toContain('@layer marketplace-themes')
+    // The import must be hoisted whole and nothing may leak into the layer
+    // body as garbage tokens (the old `[^;]+` match truncated at the first
+    // weight axis).
+    const layerBody = out.slice(out.indexOf('@layer'))
+    expect(out.indexOf('display=swap')).toBeLessThan(out.indexOf('@layer'))
+    expect(layerBody).not.toContain('500;600')
+    expect(layerBody).not.toContain('display=swap')
+  })
+
+  it('strips the spec-legal `! important` whitespace variant (layered-important would beat manual CSS)', () => {
+    const out = wrapThemeCss('.d { margin: 1px ! important; }')
+    expect(out).not.toContain('important')
+    expect(out).toContain('.d { margin: 1px; }')
+  })
 })
