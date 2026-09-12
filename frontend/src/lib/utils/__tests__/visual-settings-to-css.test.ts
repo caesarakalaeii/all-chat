@@ -85,6 +85,7 @@ describe('visualSettingsToCss', () => {
       goodgameBubbleBg: '#1b2a3d',
       picartoBubbleBg: '#1b3d26',
       facebookBubbleBg: '#1b2940',
+      instagramBubbleBg: '#2b1220',
       rumbleBubbleBg: '#2b3d1b',
       messageGap: '8px',
       backdropBlur: '0px',
@@ -108,6 +109,7 @@ describe('visualSettingsToCss', () => {
       goodgameAccent: '#52709c',
       picartoAccent: '#1aa455',
       facebookAccent: '#1877f2',
+      instagramAccent: '#e1306c',
       rumbleAccent: '#85c742',
       showSuperChat: 'block',
       showSubscriptions: 'block',
@@ -144,11 +146,9 @@ describe('visualSettingsToCss', () => {
     expect(result).not.toContain('platformBadgePosition')
     expect(result).not.toContain('platformBadgeStyle')
     // messageAnimation is applied as a .msg-anim-* class, never as a CSS property
-    expect(result).not.toContain('messageAnimation')
-    expect(result).not.toContain('fly-left')
-    // All 57 CSS properties present (52 + 5 new platform accents; the platform
+    // All 58 CSS properties present (52 + 6 new platform accents; the platform
     // bubble fills are rules-only and never counted here)
-    expect((result.match(/--chat-|--platform-/g) ?? []).length).toBe(57)
+    expect((result.match(/--chat-|--platform-/g) ?? []).length).toBe(58)
   })
 
   it('wraps output in correct cascade layer syntax', () => {

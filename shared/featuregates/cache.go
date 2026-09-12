@@ -92,27 +92,30 @@ const (
 
 	// The platform_ gates (ADR-0008) gate ADDING A SOURCE on a rollout platform:
 	// platform_owncast, platform_goodgame, platform_picarto, platform_facebook,
-	// platform_rumble. Each ships seeded is_premium=TRUE (migrations 091-095) so a
-	// new listener cannot reach every overlay at once; flip a row to
-	// is_premium=false via the feature-gate admin endpoint to graduate a platform
-	// with no redeploy. Sources created while the gate is open keep working after
-	// it closes — the gate only ever blocks new adds, mirroring how the
-	// moderation/engagement gates gate the write, not the reads.
-	GatePlatformOwncast  = "platform_owncast"
-	GatePlatformGoodGame = "platform_goodgame"
-	GatePlatformPicarto  = "platform_picarto"
-	GatePlatformFacebook = "platform_facebook"
-	GatePlatformRumble   = "platform_rumble"
+	// platform_rumble, platform_instagram. Each ships seeded is_premium=TRUE
+	// (migrations 091-096) so a new listener cannot reach every overlay at
+	// once; flip a row to is_premium=false via the feature-gate admin endpoint
+	// to graduate a platform with no redeploy. Sources created while the gate
+	// is open keep working after it closes — the gate only ever blocks new
+	// adds, mirroring how the moderation/engagement gates gate the write, not
+	// the reads.
+	GatePlatformOwncast   = "platform_owncast"
+	GatePlatformGoodGame  = "platform_goodgame"
+	GatePlatformPicarto   = "platform_picarto"
+	GatePlatformFacebook  = "platform_facebook"
+	GatePlatformRumble    = "platform_rumble"
+	GatePlatformInstagram = "platform_instagram"
 )
 
 // rolloutPlatformGates maps a platform slug to its source-add rollout gate
 // (ADR-0008). Platforms absent from this map are not gated at all.
 var rolloutPlatformGates = map[string]string{
-	"owncast":  GatePlatformOwncast,
-	"goodgame": GatePlatformGoodGame,
-	"picarto":  GatePlatformPicarto,
-	"facebook": GatePlatformFacebook,
-	"rumble":   GatePlatformRumble,
+	"owncast":   GatePlatformOwncast,
+	"goodgame":  GatePlatformGoodGame,
+	"picarto":   GatePlatformPicarto,
+	"facebook":  GatePlatformFacebook,
+	"rumble":    GatePlatformRumble,
+	"instagram": GatePlatformInstagram,
 }
 
 // RolloutPlatformGateKey returns the feature-gate key that gates adding a

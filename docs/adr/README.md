@@ -664,6 +664,46 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 **Impact**: **Two gates, because two independent failures were needed to land this.** (1) `text-outline.test.ts` rasterises the offsets the way a browser does (union of translated copies) over glyph-like probes — a lone pixel, a 1px stem, a diagonal, two stems 4px apart, a ring with a counter — and asserts the two properties that _are_ an outline: **reach** (nothing painted farther than `w`, the ghost text) and **solidity** (everything within `w` is painted, the background showing through). Both are exact for an integer disc, so neither needs a tolerance, and a further test requires both checks to **fail** on the exact string #833 shipped so the gate cannot pass vacuously. It is a TypeScript rasterisation rather than a screenshot on purpose: `flake.nix` records that Playwright's downloaded browsers cannot run on a NixOS dev host, so a screenshot gate would be runnable **only in CI** — the same "nobody can check this locally" shape as the bug; the correspondence to real rendering was verified by hand against system Chromium in both directions. (2) **The frontend unit project now runs on a pull request**, which it did not: the required contexts are `test (<go service>)`, `test-node` (support-bot only) and `frontend-a11y.yml`'s three jobs, whose only vitest steps named three files by path, so #833's 97 lines of test were never executed and a _correct_ test would not have blocked the merge either. `a11y-static` gained a full `vitest --project unit --run` step; it is already a required context, so no branch-protection change was needed. New rule for this module: a test asserting the shape of a generated CSS string is not a test of what the user sees.
 **→ Read**: [0057-outline-thickness-samples-the-disc.md](./0057-outline-thickness-samples-the-disc.md)
 
+### ADR-0058: An Owncast source is the instance URL, not a channel name
+
+**Status**: Accepted (2026-09-08)
+**Problem**: Every chat platform All-Chat supports addresses content by a channel name or platform id, but Owncast has no channels — it is a self-hosted server whose instances serve one stream each, and an instance goes offline or upgrades independently of All-Chat, so a listener that treats "unreachable" as a fault will crash-loop against a temporary outage that is correct to tolerate.
+**Decision**: The instance base URL (normalized to `scheme://host`) is the stored channel identifier, rejected at add time in any other shape. Display name comes from the instance's own `/api/config`, best-effort — a fetch failure falls back to the hostname and never fails the add. Offline is a normal state: capped backoff reconnects, `platform:status` offline with `next_retry_at` (ADR-0032 contract), `is_active = false`, no error spam. Registration is repeated per connection, and only `CHAT` events publish.
+**Impact**: The only platform whose source picker asks for a URL. No OAuth, no auth-service change. Deployment adds `owncast-listener` (port 8095) and migration 091 (`platform_owncast` gate seed).
+**→ Read**: [0058-owncast-instance-url-as-channel-identifier.md](./0058-owncast-instance-url-as-channel-identifier.md)
+
+### ADR-0059: Picarto chat via the unofficial pop-out WebSocket feed
+
+**Status**: Accepted (2026-09-08)
+**Problem**: Picarto publishes a REST API for channel metadata but no public way to follow chat. What exists is the pop-out chat page's WebSocket — verified live against the production bundle's build constants and an anonymous capture — undocumented and free to change in any deploy without notice.
+**Decision**: Read over the unofficial pop-out WebSocket (`wss://chat.picarto.tv/chat/token=<jwt>`, anonymous JWT from Picarto's internal GraphQL, no client hello). Protocol interpretation is isolated in one package; unknown or malformed frames are log-and-dropped, never a panic. Emotes stay shortcodes and the normalizer strips them. The risk is priced into the gate: `platform_picarto` seeds `is_premium = TRUE` (migration 093) until the feed has been observed stable in production.
+**Impact**: A Picarto deploy can break chat with no warning; detection is dropped-message metrics and the reconnect loop, not a streamer-facing error. Source changes take up to 30 s to connect.
+**→ Read**: [0059-picarto-unofficial-popout-websocket.md](./0059-picarto-unofficial-popout-websocket.md)
+
+### ADR-0060: Facebook via Graph API polling with a dual-scope page credential and a moderation write path
+
+**Status**: Accepted (2026-09-08)
+**Problem**: Facebook Live comments have no public realtime API — webhooks need a public HTTPS endpoint and a verify token — so polling is the only route that fits the cloud-hosted model. Reading needs `pages_read_engagement` and moderating needs `pages_manage_engagement`, both behind App Review; requesting the write scope later would mean a second consent round per streamer and a second review cycle. The credential that works is the non-expiring Page token.
+**Decision**: `facebook-listener` polls the live-video comments edge (`order=reverse_chronological`, `since` cursor pinned to the newest `created_time`). No quota subsystem: the Pages rate limit is `4800 * engaged users` per rolling 24 h, policed by reading the `X-Business-Use-Case-Usage` header and warning at 90%. The OAuth callback exchanges all the way to the Page token and stores it encrypted in `facebook_oauth_tokens` (migration 094) — no refresh token, no expiry column, token-refresh-service skips the platform. Moderation maps ADR-0017's write path onto `DELETE /{comment-id}` and the `blocked` edge; hide/unhide and timeout are deliberately not offered, and delegated moderation is refused. Single replica, no leader election; source adds fail closed on the token row.
+**Impact**: Facebook costs the standard platform surface minus the quota ledger and minus token refresh. App Review is the deployment bottleneck; dev mode covers the integration window. Migration 094 seeds the `platform_facebook` gate.
+**→ Read**: [0060-facebook-graph-api-and-moderation.md](./0060-facebook-graph-api-and-moderation.md)
+
+### ADR-0061: Rumble chat via the internal chat pop-up SSE endpoint
+
+**Status**: Accepted (2026-09-08)
+**Problem**: The product model requires reading chat from arbitrary channels a streamer adds as sources, but Rumble's official Live Stream API reports only the creator's own streams and embeds the stream key in its URL — it cannot address arbitrary channels, so it was ruled out by the spike.
+**Decision**: Read via Rumble's internal chat API — the same SSE endpoint (`GET .../chat/api/chat/<chat_id>/stream`) the official pop-up page drives. Verified live: anonymous reads work, the `<chat_id>` is the numeric chat room id, the shape is pinned as test fixtures from a live capture. The id becomes the stored channel identifier, validated numeric, never resolved through an API. Parser isolation: everything protocol-specific lives in one file. ToS grey zone accepted knowingly — read-only, low rate, standard browser headers; deletions surface as `is_deleted`, rants as donation events, stray event types are logged and dropped.
+**Impact**: Expect breakage without notice: a Rumble chat upgrade can silence this listener, and the fix is a one-file re-spike against a fresh capture. No auth-service changes; migration 095 seeds the gate.
+**→ Read**: [0061-rumble-chat-popup-sse.md](./0061-rumble-chat-popup-sse.md)
+
+### ADR-0062: Instagram Live comments via HTTP polling of `live_comments`
+
+**Status**: Accepted (2026-09-11)
+**Problem**: Instagram Live is the last surface in the platform expansion plan. Comments on an IG live broadcast are only readable via `GET /{ig-user-id}/live_comments` on the streamer's IG professional account (business/creator, linked to a Facebook Page) — and only while the media is being broadcast. There is no realtime webhook-free public API shape All-Chat uses elsewhere; webhooks would need a public HTTPS endpoint and a verify token. IG rate limits are BUC-based like Facebook's, so no quota subsystem is warranted.
+**Decision**: A new `instagram-listener` service (port 8100) polling `live_comments` with a `comment_id` id-cursor (comments cannot be filtered by timestamp), resolving the currently-broadcast media via `live_media` (empty set = not-live, a normal state). Separate `instagram_oauth_tokens` table (migration 096) keyed `(user_id, ig_user_id)`; the stored credential is the non-expiring Page token from the same Meta app as Facebook's (ADR-0060 chain), with `expires_at` kept for the 60-day user-token variant — an expired row deactivates the source for re-auth. Scopes `instagram_basic` + `instagram_manage_comments` + `pages_show_list` (the enumeration dependency), folded into the next App Review cycle. Read-only: no moderation write path, no emotes, no quota. Single replica, no HPA.
+**Impact**: A streamer needs an IG professional account linked to a Page; personal accounts cannot connect. Sources add fail-closed unless a token row exists for the exact `(user, ig_user_id)` pair. token-refresh-service has nothing to do for Instagram.
+**→ Read**: [0062-instagram-live-comments-polling.md](./0062-instagram-live-comments-polling.md)
+
 ---
 
 ## How to Create a New ADR
@@ -805,4 +845,4 @@ Create a new ADR if:
 2. ADR-0001 (Go layout) - Referenced by all services
 3. ADR-0006 (Quota tracking) - Referenced by YouTube listener, overlay manager
 
-**Last Updated**: 2026-09-03
+**Last Updated**: 2026-09-12

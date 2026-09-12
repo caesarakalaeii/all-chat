@@ -14,7 +14,7 @@ All-Chat is a **cloud-native microservices platform** for aggregating and displa
 
 **Platform Status**:
 - ✅ Twitch (EventSub primary; IRC listener deprecated per ADR-0026) | ✅ YouTube (HTTP polling with quota tracking + InnerTube polling) | ✅ Kick (Pusher WebSocket) | ✅ TikTok (Unofficial library) | ✅ Discord (channel relay)
-- 🚧 Rollout cohort, premium-gated per ADR-0008 (`platform_*` feature gates, seeded `is_premium=TRUE` in migrations 091-095; graduate by flipping the gate via the feature-gate admin endpoint): Owncast (ADR-0058, instance URL as channel) | GoodGame (chat websocket, channel key) | Picarto (ADR-0059, unofficial pop-out websocket) | Facebook (ADR-0060, Graph API polling + moderation write path) | Rumble (ADR-0061, internal chat pop-up SSE)
+- 🚧 Rollout cohort, premium-gated per ADR-0008 (`platform_*` feature gates, seeded `is_premium=TRUE` in migrations 091-096; graduate by flipping the gate via the feature-gate admin endpoint): Owncast (ADR-0058, instance URL as channel) | GoodGame (chat websocket, channel key) | Picarto (ADR-0059, unofficial pop-out websocket) | Facebook (ADR-0060, Graph API polling + moderation write path) | Rumble (ADR-0061, internal chat pop-up SSE) | Instagram (ADR-0062, Graph API live_comments polling, read-only)
 
 ---
 
@@ -115,6 +115,7 @@ Each service has a detailed README:
 - [picarto-listener](./services/picarto-listener/README.md) - Picarto pop-out chat websocket, defensively parsed (ADR-0059)
 - [facebook-listener](./services/facebook-listener/README.md) - Facebook Live comments via Graph API polling + moderation (ADR-0060)
 - [rumble-listener](./services/rumble-listener/README.md) - Rumble chat via the internal chat pop-up SSE (ADR-0061)
+- [instagram-listener](./services/instagram-listener/README.md) - Instagram Live comments via Graph API `live_comments` polling, read-only (ADR-0062)
 - [message-processor](./services/message-processor/README.md) - Normalization, emote enrichment
 - [overlay-manager](./services/overlay-manager/README.md) - Overlay CRUD, source configuration
 - [source-manager](./services/source-manager/README.md) - Leader election, active source registry
@@ -210,7 +211,7 @@ services/<service-name>/
 ## Message Flow Architecture
 
 ```
-Listeners (Twitch/YouTube/Kick/TikTok/Discord/Owncast/GoodGame/Picarto/Facebook/Rumble)
+Listeners (Twitch/YouTube/Kick/TikTok/Discord/Owncast/GoodGame/Picarto/Facebook/Rumble/Instagram)
   ↓ publish raw messages
 Redis Streams (chat:raw)
   ↓ consume via XREADGROUP (group: message-processors)

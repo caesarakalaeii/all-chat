@@ -61,6 +61,7 @@ const PLATFORMS: ReadonlyArray<{
     | 'goodgame'
     | 'picarto'
     | 'facebook'
+    | 'instagram'
     | 'rumble'
     | 'discord'
   sample: string
@@ -73,6 +74,7 @@ const PLATFORMS: ReadonlyArray<{
   { field: 'goodgameBubbleBg', platform: 'goodgame', sample: '#1b2a3d' },
   { field: 'picartoBubbleBg', platform: 'picarto', sample: '#1b3d26' },
   { field: 'facebookBubbleBg', platform: 'facebook', sample: '#1b2940' },
+  { field: 'instagramBubbleBg', platform: 'instagram', sample: '#2b1220' },
   { field: 'rumbleBubbleBg', platform: 'rumble', sample: '#2b3d1b' },
   { field: 'discordBubbleBg', platform: 'discord', sample: '#22253d' },
 ]
