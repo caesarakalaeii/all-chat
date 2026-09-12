@@ -3,35 +3,33 @@
  * Copyright (C) 2026 caesarakalaeii
  *
  * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as published
- * by the Free Software Foundation, either version 3 of the License, or
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 /**
- * useLaneWaves — the WebGL lane renderer behind the homepage hero.
+ * useLaneWaves — the WebGL stacked-area hero.
  *
- * One fullscreen canvas draws the five platform bands. Their boundaries
- * undulate continuously: each lane's height walks a smooth two-sine time
- * series around its real weekly share (laneWeight), so the stack reads as
- * a live chart instead of stepped ticks. The canvas owns the fills; the
- * DOM keeps every piece of text (marquee, wordmarks), so i18n, selection
- * and crisp text rendering stay untouched.
+ * One fullscreen quad, evaluated per pixel in the fragment shader: every
+ * lane's thickness is a smooth function of horizontal position and time
+ * (a two-sine field, phase-shifted per lane), the five curves are stacked
+ * and filled to the bottom, and the stack is re-normalized per column so
+ * the fills always sum to exactly the stage height while every lane
+ * keeps its 10% floor at every x. The result reads as a filled stacked
+ * line graph that never stops moving — not as five straight bands.
  *
- * Geometry: one TRIANGLE_STRIP with two vertices per lane boundary
- * (boundaries 0..5, left/right corners = 12 vertices). Each vertex's
- * clip-space y is its boundary's cumulative share, so the strip tiles all
- * five bands in a single draw call. Band color is flat-shaded from the
- * provoking vertex (last of each triangle = the strip's upper boundary),
- * hence `boundary - 1` as the lane index.
+ * The same curve is evaluated on the CPU (laneWeight) for the DOM text
+ * lanes, so flex lanes, canvas fills and the counter all trace one
+ * chart.
  *
  * The render loop never calls setState — it mutates the returned
  * weightsRef, which the hero reads from its own rAF loop to size the flex
@@ -41,7 +39,7 @@
  * Degradation: without WebGL2 (or after a context loss) the canvas stays
  * blank and activeRef stays false — the hero keeps the CSS lane
  * backgrounds, so lanes lose their waves but never their color. Reduced
- * motion: one static frame at the exact base shares.
+ * motion: one static frame at the exact base weights.
  */
 
 'use client'
@@ -51,22 +49,72 @@ import { useEffect, useRef } from 'react'
 /** Fixed platform count; the shaders hardcode this. */
 export const LANE_COUNT = 5
 
-/** Wave amplitude per lane, relative to its base share. */
-const WAVE_AMPLITUDE = 0.22
+/** Guaranteed minimum lane thickness as a fraction of the stage: with five
+ * lanes the floors take half the hero and the remaining half is split by
+ * real share. Raw weekly counts are huge, so a floor expressed in those
+ * units is meaningless — normalization (laneBaseWeights) turns shares
+ * into stage fractions first, and only then does this floor bite. */
+export const LANE_FLOOR = 0.1
+
+/** Share of the stage left over once every lane has its floor. */
+const FLEX_BUDGET = 1 - LANE_FLOOR * LANE_COUNT
 
 /**
- * Smooth pseudo time series around one lane's base share: a slow primary
- * wave plus a faster secondary ripple, phase-shifted per lane so the lanes
- * never breathe in sync. Decorative — no weekly history exists
- * server-side — but the continuous rise-and-fall reads like a live chart.
- * Deterministic in (lane, seconds); sin(0) === 0 keeps the reduced-motion
- * frame and the first animation frame at the exact base shares, so the
- * canvas never disagrees with the server-rendered lane sizes.
+ * Raw weekly counts → normalized lane weights: every lane gets its 10%
+ * floor plus a slice of the remaining budget proportional to its share.
+ * Output sums to 1, so the vector doubles directly as a flex-grow vector.
+ * Missing entries default to share 1, and an all-zero input yields equal
+ * weights — fallback (40) and live (400000) counts produce the same lane
+ * sizes, which is what the zero-guard in LanesHero relies on.
  */
-export function laneWeight(base: number, laneIndex: number, seconds: number): number {
+export function laneBaseWeights(shares: readonly number[]): number[] {
+  const total = shares.reduce((sum, share) => sum + share, 0)
+  const safeTotal = total > 0 ? total : LANE_COUNT
+  return Array.from({ length: LANE_COUNT }, (_, i) => {
+    const share = shares[i] ?? 1
+    return LANE_FLOOR + FLEX_BUDGET * (share / safeTotal)
+  })
+}
+
+/**
+ * Wave amplitude per lane, as a fraction of that lane's FLEX mass (the
+ * budget above the floor): small lanes get bigger relative swings so
+ * their movement stays perceptible, but because the floor term is never
+ * modulated they can never wave below their 10%.
+ */
+const WAVE_AMPLITUDES = [0.16, 0.2, 0.24, 0.28, 0.32] as const
+
+// The wave field below is mirrored between GLSL and TypeScript: any change
+// to the formula must land in both places — the DOM lanes must trace the
+// same curves the canvas paints, or the text rides a different chart than
+// its fill. The -1..1 x range spans the canvas width.
+
+/**
+ * Smooth pseudo time series around one lane's base weight at horizontal
+ * position x (−1 left edge, +1 right edge): a slow primary wave plus a
+ * faster secondary ripple, phase-shifted per lane so the lanes never
+ * breathe in sync. Decorative — no weekly history exists server-side —
+ * but the continuous rise-and-fall reads like a live chart.
+ * Only the flex mass above LANE_FLOOR is modulated, so the floor never
+ * moves and a lane cannot undulate out of view. Deterministic in
+ * (lane, x, seconds); the phase term is subtracted out so the value at
+ * seconds=0 is exactly the base — the reduced-motion frame and the first
+ * animation frame match the server-rendered lane sizes (a plain
+ * sin(s + phase) would start offset, disagreeing with the SSR markup).
+ * The x terms vanish at x=0 (screen center), so the CPU mirror
+ * there evaluates the same time-only wave the center column paints and
+ * the DOM text lanes trace their fill; toward the edges the x terms pull
+ * each lane's curve out of phase with the center, which is what makes
+ * the boundaries undulate horizontally.
+ */
+export function laneWeight(base: number, laneIndex: number, x: number, seconds: number): number {
+  const flex = Math.max(base - LANE_FLOOR, 0)
   const phase = laneIndex * 1.3
-  const wave = Math.sin(seconds * 0.45 + phase) + 0.5 * Math.sin(seconds * 1.15 + phase * 2)
-  return Math.max(base * (1 + wave * WAVE_AMPLITUDE), 2)
+  const wave =
+    Math.sin(seconds * 0.45 + phase + x * 1.6) +
+    0.5 * Math.sin(seconds * 1.15 + phase * 2 - x * 2.4) -
+    (Math.sin(phase) + 0.5 * Math.sin(phase * 2))
+  return base + flex * wave * WAVE_AMPLITUDES[laneIndex % WAVE_AMPLITUDES.length]
 }
 
 // Lane colors duplicated from the .lanes-home palette (globals.css): the
@@ -82,38 +130,93 @@ const LANE_COLORS = ['#8464d6', '#d95c50', '#62aeb4', '#56b847', '#6a72c9'] as c
 // the two curves below are calibrated to that page background.
 const LANE_ALPHAS = [0.24, 0.24, 0.26, 0.3, 0.32] as const
 
+// The fragment shader evaluates the whole stacked chart per pixel: lane
+// weights as a smooth function of x and time, stacked cumulatively, and
+// filled to the bottom of the stage. A single full-screen triangle strip
+// covers the quad; v_x interpolates −1..1 left to right.
 const VERT_SRC = `#version 300 es
-uniform float u_weights[${LANE_COUNT}];
-flat out float v_lane;
+out float v_x;
+out float v_y;
 void main() {
-  int boundary = gl_VertexID / 2;
-  int corner = gl_VertexID % 2;
-  float total = 0.0;
-  float below = 0.0;
-  for (int i = 0; i < ${LANE_COUNT}; i++) {
-    total += u_weights[i];
-    if (i < boundary) below += u_weights[i];
-  }
-  // Band 0 sits at the top: clip y runs +1 (boundary 0) to -1 (bottom).
-  float y = 1.0 - 2.0 * (below / total);
-  // Provoking vertex of every strip triangle is an upper-boundary corner,
-  // so boundary - 1 names the band the triangle fills.
-  v_lane = clamp(float(boundary) - 1.0, 0.0, float(${LANE_COUNT}) - 1.0);
-  gl_Position = vec4(float(corner) * 2.0 - 1.0, y, 0.0, 1.0);
+  // One full-screen triangle strip of 4 vertices (two triangles).
+  vec2 corners[4] = vec2[4](
+    vec2(-1.0, -1.0), vec2(1.0, -1.0), vec2(-1.0, 1.0), vec2(1.0, 1.0)
+  );
+  v_x = corners[gl_VertexID].x;
+  v_y = corners[gl_VertexID].y;
+  gl_Position = vec4(corners[gl_VertexID], 0.0, 1.0);
 }`
 
+// Mirrors laneWeight() in TypeScript above (same sines, same phases, same
+// amplitudes): the CPU evaluates the identical field at x=0 to size the
+// DOM lanes, so text and fill trace one chart. Amplitudes and base
+// weights arrive as uniforms so a stats refetch never rebuilds the GL
+// program — the field shape stays compiled, only the numbers move.
 const FRAG_SRC = `#version 300 es
 precision mediump float;
-flat in float v_lane;
+in float v_x;
+in float v_y;
+uniform float u_time;
+uniform float u_bases[${LANE_COUNT}];
+uniform float u_amps[${LANE_COUNT}];
 uniform vec3 u_colors[${LANE_COUNT}];
 uniform float u_alphas[${LANE_COUNT}];
 out vec4 o_color;
+
+const float FLOOR = ${LANE_FLOOR.toFixed(2)};
+// Flex budget: stage fraction left once every lane has its floor.
+const float FLEX = ${(1 - LANE_FLOOR * LANE_COUNT).toFixed(2)};
+
+float laneWeight(float base, int lane, float x, float s) {
+  float flex = max(base - FLOOR, 0.0);
+  float phase = float(lane) * 1.3;
+  float wave =
+    sin(s * 0.45 + phase + x * 1.6) +
+    0.5 * sin(s * 1.15 + phase * 2.0 - x * 2.4) -
+    (sin(phase) + 0.5 * sin(phase * 2.0));
+  return base + flex * wave * u_amps[lane];
+}
+
 void main() {
-  o_color = vec4(u_colors[int(v_lane)], u_alphas[int(v_lane)]);
+  // Raw modulated weights at this column. At s=0, x=0 every lane is
+  // exactly its base (phase subtracted), which pins the first frame to
+  // the SSR markup.
+  float w[${LANE_COUNT}];
+  for (int i = 0; i < ${LANE_COUNT}; i++) {
+    w[i] = laneWeight(u_bases[i], i, v_x, u_time);
+  }
+  // Per-column re-normalization of the flex mass: after the wave moves
+  // mass between lanes, the part above each floor is rescaled so the
+  // five floors plus the shared flex budget tile the stage exactly.
+  // Because only mass above the floor is redistributed, every lane
+  // keeps its full floor — the 10% minimum holds at every x and t.
+  // Σflex is always > 0: the bases sum to 1 and the floors to 0.5.
+  float fm[${LANE_COUNT}];
+  float fmTotal = 0.0;
+  for (int i = 0; i < ${LANE_COUNT}; i++) {
+    fm[i] = max(w[i] - FLOOR, 0.0);
+    fmTotal += fm[i];
+  }
+  for (int i = 0; i < ${LANE_COUNT}; i++) {
+    w[i] = FLOOR + FLEX * fm[i] / fmTotal;
+  }
+  // Stacked lookup: clip-space v_y runs +1 (stage top) to -1 (bottom);
+  // lane i fills [cum, cum + w[i]] of the unit stack, top-down.
+  float y = (1.0 - v_y) / 2.0;
+  float cum = 0.0;
+  int lane = -1;
+  for (int i = 0; i < ${LANE_COUNT}; i++) {
+    // Last lane inclusive at the stage bottom: cum+w sums to exactly 1.0,
+    // and the 'y <' test would otherwise discard the bottom pixel row.
+    if (y >= cum && (y < cum + w[i] || i == ${LANE_COUNT} - 1)) lane = i;
+    cum += w[i];
+  }
+  if (lane < 0) discard;
+  o_color = vec4(u_colors[lane], u_alphas[lane]);
 }`
 
 export interface LaneWavesOptions {
-  /** Real (or fallback) weekly share per lane, palette order. */
+  /** Normalized lane weights (laneBaseWeights output), palette order. */
   bases: readonly number[]
   /** Current prefers-reduced-motion resolution. */
   reducedMotion: boolean
@@ -174,7 +277,9 @@ export function useLaneWaves(
     gl.bindBuffer(gl.ARRAY_BUFFER, buf)
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(12), gl.STATIC_DRAW)
 
-    const uWeights = gl.getUniformLocation(prog, 'u_weights')
+    const uTime = gl.getUniformLocation(prog, 'u_time')
+    const uBases = gl.getUniformLocation(prog, 'u_bases')
+    const uAmps = gl.getUniformLocation(prog, 'u_amps')
     const uColors = gl.getUniformLocation(prog, 'u_colors')
     const uAlphas = gl.getUniformLocation(prog, 'u_alphas')
     const colors = new Float32Array(LANE_COLORS.length * 3)
@@ -185,11 +290,42 @@ export function useLaneWaves(
     })
     gl.uniform3fv(uColors, colors)
     gl.uniform1fv(uAlphas, LANE_ALPHAS)
+    gl.uniform1fv(uAmps, WAVE_AMPLITUDES)
 
     const weights = weightsRef.current
+    // Bases arrive in two hops: fallback weights on first paint, live
+    // stats a moment later. The draw loop eases its own copy toward
+    // basesRef so a late /stats glides the boundaries in instead of
+    // snapping a single frame. Time-constant form (not per-frame blend)
+    // keeps the ease frame-rate independent; reduced motion draws only at
+    // t=0, so it copies once and stays put.
+    const displayedBases = [...basesRef.current]
+    const BASE_EASE_TAU = 0.8
+    let lastTs = 0
     const draw = (seconds: number) => {
+      const ts = performance.now()
+      const dt = lastTs === 0 ? 0 : (ts - lastTs) / 1000
+      lastTs = ts
+      if (dt > 0) {
+        const blend = 1 - Math.exp(-dt / BASE_EASE_TAU)
+        for (let i = 0; i < LANE_COUNT; i++) {
+          const target = basesRef.current[i] ?? 1
+          displayedBases[i] += (target - displayedBases[i]) * blend
+        }
+      }
+      // CPU mirror of the shader's center column: raw wave, then the
+      // same flex renormalization (LANE_FLOOR + FLEX_BUDGET * fm/Σfm), so
+      // the DOM lanes trace the same curves the canvas paints at x=0 —
+      // text lanes sit centered on their fills.
+      let fmTotal = 0
       for (let i = 0; i < LANE_COUNT; i++) {
-        weights[i] = laneWeight(basesRef.current[i] ?? 1, i, seconds)
+        const raw = laneWeight(displayedBases[i], i, 0, seconds)
+        const fm = Math.max(raw - LANE_FLOOR, 0)
+        weights[i] = fm
+        fmTotal += fm
+      }
+      for (let i = 0; i < LANE_COUNT; i++) {
+        weights[i] = LANE_FLOOR + FLEX_BUDGET * (weights[i] / fmTotal)
       }
       const w = canvas.clientWidth
       const h = canvas.clientHeight
@@ -198,11 +334,12 @@ export function useLaneWaves(
         canvas.height = h
         gl.viewport(0, 0, w, h)
       }
-      gl.uniform1fv(uWeights, weights)
+      gl.uniform1f(uTime, seconds)
+      gl.uniform1fv(uBases, displayedBases)
       gl.clearColor(0, 0, 0, 0)
       gl.clear(gl.COLOR_BUFFER_BIT)
-      // 12 vertices: boundary pairs 0..5, left/right corners.
-      gl.drawArrays(gl.TRIANGLE_STRIP, 0, LANE_COUNT * 2 + 2)
+      // 4 vertices: one full-screen strip.
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
       activeRef.current = true
     }
 

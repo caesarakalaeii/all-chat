@@ -800,10 +800,27 @@ span.font-semibold.text-sm.username-gradient {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  /* Basis 0 (not the auto default): lane heights then come purely from
+   * flexGrow, which LanesHero sets to the same normalized weights the
+   * canvas bands use — DOM lanes and GL bands track each other exactly
+   * instead of drifting apart by each lane's content height. The 10%
+   * floor lives in the weights (LANE_FLOOR in useLaneWaves), not here. */
+  flex: 1 1 0;
   min-height: 28px;
-  /* Lane heights follow the canvas waves (LanesHero writes flexGrow every
-   * frame); the transition smooths the stepped fallback only. */
-  transition: flex-grow 2.5s ease-in-out;
+  /* River containment (feedback: the marquee must read as flowing inside
+   * its stream): rows and wordmark are vertically centered, so the moving
+   * boundaries would clip them hard at the lane edge. A vertical fade
+   * mask dissolves content near each edge instead of cutting it — chat
+   * appears to flow in from under the neighboring lane, and the wordmark
+   * keeps the same clipped-but-soft look overflow:hidden gave it. */
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 14%,
+    #000 86%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(to bottom, transparent 0, #000 14%, #000 86%, transparent 100%);
 }
 .lane[data-p='twitch'] {
   background: color-mix(in oklab, var(--lanes-twitch) 24%, transparent);
@@ -822,12 +839,12 @@ span.font-semibold.text-sm.username-gradient {
 }
 /* Once the WebGL canvas has drawn a frame (`.gl` on the stage), its bands
  * already paint the tint — the CSS backgrounds would stack on top and
- * double the opacity, so they clear. The flex-grow transition goes too:
- * it exists to smooth the stepped fallback, and would lag the canvas by
- * 2.5s if it interpolated every 60fps write. */
+ * double the opacity, so they clear. No flex-grow transition anywhere:
+ * LanesHero writes flexGrow every frame (and eases base changes in its
+ * own loop), so any CSS transition would fight the rAF writes and lag
+ * behind them. */
 .gl .lane {
   background: none;
-  transition: none;
 }
 
 /* Marquee chat inside each lane. Feedback: denser and dimmer — the rows
@@ -872,8 +889,17 @@ span.font-semibold.text-sm.username-gradient {
   opacity: 0.35;
   margin: 0 1.2em;
 }
+/* Emote artwork rides inline with the 11px chatter: 1.5em tall with a
+ * baseline offset, and dimmed like the text so it reads as texture.
+ * display:inline is load-bearing: Tailwind preflight makes every img a
+ * block, and a block box inside the nowrap marquee line breaks the line
+ * at each emote — the row collapsed into a wrapped, mostly-clipped
+ * strip that read as "a few messages, no emotes". The width/height
+ * attrs on the <img> pin the box; this only restores inline layout. */
 .flow .emote {
+  display: inline;
   margin-left: 0.35em;
+  vertical-align: -0.3em;
   opacity: 0.75;
 }
 
@@ -1112,9 +1138,13 @@ span.font-semibold.text-sm.username-gradient {
   color: #fff;
   word-break: break-word;
 }
+/* Feed emote artwork: inline image sized to the 12.5px message text.
+ * display:inline counters Tailwind preflight's img{display:block} —
+ * same fix as .flow .emote, for the same broken-line reason. */
 .msg .emote {
-  color: rgba(255, 255, 255, 0.5);
-  font-style: italic;
+  display: inline;
+  vertical-align: -0.3em;
+  margin: 0 0.1em;
 }
 
 /* Wedge (THEM / ALL·CHAT). */

@@ -21,9 +21,9 @@
  *
  * Five platform curves converge into one white line, then the live overlay
  * preview frame. The demo feed cycles `marketing.feed.*` messages against
- * mockup usernames; emote tokens inside the messages
- * (PogChamp, OMEGALUL, peepoHappy) render as .emote spans, so the frame shows
- * the emote language the copy promises.
+ * mockup usernames; emote tokens inside the messages (GIGACHAD, OMEGALUL,
+ * peepoHappy) render as .emote images, so the frame shows the emote language
+ * the copy promises.
  *
  * `id="how"` is the target of the hero's "how it works" link.
  */
@@ -34,10 +34,21 @@ import { useEffect, useState } from 'react'
 import { useReducedMotion } from '@/hooks/useReducedMotion'
 import { interpolateElements } from '@/lib/i18n/emphasise'
 import { useTranslations } from '@/lib/i18n'
+import { EMOTE_SRC, type EmoteToken } from '@/components/home/emotes'
+
+// Self-hosted artwork at 18px, plain <img> for the same reasons as the hero.
+/* eslint-disable @next/next/no-img-element */
 
 // Emote tokens that may appear inside the feed messages, rendered as .emote
-// spans — the copy promises native emotes, so the demo has to show them.
-const FEED_EMOTES = ['PogChamp', 'OMEGALUL', 'peepoHappy'] as const
+// images — the copy promises native emotes, so the demo has to show them.
+// Every token here must have an entry in EMOTE_SRC.
+const FEED_EMOTES = [
+  'GIGACHAD',
+  'OMEGALUL',
+  'peepoHappy',
+  'POGGERS',
+  'KEKW',
+] as const satisfies readonly EmoteToken[]
 
 // The demo feed: lane colour, username and message key per entry. Usernames
 // are mockup handles (component fixtures, not catalog copy). The initial six
@@ -59,24 +70,31 @@ const INITIAL_FEED_COUNT = 6
 const MAX_FEED_COUNT = 8
 
 /**
- * Split a feed message into text and .emote runs around the emote tokens.
- * Public for the HomeClient regression test.
+ * Split a feed message into text and .emote image runs around the emote
+ * tokens, so the demo feed shows native emote rendering.
  */
 export function renderFeedMessage(text: string): React.ReactNode[] {
   return FEED_EMOTES.reduce<React.ReactNode[]>(
     (parts, emote) =>
       parts.flatMap((part): React.ReactNode[] =>
         typeof part === 'string'
-          ? part.split(emote).flatMap((segment, i, segments): React.ReactNode[] =>
-              i < segments.length - 1
-                ? [
-                    segment,
-                    <span key={`${emote}-${i}`} className="emote">
-                      {emote}
-                    </span>,
-                  ]
-                : [segment]
-            )
+          ? part
+              .split(emote)
+              .flatMap((segment, i, segments): React.ReactNode[] =>
+                i < segments.length - 1
+                  ? [
+                      segment,
+                      <img
+                        key={`${emote}-${i}`}
+                        className="emote"
+                        src={EMOTE_SRC[emote]}
+                        alt={emote}
+                        width={18}
+                        height={18}
+                      />,
+                    ]
+                  : [segment]
+              )
           : [part]
       ),
     [text]
