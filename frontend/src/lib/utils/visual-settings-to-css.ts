@@ -333,24 +333,40 @@ function bubbleBgRule(settings: Partial<VisualSettings>): string[] {
  * carries the attribute — matching the events.css row rule's shape so the
  * two selectors stay diffable side by side.
  *
- * Both custom properties always consume: in background mode the border pair
- * falls back to transparent/0px, in border mode the fill pair to transparent,
- * so a row's unused half is inert without a second rule.
+ * Each mode emits only its own half. A single shared rule with transparent
+ * fallbacks for the unused half reads as inert but is not: the rule applies to
+ * every [data-user-bubble] row, so in border mode an unconditional
+ * `background-color: …transparent` actually beat theme and palette fills, and
+ * in background mode the `border-width: …0px` pair shaved off theme bubble
+ * borders. Splitting on the mode leaves the unused half to whatever the theme
+ * or the palette already styles.
  */
 function userBubbleRules(settings: Partial<VisualSettings>): string[] {
   const mode = settings.bubbleColorFromUser
-  if (mode !== 'background' && mode !== 'border') return []
-  return [
-    [
-      FEED_SCOPES.map(
-        (scope) => `  ${scope} > div[data-user-bubble]:not(.event-message):not(.scroll-anchor)`
-      ).join(',\n') + ' {',
-      '    background-color: var(--row-user-bg, var(--row-user-bg-image, transparent));',
-      '    border-color: var(--row-user-border-color, transparent);',
-      '    border-width: var(--row-user-border-width, 0px);',
-      '  }',
-    ].join('\n'),
-  ]
+  const selector =
+    FEED_SCOPES.map(
+      (scope) => `  ${scope} > div[data-user-bubble]:not(.event-message):not(.scroll-anchor)`
+    ).join(',\n') + ' {'
+  if (mode === 'background') {
+    return [
+      [
+        selector,
+        '    background-color: var(--row-user-bg, var(--row-user-bg-image, transparent));',
+        '  }',
+      ].join('\n'),
+    ]
+  }
+  if (mode === 'border') {
+    return [
+      [
+        selector,
+        '    border-color: var(--row-user-border-color, transparent);',
+        '    border-width: var(--row-user-border-width, 0px);',
+        '  }',
+      ].join('\n'),
+    ]
+  }
+  return []
 }
 
 /**

@@ -141,26 +141,33 @@ describe('visualSettingsToCss', () => {
     expect(result).not.toContain('fly-left')
     // All 53 CSS properties present (excludes non-CSS fields)
     expect((result.match(/--chat-|--platform-/g) ?? []).length).toBe(53)
-    // The by-username mode emits its [data-user-bubble] rule, not variables
+    // The by-username mode emits its [data-user-bubble] rule, not variables.
+    // Background mode emits only the fill half; the border half is emitted only
+    // when the mode is border (see the test below).
     expect(result).toContain('div[data-user-bubble]:not(.event-message):not(.scroll-anchor)')
     expect(result).toContain(
       'background-color: var(--row-user-bg, var(--row-user-bg-image, transparent));'
     )
-    expect(result).toContain('border-color: var(--row-user-border-color, transparent);')
-    expect(result).toContain('border-width: var(--row-user-border-width, 0px);')
+    expect(result).not.toContain('border-color: var(--row-user-border-color, transparent);')
   })
 
-  it('emits the user-bubble rule unchanged for border mode and nothing when off', () => {
+  it('emits only the border half for border mode and nothing when off', () => {
     const borderCss = visualSettingsToCss({ bubbleColorFromUser: 'border' })
     expect(borderCss).toContain('div[data-user-bubble]:not(.event-message):not(.scroll-anchor)')
     // Both feed scopes are covered by one rule
     expect(borderCss).toContain('.overlay-preview-body > div[data-user-bubble]')
     expect(borderCss).toContain('.overlay-live-body > div[data-user-bubble]')
+    // Border mode emits only the border pair: a background-color declaration
+    // here (with its transparent fallback) would beat theme and palette fills
+    // on every attributed row.
+    expect(borderCss).toContain('border-color: var(--row-user-border-color, transparent);')
+    expect(borderCss).toContain('border-width: var(--row-user-border-width, 0px);')
+    expect(borderCss).not.toContain('--row-user-bg')
 
     // Off ('none') and absent emit no rule at all
     expect(visualSettingsToCss({ bubbleColorFromUser: 'none' })).toBe('')
     expect(visualSettingsToCss({ bubbleUserColorOpacity: '0.5' })).toBe('')
-   })
+  })
 
   it('wraps output in correct cascade layer syntax', () => {
     const result = visualSettingsToCss({ fontFamily: 'Roboto' })
