@@ -66,7 +66,7 @@ import {
   overlayContainerStyle,
   userBubbleStyle,
 } from '@/lib/utils/visual-inline-styles'
-import { getPronounPillProps } from '@/lib/utils/pronounPill'
+import { getPronounPillProps, shouldRenderPronounPill } from '@/lib/utils/pronounPill'
 import { AllChatBadge } from '@/components/AllChatBadge'
 import { UserAvatar } from '@/components/UserAvatar'
 import { PremiumBadge } from '@/components/PremiumBadge'
@@ -973,10 +973,13 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                           {/* Pronoun pill before username, mirroring the live overlay */}
                           {(() => {
                             const pill =
-                              showPronouns &&
-                              message.user?.pronouns &&
-                              pronounPosition === 'before'
-                                ? getPronounPillProps(message.user.pronouns, pronounColor)
+                              shouldRenderPronounPill(
+                                showPronouns,
+                                message.user?.pronouns,
+                                pronounPosition,
+                                'before'
+                              )
+                                ? getPronounPillProps(message.user.pronouns!, pronounColor)
                                 : undefined
                             return pill ? (
                               <span className={pill.className} style={pill.style}>
@@ -1035,10 +1038,13 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                           {/* Pronoun pill after username, mirroring the live overlay */}
                           {(() => {
                             const pill =
-                              showPronouns &&
-                              message.user?.pronouns &&
-                              pronounPosition === 'after'
-                                ? getPronounPillProps(message.user.pronouns, pronounColor)
+                              shouldRenderPronounPill(
+                                showPronouns,
+                                message.user?.pronouns,
+                                pronounPosition,
+                                'after'
+                              )
+                                ? getPronounPillProps(message.user.pronouns!, pronounColor)
                                 : undefined
                             return pill ? (
                               <span className={pill.className} style={pill.style}>

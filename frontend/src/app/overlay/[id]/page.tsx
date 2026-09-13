@@ -66,7 +66,7 @@ import {
   userBubbleStyle,
 } from '@/lib/utils/visual-inline-styles'
 import { isDisplayVisible } from '@/lib/utils/displayVisibility'
-import { getPronounPillProps } from '@/lib/utils/pronounPill'
+import { getPronounPillProps, shouldRenderPronounPill } from '@/lib/utils/pronounPill'
 import {
   DEFAULT_FEED_ANCHOR,
   orderMessages,
@@ -940,10 +940,13 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                     {/* Phase 9: Pronoun pill - before username */}
                     {(() => {
                       const pill =
-                        showPronouns &&
-                        message.user?.pronouns &&
-                        pronounPosition === 'before'
-                          ? getPronounPillProps(message.user.pronouns, pronounColor)
+                        shouldRenderPronounPill(
+                          showPronouns,
+                          message.user?.pronouns,
+                          pronounPosition,
+                          'before'
+                        )
+                          ? getPronounPillProps(message.user.pronouns!, pronounColor)
                           : undefined
                       return pill ? (
                         <span className={pill.className} style={pill.style}>
@@ -996,10 +999,13 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                     {/* Phase 9: Pronoun pill - after username */}
                     {(() => {
                       const pill =
-                        showPronouns &&
-                        message.user?.pronouns &&
-                        pronounPosition === 'after'
-                          ? getPronounPillProps(message.user.pronouns, pronounColor)
+                        shouldRenderPronounPill(
+                          showPronouns,
+                          message.user?.pronouns,
+                          pronounPosition,
+                          'after'
+                        )
+                          ? getPronounPillProps(message.user.pronouns!, pronounColor)
                           : undefined
                       return pill ? (
                         <span className={pill.className} style={pill.style}>
