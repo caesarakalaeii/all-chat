@@ -323,15 +323,18 @@ Most `--chat-*` properties are cooperative: read the variable with your own valu
 as the fallback (`font-size: var(--chat-font-size, 15px)`) and the user's control
 wins when they set it, your look wins when they don't.
 
-The spacing and bubble-geometry controls also emit a **theme-intent step** in
-the app's own consumer rules — `gap: var(--chat-avatar-gap, var(--theme-avatar-gap,
-0.75rem))` on the avatar row, the same shape as `--chat-message-gap` and the
-bubble set. Declare your stride in `:root` (`--theme-avatar-gap: 16px`) and it
-applies whenever the user has not set the control; declare nothing and the
-platform default is used. Minimal shows the pattern for the bubble and
-message-gap intent set (it hides avatars, so it declares no
-`--theme-avatar-gap`); Comic Speech, Trading Card and Windows 98 Retro show it
-for the avatar stride.
+The spacing, bubble-geometry and font-size controls also emit a
+**theme-intent step** in the app's own consumer rules —
+`gap: var(--chat-avatar-gap, var(--theme-avatar-gap, 0.75rem))` on the avatar
+row, the same shape as `--chat-message-gap`, the bubble set and the message
+`font-size` (`var(--chat-font-size, var(--theme-font-size, 1rem))` on
+`.break-words`; the legacy display-setting size sits innermost, so a set GUI
+control outranks it). Declare your value in `:root`
+(`--theme-avatar-gap: 16px`, `--theme-font-size: 15px`) and it applies whenever
+the user has not set the control; declare nothing and the platform default is
+used. Minimal shows the pattern for the bubble and message-gap intent set (it
+hides avatars, so it declares no `--theme-avatar-gap`); Comic Speech, Trading
+Card and Windows 98 Retro show it for the avatar stride.
 
 These are **not** cooperative. When the user sets one, the app emits a rule
 inside `@layer visual-customizer` — the top layer, which outranks your theme's
@@ -444,7 +447,8 @@ for positional rhythm; a unit test enforces this.
 
 #### Message Text
 - `.text-white.break-words` - Message content
-- Inline style: `fontSize` - Text size (default 16px)
+- Font size: set by the GUI control, or by `--theme-font-size` in your `:root`
+  when the control is unset (platform default 16px; see the theme-intent step)
 
 #### Timestamp
 - `.text-xs.text-gray-500` - Timestamp text

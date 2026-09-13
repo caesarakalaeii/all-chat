@@ -18,6 +18,9 @@
      unset, so the balloon row keeps its 16px stride instead of the platform
      default. */
   --theme-avatar-gap: 16px;
+  /* Font-size intent, same mechanism: keeps the balloon's 15px message text
+     when the Font Size control is unset. */
+  --theme-font-size: 15px;
 }
 
 body {

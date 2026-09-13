@@ -604,8 +604,15 @@
   .overlay-preview-body .break-words {
     /* --chat-legacy-font-size: legacy display-settings font_size, emitted by
        the embed page. Same rationale as the live rule below: no inline style,
-       so the GUI control and manual CSS can both override it. */
-    font-size: var(--chat-font-size, var(--chat-legacy-font-size, 1rem));
+       so the GUI control and manual CSS can both override it.
+       --chat-legacy-font-size sits inside the --chat-font-size fallback rather
+       than the other way round for a reason: --chat-font-size comes from the
+       GUI customizer, and a set control must beat the legacy display setting,
+       not merge with it. */
+    font-size: var(
+      --chat-font-size,
+      var(--theme-font-size, var(--chat-legacy-font-size, 1rem))
+    );
     font-family: var(--chat-font-family, inherit);
     font-weight: var(--chat-font-weight, inherit);
     line-height: calc(var(--chat-line-height, 1.5) * 1em);
@@ -775,8 +782,8 @@
      be shorter than its container's strut, and the strut takes its line-height
      from Tailwind's preflight (1.5) — which used to leave Line Height one-way:
      it could loosen rows but never tighten them. Driving the strut from the same
-     variable makes the control symmetric. The 1.5 fallback is preflight's own
-     value, so an *unset* Line Height renders exactly as before. */
+    variable makes the control symmetric. The 1.5 fallback is preflight's own
+    value, so an *unset* Line Height renders exactly as before. */
   .overlay-live-body .min-w-0.flex-1 {
     line-height: var(--chat-line-height, 1.5);
   }
@@ -786,8 +793,14 @@
     /* The legacy display-settings font-size is emitted as a `--chat-legacy-*
        variable by the page so it feeds the same rule, not an inline style —
        inline delivery made the GUI control impossible for manual CSS to
-       override. */
-    font-size: var(--chat-font-size, var(--chat-legacy-font-size, 1rem));
+       override. --theme-font-size is the theme-intent step (same shape as
+       --theme-avatar-gap): with no control set, a theme's message font size
+       (Comic Speech 15px, Cyberpunk 17px) wins over the 1rem platform default
+       instead of being flattened by it. */
+    font-size: var(
+      --chat-font-size,
+      var(--theme-font-size, var(--chat-legacy-font-size, 1rem))
+    );
     font-family: var(--chat-font-family, inherit);
     font-weight: var(--chat-font-weight, inherit);
     line-height: calc(var(--chat-line-height, 1.5) * 1em);

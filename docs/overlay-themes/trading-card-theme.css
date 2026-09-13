@@ -17,6 +17,9 @@
      a 10px stride, which the customizer consumer reads when its slider is
      unset. */
   --theme-avatar-gap: 10px;
+  /* Font-size intent, same mechanism: keeps the ability box's 14px message
+     text when the Font Size control is unset. */
+  --theme-font-size: 14px;
 }
 
 body {

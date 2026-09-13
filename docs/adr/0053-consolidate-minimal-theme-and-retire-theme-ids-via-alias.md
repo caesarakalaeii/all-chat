@@ -123,9 +123,12 @@ padding: var(--chat-bubble-padding, var(--theme-bubble-padding, 0.75rem));
 giving the intended order: **customizer setting > theme intent > platform
 default**. A theme opts in by declaring `--theme-*` (`--theme-bubble-padding`,
 `--theme-bubble-border-radius`, `--theme-bubble-border-width`,
-`--theme-backdrop-blur`, `--theme-message-gap`, `--theme-avatar-gap`); a theme
-that declares nothing behaves exactly as before, so this is
-backwards-compatible across the bundle.
+`--theme-backdrop-blur`, `--theme-message-gap`, `--theme-avatar-gap`,
+`--theme-font-size`); a theme that declares nothing behaves exactly as before,
+so this is backwards-compatible across the bundle. `--theme-font-size` follows
+the same shape on the message text consumer (`.break-words`), with the legacy
+display-settings size sitting innermost:
+`var(--chat-font-size, var(--theme-font-size, var(--chat-legacy-font-size, 1rem)))`.
 
 Measured on the reporter's saved settings (`lineHeight: 1`, `messageGap: 8px`),
 row pitch went **48px → 24px** — which is now exactly `1 × 16px + 8px`, i.e. the
