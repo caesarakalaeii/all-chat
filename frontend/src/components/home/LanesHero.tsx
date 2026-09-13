@@ -42,7 +42,7 @@ import { useEffect, useRef, useState } from 'react'
 import { type MessageKey, formatNumber, useTranslations } from '@/lib/i18n'
 import { DISCORD_INVITE_URL } from '@/lib/constants'
 import { useReducedMotion } from '@/hooks/useReducedMotion'
-import { LANE_COUNT, useLaneWaves } from '@/hooks/useLaneWaves'
+import { LANE_COUNT, laneBaseWeights, useLaneWaves } from '@/hooks/useLaneWaves'
 import { EMOTE_SRC, type EmoteToken } from '@/components/home/emotes'
 
 // Static self-hosted artwork, not next/image: the hero renders at 17px where
@@ -238,11 +238,6 @@ export interface LanesHeroProps {
   overlaysLive: number
   /** Weekly message counts per platform; lane heights follow these. */
   platformShares: Record<string, number> | null
-  /**
-   * Live per-lane rate modulation, LANES order: 1 = platform moving at its
-   * weekly pace. Derived by HomeClient from consecutive stats samples.
-   */
-  laneModulations: number[]
   onCta: () => void
 }
 
@@ -261,7 +256,6 @@ export function LanesHero({
   userName,
   overlaysLive,
   platformShares,
-  laneModulations,
   onCta,
 }: LanesHeroProps) {
   const t = useTranslations()
@@ -279,16 +273,20 @@ export function LanesHero({
   // count and the words; .lanes-total spaces them with a flex gap.
   const totalWords = t('marketing.lanes.totalLabel').split(' ')
 
-  // Real weekly shares, zero-guarded: a platform with no messages this
-  // week falls back to its mockup weight rather than collapsing to zero
-  // (the lane must stay visible; the wordmark carries the brand).
-  const laneBases = LANES.map(({ platform }) => {
-    const share = platformShares?.[platform]
-    return share !== undefined && share > 0 ? share : FALLBACK_SHARES[platform]
-  })
+  // Real weekly counts, zero-guarded: a platform with no messages this
+  // week falls back to its mockup weight rather than collapsing to zero.
+  // laneBaseWeights then normalizes to stage fractions — every lane keeps
+  // a 10% floor, the rest splits by share — so fallback weights (40) and
+  // raw live counts (hundreds of thousands) produce comparable lane sizes
+  // and no lane can be squashed invisible by its siblings' scale.
+  const laneBases = laneBaseWeights(
+    LANES.map(({ platform }) => {
+      const share = platformShares?.[platform]
+      return share !== undefined && share > 0 ? share : FALLBACK_SHARES[platform]
+    })
+  )
   const { weightsRef, activeRef } = useLaneWaves(canvasRef, {
     bases: laneBases,
-    modulations: laneModulations,
     reducedMotion,
   })
 
