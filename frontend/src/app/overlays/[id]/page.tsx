@@ -1374,7 +1374,7 @@ function AddSourceForm({
           size="lg"
           className="gap-2.5 text-bg"
           style={
-            { backgroundColor: '#FF0000', '--tw-ring-color': '#FF0000' } as React.CSSProperties
+            { backgroundColor: '#FF0033', '--tw-ring-color': '#FF0033' } as React.CSSProperties
           }
         >
           <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
