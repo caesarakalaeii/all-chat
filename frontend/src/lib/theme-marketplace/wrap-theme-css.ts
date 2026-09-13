@@ -45,7 +45,7 @@ function stripImportant(css: string): string {
   return css.replace(/\s*!\s*important/gi, '')
 }
 
-function extractImports(css: string): { imports: string[]; rest: string } {
+export function extractImports(css: string): { imports: string[]; rest: string } {
   const imports: string[] = []
   // A Google Fonts css2 URL carries weight axes as semicolons
   // (family=Poppins:wght@400;500;600), so the URL body cannot be matched

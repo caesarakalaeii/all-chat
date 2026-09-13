@@ -66,7 +66,8 @@ import {
   overlayContainerStyle,
   userBubbleStyle,
 } from '@/lib/utils/visual-inline-styles'
-import { getPronounPillProps, shouldRenderPronounPill } from '@/lib/utils/pronounPill'
+import { LegacyFontSizeStyle } from '@/components/overlay/LegacyFontSizeStyle'
+import { PronounPill } from '@/components/overlay/PronounPill'
 import { AllChatBadge } from '@/components/AllChatBadge'
 import { UserAvatar } from '@/components/UserAvatar'
 import { PremiumBadge } from '@/components/PremiumBadge'
@@ -88,7 +89,7 @@ import type { SoundPlayer, SoundSettings } from '@/lib/utils/soundPlayer'
 import { createTTSPlayer } from '@/lib/utils/ttsPlayer'
 import type { TTSPlayer, TTSSettings } from '@/lib/utils/ttsPlayer'
 import { resolveUsernameColor } from '@/lib/utils/usernameColor'
-import { scopeCustomCss } from '@/lib/theme-marketplace/scope-css'
+import { joinPreviewCss, scopeCustomCss } from '@/lib/theme-marketplace/scope-css'
 import '@/styles/events.css'
 import { formatTime, useTranslations } from '@/lib/i18n'
 
@@ -318,11 +319,14 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
   }, [messages, feedLayout])
 
   // themeCss is already wrapped into @layer marketplace-themes; customCss is
-  // the user's manual (or diff) CSS and must stay unlayered. scopeCustomCss
-  // scopes selectors inside the layer body without unwrapping it, so one pass
-  // over the joined blob preserves both tiers.
+  // the user's manual (or diff) CSS and must stay unlayered. joinPreviewCss
+  // hoists both tiers' @imports above the blob (a user @import following the
+  // theme's @layer body would be dropped by the CSS parser — the live overlay
+  // never sees this because it renders the tiers as separate style tags), then
+  // scopeCustomCss scopes selectors inside the layer body without unwrapping
+  // it, so one pass over the joined blob preserves both tiers.
   const scopedPreviewCss = useMemo(() => {
-    const blob = [themeCss, customCss].filter((s) => s.trim().length).join('\n')
+    const blob = joinPreviewCss(themeCss, customCss)
     if (!useCustomCss || !blob.trim()) {
       return ''
     }
@@ -778,14 +782,7 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
           dangerouslySetInnerHTML={{ __html: visualSettingsCss }}
         />
       )}
-      {legacyFontSize !== null && (
-        <style
-          id="overlay-preview-legacy-font-size"
-          dangerouslySetInnerHTML={{
-            __html: `:root { --chat-legacy-font-size: ${legacyFontSize}px; }`,
-          }}
-        />
-      )}
+      <LegacyFontSizeStyle fontSize={legacyFontSize} id="overlay-preview-legacy-font-size" />
 
       {/* Flex column under feedAnchor 'bottom'; the list below must remain its
           only in-flow child, or the free space the `mt-auto` absorbs is split. */}
@@ -971,22 +968,13 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                             )}
 
                           {/* Pronoun pill before username, mirroring the live overlay */}
-                          {(() => {
-                            const pill =
-                              shouldRenderPronounPill(
-                                showPronouns,
-                                message.user?.pronouns,
-                                pronounPosition,
-                                'before'
-                              )
-                                ? getPronounPillProps(message.user.pronouns!, pronounColor)
-                                : undefined
-                            return pill ? (
-                              <span className={pill.className} style={pill.style}>
-                                {pill.text}
-                              </span>
-                            ) : null
-                          })()}
+                          <PronounPill
+                            showPronouns={showPronouns}
+                            pronouns={message.user?.pronouns}
+                            position={pronounPosition}
+                            targetPosition="before"
+                            color={pronounColor}
+                          />
 
                           {/* Username */}
                           {message.user.name_gradient ? (
@@ -1036,22 +1024,13 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                           )}
 
                           {/* Pronoun pill after username, mirroring the live overlay */}
-                          {(() => {
-                            const pill =
-                              shouldRenderPronounPill(
-                                showPronouns,
-                                message.user?.pronouns,
-                                pronounPosition,
-                                'after'
-                              )
-                                ? getPronounPillProps(message.user.pronouns!, pronounColor)
-                                : undefined
-                            return pill ? (
-                              <span className={pill.className} style={pill.style}>
-                                {pill.text}
-                              </span>
-                            ) : null
-                          })()}
+                          <PronounPill
+                            showPronouns={showPronouns}
+                            pronouns={message.user?.pronouns}
+                            position={pronounPosition}
+                            targetPosition="after"
+                            color={pronounColor}
+                          />
                           {/* Platform badge after username */}
                           {showPlatformBadge &&
                             platformBadgePosition === 'after' &&
