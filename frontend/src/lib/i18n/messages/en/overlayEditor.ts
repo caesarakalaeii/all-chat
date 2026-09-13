@@ -56,6 +56,7 @@ export const overlayEditor = {
     borderWidth: 'Border width',
     padding: 'Padding',
     messageGap: 'Message gap',
+    avatarGap: 'Avatar gap',
     backdropBlur: 'Backdrop blur',
   },
   colors: {

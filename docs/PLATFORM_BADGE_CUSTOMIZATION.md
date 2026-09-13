@@ -230,7 +230,7 @@ The new fields are:
 **Problem**: Custom CSS doesn't affect platform badges
 
 **Solution**:
-1. Use `!important` flag in CSS rules
+1. Use the correct selector with plain declarations — custom CSS is unlayered and outranks the app's layers, no `!important` needed
 2. Use the correct selector (`.platform-badge`, `.platform-badge-text`, or `.platform-badge-icon`)
 3. Refresh OBS browser source
 

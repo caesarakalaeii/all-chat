@@ -94,7 +94,7 @@ export function BackgroundGroup({
         onChange={(v) => onChange({ bubbleBorderWidth: `${v}px` })}
       />
       {/* Low-traffic fine-tuning lives behind Advanced (ADR-0042) */}
-      <AdvancedDisclosure count={3}>
+      <AdvancedDisclosure count={4}>
         <SliderControl
           label={t('overlayEditor.background.padding')}
           value={parseFloat(visualSettings.bubblePadding ?? '8')}
@@ -112,6 +112,15 @@ export function BackgroundGroup({
           step={2}
           unit="px"
           onChange={(v) => onChange({ messageGap: `${v}px` })}
+        />
+        <SliderControl
+          label={t('overlayEditor.background.avatarGap')}
+          value={parseFloat(visualSettings.avatarGap ?? '12')}
+          min={0}
+          max={32}
+          step={1}
+          unit="px"
+          onChange={(v) => onChange({ avatarGap: `${v}px` })}
         />
         <SliderControl
           label={t('overlayEditor.background.backdropBlur')}

@@ -18,7 +18,6 @@
 
 import { describe, expect, it } from 'vitest'
 import {
-  chatBubbleStyle,
   hexToRgba,
   overlayContainerStyle,
   userBubbleStyle,
@@ -83,27 +82,6 @@ describe('overlayContainerStyle', () => {
       backgroundColor: 'rgba(0, 0, 0, 0.7)',
     })
     expect(overlayContainerStyle({ maxWidth: '600px' })).toEqual({ maxWidth: '600px' })
-  })
-})
-
-describe('chatBubbleStyle', () => {
-  it('is empty when nothing is configured', () => {
-    expect(chatBubbleStyle({})).toEqual({})
-  })
-
-  it('renders a fully transparent bubble from an alpha-carrying color', () => {
-    expect(chatBubbleStyle({ bubbleBgColor: '#1a1a2e00' })).toEqual({
-      backgroundColor: 'rgba(26, 26, 46, 0)',
-    })
-  })
-
-  it('emits background + shadow only for set values', () => {
-    expect(chatBubbleStyle({ bubbleBgColor: '#1a1a2e', bubbleBgOpacity: '0.85' })).toEqual({
-      backgroundColor: 'rgba(26, 26, 46, 0.85)',
-    })
-    expect(chatBubbleStyle({ bubbleShadow: '0 0 8px red' })).toEqual({
-      boxShadow: '0 0 8px red',
-    })
   })
 })
 

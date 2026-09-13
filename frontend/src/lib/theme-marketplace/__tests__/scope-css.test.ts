@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { scopeCustomCss } from '../scope-css'
+import { joinPreviewCss, scopeCustomCss } from '../scope-css'
 import { getBundledThemes } from '../bundled-themes'
 
 const SCOPE = '.theme-preview-x'
@@ -78,5 +78,28 @@ describe('scopeCustomCss', () => {
         .filter((line) => !/^\s*(from|to|\d+%)/.test(line))
       expect(unscoped, `${theme.id} has rules that escape the preview scope`).toEqual([])
     }
+  })
+})
+
+describe('joinPreviewCss', () => {
+  it('hoists a user @import above the theme layer body (live-overlay parity)', () => {
+    const theme = "@layer marketplace-themes {\n.chat-username { color: red; }\n}"
+    const custom = "@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@700&display=swap');\n.chat-username { text-shadow: none; }"
+    const out = joinPreviewCss(theme, custom)
+    const importIdx = out.indexOf('@import')
+    const layerIdx = out.indexOf('@layer')
+    expect(importIdx).toBeGreaterThanOrEqual(0)
+    // The import must precede the layer body or the CSS parser drops it.
+    expect(layerIdx).toBeGreaterThan(importIdx)
+    expect(out).toContain('.chat-username { text-shadow: none; }')
+  })
+
+  it('keeps theme imports before user imports and drops empty tiers', () => {
+    const theme = "@import url('/font-proxy/css?family=Theme');\n@layer marketplace-themes {\n.x { color: red; }\n}"
+    const out = joinPreviewCss(theme, '')
+    expect(out.indexOf("url('/font-proxy/css?family=Theme')")).toBeLessThan(
+      out.indexOf('@layer')
+    )
+    expect(out).toContain('.x { color: red; }')
   })
 })

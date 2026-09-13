@@ -111,6 +111,7 @@ export interface VisualSettings {
   // --chat-bubble-shadow; forced on chat rows for the same reason as textShadow.
   bubbleShadow?: string
   messageGap?: string // --chat-message-gap
+  avatarGap?: string // --chat-avatar-gap (avatar→text distance inside a row)
   backdropBlur?: string // --chat-backdrop-blur
   maxWidth?: string // --chat-max-width
 
@@ -154,7 +155,7 @@ export interface VisualSettings {
 
   // Bubble colour from the username colour — non-CSS settings read into
   // React state on both overlay surfaces. The CSS half lives in
-  // userBubbleRules (visual-settings-to-css): an !important rule in the
+  // userBubbleRules (visual-settings-to-css): a normal-weight rule in the
   // visual-customizer layer keyed on the per-row [data-user-bubble]
   // attribute, beating palette/platform fills on specificity. Not in
   // PROPERTY_MAP, so no --chat-* variable is emitted.

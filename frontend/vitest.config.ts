@@ -20,6 +20,10 @@ export default defineConfig({
           name: 'unit',
           environment: 'node',
           include: ['src/**/__tests__/**/*.test.ts', 'src/**/__tests__/**/*.test.tsx'],
+          // *.browser.test.ts(x) belongs to the browser project below: the
+          // plain glob above matches the infix, and importing
+          // @vitest/browser/context in the node pool throws.
+          exclude: ['src/**/__tests__/**/*.browser.test.ts', 'src/**/__tests__/**/*.browser.test.tsx'],
           alias: {
             '@': path.join(dirname, 'src'),
           },
@@ -41,6 +45,24 @@ export default defineConfig({
             instances: [{ browser: 'chromium' }],
           },
           setupFiles: ['.storybook/vitest.setup.ts'],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'browser',
+          browser: {
+            enabled: true,
+            headless: true,
+            provider: playwright({}),
+            instances: [{ browser: 'chromium' }],
+          },
+          include: ['src/**/__tests__/**/*.browser.test.ts', 'src/**/__tests__/**/*.browser.test.tsx'],
+          // Same alias as the unit project: a browser test importing `@/…`
+          // must resolve without depending on which project runs it.
+          alias: {
+            '@': path.join(dirname, 'src'),
+          },
         },
       },
     ],

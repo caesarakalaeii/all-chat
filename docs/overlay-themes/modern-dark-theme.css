@@ -24,6 +24,13 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
+/* Font-size intent: the customizer's consumer rule reads --theme-font-size
+   when its slider is unset, so the message text keeps this 15px instead of
+   the 1rem platform default. */
+:root {
+  --theme-font-size: 15px;
+}
+
 /* ============================================================
    CORE STYLES
    ============================================================ */

@@ -16,6 +16,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+import { extractImports } from './wrap-theme-css'
+
 /**
  * Scope owner/marketplace-authored CSS to a preview container.
  *
@@ -31,6 +33,23 @@
  * external stylesheets and inline style injection vectors that would otherwise
  * be reachable via url()/@import.
  */
+
+/**
+ * Join the wrapped theme tier and the user's manual CSS for the editor
+ * preview's single `<style>` tag. The preview differs from the live overlay,
+ * which renders the two tiers as separate style tags: in one joined blob a
+ * user `@import` in customCss lands after the theme's `@layer` body, and the
+ * CSS grammar drops every @import that follows any other rule. Hoisting both
+ * tiers' imports above the blob restores live-overlay parity for the common
+ * Google Fonts case before scopeCustomCss prefixes selectors.
+ */
+export const joinPreviewCss = (themeCss: string, customCss: string): string => {
+  const theme = extractImports(themeCss)
+  const custom = extractImports(customCss)
+  return [...theme.imports, ...custom.imports, theme.rest.trim(), custom.rest.trim()]
+    .filter((part) => part !== '')
+    .join('\n')
+}
 
 /**
  * Strip `/* … *​/` comments.
