@@ -83,13 +83,9 @@ body {
   }
 }
 
-/* Message content wrapper — avatar-to-text stride. The intent is declared in
-   :root as --theme-avatar-gap, which the customizer's consumer rule reads
-   when its slider is unset, so the dense layout keeps its 8px stride. */
-.flex.items-start.gap-3 {
-  gap: 8px !important;
-}
-
+/* Message content wrapper — avatar-to-text stride. The customizer's consumer
+   rule reads --theme-avatar-gap when its slider is unset, so the dense
+   layout keeps its 8px stride. */
 :root {
   --theme-avatar-gap: 8px;
 }
