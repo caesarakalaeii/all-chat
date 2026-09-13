@@ -49,7 +49,10 @@ export const marketing = {
     titleBottom: 'ONE URL.',
     // The multistream objection, answered in the same voice: one merged
     // chat means one community, and one mod queue means no extra load.
-    manifesto: 'YOUR CHATS? MERGED. YOUR COMMUNITY? UNITED.',
+    // Two keys = the two display lines (feedback: a soft wrap broke the
+    // sentence after "COMMUNITY?"). Same pattern as titleTop/Bottom.
+    manifestoLine1: 'YOUR CHATS? MERGED.',
+    manifestoLine2: 'YOUR COMMUNITY? UNITED.',
     totalLabel: 'MSG DELIVERED',
     cta: 'GET YOUR OVERLAY — FREE →',
     ctaNote: 'lane height ≈ live share of messages',

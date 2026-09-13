@@ -42,7 +42,8 @@ describe('lanes hero, logged out', () => {
     expect(t('marketing.lanes.kicker')).toBe('A DECLARATION OF WAR ON CHAT TOOLING')
     expect(t('marketing.lanes.titleTop')).toBe('EVERY CHAT.')
     expect(t('marketing.lanes.titleBottom')).toBe('ONE URL.')
-    expect(t('marketing.lanes.totalLabel')).toBe('MSG DELIVERED')
+    expect(t('marketing.lanes.manifestoLine1')).toBe('YOUR CHATS? MERGED.')
+    expect(t('marketing.lanes.manifestoLine2')).toBe('YOUR COMMUNITY? UNITED.')
   })
 
   it('keeps the CTA bar', () => {
