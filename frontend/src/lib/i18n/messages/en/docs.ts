@@ -27,6 +27,11 @@ export const docs = {
     columnType: 'Type',
     columnDescription: 'Description',
   },
+  // Pre in components/docs/prose.tsx: names the scrollable code panel for
+  // screen readers. Kept generic — a per-language label would not translate.
+  prose: {
+    codeSample: 'Code sample',
+  },
   // /docs/api, the developer WebSocket reference. Wire field names, event type
   // names and the code samples are not copy and stay at the render site: a
   // translated field name names a field the gateway does not send.
