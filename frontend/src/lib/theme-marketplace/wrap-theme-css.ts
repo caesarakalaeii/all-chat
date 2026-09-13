@@ -52,6 +52,11 @@ function extractImports(css: string): { imports: string[]; rest: string } {
   // with `[^;]+` — that truncates the import at the first axis and leaves
   // the rest as garbage tokens. Match the quoted/url() form first, then
   // everything up to the statement's semicolon.
+  // Scope: every bundled theme imports fonts via `url(...)` — the only form
+  // rewriteThemeFontImports understands, so a bare-string import would
+  // already silently miss the font-proxy rewrite. Such an import is not
+  // matched here and stays inside the layer body, where the CSS parser
+  // drops it; acceptable until a theme actually needs that form.
   const rest = css.replace(/@import\s+(?:url\([^)]*\)|"[^"]*"|'[^']*')[^;]*;/g, (statement) => {
     imports.push(statement.trim())
     return ''

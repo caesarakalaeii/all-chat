@@ -265,8 +265,9 @@
       # Deliberately NOT covered by any verb, so the map stays honest:
       #   * scripts/quick-start-frontend.sh (`make frontend-quick`) asks a
       #     `read -r` question, so it can only be run by a human.
-      #   * the `storybook` vitest project (frontend/vitest.config.ts) and
-      #     frontend/tests/e2e/ drive a real Chromium through Playwright. Those
+      #   * the `storybook` and `browser` vitest projects
+      #     (frontend/vitest.config.ts) and frontend/tests/e2e/ drive a real
+      #     Chromium through Playwright. Those
       #     downloaded browsers are FHS-linked binaries that need a host ldso
       #     (see block 2), and the nixpkgs alternative,
       #     playwright-driver.browsers, has a 2.30 GB closure (2304223264 bytes,
