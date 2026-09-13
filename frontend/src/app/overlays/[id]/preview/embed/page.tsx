@@ -63,10 +63,10 @@ import { getBundledTheme } from '@/lib/theme-marketplace/bundled-themes'
 import { rewriteThemeFontImports } from '@/lib/theme-marketplace/font-proxy'
 import { wrapThemeCss } from '@/lib/theme-marketplace/wrap-theme-css'
 import {
-  chatBubbleStyle,
   overlayContainerStyle,
   userBubbleStyle,
 } from '@/lib/utils/visual-inline-styles'
+import { getPronounPillProps } from '@/lib/utils/pronounPill'
 import { AllChatBadge } from '@/components/AllChatBadge'
 import { UserAvatar } from '@/components/UserAvatar'
 import { PremiumBadge } from '@/components/PremiumBadge'
@@ -214,10 +214,11 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
   const [customCss, setCustomCss] = useState('')
   const [useCustomCss, setUseCustomCss] = useState(false)
   const [visualSettingsCss, setVisualSettingsCss] = useState('')
-  // Background fills / shadow / max-width applied inline only when set (see
+  // Background fill / max-width applied inline only when set (see
   // visual-inline-styles); keeps this preview in sync with the live overlay.
+  // The chat-bubble fill is delivered as a rule inside visualSettingsCss, so
+  // live VISUAL_CSS_UPDATE messages repaint it without extra state.
   const [containerStyle, setContainerStyle] = useState<React.CSSProperties>({})
-  const [bubbleStyle, setBubbleStyle] = useState<React.CSSProperties>({})
   // Bubble palette: 2+ fills cycled down the feed. Arrives on load from
   // visual_settings and live via VISUAL_SETTINGS_UPDATE (the CSS alone is not
   // enough — the per-row slot attribute has to be written in React).
@@ -536,7 +537,6 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
         const vcCss = visualSettingsToCss(vs)
         setVisualSettingsCss(vcCss)
         setContainerStyle(overlayContainerStyle(vs))
-        setBubbleStyle(chatBubbleStyle(vs))
         setBubblePalette(resolveBubblePalette(vs))
         setBubbleColorFromUser(isBubbleColorFromUser(vs.bubbleColorFromUser) ? vs.bubbleColorFromUser : 'none')
         if (typeof vs.bubbleUserColorOpacity === 'string') {
@@ -887,7 +887,6 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                       isEvent
                         ? undefined
                         : {
-                            ...bubbleStyle,
                             ...(bubbleColorFromUser !== 'none'
                               ? userBubbleStyle(
                                   message.user,
@@ -972,16 +971,19 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                             )}
 
                           {/* Pronoun pill before username, mirroring the live overlay */}
-                          {showPronouns &&
-                            message.user?.pronouns &&
-                            pronounPosition === 'before' && (
-                              <span
-                                className="inline-flex items-center rounded-full px-2 py-1 text-[11px] leading-none font-semibold text-white"
-                                style={{ backgroundColor: pronounColor }}
-                              >
-                                {message.user.pronouns}
+                          {(() => {
+                            const pill =
+                              showPronouns &&
+                              message.user?.pronouns &&
+                              pronounPosition === 'before'
+                                ? getPronounPillProps(message.user.pronouns, pronounColor)
+                                : undefined
+                            return pill ? (
+                              <span className={pill.className} style={pill.style}>
+                                {pill.text}
                               </span>
-                            )}
+                            ) : null
+                          })()}
 
                           {/* Username */}
                           {message.user.name_gradient ? (
@@ -1031,16 +1033,19 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                           )}
 
                           {/* Pronoun pill after username, mirroring the live overlay */}
-                          {showPronouns &&
-                            message.user?.pronouns &&
-                            pronounPosition === 'after' && (
-                              <span
-                                className="inline-flex items-center rounded-full px-2 py-1 text-[11px] leading-none font-semibold text-white"
-                                style={{ backgroundColor: pronounColor }}
-                              >
-                                {message.user.pronouns}
+                          {(() => {
+                            const pill =
+                              showPronouns &&
+                              message.user?.pronouns &&
+                              pronounPosition === 'after'
+                                ? getPronounPillProps(message.user.pronouns, pronounColor)
+                                : undefined
+                            return pill ? (
+                              <span className={pill.className} style={pill.style}>
+                                {pill.text}
                               </span>
-                            )}
+                            ) : null
+                          })()}
                           {/* Platform badge after username */}
                           {showPlatformBadge &&
                             platformBadgePosition === 'after' &&

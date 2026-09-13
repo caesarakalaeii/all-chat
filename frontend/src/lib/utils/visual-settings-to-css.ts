@@ -18,6 +18,7 @@
 
 import type { VisualSettings } from '@/lib/types/visual-settings'
 import { canonicalizeTextShadow } from './text-outline'
+import { withLegacyOpacity } from './hex-alpha'
 
 /**
  * Authoritative mapping from VisualSettings field names to CSS custom property names.
@@ -283,6 +284,38 @@ function bubbleFillRules(settings: Partial<VisualSettings>): string[] {
 }
 
 /**
+ * Flat bubble background (the "Bubble background" colour control). Delivered
+ * as a rule so it can lose to the higher-specificity rules that must beat it
+ * — palette and platform fills tie and win on order (emitted after), the
+ * username-colour mode wins on specificity — instead of as an inline style,
+ * which normal-weight layered rules cannot override.
+ *
+ * Same selector shape and specificity as the palette/platform fills
+ * (CHAT_ROW: scope class + div + two `:not()`s, (0,3,1)); source order decides
+ * the tie, and bubbleFillRules is emitted after this rule, so "platform tint
+ * overrides the flat fill on that platform's rows" stays true.
+ *
+ * Normal weight, like every rule in this layer: a layered `!important` would
+ * beat the user's unlayered manual CSS (Cascade 5 inverts the layer order for
+ * important declarations).
+ *
+ * The value folds the legacy `bubbleBgOpacity` sibling into the hex alpha
+ * channel (ADR-0050); non-hex values (keywords, gradients) pass through
+ * verbatim.
+ */
+function bubbleBgRule(settings: Partial<VisualSettings>): string[] {
+  const color = settings.bubbleBgColor
+  if (typeof color !== 'string' || color === '' || !hasBalancedParens(color)) return []
+  return [
+    [
+      FEED_SCOPES.map((scope) => `  ${scope} ${CHAT_ROW}`).join(',\n') + ' {',
+      `    background-color: ${withLegacyOpacity(color, settings.bubbleBgOpacity)};`,
+      '  }',
+    ].join('\n'),
+  ]
+}
+
+/**
  * Bubble colour from the username colour. The overlay surfaces write each
  * row's colour as inline custom properties (userBubbleStyle in
  * visual-inline-styles) and mark the row with `data-user-bubble`; this rule is
@@ -292,13 +325,13 @@ function bubbleFillRules(settings: Partial<VisualSettings>): string[] {
  * beat the user's unlayered manual CSS (Cascade 5 inverts the layer order for
  * important declarations), which is the exact symptom this module avoids.
  *
- * Beats palette and platform fills by specificity, not order: three
- * attribute/class selectors plus the scope class (0,4,0... counting `:not()`
- * arguments — [data-user-bubble] plus two :not()s) outrank their one attribute
- * plus one :not(), so it is emitted after them but wins regardless. The
- * `:not(.scroll-anchor)` is documentary — the sentinel never carries the
- * attribute — matching the events.css row rule's shape so the two selectors
- * stay diffable side by side.
+ * Beats palette and platform fills by specificity, not order: scope class,
+ * [data-user-bubble], and the two `:not()` arguments count as four
+ * class-level selectors (0,4,1 counting the `div`), outranking the fills'
+ * one attribute plus `:not()`, so it is emitted after them but wins
+ * regardless. The `:not(.scroll-anchor)` is documentary — the sentinel never
+ * carries the attribute — matching the events.css row rule's shape so the
+ * two selectors stay diffable side by side.
  *
  * Both custom properties always consume: in background mode the border pair
  * falls back to transparent/0px, in border mode the fill pair to transparent,
@@ -385,8 +418,12 @@ export function visualSettingsToCss(settings: Partial<VisualSettings>): string {
   if (declarations.length > 0) {
     blocks.push(['  :root {', ...declarations, '  }'].join('\n'))
   }
-  blocks.push(...overrideRules(settings), ...bubbleFillRules(settings), ...userBubbleRules(settings))
-
+  blocks.push(
+    ...overrideRules(settings),
+    ...bubbleBgRule(settings),
+    ...bubbleFillRules(settings),
+    ...userBubbleRules(settings)
+  )
   if (blocks.length === 0) {
     return ''
   }

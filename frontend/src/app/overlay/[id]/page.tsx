@@ -62,11 +62,11 @@ import { getBundledTheme } from '@/lib/theme-marketplace/bundled-themes'
 import { rewriteThemeFontImports } from '@/lib/theme-marketplace/font-proxy'
 import { wrapThemeCss } from '@/lib/theme-marketplace/wrap-theme-css'
 import {
-  chatBubbleStyle,
   overlayContainerStyle,
   userBubbleStyle,
 } from '@/lib/utils/visual-inline-styles'
 import { isDisplayVisible } from '@/lib/utils/displayVisibility'
+import { getPronounPillProps } from '@/lib/utils/pronounPill'
 import {
   DEFAULT_FEED_ANCHOR,
   orderMessages,
@@ -165,11 +165,12 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   // `--chat-font-size`), instead of an inline style that no manual CSS could
   // override.
   const [legacyFontSize, setLegacyFontSize] = useState<number | null>(null)
-  // Background fills (overlay container + chat bubbles), shadow and max-width.
-  // Applied inline ONLY when set so they don't clobber the per-variant Tailwind
-  // defaults (slate/purple bubbles, transparent overlay) — see visual-inline-styles.
+  // Background fill for the overlay container and max-width. Applied inline
+  // ONLY when set so they don't clobber the per-variant Tailwind defaults
+  // (transparent overlay) — see visual-inline-styles. The chat-bubble fill is
+  // delivered as a rule by visualSettingsToCss instead, so it can lose to the
+  // palette/platform fills and the username-colour mode in the cascade.
   const [containerStyle, setContainerStyle] = useState<React.CSSProperties>({})
-  const [bubbleStyle, setBubbleStyle] = useState<React.CSSProperties>({})
   const [platformBadgePosition, setPlatformBadgePosition] = useState<'before' | 'after'>('before')
   const [platformBadgeStyle, setPlatformBadgeStyle] = useState<'text' | 'icon'>('text')
   // Entry animation for new chat bubbles; null keeps the default fade + slide-up
@@ -420,9 +421,9 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
     if (config.visual_settings && typeof config.visual_settings === 'object') {
       const vs = config.visual_settings as Partial<VisualSettings>
       setVisualSettingsCss(visualSettingsToCss(vs))
-      // Background fills / shadow / max-width (see state decl).
+      // Background fill / max-width for the overlay container (see state decl);
+      // the bubble fill now rides in the CSS above.
       setContainerStyle(overlayContainerStyle(vs))
-      setBubbleStyle(chatBubbleStyle(vs))
       // Unconditional: clearing the palette has to drop the slot attributes too.
       setBubblePalette(resolveBubblePalette(vs))
       // Same for the by-username mode; also cleared unconditionally so a
@@ -869,7 +870,6 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                 isEvent
                   ? undefined
                   : {
-                      ...bubbleStyle,
                       ...(bubbleColorFromUser !== 'none'
                         ? userBubbleStyle(
                             message.user,
@@ -938,15 +938,19 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                       )}
 
                     {/* Phase 9: Pronoun pill - before username */}
-                    {showPronouns && message.user?.pronouns && pronounPosition === 'before' && (
-                      <span
-                        className="inline-flex items-center rounded-full px-2 py-1 text-[11px] leading-none font-semibold text-white"
-                        style={{ backgroundColor: pronounColor }}
-                      >
-                        {message.user.pronouns}
-                      </span>
-                    )}
-
+                    {(() => {
+                      const pill =
+                        showPronouns &&
+                        message.user?.pronouns &&
+                        pronounPosition === 'before'
+                          ? getPronounPillProps(message.user.pronouns, pronounColor)
+                          : undefined
+                      return pill ? (
+                        <span className={pill.className} style={pill.style}>
+                          {pill.text}
+                        </span>
+                      ) : null
+                    })()}
                     {/* Username */}
                     {showUsername &&
                       (message.user?.name_gradient ? (
@@ -990,14 +994,19 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                       ))}
 
                     {/* Phase 9: Pronoun pill - after username */}
-                    {showPronouns && message.user?.pronouns && pronounPosition === 'after' && (
-                      <span
-                        className="inline-flex items-center rounded-full px-2 py-1 text-[11px] leading-none font-semibold text-white"
-                        style={{ backgroundColor: pronounColor }}
-                      >
-                        {message.user.pronouns}
-                      </span>
-                    )}
+                    {(() => {
+                      const pill =
+                        showPronouns &&
+                        message.user?.pronouns &&
+                        pronounPosition === 'after'
+                          ? getPronounPillProps(message.user.pronouns, pronounColor)
+                          : undefined
+                      return pill ? (
+                        <span className={pill.className} style={pill.style}>
+                          {pill.text}
+                        </span>
+                      ) : null
+                    })()}
 
                     {/* Platform badge after username (original position) */}
                     {showPlatformBadge && platformBadgePosition === 'after' && (

@@ -337,6 +337,45 @@ describe('visualSettingsToCss bubble fills', () => {
   })
 })
 
+describe('visualSettingsToCss flat bubble background', () => {
+  it('emits the flat fill on both feed scopes for a set color', () => {
+    const css = visualSettingsToCss({ bubbleBgColor: '#111111' })
+    expect(css).toContain('.overlay-live-body > div:not(.event-message):not(.scroll-anchor)')
+    expect(css).toContain('.overlay-preview-body > div:not(.event-message):not(.scroll-anchor)')
+    expect(css).toContain('background-color: #111111;')
+  })
+
+  it('folds the legacy sibling opacity into the hex alpha channel', () => {
+    const css = visualSettingsToCss({ bubbleBgColor: '#111111', bubbleBgOpacity: '0.9' })
+    expect(css).toContain('background-color: #111111e6;')
+  })
+
+  it('emits no flat-fill rule for an unset color', () => {
+    // Opacity alone never paints a fill; only its :root variable is emitted.
+    expect(visualSettingsToCss({ bubbleBgOpacity: '0.5' })).not.toContain('background-color:')
+  })
+
+  it('passes non-hex values through verbatim', () => {
+    const css = visualSettingsToCss({
+      bubbleBgColor: 'linear-gradient(90deg, #111111, #222222)',
+    })
+    expect(css).toContain(
+      'background-color: linear-gradient(90deg, #111111, #222222);'
+    )
+  })
+
+  it('emits the flat fill before the palette rules so the palette wins ties', () => {
+    const css = visualSettingsToCss({
+      bubbleBgColor: '#111111',
+      bubblePalette: ['#222222', '#333333'],
+    })
+    const flat = css.indexOf('background-color: #111111;')
+    const palette = css.indexOf("div[data-bubble-slot='0']")
+    expect(flat).toBeGreaterThan(-1)
+    expect(palette).toBeGreaterThan(flat)
+  })
+})
+
 /**
  * The outline's thickness is the setting; the `text-shadow` declaration is only
  * a rendering of it (see text-outline.ts). Re-deriving the declaration here is

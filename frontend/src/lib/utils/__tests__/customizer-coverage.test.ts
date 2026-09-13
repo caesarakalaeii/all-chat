@@ -72,15 +72,17 @@ const REACT_DELIVERED: Partial<Record<keyof VisualSettings, string>> = {
   // short-circuits it; no CSS rule may force it, or themes would repaint
   // viewer-defined names.
   usernameColor: 'resolveUsernameColor() inline, ADR-0047',
-  // overlayContainerStyle() / chatBubbleStyle() apply these inline and ONLY when
-  // set, so the per-variant Tailwind defaults (bg-slate-900/90 vs
-  // bg-purple-900/40, transparent overlay) survive an unset control. Themes
-  // cooperate by reading the variable, and theme-css-parser back-fills the field
-  // from their `var()` fallbacks — which is exactly why these must not be forced.
+  // overlayContainerStyle() applies these inline and ONLY when set, so the
+  // per-variant Tailwind defaults (bg-slate-900/90 vs bg-purple-900/40,
+  // transparent overlay) survive an unset control. The bubble pair is emitted
+  // by visualSettingsToCss as a normal-weight rule (bubbleBgRule) only when
+  // set, losing to nothing when unset. Themes cooperate by reading the
+  // variable, and theme-css-parser back-fills the field from their `var()`
+  // fallbacks — which is exactly why these must not be forced.
   overlayBgColor: 'overlayContainerStyle() inline; themes read the var',
   overlayBgOpacity: 'overlayContainerStyle() inline (legacy pre-ADR-0050 alpha)',
-  bubbleBgColor: 'chatBubbleStyle() inline; themes read the var',
-  bubbleBgOpacity: 'chatBubbleStyle() inline (legacy pre-ADR-0050 alpha)',
+  bubbleBgColor: 'bubbleBgRule() in visualSettingsToCss; themes read the var',
+  bubbleBgOpacity: 'bubbleBgRule() legacy fold into the hex alpha (pre-ADR-0050)',
   maxWidth: 'overlayContainerStyle() inline; no bundled theme sets max-width',
   // Conditionally rendered, not styled away: the live overlay reads these into
   // React state (showPlatformBadge / showPlatformIndicators).
