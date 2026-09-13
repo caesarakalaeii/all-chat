@@ -1,6 +1,6 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
 import { visualSettingsToCss } from '../../src/lib/utils/visual-settings-to-css'
-import { chatBubbleStyle } from '../../src/lib/utils/visual-inline-styles'
+import { wrapThemeCss } from '../../src/lib/theme-marketplace/wrap-theme-css'
 import type { VisualSettings } from '../../src/lib/types/visual-settings'
 
 /**
@@ -8,13 +8,18 @@ import type { VisualSettings } from '../../src/lib/types/visual-settings'
  *
  * The opacity of a customizer color rides in the color value itself
  * (`#rrggbbaa`) precisely because a bundled theme paints the bubble from
- * `background: var(--chat-bubble-bg-color, …) !important`, which outranks the
- * inline `rgba()` style the overlay applies. Only a real engine can confirm
- * that an 8-digit hex survives a custom property and that the `!important`
- * theme rule beats the inline style — jsdom computes neither.
+ * `background: var(--chat-bubble-bg-color, …)` (its `!important` is stripped
+ * at injection), which outranks the GUI layer's normal-weight rule by layer
+ * order. Only a real engine can confirm that an 8-digit hex survives a
+ * custom property and that the theme rule beats the layered GUI rule —
+ * jsdom computes neither.
  *
- * The fixture drives the *real* modules (visualSettingsToCss + chatBubbleStyle)
- * so the assertion covers the shipped pipeline, not a restatement of it.
+ * The fixture drives the *real* modules (visualSettingsToCss for the GUI
+ * block, wrapThemeCss for the theme) so the assertion covers the shipped
+ * pipeline, not a restatement of it. The Tailwind default sits in
+ * `@layer utilities`, exactly where the compiled app puts it: left unlayered
+ * it would outrank every layered declaration and the non-themed tests
+ * would assert the default instead of the GUI color.
  */
 
 /** Bubble background rule as bundled themes write it (minimal-icon, cyberpunk, …). */
@@ -24,29 +29,31 @@ const THEME_CSS = `
   }
 `
 
-function inlineStyle(settings: Partial<VisualSettings>): string {
-  const style = chatBubbleStyle(settings)
-  return style.backgroundColor ? `background-color: ${style.backgroundColor}` : ''
-}
-
+/** Mirror the live overlay's feed markup and stylesheet order so the
+ * generated rule's selector and layer ranking apply as in production. */
 function fixture(settings: Partial<VisualSettings>, themed: boolean): string {
+  const css = visualSettingsToCss(settings)
   return `<!doctype html>
 <html>
 <head><meta charset="utf-8">
-  <style>${visualSettingsToCss(settings)}</style>
-  ${themed ? `<style>${THEME_CSS}</style>` : ''}
-  <style>/* Tailwind default the customizer has to override */
+  <style>@layer theme, base, components, utilities;
+         @layer base, design-system, marketplace-themes, visual-customizer, user-overrides;</style>
+  <style>@layer utilities { /* Tailwind default the customizer has to override */
     .chat-message { background-color: rgba(15, 23, 42, 0.9); }
-  </style>
+  }</style>
+  ${themed ? `<style>${wrapThemeCss(THEME_CSS)}</style>` : ''}
+  <style>${css}</style>
 </head>
 <body>
-  <div class="chat-message" data-testid="bubble" style="${inlineStyle(settings)}">A chat message.</div>
+  <div class="overlay-preview-body">
+    <div data-testid="bubble" class="chat-message">A chat message.</div>
+  </div>
 </body>
 </html>`
 }
 
 async function bubbleBackground(
-  page: import('@playwright/test').Page,
+  page: Page,
   settings: Partial<VisualSettings>,
   themed: boolean
 ): Promise<string> {
@@ -74,14 +81,15 @@ test.describe('chat bubble background opacity', () => {
     expect(await bubbleBackground(page, { bubbleBgColor: '#1a1a2e' }, true)).toBe('rgb(26, 26, 46)')
   })
 
-  test('without a theme the inline style carries the same alpha', async ({ page }) => {
+  test('without a theme the GUI rule carries the same alpha', async ({ page }) => {
     expect(await bubbleBackground(page, { bubbleBgColor: '#1a1a2e00' }, false)).toBe(
       'rgba(26, 26, 46, 0)'
     )
   })
 
   test('settings saved with the legacy sibling opacity still render', async ({ page }) => {
-    // Pre-ADR-0050 rows keep working through the inline-style path.
+    // Pre-ADR-0050 rows keep working: the GUI rule folds the sibling opacity
+    // into the hex alpha channel on emission.
     expect(
       await bubbleBackground(page, { bubbleBgColor: '#1a1a2e', bubbleBgOpacity: '0.85' }, false)
     ).toBe('rgba(26, 26, 46, 0.85)')

@@ -83,9 +83,13 @@ body {
   }
 }
 
-/* Message content wrapper */
-.flex.items-start.gap-3 {
-  gap: 8px !important;
+/* Message content wrapper — avatar-to-text stride. The customizer's consumer
+   rule reads --theme-avatar-gap when its slider is unset, so the dense
+   layout keeps its 8px stride. The --theme-font-size intent below keeps the
+   11px message text, which the consumer rule reads the same way. */
+:root {
+  --theme-avatar-gap: 8px;
+  --theme-font-size: 11px;
 }
 
 /* ============================================

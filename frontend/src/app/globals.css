@@ -1,7 +1,9 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
-/* Cascade layer order — must be declared before any @layer body */
+/* Cascade layer order — must be declared before any @layer body.
+   visual-customizer is NOT here: only overlay pages use that layer, and
+   events.css (overlay pages) restates the order with it appended. */
 @layer base, design-system, marketplace-themes, user-overrides;
 
 /* Font bridge — maps next/font/google CSS variables to Tailwind font utilities */
@@ -281,8 +283,8 @@
    Applied as .msg-anim-* on the chat bubble by the live overlay page and the
    editor's embed preview when visual_settings.messageAnimation is set; the
    class list lives in lib/types/visual-settings.ts (MESSAGE_ANIMATIONS).
-   Bundled themes / custom CSS can override: these are single unlayered class
-   rules, and theme <style> blocks are injected later in the document.
+   Bundled themes / custom CSS can override: themes are wrapped into
+   @layer marketplace-themes at injection, which sits below unlayered rules.
    ============================================================ */
 
 /* Fly-in variants start outside the overlay edge; clip the horizontal

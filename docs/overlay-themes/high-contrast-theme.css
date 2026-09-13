@@ -29,6 +29,13 @@
  * or apply via the All-Chat theme marketplace.
  */
 
+/* Font-size intent: the customizer's consumer rule reads --theme-font-size
+   when its slider is unset, so the message text keeps this 22px instead of
+   the 1rem platform default. */
+:root {
+  --theme-font-size: 22px;
+}
+
 /* ========================================
    SECTION 2: FONT CONFIGURATION
    ======================================== */

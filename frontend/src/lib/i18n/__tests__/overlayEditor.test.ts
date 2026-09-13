@@ -124,6 +124,7 @@ describe('appearance control copy', () => {
     expect(t('overlayEditor.background.borderWidth')).toBe('Border width')
     expect(t('overlayEditor.background.padding')).toBe('Padding')
     expect(t('overlayEditor.background.messageGap')).toBe('Message gap')
+    expect(t('overlayEditor.background.avatarGap')).toBe('Avatar gap')
     expect(t('overlayEditor.background.backdropBlur')).toBe('Backdrop blur')
   })
 

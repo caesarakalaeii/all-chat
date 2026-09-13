@@ -18,6 +18,7 @@
 
 import type { VisualSettings } from '@/lib/types/visual-settings'
 import { canonicalizeTextShadow } from './text-outline'
+import { withLegacyOpacity } from './hex-alpha'
 
 /**
  * Authoritative mapping from VisualSettings field names to CSS custom property names.
@@ -53,6 +54,7 @@ export const PROPERTY_MAP: ReadonlyArray<[keyof VisualSettings, string]> = [
   ['bubblePadding', '--chat-bubble-padding'],
   ['bubbleShadow', '--chat-bubble-shadow'],
   ['messageGap', '--chat-message-gap'],
+  ['avatarGap', '--chat-avatar-gap'],
   ['backdropBlur', '--chat-backdrop-blur'],
   ['maxWidth', '--chat-max-width'],
   // Visibility
@@ -121,9 +123,9 @@ const FEED_SCOPES = ['.overlay-live-body', '.overlay-preview-body'] as const
 /**
  * A chat row. Events are excluded (their chrome is theme-owned through the
  * `--event-*` tokens) and so is `.scroll-anchor`, the invisible auto-scroll
- * sentinel — an `!important` declaration inside a cascade layer outranks the
- * unlayered `!important` reset globals.css gives it, so anything styling rows
- * from inside a layer has to skip it by selector or the sentinel grows a box.
+ * sentinel — globals.css resets it `height/padding/margin: 0 !important`
+ * UNLAYERED, which outranks this whole layer, so anything styling rows from
+ * inside a layer has to skip it by selector or the sentinel grows a box.
  */
 const CHAT_ROW = '> div:not(.event-message):not(.scroll-anchor)'
 
@@ -152,26 +154,27 @@ interface OverrideRule {
 }
 
 /**
- * Customizer properties delivered as an `!important` rule instead of a bare
- * custom property on `:root`.
+ * Customizer properties delivered as a rule instead of a bare custom property
+ * on `:root`.
  *
  * A `--chat-*` variable only reaches the pixels if SOMETHING consumes it —
  * a rule in events.css, or a `var()` in the active theme. These properties have
- * neither, so the overlay pages applied them as plain inline styles: the
+ * neither, so the overlay pages once applied them as plain inline styles: the
  * weakest declaration in the cascade. Every bundled theme declares
- * `text-shadow` / `box-shadow` with `!important`, and an `!important`
- * declaration beats a normal inline style, so the controls were inert on every
- * themed overlay — the Text Shadow control (Soft / Strong / **Outline**) did
- * nothing, and the whole Platform Colors section did nothing anywhere because
- * `--platform-*-accent` had no consumer at all.
+ * `text-shadow` / `box-shadow`, and any declaration beats a normal inline
+ * style, so the controls were inert on every themed overlay — the Text Shadow
+ * control (Soft / Strong / **Outline**) did nothing, and the whole Platform
+ * Colors section did nothing anywhere because `--platform-*-accent` had no
+ * consumer at all.
  *
- * These rules are `!important` inside `@layer visual-customizer`, which beats a
- * theme's unlayered `!important` (CSS Cascade 5 reverses layer order for
- * important declarations and ranks unlayered last) — the same mechanism
- * events.css already uses for every other customizer property.
+ * These rules live in `@layer visual-customizer`, the top computed layer on
+ * overlay pages, so at normal weight they beat every theme rule (themes are
+ * wrapped into `@layer marketplace-themes` at injection) and every Tailwind
+ * utility. Manual CSS is injected unlayered and still outranks them — that is
+ * the intended hierarchy: manual CSS > GUI settings > theme.
  *
- * They are emitted ONLY when the field is set, and that is what makes forcing
- * them safe: no bundled theme declares or reads any of these variables, so a
+ * They are emitted ONLY when the field is set, and that is what makes them
+ * safe: no bundled theme declares or reads any of these variables, so a
  * value here can only have come from the user, and an unset control emits
  * nothing and leaves the theme's own look untouched.
  *
@@ -202,8 +205,7 @@ const OVERRIDE_RULES: readonly OverrideRule[] = [
     },
   ]),
 ]
-
-/** Field names this module forces with an `!important` rule (see OVERRIDE_RULES). */
+/** Field names this module delivers as dedicated rules (see OVERRIDE_RULES). */
 export const OVERRIDDEN_FIELDS: ReadonlySet<keyof VisualSettings> = new Set(
   OVERRIDE_RULES.map((rule) => rule.field)
 )
@@ -246,10 +248,9 @@ export function resolveBubblePalette(settings: Partial<VisualSettings>): string[
  * Differently-coloured bubbles: a palette cycled down the feed, plus per-platform
  * fills that win over it.
  *
- * Emitted as `!important` rules inside the cascade layer for the same reason as
- * OVERRIDE_RULES — a theme's own `background: … !important` on the row would
- * otherwise beat them — and, like those, only when configured, so an unset
- * control leaves the theme's fill alone.
+ * Emitted inside the cascade layer for the same reason as OVERRIDE_RULES, and,
+ * like those, only when configured, so an unset control leaves the theme's
+ * fill alone.
  *
  * Order matters and is the precedence rule: palette first, platform second. Both
  * selectors are one class plus one attribute, so specificity ties and the later
@@ -263,7 +264,7 @@ function bubbleFillRules(settings: Partial<VisualSettings>): string[] {
     [
       FEED_SCOPES.map((scope) => `  ${scope} > div${predicate}:not(.event-message)`).join(',\n') +
         ' {',
-      `    background-color: ${color} !important;`,
+      `    background-color: ${color};`,
       '  }',
     ].join('\n')
 
@@ -283,37 +284,89 @@ function bubbleFillRules(settings: Partial<VisualSettings>): string[] {
 }
 
 /**
+ * Flat bubble background (the "Bubble background" colour control). Delivered
+ * as a rule so it can lose to the higher-specificity rules that must beat it
+ * — palette and platform fills tie and win on order (emitted after), the
+ * username-colour mode wins on specificity — instead of as an inline style,
+ * which normal-weight layered rules cannot override.
+ *
+ * Same selector shape and specificity as the palette/platform fills
+ * (CHAT_ROW: scope class + div + two `:not()`s, (0,3,1)); source order decides
+ * the tie, and bubbleFillRules is emitted after this rule, so "platform tint
+ * overrides the flat fill on that platform's rows" stays true.
+ *
+ * Normal weight, like every rule in this layer: a layered `!important` would
+ * beat the user's unlayered manual CSS (Cascade 5 inverts the layer order for
+ * important declarations).
+ *
+ * The value folds the legacy `bubbleBgOpacity` sibling into the hex alpha
+ * channel (ADR-0050); non-hex values (keywords, gradients) pass through
+ * verbatim.
+ */
+function bubbleBgRule(settings: Partial<VisualSettings>): string[] {
+  const color = settings.bubbleBgColor
+  if (typeof color !== 'string' || color === '' || !hasBalancedParens(color)) return []
+  return [
+    [
+      FEED_SCOPES.map((scope) => `  ${scope} ${CHAT_ROW}`).join(',\n') + ' {',
+      `    background-color: ${withLegacyOpacity(color, settings.bubbleBgOpacity)};`,
+      '  }',
+    ].join('\n'),
+  ]
+}
+
+/**
  * Bubble colour from the username colour. The overlay surfaces write each
  * row's colour as inline custom properties (userBubbleStyle in
  * visual-inline-styles) and mark the row with `data-user-bubble`; this rule is
- * the !important consumer that turns them into a visible fill or border.
+ * the consumer that turns them into a visible fill or border.
  *
- * Beats everything else by specificity, not order: three attribute/class
- * selectors plus the scope class (0,4,0... counting `:not()` arguments —
- * [data-user-bubble] plus two :not()s) outrank palette and platform fills
- * (one attribute plus one :not()), so it is emitted after them but wins
+ * Normal weight, like every rule in this layer: a layered `!important` would
+ * beat the user's unlayered manual CSS (Cascade 5 inverts the layer order for
+ * important declarations), which is the exact symptom this module avoids.
+ *
+ * Beats palette and platform fills by specificity, not order: scope class,
+ * [data-user-bubble], and the two `:not()` arguments count as four
+ * class-level selectors (0,4,1 counting the `div`), outranking the fills'
+ * one attribute plus `:not()`, so it is emitted after them but wins
  * regardless. The `:not(.scroll-anchor)` is documentary — the sentinel never
  * carries the attribute — matching the events.css row rule's shape so the
  * two selectors stay diffable side by side.
  *
- * Both custom properties always consume: in background mode the border pair
- * falls back to transparent/0px, in border mode the fill pair to transparent,
- * so a row's unused half is inert without a second rule.
+ * Each mode emits only its own half. A single shared rule with transparent
+ * fallbacks for the unused half reads as inert but is not: the rule applies to
+ * every [data-user-bubble] row, so in border mode an unconditional
+ * `background-color: …transparent` actually beat theme and palette fills, and
+ * in background mode the `border-width: …0px` pair shaved off theme bubble
+ * borders. Splitting on the mode leaves the unused half to whatever the theme
+ * or the palette already styles.
  */
 function userBubbleRules(settings: Partial<VisualSettings>): string[] {
   const mode = settings.bubbleColorFromUser
-  if (mode !== 'background' && mode !== 'border') return []
-  return [
-    [
-      FEED_SCOPES.map(
-        (scope) => `  ${scope} > div[data-user-bubble]:not(.event-message):not(.scroll-anchor)`
-      ).join(',\n') + ' {',
-      '    background-color: var(--row-user-bg, var(--row-user-bg-image, transparent)) !important;',
-      '    border-color: var(--row-user-border-color, transparent) !important;',
-      '    border-width: var(--row-user-border-width, 0px) !important;',
-      '  }',
-    ].join('\n'),
-  ]
+  const selector =
+    FEED_SCOPES.map(
+      (scope) => `  ${scope} > div[data-user-bubble]:not(.event-message):not(.scroll-anchor)`
+    ).join(',\n') + ' {'
+  if (mode === 'background') {
+    return [
+      [
+        selector,
+        '    background-color: var(--row-user-bg, var(--row-user-bg-image, transparent));',
+        '  }',
+      ].join('\n'),
+    ]
+  }
+  if (mode === 'border') {
+    return [
+      [
+        selector,
+        '    border-color: var(--row-user-border-color, transparent);',
+        '    border-width: var(--row-user-border-width, 0px);',
+        '  }',
+      ].join('\n'),
+    ]
+  }
+  return []
 }
 
 /**
@@ -344,7 +397,7 @@ function overrideRules(settings: Partial<VisualSettings>): string[] {
     blocks.push(
       [
         selectors.map((selector) => `  ${selector}`).join(',\n') + ' {',
-        ...properties.map((property) => `    ${property}: ${value} !important;`),
+        ...properties.map((property) => `    ${property}: ${value};`),
         '  }',
       ].join('\n')
     )
@@ -381,8 +434,12 @@ export function visualSettingsToCss(settings: Partial<VisualSettings>): string {
   if (declarations.length > 0) {
     blocks.push(['  :root {', ...declarations, '  }'].join('\n'))
   }
-  blocks.push(...overrideRules(settings), ...bubbleFillRules(settings), ...userBubbleRules(settings))
-
+  blocks.push(
+    ...overrideRules(settings),
+    ...bubbleBgRule(settings),
+    ...bubbleFillRules(settings),
+    ...userBubbleRules(settings)
+  )
   if (blocks.length === 0) {
     return ''
   }

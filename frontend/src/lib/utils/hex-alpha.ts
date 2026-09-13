@@ -21,9 +21,9 @@
  *
  * Every color setting stores its own opacity in the value itself as an 8-digit
  * hex (`#rrggbbaa`) rather than in a sibling `*Opacity` field. The alpha then
- * travels with the color into every consumer — the inline bubble/overlay
- * styles, the `--chat-*` custom properties, and any theme or custom CSS that
- * reads them — so an `!important` theme rule such as
+ * travels with the color into every consumer — the overlay inline style,
+ * the GUI layer's bubble rule, the `--chat-*` custom properties, and any
+ * theme or custom CSS that reads them — so an `!important` theme rule such as
  * `background: var(--chat-bubble-bg-color, …)` honours it too. Sibling opacity
  * fields could not: themes only ever read the color variable.
  *

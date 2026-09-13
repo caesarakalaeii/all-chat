@@ -113,10 +113,11 @@ describe('resolveFeedAnchorLayout — all four combinations', () => {
   })
 
   it('puts the auto margin on the list, never on its children', () => {
-    // `.overlay-live-body > * + * { margin-top: ... !important }` in events.css
-    // beats a child-level rule, so the margin must live on the body element.
-    // (`.scroll-anchor` in globals.css is unlayered, so it does NOT win against
-    // that rule — events.css excludes the sentinel by selector instead.)
+    // The message-gap rule lives in `@layer visual-customizer` (events.css),
+    // which computes ABOVE the Tailwind utilities layer — so it beats any
+    // child-level `mt-auto`, and the auto margin must live on the body element.
+    // (`.scroll-anchor` in globals.css is unlayered with `!important`, which
+    // outranks every layer — events.css excludes the sentinel by selector.)
     for (const { anchor, invert } of COMBOS) {
       const l = resolveFeedAnchorLayout(anchor, invert)
       expect(l.wrapperClass).not.toContain('mt-auto')
