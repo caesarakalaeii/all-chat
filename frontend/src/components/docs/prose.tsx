@@ -51,14 +51,14 @@ export function Pre({ children, lang }: { children: string; lang?: CodeLang }) {
     'my-4 overflow-x-auto rounded-lg border border-border bg-surface-2 p-4 text-sm leading-relaxed text-text-sub'
   if (!lang) {
     return (
-      <pre className={className}>
+      <pre className={className} tabIndex={0}>
         <code className="font-mono">{children}</code>
       </pre>
     )
   }
   const highlighted = hljs.highlight(children, { language: lang, ignoreIllegals: true }).value
   return (
-    <pre className={className}>
+    <pre className={className} tabIndex={0}>
       <code className="hljs font-mono" dangerouslySetInnerHTML={{ __html: highlighted }} />
     </pre>
   )

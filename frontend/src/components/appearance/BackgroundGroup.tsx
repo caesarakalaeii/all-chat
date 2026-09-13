@@ -94,7 +94,7 @@ export function BackgroundGroup({
         onChange={(v) => onChange({ bubbleBorderWidth: `${v}px` })}
       />
       {/* Low-traffic fine-tuning lives behind Advanced (ADR-0042) */}
-      <AdvancedDisclosure count={3}>
+      <AdvancedDisclosure count={4}>
         <SliderControl
           label={t('overlayEditor.background.padding')}
           value={parseFloat(visualSettings.bubblePadding ?? '8')}

@@ -5,7 +5,7 @@ name: Frontend A11y Gate
 # debt): this workflow contains ONLY a11y checks so it stays green
 # independently of that debt and can gate PRs immediately.
 #
-# These three jobs are REQUIRED status checks on main. A workflow gated by a
+# These four jobs are REQUIRED status checks on main. A workflow gated by a
 # top-level `paths:` filter is skipped ENTIRELY on backend-only PRs, so its
 # required contexts are never reported and the PR stays permanently "Expected"
 # (blocked) — see ADR-0033 / PR #577. Instead we trigger on every PR and gate
