@@ -15,9 +15,10 @@
   --chat-message-color: #2b2b2b;
   --chat-timestamp-color: #6b6b6b;
   /* Font-size intent: the customizer's consumer rule reads this when its
-     slider is unset, so the note keeps its 15px-base handwritten text
-     (the theme's own rule multiplies it by 1.35). */
-  --theme-font-size: 15px;
+     slider is unset. The theme's own rule renders the base at 1.35x
+     (calc(15px * 1.35) = 20.25px), so the intent must carry the same
+     multiple or unset text would shrink to the raw 15px base. */
+  --theme-font-size: calc(15px * 1.35);
 }
 
 body {
