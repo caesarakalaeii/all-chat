@@ -109,7 +109,7 @@ function UnauthenticatedState() {
             <button
               onClick={() => viewerLogin('youtube')}
               className="lanes-btn gap-2.5 px-6 py-3"
-              style={{ backgroundColor: '#FF0000', ['--tw-ring-color' as string]: '#FF0000' }}
+              style={{ backgroundColor: '#FF0033', ['--tw-ring-color' as string]: '#FF0033' }}
             >
               <svg
                 className="h-5 w-5 shrink-0"

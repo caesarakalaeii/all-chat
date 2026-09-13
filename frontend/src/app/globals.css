@@ -1324,11 +1324,15 @@ span.font-semibold.text-sm.username-gradient {
   color: #0a0a0e;
 }
 .final-signin[data-p='youtube'] {
-  border-color: var(--lanes-youtube);
-  color: var(--lanes-youtube);
+  /* Official YouTube red (2025 refresh: #FF0033, replacing pure RGB #FF0000)
+   * per the yt-ringo2-svg served on youtube.com. Scoped to the sign-in button:
+   * the lane art keeps the desaturated --lanes-youtube so the five lanes
+   * side by side don't read as neon stripes. */
+  border-color: #ff0033;
+  color: #ff0033;
 }
 .final-signin[data-p='youtube']:hover {
-  background: var(--lanes-youtube);
+  background: #ff0033;
   color: #0a0a0e;
 }
 .final-signin[data-p='kick'] {
