@@ -20,10 +20,10 @@ export default defineConfig({
           name: 'unit',
           environment: 'node',
           include: ['src/**/__tests__/**/*.test.ts', 'src/**/__tests__/**/*.test.tsx'],
-          // *.browser.test.ts belongs to the browser project below: the plain
-          // glob above matches the infix, and importing @vitest/browser/context
-          // in the node pool throws.
-          exclude: ['src/**/__tests__/**/*.browser.test.ts'],
+          // *.browser.test.ts(x) belongs to the browser project below: the
+          // plain glob above matches the infix, and importing
+          // @vitest/browser/context in the node pool throws.
+          exclude: ['src/**/__tests__/**/*.browser.test.ts', 'src/**/__tests__/**/*.browser.test.tsx'],
           alias: {
             '@': path.join(dirname, 'src'),
           },
@@ -57,7 +57,7 @@ export default defineConfig({
             provider: playwright({}),
             instances: [{ browser: 'chromium' }],
           },
-          include: ['src/**/__tests__/**/*.browser.test.ts'],
+          include: ['src/**/__tests__/**/*.browser.test.ts', 'src/**/__tests__/**/*.browser.test.tsx'],
         },
       },
     ],
