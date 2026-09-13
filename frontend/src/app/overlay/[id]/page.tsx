@@ -66,7 +66,6 @@ import {
   userBubbleStyle,
 } from '@/lib/utils/visual-inline-styles'
 import { isDisplayVisible } from '@/lib/utils/displayVisibility'
-import { getPronounPillProps, shouldRenderPronounPill } from '@/lib/utils/pronounPill'
 import {
   DEFAULT_FEED_ANCHOR,
   orderMessages,
@@ -123,7 +122,9 @@ import { PremiumBadge } from '@/components/PremiumBadge'
 import { EventContent } from '@/components/overlay/EventContent'
 import { MessageAttachments } from '@/components/overlay/MessageAttachments'
 import { SharedChatOrigin } from '@/components/overlay/SharedChatOrigin'
+import { PronounPill } from '@/components/overlay/PronounPill'
 import { formatTime, useTranslations } from '@/lib/i18n'
+import { LegacyFontSizeStyle } from '@/components/overlay/LegacyFontSizeStyle'
 import { resolveUsernameColor } from '@/lib/utils/usernameColor'
 import '@/styles/events.css'
 
@@ -775,16 +776,9 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
       {visualSettingsCss.length > 0 && (
         <style dangerouslySetInnerHTML={{ __html: visualSettingsCss }} />
       )}
-      {/* Legacy display-settings font-size as a custom property, consumed by
-          the `.break-words` rule in events.css (same delivery as the GUI
-          font-size control, so manual CSS can override both). */}
-      {legacyFontSize !== null && (
-        <style
-          dangerouslySetInnerHTML={{
-            __html: `:root { --chat-legacy-font-size: ${legacyFontSize}px; }`,
-          }}
-        />
-      )}
+      {/* Legacy display-settings font-size, delivered by the shared component
+          so the property name and unit match the preview. */}
+      <LegacyFontSizeStyle fontSize={legacyFontSize} />
       {/* Bundled theme CSS first, then the user's raw custom_css overrides it. */}
       {themeCss.length > 0 && <style dangerouslySetInnerHTML={{ __html: themeCss }} />}
       {customCss.trim().length > 0 && <style dangerouslySetInnerHTML={{ __html: customCss }} />}
@@ -938,22 +932,13 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                       )}
 
                     {/* Phase 9: Pronoun pill - before username */}
-                    {(() => {
-                      const pill =
-                        shouldRenderPronounPill(
-                          showPronouns,
-                          message.user?.pronouns,
-                          pronounPosition,
-                          'before'
-                        )
-                          ? getPronounPillProps(message.user.pronouns!, pronounColor)
-                          : undefined
-                      return pill ? (
-                        <span className={pill.className} style={pill.style}>
-                          {pill.text}
-                        </span>
-                      ) : null
-                    })()}
+                    <PronounPill
+                      showPronouns={showPronouns}
+                      pronouns={message.user?.pronouns}
+                      position={pronounPosition}
+                      targetPosition="before"
+                      color={pronounColor}
+                    />
                     {/* Username */}
                     {showUsername &&
                       (message.user?.name_gradient ? (
@@ -996,23 +981,15 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                         </span>
                       ))}
 
+
                     {/* Phase 9: Pronoun pill - after username */}
-                    {(() => {
-                      const pill =
-                        shouldRenderPronounPill(
-                          showPronouns,
-                          message.user?.pronouns,
-                          pronounPosition,
-                          'after'
-                        )
-                          ? getPronounPillProps(message.user.pronouns!, pronounColor)
-                          : undefined
-                      return pill ? (
-                        <span className={pill.className} style={pill.style}>
-                          {pill.text}
-                        </span>
-                      ) : null
-                    })()}
+                    <PronounPill
+                      showPronouns={showPronouns}
+                      pronouns={message.user?.pronouns}
+                      position={pronounPosition}
+                      targetPosition="after"
+                      color={pronounColor}
+                    />
 
                     {/* Platform badge after username (original position) */}
                     {showPlatformBadge && platformBadgePosition === 'after' && (

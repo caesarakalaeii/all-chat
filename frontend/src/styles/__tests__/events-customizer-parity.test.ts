@@ -260,11 +260,11 @@ describe('overlay event-renderer parity', () => {
 
   /**
    * Manual CSS and themes key their chat-row rules on `.chat-message` (the
-   * frozen public API in CSS_CUSTOMIZATION.md), and the pronoun pill's
-   * visibility logic lives in shouldRenderPronounPill — a surface that
-   * inlines either one drifts from its sibling and from the docs.
+   * frozen public API in CSS_CUSTOMIZATION.md), and the pronoun pill is the
+   * shared <PronounPill> component — a surface that inlines either one drifts
+   * from its sibling and from the docs.
    */
-  it('keeps the chat-message class and pronoun gating on both surfaces', () => {
+  it('keeps the chat-message class and the shared PronounPill on both surfaces', () => {
     for (const [name, src] of [
       ['live overlay', live],
       ['preview/embed', preview],
@@ -272,8 +272,8 @@ describe('overlay event-renderer parity', () => {
       expect(src, `${name} must tag chat rows with the public .chat-message class`).toContain(
         "'chat-message "
       )
-      expect(src, `${name} must gate pronoun pills on shouldRenderPronounPill`).toContain(
-        'shouldRenderPronounPill('
+      expect(src, `${name} must render pronoun pills via the shared PronounPill`).toContain(
+        '<PronounPill'
       )
     }
   })
