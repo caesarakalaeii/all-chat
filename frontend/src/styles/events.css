@@ -7,7 +7,12 @@
  * PUBLIC API: Class names in this file are frozen. See EVENTS_CSS_API.md.
  */
 
-/* Cascade layer order — required for standalone overlay page context */
+/* Cascade layer order. globals.css (imported before this file in every
+   route that loads it) declares the base order WITHOUT visual-customizer,
+   because only overlay pages use that layer. The overlay pages re-import
+   this file standalone, so the full order — including visual-customizer —
+   is restated here; CSS layer statements are order-sensitive and a later
+   statement appends, so this is additive, not divergent. */
 @layer base, design-system, marketplace-themes, visual-customizer, user-overrides;
 
 /* @keyframes stay at document scope (not inside layers) */

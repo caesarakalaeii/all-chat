@@ -44,7 +44,6 @@
 .text-white.break-words {
   color: #FFFFFF;
 }
-
 ```
 
 **Copy this template, modify colors/sizes, and paste into:**

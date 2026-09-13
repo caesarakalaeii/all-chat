@@ -141,15 +141,18 @@ Consequences for theme authors:
   the app defaults in `marketplace-themes` — that is why setting `--event-*`
   tokens or overriding event rules works without ceremony.
 - Do NOT use `@layer user-overrides` for overrides. It is declared for
-  compatibility, but it ranks BELOW `visual-customizer`: GUI settings a user
-  configures would beat your overrides.
+  compatibility with pre-layer themes (v1.2 migration wrapped overrides in
+  it), but it ranks BELOW `visual-customizer`: GUI settings a user configures
+  would beat your overrides. No shipped theme or app surface writes to it
+  today — manual CSS is delivered unlayered — so treat it as reserved and
+  write plain unlayered CSS instead.
 - The app strips `!important` from bundled-theme CSS at injection (the layer
   alone provides the ranking), so `!important` in a marketplace theme is
-  inert — write normal declarations.
-- GUI rules in `@layer visual-customizer` are normal-weight, so an unlayered
-  `!important` you write still beats them. The one thing you cannot beat is a
-  user's manual custom CSS: it is unlayered too and, being loaded after, it
-  wins the last-writer contest against unlayered themes of equal weight.
+  inert — write normal declarations. GUI rules in `@layer visual-customizer`
+  are normal-weight too, so a plain unlayered rule beats them on layer order
+  alone. The one thing a theme cannot beat is a user's manual custom CSS: it
+  is unlayered as well and, being loaded after, it wins the last-writer
+  contest between unlayered rules of equal weight.
 - `.event-message` is deliberately **excluded** from the bubble rules in
   `@layer visual-customizer` (the per-platform and palette fills, and the
   username-colour bubble rule keyed on `data-user-bubble`): an inescapable
