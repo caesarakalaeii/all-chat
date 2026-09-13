@@ -754,7 +754,7 @@ describe('streamer guide copy', () => {
 })
 
 describe('streamer guide CSS reference tables', () => {
-  it('keeps the fourteen CSS custom-property descriptions', () => {
+  it('keeps the fifteen CSS custom-property descriptions', () => {
     expect(t('docs.guideCssVars.chatFontSize')).toBe('Message text size.')
     expect(t('docs.guideCssVars.chatFontWeight')).toBe('Message text weight.')
     expect(t('docs.guideCssVars.chatFontFamily')).toBe('Message text font.')
