@@ -109,7 +109,7 @@ jobs:
       # The whole frontend unit project, and the reason it is HERE: until this
       # step existed, no frontend unit test ran on a pull request at all. The
       # required contexts are `test (<go service>)`, `test-node` (support-bot
-      # only) and this workflow's three jobs, and the two steps above name
+          # only) and this workflow's four jobs, and the two steps above name
       # three files by path. So PR #833 shipped an overlay text outline that
       # rendered as eight detached copies of the chat text WITH a green
       # 97-line unit test beside it — the tests were never executed by CI, and

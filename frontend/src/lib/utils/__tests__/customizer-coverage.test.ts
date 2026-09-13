@@ -76,7 +76,8 @@ const REACT_DELIVERED: Partial<Record<keyof VisualSettings, string>> = {
   // per-variant Tailwind defaults (bg-slate-900/90 vs bg-purple-900/40,
   // transparent overlay) survive an unset control. The bubble pair is emitted
   // by visualSettingsToCss as a normal-weight rule (bubbleBgRule) only when
-  // set, losing to nothing when unset. Themes cooperate by reading the
+  // set, so an unset control emits nothing and the theme vars are free to
+  // win. Themes cooperate by reading the
   // variable, and theme-css-parser back-fills the field from their `var()`
   // fallbacks — which is exactly why these must not be forced.
   overlayBgColor: 'overlayContainerStyle() inline; themes read the var',
