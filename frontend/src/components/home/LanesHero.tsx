@@ -459,8 +459,14 @@ export function LanesHero({
             ))}
           </div>
           {/* The multistream objection, answered on the spot: one merged
-              chat, one mod queue. Copy lives in the catalog. */}
-          <p className="lanes-manifesto">{t('marketing.lanes.manifesto')}</p>
+              chat, one mod queue. Copy lives in the catalog; two keys so
+              the break always lands after "MERGED." (feedback: the soft
+              wrap broke mid-sentence after "COMMUNITY?"). */}
+          <p className="lanes-manifesto">
+            {t('marketing.lanes.manifestoLine1')}
+            <br />
+            {t('marketing.lanes.manifestoLine2')}
+          </p>
         </div>
 
         {/* Bottom CTA bar. */}

@@ -37,6 +37,7 @@
 
 import { useState, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
+import { Cookie } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useHydrated } from '@/hooks/useHydrated'
 import { useTranslations } from '@/lib/i18n'
@@ -49,10 +50,6 @@ import { cn } from '@/lib/utils'
 // text that already says which is which.
 const AFFIRMED_GLYPH = '✓'
 const DENIED_GLYPH = '✗'
-
-// Not copy either: the banner's illustration. It carries role="img" and an
-// aria-label, so its accessible name is the translated string, not this glyph.
-const COOKIE_GLYPH = '🍪'
 
 export default function CookieBanner() {
   const t = useTranslations()
@@ -103,14 +100,14 @@ export default function CookieBanner() {
         {/* Main Banner */}
         <div className="p-4 sm:p-6">
           <div className="flex items-start gap-4">
-            {/* Cookie Icon */}
-            <div
-              className="flex-shrink-0 text-2xl sm:text-4xl"
+            {/* Illustration: a minimal lucide outline (feedback: the cookie
+                emoji read as clip art). aria-label keeps the accessible
+                name on the translated string. */}
+            <Cookie
+              className="mt-1 h-8 w-8 flex-shrink-0 text-text-sub sm:h-10 sm:w-10"
               role="img"
               aria-label={t('legal.cookieBanner.iconLabel')}
-            >
-              {COOKIE_GLYPH}
-            </div>
+            />
 
             {/* Content */}
             <div className="flex-1">
@@ -237,7 +234,7 @@ export default function CookieBanner() {
                 </div>
               </details>
 
-              <p className="mb-4 text-sm text-text-sub">
+              <p className="mb-3 text-sm text-text-sub">
                 {interpolateElements(t('legal.cookieBanner.agreement'), {
                   privacy: (
                     <a
@@ -260,6 +257,13 @@ export default function CookieBanner() {
                     </a>
                   ),
                 })}
+              </p>
+
+              {/* Feedback: this line used to live in a dedicated footer box,
+                  which read as a highlighted legal disclaimer. Same text,
+                  inline as fine print instead. */}
+              <p className="mb-4 text-xs text-text-dim">
+                {t('legal.cookieBanner.footer')}
               </p>
 
               {/* Action Buttons — same box on both: h-12, 2px border, mono.
@@ -286,16 +290,6 @@ export default function CookieBanner() {
               </div>
             </div>
           </div>
-        </div>
-
-        {/* Footer */}
-        <div
-          className={cn(
-            'rounded-b-xl border-t border-border bg-bg px-4 py-3 sm:px-6',
-            lanes && 'lanes-cookie-foot'
-          )}
-        >
-          <p className="text-center text-xs text-text-dim">{t('legal.cookieBanner.footer')}</p>
         </div>
       </div>
     </div>

@@ -761,9 +761,18 @@ span.font-semibold.text-sm.username-gradient {
 }
 @media (max-width: 480px) {
   .lanes-tr {
-    top: 44px;
+    /* Feedback: the nav wrapped onto its own row below the brand and both
+     * rows overlapped the lanes. One row at the top right instead: the
+     * 12px gap + 11px links fit next to the brand chip down to 360px. */
+    top: 20px;
     right: 24px;
     gap: 12px;
+  }
+  .lanes-chrome {
+    font-size: 11px;
+  }
+  .lanes-tr .dash-chip {
+    padding: 4px 10px;
   }
 }
 /* Logged-in dashboard chip: solid warm white on black ink. */
@@ -941,6 +950,9 @@ span.font-semibold.text-sm.username-gradient {
   font-weight: 700;
   letter-spacing: 0.22em;
   margin-bottom: 2.2vh;
+  /* Feedback: the chip text sat flush on its fill. Enough breathing room
+   * to read as a plate, same vocabulary as .lanes-total below. */
+  padding: 6px 12px;
 }
 .lanes-total {
   margin-top: 2.5vh;
@@ -970,8 +982,6 @@ span.font-semibold.text-sm.username-gradient {
   color: var(--lanes-kick);
   background: #000;
   padding: 8px 14px;
-  -webkit-box-decoration-break: clone;
-  box-decoration-break: clone;
 }
 /* Bottom CTA bar over the lanes. */
 .ctabar {
@@ -1823,10 +1833,4 @@ span.font-semibold.text-sm.username-gradient {
 }
 .lanes-cookie .lanes-cookie-more:hover {
   background: rgba(244, 243, 239, 0.1) !important;
-}
-.lanes-cookie .lanes-cookie-foot {
-  background: #050508 !important;
-  border-top: 1px solid rgba(244, 243, 239, 0.28) !important;
-  border-radius: 0 !important;
-  color: rgba(244, 243, 239, 0.55) !important;
 }
