@@ -355,6 +355,11 @@ describe('visualSettingsToCss flat bubble background', () => {
     expect(visualSettingsToCss({ bubbleBgOpacity: '0.5' })).not.toContain('background-color:')
   })
 
+  it('skips an unbalanced-parens color instead of corrupting the block', () => {
+    const css = visualSettingsToCss({ bubbleBgColor: 'rgba(0, 0, 0, 0.5' })
+    expect(css).not.toContain('background-color: rgba(0, 0, 0, 0.5')
+  })
+
   it('passes non-hex values through verbatim', () => {
     const css = visualSettingsToCss({
       bubbleBgColor: 'linear-gradient(90deg, #111111, #222222)',
