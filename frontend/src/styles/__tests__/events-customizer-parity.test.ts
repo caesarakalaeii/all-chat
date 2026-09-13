@@ -198,6 +198,20 @@ describe('events.css visual-customizer scope parity', () => {
     )
     expect(gapChains?.length).toBe(2)
   })
+
+  /**
+   * The message font-size chain carries the same theme-intent step: without
+   * `var(--theme-font-size, …)` between the GUI control and the legacy
+   * default, every bundled theme whose size differs from 1rem is flattened
+   * to the platform default the moment the Font Size control is unset —
+   * the exact symptom ccfee1a5 fixed.
+   */
+  it('reads theme intent for the message font-size on both scopes', () => {
+    const fontSizeChains = CSS.match(
+      /font-size:\s*var\(\s*--chat-font-size,\s*var\(--theme-font-size, var\(--chat-legacy-font-size, 1rem\)\)\s*\)/g
+    )
+    expect(fontSizeChains?.length).toBe(2)
+  })
 })
 
 /**
@@ -264,7 +278,7 @@ describe('overlay event-renderer parity', () => {
    * shared <PronounPill> component — a surface that inlines either one drifts
    * from its sibling and from the docs.
    */
-  it('keeps the chat-message class and the shared PronounPill on both surfaces', () => {
+  it('keeps the chat-message class and the shared pill/font-size tags on both surfaces', () => {
     for (const [name, src] of [
       ['live overlay', live],
       ['preview/embed', preview],
@@ -275,6 +289,10 @@ describe('overlay event-renderer parity', () => {
       expect(src, `${name} must render pronoun pills via the shared PronounPill`).toContain(
         '<PronounPill'
       )
+      expect(
+        src,
+        `${name} must deliver the legacy font size via the shared <LegacyFontSizeStyle>`
+      ).toContain('<LegacyFontSizeStyle')
     }
   })
 })

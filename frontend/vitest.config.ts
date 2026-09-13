@@ -58,6 +58,11 @@ export default defineConfig({
             instances: [{ browser: 'chromium' }],
           },
           include: ['src/**/__tests__/**/*.browser.test.ts', 'src/**/__tests__/**/*.browser.test.tsx'],
+          // Same alias as the unit project: a browser test importing `@/…`
+          // must resolve without depending on which project runs it.
+          alias: {
+            '@': path.join(dirname, 'src'),
+          },
         },
       },
     ],
