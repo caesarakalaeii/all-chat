@@ -47,16 +47,23 @@ Element.prototype.scrollIntoView = () => {}
 // one into this capture so the test always fires the latest callbacks.
 const streamOptions: UseOverlayStreamOptions = {}
 
+// Config lives in the hook RETURN, not the options — a mutable holder lets
+// the mid-session tests swap display_settings and re-render with it, the
+// same way the real 30s refresh delivers a fresh config object.
+const streamConfig: { config: Record<string, unknown> } = {
+  config: {
+    display_settings: {
+      message_duration: 10,
+      max_messages: 50,
+    },
+  },
+}
+
 vi.mock('@/hooks/useOverlayStream', () => ({
   useOverlayStream: (_id: string, options: UseOverlayStreamOptions) => {
     Object.assign(streamOptions, options)
     return {
-      config: {
-        display_settings: {
-          message_duration: 10,
-          max_messages: 50,
-        },
-      },
+      config: streamConfig.config,
       sources: new Map(),
       activeChannels: new Set(),
       channelStatuses: new Map(),
@@ -102,6 +109,12 @@ function chatMessage(id: string, text: string): ChatMessage {
 describe('overlay fade regression', () => {
   beforeEach(() => {
     vi.useFakeTimers()
+    streamConfig.config = {
+      display_settings: {
+        message_duration: 10,
+        max_messages: 50,
+      },
+    }
   })
 
   afterEach(() => {
@@ -193,6 +206,76 @@ describe('overlay fade regression', () => {
     // duration), not 8s after the LAST update.
     await act(async () => {
       await vi.advanceTimersByTimeAsync(4_000)
+    })
+    expect(screen.queryByText('first')).not.toBeInTheDocument()
+  })
+
+  it('does not mass-expire the visible feed when fade is re-enabled mid-session', async () => {
+    const { rerender } = render(<OBSOverlayPage params={resolvedParams('test')} />)
+    await act(async () => {})
+    onChat()(chatMessage('m1', 'first'))
+    await act(async () => {})
+    onChat()(chatMessage('m2', 'second'))
+    await act(async () => {})
+
+    // Fade off for 100s (config refresh): rows stay put, and their old arrival
+    // stamps go stale. Without the re-stamp on the disabled→enabled toggle the
+    // first sweep after re-enabling would clear the whole feed at once.
+    const { display_settings: display } = streamConfig.config as {
+      display_settings: Record<string, unknown>
+    }
+    streamConfig.config = {
+      ...streamConfig.config,
+      display_settings: { ...display, disable_message_fade: true },
+    }
+    // A re-render delivers the mutated config, like the real 30s refresh.
+    rerender(<OBSOverlayPage params={resolvedParams('test')} />)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100_000)
+    })
+    expect(screen.getByText('first')).toBeInTheDocument()
+    expect(screen.getByText('second')).toBeInTheDocument()
+
+    streamConfig.config = {
+      ...streamConfig.config,
+      display_settings: { ...display, disable_message_fade: false },
+    }
+    rerender(<OBSOverlayPage params={resolvedParams('test')} />)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(9_000)
+    })
+    // Rows survive the 9s after re-enable; the re-stamped clock means they
+    // leave at toggle+10s, not at their original arrival+10s.
+    expect(screen.getByText('first')).toBeInTheDocument()
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000)
+    })
+    expect(screen.queryByText('first')).not.toBeInTheDocument()
+    expect(screen.queryByText('second')).not.toBeInTheDocument()
+  })
+
+  it('re-arms the timer from existing arrivals when duration shrinks mid-session', async () => {
+    const { rerender } = render(<OBSOverlayPage params={resolvedParams('test')} />)
+    await act(async () => {})
+    onChat()(chatMessage('m1', 'first'))
+    await act(async () => {})
+
+    // 3s after arrival the config refresh shrinks duration 10s → 2s: the row
+    // is already past its new deadline, so the overdue clamp must sweep it on
+    // the next tick rather than re-arming a fresh 2s timer from now.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_000)
+    })
+    const { display_settings: currentDisplay } = streamConfig.config as {
+      display_settings: Record<string, unknown>
+    }
+    streamConfig.config = {
+      ...streamConfig.config,
+      display_settings: { ...currentDisplay, message_duration: 2 },
+    }
+    rerender(<OBSOverlayPage params={resolvedParams('test')} />)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
     })
     expect(screen.queryByText('first')).not.toBeInTheDocument()
   })

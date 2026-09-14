@@ -23,7 +23,7 @@
  * arrival — not after the last state change. The first version of that effect
  * depended on the whole `messages` array and armed one `setTimeout` for the
  * head row, so every append re-armed the timer from the full duration and a
- * busy chat never let anything disappear (#overlays fade bug). Keeping the
+ * busy chat never let anything disappear (PR #882). Keeping the
  * arithmetic here makes "appends must not extend an older row's lifetime" a
  * directly testable property: expiry is derived from `arrivedAt`, which the
  * overlay stamps once per message id and never overwrites.

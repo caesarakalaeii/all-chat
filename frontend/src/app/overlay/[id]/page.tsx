@@ -61,10 +61,7 @@ import {
 import { getBundledTheme } from '@/lib/theme-marketplace/bundled-themes'
 import { rewriteThemeFontImports } from '@/lib/theme-marketplace/font-proxy'
 import { wrapThemeCss } from '@/lib/theme-marketplace/wrap-theme-css'
-import {
-  overlayContainerStyle,
-  userBubbleStyle,
-} from '@/lib/utils/visual-inline-styles'
+import { overlayContainerStyle, userBubbleStyle } from '@/lib/utils/visual-inline-styles'
 import { isDisplayVisible } from '@/lib/utils/displayVisibility'
 import {
   DEFAULT_FEED_ANCHOR,
@@ -872,7 +869,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
             /* The key must be POSITION-INDEPENDENT. It used to be
                `${message.id}-${index}`, and every path that shifts an index —
                `invert_message_order` (a prepend moves every row), the
-               `max_messages` cap, the fade timer's `slice(1)` — changed every
+               `max_messages` cap, the fade sweep's filter — changed every
                key at once, so React unmounted and remounted the whole feed and
                every row replayed its entry animation on every new message.
                `onChat` keeps ids unique, which is what makes the bare id safe. */
@@ -1027,7 +1024,6 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                           {message.user?.display_name || message.user?.username}
                         </span>
                       ))}
-
 
                     {/* Phase 9: Pronoun pill - after username */}
                     <PronounPill
