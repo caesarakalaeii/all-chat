@@ -1,6 +1,6 @@
 module github.com/caesar/all-chat/services/twitch-listener
 
-go 1.25.6
+go 1.26.0
 
 require (
 	github.com/alicebob/miniredis/v2 v2.38.0
@@ -15,7 +15,7 @@ require (
 	github.com/stretchr/testify v1.12.1
 	go.uber.org/goleak v1.3.0
 	go.uber.org/zap v1.28.0
-	golang.org/x/time v0.15.0
+	golang.org/x/time v0.16.0
 )
 
 require (
