@@ -425,16 +425,25 @@ func (h *EmoteHandler) fetchWithCacheAndUser(ctx context.Context, client EmoteCl
 	if !useCombinedPath {
 		// BTTV/FFZ/Twitch are keyed by Twitch identity. On a non-Twitch platform the
 		// `channel` is a platform id (e.g. a YouTube channel id) those providers can't
-		// resolve, so use the linked twitch_channel hint — or skip entirely when there is
-		// no linked Twitch account, since a lookup with a platform id is a guaranteed 404
-		// and a wasted upstream call. Mirrors how the 7TV combined path already uses
-		// twitchChannel for non-Twitch platforms (ADR-0033 follow-up).
+		// resolve, so use the linked twitch_channel hint. Without a linked Twitch
+		// account, fetch the provider's GLOBAL set instead of skipping: channel
+		// emotes are unavailable but global ones (BTTV's :tf:, FFZ's BeanieHipster)
+		// still apply. A lookup with a platform id would be a guaranteed 404, so
+		// "global" avoids the wasted upstream call. Mirrors how the 7TV combined
+		// path already falls back to globals for non-Twitch platforms (ADR-0033
+		// follow-up).
 		lookupChannel := channel
 		if isNonTwitchPlatform {
-			if twitchChannel == "" {
+			switch {
+			case twitchChannel != "":
+				lookupChannel = twitchChannel
+			case provider == "twitch":
+				// Twitch globals are fetched once by the dedicated twitch-global
+				// goroutine below; fetching them here too would double them.
 				return nil, nil
+			default:
+				lookupChannel = "global"
 			}
-			lookupChannel = twitchChannel
 		}
 		return h.fetchWithCache(ctx, client, provider, lookupChannel)
 	}

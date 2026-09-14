@@ -19,8 +19,10 @@ package clients
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/caesar/all-chat/services/emote-service/models"
@@ -39,19 +41,18 @@ type BTTVClient struct {
 	logger     *zap.Logger
 }
 
-// BTTVResponse represents the BTTV API response
+// bttvEmote is the shape shared by BTTV's channel, shared, and global emote lists.
+type bttvEmote struct {
+	ID        string `json:"id"`
+	Code      string `json:"code"`
+	ImageType string `json:"imageType"`
+}
+
+// BTTVResponse represents the BTTV API response for a channel lookup
 type BTTVResponse struct {
-	ID            string `json:"id"`
-	ChannelEmotes []struct {
-		ID        string `json:"id"`
-		Code      string `json:"code"`
-		ImageType string `json:"imageType"`
-	} `json:"channelEmotes"`
-	SharedEmotes []struct {
-		ID        string `json:"id"`
-		Code      string `json:"code"`
-		ImageType string `json:"imageType"`
-	} `json:"sharedEmotes"`
+	ID            string      `json:"id"`
+	ChannelEmotes []bttvEmote `json:"channelEmotes"`
+	SharedEmotes  []bttvEmote `json:"sharedEmotes"`
 }
 
 // NewBTTVClient creates a new BTTV API client
@@ -65,11 +66,60 @@ func NewBTTVClient(logger *zap.Logger) *BTTVClient {
 	}
 }
 
-// FetchEmotes fetches emotes from BTTV for a given channel
+// FetchEmotes fetches emotes from BTTV for a given channel.
+// For "global", only BTTV's global set is returned. For any other channel,
+// the global set is always merged in — global emotes (e.g. :tf:, AngelThump)
+// render in every channel — with the channel's own emotes taking precedence
+// on code collisions. A channel that doesn't exist on BTTV is the common case,
+// not a failure: the response is the global set.
 func (c *BTTVClient) FetchEmotes(ctx context.Context, channel string) ([]models.Emote, error) {
+	if strings.TrimSpace(channel) == "" {
+		return nil, fmt.Errorf("channel cannot be empty")
+	}
+
+	if strings.EqualFold(channel, "global") {
+		return c.fetchGlobalEmotes(ctx, channel)
+	}
+
+	channelEmotes, chErr := c.fetchChannelEmotes(ctx, channel)
+	if chErr != nil && !errors.Is(chErr, ErrNotFound) {
+		return nil, chErr
+	}
+
+	globalEmotes, gErr := c.fetchGlobalEmotes(ctx, channel)
+	if gErr != nil {
+		// Global emotes are a bonus, not a requirement — failing to fetch them
+		// must not lose channel emotes. But with nothing else to return,
+		// propagate the real error instead of caching an empty result.
+		if errors.Is(chErr, ErrNotFound) {
+			return nil, gErr
+		}
+		c.logger.Warn("Failed to fetch BTTV global emotes, returning channel emotes only",
+			zap.String("channel", channel),
+			zap.Error(gErr))
+		return channelEmotes, nil
+	}
+
+	if errors.Is(chErr, ErrNotFound) {
+		return globalEmotes, nil
+	}
+
+	merged := mergeEmoteSets(globalEmotes, channelEmotes)
+
+	c.logger.Debug("Fetched BTTV emotes",
+		zap.String("channel", channel),
+		zap.Int("channel_emotes", len(channelEmotes)),
+		zap.Int("global_emotes", len(globalEmotes)),
+		zap.Int("total", len(merged)))
+
+	return merged, nil
+}
+
+// fetchChannelEmotes fetches a channel's own (channel + shared) BTTV emotes.
+func (c *BTTVClient) fetchChannelEmotes(ctx context.Context, channel string) ([]models.Emote, error) {
 	url := fmt.Sprintf("%s/3/cached/users/twitch/%s", c.baseURL, channel)
 
-	c.logger.Debug("Fetching BTTV emotes",
+	c.logger.Debug("Fetching BTTV channel emotes",
 		zap.String("channel", channel),
 		zap.String("url", url))
 
@@ -102,37 +152,68 @@ func (c *BTTVClient) FetchEmotes(ctx context.Context, channel string) ([]models.
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	// Convert BTTV emotes to our internal format
 	// Include both channel emotes and shared emotes
 	totalCount := len(apiResp.ChannelEmotes) + len(apiResp.SharedEmotes)
 	emotes := make([]models.Emote, 0, totalCount)
 
-	// Add channel emotes
-	for _, e := range apiResp.ChannelEmotes {
-		url := fmt.Sprintf("https://cdn.betterttv.net/emote/%s/1x", e.ID)
-		emote := models.Emote{
-			Code:     e.Code,
-			URL:      url,
-			Provider: "bttv",
-			Channel:  channel,
+	for _, list := range [][]bttvEmote{apiResp.ChannelEmotes, apiResp.SharedEmotes} {
+		for _, e := range list {
+			emotes = append(emotes, models.Emote{
+				Code:     e.Code,
+				URL:      fmt.Sprintf("https://cdn.betterttv.net/emote/%s/1x", e.ID),
+				Provider: "bttv",
+				Channel:  channel,
+			})
 		}
-		emotes = append(emotes, emote)
 	}
 
-	// Add shared emotes
-	for _, e := range apiResp.SharedEmotes {
-		url := fmt.Sprintf("https://cdn.betterttv.net/emote/%s/1x", e.ID)
-		emote := models.Emote{
-			Code:     e.Code,
-			URL:      url,
-			Provider: "bttv",
-			Channel:  channel,
-		}
-		emotes = append(emotes, emote)
+	return emotes, nil
+}
+
+// fetchGlobalEmotes fetches BTTV's global emote set. channel is only used to
+// populate the Channel field on the parsed emotes.
+func (c *BTTVClient) fetchGlobalEmotes(ctx context.Context, channel string) ([]models.Emote, error) {
+	url := fmt.Sprintf("%s/3/cached/emotes/global", c.baseURL)
+
+	c.logger.Debug("Fetching BTTV global emotes",
+		zap.String("url", url))
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	c.logger.Debug("Fetched BTTV emotes",
-		zap.String("channel", channel),
+	req.Header.Set("User-Agent", "All-Chat/1.0")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch global emotes: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return nil, rateLimited("bttv", resp)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to fetch global emotes: status code %d", resp.StatusCode)
+	}
+
+	var apiEmotes []bttvEmote
+	if err := json.NewDecoder(resp.Body).Decode(&apiEmotes); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	emotes := make([]models.Emote, 0, len(apiEmotes))
+	for _, e := range apiEmotes {
+		emotes = append(emotes, models.Emote{
+			Code:     e.Code,
+			URL:      fmt.Sprintf("https://cdn.betterttv.net/emote/%s/1x", e.ID),
+			Provider: "bttv",
+			Channel:  channel,
+		})
+	}
+
+	c.logger.Debug("Fetched BTTV global emotes",
 		zap.Int("count", len(emotes)))
 
 	return emotes, nil

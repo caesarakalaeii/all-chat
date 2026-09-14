@@ -430,11 +430,12 @@ func TestEmoteHandler_GetChannelEmotes_WithTwitchGlobalForNonTwitchPlatform(t *t
 			hasTwitchGlobal: true,
 		},
 		{
-			// ADR-0033 follow-up: with no linked twitch_channel, BTTV/FFZ/Twitch cannot
-			// resolve a non-Twitch (YouTube) channel id, so those Twitch-keyed providers
-			// are skipped entirely (no guaranteed-404 upstream calls). Only the Twitch
-			// GLOBAL emotes are added for the platform.
-			name:     "Non-Twitch channel without linked Twitch skips Twitch-keyed providers",
+			// ADR-0033 follow-up, revised: with no linked twitch_channel, Twitch-keyed
+			// providers can't resolve a non-Twitch (YouTube) channel id — but their
+			// GLOBAL sets still apply to every channel, so BTTV/FFZ are fetched for
+			// "global" instead of skipped. Only the Twitch channel lookup is skipped
+			// (its globals arrive via the dedicated twitch-global fetch below).
+			name:     "Non-Twitch channel without linked Twitch fetches provider globals",
 			channel:  "someYtChannel",
 			platform: "youtube",
 			setupClients: func() map[string]EmoteClient {
@@ -458,7 +459,7 @@ func TestEmoteHandler_GetChannelEmotes_WithTwitchGlobalForNonTwitchPlatform(t *t
 			},
 			setupCache:      func() EmoteCache { return newMockEmoteCache() },
 			wantStatusCode:  http.StatusOK,
-			wantEmoteCount:  2, // only the 2 Twitch GLOBAL emotes; bttv/ffz/twitch-channel skipped
+			wantEmoteCount:  4, // 2 Twitch global + BTTV global + FFZ global
 			hasTwitchGlobal: true,
 		},
 		{

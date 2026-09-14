@@ -110,10 +110,15 @@ func (c *SevenTVClient) FetchEmotes(ctx context.Context, channel string) ([]mode
 		return c.fetchEmoteSet(ctx, "global", channel)
 	}
 
-	// For channels, fetch both channel-specific and global emotes
+	// For channels, fetch both channel-specific and global emotes. A channel
+	// without a 7TV emote set is the common case, not a failure — the global
+	// set still applies to every channel.
 	channelEmotes, err := c.fetchChannelEmotes(ctx, channel)
 	if err != nil {
-		return nil, err
+		if !errors.Is(err, ErrNotFound) {
+			return nil, err
+		}
+		channelEmotes = nil
 	}
 
 	// Fetch global emotes

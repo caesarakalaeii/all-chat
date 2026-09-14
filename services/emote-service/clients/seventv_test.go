@@ -168,13 +168,15 @@ func TestSevenTVClient_FetchEmotes(t *testing.T) {
 			expectGlobalEmotes: true,
 		},
 		{
-			name:              "channel not found fails",
-			channel:           "missing",
-			mockTwitchID:      "9999",
-			channelStatusCode: http.StatusNotFound,
-			wantErr:           true,
-			errContains:       "not found",
-			twitchCalled:      true,
+			name:               "channel not found falls back to globals",
+			channel:            "missing",
+			mockTwitchID:       "9999",
+			channelStatusCode:  http.StatusNotFound,
+			globalStatusCode:    http.StatusOK,
+			globalResponse:      globalResponse,
+			wantEmoteCount:      2, // only globals
+			twitchCalled:        true,
+			expectGlobalEmotes: true,
 		},
 		{
 			name:            "invalid JSON response",
