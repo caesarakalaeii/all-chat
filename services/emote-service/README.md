@@ -185,7 +185,7 @@ Message Processor: GET /emotes/channel/UC...ytChannelId?platform=youtube&twitch_
                         ↓
 Emote Service Returns:
   - 7TV emotes           (resolved via the YouTube platform connection / linked Twitch)
-  - BTTV + FFZ emotes    (resolved via the linked twitch_channel BLVTumi; skipped if unlinked)
+  - BTTV + FFZ emotes    (resolved via the linked twitch_channel BLVTumi; provider globals if unlinked)
   - Twitch global emotes (Kappa, PogChamp, etc.)
                         ↓
 Message displayed with all emote images rendered

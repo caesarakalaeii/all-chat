@@ -106,7 +106,16 @@ func TestBTTVClient_FetchEmotes(t *testing.T) {
 			globalStatusCode:  http.StatusOK,
 			globalResponse:    bttvGlobalResponse,
 			wantEmoteCount:    2,
-			wantGlobalEmotes:  []string{":tf:", "AngelThump"},
+			wantGlobalEmotes: []string{":tf:", "AngelThump"},
+		},
+		{
+			name:              "channel with no BTTV emotes and global fetch failure propagates error",
+			channel:           "emptyaccount",
+			channelStatusCode: http.StatusOK,
+			channelResponse:   `{"id": "5e4b3e186b9f0f6c6d3b9e3a", "channelEmotes": [], "sharedEmotes": []}`,
+			globalStatusCode:  http.StatusInternalServerError,
+			wantErr:           true,
+			errContains:       "failed to fetch global emotes",
 		},
 		{
 			name:             "global channel returns only globals",
