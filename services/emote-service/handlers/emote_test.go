@@ -36,14 +36,16 @@ import (
 
 // mockEmoteClient for testing
 type mockEmoteClient struct {
-	emotes     []models.Emote
-	err        error
-	provider   string
-	fetchCalls atomic.Int64
+	emotes      []models.Emote
+	err         error
+	provider    string
+	fetchCalls  atomic.Int64
+	lastChannel atomic.Value
 }
 
 func (m *mockEmoteClient) FetchEmotes(ctx context.Context, channel string) ([]models.Emote, error) {
 	m.fetchCalls.Add(1)
+	m.lastChannel.Store(channel)
 	return m.emotes, m.err
 }
 
@@ -375,6 +377,9 @@ func TestEmoteHandler_GetChannelEmotes_WithTwitchGlobalForNonTwitchPlatform(t *t
 		wantStatusCode  int
 		wantEmoteCount  int
 		hasTwitchGlobal bool
+		// wantGlobalLookup asserts BTTV/FFZ were fetched for "global" rather
+		// than the platform id (mocks below capture the channel argument).
+		wantGlobalLookup bool
 	}{
 		{
 			name:          "YouTube channel with linked Twitch includes Twitch global + provider emotes",
@@ -457,10 +462,11 @@ func TestEmoteHandler_GetChannelEmotes_WithTwitchGlobalForNonTwitchPlatform(t *t
 					},
 				}
 			},
-			setupCache:      func() EmoteCache { return newMockEmoteCache() },
-			wantStatusCode:  http.StatusOK,
-			wantEmoteCount:  4, // 2 Twitch global + BTTV global + FFZ global
-			hasTwitchGlobal: true,
+			setupCache:       func() EmoteCache { return newMockEmoteCache() },
+			wantStatusCode:   http.StatusOK,
+			wantEmoteCount:   4, // 2 Twitch global + BTTV global + FFZ global
+			hasTwitchGlobal:  true,
+			wantGlobalLookup: true,
 		},
 		{
 			name:     "Twitch channel does NOT duplicate global emotes",
@@ -511,7 +517,8 @@ func TestEmoteHandler_GetChannelEmotes_WithTwitchGlobalForNonTwitchPlatform(t *t
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			logger := zaptest.NewLogger(t)
-			handler := NewEmoteHandler(tt.setupClients(), tt.setupCache(), logger, nil)
+			clients := tt.setupClients()
+			handler := NewEmoteHandler(clients, tt.setupCache(), logger, nil)
 
 			router := gin.New()
 			router.GET("/emotes/channel/:channel", handler.GetChannelEmotes)
@@ -549,6 +556,17 @@ func TestEmoteHandler_GetChannelEmotes_WithTwitchGlobalForNonTwitchPlatform(t *t
 					}
 				}
 				assert.True(t, hasTwitchGlobal, "Expected Twitch global emotes to be present")
+			}
+
+			if tt.wantGlobalLookup {
+				// BTTV/FFZ must be fetched for "global", not for the platform id
+				// that those Twitch-keyed providers can't resolve.
+				for _, provider := range []string{"bttv", "ffz"} {
+					mock, ok := clients[provider].(*mockEmoteClient)
+					require.True(t, ok, "expected a mockEmoteClient for %s", provider)
+					assert.Equal(t, "global", mock.lastChannel.Load(),
+						"%s must be fetched as 'global' for non-Twitch platforms without linked Twitch", provider)
+				}
 			}
 		})
 	}

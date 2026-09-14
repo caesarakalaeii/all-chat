@@ -53,6 +53,7 @@ func TestFFZClient_FetchEmotes(t *testing.T) {
 		wantEmoteCount    int
 		wantErr           bool
 		errContains       string
+		wantURL           string
 		wantChannelEmotes []string
 		wantGlobalEmotes  []string
 	}{
@@ -156,6 +157,18 @@ func TestFFZClient_FetchEmotes(t *testing.T) {
 			}`,
 			wantEmoteCount:    1,
 			wantChannelEmotes: []string{"BeanieHipster"},
+			// Room emote id 1234 must win over global id 240003 — the URL is
+			// what distinguishes them, both emotes share the code.
+			wantURL: "https://cdn.frankerfacez.com/emote/1234/1",
+		},
+		{
+			name:              "channel miss with global fetch failure propagates error",
+			channel:           "nonexistent",
+			channelStatusCode: http.StatusNotFound,
+			channelResponse:   `{"error": "room not found"}`,
+			globalStatusCode:  http.StatusInternalServerError,
+			wantErr:           true,
+			errContains:       "failed to fetch global emotes",
 		},
 		{
 			name:              "global fetch failure with room emotes returns room only",
@@ -174,7 +187,7 @@ func TestFFZClient_FetchEmotes(t *testing.T) {
 					}
 				}
 			}`,
-			globalStatusCode: http.StatusInternalServerError,
+			globalStatusCode:  http.StatusInternalServerError,
 			wantEmoteCount:    1,
 			wantChannelEmotes: []string{"xqcL"},
 		},
@@ -257,6 +270,9 @@ func TestFFZClient_FetchEmotes(t *testing.T) {
 			}
 			for _, code := range tt.wantGlobalEmotes {
 				assert.True(t, codes[code], "expected global emote %q", code)
+			}
+			if tt.wantURL != "" {
+				assert.Equal(t, tt.wantURL, emotes[0].URL)
 			}
 		})
 	}

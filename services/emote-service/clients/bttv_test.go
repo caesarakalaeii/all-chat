@@ -35,17 +35,18 @@ const bttvGlobalResponse = `[
 
 func TestBTTVClient_FetchEmotes(t *testing.T) {
 	tests := []struct {
-		name                string
-		channel             string
-		channelStatusCode   int
-		channelResponse     string
-		globalStatusCode    int
-		globalResponse      string
-		wantEmoteCount      int
-		wantErr             bool
-		errContains         string
-		wantChannelEmotes   []string
-		wantGlobalEmotes    []string
+		name              string
+		channel           string
+		channelStatusCode int
+		channelResponse   string
+		globalStatusCode  int
+		globalResponse    string
+		wantEmoteCount    int
+		wantErr           bool
+		errContains       string
+		wantChannelEmotes []string
+		wantGlobalEmotes  []string
+		wantURL           string
 	}{
 		{
 			name:              "channel emotes merge with global set",
@@ -65,7 +66,7 @@ func TestBTTVClient_FetchEmotes(t *testing.T) {
 			globalResponse:    bttvGlobalResponse,
 			wantEmoteCount:    5, // 3 channel + 2 global
 			wantChannelEmotes: []string{"xqcL", "xqcT", "KKona"},
-			wantGlobalEmotes: []string{":tf:", "AngelThump"},
+			wantGlobalEmotes:  []string{":tf:", "AngelThump"},
 		},
 		{
 			name:              "channel emotes take precedence on code collision",
@@ -84,6 +85,18 @@ func TestBTTVClient_FetchEmotes(t *testing.T) {
 			]`,
 			wantEmoteCount:    1,
 			wantChannelEmotes: []string{":tf:"},
+			// Channel emote id 54fa8f14… must win over global id 557029e2…:
+			// proves the merge kept the channel emote, not just "a :tf: exists".
+			wantURL: "https://cdn.betterttv.net/emote/54fa8f1401e468494b85b537/1x",
+		},
+		{
+			name:              "channel miss with global fetch failure propagates error",
+			channel:           "nonexistent",
+			channelStatusCode: http.StatusNotFound,
+			channelResponse:   `{"message": "user not found"}`,
+			globalStatusCode:  http.StatusInternalServerError,
+			wantErr:           true,
+			errContains:       "failed to fetch global emotes",
 		},
 		{
 			name:              "channel with no BTTV account returns global set",
@@ -93,14 +106,14 @@ func TestBTTVClient_FetchEmotes(t *testing.T) {
 			globalStatusCode:  http.StatusOK,
 			globalResponse:    bttvGlobalResponse,
 			wantEmoteCount:    2,
-			wantGlobalEmotes: []string{":tf:", "AngelThump"},
+			wantGlobalEmotes:  []string{":tf:", "AngelThump"},
 		},
 		{
-			name:              "global channel returns only globals",
-			channel:           "global",
-			globalStatusCode:  http.StatusOK,
-			globalResponse:    bttvGlobalResponse,
-			wantEmoteCount:    2,
+			name:             "global channel returns only globals",
+			channel:          "global",
+			globalStatusCode: http.StatusOK,
+			globalResponse:   bttvGlobalResponse,
+			wantEmoteCount:   2,
 			wantGlobalEmotes: []string{":tf:", "AngelThump"},
 		},
 		{
@@ -114,7 +127,7 @@ func TestBTTVClient_FetchEmotes(t *testing.T) {
 				],
 				"sharedEmotes": []
 			}`,
-			globalStatusCode: http.StatusInternalServerError,
+			globalStatusCode:  http.StatusInternalServerError,
 			wantEmoteCount:    1,
 			wantChannelEmotes: []string{"xqcL"},
 		},
@@ -138,10 +151,10 @@ func TestBTTVClient_FetchEmotes(t *testing.T) {
 			errContains:       "failed to decode",
 		},
 		{
-			name:              "empty channel rejected",
-			channel:           " ",
-			wantErr:           true,
-			errContains:       "channel cannot be empty",
+			name:        "empty channel rejected",
+			channel:     " ",
+			wantErr:     true,
+			errContains: "channel cannot be empty",
 		},
 	}
 
@@ -182,7 +195,6 @@ func TestBTTVClient_FetchEmotes(t *testing.T) {
 			}
 			require.NoError(t, err)
 			assert.Len(t, emotes, tt.wantEmoteCount)
-
 			codes := make(map[string]bool, len(emotes))
 			for _, emote := range emotes {
 				assert.NotEmpty(t, emote.Code)
@@ -197,6 +209,9 @@ func TestBTTVClient_FetchEmotes(t *testing.T) {
 			}
 			for _, code := range tt.wantGlobalEmotes {
 				assert.True(t, codes[code], "expected global emote %q", code)
+			}
+			if tt.wantURL != "" {
+				assert.Equal(t, tt.wantURL, emotes[0].URL)
 			}
 		})
 	}

@@ -118,20 +118,20 @@ func TestSevenTVClient_FetchEmotes(t *testing.T) {
 	}`
 
 	tests := []struct {
-		name                 string
-		channel              string
-		mockTwitchID         string
-		mockTwitchErr        error
-		channelStatusCode    int
-		channelResponse      string
-		globalStatusCode     int
-		globalResponse       string
-		wantEmoteCount       int
-		wantErr              bool
-		errContains          string
-		twitchCalled         bool
-		expectChannelEmotes  bool
-		expectGlobalEmotes   bool
+		name                string
+		channel             string
+		mockTwitchID        string
+		mockTwitchErr       error
+		channelStatusCode   int
+		channelResponse     string
+		globalStatusCode    int
+		globalResponse      string
+		wantEmoteCount      int
+		wantErr             bool
+		errContains         string
+		twitchCalled        bool
+		expectChannelEmotes bool
+		expectGlobalEmotes  bool
 	}{
 		{
 			name:                "successful fetch with channel and global emotes",
@@ -172,21 +172,31 @@ func TestSevenTVClient_FetchEmotes(t *testing.T) {
 			channel:            "missing",
 			mockTwitchID:       "9999",
 			channelStatusCode:  http.StatusNotFound,
-			globalStatusCode:    http.StatusOK,
-			globalResponse:      globalResponse,
-			wantEmoteCount:      2, // only globals
-			twitchCalled:        true,
+			globalStatusCode:   http.StatusOK,
+			globalResponse:     globalResponse,
+			wantEmoteCount:     2, // only globals
+			twitchCalled:       true,
 			expectGlobalEmotes: true,
 		},
 		{
-			name:            "invalid JSON response",
-			channel:         "xqc",
-			mockTwitchID:    "71092938",
+			name:              "channel not found with global fetch failure propagates error",
+			channel:           "missing",
+			mockTwitchID:      "9999",
+			channelStatusCode: http.StatusNotFound,
+			globalStatusCode:  http.StatusInternalServerError,
+			wantErr:           true,
+			errContains:       "failed to fetch emote set",
+			twitchCalled:      true,
+		},
+		{
+			name:              "invalid JSON response",
+			channel:           "xqc",
+			mockTwitchID:      "71092938",
 			channelStatusCode: http.StatusOK,
-			channelResponse: `{invalid json}`,
-			wantErr:         true,
-			errContains:     "failed to decode",
-			twitchCalled:    true,
+			channelResponse:   `{invalid json}`,
+			wantErr:           true,
+			errContains:       "failed to decode",
+			twitchCalled:      true,
 		},
 		{
 			name:          "twitch lookup error",
@@ -254,7 +264,7 @@ func TestSevenTVClient_FetchEmotes(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 				assert.Len(t, emotes, tt.wantEmoteCount)
-				
+
 				// Verify emote properties
 				emoteMap := make(map[string]models.Emote)
 				for _, emote := range emotes {
