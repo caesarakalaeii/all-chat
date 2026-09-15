@@ -87,7 +87,10 @@ async function refreshProxiesFromWebshare() {
         const list = await fetchWebshareProxies(webshareToken);
         proxyUser = list.username;
         proxyPass = list.password;
-        await viewer.refreshProxies(list.hosts);
+        // Credentials ride with the refresh: the pool was constructed from the
+        // static-list fallback and may have none, and lane pages authenticate
+        // per-request from the pool's own options.
+        await viewer.refreshProxies(list.hosts, { username: list.username, password: list.password });
         logger.info('viewer proxy pool refreshed from webshare', { proxies: list.hosts.length });
     }
     catch (error) {
