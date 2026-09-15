@@ -60,33 +60,52 @@ describe('ViewerPool (no browser)', () => {
 describe('ViewerPool lane selection', () => {
   it('creates one lane per proxy and a single direct lane without proxies', async () => {
     const pooled = new ViewerPool({ proxyHosts: ['h1:1', 'h2:2', 'h3:3'], userDataDir: '/tmp/x' });
-    expect(((pooled as unknown as { lanes: unknown[] }).lanes).length).toBe(3);
+    expect(((pooled as unknown as { lanes: Map<string, unknown> }).lanes).size).toBe(3);
     await pooled.close();
 
     const direct = new ViewerPool({ userDataDir: '/tmp/x' });
-    expect(((direct as unknown as { lanes: unknown[] }).lanes).length).toBe(1);
+    expect(((direct as unknown as { lanes: Map<string, unknown> }).lanes).size).toBe(1);
+    expect(((direct as unknown as { lanes: Map<string, unknown> }).lanes).has('')).toBe(true);
     await direct.close();
   });
 
-  it('pins a room to its lane and skips benched lanes', async () => {
+  it('pins a room to its lane and skips benched lanes', () => {
     const pool = new ViewerPool({ proxyHosts: ['a:1', 'b:2'], userDataDir: '/tmp/x' });
     const internals = pool as unknown as {
-      lanes: { index: number; benchedUntil: number }[];
-      roomLane: Map<string, number>;
-      pickLane(username: string): { index: number };
+      lanes: Map<string, { host: string; benchedUntil: number }>;
+      roomLane: Map<string, string>;
+      pickLane(username: string): { host: string };
     };
-    // Room captured on lane 1 -> pinned there while the lane is healthy.
-    internals.roomLane.set('streamer', 1);
-    expect(internals.pickLane('streamer').index).toBe(1);
+    // Room captured on lane a:1 -> pinned there while the lane is healthy.
+    internals.roomLane.set('streamer', 'a:1');
+    expect(internals.pickLane('streamer').host).toBe('a:1');
 
-    // Bench lane 1: the pinned room must fall to another lane.
-    internals.lanes[1].benchedUntil = Date.now() + 60_000;
-    expect(internals.pickLane('streamer').index).not.toBe(1);
+    // Bench it: the pinned room must fall to another lane.
+    internals.lanes.get('a:1')!.benchedUntil = Date.now() + 60_000;
+    expect(internals.pickLane('streamer').host).not.toBe('a:1');
 
     // Cooldown elapsed: the pinned lane serves the room again.
-    internals.lanes[1].benchedUntil = Date.now() - 1_000;
-    expect(internals.pickLane('streamer').index).toBe(1);
+    internals.lanes.get('a:1')!.benchedUntil = Date.now() - 1_000;
+    expect(internals.pickLane('streamer').host).toBe('a:1');
+  });
 
+  it('refresh keeps surviving lanes, drops removed ones and adds new ones', async () => {
+    const pool = new ViewerPool({ proxyHosts: ['a:1', 'b:2'], userDataDir: '/tmp/x' });
+    const internals = pool as unknown as {
+      lanes: Map<string, { host: string }>;
+      roomLane: Map<string, string>;
+    };
+    // One room pinned to a surviving proxy, one to the lane being removed.
+    internals.roomLane.set('streamer', 'a:1');
+    internals.roomLane.set('gone', 'b:2');
+
+    await pool.refreshProxies(['a:1', 'c:3']);
+    expect(internals.lanes.has('a:1')).toBe(true);
+    expect(internals.lanes.has('b:2')).toBe(false);
+    expect(internals.lanes.has('c:3')).toBe(true);
+    // The surviving pin survived; the removed lane's pin was dropped.
+    expect(internals.roomLane.get('streamer')).toBe('a:1');
+    expect(internals.roomLane.has('gone')).toBe(false);
     await pool.close();
   });
 });

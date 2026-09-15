@@ -37,16 +37,21 @@ puppeteer.use(StealthPlugin());
  * directory, own session identity) and rooms are pinned to the lane they
  * first captured on — the profile keeps its TikTok cookies, which is part of
  * the session-grade identity that passes the gate. A failed capture benches
- * the lane for a cooldown and the next attempt rides another one.
+ * the lane for a cooldown and the next attempt rides another one. Lanes are
+ * keyed by proxy host, so `refreshProxies` (fed by the webshare API) can
+ * swap the list underneath without disturbing surviving lanes.
  *
  * Tabs stay open after a capture: the page keeps receiving live push (which
  * keeps the session warm on TikTok's side) and the next capture for the same
  * room reuses its warmed session identity instead of bootstrapping a new one.
  */
 export class ViewerPool {
-    lanes = [];
+    /** Lanes keyed by proxy host ("" = direct). */
+    lanes = new Map();
+    /** Round-robin cursor over the lane keys in insertion order. */
+    laneOrder = [];
     tabs = new Map();
-    /** username -> lane index, so a room keeps its browser identity. */
+    /** username -> lane host, so a room keeps its browser identity. */
     roomLane = new Map();
     roundRobin = 0;
     options;
@@ -58,32 +63,70 @@ export class ViewerPool {
         };
         const hosts = options.proxyHosts ?? [];
         if (hosts.length === 0) {
-            this.lanes.push(this.newLane(0));
+            this.addLane('');
         }
         else {
-            hosts.forEach((_, i) => this.lanes.push(this.newLane(i)));
+            hosts.forEach((host) => this.addLane(host));
         }
     }
-    newLane(index) {
-        return { index, browser: null, launching: null, active: new Set(), benchedUntil: 0 };
+    addLane(host) {
+        const lane = { host, browser: null, launching: null, active: new Set(), benchedUntil: 0 };
+        this.lanes.set(host, lane);
+        this.laneOrder = [...this.lanes.keys()];
+        return lane;
     }
-    laneProxyHost(index) {
-        const hosts = this.options.proxyHosts ?? [];
-        return hosts[index];
+    /**
+     * Refresh the proxy list (fed by the webshare API). Lanes for proxies that
+     * disappeared are closed — their pinned rooms recapture on surviving lanes —
+     * and new proxies get fresh lanes. Surviving lanes keep their browsers,
+     * profiles and pinned rooms untouched.
+     */
+    async refreshProxies(hosts) {
+        const wanted = new Set(hosts);
+        for (const [host, lane] of [...this.lanes]) {
+            if (host !== '' && !wanted.has(host)) {
+                this.lanes.delete(host);
+                this.laneOrder = [...this.lanes.keys()];
+                try {
+                    await lane.browser?.close();
+                }
+                catch {
+                    // Closing an already-dead browser is not an error.
+                }
+                lane.active.clear();
+                for (const [username, laneHost] of [...this.roomLane]) {
+                    if (laneHost === host) {
+                        this.roomLane.delete(username);
+                        const tab = this.tabs.get(username);
+                        if (tab) {
+                            this.tabs.delete(username);
+                            void tab.page.close().catch(() => undefined);
+                        }
+                    }
+                }
+            }
+        }
+        for (const host of hosts) {
+            if (!this.lanes.has(host))
+                this.addLane(host);
+        }
     }
     pickLane(username) {
         // A room already captured keeps its lane: the profile's cookies are part
         // of the identity TikTok judged the first time.
-        const pinned = this.roomLane.get(username);
-        if (pinned !== undefined) {
-            const lane = this.lanes[pinned];
-            if (Date.now() >= lane.benchedUntil)
+        const pinnedHost = this.roomLane.get(username);
+        if (pinnedHost !== undefined) {
+            const lane = this.lanes.get(pinnedHost);
+            if (lane && Date.now() >= lane.benchedUntil)
                 return lane;
-            // The pinned lane is benched; fall through to picking another.
+            // The pinned lane is benched or gone; fall through to picking another.
         }
         const now = Date.now();
-        const available = this.lanes.filter((l) => now >= l.benchedUntil);
-        const pool = available.length > 0 ? available : this.lanes;
+        const all = this.laneOrder
+            .map((h) => this.lanes.get(h))
+            .filter((l) => l !== undefined);
+        const available = all.filter((l) => now >= l.benchedUntil);
+        const pool = available.length > 0 ? available : all;
         const lane = pool[this.roundRobin % pool.length];
         this.roundRobin++;
         return lane;
@@ -91,7 +134,7 @@ export class ViewerPool {
     benchLane(lane) {
         // Only bench proxy lanes: the direct lane has nothing to rotate away from,
         // and benching it would just serialize captures for no benefit.
-        if ((this.options.proxyHosts ?? []).length > 0) {
+        if (lane.host !== '') {
             lane.benchedUntil = Date.now() + this.options.proxyCooldownMs;
         }
     }
@@ -116,9 +159,8 @@ export class ViewerPool {
         if (this.options.display) {
             args.push(`--display=${this.options.display}`);
         }
-        const proxyHost = this.laneProxyHost(lane.index);
-        if (proxyHost) {
-            args.push(`--proxy-server=http://${proxyHost}`);
+        if (lane.host) {
+            args.push(`--proxy-server=http://${lane.host}`);
         }
         lane.launching = puppeteer
             .launch({
@@ -129,7 +171,9 @@ export class ViewerPool {
             headless: false,
             executablePath: this.options.executablePath,
             args,
-            userDataDir: `${this.options.userDataDir ?? '/tmp/tiktok-signer-profile-viewer'}-p${lane.index}`,
+            // Profile per lane: the session identity (cookies, device reputation)
+            // is bound to the egress IP and must never mix.
+            userDataDir: `${this.options.userDataDir ?? '/tmp/tiktok-signer-profile-viewer'}-${lane.host || 'direct'}`,
             ignoreDefaultArgs: ['--enable-automation']
         })
             .then((browser) => {
@@ -201,7 +245,7 @@ export class ViewerPool {
                     this.roomLane.delete(username);
                     this.benchLane(lane);
                     await page.close().catch(() => undefined);
-                    reject(new Error(`im/fetch 200 not captured within ${timeoutMs}ms (proxy ${lane.index}, ${jobId})`));
+                    reject(new Error(`im/fetch 200 not captured within ${timeoutMs}ms (proxy ${lane.host || 'direct'}, ${jobId})`));
                 }, timeoutMs);
                 const onResponse = async (response) => {
                     if (settled)
@@ -229,13 +273,13 @@ export class ViewerPool {
                             .join('; ');
                         const roomId = new URL(url).searchParams.get('room_id') ?? username;
                         this.tabs.set(username, { page, lastUsed: Date.now() });
-                        this.roomLane.set(username, lane.index);
+                        this.roomLane.set(username, lane.host);
                         resolve({
                             roomId,
                             protoBase64: buf.toString('base64'),
                             cookieHeader: cookies,
                             userAgent: VIEWER_UA,
-                            proxyIndex: lane.index,
+                            proxyHost: lane.host,
                             elapsedMs: Date.now() - startedAt
                         });
                     }
@@ -263,7 +307,7 @@ export class ViewerPool {
                     this.roomLane.delete(username);
                     this.benchLane(lane);
                     void page.close().catch(() => undefined);
-                    reject(new Error(`navigation failed on proxy ${lane.index}: ${error.message}`));
+                    reject(new Error(`navigation failed on proxy ${lane.host || 'direct'}: ${error.message}`));
                 });
             });
         }
@@ -274,7 +318,7 @@ export class ViewerPool {
     async close() {
         this.tabs.clear();
         this.roomLane.clear();
-        for (const lane of this.lanes) {
+        for (const lane of this.lanes.values()) {
             if (lane.browser) {
                 try {
                     await lane.browser.close();
