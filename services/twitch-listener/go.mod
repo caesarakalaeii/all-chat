@@ -3,7 +3,7 @@ module github.com/caesar/all-chat/services/twitch-listener
 go 1.25.6
 
 require (
-	github.com/alicebob/miniredis/v2 v2.38.0
+	github.com/alicebob/miniredis/v2 v2.39.0
 	github.com/caesar/all-chat/services/message-processor v0.0.0-00010101000000-000000000000
 	github.com/caesar/all-chat/shared v0.0.0-00010101000000-000000000000
 	github.com/gempir/go-twitch-irc/v4 v4.4.1
