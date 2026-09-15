@@ -74,10 +74,12 @@ export class SelfSigner implements WebcastSigner {
   async sign(request: SignRequest): Promise<SignResult> {
     const payload = JSON.stringify({
       roomId: request.roomId,
+      // The sign service's page-viewer mode opens the room's live page by
+      // handle; the signature path ignores it.
+      username: request.username,
       cursor: request.cursor,
       cookieHeader: request.cookieHeader
     });
-
     let bodyJson: SignServiceResponse;
     let status: number;
     try {

@@ -38,6 +38,12 @@ export interface SignRequest {
   roomId: string;
 
   /**
+   * Streamer handle, when the caller knows it. Viewer-mode signers navigate
+   * to the room's live page by handle; signature-mode signers ignore it.
+   */
+  username?: string;
+
+  /**
    * Cursor to resume from, if this is a reconnect rather than a fresh join.
    *
    * TikTok uses the cursor to decide which backlog to replay. Omitting it on a reconnect is not
