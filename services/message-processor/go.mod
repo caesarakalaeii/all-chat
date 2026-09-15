@@ -3,7 +3,7 @@ module github.com/caesar/all-chat/services/message-processor
 go 1.25.6
 
 require (
-	github.com/alicebob/miniredis/v2 v2.38.0
+	github.com/alicebob/miniredis/v2 v2.39.0
 	github.com/caesar/all-chat/shared v0.0.0-00010101000000-000000000000
 	github.com/gin-gonic/gin v1.12.0
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // S3: pseudo-version; pin to tagged release when gorilla/websocket v1.5.4 is published
