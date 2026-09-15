@@ -56,3 +56,37 @@ describe('ViewerPool (no browser)', () => {
     await pool.close();
   });
 });
+
+describe('ViewerPool lane selection', () => {
+  it('creates one lane per proxy and a single direct lane without proxies', async () => {
+    const pooled = new ViewerPool({ proxyHosts: ['h1:1', 'h2:2', 'h3:3'], userDataDir: '/tmp/x' });
+    expect(((pooled as unknown as { lanes: unknown[] }).lanes).length).toBe(3);
+    await pooled.close();
+
+    const direct = new ViewerPool({ userDataDir: '/tmp/x' });
+    expect(((direct as unknown as { lanes: unknown[] }).lanes).length).toBe(1);
+    await direct.close();
+  });
+
+  it('pins a room to its lane and skips benched lanes', async () => {
+    const pool = new ViewerPool({ proxyHosts: ['a:1', 'b:2'], userDataDir: '/tmp/x' });
+    const internals = pool as unknown as {
+      lanes: { index: number; benchedUntil: number }[];
+      roomLane: Map<string, number>;
+      pickLane(username: string): { index: number };
+    };
+    // Room captured on lane 1 -> pinned there while the lane is healthy.
+    internals.roomLane.set('streamer', 1);
+    expect(internals.pickLane('streamer').index).toBe(1);
+
+    // Bench lane 1: the pinned room must fall to another lane.
+    internals.lanes[1].benchedUntil = Date.now() + 60_000;
+    expect(internals.pickLane('streamer').index).not.toBe(1);
+
+    // Cooldown elapsed: the pinned lane serves the room again.
+    internals.lanes[1].benchedUntil = Date.now() - 1_000;
+    expect(internals.pickLane('streamer').index).toBe(1);
+
+    await pool.close();
+  });
+});

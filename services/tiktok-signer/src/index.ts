@@ -57,9 +57,19 @@ const session = new SigningSession({
 // tab instead of the signature path. The signing session stays up for
 // /v1/sign-url (the gift-list seam still only needs a signature).
 const viewerMode = (process.env.SIGNER_VIEWER_MODE || 'signature') === 'page';
+// Residential proxy pool for the viewer lanes: TikTok gates the chat bootstrap
+// on IP reputation, so viewer browsers egress through residential IPs. One
+// browser per proxy (own profile = own session identity); rooms are pinned to
+// their lane, and a failing lane is benched for a cooldown while another
+// serves. SIGNER_PROXY_HOSTS is a comma-separated host:port list; the legacy
+// singular SIGNER_PROXY_HOST still applies to the signature session.
+const proxyHosts = (process.env.SIGNER_PROXY_HOSTS || process.env.SIGNER_PROXY_HOST || '')
+  .split(',')
+  .map((h) => h.trim())
+  .filter(Boolean);
 const viewer = viewerMode
   ? new ViewerPool({
-      proxyHost: process.env.SIGNER_PROXY_HOST,
+      proxyHosts,
       proxyUser: process.env.SIGNER_PROXY_USER,
       proxyPass: process.env.SIGNER_PROXY_PASS,
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
@@ -67,6 +77,9 @@ const viewer = viewerMode
       display: process.env.SIGNER_DISPLAY
     })
   : undefined;
+if (viewerMode && proxyHosts.length > 0) {
+  logger.info('viewer proxy pool configured', { proxies: proxyHosts.length });
+}
 
 const server = createServer({ port: PORT, session, viewer, logger });
 
@@ -75,11 +88,11 @@ server.listen(PORT, () => {
 });
 
 async function shutdown(signal: string): Promise<void> {
-   logger.info('shutting down', { signal });
-   server.close();
-   await session.close();
+  logger.info('shutting down', { signal });
+  server.close();
+  await session.close();
   await viewer?.close();
-   process.exit(0);
+  process.exit(0);
 }
 
 process.on('SIGTERM', () => void shutdown('SIGTERM'));
