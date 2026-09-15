@@ -42,7 +42,7 @@ import Image from 'next/image'
 import { use, useEffect, useMemo, useState, useRef, useCallback } from 'react'
 import clsx from 'clsx'
 import { toastManager } from '@/lib/toast'
-import type { ChatMessage, EventTier, DeletionMetadata } from '@/lib/types/message'
+import type { ChatMessage, DeletionMetadata } from '@/lib/types/message'
 import { renderMessageContent } from '@/lib/renderMessage'
 import PlatformStatusIndicators from '@/components/PlatformStatusIndicators'
 import { useOverlayStream } from '@/hooks/useOverlayStream'
@@ -61,10 +61,7 @@ import {
 import { getBundledTheme } from '@/lib/theme-marketplace/bundled-themes'
 import { rewriteThemeFontImports } from '@/lib/theme-marketplace/font-proxy'
 import { wrapThemeCss } from '@/lib/theme-marketplace/wrap-theme-css'
-import {
-  overlayContainerStyle,
-  userBubbleStyle,
-} from '@/lib/utils/visual-inline-styles'
+import { overlayContainerStyle, userBubbleStyle } from '@/lib/utils/visual-inline-styles'
 import { isDisplayVisible } from '@/lib/utils/displayVisibility'
 import {
   DEFAULT_FEED_ANCHOR,
@@ -87,6 +84,7 @@ import { createSoundPlayer } from '@/lib/utils/soundPlayer'
 import type { SoundPlayer, SoundSettings } from '@/lib/utils/soundPlayer'
 import { createTTSPlayer } from '@/lib/utils/ttsPlayer'
 import type { TTSPlayer, TTSSettings } from '@/lib/utils/ttsPlayer'
+import { messageExpiry, nextFadeDelayMs } from '@/lib/utils/messageFade'
 
 // Fonts are proxied through /font-proxy/css so end-user IPs never reach Google
 // (DSGVO / "Google Fonts Urteil" LG München 2022-01-20, Az. 3 O 17493/20).
@@ -131,21 +129,6 @@ import '@/styles/events.css'
 // The letter the Kick icon's SVG draws — a brand mark, not text. Matches the
 // preview embed's constant of the same name.
 const KICK_GLYPH = 'K'
-
-// Default display duration (seconds) for an event based on its tier. Pure
-// helper hoisted to module scope so the fade effect can reference it safely.
-function getTierDuration(tier: EventTier): number {
-  switch (tier) {
-    case 'high':
-      return 30
-    case 'medium':
-      return 15
-    case 'low':
-      return 8
-    default:
-      return 15
-  }
-}
 
 export default function OBSOverlayPage({ params }: { params: Promise<{ id: string }> }) {
   const t = useTranslations()
@@ -251,7 +234,30 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   // Keep a ref so the stream callbacks always see the latest value without
   // maxMessages needing to be a dependency.
   const maxMessagesRef = useRef<number>(50)
+  // Client-side arrival time per message id, feeding the fade timer below.
+  // Keyed by id (not index) so an in-place update or a redelivery cannot
+  // restart a row's clock. The pruning effect keeps it down to the rows on
+  // screen, so it cannot outgrow the feed it shadows.
+  const arrivalTimesRef = useRef<Map<string, number>>(new Map())
+  const noteArrival = useCallback((id: string) => {
+    const times = arrivalTimesRef.current
+    if (times.has(id)) return
+    times.set(id, Date.now())
+  }, [])
 
+  // Whether the last fade-effect run saw fade disabled — the transition back
+  // to enabled re-stamps arrivals (see the fade effect).
+  const fadeDisabledRef = useRef(true)
+  // Drop arrival times for rows that left the feed — faded, moderated, or
+  // evicted by maxMessages — so the map tracks exactly the live rows.
+  useEffect(() => {
+    const times = arrivalTimesRef.current
+    if (times.size === 0) return
+    const live = new Set(messages.map((m) => m.id))
+    for (const id of times.keys()) {
+      if (!live.has(id)) times.delete(id)
+    }
+  }, [messages])
   // Keep filterSettingsRef in sync so the onChat callback always reads the latest value
   useEffect(() => {
     filterSettingsRef.current = filterSettings
@@ -280,48 +286,69 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   // useOverlayStream owns the connection, replay, dedup and enrichment; the
   // overlay applies its own filter → sound → TTS → append+fade policy here.
 
-  const onChat = useCallback((message: ChatMessage) => {
-    if (shouldFilterMessage(message, filterSettingsRef.current)) return
-    // Sound and TTS are independent: both fire for a message that survives the
-    // filter, neither fires for one that does not (D-42).
-    soundPlayerRef.current?.play()
-    ttsPlayerRef.current?.speak(message)
-    // Arrival order for the bubble palette (idempotent per id, so a
-    // double-invoked updater cannot burn a number).
-    setBubbleSlots((prev) => admitBubbleSlot(prev, message.id, maxMessagesRef.current * 2))
-    setMessages((prev) =>
-      // Ignore a redelivery of a message already on screen. The render key is
-      // `message.id`, so a duplicate id would be a duplicate React key (and the
-      // deletion path already assumes ids are unique — it removes every row
-      // matching `target_uuid`). A WebSocket reconnect that replays the tail is
-      // the realistic source.
-      prev.some((m) => m.id === message.id)
-        ? prev
-        : [...prev, message].slice(-maxMessagesRef.current)
-    )
-  }, [])
+  const onChat = useCallback(
+    (message: ChatMessage) => {
+      if (shouldFilterMessage(message, filterSettingsRef.current)) return
+      // Sound and TTS are independent: both fire for a message that survives the
+      // filter, neither fires for one that does not (D-42).
+      soundPlayerRef.current?.play()
+      noteArrival(message.id)
+      ttsPlayerRef.current?.speak(message)
+      // Arrival order for the bubble palette (idempotent per id, so a
+      // double-invoked updater cannot burn a number).
+      setBubbleSlots((prev) => admitBubbleSlot(prev, message.id, maxMessagesRef.current * 2))
+      setMessages((prev) =>
+        // Ignore a redelivery of a message already on screen. The render key is
+        // `message.id`, so a duplicate id would be a duplicate React key (and the
+        // deletion path already assumes ids are unique — it removes every row
+        // matching `target_uuid`). A WebSocket reconnect that replays the tail is
+        // the realistic source.
+        prev.some((m) => m.id === message.id)
+          ? prev
+          : [...prev, message].slice(-maxMessagesRef.current)
+      )
+    },
+    [noteArrival]
+  )
 
-  const onMessageUpdate = useCallback((updatedMessage: ChatMessage) => {
-    setBubbleSlots((prev) => admitBubbleSlot(prev, updatedMessage.id, maxMessagesRef.current * 2))
-    setMessages((prev) => {
-      // Find existing message by aggregation_id (TikTok like aggregates), then
-      // by id — an update that carries a live row's id has to REPLACE that row.
-      // Appending it would put the same id on screen twice, and the render key
-      // is the id (see onChat).
-      const aggregationId = updatedMessage.event?.aggregation_id
-      const index = aggregationId
-        ? prev.findIndex((m) => m.event?.aggregation_id === aggregationId)
-        : prev.findIndex((m) => m.id === updatedMessage.id)
-      if (index === -1) {
-        // Original message already faded away, treat as new
-        return [...prev, updatedMessage].slice(-maxMessagesRef.current)
-      }
-      // Update existing message in place
-      const updated = [...prev]
-      updated[index] = updatedMessage
-      return updated
-    })
-  }, [])
+  const onMessageUpdate = useCallback(
+    (updatedMessage: ChatMessage) => {
+      setBubbleSlots((prev) => admitBubbleSlot(prev, updatedMessage.id, maxMessagesRef.current * 2))
+      noteArrival(updatedMessage.id)
+      setMessages((prev) => {
+        // Find existing message by aggregation_id (TikTok like aggregates), then
+        // by id — an update that carries a live row's id has to REPLACE that row.
+        // Appending it would put the same id on screen twice, and the render key
+        // is the id (see onChat).
+        const aggregationId = updatedMessage.event?.aggregation_id
+        const index = aggregationId
+          ? prev.findIndex((m) => m.event?.aggregation_id === aggregationId)
+          : prev.findIndex((m) => m.id === updatedMessage.id)
+        if (index !== -1) {
+          // An aggregate update replaces the row under a NEW id, so inherit the
+          // replaced row's arrival — the visual row's clock must not restart on
+          // every like-count refresh. The match is only knowable against `prev`
+          // (two updates can land in one batch), which is why this runs here;
+          // it is idempotent under a double-invoked updater: same prev, same
+          // inherited value. An unstamped live row falls back to 0, matching the
+          // expire-don't-linger policy of messageExpiry.
+          arrivalTimesRef.current.set(
+            updatedMessage.id,
+            arrivalTimesRef.current.get(prev[index].id) ?? 0
+          )
+        }
+        if (index === -1) {
+          // Original message already faded away, treat as new
+          return [...prev, updatedMessage].slice(-maxMessagesRef.current)
+        }
+        // Update existing message in place
+        const updated = [...prev]
+        updated[index] = updatedMessage
+        return updated
+      })
+    },
+    [noteArrival]
+  )
 
   const onDeletion = useCallback((deletion: DeletionMetadata) => {
     setMessages((prev) => {
@@ -606,24 +633,41 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }, [messages, feedLayout])
 
-  // Auto-remove old messages based on duration (if fade is enabled)
-  // Events have tier-based durations, chat uses configured duration
+  // Auto-remove messages once their own display duration elapses. Each row's
+  // expiry is anchored to its arrival time (arrivalTimesRef), so a reschedule
+  // on append — which is every incoming message — can never extend an older
+  // row's lifetime: under continuous chat the head row still leaves at its own
+  // deadline instead of being pushed forward forever.
   useEffect(() => {
-    if (messages.length === 0 || disableMessageFade) return
-
-    const firstMessage = messages[0]
-
-    // Determine display duration
-    let duration = messageDuration // Default from settings
-
-    if (firstMessage.event) {
-      // Event: use event-specific duration or tier-based default
-      duration = firstMessage.event.duration || getTierDuration(firstMessage.event.tier)
+    // The 30s config refresh can flip disable_message_fade back on after it
+    // was off for a while; every row's arrival then predates the new expiry
+    // horizon and the first sweep would clear the whole feed at once. Re-stamp
+    // the surviving rows at the toggle so the clock restarts with the feature.
+    if (disableMessageFade) {
+      fadeDisabledRef.current = true
+      return
     }
+    if (fadeDisabledRef.current) {
+      fadeDisabledRef.current = false
+      for (const m of messages) {
+        arrivalTimesRef.current.set(m.id, Date.now())
+      }
+    }
+    if (messages.length === 0) return
+
+    const arrivalTimes = arrivalTimesRef.current
+    const delay = nextFadeDelayMs(messages, arrivalTimes, messageDuration, Date.now())
+    if (delay === null) return
 
     const timer = setTimeout(() => {
-      setMessages((prev) => prev.slice(1))
-    }, duration * 1000)
+      // Sweep, not pop: a throttled background tab fires this once for many
+      // overdue rows, and all of them must leave together. Pure filter — the
+      // arrival-time pruning effect removes the swept ids on the same commit.
+      const now = Date.now()
+      setMessages((prev) =>
+        prev.filter((m) => messageExpiry(m, arrivalTimes.get(m.id), messageDuration) > now)
+      )
+    }, delay)
 
     return () => clearTimeout(timer)
   }, [messages, messageDuration, disableMessageFade])
@@ -825,7 +869,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
             /* The key must be POSITION-INDEPENDENT. It used to be
                `${message.id}-${index}`, and every path that shifts an index —
                `invert_message_order` (a prepend moves every row), the
-               `max_messages` cap, the fade timer's `slice(1)` — changed every
+               `max_messages` cap, the fade sweep's filter — changed every
                key at once, so React unmounted and remounted the whole feed and
                every row replayed its entry animation on every new message.
                `onChat` keeps ids unique, which is what makes the bare id safe. */
@@ -980,7 +1024,6 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                           {message.user?.display_name || message.user?.username}
                         </span>
                       ))}
-
 
                     {/* Phase 9: Pronoun pill - after username */}
                     <PronounPill
