@@ -58,6 +58,7 @@ import { LiveStreamPoller } from './livestream/poller.js';
 import { PrometheusMetrics } from './metrics/prometheus.js';
 import { HeartbeatMonitor } from './reliability/heartbeat-monitor.js';
 import { MessageDeduplicator } from './deduplication/message-deduplicator.js';
+import { connectionCeilingReached, shouldBackOffReconnect } from './reliability/connection-decisions.js';
 
 // Import coordination modules (leadership-based)
 import { SourceManagerClient } from './coordination/client.js';
@@ -97,7 +98,18 @@ if (!DATABASE_PASSWORD) {
 }
 const DATABASE_NAME = process.env.DATABASE_NAME || 'allchat';
 const HTTP_PORT = parseInt(process.env.PORT || '8089');
-const DEMAND_SAFETY_INTERVAL_MS = parseInt(process.env.DEMAND_SAFETY_INTERVAL_MS || '60000'); // 60 seconds
+// 25s, below source-manager's 30s PeerTTL (election/leader.go): each poll both
+// re-registers this pod as a peer and drives rebalancing, so the poll interval
+// must stay under the TTL or this pod's registration expires between polls and
+// the observed peer count never stabilizes (the ADR-0007 gate then never opens).
+// The Go listeners run the same loop at 30s (their syncInterval), which only
+// works because their PeerTTL window has a full interval of slack; 25s gives the
+// same margin without going full-second-fast.
+const DEMAND_SAFETY_INTERVAL_MS = parseInt(process.env.DEMAND_SAFETY_INTERVAL_MS || '25000'); // 25 seconds
+// How long a pod refuses to re-claim a lease it shed in rebalancing. One
+// demand cycle is enough for another pod to take it; matching the poll
+// interval keeps the hold from expiring before the next poll cycle arrives.
+const REBALANCE_HOLD_MS = DEMAND_SAFETY_INTERVAL_MS;
 
 // Coordinator configuration (Phase 6)
 const COORDINATOR_URL = process.env.COORDINATOR_URL || 'http://source-manager:8088';
@@ -336,6 +348,15 @@ class TikTokListenerService {
   // orphan (a live WebSocket + leadership lease with no downstream consumer).
   private demandedUsernames: Set<string> = new Set();
 
+  // Streams this pod just shed in ADR-0007 rebalancing, with the timestamp of
+  // the release. handleDemandUpdate refuses to re-claim these for
+  // REBALANCE_HOLD_MS so a pod does not take back what it just released —
+  // whichever path the demand snapshot arrives on (25s poll or Redis Pub/Sub).
+  // The Go listeners need no such map because they claim from a single sync
+  // loop; this service claims from two, and an overlay connect/disconnect can
+  // republish the demand snapshot seconds after a release.
+  private rebalanceHolds: Map<string, number> = new Map();
+
   // Leadership coordination
   private sourceManagerClient?: SourceManagerClient;
   private leadershipCoordinator?: LeadershipCoordinator;
@@ -393,8 +414,18 @@ class TikTokListenerService {
       { pollIntervalMs: TIKTOK_POLLER_INTERVAL_MS }
     );
 
-    // Set up callback for when poller detects a live stream
+    // Set up callback for when poller detects a live stream. The lease check is
+    // not redundant with handleDemandUpdate's: a poller target survives demand
+    // snapshots this pod does not own (they are claimed by other pods), and
+    // this callback fires from the poller's own 30s cycle — connecting without
+    // holding the lease would open a second live connection to a room another
+    // pod is already serving, against the same Euler concurrent cap.
     this.livePoller.setOnLiveCallback(async (username: string, overlayId: string) => {
+      if (this.leadershipCoordinator && !this.leadershipCoordinator.hasLeadership(username)) {
+        logger.debug('Skipping poller live callback (no leadership lease)', { username, overlay_id: overlayId });
+        this.livePoller.removeTarget(username);
+        return;
+      }
       await this.connectToStream(username, overlayId);
     });
 
@@ -507,7 +538,9 @@ class TikTokListenerService {
       await this.demandSubscriber.subscribe();
       logger.info('Demand subscriber started');
 
-      // Start 60s safety-net poll to restore state after Redis reconnect / missed events
+      // Safety-net poll to restore state after Redis reconnect / missed events.
+      // Also re-registers this pod as a peer (must stay under the 30s peer TTL,
+      // see DEMAND_SAFETY_INTERVAL_MS above).
       this.demandSafetyInterval = setInterval(async () => {
         try {
           await this.pollDemandFallback();
@@ -735,11 +768,19 @@ class TikTokListenerService {
    * Called on every DemandUpdate received via Redis Pub/Sub "source:demand".
    * Full-replacement snapshot: connects new streams, disconnects removed ones.
    * Goes fully idle (stops LiveStreamPoller) when demand is empty.
+   *
+   * A stream on a live rebalanceHold (see rebalanceHolds) is skipped: this
+   * pod shed it in ADR-0007 rebalancing and must not take it back while
+   * another pod has the chance to claim it. The hold is consulted here —
+   * not passed in by the caller — because demand snapshots arrive on two
+   * paths (the 25s poll and Redis Pub/Sub republishes on every overlay
+   * connect/disconnect), and the pod must not re-claim on either.
    */
   private async handleDemandUpdate(demanded: Map<string, DemandSource>): Promise<void> {
     if (this.isShuttingDown) return;
 
     logger.info('Demand update received', { demanded_count: demanded.size });
+    const now = Date.now();
 
     // Record the authoritative demand snapshot first, so any connection attempt
     // already in flight (suspended on its async live-status pre-check) sees the
@@ -769,6 +810,10 @@ class TikTokListenerService {
       if (this.activeStreams.has(username)) {
         await this.disconnectFromStream(username);
       }
+      // Drop any silent-failure streak: a stale streak from a since-removed
+      // overlay would give a re-added channel error backoff after one future
+      // heartbeat timeout.
+      this.heartbeatMonitor.clearSilentFailureStreak(username);
     }
 
     // Go fully idle when there is no demand: stop the poller entirely.
@@ -788,8 +833,20 @@ class TikTokListenerService {
       logger.info('LiveStreamPoller started (demand present)');
     }
 
-    // Claim leadership and connect new demanded streams
+    // Claim leadership and connect new demanded streams. Prune expired
+    // rebalance holds first so the map cannot grow without bound.
+    for (const [username, heldUntil] of this.rebalanceHolds) {
+      if (heldUntil <= now) this.rebalanceHolds.delete(username);
+    }
     for (const [username, source] of demanded.entries()) {
+      // Rebalancing shed this lease recently: skip while the hold is live so
+      // another pod takes it. Re-claiming here would recreate the hoard
+      // rebalancing just shed — this pod is the guaranteed first claimant,
+      // because its release already landed.
+      if (this.rebalanceHolds.has(username)) {
+        logger.debug('Skipping stream (rebalanced away recently)', { username });
+        continue;
+      }
       // Skip if already active, connecting, or waiting in the poller for live status
       if (!this.activeStreams.has(username) && !this.connectingStreams.has(username) && !this.livePoller.isTargetActive(username)) {
         // Try to claim leadership — if another pod holds it, skip
@@ -818,9 +875,10 @@ class TikTokListenerService {
 
   /**
    * Safety-net poll that queries source-manager GET /demand endpoint.
-   * Runs every 60s to restore correct state after Redis reconnect / missed Pub/Sub events.
+   * Restores correct state after Redis reconnect / missed Pub/Sub events.
    * Only runs when coordinator integration is enabled. Also drives ADR-0007 lease
-   * rebalancing (see the rebalance call inside).
+   * rebalancing (see the rebalance call inside) — each poll re-registers this
+   * pod as a peer, so the interval must stay under source-manager's 30s PeerTTL.
    */
   private async pollDemandFallback(): Promise<void> {
     if (this.isShuttingDown) return;
@@ -833,14 +891,30 @@ class TikTokListenerService {
         demanded.set(source.channel_id, source);
       }
 
-      // ADR-0007: shed leases in excess of ceil(total/peers) so a pod that grabbed
-      // every lease at boot cannot hoard the fleet (the 2026-09-14 incident: one
-      // pod held 43 of 48, overran the Euler proxy's concurrent cap, and every
-      // channel on it went deaf). Runs before handleDemandUpdate so released
-      // streams are re-claimed by another pod in the same cycle.
+      // ADR-0007: shed leases in excess of min(ceil(total/peers), ceiling) so a
+      // pod that grabbed every lease at boot cannot hoard the fleet, and cannot
+      // hold more leases than TIKTOK_MAX_STREAMS_PER_POD connections (the
+      // 2026-09-14 incident: one pod held 43 of 48, overran the Euler proxy's
+      // concurrent cap, and every channel on it went deaf). Runs before
+      // handleDemandUpdate, which consults the rebalance holds this sets so
+      // another pod can claim the released streams — without the hold this
+      // pod would re-acquire everything it just shed, from the poll path or
+      // from a Pub/Sub demand republish.
       if (this.leadershipCoordinator) {
-        const released = await this.leadershipCoordinator.rebalance(demanded.size);
+        const released = await this.leadershipCoordinator.rebalance(demanded.size, TIKTOK_MAX_STREAMS_PER_POD);
+        // Set every hold synchronously before any teardown awaits: a Pub/Sub
+        // snapshot can arrive mid-teardown, and a lease released by rebalance()
+        // but not yet held would be re-claimable in that window.
         for (const username of released) {
+          this.rebalanceHolds.set(username, Date.now() + REBALANCE_HOLD_MS);
+        }
+        for (const username of released) {
+          // Drop all local tracking for the released stream, including a
+          // poller target for an offline-but-demanded room: the poller's
+          // onLive callback connects without a lease check, so a surviving
+          // target would reconnect a stream whose lease another pod now holds.
+          // A later demand cycle re-adds it under a fresh lease.
+          this.livePoller.removeTarget(username);
           await this.disconnectFromStream(username);
         }
       }
@@ -850,8 +924,6 @@ class TikTokListenerService {
       logger.error('Demand fallback poll error', { error: String(err) });
     }
   }
-
-
 
   /**
    * Handle migration event from coordinator (Phase 6).
@@ -879,10 +951,15 @@ class TikTokListenerService {
     // Connection ceiling (see TIKTOK_MAX_STREAMS_PER_POD). Checked before the
     // connectingStreams bookkeeping so the early return needs no cleanup, and
     // before the live-status pre-check so a full pod spends no Euler budget on
-    // a stream it cannot connect anyway. The poller re-checks on its own
-    // schedule, so this re-park costs one status check, not a connection.
+    // a stream it cannot connect anyway.
+    //
+    // The lease must be released before re-parking: a leased-but-unconnected
+    // stream is deaf everywhere, because no other pod may claim it (the exact
+    // failure of the 2026-09-14 incident). Rebalancing normally keeps leases
+    // under the same ceiling, so this is the last-resort guard when pods
+    // scale down between cycles.
     const liveConnectionCount = this.activeStreams.size + this.connectingStreams.size;
-    if (liveConnectionCount >= TIKTOK_MAX_STREAMS_PER_POD) {
+    if (connectionCeilingReached(liveConnectionCount, TIKTOK_MAX_STREAMS_PER_POD)) {
       logger.warn('Connection ceiling reached, re-parking stream', {
         username,
         overlay_id: overlayId,
@@ -890,6 +967,9 @@ class TikTokListenerService {
         active: this.activeStreams.size,
         connecting: this.connectingStreams.size,
       });
+      if (this.leadershipCoordinator) {
+        await this.leadershipCoordinator.release(username);
+      }
       this.livePoller.addTarget(username, overlayId);
       return;
     }
@@ -1049,7 +1129,7 @@ class TikTokListenerService {
         // days (2026-09-14 incident), burning the Euler free tier and keeping
         // the proxy wedged. A genuinely-ended stream stays at streak 0 via
         // recordMessage having fired on its last real messages.
-        if (this.heartbeatMonitor.getSilentFailureStreak(username) > 1) {
+        if (shouldBackOffReconnect(this.heartbeatMonitor.getSilentFailureStreak(username))) {
           this.backoffManager.recordConnectionError(
             username,
             new Error(`Silent connection failure x${this.heartbeatMonitor.getSilentFailureStreak(username)}`)
@@ -1058,7 +1138,14 @@ class TikTokListenerService {
           // Stream ended - reset to quick re-check
           this.backoffManager.recordDisconnection(username);
         }
-        this.livePoller.addTarget(username, overlayId);
+        // Only re-park a stream this pod still leads. The disconnect may be the
+        // asynchronous tail of a rebalance/leadership-loss teardown, and a
+        // lease-less poller target is either another pod's job or nobody's —
+        // its onLive callback would skip anyway, but the poller would keep
+        // spending status checks on it forever.
+        if (!this.leadershipCoordinator || this.leadershipCoordinator.hasLeadership(username)) {
+          this.livePoller.addTarget(username, overlayId);
+        }
 
         // Publish reconnecting status so overlay indicators show the retry state
         const backoffState = this.backoffManager.getState(username);
@@ -1075,9 +1162,14 @@ class TikTokListenerService {
       emitter.on('error', (err: Error) => {
         logger.error('TikTok stream error', { username, error: err });
 
-        // Connection error - record for backoff
+        // Connection error - record for backoff. Re-park only if this pod
+        // still leads the stream: an 'error' can fire during the teardown of
+        // a rebalanced or lost stream, and a lease-less poller target only
+        // burns status checks (onLive would skip it anyway).
         this.backoffManager.recordConnectionError(username, err);
-        this.livePoller.addTarget(username, overlayId);
+        if (!this.leadershipCoordinator || this.leadershipCoordinator.hasLeadership(username)) {
+          this.livePoller.addTarget(username, overlayId);
+        }
       });
 
       // Store before connecting
@@ -1125,6 +1217,12 @@ class TikTokListenerService {
       this.livePoller.removeTarget(username);
       this.backoffManager.removeState(username);
       this.statusChecker.clearCache(username);
+      // The heartbeat-forced path does not come through here (it disconnects
+      // directly and reads the streak in the disconnected handler), so clearing
+      // here only affects deliberate teardown — leadership loss, rebalance
+      // release, demand removal — where the stream gets a fresh start
+      // wherever it reconnects next.
+      this.heartbeatMonitor.clearSilentFailureStreak(username);
 
       // Publish offline status so overlay indicators reflect the disconnected state
       this.publishPlatformStatus(username, 'offline');
@@ -1242,7 +1340,10 @@ class TikTokListenerService {
       }
 
       // Delivered (not replay): the connection is provably receiving live
-      // push, so any silent-failure streak for it is healed.
+      // push, so any silent-failure streak for it is healed. CHAT is the only
+      // dedup-gated handler, so it is the only one that needs the call: the
+      // other event types publish unconditionally after recordMessage, which
+      // already prevents the heartbeat timeout that grows a streak.
       this.heartbeatMonitor.noteSilentFailureHealing(username);
 
       // Create raw message in standardized format
@@ -1746,7 +1847,6 @@ class TikTokListenerService {
 
     return usernames.length;
   }
-
 
   async stop(): Promise<void> {
     this.isShuttingDown = true;
