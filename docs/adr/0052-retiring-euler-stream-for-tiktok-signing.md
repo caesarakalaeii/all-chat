@@ -17,6 +17,17 @@ is unchanged because it is a *sign* limit, and every connect still signs through
 Euler; lever 1 reduces free-tier calls but does not raise the concurrent-room
 ceiling.
 
+> **Update 2026-09-15** (incident follow-up): the ceiling bit us in production
+> before the signing work landed. On 2026-09-14 one tiktok-listener pod held 43
+> of ~48 leases and overran the free tier's concurrent *WebSocket proxy* cap
+> (every connection is proxied via `ws-fallback.eulerstream.com` with
+> `ws_direct=0`); above the cap the proxy accepts the handshake and replays the
+> initial fetch, then silently withholds live push. Two mitigations shipped that
+> stay within this ADR's levers: ADR-0007 rebalancing ported to the service's
+> TypeScript coordinator, and a per-pod connection ceiling
+> (`TIKTOK_MAX_STREAMS_PER_POD`, default 20). Neither raises the ceiling; both
+> keep us visibly under it until self-signing retires Euler entirely.
+
 The licence obstacle the issue describes does **not** apply to the version we
 pin (see "Licence"): 2.4.0 is MIT.
 
