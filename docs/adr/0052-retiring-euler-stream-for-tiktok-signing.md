@@ -2,20 +2,27 @@
 
 ## Status
 
-Proposed — steps 3–4 implemented behind flags; step 1 (the signature itself) not
-started, and scoped at two seams rather than one (see "There are two Euler
-signing seams").
+Accepted — step 1 (the signature itself) is implemented as
+`services/tiktok-signer`, a self-hosted sign service that computes X-Bogus with
+TikTok's own web SDK in a headless browser (vendored from the MIT-licensed
+carcabot/tiktok-signature; see its `vendor/PROVENANCE.md`) and X-Gnarly with a
+vendored encoder, then signs *and executes* `/webcast/im/fetch/` exactly as
+Euler's `/webcast/fetch` did. The listener wires it in behind the existing
+flags: `SelfSigner` (`src/sign/self.ts`) is constructed when
+`TIKTOK_SIGNER_URL` is set, connections pin their device presets to the
+signer's browser identity, and under `self` the second seam
+(`fetchWebcastSignatureFromProvider`) is repointed at the service as well.
 
-Step 4 (lever 1) is **verified live**, not merely implemented:
+Step 4 (lever 1) remains **verified live**, not merely implemented:
 `src/sign/euler-free.live.test.ts` resolves room IDs for three accounts and
 answers is-live with `SignConfig.basePath` pointed at a closed port, so Euler
 demonstrably is not on that path. Opt-in via `TIKTOK_LIVE_TESTS=1`.
 
-Neither acceptance criterion of the issue — the connection-rate ceiling and gift
-enrichment — is met yet; both depend on the unstarted signing work. The ceiling
-is unchanged because it is a *sign* limit, and every connect still signs through
-Euler; lever 1 reduces free-tier calls but does not raise the concurrent-room
-ceiling.
+Not yet retired: the default signer mode is still `euler`. Walk
+`shadow` (measure) → `self` (cutover, Euler fallback on) →
+`TIKTOK_SELF_SIGN_FALLBACK=false` (retire) per the listener README. The
+connection-rate ceiling and gift enrichment acceptance criteria land with
+that rollout, not with the code.
 
 > **Update 2026-09-15** (incident follow-up): the ceiling bit us in production
 > before the signing work landed. On 2026-09-14 one tiktok-listener pod held 43

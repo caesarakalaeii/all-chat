@@ -42,6 +42,7 @@ jobs:
       youtube-quota-monitor: ${{ steps.changes.outputs.youtube-quota-monitor }}
       kick-listener: ${{ steps.changes.outputs.kick-listener }}
       tiktok-listener: ${{ steps.changes.outputs.tiktok-listener }}
+      tiktok-signer: ${{ steps.changes.outputs.tiktok-signer }}
       message-processor: ${{ steps.changes.outputs.message-processor }}
       source-manager: ${{ steps.changes.outputs.source-manager }}
       token-refresh-service: ${{ steps.changes.outputs.token-refresh-service }}
@@ -97,6 +98,8 @@ jobs:
               - 'shared/**'
             tiktok-listener:
               - 'services/tiktok-listener/**'
+            tiktok-signer:
+              - 'services/tiktok-signer/**'
             message-processor:
               - 'services/message-processor/**'
               - 'shared/**'
@@ -190,6 +193,9 @@ jobs:
           - name: tiktok-listener
             changed: ${{ needs.detect-changes.outputs.tiktok-listener }}
             path: services/tiktok-listener
+          - name: tiktok-signer
+            changed: ${{ needs.detect-changes.outputs.tiktok-signer }}
+            path: services/tiktok-signer
           - name: message-processor
             changed: ${{ needs.detect-changes.outputs.message-processor }}
             path: services/message-processor
@@ -352,6 +358,36 @@ jobs:
       - name: Run tests for support-bot
         run: |
           cd services/support-bot
+          npm ci
+          npm test
+
+  # TikTok Node suites (tiktok-listener, tiktok-signer). Separate job rather
+  # than a test-node matrix: test-node is a required branch-protection context
+  # and a matrix would rename it to `test-node (<service>)`, leaving the bare
+  # check forever pending (same trap the Go test matrix comment above avoids).
+  test-tiktok-node:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: github.event_name == 'pull_request' && needs.detect-changes.outputs.code == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - tiktok-listener
+          - tiktok-signer
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: services/${{ matrix.service }}/package-lock.json
+
+      - name: Run tests for ${{ matrix.service }}
+        run: |
+          cd services/${{ matrix.service }}
           npm ci
           npm test
 
