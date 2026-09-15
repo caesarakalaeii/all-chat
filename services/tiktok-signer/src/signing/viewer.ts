@@ -162,17 +162,29 @@ export class ViewerPool {
     // Reuse a warm tab when we have one for this room's streamer.
     const existing = this.tabs.get(username);
     const page: Page = existing
-      ? existing.page
-      : await browser.newPage().then(async (p) => {
-        await p.setUserAgent(VIEWER_UA);
-        if (this.options.proxyUser && this.options.proxyPass) {
-          await p.authenticate({
-            username: this.options.proxyUser,
-            password: this.options.proxyPass
-          });
-        }
-        return p;
-      });
+       ? existing.page
+       : await browser.newPage().then(async (p) => {
+         await p.setUserAgent(VIEWER_UA);
+        // The tab must not stream the video: with a residential proxy wired
+        // (the answer to TikTok's datacenter-IP gating), media would be 99%
+        // of the proxy's bill. The player initializes and fetches chat data
+        // the same without the stream itself.
+        await p.setRequestInterception(true);
+        p.on('request', (request) => {
+          if (['media', 'font'].includes(request.resourceType())) {
+            void request.abort().catch(() => undefined);
+            return;
+          }
+          void request.continue().catch(() => undefined);
+        });
+         if (this.options.proxyUser && this.options.proxyPass) {
+           await p.authenticate({
+             username: this.options.proxyUser,
+             password: this.options.proxyPass
+           });
+         }
+         return p;
+       });
 
     const firstCapture = !existing;
     return await new Promise<RoomCapture>((resolve, reject) => {
