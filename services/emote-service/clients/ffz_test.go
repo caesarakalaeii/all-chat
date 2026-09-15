@@ -136,6 +136,22 @@ func TestFFZClient_FetchEmotes(t *testing.T) {
 			errContains:      "failed to fetch global emotes",
 		},
 		{
+			name:              "room with no emotes returns global set",
+			channel:           "emptyaccount",
+			channelStatusCode: http.StatusOK,
+			channelResponse: `{
+				"room": {
+					"id": "777",
+					"display_name": "emptyaccount"
+				},
+				"sets": {}
+			}`,
+			globalStatusCode: http.StatusOK,
+			globalResponse:   ffzGlobalResponse,
+			wantEmoteCount:   2,
+			wantGlobalEmotes: []string{"BeanieHipster", "CoolCat"},
+		},
+		{
 			name:             "global channel returns only globals",
 			channel:          "global",
 			globalStatusCode: http.StatusOK,

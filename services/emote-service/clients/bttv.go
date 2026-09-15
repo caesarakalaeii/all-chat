@@ -87,34 +87,9 @@ func (c *BTTVClient) FetchEmotes(ctx context.Context, channel string) ([]models.
 	}
 
 	globalEmotes, gErr := c.fetchGlobalEmotes(ctx, channel)
-	if gErr != nil {
-		// Global emotes are a bonus, not a requirement — failing to fetch them
-		// must not lose channel emotes. But with nothing else to return, the
-		// fetch either missed (ErrNotFound) or returned no emotes (an existing
-		// BTTV user with empty channel and shared lists), so propagate the real
-		// error instead of caching an empty result.
-		if len(channelEmotes) == 0 {
-			return nil, gErr
-		}
-		c.logger.Warn("Failed to fetch BTTV global emotes, returning channel emotes only",
-			zap.String("channel", channel),
-			zap.Error(gErr))
-		return channelEmotes, nil
-	}
 
-	if errors.Is(chErr, ErrNotFound) {
-		return globalEmotes, nil
-	}
-
-	merged := mergeEmoteSets(globalEmotes, channelEmotes)
-
-	c.logger.Debug("Fetched BTTV emotes",
-		zap.String("channel", channel),
-		zap.Int("channel_emotes", len(channelEmotes)),
-		zap.Int("global_emotes", len(globalEmotes)),
-		zap.Int("total", len(merged)))
-
-	return merged, nil
+	return mergeChannelWithGlobals(c.logger, "bttv", channel,
+		channelEmotes, chErr, globalEmotes, gErr)
 }
 
 // fetchChannelEmotes fetches a channel's own (channel + shared) BTTV emotes.

@@ -41,18 +41,23 @@ type FFZClient struct {
 	logger     *zap.Logger
 }
 
-// FFZResponse represents the FFZ API response for a room lookup
+// FFZEmoticon is one emote entry within an FFZ set. URLs are keyed by scale
+// ("1", "2", "4").
+type FFZEmoticon struct {
+	ID   int               `json:"id"`
+	Name string            `json:"name"`
+	URLs map[string]string `json:"urls"`
+}
+
+// FFZResponse represents the FFZ API response for a room or set lookup. The
+// room lookup fills Room; the global-set endpoint returns only Sets.
 type FFZResponse struct {
 	Room struct {
 		ID          string `json:"id"`
 		DisplayName string `json:"display_name"`
 	} `json:"room"`
 	Sets map[string]struct {
-		Emoticons []struct {
-			ID   int               `json:"id"`
-			Name string            `json:"name"`
-			URLs map[string]string `json:"urls"`
-		} `json:"emoticons"`
+		Emoticons []FFZEmoticon `json:"emoticons"`
 	} `json:"sets"`
 }
 
@@ -87,34 +92,9 @@ func (c *FFZClient) FetchEmotes(ctx context.Context, channel string) ([]models.E
 	}
 
 	globalEmotes, gErr := c.fetchGlobalEmotes(ctx, channel)
-	if gErr != nil {
-		// Global emotes are a bonus, not a requirement — failing to fetch them
-		// must not lose channel emotes. But with nothing else to return, the
-		// fetch either missed (ErrNotFound) or returned no emotes (a room with
-		// only emotes lacking a 1x URL), so propagate the real error instead
-		// of caching an empty result.
-		if len(channelEmotes) == 0 {
-			return nil, gErr
-		}
-		c.logger.Warn("Failed to fetch FFZ global emotes, returning channel emotes only",
-			zap.String("channel", channel),
-			zap.Error(gErr))
-		return channelEmotes, nil
-	}
 
-	if errors.Is(chErr, ErrNotFound) {
-		return globalEmotes, nil
-	}
-
-	merged := mergeEmoteSets(globalEmotes, channelEmotes)
-
-	c.logger.Debug("Fetched FFZ emotes",
-		zap.String("channel", channel),
-		zap.Int("channel_emotes", len(channelEmotes)),
-		zap.Int("global_emotes", len(globalEmotes)),
-		zap.Int("total", len(merged)))
-
-	return merged, nil
+	return mergeChannelWithGlobals(c.logger, "ffz", channel,
+		channelEmotes, chErr, globalEmotes, gErr)
 }
 
 // fetchRoomEmotes fetches a channel's room emote sets from FFZ.
@@ -154,15 +134,19 @@ func (c *FFZClient) fetchRoomEmotes(ctx context.Context, channel string) ([]mode
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	// FFZ has multiple "sets" of emotes per channel
-	emotes := make([]models.Emote, 0)
+	return ffzSetsEmotes(apiResp.Sets, channel), nil
+}
 
-	for _, set := range apiResp.Sets {
+// ffzSetsEmotes flattens FFZ sets into emotes, skipping entries without a
+// 1x URL.
+func ffzSetsEmotes(sets map[string]struct {
+	Emoticons []FFZEmoticon `json:"emoticons"`
+}, channel string) []models.Emote {
+	emotes := make([]models.Emote, 0)
+	for _, set := range sets {
 		for _, e := range set.Emoticons {
-			// Get 1x size URL
 			url, ok := e.URLs["1"]
 			if !ok {
-				// Skip emotes without 1x URL
 				continue
 			}
 
@@ -174,8 +158,7 @@ func (c *FFZClient) fetchRoomEmotes(ctx context.Context, channel string) ([]mode
 			})
 		}
 	}
-
-	return emotes, nil
+	return emotes
 }
 
 // fetchGlobalEmotes fetches FFZ's global emote set. channel is only used to
@@ -206,37 +189,12 @@ func (c *FFZClient) fetchGlobalEmotes(ctx context.Context, channel string) ([]mo
 		return nil, fmt.Errorf("failed to fetch global emotes: status code %d", resp.StatusCode)
 	}
 
-	var apiResp struct {
-		Sets map[string]struct {
-			Emoticons []struct {
-				ID   int               `json:"id"`
-				Name string            `json:"name"`
-				URLs map[string]string `json:"urls"`
-			} `json:"emoticons"`
-		} `json:"sets"`
-	}
+	var apiResp FFZResponse
 	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	emotes := make([]models.Emote, 0)
-	for _, set := range apiResp.Sets {
-		for _, e := range set.Emoticons {
-			// Get 1x size URL
-			url, ok := e.URLs["1"]
-			if !ok {
-				continue
-			}
-
-			emotes = append(emotes, models.Emote{
-				Code:     e.Name,
-				URL:      url,
-				Provider: "ffz",
-				Channel:  channel,
-			})
-		}
-	}
-
+	emotes := ffzSetsEmotes(apiResp.Sets, channel)
 	c.logger.Debug("Fetched FFZ global emotes",
 		zap.Int("count", len(emotes)))
 

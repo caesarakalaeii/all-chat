@@ -266,10 +266,10 @@ func (h *EmoteHandler) GetProviderEmotes(c *gin.Context) {
 }
 
 // recordAPIResult increments the provider API-call counter, distinguishing a benign
-// "not_found" miss (the channel simply has no emotes on this provider — the norm for
-// BTTV/FFZ and unset 7TV channels) and a throttled "rate_limited" call from a real
-// "error" (5xx/timeout/network). Conflating them inflated the error rate and made a
-// healthy service look like it was failing.
+// "not_found" miss (a nonexistent Twitch channel — BTTV/FFZ/7TV fall back to their
+// global sets and no longer surface ErrNotFound) and a throttled "rate_limited"
+// call from a real "error" (5xx/timeout/network). Conflating them inflated the
+// error rate and made a healthy service look like it was failing.
 func (h *EmoteHandler) recordAPIResult(provider string, err error) {
 	if h.apiCalls == nil {
 		return

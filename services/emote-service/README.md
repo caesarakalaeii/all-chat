@@ -204,10 +204,10 @@ Message displayed with all emote images rendered
 `result` label distinguishes three outcomes — do **not** read `not_found` as a failure:
 
 - `success` — emotes returned.
-- `not_found` — the provider has no emotes for this channel (HTTP 404). This is the **normal**
-  case for most channels on BTTV/FFZ and for channels without a 7TV set, so a high `not_found`
-  rate is expected and benign. It scales with lookup volume (unique channels/users), not with
-  provider health.
+- `not_found` — a nonexistent Twitch channel (the Twitch user lookup is the one
+  path that still surfaces a 404; BTTV/FFZ/7TV fall back to their global sets).
+  A high `not_found` rate is expected and benign. It scales with lookup volume
+  (unique channels/users), not with provider health.
 - `error` — a real failure (5xx, timeout, network). This is the only label worth alerting on.
 
 (Before this split, 404s were counted as `error`, which made a healthy service look like it was
