@@ -67,8 +67,8 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY LICENSE ./LICENSE
 
 # Create non-root user with a writable home for the browser profile
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001 && \
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 --ingroup nodejs --home /home/signer nodejs && \
     mkdir -p /home/signer/.chrome-profile && \
     chown -R nodejs:nodejs /app /home/signer
 
