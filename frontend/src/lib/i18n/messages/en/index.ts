@@ -48,6 +48,7 @@ import { moderation } from './moderation'
 import { onboarding } from './onboarding'
 import { overlayEditor } from './overlayEditor'
 import { settings } from './settings'
+import { translate } from './translate'
 import { viewerOverlay } from './viewerOverlay'
 
 export const enMessages = {
@@ -66,7 +67,9 @@ export const enMessages = {
   onboarding,
   overlayEditor,
   settings,
+  translate,
   viewerOverlay,
 } as const
+
 
 export type EnMessages = typeof enMessages
