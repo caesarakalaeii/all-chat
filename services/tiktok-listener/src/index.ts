@@ -106,6 +106,10 @@ const HTTP_PORT = parseInt(process.env.PORT || '8089');
 // works because their PeerTTL window has a full interval of slack; 25s gives the
 // same margin without going full-second-fast.
 const DEMAND_SAFETY_INTERVAL_MS = parseInt(process.env.DEMAND_SAFETY_INTERVAL_MS || '25000'); // 25 seconds
+// How long a pod refuses to re-claim a lease it shed in rebalancing. One
+// demand cycle is enough for another pod to take it; matching the poll
+// interval keeps the hold from expiring before the next poll cycle arrives.
+const REBALANCE_HOLD_MS = DEMAND_SAFETY_INTERVAL_MS;
 
 // Coordinator configuration (Phase 6)
 const COORDINATOR_URL = process.env.COORDINATOR_URL || 'http://source-manager:8088';
@@ -343,6 +347,15 @@ class TikTokListenerService {
   // so a stream that loses demand mid-connection bails out instead of becoming an
   // orphan (a live WebSocket + leadership lease with no downstream consumer).
   private demandedUsernames: Set<string> = new Set();
+
+  // Streams this pod just shed in ADR-0007 rebalancing, with the timestamp of
+  // the release. handleDemandUpdate refuses to re-claim these for
+  // REBALANCE_HOLD_MS so a pod does not take back what it just released —
+  // whichever path the demand snapshot arrives on (25s poll or Redis Pub/Sub).
+  // The Go listeners need no such map because they claim from a single sync
+  // loop; this service claims from two, and an overlay connect/disconnect can
+  // republish the demand snapshot seconds after a release.
+  private rebalanceHolds: Map<string, number> = new Map();
 
   // Leadership coordination
   private sourceManagerClient?: SourceManagerClient;
@@ -756,18 +769,18 @@ class TikTokListenerService {
    * Full-replacement snapshot: connects new streams, disconnects removed ones.
    * Goes fully idle (stops LiveStreamPoller) when demand is empty.
    *
-   * rebalancedOut lists streams this pod just shed in ADR-0007 rebalancing; they
-   * are skipped for this cycle so the pod does not immediately re-claim what it
-   * released. Every Go caller guards its sync loop the same way
-   * (e.g. kick-listener channels/manager.go rebalancedOut).
+   * A stream on a live rebalanceHold (see rebalanceHolds) is skipped: this
+   * pod shed it in ADR-0007 rebalancing and must not take it back while
+   * another pod has the chance to claim it. The hold is consulted here —
+   * not passed in by the caller — because demand snapshots arrive on two
+   * paths (the 25s poll and Redis Pub/Sub republishes on every overlay
+   * connect/disconnect), and the pod must not re-claim on either.
    */
-  private async handleDemandUpdate(
-    demanded: Map<string, DemandSource>,
-    rebalancedOut: Set<string> = new Set(),
-  ): Promise<void> {
+  private async handleDemandUpdate(demanded: Map<string, DemandSource>): Promise<void> {
     if (this.isShuttingDown) return;
 
     logger.info('Demand update received', { demanded_count: demanded.size });
+    const now = Date.now();
 
     // Record the authoritative demand snapshot first, so any connection attempt
     // already in flight (suspended on its async live-status pre-check) sees the
@@ -820,14 +833,18 @@ class TikTokListenerService {
       logger.info('LiveStreamPoller started (demand present)');
     }
 
-    // Claim leadership and connect new demanded streams
+    // Claim leadership and connect new demanded streams. Prune expired
+    // rebalance holds first so the map cannot grow without bound.
+    for (const [username, heldUntil] of this.rebalanceHolds) {
+      if (heldUntil <= now) this.rebalanceHolds.delete(username);
+    }
     for (const [username, source] of demanded.entries()) {
-      // Rebalancing shed this lease moments ago: skip for this cycle so
+      // Rebalancing shed this lease recently: skip while the hold is live so
       // another pod takes it. Re-claiming here would recreate the hoard
       // rebalancing just shed — this pod is the guaranteed first claimant,
       // because its release already landed.
-      if (rebalancedOut.has(username)) {
-        logger.debug('Skipping stream (rebalanced away this cycle)', { username });
+      if (this.rebalanceHolds.has(username)) {
+        logger.debug('Skipping stream (rebalanced away recently)', { username });
         continue;
       }
       // Skip if already active, connecting, or waiting in the poller for live status
@@ -879,14 +896,19 @@ class TikTokListenerService {
       // hold more leases than TIKTOK_MAX_STREAMS_PER_POD connections (the
       // 2026-09-14 incident: one pod held 43 of 48, overran the Euler proxy's
       // concurrent cap, and every channel on it went deaf). Runs before
-      // handleDemandUpdate, which skips the released streams for this cycle so
-      // another pod can claim them — without that exclusion this pod would
-      // re-acquire everything it just shed.
-      const rebalancedOut = new Set<string>();
+      // handleDemandUpdate, which consults the rebalance holds this sets so
+      // another pod can claim the released streams — without the hold this
+      // pod would re-acquire everything it just shed, from the poll path or
+      // from a Pub/Sub demand republish.
       if (this.leadershipCoordinator) {
         const released = await this.leadershipCoordinator.rebalance(demanded.size, TIKTOK_MAX_STREAMS_PER_POD);
+        // Set every hold synchronously before any teardown awaits: a Pub/Sub
+        // snapshot can arrive mid-teardown, and a lease released by rebalance()
+        // but not yet held would be re-claimable in that window.
         for (const username of released) {
-          rebalancedOut.add(username);
+          this.rebalanceHolds.set(username, Date.now() + REBALANCE_HOLD_MS);
+        }
+        for (const username of released) {
           // Drop all local tracking for the released stream, including a
           // poller target for an offline-but-demanded room: the poller's
           // onLive callback connects without a lease check, so a surviving
@@ -897,13 +919,11 @@ class TikTokListenerService {
         }
       }
 
-      await this.handleDemandUpdate(demanded, rebalancedOut);
+      await this.handleDemandUpdate(demanded);
     } catch (err) {
       logger.error('Demand fallback poll error', { error: String(err) });
     }
   }
-
-
 
   /**
    * Handle migration event from coordinator (Phase 6).
@@ -1142,9 +1162,14 @@ class TikTokListenerService {
       emitter.on('error', (err: Error) => {
         logger.error('TikTok stream error', { username, error: err });
 
-        // Connection error - record for backoff
+        // Connection error - record for backoff. Re-park only if this pod
+        // still leads the stream: an 'error' can fire during the teardown of
+        // a rebalanced or lost stream, and a lease-less poller target only
+        // burns status checks (onLive would skip it anyway).
         this.backoffManager.recordConnectionError(username, err);
-        this.livePoller.addTarget(username, overlayId);
+        if (!this.leadershipCoordinator || this.leadershipCoordinator.hasLeadership(username)) {
+          this.livePoller.addTarget(username, overlayId);
+        }
       });
 
       // Store before connecting
@@ -1822,7 +1847,6 @@ class TikTokListenerService {
 
     return usernames.length;
   }
-
 
   async stop(): Promise<void> {
     this.isShuttingDown = true;
