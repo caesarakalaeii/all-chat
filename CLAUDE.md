@@ -108,6 +108,7 @@ Each service has a detailed README:
 - [youtube-quota-monitor](./services/youtube-quota-monitor/README.md) - Reads the shared YouTube quota table; exports the quota metric + publishes `quota:alerts` for the discord-bot (ADR-0023)
 - [kick-listener](./services/kick-listener/README.md) - Pusher WebSocket client
 - [tiktok-listener](./services/tiktok-listener/README.md) - Unofficial TikTok Live library
+- [tiktok-signer](./services/tiktok-signer/README.md) - Self-hosted TikTok webcast signing (X-Bogus/X-Gnarly via TikTok's own SDK in a headless browser; replaces Euler Stream, ADR-0052)
 - discord-listener — Discord channel chat relay (`services/discord-listener/`, no README yet)
 - [message-processor](./services/message-processor/README.md) - Normalization, emote enrichment
 - [overlay-manager](./services/overlay-manager/README.md) - Overlay CRUD, source configuration

@@ -43,9 +43,11 @@ import {
   RouteConfig,
   SignConfig,
   TikTokLiveConnection,
-  WebcastEvent
+  WebcastEvent,
+  userAgentToDevicePreset
 } from 'tiktok-live-connector';
 import { createClient, RedisClientType } from 'redis';
+import { request } from 'undici';
 import { Pool } from 'pg';
 import { randomUUID } from 'crypto';
 import http from 'http';
@@ -71,6 +73,7 @@ import { DemandSubscriber, DemandSource } from './demand/subscriber.js';
 import { loadSignConfiguration } from './sign/config.js';
 import { installSignConfiguration } from './sign/installer.js';
 import { EulerSigner } from './sign/euler.js';
+import { SelfSigner } from './sign/self.js';
 import { pickAvatarUrl, tiktokAvatarUrl } from './avatar.js';
 import {
   hasTikTokChestPayload,
@@ -148,6 +151,21 @@ const TIKTOK_DEDUP_MAX_CACHE_SIZE = parseInt(process.env.TIKTOK_DEDUP_MAX_CACHE_
 // Euler Stream retirement configuration (issue #698). Read once at module load so every
 // connection site agrees on it.
 const SIGN_CONFIG = loadSignConfiguration();
+
+// Bearer token for the tiktok-signer service, when it runs with auth enabled.
+const TIKTOK_SIGNER_AUTH_TOKEN = (process.env.TIKTOK_SIGNER_AUTH_TOKEN || '').trim();
+
+type ClientPresets = {
+  device: {
+    user_agent: string;
+    browser_name: string;
+    browser_version: string;
+    browser_platform: string;
+    os: string;
+  };
+  screen: { screen_width: number; screen_height: number };
+  location: { lang: string; lang_country: string; country: string; tz_name: string };
+};
 
 // Import logger interface
 import { Logger } from './types/logger.js';
@@ -361,6 +379,12 @@ class TikTokListenerService {
   private sourceManagerClient?: SourceManagerClient;
   private leadershipCoordinator?: LeadershipCoordinator;
 
+  // Signer identity (user agent + fingerprint the signer's signatures are bound
+  // to), fetched once from the signer service when self signing is configured.
+  // Connections pin their device presets to it so the /im/fetch/ identity, the
+  // signature and the WebSocket handshake all describe the same browser.
+  private signerPresets?: ClientPresets;
+
   // Demand subscriber (Phase 5)
   private demandSubscriber: DemandSubscriber | null = null;
   private demandSafetyInterval: ReturnType<typeof setInterval> | null = null;
@@ -448,10 +472,19 @@ class TikTokListenerService {
         signConfig: SignConfig
       },
       SIGN_CONFIG,
-      // No self signer yet: the webcast signature spike (step 1 of #698's sequence) has not
-      // landed. Until it does, `shadow` and `self` degrade to Euler with a warning rather than
-      // failing to start, so the flag can be set ahead of the implementation.
-      { euler: new EulerSigner(RouteConfig.fetchSignedWebSocketFromProvider as never) },
+      // The self signer exists now (services/tiktok-signer, ADR-0052 step 1):
+      // construct it whenever a signer URL is configured. Without the URL,
+      // shadow and self still degrade to Euler with a warning rather than
+      // failing to start.
+      {
+        euler: new EulerSigner(RouteConfig.fetchSignedWebSocketFromProvider as never),
+        self: SIGN_CONFIG.signerBaseUrl
+          ? new SelfSigner({
+              baseUrl: SIGN_CONFIG.signerBaseUrl,
+              authToken: TIKTOK_SIGNER_AUTH_TOKEN || undefined
+            })
+          : undefined
+      },
       this.metrics,
       logger
     );
@@ -514,6 +547,24 @@ class TikTokListenerService {
         logger.warn('Leadership coordination disabled (SERVICE_JWT_SECRET not set)');
       }
 
+      // When signing for ourselves, fetch the signer's browser identity once so
+      // connections can pin their presets to it (see connectToStream). Failure
+      // is not fatal: shadow mode does not need it, and self mode surfaces the
+      // problem per-connection with a classified signature failure.
+      if (SIGN_CONFIG.signerBaseUrl) {
+        try {
+          this.signerPresets = await this.fetchSignerPresets(SIGN_CONFIG.signerBaseUrl);
+          logger.info('Pinned connector presets to signer identity', {
+            signer_url: SIGN_CONFIG.signerBaseUrl,
+            user_agent: this.signerPresets.device.user_agent
+          });
+        } catch (error) {
+          logger.warn('Could not fetch signer identity; connections will use random presets', {
+            signer_url: SIGN_CONFIG.signerBaseUrl,
+            error: (error as Error).message
+          });
+        }
+      }
       // Wire Redis client to livePoller for lifecycle event publishing (EXPIRY-06)
       this.livePoller.setRedisClient(this.redis);
 
@@ -559,6 +610,36 @@ class TikTokListenerService {
       logger.error('Failed to start service', { error });
       throw error;
     }
+  }
+
+  /**
+   * Fetch the signer service's browser identity (GET /v1/identity) and turn it
+   * into connector clientPresets. The signer's signatures are computed inside a
+   * browser with this exact user agent and fingerprint; if the connector's
+   * presets disagreed, TikTok would see a fetch from one browser and a
+   * WebSocket handshake from another.
+   */
+  private async fetchSignerPresets(baseUrl: string): Promise<ClientPresets> {
+    const response = await request(`${baseUrl.replace(/\/+$/, '')}/v1/identity`, {
+      headers: TIKTOK_SIGNER_AUTH_TOKEN
+        ? { Authorization: `Bearer ${TIKTOK_SIGNER_AUTH_TOKEN}` }
+        : undefined
+    });
+    if (response.statusCode !== 200) {
+      throw new Error(`signer identity endpoint returned ${response.statusCode}`);
+    }
+    const identity = JSON.parse(await response.body.text()) as {
+      userAgent: string;
+      browserPlatform: string;
+      os: string;
+      screenWidth: number;
+      screenHeight: number;
+    };
+    return {
+      device: userAgentToDevicePreset(identity.userAgent),
+      screen: { screen_width: identity.screenWidth, screen_height: identity.screenHeight },
+      location: { lang: 'en', lang_country: 'en-US', country: 'US', tz_name: 'UTC' }
+    };
   }
 
   /**
@@ -1028,6 +1109,11 @@ class TikTokListenerService {
 
       const connection = new TikTokLiveConnection(username, {
         processInitialData: false, // Don't process historical messages
+        // Pin the connection's device/screen presets to the signer's browser
+        // identity when we sign for ourselves, so every request TikTok sees
+        // from this connection describes the same browser as the signature.
+        // Undefined keeps the connector's randomized defaults (Euler path).
+        clientPresets: this.signerPresets,
         // Gift enrichment fetches the room's gift list. The library already asks TikTok directly
         // for it (`fetchRoomGiftsRoute` -> `webcast/gift/list/`), but that request is signed, and
         // signing an HTTP URL goes through Euler's `fetchWebcastSignatureFromProvider` — which is
