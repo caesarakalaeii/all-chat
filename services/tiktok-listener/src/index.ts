@@ -155,6 +155,26 @@ const SIGN_CONFIG = loadSignConfiguration();
 // Bearer token for the tiktok-signer service, when it runs with auth enabled.
 const TIKTOK_SIGNER_AUTH_TOKEN = (process.env.TIKTOK_SIGNER_AUTH_TOKEN || '').trim();
 
+/**
+ * Tag the connection's internal web client with the streamer handle. The
+ * connector's sign route bag passes the web client (not the connection), so
+ * this is the channel the route handler reads the handle from: viewer-mode
+ * signers navigate to the room's live page by handle, not by room ID.
+ * Per-connection state, safe under concurrent connects.
+ */
+function setConnectionUniqueId(connection: unknown, username: string): void {
+  if (
+    typeof connection === 'object' &&
+    connection !== null &&
+    '_webClient' in connection &&
+    typeof connection._webClient === 'object' &&
+    connection._webClient !== null
+  ) {
+    const webClient: { uniqueId?: string } = connection._webClient;
+    webClient.uniqueId = username;
+  }
+}
+
 type ClientPresets = {
   device: {
     user_agent: string;
@@ -1122,6 +1142,11 @@ class TikTokListenerService {
         // See ADR-0052, "There are two Euler signing seams".
         enableExtendedGiftInfo: SIGN_CONFIG.enableExtendedGiftInfo
       });
+
+      // The sign route bag carries the web client, not the connection, so the
+      // streamer handle rides on the web client for the route handler to read
+      // (viewer-mode signers open the room's live page by handle, not room ID).
+      setConnectionUniqueId(connection, username);
 
       // Set up event handlers
       connection.on(WebcastEvent.CHAT, (data) => {
