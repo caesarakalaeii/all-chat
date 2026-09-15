@@ -80,28 +80,42 @@ export class ViewerPool {
      * disappeared are closed — their pinned rooms recapture on surviving lanes —
      * and new proxies get fresh lanes. Surviving lanes keep their browsers,
      * profiles and pinned rooms untouched.
+     *
+     * The credentials arrive with the list (webshare shape: shared user/pass):
+     * a pool constructed from the static-list fallback may have none at all,
+     * and pages must not authenticate with stale empty values.
+     *
+     * A pool that started direct (no static list) drops its direct lane once
+     * real proxies arrive: a direct lane next to residential ones would eat
+     * every Nth capture with TikTok's datacenter-IP refusal.
      */
-    async refreshProxies(hosts) {
+    async refreshProxies(hosts, credentials) {
+        if (credentials) {
+            this.options.proxyUser = credentials.username;
+            this.options.proxyPass = credentials.password;
+        }
         const wanted = new Set(hosts);
         for (const [host, lane] of [...this.lanes]) {
-            if (host !== '' && !wanted.has(host)) {
-                this.lanes.delete(host);
-                this.laneOrder = [...this.lanes.keys()];
-                try {
-                    await lane.browser?.close();
-                }
-                catch {
-                    // Closing an already-dead browser is not an error.
-                }
-                lane.active.clear();
-                for (const [username, laneHost] of [...this.roomLane]) {
-                    if (laneHost === host) {
-                        this.roomLane.delete(username);
-                        const tab = this.tabs.get(username);
-                        if (tab) {
-                            this.tabs.delete(username);
-                            void tab.page.close().catch(() => undefined);
-                        }
+            const gone = host !== '' && !wanted.has(host);
+            const dropDirect = host === '' && hosts.length > 0;
+            if (!gone && !dropDirect)
+                continue;
+            this.lanes.delete(host);
+            this.laneOrder = [...this.lanes.keys()];
+            try {
+                await lane.browser?.close();
+            }
+            catch {
+                // Closing an already-dead browser is not an error.
+            }
+            lane.active.clear();
+            for (const [username, laneHost] of [...this.roomLane]) {
+                if (laneHost === host) {
+                    this.roomLane.delete(username);
+                    const tab = this.tabs.get(username);
+                    if (tab) {
+                        this.tabs.delete(username);
+                        void tab.page.close().catch(() => undefined);
                     }
                 }
             }
