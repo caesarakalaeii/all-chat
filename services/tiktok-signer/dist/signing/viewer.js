@@ -33,23 +33,73 @@ puppeteer.use(StealthPlugin());
  * signature (X-Bogus/X-Gnarly) can substitute for, so the signer *is* the
  * viewer.
  *
+ * With a proxy list configured, each proxy gets its own browser (own profile
+ * directory, own session identity) and rooms are pinned to the lane they
+ * first captured on — the profile keeps its TikTok cookies, which is part of
+ * the session-grade identity that passes the gate. A failed capture benches
+ * the lane for a cooldown and the next attempt rides another one.
+ *
  * Tabs stay open after a capture: the page keeps receiving live push (which
  * keeps the session warm on TikTok's side) and the next capture for the same
  * room reuses its warmed session identity instead of bootstrapping a new one.
  */
 export class ViewerPool {
-    browser = null;
+    lanes = [];
     tabs = new Map();
-    launching = null;
+    /** username -> lane index, so a room keeps its browser identity. */
+    roomLane = new Map();
+    roundRobin = 0;
     options;
     constructor(options = {}) {
-        this.options = { tabIdleMs: 5 * 60_000, ...options };
+        this.options = {
+            tabIdleMs: 5 * 60_000,
+            proxyCooldownMs: 10 * 60_000,
+            ...options
+        };
+        const hosts = options.proxyHosts ?? [];
+        if (hosts.length === 0) {
+            this.lanes.push(this.newLane(0));
+        }
+        else {
+            hosts.forEach((_, i) => this.lanes.push(this.newLane(i)));
+        }
     }
-    async ensureBrowser() {
-        if (this.browser)
-            return this.browser;
-        if (this.launching)
-            return this.launching;
+    newLane(index) {
+        return { index, browser: null, launching: null, active: new Set(), benchedUntil: 0 };
+    }
+    laneProxyHost(index) {
+        const hosts = this.options.proxyHosts ?? [];
+        return hosts[index];
+    }
+    pickLane(username) {
+        // A room already captured keeps its lane: the profile's cookies are part
+        // of the identity TikTok judged the first time.
+        const pinned = this.roomLane.get(username);
+        if (pinned !== undefined) {
+            const lane = this.lanes[pinned];
+            if (Date.now() >= lane.benchedUntil)
+                return lane;
+            // The pinned lane is benched; fall through to picking another.
+        }
+        const now = Date.now();
+        const available = this.lanes.filter((l) => now >= l.benchedUntil);
+        const pool = available.length > 0 ? available : this.lanes;
+        const lane = pool[this.roundRobin % pool.length];
+        this.roundRobin++;
+        return lane;
+    }
+    benchLane(lane) {
+        // Only bench proxy lanes: the direct lane has nothing to rotate away from,
+        // and benching it would just serialize captures for no benefit.
+        if ((this.options.proxyHosts ?? []).length > 0) {
+            lane.benchedUntil = Date.now() + this.options.proxyCooldownMs;
+        }
+    }
+    async ensureBrowser(lane) {
+        if (lane.browser)
+            return lane.browser;
+        if (lane.launching)
+            return lane.launching;
         const args = [
             '--no-sandbox',
             '--disable-setuid-sandbox',
@@ -66,10 +116,11 @@ export class ViewerPool {
         if (this.options.display) {
             args.push(`--display=${this.options.display}`);
         }
-        if (this.options.proxyHost) {
-            args.push(`--proxy-server=http://${this.options.proxyHost}`);
+        const proxyHost = this.laneProxyHost(lane.index);
+        if (proxyHost) {
+            args.push(`--proxy-server=http://${proxyHost}`);
         }
-        this.launching = puppeteer
+        lane.launching = puppeteer
             .launch({
             // Non-headless, always: measured 2026-09-15, headless Chromium —
             // stealth plugin included — gets im/fetch 403 on every attempt while
@@ -78,21 +129,22 @@ export class ViewerPool {
             headless: false,
             executablePath: this.options.executablePath,
             args,
-            userDataDir: this.options.userDataDir,
+            userDataDir: `${this.options.userDataDir ?? '/tmp/tiktok-signer-profile-viewer'}-p${lane.index}`,
             ignoreDefaultArgs: ['--enable-automation']
         })
             .then((browser) => {
-            this.browser = browser;
-            this.launching = null;
+            lane.browser = browser;
+            lane.launching = null;
             return browser;
         });
-        return this.launching;
+        return lane.launching;
     }
     evictIdleTabs() {
         const now = Date.now();
-        for (const [roomId, entry] of this.tabs) {
+        for (const [username, entry] of this.tabs) {
             if (now - entry.lastUsed > this.options.tabIdleMs) {
-                this.tabs.delete(roomId);
+                this.tabs.delete(username);
+                this.roomLane.delete(username);
                 void entry.page.close().catch(() => undefined);
             }
         }
@@ -105,8 +157,10 @@ export class ViewerPool {
      */
     async captureRoom(username, { timeoutMs = 45_000 } = {}) {
         this.evictIdleTabs();
-        const browser = await this.ensureBrowser();
+        const lane = this.pickLane(username);
+        const browser = await this.ensureBrowser(lane);
         const startedAt = Date.now();
+        lane.active.add(username);
         // Reuse a warm tab when we have one for this room's streamer.
         const existing = this.tabs.get(username);
         const page = existing
@@ -134,88 +188,102 @@ export class ViewerPool {
                 return p;
             });
         const firstCapture = !existing;
-        return await new Promise((resolve, reject) => {
-            let settled = false;
-            const jobId = randomUUID(); // correlation for logs; capture is per-tab
-            const fail = setTimeout(async () => {
-                if (settled)
-                    return;
-                settled = true;
-                // Drop the tab: a page that never produced a fetch is a dead session.
-                this.tabs.delete(username);
-                await page.close().catch(() => undefined);
-                reject(new Error(`im/fetch 200 not captured within ${timeoutMs}ms (${jobId})`));
-            }, timeoutMs);
-            const onResponse = async (response) => {
-                if (settled)
-                    return;
-                const url = response.url();
-                if (!url.includes('/webcast/im/fetch/'))
-                    return;
-                if (response.status() !== 200)
-                    return;
-                let buf;
-                try {
-                    buf = await response.buffer();
-                }
-                catch {
-                    return;
-                }
-                if (buf.length < 1000)
-                    return; // keepalive/empty shapes are not a capture
-                settled = true;
-                clearTimeout(fail);
-                page.off('response', onResponse);
-                try {
-                    const cookies = (await page.cookies('https://www.tiktok.com'))
-                        .map((c) => `${c.name}=${c.value}`)
-                        .join('; ');
-                    const roomId = new URL(url).searchParams.get('room_id') ?? username;
-                    this.tabs.set(username, { page, lastUsed: Date.now() });
-                    resolve({
-                        roomId,
-                        protoBase64: buf.toString('base64'),
-                        cookieHeader: cookies,
-                        userAgent: VIEWER_UA,
-                        elapsedMs: Date.now() - startedAt
-                    });
-                }
-                catch (error) {
-                    reject(error);
-                }
-            };
-            // The player fetches on its own after page init; on a reused tab (page
-            // already live) it will not re-fetch, so trigger a fresh page load which
-            // replays the player bootstrap for the same room.
-            page.on('response', onResponse);
-            const nav = firstCapture
-                ? page.goto(`https://www.tiktok.com/@${username}/live`, {
-                    waitUntil: 'domcontentloaded',
-                    timeout: 30_000
-                })
-                : page.reload({ waitUntil: 'domcontentloaded', timeout: 30_000 });
-            nav.catch((error) => {
-                if (settled)
-                    return;
-                settled = true;
-                clearTimeout(fail);
-                page.off('response', onResponse);
-                this.tabs.delete(username);
-                void page.close().catch(() => undefined);
-                reject(error);
+        try {
+            return await new Promise((resolve, reject) => {
+                let settled = false;
+                const jobId = randomUUID(); // correlation for logs; capture is per-tab
+                const fail = setTimeout(async () => {
+                    if (settled)
+                        return;
+                    settled = true;
+                    // Drop the tab: a page that never produced a fetch is a dead session.
+                    this.tabs.delete(username);
+                    this.roomLane.delete(username);
+                    this.benchLane(lane);
+                    await page.close().catch(() => undefined);
+                    reject(new Error(`im/fetch 200 not captured within ${timeoutMs}ms (proxy ${lane.index}, ${jobId})`));
+                }, timeoutMs);
+                const onResponse = async (response) => {
+                    if (settled)
+                        return;
+                    const url = response.url();
+                    if (!url.includes('/webcast/im/fetch/'))
+                        return;
+                    if (response.status() !== 200)
+                        return;
+                    let buf;
+                    try {
+                        buf = await response.buffer();
+                    }
+                    catch {
+                        return;
+                    }
+                    if (buf.length < 1000)
+                        return; // keepalive/empty shapes are not a capture
+                    settled = true;
+                    clearTimeout(fail);
+                    page.off('response', onResponse);
+                    try {
+                        const cookies = (await page.cookies('https://www.tiktok.com'))
+                            .map((c) => `${c.name}=${c.value}`)
+                            .join('; ');
+                        const roomId = new URL(url).searchParams.get('room_id') ?? username;
+                        this.tabs.set(username, { page, lastUsed: Date.now() });
+                        this.roomLane.set(username, lane.index);
+                        resolve({
+                            roomId,
+                            protoBase64: buf.toString('base64'),
+                            cookieHeader: cookies,
+                            userAgent: VIEWER_UA,
+                            proxyIndex: lane.index,
+                            elapsedMs: Date.now() - startedAt
+                        });
+                    }
+                    catch (error) {
+                        reject(error);
+                    }
+                };
+                // The player fetches on its own after page init; on a reused tab (page
+                // already live) it will not re-fetch, so trigger a fresh page load which
+                // replays the player bootstrap for the same room.
+                page.on('response', onResponse);
+                const nav = firstCapture
+                    ? page.goto(`https://www.tiktok.com/@${username}/live`, {
+                        waitUntil: 'domcontentloaded',
+                        timeout: 30_000
+                    })
+                    : page.reload({ waitUntil: 'domcontentloaded', timeout: 30_000 });
+                nav.catch((error) => {
+                    if (settled)
+                        return;
+                    settled = true;
+                    clearTimeout(fail);
+                    page.off('response', onResponse);
+                    this.tabs.delete(username);
+                    this.roomLane.delete(username);
+                    this.benchLane(lane);
+                    void page.close().catch(() => undefined);
+                    reject(new Error(`navigation failed on proxy ${lane.index}: ${error.message}`));
+                });
             });
-        });
+        }
+        finally {
+            lane.active.delete(username);
+        }
     }
     async close() {
         this.tabs.clear();
-        if (this.browser) {
-            try {
-                await this.browser.close();
+        this.roomLane.clear();
+        for (const lane of this.lanes) {
+            if (lane.browser) {
+                try {
+                    await lane.browser.close();
+                }
+                catch {
+                    // Closing an already-dead browser is not an error.
+                }
+                lane.browser = null;
             }
-            catch {
-                // Closing an already-dead browser is not an error.
-            }
-            this.browser = null;
         }
     }
 }
