@@ -43,6 +43,7 @@ func TestBTTVClient_FetchEmotes(t *testing.T) {
 		globalResponse    string
 		wantEmoteCount    int
 		wantErr           bool
+		wantErrIs         error
 		errContains       string
 		wantChannelEmotes []string
 		wantGlobalEmotes  []string
@@ -105,7 +106,8 @@ func TestBTTVClient_FetchEmotes(t *testing.T) {
 			channelResponse:   `{"message": "user not found"}`,
 			globalStatusCode:  http.StatusTooManyRequests,
 			wantErr:           true,
-			errContains:       "rate limited",
+			// The handler opens its cooldown via errors.Is, not the message.
+			wantErrIs: ErrRateLimited,
 		},
 		{
 			name:              "channel emotes with global 429 returns channel only",
@@ -131,6 +133,16 @@ func TestBTTVClient_FetchEmotes(t *testing.T) {
 			globalResponse:    bttvGlobalResponse,
 			wantEmoteCount:    2,
 			wantGlobalEmotes: []string{":tf:", "AngelThump"},
+		},
+		{
+			name:              "channel with no BTTV emotes returns global set",
+			channel:           "emptyaccount",
+			channelStatusCode: http.StatusOK,
+			channelResponse:   `{"id": "5e4b3e186b9f0f6c6d3b9e3a", "channelEmotes": [], "sharedEmotes": []}`,
+			globalStatusCode:  http.StatusOK,
+			globalResponse:    bttvGlobalResponse,
+			wantEmoteCount:    2,
+			wantGlobalEmotes:  []string{":tf:", "AngelThump"},
 		},
 		{
 			name:              "channel with no BTTV emotes and global fetch failure propagates error",
@@ -223,7 +235,12 @@ func TestBTTVClient_FetchEmotes(t *testing.T) {
 			// Assert
 			if tt.wantErr {
 				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errContains)
+				if tt.wantErrIs != nil {
+					assert.ErrorIs(t, err, tt.wantErrIs)
+				}
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
 				return
 			}
 			require.NoError(t, err)

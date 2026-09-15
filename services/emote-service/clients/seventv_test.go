@@ -148,6 +148,7 @@ func TestSevenTVClient_FetchEmotes(t *testing.T) {
 		globalResponse      string
 		wantEmoteCount      int
 		wantErr             bool
+		wantErrIs           error
 		errContains         string
 		twitchCalled        bool
 		expectChannelEmotes bool
@@ -225,6 +226,17 @@ func TestSevenTVClient_FetchEmotes(t *testing.T) {
 			wantErr:          true,
 			errContains:      "failed to fetch emote set",
 			twitchCalled:     true,
+		},
+		{
+			name:              "channel miss with global 429 surfaces rate limit",
+			channel:           "missing",
+			mockTwitchID:      "9999",
+			channelStatusCode: http.StatusNotFound,
+			globalStatusCode:  http.StatusTooManyRequests,
+			wantErr:           true,
+			// The handler opens its cooldown via errors.Is, not the message.
+			wantErrIs:   ErrRateLimited,
+			twitchCalled: true,
 		},
 		{
 			name:                "channel emotes take precedence on code collision",
@@ -310,6 +322,9 @@ func TestSevenTVClient_FetchEmotes(t *testing.T) {
 
 			if tt.wantErr {
 				require.Error(t, err)
+				if tt.wantErrIs != nil {
+					assert.ErrorIs(t, err, tt.wantErrIs)
+				}
 				if tt.errContains != "" {
 					assert.Contains(t, err.Error(), tt.errContains)
 				}

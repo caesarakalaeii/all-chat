@@ -52,6 +52,7 @@ func TestFFZClient_FetchEmotes(t *testing.T) {
 		globalResponse    string
 		wantEmoteCount    int
 		wantErr           bool
+		wantErrIs         error
 		errContains       string
 		wantURL           string
 		wantChannelEmotes []string
@@ -192,7 +193,8 @@ func TestFFZClient_FetchEmotes(t *testing.T) {
 			channelResponse:   `{"error": "room not found"}`,
 			globalStatusCode:  http.StatusTooManyRequests,
 			wantErr:           true,
-			errContains:       "rate limited",
+			// The handler opens its cooldown via errors.Is, not the message.
+			wantErrIs: ErrRateLimited,
 		},
 		{
 			name:              "room emotes with global 429 returns room only",
@@ -295,10 +297,14 @@ func TestFFZClient_FetchEmotes(t *testing.T) {
 			// Assert
 			if tt.wantErr {
 				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errContains)
+				if tt.wantErrIs != nil {
+					assert.ErrorIs(t, err, tt.wantErrIs)
+				}
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
 				return
 			}
-			require.NoError(t, err)
 			assert.Len(t, emotes, tt.wantEmoteCount)
 
 			codes := make(map[string]bool, len(emotes))
