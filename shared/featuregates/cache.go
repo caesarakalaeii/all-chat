@@ -105,6 +105,14 @@ const (
 	GatePlatformFacebook  = "platform_facebook"
 	GatePlatformRumble    = "platform_rumble"
 	GatePlatformInstagram = "platform_instagram"
+
+	// GateLocalizationContribution is the feature key for the beta-tester
+	// translation tool (ADR-0063): contributing UI-catalog translations into
+	// requested/approved locales. Seeded early_access=TRUE (migration 097),
+	// so contribution is open to beta testers and ambassadors only; flip
+	// early_access=FALSE to graduate it to all authenticated users. The
+	// English catalog is never gated — every user already reads English.
+	GateLocalizationContribution = "localization_contribution"
 )
 
 // rolloutPlatformGates maps a platform slug to its source-add rollout gate
