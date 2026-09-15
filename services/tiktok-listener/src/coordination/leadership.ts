@@ -35,6 +35,10 @@ import { Logger } from '../types/logger.js';
 const RENEWAL_INTERVAL_MS = 5000;    // 5 seconds, matches Go
 const RETRY_DELAYS_MS = [100, 200, 400]; // Exponential backoff for renewal retries
 const MAX_CONSECUTIVE_FAILURES = 2;  // Grace period before declaring leadership lost
+// ADR-0007 stabilization gate: releasing leases before the fleet view settles
+// during a scale event makes released streams bounce between pods. Mirrors
+// rebalanceStabilizationPeriod in shared/sourcemanager/coordinator.go.
+const REBALANCE_STABILIZATION_MS = 30_000;
 
 interface LeaseEntry {
   streamID: string;
@@ -44,12 +48,18 @@ interface LeaseEntry {
   stopped: boolean;
 }
 
+interface RebalanceState {
+  lastPeerCount: number;
+  peerCountStableAt: number;
+}
+
 export class LeadershipCoordinator {
   private platform: string;
   private callerID: string;
   private client: SourceManagerClient;
   private logger: Logger;
   private leases: Map<string, LeaseEntry> = new Map();
+  private rebalanceState?: RebalanceState;
 
   constructor(platform: string, client: SourceManagerClient, logger: Logger) {
     this.platform = platform;
@@ -63,6 +73,7 @@ export class LeadershipCoordinator {
       renewal_interval_ms: RENEWAL_INTERVAL_MS,
     });
   }
+
 
   /**
    * EnsureLeadership claims leadership for a stream and starts a renewal loop.
@@ -179,6 +190,85 @@ export class LeadershipCoordinator {
    */
   getLeaseCount(): number {
     return this.leases.size;
+  }
+
+  /**
+   * ADR-0007 rebalancing, ported from shared/sourcemanager/coordinator.go.
+   *
+   * Registers this pod as a peer, then sheds leases in excess of
+   * ceil(totalStreams / peerCount), releasing alphabetically by stream ID so
+   * both coordinators shed the same streams for the same fleet state. Returns
+   * the released stream IDs so the caller can disconnect them.
+   *
+   * The stabilization gate prevents the release→re-acquire oscillation during
+   * scale events: the first call after a peer-count change only records the new
+   * count; releases happen once the count has been stable for
+   * REBALANCE_STABILIZATION_MS.
+   */
+  async rebalance(totalStreams: number): Promise<string[]> {
+    let peerCount: number;
+    try {
+      peerCount = await this.client.registerPeer(this.platform, this.callerID);
+    } catch (err) {
+      this.logger.warn('Failed to register peer for rebalancing', {
+        platform: this.platform,
+        error: String(err),
+      });
+      return [];
+    }
+
+    if (peerCount <= 0) peerCount = 1;
+
+    const now = Date.now();
+    if (!this.rebalanceState || this.rebalanceState.lastPeerCount !== peerCount) {
+      this.rebalanceState = {
+        lastPeerCount: peerCount,
+        peerCountStableAt: now + REBALANCE_STABILIZATION_MS,
+      };
+      this.logger.info('Peer count changed, waiting for stabilization before rebalancing', {
+        platform: this.platform,
+        peer_count: peerCount,
+        stabilization_period_ms: REBALANCE_STABILIZATION_MS,
+      });
+      return [];
+    }
+    if (now < this.rebalanceState.peerCountStableAt) return [];
+
+    const maxPerPod = Math.ceil(totalStreams / peerCount);
+    const currentCount = this.leases.size;
+    const excess = currentCount - maxPerPod;
+    if (excess <= 0) return [];
+
+    const toRelease = [...this.leases.keys()].sort().slice(maxPerPod);
+
+    for (const streamID of toRelease) {
+      const entry = this.leases.get(streamID);
+      if (!entry) continue;
+      entry.stopped = true;
+      clearInterval(entry.timer);
+      this.leases.delete(streamID);
+
+      // Fire-and-forget: a failed release lets the lease expire server-side,
+      // matching the Go coordinator's asynchronous release.
+      this.client.releaseLeadership(this.platform, streamID, this.callerID).catch(err => {
+        this.logger.warn('Failed to release leadership during rebalance', {
+          stream_id: streamID,
+          error: String(err),
+        });
+      });
+    }
+
+    this.logger.info('Rebalanced leadership leases', {
+      platform: this.platform,
+      peer_count: peerCount,
+      total_streams: totalStreams,
+      max_per_pod: maxPerPod,
+      had: currentCount,
+      released: toRelease.length,
+      kept: currentCount - toRelease.length,
+    });
+
+    return toRelease;
   }
 
   /**

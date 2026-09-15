@@ -114,6 +114,15 @@ const TIKTOK_MAX_ERROR_BACKOFF_MS = parseInt(process.env.TIKTOK_MAX_ERROR_BACKOF
 const TIKTOK_HEARTBEAT_INTERVAL_MS = parseInt(process.env.TIKTOK_HEARTBEAT_INTERVAL_MS || '30000');
 const TIKTOK_HEARTBEAT_TIMEOUT_MS = parseInt(process.env.TIKTOK_HEARTBEAT_TIMEOUT_MS || '90000');
 
+// Hard ceiling on concurrent WebSocket connections this pod will open. The Euler
+// free tier proxies every connection through ws-fallback.eulerstream.com and caps
+// concurrent cloud WebSockets (~25); above that the proxy still accepts the
+// handshake but silently withholds live push, which looks exactly like a healthy
+// connection to the library (ADR-0052; 2026-09-14 incident). Staying under it
+// converts that failure mode into a visible skip here. Raise alongside a paid
+// Euler plan, and remove when self-signing retires Euler entirely.
+const TIKTOK_MAX_STREAMS_PER_POD = parseInt(process.env.TIKTOK_MAX_STREAMS_PER_POD || '20');
+
 // Hard cap on internal admin HTTP request bodies (/api/retry, /api/reset-backoff).
 // These accept small JSON payloads; capping prevents an oversized POST from spiking
 // process memory and risking an OOMKill.
@@ -810,7 +819,8 @@ class TikTokListenerService {
   /**
    * Safety-net poll that queries source-manager GET /demand endpoint.
    * Runs every 60s to restore correct state after Redis reconnect / missed Pub/Sub events.
-   * Only runs when coordinator integration is enabled.
+   * Only runs when coordinator integration is enabled. Also drives ADR-0007 lease
+   * rebalancing (see the rebalance call inside).
    */
   private async pollDemandFallback(): Promise<void> {
     if (this.isShuttingDown) return;
@@ -822,11 +832,25 @@ class TikTokListenerService {
       for (const source of sources) {
         demanded.set(source.channel_id, source);
       }
+
+      // ADR-0007: shed leases in excess of ceil(total/peers) so a pod that grabbed
+      // every lease at boot cannot hoard the fleet (the 2026-09-14 incident: one
+      // pod held 43 of 48, overran the Euler proxy's concurrent cap, and every
+      // channel on it went deaf). Runs before handleDemandUpdate so released
+      // streams are re-claimed by another pod in the same cycle.
+      if (this.leadershipCoordinator) {
+        const released = await this.leadershipCoordinator.rebalance(demanded.size);
+        for (const username of released) {
+          await this.disconnectFromStream(username);
+        }
+      }
+
       await this.handleDemandUpdate(demanded);
     } catch (err) {
       logger.error('Demand fallback poll error', { error: String(err) });
     }
   }
+
 
 
   /**
@@ -849,6 +873,24 @@ class TikTokListenerService {
         overlay_id: overlayId,
         reason: usernameCheck.reason,
       });
+      return;
+    }
+
+    // Connection ceiling (see TIKTOK_MAX_STREAMS_PER_POD). Checked before the
+    // connectingStreams bookkeeping so the early return needs no cleanup, and
+    // before the live-status pre-check so a full pod spends no Euler budget on
+    // a stream it cannot connect anyway. The poller re-checks on its own
+    // schedule, so this re-park costs one status check, not a connection.
+    const liveConnectionCount = this.activeStreams.size + this.connectingStreams.size;
+    if (liveConnectionCount >= TIKTOK_MAX_STREAMS_PER_POD) {
+      logger.warn('Connection ceiling reached, re-parking stream', {
+        username,
+        overlay_id: overlayId,
+        ceiling: TIKTOK_MAX_STREAMS_PER_POD,
+        active: this.activeStreams.size,
+        connecting: this.connectingStreams.size,
+      });
+      this.livePoller.addTarget(username, overlayId);
       return;
     }
 
@@ -1000,8 +1042,22 @@ class TikTokListenerService {
         // Publish lifecycle:stream_end event for share expiry (EXPIRY-06)
         this.livePoller.publishStreamEnd(username);
 
-        // Stream ended - reset to quick re-check
-        this.backoffManager.recordDisconnection(username);
+        // A heartbeat-forced disconnect means the connection went silently deaf;
+        // if reconnects keep landing in the same state (streak > 1), back off
+        // progressively instead of resetting to the 60s base. The instant
+        // reconnect loop re-entered ~43 rooms every 2 minutes from one pod for
+        // days (2026-09-14 incident), burning the Euler free tier and keeping
+        // the proxy wedged. A genuinely-ended stream stays at streak 0 via
+        // recordMessage having fired on its last real messages.
+        if (this.heartbeatMonitor.getSilentFailureStreak(username) > 1) {
+          this.backoffManager.recordConnectionError(
+            username,
+            new Error(`Silent connection failure x${this.heartbeatMonitor.getSilentFailureStreak(username)}`)
+          );
+        } else {
+          // Stream ended - reset to quick re-check
+          this.backoffManager.recordDisconnection(username);
+        }
         this.livePoller.addTarget(username, overlayId);
 
         // Publish reconnecting status so overlay indicators show the retry state
@@ -1184,6 +1240,10 @@ class TikTokListenerService {
         });
         return; // Skip publishing duplicate
       }
+
+      // Delivered (not replay): the connection is provably receiving live
+      // push, so any silent-failure streak for it is healed.
+      this.heartbeatMonitor.noteSilentFailureHealing(username);
 
       // Create raw message in standardized format
       const rawMessage: RawChatMessage = {
