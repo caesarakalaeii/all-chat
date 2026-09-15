@@ -114,6 +114,7 @@ const CSS_PROPERTY_NAMES = new Set([
   'border-width',
   'fill-opacity',
   'fill-rule',
+  'placeholder-parity',
   'stroke-linecap',
   'stroke-width',
   'text-align',

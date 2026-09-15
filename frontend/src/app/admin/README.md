@@ -71,11 +71,14 @@ surfaces cross-streamer context (total messages, last seen, and the
 streamers/overlays the viewer chats in) from the per-session aggregate over
 `viewer_message_history`. Ban/unban and grant/revoke premium are inline.
 
-### Cosmetics / Features / Maintenance
+### Cosmetics / Features / Maintenance / Localization
 
 `/admin/cosmetics` manages the avatar-frame and flair catalog; `/admin/features`
 manages premium feature gates (ADR-0008); `/admin/maintenance` toggles
-maintenance mode.
+maintenance mode; `/admin/localization` reviews community translations
+(ADR-0063): approve/reject language requests, approve translations or request
+changes with a note, and download the approved-translation export that
+`scripts/generate-locale-catalog.mjs` turns into catalog files for a PR.
 
 ## Channel resolution
 
@@ -90,7 +93,7 @@ stored channel identifier into a link to the real platform page:
 
 - overlay-manager: `GET /api/v1/admin/overlays`, `/admin/overlays/active`, `/admin/overlays/:id/sources`, `/admin/sources`, `/admin/user-overlays/:id` — overlay/source responses include `owner_username`/`owner_display_name` (joined from `users`) and `channel_handle`.
 - auth-service: `GET /api/v1/admin/users`, `/admin/viewers` (with `q`/`is_banned`/`is_premium`/`platform`/`limit`/`offset` and a `total`), `/admin/viewers/:session_id/activity`, plus ban/unban/premium/beta mutations and impersonation.
-- share-service: admin feature gates.
+- share-service: admin feature gates; localization review (`GET /admin/localization/locales/requests`, `/review`, `/progress`, `/export/:code`; `POST /admin/localization/locales/:code/review`, `/review/:locale/:keyHash`).
 
 ## Related ADRs
 
@@ -98,3 +101,4 @@ stored channel identifier into a link to the real platform page:
 - ADR-0034 — admin viewer identity model
 - ADR-0035 — admin global entity search
 - ADR-0008 — premium feature gates · ADR-0020 — beta-tester role · ADR-0027 — time-limited premium overrides
+- ADR-0063 — localization contribution review

@@ -40,6 +40,10 @@ export const common = {
     admin: 'Admin',
     settings: 'Settings',
     docs: 'Docs',
+    // Beta-tester nav entry (ADR-0063) — rendered only for is_beta_tester /
+    // is_ambassador users, hence "beta" rather than a second word for
+    // "translate".
+    translate: 'Translate',
     logOut: 'Log out',
   },
   // The soundPlayer presets. Read by the overlay editor's on-stream notification

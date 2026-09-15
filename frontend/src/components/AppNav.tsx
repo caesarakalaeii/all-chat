@@ -100,6 +100,11 @@ export function AppNav() {
             {t('common.appNav.admin')}
           </Link>
         )}
+        {(user?.is_beta_tester || user?.is_ambassador) && (
+          <Link href="/translate" className={isActive('/translate') ? activeClass : inactiveClass}>
+            {t('common.appNav.translate')}
+          </Link>
+        )}
         <Link href="/settings" className={pathname === '/settings' ? activeClass : inactiveClass}>
           {t('common.appNav.settings')}
         </Link>

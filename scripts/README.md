@@ -156,6 +156,32 @@ WS_URL=ws://localhost:8080 node test-websocket.js
 
 ---
 
+### `generate-locale-catalog.mjs`
+
+**Purpose**: Turns a localization export (ADR-0063) into frontend catalog files.
+
+**Usage**:
+```bash
+# Download the export in /admin/localization first, then:
+node scripts/generate-locale-catalog.mjs localization-export-de.json
+
+# Custom output directory (default: frontend/src/lib/i18n/messages)
+node scripts/generate-locale-catalog.mjs localization-export-de.json --out /tmp/out
+```
+
+**Input**: the JSON from `GET /api/v1/admin/localization/export/<locale>`
+(`{"locale": "de", "translations": [{"key": ..., "value": ...}, ...]}`).
+
+**Output**: `messages/<locale>/<namespace>.ts` files in the English catalog's
+shape (nested, `as const`), only for namespaces that have translations. Keys
+absent from the export stay English at runtime. The script prints the
+remaining PR wiring steps (barrel, `SUPPORTED_LOCALES`, index mapping) — it
+does not do them, and it never writes to the repo without you running it.
+
+**Requirements**: Node.js 22+ (no npm packages)
+
+---
+
 ## 🔧 Script Dependencies
 
 ### System Requirements
@@ -171,6 +197,8 @@ WS_URL=ws://localhost:8080 node test-websocket.js
 | `seed-test-data.sh` | `psql` |
 | `generate-test-messages.sh` | `curl`, `redis-cli` |
 | `verify-frontend-setup.sh` | `psql`, `redis-cli`, `curl` |
+| `test-websocket.js` | Node.js, npm |
+| `generate-locale-catalog.mjs` | Node.js 22+ |
 | `test-websocket.js` | Node.js, npm |
 
 ### Installing Dependencies

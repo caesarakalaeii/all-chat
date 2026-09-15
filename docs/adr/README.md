@@ -704,7 +704,16 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 **Impact**: A streamer needs an IG professional account linked to a Page; personal accounts cannot connect. Sources add fail-closed unless a token row exists for the exact `(user, ig_user_id)` pair. token-refresh-service has nothing to do for Instagram.
 **→ Read**: [0062-instagram-live-comments-polling.md](./0062-instagram-live-comments-polling.md)
 
+### ADR-0063: Beta-tester localization contribution with admin review and a repo-based catalog pipeline
+
+**Status**: Accepted (2026-09-15)
+**Problem**: Community members want to translate the UI, but the string catalog is typed code in the repo (ADR-0055), contributors are not developers, and a service that commits to the repo would need a credential and a blast radius no contributor feature justifies.
+**Decision**: A guided translator tool at `/translate` (pick language → pick namespace → translate string by string with placeholder hints) gated by the `localization_contribution` early-access gate (migration 097, share-service routes via RequireEarlyAccess). Open, request-based locales; one row per (locale, key) that resubmission overwrites and resets to pending; admin review at `/admin/localization` with rejection notes. The key list is derived from the English catalog in the frontend, never stored in the DB. Approved rows export as JSON; `scripts/generate-locale-catalog.mjs` turns the export into `messages/<locale>/` files in the catalog's shape, and the locale wiring (barrel, SUPPORTED_LOCALES) stays a reviewed PR edit. Nothing auto-commits.
+**Impact**: Beta testers gain a translation surface without touching git; the catalog stays the single source of truth; graduating the gate opens contribution to all authenticated users with no deploy.
+**→ Read**: [0063-localization-contribution.md](./0063-localization-contribution.md)
+
 ---
+
 
 ## How to Create a New ADR
 
@@ -836,7 +845,7 @@ Create a new ADR if:
 ## Summary
 
 **Total ADRs**: see `docs/adr/` (ADR numbers are shared with caesar-deployment). The count was hardcoded here and drifted by twelve before anyone noticed; do not re-add a number.
-**Status**: All accepted (✅)
+**Last Updated**: 2026-09-15
 **Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation, overlay observability view, demand linger, EventSub chat-ownership partition, linked Twitch credentials, chat moderation write-path, premium entitlements via Patreon, streamer/viewer premium split, engagement economy, source-liveness heartbeat, admin URL-addressable views + viewer identity model + global search)
 
 **Most Referenced**:

@@ -863,6 +863,13 @@ func main() {
 		protectedAPI.POST("/shares/:id/revoke", proxyHandler.ForwardRequest)        // -> share-service
 		protectedAPI.POST("/shares/:id/mark-seen", proxyHandler.ForwardRequest)     // -> share-service
 
+		// Localization contributor tool (ADR-0063) — beta-tester gated on the
+		// service side via RequireEarlyAccess('localization_contribution').
+		protectedAPI.GET("/localization/locales", proxyHandler.ForwardRequest)                     // -> share-service
+		protectedAPI.POST("/localization/locales", proxyHandler.ForwardRequest)                    // -> share-service
+		protectedAPI.GET("/localization/locales/:code/translations", proxyHandler.ForwardRequest)  // -> share-service
+		protectedAPI.POST("/localization/locales/:code/translations", proxyHandler.ForwardRequest) // -> share-service
+
 		// Payment service (ADR-0018) — authenticated surfaces (-> payment-service).
 		protectedAPI.GET("/payment/patreon/connect", proxyHandler.ForwardRequest)
 		protectedAPI.GET("/payment/status", proxyHandler.ForwardRequest)
@@ -931,6 +938,15 @@ func main() {
 		// Feature gate management (-> share-service)
 		adminAPI.GET("/feature-gates", proxyHandler.ForwardRequest)
 		adminAPI.PATCH("/feature-gates/:key", proxyHandler.ForwardRequest)
+
+		// Localization admin routes (ADR-0063) — review queue, locale approval,
+		// accepted-translation export (-> share-service).
+		adminAPI.GET("/localization/locales/requests", proxyHandler.ForwardRequest)
+		adminAPI.POST("/localization/locales/:code/review", proxyHandler.ForwardRequest)
+		adminAPI.GET("/localization/review", proxyHandler.ForwardRequest)
+		adminAPI.POST("/localization/review/:locale/:keyHash", proxyHandler.ForwardRequest)
+		adminAPI.GET("/localization/export/:code", proxyHandler.ForwardRequest)
+		adminAPI.GET("/localization/progress", proxyHandler.ForwardRequest)
 
 		// User management (-> auth-service)
 		adminAPI.GET("/users", proxyHandler.ForwardRequest)
