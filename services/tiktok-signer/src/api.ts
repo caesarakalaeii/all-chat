@@ -38,6 +38,7 @@ import http from 'node:http';
 import { collectDefaultMetrics, Counter, Histogram, Registry } from 'prom-client';
 import { request as undiciRequest } from 'undici';
 import { SigningSession, type SignerIdentity } from './signing/session.js';
+import type { ViewerPool } from './signing/viewer.js';
 
 const register = new Registry();
 collectDefaultMetrics({ register });
@@ -71,6 +72,8 @@ function readAuthToken(): string {
 
 export interface SignRequestPayload {
   roomId: string;
+  /** Streamer handle; enables the page-viewer path when viewer mode is on. */
+  username?: string;
   cursor?: string;
   cookieHeader?: string;
 }
@@ -271,14 +274,61 @@ async function performSignUrl(
   };
 }
 
+/**
+ * Page-viewer fetch: open (or reuse) a real viewer tab on the streamer's live
+ * page and capture the SDK-signed /im/fetch/ response TikTok serves the
+ * player. Measured 2026-09-15: TikTok answers the same request made outside a
+ * real browser session with an empty 200 (signature path) or 403, so the
+ * viewer capture is the only shape that still yields a full
+ * ProtoMessageFetchResult. See ADR-0052's follow-up and viewer.ts.
+ */
+async function performViewerFetch(
+  viewer: ViewerPool,
+  payload: SignRequestPayload
+): Promise<RouteResult> {
+  const username = payload.username;
+  if (!username || typeof username !== 'string') {
+    return { status: 400, body: { error: 'username is required for viewer mode' } };
+  }
+  try {
+    const capture = await viewer.captureRoom(username);
+    return {
+      status: 200,
+      body: {
+        fetchResult: capture.protoBase64,
+        fetchResultCookieHeader: capture.cookieHeader,
+        fetchResultRoomId: capture.roomId
+      } satisfies SignResponsePayload
+    };
+  } catch (error) {
+    // Viewer captures fail when the room is not live (player never fetches)
+    // or TikTok withholds data from the session. Both are TikTok-side
+    // rejections from the caller's point of view: 502 keeps the listener's
+    // failure classification alert-legible (reason="signature").
+    return {
+      status: 502,
+      body: {
+        error: 'viewer_capture_failed',
+        message: (error as Error).message
+      }
+    };
+  }
+}
+
 export interface ServerOptions {
   port: number;
   session: SigningSession;
+  /**
+   * Page-viewer pool. When set and the request carries a username, /v1/sign is
+   * served by a real viewer tab instead of the signature path (ADR-0052
+   * post-2026-09-09: TikTok gates webcast data on browser-grade sessions).
+   */
+  viewer?: ViewerPool;
   logger?: { info: (msg: string, meta?: Record<string, unknown>) => void; error: (msg: string, meta?: Record<string, unknown>) => void };
 }
 
 export function createServer(options: ServerOptions): http.Server {
-  const { session, logger } = options;
+  const { session, viewer, logger } = options;
   const authToken = readAuthToken();
 
   const server = http.createServer((req, res) => {
@@ -348,10 +398,17 @@ export function createServer(options: ServerOptions): http.Server {
       let outcome: SignRequestOutcome;
       let result: RouteResult;
       try {
-        result =
-          url === '/v1/sign'
-            ? await performSignedFetch(session, session.identity, payload as SignRequestPayload)
-            : await performSignUrl(session, payload as SignUrlRequestPayload);
+        if (url === '/v1/sign' && viewer && (payload as SignRequestPayload).username) {
+          // Page-viewer path: a real tab on the room's live page captures the
+          // SDK-signed im/fetch TikTok serves the player. Returns the same
+          // { fetchResult, fetchResultCookieHeader } contract.
+          result = await performViewerFetch(viewer, payload as SignRequestPayload);
+        } else {
+          result =
+            url === '/v1/sign'
+              ? await performSignedFetch(session, session.identity, payload as SignRequestPayload)
+              : await performSignUrl(session, payload as SignUrlRequestPayload);
+        }
       } catch (error) {
         // Thrown sign errors are the signing session itself failing (browser
         // dead, rebuild loop). Counted, then surfaced as 500 to the caller —

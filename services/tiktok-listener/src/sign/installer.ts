@@ -86,22 +86,26 @@ export function asRouteHandler(signer: WebcastSigner) {
     roomId: string;
     cursor?: string;
     authenticateWs?: boolean;
-    webClient: {
-      clientHeaders: Record<string, string>;
-      cookieJar: { getCookieString(): Promise<string> };
-    };
+     webClient: {
+       clientHeaders: Record<string, string>;
+       cookieJar: { getCookieString(): Promise<string> };
+      /** Set by the listener (setConnectionUniqueId in index.ts): the streamer
+       * handle for this connection, for signers that need it. */
+      uniqueId?: string;
+     };
   }): Promise<SignResult> => {
     const cookieHeader = (await args.webClient.cookieJar.getCookieString()) || undefined;
 
-    return signer.sign({
-      roomId: args.roomId,
-      cursor: args.cursor,
-      userAgent: args.webClient.clientHeaders['User-Agent'],
-      // Only bind the signature to the session when the caller actually asked for an
-      // authenticated socket. Forwarding a session cookie that nothing requested is how the
-      // credential-exposure problem in #698 happens in the first place.
-      cookieHeader: args.authenticateWs ? cookieHeader : undefined
-    });
+     return signer.sign({
+       roomId: args.roomId,
+       username: args.webClient.uniqueId,
+       cursor: args.cursor,
+       userAgent: args.webClient.clientHeaders['User-Agent'],
+       // Only bind the signature to the session when the caller actually asked for an
+       // authenticated socket. Forwarding a session cookie that nothing requested is how the
+       // credential-exposure problem in #698 happens in the first place.
+       cookieHeader: args.authenticateWs ? cookieHeader : undefined
+     });
   };
 }
 

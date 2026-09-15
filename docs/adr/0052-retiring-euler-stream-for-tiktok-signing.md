@@ -35,6 +35,26 @@ that rollout, not with the code.
 > (`TIKTOK_MAX_STREAMS_PER_POD`, default 20). Neither raises the ceiling; both
 > keep us visibly under it until self-signing retires Euler entirely.
 
+> **Update 2026-09-15, later the same day** (TikTok-side escalation): Euler's
+> sign API went dark (`Route '/api/v1/sign_webcast' DNE`), and the same day the
+> community established the common cause (zerodytrash/TikTok-Live-Connector#329,
+> isaackogan/TikTokLive#376): since 2026-09-09 TikTok gates webcast data
+> endpoints on browser-grade sessions — anonymous, non-browser fetchers get an
+> empty 200 or a 403 regardless of signature quality. Measured against the
+> same live room: our signed fetch (undici, X-Bogus) → 200 with 0 bytes; the
+> same fetch in-page from a headless/Xvfb Chromium → 403; the same Chromium
+> on a real display → 200 with a full `ProtoMessageFetchResult` (~5s, ~60KB,
+> pushServer/cursor/internalExt intact). The signature is accepted; the
+> *session* is what TikTok judges. The signer therefore grew a page-viewer
+> mode (`src/signing/viewer.ts`, `SIGNER_VIEWER_MODE=page`): a non-headless
+> browser tab per room on the streamer's live page, capturing the SDK-signed
+> im/fetch the player itself receives, and returning the same
+> `{fetchResult, fetchResultCookieHeader}` contract. It requires a real
+> rendering stack (Xvfb was measured insufficient) — see the signer README
+> for the deployment requirements. `shadow`/`self`/fallback flags are
+> unchanged; the viewer path is how `self` keeps working under the new
+> TikTok regime.
+
 The licence obstacle the issue describes does **not** apply to the version we
 pin (see "Licence"): 2.4.0 is MIT.
 
