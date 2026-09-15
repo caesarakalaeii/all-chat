@@ -104,7 +104,8 @@ TIKTOK_ENVELOPE_TRACE=                # Set to any value to log businessType, th
 TIKTOK_DISABLE_EULER_FALLBACKS=true   # Skip Euler's leg of the room-id and is-live composites
 TIKTOK_SIGNER_MODE=euler              # euler | shadow | self
 TIKTOK_SELF_SIGN_FALLBACK=true        # Under `self`, fall back to Euler when our signer fails
-TIKTOK_SIGNER_URL=                    # Empty = sign in-process; a URL points at a sign service
+TIKTOK_SIGNER_URL=                    # tiktok-signer service URL; empty = no self signer
+TIKTOK_SIGNER_AUTH_TOKEN=             # Bearer token if the signer service runs with auth
 TIKTOK_EXTENDED_GIFT_INFO=            # Defaults on only under `self` (see below)
 SIGN_API_KEY=                         # Euler Stream API key; empty means the free tier
 
@@ -152,9 +153,12 @@ TIKTOK_LIVE_TESTS=1 npx vitest run src/sign/euler-free.live.test.ts
 instead of quietly working. It resolves room IDs for three accounts and answers is-live with
 Euler black-holed. It is opt-in and skipped by default: CI must not depend on tiktok.com being
 reachable, or a TikTok outage reads as our regression.
-
 **`TIKTOK_SIGNER_MODE`** (default `euler`, risky). The signature has no direct-to-TikTok route in
-the library, so this is the part we have to build:
+the library, so this is the part we had to build. The signer now exists:
+[`services/tiktok-signer`](../tiktok-signer/) signs and executes `/webcast/im/fetch/` with
+TikTok's own SDK in a headless browser. Set `TIKTOK_SIGNER_URL` to its address (the k8s
+deployment defaults it to `http://tiktok-signer:8092`) and the `self` signer is constructed at
+startup; without the URL, `shadow` and `self` log a warning and stay on Euler.
 
 | Mode | Who signs the connection | Purpose |
 |---|---|---|
@@ -165,16 +169,20 @@ the library, so this is the part we have to build:
 Walk them in that order. `shadow` exists so the success rate of our own signer can be measured
 against Euler's, on live rooms, before anything depends on it — after cutover, a TikTok change to
 the signing algorithm takes TikTok ingest down until we fix it, where today it is Euler's problem.
+That break-fix cycle lands on the signer service; see its README for the update procedure.
 
-Until the signer itself is implemented, `shadow` and `self` log a warning and fall back to Euler,
-so the flag can be set ahead of the code.
+When `TIKTOK_SIGNER_URL` is set the listener also fetches the signer's browser identity
+(`GET /v1/identity`) once at startup and pins every connection's device presets to it, so the
+signed fetch, the signature and the WebSocket handshake all describe the same browser. Under
+`self`, the second Euler seam (`fetchWebcastSignatureFromProvider`, generic HTTP URL signing) is
+repointed at the signer service too.
 
 `TIKTOK_EXTENDED_GIFT_INFO` defaults on **only** under `self`. The reason is narrower than it
 looks: the library already fetches the gift list from TikTok directly (`gift/list/`), but that
 request is signed, and signing an HTTP URL goes through a *second* Euler seam
-(`fetchWebcastSignatureFromProvider`). Euler paywalls the signing call, not the gift data.
-Enabling this any earlier just reinstates the Business-plan error on every connect — and note that
-implementing only the WebSocket signature will not unblock it either.
+(`fetchWebcastSignatureFromProvider`). Under `self` mode that seam routes to our signer service,
+so the gift list unblocks; enabling it any earlier reinstates Euler's Business-plan error on
+every connect.
 
 Signature outcomes are exported as `tiktok_sign_attempts_total{signer,outcome,reason,load_bearing}`
 and `tiktok_sign_duration_seconds`. Filter to `load_bearing="true"` for real availability, and to

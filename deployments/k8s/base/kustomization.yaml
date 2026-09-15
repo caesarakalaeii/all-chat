@@ -44,8 +44,11 @@ resources:
 
   # Phase 5 - Discord Listener (v1.5)
   - discord-listener/deployment.yaml
-  - discord-listener/hpa.yaml
   - discord-listener/servicemonitor.yaml
+
+  # TikTok self-signing (ADR-0052): replaces Euler Stream on the signing path.
+  - tiktok-signer/deployment.yaml
+  - tiktok-signer/service.yaml
 
 commonLabels:
   project: allchat
@@ -88,4 +91,7 @@ images:
     newTag: main
   - name: allchat-discord-listener:latest
     newName: ghcr.io/caesarakalaeii/allchat-discord-listener
+    newTag: main
+  - name: allchat-tiktok-signer:latest
+    newName: ghcr.io/caesarakalaeii/allchat-tiktok-signer
     newTag: main

@@ -149,6 +149,38 @@ describe('installSignConfiguration', () => {
     });
   });
 
+  describe('generic HTTP URL signing seam (gift list)', () => {
+    it('is left untouched in euler mode', () => {
+      const original = globals.routeConfig.fetchWebcastSignatureFromProvider;
+      install(globals, { signerMode: 'euler' }, { euler });
+      expect(globals.routeConfig.fetchWebcastSignatureFromProvider).toBe(original);
+    });
+
+    it('routes to the self signer when one is installed', async () => {
+      const self = new (class extends StubSigner {
+        signUrlCalls: Array<{ url: string; method?: string }> = [];
+        async signUrl(url: string, method = 'GET') {
+          this.signUrlCalls.push({ url, method });
+          return { response: { signedUrl: url + '&signed=1', userAgent: 'UA' } };
+        }
+      })('self');
+      install(globals, { signerMode: 'self' }, { euler, self });
+
+      const handler = globals.routeConfig.fetchWebcastSignatureFromProvider;
+      expect(handler).toBeDefined();
+      if (!handler) throw new Error('URL seam handler not installed');
+      const result = (await handler({ url: 'https://webcast.tiktok.com/x', method: 'POST' } as never)) as {
+        response: { signedUrl: string };
+      };
+      // The connector reads response.signedUrl off this shape.
+      expect(result.response.signedUrl).toBe('https://webcast.tiktok.com/x&signed=1');
+      expect(self.signUrlCalls[0]).toEqual({
+        url: 'https://webcast.tiktok.com/x',
+        method: 'POST'
+      });
+    });
+  });
+
   describe('euler mode', () => {
     it('leaves the library route untouched', async () => {
       const original = globals.routeConfig.fetchSignedWebSocketFromProvider;
