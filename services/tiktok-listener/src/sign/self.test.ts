@@ -19,7 +19,7 @@
 import { describe, expect, it } from 'vitest';
 import type { request as undiciRequest } from 'undici';
 import { SelfSigner } from './self.js';
-import { SignatureFailure } from './signer.js';
+import { classifySignatureFailure, SignatureFailure } from './signer.js';
 
 type FetchImpl = typeof undiciRequest;
 
@@ -63,6 +63,19 @@ describe('SelfSigner', () => {
 
     await expect(signer.sign(request)).rejects.toThrow(SignatureFailure);
     await expect(signer.sign(request)).rejects.toThrow(/rate limited/);
+  });
+
+  it('classifies a TikTok-side rejection as a signature failure reason', async () => {
+    // The alert TikTokSelfSigningFailing routes on reason="signature", so a
+    // TikTok 403 relayed by the sign service must land there, not in unknown.
+    const signer = new SelfSigner({
+      baseUrl: 'http://signer:8092',
+      fetchImpl: stubFetch(502, { error: 'sign_target_error', message: 'TikTok returned 403' })
+    });
+
+    const failure = await signer.sign(request).catch((error: unknown) => error as SignatureFailure);
+    expect(failure).toBeInstanceOf(SignatureFailure);
+    expect(classifySignatureFailure(failure)).toBe('signature');
   });
 
   it('wraps transport failures with the signer name and endpoint', async () => {

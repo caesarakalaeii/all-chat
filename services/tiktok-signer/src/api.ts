@@ -35,8 +35,34 @@
  */
 
 import http from 'node:http';
+import { collectDefaultMetrics, Counter, Histogram, Registry } from 'prom-client';
 import { request as undiciRequest } from 'undici';
 import { SigningSession, type SignerIdentity } from './signing/session.js';
+
+const register = new Registry();
+collectDefaultMetrics({ register });
+
+/**
+ * Outcome of one sign request, as a bounded metric label. `tiktok_rejected`
+ * separates "our signature was computed but TikTok refused it" (the arms-race
+ * signal, ADR-0052) from transport and payload problems.
+ */
+export type SignRequestOutcome = 'success' | 'tiktok_rejected' | 'bad_request' | 'signer_error';
+
+const signRequestsTotal = new Counter({
+  name: 'signer_sign_requests_total',
+  help: 'Sign requests by endpoint and outcome',
+  labelNames: ['endpoint', 'outcome'],
+  registers: [register]
+});
+
+const signRequestDuration = new Histogram({
+  name: 'signer_sign_request_duration_seconds',
+  help: 'End-to-end sign request latency by endpoint and outcome',
+  labelNames: ['endpoint', 'outcome'],
+  buckets: [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30],
+  registers: [register]
+});
 
 /** Shared bearer token; empty disables auth (cluster-internal NetworkPolicy path). */
 function readAuthToken(): string {
@@ -274,6 +300,20 @@ export function createServer(options: ServerOptions): http.Server {
       return;
     }
 
+    // Prometheus scrape. No auth: cluster-internal behind the default-deny
+    // NetworkPolicy, same trust boundary as the other allchat /metrics ports.
+    if (req.method === 'GET' && url === '/metrics') {
+      try {
+        res.writeHead(200, { 'Content-Type': register.contentType });
+        res.end(await register.metrics());
+      } catch (error) {
+        logger?.error('metrics scrape failed', { error: (error as Error).message });
+        res.writeHead(500);
+        res.end();
+      }
+      return;
+    }
+
     if (req.method === 'GET' && url === '/v1/identity') {
       const identity = session.identity;
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -303,10 +343,35 @@ export function createServer(options: ServerOptions): http.Server {
         return;
       }
 
-      const result =
-        url === '/v1/sign'
-          ? await performSignedFetch(session, session.identity, payload as SignRequestPayload)
-          : await performSignUrl(session, payload as SignUrlRequestPayload);
+      const endpoint = url === '/v1/sign' ? 'sign' : 'sign_url';
+      const startedAt = Date.now();
+      let outcome: SignRequestOutcome;
+      let result: RouteResult;
+      try {
+        result =
+          url === '/v1/sign'
+            ? await performSignedFetch(session, session.identity, payload as SignRequestPayload)
+            : await performSignUrl(session, payload as SignUrlRequestPayload);
+      } catch (error) {
+        // Thrown sign errors are the signing session itself failing (browser
+        // dead, rebuild loop). Counted, then surfaced as 500 to the caller —
+        // the listener classifies it via the reason set on its side.
+        outcome = 'signer_error';
+        signRequestsTotal.inc({ endpoint, outcome });
+        signRequestDuration.observe({ endpoint, outcome }, (Date.now() - startedAt) / 1000);
+        logger?.error('sign request failed', { endpoint, error: (error as Error).message });
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'signer_error', message: (error as Error).message }));
+        return;
+      }
+      outcome =
+        result.status === 200
+          ? 'success'
+          : result.status === 400
+            ? 'bad_request'
+            : 'tiktok_rejected';
+      signRequestsTotal.inc({ endpoint, outcome });
+      signRequestDuration.observe({ endpoint, outcome }, (Date.now() - startedAt) / 1000);
 
       res.writeHead(result.status, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result.body));
