@@ -24,6 +24,7 @@
 import { createServer } from './api.js';
 import { SigningSession } from './signing/session.js';
 import { ViewerPool } from './signing/viewer.js';
+import { fetchWebshareProxies } from './signing/webshare.js';
 const PORT = parseInt(process.env.PORT || '8092', 10);
 const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
 const logger = {
@@ -50,22 +51,68 @@ const session = new SigningSession({
 // tab instead of the signature path. The signing session stays up for
 // /v1/sign-url (the gift-list seam still only needs a signature).
 const viewerMode = (process.env.SIGNER_VIEWER_MODE || 'signature') === 'page';
+// Residential proxy pool for the viewer lanes: TikTok gates the chat bootstrap
+// on IP reputation, so viewer browsers egress through residential IPs. One
+// browser per proxy (own profile = own session identity); rooms are pinned to
+// their lane, and a failing lane is benched for a cooldown while another
+// serves. Proxies come from the webshare API (SIGNER_WEBSHARE_TOKEN) so
+// dashboard-side rotations propagate without touching the cluster; a static
+// comma-separated SIGNER_PROXY_HOSTS is the fallback. The legacy singular
+// SIGNER_PROXY_HOST still applies to the signature session.
+const webshareToken = (process.env.SIGNER_WEBSHARE_TOKEN || '').trim();
+const staticProxyHosts = (process.env.SIGNER_PROXY_HOSTS || '')
+    .split(',')
+    .map((h) => h.trim())
+    .filter(Boolean);
+let proxyUser = process.env.SIGNER_PROXY_USER;
+let proxyPass = process.env.SIGNER_PROXY_PASS;
 const viewer = viewerMode
     ? new ViewerPool({
-        proxyHost: process.env.SIGNER_PROXY_HOST,
-        proxyUser: process.env.SIGNER_PROXY_USER,
-        proxyPass: process.env.SIGNER_PROXY_PASS,
+        proxyHosts: staticProxyHosts,
+        proxyUser,
+        proxyPass,
         executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
         userDataDir: userDataDir + '-viewer',
         display: process.env.SIGNER_DISPLAY
     })
     : undefined;
+// Refresh the proxy list from webshare hourly: replacements and removals in
+// the dashboard propagate without a redeploy. Surviving lanes keep their
+// browsers and pinned rooms (see ViewerPool.refreshProxies).
+let proxyRefresh;
+async function refreshProxiesFromWebshare() {
+    if (!viewer || !webshareToken)
+        return;
+    try {
+        const list = await fetchWebshareProxies(webshareToken);
+        proxyUser = list.username;
+        proxyPass = list.password;
+        await viewer.refreshProxies(list.hosts);
+        logger.info('viewer proxy pool refreshed from webshare', { proxies: list.hosts.length });
+    }
+    catch (error) {
+        logger.error('webshare proxy refresh failed; keeping current lanes', {
+            error: error.message
+        });
+    }
+}
 const server = createServer({ port: PORT, session, viewer, logger });
 server.listen(PORT, () => {
     logger.info('tiktok-signer listening', { port: PORT });
+    if (viewer && webshareToken) {
+        void refreshProxiesFromWebshare();
+        proxyRefresh = setInterval(() => void refreshProxiesFromWebshare(), 60 * 60 * 1000);
+    }
+    else if (viewer && staticProxyHosts.length > 0) {
+        logger.info('viewer proxy pool configured from static list', {
+            proxies: staticProxyHosts.length
+        });
+    }
 });
 async function shutdown(signal) {
     logger.info('shutting down', { signal });
+    if (proxyRefresh)
+        clearInterval(proxyRefresh);
     server.close();
     await session.close();
     await viewer?.close();
