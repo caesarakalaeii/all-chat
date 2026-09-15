@@ -19,8 +19,10 @@ package clients
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/caesar/all-chat/services/emote-service/models"
@@ -39,18 +41,23 @@ type FFZClient struct {
 	logger     *zap.Logger
 }
 
-// FFZResponse represents the FFZ API response
+// FFZEmoticon is one emote entry within an FFZ set. URLs are keyed by scale
+// ("1", "2", "4").
+type FFZEmoticon struct {
+	ID   int               `json:"id"`
+	Name string            `json:"name"`
+	URLs map[string]string `json:"urls"`
+}
+
+// FFZResponse represents the FFZ API response for a room or set lookup. The
+// room lookup fills Room; the global-set endpoint returns only Sets.
 type FFZResponse struct {
 	Room struct {
 		ID          string `json:"id"`
 		DisplayName string `json:"display_name"`
 	} `json:"room"`
 	Sets map[string]struct {
-		Emoticons []struct {
-			ID   int               `json:"id"`
-			Name string            `json:"name"`
-			URLs map[string]string `json:"urls"`
-		} `json:"emoticons"`
+		Emoticons []FFZEmoticon `json:"emoticons"`
 	} `json:"sets"`
 }
 
@@ -65,11 +72,36 @@ func NewFFZClient(logger *zap.Logger) *FFZClient {
 	}
 }
 
-// FetchEmotes fetches emotes from FFZ for a given channel
+// FetchEmotes fetches emotes from FFZ for a given channel.
+// For "global", only FFZ's global set is returned. For any other channel,
+// the global set is always merged in — global emotes (e.g. BeanieHipster)
+// render in every channel — with the channel's own emotes taking precedence
+// on code collisions. A channel without an FFZ room is the common case,
+// not a failure: the response is the global set.
 func (c *FFZClient) FetchEmotes(ctx context.Context, channel string) ([]models.Emote, error) {
+	if strings.TrimSpace(channel) == "" {
+		return nil, fmt.Errorf("channel cannot be empty")
+	}
+
+	if strings.EqualFold(channel, "global") {
+		return c.fetchGlobalEmotes(ctx, channel)
+	}
+	channelEmotes, chErr := c.fetchRoomEmotes(ctx, channel)
+	if chErr != nil && !errors.Is(chErr, ErrNotFound) {
+		return nil, chErr
+	}
+
+	globalEmotes, gErr := c.fetchGlobalEmotes(ctx, channel)
+
+	return mergeChannelWithGlobals(c.logger, "ffz", channel,
+		channelEmotes, chErr, globalEmotes, gErr)
+}
+
+// fetchRoomEmotes fetches a channel's room emote sets from FFZ.
+func (c *FFZClient) fetchRoomEmotes(ctx context.Context, channel string) ([]models.Emote, error) {
 	url := fmt.Sprintf("%s/v1/room/%s", c.baseURL, channel)
 
-	c.logger.Debug("Fetching FFZ emotes",
+	c.logger.Debug("Fetching FFZ room emotes",
 		zap.String("channel", channel),
 		zap.String("url", url))
 
@@ -102,31 +134,68 @@ func (c *FFZClient) FetchEmotes(ctx context.Context, channel string) ([]models.E
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	// Convert FFZ emotes to our internal format
-	// FFZ has multiple "sets" of emotes per channel
-	emotes := make([]models.Emote, 0)
+	return ffzSetsEmotes(apiResp.Sets, channel), nil
+}
 
-	for _, set := range apiResp.Sets {
+// ffzSetsEmotes flattens FFZ sets into emotes, skipping entries without a
+// 1x URL.
+func ffzSetsEmotes(sets map[string]struct {
+	Emoticons []FFZEmoticon `json:"emoticons"`
+}, channel string) []models.Emote {
+	emotes := make([]models.Emote, 0)
+	for _, set := range sets {
 		for _, e := range set.Emoticons {
-			// Get 1x size URL
 			url, ok := e.URLs["1"]
 			if !ok {
-				// Skip emotes without 1x URL
 				continue
 			}
 
-			emote := models.Emote{
+			emotes = append(emotes, models.Emote{
 				Code:     e.Name,
 				URL:      url,
 				Provider: "ffz",
 				Channel:  channel,
-			}
-			emotes = append(emotes, emote)
+			})
 		}
 	}
+	return emotes
+}
 
-	c.logger.Debug("Fetched FFZ emotes",
-		zap.String("channel", channel),
+// fetchGlobalEmotes fetches FFZ's global emote set. channel is only used to
+// populate the Channel field on the parsed emotes.
+func (c *FFZClient) fetchGlobalEmotes(ctx context.Context, channel string) ([]models.Emote, error) {
+	url := fmt.Sprintf("%s/v1/set/global", c.baseURL)
+
+	c.logger.Debug("Fetching FFZ global emotes",
+		zap.String("url", url))
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("User-Agent", "All-Chat/1.0")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch global emotes: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return nil, rateLimited("ffz", resp)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to fetch global emotes: status code %d", resp.StatusCode)
+	}
+
+	var apiResp FFZResponse
+	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	emotes := ffzSetsEmotes(apiResp.Sets, channel)
+	c.logger.Debug("Fetched FFZ global emotes",
 		zap.Int("count", len(emotes)))
 
 	return emotes, nil

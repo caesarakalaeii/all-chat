@@ -18,6 +18,7 @@ package clients
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -120,5 +121,35 @@ func TestGetUserIDDoesNotLoopOnPersistent401(t *testing.T) {
 	// One initial fetch + exactly one refresh after the first 401.
 	if issued != 2 {
 		t.Fatalf("expected exactly one refresh (2 issuances), got %d", issued)
+	}
+}
+
+// TestGetUserIDWrapsErrNotFound locks the wrap contract the emote handler relies
+// on to classify a nonexistent Twitch channel as not_found (negative cache +
+// metric) instead of a real error: an empty users response must surface
+// ErrNotFound via errors.Is. With BTTV/FFZ/7TV FetchEmotes now falling back to
+// their global sets on a channel miss, the Twitch user lookup is the one path
+// where a 404-class miss still escapes to the handler.
+func TestGetUserIDWrapsErrNotFound(t *testing.T) {
+	tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"access_token":"tok","expires_in":5184000}`)
+	}))
+	defer tokenSrv.Close()
+
+	usersSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"data":[]}`)
+	}))
+	defer usersSrv.Close()
+
+	c := newTestTwitchClient(tokenSrv.URL, usersSrv.URL, "")
+
+	_, err := c.GetUserID(context.Background(), "nochannel")
+	if err == nil {
+		t.Fatal("expected error for unknown twitch user, got nil")
+	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
 	}
 }
