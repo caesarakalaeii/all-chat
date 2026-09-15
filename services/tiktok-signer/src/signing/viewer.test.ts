@@ -108,4 +108,29 @@ describe('ViewerPool lane selection', () => {
     expect(internals.roomLane.has('gone')).toBe(false);
     await pool.close();
   });
+
+  it('drops the bootstrap direct lane when proxies arrive and stores credentials', async () => {
+    // Pool constructed with no proxies (webshare flow: list arrives later).
+    const pool = new ViewerPool({ userDataDir: '/tmp/x' });
+    const internals = pool as unknown as {
+      lanes: Map<string, { host: string }>;
+      options: { proxyUser?: string; proxyPass?: string };
+    };
+    expect(internals.lanes.has('')).toBe(true);
+
+    await pool.refreshProxies(['a:1', 'b:2'], { username: 'u', password: 'p' });
+    // The direct lane is gone once real proxies exist...
+    expect(internals.lanes.has('')).toBe(false);
+    expect(internals.lanes.size).toBe(2);
+    // ...and the credentials are stored for lane pages to authenticate with.
+    expect(internals.options.proxyUser).toBe('u');
+    expect(internals.options.proxyPass).toBe('p');
+
+    // An empty refresh keeps the direct lane (nothing else to serve on).
+    const directPool = new ViewerPool({ userDataDir: '/tmp/x' });
+    await directPool.refreshProxies([], { username: 'u', password: 'p' });
+    expect(((directPool as unknown as { lanes: Map<string, unknown> }).lanes).has('')).toBe(true);
+    await directPool.close();
+    await pool.close();
+  });
 });
