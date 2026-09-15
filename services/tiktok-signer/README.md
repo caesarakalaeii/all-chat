@@ -74,7 +74,9 @@ behind the default-deny NetworkPolicy).
 | `SIGNER_DISPLAY` | empty | X display the viewer browser renders on (e.g. `:0`). Page-viewer mode requires a real display stack. |
 | `SIGNER_USER_DATA_DIR` | `/tmp/tiktok-signer-profile` | Writable browser profile dir (emptyDir in k8s). |
 | `PUPPETEER_EXECUTABLE_PATH` | puppeteer default | Chromium path (set to `/usr/bin/chromium` in the image). |
-| `SIGNER_PROXY_HOST` | empty | Residential proxy `host:port`. **Recommended in production**: TikTok blocks datacenter IPs; expect empty responses / 429s without one. |
+| `SIGNER_WEBSHARE_TOKEN` | empty | Webshare API token: the proxy list is fetched from the API at startup and refreshed hourly, so dashboard-side rotations propagate without touching the cluster. **Preferred** over the static list. |
+| `SIGNER_PROXY_HOSTS` | empty | Static comma-separated residential proxy list (`host:port,...`) for the viewer lanes, used when no webshare token is set. One browser per proxy, rooms pinned to their lane, failing lanes benched for a cooldown. **Required for page mode in production**: TikTok gates the chat bootstrap on IP reputation; the datacenter IP never receives im/fetch. |
+| `SIGNER_PROXY_HOST` | empty | Singular proxy for the signature session (X-Bogus fetch path). |
 | `SIGNER_PROXY_USER` / `SIGNER_PROXY_PASS` | empty | Proxy credentials. |
 
 ## Scripts
