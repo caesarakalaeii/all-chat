@@ -196,16 +196,24 @@ export class LeadershipCoordinator {
    * ADR-0007 rebalancing, ported from shared/sourcemanager/coordinator.go.
    *
    * Registers this pod as a peer, then sheds leases in excess of
-   * ceil(totalStreams / peerCount), releasing alphabetically by stream ID so
-   * both coordinators shed the same streams for the same fleet state. Returns
-   * the released stream IDs so the caller can disconnect them.
+   * min(ceil(totalStreams / peerCount), maxPerPod), releasing alphabetically by
+   * stream ID so both coordinators shed the same streams for the same fleet
+   * state. Returns the released stream IDs so the caller can disconnect them
+   * and exclude them from re-acquisition for a cycle.
+   *
+   * maxPerPod carries the caller's hard connection ceiling
+   * (TIKTOK_MAX_STREAMS_PER_POD): the Euler proxy caps concurrent proxied
+   * WebSockets (ADR-0052), so a pod must never hold more leases than it can
+   * connect — a leased-but-unconnectable stream is deaf everywhere, because no
+   * other pod may claim it. The Go coordinator has no such parameter because
+   * no Go listener connects through the Euler proxy.
    *
    * The stabilization gate prevents the release→re-acquire oscillation during
    * scale events: the first call after a peer-count change only records the new
    * count; releases happen once the count has been stable for
    * REBALANCE_STABILIZATION_MS.
    */
-  async rebalance(totalStreams: number): Promise<string[]> {
+  async rebalance(totalStreams: number, maxPerPod?: number): Promise<string[]> {
     let peerCount: number;
     try {
       peerCount = await this.client.registerPeer(this.platform, this.callerID);
@@ -234,35 +242,27 @@ export class LeadershipCoordinator {
     }
     if (now < this.rebalanceState.peerCountStableAt) return [];
 
-    const maxPerPod = Math.ceil(totalStreams / peerCount);
+    const fairShare = Math.ceil(totalStreams / peerCount);
+    const targetLeases = maxPerPod !== undefined ? Math.min(fairShare, maxPerPod) : fairShare;
     const currentCount = this.leases.size;
-    const excess = currentCount - maxPerPod;
+    const excess = currentCount - targetLeases;
     if (excess <= 0) return [];
 
-    const toRelease = [...this.leases.keys()].sort().slice(maxPerPod);
+    const toRelease = [...this.leases.keys()].sort().slice(targetLeases);
 
+    // One release path for demand removal, leadership loss and rebalancing.
+    // Fire-and-forget per stream (void, matching the Go coordinator's
+    // asynchronous release): a failed release lets the lease expire
+    // server-side, so rebalancing must not stall on one slow request.
     for (const streamID of toRelease) {
-      const entry = this.leases.get(streamID);
-      if (!entry) continue;
-      entry.stopped = true;
-      clearInterval(entry.timer);
-      this.leases.delete(streamID);
-
-      // Fire-and-forget: a failed release lets the lease expire server-side,
-      // matching the Go coordinator's asynchronous release.
-      this.client.releaseLeadership(this.platform, streamID, this.callerID).catch(err => {
-        this.logger.warn('Failed to release leadership during rebalance', {
-          stream_id: streamID,
-          error: String(err),
-        });
-      });
+      void this.release(streamID);
     }
 
     this.logger.info('Rebalanced leadership leases', {
       platform: this.platform,
       peer_count: peerCount,
       total_streams: totalStreams,
-      max_per_pod: maxPerPod,
+      max_per_pod: targetLeases,
       had: currentCount,
       released: toRelease.length,
       kept: currentCount - toRelease.length,
@@ -270,6 +270,7 @@ export class LeadershipCoordinator {
 
     return toRelease;
   }
+
 
   /**
    * Heartbeat loop — renew leadership with retry and grace period.
