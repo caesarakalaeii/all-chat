@@ -261,6 +261,13 @@ export class SigningSession {
             return;
         }
         this.initializing = (async () => {
+            // Tests run without Chromium: skipWarmUp means no browser at all, so
+            // sign jobs fail fast through the normal error path instead of
+            // stalling on a launch (or succeeding on a machine that happens to
+            // have one cached).
+            if (this.options.skipWarmUp) {
+                throw new Error('signing session not initialized (skipWarmUp)');
+            }
             const sdkContent = await this.loadSdk();
             const browserArgs = [
                 '--no-sandbox',
@@ -338,13 +345,6 @@ export class SigningSession {
                         // first sign, which triggers the rebuild-and-retry path.
                     }
                 }, sdkContent);
-                if (this.options.skipWarmUp) {
-                    this.browser = browser;
-                    this.page = page;
-                    this.initializedAt = Date.now();
-                    this.generationCount = 0;
-                    return;
-                }
                 // Warm up on a real profile page: the page bundle initializes __sdkN
                 // (the X-Bogus table we call) on top of the injected SDK, and the visit
                 // primes msToken + cookies the signatures need. Upstream's sequence:
