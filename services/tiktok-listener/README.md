@@ -107,6 +107,13 @@ TIKTOK_SELF_SIGN_FALLBACK=true        # Under `self`, fall back to Euler when ou
 TIKTOK_SIGNER_URL=                    # Empty = sign in-process; a URL points at a sign service
 TIKTOK_EXTENDED_GIFT_INFO=            # Defaults on only under `self` (see below)
 SIGN_API_KEY=                         # Euler Stream API key; empty means the free tier
+
+# Connection ceiling per pod
+TIKTOK_MAX_STREAMS_PER_POD=20         # Hard cap on concurrent WebSocket connections. The Euler
+                                      # free tier proxies every connection and caps concurrent ones
+                                      # (~25); above that it accepts the handshake but withholds live
+                                      # push (2026-09-14 incident). Raise with a paid plan; remove
+                                      # when self-signing retires Euler (ADR-0052)
 ```
 
 ### WebSocket signing
