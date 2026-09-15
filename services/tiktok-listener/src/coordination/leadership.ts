@@ -271,7 +271,6 @@ export class LeadershipCoordinator {
     return toRelease;
   }
 
-
   /**
    * Heartbeat loop — renew leadership with retry and grace period.
    */
