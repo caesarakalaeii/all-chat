@@ -128,7 +128,8 @@ func (c *SevenTVClient) FetchEmotes(ctx context.Context, channel string) ([]mode
 		// must not lose channel emotes. But with nothing else to return — a
 		// channel miss, or a channel lookup that succeeded with zero emotes —
 		// propagate the real error instead of caching an empty result for an
-		// hour (and a 429 must reach startCooldown).
+		// hour (a 429 here reaches startCooldown; once channel emotes exist,
+		// a global 429 only drops the bonus set).
 		if len(channelEmotes) == 0 {
 			return nil, err
 		}

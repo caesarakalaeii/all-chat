@@ -99,6 +99,30 @@ func TestBTTVClient_FetchEmotes(t *testing.T) {
 			errContains:       "failed to fetch global emotes",
 		},
 		{
+			name:              "channel miss with global 429 surfaces rate limit",
+			channel:           "nonexistent",
+			channelStatusCode: http.StatusNotFound,
+			channelResponse:   `{"message": "user not found"}`,
+			globalStatusCode:  http.StatusTooManyRequests,
+			wantErr:           true,
+			errContains:       "rate limited",
+		},
+		{
+			name:              "channel emotes with global 429 returns channel only",
+			channel:           "xqc",
+			channelStatusCode: http.StatusOK,
+			channelResponse: `{
+				"id": "5e4b3e186b9f0f6c6d3b9e3a",
+				"channelEmotes": [
+					{"id": "54fa8f1401e468494b85b537", "code": "xqcL", "imageType": "png"}
+				],
+				"sharedEmotes": []
+			}`,
+			globalStatusCode:  http.StatusTooManyRequests,
+			wantEmoteCount:    1,
+			wantChannelEmotes: []string{"xqcL"},
+		},
+		{
 			name:              "channel with no BTTV account returns global set",
 			channel:           "nonexistent",
 			channelStatusCode: http.StatusNotFound,

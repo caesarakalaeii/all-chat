@@ -93,7 +93,7 @@ func (c *FFZClient) FetchEmotes(ctx context.Context, channel string) ([]models.E
 		// fetch either missed (ErrNotFound) or returned no emotes (a room with
 		// only emotes lacking a 1x URL), so propagate the real error instead
 		// of caching an empty result.
-		if errors.Is(chErr, ErrNotFound) || len(channelEmotes) == 0 {
+		if len(channelEmotes) == 0 {
 			return nil, gErr
 		}
 		c.logger.Warn("Failed to fetch FFZ global emotes, returning channel emotes only",

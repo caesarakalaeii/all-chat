@@ -186,6 +186,36 @@ func TestFFZClient_FetchEmotes(t *testing.T) {
 			errContains:       "failed to fetch global emotes",
 		},
 		{
+			name:              "channel miss with global 429 surfaces rate limit",
+			channel:           "nonexistent",
+			channelStatusCode: http.StatusNotFound,
+			channelResponse:   `{"error": "room not found"}`,
+			globalStatusCode:  http.StatusTooManyRequests,
+			wantErr:           true,
+			errContains:       "rate limited",
+		},
+		{
+			name:              "room emotes with global 429 returns room only",
+			channel:           "xqc",
+			channelStatusCode: http.StatusOK,
+			channelResponse: `{
+				"room": {
+					"id": "123456",
+					"display_name": "xQc"
+				},
+				"sets": {
+					"123456": {
+						"emoticons": [
+							{"id": 1234, "name": "xqcL", "urls": {"1": "https://cdn.frankerfacez.com/emote/1234/1"}}
+						]
+					}
+				}
+			}`,
+			globalStatusCode:  http.StatusTooManyRequests,
+			wantEmoteCount:   1,
+			wantChannelEmotes: []string{"xqcL"},
+		},
+		{
 			name:              "global fetch failure with room emotes returns room only",
 			channel:           "xqc",
 			channelStatusCode: http.StatusOK,

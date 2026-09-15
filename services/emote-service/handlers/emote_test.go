@@ -464,7 +464,7 @@ func TestEmoteHandler_GetChannelEmotes_WithTwitchGlobalForNonTwitchPlatform(t *t
 			},
 			setupCache:       func() EmoteCache { return newMockEmoteCache() },
 			wantStatusCode:   http.StatusOK,
-			wantEmoteCount:   4, // 2 Twitch global + BTTV global + FFZ global
+			wantEmoteCount:   4, // 2 Twitch global + BTTV global + FFZ global. Also pins the twitch channel-lookup skip: the twitch mock returns 2 emotes for any call, so wantEmoteCount: 4 fails if the channel fetch ran (it would add 2 duplicates).
 			hasTwitchGlobal:  true,
 			wantGlobalLookup: true,
 		},
