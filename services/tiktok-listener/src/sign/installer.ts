@@ -43,6 +43,7 @@ export interface ConnectorGlobals {
    */
   routeConfig: {
     fetchSignedWebSocketFromProvider: (args: never) => Promise<unknown>;
+    fetchWebcastSignatureFromProvider?: (args: never) => Promise<unknown>;
   };
   /** Composite-route switches controlling whether Euler is consulted as a last resort. */
   roomIdRouteConfig: { skipFetchRoomIdFromEulerRoute: boolean };
@@ -210,6 +211,24 @@ export function installSignConfiguration(
     globals.routeConfig.fetchSignedWebSocketFromProvider = asRouteHandler(
       installed
     ) as unknown as (args: never) => Promise<unknown>;
+
+    // The second Euler seam: generic HTTP URL signing, reached whenever the
+    // connector sends `signRequest: true` (gift list, currently). The self
+    // signer's signUrl posts to the sign service's /v1/sign-url, which returns
+    // the `response.signedUrl` shape WebcastHttpClient.request reads. Without
+    // this, `self` mode would still hit Euler for every signed HTTP request.
+    const selfSigner = signers.self as
+      | (WebcastSigner & { signUrl?: (url: string, method?: string) => Promise<unknown> })
+      | undefined;
+    if (selfSigner?.signUrl) {
+      const signUrl = selfSigner.signUrl.bind(selfSigner);
+      globals.routeConfig.fetchWebcastSignatureFromProvider = (async (
+        args: { url: string; method?: string }
+      ) => signUrl(args.url, args.method ?? 'GET')) as unknown as (
+        args: never
+      ) => Promise<unknown>;
+      notes.push('generic HTTP URL signing also routes to the self signer');
+    }
   }
 
   const report: InstallReport = {
