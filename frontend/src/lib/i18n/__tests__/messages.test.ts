@@ -43,6 +43,7 @@ const EXPECTED_NAMESPACES = [
   'onboarding',
   'overlayEditor',
   'settings',
+  'translate',
   'viewerOverlay',
 ] as const
 
