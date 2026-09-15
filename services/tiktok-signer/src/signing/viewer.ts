@@ -31,11 +31,11 @@ puppeteer.use(StealthPlugin());
 
 export interface ViewerPoolOptions {
   /**
-   * Comma-separated residential proxy list (host:port each). One browser
-   * profile per proxy: a profile's session identity is bound to its IP, and
-   * mixing IPs inside one profile reads as account-hopping to TikTok's bot
-   * detection. Rooms are pinned to the browser they first captured on.
-   * With no proxies, a single direct-connection browser serves everything.
+   * Residential proxy list (host:port each). One browser profile per proxy: a
+   * profile's session identity is bound to its IP, and mixing IPs inside one
+   * profile reads as account-hopping to TikTok's bot detection. Rooms are
+   * pinned to the browser they first captured on. With no proxies, a single
+   * direct-connection browser serves everything.
    */
   proxyHosts?: string[];
   /** Proxy credentials; shared across the list (webshare shape). */
@@ -47,11 +47,11 @@ export interface ViewerPoolOptions {
   executablePath?: string;
   /**
    * X server display to render on. Page-viewer mode needs a real rendering
-   * stack: measured 2026-09-15, im/fetch answers 403 to every headless/Xvfb
-   * attempt and 200-with-full-payload to the same Chromium on a real display
-   * (Xvfb + llvmpipe passes; --disable-gpu/SwiftShader does not).
-   * If unset, Chromium runs headless and viewer capture is expected to fail
-   * against TikTok's bot detection.
+   * stack: measured 2026-09-15, im/fetch answers 403 to every headless attempt
+   * and 200-with-full-payload to the same Chromium on a real display (Xvfb +
+   * llvmpipe passes; --disable-gpu/SwiftShader does not). If unset, Chromium
+   * runs headless and viewer capture is expected to fail against TikTok's bot
+   * detection.
    */
   display?: string;
   /** How long an idle room tab is kept before eviction (default 5 min). */
@@ -69,8 +69,8 @@ export interface RoomCapture {
   cookieHeader: string;
   /** The UA the page ran with; the listener pins its presets to it. */
   userAgent: string;
-  /** Which proxy index served the capture (0 = direct). For logs/metrics. */
-  proxyIndex: number;
+  /** Which proxy served the capture ("" = direct). For logs/metrics. */
+  proxyHost: string;
   elapsedMs: number;
 }
 
@@ -79,13 +79,13 @@ interface TabEntry {
   lastUsed: number;
 }
 
-/** One browser instance = one egress identity. */
+/** One browser instance = one egress identity. Keyed by proxy host ("" = direct). */
 interface ProxyLane {
-  /** Index into the proxyHosts list; 0 with no proxies = direct connection. */
-  index: number;
+  /** The lane's stable identity: the proxy host:port, or "" for direct. */
+  host: string;
   browser: Browser | null;
   launching: Promise<Browser> | null;
-  /** Usernames currently being captured on this lane (for eviction bookkeeping). */
+  /** Usernames currently being captured on this lane. */
   active: Set<string>;
   /** Until when this lane is benched after a failure. */
   benchedUntil: number;
@@ -104,17 +104,22 @@ interface ProxyLane {
  * directory, own session identity) and rooms are pinned to the lane they
  * first captured on — the profile keeps its TikTok cookies, which is part of
  * the session-grade identity that passes the gate. A failed capture benches
- * the lane for a cooldown and the next attempt rides another one.
+ * the lane for a cooldown and the next attempt rides another one. Lanes are
+ * keyed by proxy host, so `refreshProxies` (fed by the webshare API) can
+ * swap the list underneath without disturbing surviving lanes.
  *
  * Tabs stay open after a capture: the page keeps receiving live push (which
  * keeps the session warm on TikTok's side) and the next capture for the same
  * room reuses its warmed session identity instead of bootstrapping a new one.
  */
 export class ViewerPool {
-  private readonly lanes: ProxyLane[] = [];
+  /** Lanes keyed by proxy host ("" = direct). */
+  private readonly lanes = new Map<string, ProxyLane>();
+  /** Round-robin cursor over the lane keys in insertion order. */
+  private laneOrder: string[] = [];
   private readonly tabs = new Map<string, TabEntry>();
-  /** username -> lane index, so a room keeps its browser identity. */
-  private readonly roomLane = new Map<string, number>();
+  /** username -> lane host, so a room keeps its browser identity. */
+  private readonly roomLane = new Map<string, string>();
   private roundRobin = 0;
   private readonly options: Required<Pick<ViewerPoolOptions, 'tabIdleMs' | 'proxyCooldownMs'>> &
     ViewerPoolOptions;
@@ -127,33 +132,69 @@ export class ViewerPool {
     };
     const hosts = options.proxyHosts ?? [];
     if (hosts.length === 0) {
-      this.lanes.push(this.newLane(0));
+      this.addLane('');
     } else {
-      hosts.forEach((_, i) => this.lanes.push(this.newLane(i)));
+      hosts.forEach((host) => this.addLane(host));
     }
   }
 
-  private newLane(index: number): ProxyLane {
-    return { index, browser: null, launching: null, active: new Set(), benchedUntil: 0 };
+  private addLane(host: string): ProxyLane {
+    const lane: ProxyLane = { host, browser: null, launching: null, active: new Set(), benchedUntil: 0 };
+    this.lanes.set(host, lane);
+    this.laneOrder = [...this.lanes.keys()];
+    return lane;
   }
 
-  private laneProxyHost(index: number): string | undefined {
-    const hosts = this.options.proxyHosts ?? [];
-    return hosts[index];
+  /**
+   * Refresh the proxy list (fed by the webshare API). Lanes for proxies that
+   * disappeared are closed — their pinned rooms recapture on surviving lanes —
+   * and new proxies get fresh lanes. Surviving lanes keep their browsers,
+   * profiles and pinned rooms untouched.
+   */
+  async refreshProxies(hosts: string[]): Promise<void> {
+    const wanted = new Set(hosts);
+    for (const [host, lane] of [...this.lanes]) {
+      if (host !== '' && !wanted.has(host)) {
+        this.lanes.delete(host);
+        this.laneOrder = [...this.lanes.keys()];
+        try {
+          await lane.browser?.close();
+        } catch {
+          // Closing an already-dead browser is not an error.
+        }
+        lane.active.clear();
+        for (const [username, laneHost] of [...this.roomLane]) {
+          if (laneHost === host) {
+            this.roomLane.delete(username);
+            const tab = this.tabs.get(username);
+            if (tab) {
+              this.tabs.delete(username);
+              void tab.page.close().catch(() => undefined);
+            }
+          }
+        }
+      }
+    }
+    for (const host of hosts) {
+      if (!this.lanes.has(host)) this.addLane(host);
+    }
   }
 
   private pickLane(username: string): ProxyLane {
     // A room already captured keeps its lane: the profile's cookies are part
     // of the identity TikTok judged the first time.
-    const pinned = this.roomLane.get(username);
-    if (pinned !== undefined) {
-      const lane = this.lanes[pinned];
-      if (Date.now() >= lane.benchedUntil) return lane;
-      // The pinned lane is benched; fall through to picking another.
+    const pinnedHost = this.roomLane.get(username);
+    if (pinnedHost !== undefined) {
+      const lane = this.lanes.get(pinnedHost);
+      if (lane && Date.now() >= lane.benchedUntil) return lane;
+      // The pinned lane is benched or gone; fall through to picking another.
     }
     const now = Date.now();
-    const available = this.lanes.filter((l) => now >= l.benchedUntil);
-    const pool = available.length > 0 ? available : this.lanes;
+    const all = this.laneOrder
+      .map((h) => this.lanes.get(h))
+      .filter((l): l is ProxyLane => l !== undefined);
+    const available = all.filter((l) => now >= l.benchedUntil);
+    const pool = available.length > 0 ? available : all;
     const lane = pool[this.roundRobin % pool.length];
     this.roundRobin++;
     return lane;
@@ -162,7 +203,7 @@ export class ViewerPool {
   private benchLane(lane: ProxyLane): void {
     // Only bench proxy lanes: the direct lane has nothing to rotate away from,
     // and benching it would just serialize captures for no benefit.
-    if ((this.options.proxyHosts ?? []).length > 0) {
+    if (lane.host !== '') {
       lane.benchedUntil = Date.now() + this.options.proxyCooldownMs;
     }
   }
@@ -187,9 +228,8 @@ export class ViewerPool {
     if (this.options.display) {
       args.push(`--display=${this.options.display}`);
     }
-    const proxyHost = this.laneProxyHost(lane.index);
-    if (proxyHost) {
-      args.push(`--proxy-server=http://${proxyHost}`);
+    if (lane.host) {
+      args.push(`--proxy-server=http://${lane.host}`);
     }
 
     lane.launching = puppeteer
@@ -201,7 +241,9 @@ export class ViewerPool {
         headless: false,
         executablePath: this.options.executablePath,
         args,
-        userDataDir: `${this.options.userDataDir ?? '/tmp/tiktok-signer-profile-viewer'}-p${lane.index}`,
+        // Profile per lane: the session identity (cookies, device reputation)
+        // is bound to the egress IP and must never mix.
+        userDataDir: `${this.options.userDataDir ?? '/tmp/tiktok-signer-profile-viewer'}-${lane.host || 'direct'}`,
         ignoreDefaultArgs: ['--enable-automation']
       })
       .then((browser: Browser) => {
@@ -279,7 +321,7 @@ export class ViewerPool {
           this.roomLane.delete(username);
           this.benchLane(lane);
           await page.close().catch(() => undefined);
-          reject(new Error(`im/fetch 200 not captured within ${timeoutMs}ms (proxy ${lane.index}, ${jobId})`));
+          reject(new Error(`im/fetch 200 not captured within ${timeoutMs}ms (proxy ${lane.host || 'direct'}, ${jobId})`));
         }, timeoutMs);
 
         const onResponse = async (response: {
@@ -308,13 +350,13 @@ export class ViewerPool {
               .join('; ');
             const roomId = new URL(url).searchParams.get('room_id') ?? username;
             this.tabs.set(username, { page, lastUsed: Date.now() });
-            this.roomLane.set(username, lane.index);
+            this.roomLane.set(username, lane.host);
             resolve({
               roomId,
               protoBase64: buf.toString('base64'),
               cookieHeader: cookies,
               userAgent: VIEWER_UA,
-              proxyIndex: lane.index,
+              proxyHost: lane.host,
               elapsedMs: Date.now() - startedAt
             });
           } catch (error) {
@@ -341,7 +383,7 @@ export class ViewerPool {
           this.roomLane.delete(username);
           this.benchLane(lane);
           void page.close().catch(() => undefined);
-          reject(new Error(`navigation failed on proxy ${lane.index}: ${error.message}`));
+          reject(new Error(`navigation failed on proxy ${lane.host || 'direct'}: ${error.message}`));
         });
       });
     } finally {
@@ -352,7 +394,7 @@ export class ViewerPool {
   async close(): Promise<void> {
     this.tabs.clear();
     this.roomLane.clear();
-    for (const lane of this.lanes) {
+    for (const lane of this.lanes.values()) {
       if (lane.browser) {
         try {
           await lane.browser.close();
