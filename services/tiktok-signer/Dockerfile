@@ -5,7 +5,7 @@
 # File: ./services/tiktok-signer/Dockerfile
 
 # Build stage
-FROM node:20-bookworm-slim AS builder
+FROM node:22-bookworm-slim AS builder
 
 WORKDIR /app
 
@@ -25,7 +25,7 @@ RUN npm run build
 
 # Production stage: Chromium is required for the signing session. Bookworm
 # (not alpine) because puppeteer's bundled chromium needs glibc.
-FROM node:20-bookworm-slim
+FROM node:22-bookworm-slim
 
 # Chromium plus the shared libs headless Chromium needs on bookworm.
 RUN apt-get update && \
