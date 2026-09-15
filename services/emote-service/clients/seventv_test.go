@@ -101,13 +101,33 @@ func TestSevenTVClient_FetchEmotes(t *testing.T) {
 						]
 					}
 				}
-			},
+		},
+		{
+			"id": "603cac391cd55c0014d989bf",
+			"name": "OMEGALUL",
+			"data": {
+				"host": {
+					"url": "//cdn.7tv.app/emote/603cac391cd55c0014d989bf",
+					"files": [
+						{"name": "1x.webp", "width": 28}
+					]
+				}
+			}
+		}
+	]}`
+
+	// globalResponseWithCollision adds a global emote sharing the channel emote's
+	// code (xqcL) with a different id, so a merge-order regression swaps the URL.
+	globalResponseWithCollision := `{
+		"id": "global-set",
+		"name": "Global Emotes",
+		"emotes": [
 			{
-				"id": "603cac391cd55c0014d989bf",
-				"name": "OMEGALUL",
+				"id": "603cac391cd55c0014d989c0",
+				"name": "xqcL",
 				"data": {
 					"host": {
-						"url": "//cdn.7tv.app/emote/603cac391cd55c0014d989bf",
+						"url": "//cdn.7tv.app/emote/603cac391cd55c0014d989c0",
 						"files": [
 							{"name": "1x.webp", "width": 28}
 						]
@@ -118,20 +138,22 @@ func TestSevenTVClient_FetchEmotes(t *testing.T) {
 	}`
 
 	tests := []struct {
-		name                 string
-		channel              string
-		mockTwitchID         string
-		mockTwitchErr        error
-		channelStatusCode    int
-		channelResponse      string
-		globalStatusCode     int
-		globalResponse       string
-		wantEmoteCount       int
-		wantErr              bool
-		errContains          string
-		twitchCalled         bool
-		expectChannelEmotes  bool
-		expectGlobalEmotes   bool
+		name                string
+		channel             string
+		mockTwitchID        string
+		mockTwitchErr       error
+		channelStatusCode   int
+		channelResponse     string
+		globalStatusCode    int
+		globalResponse      string
+		wantEmoteCount      int
+		wantErr             bool
+		wantErrIs           error
+		errContains         string
+		twitchCalled        bool
+		expectChannelEmotes bool
+		expectGlobalEmotes  bool
+		wantURL             string
 	}{
 		{
 			name:                "successful fetch with channel and global emotes",
@@ -168,23 +190,77 @@ func TestSevenTVClient_FetchEmotes(t *testing.T) {
 			expectGlobalEmotes: true,
 		},
 		{
-			name:              "channel not found fails",
+			name:               "channel not found falls back to globals",
+			channel:            "missing",
+			mockTwitchID:       "9999",
+			channelStatusCode:  http.StatusNotFound,
+			globalStatusCode:   http.StatusOK,
+			globalResponse:     globalResponse,
+			wantEmoteCount:     2, // only globals
+			twitchCalled:       true,
+			expectGlobalEmotes: true,
+		},
+		{
+			name:              "channel not found with global fetch failure propagates error",
 			channel:           "missing",
 			mockTwitchID:      "9999",
 			channelStatusCode: http.StatusNotFound,
+			globalStatusCode:  http.StatusInternalServerError,
 			wantErr:           true,
-			errContains:       "not found",
+			errContains:       "failed to fetch emote set",
 			twitchCalled:      true,
 		},
 		{
-			name:            "invalid JSON response",
-			channel:         "xqc",
-			mockTwitchID:    "71092938",
+			name:              "channel with no 7TV emotes and global fetch failure propagates error",
+			channel:           "emptyaccount",
+			mockTwitchID:      "71092938",
 			channelStatusCode: http.StatusOK,
-			channelResponse: `{invalid json}`,
-			wantErr:         true,
-			errContains:     "failed to decode",
-			twitchCalled:    true,
+			channelResponse: `{
+				"emote_set": {
+					"id": "set-123",
+					"name": "Cool Emotes",
+					"emotes": []
+				}
+			}`,
+			globalStatusCode: http.StatusInternalServerError,
+			wantErr:          true,
+			errContains:      "failed to fetch emote set",
+			twitchCalled:     true,
+		},
+		{
+			name:              "channel miss with global 429 surfaces rate limit",
+			channel:           "missing",
+			mockTwitchID:      "9999",
+			channelStatusCode: http.StatusNotFound,
+			globalStatusCode:  http.StatusTooManyRequests,
+			wantErr:           true,
+			// The handler opens its cooldown via errors.Is, not the message.
+			wantErrIs:   ErrRateLimited,
+			twitchCalled: true,
+		},
+		{
+			name:                "channel emotes take precedence on code collision",
+			channel:             "xqc",
+			mockTwitchID:        "71092938",
+			channelStatusCode:   http.StatusOK,
+			channelResponse:     channelResponse,
+			globalStatusCode:    http.StatusOK,
+			globalResponse:      globalResponseWithCollision,
+			wantEmoteCount:      1, // both sets' xqcL collapse to the channel one
+			twitchCalled:        true,
+			expectChannelEmotes: true,
+			// Channel emote id 60ae7316… must win over global id 603cac…c0;
+			wantURL: "https://cdn.7tv.app/emote/60ae7316f7c927fad14e6ca2/2x.webp",
+		},
+		{
+			name:              "invalid JSON response",
+			channel:           "xqc",
+			mockTwitchID:      "71092938",
+			channelStatusCode: http.StatusOK,
+			channelResponse:   `{invalid json}`,
+			wantErr:           true,
+			errContains:       "failed to decode",
+			twitchCalled:      true,
 		},
 		{
 			name:          "twitch lookup error",
@@ -246,13 +322,16 @@ func TestSevenTVClient_FetchEmotes(t *testing.T) {
 
 			if tt.wantErr {
 				require.Error(t, err)
+				if tt.wantErrIs != nil {
+					assert.ErrorIs(t, err, tt.wantErrIs)
+				}
 				if tt.errContains != "" {
 					assert.Contains(t, err.Error(), tt.errContains)
 				}
 			} else {
 				require.NoError(t, err)
 				assert.Len(t, emotes, tt.wantEmoteCount)
-				
+
 				// Verify emote properties
 				emoteMap := make(map[string]models.Emote)
 				for _, emote := range emotes {
@@ -272,6 +351,9 @@ func TestSevenTVClient_FetchEmotes(t *testing.T) {
 				if tt.expectGlobalEmotes {
 					_, hasGlobalEmote := emoteMap["Stare"]
 					assert.True(t, hasGlobalEmote, "Expected global emote 'Stare' to be present")
+				}
+				if tt.wantURL != "" {
+					assert.Equal(t, tt.wantURL, emoteMap["xqcL"].URL)
 				}
 			}
 

@@ -110,16 +110,29 @@ func (c *SevenTVClient) FetchEmotes(ctx context.Context, channel string) ([]mode
 		return c.fetchEmoteSet(ctx, "global", channel)
 	}
 
-	// For channels, fetch both channel-specific and global emotes
+	// For channels, fetch both channel-specific and global emotes. A channel
+	// without a 7TV emote set is the common case, not a failure — the global
+	// set still applies to every channel.
 	channelEmotes, err := c.fetchChannelEmotes(ctx, channel)
 	if err != nil {
-		return nil, err
+		if !errors.Is(err, ErrNotFound) {
+			return nil, err
+		}
+		channelEmotes = nil
 	}
 
 	// Fetch global emotes
 	globalEmotes, err := c.fetchEmoteSet(ctx, "global", channel)
 	if err != nil {
-		// Log warning but don't fail - channel emotes are still valid
+		// Global emotes are a bonus, not a requirement — failing to fetch them
+		// must not lose channel emotes. But with nothing else to return — a
+		// channel miss, or a channel lookup that succeeded with zero emotes —
+		// propagate the real error instead of caching an empty result for an
+		// hour (a 429 here reaches startCooldown; once channel emotes exist,
+		// a global 429 only drops the bonus set).
+		if len(channelEmotes) == 0 {
+			return nil, err
+		}
 		c.logger.Warn("Failed to fetch global emotes, returning channel emotes only",
 			zap.String("channel", channel),
 			zap.Error(err))

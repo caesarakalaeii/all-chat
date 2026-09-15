@@ -27,10 +27,10 @@ import (
 )
 
 // TestRecordAPIResult_Classification verifies the emote_api_calls_total metric separates
-// a benign "not_found" miss (channel has no emotes on this provider — the norm for
-// BTTV/FFZ and unset 7TV channels) from a real "error". Conflating them inflated the
-// error rate and made a healthy service look like it was failing during the 2026-07-17
-// investigation.
+// a benign "not_found" miss (a nonexistent Twitch channel — with globals merged into
+// every BTTV/FFZ/7TV lookup, those providers can no longer surface ErrNotFound) from
+// a real "error". Conflating them inflated the error rate and made a healthy service
+// look like it was failing during the 2026-07-17 investigation.
 func TestRecordAPIResult_Classification(t *testing.T) {
 	vec := prometheus.NewCounterVec(
 		prometheus.CounterOpts{Name: "test_emote_api_calls_total"},

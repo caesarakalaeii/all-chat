@@ -174,7 +174,7 @@ The emote service enables users on **YouTube, Kick, and TikTok** to use Twitch's
 2. **Platform Detection**: When the message processor requests emotes with `?platform=youtube` (or kick/tiktok), the service automatically includes Twitch global emotes.
 3. **No Duplication**: For Twitch channels, global emotes are included only once (not fetched twice).
 4. **Global Twitch emotes for everyone**: The Twitch **global** set is always included for non-Twitch platforms (channel/subscription emotes still require the viewer's own Twitch entitlements).
-5. **Twitch-keyed providers via the linked account**: BTTV, FFZ, and Twitch channel emotes are keyed by *Twitch* identity, so a platform channel id (e.g. a YouTube channel id) can't resolve them. For a non-Twitch platform the service uses the overlay's linked `twitch_channel` hint to fetch those providers, and **skips them entirely when there is no linked Twitch account** — a lookup with a platform id is a guaranteed 404 and a wasted upstream call. (7TV, being multi-platform, is resolved via its own platform connections.)
+5. **Twitch-keyed providers via the linked account**: BTTV, FFZ, and Twitch channel emotes are keyed by *Twitch* identity, so a platform channel id (e.g. a YouTube channel id) can't resolve them. For a non-Twitch platform the service uses the overlay's linked `twitch_channel` hint to fetch those providers; when there is no linked Twitch account it fetches the provider's **global set** instead — channel emotes are unavailable, but global ones (BTTV's `:tf:`, FFZ's `BeanieHipster`) apply everywhere. (7TV, being multi-platform, is resolved via its own platform connections.) Additionally, every provider (7TV, BTTV, FFZ) always merges its global set into channel results, so global emotes render in every channel, including Twitch channels without that provider account.
 
 ### Example Flow
 
@@ -185,7 +185,7 @@ Message Processor: GET /emotes/channel/UC...ytChannelId?platform=youtube&twitch_
                         ↓
 Emote Service Returns:
   - 7TV emotes           (resolved via the YouTube platform connection / linked Twitch)
-  - BTTV + FFZ emotes    (resolved via the linked twitch_channel BLVTumi; skipped if unlinked)
+  - BTTV + FFZ emotes    (resolved via the linked twitch_channel BLVTumi; provider globals if unlinked)
   - Twitch global emotes (Kappa, PogChamp, etc.)
                         ↓
 Message displayed with all emote images rendered
@@ -204,10 +204,10 @@ Message displayed with all emote images rendered
 `result` label distinguishes three outcomes — do **not** read `not_found` as a failure:
 
 - `success` — emotes returned.
-- `not_found` — the provider has no emotes for this channel (HTTP 404). This is the **normal**
-  case for most channels on BTTV/FFZ and for channels without a 7TV set, so a high `not_found`
-  rate is expected and benign. It scales with lookup volume (unique channels/users), not with
-  provider health.
+- `not_found` — a nonexistent Twitch channel (the Twitch user lookup is the one
+  path that still surfaces a 404; BTTV/FFZ/7TV fall back to their global sets).
+  A high `not_found` rate is expected and benign. It scales with lookup volume
+  (unique channels/users), not with provider health.
 - `error` — a real failure (5xx, timeout, network). This is the only label worth alerting on.
 
 (Before this split, 404s were counted as `error`, which made a healthy service look like it was
@@ -379,16 +379,16 @@ graph LR
 
 ### BTTV API
 
-- **Endpoint**: `GET https://api.betterttv.net/3/cached/users/twitch/{channel}`
+- **Endpoints**: `GET https://api.betterttv.net/3/cached/users/twitch/{channel}` (channel + shared emotes) + `GET https://api.betterttv.net/3/cached/emotes/global` (global emotes, always merged in)
 - **Rate Limit**: ~20 req/s
-- **Response**: Channel emotes + shared emotes
+- **Response**: Channel emotes + shared emotes, merged with global emotes
 - **Docs**: https://betterttv.com/developers
 
 ### FFZ API
 
-- **Endpoint**: `GET https://api.frankerfacez.com/v1/room/{channel}`
+- **Endpoints**: `GET https://api.frankerfacez.com/v1/room/{channel}` (room emote sets) + `GET https://api.frankerfacez.com/v1/set/global` (global emotes, always merged in)
 - **Rate Limit**: ~10 req/s
-- **Response**: Multiple emote sets
+- **Response**: Multiple emote sets, merged with global emotes
 - **Docs**: https://www.frankerfacez.com/developers
 
 ## Monitoring

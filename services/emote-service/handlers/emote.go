@@ -266,10 +266,10 @@ func (h *EmoteHandler) GetProviderEmotes(c *gin.Context) {
 }
 
 // recordAPIResult increments the provider API-call counter, distinguishing a benign
-// "not_found" miss (the channel simply has no emotes on this provider — the norm for
-// BTTV/FFZ and unset 7TV channels) and a throttled "rate_limited" call from a real
-// "error" (5xx/timeout/network). Conflating them inflated the error rate and made a
-// healthy service look like it was failing.
+// "not_found" miss (a nonexistent Twitch channel — BTTV/FFZ/7TV fall back to their
+// global sets and no longer surface ErrNotFound) and a throttled "rate_limited"
+// call from a real "error" (5xx/timeout/network). Conflating them inflated the
+// error rate and made a healthy service look like it was failing.
 func (h *EmoteHandler) recordAPIResult(provider string, err error) {
 	if h.apiCalls == nil {
 		return
@@ -425,16 +425,25 @@ func (h *EmoteHandler) fetchWithCacheAndUser(ctx context.Context, client EmoteCl
 	if !useCombinedPath {
 		// BTTV/FFZ/Twitch are keyed by Twitch identity. On a non-Twitch platform the
 		// `channel` is a platform id (e.g. a YouTube channel id) those providers can't
-		// resolve, so use the linked twitch_channel hint — or skip entirely when there is
-		// no linked Twitch account, since a lookup with a platform id is a guaranteed 404
-		// and a wasted upstream call. Mirrors how the 7TV combined path already uses
-		// twitchChannel for non-Twitch platforms (ADR-0033 follow-up).
+		// resolve, so use the linked twitch_channel hint. Without a linked Twitch
+		// account, fetch the provider's GLOBAL set instead of skipping: channel
+		// emotes are unavailable but global ones (BTTV's :tf:, FFZ's BeanieHipster)
+		// still apply. A lookup with a platform id would be a guaranteed 404, so
+		// "global" avoids the wasted upstream call. Mirrors how the 7TV combined
+		// path already falls back to globals for non-Twitch platforms (ADR-0033
+		// follow-up).
 		lookupChannel := channel
 		if isNonTwitchPlatform {
-			if twitchChannel == "" {
+			switch {
+			case twitchChannel != "":
+				lookupChannel = twitchChannel
+			case provider == "twitch":
+				// Twitch globals are fetched once by the dedicated twitch-global
+				// goroutine below; fetching them here too would double them.
 				return nil, nil
+			default:
+				lookupChannel = "global"
 			}
-			lookupChannel = twitchChannel
 		}
 		return h.fetchWithCache(ctx, client, provider, lookupChannel)
 	}

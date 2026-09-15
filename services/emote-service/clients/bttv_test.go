@@ -20,6 +20,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -27,101 +28,178 @@ import (
 	"go.uber.org/zap/zaptest"
 )
 
+const bttvGlobalResponse = `[
+	{"id": "54fa8f1401e468494b85b537", "code": ":tf:", "imageType": "png"},
+	{"id": "557029e2d90919094b1a1c22", "code": "AngelThump", "imageType": "png"}
+]`
+
 func TestBTTVClient_FetchEmotes(t *testing.T) {
 	tests := []struct {
-		name           string
-		channel        string
-		mockStatusCode int
-		mockResponse   string
-		wantEmoteCount int
-		wantErr        bool
-		errContains    string
+		name              string
+		channel           string
+		channelStatusCode int
+		channelResponse   string
+		globalStatusCode  int
+		globalResponse    string
+		wantEmoteCount    int
+		wantErr           bool
+		wantErrIs         error
+		errContains       string
+		wantChannelEmotes []string
+		wantGlobalEmotes  []string
+		wantURL           string
 	}{
 		{
-			name:           "successful fetch with emotes",
-			channel:        "xqc",
-			mockStatusCode: http.StatusOK,
-			mockResponse: `{
+			name:              "channel emotes merge with global set",
+			channel:           "xqc",
+			channelStatusCode: http.StatusOK,
+			channelResponse: `{
 				"id": "5e4b3e186b9f0f6c6d3b9e3a",
 				"channelEmotes": [
-					{
-						"id": "54fa8f1401e468494b85b537",
-						"code": "xqcL",
-						"imageType": "png"
-					},
-					{
-						"id": "5e4b3e186b9f0f6c6d3b9e3a",
-						"code": "xqcT",
-						"imageType": "png"
-					}
+					{"id": "54fa8f1401e468494b85b537", "code": "xqcL", "imageType": "png"},
+					{"id": "5e4b3e186b9f0f6c6d3b9e3a", "code": "xqcT", "imageType": "png"}
 				],
 				"sharedEmotes": [
-					{
-						"id": "54fa925e01e468494b85b54b",
-						"code": "KKona",
-						"imageType": "png"
-					}
+					{"id": "54fa925e01e468494b85b54b", "code": "KKona", "imageType": "png"}
 				]
 			}`,
-			wantEmoteCount: 3,
-			wantErr:        false,
+			globalStatusCode:  http.StatusOK,
+			globalResponse:    bttvGlobalResponse,
+			wantEmoteCount:    5, // 3 channel + 2 global
+			wantChannelEmotes: []string{"xqcL", "xqcT", "KKona"},
+			wantGlobalEmotes:  []string{":tf:", "AngelThump"},
 		},
 		{
-			name:           "only channel emotes",
-			channel:        "shroud",
-			mockStatusCode: http.StatusOK,
-			mockResponse: `{
+			name:              "channel emotes take precedence on code collision",
+			channel:           "xqc",
+			channelStatusCode: http.StatusOK,
+			channelResponse: `{
 				"id": "5e4b3e186b9f0f6c6d3b9e3a",
 				"channelEmotes": [
-					{
-						"id": "54fa8f1401e468494b85b537",
-						"code": "shroudW",
-						"imageType": "png"
-					}
+					{"id": "54fa8f1401e468494b85b537", "code": ":tf:", "imageType": "png"}
 				],
 				"sharedEmotes": []
 			}`,
-			wantEmoteCount: 1,
-			wantErr:        false,
+			globalStatusCode: http.StatusOK,
+			globalResponse: `[
+				{"id": "557029e2d90919094b1a1c22", "code": ":tf:", "imageType": "png"}
+			]`,
+			wantEmoteCount:    1,
+			wantChannelEmotes: []string{":tf:"},
+			// Channel emote id 54fa8f14… must win over global id 557029e2…:
+			// proves the merge kept the channel emote, not just "a :tf: exists".
+			wantURL: "https://cdn.betterttv.net/emote/54fa8f1401e468494b85b537/1x",
 		},
 		{
-			name:           "empty emote list",
-			channel:        "newstreamer",
-			mockStatusCode: http.StatusOK,
-			mockResponse: `{
+			name:              "channel miss with global fetch failure propagates error",
+			channel:           "nonexistent",
+			channelStatusCode: http.StatusNotFound,
+			channelResponse:   `{"message": "user not found"}`,
+			globalStatusCode:  http.StatusInternalServerError,
+			wantErr:           true,
+			errContains:       "failed to fetch global emotes",
+		},
+		{
+			name:              "channel miss with global 429 surfaces rate limit",
+			channel:           "nonexistent",
+			channelStatusCode: http.StatusNotFound,
+			channelResponse:   `{"message": "user not found"}`,
+			globalStatusCode:  http.StatusTooManyRequests,
+			wantErr:           true,
+			// The handler opens its cooldown via errors.Is, not the message.
+			wantErrIs: ErrRateLimited,
+		},
+		{
+			name:              "channel emotes with global 429 returns channel only",
+			channel:           "xqc",
+			channelStatusCode: http.StatusOK,
+			channelResponse: `{
 				"id": "5e4b3e186b9f0f6c6d3b9e3a",
-				"channelEmotes": [],
+				"channelEmotes": [
+					{"id": "54fa8f1401e468494b85b537", "code": "xqcL", "imageType": "png"}
+				],
 				"sharedEmotes": []
 			}`,
-			wantEmoteCount: 0,
-			wantErr:        false,
+			globalStatusCode:  http.StatusTooManyRequests,
+			wantEmoteCount:    1,
+			wantChannelEmotes: []string{"xqcL"},
 		},
 		{
-			name:           "user not found",
-			channel:        "nonexistent",
-			mockStatusCode: http.StatusNotFound,
-			mockResponse:   `{"message": "user not found"}`,
-			wantEmoteCount: 0,
-			wantErr:        true,
-			errContains:    "not found",
+			name:              "channel with no BTTV account returns global set",
+			channel:           "nonexistent",
+			channelStatusCode: http.StatusNotFound,
+			channelResponse:   `{"message": "user not found"}`,
+			globalStatusCode:  http.StatusOK,
+			globalResponse:    bttvGlobalResponse,
+			wantEmoteCount:    2,
+			wantGlobalEmotes: []string{":tf:", "AngelThump"},
 		},
 		{
-			name:           "server error",
-			channel:        "xqc",
-			mockStatusCode: http.StatusInternalServerError,
-			mockResponse:   `{"error": "internal server error"}`,
-			wantEmoteCount: 0,
-			wantErr:        true,
-			errContains:    "failed to fetch emotes",
+			name:              "channel with no BTTV emotes returns global set",
+			channel:           "emptyaccount",
+			channelStatusCode: http.StatusOK,
+			channelResponse:   `{"id": "5e4b3e186b9f0f6c6d3b9e3a", "channelEmotes": [], "sharedEmotes": []}`,
+			globalStatusCode:  http.StatusOK,
+			globalResponse:    bttvGlobalResponse,
+			wantEmoteCount:    2,
+			wantGlobalEmotes:  []string{":tf:", "AngelThump"},
 		},
 		{
-			name:           "invalid JSON response",
-			channel:        "xqc",
-			mockStatusCode: http.StatusOK,
-			mockResponse:   `{invalid json}`,
-			wantEmoteCount: 0,
-			wantErr:        true,
-			errContains:    "failed to decode",
+			name:              "channel with no BTTV emotes and global fetch failure propagates error",
+			channel:           "emptyaccount",
+			channelStatusCode: http.StatusOK,
+			channelResponse:   `{"id": "5e4b3e186b9f0f6c6d3b9e3a", "channelEmotes": [], "sharedEmotes": []}`,
+			globalStatusCode:  http.StatusInternalServerError,
+			wantErr:           true,
+			errContains:       "failed to fetch global emotes",
+		},
+		{
+			name:             "global channel returns only globals",
+			channel:          "global",
+			globalStatusCode: http.StatusOK,
+			globalResponse:   bttvGlobalResponse,
+			wantEmoteCount:   2,
+			wantGlobalEmotes: []string{":tf:", "AngelThump"},
+		},
+		{
+			name:              "global fetch failure with channel emotes returns channel only",
+			channel:           "xqc",
+			channelStatusCode: http.StatusOK,
+			channelResponse: `{
+				"id": "5e4b3e186b9f0f6c6d3b9e3a",
+				"channelEmotes": [
+					{"id": "54fa8f1401e468494b85b537", "code": "xqcL", "imageType": "png"}
+				],
+				"sharedEmotes": []
+			}`,
+			globalStatusCode:  http.StatusInternalServerError,
+			wantEmoteCount:    1,
+			wantChannelEmotes: []string{"xqcL"},
+		},
+		{
+			name:              "both fetches fail",
+			channel:           "xqc",
+			channelStatusCode: http.StatusInternalServerError,
+			channelResponse:   `{"error": "internal server error"}`,
+			globalStatusCode:  http.StatusInternalServerError,
+			wantErr:           true,
+			errContains:       "failed to fetch emotes",
+		},
+		{
+			name:              "invalid JSON channel response",
+			channel:           "xqc",
+			channelStatusCode: http.StatusOK,
+			channelResponse:   `{invalid json}`,
+			globalStatusCode:  http.StatusOK,
+			globalResponse:    bttvGlobalResponse,
+			wantErr:           true,
+			errContains:       "failed to decode",
+		},
+		{
+			name:        "empty channel rejected",
+			channel:     " ",
+			wantErr:     true,
+			errContains: "channel cannot be empty",
 		},
 	}
 
@@ -129,9 +207,20 @@ func TestBTTVClient_FetchEmotes(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create mock server
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				assert.Contains(t, r.URL.Path, "/3/cached/users/twitch/")
-				w.WriteHeader(tt.mockStatusCode)
-				w.Write([]byte(tt.mockResponse))
+				switch {
+				case strings.HasSuffix(r.URL.Path, "/3/cached/emotes/global"):
+					w.WriteHeader(tt.globalStatusCode)
+					w.Write([]byte(tt.globalResponse))
+				case strings.Contains(r.URL.Path, "/3/cached/users/twitch/"):
+					if tt.channelStatusCode == 0 {
+						w.WriteHeader(http.StatusNotFound)
+						return
+					}
+					w.WriteHeader(tt.channelStatusCode)
+					w.Write([]byte(tt.channelResponse))
+				default:
+					w.WriteHeader(http.StatusNotFound)
+				}
 			}))
 			defer server.Close()
 
@@ -146,21 +235,33 @@ func TestBTTVClient_FetchEmotes(t *testing.T) {
 			// Assert
 			if tt.wantErr {
 				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errContains)
-			} else {
-				require.NoError(t, err)
-				assert.Len(t, emotes, tt.wantEmoteCount)
-
-				// Verify emote structure if we got emotes
-				if tt.wantEmoteCount > 0 {
-					for _, emote := range emotes {
-						assert.NotEmpty(t, emote.Code)
-						assert.NotEmpty(t, emote.URL)
-						assert.Equal(t, "bttv", emote.Provider)
-						assert.Equal(t, tt.channel, emote.Channel)
-						assert.NoError(t, emote.Validate())
-					}
+				if tt.wantErrIs != nil {
+					assert.ErrorIs(t, err, tt.wantErrIs)
 				}
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
+				return
+			}
+			require.NoError(t, err)
+			assert.Len(t, emotes, tt.wantEmoteCount)
+			codes := make(map[string]bool, len(emotes))
+			for _, emote := range emotes {
+				assert.NotEmpty(t, emote.Code)
+				assert.NotEmpty(t, emote.URL)
+				assert.Equal(t, "bttv", emote.Provider)
+				assert.Equal(t, tt.channel, emote.Channel)
+				assert.NoError(t, emote.Validate())
+				codes[emote.Code] = true
+			}
+			for _, code := range tt.wantChannelEmotes {
+				assert.True(t, codes[code], "expected channel emote %q", code)
+			}
+			for _, code := range tt.wantGlobalEmotes {
+				assert.True(t, codes[code], "expected global emote %q", code)
+			}
+			if tt.wantURL != "" {
+				assert.Equal(t, tt.wantURL, emotes[0].URL)
 			}
 		})
 	}
