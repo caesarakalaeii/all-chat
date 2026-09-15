@@ -65,11 +65,10 @@ async function claimLeases(coord: LeadershipCoordinator, names: string[]): Promi
 }
 
 /** Two rebalance cycles with a stable peer count in between, so the stabilization gate opens. */
-async function settleRebalance(coord: LeadershipCoordinator, total: number): Promise<string[]> {
-  const now = Date.now;
-  const first = await coord.rebalance(total); // records peer count, starts the window
+async function settleRebalance(coord: LeadershipCoordinator, total: number, maxPerPod?: number): Promise<string[]> {
+  const first = await coord.rebalance(total, maxPerPod); // records peer count, starts the window
   vi.advanceTimersByTime(31_000);
-  const second = await coord.rebalance(total);
+  const second = await coord.rebalance(total, maxPerPod);
   expect(first).toEqual([]);
   return second;
 }
@@ -149,5 +148,44 @@ describe('LeadershipCoordinator.rebalance', () => {
 
     // ceil(3/1) = 3 → no excess, even though registerPeer returned 0.
     expect(await settleRebalance(coord, 3)).toEqual([]);
+  });
+
+  it('sheds down to maxPerPod when the fair share exceeds it', async () => {
+    // The 2026-09-14 incident's own numbers: 2 pods, 48 streams → fair share 24,
+    // but the Euler ceiling is 20. A pod holding 24 leases must shed to 20,
+    // not park 4 leased-but-unconnectable streams.
+    const client = new FakeClient(2);
+    const coord = new LeadershipCoordinator('tiktok', client as never, silentLogger);
+    await claimLeases(coord, ['s01', 's02', 's03', 's04', 's05', 's06']);
+
+    // ceil(6/2) = 3 fair share, but ceiling 2 wins.
+    const released = await settleRebalance(coord, 6, 2);
+
+    expect(released).toEqual(['s03', 's04', 's05', 's06']);
+    expect(coord.getLeaseCount()).toBe(2);
+  });
+
+  it('never keeps more leases than maxPerPod even as the sole pod', async () => {
+    const client = new FakeClient(1);
+    const coord = new LeadershipCoordinator('tiktok', client as never, silentLogger);
+    await claimLeases(coord, ['a', 'b', 'c', 'd']);
+
+    // ceil(4/1) = 4 fair share, ceiling 3.
+    const released = await settleRebalance(coord, 4, 3);
+
+    expect(released).toEqual(['d']);
+    expect(coord.getLeaseCount()).toBe(3);
+  });
+
+  it('ignores maxPerPod when the fair share is lower', async () => {
+    const client = new FakeClient(4);
+    const coord = new LeadershipCoordinator('tiktok', client as never, silentLogger);
+    await claimLeases(coord, ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']);
+
+    // ceil(8/4) = 2 fair share under a generous ceiling of 6.
+    const released = await settleRebalance(coord, 8, 6);
+
+    expect(released).toEqual(['c', 'd', 'e', 'f', 'g', 'h']);
+    expect(coord.getLeaseCount()).toBe(2);
   });
 });
