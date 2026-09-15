@@ -24,6 +24,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 )
 
@@ -128,6 +129,10 @@ func (r *fakeRows) Err() error {
 
 func (r *fakeRows) CommandTag() pgconn.CommandTag {
 	return pgconn.CommandTag{}
+}
+
+func (r *fakeRows) TypeMap() *pgtype.Map {
+	return nil
 }
 
 func (r *fakeRows) FieldDescriptions() []pgconn.FieldDescription {
