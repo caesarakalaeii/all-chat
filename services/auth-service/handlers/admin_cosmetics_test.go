@@ -33,6 +33,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // mockCosmeticsCatalogDB implements cosmeticsCatalogDB for unit tests.
@@ -63,6 +64,7 @@ type mockRows struct {
 }
 
 func (r *mockRows) Close()                                       {}
+func (r *mockRows) TypeMap() *pgtype.Map                         { return nil }
 func (r *mockRows) Err() error                                   { return r.err }
 func (r *mockRows) CommandTag() pgconn.CommandTag                { return pgconn.CommandTag{} }
 func (r *mockRows) FieldDescriptions() []pgconn.FieldDescription { return nil }
@@ -89,8 +91,8 @@ func (r *mockRows) Scan(dest ...interface{}) error {
 	return nil
 }
 func (r *mockRows) Values() ([]interface{}, error) { return nil, nil }
-func (r *mockRows) RawValues() [][]byte             { return nil }
-func (r *mockRows) Conn() *pgx.Conn                 { return nil }
+func (r *mockRows) RawValues() [][]byte            { return nil }
+func (r *mockRows) Conn() *pgx.Conn                { return nil }
 
 // mockRow wraps a single CosmeticCatalogEntry to satisfy pgx.Row.
 type mockRow struct {

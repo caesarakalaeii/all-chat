@@ -29,6 +29,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/mock"
 	"go.uber.org/zap"
 )
@@ -40,6 +41,7 @@ type platformRows struct {
 }
 
 func (r *platformRows) Close()                                       {}
+func (r *platformRows) TypeMap() *pgtype.Map                         { return nil }
 func (r *platformRows) Err() error                                   { return nil }
 func (r *platformRows) CommandTag() pgconn.CommandTag                { return pgconn.CommandTag{} }
 func (r *platformRows) FieldDescriptions() []pgconn.FieldDescription { return nil }
