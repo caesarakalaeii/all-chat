@@ -85,7 +85,7 @@ export interface SigningSessionOptions {
   executablePath?: string;
   /** Page used for the warm-up navigation to TikTok. */
   warmUpTarget?: string;
-  /** Skip warm-up navigation (tests only: no network). */
+  /** Tests only: skip warm-up *and* the browser entirely — no network, no Chromium. */
   skipWarmUp?: boolean;
   /**
    * Attach the vendored X-Gnarly encoder's output. Off by default: measured
@@ -354,6 +354,13 @@ export class SigningSession {
       return;
     }
     this.initializing = (async () => {
+      // Tests run without Chromium: skipWarmUp means no browser at all, so
+      // sign jobs fail fast through the normal error path instead of
+      // stalling on a launch (or succeeding on a machine that happens to
+      // have one cached).
+      if (this.options.skipWarmUp) {
+        throw new Error('signing session not initialized (skipWarmUp)');
+      }
       const sdkContent = await this.loadSdk();
 
       const browserArgs = [
@@ -436,14 +443,6 @@ export class SigningSession {
             // first sign, which triggers the rebuild-and-retry path.
           }
         }, sdkContent);
-
-        if (this.options.skipWarmUp) {
-          this.browser = browser;
-          this.page = page;
-          this.initializedAt = Date.now();
-          this.generationCount = 0;
-          return;
-        }
 
         // Warm up on a real profile page: the page bundle initializes __sdkN
         // (the X-Bogus table we call) on top of the injected SDK, and the visit
