@@ -46,6 +46,12 @@ export class HeartbeatMonitor {
   private logger: Logger;
   private metrics: PrometheusMetrics;
   private monitors: Map<string, MonitorState> = new Map();
+  // Consecutive heartbeat-forced disconnects without a delivered message in
+  // between (noteSilentFailureHealing resets it). >1 means reconnecting did
+  // not fix the silence, so the reconnect loop must back off instead of
+  // hammering Euler every ~2 minutes per channel — the churn that kept the
+  // 2026-09-14 incident wedged for a day.
+  private silentFailureStreaks = new Map<string, number>();
 
   private readonly HEARTBEAT_INTERVAL: number;
   private readonly HEARTBEAT_TIMEOUT: number;
@@ -134,6 +140,18 @@ export class HeartbeatMonitor {
   }
 
   /**
+   * Mark a username's silent-failure streak as healed. Called only when a
+   * message is actually delivered downstream — not from recordMessage, which
+   * fires on every inbound frame including reconnect replay bursts that are
+   * then dropped as duplicates. A replay that never delivers must not reset
+   * the streak, or a permanently deaf connection reconnects at full speed
+   * forever.
+   */
+  noteSilentFailureHealing(username: string): void {
+    this.silentFailureStreaks.delete(username);
+  }
+
+  /**
    * Stop monitoring a connection
    *
    * @param username TikTok username
@@ -213,6 +231,7 @@ export class HeartbeatMonitor {
 
       // Record timeout in metrics
       this.metrics.recordHeartbeatTimeout(username);
+      this.silentFailureStreaks.set(username, (this.silentFailureStreaks.get(username) ?? 0) + 1);
 
       // Force disconnection to trigger reconnection flow
       try {
@@ -234,6 +253,21 @@ export class HeartbeatMonitor {
         last_message_time: new Date(state.lastMessageTime).toISOString()
       });
     }
+  }
+
+  /**
+   * How many silent-failure disconnects in a row this username has had without
+   * a delivered message in between. 0 = last connection was healthy.
+   */
+  getSilentFailureStreak(username: string): number {
+    return this.silentFailureStreaks.get(username) ?? 0;
+  }
+
+  /**
+   * Drop a username's silent-failure streak (e.g. when its demand is removed).
+   */
+  clearSilentFailureStreak(username: string): void {
+    this.silentFailureStreaks.delete(username);
   }
 
   /**

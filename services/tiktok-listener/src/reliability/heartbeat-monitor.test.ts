@@ -158,4 +158,40 @@ describe('HeartbeatMonitor silent-failure recovery', () => {
       expect.objectContaining({ username: 'lejoe_tiktok' })
     );
   });
+
+  it('counts consecutive silent failures so the reconnect loop can back off', () => {
+    const logger = fakeLogger();
+    const metrics = fakeMetrics();
+    const monitor = new HeartbeatMonitor(logger, metrics, INTERVAL_MS, TIMEOUT_MS);
+
+    // First deaf cycle: connect, silence, forced disconnect.
+    monitor.start('lejoe_tiktok', fakeConnection({ isConnected: true }) as never);
+    vi.advanceTimersByTime(TIMEOUT_MS + INTERVAL_MS);
+    expect(monitor.getSilentFailureStreak('lejoe_tiktok')).toBe(1);
+
+    // Reconnect lands deaf again — streak grows.
+    monitor.start('lejoe_tiktok', fakeConnection({ isConnected: true }) as never);
+    vi.advanceTimersByTime(TIMEOUT_MS + INTERVAL_MS);
+    expect(monitor.getSilentFailureStreak('lejoe_tiktok')).toBe(2);
+  });
+
+  it('heals the streak only on delivered messages, not on replay frames', () => {
+    const logger = fakeLogger();
+    const metrics = fakeMetrics();
+    const monitor = new HeartbeatMonitor(logger, metrics, INTERVAL_MS, TIMEOUT_MS);
+
+    monitor.start('lejoe_tiktok', fakeConnection({ isConnected: true }) as never);
+    vi.advanceTimersByTime(TIMEOUT_MS + INTERVAL_MS);
+    expect(monitor.getSilentFailureStreak('lejoe_tiktok')).toBe(1);
+
+    // A reconnect replay burst arrives: recordMessage fires (heartbeat stays
+    // alive) but nothing is delivered, so the streak must survive it.
+    monitor.start('lejoe_tiktok', fakeConnection({ isConnected: true }) as never);
+    monitor.recordMessage('lejoe_tiktok');
+    expect(monitor.getSilentFailureStreak('lejoe_tiktok')).toBe(1);
+
+    // One real delivered message heals it.
+    monitor.noteSilentFailureHealing('lejoe_tiktok');
+    expect(monitor.getSilentFailureStreak('lejoe_tiktok')).toBe(0);
+  });
 });
