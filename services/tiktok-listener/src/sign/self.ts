@@ -100,15 +100,16 @@ export class SelfSigner implements WebcastSigner {
     }
 
     if (status !== 200 || typeof bodyJson.fetchResult !== 'string') {
-      // The service maps TikTok 429s to 429; keep that reason legible for the
-      // metrics classifier rather than folding it into a generic failure.
+      // The service maps TikTok 429s to 429 and TikTok-side rejections to 502;
+      // word the errors so classifySignatureFailure lands each on the right
+      // bounded reason (rate_limit / signature) instead of unknown.
       const detail = bodyJson.error ?? bodyJson.message ?? `status ${status}`;
-      const message =
-        status === 429
-          ? `sign service rate limited: ${detail}`
-          : `sign service rejected the request: ${detail}`;
+      const rateLimited = status === 429 || String(detail).includes('rate');
+      const message = rateLimited
+        ? `sign service rate limited: ${detail}`
+        : `TikTok rejected the signature (via sign service): ${detail}`;
       const error = new Error(message);
-      error.name = status === 429 ? 'SignatureRateLimitError' : 'SignAPIError';
+      error.name = rateLimited ? 'SignatureRateLimitError' : 'SignatureMissingTokensError';
       throw new SignatureFailure(this.name, message, error);
     }
 
