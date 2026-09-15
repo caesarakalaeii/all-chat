@@ -1,6 +1,6 @@
 module github.com/caesar/all-chat/services/token-refresh-service
 
-go 1.25.6
+go 1.26.0
 
 require (
 	github.com/caesar/all-chat/services/auth-service v0.0.0
@@ -11,7 +11,7 @@ require (
 	github.com/prometheus/client_golang v1.24.1
 	github.com/redis/go-redis/v9 v9.22.0
 	go.uber.org/zap v1.28.0
-	golang.org/x/oauth2 v0.36.0
+	golang.org/x/oauth2 v0.37.0
 )
 
 require (
