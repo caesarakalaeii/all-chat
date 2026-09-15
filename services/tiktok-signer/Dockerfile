@@ -27,10 +27,23 @@ RUN npm run build
 # (not alpine) because puppeteer's bundled chromium needs glibc.
 FROM node:22-bookworm-slim
 
-# Chromium plus the shared libs headless Chromium needs on bookworm.
+# Chromium, the shared libs it needs on bookworm, and an X server with Mesa
+# GL. Page-viewer mode (ADR-0052 post-2026-09-09) runs Chromium non-headless:
+# TikTok gates webcast data on a browser-grade session, and a real rendering
+# stack was measured to be part of what it judges (Xvfb+software-GL fails,
+# GPU-backed X passes). The entrypoint starts X on the node's GPU when
+# /dev/dri is passed through, falling back to Xvfb otherwise.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       chromium \
+      xvfb \
+      xauth \
+      x11-utils \
+      mesa-utils \
+      libgl1-mesa-dri \
+      libgl1 \
+      libegl1 \
+      libglx-mesa0 \
       fonts-liberation \
       libasound2 \
       libatk-bridge2.0-0 \
@@ -79,4 +92,10 @@ EXPOSE 8092
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD node -e "require('http').get('http://localhost:8092/health/live', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); }).on('error', () => process.exit(1));"
 
-CMD ["node", "dist/index.js"]
+# Starts the display (node GPU when /dev/dri exists, else Xvfb), then the
+# service. Page mode needs the display before the viewer browser launches.
+# --chmod keeps this a single layer after USER nodejs (RUN chmod would fail
+# unprivileged).
+COPY --chmod=0755 services/tiktok-signer/entrypoint.sh /app/entrypoint.sh
+
+CMD ["/app/entrypoint.sh"]
