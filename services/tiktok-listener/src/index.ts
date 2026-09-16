@@ -48,7 +48,7 @@ import {
 } from 'tiktok-live-connector';
 import { createClient, RedisClientType } from 'redis';
 import { request } from 'undici';
-import { HttpsProxyAgent } from 'https-proxy-agent';
+import { createChromeTlsProxyAgent, type WsEgressAgent } from './ws/chrome-tls.js';
 import { Pool } from 'pg';
 import { randomUUID } from 'crypto';
 import http from 'http';
@@ -1184,7 +1184,7 @@ class TikTokListenerService {
       // connect time hits the signer's pinned warm tab for this room and
       // returns in milliseconds. Skipped when self signing is off (Euler
       // signs in its own cloud and rides its own proxy already).
-      let wsAgent: HttpsProxyAgent<string> | undefined;
+      let wsAgent: WsEgressAgent | undefined;
       if (this.selfSigner && this.proxyCredentials) {
         try {
           const preSign = await this.selfSigner.sign({
@@ -1194,7 +1194,7 @@ class TikTokListenerService {
           });
           if (preSign.fetchResultProxyHost) {
             const { username: proxyUser, password: proxyPass } = this.proxyCredentials;
-            wsAgent = new HttpsProxyAgent(
+            wsAgent = createChromeTlsProxyAgent(
               `http://${proxyUser}:${proxyPass}@${preSign.fetchResultProxyHost}`
             );
             logger.info('Pinning WebSocket egress to capture lane', {

@@ -264,20 +264,14 @@ export class ViewerPool {
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
       '--disable-blink-features=AutomationControlled',
-      '--window-size=1920,1080',
-      // ANGLE on Vulkan via lavapipe — measured 2026-09-16 in-cluster:
-      // --use-gl=angle over the GLX/llvmpipe stack reports llvmpipe as the
-      // WebGL renderer and TikTok's secSDK withholds im/fetch from most of
-      // those sessions. The Vulkan path through Mesa's lvp (lavapipe)
-      // reports an Intel Iris renderer instead, and the same lane+room
-      // captured a full 57KB im/fetch in ~67s on the very first attempt.
-      // GPU stays enabled and the blocklist off because with no /dev/dri
-      // Chromium would otherwise refuse to accelerate at all.
-      '--enable-features=Vulkan',
-      '--use-angle=vulkan',
-      '--enable-gpu-rasterization',
-      '--ignore-gpu-blocklist',
-      '--enable-gpu'
+      '--window-size=1920,1080'
+      // No GPU flags: measured 2026-09-16 in-cluster (signing lab, A/B over
+      // the same lane+room), the ANGLE-on-Vulkan/lavapipe stack wedges the
+      // page entirely — zero webcast calls in 240s — while plain default GL
+      // (llvmpipe) boots the player and captures im/fetch 200 with a full
+      // 2613-byte payload on every attempt. The renderer spoof stopped
+      // helping after the image's Chromium update; do not re-add GPU
+      // renderer flags without a fresh in-cluster A/B.
     ];
     if (this.options.display) {
       args.push(`--display=${this.options.display}`);

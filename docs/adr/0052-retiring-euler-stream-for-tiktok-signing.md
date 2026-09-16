@@ -55,6 +55,25 @@ that rollout, not with the code.
 > unchanged; the viewer path is how `self` keeps working under the new
 > TikTok regime.
 
+> **Update 2026-09-16** (signing lab, diagnosis + hardening): the page-mode
+> viewer fleet went 100% `viewer_capture_failed` across every lane and room.
+> In-cluster A/B (same lane, same live room, same Chromium) isolated the
+> cause to the ANGLE-on-Vulkan/lavapipe renderer args added to
+> `ensureBrowser` that morning: with them the page never makes a single
+> webcast call (no room/enter, no im/fetch, 0 requests in 240s); without
+> them, plain default GL on Xvfb+llvmpipe boots the player and captures
+> im/fetch 200 with full payloads (2613 bytes in the lab) on every attempt —
+> direct, through residential lanes, and with media interception. The
+> renderer spoof stopped matching real driver behaviour after the image's
+> Chromium update and now reads as the bot tell it was avoiding; the args and
+> the mesa-vulkan-drivers they needed are removed. Also shipped same day:
+> the listener's push WebSocket now mirrors Chrome's TLS ClientHello
+> (`tls-impersonate`, `src/ws/chrome-tls.ts`; JA4 cipher/extension segments
+> verified against a reference fingerprint service through the CONNECT
+> tunnel), closing the last leg where the connection described itself as
+> Node. Runtime: node:20-alpine → node:26-bookworm-slim (glibc prebuilds,
+> full Chrome extension set).
+
 The licence obstacle the issue describes does **not** apply to the version we
 pin (see "Licence"): 2.4.0 is MIT.
 
