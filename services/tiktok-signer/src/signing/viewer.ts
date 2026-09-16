@@ -45,9 +45,15 @@ export interface ViewerPoolOptions {
    * direct-connection browser serves everything.
    */
   proxyHosts?: string[];
-  /** Proxy credentials; shared across the list (webshare shape). */
+  /** Shared credentials when the whole pool uses one pair. */
   proxyUser?: string;
   proxyPass?: string;
+  /**
+   * Per-lane credentials keyed by host:port. Webshare issues one pair per
+   * proxy (verified 2026-09-16: auto-replaced lanes carry fresh individual
+   * credentials); a lane's own entry wins over the shared pair.
+   */
+  proxyCredentials?: Record<string, { username: string; password: string }>;
   /** Directory base for browser profiles; must be writable (emptyDir in k8s). */
   userDataDir?: string;
   /** Where Chromium is; resolved by puppeteer when unset. */
@@ -72,10 +78,10 @@ export interface ViewerPoolOptions {
    * the request surfaces any working lane in one call.
    */
   maxLaneAttempts?: number;
-  /** Optional structured logger; per-lane capture outcomes land here. */
   logger?: {
     info: (msg: string, meta?: Record<string, unknown>) => void;
     warn: (msg: string, meta?: Record<string, unknown>) => void;
+    error?: (msg: string, meta?: Record<string, unknown>) => void;
   };
 }
 
@@ -192,11 +198,18 @@ export class ViewerPool {
    */
   async refreshProxies(
     hosts: string[],
-    credentials?: { username: string; password: string }
+    credentials?: { username: string; password: string },
+    perLaneCredentials?: Record<string, { username: string; password: string }>
   ): Promise<void> {
     if (credentials) {
       this.options.proxyUser = credentials.username;
       this.options.proxyPass = credentials.password;
+    }
+    if (perLaneCredentials) {
+      this.options.proxyCredentials = {
+        ...this.options.proxyCredentials,
+        ...perLaneCredentials
+      };
     }
     const wanted = new Set(hosts);
     for (const [host, lane] of [...this.lanes]) {
@@ -311,6 +324,19 @@ export class ViewerPool {
         void entry.page.close().catch(() => undefined);
       }
     }
+  }
+
+  /**
+   * The warmed tab for a previously captured room, refreshed so idle
+   * eviction cannot reclaim it while a relay subscriber is attached.
+   * Undefined when the room has no warm tab (never captured, evicted, or
+   * rotated away).
+   */
+  pinTab(username: string): Page | undefined {
+    const entry = this.tabs.get(username);
+    if (!entry) return undefined;
+    entry.lastUsed = Date.now();
+    return entry.page;
   }
 
   /**
@@ -440,10 +466,17 @@ export class ViewerPool {
             }
             void request.continue().catch(() => undefined);
           });
-          if (this.options.proxyUser && this.options.proxyPass) {
+          // Webshare issues one credential pair per proxy; a lane's own
+          // entry wins, the shared pair is the fallback (static-list pools).
+          const laneCreds = lane.host
+            ? this.options.proxyCredentials?.[lane.host]
+            : undefined;
+          const authUser = laneCreds?.username ?? this.options.proxyUser;
+          const authPass = laneCreds?.password ?? this.options.proxyPass;
+          if (authUser && authPass) {
             await p.authenticate({
-              username: this.options.proxyUser,
-              password: this.options.proxyPass
+              username: authUser,
+              password: authPass
             });
           }
           return p;

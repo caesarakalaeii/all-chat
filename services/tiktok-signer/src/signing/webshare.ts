@@ -3,9 +3,9 @@
  * Copyright (C) 2026 caesarakalaeii
  *
  * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -18,12 +18,33 @@
 
 import { request as undiciRequest } from 'undici';
 
-export interface ProxyList {
-  /** host:port entries, ready for Chromium's --proxy-server. */
-  hosts: string[];
-  /** Shared credentials across the list (webshare shape). */
+export interface ProxyEntry {
+  /** host:port, ready for Chromium's --proxy-server. */
+  host: string;
   username: string;
   password: string;
+}
+
+/**
+ * Per-proxy credentials, keyed by host:port. Webshare issues a username and
+ * password PER PROXY (mode=direct), not one pair for the list — verified
+ * 2026-09-16 when every lane except the first failed Chromium's proxy auth
+ * with ERR_INVALID_AUTH_CREDENTIALS after webshare's auto-replace rotated
+ * six IPs and issued fresh per-proxy credentials.
+ */
+export type ProxyCredentials = Record<string, { username: string; password: string }>;
+
+export interface ProxyList {
+  hosts: string[];
+  /**
+   * Shared credentials (webshare's documented shape) when every entry
+   * carries the same pair; null when they are per-proxy, in which case
+   * `credentials` is the authoritative map.
+   */
+  username?: string;
+  password?: string;
+  /** Per-proxy credentials, always populated. */
+  credentials: ProxyCredentials;
 }
 
 interface WebshareProxyEntry {
@@ -61,10 +82,22 @@ export async function fetchWebshareProxies(
   if (valid.length === 0) {
     throw new Error('webshare proxy list contained no valid proxies');
   }
-  const { username, password } = valid[0];
+  const credentials: ProxyCredentials = {};
+  for (const entry of valid) {
+    credentials[`${entry.proxy_address}:${entry.port}`] = {
+      username: entry.username,
+      password: entry.password
+    };
+  }
+  // A list where every entry shares one pair keeps the shared shape so
+  // callers that only want "the" credentials still work.
+  const [first, ...rest] = valid;
+  const shared = rest.every(
+    (e) => e.username === first.username && e.password === first.password
+  );
   return {
     hosts: valid.map((entry) => `${entry.proxy_address}:${entry.port}`),
-    username,
-    password
+    ...(shared ? { username: first.username, password: first.password } : {}),
+    credentials
   };
 }
