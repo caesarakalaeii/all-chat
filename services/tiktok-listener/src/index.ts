@@ -1223,6 +1223,12 @@ class TikTokListenerService {
       // so the WebSocket handshake must egress via the same proxy — the
       // 2026-09-16 "Unexpected server response: 200" failures were the
       // connector dialling the push server from the pod's datacenter IP
+      // while the session was captured via residential.
+      //
+      // This is a real sign round trip; the connector's own sign call at
+      // connect time hits the signer's pinned warm tab for this room and
+      // returns in milliseconds. Skipped when self signing is off (Euler
+      // signs in its own cloud and rides its own proxy already).
       let wsAgent: WsEgressAgent | undefined;
       if (this.selfSigner && this.proxyCredentials) {
         try {
