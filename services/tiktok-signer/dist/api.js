@@ -225,7 +225,8 @@ async function performViewerFetch(viewer, payload) {
             body: {
                 fetchResult: capture.protoBase64,
                 fetchResultCookieHeader: capture.cookieHeader,
-                fetchResultRoomId: capture.roomId
+                fetchResultRoomId: capture.roomId,
+                fetchResultProxyHost: capture.proxyHost
             }
         };
     }

@@ -89,6 +89,14 @@ export interface SignResult {
    * TikTok occasionally redirects a room; the connector re-points at this value when present.
    */
   fetchResultRoomId?: string;
+
+  /**
+   * Viewer-mode signers only: proxy host:port the capture rode. The signed
+   * session is bound to that egress IP, so the connector's WebSocket to
+   * TikTok must egress via the same proxy or the handshake is rejected.
+   * Undefined when the signer did not ride a proxy (direct lane, or Euler).
+   */
+  fetchResultProxyHost?: string;
 }
 
 /**

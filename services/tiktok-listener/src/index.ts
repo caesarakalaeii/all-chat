@@ -48,6 +48,7 @@ import {
 } from 'tiktok-live-connector';
 import { createClient, RedisClientType } from 'redis';
 import { request } from 'undici';
+import { HttpsProxyAgent } from 'https-proxy-agent';
 import { Pool } from 'pg';
 import { randomUUID } from 'crypto';
 import http from 'http';
@@ -159,6 +160,13 @@ const TIKTOK_SIGNER_AUTH_TOKEN = (process.env.TIKTOK_SIGNER_AUTH_TOKEN || '').tr
 // plus im/fetch capture bootstrap, times 2-3 lanes. Default in SelfSigner
 // covers this; the env knob exists for tuning without a redeploy.
 const TIKTOK_SIGNER_TIMEOUT_MS = parseInt(process.env.TIKTOK_SIGNER_TIMEOUT_MS || '120000', 10);
+// Credentials for the residential proxy the signer rides. The signed session
+// TikTok issues is bound to that egress IP, so the WebSocket handshake must
+// egress via the same proxy — these are the same values the signer uses
+// (webshare account). Empty disables WS-proxy pinning.
+const TIKTOK_WS_PROXY_USER = (process.env.TIKTOK_WS_PROXY_USER || '').trim();
+const TIKTOK_WS_PROXY_PASS = (process.env.TIKTOK_WS_PROXY_PASS || '').trim();
+
 
 
 /**
@@ -411,6 +419,11 @@ class TikTokListenerService {
   // signature and the WebSocket handshake all describe the same browser.
   private signerPresets?: ClientPresets;
 
+  // The self signer, kept as a field so a connection can pre-sign to learn
+  // which proxy lane the capture rode and pin its WebSocket egress to the
+  // same lane. Undefined when self signing is not configured.
+  private selfSigner?: SelfSigner;
+
   // Demand subscriber (Phase 5)
   private demandSubscriber: DemandSubscriber | null = null;
   private demandSafetyInterval: ReturnType<typeof setInterval> | null = null;
@@ -505,11 +518,11 @@ class TikTokListenerService {
       {
         euler: new EulerSigner(RouteConfig.fetchSignedWebSocketFromProvider as never),
         self: SIGN_CONFIG.signerBaseUrl
-          ? new SelfSigner({
+          ? (this.selfSigner = new SelfSigner({
               baseUrl: SIGN_CONFIG.signerBaseUrl,
               authToken: TIKTOK_SIGNER_AUTH_TOKEN || undefined,
               timeoutMs: TIKTOK_SIGNER_TIMEOUT_MS
-            })
+            }))
           : undefined
       },
       this.metrics,
@@ -1134,6 +1147,44 @@ class TikTokListenerService {
 
       logger.info('User is live, proceeding with connection', { username, overlay_id: overlayId });
 
+      // Pre-sign to learn which proxy lane the signer's viewer captured this
+      // room on. The signed session TikTok issues is bound to that egress IP,
+      // so the WebSocket handshake must egress via the same proxy — the
+      // 2026-09-16 "Unexpected server response: 200" failures were the
+      // connector dialling the push server from the pod's datacenter IP
+      // while the session was captured via residential.
+      //
+      // This is a real sign round trip; the connector's own sign call at
+      // connect time hits the signer's pinned warm tab for this room and
+      // returns in milliseconds. Skipped when self signing is off (Euler
+      // signs in its own cloud and rides its own proxy already).
+      let wsAgent: HttpsProxyAgent<string> | undefined;
+      if (this.selfSigner && TIKTOK_WS_PROXY_USER && TIKTOK_WS_PROXY_PASS) {
+        try {
+          const preSign = await this.selfSigner.sign({
+            roomId: 'unused',
+            username,
+            userAgent: 'ws-pin'
+          });
+          if (preSign.fetchResultProxyHost) {
+            wsAgent = new HttpsProxyAgent(
+              `http://${TIKTOK_WS_PROXY_USER}:${TIKTOK_WS_PROXY_PASS}@${preSign.fetchResultProxyHost}`
+            );
+            logger.info('Pinning WebSocket egress to capture lane', {
+              username,
+              lane: preSign.fetchResultProxyHost
+            });
+          }
+        } catch (error) {
+          // Do not fail the connect on a pre-sign error: the connector's own
+          // sign call will surface the same problem with a proper SignatureFailure.
+          logger.warn('Pre-sign for WS lane pinning failed; connecting unpinned', {
+            username,
+            error: (error as Error).message
+          });
+        }
+      }
+
       const connection = new TikTokLiveConnection(username, {
         processInitialData: false, // Don't process historical messages
         // Pin the connection's device/screen presets to the signer's browser
@@ -1147,7 +1198,8 @@ class TikTokListenerService {
         // the call Euler paywalls, not the gift data itself. So this only becomes viable once we
         // sign for ourselves, and loadSignConfiguration defaults it on exactly then.
         // See ADR-0052, "There are two Euler signing seams".
-        enableExtendedGiftInfo: SIGN_CONFIG.enableExtendedGiftInfo
+        enableExtendedGiftInfo: SIGN_CONFIG.enableExtendedGiftInfo,
+        wsClientOptions: wsAgent ? { agent: wsAgent } : undefined
       });
 
       // The sign route bag carries the web client, not the connection, so the
