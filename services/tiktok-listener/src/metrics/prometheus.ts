@@ -391,7 +391,6 @@ export class PrometheusMetrics {
     this.lanePins.inc({ outcome });
   }
 
-  // Canary divergence
   recordCanaryDivergence(kind: string): void {
     this.canaryDivergences.inc({ kind });
   }
