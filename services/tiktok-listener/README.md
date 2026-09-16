@@ -111,6 +111,17 @@ TIKTOK_SIGNER_TIMEOUT_MS=180000       # Self-signer HTTP timeout; signer rotates
 TIKTOK_EXTENDED_GIFT_INFO=            # Defaults on only under `self` (see below)
 SIGN_API_KEY=                         # Euler Stream API key; empty means the free tier
 
+# WS connect flap (2026-09-16 transport plan): TikTok answering the upgrade
+# with HTTP 200 is a transient flap; connect retries immediately up to
+# WS_FLAP_MAX_FAST_RETRIES (3) x 1s before falling into normal error backoff.
+# Metrics: tiktok_ws_flap_total, tiktok_ws_flap_retries_total,
+# tiktok_ws_flap_exhausted_total.
+
+# Canary rooms (phase 2): rooms mirrored against the signer's viewer-tab
+# relay (signer: SIGNER_RELAY_CANARY_ROOMS). Divergence logs +
+# tiktok_canary_divergences_total; never affects the primary connection.
+TIKTOK_CANARY_ROOMS=                   # Comma-separated usernames; empty = no canary
+
 # Demand poll and rebalancing (ADR-0007)
 DEMAND_SAFETY_INTERVAL_MS=25000       # Demand safety-net poll; also re-registers this pod as a
                                       # peer and drives lease rebalancing. Must stay below

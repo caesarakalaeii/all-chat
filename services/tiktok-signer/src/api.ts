@@ -38,7 +38,9 @@ import http from 'node:http';
 import { collectDefaultMetrics, Counter, Histogram, Registry } from 'prom-client';
 import { request as undiciRequest } from 'undici';
 import { SigningSession, type SignerIdentity } from './signing/session.js';
+import { CaptureBreaker } from './signing/capture-breaker.js';
 import { VIEWER_IDENTITY, type ViewerPool } from './signing/viewer.js';
+import { RelayHub, type RelayLogger, type RelayMessage } from './signing/relay.js';
 
 const register = new Registry();
 collectDefaultMetrics({ register });
@@ -62,6 +64,22 @@ const signRequestDuration = new Histogram({
   help: 'End-to-end sign request latency by endpoint and outcome',
   labelNames: ['endpoint', 'outcome'],
   buckets: [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30],
+  registers: [register]
+});
+
+// Capture breaker visibility (2026-09-16 transport plan, phase 1). Refusals
+// are the fast-fail path working; trips mean a room entered a cooldown.
+const captureBreakerRefusals = new Counter({
+  name: 'signer_capture_breaker_refusals_total',
+  help: 'Viewer captures refused by the per-room breaker (fast 502 instead of pool time)',
+  labelNames: ['username'],
+  registers: [register]
+});
+
+const captureBreakerTrips = new Counter({
+  name: 'signer_capture_breaker_trips_total',
+  help: 'Rooms that tripped the capture breaker (threshold consecutive failures)',
+  labelNames: ['username'],
   registers: [register]
 });
 
@@ -291,14 +309,34 @@ async function performSignUrl(
  */
 async function performViewerFetch(
   viewer: ViewerPool,
-  payload: SignRequestPayload
+  breaker: CaptureBreaker,
+  payload: SignRequestPayload,
+  logger?: ServerOptions['logger']
 ): Promise<RouteResult> {
   const username = payload.username;
   if (!username || typeof username !== 'string') {
     return { status: 400, body: { error: 'username is required for viewer mode' } };
   }
+
+  // Per-room breaker: a room whose captures keep failing is gated on
+  // TikTok's side (room-correlated, per the 2026-09-16 lab verdict), and
+  // paying maxLaneAttempts x ~60s per retry cycle for it wedges the pool
+  // behind rooms that would capture fine. Fast-fail instead; the listener's
+  // own backoff paces the retry.
+  if (breaker.isRefused(username)) {
+    captureBreakerRefusals.inc({ username });
+    return {
+      status: 502,
+      body: {
+        error: 'viewer_capture_refused',
+        message: `capture breaker open for ${username}; retry in ${Math.ceil(breaker.refusedForMs(username) / 1000)}s`
+      }
+    };
+  }
+
   try {
     const capture = await viewer.captureRoom(username);
+    breaker.recordSuccess(username);
     return {
       status: 200,
       body: {
@@ -309,6 +347,15 @@ async function performViewerFetch(
       } satisfies SignResponsePayload
     };
   } catch (error) {
+    const tripped = breaker.recordFailure(username);
+    if (tripped) {
+      captureBreakerTrips.inc({ username });
+      logger?.error?.('capture breaker tripped for room', {
+        username,
+        error: (error as Error).message,
+        refused_for_ms: breaker.refusedForMs(username)
+      });
+    }
     // Viewer captures fail when the room is not live (player never fetches)
     // or TikTok withholds data from the session. Both are TikTok-side
     // rejections from the caller's point of view: 502 keeps the listener's
@@ -332,11 +379,29 @@ export interface ServerOptions {
    * post-2026-09-09: TikTok gates webcast data on browser-grade sessions).
    */
   viewer?: ViewerPool;
+  /**
+   * Per-room capture breaker for the viewer path. Defaults to a breaker with
+   * the standard thresholds; injectable for tests.
+   */
+  captureBreaker?: CaptureBreaker;
+  /**
+   * Canary relay hub. Present when relay mode is configured
+   * (SIGNER_RELAY_CANARY_ROOMS non-empty); enables GET /v1/stream/:username.
+   */
+  relay?: RelayHub;
+  /**
+   * Rooms allowed to be relayed (canary set, SIGNER_RELAY_CANARY_ROOMS).
+   * Requests for rooms outside the set answer 404.
+   */
+  canaryRooms?: ReadonlySet<string>;
   logger?: { info: (msg: string, meta?: Record<string, unknown>) => void; error: (msg: string, meta?: Record<string, unknown>) => void };
 }
 
 export function createServer(options: ServerOptions): http.Server {
   const { session, viewer, logger } = options;
+  const captureBreaker = options.captureBreaker ?? new CaptureBreaker();
+  const relay = options.relay;
+  const canaryRooms = options.canaryRooms ?? new Set<string>();
   const authToken = readAuthToken();
 
   const server = http.createServer((req, res) => {
@@ -383,6 +448,31 @@ export function createServer(options: ServerOptions): http.Server {
       return;
     }
 
+    // Canary relay: SSE stream of the room's viewer-tab WS frames. Same
+    // bearer token as /v1/sign; long-lived GET, no body.
+    const streamMatch =
+      req.method === 'GET' ? url.match(/^\/v1\/stream\/([A-Za-z0-9_.]+)$/) : null;
+    if (streamMatch) {
+      const streamUsername = streamMatch[1];
+      if (authToken && req.headers.authorization !== `Bearer ${authToken}`) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'unauthorized' }));
+        return;
+      }
+      if (!canaryRooms.has(streamUsername)) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'room is not a canary' }));
+        return;
+      }
+      if (!viewer || !relay) {
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'relay mode not enabled' }));
+        return;
+      }
+      await handleRelayStream(req, res, streamUsername, viewer, relay, logger);
+      return;
+    }
+
     if (authToken && req.headers.authorization !== `Bearer ${authToken}`) {
       res.writeHead(401, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'unauthorized' }));
@@ -414,7 +504,7 @@ export function createServer(options: ServerOptions): http.Server {
           // Page-viewer path: a real tab on the room's live page captures the
           // SDK-signed im/fetch TikTok serves the player. Returns the same
           // { fetchResult, fetchResultCookieHeader } contract.
-          result = await performViewerFetch(viewer, payload as SignRequestPayload);
+          result = await performViewerFetch(viewer, captureBreaker, payload as SignRequestPayload, logger);
         } else {
           result =
             url === '/v1/sign'
@@ -478,4 +568,58 @@ async function readBody(req: http.IncomingMessage): Promise<Buffer | null> {
     if (error === null) return null;
     throw error;
   }
+}
+
+/** Heartbeat comment interval for the SSE relay stream. */
+const SSE_HEARTBEAT_MS = 15_000;
+
+/**
+ * SSE stream of a canary room's viewer-tab frames. One request = one
+ * subscriber; frames are opaque base64 PushFrames the listener decodes
+ * with its own connector schemas.
+ */
+async function handleRelayStream(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  username: string,
+  viewer: ViewerPool,
+  relay: RelayHub,
+  logger?: RelayLogger
+): Promise<void> {
+  // The room must already have a warm tab (a capture ran for it — the
+  // listener's pre-sign guarantees this on every connect). Pin it first so
+  // idle eviction cannot reclaim the tab between pin and attach.
+  const page = viewer.pinTab(username);
+  if (!page) {
+    res.writeHead(409, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'no warm tab for room; run a capture first' }));
+    return;
+  }
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive'
+  });
+  res.write(': connected\n\n');
+
+  const unsubscribe = await relay.subscribe(username, page, (msg: RelayMessage) => {
+    if (msg.type === 'frame') {
+      res.write(`event: frame\ndata: ${JSON.stringify(msg)}\n\n`);
+    } else {
+      res.write(`event: state\ndata: ${JSON.stringify(msg)}\n\n`);
+    }
+  });
+
+  const heartbeat = setInterval(() => {
+    res.write(': ping\n\n');
+  }, SSE_HEARTBEAT_MS);
+
+  const cleanup = () => {
+    clearInterval(heartbeat);
+    unsubscribe();
+    logger?.info('relay stream closed', { username });
+  };
+  req.on('close', cleanup);
+  res.on('close', cleanup);
 }

@@ -185,3 +185,60 @@ spec:
 
               Consider temporarily disabling auto-rebalancing if thrashing persists:
               kubectl set env -n allchat deployment/source-manager REBALANCING_ENABLED=false
+
+        # TikTok canary divergence (2026-09-16 transport plan, phase 2):
+        # the signer's viewer-tab relay is the canary for the listener's
+        # Node-WS primary transport. Any divergence kind firing repeatedly
+        # means TikTok is treating the two transports differently — the
+        # early signal of handshake session scoring starting to bite.
+        - alert: TikTokCanaryDivergence
+          expr: increase(tiktok_canary_divergences_total[10m]) > 3
+          for: 0m
+          labels:
+            severity: warning
+            team: allchat
+          annotations:
+            summary: "TikTok canary relay diverging from primary WS transport"
+            description: |
+              {{ $labels.kind }} divergence fired more than 3 times in 10 minutes
+              for a canary room. The viewer-tab relay and the listener's own
+              WebSocket are seeing different traffic for the same room.
+
+              Impact: the primary transport may be degraded before it fails
+              outright (TikTok session scoring on the WS handshake).
+
+              Remediation Steps:
+              1. Compare per-method frame counts in the listener logs:
+                 kubectl logs -n allchat -l app=tiktok-listener | grep "canary divergence"
+              2. Check whether the affected room's WS is flapping:
+                 tiktok_ws_flap_exhausted_total in Prometheus
+              3. If only canary rooms diverge, the primary is healthy — watch
+                 and do not roll back.
+
+        # TikTok WS flap exhaustion (phase 1): a room that exhausted its
+        # fast retries has hit a persistent refusal, not the transient
+        # 200-upgrade flap. Sustained exhaustion across rooms means the
+        # session-scoring wall the canary exists to watch.
+        - alert: TikTokWsFlapExhausted
+          expr: increase(tiktok_ws_flap_exhausted_total[15m]) > 5
+          for: 0m
+          labels:
+            severity: warning
+            team: allchat
+          annotations:
+            summary: "TikTok WS connect flaps not clearing after fast retries"
+            description: |
+              More than 5 connect attempts in 15 minutes exhausted the flap
+              retry budget. The "Unexpected server response: 200" refusal is
+              persistent, which means handshake session scoring, not a flap.
+
+              Impact: affected rooms are deaf and stuck in normal error
+              backoff.
+
+              Remediation Steps:
+              1. Identify affected rooms:
+                 kubectl logs -n allchat -l app=tiktok-listener | grep "flap did not clear"
+              2. Check lane pinning health: tiktok_ws_lane_pins_total{outcome="failed"}
+              3. Check the capture breaker: signer_capture_breaker_trips_total
+              4. Verify the signer pool can still capture healthy rooms
+                 (signer_sign_requests_total{outcome="success"}).

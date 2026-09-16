@@ -61,7 +61,14 @@ import { LiveStreamPoller } from './livestream/poller.js';
 import { PrometheusMetrics } from './metrics/prometheus.js';
 import { HeartbeatMonitor } from './reliability/heartbeat-monitor.js';
 import { MessageDeduplicator } from './deduplication/message-deduplicator.js';
-import { connectionCeilingReached, shouldBackOffReconnect } from './reliability/connection-decisions.js';
+import {
+  connectionCeilingReached,
+  isWsFlapError,
+  shouldBackOffReconnect,
+  WS_FLAP_MAX_FAST_RETRIES,
+  WS_FLAP_RETRY_DELAY_MS
+} from './reliability/connection-decisions.js';
+import { CanaryConsumer } from './canary/canary-consumer.js';
 
 // Import coordination modules (leadership-based)
 import { SourceManagerClient } from './coordination/client.js';
@@ -156,6 +163,17 @@ const SIGN_CONFIG = loadSignConfiguration();
 
 // Bearer token for the tiktok-signer service, when it runs with auth enabled.
 const TIKTOK_SIGNER_AUTH_TOKEN = (process.env.TIKTOK_SIGNER_AUTH_TOKEN || '').trim();
+
+// Canary rooms (2026-09-16 transport plan, phase 2): rooms whose primary WS
+// connection is mirrored against the signer's viewer-tab relay. The
+// consumer compares per-method decoded frames; divergence is logged and
+// counted but never affects the primary connection.
+const TIKTOK_CANARY_ROOMS = new Set(
+  (process.env.TIKTOK_CANARY_ROOMS || '')
+    .split(',')
+    .map((r) => r.trim().toLowerCase())
+    .filter(Boolean)
+);
 // Per-request timeout for calls to the tiktok-signer service. Page-viewer mode
 // may need to try several proxy lanes inside one request: navigation (~10-30s)
 // plus im/fetch capture bootstrap, times 2-3 lanes. Default in SelfSigner
@@ -425,6 +443,10 @@ class TikTokListenerService {
   // which proxy lane the capture rode and pin its WebSocket egress to the
   // same lane. Undefined when self signing is not configured.
   private selfSigner?: SelfSigner;
+
+  // Canary consumers per room (phase 2): only rooms in TIKTOK_CANARY_ROOMS
+  // get one; divergence is logged + counted, never load-bearing.
+  private canaryConsumers: Map<string, CanaryConsumer> = new Map();
 
   // Current webshare proxy credentials for WS pinning, refreshed hourly.
   // Undefined until the first successful fetch; WS pinning stays off until
@@ -1178,15 +1200,10 @@ class TikTokListenerService {
       // so the WebSocket handshake must egress via the same proxy — the
       // 2026-09-16 "Unexpected server response: 200" failures were the
       // connector dialling the push server from the pod's datacenter IP
-      // while the session was captured via residential.
-      //
-      // This is a real sign round trip; the connector's own sign call at
-      // connect time hits the signer's pinned warm tab for this room and
-      // returns in milliseconds. Skipped when self signing is off (Euler
-      // signs in its own cloud and rides its own proxy already).
       let wsAgent: WsEgressAgent | undefined;
       if (this.selfSigner && this.proxyCredentials) {
         try {
+          const preSignStartedAt = Date.now();
           const preSign = await this.selfSigner.sign({
             roomId: 'unused',
             username,
@@ -1197,19 +1214,31 @@ class TikTokListenerService {
             wsAgent = createChromeTlsProxyAgent(
               `http://${proxyUser}:${proxyPass}@${preSign.fetchResultProxyHost}`
             );
+            this.metrics.recordLanePinOutcome('pinned');
             logger.info('Pinning WebSocket egress to capture lane', {
               username,
-              lane: preSign.fetchResultProxyHost
+              lane: preSign.fetchResultProxyHost,
+              presign_ms: Date.now() - preSignStartedAt
             });
+          } else {
+            // The signer answered but named no lane (direct capture or an
+            // older signer): the WS dial defaults to pod egress, which is
+            // exactly the shape that produced the 2026-09-16 flaps.
+            this.metrics.recordLanePinOutcome('unpinned_no_lane');
+            logger.warn('Pre-sign returned no proxy lane; connecting unpinned', { username });
           }
         } catch (error) {
           // Do not fail the connect on a pre-sign error: the connector's own
           // sign call will surface the same problem with a proper SignatureFailure.
+          this.metrics.recordLanePinOutcome('failed');
           logger.warn('Pre-sign for WS lane pinning failed; connecting unpinned', {
             username,
             error: (error as Error).message
           });
         }
+      } else {
+        // Euler path or credentials not yet fetched: pinning is off by design.
+        this.metrics.recordLanePinOutcome('skipped');
       }
 
       const connection = new TikTokLiveConnection(username, {
@@ -1278,6 +1307,7 @@ class TikTokListenerService {
       // question that took a prod investigation to answer the first time.
       emitter.on('decodedData', (method: string) => {
         this.metrics.recordWireMessage(method);
+        this.canaryConsumers.get(username)?.notePrimaryFrame(method);
       });
 
       emitter.on('connected', (state: { roomId?: string }) => {
@@ -1304,9 +1334,13 @@ class TikTokListenerService {
         // Update database: stream is live and source is active
         this.updateStreamHistory(username, true);
         this.setSourceActive(username, true);
-      });
 
+        // Canary (phase 2): mirror this room against the signer relay when
+        // configured. Never load-bearing — divergence only logs + counts.
+        this.startCanary(username);
+      });
       emitter.on('disconnected', () => {
+        this.stopCanary(username);
         logger.warn('TikTok stream disconnected', { username });
         const stream = this.activeStreams.get(username);
         if (stream) {
@@ -1377,8 +1411,37 @@ class TikTokListenerService {
         is_connected: false
       });
 
-      // Connect
-      await connection.connect();
+      // Connect. A WS flap ("Unexpected server response: 200") is retried
+      // immediately and outside normal error backoff: lab-measured 2026-09-16
+      // it clears by attempt 3, while the escalating backoff would park the
+      // room for minutes over a transient. The connector resets its state to
+      // DISCONNECTED on a failed connect, so the same connection object can
+      // be re-dialled. Any other error propagates to the catch below, which
+      // keeps the poller's backoff semantics for real failures.
+      for (let attempt = 1; ; attempt++) {
+        try {
+          await connection.connect();
+          break;
+        } catch (error) {
+          if (!isWsFlapError(error)) throw error;
+          this.metrics.recordWsFlap(username);
+          if (attempt > WS_FLAP_MAX_FAST_RETRIES) {
+            this.metrics.recordWsFlapExhausted(username);
+            logger.warn('WS flap did not clear after fast retries', {
+              username,
+              attempts: attempt
+            });
+            throw error;
+          }
+          this.metrics.recordWsFlapRetry(username);
+          logger.info('WS connect flap; retrying immediately', {
+            username,
+            attempt,
+            retry_in_ms: WS_FLAP_RETRY_DELAY_MS
+          });
+          await new Promise<void>((resolve) => setTimeout(resolve, WS_FLAP_RETRY_DELAY_MS));
+        }
+      }
     } catch (error) {
       logger.error('Failed to connect to TikTok stream', { username, error });
 
@@ -1407,6 +1470,7 @@ class TikTokListenerService {
 
     try {
       logger.info('Disconnecting from TikTok stream', { username });
+      this.stopCanary(username);
       stream.connection.disconnect();
       this.activeStreams.delete(username);
 
@@ -1426,6 +1490,53 @@ class TikTokListenerService {
     } catch (error) {
       logger.error('Failed to disconnect from TikTok stream', { username, error });
     }
+  }
+
+  /**
+   * Start the canary mirror for a room, if it is in the canary set and not
+   * already running. The consumer decodes the signer relay's frames with
+   * the connector's schemas and compares against this pod's own WS counts;
+   * divergence is logged and counted, never acted on by the connect path.
+   */
+  private startCanary(username: string): void {
+    if (!TIKTOK_CANARY_ROOMS.has(username.toLowerCase())) return;
+    if (this.canaryConsumers.has(username)) return;
+    const signerUrl = SIGN_CONFIG.signerBaseUrl;
+    if (!signerUrl) {
+      logger.warn('Canary room configured but signer URL unknown; canary off', { username });
+      return;
+    }
+    const consumer = new CanaryConsumer({
+      username,
+      signerUrl,
+      signerAuthToken: TIKTOK_SIGNER_AUTH_TOKEN || undefined,
+      logger: {
+        info: (msg, meta) => logger.info(msg, { ...meta }),
+        warn: (msg, meta) => logger.warn(msg, { ...meta })
+      }
+    });
+    consumer.on('divergence', (divergence) => {
+      this.metrics.recordCanaryDivergence(divergence.kind);
+      logger.warn('TikTok canary divergence', {
+        username,
+        kind: divergence.kind,
+        detail: divergence.detail
+      });
+    });
+    consumer.on('error', (error: Error) => {
+      logger.warn('TikTok canary relay error', { username, error: error.message });
+    });
+    this.canaryConsumers.set(username, consumer);
+    consumer.start();
+    logger.info('Canary mirror started for room', { username });
+  }
+
+  private stopCanary(username: string): void {
+    const consumer = this.canaryConsumers.get(username);
+    if (!consumer) return;
+    consumer.stop();
+    this.canaryConsumers.delete(username);
+    logger.info('Canary mirror stopped for room', { username });
   }
 
   private async updateStreamHistory(username: string, isLive: boolean): Promise<void> {

@@ -52,3 +52,23 @@ export const SILENT_FAILURE_STREAK_THRESHOLD = 1;
 export function shouldBackOffReconnect(silentFailureStreak: number): boolean {
   return silentFailureStreak > SILENT_FAILURE_STREAK_THRESHOLD;
 }
+
+/**
+ * The signature of the 2026-09-16 WS connect flap: TikTok answers the upgrade
+ * request with a plain HTTP 200 instead of switching protocols, which the ws
+ * library surfaces as "Unexpected server response: 200". Lab-measured on
+ * diamondslay: a flap, not a wall — attempt 3 connected and held a sustained
+ * stream — so it must be retried immediately instead of entering the
+ * escalating error backoff (which is what kept rooms parked through it).
+ */
+export const WS_FLAP_SIGNATURE = 'Unexpected server response: 200';
+
+/** Fast retries a flap gets before the error is allowed into normal backoff. */
+export const WS_FLAP_MAX_FAST_RETRIES = 3;
+
+/** Delay between flap retries. Lab flap cleared on attempt 3; 1s is enough. */
+export const WS_FLAP_RETRY_DELAY_MS = 1000;
+
+export function isWsFlapError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes(WS_FLAP_SIGNATURE);
+}

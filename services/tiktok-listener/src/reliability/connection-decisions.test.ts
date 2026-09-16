@@ -17,7 +17,14 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { connectionCeilingReached, shouldBackOffReconnect, SILENT_FAILURE_STREAK_THRESHOLD } from './connection-decisions.js';
+import {
+  connectionCeilingReached,
+  isWsFlapError,
+  shouldBackOffReconnect,
+  SILENT_FAILURE_STREAK_THRESHOLD,
+  WS_FLAP_MAX_FAST_RETRIES,
+  WS_FLAP_RETRY_DELAY_MS
+} from './connection-decisions.js';
 
 describe('connectionCeilingReached', () => {
   // The ceiling check is what stops a pod from opening more Euler-proxied
@@ -75,5 +82,47 @@ describe('shouldBackOffReconnect', () => {
     expect(SILENT_FAILURE_STREAK_THRESHOLD).toBe(1);
     expect(shouldBackOffReconnect(SILENT_FAILURE_STREAK_THRESHOLD)).toBe(false);
     expect(shouldBackOffReconnect(SILENT_FAILURE_STREAK_THRESHOLD + 1)).toBe(true);
+  });
+});
+
+describe('isWsFlapError', () => {
+  // The classifier decides which connect failures get the immediate-retry
+  // loop in connectToStream. Too narrow and a real flap (ws wording changes
+  // slightly) goes into escalating backoff, parking a healthy room for
+  // minutes; too wide and genuine connect failures (room offline, signer
+  // down) get hammered with fast retries.
+
+  it('classifies the ws library flap message', () => {
+    expect(isWsFlapError(new Error('Unexpected server response: 200'))).toBe(true);
+  });
+
+  it('classifies the flap when the message carries trailing context', () => {
+    // The ws library appends the response body to the message; the signature
+    // must match on the prefix, not the exact string.
+    expect(isWsFlapError(new Error('Unexpected server response: 200 {"code":10000}'))).toBe(true);
+  });
+
+  it('does not classify a non-200 upgrade rejection', () => {
+    expect(isWsFlapError(new Error('Unexpected server response: 403'))).toBe(false);
+  });
+
+  it('does not classify unrelated connect errors', () => {
+    expect(isWsFlapError(new Error('ETIMEDOUT'))).toBe(false);
+    expect(isWsFlapError(new Error('fetchRoomId failed'))).toBe(false);
+  });
+
+  it('does not classify non-Error values', () => {
+    expect(isWsFlapError('Unexpected server response: 200')).toBe(false);
+    expect(isWsFlapError(undefined)).toBe(false);
+  });
+
+  it('bounds the fast-retry budget so a wall eventually backs off', () => {
+    // Lab flap cleared on attempt 3; the budget must cover that with slack
+    // but stay small enough that a persistent refusal reaches the poller's
+    // normal backoff within seconds, not minutes.
+    expect(WS_FLAP_MAX_FAST_RETRIES).toBeGreaterThanOrEqual(3);
+    expect(WS_FLAP_MAX_FAST_RETRIES).toBeLessThanOrEqual(5);
+    expect(WS_FLAP_RETRY_DELAY_MS).toBeGreaterThanOrEqual(1000);
+    expect(WS_FLAP_RETRY_DELAY_MS).toBeLessThanOrEqual(2000);
   });
 });

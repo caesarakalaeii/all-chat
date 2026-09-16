@@ -22,6 +22,7 @@
 * exposure — see the ADR for the measured costs).
 */
 import { createServer } from './api.js';
+import { RelayHub } from './signing/relay.js';
 import { SigningSession } from './signing/session.js';
 import { ViewerPool } from './signing/viewer.js';
 import { fetchWebshareProxies } from './signing/webshare.js';
@@ -114,10 +115,11 @@ async function refreshProxiesFromWebshare() {
         const list = await fetchWebshareProxies(webshareToken);
         proxyUser = list.username;
         proxyPass = list.password;
-        // Credentials ride with the refresh: the pool was constructed from the
-        // static-list fallback and may have none, and lane pages authenticate
-        // per-request from the pool's own options.
-        await viewer.refreshProxies(list.hosts, { username: list.username, password: list.password });
+        // Credentials ride with the refresh: the pool was constructed from
+        // the static-list fallback and may have none, and lane pages
+        // authenticate per-request from the pool's own options. Webshare's
+        // per-proxy credentials go straight to the pool.
+        await viewer.refreshProxies(list.hosts, list.username ? { username: list.username, password: list.password ?? '' } : undefined, list.credentials);
         logger.info('viewer proxy pool refreshed from webshare', { proxies: list.hosts.length });
     }
     catch (error) {
@@ -126,7 +128,18 @@ async function refreshProxiesFromWebshare() {
         });
     }
 }
-const server = createServer({ port: PORT, session, viewer, logger });
+// Canary relay (2026-09-16 transport plan, phase 2): rooms listed in
+// SIGNER_RELAY_CANARY_ROOMS get GET /v1/stream/:username — an SSE feed of
+// the viewer tab's own WS frames. The hub pins subscribed tabs against
+// idle eviction via the pool's tab refresh; decode stays with the listener.
+const canaryRooms = new Set((process.env.SIGNER_RELAY_CANARY_ROOMS || '')
+    .split(',')
+    .map((r) => r.trim().toLowerCase())
+    .filter(Boolean));
+const relay = viewer
+    ? new RelayHub((username) => { viewer.pinTab(username); }, { logger })
+    : undefined;
+const server = createServer({ port: PORT, session, viewer, relay, canaryRooms, logger });
 server.listen(PORT, () => {
     logger.info('tiktok-signer listening', { port: PORT });
     if (viewer && webshareToken) {
@@ -143,9 +156,9 @@ async function shutdown(signal) {
     logger.info('shutting down', { signal });
     if (proxyRefresh)
         clearInterval(proxyRefresh);
-    server.close();
-    await session.close();
+    await relay?.close();
     await viewer?.close();
+    await session.close();
     process.exit(0);
 }
 process.on('SIGTERM', () => void shutdown('SIGTERM'));
