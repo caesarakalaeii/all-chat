@@ -341,7 +341,7 @@ export function createServer(options) {
                 res.end(JSON.stringify({ error: 'unauthorized' }));
                 return;
             }
-            if (!canaryRooms.has(streamUsername)) {
+            if (!canaryRooms.has(streamUsername) && !options.relayFallbackEnabled) {
                 res.writeHead(404, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ error: 'room is not a canary' }));
                 return;

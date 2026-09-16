@@ -24,8 +24,15 @@ changes are absorbed by the page instead of reimplemented by us.
   `ghcr.io/caesarakalaeii/allchat-tiktok-signer:main` (includes #896 crash
   guard), port **18092** → 8092, `--shm-size 2g`, Xvfb llvmpipe.
 - Env: `SIGNER_VIEWER_MODE=page`, `SIGNER_USER_DATA_DIR=/profiles/base`
-  (named volume `signer-lab-profiles` — profiles persist across restarts),
-  webshare token from `/run/secrets/tok` (root-only file `/tmp/tok` on the
+  (named volume `signer-lab-profiles`). CORRECTION (2026-09-16 evening):
+  "profiles persist across restarts" was FALSE all day — docker created the
+  volume root-owned while the container runs as uid 1001 (`nodejs`), so
+  every lane profile mkdir failed with EACCES and every capture ran a cold
+  profile. No warm-profile experiment done on this rig was actually warm.
+  Fixed on the lab rig with
+  `docker exec -u root signer-lab chown -R 1001:1001 /profiles`; profiles
+  now persist. Prod k8s is NOT affected: emptyDir + `fsGroup: 1001` makes
+  `/home/signer/.chrome-profile` writable there. Webshare token from
   host, re-extractable with:
   `kubectl exec -n allchat --context default deploy/tiktok-listener -- node -e "process.stdout.write(process.env.SIGNER_WEBSHARE_TOKEN)" > /tmp/tok && chmod 644 /tmp/tok`
   — note: any single bash command containing both `kubectl` and `secret`-ish
@@ -36,12 +43,11 @@ changes are absorbed by the page instead of reimplemented by us.
   `curl -X POST localhost:18092/v1/sign -d '{"roomId":"unused","username":"<live-room>"}'`
   against each lane; find one that captures, then hold the tab open and
   verify the stream (see "Open spike questions").
-- Webshare pool state: the original 10 static-residential IPs stopped
-  serving im/fetch ~15:00 UTC. Whether they are burned at TikTok's edge or
-  throttled by webshare is UNRESOLVED (see "Lane burn evidence"). The user
-  has 4 IP rotations left this month — do not spend one until the local rig
-  can prove a lane holds a stream, and prefer testing the fresh-IP
-  hypothesis cheaply first (one lane from an unused origin).
+- Webshare pool state (VERIFIED 2026-09-16 ~18:45 UTC, see "Pool NOT
+  burned — verdict"): pool serves captures again; 6 of 10 IPs were
+  auto-replaced by webshare at 10:55 UTC via
+  `auto_replace_invalid_proxies: true`, consuming 6 of 10 monthly
+  proxy-replacements (4 left). Do not spend a rotation: lanes are healthy.
 
 ## Day timeline (what happened)
 
@@ -99,12 +105,51 @@ t=~5.2s  GET  /webcast/room/check_alive/         (recurring)
   telemetry. Real sessions beacon; capture-only sessions don't.
   [INFERENCE] session scoring may expect it.
 
-### The web client no longer uses WebSocket for chat
+### CORRECTED (2026-09-16 evening): the web client DOES use WebSocket for chat
 
-100s capture of a live room with chat flowing: exactly ONE im/fetch
-request; its HTTP/2 response stream held open; DATA bursts at t=6s, 38s,
-89s. Zero WebSocket handshakes anywhere. Chat = server push over the
-im/fetch h2 stream. `ws_direct=1` marks this mode.
+The earlier claim below was WRONG — drawn from a 100s decrypted capture of
+a room that was almost certainly quiet or gated. Re-measured tonight on
+diamondslay (active chat, warm viewer tab, CDP attach to the signer's own
+browser):
+
+- **Chat rides a WebSocket push.** `Network.webSocketFrameReceived/Sent`
+  at 1.3-3 frames/s on the room tab; 321 recv / 323 sent over 240s;
+  170 frames captured in 60s. ZERO im/fetch re-polls in the same window.
+- **Frames are base64 PushFrames** containing embedded
+  `ProtoMessageFetchResult` payloads. The connector's own
+  `deserializeWebSocketMessage` decodes them; inner `messages[]` carry
+  `WebcastChatMessage`, `WebcastLikeMessage`, `WebcastMemberMessage`,
+  `WebcastRoomUserSeqMessage` — full user objects, msgId, roomId, createTime.
+  Verified end-to-end: one 60s capture contained decodable
+  `WebcastChatMessage`s with real msgIds.
+- **im/fetch is the BOOTSTRAP, not the transport.** One-shot ~25-29KB
+  response, `loadingFinished` immediately (raw ProtoMessageFetchResult
+  protobuf — decodes with `deserializeMessage('ProtoMessageFetchResult')`:
+  cursor, 11 messages, `internalExt`, and
+  `pushServer.webcastPushAddr = wss://webcast-ws.eu.tiktok.com/webcast/im/ws_proxy/ws_reuse_supplement/`).
+  Never re-fired across three 150-300s watches on live rooms.
+- ~79/170 frames failed decode with one error kind
+  (`ProtoMessageFetchResult: premature EOF`) — likely ack/keepalive frames
+  (`msg_type: "r"`); classify before treating as data loss.
+- CDP CAN read the transport incrementally: `Network.webSocketFrameReceived`
+  on an attached session delivers every frame as it arrives. Attaching a
+  second CDP client to the signer's warm viewer browser works (619 events
+  in 45s sanity run) — no new browser needed, no tunnel-fail problem.
+
+Architecture implication: the "h2 long-poll migration" premise dissolves.
+Two viable transports, both SDK-proof:
+1. Signer-side: attach CDP to the warm viewer tab (as spiked), decode
+   PushFrames with the connector's schemas, publish to Redis directly.
+2. Listener-side: WS connect using the fetchResult's
+   `pushServer.webcastPushAddr` (`ws_reuse_supplement` endpoint) — the
+   existing WS machinery, new URL + the viewer session's cookies.
+
+Original (wrong) claim, kept for the record: 100s capture of a live room
+with chat flowing: exactly ONE im/fetch request; its HTTP/2 response stream
+held open; DATA bursts at t=6s, 38s, 89s. Zero WebSocket handshakes
+anywhere. Chat = server push over the im/fetch h2 stream. `ws_direct=1`
+marks this mode. — The one im/fetch observation is real (bootstrap); the
+"zero WebSocket handshakes" part is what failed to reproduce.
 
 ### WebGL is NOT required by the gate
 
@@ -131,60 +176,109 @@ require N consecutive attempts on a verified-live room before believing a
 negative. Conversely the 17:30-18:00 window shows direct CAN work, so the
 gate is flapping, not a hard wall.
 
-## Lane burn evidence (unresolved)
+## Pool NOT burned — verdict (2026-09-16 evening verification)
 
-For: same minute, real Chromium through lane → no im/fetch; direct →
-31KB. Failures included plain navigation timeouts (pre-gate). All lanes
-dead from two origins.
-Against: no proof whether TikTok edge-flagged the IPs or webshare
-throttled us. Home IP carried MORE traffic than any lane and still worked
-longer, tilting toward TikTok-side — but webshare-side fits too.
-Cheap test before spending a rotation: request one lane from an origin
-that never touched it (VPN/phone hotspot) — if still dead, it's the IP at
-TikTok's edge.
+The "burned pool" hypothesis was re-tested from scratch and FAILS at
+every layer measured:
 
-## Open spike questions (blocking the h2 long-poll build)
+- **Webshare-side health**: all 10 lanes proxy a neutral site
+  (api.ipify.org) instantly with correct exit IPs. Account `throttled:
+  false`, subscription active, 250GB plan bandwidth.
+- **TikTok edge (no signing)**: all 10 lanes GET https://www.tiktok.com/
+  → 200 in 0.5-2.2s, matching direct egress baseline. No IP-level edge
+  block on any lane.
+- **Full signed capture** on the local rig: burritostreamgr 8.6s (lane
+  209.166.16.88:6749), bigjaygaming01 7.3s (104.253.199.239:5518),
+  dan2dxo 6.3s — all attempt 1, all through lanes. Rooms asahiicc and
+  tv_whiteshark failed on 4 lanes each, but the SAME lanes captured
+  other rooms minutes earlier: failures are room-correlated, not
+  lane-correlated. Those rooms are dead/gated at TikTok's side.
+- **Pool timeline correction**: the pool that "died at 15:00" was already
+  4 original + 6 auto-replaced IPs (webshare replaced them at 10:55 UTC
+  via `auto_replace_invalid_proxies: true`, consuming 6 of 10 monthly
+  proxy replacements — hence "4 left", which was real, but it was
+  webshare's own health checks that spent them, not our volume). So "10
+  burned originals" was wrong twice over: 6 IPs were hours-old when they
+  "burned", and nothing is burned now.
+- The afternoon's "all lanes dead from two origins" is best explained by
+  the combination verified tonight: room-side gating (not IP-side) + the
+  rig's profile-ownership bug (every attempt was a cold profile, EACCES
+  on mkdir) + the flapping session gate.
+- Implication: **do NOT rotate IPs.** Nothing on the account needs the
+  remaining 4 replacements; burning one to "test the fresh-IP hypothesis"
+  would spend quota on a hypothesis already answered.
 
-1. **CDP incremental read of a held-open response** — UNANSWERED. Three
-   spike runs got zero im/fetch (gate flapping), so we never observed
-   whether `Network.dataReceived` fires per-chunk on the streaming
-   response, or whether `Network.streamResourceContent` /
-   Fetch-domain streaming works on an unbounded response. This decides
-   the transport plumbing: if CDP can't read incrementally, the fallback
-   is in-page JS (fetch reader inside the viewer tab posting frames to the
-   signer via CDP Runtime.evaluate or a localhost beacon), which is more
-   moving parts but equally SDK-proof.
-   Spike rig: inside the signer container (it has chromium + puppeteer +
-   Xvfb), `docker exec signer-lab env DISPLAY=:99 node -e "<script>"`;
-   instrument `Network.responseReceived` + `Network.dataReceived` on a
-   live room, watch chunk cadence for 90s+. A successful capture earlier
-   showed DATA bursts — so Network.dataReceived should fire; verify.
-2. Which lane (if any of the 10) still serves im/fetch today; if none,
-   the fresh-IP hypothesis test above, then rotation decision.
-3. ProtoMessageFetchResult framing: the h2 stream delivers protobuf
-   frames; the connector's `deserializeWebSocketMessage` expects the
-   WS push framing (length-prefixed PushFrame). Confirm whether the
-   h2 body chunks are the same framing or raw FetchResult protobufs —
-   capture is on the lab container if still mounted (see measurement
-   notes: rig was cleaned; re-capture if needed).
+## Spike results (2026-09-16 night — all three answered)
 
-## Architecture sketch for the implementation (agreed direction)
+1. ANSWERED — but the premise was wrong: there is no held-open im/fetch
+   stream to read. im/fetch is a one-shot ~25-29KB bootstrap response
+   (single `dataReceived`, immediate `loadingFinished`; verified twice).
+   The transport on an active room is a **WebSocket push**, and CDP reads
+   it fine: attach to the warm viewer browser (second CDP client works —
+   619 events/45s sanity run) and consume
+   `Network.webSocketFrameReceived` per frame. No Fetch-domain streaming
+   needed. Spike scripts left on the lab container in /app (spike-attach,
+   spike-ws, spike-frames) and in /tmp on the host; frames captured at
+   /tmp/ws-frames.jsonl (170 frames/60s off diamondslay).
+2. ANSWERED: lanes serve im/fetch — see "Pool NOT burned". No rotation.
+3. ANSWERED: the im/fetch response body is a RAW ProtoMessageFetchResult
+   protobuf (decodes with `deserializeMessage('ProtoMessageFetchResult',
+   buf)`; cursor + 11 messages + internalExt + pushServer present —
+   saved at /tmp/imfetch-body.bin). The WS frames are base64 PushFrames
+   whose payload embeds a ProtoMessageFetchResult; the connector's
+   `deserializeWebSocketMessage` (async) decodes them, inner `messages[]`
+   verified to carry WebcastChatMessage with real msgId/roomId/user.
+   Caveat: ~half the frames (79/170) throw `premature EOF` at the inner
+   decode — consistent with ack/keepalive frames (`msg_type: "r"`);
+   classify them before assuming data loss.
 
-- Signer viewer tab per room stays open (already true) — it IS the
-  transport: TikTok's JS holds the im/fetch h2 stream and receives chat
-  bursts.
-- Signer reads frames via CDP (plumbing per spike question 1) and decodes
-  with the connector's existing protobuf schemas, then publishes to Redis
-  Streams (chat:raw) directly or via its /v1 API — same normalized format
-  the listener emits today.
-- Listener keeps its leadership/demand/backoff machinery but drops the
-  WS connect path for TikTok (other platforms unaffected).
-- Retired with the WS leg: WS lane pinning, the signed-URL round trip
-  per connection. The Chrome-TLS agent stays (it also covers generic
-  HTTP fetch egress if needed).
-- Circuit breaker STILL needed first (see "Open work" in git history of
-  this file / earlier revision): N consecutive all-lane failures →
-  fast 502 cooldown, never hammer. It's what burned the pool.
+## Architecture decision (2026-09-16 night — no-chrome VALIDATED, viewer tab = canary)
+
+The scaling question ("must we keep a Chrome tab per stream?") was settled
+empirically in the lab the same night: NO.
+
+**Lab proof (diamondslay, chatty room):** the EXISTING listener —
+connector WS + SelfSigner + Chrome-TLS lane pinning, zero resident
+Chrome per stream — connected and held a sustained chat stream:
+- Signer tab needed only ~6s for the capture, then idle.
+- "Unexpected server response: 200" flap: 2 failures (~4-8s backoff),
+  then CONNECTED. The 200-instead-of-101 gate is flapping, not a wall.
+- 1756 messages into chat:raw over 10 minutes (~3/s), full decode chain
+  (PushFrame → messages → RawChatMessage) working.
+- Clean disconnect when the room ended; poller backed off correctly.
+
+Euler comparison, for the record: Euler broke on TikTok churn AND free-plan
+rate limits. The in-house Node WS has no vendor and no quota; its only
+exposure is TikTok session scoring on the WS handshake, which the canary
+below watches.
+
+**Design (user-set, 2026-09-16):**
+
+1. **Primary transport: listener Node WS** (what the lab just ran —
+   prod-shipped code, no new transport). Signer tab = capture-only
+   bootstrap, closed or idle-evicted after the fetchResult is handed over.
+   Scaling: one signer browser pool serves all rooms' captures; listener
+   holds cheap WS connections instead of the signer holding renderers.
+2. **Viewer-tab relay = canary + fallback.** Keep the signer-relay machinery
+   (CDP attach, PushFrame decode — spiked and working) deployed on a small
+   set of rooms. Two jobs:
+   - Canary: compare frame/method shape and connect outcomes between the
+     Node WS and the SDK-owned page WS on the same room. Divergence (new
+     ack requirements, changed framing, rising 200-flap rate) = early
+     warning that TikTok moved the signing surface; alert and fix before
+     the primary tier breaks broadly.
+   - Premium fallback: on primary-tier failure for a premium user's room,
+     promote that room to the viewer-tab relay automatically. The page
+     rides TikTok's own SDK, absorbing changes we haven't reimplemented.
+3. **Circuit breaker still first** (unchanged): N consecutive all-lane
+   capture failures → fast 502 cooldown; the flap shows why — connect
+   retries self-resolve with backoff, but capture-hammering burns lanes.
+
+Lab rig for further transport work: lab-redis (port 16379), lab-pg (15432),
+lab-listener (node dist build, host network, TIKTOK_SIGNER_URL=http://
+127.0.0.1:18092, no SERVICE_JWT_SECRET → no leadership gate; demand via
+`redis-cli publish source:demand` with {type:'demand_update',sources:
+[{channel_id,platform,overlay_id}],timestamp}).
 
 ## Measurement notes (traps from today)
 
@@ -196,6 +290,14 @@ TikTok's edge.
 - 60s per-attempt timeout is marginal: real browsers fire im/fetch at
   ~5.7s warm; in-cluster cold lanes took 33-52s; failures cluster at
   60-65s. Raise, don't lower.
+- (Night) Don't launch extra Chromium instances next to the viewer pool for
+  spikes: they die with ERR_TUNNEL_CONNECTION_FAILED (connect exhaustion)
+  while the pool itself keeps working. Attach CDP to the pool's existing
+  browser instead — DevTools port per lane at
+  /profiles/<lane>/DevToolsActivePort.
+- (Night) The viewer pool evicts idle tabs after 5 min (tabIdleMs), killing
+  their WebSocket. Re-warm with a /v1/sign call before any observation
+  window, and don't let the watch exceed the idle budget.
 - Don't run multiple extra Chromium instances alongside the production
   viewer pool in one pod — contributed to "Failed to open a new tab"
   (browser process exhaustion). For spikes, use the local rig.
