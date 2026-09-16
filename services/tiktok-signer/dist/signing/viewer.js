@@ -217,21 +217,23 @@ export class ViewerPool {
      * residential-IP pool with per-lane reputation variance should not pay a
      * whole caller timeout for one bad lane.
      */
-    async captureRoom(username, { timeoutMs = 60_000 } = {}) {
+    async captureRoom(username, { timeoutMs = 90_000 } = {}) {
         this.evictIdleTabs();
         const failures = [];
         const attempts = Math.max(1, this.options.maxLaneAttempts);
         const overallStart = Date.now();
         for (let i = 0; i < attempts; i++) {
-            // Budget what's left across the attempts still permitted. A single-lane
-            // pool gets the full timeoutMs; on a multi-lane pool a cold room splits
-            // it so one bad lane doesn't eat the caller's whole budget.
+            // Budget what's left across the attempts still permitted. Floor is 30s:
+            // navigation alone can take that long, and a lower per-lane budget cuts
+            // captures that would have succeeded a few seconds past the deadline —
+            // measured 2026-09-16: lanes elapsed past their 20s budget before the
+            // player's first im/fetch arrived.
             const remainingAttempts = attempts - i;
             const elapsed = Date.now() - overallStart;
             const remaining = timeoutMs - elapsed;
             if (remaining <= 0)
                 break;
-            const perAttempt = Math.max(10_000, Math.floor(remaining / remainingAttempts));
+            const perAttempt = Math.max(30_000, Math.floor(remaining / remainingAttempts));
             const lane = this.pickLane(username);
             const startedAt = Date.now();
             try {
