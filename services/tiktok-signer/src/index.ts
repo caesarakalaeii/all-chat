@@ -37,6 +37,11 @@ const logger = {
       console.log(JSON.stringify({ level: 'info', message, ...meta }));
     }
   },
+  warn(message: string, meta?: Record<string, unknown>): void {
+    if (LOG_LEVEL !== 'silent') {
+      console.warn(JSON.stringify({ level: 'warn', message, ...meta }));
+    }
+  },
   error(message: string, meta?: Record<string, unknown>): void {
     console.error(JSON.stringify({ level: 'error', message, ...meta }));
   }
@@ -80,7 +85,9 @@ const viewer = viewerMode
       proxyPass,
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
       userDataDir: userDataDir + '-viewer',
-      display: process.env.SIGNER_DISPLAY
+      display: process.env.SIGNER_DISPLAY,
+      maxLaneAttempts: parseInt(process.env.SIGNER_MAX_LANE_ATTEMPTS || '3', 10),
+      logger: { info: logger.info, warn: logger.warn }
     })
   : undefined;
 
