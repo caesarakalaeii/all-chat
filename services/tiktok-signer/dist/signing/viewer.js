@@ -59,6 +59,7 @@ export class ViewerPool {
         this.options = {
             tabIdleMs: 5 * 60_000,
             proxyCooldownMs: 10 * 60_000,
+            maxLaneAttempts: 3,
             ...options
         };
         const hosts = options.proxyHosts ?? [];
@@ -210,14 +211,63 @@ export class ViewerPool {
     /**
      * Capture the initial fetch exchange for a live room. Resolves when the
      * page's player receives a non-trivial /im/fetch/ response; rejects after
-     * `timeoutMs` (default 45s — page load plus player init measured at ~5s,
-     * the timeout covers cold starts and slow rooms).
+     * `timeoutMs` per lane attempt. If the room is not yet pinned and the
+     * chosen lane fails, the call rotates to the next available lane and tries
+     * again — up to `maxLaneAttempts` lanes total. A cold room on a
+     * residential-IP pool with per-lane reputation variance should not pay a
+     * whole caller timeout for one bad lane.
      */
-    async captureRoom(username, { timeoutMs = 45_000 } = {}) {
+    async captureRoom(username, { timeoutMs = 60_000 } = {}) {
         this.evictIdleTabs();
-        const lane = this.pickLane(username);
+        const failures = [];
+        const attempts = Math.max(1, this.options.maxLaneAttempts);
+        const overallStart = Date.now();
+        for (let i = 0; i < attempts; i++) {
+            // Budget what's left across the attempts still permitted. A single-lane
+            // pool gets the full timeoutMs; on a multi-lane pool a cold room splits
+            // it so one bad lane doesn't eat the caller's whole budget.
+            const remainingAttempts = attempts - i;
+            const elapsed = Date.now() - overallStart;
+            const remaining = timeoutMs - elapsed;
+            if (remaining <= 0)
+                break;
+            const perAttempt = Math.max(10_000, Math.floor(remaining / remainingAttempts));
+            const lane = this.pickLane(username);
+            const startedAt = Date.now();
+            try {
+                const capture = await this.attemptOnLane(username, lane, perAttempt, startedAt);
+                this.options.logger?.info('viewer capture ok', {
+                    username,
+                    lane: lane.host || 'direct',
+                    elapsed_ms: capture.elapsedMs,
+                    attempt: i + 1
+                });
+                return capture;
+            }
+            catch (error) {
+                const message = error.message;
+                failures.push({ lane: lane.host || 'direct', error: message });
+                this.options.logger?.warn('viewer capture failed on lane', {
+                    username,
+                    lane: lane.host || 'direct',
+                    elapsed_ms: Date.now() - startedAt,
+                    attempt: i + 1,
+                    error: message
+                });
+                // A pinned room that just failed has been unpinned by attemptOnLane;
+                // stop if every lane is benched — further rotation can only loop the
+                // same bad set.
+                const now = Date.now();
+                const anyAvailable = [...this.lanes.values()].some((l) => now >= l.benchedUntil);
+                if (!anyAvailable)
+                    break;
+            }
+        }
+        const summary = failures.map((f) => `${f.lane}: ${f.error}`).join(' | ');
+        throw new Error(`viewer capture failed across ${failures.length} lane(s): ${summary}`);
+    }
+    async attemptOnLane(username, lane, timeoutMs, startedAt) {
         const browser = await this.ensureBrowser(lane);
-        const startedAt = Date.now();
         lane.active.add(username);
         // Reuse a warm tab when we have one for this room's streamer.
         const existing = this.tabs.get(username);

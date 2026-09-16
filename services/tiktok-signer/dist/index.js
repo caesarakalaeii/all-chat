@@ -33,6 +33,11 @@ const logger = {
             console.log(JSON.stringify({ level: 'info', message, ...meta }));
         }
     },
+    warn(message, meta) {
+        if (LOG_LEVEL !== 'silent') {
+            console.warn(JSON.stringify({ level: 'warn', message, ...meta }));
+        }
+    },
     error(message, meta) {
         console.error(JSON.stringify({ level: 'error', message, ...meta }));
     }
@@ -73,7 +78,9 @@ const viewer = viewerMode
         proxyPass,
         executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
         userDataDir: userDataDir + '-viewer',
-        display: process.env.SIGNER_DISPLAY
+        display: process.env.SIGNER_DISPLAY,
+        maxLaneAttempts: parseInt(process.env.SIGNER_MAX_LANE_ATTEMPTS || '3', 10),
+        logger: { info: logger.info, warn: logger.warn }
     })
     : undefined;
 // Refresh the proxy list from webshare hourly: replacements and removals in
