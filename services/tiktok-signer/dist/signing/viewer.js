@@ -404,4 +404,19 @@ export class ViewerPool {
 }
 /** The UA the viewer pages run with. Must match what the listener pins. */
 export const VIEWER_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36';
+/**
+ * Identity matching VIEWER_UA, exposed via /v1/identity when viewer mode is
+ * active. The connector pins its device presets to whatever /v1/identity
+ * reports, so the WebSocket handshake's User-Agent and browser_* params
+ * describe the same browser that captured the session — a mismatch (the
+ * signature-path Safari identity against a Chrome viewer capture) gets the
+ * WS handshake answered with a plain HTTP 200 and no upgrade.
+ */
+export const VIEWER_IDENTITY = {
+    userAgent: VIEWER_UA,
+    browserPlatform: 'Linux x86_64',
+    os: 'linux',
+    screenWidth: 1920,
+    screenHeight: 1080
+};
 //# sourceMappingURL=viewer.js.map
