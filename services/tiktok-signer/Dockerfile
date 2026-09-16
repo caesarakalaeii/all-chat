@@ -29,10 +29,12 @@ FROM node:22-bookworm-slim
 
 # Chromium, the shared libs it needs on bookworm, and an X server with Mesa
 # GL. Page-viewer mode (ADR-0052 post-2026-09-09) runs Chromium non-headless:
-# TikTok gates webcast data on a browser-grade session, and a real rendering
-# stack was measured to be part of what it judges (Xvfb+software-GL fails,
-# GPU-backed X passes). The entrypoint starts X on the node's GPU when
-# /dev/dri is passed through, falling back to Xvfb otherwise.
+# Xvfb + llvmpipe passes TikTok's session gate (measured 2026-09-15; the
+# earlier failures were --disable-gpu/SwiftShader, not software GL). The
+# entrypoint starts X on the node GPU when /dev/dri is passed through,
+# falling back to Xvfb otherwise.
+# No Vulkan/lavapipe stack: the ANGLE-on-Vulkan viewer args that needed it
+# wedge the page (see viewer.ts); it was removed with them.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       chromium \
@@ -44,8 +46,6 @@ RUN apt-get update && \
       libgl1 \
       libegl1 \
       libglx-mesa0 \
-      mesa-vulkan-drivers \
-      vulkan-tools \
       fonts-liberation \
       libasound2 \
       libatk-bridge2.0-0 \
