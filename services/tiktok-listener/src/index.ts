@@ -61,7 +61,16 @@ import { LiveStreamPoller } from './livestream/poller.js';
 import { PrometheusMetrics } from './metrics/prometheus.js';
 import { HeartbeatMonitor } from './reliability/heartbeat-monitor.js';
 import { MessageDeduplicator } from './deduplication/message-deduplicator.js';
-import { connectionCeilingReached, shouldBackOffReconnect } from './reliability/connection-decisions.js';
+import {
+  connectionCeilingReached,
+  isWsFlapError,
+  shouldBackOffReconnect,
+  WS_FLAP_MAX_FAST_RETRIES,
+  WS_FLAP_RETRY_DELAY_MS
+} from './reliability/connection-decisions.js';
+import { CanaryConsumer } from './canary/canary-consumer.js';
+import { FallbackConsumer } from './canary/fallback-consumer.js';
+import { PremiumChecker } from './fallback/premium.js';
 
 // Import coordination modules (leadership-based)
 import { SourceManagerClient } from './coordination/client.js';
@@ -156,6 +165,32 @@ const SIGN_CONFIG = loadSignConfiguration();
 
 // Bearer token for the tiktok-signer service, when it runs with auth enabled.
 const TIKTOK_SIGNER_AUTH_TOKEN = (process.env.TIKTOK_SIGNER_AUTH_TOKEN || '').trim();
+
+// Premium fallback (2026-09-16 transport plan, phase 3): when a room's
+// primary WS attempt exhausts flap retries and the room's streamer is
+// premium, delivery switches to the signer's viewer-tab relay. Off by
+// default; requires self-signing (the relay endpoint lives on the signer).
+const TIKTOK_FALLBACK_ENABLED =
+  (process.env.TIKTOK_PREMIUM_FALLBACK || 'off').trim().toLowerCase() === 'on';
+// Ceiling for one fallback stint. The fallback is a bridge: past this the
+// room returns to the poller and retries the primary WS with a fresh flap
+// budget, so no room can silently live on the relay tier forever.
+const TIKTOK_FALLBACK_MAX_DURATION_MS = parseInt(
+  process.env.TIKTOK_FALLBACK_MAX_DURATION_MS || '21600000', // 6 hours
+  10
+);
+
+// Canary rooms (2026-09-16 transport plan, phase 2): rooms whose primary WS
+// connection is mirrored against the signer's viewer-tab relay. The
+// consumer compares per-method decoded frames; divergence is logged and
+// counted but never affects the primary connection.
+const TIKTOK_CANARY_ROOMS = new Set(
+  (process.env.TIKTOK_CANARY_ROOMS || '')
+    .split(',')
+    .map((r) => r.trim().toLowerCase())
+    .filter(Boolean)
+);
+
 // Per-request timeout for calls to the tiktok-signer service. Page-viewer mode
 // may need to try several proxy lanes inside one request: navigation (~10-30s)
 // plus im/fetch capture bootstrap, times 2-3 lanes. Default in SelfSigner
@@ -426,6 +461,15 @@ class TikTokListenerService {
   // same lane. Undefined when self signing is not configured.
   private selfSigner?: SelfSigner;
 
+  // Canary consumers per room (phase 2): only rooms in TIKTOK_CANARY_ROOMS
+  // get one; divergence is logged + counted, never load-bearing.
+  private canaryConsumers: Map<string, CanaryConsumer> = new Map();
+  // Premium fallback stints (phase 3): rooms whose delivery switched from
+  // the primary WS to the signer relay after flap exhaustion. Keyed by
+  // username; presence means the relay is the delivered stream right now.
+  private fallbackConsumers: Map<string, FallbackConsumer> = new Map();
+  private premiumChecker: PremiumChecker;
+
   // Current webshare proxy credentials for WS pinning, refreshed hourly.
   // Undefined until the first successful fetch; WS pinning stays off until
   // then (connections proceed unpinned).
@@ -501,6 +545,7 @@ class TikTokListenerService {
     });
 
     // Initialize Prometheus metrics
+    this.premiumChecker = new PremiumChecker({ db: this.db, logger });
     this.metrics = new PrometheusMetrics(logger);
 
     // Apply the Euler Stream retirement configuration to the connector's global route registry
@@ -1187,6 +1232,7 @@ class TikTokListenerService {
       let wsAgent: WsEgressAgent | undefined;
       if (this.selfSigner && this.proxyCredentials) {
         try {
+          const preSignStartedAt = Date.now();
           const preSign = await this.selfSigner.sign({
             roomId: 'unused',
             username,
@@ -1197,19 +1243,31 @@ class TikTokListenerService {
             wsAgent = createChromeTlsProxyAgent(
               `http://${proxyUser}:${proxyPass}@${preSign.fetchResultProxyHost}`
             );
+            this.metrics.recordLanePinOutcome('pinned');
             logger.info('Pinning WebSocket egress to capture lane', {
               username,
-              lane: preSign.fetchResultProxyHost
+              lane: preSign.fetchResultProxyHost,
+              presign_ms: Date.now() - preSignStartedAt
             });
+          } else {
+            // The signer answered but named no lane (direct capture or an
+            // older signer): the WS dial defaults to pod egress, which is
+            // exactly the shape that produced the 2026-09-16 flaps.
+            this.metrics.recordLanePinOutcome('unpinned_no_lane');
+            logger.warn('Pre-sign returned no proxy lane; connecting unpinned', { username });
           }
         } catch (error) {
           // Do not fail the connect on a pre-sign error: the connector's own
           // sign call will surface the same problem with a proper SignatureFailure.
+          this.metrics.recordLanePinOutcome('failed');
           logger.warn('Pre-sign for WS lane pinning failed; connecting unpinned', {
             username,
             error: (error as Error).message
           });
         }
+      } else {
+        // Euler path or credentials not yet fetched: pinning is off by design.
+        this.metrics.recordLanePinOutcome('skipped');
       }
 
       const connection = new TikTokLiveConnection(username, {
@@ -1278,6 +1336,7 @@ class TikTokListenerService {
       // question that took a prod investigation to answer the first time.
       emitter.on('decodedData', (method: string) => {
         this.metrics.recordWireMessage(method);
+        this.canaryConsumers.get(username)?.notePrimaryFrame(method);
       });
 
       emitter.on('connected', (state: { roomId?: string }) => {
@@ -1304,9 +1363,13 @@ class TikTokListenerService {
         // Update database: stream is live and source is active
         this.updateStreamHistory(username, true);
         this.setSourceActive(username, true);
-      });
 
+        // Canary (phase 2): mirror this room against the signer relay when
+        // configured. Never load-bearing — divergence only logs + counts.
+        this.startCanary(username);
+      });
       emitter.on('disconnected', () => {
+        this.stopCanary(username);
         logger.warn('TikTok stream disconnected', { username });
         const stream = this.activeStreams.get(username);
         if (stream) {
@@ -1377,8 +1440,43 @@ class TikTokListenerService {
         is_connected: false
       });
 
-      // Connect
-      await connection.connect();
+      // Connect. A WS flap ("Unexpected server response: 200") is retried
+      // immediately and outside normal error backoff: lab-measured 2026-09-16
+      // it clears by attempt 3, while the escalating backoff would park the
+      // room for minutes over a transient. The connector resets its state to
+      // DISCONNECTED on a failed connect, so the same connection object can
+      // be re-dialled. Any other error propagates to the catch below, which
+      // keeps the poller's backoff semantics for real failures.
+      for (let attempt = 1; ; attempt++) {
+        try {
+          await connection.connect();
+          break;
+        } catch (error) {
+          if (!isWsFlapError(error)) throw error;
+          this.metrics.recordWsFlap(username);
+          if (attempt > WS_FLAP_MAX_FAST_RETRIES) {
+            this.metrics.recordWsFlapExhausted(username);
+            logger.warn('WS flap did not clear after fast retries', {
+              username,
+              attempts: attempt
+            });
+            // Premium fallback (phase 3): the primary tier failed its
+            // retry budget; a premium room's delivery can switch to the
+            // signer relay instead of parking in error backoff.
+            if (await this.tryPromoteFallback(username, overlayId, connection)) {
+              return; // delivery switched to the relay; skip normal error backoff
+            }
+            throw error;
+          }
+          this.metrics.recordWsFlapRetry(username);
+          logger.info('WS connect flap; retrying immediately', {
+            username,
+            attempt,
+            retry_in_ms: WS_FLAP_RETRY_DELAY_MS
+          });
+          await new Promise<void>((resolve) => setTimeout(resolve, WS_FLAP_RETRY_DELAY_MS));
+        }
+      }
     } catch (error) {
       logger.error('Failed to connect to TikTok stream', { username, error });
 
@@ -1400,13 +1498,14 @@ class TikTokListenerService {
       this.connectingStreams.delete(username);
     }
   }
-
   private async disconnectFromStream(username: string): Promise<void> {
     const stream = this.activeStreams.get(username);
     if (!stream) return;
 
     try {
       logger.info('Disconnecting from TikTok stream', { username });
+      this.stopCanary(username);
+      this.stopFallback(username);
       stream.connection.disconnect();
       this.activeStreams.delete(username);
 
@@ -1426,6 +1525,161 @@ class TikTokListenerService {
     } catch (error) {
       logger.error('Failed to disconnect from TikTok stream', { username, error });
     }
+  }
+
+  /**
+   * Start the canary mirror for a room, if it is in the canary set and not
+   * already running. The consumer decodes the signer relay's frames with
+   * the connector's schemas and compares against this pod's own WS counts;
+   * divergence is logged and counted, never acted on by the connect path.
+   */
+  private startCanary(username: string): void {
+    if (!TIKTOK_CANARY_ROOMS.has(username.toLowerCase())) return;
+    if (this.canaryConsumers.has(username)) return;
+    const signerUrl = SIGN_CONFIG.signerBaseUrl;
+    if (!signerUrl) {
+      logger.warn('Canary room configured but signer URL unknown; canary off', { username });
+      return;
+    }
+    const consumer = new CanaryConsumer({
+      username,
+      signerUrl,
+      signerAuthToken: TIKTOK_SIGNER_AUTH_TOKEN || undefined,
+      logger: {
+        info: (msg, meta) => logger.info(msg, { ...meta }),
+        warn: (msg, meta) => logger.warn(msg, { ...meta })
+      }
+    });
+    consumer.on('divergence', (divergence) => {
+      this.metrics.recordCanaryDivergence(divergence.kind);
+      logger.warn('TikTok canary divergence', {
+        username,
+        kind: divergence.kind,
+        detail: divergence.detail
+      });
+    });
+    consumer.on('error', (error: Error) => {
+      logger.warn('TikTok canary relay error', { username, error: error.message });
+    });
+    this.canaryConsumers.set(username, consumer);
+    consumer.start();
+    logger.info('Canary mirror started for room', { username });
+  }
+
+  private stopCanary(username: string): void {
+    const consumer = this.canaryConsumers.get(username);
+    if (!consumer) return;
+    consumer.stop();
+    this.canaryConsumers.delete(username);
+    logger.info('Canary mirror stopped for room', { username });
+  }
+
+  /**
+   * Premium fallback (phase 3): after the primary WS exhausted its flap
+   * retry budget, try to switch this room's delivery to the signer's
+   * viewer-tab relay. Promotion is premium-only (a tab is ~150MB in the
+   * signer pod), gated by TIKTOK_PREMIUM_FALLBACK, and requires self
+   * signing (the relay endpoint lives on the signer).
+   *
+   * The connection handed in stays DISCONNECTED: its listeners were wired
+   * in connectToStream before the primary attempt failed, and the fallback
+   * replays relay frames through them via processProtoMessageFetchResult.
+   * Keeping it disconnected also keeps the heartbeat monitor from timing
+   * it out — recordMessage fires from the same listeners the replay
+   * drives, which is the honest signal: frames delivered, connection live.
+   *
+   * Returns true when the room is now delivered by the relay.
+   */
+  private async tryPromoteFallback(
+    username: string,
+    overlayId: string,
+    connection: TikTokLiveConnection
+  ): Promise<boolean> {
+    if (!TIKTOK_FALLBACK_ENABLED) return false;
+    if (this.fallbackConsumers.has(username)) return true;
+    const signerUrl = SIGN_CONFIG.signerBaseUrl;
+    if (!signerUrl || !this.selfSigner) {
+      // No signer, no relay: nothing to promote to.
+      this.metrics.recordFallbackPromotion(username, 'relay_unavailable');
+      return false;
+    }
+
+    let premium: boolean;
+    try {
+      premium = await this.premiumChecker.isPremiumRoom(username);
+    } catch {
+      // isPremiumRoom already fails closed; this is its contract held at
+      // the call site in case the shape ever changes.
+      premium = false;
+    }
+    if (!premium) {
+      this.metrics.recordFallbackPromotion(username, 'not_premium');
+      logger.info('Flap exhausted but room is not premium; staying on primary tier', { username });
+      return false;
+    }
+
+    // A warm tab must exist for the relay to attach (the signer answers
+    // 409 otherwise). The pre-sign at the top of connectToStream just ran
+    // one, so the tab is as warm as this process can make it.
+    const consumer = new FallbackConsumer({
+      username,
+      signerUrl,
+      connection,
+      signerAuthToken: TIKTOK_SIGNER_AUTH_TOKEN || undefined,
+      maxDurationMs: TIKTOK_FALLBACK_MAX_DURATION_MS,
+      logger: {
+        info: (msg, meta) => logger.info(msg, { ...meta }),
+        warn: (msg, meta) => logger.warn(msg, { ...meta })
+      }
+    });
+    consumer.on('delivered', (outcome) => {
+      this.metrics.recordFallbackDelivery(username, outcome);
+    });
+    consumer.on('error', (error: Error) => {
+      logger.warn('TikTok fallback relay error', { username, error: error.message });
+    });
+    consumer.on('ended', (reason) => {
+      this.demoteFallback(username, overlayId, reason);
+    });
+
+    this.fallbackConsumers.set(username, consumer);
+    consumer.start();
+    this.metrics.recordFallbackPromotion(username, 'promoted');
+    logger.warn('Premium fallback: room delivery switched to signer relay', {
+      username,
+      overlay_id: overlayId
+    });
+    return true;
+  }
+
+  /**
+   * End a fallback stint: hand the room back to the primary tier. The
+   * stream ended (relay ws_closed), the tab died (tap_error), the signer
+   * refuses the room (rejected), or the stint hit its ceiling. In every
+   * case the poller re-evaluates liveness and connectToStream retries the
+   * primary WS with a fresh flap budget; a still-demanded live room whose
+   * primary also recovers simply stays there.
+   */
+  private demoteFallback(username: string, overlayId: string, reason: string): void {
+    if (!this.fallbackConsumers.delete(username)) return;
+    logger.info('Premium fallback stint ended; returning room to primary tier', {
+      username,
+      overlay_id: overlayId,
+      reason
+    });
+    this.backoffManager.recordDisconnection(username);
+    if (!this.leadershipCoordinator || this.leadershipCoordinator.hasLeadership(username)) {
+      this.livePoller.addTarget(username, overlayId);
+    }
+    this.publishPlatformStatus(username, 'reconnecting');
+  }
+
+  private stopFallback(username: string): void {
+    const consumer = this.fallbackConsumers.get(username);
+    if (!consumer) return;
+    consumer.stop();
+    this.fallbackConsumers.delete(username);
+    logger.info('Premium fallback stopped for room', { username });
   }
 
   private async updateStreamHistory(username: string, isLive: boolean): Promise<void> {

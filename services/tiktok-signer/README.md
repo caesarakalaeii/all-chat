@@ -58,6 +58,7 @@ Both vendored files are MIT, from
 | `POST /v1/sign` | The webcast WebSocket seam. Body `{ roomId, username?, cursor?, cookieHeader? }` — the optional `username` routes the request to a real viewer tab when viewer mode is on. Returns `{ fetchResult (base64 protobuf), fetchResultCookieHeader, fetchResultRoomId? }`. Called by `tiktok-listener`'s `SelfSigner`. |
 | `POST /v1/sign-url` | The generic HTTP URL seam (gift list). Body `{ url, method? }`, `webcast.tiktok.com` URLs only. Returns `{ response: { signedUrl, userAgent } }`. |
 | `GET /v1/identity` | The stable browser identity (User-Agent, platform, screen). The listener pins its connector device presets to this so the fetch and the WebSocket handshake describe the same browser. |
+| `GET /v1/stream/:username` | Relay SSE stream of the room's viewer-tab WS frames — opaque base64 `PushFrame`s the listener decodes with its own connector schemas; heartbeat comment every 15s, `state` events (`capture`/`open`/`ws_closed`/`recapture`) alongside `frame` events. Rooms must be in `SIGNER_RELAY_CANARY_ROOMS`, or any warm-tab room when `SIGNER_RELAY_FALLBACK=on` (ADR-0058); 404 otherwise. Requires the room to have a warm tab (run a `/v1/sign` capture first). |
 | `GET /health/live` | Liveness. |
 
 All endpoints speak JSON. Auth: `Authorization: Bearer $SIGNER_AUTH_TOKEN`
@@ -77,7 +78,9 @@ behind the default-deny NetworkPolicy).
 | `SIGNER_WEBSHARE_TOKEN` | empty | Webshare API token: the proxy list is fetched from the API at startup and refreshed hourly, so dashboard-side rotations propagate without touching the cluster. **Preferred** over the static list. |
 | `SIGNER_PROXY_HOSTS` | empty | Static comma-separated residential proxy list (`host:port,...`) for the viewer lanes, used when no webshare token is set. One browser per proxy, rooms pinned to their lane, failing lanes benched for a cooldown. **Required for page mode in production**: TikTok gates the chat bootstrap on IP reputation; the datacenter IP never receives im/fetch. |
 | `SIGNER_PROXY_HOST` | empty | Singular proxy for the signature session (X-Bogus fetch path). |
-| `SIGNER_PROXY_USER` / `SIGNER_PROXY_PASS` | empty | Proxy credentials. |
+| `SIGNER_PROXY_USER` / `SIGNER_PROXY_PASS` | empty | Shared proxy credentials (static-list pools). Webshare pools use per-proxy credentials from the API instead — webshare issues one pair per proxy, and the lane's own pair always wins. |
+| `SIGNER_RELAY_CANARY_ROOMS` | empty | Comma-separated room list whose viewer tabs can be relayed via `GET /v1/stream/:username` (the canary of the 2026-09-16 transport plan). Empty disables the endpoint entirely. |
+| `SIGNER_RELAY_FALLBACK` | `off` | `on` opens `GET /v1/stream/:username` to any room with a warm tab, not just the canary set — the listener's premium-fallback tier (ADR-0058) promotes rooms onto the relay after their primary WS exhausts flap retries. The canary set stays the read-only mirror cohort. |
 
 ## Scripts
 
@@ -112,6 +115,29 @@ behind the default-deny NetworkPolicy).
 3. On a healthy rate, set `TIKTOK_SIGNER_MODE=self` (Euler stays as fallback
    via `TIKTOK_SELF_SIGN_FALLBACK=true`, the default).
 4. Finally set `TIKTOK_SELF_SIGN_FALLBACK=false`. That is what retires Euler.
+
+## Capture breaker and canary (2026-09-16 transport plan)
+
+- **Per-room capture breaker**: 3 consecutive `/v1/sign` viewer-capture
+  failures for a room trip a breaker that fast-fails further captures with
+  502 `viewer_capture_refused` (measured 2026-09-16: capture failures are
+  room-correlated — gated rooms fail on every lane while healthy rooms
+  capture first-attempt on the same lanes, so the breaker is per room, not
+  per lane). Cooldown escalates 5 min → 10 → 20 → ... capped at 60 min; a
+  success resets it. Metrics: `signer_capture_breaker_trips_total`,
+* **Canary relay**: with `SIGNER_RELAY_CANARY_ROOMS` set, the listener
+  (`TIKTOK_CANARY_ROOMS` on its side) mirrors a canary room's primary WS
+  against `GET /v1/stream/:username` and fires
+  `tiktok_canary_divergences_total{kind=...}` on divergence
+  (`stalled` / `method_set` / `frame_rate` / `decode_failure_rate`).
+  The canary is never load-bearing: divergence only logs and counts.
+* **Premium fallback tier (ADR-0058)**: with `SIGNER_RELAY_FALLBACK=on`,
+  the same relay endpoint serves any warm-tab room, and the listener
+  (`TIKTOK_PREMIUM_FALLBACK=on` on its side) promotes premium rooms onto
+  it after flap exhaustion — there the relay frames are the *delivered*
+  stream, not a mirror. `signer_capture_breaker_*` gates the captures that
+  warm the tabs; a capture-refused room cannot be promoted until the
+  breaker's cooldown passes.
 
 `TIKTOK_EXTENDED_GIFT_INFO` defaults on under `self` — the gift list request is
 signed through `/v1/sign-url`, so it stops hitting the Euler paywall.

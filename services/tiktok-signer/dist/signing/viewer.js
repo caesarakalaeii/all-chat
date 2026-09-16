@@ -96,10 +96,16 @@ export class ViewerPool {
      * real proxies arrive: a direct lane next to residential ones would eat
      * every Nth capture with TikTok's datacenter-IP refusal.
      */
-    async refreshProxies(hosts, credentials) {
+    async refreshProxies(hosts, credentials, perLaneCredentials) {
         if (credentials) {
             this.options.proxyUser = credentials.username;
             this.options.proxyPass = credentials.password;
+        }
+        if (perLaneCredentials) {
+            this.options.proxyCredentials = {
+                ...this.options.proxyCredentials,
+                ...perLaneCredentials
+            };
         }
         const wanted = new Set(hosts);
         for (const [host, lane] of [...this.lanes]) {
@@ -214,6 +220,19 @@ export class ViewerPool {
                 void entry.page.close().catch(() => undefined);
             }
         }
+    }
+    /**
+     * The warmed tab for a previously captured room, refreshed so idle
+     * eviction cannot reclaim it while a relay subscriber is attached.
+     * Undefined when the room has no warm tab (never captured, evicted, or
+     * rotated away).
+     */
+    pinTab(username) {
+        const entry = this.tabs.get(username);
+        if (!entry)
+            return undefined;
+        entry.lastUsed = Date.now();
+        return entry.page;
     }
     /**
      * Capture the initial fetch exchange for a live room. Resolves when the
@@ -335,10 +354,17 @@ export class ViewerPool {
                     }
                     void request.continue().catch(() => undefined);
                 });
-                if (this.options.proxyUser && this.options.proxyPass) {
+                // Webshare issues one credential pair per proxy; a lane's own
+                // entry wins, the shared pair is the fallback (static-list pools).
+                const laneCreds = lane.host
+                    ? this.options.proxyCredentials?.[lane.host]
+                    : undefined;
+                const authUser = laneCreds?.username ?? this.options.proxyUser;
+                const authPass = laneCreds?.password ?? this.options.proxyPass;
+                if (authUser && authPass) {
                     await p.authenticate({
-                        username: this.options.proxyUser,
-                        password: this.options.proxyPass
+                        username: authUser,
+                        password: authPass
                     });
                 }
                 return p;

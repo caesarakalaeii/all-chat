@@ -65,6 +65,32 @@ export class PrometheusMetrics {
   private signAttempts: Counter<string>;
   private signDuration: Histogram<string>;
 
+  // WS connect-flap visibility (2026-09-16 transport plan): TikTok answering
+  // the upgrade with HTTP 200 is a transient flap that connectToStream retries
+  // immediately; without this counter the retry loop is invisible and a
+  // persistent flap cannot be told from a wall.
+  private wsFlaps: Counter<string>;
+  private wsFlapRetries: Counter<string>;
+  private wsFlapExhausted: Counter<string>;
+
+  // Lane-pinning visibility: every connect pre-signs to learn the capture
+  // lane and pins WS egress to it. These counters prove the pinning actually
+  // fired (and how often it could not) instead of assuming it.
+  private lanePins: Counter<string>;
+
+  // Canary divergence (phase 2): the canary compares the viewer-tab relay
+  // against the primary WS per room; each firing is a transport-health
+  // signal that precedes an outage report if acted on.
+  private canaryDivergences: Counter<string>;
+
+  // Premium fallback (phase 3): rooms demoted from the primary WS tier to
+  // the viewer-tab relay transport, and how many relay frames each stint
+  // delivered. Promotion counts by outcome (premium promoted, not premium,
+  // check failed, signer refused) so a fallback that never opens is visible.
+  private fallbackPromotions: Counter<string>;
+  private fallbackDeliveries: Counter<string>;
+
+
   constructor(logger: Logger) {
     this.logger = logger;
     this.registry = new Registry();
@@ -241,6 +267,60 @@ export class PrometheusMetrics {
       registers: [this.registry]
     });
 
+
+    // WS connect flaps (see connection-decisions.ts WS_FLAP_SIGNATURE). Split
+    // into detected / retried / exhausted so a persistent flap (exhausted
+    // growing while retries flatten) is visible as the wall it becomes.
+    this.wsFlaps = new Counter({
+      name: 'tiktok_ws_flap_total',
+      help: 'WS connect attempts answered with HTTP 200 (upgrade flap), by username',
+      labelNames: ['username'],
+      registers: [this.registry]
+    });
+    this.wsFlapRetries = new Counter({
+      name: 'tiktok_ws_flap_retries_total',
+      help: 'Immediate flap retries issued (not counted in normal backoff)',
+      labelNames: ['username'],
+      registers: [this.registry]
+    });
+    this.wsFlapExhausted = new Counter({
+      name: 'tiktok_ws_flap_exhausted_total',
+      help: 'Connects that exhausted flap retries and fell into normal error backoff',
+      labelNames: ['username'],
+      registers: [this.registry]
+    });
+
+    // One per connect outcome of the pre-sign lane pinning step. `pinned` /
+    // `unpinned_no_lane` / `skipped` / `failed` mirror the log lines in
+    // connectToStream so metric and log tell the same story.
+    this.lanePins = new Counter({
+      name: 'tiktok_ws_lane_pins_total',
+      help: 'Pre-sign WS lane pinning outcomes per connect',
+      labelNames: ['outcome'],
+      registers: [this.registry]
+    });
+
+    // Canary divergence firings by kind (stalled | method_set | frame_rate |
+    // decode_failure_rate). Room is in the log line, not a label: room count
+    // is small and bounded, but kind is what the alert rule aggregates on.
+    this.canaryDivergences = new Counter({
+      name: 'tiktok_canary_divergences_total',
+      help: 'Canary relay vs primary WS divergences by kind',
+      labelNames: ['kind'],
+      registers: [this.registry]
+    });
+    this.fallbackPromotions = new Counter({
+      name: 'tiktok_fallback_promotions_total',
+      help: 'Premium fallback tier promotions by outcome',
+      labelNames: ['username', 'outcome'], // promoted | not_premium | check_failed | relay_unavailable
+      registers: [this.registry]
+    });
+    this.fallbackDeliveries = new Counter({
+      name: 'tiktok_fallback_deliveries_total',
+      help: 'Relay frames processed by an active fallback stint, by outcome',
+      labelNames: ['username', 'outcome'], // delivered | no_messages | decode_failure | replay_error
+      registers: [this.registry]
+    });
     this.logger.info('Prometheus metrics initialized');
   }
 
@@ -291,6 +371,38 @@ export class PrometheusMetrics {
 
   recordHeartbeatMessage(username: string, timestamp: number): void {
     this.heartbeatLastMessage.set({ username }, timestamp);
+  }
+
+  // WS connect-flap methods
+  recordWsFlap(username: string): void {
+    this.wsFlaps.inc({ username });
+  }
+
+  recordWsFlapRetry(username: string): void {
+    this.wsFlapRetries.inc({ username });
+  }
+
+  recordWsFlapExhausted(username: string): void {
+    this.wsFlapExhausted.inc({ username });
+  }
+
+  // Lane-pinning outcome per connect: pinned | unpinned_no_lane | skipped | failed
+  recordLanePinOutcome(outcome: 'pinned' | 'unpinned_no_lane' | 'skipped' | 'failed'): void {
+    this.lanePins.inc({ outcome });
+  }
+
+  // Canary divergence
+  recordCanaryDivergence(kind: string): void {
+    this.canaryDivergences.inc({ kind });
+  }
+
+  // Premium fallback (phase 3)
+  recordFallbackPromotion(username: string, outcome: 'promoted' | 'not_premium' | 'check_failed' | 'relay_unavailable'): void {
+    this.fallbackPromotions.inc({ username, outcome });
+  }
+
+  recordFallbackDelivery(username: string, outcome: 'delivered' | 'no_messages' | 'decode_failure' | 'replay_error'): void {
+    this.fallbackDeliveries.inc({ username, outcome });
   }
 
   // Message processing methods
