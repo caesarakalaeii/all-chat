@@ -154,6 +154,11 @@ const SIGN_CONFIG = loadSignConfiguration();
 
 // Bearer token for the tiktok-signer service, when it runs with auth enabled.
 const TIKTOK_SIGNER_AUTH_TOKEN = (process.env.TIKTOK_SIGNER_AUTH_TOKEN || '').trim();
+// Per-request timeout for calls to the tiktok-signer service. Page-viewer mode
+// needs ~60s on a cold lane (navigation + im/fetch capture); defaults in
+// SelfSigner cover this, the env knob exists for tuning without a redeploy.
+const TIKTOK_SIGNER_TIMEOUT_MS = parseInt(process.env.TIKTOK_SIGNER_TIMEOUT_MS || '75000', 10);
+
 
 /**
  * Tag the connection's internal web client with the streamer handle. The
@@ -501,7 +506,8 @@ class TikTokListenerService {
         self: SIGN_CONFIG.signerBaseUrl
           ? new SelfSigner({
               baseUrl: SIGN_CONFIG.signerBaseUrl,
-              authToken: TIKTOK_SIGNER_AUTH_TOKEN || undefined
+              authToken: TIKTOK_SIGNER_AUTH_TOKEN || undefined,
+              timeoutMs: TIKTOK_SIGNER_TIMEOUT_MS
             })
           : undefined
       },

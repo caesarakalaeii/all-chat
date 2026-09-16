@@ -67,7 +67,10 @@ export class SelfSigner implements WebcastSigner {
       'Content-Type': 'application/json',
       ...(options.authToken ? { Authorization: `Bearer ${options.authToken}` } : {})
     };
-    this.timeoutMs = options.timeoutMs ?? 15_000;
+    // Page-viewer mode: navigation (up to 30s) + im/fetch capture (up to 45s) can
+    // legitimately take ~60s on a cold lane; a shorter budget kills every first
+    // connect before the signer has a chance to serve.
+    this.timeoutMs = options.timeoutMs ?? 75_000;
     this.fetchImpl = options.fetchImpl ?? undiciRequest;
   }
 
