@@ -242,3 +242,43 @@ spec:
               3. Check the capture breaker: signer_capture_breaker_trips_total
               4. Verify the signer pool can still capture healthy rooms
                  (signer_sign_requests_total{outcome="success"}).
+
+        # TikTok premium fallback promotion (phase 3, ADR-0058): a room
+        # switching to the viewer-tab relay means the primary WS tier was
+        # refused persistently. This is the breakage canary for the whole
+        # self-signed transport: the users we upgrade are the first to
+        # feel whatever TikTok changed, and the alert is the signal that
+        # delivery for everyone else is at risk.
+        - alert: TikTokFallbackPromoted
+          expr: increase(tiktok_fallback_promotions_total{outcome="promoted"}[15m]) > 0
+          for: 0m
+          labels:
+            severity: warning
+            team: allchat
+          annotations:
+            summary: "TikTok premium room promoted to fallback relay transport"
+            description: |
+              Room {{ $labels.username }} exhausted its WS flap retries and was
+              promoted to the signer's viewer-tab relay (premium fallback,
+              ADR-0058). Delivery continues, but the primary transport has been
+              refused persistently for this room.
+
+              Impact: this is the early-warning channel for the transport as a
+              whole — the upgraded users are the canary for everyone on the
+              primary tier. One promotion is lane noise; several rooms in a
+              short window is TikTok tightening handshake scoring.
+
+              Remediation Steps:
+              1. Check how many rooms promoted:
+                 increase(tiktok_fallback_promotions_total{outcome="promoted"}[1h])
+              2. If promotions repeat for the same room after stint end
+                 (TIKTOK_FALLBACK_MAX_DURATION_MS, default 6h), the primary
+                 tier is not recovering for it — check lane pinning:
+                 tiktok_ws_lane_pins_total{outcome="failed"}
+              3. Verify the fallback is actually delivering:
+                 rate(tiktok_fallback_deliveries_total{outcome="delivered"}[5m]) > 0
+              4. If delivery is flat too, the signer tab is dead — check
+                 signer_capture_breaker_trips_total and the signer logs.
+              5. Sustained multi-room promotion is the signal to investigate
+                 the WS handshake (session scoring) before non-premium rooms
+                 start going dark.

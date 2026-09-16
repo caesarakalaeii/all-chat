@@ -248,6 +248,13 @@ paths share the signer's viewer-tab relay (`GET /v1/stream/:username`, SSE):
   The signer side needs `SIGNER_RELAY_FALLBACK=on` for the endpoint to
   serve non-canary rooms.
 
+Every promotion alerts (`TikTokFallbackPromoted` in
+`deployments/k8s/monitoring/alerts/allchat-warning-alerts.yaml`, fires on
+any `outcome="promoted"`): the promoted users are the breakage canary for
+the whole transport — they are the first to feel whatever TikTok changed,
+before non-premium rooms go dark. Treat an alert as "investigate the
+primary tier", not "fallback working as intended".
+
 
 ## Development
 

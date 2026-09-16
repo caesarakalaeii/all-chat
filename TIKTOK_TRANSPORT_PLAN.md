@@ -8,6 +8,20 @@ working plan; the PR description carries the shipped account.
 2026-09-17, same branch). Remaining: Phase 4 (ship). Fresh sessions start
 at "Phase 4" below.
 
+**Two operator notes (2026-09-17):**
+- **Flap retry tuning is expected.** WS_FLAP_MAX_FAST_RETRIES (3) and
+  WS_FLAP_RETRY_DELAY_MS (1000) are lab-measured constants in
+  `connection-decisions.ts` — NOT env-configurable yet. Prod may show
+  different flap-clear rates; if `tiktok_ws_flap_retries_total` succeeds
+  on attempt 1-2 but exhaustion still fires, the budget is fine; if rooms
+  clear on attempt 4+, raise the retries (and consider making both
+  env-tunable, mirroring TIKTOK_FALLBACK_MAX_DURATION_MS).
+- **Promotion is the breakage canary.** `TikTokFallbackPromoted` (added to
+  `allchat-warning-alerts.yaml`, fires on ANY promotion) alerts when a
+  premium room switches tiers — the upgraded users are the first to feel
+  whatever TikTok changed, before non-premium rooms go dark. Treat every
+  promotion as a signal to check the primary tier, not as the fallback
+  "working as intended".
 ## Decision (measured, not assumed)
 
 **Primary transport: the listener's existing Node WebSocket.** No resident
@@ -200,6 +214,9 @@ All items shipped; details in ADR-0058 and the service READMEs.
 
 ## Phase 4 — ship ⬜ NEXT (fresh sessions start here)
 
+All implementation work is done and committed on
+`fix/tiktok-viewer-vulkan-regression`; what remains is rollout:
+
 - Config + `caesar-deployment` PR: revert #104 direct-egress to lane
   egress (lanes healthy again per the phase report), flap classification +
   breaker + canary env; both fallback flags stay off initially.
@@ -208,11 +225,18 @@ All items shipped; details in ADR-0058 and the service READMEs.
   `TIKTOK_CANARY_ROOMS` (listener) to match.
 - Docs: service READMEs + ADR-0058 shipped in the phase-3 commit; nothing
   further owed.
-- Rollout: phase 1 → lab soak → prod behind breaker → canary on →
+- Rollout order: phase 1 → lab soak → prod behind breaker → canary on →
   fallback flags on after a week of canary data.
-- Note: the phase 1-3 work sits on branch
-  `fix/tiktok-viewer-vulkan-regression` — decide before shipping whether
-  to PR from there or cherry onto a fresh `feat/tiktok-transport` branch.
+- The `TikTokFallbackPromoted` alert rule
+  (`deployments/k8s/monitoring/alerts/allchat-warning-alerts.yaml`, added
+  in the phase-3 work) must land with the monitoring config in the same
+  rollout. It fires on ANY promotion because promoted users are the
+  breakage canary for the whole transport (see the operator note at the
+  top of this file).
+- Decide before shipping whether to PR from
+  `fix/tiktok-viewer-vulkan-regression` or cherry onto a fresh
+  `feat/tiktok-transport` branch.
+
 ## Not built (deliberately)
 
 - h2 long-poll anything (premise dead).
