@@ -74,6 +74,7 @@ import { DemandSubscriber, DemandSource } from './demand/subscriber.js';
 import { loadSignConfiguration } from './sign/config.js';
 import { installSignConfiguration } from './sign/installer.js';
 import { EulerSigner } from './sign/euler.js';
+import { fetchWebshareCredentials } from './sign/webshare.js';
 import { SelfSigner } from './sign/self.js';
 import { pickAvatarUrl, tiktokAvatarUrl } from './avatar.js';
 import {
@@ -160,12 +161,13 @@ const TIKTOK_SIGNER_AUTH_TOKEN = (process.env.TIKTOK_SIGNER_AUTH_TOKEN || '').tr
 // plus im/fetch capture bootstrap, times 2-3 lanes. Default in SelfSigner
 // covers this; the env knob exists for tuning without a redeploy.
 const TIKTOK_SIGNER_TIMEOUT_MS = parseInt(process.env.TIKTOK_SIGNER_TIMEOUT_MS || '120000', 10);
-// Credentials for the residential proxy the signer rides. The signed session
-// TikTok issues is bound to that egress IP, so the WebSocket handshake must
-// egress via the same proxy — these are the same values the signer uses
-// (webshare account). Empty disables WS-proxy pinning.
-const TIKTOK_WS_PROXY_USER = (process.env.TIKTOK_WS_PROXY_USER || '').trim();
-const TIKTOK_WS_PROXY_PASS = (process.env.TIKTOK_WS_PROXY_PASS || '').trim();
+
+// Webshare API token for fetching the current residential-proxy credentials.
+// The signed session TikTok issues is bound to the residential egress IP the
+// signer's viewer captured it through, so the WebSocket handshake must
+// egress via the same proxy. Reading credentials from the API (not a secret)
+// keeps a redeploy out of webshare's dashboard-side rotations.
+const SIGNER_WEBSHARE_TOKEN = (process.env.SIGNER_WEBSHARE_TOKEN || '').trim();
 
 
 
@@ -424,9 +426,15 @@ class TikTokListenerService {
   // same lane. Undefined when self signing is not configured.
   private selfSigner?: SelfSigner;
 
+  // Current webshare proxy credentials for WS pinning, refreshed hourly.
+  // Undefined until the first successful fetch; WS pinning stays off until
+  // then (connections proceed unpinned).
+  private proxyCredentials?: { username: string; password: string };
+  private proxyCredentialsRefresh?: NodeJS.Timeout;
+
   // Demand subscriber (Phase 5)
   private demandSubscriber: DemandSubscriber | null = null;
-  private demandSafetyInterval: ReturnType<typeof setInterval> | null = null;
+  private demandSafetyInterval: NodeJS.Timeout | null = null;
   private livePollerRunning: boolean = false;
 
   constructor() {
@@ -528,6 +536,24 @@ class TikTokListenerService {
       this.metrics,
       logger
     );
+
+    // Fetch the current webshare proxy credentials for WS-lane pinning, then
+    // refresh hourly. Dashboard-side rotations of user/pass propagate without
+    // a redeploy; the API token is stable. Disabled silently without a token.
+    if (SIGNER_WEBSHARE_TOKEN) {
+      const refresh = async (): Promise<void> => {
+        try {
+          this.proxyCredentials = await fetchWebshareCredentials(SIGNER_WEBSHARE_TOKEN);
+          logger.info('Webshare proxy credentials refreshed');
+        } catch (error) {
+          logger.warn('Webshare proxy credential refresh failed; keeping previous', {
+            error: (error as Error).message
+          });
+        }
+      };
+      void refresh();
+      this.proxyCredentialsRefresh = setInterval(refresh, 60 * 60_000);
+    }
 
     // Initialize heartbeat monitor
     this.heartbeatMonitor = new HeartbeatMonitor(
@@ -1159,7 +1185,7 @@ class TikTokListenerService {
       // returns in milliseconds. Skipped when self signing is off (Euler
       // signs in its own cloud and rides its own proxy already).
       let wsAgent: HttpsProxyAgent<string> | undefined;
-      if (this.selfSigner && TIKTOK_WS_PROXY_USER && TIKTOK_WS_PROXY_PASS) {
+      if (this.selfSigner && this.proxyCredentials) {
         try {
           const preSign = await this.selfSigner.sign({
             roomId: 'unused',
@@ -1167,8 +1193,9 @@ class TikTokListenerService {
             userAgent: 'ws-pin'
           });
           if (preSign.fetchResultProxyHost) {
+            const { username: proxyUser, password: proxyPass } = this.proxyCredentials;
             wsAgent = new HttpsProxyAgent(
-              `http://${TIKTOK_WS_PROXY_USER}:${TIKTOK_WS_PROXY_PASS}@${preSign.fetchResultProxyHost}`
+              `http://${proxyUser}:${proxyPass}@${preSign.fetchResultProxyHost}`
             );
             logger.info('Pinning WebSocket egress to capture lane', {
               username,
