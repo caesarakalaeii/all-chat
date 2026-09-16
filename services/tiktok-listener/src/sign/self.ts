@@ -38,6 +38,7 @@ interface SignServiceResponse {
   fetchResult?: string;
   fetchResultCookieHeader?: string;
   fetchResultRoomId?: string;
+  fetchResultProxyHost?: string;
   error?: string;
   message?: string;
 }
@@ -132,7 +133,8 @@ export class SelfSigner implements WebcastSigner {
     return {
       fetchResult,
       fetchResultCookieHeader: bodyJson.fetchResultCookieHeader ?? '',
-      fetchResultRoomId: bodyJson.fetchResultRoomId || undefined
+      fetchResultRoomId: bodyJson.fetchResultRoomId || undefined,
+      fetchResultProxyHost: bodyJson.fetchResultProxyHost || undefined
     };
   }
 

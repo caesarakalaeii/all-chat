@@ -85,6 +85,13 @@ export interface SignResponsePayload {
   fetchResultCookieHeader: string;
   /** Room ID TikTok actually served, when it redirects. */
   fetchResultRoomId?: string;
+  /**
+   * Viewer mode only: proxy host:port the capture rode. The signed session
+   * is bound to that egress IP — the caller's WebSocket to TikTok must
+   * egress via the same proxy or TikTok rejects the handshake. Empty string
+   * when the capture went direct (no proxy lanes configured).
+   */
+  fetchResultProxyHost?: string;
 }
 
 export interface SignUrlRequestPayload {
@@ -297,7 +304,8 @@ async function performViewerFetch(
       body: {
         fetchResult: capture.protoBase64,
         fetchResultCookieHeader: capture.cookieHeader,
-        fetchResultRoomId: capture.roomId
+        fetchResultRoomId: capture.roomId,
+        fetchResultProxyHost: capture.proxyHost
       } satisfies SignResponsePayload
     };
   } catch (error) {
