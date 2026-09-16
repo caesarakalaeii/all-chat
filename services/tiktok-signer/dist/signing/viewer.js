@@ -170,14 +170,16 @@ export class ViewerPool {
             '--disable-dev-shm-usage',
             '--disable-blink-features=AutomationControlled',
             '--window-size=1920,1080',
-            // Real rendering, not SwiftShader: the display/timing stack is part of
-            // what TikTok's bot detection measures (see class doc). --disable-gpu
-            // forces software rendering and was measured to fail the same way as
-            // headless on 2026-09-15. On a GPU-less pod Chromium's default
-            // blocklist kills WebGL entirely — measured 2026-09-16 that no-WebGL
-            // sessions never receive im/fetch — so the blocklist must go off and
-            // GPU stays on; llvmpipe provides the renderer.
-            '--use-gl=angle',
+            // ANGLE on Vulkan via lavapipe — measured 2026-09-16 in-cluster:
+            // --use-gl=angle over the GLX/llvmpipe stack reports llvmpipe as the
+            // WebGL renderer and TikTok's secSDK withholds im/fetch from most of
+            // those sessions. The Vulkan path through Mesa's lvp (lavapipe)
+            // reports an Intel Iris renderer instead, and the same lane+room
+            // captured a full 57KB im/fetch in ~67s on the very first attempt.
+            // GPU stays enabled and the blocklist off because with no /dev/dri
+            // Chromium would otherwise refuse to accelerate at all.
+            '--enable-features=Vulkan',
+            '--use-angle=vulkan',
             '--enable-gpu-rasterization',
             '--ignore-gpu-blocklist',
             '--enable-gpu'
