@@ -122,6 +122,15 @@ SIGN_API_KEY=                         # Euler Stream API key; empty means the fr
 # tiktok_canary_divergences_total; never affects the primary connection.
 TIKTOK_CANARY_ROOMS=                   # Comma-separated usernames; empty = no canary
 
+# Premium fallback (ADR-0058, off by default): on flap-retry exhaustion a
+# premium room's delivery switches to the signer's viewer-tab relay
+# (signer: SIGNER_RELAY_FALLBACK=on). A stint ends on stream end, tab death,
+# signer refusal, or TIKTOK_FALLBACK_MAX_DURATION_MS (default 6h), and the
+# room returns to the primary tier with a fresh flap budget. Metrics:
+# tiktok_fallback_promotions_total, tiktok_fallback_deliveries_total.
+TIKTOK_PREMIUM_FALLBACK=off           # on | off
+TIKTOK_FALLBACK_MAX_DURATION_MS=21600000
+
 # Demand poll and rebalancing (ADR-0007)
 DEMAND_SAFETY_INTERVAL_MS=25000       # Demand safety-net poll; also re-registers this pod as a
                                       # peer and drives lease rebalancing. Must stay below
@@ -214,6 +223,31 @@ sum(rate(tiktok_sign_attempts_total{signer="self",outcome="success",load_bearing
 # Are we still hitting Euler's free-tier ceiling?
 sum(rate(tiktok_sign_attempts_total{reason="rate_limit"}[5m]))
 ```
+
+### Transport tiers and the premium fallback (ADR-0058)
+
+The primary transport is this service's own Node WebSocket. Two auxiliary
+paths share the signer's viewer-tab relay (`GET /v1/stream/:username`, SSE):
+
+- **Canary (phase 2)**: rooms in `TIKTOK_CANARY_ROOMS` are mirrored —
+  relay frames are decoded and *compared* against the primary WS per
+  method; divergence logs and counts (`tiktok_canary_divergences_total`)
+  but never affects the connection.
+- **Premium fallback (ADR-0058)**: with `TIKTOK_PREMIUM_FALLBACK=on`, a
+  room whose flap retries are exhausted **and** whose streamer is premium
+  (`users.is_premium` via overlay ownership, TTL-cached, fail-closed)
+  switches delivery to the relay. Frames are decoded with the connector's
+  own schemas and replayed into the room's connection, so all handlers,
+  dedup and heartbeat run exactly as on the primary. A stint ends on
+  stream end, tab death, signer refusal, or
+  `TIKTOK_FALLBACK_MAX_DURATION_MS` (default 6h) — not on "primary
+  health", which is unobservable while the fallback delivers — and the
+  room returns to the poller with a fresh flap budget. Metrics:
+  `tiktok_fallback_promotions_total{outcome}`, `tiktok_fallback_deliveries_total{outcome}`.
+
+  The signer side needs `SIGNER_RELAY_FALLBACK=on` for the endpoint to
+  serve non-canary rooms.
+
 
 ## Development
 

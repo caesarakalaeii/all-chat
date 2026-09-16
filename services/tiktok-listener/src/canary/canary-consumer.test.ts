@@ -18,12 +18,15 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { CanaryConsumer } from './canary-consumer.js';
+import { makeAckFrame, makeChatFrame } from './relay-fixtures.js';
 
 // The consumer's comparison logic is windowed over internal state; the
 // tests drive notePrimaryFrame / noteCanaryFrame and force the window
 // comparison via the private compareWindow, so no HTTP or SSE is needed.
 // The SSE-specific plumbing (connect/readSse) is exercised in the lab rig,
-// not here.
+// not here. Frames come from relay-fixtures: real wire-format PushFrames
+// that must decode with the connector's own schemas — see the missing-
+// await regression test for why a fake payload proves nothing.
 
 function makeConsumer(windowSeconds = 60) {
   const consumer = new CanaryConsumer({
@@ -36,6 +39,65 @@ function makeConsumer(windowSeconds = 60) {
   return { consumer, compare };
 }
 
+describe('CanaryConsumer relay frame decoding', () => {
+  it('counts a real PushFrame chat message as a decoded canary method', async () => {
+    // Regression (phase 3 recon): noteCanaryFrame used to call
+    // deserializeWebSocketMessage without await. The function is async
+    // (gzip payload path), so decodedData was always undefined and every
+    // frame silently counted as an ack — method_set and
+    // decode_failure_rate could never fire.
+    const { consumer } = makeConsumer();
+    const frame = await makeChatFrame('hello');
+    await (consumer as unknown as { noteCanaryFrame(b: string): Promise<void> })
+      .noteCanaryFrame(frame.base64);
+    const window = (consumer as unknown as {
+      window: { canary: Map<string, number>; canaryFrames: number; canaryDecodeFailures: number };
+    }).window;
+    expect(window.canaryFrames).toBe(1);
+    expect(window.canary.get('WebcastChatMessage')).toBe(1);
+    expect(window.canaryDecodeFailures).toBe(0);
+  });
+
+  it('counts an ack PushFrame as a frame with no methods', async () => {
+    const { consumer } = makeConsumer();
+    await (consumer as unknown as { noteCanaryFrame(b: string): Promise<void> })
+      .noteCanaryFrame(await makeAckFrame());
+    const window = (consumer as unknown as {
+      window: { canary: Map<string, number>; canaryFrames: number };
+    }).window;
+    expect(window.canaryFrames).toBe(1);
+    expect(window.canary.size).toBe(0);
+  });
+
+  it('counts a malformed payload as a decode failure, not an ack', async () => {
+    const { consumer } = makeConsumer();
+    await (consumer as unknown as { noteCanaryFrame(b: string): Promise<void> })
+      .noteCanaryFrame('bm90LXByb3RvYnVm'); // "not-proobuf"
+    const window = (consumer as unknown as {
+      window: { canaryDecodeFailures: number };
+    }).window;
+    expect(window.canaryDecodeFailures).toBe(1);
+  });
+
+  it('parses an SSE frame event into a canary frame', async () => {
+    // handleSseChunk drives noteCanaryFrame via the base class 'frame'
+    // event; this covers the wiring between SSE parsing and the counter.
+    const { consumer } = makeConsumer();
+    const frame = await makeChatFrame('via sse');
+    const handle = (consumer as unknown as { handleSseChunk(chunk: string): void })
+      .handleSseChunk.bind(consumer);
+    handle(`event: frame\ndata: ${JSON.stringify({ type: 'frame', payload: frame.base64 })}`);
+    // noteCanaryFrame runs async (connector decode); await the microtask
+    // queue, not a timer, so the assertion is deterministic.
+    await new Promise((resolve) => setImmediate(resolve));
+    const window = (consumer as unknown as {
+      window: { canary: Map<string, number>; canaryFrames: number };
+    }).window;
+    expect(window.canaryFrames).toBe(1);
+    expect(window.canary.get('WebcastChatMessage')).toBe(1);
+  });
+});
+
 describe('CanaryConsumer divergence detection', () => {
   it('does not diverge when both transports see the same methods', () => {
     const { consumer, compare } = makeConsumer();
@@ -45,9 +107,6 @@ describe('CanaryConsumer divergence detection', () => {
     for (let i = 0; i < 100; i++) {
       consumer.notePrimaryFrame('WebcastChatMessage');
     }
-    // Real base64 PushFrames would be needed to feed noteCanaryFrame; the
-    // window-level state is driven directly through the private map so the
-    // test exercises the comparison, not the decode.
     const window = (consumer as unknown as { window: { canary: Map<string, number>; canaryFrames: number } }).window;
     window.canaryFrames = 100;
     window.canary.set('WebcastChatMessage', 100);
@@ -155,14 +214,12 @@ describe('CanaryConsumer divergence detection', () => {
     const { consumer } = makeConsumer();
     const handle = (consumer as unknown as { handleSseChunk(chunk: string): void })
       .handleSseChunk.bind(consumer);
-    const logged: string[] = [];
-    (consumer as unknown as { logger?: { info: (m: string, meta?: Record<string, unknown>) => void } }).logger = {
-      info: (m, meta) => logged.push(String(meta?.state))
-    };
+    const states: string[] = [];
+    consumer.on('state', (s: string) => states.push(s));
     handle('event: state\ndata: {"type":"state","event":"open"}');
     const window = (consumer as unknown as { window: { canaryFrames: number } }).window;
     expect(window.canaryFrames).toBe(0);
-    expect(logged).toHaveLength(1);
+    expect(states).toEqual(['open']);
   });
 
   it('stop clears timers and prevents reconnects', () => {

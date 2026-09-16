@@ -83,6 +83,14 @@ export class PrometheusMetrics {
   // signal that precedes an outage report if acted on.
   private canaryDivergences: Counter<string>;
 
+  // Premium fallback (phase 3): rooms demoted from the primary WS tier to
+  // the viewer-tab relay transport, and how many relay frames each stint
+  // delivered. Promotion counts by outcome (premium promoted, not premium,
+  // check failed, signer refused) so a fallback that never opens is visible.
+  private fallbackPromotions: Counter<string>;
+  private fallbackDeliveries: Counter<string>;
+
+
   constructor(logger: Logger) {
     this.logger = logger;
     this.registry = new Registry();
@@ -301,6 +309,18 @@ export class PrometheusMetrics {
       labelNames: ['kind'],
       registers: [this.registry]
     });
+    this.fallbackPromotions = new Counter({
+      name: 'tiktok_fallback_promotions_total',
+      help: 'Premium fallback tier promotions by outcome',
+      labelNames: ['username', 'outcome'], // promoted | not_premium | check_failed | relay_unavailable
+      registers: [this.registry]
+    });
+    this.fallbackDeliveries = new Counter({
+      name: 'tiktok_fallback_deliveries_total',
+      help: 'Relay frames processed by an active fallback stint, by outcome',
+      labelNames: ['username', 'outcome'], // delivered | no_messages | decode_failure | replay_error
+      registers: [this.registry]
+    });
     this.logger.info('Prometheus metrics initialized');
   }
 
@@ -374,6 +394,15 @@ export class PrometheusMetrics {
   // Canary divergence
   recordCanaryDivergence(kind: string): void {
     this.canaryDivergences.inc({ kind });
+  }
+
+  // Premium fallback (phase 3)
+  recordFallbackPromotion(username: string, outcome: 'promoted' | 'not_premium' | 'check_failed' | 'relay_unavailable'): void {
+    this.fallbackPromotions.inc({ username, outcome });
+  }
+
+  recordFallbackDelivery(username: string, outcome: 'delivered' | 'no_messages' | 'decode_failure' | 'replay_error'): void {
+    this.fallbackDeliveries.inc({ username, outcome });
   }
 
   // Message processing methods

@@ -394,6 +394,13 @@ export interface ServerOptions {
    * Requests for rooms outside the set answer 404.
    */
   canaryRooms?: ReadonlySet<string>;
+  /**
+   * Fallback gate (phase 3, SIGNER_RELAY_FALLBACK=on): when on, the relay
+   * endpoint serves any room with a warm tab, not just the canary set —
+   * premium rooms the listener promotes after flap exhaustion. The canary
+   * set stays the read-only mirror cohort; this gate is the delivery tier.
+   */
+  relayFallbackEnabled?: boolean;
   logger?: { info: (msg: string, meta?: Record<string, unknown>) => void; error: (msg: string, meta?: Record<string, unknown>) => void };
 }
 
@@ -459,7 +466,7 @@ export function createServer(options: ServerOptions): http.Server {
         res.end(JSON.stringify({ error: 'unauthorized' }));
         return;
       }
-      if (!canaryRooms.has(streamUsername)) {
+      if (!canaryRooms.has(streamUsername) && !options.relayFallbackEnabled) {
         res.writeHead(404, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'room is not a canary' }));
         return;

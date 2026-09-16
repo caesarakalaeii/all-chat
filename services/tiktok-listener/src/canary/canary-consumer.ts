@@ -22,9 +22,10 @@
  * For rooms listed in TIKTOK_CANARY_ROOMS, the listener consumes the
  * signer's SSE relay of the viewer tab's own WS frames alongside its own
  * Node WebSocket and compares per-method decoded-frame counts. The
- * canary's job is to watch the primary transport's blind spot: TikTok's
- * listener's connections while the viewer-tab frames keep flowing, that
- * divergence shows up here before it becomes an outage report.
+ * canary's job is to watch the primary transport's blind spot: while the
+ * listener's own connection keeps receiving, the viewer-tab frames must
+ * keep flowing too, and divergence shows up here before it becomes an
+ * outage report.
  *
  * Frames from the relay are decoded with the same connector schemas the
  * primary path uses, so a decode-failure delta means the two transports
@@ -35,14 +36,8 @@
  * as `ack` and are expected on both transports.
  */
 
-import { EventEmitter } from 'events';
 import { deserializeWebSocketMessage } from 'tiktok-live-connector';
-
-/** SSE event stream entry as the signer emits it. */
-interface SseEvent {
-  event: 'frame' | 'state';
-  data: string;
-}
+import { RelayStream, type RelayLogger } from './relay-stream.js';
 
 export interface CanaryDivergence {
   username: string;
@@ -65,10 +60,7 @@ export type CanaryConsumerOptions = {
   windowSeconds?: number;
   /** Max canary frames/sec below primary before frame_rate divergence. */
   frameRateRatio?: number;
-  logger?: {
-    info: (msg: string, meta?: Record<string, unknown>) => void;
-    warn: (msg: string, meta?: Record<string, unknown>) => void;
-  };
+  logger?: RelayLogger;
 };
 
 /** Comparison window state for one room. */
@@ -95,20 +87,11 @@ interface WindowState {
  *  - 'error' (Error): the SSE stream failed; the consumer reconnects with
  *    capped backoff, the primary is never affected.
  */
-export class CanaryConsumer extends EventEmitter {
-  readonly username: string;
-  private readonly signerUrl: string;
-  private readonly authToken?: string;
+export class CanaryConsumer extends RelayStream {
   private readonly windowMs: number;
   private readonly frameRateRatio: number;
-  private readonly logger?: CanaryConsumerOptions['logger'];
-
-  private controller?: AbortController;
   private window: WindowState = CanaryConsumer.emptyWindow();
   private windowTimer?: NodeJS.Timeout;
-  private reconnectTimer?: NodeJS.Timeout;
-  private reconnectAttempts = 0;
-  private stopped = false;
 
   private static emptyWindow(): WindowState {
     return {
@@ -122,31 +105,33 @@ export class CanaryConsumer extends EventEmitter {
   }
 
   constructor(options: CanaryConsumerOptions) {
-    super();
-    this.username = options.username;
-    this.signerUrl = options.signerUrl.replace(/\/$/, '');
-    this.authToken = options.signerAuthToken;
+    super({
+      username: options.username,
+      signerUrl: options.signerUrl,
+      signerAuthToken: options.signerAuthToken,
+      logger: options.logger
+    });
     this.windowMs = (options.windowSeconds ?? 60) * 1000;
     this.frameRateRatio = options.frameRateRatio ?? 0.5;
-    this.logger = options.logger;
+
+    this.on('frame', (base64: string) => {
+      void this.noteCanaryFrame(base64);
+    });
   }
 
-  /** Start consuming the SSE feed. Idempotent. */
-  start(): void {
-    if (this.controller) return;
-    this.stopped = false;
-    void this.connect();
+  override start(): void {
+    if (this.windowTimer) return; // RelayStream.start() is idempotent, but the window timer needs its own guard
+    // One comparison window per connection; drift across reconnects is
+    // bounded because both counters reset together.
+    this.window = CanaryConsumer.emptyWindow();
+    this.windowTimer = setInterval(() => this.compareWindow(), this.windowMs);
+    super.start();
   }
 
-  /** Stop consuming and clear timers. The room leaves the canary set. */
-  stop(): void {
-    this.stopped = true;
-    this.controller?.abort();
-    this.controller = undefined;
+  override stop(): void {
+    super.stop();
     if (this.windowTimer) clearInterval(this.windowTimer);
-    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.windowTimer = undefined;
-    this.reconnectTimer = undefined;
   }
 
   /** Wire from the primary connection's decodedData event. */
@@ -161,97 +146,15 @@ export class CanaryConsumer extends EventEmitter {
     this.window.primaryDecodeFailures++;
   }
 
-  private async connect(): Promise<void> {
-    this.controller = new AbortController();
-    const headers: Record<string, string> = { accept: 'text/event-stream' };
-    if (this.authToken) headers.authorization = `Bearer ${this.authToken}`;
-
-    const url = `${this.signerUrl}/v1/stream/${encodeURIComponent(this.username)}`;
-    try {
-      const response = await fetch(url, {
-        headers,
-        signal: this.controller.signal,
-        // Node fetch buffers by default; the SSE reader below streams.
-      });
-      if (response.status === 404) {
-        this.logger?.warn('canary room rejected by signer relay; stopping', {
-          username: this.username
-        });
-        this.stop();
-        return;
-      }
-      if (!response.ok || !response.body) {
-        throw new Error(`relay stream HTTP ${response.status}`);
-      }
-      this.reconnectAttempts = 0;
-      this.logger?.info('canary relay stream connected', { username: this.username });
-
-      // One comparison window per connection; drift across reconnects is
-      // bounded because both counters reset together.
-      this.window = CanaryConsumer.emptyWindow();
-      if (this.windowTimer) clearInterval(this.windowTimer);
-      this.windowTimer = setInterval(() => this.compareWindow(), this.windowMs);
-
-      await this.readSse(response.body);
-    } catch (error) {
-      if (this.stopped) return;
-      this.emit('error', error as Error);
-      this.reconnect();
-    }
-  }
-
-  /** Parse the SSE byte stream: events separated by \n\n, lines by \n. */
-  private async readSse(body: ReadableStream<Uint8Array>): Promise<void> {
-    const reader = body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      let sep: number;
-      while ((sep = buffer.indexOf('\n\n')) !== -1) {
-        const chunk = buffer.slice(0, sep);
-        buffer = buffer.slice(sep + 2);
-        this.handleSseChunk(chunk);
-      }
-    }
-  }
-
-  private handleSseChunk(chunk: string): void {
-    const event: SseEvent = { event: 'frame', data: '' };
-    for (const line of chunk.split('\n')) {
-      if (line.startsWith('event: ')) event.event = line.slice(7).trim() as SseEvent['event'];
-      if (line.startsWith('data: ')) event.data = line.slice(6);
-    }
-    if (event.event === 'state') {
-      this.logger?.info('canary relay state', {
-        username: this.username,
-        state: event.data
-      });
-      return;
-    }
-    if (event.event !== 'frame') return; // heartbeat comments never reach here
-
-    let payload: string;
-    try {
-      payload = (JSON.parse(event.data) as { payload: string }).payload;
-    } catch {
-      return;
-    }
-    this.noteCanaryFrame(payload);
-  }
-
-  private noteCanaryFrame(base64: string): void {
+  private async noteCanaryFrame(base64: string): Promise<void> {
     this.window.canaryFrames++;
     // Decode with the connector's own schemas so both transports share one
     // decoder; a method count mismatch is then a wire mismatch, not a
-    // decoder mismatch.
+    // decoder mismatch. deserializeWebSocketMessage is async (the payload
+    // is gzip; the ack/keepalive frames throw inside it).
     try {
-      const decoded = deserializeWebSocketMessage(Buffer.from(base64, 'base64')) as {
-        decodedData?: { messages?: Array<{ method?: string }> };
-      };
-      const messages = decoded.decodedData?.messages ?? [];
+      const decoded = await deserializeWebSocketMessage(Buffer.from(base64, 'base64'));
+      const messages = decoded.protoMessageFetchResult?.messages ?? [];
       if (messages.length === 0) {
         // Ack/keepalive frames decode to no messages — expected ~50%.
         return;
@@ -337,20 +240,5 @@ export class CanaryConsumer extends EventEmitter {
       detail
     });
     this.emit('divergence', divergence);
-  }
-
-  /** Capped backoff reconnect: 1s, 2s, 4s... max 60s. */
-  private reconnect(): void {
-    if (this.stopped) return;
-    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 60_000);
-    this.reconnectAttempts++;
-    this.logger?.info('canary relay stream reconnecting', {
-      username: this.username,
-      attempt: this.reconnectAttempts,
-      delay_ms: delay
-    });
-    this.reconnectTimer = setTimeout(() => {
-      if (!this.stopped) void this.connect();
-    }, delay);
   }
 }

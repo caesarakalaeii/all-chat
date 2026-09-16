@@ -156,11 +156,16 @@ const canaryRooms = new Set(
     .map((r) => r.trim().toLowerCase())
     .filter(Boolean)
 );
+// Premium fallback gate (2026-09-16 transport plan, phase 3): when on,
+// GET /v1/stream/:username serves any room with a warm tab, not just the
+// canary set — the listener's premium-fallback tier promotes rooms onto
+// the relay after their primary WS exhausts flap retries.
+const relayFallbackEnabled = (process.env.SIGNER_RELAY_FALLBACK || '').trim().toLowerCase() === 'on';
 const relay = viewer
   ? new RelayHub((username) => { viewer.pinTab(username); }, { logger })
   : undefined;
 
-const server = createServer({ port: PORT, session, viewer, relay, canaryRooms, logger });
+const server = createServer({ port: PORT, session, viewer, relay, canaryRooms, relayFallbackEnabled, logger });
 
 server.listen(PORT, () => {
   logger.info('tiktok-signer listening', { port: PORT });
