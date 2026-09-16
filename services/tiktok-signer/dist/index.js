@@ -79,7 +79,7 @@ const viewer = viewerMode
         executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
         userDataDir: userDataDir + '-viewer',
         display: process.env.SIGNER_DISPLAY,
-        maxLaneAttempts: parseInt(process.env.SIGNER_MAX_LANE_ATTEMPTS || '3', 10),
+        maxLaneAttempts: parseInt(process.env.SIGNER_MAX_LANE_ATTEMPTS || '2', 10),
         logger: { info: logger.info, warn: logger.warn }
     })
     : undefined;
