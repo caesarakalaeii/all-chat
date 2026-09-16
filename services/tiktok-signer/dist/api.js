@@ -35,6 +35,7 @@
 import http from 'node:http';
 import { collectDefaultMetrics, Counter, Histogram, Registry } from 'prom-client';
 import { request as undiciRequest } from 'undici';
+import { VIEWER_IDENTITY } from './signing/viewer.js';
 const register = new Registry();
 collectDefaultMetrics({ register });
 const signRequestsTotal = new Counter({
@@ -278,7 +279,11 @@ export function createServer(options) {
             return;
         }
         if (req.method === 'GET' && url === '/v1/identity') {
-            const identity = session.identity;
+            // Viewer mode: report the viewer's identity, not the signature
+            // session's. The connector pins its presets to this and the session
+            // TikTok judges the WS handshake against was captured by the viewer —
+            // a mismatch makes TikTok answer the upgrade with HTTP 200.
+            const identity = viewer ? VIEWER_IDENTITY : session.identity;
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(identity));
             return;
