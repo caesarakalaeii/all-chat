@@ -328,23 +328,22 @@ export class ViewerPool {
    */
   async captureRoom(
     username: string,
-    { timeoutMs = 90_000 }: { timeoutMs?: number } = {}
+    { timeoutMs = 120_000 }: { timeoutMs?: number } = {}
   ): Promise<RoomCapture> {
     this.evictIdleTabs();
     const failures: Array<{ lane: string; error: string }> = [];
     const attempts = Math.max(1, this.options.maxLaneAttempts);
     const overallStart = Date.now();
     for (let i = 0; i < attempts; i++) {
-      // Budget what's left across the attempts still permitted. Floor is 45s:
-      // in-cluster on llvmpipe a cold profile needs ~45s for nav + player
-      // bootstrap before the first im/fetch arrives — measured 2026-09-16
-      // (43.8s on a warmed lane profile, 33s on a fresh profile). A lower
-      // floor guarantees every lane "fails" even when it would have served.
+      // Budget what's left across the attempts still permitted. Floor is 60s:
+      // in-cluster on llvmpipe, nav + player bootstrap + im/fetch capture
+      // measured 33-52s on lanes that eventually succeeded. The 45s floor
+      // was marginal and cut captures that would have served.
       const remainingAttempts = attempts - i;
       const elapsed = Date.now() - overallStart;
       const remaining = timeoutMs - elapsed;
       if (remaining <= 0) break;
-      const perAttempt = Math.max(45_000, Math.floor(remaining / remainingAttempts));
+      const perAttempt = Math.max(60_000, Math.floor(remaining / remainingAttempts));
       const lane = this.pickLane(username);
       const startedAt = Date.now();
       try {

@@ -160,7 +160,7 @@ const TIKTOK_SIGNER_AUTH_TOKEN = (process.env.TIKTOK_SIGNER_AUTH_TOKEN || '').tr
 // may need to try several proxy lanes inside one request: navigation (~10-30s)
 // plus im/fetch capture bootstrap, times 2-3 lanes. Default in SelfSigner
 // covers this; the env knob exists for tuning without a redeploy.
-const TIKTOK_SIGNER_TIMEOUT_MS = parseInt(process.env.TIKTOK_SIGNER_TIMEOUT_MS || '120000', 10);
+const TIKTOK_SIGNER_TIMEOUT_MS = parseInt(process.env.TIKTOK_SIGNER_TIMEOUT_MS || '180000', 10);
 
 // Webshare API token for fetching the current residential-proxy credentials.
 // The signed session TikTok issues is bound to the residential egress IP the
