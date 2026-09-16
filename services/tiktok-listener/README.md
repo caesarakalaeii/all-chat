@@ -106,7 +106,7 @@ TIKTOK_SIGNER_MODE=euler              # euler | shadow | self
 TIKTOK_SELF_SIGN_FALLBACK=true        # Under `self`, fall back to Euler when our signer fails
 TIKTOK_SIGNER_URL=                    # tiktok-signer service URL; empty = no self signer
 TIKTOK_SIGNER_AUTH_TOKEN=             # Bearer token if the signer service runs with auth
-TIKTOK_SIGNER_TIMEOUT_MS=120000       # Self-signer HTTP timeout; signer rotates lanes inside one request
+TIKTOK_SIGNER_TIMEOUT_MS=180000       # Self-signer HTTP timeout; signer rotates lanes inside one request
 TIKTOK_EXTENDED_GIFT_INFO=            # Defaults on only under `self` (see below)
 SIGN_API_KEY=                         # Euler Stream API key; empty means the free tier
 
