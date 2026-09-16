@@ -44,6 +44,8 @@ RUN apt-get update && \
       libgl1 \
       libegl1 \
       libglx-mesa0 \
+      mesa-vulkan-drivers \
+      vulkan-tools \
       fonts-liberation \
       libasound2 \
       libatk-bridge2.0-0 \
