@@ -58,7 +58,8 @@ This service uses the **unofficial** [TikTok-Live-Connector](https://github.com/
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 26.4+ (tls-impersonate's Chrome ClientHello needs the native addon
+  and an OpenSSL new enough for the full extension set; see `src/ws/chrome-tls.ts`)
 - Redis (for message publishing)
 - PostgreSQL (for active stream tracking)
 
@@ -174,7 +175,12 @@ That break-fix cycle lands on the signer service; see its README for the update 
 
 When `TIKTOK_SIGNER_URL` is set the listener also fetches the signer's browser identity
 (`GET /v1/identity`) once at startup and pins every connection's device presets to it, so the
-signed fetch, the signature and the WebSocket handshake all describe the same browser. Under
+signed fetch, the signature and the WebSocket handshake all describe the same browser. The
+WebSocket egress goes one step further: its TLS handshake mirrors Chrome's ClientHello
+(`src/ws/chrome-tls.ts`, verified against a reference fingerprint service through the CONNECT
+tunnel), so the connection is Chrome at every layer TikTok can see — TLS, HTTP headers, and
+signed payload. On runtimes where the impersonation addon cannot load, the plain Node
+handshake is used, which is the pre-hardening behaviour. Under
 `self`, the second Euler seam (`fetchWebcastSignatureFromProvider`, generic HTTP URL signing) is
 repointed at the signer service too.
 

@@ -5,7 +5,11 @@
 # File: ./services/tiktok-listener/Dockerfile
 
 # Build stage
-FROM node:20-alpine AS builder
+# bookworm (not alpine): tls-impersonate's native addon ships glibc prebuilds
+# only — musl falls back to node-gyp and there is no toolchain here. Node 26:
+# tls-impersonate's full Chrome ClientHello (incl. compress_certificate) is
+# verified complete only on >= 26.4.
+FROM node:26-bookworm-slim AS builder
 
 WORKDIR /app
 
@@ -22,8 +26,8 @@ COPY services/tiktok-listener/src/ ./src/
 # Build TypeScript
 RUN npm run build
 
-# Production stage
-FROM node:20-alpine
+# Production stage — same glibc and Node-floor reasoning as the builder.
+FROM node:26-bookworm-slim
 
 WORKDIR /app
 
@@ -36,8 +40,8 @@ COPY --from=builder /app/dist ./dist
 COPY LICENSE ./LICENSE
 
 # Create non-root user
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 --ingroup nodejs nodejs
 
 # Change ownership
 RUN chown -R nodejs:nodejs /app
