@@ -18,6 +18,12 @@
 import puppeteerExtra from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { randomUUID } from 'crypto';
+import { rm } from 'fs/promises';
+/**
+ * How many consecutive capture failures a lane tolerates before its browser
+ * profile is wiped and rebuilt. See ProxyLane.consecutiveFailures.
+ */
+const PROFILE_ROTATE_FAILURES = 3;
 // Stealth evasions: TikTok's secSDK fingerprints the browser environment, and
 // since 2026-09-09 TikTok refuses webcast data endpoints to sessions that look
 // automated (zerodytrash/TikTok-Live-Connector#329). Same plugin stack the
@@ -71,7 +77,7 @@ export class ViewerPool {
         }
     }
     addLane(host) {
-        const lane = { host, browser: null, launching: null, active: new Set(), benchedUntil: 0 };
+        const lane = { host, browser: null, launching: null, active: new Set(), benchedUntil: 0, consecutiveFailures: 0 };
         this.lanes.set(host, lane);
         this.laneOrder = [...this.lanes.keys()];
         return lane;
@@ -243,6 +249,7 @@ export class ViewerPool {
             const startedAt = Date.now();
             try {
                 const capture = await this.attemptOnLane(username, lane, perAttempt, startedAt);
+                lane.consecutiveFailures = 0;
                 this.options.logger?.info('viewer capture ok', {
                     username,
                     lane: lane.host || 'direct',
@@ -254,13 +261,18 @@ export class ViewerPool {
             catch (error) {
                 const message = error.message;
                 failures.push({ lane: lane.host || 'direct', error: message });
+                lane.consecutiveFailures++;
                 this.options.logger?.warn('viewer capture failed on lane', {
                     username,
                     lane: lane.host || 'direct',
                     elapsed_ms: Date.now() - startedAt,
                     attempt: i + 1,
+                    consecutive_failures: lane.consecutiveFailures,
                     error: message
                 });
+                if (lane.consecutiveFailures >= PROFILE_ROTATE_FAILURES) {
+                    await this.rotateLaneProfile(lane);
+                }
                 // A pinned room that just failed has been unpinned by attemptOnLane;
                 // stop if every lane is benched — further rotation can only loop the
                 // same bad set.
@@ -272,6 +284,40 @@ export class ViewerPool {
         }
         const summary = failures.map((f) => `${f.lane}: ${f.error}`).join(' | ');
         throw new Error(`viewer capture failed across ${failures.length} lane(s): ${summary}`);
+    }
+    /**
+     * Close the lane's browser, wipe its profile directory, and clear the
+     * failure counter so the next capture builds a fresh session identity.
+     * Pinned rooms on the lane are unpinned and their tabs dropped; they
+     * recapture on the next call.
+     */
+    async rotateLaneProfile(lane) {
+        const profileDir = `${this.options.userDataDir ?? '/tmp/tiktok-signer-profile-viewer'}-${lane.host || 'direct'}`;
+        this.options.logger?.warn('rotating lane profile after repeated capture failures', {
+            lane: lane.host || 'direct',
+            consecutive_failures: lane.consecutiveFailures,
+            profile_dir: profileDir
+        });
+        lane.consecutiveFailures = 0;
+        for (const [username, laneHost] of [...this.roomLane]) {
+            if (laneHost === lane.host) {
+                this.roomLane.delete(username);
+                const tab = this.tabs.get(username);
+                if (tab) {
+                    this.tabs.delete(username);
+                    void tab.page.close().catch(() => undefined);
+                }
+            }
+        }
+        try {
+            await lane.browser?.close();
+        }
+        catch {
+            // Closing an already-dead browser is not an error.
+        }
+        lane.browser = null;
+        lane.launching = null;
+        await rm(profileDir, { recursive: true, force: true }).catch(() => undefined);
     }
     async attemptOnLane(username, lane, timeoutMs, startedAt) {
         const browser = await this.ensureBrowser(lane);
