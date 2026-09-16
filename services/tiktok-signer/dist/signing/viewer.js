@@ -167,9 +167,14 @@ export class ViewerPool {
             // Real rendering, not SwiftShader: the display/timing stack is part of
             // what TikTok's bot detection measures (see class doc). --disable-gpu
             // forces software rendering and was measured to fail the same way as
-            // headless on 2026-09-15.
+            // headless on 2026-09-15. On a GPU-less pod Chromium's default
+            // blocklist kills WebGL entirely — measured 2026-09-16 that no-WebGL
+            // sessions never receive im/fetch — so the blocklist must go off and
+            // GPU stays on; llvmpipe provides the renderer.
             '--use-gl=angle',
-            '--enable-gpu-rasterization'
+            '--enable-gpu-rasterization',
+            '--ignore-gpu-blocklist',
+            '--enable-gpu'
         ];
         if (this.options.display) {
             args.push(`--display=${this.options.display}`);
