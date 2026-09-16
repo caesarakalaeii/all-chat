@@ -25,6 +25,26 @@ import { createServer } from './api.js';
 import { SigningSession } from './signing/session.js';
 import { ViewerPool } from './signing/viewer.js';
 import { fetchWebshareProxies } from './signing/webshare.js';
+// Stealth-plugin page hooks race lane/browser shutdown: rotateLaneProfile and
+// refreshProxies close the browser while the plugin's onPageCreated hook is
+// still calling into the CDP session of a target that just closed. The
+// resulting TargetCloseError/ProtocolError rejection arrives after every
+// await we own, so it lands here as "unhandled" and kills the service
+// (measured 2026-09-16: two signer restarts in twelve minutes under direct
+// mode, where the single lane rotates on every failure streak). The target
+// was closing anyway — log and keep serving.
+process.on('unhandledRejection', (reason) => {
+    if (typeof reason === 'object' &&
+        reason !== null &&
+        'name' in reason &&
+        (reason.name === 'TargetCloseError' || reason.name === 'ProtocolError')) {
+        const message = typeof reason === 'object' && 'message' in reason ? String(reason.message) : '';
+        console.warn(JSON.stringify({ level: 'warn', message: 'swallowing CDP close race', error: message.slice(0, 200) }));
+        return;
+    }
+    console.error(JSON.stringify({ level: 'error', message: 'unhandled rejection, crashing', error: String(reason).slice(0, 400) }));
+    process.exit(1);
+});
 const PORT = parseInt(process.env.PORT || '8092', 10);
 const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
 const logger = {
