@@ -57,7 +57,6 @@ import {
   type SubmitRow,
 } from '@/lib/api/localization'
 
-// --- English catalog flattening ---------------------------------------------
 // The catalog is the key source of truth; the backend never sends keys.
 
 type MessageCatalog = { readonly [key: string]: string | MessageCatalog }
@@ -97,7 +96,6 @@ const TOOL_NAMESPACES = [
   'viewerOverlay',
 ] as const
 
-// --- The page ----------------------------------------------------------------
 
 function TranslatePageInner() {
   const t = useTranslations()
