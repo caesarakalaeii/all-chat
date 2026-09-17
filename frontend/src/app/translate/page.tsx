@@ -115,7 +115,7 @@ function TranslatePageInner() {
   const locale = locales?.find((l) => l.code === localeCode) ?? null
   const namespace = TOOL_NAMESPACES.find((n) => n === namespaceId)
   const nsKeys = useMemo(
-    () => (namespace ? Object.keys(flatten(enMessages[namespace])) : []),
+    () => (namespace ? Object.keys(flatten(enMessages[namespace], namespace)) : []),
     [namespace]
   )
 
