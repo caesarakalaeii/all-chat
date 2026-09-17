@@ -42,6 +42,8 @@ export const admin = {
     featuresDescription: 'Premium feature gates',
     maintenanceLabel: 'Maintenance',
     maintenanceDescription: 'Maintenance mode and ops',
+    localizationLabel: 'Localization',
+    localizationDescription: 'Review community translations',
   },
   sidebar: {
     brandSuffix: 'Admin',
@@ -505,5 +507,50 @@ export const admin = {
     // One string: the en dash came from an &ndash; entity, and a language that
     // words a range differently cannot reorder JSX siblings.
     customRange: 'days (1–{max})',
+  },
+
+  // Localization review (ADR-0063): /admin/localization. The admin half of
+  // the beta-tester translation tool — see the translate namespace for the
+  // contributor half.
+  localization: {
+    heading: 'Localization',
+    intro:
+      'Review beta-tester translations and approve new languages. Approved strings are exported as JSON and turned into catalog files by scripts/generate-locale-catalog.mjs.',
+    loadError: 'Failed to load localization data',
+    // Locale requests.
+    requestsHeading: 'Language requests',
+    requestsEmpty: 'No pending language requests',
+    requestFrom: 'Requested by {username}',
+    approveLocale: 'Approve {code}',
+    rejectLocale: 'Reject {code}',
+    localeApprovedToast: '{code} approved',
+    localeRejectedToast: '{code} rejected',
+    localeReviewFailedToast: 'Failed to review the language request',
+    queueHeading: 'Review queue',
+    queueEmpty: 'Nothing waiting for review',
+    queueCount: '{count} waiting',
+    sourceLabel: 'English source',
+    translationLabel: 'Translation ({locale})',
+    // Deliberately no lookup of the English value here: the admin reads the
+    // key, and the source string is fetched from the catalog by the page so a
+    // repo/catalog drift shows up as a missing source, not stale copy.
+    approveButton: 'Approve',
+    rejectButton: 'Request changes',
+    reviewNoteLabel: 'Note for the contributor (optional)',
+    reviewNotePlaceholder: 'What should change?',
+    submissionApprovedToast: 'Translation approved',
+    submissionRejectedToast: 'Changes requested',
+    submissionReviewFailedToast: 'Failed to review the translation',
+    // Export.
+    exportHeading: 'Export',
+    exportBody:
+      'Download the approved translations as JSON, then run scripts/generate-locale-catalog.mjs to produce catalog files for a pull request.',
+    exportButton: 'Download {code} export',
+    exportEmpty: 'No approved translations for {code} yet',
+    exportFailedToast: 'Export failed',
+    // Progress list.
+    progressHeading: 'Progress',
+    progressPending: '{count} waiting',
+    progressApproved: '{count} approved',
   },
 } as const
