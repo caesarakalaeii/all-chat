@@ -526,7 +526,6 @@ export const admin = {
     localeApprovedToast: '{code} approved',
     localeRejectedToast: '{code} rejected',
     localeReviewFailedToast: 'Failed to review the language request',
-    // Review queue.
     queueHeading: 'Review queue',
     queueEmpty: 'Nothing waiting for review',
     queueCount: '{count} waiting',
