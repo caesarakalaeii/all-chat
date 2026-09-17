@@ -40,7 +40,7 @@ type localizationStore interface {
 	RequestLocale(ctx context.Context, code, englishName, nativeName, requestedBy string) error
 	ListApprovedLocales(ctx context.Context) ([]repository.Locale, error)
 	UpsertTranslation(ctx context.Context, locale, key, value, submittedBy string) error
-	ListTranslations(ctx context.Context, locale string) ([]repository.Translation, error)
+	ListTranslations(ctx context.Context, locale, submittedBy string) ([]repository.Translation, error)
 }
 
 type LocalizationHandler struct {
@@ -246,7 +246,7 @@ func (h *LocalizationHandler) MyTranslations(c *gin.Context) {
 	}
 	locale := c.Param("code")
 
-	translations, err := h.repo.ListTranslations(c.Request.Context(), locale)
+	translations, err := h.repo.ListTranslations(c.Request.Context(), locale, userID)
 	if err != nil {
 		h.logger.Error("Failed to list translations",
 			zap.String("user_id", userID), zap.String("locale", locale), zap.Error(err))
