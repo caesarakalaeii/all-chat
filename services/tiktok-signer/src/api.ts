@@ -54,14 +54,14 @@ export type SignRequestOutcome = 'success' | 'tiktok_rejected' | 'bad_request' |
 
 const signRequestsTotal = new Counter({
   name: 'signer_sign_requests_total',
-  help: 'Sign requests by endpoint, path and outcome. path=viewer_capture is the headless-Chromium viewer-tab capture (tens of seconds by design); path=signature is the in-page SDK sign',
+  help: 'Sign requests by endpoint, path and outcome. path=viewer_capture is the viewer-tab capture on a real-display Chromium (tens of seconds by design); path=signature is the in-page SDK sign',
   labelNames: ['endpoint', 'path', 'outcome'],
   registers: [register]
 });
 
 const signRequestDuration = new Histogram({
   name: 'signer_sign_request_duration_seconds',
-  help: 'End-to-end sign request latency by endpoint, path and outcome. path=viewer_capture is the headless-Chromium viewer-tab capture (tens of seconds by design); path=signature is the in-page SDK sign',
+  help: 'End-to-end sign request latency by endpoint, path and outcome. path=viewer_capture is the viewer-tab capture on a real-display Chromium (tens of seconds by design); path=signature is the in-page SDK sign',
   labelNames: ['endpoint', 'path', 'outcome'],
   buckets: [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60, 120],
   registers: [register]
@@ -503,14 +503,15 @@ export function createServer(options: ServerOptions): http.Server {
       }
 
       const endpoint = url === '/v1/sign' ? 'sign' : 'sign_url';
-      const isViewerPath =
-        url === '/v1/sign' && Boolean(viewer) && Boolean((payload as SignRequestPayload).username);
-      const path = isViewerPath ? 'viewer_capture' : 'signature';
+      // Route once: the metric's path label and the dispatch below must
+      // read the same condition, or the histogram silently mislabels.
+      const viewerPath = url === '/v1/sign' && Boolean(viewer) && Boolean((payload as SignRequestPayload).username);
+      const path = viewerPath ? 'viewer_capture' : 'signature';
       const startedAt = Date.now();
       let outcome: SignRequestOutcome;
       let result: RouteResult;
       try {
-        if (url === '/v1/sign' && viewer && (payload as SignRequestPayload).username) {
+        if (viewerPath && viewer) {
           // Page-viewer path: a real tab on the room's live page captures the
           // SDK-signed im/fetch TikTok serves the player. Returns the same
           // { fetchResult, fetchResultCookieHeader } contract.

@@ -41,11 +41,17 @@ function fakePage(behavior: {
       return undefined;
     },
     reload: async () => {
+      if (behavior.navError) {
+        throw new Error('net::ERR_CONNECTION_RESET');
+      }
       navLog.push('reload');
       emitResponses();
       return undefined;
     },
     evaluate: async () => {
+      if (behavior.navError) {
+        throw new Error('net::ERR_CONNECTION_RESET');
+      }
       // SPA anchor click: player bootstrap replays without a new document.
       navLog.push('spa');
       emitResponses();
@@ -80,7 +86,13 @@ const GOOD_BODY = Buffer.alloc(1500, 'x');
 
 function poolInternals(pool: ViewerPool) {
   return pool as unknown as {
-    lanes: Map<string, { host: string; prewarmed: unknown[] }>;
+    lanes: Map<string, {
+      host: string;
+      prewarmed: unknown[];
+      prewarmRefilling: boolean;
+      waiters: Array<() => void>;
+      slots: number;
+    }>;
     tabs: Map<string, { page: unknown; lastUsed: number }>;
     roomLane: Map<string, string>;
   };
@@ -115,6 +127,7 @@ describe('ViewerPool capture flow (fake pages)', () => {
       ]
     });
     internals.tabs.set('warmuser', { page, lastUsed: Date.now() });
+    internals.roomLane.set('warmuser', '');
 
     const capture = await pool.captureRoom('warmuser', { timeoutMs: 10_000 });
     expect(capture.roomId).toBe('7');
@@ -164,6 +177,146 @@ describe('ViewerPool capture flow (fake pages)', () => {
     // The winner's tab is registered; the loser did not touch it.
     expect(internals.tabs.has('racer')).toBe(true);
     expect(internals.roomLane.get('racer')).toBe('fast:2');
+    await pool.close();
+  });
+
+  it('holds the lane slot for the whole attempt, so the concurrency cap actually caps', async () => {
+    const pool = new ViewerPool({ userDataDir: '/tmp/x' });
+    const internals = poolInternals(pool);
+    // Three parked tabs on the single direct lane; each capture navigates
+    // and emits its capture response after a delay, so all three start
+    // concurrently before any settles.
+    const lanes = internals.lanes.get('')!;
+    for (let i = 2; i >= 0; i--) {
+      const { page } = fakePage({
+        responses: [
+          { url: `https://webcast.tiktok.com/webcast/im/fetch/?room_id=${i}`, status: 200, body: GOOD_BODY }
+        ],
+        navDelayMs: 50
+      });
+      lanes.prewarmed.push(page);
+    }
+
+    const p0 = pool.captureRoom('user0', { timeoutMs: 5_000 });
+    // The slot is acquired inside the async IIFE; let it book before the next.
+    await new Promise((r) => setTimeout(r, 10));
+    expect(lanes.slots).toBe(1);
+    const p1 = pool.captureRoom('user1', { timeoutMs: 5_000 });
+    const p2 = pool.captureRoom('user2', { timeoutMs: 5_000 });
+    await new Promise((r) => setTimeout(r, 10));
+    // Cap is 2: the third capture must be queued (slot not stolen).
+    expect(lanes.slots).toBe(2);
+    expect(lanes.waiters.length).toBe(1);
+
+    const [c0, c1, c2] = await Promise.all([p0, p1, p2]);
+    expect(c0.roomId).toBe('0');
+    expect(c1.roomId).toBe('1');
+    expect(c2.roomId).toBe('2');
+    // All settled: every slot returned.
+    expect(lanes.slots).toBe(0);
+    expect(lanes.waiters.length).toBe(0);
+    await pool.close();
+  });
+
+  it('releases the lane slot when a capture fails (fast-fail frees the queue)', async () => {
+    const pool = new ViewerPool({ userDataDir: '/tmp/x' });
+    const internals = poolInternals(pool);
+    const lanes = internals.lanes.get('')!;
+    // Zombie page: player never appears, no capture response. Pushed last:
+    // pop() hands it to the first capture, the good page to the queued one.
+    const good = fakePage({
+      responses: [
+        { url: 'https://webcast.tiktok.com/webcast/im/fetch/?room_id=9', status: 200, body: GOOD_BODY }
+      ]
+    });
+    lanes.prewarmed.push(good.page);
+    const { page: zombie } = fakePage({ livePlayerFoundAt: Number.MAX_SAFE_INTEGER });
+    lanes.prewarmed.push(zombie);
+    vi.useFakeTimers();
+    const zombieAttempt = pool.captureRoom('zombie', { timeoutMs: 60_000 });
+    const zombieOutcome = expect(zombieAttempt).rejects.toThrow(/live player not up/);
+    // Let the attempt book its slot and start navigating (fake timers:
+    // microtasks still run between advance calls).
+    await vi.advanceTimersByTimeAsync(0);
+    expect(lanes.slots).toBe(1);
+    // The good capture queues behind the zombie's held slot.
+    const goodAttempt = pool.captureRoom('good', { timeoutMs: 60_000 });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(lanes.slots).toBe(1);
+    // Zombie fast-fail at the 15s deadline releases its slot, the good
+    // capture takes it and completes.
+    await vi.advanceTimersByTimeAsync(15_100);
+    await vi.runAllTimersAsync();
+    const goodCapture = await goodAttempt;
+    expect(goodCapture.roomId).toBe('9');
+    await zombieOutcome;
+    expect(lanes.slots).toBe(0);
+    vi.useRealTimers();
+    await pool.close();
+  });
+
+  it('a racer does not steal another lane\'s warm tab for the room', async () => {
+    const pool = new ViewerPool({ proxyHosts: ['laneA:1', 'laneB:2'], userDataDir: '/tmp/x' });
+    const internals = poolInternals(pool);
+    // A warm tab for the room lives on lane A.
+    // A warm tab for the room lives on lane A. Its SPA navigation is dead
+    // (navError), so the first attempt on the pinned lane fails and the
+    // race rides lane B.
+    const warm = fakePage({ navError: true });
+    internals.tabs.set('room', { page: warm.page, lastUsed: Date.now() });
+    internals.roomLane.set('room', 'laneA:1');
+
+    // The room is pinned to lane A but its navigation dies: the race rides
+    // lane B, whose racer must NOT SPA-navigate lane A's warm tab. The
+    // racer takes its own prewarmed tab instead.
+    const laneAPage = fakePage({ navError: true });
+    internals.lanes.get('laneA:1')!.prewarmed.push(laneAPage.page);
+    const laneBPage = fakePage({
+      responses: [
+        { url: 'https://webcast.tiktok.com/webcast/im/fetch/?room_id=5', status: 200, body: GOOD_BODY }
+      ]
+    });
+    internals.lanes.get('laneB:2')!.prewarmed.push(laneBPage.page);
+
+    const capture = await pool.captureRoom('room', { timeoutMs: 20_000 });
+    expect(capture.roomId).toBe('5');
+    // The winner registered its own page (lane B's), and the old warm tab
+    // was never touched by the racer: no 'spa' nav on it.
+    expect(internals.tabs.get('room')?.page).toBe(laneBPage.page);
+    expect(internals.roomLane.get('room')).toBe('laneB:2');
+    expect(warm.navLog).not.toContain('spa');
+    await pool.close();
+  });
+
+  it('only the race winner registers its tab: a loser that reaches onResponse does not overwrite it', async () => {
+    const pool = new ViewerPool({ proxyHosts: ['pin:1', 'win:2', 'lose:3'], userDataDir: '/tmp/x' });
+    const internals = poolInternals(pool);
+    // First attempt (pinned lane) dies instantly; the race then rides the
+    // other two lanes. Both racers capture, but the winner is whichever
+    // the race resolves first; the loser's onResponse must see the race
+    // settled against it and close its own page without registering.
+    const pin = fakePage({ navError: true });
+    internals.lanes.get('pin:1')!.prewarmed.push(pin.page);
+    const winner = fakePage({
+      responses: [
+        { url: 'https://webcast.tiktok.com/webcast/im/fetch/?room_id=11', status: 200, body: GOOD_BODY }
+      ]
+    });
+    internals.lanes.get('win:2')!.prewarmed.push(winner.page);
+    const loser = fakePage({
+      responses: [
+        { url: 'https://webcast.tiktok.com/webcast/im/fetch/?room_id=12', status: 200, body: GOOD_BODY }
+      ],
+      navDelayMs: 30
+    });
+    internals.lanes.get('lose:3')!.prewarmed.push(loser.page);
+    internals.roomLane.set('roomx', 'pin:1');
+
+    const capture = await pool.captureRoom('roomx', { timeoutMs: 20_000 });
+    expect(capture.roomId).toBe('11');
+    // The registered tab is the winner's live page, not a closed loser.
+    expect(internals.tabs.get('roomx')?.page).toBe(winner.page);
+    expect(internals.roomLane.get('roomx')).toBe('win:2');
     await pool.close();
   });
 });

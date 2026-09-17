@@ -38,7 +38,10 @@ const PROFILE_ROTATE_FAILURES = 3;
  * never going to answer.
  */
 const LIVE_READY_DEADLINE_MS = 15_000;
-const LIVE_PAGE_SELECTOR = '#live-player, #LoginCanvas, div[class*="LIVE"], div[class*="live"]';
+// Player roots only. A bare div[class*="live"] substring would match the
+// site-wide LIVE nav and let a zombie page that reached domcontentloaded
+// pass the heartbeat, defeating the fast-fail the deadline exists for.
+const LIVE_PAGE_SELECTOR = '#live-player, #LoginCanvas, div[class*="LIVE"], div[class*="Live"]';
 
 /**
  * How many concurrent room captures may run on one lane's browser. Every
@@ -139,8 +142,7 @@ interface ProxyLane {
   host: string;
   browser: Browser | null;
   launching: Promise<Browser> | null;
-  /** Usernames currently being captured on this lane. */
-  active: Set<string>;
+
   /** Until when this lane is benched after a failure. */
   benchedUntil: number;
   /**
@@ -158,6 +160,8 @@ interface ProxyLane {
    * capture so the next cold room on this lane skips the domain bootstrap.
    */
   prewarmed: Page[];
+  /** Set while a refillPrewarm run is in flight (bounds concurrent refills). */
+  prewarmRefilling: boolean;
   /** Queued captures waiting for a lane slot under the concurrency cap. */
   waiters: Array<() => void>;
   /** Booked capture slots (see LANE_MAX_CONCURRENT_CAPTURES). */
@@ -219,10 +223,10 @@ export class ViewerPool {
       host,
       browser: null,
       launching: null,
-      active: new Set(),
       benchedUntil: 0,
       consecutiveFailures: 0,
       prewarmed: [],
+      prewarmRefilling: false,
       waiters: [],
       slots: 0
     };
@@ -272,20 +276,7 @@ export class ViewerPool {
       } catch {
         // Closing an already-dead browser is not an error.
       }
-      lane.active.clear();
-      for (const page of lane.prewarmed) void page.close().catch(() => undefined);
-      lane.prewarmed = [];
-      for (const release of lane.waiters.splice(0)) release();
-      for (const [username, laneHost] of [...this.roomLane]) {
-        if (laneHost === host) {
-          this.roomLane.delete(username);
-          const tab = this.tabs.get(username);
-          if (tab) {
-            this.tabs.delete(username);
-            void tab.page.close().catch(() => undefined);
-          }
-        }
-      }
+      this.teardownLane(lane);
     }
     for (const host of hosts) {
       if (!this.lanes.has(host)) this.addLane(host);
@@ -362,6 +353,10 @@ export class ViewerPool {
       .then((browser: Browser) => {
         lane.browser = browser;
         lane.launching = null;
+        // Park the first tabs now, not after the lane's first successful
+        // capture: a lane's first cold capture is exactly the one that
+        // benefits most from skipping the domain bootstrap.
+        this.refillPrewarm(lane);
         return browser;
       });
     return lane.launching;
@@ -467,9 +462,13 @@ export class ViewerPool {
     const racing = candidates.slice(0, attempts - 1);
     const raceStart = Date.now();
     const cancels: Array<() => void> = [];
+    // Shared across all racers: the first to reach a capture claims the
+    // registration; the others close their pages without registering.
+    const claim = { winner: false };
     const racers = racing.map((lane) => {
       const { promise, cancel } = this.attemptOnLane(username, lane, remaining, raceStart, {
-        registerCancel: (fn) => cancels.push(fn)
+        registerCancel: (fn) => cancels.push(fn),
+        claim
       });
       return promise.then(
         (capture) => ({ lane, capture }),
@@ -516,6 +515,23 @@ export class ViewerPool {
       profile_dir: profileDir
     });
     lane.consecutiveFailures = 0;
+    try {
+      await lane.browser?.close();
+    } catch {
+      // Closing an already-dead browser is not an error.
+    }
+    this.teardownLane(lane);
+    await rm(profileDir, { recursive: true, force: true }).catch(() => undefined);
+  }
+
+  /**
+   * Tear down a lane's runtime state after its browser is closed: pinned
+   * rooms dropped, parked tabs closed, queued slot waiters released. Shared
+   * by proxy removal (refreshProxies) and profile rotation.
+   */
+  private teardownLane(lane: ProxyLane): void {
+    lane.browser = null;
+    lane.launching = null;
     for (const [username, laneHost] of [...this.roomLane]) {
       if (laneHost === lane.host) {
         this.roomLane.delete(username);
@@ -526,17 +542,9 @@ export class ViewerPool {
         }
       }
     }
-    try {
-      await lane.browser?.close();
-    } catch {
-      // Closing an already-dead browser is not an error.
-    }
-    lane.browser = null;
-    lane.launching = null;
     for (const page of lane.prewarmed) void page.close().catch(() => undefined);
     lane.prewarmed = [];
     for (const release of lane.waiters.splice(0)) release();
-    await rm(profileDir, { recursive: true, force: true }).catch(() => undefined);
   }
 
   /**
@@ -577,10 +585,17 @@ export class ViewerPool {
   private async takePrewarmedTab(lane: ProxyLane): Promise<Page | undefined> {
     const parked = lane.prewarmed.pop();
     if (parked) {
-      // Verify it survived; a crashed tab would hang the capture.
+      // Verify it survived; a crashed tab would hang the capture. A dead
+      // one permanently consumed a prewarm slot until the next successful
+      // capture refilled it, so kick a refill here too.
+      let dead = false;
       try {
-        if (parked.isClosed()) return undefined;
+        dead = parked.isClosed();
       } catch {
+        dead = true;
+      }
+      if (dead) {
+        this.refillPrewarm(lane);
         return undefined;
       }
       return parked;
@@ -590,7 +605,9 @@ export class ViewerPool {
 
   /** Refill the lane's prewarm slots after a capture, best-effort. */
   private refillPrewarm(lane: ProxyLane): void {
+    if (lane.prewarmRefilling) return;
     if (lane.prewarmed.length >= PREWARM_PER_LANE) return;
+    lane.prewarmRefilling = true;
     void this.ensureBrowser(lane)
       .then(async (browser) => {
         while (lane.prewarmed.length < PREWARM_PER_LANE) {
@@ -599,7 +616,10 @@ export class ViewerPool {
           lane.prewarmed.push(page);
         }
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => {
+        lane.prewarmRefilling = false;
+      });
   }
 
   /** New page configured for this lane: UA, request blocking, proxy auth. */
@@ -608,11 +628,14 @@ export class ViewerPool {
     await page.setUserAgent(VIEWER_UA);
     // The tab must not stream the video: with a residential proxy wired
     // (the answer to TikTok's datacenter-IP gating), media would be 99% of
-    // the proxy's bill. Images, stylesheets and third-party trackers are
-    // likewise dead weight the player never needs — measured on the lab
-    // lane, blocking them measurably shortens time-to-im/fetch and none of
-    // the player's fetches were to those resource types. Anything on the
-    // tiktok.com or webcast endpoints is always allowed through.
+    // the proxy's bill. Images, stylesheets and trackers are likewise dead
+    // weight the player never needs — measured on the lab lane, blocking
+    // them measurably shortens time-to-im/fetch and none of the player's
+    // fetches were to those resource types. Known telemetry hosts are
+    // blocked even though they sit on tiktok.com: the player never calls
+    // them, and exempting "anything tiktok.com" would let analytics.tiktok
+    // com straight back in. Non-media/font/image requests on tiktok.com,
+    // tiktokcdn and webcast hosts are allowed through.
     await page.setRequestInterception(true);
     page.on('request', (request) => {
       const type = request.resourceType();
@@ -621,12 +644,16 @@ export class ViewerPool {
         return;
       }
       const url = request.url();
+      if (isTrackerUrl(url)) {
+        void request.abort().catch(() => undefined);
+        return;
+      }
       const firstParty =
         url.startsWith('https://www.tiktok.com/') ||
         url.startsWith('https://webcast') ||
         url.includes('.tiktok.com/') ||
         url.includes('.tiktokcdn.com/');
-      if (!firstParty && (type === 'stylesheet' || isTrackerUrl(url))) {
+      if (!firstParty && type === 'stylesheet') {
         void request.abort().catch(() => undefined);
         return;
       }
@@ -648,15 +675,42 @@ export class ViewerPool {
    * the returned cancel when another racer wins — the cancelled attempt
    * closes its own page but does not bench the lane or unregister the
    * room's tab, both of which belong to the winner now.
+   *
+   * The lane slot is held for the whole attempt, not the setup: the cap
+   * exists to bound simultaneous live-page renders on one llvmpipe browser,
+   * and the render spans from navigation to im/fetch — released where the
+   * attempt settles (success, giveUp, cancel or reject), never in a
+   * finally over the setup block.
+   *
+   * Registration (tabs/roomLane) is race-winner-only: in a parallel race
+   * two racers can both reach onResponse before either resolves, and the
+   * loser must not overwrite the winner's entries — its page gets closed
+   * by cancel, and a closed page registered as the room's warm tab turns
+   * the next capture for that room into a guaranteed dead-tab attempt.
+   * The winner is decided once, in captureRoom, and passed down here as
+   * `willRegister` — flipped by the loser side the moment the race
+   * settles against it, before cancel() closes the page.
    */
   private attemptOnLane(
     username: string,
     lane: ProxyLane,
     timeoutMs: number,
     startedAt: number,
-    options: { registerCancel?: (cancel: () => void) => void } = {}
+    options: {
+      registerCancel?: (cancel: () => void) => void;
+      /** Settled by the race owner: false once this attempt lost the race. */
+      willRegister?: { value: boolean };
+      /**
+       * Shared across the racers of one captureRoom call: the first racer
+       * to reach a capture flips `winner` and is the only one allowed to
+       * register. Undefined for the solo first attempt.
+       */
+      claim?: { winner: boolean };
+    } = {}
   ): { promise: Promise<RoomCapture>; cancel: () => void } {
     const { promise, resolve, reject } = Promise.withResolvers<RoomCapture>();
+    const claim = options.claim;
+    const willRegister = options.willRegister ?? { value: true };
     let cancelled = false;
     let fail: ReturnType<typeof setTimeout> | undefined;
     let heartbeat: ReturnType<typeof setTimeout> | undefined;
@@ -668,13 +722,21 @@ export class ViewerPool {
           buffer(): Promise<Buffer>;
         }) => void | Promise<void>)
       | null = null;
+    let slotHeld = false;
+    const releaseSlotOnce = () => {
+      if (!slotHeld) return;
+      slotHeld = false;
+      this.releaseLaneSlot(lane);
+    };
     const cancel = () => {
       if (cancelled) return;
       cancelled = true;
+      willRegister.value = false;
       clearTimeout(fail);
       clearTimeout(heartbeat);
       if (page && onResponse) page.off('response', onResponse);
       if (page) void page.close().catch(() => undefined);
+      releaseSlotOnce();
       reject(new Error(`lane race cancelled (${lane.host || 'direct'})`));
     };
     options.registerCancel?.(cancel);
@@ -689,16 +751,35 @@ export class ViewerPool {
         );
         return;
       }
+      slotHeld = true;
+      if (cancelled) {
+        // cancel() ran while the slot was being booked and could not release
+        // it (slotHeld was still false there). Release it here.
+        releaseSlotOnce();
+        return;
+      }
       try {
-        lane.active.add(username);
-        // Reuse a warm tab when we have one for this room's streamer, or a
-        // prewarmed parked tab for a cold room (skips the domain bootstrap).
-        // The browser only launches when a brand-new page is needed.
-        const existing = this.tabs.get(username);
+
+        // Reuse a warm tab when we have one for this room's streamer AND it
+        // lives on this lane's browser — tabs are lane-bound pages and a
+        // cross-lane reuse would mix session cookies across profiles, which
+        // the profile-per-lane design exists to prevent. A racer reaching a
+        // room whose warm tab sits on another lane takes a prewarmed/new
+        // page on its own lane instead. Prewarmed parked tab serves a cold
+        // room (skips the domain bootstrap); the browser only launches when
+        // a brand-new page is needed.
+        const existing =
+          this.roomLane.get(username) === lane.host ? this.tabs.get(username) : undefined;
         const prewarmed = existing ? undefined : await this.takePrewarmedTab(lane);
         page = existing?.page ?? prewarmed ?? null;
         if (!page) {
           page = await this.newLanePage(lane, await this.ensureBrowser(lane));
+          if (cancelled) {
+            // cancel() fired while the page was being created: it saw
+            // page === null and could not close this one. Release it here.
+            void page.close().catch(() => undefined);
+            return;
+          }
         }
         const capturePage = page;
         const giveUp = async (message: string) => {
@@ -717,29 +798,12 @@ export class ViewerPool {
           }
           this.benchLane(lane);
           await capturePage.close().catch(() => undefined);
+          releaseSlotOnce();
           reject(new Error(`${message} (proxy ${lane.host || 'direct'})`));
         };
         fail = setTimeout(() => {
           void giveUp(`im/fetch 200 not captured within ${timeoutMs}ms`);
         }, timeoutMs);
-
-        // Fast-fail heartbeat: successful captures show the live player
-        // shortly after domcontentloaded. A page without the player root by
-        // LIVE_READY_DEADLINE_MS is a zombie — hung page, stalling proxy —
-        // and pays the deadline instead of the full timeout, freeing the
-        // lane slot for the next attempt.
-        heartbeat = setTimeout(() => {
-          void capturePage
-            .$$(LIVE_PAGE_SELECTOR)
-            .then((els) => {
-              if (els.length === 0 && !cancelled) {
-                void giveUp(
-                  `live player not up within ${LIVE_READY_DEADLINE_MS}ms (zombie page fast-fail)`
-                );
-              }
-            })
-            .catch(() => undefined);
-        }, LIVE_READY_DEADLINE_MS);
 
         onResponse = async (response: {
           url(): string;
@@ -757,6 +821,30 @@ export class ViewerPool {
             return;
           }
           if (buf.length < 1000) return; // keepalive/empty shapes are not a capture
+          const loseRace = async () => {
+            // A racer that reached a capture but is not the race's winner:
+            // close our own page, keep the winner's registration intact.
+            cancelled = true;
+            clearTimeout(fail);
+            clearTimeout(heartbeat);
+            capturePage.off('response', onResponse!);
+            await capturePage.close().catch(() => undefined);
+            releaseSlotOnce();
+            reject(new Error(`lane race cancelled (${lane.host || 'direct'})`));
+          };
+          if (!willRegister.value) {
+            // The race owner cancelled us (loser of the race).
+            await loseRace();
+            return;
+          }
+          if (claim) {
+            if (claim.winner) {
+              // Another racer won the claim between our check and here.
+              await loseRace();
+              return;
+            }
+            claim.winner = true;
+          }
           cancelled = true;
           clearTimeout(fail);
           clearTimeout(heartbeat);
@@ -766,10 +854,17 @@ export class ViewerPool {
             const cookies = (await capturePage.cookies('https://www.tiktok.com'))
               .map((c) => `${c.name}=${c.value}`)
               .join('; ');
+            if (!willRegister.value) {
+              // Lost the race while the cookie read was in flight (the
+              // owner's cancel() flipped the flag and closed the page).
+              await loseRace();
+              return;
+            }
             const roomId = new URL(url).searchParams.get('room_id') ?? username;
             this.tabs.set(username, { page: capturePage, lastUsed: Date.now() });
             this.roomLane.set(username, lane.host);
             this.refillPrewarm(lane);
+            releaseSlotOnce();
             resolve({
               roomId,
               protoBase64: buf.toString('base64'),
@@ -779,6 +874,7 @@ export class ViewerPool {
               elapsedMs: Date.now() - startedAt
             });
           } catch (error) {
+            releaseSlotOnce();
             reject(error as Error);
           }
         };
@@ -819,15 +915,40 @@ export class ViewerPool {
                 waitUntil: 'domcontentloaded',
                 timeout: 30_000
               });
-        nav.catch((error: Error) => {
-          if (cancelled) return;
-          void giveUp(`navigation failed: ${error.message}`);
-        });
+        nav
+          .then(() => {
+            // Fast-fail heartbeat, armed at domcontentloaded: successful
+            // captures show the live player within a few seconds of the
+            // document being ready. A page without the player root by
+            // LIVE_READY_DEADLINE_MS is a zombie — hung page, stalling
+            // proxy — and pays the deadline instead of the full timeout,
+            // freeing the lane slot for the next attempt. Armed on nav
+            // completion, not attempt start: a residential proxy can burn
+            // half the deadline on goto alone without the page being a
+            // zombie.
+            heartbeat = setTimeout(() => {
+              void capturePage
+                .$$(LIVE_PAGE_SELECTOR)
+                .then((els) => {
+                  if (els.length === 0 && !cancelled) {
+                    void giveUp(
+                      `live player not up within ${LIVE_READY_DEADLINE_MS}ms of navigation (zombie page fast-fail)`
+                    );
+                  }
+                })
+                .catch(() => undefined);
+            }, LIVE_READY_DEADLINE_MS);
+          })
+          .catch((error: Error) => {
+            if (cancelled) return;
+            void giveUp(`navigation failed: ${error.message}`);
+          });
+        // The attempt runs on from here on timers and the response listener;
+        // the slot must stay booked until the attempt settles, which is
+        // exactly why it is not released in the outer finally.
       } catch (error) {
+        releaseSlotOnce();
         reject(error as Error);
-      } finally {
-        lane.active.delete(username);
-        this.releaseLaneSlot(lane);
       }
     })();
     return { promise, cancel };
