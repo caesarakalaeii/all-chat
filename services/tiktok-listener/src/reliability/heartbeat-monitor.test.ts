@@ -194,4 +194,42 @@ describe('HeartbeatMonitor silent-failure recovery', () => {
     monitor.noteSilentFailureHealing('lejoe_tiktok');
     expect(monitor.getSilentFailureStreak('lejoe_tiktok')).toBe(0);
   });
+
+  it('keeps a live-but-quiet stream connected on RoomUserSeq traffic alone', () => {
+    const logger = fakeLogger();
+    const metrics = fakeMetrics();
+    const monitor = new HeartbeatMonitor(logger, metrics, INTERVAL_MS, TIMEOUT_MS);
+    const connection = fakeConnection({ isConnected: true });
+
+    monitor.start('lejoe_tiktok', connection as never);
+    // Quiet stream: no chat/gift/social/member/envelope, only periodic
+    // sequence frames. Each decodedData-driven recordMessage lands just
+    // before a check, as on a real low-traffic room.
+    for (let i = 0; i < 5; i++) {
+      vi.advanceTimersByTime(INTERVAL_MS);
+      monitor.recordMessage('lejoe_tiktok');
+    }
+
+    // 5 intervals of wire liveness with zero delivered messages: alive.
+    expect(connection.disconnect).not.toHaveBeenCalled();
+    expect(metrics.recordHeartbeatTimeout).not.toHaveBeenCalled();
+    expect(monitor.getSilentFailureStreak('lejoe_tiktok')).toBe(0);
+  });
+
+  it('still kills a connection whose only frames are undecodable acks', () => {
+    const logger = fakeLogger();
+    const metrics = fakeMetrics();
+    const monitor = new HeartbeatMonitor(logger, metrics, INTERVAL_MS, TIMEOUT_MS);
+    const connection = fakeConnection({ isConnected: true });
+
+    monitor.start('lejoe_tiktok', connection as never);
+    // Ack/keepalive frames decode to no message, so decodedData never fires
+    // and recordMessage stays silent — the socket is up but the room is
+    // pushing nothing decodable, which is the deaf state the timeout exists
+    // to catch.
+    vi.advanceTimersByTime(2 * (TIMEOUT_MS + INTERVAL_MS));
+
+    expect(connection.disconnect).toHaveBeenCalledTimes(1);
+    expect(metrics.recordHeartbeatTimeout).toHaveBeenCalledWith('lejoe_tiktok');
+  });
 });

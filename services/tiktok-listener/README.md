@@ -111,6 +111,15 @@ TIKTOK_SIGNER_TIMEOUT_MS=180000       # Self-signer HTTP timeout; signer rotates
 TIKTOK_EXTENDED_GIFT_INFO=            # Defaults on only under `self` (see below)
 SIGN_API_KEY=                         # Euler Stream API key; empty means the free tier
 
+# Heartbeat (silent-failure watchdog). Liveness is wire liveness: any frame
+# the connector decodes (e.g. the RoomUserSeq a live-but-quiet stream still
+# pushes) resets the timer, so a low-traffic room is not killed for silence.
+# A connection whose frames never decode (acks only) is treated as deaf and
+# reconnected. The timeout is room liveness, not socket liveness; soften it
+# for launch-day streams rather than disabling monitoring.
+TIKTOK_HEARTBEAT_INTERVAL_MS=30000     # How often to check (default)
+TIKTOK_HEARTBEAT_TIMEOUT_MS=90000      # Silence before a forced reconnect (default)
+
 # WS connect flap (2026-09-16 transport plan): TikTok answering the upgrade
 # with HTTP 200 is a transient flap; connect retries immediately up to
 # WS_FLAP_MAX_FAST_RETRIES (3) x 1s before falling into normal error backoff.

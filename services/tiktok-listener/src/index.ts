@@ -1336,6 +1336,15 @@ class TikTokListenerService {
       // question that took a prod investigation to answer the first time.
       emitter.on('decodedData', (method: string) => {
         this.metrics.recordWireMessage(method);
+        // Any decodable frame is wire liveness. A live-but-quiet stream pushes
+        // RoomUserSeq/ControlMessage continuously but may go minutes without a
+        // chat/gift/social/member/envelope message, which would otherwise let
+        // the 90s heartbeat kill a healthy connection and churn the room into
+        // flap exhaustion (prod-measured 2026-09-17: connect → silent → kill
+        // → reconnect every ~2 min on low-traffic rooms). Ack-only frames decode
+        // to nothing and never reach this hook, so the floor stays room
+        // liveness, not socket liveness.
+        this.heartbeatMonitor.recordMessage(username);
         this.canaryConsumers.get(username)?.notePrimaryFrame(method);
       });
 
