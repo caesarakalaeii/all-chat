@@ -240,14 +240,14 @@ func (r *LocalizationRepository) UpsertTranslation(ctx context.Context, locale, 
 // ListTranslations returns the caller's rows for a locale. Statuses:
 // 'pending' (awaiting review), 'approved', 'rejected' (with review_note —
 // the contributor revises and resubmits, overwriting the row).
-func (r *LocalizationRepository) ListTranslations(ctx context.Context, locale string) ([]Translation, error) {
+func (r *LocalizationRepository) ListTranslations(ctx context.Context, locale, submittedBy string) ([]Translation, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT key, value, status, COALESCE(submitted_by::text, ''), review_note,
 		        to_char(updated_at, 'YYYY-MM-DD"T"HH24:MI:SSZ')
 		 FROM localization_translations
 		 WHERE locale = $1 AND submitted_by = $2::uuid
 		 ORDER BY key`,
-		locale)
+		locale, submittedBy)
 	if err != nil {
 		r.logger.Error("Failed to list translations", zap.String("locale", locale), zap.Error(err))
 		return nil, fmt.Errorf("failed to list translations: %w", err)
