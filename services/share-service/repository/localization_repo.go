@@ -122,7 +122,7 @@ func (r *LocalizationRepository) ListApprovedLocales(ctx context.Context) ([]Loc
 	}
 	defer rows.Close()
 
-	var locales []Locale
+	locales := make([]Locale, 0)
 	for rows.Next() {
 		var l Locale
 		if err := rows.Scan(&l.Code, &l.EnglishName, &l.NativeName); err != nil {
@@ -146,7 +146,7 @@ func (r *LocalizationRepository) ListRequestedLocales(ctx context.Context) ([]Lo
 	}
 	defer rows.Close()
 
-	var locales []Locale
+	locales := make([]Locale, 0)
 	for rows.Next() {
 		var l Locale
 		if err := rows.Scan(&l.Code, &l.EnglishName, &l.NativeName, &l.RequestedBy); err != nil {
@@ -258,7 +258,7 @@ func (r *LocalizationRepository) ListTranslations(ctx context.Context, locale st
 
 // scanTranslations drains a translation result set.
 func scanTranslations(rows pgx.Rows) ([]Translation, error) {
-	var out []Translation
+	out := make([]Translation, 0)
 	for rows.Next() {
 		var t Translation
 		if err := rows.Scan(&t.Key, &t.Value, &t.Status, &t.SubmittedBy, &t.ReviewNote, &t.UpdatedAt); err != nil {
@@ -371,7 +371,7 @@ func (r *LocalizationRepository) ListLocaleProgress(ctx context.Context) ([]Loca
 	}
 	defer rows.Close()
 
-	var out []LocaleProgress
+	out := make([]LocaleProgress, 0)
 	for rows.Next() {
 		var p LocaleProgress
 		if err := rows.Scan(&p.Code, &p.Pending, &p.Approved, &p.Rejected); err != nil {
