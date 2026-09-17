@@ -57,7 +57,7 @@ func (m *mockLocalizationStore) UpsertTranslation(_ context.Context, locale, key
 	return m.localeErr
 }
 
-func (m *mockLocalizationStore) ListTranslations(_ context.Context, locale string) ([]repository.Translation, error) {
+func (m *mockLocalizationStore) ListTranslations(_ context.Context, locale, _ string) ([]repository.Translation, error) {
 	m.listedLocale = locale
 	return m.translations, nil
 }
