@@ -425,7 +425,7 @@ export class ViewerPool {
    */
   async captureRoom(
     username: string,
-    { timeoutMs = 120_000 }: { timeoutMs?: number } = {}
+    { timeoutMs = 180_000 }: { timeoutMs?: number } = {}
   ): Promise<RoomCapture> {
     this.evictIdleTabs();
     const attempts = Math.max(1, this.options.maxLaneAttempts);
@@ -458,7 +458,12 @@ export class ViewerPool {
     const firstResult = await this.attemptOnLane(
       username,
       firstLane,
-      Math.max(60_000, Math.floor(timeoutMs / attempts)),
+      // Floor 90s: healthy in-cluster captures measured 33-52s on llvmpipe
+      // (2026-09-16), and 2026-09-17 prod showed good captures passing 60s
+      // under CPU contention — the floor was cutting captures that would
+      // have served. The listener's TIKTOK_SIGNER_TIMEOUT_MS (180s default)
+      // still bounds the overall call.
+      Math.max(90_000, Math.floor(timeoutMs / attempts)),
       overallStart
     ).promise.then(
       (capture: RoomCapture) => ({ ok: true as const, capture }),

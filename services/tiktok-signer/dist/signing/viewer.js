@@ -299,7 +299,7 @@ export class ViewerPool {
      * cancelled clean: their page closes, but the lane is not benched and the
      * winner's warm tab stays registered.
      */
-    async captureRoom(username, { timeoutMs = 120_000 } = {}) {
+    async captureRoom(username, { timeoutMs = 180_000 } = {}) {
         this.evictIdleTabs();
         const attempts = Math.max(1, this.options.maxLaneAttempts);
         const overallStart = Date.now();
@@ -327,7 +327,13 @@ export class ViewerPool {
             return capture;
         };
         const firstLane = this.pickLane(username);
-        const firstResult = await this.attemptOnLane(username, firstLane, Math.max(60_000, Math.floor(timeoutMs / attempts)), overallStart).promise.then((capture) => ({ ok: true, capture }), (error) => ({ ok: false, error }));
+        const firstResult = await this.attemptOnLane(username, firstLane, 
+        // Floor 90s: healthy in-cluster captures measured 33-52s on llvmpipe
+        // (2026-09-16), and 2026-09-17 prod showed good captures passing 60s
+        // under CPU contention — the floor was cutting captures that would
+        // have served. The listener's TIKTOK_SIGNER_TIMEOUT_MS (180s default)
+        // still bounds the overall call.
+        Math.max(90_000, Math.floor(timeoutMs / attempts)), overallStart).promise.then((capture) => ({ ok: true, capture }), (error) => ({ ok: false, error }));
         if (firstResult.ok)
             return recordSuccess(firstLane, firstResult.capture, 1);
         recordFailure(firstLane, firstResult.error.message, 1);
