@@ -61,6 +61,21 @@ const LANE_MAX_CONCURRENT_CAPTURES = 2;
 const PREWARM_PER_LANE = 2;
 const PREWARM_URL = 'https://www.tiktok.com/';
 
+/**
+ * Rejection marker for a race attempt that lost to another racer (or was
+ * cancelled by the race owner after a winner settled): not a lane failure.
+ * captureRoom's rejection handler checks the marker and skips
+ * recordFailure, so a healthy lane does not accrue consecutiveFailures —
+ * and eventually a profile rotation — for delivering a valid capture a
+ * hair slower than its sibling.
+ */
+class RaceLostError extends Error {
+  constructor(lane: string) {
+    super(`lane race cancelled (${lane || 'direct'})`);
+    this.name = 'RaceLostError';
+  }
+}
+
 // Stealth evasions: TikTok's secSDK fingerprints the browser environment, and
 // since 2026-09-09 TikTok refuses webcast data endpoints to sessions that look
 // automated (zerodytrash/TikTok-Live-Connector#329). Same plugin stack the
@@ -166,6 +181,8 @@ interface ProxyLane {
   waiters: Array<() => void>;
   /** Booked capture slots (see LANE_MAX_CONCURRENT_CAPTURES). */
   slots: number;
+  /** True once the lane was torn down (proxy gone / profile rotated). */
+  detached: boolean;
 }
 
 /**
@@ -228,7 +245,8 @@ export class ViewerPool {
       prewarmed: [],
       prewarmRefilling: false,
       waiters: [],
-      slots: 0
+      slots: 0,
+      detached: false
     };
     this.lanes.set(host, lane);
     this.laneOrder = [...this.lanes.keys()];
@@ -473,9 +491,11 @@ export class ViewerPool {
       return promise.then(
         (capture) => ({ lane, capture }),
         (error: Error) => {
-          if (cancels.length === 0) {
-            // The race already settled (winner found, cancels drained):
-            // this loser was cancelled, not failed — do not bench it.
+          if (error instanceof RaceLostError) {
+            // Lost the race to a sibling racer (or cancelled by the owner
+            // after a winner settled): not a lane failure — a lane that
+            // delivered a valid capture a hair slower must not accrue
+            // consecutiveFailures toward profile rotation.
             throw new Error(`race loser (${lane.host}): cancelled`);
           }
           recordFailure(lane, error.message, 2);
@@ -532,6 +552,7 @@ export class ViewerPool {
   private teardownLane(lane: ProxyLane): void {
     lane.browser = null;
     lane.launching = null;
+    lane.detached = true;
     for (const [username, laneHost] of [...this.roomLane]) {
       if (laneHost === lane.host) {
         this.roomLane.delete(username);
@@ -544,6 +565,10 @@ export class ViewerPool {
     }
     for (const page of lane.prewarmed) void page.close().catch(() => undefined);
     lane.prewarmed = [];
+    // Queued waiters must not book a slot on the detached lane: its proxy
+    // is gone from this.lanes, and a booked waiter would launch a browser
+    // for it that nothing ever closes. The detached flag makes their
+    // release() resolve false (lane gone, fail fast).
     for (const release of lane.waiters.splice(0)) release();
   }
 
@@ -562,7 +587,10 @@ export class ViewerPool {
     const deadline = Date.now() + timeoutMs;
     const booked = await new Promise<boolean>((resolve) => {
       const release = () => {
-        if (lane.slots < LANE_MAX_CONCURRENT_CAPTURES) {
+        if (lane.detached) {
+          lane.waiters = lane.waiters.filter((w) => w !== release);
+          resolve(false);
+        } else if (lane.slots < LANE_MAX_CONCURRENT_CAPTURES) {
           lane.slots++;
           lane.waiters = lane.waiters.filter((w) => w !== release);
           resolve(true);
@@ -687,9 +715,11 @@ export class ViewerPool {
    * loser must not overwrite the winner's entries — its page gets closed
    * by cancel, and a closed page registered as the room's warm tab turns
    * the next capture for that room into a guaranteed dead-tab attempt.
-   * The winner is decided once, in captureRoom, and passed down here as
-   * `willRegister` — flipped by the loser side the moment the race
-   * settles against it, before cancel() closes the page.
+   * Two mechanisms keep it single-winner: the shared `claim` token
+   * (first racer to reach a capture wins it; the rest loseRace and close
+   * their own page, rejecting with RaceLostError so the lane accrues no
+   * failure) and the owner-side `willRegister` flip, which cancels a
+   * claimed winner mid-registration if the race owner settles against it.
    */
   private attemptOnLane(
     username: string,
@@ -737,7 +767,7 @@ export class ViewerPool {
       if (page && onResponse) page.off('response', onResponse);
       if (page) void page.close().catch(() => undefined);
       releaseSlotOnce();
-      reject(new Error(`lane race cancelled (${lane.host || 'direct'})`));
+      reject(new RaceLostError(lane.host));
     };
     options.registerCancel?.(cancel);
 
@@ -824,13 +854,15 @@ export class ViewerPool {
           const loseRace = async () => {
             // A racer that reached a capture but is not the race's winner:
             // close our own page, keep the winner's registration intact.
+            // Rejected with the marker so captureRoom does not count it
+            // as a lane failure.
             cancelled = true;
             clearTimeout(fail);
             clearTimeout(heartbeat);
             capturePage.off('response', onResponse!);
             await capturePage.close().catch(() => undefined);
             releaseSlotOnce();
-            reject(new Error(`lane race cancelled (${lane.host || 'direct'})`));
+            reject(new RaceLostError(lane.host));
           };
           if (!willRegister.value) {
             // The race owner cancelled us (loser of the race).
@@ -885,12 +917,10 @@ export class ViewerPool {
         // reload (which replays the whole page bootstrap) click through the
         // SPA: the site is a React app, and an in-page navigation to the room
         // route re-runs just the player bootstrap against the warm session.
-        // Falls back to a plain reload if the in-page navigation throws (SPA
-        // hook shape changed) — the reload path always worked.
         const nav =
           existing
-            ? capturePage
-                .evaluate(
+            ? Promise.race([
+                capturePage.evaluate(
                   (target) => {
                     const anchor = document.createElement('a');
                     anchor.href = target;
@@ -901,7 +931,15 @@ export class ViewerPool {
                     return true;
                   },
                   `https://www.tiktok.com/@${username}/live`
+                ),
+                // evaluate carries no timeout of its own; a wedged warm
+                // tab would otherwise hang the nav chain until the
+                // overall fail timer, skipping the reload fallback and
+                // the zombie fast-fail entirely.
+                new Promise<never>((_, timeout) =>
+                  setTimeout(() => timeout(new Error('spa navigate timed out')), 30_000)
                 )
+              ])
                 .then(() =>
                   capturePage.waitForNavigation({
                     waitUntil: 'domcontentloaded',

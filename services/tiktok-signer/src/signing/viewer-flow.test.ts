@@ -12,6 +12,8 @@ function fakePage(behavior: {
   livePlayerFoundAt?: number;
   navDelayMs?: number;
   navError?: boolean;
+  /** Delay before cookies() resolves, to hold the winner mid-registration. */
+  cookieDelayMs?: number;
 }) {
   const listeners = new Set<Function>();
   let closed = false;
@@ -28,7 +30,12 @@ function fakePage(behavior: {
     setUserAgent: async () => undefined,
     setRequestInterception: async () => undefined,
     authenticate: async () => undefined,
-    cookies: async () => [],
+    cookies: async () => {
+      if (behavior.cookieDelayMs) {
+        await new Promise((r) => setTimeout(r, behavior.cookieDelayMs));
+      }
+      return [];
+    },
     goto: async (url: string) => {
       navLog.push(`goto:${url}`);
       if (behavior.navDelayMs) {
@@ -92,6 +99,8 @@ function poolInternals(pool: ViewerPool) {
       prewarmRefilling: boolean;
       waiters: Array<() => void>;
       slots: number;
+      benchedUntil: number;
+      consecutiveFailures: number;
     }>;
     tabs: Map<string, { page: unknown; lastUsed: number }>;
     roomLane: Map<string, string>;
@@ -255,22 +264,24 @@ describe('ViewerPool capture flow (fake pages)', () => {
     await pool.close();
   });
 
-  it('a racer does not steal another lane\'s warm tab for the room', async () => {
+  it('an attempt on lane B does not steal lane A\'s warm tab for the room', async () => {
     const pool = new ViewerPool({ proxyHosts: ['laneA:1', 'laneB:2'], userDataDir: '/tmp/x' });
     const internals = poolInternals(pool);
-    // A warm tab for the room lives on lane A.
-    // A warm tab for the room lives on lane A. Its SPA navigation is dead
-    // (navError), so the first attempt on the pinned lane fails and the
-    // race rides lane B.
-    const warm = fakePage({ navError: true });
+    // A live warm tab for the room sits on lane A. Lane A is benched, so
+    // pickLane's round-robin hands the first attempt to lane B — with the
+    // warm tab still registered. Pre-fix code keyed reuse by username
+    // alone and SPA-navigated lane A's page from lane B's attempt,
+    // mixing the room's session across profiles; post-fix the attempt
+    // takes lane B's own prewarmed tab.
+    const warm = fakePage({
+      responses: [
+        { url: 'https://webcast.tiktok.com/webcast/im/fetch/?room_id=5', status: 200, body: GOOD_BODY }
+      ]
+    });
     internals.tabs.set('room', { page: warm.page, lastUsed: Date.now() });
     internals.roomLane.set('room', 'laneA:1');
+    internals.lanes.get('laneA:1')!.benchedUntil = Date.now() + 60_000;
 
-    // The room is pinned to lane A but its navigation dies: the race rides
-    // lane B, whose racer must NOT SPA-navigate lane A's warm tab. The
-    // racer takes its own prewarmed tab instead.
-    const laneAPage = fakePage({ navError: true });
-    internals.lanes.get('laneA:1')!.prewarmed.push(laneAPage.page);
     const laneBPage = fakePage({
       responses: [
         { url: 'https://webcast.tiktok.com/webcast/im/fetch/?room_id=5', status: 200, body: GOOD_BODY }
@@ -280,11 +291,12 @@ describe('ViewerPool capture flow (fake pages)', () => {
 
     const capture = await pool.captureRoom('room', { timeoutMs: 20_000 });
     expect(capture.roomId).toBe('5');
-    // The winner registered its own page (lane B's), and the old warm tab
-    // was never touched by the racer: no 'spa' nav on it.
+    // Lane A's warm tab was never touched by lane B's attempt.
+    expect(warm.navLog).not.toContain('spa');
+    // The capture came from lane B's own page, and the room is now
+    // registered with that page.
     expect(internals.tabs.get('room')?.page).toBe(laneBPage.page);
     expect(internals.roomLane.get('room')).toBe('laneB:2');
-    expect(warm.navLog).not.toContain('spa');
     await pool.close();
   });
 
@@ -292,31 +304,38 @@ describe('ViewerPool capture flow (fake pages)', () => {
     const pool = new ViewerPool({ proxyHosts: ['pin:1', 'win:2', 'lose:3'], userDataDir: '/tmp/x' });
     const internals = poolInternals(pool);
     // First attempt (pinned lane) dies instantly; the race then rides the
-    // other two lanes. Both racers capture, but the winner is whichever
-    // the race resolves first; the loser's onResponse must see the race
-    // settled against it and close its own page without registering.
+    // other two lanes. Both racers reach a capture: the winner's cookie
+    // read is held open (cookieDelayMs) so the loser's onResponse runs
+    // while the winner is still mid-registration — the exact window the
+    // claim token exists for. Pre-fix code let the loser's registration
+    // win; post-fix the loser sees the claim taken and closes its page.
     const pin = fakePage({ navError: true });
     internals.lanes.get('pin:1')!.prewarmed.push(pin.page);
     const winner = fakePage({
       responses: [
         { url: 'https://webcast.tiktok.com/webcast/im/fetch/?room_id=11', status: 200, body: GOOD_BODY }
-      ]
+      ],
+      cookieDelayMs: 40
     });
     internals.lanes.get('win:2')!.prewarmed.push(winner.page);
     const loser = fakePage({
       responses: [
         { url: 'https://webcast.tiktok.com/webcast/im/fetch/?room_id=12', status: 200, body: GOOD_BODY }
-      ],
-      navDelayMs: 30
+      ]
     });
     internals.lanes.get('lose:3')!.prewarmed.push(loser.page);
     internals.roomLane.set('roomx', 'pin:1');
 
     const capture = await pool.captureRoom('roomx', { timeoutMs: 20_000 });
     expect(capture.roomId).toBe('11');
-    // The registered tab is the winner's live page, not a closed loser.
+    // The registered tab is the winner's live page, not the loser's.
     expect(internals.tabs.get('roomx')?.page).toBe(winner.page);
     expect(internals.roomLane.get('roomx')).toBe('win:2');
+    // The loser closed its own page without registering or benching, and
+    // its lane accrued no failure: a lane that delivered a valid capture
+    // a hair slower must not count toward profile rotation.
+    expect(loser.navLog).not.toContain('spa');
+    expect(internals.lanes.get('lose:3')!.consecutiveFailures).toBe(0);
     await pool.close();
   });
 });
