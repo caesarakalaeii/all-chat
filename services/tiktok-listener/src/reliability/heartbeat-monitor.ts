@@ -116,7 +116,10 @@ export class HeartbeatMonitor {
   }
 
   /**
-   * Record that a message was received
+   * Record wire liveness: a decodable frame arrived. Fed from the
+   * decodedData hook (any method), not only the five delivery handlers, so
+   * a live-but-quiet stream stays connected on its RoomUserSeq traffic.
+   * Streak healing stays stricter — it requires a delivered message.
    *
    * @param username TikTok username
    */
