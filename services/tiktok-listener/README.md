@@ -122,9 +122,18 @@ TIKTOK_HEARTBEAT_TIMEOUT_MS=90000      # Silence before a forced reconnect (defa
 
 # WS connect flap (2026-09-16 transport plan): TikTok answering the upgrade
 # with HTTP 200 is a transient flap; connect retries immediately up to
-# WS_FLAP_MAX_FAST_RETRIES (3) x 1s before falling into normal error backoff.
-# Metrics: tiktok_ws_flap_total, tiktok_ws_flap_retries_total,
-# tiktok_ws_flap_exhausted_total.
+# TIKTOK_FLAP_MAX_FAST_RETRIES before falling into normal error backoff.
+# Retries 1-2 wait TIKTOK_FLAP_RETRY_DELAY_MS, retries 3+ wait 3x that —
+# prod flaps (2026-09-17) are session-scoring artifacts that ease with
+# spacing. Defaults: 3 x 1000ms (lab-measured). Metrics: tiktok_ws_flap_total,
+# tiktok_ws_flap_retries_total, tiktok_ws_flap_exhausted_total.
+TIKTOK_FLAP_MAX_FAST_RETRIES=3
+TIKTOK_FLAP_RETRY_DELAY_MS=1000
+
+# Pre-sign lane pinning (WS egress): when the signer answers a pre-sign with
+# no proxy lane (direct egress), the pre-sign is skipped for 10 minutes —
+# its ~50s capture round-trip cannot pin anything. The first answer that
+# does carry a lane re-enables pinning immediately.
 
 # Canary rooms (phase 2): rooms mirrored against the signer's viewer-tab
 # relay (signer: SIGNER_RELAY_CANARY_ROOMS). Divergence logs +
@@ -145,7 +154,10 @@ DEMAND_SAFETY_INTERVAL_MS=25000       # Demand safety-net poll; also re-register
                                       # peer and drives lease rebalancing. Must stay below
                                       # source-manager's 30s peer TTL or the observed peer count
                                       # never stabilizes and rebalancing never fires
-
+                                      # Release selection ranks by wire freshness (heartbeat
+                                      # monitor): idle rooms are released first, hot rooms
+                                      # (message <60s ago) last — a moved hot room must re-handshake
+                                      # on the receiving pod for nothing.
 # Connection ceiling per pod
 TIKTOK_MAX_STREAMS_PER_POD=20         # Hard cap on concurrent WebSocket connections. The Euler
                                       # free tier proxies every connection and caps concurrent ones
