@@ -9,13 +9,13 @@ working plan; the PR description carries the shipped account.
 at "Phase 4" below.
 
 **Two operator notes (2026-09-17):**
-- **Flap retry tuning is expected.** WS_FLAP_MAX_FAST_RETRIES (3) and
-  WS_FLAP_RETRY_DELAY_MS (1000) are lab-measured constants in
-  `connection-decisions.ts` — NOT env-configurable yet. Prod may show
-  different flap-clear rates; if `tiktok_ws_flap_retries_total` succeeds
-  on attempt 1-2 but exhaustion still fires, the budget is fine; if rooms
-  clear on attempt 4+, raise the retries (and consider making both
-  env-tunable, mirroring TIKTOK_FALLBACK_MAX_DURATION_MS).
+- **Flap retry tuning is env-tunable** (2026-09-17): `TIKTOK_FLAP_MAX_FAST_RETRIES`
+  and `TIKTOK_FLAP_RETRY_DELAY_MS` (defaults 3 / 1000ms, the lab-measured
+  constants in `connection-decisions.ts`). Prod measured rooms clearing on
+  attempt 4-8, so prod sets retries to 6; retry waits progress 1s, 1s, then
+  3s — flaps are session-scoring artifacts that ease with spacing. Judge by
+  `tiktok_ws_flap_retries_total` vs `tiktok_ws_flap_exhausted_total`: if
+  retries succeed but exhaustion still fires, the budget is fine.
 - **Promotion is the breakage canary.** `TikTokFallbackPromoted` (added to
   `allchat-warning-alerts.yaml`, fires on ANY promotion) alerts when a
   premium room switches tiers — the upgraded users are the first to feel
