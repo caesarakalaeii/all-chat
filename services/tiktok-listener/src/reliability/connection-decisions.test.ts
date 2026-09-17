@@ -20,6 +20,9 @@ import { describe, expect, it } from 'vitest';
 import {
   connectionCeilingReached,
   isWsFlapError,
+  nextFlapRetryDelayMs,
+  NoLaneCache,
+  NO_LANE_CACHE_TTL_MS,
   shouldBackOffReconnect,
   SILENT_FAILURE_STREAK_THRESHOLD,
   WS_FLAP_MAX_FAST_RETRIES,
@@ -124,5 +127,56 @@ describe('isWsFlapError', () => {
     expect(WS_FLAP_MAX_FAST_RETRIES).toBeLessThanOrEqual(5);
     expect(WS_FLAP_RETRY_DELAY_MS).toBeGreaterThanOrEqual(1000);
     expect(WS_FLAP_RETRY_DELAY_MS).toBeLessThanOrEqual(2000);
+  });
+});
+
+describe('nextFlapRetryDelayMs', () => {
+  // The first two retries stay at the base delay (a flap usually clears
+  // fast); beyond that the wait triples, because prod flaps are
+  // session-scoring artifacts that ease with spacing and a 1s hammer just
+  // burns handshakes.
+  it('keeps the base delay for the first two retries', () => {
+    expect(nextFlapRetryDelayMs(1, 1000)).toBe(1000);
+    expect(nextFlapRetryDelayMs(2, 1000)).toBe(1000);
+  });
+
+  it('triples the delay from the third retry on', () => {
+    expect(nextFlapRetryDelayMs(3, 1000)).toBe(3000);
+    expect(nextFlapRetryDelayMs(6, 1000)).toBe(3000);
+  });
+
+  it('scales with a tuned base delay', () => {
+    expect(nextFlapRetryDelayMs(4, 2000)).toBe(6000);
+  });
+});
+
+describe('NoLaneCache', () => {
+  // Under direct egress the pre-sign cannot pin anything, so its ~50s
+  // capture round-trip must be skipped for the TTL — and the first answer
+  // carrying a lane must re-arm pinning immediately.
+
+  it('is inactive before any sign answer', () => {
+    expect(new NoLaneCache().skipActive()).toBe(false);
+  });
+
+  it('skips the pre-sign for the TTL after a no-lane answer', () => {
+    const cache = new NoLaneCache();
+    cache.markNoLane();
+    expect(cache.skipActive()).toBe(true);
+    expect(cache.skipActive(Date.now() + NO_LANE_CACHE_TTL_MS - 1)).toBe(true);
+    expect(cache.skipActive(Date.now() + NO_LANE_CACHE_TTL_MS)).toBe(false);
+  });
+
+  it('re-arms pinning immediately after a lane answer', () => {
+    const cache = new NoLaneCache();
+    cache.markNoLane();
+    cache.markLane();
+    expect(cache.skipActive()).toBe(false);
+  });
+
+  it('stays re-armed after the TTL expires on its own', () => {
+    const cache = new NoLaneCache();
+    cache.markNoLane(Date.now());
+    expect(cache.skipActive(Date.now() + NO_LANE_CACHE_TTL_MS + 1)).toBe(false);
   });
 });

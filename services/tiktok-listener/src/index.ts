@@ -64,6 +64,8 @@ import { MessageDeduplicator } from './deduplication/message-deduplicator.js';
 import {
   connectionCeilingReached,
   isWsFlapError,
+  nextFlapRetryDelayMs,
+  NoLaneCache,
   shouldBackOffReconnect,
   WS_FLAP_MAX_FAST_RETRIES,
   WS_FLAP_RETRY_DELAY_MS
@@ -177,6 +179,19 @@ const TIKTOK_FALLBACK_ENABLED =
 // budget, so no room can silently live on the relay tier forever.
 const TIKTOK_FALLBACK_MAX_DURATION_MS = parseInt(
   process.env.TIKTOK_FALLBACK_MAX_DURATION_MS || '21600000', // 6 hours
+  10
+);
+
+// WS flap fast-retry budget (2026-09-16 transport plan, phase 1). Lab
+// measured 3x1s clearing by attempt 3; prod 2026-09-17 saw walls clearing on
+// attempt 4-8, so the budget is env-tunable to keep that inside the fast
+// path without a redeploy. Defaults live in connection-decisions.ts.
+const TIKTOK_FLAP_MAX_FAST_RETRIES = parseInt(
+  process.env.TIKTOK_FLAP_MAX_FAST_RETRIES || String(WS_FLAP_MAX_FAST_RETRIES),
+  10
+);
+const TIKTOK_FLAP_RETRY_DELAY_MS = parseInt(
+  process.env.TIKTOK_FLAP_RETRY_DELAY_MS || String(WS_FLAP_RETRY_DELAY_MS),
   10
 );
 
@@ -461,6 +476,9 @@ class TikTokListenerService {
   // same lane. Undefined when self signing is not configured.
   private selfSigner?: SelfSigner;
 
+
+  // Pre-sign no-lane negative cache (see NoLaneCache): pool-wide, not per-room.
+  private readonly noLaneCache = new NoLaneCache();
   // Canary consumers per room (phase 2): only rooms in TIKTOK_CANARY_ROOMS
   // get one; divergence is logged + counted, never load-bearing.
   private canaryConsumers: Map<string, CanaryConsumer> = new Map();
@@ -1093,7 +1111,19 @@ class TikTokListenerService {
       // pod would re-acquire everything it just shed, from the poll path or
       // from a Pub/Sub demand republish.
       if (this.leadershipCoordinator) {
-        const released = await this.leadershipCoordinator.rebalance(demanded.size, TIKTOK_MAX_STREAMS_PER_POD);
+        // Rank release candidates by wire freshness so a rebalance sheds
+        // idle rooms first: a moved hot room pays a full re-handshake (and
+        // flap exposure) on the receiving pod for nothing.
+        const freshness = new Map(
+          this.heartbeatMonitor
+            .getStats()
+            .usernames.map((u) => [u.username, u.last_message_seconds_ago] as const)
+        );
+        const released = await this.leadershipCoordinator.rebalance(
+          demanded.size,
+          TIKTOK_MAX_STREAMS_PER_POD,
+          (username) => freshness.get(username)
+        );
         // Set every hold synchronously before any teardown awaits: a Pub/Sub
         // snapshot can arrive mid-teardown, and a lease released by rebalance()
         // but not yet held would be re-claimable in that window.
@@ -1230,7 +1260,7 @@ class TikTokListenerService {
       // returns in milliseconds. Skipped when self signing is off (Euler
       // signs in its own cloud and rides its own proxy already).
       let wsAgent: WsEgressAgent | undefined;
-      if (this.selfSigner && this.proxyCredentials) {
+      if (this.selfSigner && this.proxyCredentials && !this.noLaneCache.skipActive()) {
         try {
           const preSignStartedAt = Date.now();
           const preSign = await this.selfSigner.sign({
@@ -1239,6 +1269,8 @@ class TikTokListenerService {
             userAgent: 'ws-pin'
           });
           if (preSign.fetchResultProxyHost) {
+            // Lanes are back: re-arm pinning for every subsequent connect.
+            this.noLaneCache.markLane();
             const { username: proxyUser, password: proxyPass } = this.proxyCredentials;
             wsAgent = createChromeTlsProxyAgent(
               `http://${proxyUser}:${proxyPass}@${preSign.fetchResultProxyHost}`
@@ -1252,13 +1284,19 @@ class TikTokListenerService {
           } else {
             // The signer answered but named no lane (direct capture or an
             // older signer): the WS dial defaults to pod egress, which is
-            // exactly the shape that produced the 2026-09-16 flaps.
+            // exactly the shape that produced the 2026-09-16 flaps. Under
+            // direct egress the lane is never coming back per-connect, so
+            // park the pre-sign for the cache TTL instead of paying its
+            // ~50s capture round-trip on every retry.
+            this.noLaneCache.markNoLane();
             this.metrics.recordLanePinOutcome('unpinned_no_lane');
             logger.warn('Pre-sign returned no proxy lane; connecting unpinned', { username });
           }
         } catch (error) {
           // Do not fail the connect on a pre-sign error: the connector's own
           // sign call will surface the same problem with a proper SignatureFailure.
+          // A sign failure never touches the no-lane cache — it is an
+          // availability problem, not a lane state.
           this.metrics.recordLanePinOutcome('failed');
           logger.warn('Pre-sign for WS lane pinning failed; connecting unpinned', {
             username,
@@ -1266,9 +1304,11 @@ class TikTokListenerService {
           });
         }
       } else {
-        // Euler path or credentials not yet fetched: pinning is off by design.
+        // Euler path, credentials not yet fetched, or the no-lane cache is
+        // holding: pinning is off.
         this.metrics.recordLanePinOutcome('skipped');
       }
+
 
       const connection = new TikTokLiveConnection(username, {
         processInitialData: false, // Don't process historical messages
@@ -1452,10 +1492,13 @@ class TikTokListenerService {
       // Connect. A WS flap ("Unexpected server response: 200") is retried
       // immediately and outside normal error backoff: lab-measured 2026-09-16
       // it clears by attempt 3, while the escalating backoff would park the
-      // room for minutes over a transient. The connector resets its state to
-      // DISCONNECTED on a failed connect, so the same connection object can
-      // be re-dialled. Any other error propagates to the catch below, which
-      // keeps the poller's backoff semantics for real failures.
+      // room for minutes over a transient. Prod 2026-09-17 saw walls clear on
+      // attempt 4-8, so the budget and base delay are env-tunable
+      // (TIKTOK_FLAP_MAX_FAST_RETRIES / TIKTOK_FLAP_RETRY_DELAY_MS). The
+      // connector resets its state to DISCONNECTED on a failed connect, so
+      // the same connection object can be re-dialled. Any other error
+      // propagates to the catch below, which keeps the poller's backoff
+      // semantics for real failures.
       for (let attempt = 1; ; attempt++) {
         try {
           await connection.connect();
@@ -1463,7 +1506,7 @@ class TikTokListenerService {
         } catch (error) {
           if (!isWsFlapError(error)) throw error;
           this.metrics.recordWsFlap(username);
-          if (attempt > WS_FLAP_MAX_FAST_RETRIES) {
+          if (attempt > TIKTOK_FLAP_MAX_FAST_RETRIES) {
             this.metrics.recordWsFlapExhausted(username);
             logger.warn('WS flap did not clear after fast retries', {
               username,
@@ -1478,12 +1521,13 @@ class TikTokListenerService {
             throw error;
           }
           this.metrics.recordWsFlapRetry(username);
+          const retryDelayMs = nextFlapRetryDelayMs(attempt, TIKTOK_FLAP_RETRY_DELAY_MS);
           logger.info('WS connect flap; retrying immediately', {
             username,
             attempt,
-            retry_in_ms: WS_FLAP_RETRY_DELAY_MS
+            retry_in_ms: retryDelayMs
           });
-          await new Promise<void>((resolve) => setTimeout(resolve, WS_FLAP_RETRY_DELAY_MS));
+          await new Promise<void>((resolve) => setTimeout(resolve, retryDelayMs));
         }
       }
     } catch (error) {

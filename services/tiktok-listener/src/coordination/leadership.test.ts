@@ -17,7 +17,11 @@
  */
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { LeadershipCoordinator } from './leadership.js';
+import {
+  HOT_ROOM_THRESHOLD_SECONDS,
+  LeadershipCoordinator,
+  selectLeasesToRelease
+} from './leadership.js';
 import type { Logger } from '../types/logger.js';
 
 /**
@@ -56,7 +60,6 @@ const silentLogger: Logger = {
   error: vi.fn(),
   debug: vi.fn()
 };
-
 /** Claim `n` leases so the coordinator has a fleet to shed. */
 async function claimLeases(coord: LeadershipCoordinator, names: string[]): Promise<void> {
   for (const name of names) {
@@ -65,13 +68,21 @@ async function claimLeases(coord: LeadershipCoordinator, names: string[]): Promi
 }
 
 /** Two rebalance cycles with a stable peer count in between, so the stabilization gate opens. */
-async function settleRebalance(coord: LeadershipCoordinator, total: number, maxPerPod?: number): Promise<string[]> {
-  const first = await coord.rebalance(total, maxPerPod); // records peer count, starts the window
+async function settleRebalance(
+  coord: LeadershipCoordinator,
+  total: number,
+  maxPerPod?: number,
+  secondsSinceLastMessage?: (streamID: string) => number | undefined
+): Promise<string[]> {
+  const first = await coord.rebalance(total, maxPerPod, secondsSinceLastMessage); // records peer count, starts the window
   vi.advanceTimersByTime(31_000);
-  const second = await coord.rebalance(total, maxPerPod);
+  const second = await coord.rebalance(total, maxPerPod, secondsSinceLastMessage);
   expect(first).toEqual([]);
   return second;
 }
+
+const byMap = (freshness: Record<string, number>): ((streamID: string) => number | undefined) =>
+  (streamID) => freshness[streamID];
 
 describe('LeadershipCoordinator.rebalance', () => {
   beforeEach(() => {
@@ -187,5 +198,90 @@ describe('LeadershipCoordinator.rebalance', () => {
 
     expect(released).toEqual(['c', 'd', 'e', 'f', 'g', 'h']);
     expect(coord.getLeaseCount()).toBe(2);
+  });
+});
+
+describe('selectLeasesToRelease', () => {
+  // The 2026-09-17 rebalance released a room delivering ~1.6 msg/s to a
+  // healthy peer; the receiving pod then burned a full flap cycle
+  // re-handshaking. Selection must rank by freshness, not by ID.
+
+  it('releases idle rooms before hot rooms', () => {
+    // shed-2 with 2 idle + 3 hot: the 2 idle go, hot rooms survive.
+    const released = selectLeasesToRelease(
+      ['hot1', 'idle1', 'hot2', 'idle2', 'hot3'],
+      2,
+      byMap({ hot1: 5, hot2: 10, hot3: 30, idle1: 500, idle2: 900 })
+    );
+    expect(released).toEqual(['idle1', 'idle2']);
+  });
+
+  it('falls back to the least-hot rooms when idle rooms do not cover the shed', () => {
+    // shed-3 with 1 idle + 3 hot: the idle goes first, then the hottest
+    // rooms by oldest message time; the freshest room survives.
+    const released = selectLeasesToRelease(
+      ['hot1', 'idle', 'hot2', 'hot3'],
+      3,
+      byMap({ hot1: 5, hot2: 40, hot3: 70, idle: 900 })
+    );
+    expect(released).toEqual(['hot2', 'hot3', 'idle']);
+  });
+
+  it('treats rooms with no monitor entry as maximally releasable', () => {
+    // A never-connected room (fresh demand) must flow to the least-loaded
+    // pod as it does today, even next to a hot room.
+    const released = selectLeasesToRelease(['hot', 'cold-start'], 1, byMap({ hot: 5 }));
+    expect(released).toEqual(['cold-start']);
+  });
+
+  it('breaks freshness ties alphabetically, matching the Go coordinator', () => {
+    const released = selectLeasesToRelease(['b', 'a', 'c'], 1, byMap({ a: 500, b: 500, c: 5 }));
+    expect(released).toEqual(['a']);
+  });
+
+  it('sorts the released set alphabetically for deterministic log parity', () => {
+    const released = selectLeasesToRelease(['z', 'y', 'x'], 3, byMap({ z: 900, y: 800, x: 700 }));
+    expect(released).toEqual(['x', 'y', 'z']);
+  });
+});
+
+describe('LeadershipCoordinator.rebalance with freshness', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  it('sheds idle leases and keeps delivering ones when ranking is available', async () => {
+    const client = new FakeClient(2);
+    const coord = new LeadershipCoordinator('tiktok', client as never, silentLogger);
+    await claimLeases(coord, ['idle1', 'hot1', 'idle2', 'hot2', 'hot3']);
+
+    // ceil(4/2) = 2 → shed 3; only 2 are idle, so the least-hot room goes too.
+    const released = await settleRebalance(coord, 4, undefined, byMap({ hot1: 5, hot2: 10, hot3: 30, idle1: 500, idle2: 900 }));
+
+    expect(released).toEqual(['hot3', 'idle1', 'idle2']);
+    expect(coord.hasLeadership('hot1')).toBe(true);
+    expect(coord.hasLeadership('hot2')).toBe(true);
+  });
+
+  it('keeps the alphabetical Go behaviour when no freshness accessor is given', async () => {
+    const client = new FakeClient(2);
+    const coord = new LeadershipCoordinator('tiktok', client as never, silentLogger);
+    await claimLeases(coord, ['a', 'b', 'c', 'd', 'e']);
+
+    const released = await settleRebalance(coord, 4);
+
+    expect(released).toEqual(['c', 'd', 'e']);
+  });
+
+  it('releases only idle rooms when they cover the whole shed', async () => {
+    const client = new FakeClient(2);
+    const coord = new LeadershipCoordinator('tiktok', client as never, silentLogger);
+    await claimLeases(coord, ['hot1', 'hot2', 'idle1', 'idle2']);
+
+    // ceil(2/2) = 1 → shed 3; both idle go plus the least-hot.
+    const released = await settleRebalance(coord, 2, undefined, byMap({ hot1: 5, hot2: 7, idle1: 400, idle2: 800 }));
+
+    expect(released).toEqual(['hot2', 'idle1', 'idle2']);
+    expect(coord.hasLeadership('hot1')).toBe(true);
   });
 });

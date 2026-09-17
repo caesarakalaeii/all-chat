@@ -69,6 +69,44 @@ export const WS_FLAP_MAX_FAST_RETRIES = 3;
 /** Delay between flap retries. Lab flap cleared on attempt 3; 1s is enough. */
 export const WS_FLAP_RETRY_DELAY_MS = 1000;
 
+/**
+ * Wait before flap retry `attempt` (the attempt number that just flapped,
+ * 1-based). Prod flaps 2026-09-17 cleared on attempt 4-8: they are
+ * session-scoring artifacts that ease with spacing, so past the first two
+ * quick retries the wait triples instead of burning handshakes every second.
+ */
+export function nextFlapRetryDelayMs(attempt: number, baseMs: number): number {
+  return attempt <= 2 ? baseMs : baseMs * 3;
+}
+
+/**
+ * Negative cache for the WS pre-sign lane check. Under direct egress the
+ * signer answers with no proxy lane, so the pre-sign cannot pin anything
+ * and its ~50s capture round-trip is pure latency on every connect attempt.
+ * A successful no-lane answer parks the pre-sign for the TTL; the first
+ * answer that does carry a lane clears it, so pinning resumes the moment
+ * lanes return without a restart. Sign *failures* never touch the cache:
+ * that is an availability problem, not a lane state, and hiding it would
+ * delay diagnosing a signer outage.
+ */
+export const NO_LANE_CACHE_TTL_MS = 10 * 60_000;
+
+export class NoLaneCache {
+  private until = 0;
+
+  skipActive(now: number = Date.now()): boolean {
+    return now < this.until;
+  }
+
+  markNoLane(now: number = Date.now()): void {
+    this.until = now + NO_LANE_CACHE_TTL_MS;
+  }
+
+  markLane(): void {
+    this.until = 0;
+  }
+}
+
 export function isWsFlapError(error: unknown): boolean {
   return error instanceof Error && error.message.includes(WS_FLAP_SIGNATURE);
 }
