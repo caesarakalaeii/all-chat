@@ -271,8 +271,8 @@ type instagramPage struct {
 // account: it enumerates the Pages the user can perform tasks on and picks one
 // with a connected IG professional account (the IG business account field on
 // the Page is the documented Page→IG mapping,
-// https://developers.facebook.com/documentation/instagram-platform/instagram-api-with-facebook-login/get-started,
-// step 5). A Page the user can at least CREATE_CONTENT on is preferred so the
+// https://developers.facebook.com/documentation/instagram-platform/instagram-api-with-facebook-login/get-started).
+// A Page the user can at least CREATE_CONTENT on is preferred so the
 // connected account is theirs, not one they merely browse.
 func (o *InstagramOAuth) GetStreamersInstagramAccount(ctx context.Context, longLivedUserToken string) (*InstagramAccount, error) {
 	var out struct {
