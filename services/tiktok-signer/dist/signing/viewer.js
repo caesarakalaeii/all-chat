@@ -250,6 +250,10 @@ export class ViewerPool {
             .then((browser) => {
             lane.browser = browser;
             lane.launching = null;
+            // A relaunch means this lane object is serving captures again
+            // (profile rotation reuses it): clear the teardown marker so its
+            // slot queue stops fail-fasting over-cap waiters.
+            lane.detached = false;
             // Park the first tabs now, not after the lane's first successful
             // capture: a lane's first cold capture is exactly the one that
             // benefits most from skipping the domain bootstrap.
@@ -576,16 +580,15 @@ export class ViewerPool {
      * loser must not overwrite the winner's entries — its page gets closed
      * by cancel, and a closed page registered as the room's warm tab turns
      * the next capture for that room into a guaranteed dead-tab attempt.
-     * Two mechanisms keep it single-winner: the shared `claim` token
-     * (first racer to reach a capture wins it; the rest loseRace and close
-     * their own page, rejecting with RaceLostError so the lane accrues no
-     * failure) and the owner-side `willRegister` flip, which cancels a
-     * claimed winner mid-registration if the race owner settles against it.
+     * The shared `claim` token keeps it single-winner: the first racer to
+     * reach a capture wins the claim; the rest loseRace and close their
+     * own page, rejecting with RaceLostError so the lane accrues no
+     * failure. The race owner's cancel() covers the remaining window (a
+     * racer still in flight when the race settles).
      */
     attemptOnLane(username, lane, timeoutMs, startedAt, options = {}) {
         const { promise, resolve, reject } = Promise.withResolvers();
         const claim = options.claim;
-        const willRegister = options.willRegister ?? { value: true };
         let cancelled = false;
         let fail;
         let heartbeat;
@@ -602,7 +605,6 @@ export class ViewerPool {
             if (cancelled)
                 return;
             cancelled = true;
-            willRegister.value = false;
             clearTimeout(fail);
             clearTimeout(heartbeat);
             if (page && onResponse)
@@ -701,11 +703,6 @@ export class ViewerPool {
                         releaseSlotOnce();
                         reject(new RaceLostError(lane.host));
                     };
-                    if (!willRegister.value) {
-                        // The race owner cancelled us (loser of the race).
-                        await loseRace();
-                        return;
-                    }
                     if (claim) {
                         if (claim.winner) {
                             // Another racer won the claim between our check and here.
@@ -722,12 +719,6 @@ export class ViewerPool {
                         const cookies = (await capturePage.cookies('https://www.tiktok.com'))
                             .map((c) => `${c.name}=${c.value}`)
                             .join('; ');
-                        if (!willRegister.value) {
-                            // Lost the race while the cookie read was in flight (the
-                            // owner's cancel() flipped the flag and closed the page).
-                            await loseRace();
-                            return;
-                        }
                         const roomId = new URL(url).searchParams.get('room_id') ?? username;
                         this.tabs.set(username, { page: capturePage, lastUsed: Date.now() });
                         this.roomLane.set(username, lane.host);
