@@ -523,6 +523,7 @@ export const admin = {
     requestFrom: 'Requested by {username}',
     approveLocale: 'Approve {code}',
     rejectLocale: 'Reject {code}',
+    localeApprovedToast: '{code} approved',
     localeRejectedToast: '{code} rejected',
     localeReviewFailedToast: 'Failed to review the language request',
     queueHeading: 'Review queue',
