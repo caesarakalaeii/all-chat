@@ -41,7 +41,12 @@ const LIVE_READY_DEADLINE_MS = 15_000;
 // Player roots only. A bare div[class*="live"] substring would match the
 // site-wide LIVE nav and let a zombie page that reached domcontentloaded
 // pass the heartbeat, defeating the fast-fail the deadline exists for.
-const LIVE_PAGE_SELECTOR = '#live-player, #LoginCanvas, div[class*="LIVE"], div[class*="Live"]';
+// #tiktok-live-main-container-id is what the live page actually mounts the
+// player into (verified 2026-09-17 on a page whose <video> was playing); the
+// shipped selector matched nothing, so every healthy capture was fast-failed
+// as a zombie — the 2026-09-17 total capture outage.
+const LIVE_PAGE_SELECTOR =
+  '#tiktok-live-main-container-id, #live-player, #LoginCanvas, div[class*="LIVE"], div[class*="Live"]';
 
 /**
  * How many concurrent room captures may run on one lane's browser. Every
@@ -667,7 +672,10 @@ export class ViewerPool {
     // blocked even though they sit on tiktok.com: the player never calls
     // them, and exempting "anything tiktok.com" would let analytics.tiktok
     // com straight back in. Non-media/font/image requests on tiktok.com,
-    // tiktokcdn and webcast hosts are allowed through.
+    // tiktokcdn, ttwstatic and webcast hosts are allowed through.
+    // .ttwstatic.com carries the live webapp's own stylesheets: leaving it
+    // out of firstParty meant the stylesheet rule aborted the live page's
+    // CSS, and the player never mounted (2026-09-17 outage, second cause).
     await page.setRequestInterception(true);
     page.on('request', (request) => {
       const type = request.resourceType();
@@ -684,7 +692,8 @@ export class ViewerPool {
         url.startsWith('https://www.tiktok.com/') ||
         url.startsWith('https://webcast') ||
         url.includes('.tiktok.com/') ||
-        url.includes('.tiktokcdn.com/');
+        url.includes('.tiktokcdn.com/') ||
+        url.includes('.ttwstatic.com/');
       if (!firstParty && type === 'stylesheet') {
         void request.abort().catch(() => undefined);
         return;
