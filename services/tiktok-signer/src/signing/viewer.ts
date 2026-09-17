@@ -29,6 +29,35 @@ import { rm } from 'fs/promises';
  */
 const PROFILE_ROTATE_FAILURES = 3;
 
+/**
+ * Fast-fail budget: if a freshly navigated page has not produced the live
+ * player's root element by this deadline, the attempt is a zombie (page hung,
+ * proxy stalling) and is aborted instead of burning the full per-attempt
+ * timeout. In-cluster captures that succeed show the player root within a few
+ * seconds of domcontentloaded; waiting longer only pays for lanes that were
+ * never going to answer.
+ */
+const LIVE_READY_DEADLINE_MS = 15_000;
+const LIVE_PAGE_SELECTOR = '#live-player, #LoginCanvas, div[class*="LIVE"], div[class*="live"]';
+
+/**
+ * How many concurrent room captures may run on one lane's browser. Every
+ * capture renders a TikTok live page; on llvmpipe several simultaneous renders
+ * starve each other's renderer loop and the slowest becomes an im/fetch
+ * timeout. Over-budget captures wait their turn instead of piling on.
+ */
+const LANE_MAX_CONCURRENT_CAPTURES = 2;
+
+/**
+ * How many single-use prewarmed tabs a lane keeps parked on the TikTok home
+ * page. A capture served from one skips the initial domain bootstrap (TLS,
+ * cookies seeding, first-paint JS): on cold starts measured 2026-09-16 the
+ * handshake overhead dominates before the player even starts. The tab is
+ * handed out, navigated to the room and becomes that room's warm tab.
+ */
+const PREWARM_PER_LANE = 2;
+const PREWARM_URL = 'https://www.tiktok.com/';
+
 // Stealth evasions: TikTok's secSDK fingerprints the browser environment, and
 // since 2026-09-09 TikTok refuses webcast data endpoints to sessions that look
 // automated (zerodytrash/TikTok-Live-Connector#329). Same plugin stack the
@@ -123,6 +152,16 @@ interface ProxyLane {
    * attempt, fresh profiles captured in 30-50s on the same lane+room).
    */
   consecutiveFailures: number;
+  /**
+   * Parked tabs on PREWARM_URL, handed out to cold captures. Bounded at
+   * PREWARM_PER_LANE; refilled opportunistically after each successful
+   * capture so the next cold room on this lane skips the domain bootstrap.
+   */
+  prewarmed: Page[];
+  /** Queued captures waiting for a lane slot under the concurrency cap. */
+  waiters: Array<() => void>;
+  /** Booked capture slots (see LANE_MAX_CONCURRENT_CAPTURES). */
+  slots: number;
 }
 
 /**
@@ -176,7 +215,17 @@ export class ViewerPool {
   }
 
   private addLane(host: string): ProxyLane {
-    const lane: ProxyLane = { host, browser: null, launching: null, active: new Set(), benchedUntil: 0, consecutiveFailures: 0 };
+    const lane: ProxyLane = {
+      host,
+      browser: null,
+      launching: null,
+      active: new Set(),
+      benchedUntil: 0,
+      consecutiveFailures: 0,
+      prewarmed: [],
+      waiters: [],
+      slots: 0
+    };
     this.lanes.set(host, lane);
     this.laneOrder = [...this.lanes.keys()];
     return lane;
@@ -224,6 +273,9 @@ export class ViewerPool {
         // Closing an already-dead browser is not an error.
       }
       lane.active.clear();
+      for (const page of lane.prewarmed) void page.close().catch(() => undefined);
+      lane.prewarmed = [];
+      for (const release of lane.waiters.splice(0)) release();
       for (const [username, laneHost] of [...this.roomLane]) {
         if (laneHost === host) {
           this.roomLane.delete(username);
@@ -342,67 +394,112 @@ export class ViewerPool {
   /**
    * Capture the initial fetch exchange for a live room. Resolves when the
    * page's player receives a non-trivial /im/fetch/ response; rejects after
-   * `timeoutMs` per lane attempt. If the room is not yet pinned and the
-   * chosen lane fails, the call rotates to the next available lane and tries
-   * again — up to `maxLaneAttempts` lanes total. A cold room on a
-   * residential-IP pool with per-lane reputation variance should not pay a
-   * whole caller timeout for one bad lane.
+   * `timeoutMs` overall. The first attempt runs alone on the pinned or
+   * round-robin lane; if it fails, the remaining candidate lanes race in
+   * parallel and the first capture wins, so a cold room on a bad lane costs
+   * one attempt, not maxLaneAttempts sequential ones. Race losers are
+   * cancelled clean: their page closes, but the lane is not benched and the
+   * winner's warm tab stays registered.
    */
   async captureRoom(
     username: string,
     { timeoutMs = 120_000 }: { timeoutMs?: number } = {}
   ): Promise<RoomCapture> {
     this.evictIdleTabs();
-    const failures: Array<{ lane: string; error: string }> = [];
     const attempts = Math.max(1, this.options.maxLaneAttempts);
     const overallStart = Date.now();
-    for (let i = 0; i < attempts; i++) {
-      // Budget what's left across the attempts still permitted. Floor is 60s:
-      // in-cluster on llvmpipe, nav + player bootstrap + im/fetch capture
-      // measured 33-52s on lanes that eventually succeeded. The 45s floor
-      // was marginal and cut captures that would have served.
-      const remainingAttempts = attempts - i;
-      const elapsed = Date.now() - overallStart;
-      const remaining = timeoutMs - elapsed;
-      if (remaining <= 0) break;
-      const perAttempt = Math.max(60_000, Math.floor(remaining / remainingAttempts));
-      const lane = this.pickLane(username);
-      const startedAt = Date.now();
-      try {
-        const capture = await this.attemptOnLane(username, lane, perAttempt, startedAt);
-        lane.consecutiveFailures = 0;
-        this.options.logger?.info('viewer capture ok', {
-          username,
-          lane: lane.host || 'direct',
-          elapsed_ms: capture.elapsedMs,
-          attempt: i + 1
-        });
-        return capture;
-      } catch (error) {
-        const message = (error as Error).message;
-        failures.push({ lane: lane.host || 'direct', error: message });
-        lane.consecutiveFailures++;
-        this.options.logger?.warn('viewer capture failed on lane', {
-          username,
-          lane: lane.host || 'direct',
-          elapsed_ms: Date.now() - startedAt,
-          attempt: i + 1,
-          consecutive_failures: lane.consecutiveFailures,
-          error: message
-        });
-        if (lane.consecutiveFailures >= PROFILE_ROTATE_FAILURES) {
-          await this.rotateLaneProfile(lane);
-        }
-        // A pinned room that just failed has been unpinned by attemptOnLane;
-        // stop if every lane is benched — further rotation can only loop the
-        // same bad set.
-        const now = Date.now();
-        const anyAvailable = [...this.lanes.values()].some((l) => now >= l.benchedUntil);
-        if (!anyAvailable) break;
-      }
+    const failures: Array<{ lane: string; error: string }> = [];
+    const recordFailure = (lane: ProxyLane, message: string, attempt: number) => {
+      failures.push({ lane: lane.host || 'direct', error: message });
+      lane.consecutiveFailures++;
+      this.options.logger?.warn('viewer capture failed on lane', {
+        username,
+        lane: lane.host || 'direct',
+        elapsed_ms: Date.now() - overallStart,
+        attempt,
+        consecutive_failures: lane.consecutiveFailures,
+        error: message
+      });
+    };
+    const recordSuccess = (lane: ProxyLane, capture: RoomCapture, attempt: number) => {
+      lane.consecutiveFailures = 0;
+      this.options.logger?.info('viewer capture ok', {
+        username,
+        lane: lane.host || 'direct',
+        elapsed_ms: capture.elapsedMs,
+        attempt
+      });
+      return capture;
+    };
+
+    const firstLane = this.pickLane(username);
+    const firstResult = await this.attemptOnLane(
+      username,
+      firstLane,
+      Math.max(60_000, Math.floor(timeoutMs / attempts)),
+      overallStart
+    ).promise.then(
+      (capture: RoomCapture) => ({ ok: true as const, capture }),
+      (error: Error) => ({ ok: false as const, error })
+    );
+    if (firstResult.ok) return recordSuccess(firstLane, firstResult.capture, 1);
+    recordFailure(firstLane, firstResult.error.message, 1);
+    if (firstLane.consecutiveFailures >= PROFILE_ROTATE_FAILURES) {
+      await this.rotateLaneProfile(firstLane);
     }
+
+    // Race the remaining candidate lanes: first capture wins, losers are
+    // cancelled by the cancel flag each attempt checks between phases. A
+    // slow lane then costs one fast-fail deadline, not the whole caller
+    // budget.
+    const remaining = timeoutMs - (Date.now() - overallStart);
+    if (remaining <= 0 || attempts <= 1) {
+      throw this.captureFailure(failures);
+    }
+    const now = Date.now();
+    const candidates = [...this.lanes.values()].filter(
+      (l) => l !== firstLane && now >= l.benchedUntil
+    );
+    if (candidates.length === 0) {
+      // Every other lane is benched: nothing to race, the first failure stands.
+      throw this.captureFailure(failures);
+    }
+    const racing = candidates.slice(0, attempts - 1);
+    const raceStart = Date.now();
+    const cancels: Array<() => void> = [];
+    const racers = racing.map((lane) => {
+      const { promise, cancel } = this.attemptOnLane(username, lane, remaining, raceStart, {
+        registerCancel: (fn) => cancels.push(fn)
+      });
+      return promise.then(
+        (capture) => ({ lane, capture }),
+        (error: Error) => {
+          if (cancels.length === 0) {
+            // The race already settled (winner found, cancels drained):
+            // this loser was cancelled, not failed — do not bench it.
+            throw new Error(`race loser (${lane.host}): cancelled`);
+          }
+          recordFailure(lane, error.message, 2);
+          throw error;
+        }
+      );
+    });
+    try {
+      const winner = await Promise.any(racers);
+      const drain = cancels.splice(0);
+      for (const cancel of drain) cancel();
+      return recordSuccess(winner.lane, winner.capture, 2);
+    } catch {
+      const drain = cancels.splice(0);
+      for (const cancel of drain) cancel();
+      // Per-lane failures were recorded in each racer's rejection handler.
+      throw this.captureFailure(failures);
+    }
+  }
+
+  private captureFailure(failures: Array<{ lane: string; error: string }>): Error {
     const summary = failures.map((f) => `${f.lane}: ${f.error}`).join(' | ');
-    throw new Error(`viewer capture failed across ${failures.length} lane(s): ${summary}`);
+    return new Error(`viewer capture failed across ${failures.length} lane(s): ${summary}`);
   }
 
   /**
@@ -436,74 +533,220 @@ export class ViewerPool {
     }
     lane.browser = null;
     lane.launching = null;
+    for (const page of lane.prewarmed) void page.close().catch(() => undefined);
+    lane.prewarmed = [];
+    for (const release of lane.waiters.splice(0)) release();
     await rm(profileDir, { recursive: true, force: true }).catch(() => undefined);
   }
 
-  private async attemptOnLane(
+  /**
+   * Book one of the lane's capture slots. Concurrent room captures share one
+   * browser and its renderer loop; on llvmpipe the contention turns the
+   * slowest page into an im/fetch timeout. Over-budget captures queue and
+   * take a slot when a current holder's attempt finishes, or give up when
+   * the attempt budget runs out.
+   */
+  private async acquireLaneSlot(lane: ProxyLane, timeoutMs: number): Promise<boolean> {
+    if (lane.slots < LANE_MAX_CONCURRENT_CAPTURES) {
+      lane.slots++;
+      return true;
+    }
+    const deadline = Date.now() + timeoutMs;
+    const booked = await new Promise<boolean>((resolve) => {
+      const release = () => {
+        if (lane.slots < LANE_MAX_CONCURRENT_CAPTURES) {
+          lane.slots++;
+          lane.waiters = lane.waiters.filter((w) => w !== release);
+          resolve(true);
+        } else if (Date.now() >= deadline) {
+          lane.waiters = lane.waiters.filter((w) => w !== release);
+          resolve(false);
+        }
+      };
+      lane.waiters.push(release);
+    });
+    return booked;
+  }
+
+  private releaseLaneSlot(lane: ProxyLane): void {
+    lane.slots = Math.max(0, lane.slots - 1);
+    lane.waiters.shift()?.();
+  }
+
+  /** A page parked on the TikTok home page, ready to be handed to a capture. */
+  private async takePrewarmedTab(lane: ProxyLane): Promise<Page | undefined> {
+    const parked = lane.prewarmed.pop();
+    if (parked) {
+      // Verify it survived; a crashed tab would hang the capture.
+      try {
+        if (parked.isClosed()) return undefined;
+      } catch {
+        return undefined;
+      }
+      return parked;
+    }
+    return undefined;
+  }
+
+  /** Refill the lane's prewarm slots after a capture, best-effort. */
+  private refillPrewarm(lane: ProxyLane): void {
+    if (lane.prewarmed.length >= PREWARM_PER_LANE) return;
+    void this.ensureBrowser(lane)
+      .then(async (browser) => {
+        while (lane.prewarmed.length < PREWARM_PER_LANE) {
+          const page = await this.newLanePage(lane, browser);
+          await page.goto(PREWARM_URL, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+          lane.prewarmed.push(page);
+        }
+      })
+      .catch(() => undefined);
+  }
+
+  /** New page configured for this lane: UA, request blocking, proxy auth. */
+  private async newLanePage(lane: ProxyLane, browser: Browser): Promise<Page> {
+    const page = await browser.newPage();
+    await page.setUserAgent(VIEWER_UA);
+    // The tab must not stream the video: with a residential proxy wired
+    // (the answer to TikTok's datacenter-IP gating), media would be 99% of
+    // the proxy's bill. Images, stylesheets and third-party trackers are
+    // likewise dead weight the player never needs — measured on the lab
+    // lane, blocking them measurably shortens time-to-im/fetch and none of
+    // the player's fetches were to those resource types. Anything on the
+    // tiktok.com or webcast endpoints is always allowed through.
+    await page.setRequestInterception(true);
+    page.on('request', (request) => {
+      const type = request.resourceType();
+      if (type === 'media' || type === 'font' || type === 'image') {
+        void request.abort().catch(() => undefined);
+        return;
+      }
+      const url = request.url();
+      const firstParty =
+        url.startsWith('https://www.tiktok.com/') ||
+        url.startsWith('https://webcast') ||
+        url.includes('.tiktok.com/') ||
+        url.includes('.tiktokcdn.com/');
+      if (!firstParty && (type === 'stylesheet' || isTrackerUrl(url))) {
+        void request.abort().catch(() => undefined);
+        return;
+      }
+      void request.continue().catch(() => undefined);
+    });
+    // Webshare issues one credential pair per proxy; a lane's own entry
+    // wins, the shared pair is the fallback (static-list pools).
+    const laneCreds = lane.host ? this.options.proxyCredentials?.[lane.host] : undefined;
+    const authUser = laneCreds?.username ?? this.options.proxyUser;
+    const authPass = laneCreds?.password ?? this.options.proxyPass;
+    if (authUser && authPass) {
+      await page.authenticate({ username: authUser, password: authPass });
+    }
+    return page;
+  }
+
+  /**
+   * One capture attempt on a lane. Cancellable: a parallel lane race calls
+   * the returned cancel when another racer wins — the cancelled attempt
+   * closes its own page but does not bench the lane or unregister the
+   * room's tab, both of which belong to the winner now.
+   */
+  private attemptOnLane(
     username: string,
     lane: ProxyLane,
     timeoutMs: number,
-    startedAt: number
-  ): Promise<RoomCapture> {
-    const browser = await this.ensureBrowser(lane);
-    lane.active.add(username);
+    startedAt: number,
+    options: { registerCancel?: (cancel: () => void) => void } = {}
+  ): { promise: Promise<RoomCapture>; cancel: () => void } {
+    const { promise, resolve, reject } = Promise.withResolvers<RoomCapture>();
+    let cancelled = false;
+    let fail: ReturnType<typeof setTimeout> | undefined;
+    let heartbeat: ReturnType<typeof setTimeout> | undefined;
+    let page: Page | null = null;
+    let onResponse:
+      | ((response: {
+          url(): string;
+          status(): number;
+          buffer(): Promise<Buffer>;
+        }) => void | Promise<void>)
+      | null = null;
+    const cancel = () => {
+      if (cancelled) return;
+      cancelled = true;
+      clearTimeout(fail);
+      clearTimeout(heartbeat);
+      if (page && onResponse) page.off('response', onResponse);
+      if (page) void page.close().catch(() => undefined);
+      reject(new Error(`lane race cancelled (${lane.host || 'direct'})`));
+    };
+    options.registerCancel?.(cancel);
 
-    // Reuse a warm tab when we have one for this room's streamer.
-    const existing = this.tabs.get(username);
-    const page: Page = existing
-      ? existing.page
-      : await browser.newPage().then(async (p) => {
-          await p.setUserAgent(VIEWER_UA);
-          // The tab must not stream the video: with a residential proxy wired
-          // (the answer to TikTok's datacenter-IP gating), media would be 99%
-          // of the proxy's bill. The player initializes and fetches chat data
-          // the same without the stream itself.
-          await p.setRequestInterception(true);
-          p.on('request', (request) => {
-            if (['media', 'font'].includes(request.resourceType())) {
-              void request.abort().catch(() => undefined);
-              return;
-            }
-            void request.continue().catch(() => undefined);
-          });
-          // Webshare issues one credential pair per proxy; a lane's own
-          // entry wins, the shared pair is the fallback (static-list pools).
-          const laneCreds = lane.host
-            ? this.options.proxyCredentials?.[lane.host]
-            : undefined;
-          const authUser = laneCreds?.username ?? this.options.proxyUser;
-          const authPass = laneCreds?.password ?? this.options.proxyPass;
-          if (authUser && authPass) {
-            await p.authenticate({
-              username: authUser,
-              password: authPass
-            });
+    void (async () => {
+      const booked = await this.acquireLaneSlot(lane, timeoutMs);
+      if (!booked) {
+        reject(
+          new Error(
+            `lane busy (proxy ${lane.host || 'direct'}): no capture slot within ${timeoutMs}ms`
+          )
+        );
+        return;
+      }
+      try {
+        lane.active.add(username);
+        // Reuse a warm tab when we have one for this room's streamer, or a
+        // prewarmed parked tab for a cold room (skips the domain bootstrap).
+        // The browser only launches when a brand-new page is needed.
+        const existing = this.tabs.get(username);
+        const prewarmed = existing ? undefined : await this.takePrewarmedTab(lane);
+        page = existing?.page ?? prewarmed ?? null;
+        if (!page) {
+          page = await this.newLanePage(lane, await this.ensureBrowser(lane));
+        }
+        const capturePage = page;
+        const giveUp = async (message: string) => {
+          if (cancelled) return;
+          cancelled = true;
+          clearTimeout(fail);
+          clearTimeout(heartbeat);
+          capturePage.off('response', onResponse!);
+          // Drop the tab only when this page is the room's registered one:
+          // in a parallel lane race the loser's page is its own, while the
+          // winner may have already registered a different tab for the room.
+          const owned = this.tabs.get(username);
+          if (!owned || owned.page === capturePage) {
+            this.tabs.delete(username);
+            this.roomLane.delete(username);
           }
-          return p;
-        });
-
-    const firstCapture = !existing;
-    try {
-      return await new Promise<RoomCapture>((resolve, reject) => {
-        let settled = false;
-        const jobId = randomUUID(); // correlation for logs; capture is per-tab
-        const fail = setTimeout(async () => {
-          if (settled) return;
-          settled = true;
-          // Drop the tab: a page that never produced a fetch is a dead session.
-          this.tabs.delete(username);
-          this.roomLane.delete(username);
           this.benchLane(lane);
-          await page.close().catch(() => undefined);
-          reject(new Error(`im/fetch 200 not captured within ${timeoutMs}ms (proxy ${lane.host || 'direct'}, ${jobId})`));
+          await capturePage.close().catch(() => undefined);
+          reject(new Error(`${message} (proxy ${lane.host || 'direct'})`));
+        };
+        fail = setTimeout(() => {
+          void giveUp(`im/fetch 200 not captured within ${timeoutMs}ms`);
         }, timeoutMs);
 
-        const onResponse = async (response: {
+        // Fast-fail heartbeat: successful captures show the live player
+        // shortly after domcontentloaded. A page without the player root by
+        // LIVE_READY_DEADLINE_MS is a zombie — hung page, stalling proxy —
+        // and pays the deadline instead of the full timeout, freeing the
+        // lane slot for the next attempt.
+        heartbeat = setTimeout(() => {
+          void capturePage
+            .$$(LIVE_PAGE_SELECTOR)
+            .then((els) => {
+              if (els.length === 0 && !cancelled) {
+                void giveUp(
+                  `live player not up within ${LIVE_READY_DEADLINE_MS}ms (zombie page fast-fail)`
+                );
+              }
+            })
+            .catch(() => undefined);
+        }, LIVE_READY_DEADLINE_MS);
+
+        onResponse = async (response: {
           url(): string;
           status(): number;
           buffer(): Promise<Buffer>;
         }) => {
-          if (settled) return;
+          if (cancelled) return;
           const url = response.url();
           if (!url.includes('/webcast/im/fetch/')) return;
           if (response.status() !== 200) return;
@@ -514,17 +757,19 @@ export class ViewerPool {
             return;
           }
           if (buf.length < 1000) return; // keepalive/empty shapes are not a capture
-          settled = true;
+          cancelled = true;
           clearTimeout(fail);
-          page.off('response', onResponse);
+          clearTimeout(heartbeat);
+          capturePage.off('response', onResponse!);
 
           try {
-            const cookies = (await page.cookies('https://www.tiktok.com'))
+            const cookies = (await capturePage.cookies('https://www.tiktok.com'))
               .map((c) => `${c.name}=${c.value}`)
               .join('; ');
             const roomId = new URL(url).searchParams.get('room_id') ?? username;
-            this.tabs.set(username, { page, lastUsed: Date.now() });
+            this.tabs.set(username, { page: capturePage, lastUsed: Date.now() });
             this.roomLane.set(username, lane.host);
+            this.refillPrewarm(lane);
             resolve({
               roomId,
               protoBase64: buf.toString('base64'),
@@ -538,31 +783,54 @@ export class ViewerPool {
           }
         };
 
-        // The player fetches on its own after page init; on a reused tab (page
-        // already live) it will not re-fetch, so trigger a fresh page load which
-        // replays the player bootstrap for the same room.
-        page.on('response', onResponse);
-        const nav = firstCapture
-          ? page.goto(`https://www.tiktok.com/@${username}/live`, {
-              waitUntil: 'domcontentloaded',
-              timeout: 30_000
-            })
-          : page.reload({ waitUntil: 'domcontentloaded', timeout: 30_000 });
+        capturePage.on('response', onResponse!);
+        // The player fetches on its own after page init. On a reused tab the
+        // page is already live and will not re-fetch, so instead of a full
+        // reload (which replays the whole page bootstrap) click through the
+        // SPA: the site is a React app, and an in-page navigation to the room
+        // route re-runs just the player bootstrap against the warm session.
+        // Falls back to a plain reload if the in-page navigation throws (SPA
+        // hook shape changed) — the reload path always worked.
+        const nav =
+          existing
+            ? capturePage
+                .evaluate(
+                  (target) => {
+                    const anchor = document.createElement('a');
+                    anchor.href = target;
+                    anchor.style.display = 'none';
+                    document.body.append(anchor);
+                    anchor.click();
+                    anchor.remove();
+                    return true;
+                  },
+                  `https://www.tiktok.com/@${username}/live`
+                )
+                .then(() =>
+                  capturePage.waitForNavigation({
+                    waitUntil: 'domcontentloaded',
+                    timeout: 30_000
+                  })
+                )
+                .catch(() =>
+                  capturePage.reload({ waitUntil: 'domcontentloaded', timeout: 30_000 })
+                )
+            : capturePage.goto(`https://www.tiktok.com/@${username}/live`, {
+                waitUntil: 'domcontentloaded',
+                timeout: 30_000
+              });
         nav.catch((error: Error) => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(fail);
-          page.off('response', onResponse);
-          this.tabs.delete(username);
-          this.roomLane.delete(username);
-          this.benchLane(lane);
-          void page.close().catch(() => undefined);
-          reject(new Error(`navigation failed on proxy ${lane.host || 'direct'}: ${error.message}`));
+          if (cancelled) return;
+          void giveUp(`navigation failed: ${error.message}`);
         });
-      });
-    } finally {
-      lane.active.delete(username);
-    }
+      } catch (error) {
+        reject(error as Error);
+      } finally {
+        lane.active.delete(username);
+        this.releaseLaneSlot(lane);
+      }
+    })();
+    return { promise, cancel };
   }
 
   async close(): Promise<void> {
@@ -579,6 +847,17 @@ export class ViewerPool {
       }
     }
   }
+}
+
+/** Known third-party telemetry the player never depends on. */
+function isTrackerUrl(url: string): boolean {
+  return (
+    url.includes('analytics.tiktok.com') ||
+    url.includes('log.byteoversea.net') ||
+    url.includes('mon.byteoversea.net') ||
+    url.includes('/collect') ||
+    url.includes('ads-sdk')
+  );
 }
 
 /** The UA the viewer pages run with. Must match what the listener pins. */
