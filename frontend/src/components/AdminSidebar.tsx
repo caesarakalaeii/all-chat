@@ -31,6 +31,7 @@ import {
   Sparkles,
   Flag,
   Wrench,
+  Languages,
   Menu,
   X,
   ArrowLeft,
@@ -53,7 +54,15 @@ import { cn } from '@/lib/utils'
  * `tsc` error at the render site instead of a catalog key echoed at an admin.
  */
 type DescribedStem =
-  'search' | 'users' | 'overlays' | 'sources' | 'viewers' | 'cosmetics' | 'features' | 'maintenance'
+  | 'search'
+  | 'users'
+  | 'overlays'
+  | 'sources'
+  | 'viewers'
+  | 'cosmetics'
+  | 'features'
+  | 'maintenance'
+  | 'localization'
 
 // 'dashboard' is the only stem with no description: the dashboard home grid, the
 // sole surface that renders descriptions, is itself that page and omits its own
@@ -86,7 +95,9 @@ export const ADMIN_LINKS: AdminLink[] = [
   { href: '/admin/cosmetics', messageStem: 'cosmetics', icon: Sparkles },
   { href: '/admin/features', messageStem: 'features', icon: Flag },
   { href: '/admin/maintenance', messageStem: 'maintenance', icon: Wrench },
+  { href: '/admin/localization', messageStem: 'localization', icon: Languages },
 ]
+
 
 /**
  * The rail entries that are not the dashboard itself, in rail order. The grid on

@@ -198,6 +198,24 @@ func NewServiceRegistry() (*ServiceRegistry, error) {
 		PathPrefix:  "/api/v1/admin/beta-tester",
 		StripPrefix: false,
 	}
+	// Localization contributor routes (ADR-0063) → share-service. The service
+	// gates them with RequireEarlyAccess('localization_contribution').
+	registry.Services["share-service-localization"] = &ServiceConfig{
+		Name:        "share-service-localization",
+		BaseURL:     shareURL,
+		HealthPath:  "/health/live",
+		PathPrefix:  "/api/v1/localization",
+		StripPrefix: false,
+	}
+	// Admin localization routes (ADR-0063) → share-service — review queue, locale
+	// approval, export. Separate prefix like the other admin blocks above.
+	registry.Services["share-service-admin-localization"] = &ServiceConfig{
+		Name:        "share-service-admin-localization",
+		BaseURL:     shareURL,
+		HealthPath:  "/health/live",
+		PathPrefix:  "/api/v1/admin/localization",
+		StripPrefix: false,
+	}
 	// Ambassador routes (ADR-0041) → share-service. One prefix covers the public
 	// list (GET /api/v1/ambassadors) and the self-service showcase
 	// (/api/v1/ambassadors/me/showcase) by longest-prefix match.

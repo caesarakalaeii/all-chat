@@ -45,6 +45,11 @@ interface ProtectedRouteProps {
   children: React.ReactNode
   requireAdmin?: boolean
   /**
+   * Require the beta-tester role (is_beta_tester; ambassadors hold it via
+   * early access, ADR-0020/0041). Renders the 403 card instead of the page.
+   */
+  requireBetaTester?: boolean
+  /**
    * What to render for an anonymous visitor INSTEAD of redirecting home.
    *
    * Exists for surfaces where the homepage is not reachable copy: an OBS custom
@@ -60,7 +65,7 @@ interface ProtectedRouteProps {
 // says the same thing in words, so not part of the catalog.
 const FORBIDDEN_GLYPH = '\u{1F6AB}'
 
-export function ProtectedRoute({ children, requireAdmin = false, fallback }: ProtectedRouteProps) {
+export function ProtectedRoute({ children, requireAdmin = false, requireBetaTester = false, fallback }: ProtectedRouteProps) {
   const t = useTranslations()
   const router = useRouter()
   const { user, loading, init } = useAuthStore()
@@ -111,6 +116,25 @@ export function ProtectedRoute({ children, requireAdmin = false, fallback }: Pro
           <div className="mb-4 text-5xl">{FORBIDDEN_GLYPH}</div>
           <h1 className="mb-2 text-2xl font-bold text-text">{t('common.forbidden.heading')}</h1>
           <p className="mb-6 text-text-sub">{t('common.forbidden.body')}</p>
+          <Button onClick={() => router.push('/dashboard')} size="lg">
+            {t('common.forbidden.dashboardButton')}
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  // Beta-tester requirement (ADR-0063): the /translate surface. The backend
+  // enforces the same role via the localization_contribution early-access
+  // gate, so this check only avoids rendering a tool whose every fetch would
+  // 403 — it is UX, not the security boundary.
+  if (requireBetaTester && !(user.is_beta_tester || user.is_ambassador)) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-bg">
+        <div className="w-full max-w-md rounded-xl border border-border bg-surface p-8 text-center">
+          <div className="mb-4 text-5xl">{FORBIDDEN_GLYPH}</div>
+          <h1 className="mb-2 text-2xl font-bold text-text">{t('translate.gateHeading')}</h1>
+          <p className="mb-6 text-text-sub">{t('translate.gateBody')}</p>
           <Button onClick={() => router.push('/dashboard')} size="lg">
             {t('common.forbidden.dashboardButton')}
           </Button>

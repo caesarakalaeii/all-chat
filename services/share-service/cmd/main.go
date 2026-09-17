@@ -126,6 +126,7 @@ func main() {
 	ambassadorRepo := repository.NewAmbassadorRepository(dbPool, recomputer, log)
 	userSearchRepo := repository.NewUserSearchRepository(dbPool, log)
 	shareRepo := repository.NewShareRepository(dbPool, log)
+	localizationRepo := repository.NewLocalizationRepository(dbPool, log)
 
 	// Initialize cycle detector
 	cycleDetector := cycles.NewCycleDetector(shareRepo)
@@ -143,6 +144,8 @@ func main() {
 	ambassadorHandler := handlers.NewAmbassadorHandler(ambassadorRepo, log)
 	searchHandler := handlers.NewSearchHandler(userSearchRepo, log)
 	shareHandler := handlers.NewShareHandler(shareRepo, userSearchRepo, dbPool, log, cycleDetector, serviceKeyChain)
+	adminLocalizationHandler := handlers.NewLocalizationAdminHandler(localizationRepo, log)
+	localizationHandler := handlers.NewLocalizationHandler(localizationRepo, log)
 	adminFGHandler := handlers.NewAdminFeatureGatesHandler(dbPool, redisClientForJobs, log)
 
 	// Setup Gin router
@@ -218,6 +221,20 @@ func main() {
 			premiumRoutes.POST("/shares", shareHandler.CreateRequest)
 		}
 
+		// Localization contributor tool (ADR-0063) — beta-tester gated via the
+		// localization_contribution feature gate (seeded early_access, migration
+		// 097). RequireEarlyAccess admits beta testers and ambassadors; graduating
+		// the gate opens contribution to all authenticated users, so the gate —
+		// not the route — stays the only access control.
+		localizationRoutes := api.Group("/localization")
+		localizationRoutes.Use(middleware.RequireEarlyAccess(dbPool, gateCache, featuregates.GateLocalizationContribution, log))
+		{
+			localizationRoutes.GET("/locales", localizationHandler.ListLocales)
+			localizationRoutes.POST("/locales", localizationHandler.RequestLocale)
+			localizationRoutes.GET("/locales/:code/translations", localizationHandler.MyTranslations)
+			localizationRoutes.POST("/locales/:code/translations", localizationHandler.SubmitTranslations)
+		}
+
 		// Non-premium routes for receivers (accept/reject should not require premium)
 		api.POST("/shares/:id/accept", shareHandler.AcceptRequest)
 		api.POST("/shares/:id/reject", shareHandler.RejectRequest)
@@ -253,6 +270,19 @@ func main() {
 		{
 			featureGateRoutes.GET("", adminFGHandler.ListGates)
 			featureGateRoutes.PATCH("/:key", adminFGHandler.UpdateGate)
+		}
+
+		// Localization admin routes (ADR-0063) — review queue, locale approval,
+		// accepted-translation export.
+		localizationAdminRoutes := api.Group("/admin/localization")
+		localizationAdminRoutes.Use(middleware.AdminOnly())
+		{
+			localizationAdminRoutes.GET("/locales/requests", adminLocalizationHandler.GetLocaleRequests)
+			localizationAdminRoutes.POST("/locales/:code/review", adminLocalizationHandler.ReviewLocaleRequest)
+			localizationAdminRoutes.GET("/review", adminLocalizationHandler.GetReviewQueue)
+			localizationAdminRoutes.POST("/review/:locale/:keyHash", adminLocalizationHandler.ReviewSubmission)
+			localizationAdminRoutes.GET("/export/:code", adminLocalizationHandler.ExportLocale)
+			localizationAdminRoutes.GET("/progress", adminLocalizationHandler.GetProgress)
 		}
 	}
 

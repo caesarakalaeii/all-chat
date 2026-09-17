@@ -25,7 +25,10 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }))
 vi.mock('@/lib/analytics', () => ({ trackEvent: vi.fn() }))
 vi.mock('@/lib/api/auth', () => ({ authApi: { updateOnboarding: vi.fn() } }))
 vi.mock('@/lib/stores/auth-store', () => ({
-  useAuthStore: { getState: () => ({ user: { id: 'user-1' }, init: vi.fn() }) },
+  // Zustand stores are callable; the component subscribes with a selector.
+  useAuthStore: Object.assign(() => ({ user: null }), {
+    getState: () => ({ user: { id: 'user-1' }, init: vi.fn() }),
+  }),
 }))
 
 import { trackEvent } from '@/lib/analytics'

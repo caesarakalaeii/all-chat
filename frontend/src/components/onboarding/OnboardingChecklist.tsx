@@ -47,6 +47,7 @@ import { trackEvent } from '@/lib/analytics'
 import { DISCORD_INVITE_URL, PATREON_JOIN_URL } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 import { useTranslations } from '@/lib/i18n'
+import { useAuthStore } from '@/lib/stores/auth-store'
 import type { SpotlightSection } from '@/components/editor/sectionRegistry'
 
 /**
@@ -106,7 +107,7 @@ export function OnboardingChecklist({
   const reportStepCompleted = useOnboardingStore((s) => s.reportStepCompleted)
   const dismiss = useOnboardingStore((s) => s.dismiss)
   const finish = useOnboardingStore((s) => s.finish)
-
+  const user = useAuthStore((s) => s.user)
   const [createOpen, setCreateOpen] = useState(false)
   const [confirmDismiss, setConfirmDismiss] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -438,6 +439,32 @@ export function OnboardingChecklist({
                       two in sync per the note above. */}
                   <p className="text-xs text-text-sub">{t('onboarding.extras.streamDeckBody')}</p>
                 </li>
+                {/* Beta-tester tour entry (ADR-0063). /upgrade does not list
+                    it: that page is the PREMIUM tour and the translate tool is
+                    gated by role, not by premium. */}
+                {(user?.is_beta_tester || user?.is_ambassador) && (
+                  <li>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium text-text">
+                        {t('onboarding.extras.translateTitle')}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          trackEvent('cta_click', {
+                            cta: 'translate',
+                            location: 'onboarding-extras',
+                          })
+                          router.push('/translate')
+                        }}
+                      >
+                        {t('onboarding.checklist.showMe')}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-text-sub">{t('onboarding.extras.translateBody')}</p>
+                  </li>
+                )}
               </ul>
               <p className="mt-2 text-xs text-text-sub">
                 <a

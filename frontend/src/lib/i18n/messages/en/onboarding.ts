@@ -95,6 +95,11 @@ export const onboarding = {
     streamDeckTitle: 'Stream Deck buttons',
     streamDeckBody:
       'Drive polls, predictions and canned messages from a physical button. Link a Stream Deck or StreamController under Paired devices — nothing to copy or paste. Starting a poll or prediction is still Premium.',
+    // Beta-tester surface (ADR-0063): only rendered when the viewer holds the
+    // beta-tester role, so the copy names the role, not the price.
+    translateTitle: 'Help translate All-Chat',
+    translateBody:
+      'Beta testers can translate the interface into other languages under Translate in the navigation. Everything is reviewed before it goes live.',
     seePremium: 'See everything Premium includes',
     done: 'Done',
     skip: 'Skip',

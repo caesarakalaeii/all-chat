@@ -672,7 +672,16 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 **Impact**: Premium rooms ride out flap walls instead of going dark; the signer pod carries one ~150MB tab per fallback room, bounded by the stint ceiling. Tier-transition duplicates are absorbed by the existing dedup layer. Rebuilding the shared decode path exposed a phase-2 bug: the canary never awaited the async `deserializeWebSocketMessage`, so every relay frame had counted as an ack and two of its four divergence checks could never fire — now regression-tested with real wire-format frames.
 **→ Read**: [0058-tiktok-transport-tiers-by-entitlement.md](./0058-tiktok-transport-tiers-by-entitlement.md)
 
+### ADR-0063: Beta-tester localization contribution with admin review and a repo-based catalog pipeline
+
+**Status**: Accepted (2026-09-15)
+**Problem**: Community members want to translate the UI, but the string catalog is typed code in the repo (ADR-0055), contributors are not developers, and a service that commits to the repo would need a credential and a blast radius no contributor feature justifies.
+**Decision**: A guided translator tool at `/translate` (pick language → pick namespace → translate string by string with placeholder hints) gated by the `localization_contribution` early-access gate (migration 097, share-service routes via RequireEarlyAccess). Open, request-based locales; one row per (locale, key) that resubmission overwrites and resets to pending; admin review at `/admin/localization` with rejection notes. The key list is derived from the English catalog in the frontend, never stored in the DB. Approved rows export as JSON; `scripts/generate-locale-catalog.mjs` turns the export into `messages/<locale>/` files in the catalog's shape, and the locale wiring (barrel, SUPPORTED_LOCALES) stays a reviewed PR edit. Nothing auto-commits.
+**Impact**: Beta testers gain a translation surface without touching git; the catalog stays the single source of truth; graduating the gate opens contribution to all authenticated users with no deploy.
+**→ Read**: [0063-localization-contribution.md](./0063-localization-contribution.md)
+
 ---
+
 
 ## How to Create a New ADR
 
@@ -804,7 +813,7 @@ Create a new ADR if:
 ## Summary
 
 **Total ADRs**: see `docs/adr/` (ADR numbers are shared with caesar-deployment). The count was hardcoded here and drifted by twelve before anyone noticed; do not re-add a number.
-**Status**: All accepted (✅)
+**Last Updated**: 2026-09-15
 **Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation, overlay observability view, demand linger, EventSub chat-ownership partition, linked Twitch credentials, chat moderation write-path, premium entitlements via Patreon, streamer/viewer premium split, engagement economy, source-liveness heartbeat, admin URL-addressable views + viewer identity model + global search)
 
 **Most Referenced**:
