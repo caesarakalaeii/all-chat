@@ -53,6 +53,38 @@ interface RebalanceState {
   peerCountStableAt: number;
 }
 
+/**
+ * Which of `leases` to give up when this pod must shed `excess` of them.
+ *
+ * Release order is by room freshness, oldest messages first: a hot room (a
+ * message within HOT_ROOM_THRESHOLD_SECONDS) must survive its receiving pod
+ * a full reconnect cycle (re-handshake, flap exposure) for a move that buys
+ * nothing between healthy pods, while an idle room was likely already
+ * reconnecting. A room with no freshness entry (never connected, fresh
+ * demand) counts as maximally releasable so cold-start rooms still flow to
+ * the least-loaded pod. Ties break alphabetically, matching the Go
+ * coordinator: both coordinators facing the same fleet state shed the same
+ * streams.
+ */
+export const HOT_ROOM_THRESHOLD_SECONDS = 60;
+
+export function selectLeasesToRelease(
+  leases: string[],
+  excess: number,
+  secondsSinceLastMessage: (streamID: string) => number | undefined
+): string[] {
+  // Most-releasable first: oldest message, a missing monitor entry (never
+  // connected) counting as infinitely old, alphabetical on ties so both
+  // coordinators shed the same streams for the same fleet state.
+  const ranked = [...leases].sort((a, b) => {
+    const freshnessA = secondsSinceLastMessage(a) ?? Number.POSITIVE_INFINITY;
+    const freshnessB = secondsSinceLastMessage(b) ?? Number.POSITIVE_INFINITY;
+    if (freshnessA !== freshnessB) return freshnessB - freshnessA;
+    return a.localeCompare(b);
+  });
+  return ranked.slice(0, excess).sort();
+}
+
 export class LeadershipCoordinator {
   private platform: string;
   private callerID: string;
@@ -196,10 +228,14 @@ export class LeadershipCoordinator {
    * ADR-0007 rebalancing, ported from shared/sourcemanager/coordinator.go.
    *
    * Registers this pod as a peer, then sheds leases in excess of
-   * min(ceil(totalStreams / peerCount), maxPerPod), releasing alphabetically by
-   * stream ID so both coordinators shed the same streams for the same fleet
-   * state. Returns the released stream IDs so the caller can disconnect them
-   * and exclude them from re-acquisition for a cycle.
+   * min(ceil(totalStreams / peerCount), maxPerPod). Release selection ranks
+   * by room freshness when `secondsSinceLastMessage` is provided — idle
+   * rooms first, hot rooms (message within HOT_ROOM_THRESHOLD_SECONDS)
+   * last — because a moved hot room must re-handshake on the receiving pod
+   * while an idle room was likely already reconnecting; without the
+   * accessor the selection falls back to alphabetical, the Go coordinator's
+   * behaviour. Returns the released stream IDs so the caller can disconnect
+   * them and exclude them from re-acquisition for a cycle.
    *
    * maxPerPod carries the caller's hard connection ceiling
    * (TIKTOK_MAX_STREAMS_PER_POD): the Euler proxy caps concurrent proxied
@@ -213,7 +249,11 @@ export class LeadershipCoordinator {
    * count; releases happen once the count has been stable for
    * REBALANCE_STABILIZATION_MS.
    */
-  async rebalance(totalStreams: number, maxPerPod?: number): Promise<string[]> {
+  async rebalance(
+    totalStreams: number,
+    maxPerPod?: number,
+    secondsSinceLastMessage?: (streamID: string) => number | undefined
+  ): Promise<string[]> {
     let peerCount: number;
     try {
       peerCount = await this.client.registerPeer(this.platform, this.callerID);
@@ -233,6 +273,7 @@ export class LeadershipCoordinator {
         lastPeerCount: peerCount,
         peerCountStableAt: now + REBALANCE_STABILIZATION_MS,
       };
+
       this.logger.info('Peer count changed, waiting for stabilization before rebalancing', {
         platform: this.platform,
         peer_count: peerCount,
@@ -248,7 +289,18 @@ export class LeadershipCoordinator {
     const excess = currentCount - targetLeases;
     if (excess <= 0) return [];
 
-    const toRelease = [...this.leases.keys()].sort().slice(targetLeases);
+    const candidates = [...this.leases.keys()];
+    const toRelease = secondsSinceLastMessage
+      ? selectLeasesToRelease(candidates, excess, secondsSinceLastMessage)
+      : candidates.sort().slice(targetLeases);
+
+    this.logger.debug('rebalance candidates', {
+      candidates: candidates.map((streamID) => ({
+        stream_id: streamID,
+        last_message_seconds_ago: secondsSinceLastMessage?.(streamID) ?? null,
+      })),
+    });
+
 
     // One release path for demand removal, leadership loss and rebalancing.
     // Fire-and-forget per stream (void, matching the Go coordinator's
