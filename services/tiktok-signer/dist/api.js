@@ -41,15 +41,15 @@ const register = new Registry();
 collectDefaultMetrics({ register });
 const signRequestsTotal = new Counter({
     name: 'signer_sign_requests_total',
-    help: 'Sign requests by endpoint and outcome',
-    labelNames: ['endpoint', 'outcome'],
+    help: 'Sign requests by endpoint, path and outcome. path=viewer_capture is the headless-Chromium viewer-tab capture (tens of seconds by design); path=signature is the in-page SDK sign',
+    labelNames: ['endpoint', 'path', 'outcome'],
     registers: [register]
 });
 const signRequestDuration = new Histogram({
     name: 'signer_sign_request_duration_seconds',
-    help: 'End-to-end sign request latency by endpoint and outcome',
-    labelNames: ['endpoint', 'outcome'],
-    buckets: [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30],
+    help: 'End-to-end sign request latency by endpoint, path and outcome. path=viewer_capture is the headless-Chromium viewer-tab capture (tens of seconds by design); path=signature is the in-page SDK sign',
+    labelNames: ['endpoint', 'path', 'outcome'],
+    buckets: [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 30, 60, 120],
     registers: [register]
 });
 // Capture breaker visibility (2026-09-16 transport plan, phase 1). Refusals
@@ -376,6 +376,8 @@ export function createServer(options) {
                 return;
             }
             const endpoint = url === '/v1/sign' ? 'sign' : 'sign_url';
+            const isViewerPath = url === '/v1/sign' && Boolean(viewer) && Boolean(payload.username);
+            const path = isViewerPath ? 'viewer_capture' : 'signature';
             const startedAt = Date.now();
             let outcome;
             let result;
@@ -398,8 +400,8 @@ export function createServer(options) {
                 // dead, rebuild loop). Counted, then surfaced as 500 to the caller —
                 // the listener classifies it via the reason set on its side.
                 outcome = 'signer_error';
-                signRequestsTotal.inc({ endpoint, outcome });
-                signRequestDuration.observe({ endpoint, outcome }, (Date.now() - startedAt) / 1000);
+                signRequestsTotal.inc({ endpoint, path, outcome });
+                signRequestDuration.observe({ endpoint, path, outcome }, (Date.now() - startedAt) / 1000);
                 logger?.error('sign request failed', { endpoint, error: error.message });
                 res.writeHead(500, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ error: 'signer_error', message: error.message }));
@@ -411,8 +413,8 @@ export function createServer(options) {
                     : result.status === 400
                         ? 'bad_request'
                         : 'tiktok_rejected';
-            signRequestsTotal.inc({ endpoint, outcome });
-            signRequestDuration.observe({ endpoint, outcome }, (Date.now() - startedAt) / 1000);
+            signRequestsTotal.inc({ endpoint, path, outcome });
+            signRequestDuration.observe({ endpoint, path, outcome }, (Date.now() - startedAt) / 1000);
             res.writeHead(result.status, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(result.body));
             return;
