@@ -530,3 +530,37 @@ caesar-deployment #104). Consequences for this effort:
   resolves to DIRECT for both the fetch leg and the WS leg.
 - Do not re-introduce webshare wiring, tokens, or proxy-lane machinery
   in any later PR without an explicit operator instruction.
+
+## PR 2 Task 5 — live soak PASSED (2026-09-18 21:18-21:50 UTC)
+
+Lab rig: signer-lab on PR 1 image (commit 2845b5df, viewer-mode,
+`SIGNER_WARM_ROOMS=zaganovakov`, direct egress — webshare dropped, see
+the egress-policy section above); lab-listener on the PR 2 build
+(`TIKTOK_SIGNER_MODE=pure-node`, dist built from the a81af4fd tree).
+Demand snapshots published directly on the lab Redis `source:demand`
+channel (no source-manager in the lab). Two verified-live rooms:
+zaganovakov and dan2dxo; kyle.toynbee was offline at soak time
+(listener's own fetchIsLive check).
+
+31-minute window (21:18:46 → 21:49:51 UTC), both rooms connected through
+the pure-node signer and stayed connected:
+
+| Criterion (plan Task 5) | Measured |
+|---|---|
+| ≥1 decoded message per room per run | 252 WebcastChatMessage, 776 LikeMessage, 963 RoomUserSeqMessage, 77 GiftMessage, 637 MemberMessage over the window; both rooms connected 21:17-21:18 and never disconnected |
+| payload roomIds | both rooms' connect-time roomIds constant; no re-pointing (per-payload roomId verified in Task 1) |
+| lane-pin `pinned` ≥1 | VOID per the webshare retirement; `tiktok_ws_lane_pins_total{outcome="skipped"}=2` is the correct direct-egress outcome |
+| lease delta (success+captured) ≤ 8 | **0** — the 10-min lease cache served the entire window without one refresh |
+| WS connects ≤ 4 | **2** |
+| 403s | **0** |
+| sign attempts | `tiktok_sign_attempts_total{signer="pure-node",outcome="success"}=2` — one per connect, zero failures, zero re-signs (no flap storm) |
+
+Only recurring log noise: the canary relay's HTTP 409 retry loop on
+dan2dxo — the documented pure-node limitation (the relay needs a warm
+viewer tab the lease never creates; TIKTOK_CANARY_ROOMS should stay
+unset in pure-node rollouts until PR 3). Not load-bearing, retried with
+backoff.
+
+The install report logged `signer_mode: pure-node, signer: pure-node,
+euler_reachable_for_signature: false` — Euler is off the connect path
+end to end. PR 2's acceptance is complete; the merge is unblocked.
