@@ -361,3 +361,48 @@ PR 1's implementation judge picks). sign-fetch as a standalone shortcut is
 disproven. The capture pool remains the only proven source of accepted
 signatures; option (c) — capture-supplied bootstrap, pure-Node WS delivery —
 matches every measurement made today.
+
+## Cross-room WS entry (2026-09-18 16:55-16:59 UTC, operator-requested)
+
+Question: the live_new rooms cannot be captured (their page sends no
+im/fetch), so can a classic room's captured WS session serve another room's
+chat — making the room variant irrelevant to delivery?
+
+Test: connect the recorded webcast-ws URL of room A (kyle.toynbee,
+roomId 7686914945002294048, classic client, capture seconds old, cookies
+sent) and send `im_enter_room` for room B (zaganovakov, roomId
+7686832401615457057 — a different room, live at test time).
+
+Result, three consecutive runs:
+
+```
+open OK (handshake accepted on A's credentials)
+enter_room_resp received (entry into B accepted)
+6 WebcastChatMessage / 60 s, plus room-state frames; acks accepted
+every WebcastChatMessage payload decodes with common.roomId = 7686832401615457057
+```
+
+**Answer: yes — cross-room entry works.** One captured WS session (URL +
+cookies from any classic room) enters a *different* room and receives that
+room's chat, verified by roomId inside every chat payload. Three
+consequences:
+
+- **The live_new room variant does not block delivery.** Rooms whose pages
+  cannot be captured still receive chat through a session captured on any
+  classic room. The variant only threatens the *bootstrap payload* (backlog
+  cursor/internalExt for that room), which the fetchResult of the target
+  room would normally carry; entering with `cursor: ""` gets the live
+  stream regardless (morning spike finding — full room state is pushed on
+  enter).
+- **PR 1's signer does not need per-room captures.** One warm classic room
+  (plus a backup) can mint the WS session that the listener's Node client
+  re-enters per target room. The capture pool's job shrinks from
+  per-room captures to keeping one or two classic sessions warm.
+- **Prod's per-room capture load drops correspondingly** once the listener
+  uses cross-room entry — the same direction PR 3's viewer-pool wind-down
+  planned.
+
+Budget: 3 WS connects (60-75 s each, ≥15 min after any fetch surface use —
+last fetch replay was 14:31, four hours prior), no im/fetch replays.
+Session cookie use: the kyle.toynbee capture's cookieHeader, never quoted
+anywhere (recordings stay in containers).
