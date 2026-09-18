@@ -513,3 +513,20 @@ re-pointing delivers target-room chat on a leased classic-room session:
 PR 2's delivery mechanism is proven end to end at the protocol level.
 The listener-level proof (real connector, synthesized SignResult through
 the route handler, ack path, reconnect) remains Task 5's soak.
+
+## Egress policy: webshare dropped (operator decision, 2026-09-18)
+
+Webshare residential proxies are DROPPED for TikTok, lab and prod: the
+datacenter IPs have better reputation than the proxy ones (measured
+2026-09-16: all 10 webshare lanes stopped serving im/fetch while direct
+egress captured fine; the signer switched to direct egress in
+caesar-deployment #104). Consequences for this effort:
+
+- PR 2's Task 5 soak prerequisite "signer-side proxy lanes +
+  `SIGNER_WEBSHARE_TOKEN`" is VOID: the lab runs direct, matching prod.
+  The `pinned` lane-pin criterion does not apply (no lanes to pin);
+  the pre-sign path simply observes no proxyCredentials in the lab.
+- Spike #6c's open question ("PR 2 must decide pure-node fetch egress")
+  resolves to DIRECT for both the fetch leg and the WS leg.
+- Do not re-introduce webshare wiring, tokens, or proxy-lane machinery
+  in any later PR without an explicit operator instruction.
