@@ -96,7 +96,7 @@ const baseConfig: SignConfiguration = {
 function install(
   globals: ConnectorGlobals,
   overrides: Partial<SignConfiguration>,
-  signers: { euler: WebcastSigner; self?: WebcastSigner },
+  signers: { euler: WebcastSigner; self?: WebcastSigner; pureNode?: WebcastSigner },
   observer: SignObserver = new RecordingObserver(),
   logger: InstallerLogger = new CapturingLogger()
 ) {
@@ -245,6 +245,32 @@ describe('installSignConfiguration', () => {
       // This is the actual finish line for #698: only here is Euler off the signature path.
       expect(report.signerName).toBe('self');
       expect(report.eulerReachableForSignature).toBe(false);
+    });
+  });
+
+  describe('pure-node mode', () => {
+    it('installs the pure-node signer with no Euler fallback', () => {
+      const pureNode = new StubSigner('pure-node');
+      const report = install(
+        globals,
+        { signerMode: 'pure-node' },
+        { euler, pureNode }
+      );
+
+      // The whole point of the mode: the leased session replaces the
+      // Euler signature, and MeasuredSigner (not FallbackSigner) wraps
+      // it, so a lease failure cannot silently dial Euler.
+      expect(report.signerName).toBe('pure-node');
+      expect(report.eulerReachableForSignature).toBe(false);
+    });
+
+    it('degrades to Euler with a warning when no pure-node signer is supplied', () => {
+      const report = install(globals, { signerMode: 'pure-node' }, { euler }, undefined, logger);
+
+      expect(report.signerName).toBeUndefined();
+      expect(logger.warns[0].message).toMatch(/no pure-node signer/i);
+      // Effective state, not requested: it stayed on Euler.
+      expect(report.eulerReachableForSignature).toBe(true);
     });
   });
 
@@ -427,5 +453,50 @@ describe('asRouteHandler', () => {
       fetchResultCookieHeader: 'tt=1',
       fetchResultRoomId: '7399'
     });
+  });
+
+  it('seeds every cookie pair into the jar — the connector absorbs only the first pair', async () => {
+    // The session jar is many cookies (ttwid, msToken, ...), but the
+    // connector's processSetCookieHeader takes split(";")[0] — without
+    // this split the WS Cookie header would carry one pair plus whatever
+    // the page view set. A signer without a jar.setCookie (older shape)
+    // is skipped silently.
+    const signer = new StubSigner('self', { fetchResult: {}, fetchResultCookieHeader: 'ttwid=1; msToken=2; sessionid=3' });
+    const set: string[] = [];
+    const client = {
+      clientHeaders: { 'User-Agent': 'UA' },
+      cookieJar: {
+        getCookieString: async () => '',
+        setCookie: async (raw: string) => {
+          set.push(raw);
+        }
+      }
+    };
+
+    await asRouteHandler(signer)({ roomId: '73', webClient: client });
+
+    expect(set).toEqual(['ttwid=1', 'msToken=2', 'sessionid=3']);
+  });
+
+  it('tolerates a jar.setCookie that throws on one malformed pair', async () => {
+    // The jar's decodeURIComponent is unguarded: a cookie value with a
+    // stray '%' throws. One bad pair must not fail the whole connect.
+    const signer = new StubSigner('self', { fetchResult: {}, fetchResultCookieHeader: 'ttwid=1; bad=%zz; msToken=2' });
+    const set: string[] = [];
+    const client = {
+      clientHeaders: { 'User-Agent': 'UA' },
+      cookieJar: {
+        getCookieString: async () => '',
+        setCookie: async (raw: string) => {
+          if (raw.includes('%')) throw new Error('decodeURIComponent failed');
+          set.push(raw);
+        }
+      }
+    };
+
+    const result = await asRouteHandler(signer)({ roomId: '73', webClient: client });
+
+    expect(set).toEqual(['ttwid=1', 'msToken=2']);
+    expect(result.fetchResultCookieHeader).toBe('ttwid=1; bad=%zz; msToken=2');
   });
 });

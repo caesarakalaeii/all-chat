@@ -200,19 +200,39 @@ reachable, or a TikTok outage reads as our regression.
 the library, so this is the part we had to build. The signer now exists:
 [`services/tiktok-signer`](../tiktok-signer/) signs and executes `/webcast/im/fetch/` with
 TikTok's own SDK in a headless browser. Set `TIKTOK_SIGNER_URL` to its address (the k8s
-deployment defaults it to `http://tiktok-signer:8092`) and the `self` signer is constructed at
-startup; without the URL, `shadow` and `self` log a warning and stay on Euler.
+deployment defaults it to `http://tiktok-signer:8092`) and the mode's signer is constructed at
+startup; without the URL, `shadow`, `self` and `pure-node` log a warning and stay on Euler.
 
 | Mode | Who signs the connection | Purpose |
 |---|---|---|
 | `euler` | Euler Stream | Unchanged behaviour. Our code is not on the connect path. |
 | `shadow` | Euler | Our signer runs in parallel against the same room; its outcome is recorded and discarded. Cannot change connection behaviour. |
 | `self` | Us | Euler catches failures while `TIKTOK_SELF_SIGN_FALLBACK` is on. |
+| `pure-node` | Us (leased session) | No Euler, no per-room page capture: the signer's warm classic room leases its WS session (`GET /v1/session`), and every room enters on it cross-room. |
 
 Walk them in that order. `shadow` exists so the success rate of our own signer can be measured
 against Euler's, on live rooms, before anything depends on it — after cutover, a TikTok change to
 the signing algorithm takes TikTok ingest down until we fix it, where today it is Euler's problem.
 That break-fix cycle lands on the signer service; see its README for the update procedure.
+
+`pure-node` details (PR 2 of the pure-Node transport, measured 2026-09-18):
+the signer leases a **shared WS session** — one warm classic room's
+webcast URL + cookie jar, freshness-stamped — and the listener
+synthesizes the connector's initial fetch result in-process
+(`src/sign/pure-node.ts`): every recorded identity param is forwarded
+(they are handshake-load-bearing; the bare push origin is rejected),
+`cursor=0` rides the WS query (validated on the wire), and the room's
+chat arrives via the connector's own `im_enter_room`. Two budgets pace
+it (constraint: ~15 WS connects/hour flags the session): successful
+lease fetches ≤ 8/hour (10-min cache, single-flight) and WS connect
+signs ≤ 12/hour **per pod** — the session's flag budget is shared by
+every pod leasing it, so keep ONE connect-capable replica in pure-node
+rollouts or divide the cap accordingly. The premium **fallback tier is
+OFF** in this mode: the relay needs a target-room warm tab that the
+lease never creates, so promotion honestly reports `relay_unavailable`
+until PR 3 wires the capture-based fallback. Gifts stay off
+(`enableExtendedGiftInfo` is self-only — the URL-signing seam keys on
+the self signer).
 
 When `TIKTOK_SIGNER_URL` is set the listener also fetches the signer's browser identity
 (`GET /v1/identity`) once at startup and pins every connection's device presets to it, so the
