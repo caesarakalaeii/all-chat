@@ -255,3 +255,73 @@ describe('CanaryConsumer divergence detection', () => {
     }
   });
 });
+
+describe('CanaryConsumer tab warm (PR 3, pure-node mode)', () => {
+  // The RelayStream calls the 409 hook (onNoWarmTab) once per connect that
+  // answers 409; the consumer must run the warm callback at most ONCE per
+  // stint — each warm is a signer-side capture against a single-digit-
+  // per-hour budget. The hook is driven directly: the SSE connect path
+  // needs a live signer (lab rig, Task 5).
+  function makeWarmConsumer() {
+    const warm = vi.fn(async () => true);
+    const consumer = new CanaryConsumer({
+      username: 'lab-test',
+      signerUrl: 'http://signer.invalid:8092',
+      warm
+    });
+    const noWarmTab = () =>
+      (consumer as unknown as { onNoWarmTab?: () => void }).onNoWarmTab?.();
+    return { consumer, warm, noWarmTab };
+  }
+
+  it('runs the warm exactly once across repeated 409s in one stint', () => {
+    const { consumer, warm, noWarmTab } = makeWarmConsumer();
+    consumer.start();
+    // Three 409 connect attempts in one stint: the flag must hold after
+    // the first.
+    noWarmTab();
+    noWarmTab();
+    noWarmTab();
+    expect(warm).toHaveBeenCalledTimes(1);
+    consumer.stop();
+  });
+
+  it('does not warm a failed warm again within the stint', async () => {
+    const warm = vi.fn(async () => false);
+    const consumer = new CanaryConsumer({
+      username: 'lab-test',
+      signerUrl: 'http://signer.invalid:8092',
+      warm
+    });
+    const noWarmTab = () =>
+      (consumer as unknown as { onNoWarmTab?: () => void }).onNoWarmTab?.();
+    consumer.start();
+    noWarmTab();
+    await new Promise((resolve) => setImmediate(resolve)); // warm promise settles
+    noWarmTab(); // still 409ing after a failed warm
+    noWarmTab();
+    expect(warm).toHaveBeenCalledTimes(1); // the retry path is SSE-only
+    consumer.stop();
+  });
+
+  it('a new stint earns exactly one fresh warm', () => {
+    const { consumer, warm, noWarmTab } = makeWarmConsumer();
+    consumer.start();
+    noWarmTab();
+    expect(warm).toHaveBeenCalledTimes(1);
+    consumer.stop();
+    consumer.start();
+    noWarmTab();
+    expect(warm).toHaveBeenCalledTimes(2);
+    consumer.stop();
+  });
+
+  it('never fires the warm hook without a warm callback', () => {
+    const consumer = new CanaryConsumer({
+      username: 'lab-test',
+      signerUrl: 'http://signer.invalid:8092'
+    });
+    const hook = (consumer as unknown as { onNoWarmTab?: () => void }).onNoWarmTab;
+    expect(hook).toBeUndefined(); // RelayStream skips the 409 branch entirely
+  });
+});
