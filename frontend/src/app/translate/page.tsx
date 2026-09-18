@@ -96,6 +96,7 @@ const TOOL_NAMESPACES = [
   'viewerOverlay',
 ] as const
 
+
 function TranslatePageInner() {
   const t = useTranslations()
 
