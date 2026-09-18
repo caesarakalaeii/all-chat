@@ -161,6 +161,10 @@ export class RelayHub {
             }
         }
     }
+    /** Whether the room has live relay subscribers (session recovery skips it). */
+    hasSubscribers(username) {
+        return (this.subscribers.get(username)?.size ?? 0) > 0;
+    }
     /** Room counts currently relayed (for metrics). */
     get size() {
         return this.taps.size;

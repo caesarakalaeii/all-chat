@@ -18,6 +18,7 @@
 import puppeteerExtra from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { rm } from 'fs/promises';
+import { VIEWER_UA } from './identity.js';
 /**
  * How many consecutive capture failures a lane tolerates before its browser
  * profile is wiped and rebuilt. See ProxyLane.consecutiveFailures.
@@ -76,6 +77,21 @@ class RaceLostError extends Error {
 // signature path uses.
 const puppeteer = puppeteerExtra;
 puppeteer.use(StealthPlugin());
+/** Compound lane key: one host hosts a primary and a canary lane. */
+function laneKey(host, klass) {
+    return `${host}|${klass}`;
+}
+/**
+ * Rooms listed in both the canary set and the warm set: a misconfiguration
+ * whose canary jar the session endpoint would lease as the primary session.
+ * Pure so index.ts (an entry script) stays testable; the service refuses to
+ * start on a non-empty result — a crash-looping pod is GitOps- and
+ * alert-visible, a silently cross-contaminated jar is not.
+ */
+export function findDualListedRooms(canaryRooms, warmRooms) {
+    const canary = new Set([...canaryRooms].map((r) => r.toLowerCase()));
+    return warmRooms.map((r) => r.toLowerCase()).filter((r) => canary.has(r));
+}
 /**
  * A pool of "real viewer" browser tabs. Each capture opens (or reuses) a tab
  * on the room's live page and records the SDK-signed /webcast/im/fetch/
@@ -90,20 +106,22 @@ puppeteer.use(StealthPlugin());
  * first captured on — the profile keeps its TikTok cookies, which is part of
  * the session-grade identity that passes the gate. A failed capture benches
  * the lane for a cooldown and the next attempt rides another one. Lanes are
- * keyed by proxy host, so `refreshProxies` (fed by the webshare API) can
- * swap the list underneath without disturbing surviving lanes.
+ * keyed by compound `host|class` (one lane per proxy per profile class), so
+ * `refreshProxies` (fed by the webshare API) can swap the list underneath
+ * without disturbing surviving lanes — and canary rooms ride their own
+ * profiles, so a flag earned on a primary jar cannot blind the canary.
  *
  * Tabs stay open after a capture: the page keeps receiving live push (which
  * keeps the session warm on TikTok's side) and the next capture for the same
  * room reuses its warmed session identity instead of bootstrapping a new one.
  */
 export class ViewerPool {
-    /** Lanes keyed by proxy host ("" = direct). */
+    /** Lanes keyed by compound lane key (host + '|' + class; "" host = direct). */
     lanes = new Map();
     /** Round-robin cursor over the lane keys in insertion order. */
     laneOrder = [];
     tabs = new Map();
-    /** username -> lane host, so a room keeps its browser identity. */
+    /** username -> compound lane key, so a room keeps its browser identity. */
     roomLane = new Map();
     roundRobin = 0;
     options;
@@ -115,16 +133,22 @@ export class ViewerPool {
             ...options
         };
         const hosts = options.proxyHosts ?? [];
-        if (hosts.length === 0) {
-            this.addLane('');
-        }
-        else {
-            hosts.forEach((host) => this.addLane(host));
-        }
+        const hostList = hosts.length === 0 ? [''] : hosts;
+        // Both classes always exist per host: room class routing must never
+        // fall back to the other class because its lane was never created.
+        hostList.forEach((host) => {
+            this.addLane(host, 'primary');
+            this.addLane(host, 'canary');
+        });
     }
-    addLane(host) {
+    addLane(host, klass) {
+        const base = klass === 'canary'
+            ? (this.options.canaryProfileDir ?? `${this.options.userDataDir ?? '/tmp/tiktok-signer-profile-viewer'}-canary`)
+            : (this.options.userDataDir ?? '/tmp/tiktok-signer-profile-viewer');
         const lane = {
             host,
+            klass,
+            profileDir: `${base}-${host || 'direct'}`,
             browser: null,
             launching: null,
             benchedUntil: 0,
@@ -135,7 +159,7 @@ export class ViewerPool {
             slots: 0,
             detached: false
         };
-        this.lanes.set(host, lane);
+        this.lanes.set(laneKey(host, klass), lane);
         this.laneOrder = [...this.lanes.keys()];
         return lane;
     }
@@ -165,12 +189,12 @@ export class ViewerPool {
             };
         }
         const wanted = new Set(hosts);
-        for (const [host, lane] of [...this.lanes]) {
-            const gone = host !== '' && !wanted.has(host);
-            const dropDirect = host === '' && hosts.length > 0;
+        for (const [key, lane] of [...this.lanes]) {
+            const gone = lane.host !== '' && !wanted.has(lane.host);
+            const dropDirect = lane.host === '' && hosts.length > 0;
             if (!gone && !dropDirect)
                 continue;
-            this.lanes.delete(host);
+            this.lanes.delete(key);
             this.laneOrder = [...this.lanes.keys()];
             try {
                 await lane.browser?.close();
@@ -181,24 +205,35 @@ export class ViewerPool {
             this.teardownLane(lane);
         }
         for (const host of hosts) {
-            if (!this.lanes.has(host))
-                this.addLane(host);
+            // Both classes per proxy: room class routing never falls back to the
+            // other class because its lane was never created.
+            if (!this.lanes.has(laneKey(host, 'primary')))
+                this.addLane(host, 'primary');
+            if (!this.lanes.has(laneKey(host, 'canary')))
+                this.addLane(host, 'canary');
         }
     }
+    /** The profile class a room captures under: canary rooms get canary lanes. */
+    laneClassFor(username) {
+        return this.options.canaryRooms?.has(username) ? 'canary' : 'primary';
+    }
     pickLane(username) {
+        const klass = this.laneClassFor(username);
         // A room already captured keeps its lane: the profile's cookies are part
-        // of the identity TikTok judged the first time.
-        const pinnedHost = this.roomLane.get(username);
-        if (pinnedHost !== undefined) {
-            const lane = this.lanes.get(pinnedHost);
-            if (lane && Date.now() >= lane.benchedUntil)
+        // of the identity TikTok judged the first time. The pinned key carries
+        // the class; a pinned key of the wrong class (config change) falls
+        // through to the class pool.
+        const pinnedKey = this.roomLane.get(username);
+        if (pinnedKey !== undefined) {
+            const lane = this.lanes.get(pinnedKey);
+            if (lane && lane.klass === klass && Date.now() >= lane.benchedUntil)
                 return lane;
-            // The pinned lane is benched or gone; fall through to picking another.
+            // The pinned lane is benched, gone or wrong-class; fall through.
         }
         const now = Date.now();
         const all = this.laneOrder
             .map((h) => this.lanes.get(h))
-            .filter((l) => l !== undefined);
+            .filter((l) => l !== undefined && l.klass === klass);
         const available = all.filter((l) => now >= l.benchedUntil);
         const pool = available.length > 0 ? available : all;
         const lane = pool[this.roundRobin % pool.length];
@@ -246,10 +281,10 @@ export class ViewerPool {
             headless: false,
             executablePath: this.options.executablePath,
             args,
-            // Profile per lane: the session identity (cookies, device reputation)
-            // is bound to the egress IP and must never mix.
-            userDataDir: `${this.options.userDataDir ?? '/tmp/tiktok-signer-profile-viewer'}-${lane.host || 'direct'}`,
-            ignoreDefaultArgs: ['--enable-automation']
+            // Profile per lane, from lane.profileDir (built by addLane per
+            // class): the session identity (cookies, device reputation) is
+            // bound to the egress IP and profile class and must never mix.
+            userDataDir: lane.profileDir,
         })
             .then((browser) => {
             lane.browser = browser;
@@ -269,6 +304,13 @@ export class ViewerPool {
     evictIdleTabs() {
         const now = Date.now();
         for (const [username, entry] of this.tabs) {
+            // Pinned rooms (the warm set) keep their tab: the page's own WS is
+            // what keeps the leased session warm on TikTok's side between
+            // connects. Their unservable tabs are closed by the session
+            // endpoint's recovery pass, whose criterion is the lease outcome,
+            // not idleness.
+            if (this.options.pinnedRooms?.has(username))
+                continue;
             if (now - entry.lastUsed > this.options.tabIdleMs) {
                 this.tabs.delete(username);
                 this.roomLane.delete(username);
@@ -288,6 +330,57 @@ export class ViewerPool {
             return undefined;
         entry.lastUsed = Date.now();
         return entry.page;
+    }
+    /**
+     * The room's warm WS session, served from its registered tab: the recorded
+     * webcast push URL plus a freshly re-read cookie jar (the jar at capture
+     * time may have rotated since). Undefined when the room has no warm tab
+     * OR its page is dead (the cookie re-read rejects — the entry self-heals
+     * via the session endpoint's recovery pass, which is the only path that
+     * can clear it: hasTab stays true, so no captureRoom is reachable).
+     */
+    async sessionLease(username) {
+        const entry = this.tabs.get(username);
+        if (!entry)
+            return undefined;
+        entry.lastUsed = Date.now();
+        let cookies;
+        try {
+            cookies = await cookieHeader(entry.page);
+        }
+        catch {
+            return undefined;
+        }
+        const pinnedKey = this.roomLane.get(username);
+        const lane = pinnedKey !== undefined ? this.lanes.get(pinnedKey) : undefined;
+        return {
+            wsUrl: entry.wsUrl,
+            cookieHeader: cookies,
+            roomId: entry.roomId,
+            userAgent: VIEWER_UA,
+            proxyHost: lane?.host ?? '',
+            capturedAt: entry.capturedAt
+        };
+    }
+    /**
+     * Close one room's tab and unregister it (tabs AND roomLane — deleting
+     * only tabs would leave the reuse precondition armed, and the next
+     * capture would ride a dead page into giveUp instead of cold-capturing).
+     * The lane's profile directory persists: the jar is not lost, only the
+     * tab. Returns whether a tab was dropped.
+     */
+    closeTab(username) {
+        const entry = this.tabs.get(username);
+        if (!entry)
+            return false;
+        this.tabs.delete(username);
+        this.roomLane.delete(username);
+        void entry.page.close().catch(() => undefined);
+        return true;
+    }
+    /** Whether the room currently has a registered tab (dead or alive). */
+    hasTab(username) {
+        return this.tabs.has(username);
     }
     /**
      * Capture the initial fetch exchange for a live room. Resolves when the
@@ -349,7 +442,12 @@ export class ViewerPool {
             throw this.captureFailure(failures);
         }
         const now = Date.now();
-        const candidates = [...this.lanes.values()].filter((l) => l !== firstLane && now >= l.benchedUntil);
+        const candidates = [...this.lanes.values()].filter(
+        // Same profile class as the first attempt: a primary room must never
+        // win its race on a canary lane (and vice versa) — that would register
+        // the room inside the other class's jar, exactly when lanes are
+        // benched and failing.
+        (l) => l !== firstLane && l.klass === firstLane.klass && now >= l.benchedUntil);
         if (candidates.length === 0) {
             // Every other lane is benched: nothing to race, the first failure stands.
             throw this.captureFailure(failures);
@@ -403,7 +501,7 @@ export class ViewerPool {
      * recapture on the next call.
      */
     async rotateLaneProfile(lane) {
-        const profileDir = `${this.options.userDataDir ?? '/tmp/tiktok-signer-profile-viewer'}-${lane.host || 'direct'}`;
+        const profileDir = lane.profileDir;
         this.options.logger?.warn('rotating lane profile after repeated capture failures', {
             lane: lane.host || 'direct',
             consecutive_failures: lane.consecutiveFailures,
@@ -428,8 +526,11 @@ export class ViewerPool {
         lane.browser = null;
         lane.launching = null;
         lane.detached = true;
-        for (const [username, laneHost] of [...this.roomLane]) {
-            if (laneHost === lane.host) {
+        for (const [username, pinnedKey] of [...this.roomLane]) {
+            // Compound-key match: only THIS lane's rooms. A bare-host match would
+            // tear down the primary rooms too when a canary lane rotates (both
+            // classes of one host share the host value).
+            if (pinnedKey === laneKey(lane.host, lane.klass)) {
                 this.roomLane.delete(username);
                 const tab = this.tabs.get(username);
                 if (tab) {
@@ -607,6 +708,16 @@ export class ViewerPool {
         let fail;
         let heartbeat;
         let page = null;
+        /** CDP tap for the webcast push WS URL; closed on every settle path. */
+        let cdp = null;
+        /** Last webcast WS URL the tap saw ('' when none). */
+        let wsUrl = '';
+        const closeCdpOnce = () => {
+            if (!cdp)
+                return;
+            void cdp.detach().catch(() => undefined);
+            cdp = null;
+        };
         let onResponse = null;
         let slotHeld = false;
         const releaseSlotOnce = () => {
@@ -625,6 +736,7 @@ export class ViewerPool {
                 page.off('response', onResponse);
             if (page)
                 void page.close().catch(() => undefined);
+            closeCdpOnce();
             releaseSlotOnce();
             reject(new RaceLostError(lane.host));
         };
@@ -651,7 +763,9 @@ export class ViewerPool {
                 // page on its own lane instead. Prewarmed parked tab serves a cold
                 // room (skips the domain bootstrap); the browser only launches when
                 // a brand-new page is needed.
-                const existing = this.roomLane.get(username) === lane.host ? this.tabs.get(username) : undefined;
+                const existing = this.roomLane.get(username) === laneKey(lane.host, lane.klass)
+                    ? this.tabs.get(username)
+                    : undefined;
                 const prewarmed = existing ? undefined : await this.takePrewarmedTab(lane);
                 page = existing?.page ?? prewarmed ?? null;
                 if (!page) {
@@ -671,6 +785,7 @@ export class ViewerPool {
                     clearTimeout(fail);
                     clearTimeout(heartbeat);
                     capturePage.off('response', onResponse);
+                    closeCdpOnce();
                     // Drop the tab only when this page is the room's registered one:
                     // in a parallel lane race the loser's page is its own, while the
                     // winner may have already registered a different tab for the room.
@@ -713,6 +828,7 @@ export class ViewerPool {
                         clearTimeout(fail);
                         clearTimeout(heartbeat);
                         capturePage.off('response', onResponse);
+                        closeCdpOnce();
                         await capturePage.close().catch(() => undefined);
                         releaseSlotOnce();
                         reject(new RaceLostError(lane.host));
@@ -729,13 +845,30 @@ export class ViewerPool {
                     clearTimeout(fail);
                     clearTimeout(heartbeat);
                     capturePage.off('response', onResponse);
+                    closeCdpOnce();
                     try {
-                        const cookies = (await capturePage.cookies('https://www.tiktok.com'))
-                            .map((c) => `${c.name}=${c.value}`)
-                            .join('; ');
+                        const cookies = await cookieHeader(capturePage);
                         const roomId = new URL(url).searchParams.get('room_id') ?? username;
-                        this.tabs.set(username, { page: capturePage, lastUsed: Date.now() });
-                        this.roomLane.set(username, lane.host);
+                        const previous = this.tabs.get(username);
+                        // Keep-on-empty: a re-capture of the SAME warm page whose SPA
+                        // nav did not open a fresh webcast socket keeps the previously
+                        // recorded wsUrl (durable ≥16 min measured) AND its capturedAt —
+                        // the stamp always describes the URL it serves, never the
+                        // re-capture. A different page (cold capture on another lane)
+                        // has no previous session to keep: its own tap result stands,
+                        // even when empty — pairing this page's cookies with another
+                        // page's wsUrl is a cross-session mismatch TikTok can reject.
+                        const samePage = previous !== undefined && previous.page === capturePage;
+                        const kept = wsUrl === '' && samePage ? previous.wsUrl : wsUrl;
+                        const stamp = kept === '' ? Date.now() : (wsUrl === '' && samePage ? previous.capturedAt : Date.now());
+                        this.tabs.set(username, {
+                            page: capturePage,
+                            lastUsed: Date.now(),
+                            wsUrl: kept,
+                            roomId,
+                            capturedAt: stamp
+                        });
+                        this.roomLane.set(username, laneKey(lane.host, lane.klass));
                         this.refillPrewarm(lane);
                         releaseSlotOnce();
                         resolve({
@@ -744,7 +877,8 @@ export class ViewerPool {
                             cookieHeader: cookies,
                             userAgent: VIEWER_UA,
                             proxyHost: lane.host,
-                            elapsedMs: Date.now() - startedAt
+                            elapsedMs: Date.now() - startedAt,
+                            wsUrl: kept
                         });
                     }
                     catch (error) {
@@ -752,6 +886,24 @@ export class ViewerPool {
                         reject(error);
                     }
                 };
+                // CDP tap for the webcast push WS URL, attached BEFORE navigation so
+                // the socket's creation event cannot be missed (relay.ts solves the
+                // same too-late problem with a page reload; here we are pre-nav).
+                // Same substring filter RelayHub uses: the page keeps analytics
+                // sockets too, only the webcast ones carry the push URL.
+                try {
+                    cdp = await capturePage.createCDPSession();
+                    cdp.on('Network.webSocketCreated', (params) => {
+                        if (params.url.includes('webcast'))
+                            wsUrl = params.url;
+                    });
+                    await cdp.send('Network.enable');
+                }
+                catch {
+                    // The tap is best-effort: without it the capture still serves, just
+                    // with wsUrl '' (keep-on-empty then preserves any previous URL).
+                    cdp = null;
+                }
                 capturePage.on('response', onResponse);
                 // The player fetches on its own after page init. On a reused tab the
                 // page is already live and will not re-fetch, so instead of a full
@@ -846,21 +998,11 @@ function isTrackerUrl(url) {
         url.includes('/collect') ||
         url.includes('ads-sdk'));
 }
-/** The UA the viewer pages run with. Must match what the listener pins. */
-export const VIEWER_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36';
-/**
- * Identity matching VIEWER_UA, exposed via /v1/identity when viewer mode is
- * active. The connector pins its device presets to whatever /v1/identity
- * reports, so the WebSocket handshake's User-Agent and browser_* params
- * describe the same browser that captured the session — a mismatch (the
- * signature-path Safari identity against a Chrome viewer capture) gets the
- * WS handshake answered with a plain HTTP 200 and no upgrade.
- */
-export const VIEWER_IDENTITY = {
-    userAgent: VIEWER_UA,
-    browserPlatform: 'Linux x86_64',
-    os: 'linux',
-    screenWidth: 1920,
-    screenHeight: 1080
-};
+/** A page's tiktok.com cookies as a `name=value; ...` header. One helper so
+ * the capture path and the lease path serialize identically. */
+async function cookieHeader(page) {
+    return (await page.cookies('https://www.tiktok.com'))
+        .map((c) => `${c.name}=${c.value}`)
+        .join('; ');
+}
 //# sourceMappingURL=viewer.js.map

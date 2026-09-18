@@ -353,7 +353,10 @@ Answers vs the plan's forks:
 - **#2 (from the 13:37 batch): harvest-needed.** sign-url (X-Bogus) alone
   yields empty-200; the page-computed X-Gnarly/X-Dynosaur set is required.
 
-**PR 1 branch resolution (now fully measured):** the signing endpoint must
+**PR 1 branch resolution (now fully measured):** [Superseded: the
+cross-room WS entry section below and the PR 1 plan's deltas resolve this
+differently — no per-room captures; a warm classic room's session is leased
+and re-entered per target room.] The signing endpoint must
 produce, per room, per connect, a page-computed signature over the im/fetch
 param set — i.e. the harvest route (CDP capture of the page's own im/fetch or
 an in-page sign of a per-room URL with the full signature family, whichever
@@ -406,3 +409,69 @@ Budget: 3 WS connects (60-75 s each, ≥15 min after any fetch surface use —
 last fetch replay was 14:31, four hours prior), no im/fetch replays.
 Session cookie use: the kyle.toynbee capture's cookieHeader, never quoted
 anywhere (recordings stay in containers).
+
+## PR 1 implemented (2026-09-18, no live requests)
+
+PR 1 of the pure-Node transport landed in `services/tiktok-signer`, exactly
+on the handoff's deltas (no sign-fetch, no allowlist extension, no harvest
+cadence; canary isolation kept as handoff item 4). Plan passed a 6-round,
+3-lens council (feasibility/decomposition/criteria, 18 reviewer sessions,
+verdict: PASS after five rounds of blocking findings — the load-bearing
+catches were the roomLane compound-key migration's four consumer sites, the
+`ensureBrowser`/`rotateLaneProfile` inline profileDir templates, the
+`PROFILE_ROTATE_FAILURES` rotation cascade the breaker cannot prevent, and
+the dead-tab absorbing state in the lease endpoint's recovery pass).
+
+What shipped:
+
+- **Identity module** (`src/signing/identity.ts`): `SIGNING_IDENTITY`
+  (Safari/macOS) + `VIEWER_IDENTITY` (Linux Chrome/144) in one place;
+  `imFetchParams` derives `browser_*`/`os`/`screen_*`/`browser_version`
+  from the identity it is handed (the hardcoded MacIntel/mac/5.0 is gone);
+  session.ts's page UA, viewport, `navigator.platform` and window-size all
+  read from it; `identityIsConsistent` is exported so the golden test
+  asserts the negative.
+- **WS-URL capture**: each capture attaches a CDP tap before navigation and
+  records the page's webcast push WS URL (RelayHub's `includes('webcast')`
+  filter) into `RoomCapture.wsUrl` and the registered `TabEntry`
+  (`wsUrl`/`roomId`/`capturedAt`). Keep-on-empty: a re-capture of the SAME
+  warm page whose SPA nav opens no fresh socket keeps the previous `wsUrl`
+  AND its original `capturedAt` — the stamp always describes the served
+  URL's age. A different page's empty tap result stands on its own: no
+  cross-session cookie/wsUrl pairing.
+- **`GET /v1/session`**: shared-session lease endpoint
+  (`{ wsUrl, cookieHeader, roomId, userAgent, proxyHost, capturedAt }`),
+  four-phase flow (warm lease → breaker-gated tab-less capture with
+  fallthrough → recovery pass that closes unservable tabs, skipping rooms
+  with active relay subscribers, then cold-captures exactly the freed
+  rooms → retryable 503). Metric `signer_session_leases_total{outcome}`
+  with `success`/`captured`/`capture_failed`/`no_session`/`disabled`/
+  `viewer_off`. The recovery's dead-page criterion is what keeps a Chromium
+  crash from wedging the endpoint (council round-6 blocker).
+- **Canary profile isolation**: every lane carries a class
+  (`primary`/`canary`) and its own `profileDir`; roomLane stores the
+  compound `host|class` key (all four consumer sites migrated);
+  `pickLane` and the race candidates are class-filtered; `refreshProxies`
+  manages both classes; canary browsers launch lazily. A room listed in
+  both `SIGNER_WARM_ROOMS` and `SIGNER_RELAY_CANARY_ROOMS` refuses startup
+  (`findDualListedRooms`).
+- **Canonical usernames**: `/v1/sign` viewer path, `/v1/stream` path capture
+  and both env lists lowercase, so pool tabs, breaker state, relay
+  subscribers and warm-room config key on one form.
+- Pinned warm rooms are exempt from idle eviction; the recovery pass is
+  the only thing that closes them (criterion: lease outcome, not idleness).
+
+Acceptance gate (all offline, no TikTok requests — the live proof of the
+leased session lands in PR 2's shadow acceptance, per plan):
+
+```
+docker run --rm -v $PWD/services/tiktok-signer:/app -w /app \
+  node:22-bookworm-slim sh -c "npm ci && npx tsc --noEmit && npm test"
+→ 6 test files, 63 tests passed, exit 0 (verified after round-2 review fixes, 2026-09-18)
+```
+
+Honest costs recorded by the plan and README: the capture breaker paces a
+dead/live_new configured warm room but cannot prevent the first lane
+profile rotation it drives (pool-side failure accrual is unconditional,
+`PROFILE_ROTATE_FAILURES` = breaker threshold = 3); the actual control is
+`SIGNER_WARM_ROOMS` listing classic, verified-live rooms only.
