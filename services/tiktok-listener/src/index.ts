@@ -86,7 +86,9 @@ import { loadSignConfiguration } from './sign/config.js';
 import { installSignConfiguration } from './sign/installer.js';
 import { EulerSigner } from './sign/euler.js';
 import { fetchWebshareCredentials } from './sign/webshare.js';
-import { SelfSigner } from './sign/self.js';
+import { pickSignClients } from './sign/sign-clients.js';
+import type { PureNodeSigner } from './sign/pure-node.js';
+import type { SelfSigner } from './sign/self.js';
 import { pickAvatarUrl, tiktokAvatarUrl } from './avatar.js';
 import {
   hasTikTokChestPayload,
@@ -476,6 +478,11 @@ class TikTokListenerService {
   // same lane. Undefined when self signing is not configured.
   private selfSigner?: SelfSigner;
 
+  // The pure-node session signer (PR 2): set only in pure-node mode, where
+  // the pre-sign reads the leased session's proxyHost instead of driving a
+  // page capture. Exactly one of selfSigner/pureNodeSigner is ever set.
+  private pureNodeSigner?: PureNodeSigner;
+
 
   // Pre-sign no-lane negative cache (see NoLaneCache): pool-wide, not per-room.
   private readonly noLaneCache = new NoLaneCache();
@@ -569,11 +576,17 @@ class TikTokListenerService {
     // Apply the Euler Stream retirement configuration to the connector's global route registry
     // (issue #698). Must happen before any TikTokLiveConnection is constructed, because the
     // connector reads these module-level singletons at connect time and caches its Euler client.
-    //
-    // By default this only switches the room-id and is-live composites off Euler's fallback leg,
-    // which is free of risk: those composites try TikTok directly first and reach for Euler only
-    // when both direct routes have already failed. Signing stays with Euler unless
-    // TIKTOK_SIGNER_MODE says otherwise.
+    // Mode-gated signer construction (PR 2 plan ruling 6): euler/shadow
+    // keep SelfSigner whenever a signer URL is configured (k8s default
+    // relies on it for lane pinning and relay promotion); pure-node gets
+    // the PureNodeSigner and no SelfSigner.
+    const signClients = pickSignClients(SIGN_CONFIG.signerMode, {
+      signerBaseUrl: SIGN_CONFIG.signerBaseUrl,
+      authToken: TIKTOK_SIGNER_AUTH_TOKEN || undefined,
+      selfTimeoutMs: TIKTOK_SIGNER_TIMEOUT_MS
+    });
+    this.selfSigner = signClients.selfSigner;
+    this.pureNodeSigner = signClients.pureNodeSigner;
     installSignConfiguration(
       {
         routeConfig: RouteConfig,
@@ -582,19 +595,11 @@ class TikTokListenerService {
         signConfig: SignConfig
       },
       SIGN_CONFIG,
-      // The self signer exists now (services/tiktok-signer, ADR-0052 step 1):
-      // construct it whenever a signer URL is configured. Without the URL,
-      // shadow and self still degrade to Euler with a warning rather than
-      // failing to start.
+      // Signer construction is mode-gated (pickSignClients, see above).
       {
         euler: new EulerSigner(RouteConfig.fetchSignedWebSocketFromProvider as never),
-        self: SIGN_CONFIG.signerBaseUrl
-          ? (this.selfSigner = new SelfSigner({
-              baseUrl: SIGN_CONFIG.signerBaseUrl,
-              authToken: TIKTOK_SIGNER_AUTH_TOKEN || undefined,
-              timeoutMs: TIKTOK_SIGNER_TIMEOUT_MS
-            }))
-          : undefined
+        self: signClients.selfSigner,
+        pureNode: signClients.pureNodeSigner
       },
       this.metrics,
       logger
@@ -1260,10 +1265,16 @@ class TikTokListenerService {
       // returns in milliseconds. Skipped when self signing is off (Euler
       // signs in its own cloud and rides its own proxy already).
       let wsAgent: WsEgressAgent | undefined;
-      if (this.selfSigner && this.proxyCredentials && !this.noLaneCache.skipActive()) {
+      // The lane-pin pre-sign keys on whichever mode-specific signer is
+      // configured: SelfSigner's capture names the capture lane,
+      // PureNodeSigner's lease names the session lane (a cache hit after
+      // the first fetch). The proxyCredentials and noLaneCache conditions
+      // are unchanged.
+      const signClient = this.pureNodeSigner ?? this.selfSigner;
+      if (signClient && this.proxyCredentials && !this.noLaneCache.skipActive()) {
         try {
           const preSignStartedAt = Date.now();
-          const preSign = await this.selfSigner.sign({
+          const preSign = await signClient.sign({
             roomId: 'unused',
             username,
             userAgent: 'ws-pin'

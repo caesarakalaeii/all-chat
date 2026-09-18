@@ -475,3 +475,41 @@ dead/live_new configured warm room but cannot prevent the first lane
 profile rotation it drives (pool-side failure accrual is unconditional,
 `PROFILE_ROTATE_FAILURES` = breaker threshold = 3); the actual control is
 `SIGNER_WARM_ROOMS` listing classic, verified-live rooms only.
+
+## PR 2 Task 1 — the bare WS shape is falsified; recorded params + cursor=0 deliver (2026-09-18 19:54-20:20 UTC, 4 WS connects)
+
+PR 2's plan (rev 5) hypothesized that the synthesized fetchResult could
+carry a bare push URL — `pushServer?compress=gzip&room_id=<TARGET>
+&internal_ext=&cursor=0`, every recorded identity param discarded — with
+only `cursor='0'` needing live verification. Measured against the
+PR 1 lease endpoint (signer-lab rebuilt on commit 2845b5df,
+`SIGNER_WARM_ROOMS=zaganovakov`, one warm lease captured 19:54:13 UTC),
+same target room (zaganovakov, live-verified), same lease cookies, same
+minute, back to back:
+
+| Shape | Handshake | Enter | Chat |
+|---|---|---|---|
+| shipped (bare: `compress=gzip&room_id=<TARGET>&internal_ext=&cursor=0`) | **rejected — "Unexpected server response: 200"** | — | — |
+| recorded (lease wsUrl verbatim, identity params intact) | **accepted** | `im_enter_room_resp` received | (closed at ~2 s: the instrument's ack was a JSON string, not a PushFrame — instrument bug, fixed) |
+| recorded + `cursor=0` substituted, proper PushFrame ack | **accepted** | `im_enter_room_resp` received | **19 WebcastChatMessages, 115 frames, 103 acks, every payload's roomId = the target's, full 120 s window** |
+
+Budget: 4 WS connects total (bare attempt, recorded control, cursor0
+first run with the malformed ack, cursor0 with the fixed ack), no other
+TikTok surfaces in between, zero 403s. The early `read_message` close on
+the first recorded-shape runs was the probe instrument's own bug — the
+ack must be a PushFrame echoing logId with the internalExt payload
+(cross-room-ws.cjs's shape), not a JSON string; with the proper ack the
+connection holds and chat flows.
+
+**Consequence for PR 2 (measured, final)**: the synthesized fetchResult
+must forward the lease wsUrl's recorded identity params via
+`routeParams` — everything except `compress`, `room_id`, `internal_ext`,
+`cursor`, which the connector appends itself — with `pushServer` =
+origin+path and cursor `'0'`. That is exactly the shape PR 2's
+PureNodeSigner implements (the shape change from plan rev 5's bare-origin
+hypothesis, adopted on this measurement). The cursor sentinel `'0'` is
+validated on the wire. Cross-room entry + cursor=0 + target room_id
+re-pointing delivers target-room chat on a leased classic-room session:
+PR 2's delivery mechanism is proven end to end at the protocol level.
+The listener-level proof (real connector, synthesized SignResult through
+the route handler, ack path, reconnect) remains Task 5's soak.
