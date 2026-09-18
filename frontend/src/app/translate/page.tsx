@@ -108,7 +108,6 @@ function apiErrorDetail(err: unknown, fallback: string): string {
   }
   return fallback
 }
-
 function TranslatePageInner() {
   const t = useTranslations()
 
