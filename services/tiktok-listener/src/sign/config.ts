@@ -61,8 +61,9 @@
  *                  flag budget is shared by every pod leasing it, so N connect-capable
  *                  replicas enforce N x the per-pod cap — keep ONE connect-capable replica
  *                  in pure-node rollouts or divide the cap accordingly (PR 4 deployment
- *                  assumption). The premium fallback tier is OFF in this mode until PR 3
- *                  (the relay needs a target-room warm tab the lease never creates).
+ *                  assumption). The premium fallback tier is ON in this mode: promotion
+ *                  warms the target-room tab on the signer before attaching the relay
+ *                  (PR 3, sign/warm-target-tab.ts).
  */
 export type SignerMode = 'euler' | 'shadow' | 'self' | 'pure-node';
 

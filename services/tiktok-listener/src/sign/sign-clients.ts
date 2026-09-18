@@ -21,18 +21,19 @@
  * testable without constructing the 2400-line service (same precedent as
  * src/reliability/connection-decisions.ts).
  *
- * The rules these functions encode (PR 2 plan ruling 6):
+ * The rules these functions encode (PR 2 plan ruling 6, PR 3 extension):
  *
  *  - `euler` and `shadow` construct a SelfSigner whenever a signer URL is
  *    configured — unchanged from pre-PR2 behaviour, because the k8s default
  *    runs euler WITH TIKTOK_SIGNER_URL set and relies on the SelfSigner for
  *    lane pinning and relay promotion.
  *  - `pure-node` constructs a PureNodeSigner instead and NO SelfSigner:
- *    nothing in pure-node mode should drive a per-room page capture.
- *  - Fallback (relay) promotion needs a SelfSigner-warmed target-room tab;
- *    PureNodeSigner leases a warm-classic-room session and never warms a
- *    target-room tab, so promotion is honestly unavailable in pure-node
- *    mode until PR 3 wires the capture-based fallback tier.
+ *    nothing in pure-node mode should drive a per-room page capture on the
+ *    connect path.
+ *  - Fallback (relay) promotion needs a target-room warm tab: self mode's
+ *    pre-sign already ran one, and pure-node mode warms it at promotion
+ *    time (PR 3, sign/warm-target-tab.ts) — so promotion is available in
+ *    every mode with a signer URL.
  */
 
 import type { SignerMode } from './config.js';
@@ -88,10 +89,21 @@ export function pickSignClients(mode: SignerMode, deps: SignClientDeps): SignCli
 
 /**
  * Whether premium fallback (relay) promotion can run. The relay attaches to
- * a target-room warm tab that only the SelfSigner's page capture creates;
- * in pure-node mode no such tab exists, so promotion must report
- * relay_unavailable rather than attempt-and-404-reject.
+ * a target-room warm tab: self/euler/shadow modes get one from the
+ * connect-time pre-sign, and pure-node mode warms it at promotion time
+ * (PR 3, sign/warm-target-tab.ts) — so any mode with a signer URL can
+ * promote; without one there is no relay to promote to.
  */
-export function fallbackPromotionAvailable(signerUrl: string, clients: SignClients): boolean {
-  return Boolean(signerUrl) && Boolean(clients.selfSigner);
+export function fallbackPromotionAvailable(
+  signerUrl: string,
+  clients: SignClients,
+  mode: SignerMode
+): boolean {
+  return (
+    Boolean(signerUrl) &&
+    (Boolean(clients.selfSigner) ||
+      // PR 3: pure-node promotion warms the target tab at promotion time
+      // (sign/warm-target-tab.ts), so the relay is attachable now.
+      mode === 'pure-node')
+  );
 }

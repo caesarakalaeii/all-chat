@@ -54,6 +54,14 @@ export type RelayStreamOptions = {
   signerUrl: string;
   /** Bearer token for the signer, if it runs with auth. */
   signerAuthToken?: string;
+  /**
+   * Opt-in hook for the 409 (no warm tab for the room). Called once per
+   * connect attempt that answers 409, before the normal retry path. Only
+   * the canary sets it (pure-node mode: warm the tab on the signer);
+   * FallbackConsumer never does — a promoted room's tab was warmed by the
+   * promotion step, and the single-warm budget is the canary's discipline.
+   */
+  onNoWarmTab?: () => void;
   logger?: RelayLogger;
 };
 
@@ -77,6 +85,7 @@ export class RelayStream extends EventEmitter {
   protected readonly signerUrl: string;
   protected readonly authToken?: string;
   protected readonly logger?: RelayLogger;
+  private readonly onNoWarmTab?: () => void;
 
   private controller?: AbortController;
   private reconnectTimer?: NodeJS.Timeout;
@@ -88,6 +97,7 @@ export class RelayStream extends EventEmitter {
     this.username = options.username;
     this.signerUrl = options.signerUrl.replace(/\/$/, '');
     this.authToken = options.signerAuthToken;
+    this.onNoWarmTab = options.onNoWarmTab;
     this.logger = options.logger;
   }
 
@@ -125,6 +135,12 @@ export class RelayStream extends EventEmitter {
         this.stop();
         this.emit('rejected');
         return;
+      }
+      if (response.status === 409 && this.onNoWarmTab) {
+        // Distinguishable from 5xx for the opt-in warm path: the tab can be
+        // created, so the caller gets a chance to do exactly that before
+        // the reconnect loop runs.
+        this.onNoWarmTab();
       }
       if (!response.ok || !response.body) {
         // 409 (no warm tab) and 5xx share the retry path: both can clear

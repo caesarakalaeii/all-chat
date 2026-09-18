@@ -83,13 +83,18 @@ export class PrometheusMetrics {
   // signal that precedes an outage report if acted on.
   private canaryDivergences: Counter<string>;
 
+  // PR 3 (pure-Node transport): target-room tab warms the canary requests
+  // from the signer. Bounded outcomes; each warm is one signer-side capture,
+  // so the counter also audits the single-digit-per-hour budget.
+  private canaryWarms: Counter<string>;
+
   // Premium fallback (phase 3): rooms demoted from the primary WS tier to
   // the viewer-tab relay transport, and how many relay frames each stint
-  // delivered. Promotion counts by outcome (premium promoted, not premium,
-  // check failed, signer refused) so a fallback that never opens is visible.
+  // delivered. Promotion outcome labels include the reasons a promotion
+  // never opened (not premium, premium check failed, signer refused) so a
+  // fallback that never opens is visible.
   private fallbackPromotions: Counter<string>;
   private fallbackDeliveries: Counter<string>;
-
 
   constructor(logger: Logger) {
     this.logger = logger;
@@ -309,6 +314,12 @@ export class PrometheusMetrics {
       labelNames: ['kind'],
       registers: [this.registry]
     });
+    this.canaryWarms = new Counter({
+      name: 'tiktok_canary_warms_total',
+      help: 'Canary tab warm requests to the signer, by outcome',
+      labelNames: ['outcome'], // attempted | warmed | capture_refused | capture_failed | network
+      registers: [this.registry]
+    });
     this.fallbackPromotions = new Counter({
       name: 'tiktok_fallback_promotions_total',
       help: 'Premium fallback tier promotions by outcome',
@@ -393,6 +404,11 @@ export class PrometheusMetrics {
 
   recordCanaryDivergence(kind: string): void {
     this.canaryDivergences.inc({ kind });
+  }
+
+  /** PR 3: one canary warm request's outcome (attempted is recorded on call). */
+  recordCanaryWarm(outcome: 'attempted' | 'warmed' | 'capture_refused' | 'capture_failed' | 'network'): void {
+    this.canaryWarms.inc({ outcome });
   }
 
   // Premium fallback (phase 3)

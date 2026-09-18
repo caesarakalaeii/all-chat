@@ -138,14 +138,19 @@ TIKTOK_FLAP_RETRY_DELAY_MS=1000
 # Canary rooms (phase 2): rooms mirrored against the signer's viewer-tab
 # relay (signer: SIGNER_RELAY_CANARY_ROOMS). Divergence logs +
 # tiktok_canary_divergences_total; never affects the primary connection.
+# In pure-node mode the relay has no target-room tab to attach to, so the
+# consumer warms one on the signer (POST /v1/sign viewer path) at most once
+# per stint — tiktok_canary_warms_total{outcome} audits that budget.
 TIKTOK_CANARY_ROOMS=                   # Comma-separated usernames; empty = no canary
 
 # Premium fallback (ADR-0058, off by default): on flap-retry exhaustion a
 # premium room's delivery switches to the signer's viewer-tab relay
 # (signer: SIGNER_RELAY_FALLBACK=on). A stint ends on stream end, tab death,
 # signer refusal, or TIKTOK_FALLBACK_MAX_DURATION_MS (default 6h), and the
-# room returns to the primary tier with a fresh flap budget. Metrics:
-# tiktok_fallback_promotions_total, tiktok_fallback_deliveries_total.
+# room returns to the primary tier with a fresh flap budget. In pure-node
+# mode the promotion warms the target-room tab first (one capture,
+# premium-gated). Metrics: tiktok_fallback_promotions_total,
+# tiktok_fallback_deliveries_total.
 TIKTOK_PREMIUM_FALLBACK=off           # on | off
 TIKTOK_FALLBACK_MAX_DURATION_MS=21600000
 
@@ -228,11 +233,13 @@ lease fetches ≤ 8/hour (10-min cache, single-flight) and WS connect
 signs ≤ 12/hour **per pod** — the session's flag budget is shared by
 every pod leasing it, so keep ONE connect-capable replica in pure-node
 rollouts or divide the cap accordingly. The premium **fallback tier is
-OFF** in this mode: the relay needs a target-room warm tab that the
-lease never creates, so promotion honestly reports `relay_unavailable`
-until PR 3 wires the capture-based fallback. Gifts stay off
-(`enableExtendedGiftInfo` is self-only — the URL-signing seam keys on
-the self signer).
+ON** in this mode (PR 3 of the pure-Node transport): promotion warms the
+target-room tab on the signer (`POST /v1/sign` viewer path, one capture
+per attempt, premium-gated) before attaching the relay, and the canary
+mirror attaches the same way — one warm per canary stint, paced by the
+signer's per-room capture breaker (`tiktok_canary_warms_total{outcome}`).
+Gifts stay off (`enableExtendedGiftInfo` is self-only — the URL-signing
+seam keys on the self signer).
 
 When `TIKTOK_SIGNER_URL` is set the listener also fetches the signer's browser identity
 (`GET /v1/identity`) once at startup and pins every connection's device presets to it, so the
@@ -273,7 +280,9 @@ paths share the signer's viewer-tab relay (`GET /v1/stream/:username`, SSE):
 - **Canary (phase 2)**: rooms in `TIKTOK_CANARY_ROOMS` are mirrored —
   relay frames are decoded and *compared* against the primary WS per
   method; divergence logs and counts (`tiktok_canary_divergences_total`)
-  but never affects the connection.
+  but never affects the connection. In pure-node mode the consumer warms
+  the room's tab on the signer when the relay answers 409 (no warm tab):
+  at most once per stint, `tiktok_canary_warms_total{outcome}`.
 - **Premium fallback (ADR-0058)**: with `TIKTOK_PREMIUM_FALLBACK=on`, a
   room whose flap retries are exhausted **and** whose streamer is premium
   (`users.is_premium` via overlay ownership, TTL-cached, fail-closed)
@@ -285,6 +294,10 @@ paths share the signer's viewer-tab relay (`GET /v1/stream/:username`, SSE):
   health", which is unobservable while the fallback delivers — and the
   room returns to the poller with a fresh flap budget. Metrics:
   `tiktok_fallback_promotions_total{outcome}`, `tiktok_fallback_deliveries_total{outcome}`.
+  In pure-node mode the promotion first warms the target-room tab on the
+  signer (`POST /v1/sign` viewer path, one capture, premium-gated); a
+  failed warm reports `relay_unavailable` and the room stays on the
+  primary tier's error backoff.
 
   The signer side needs `SIGNER_RELAY_FALLBACK=on` for the endpoint to
   serve non-canary rooms.

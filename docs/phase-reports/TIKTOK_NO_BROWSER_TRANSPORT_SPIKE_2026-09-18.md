@@ -556,11 +556,83 @@ the pure-node signer and stayed connected:
 | sign attempts | `tiktok_sign_attempts_total{signer="pure-node",outcome="success"}=2` — one per connect, zero failures, zero re-signs (no flap storm) |
 
 Only recurring log noise: the canary relay's HTTP 409 retry loop on
-dan2dxo — the documented pure-node limitation (the relay needs a warm
-viewer tab the lease never creates; TIKTOK_CANARY_ROOMS should stay
-unset in pure-node rollouts until PR 3). Not load-bearing, retried with
-backoff.
+dan2dxo — the documented pure-node limitation at soak time (the relay
+needs a warm viewer tab the lease never creates; TIKTOK_CANARY_ROOMS
+should stay unset in pure-node rollouts until PR 3). Not load-bearing,
+retried with backoff. [Superseded by PR 3: the canary consumer now warms
+the room's tab on the signer when the relay answers 409 — at most once
+per stint, budget-audited by tiktok_canary_warms_total.]
 
 The install report logged `signer_mode: pure-node, signer: pure-node,
 euler_reachable_for_signature: false` — Euler is off the connect path
 end to end. PR 2's acceptance is complete; the merge is unblocked.
+
+## PR 3 — canary warm attach PROVEN live; promotion path not exercised (2026-09-18 23:21-23:27 UTC)
+
+Code (branch `docs/tiktok-pr0-gate-tests`, uncommitted at test time): the
+pure-node canary/fallback warm wiring. Lab listener rebuilt from the PR 3
+tree (`npm run build` in the lab-listener container), recreated with
+`TIKTOK_FLAP_MAX_FAST_RETRIES=0` (promotion arming), `TIKTOK_PREMIUM_FALLBACK=on`,
+`TIKTOK_SIGNER_MODE=pure-node`; signer-lab unchanged (PR 1 image,
+`SIGNER_RELAY_FALLBACK=on`, warm room zaganovakov — offline all session).
+Premium flag: the seed overlay's owner `premiumtest` was already
+`is_premium=true` (rig leftover from the PR 2 soak setup; the fresh
+container's checker cache was cold, so no TTL staleness).
+
+**Canary warm attach — measured chain, live:**
+
+```
+23:25:14 canary mirror started (shaman_production777, TIKTOK_CANARY_ROOMS override)
+23:25:14-17 relay stream HTTP 409 x3  (SSE retries during the warm's capture window)
+signer-lab: "viewer capture ok" shaman_production777, lane direct, elapsed_ms 3301, attempt 1
+signer-lab: "relay tap attached" shaman_production777
+23:25:21 relay stream connected  → canary frames flowing
+listener /metrics: tiktok_canary_warms_total{attempted}=1 {warmed}=1
+```
+
+Exactly ONE warm per stint on the wire: the three 409s are the SSE retry
+loop running while the single warm capture was in flight; after it
+registered the tab, the reconnect attached. The pre-PR 3 soak's
+"TIKTOK_CANARY_ROOMS should stay unset" guidance is dead: the canary set
+works in pure-node mode now.
+
+**Pure-node connect on the PR 3 dist:** 9 verified-live rooms (live-feed
+discovery via a one-shot page load in the signer's browser — 12 handles,
+no captures involved) connected cleanly through the leased session:
+zero flaps, zero 403s, zero sign failures.
+
+**Promotion path — NOT exercised live, honestly:** a room only promotes
+after flap exhaustion, and no room flapped — the session was healthy the
+whole window. The per-pod WS-connect budget (12/h) exhausted first (11
+connects + the budget's own guard), which is the budget working as
+designed, not a flap. With `TIKTOK_FLAP_MAX_FAST_RETRIES=0` armed and a
+premium-flagged overlay owner in place, the trigger never fired. The
+promotion path's logic is covered offline: warm classification
+(`sign/warm-target-tab.test.ts`, 6 tests) and the availability predicate
+(`sign/sign-clients.test.ts` matrix). The plan's switch-to-a-gated-room
+contingency had no gated room to switch to: the known gated set (jinuabi,
+neringakazlauskaite, sarameels) was offline all session (status 4), and
+live-feed discovery served only healthy rooms. The natural-flap live
+proof remains open for the PR 4 soak window, where sustained rooms
+will meet real flaps. Healthy-primary demotion is out of scope per
+(unobservable while the fallback delivers) — the stint-end paths
+(room end / tab death / signer refusal / 6h ceiling) are the shipped
+demotion and were not re-verified here.
+
+Budget accounting (23:21-23:27 UTC): signer sign requests 1
+(the canary warm, success), session leases served from cache
+(success counter 22 = pre-existing pod restarts' warm-lease reads, no
+new captures: leases captured stayed 1), capture breaker quiet
+(0 refusals, 0 trips), zero 403s on both services. The 11 WS connects
+stayed inside the listener's per-pod budget, which then correctly
+refused further connects for the hour.
+
+Offline acceptance (container gate): `npx tsc --noEmit && npm test`
+green — 544 passed, 8 skipped (6 warm-classification, 4 canary-warm-flow
+tests added in PR 3), the one pre-existing 1ms-tick flake in
+connection-decisions.test.ts:166 observed once mid-run and green on
+re-run (documented pre-existing, not in this diff).
+
+Rig restored: lab-listener recreated with the rig-default env (flap
+retries 3, canary dan2dxo, PR 3 dist), lab DB sources back to
+zaganovakov/kyle.toynbee/bigjaygaming01.

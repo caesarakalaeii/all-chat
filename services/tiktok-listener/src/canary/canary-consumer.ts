@@ -60,6 +60,13 @@ export type CanaryConsumerOptions = {
   windowSeconds?: number;
   /** Max canary frames/sec below primary before frame_rate divergence. */
   frameRateRatio?: number;
+  /**
+   * Warm the target-room tab on the signer (pure-node mode, where the
+   * lease never creates one). Called AT MOST ONCE per stint: each call is
+   * a signer-side capture against a single-digit-per-hour budget, so the
+   * consumer's own retry discipline must never loop into it.
+   */
+  warm?: () => Promise<boolean>;
   logger?: RelayLogger;
 };
 
@@ -90,9 +97,9 @@ interface WindowState {
 export class CanaryConsumer extends RelayStream {
   private readonly windowMs: number;
   private readonly frameRateRatio: number;
+  private warmAttempted = false;
   private window: WindowState = CanaryConsumer.emptyWindow();
   private windowTimer?: NodeJS.Timeout;
-
   private static emptyWindow(): WindowState {
     return {
       primary: new Map(),
@@ -109,6 +116,17 @@ export class CanaryConsumer extends RelayStream {
       username: options.username,
       signerUrl: options.signerUrl,
       signerAuthToken: options.signerAuthToken,
+      // One warm per stint: the RelayStream calls this hook on every 409
+      // connect, the flag below makes exactly the first one run the
+      // capture — the signer's per-room breaker bounds even a bug here.
+      onNoWarmTab: options.warm
+        ? () => {
+            if (this.warmAttempted) return;
+            this.warmAttempted = true;
+            const warm = options.warm;
+            if (warm) void warm().catch(() => undefined);
+          }
+        : undefined,
       logger: options.logger
     });
     this.windowMs = (options.windowSeconds ?? 60) * 1000;
@@ -124,6 +142,7 @@ export class CanaryConsumer extends RelayStream {
     // One comparison window per connection; drift across reconnects is
     // bounded because both counters reset together.
     this.window = CanaryConsumer.emptyWindow();
+    this.warmAttempted = false; // a new stint earns one fresh warm
     this.windowTimer = setInterval(() => this.compareWindow(), this.windowMs);
     super.start();
   }

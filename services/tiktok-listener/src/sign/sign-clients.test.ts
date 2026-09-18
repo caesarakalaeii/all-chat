@@ -62,34 +62,33 @@ describe('pickSignClients', () => {
 });
 
 describe('fallbackPromotionAvailable', () => {
-  it('pure-node mode is honestly unavailable: the lease never warms a target-room tab', () => {
-    // The relay (GET /v1/stream/:username) attaches only to an existing
-    // pool tab; pure-node leases a warm-CLASSIC-room session and never
-    // creates one for the target room — promotion would attempt, 404,
-    // and churn. FALSE is the correct answer until PR 3.
+  it('pure-node mode is available: PR 3 warms the target tab at promotion time', () => {
+    // The relay (GET /v1/stream/:username) attaches to a pool tab; pure-node
+    // leases a warm-CLASSIC-room session that never creates one for the
+    // target room, so promotion warms it first (sign/warm-target-tab.ts).
     const clients = pickSignClients('pure-node', URL_DEPS);
-    expect(fallbackPromotionAvailable('http://signer:8092', clients)).toBe(false);
+    expect(fallbackPromotionAvailable('http://signer:8092', clients, 'pure-node')).toBe(true);
   });
 
   it('self mode with a signer URL is available (pre-existing behaviour)', () => {
     const clients = pickSignClients('self', URL_DEPS);
-    expect(fallbackPromotionAvailable('http://signer:8092', clients)).toBe(true);
+    expect(fallbackPromotionAvailable('http://signer:8092', clients, 'self')).toBe(true);
   });
 
   it('euler with a signer URL is available (the k8s default keeps relay promotion)', () => {
     const clients = pickSignClients('euler', URL_DEPS);
-    expect(fallbackPromotionAvailable('http://signer:8092', clients)).toBe(true);
+    expect(fallbackPromotionAvailable('http://signer:8092', clients, 'euler')).toBe(true);
   });
 
   it('shadow with a signer URL is available', () => {
     const clients = pickSignClients('shadow', URL_DEPS);
-    expect(fallbackPromotionAvailable('http://signer:8092', clients)).toBe(true);
+    expect(fallbackPromotionAvailable('http://signer:8092', clients, 'shadow')).toBe(true);
   });
 
   it('no signer URL is unavailable in every mode', () => {
     for (const mode of ['euler', 'shadow', 'self', 'pure-node'] as const) {
       const clients = pickSignClients(mode, { signerBaseUrl: '' });
-      expect(fallbackPromotionAvailable('', clients), mode).toBe(false);
+      expect(fallbackPromotionAvailable('', clients, mode), mode).toBe(false);
     }
   });
 });
