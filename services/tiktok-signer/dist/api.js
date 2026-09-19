@@ -36,7 +36,7 @@ import http from 'node:http';
 import { collectDefaultMetrics, Counter, Histogram, Registry } from 'prom-client';
 import { request as undiciRequest } from 'undici';
 import { CaptureBreaker } from './signing/capture-breaker.js';
-import { VIEWER_IDENTITY } from './signing/viewer.js';
+import { VIEWER_IDENTITY, browserVersionFromUserAgent } from './signing/identity.js';
 const register = new Registry();
 collectDefaultMetrics({ register });
 const signRequestsTotal = new Counter({
@@ -77,8 +77,14 @@ function randomDeviceId() {
         digits += Math.floor(Math.random() * 10);
     return digits;
 }
-/** The query params TikTok's own web client sends on /webcast/im/fetch/. */
-function imFetchParams(roomId, cursor) {
+/**
+ * The query params TikTok's own web client sends on /webcast/im/fetch/. The
+ * browser_* / os / screen_* params describe the identity that signs and
+ * sends the fetch — TikTok silently empty-200s a request whose UA disagrees
+ * with them (measured 2026-09-18), so they are derived from the identity,
+ * never hardcoded.
+ */
+export function imFetchParams(roomId, cursor, identity) {
     const params = new URLSearchParams({
         aid: '1988',
         app_language: 'en',
@@ -86,8 +92,8 @@ function imFetchParams(roomId, cursor) {
         browser_language: 'en-US',
         browser_name: 'Mozilla',
         browser_online: 'true',
-        browser_platform: 'MacIntel',
-        browser_version: '5.0',
+        browser_platform: identity.browserPlatform,
+        browser_version: browserVersionFromUserAgent(identity.userAgent),
         channel: 'tiktok_web',
         cookie_enabled: 'true',
         cursor: cursor ?? '',
@@ -104,12 +110,12 @@ function imFetchParams(roomId, cursor) {
         is_page_visible: 'true',
         last_rtt: '0',
         live_id: '12',
-        os: 'mac',
+        os: identity.os,
         priority_region: 'US',
         region: 'US',
         resp_content_type: 'protobuf',
-        screen_height: '1080',
-        screen_width: '1920',
+        screen_height: String(identity.screenHeight),
+        screen_width: String(identity.screenWidth),
         sup_ws_ds_opt: '1',
         tz_name: 'UTC',
         user_is_login: 'false',
@@ -133,7 +139,7 @@ async function performSignedFetch(session, identity, payload) {
         return { status: 400, body: { error: 'roomId is required' } };
     }
     const target = new URL('https://webcast.tiktok.com/webcast/im/fetch/');
-    imFetchParams(payload.roomId, payload.cursor).forEach((value, key) => {
+    imFetchParams(payload.roomId, payload.cursor, identity).forEach((value, key) => {
         target.searchParams.set(key, value);
     });
     const signed = await session.signUrl(target.toString());
@@ -230,10 +236,16 @@ async function performSignUrl(session, payload) {
  * ProtoMessageFetchResult. See ADR-0052's follow-up and viewer.ts.
  */
 async function performViewerFetch(viewer, breaker, payload, logger) {
-    const username = payload.username;
-    if (!username || typeof username !== 'string') {
+    // One canonical lowercase username at every comparison site: pool tabs,
+    // breaker state and the session endpoint's warm-room config all key on
+    // the lowercased form, so a mixed-case caller must not fork its identity
+    // across two keys.
+    // Type-check before lowercasing: a non-string username must 400, not
+    // throw inside toLowerCase and surface as a 500.
+    if (typeof payload.username !== 'string' || payload.username === '') {
         return { status: 400, body: { error: 'username is required for viewer mode' } };
     }
+    const username = payload.username.toLowerCase();
     // Per-room breaker: a room whose captures keep failing is gated on
     // TikTok's side (room-correlated, per the 2026-09-16 lab verdict), and
     // paying maxLaneAttempts x ~60s per retry cycle for it wedges the pool
@@ -285,11 +297,22 @@ async function performViewerFetch(viewer, breaker, payload, logger) {
         };
     }
 }
+const sessionLeasesTotal = new Counter({
+    name: 'signer_session_leases_total',
+    help: 'Session lease requests by outcome. success = warm lease served; captured = a capture ran and was served; capture_failed = a capture threw or resolved empty (counted per attempt); no_session = phases exhausted with no servable lease; disabled = endpoint off; viewer_off = viewer mode off.',
+    labelNames: ['outcome'],
+    registers: [register]
+});
+/** Count one request outcome. Bounded labels keep the metric cheap to query. */
+function leaseOutcome(outcome) {
+    sessionLeasesTotal.inc({ outcome });
+}
 export function createServer(options) {
     const { session, viewer, logger } = options;
     const captureBreaker = options.captureBreaker ?? new CaptureBreaker();
     const relay = options.relay;
     const canaryRooms = options.canaryRooms ?? new Set();
+    const warmRooms = options.warmRooms ?? [];
     const authToken = readAuthToken();
     const server = http.createServer((req, res) => {
         void handle(req, res).catch((error) => {
@@ -335,7 +358,10 @@ export function createServer(options) {
         // bearer token as /v1/sign; long-lived GET, no body.
         const streamMatch = req.method === 'GET' ? url.match(/^\/v1\/stream\/([A-Za-z0-9_.]+)$/) : null;
         if (streamMatch) {
-            const streamUsername = streamMatch[1];
+            // Lowercase before every keyed consumer (canary set, pool tab, relay
+            // subscriber) so one mixed-case caller cannot key its subscriber
+            // apart from its pool tab.
+            const streamUsername = streamMatch[1].toLowerCase();
             if (authToken && req.headers.authorization !== `Bearer ${authToken}`) {
                 res.writeHead(401, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ error: 'unauthorized' }));
@@ -354,9 +380,33 @@ export function createServer(options) {
             await handleRelayStream(req, res, streamUsername, viewer, relay, logger);
             return;
         }
+        // Bearer gate for everything stateful: the lease endpoint, and the POST
+        // routes that mint signatures or drive captures. (The SSE stream checks
+        // the same token inline in its own branch; /metrics and /health stay
+        // deliberately open.)
         if (authToken && req.headers.authorization !== `Bearer ${authToken}`) {
             res.writeHead(401, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'unauthorized' }));
+            return;
+        }
+        // Shared-session lease: the warm classic room's WS URL + cookie jar the
+        // listener's pure-Node client re-enters per target room (cross-room
+        // entry, measured 2026-09-18). No capture cadence — harvest only on
+        // request (budget discipline, constraint 1).
+        if (req.method === 'GET' && url === '/v1/session') {
+            if (!warmRooms.length) {
+                leaseOutcome('disabled');
+                res.writeHead(404, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'session_endpoint_disabled' }));
+                return;
+            }
+            if (!viewer) {
+                leaseOutcome('viewer_off');
+                res.writeHead(503, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'viewer mode not enabled' }));
+                return;
+            }
+            await handleSessionLease(res, viewer, warmRooms, captureBreaker, relay);
             return;
         }
         if (req.method === 'POST' && (url === '/v1/sign' || url === '/v1/sign-url')) {
@@ -493,5 +543,100 @@ async function handleRelayStream(req, res, username, viewer, relay, logger) {
     };
     req.on('close', cleanup);
     res.on('close', cleanup);
+}
+/**
+ * GET /v1/session: serve the shared WS session (warm lease, or capture a
+ * tab-less room). Deterministic four-phase flow — the phases and their
+ * recovery semantics are the plan's contract; see the PR 1 plan in
+ * docs/phase-reports/ for the state-machine rationale.
+ *
+ * The per-room capture breaker (the same instance /v1/sign consults) paces
+ * a dead or live_new configured room's retries. It does NOT prevent the
+ * pool's own PROFILE_ROTATE_FAILURES profile rotation — that accrual is
+ * unconditional on thrown captures, and its threshold equals the breaker's.
+ * One rotation per breaker cooldown cycle is the priced cost of a
+ * misconfigured warm room; the actual control is SIGNER_WARM_ROOMS listing
+ * classic, verified-live rooms only (README).
+ */
+async function handleSessionLease(res, viewer, warmRooms, breaker, relay) {
+    // Phase 1: warm leases. The per-room outcome (undefined lease = dead page,
+    // empty wsUrl = unservable) feeds the recovery pass.
+    const outcomes = [];
+    for (const room of warmRooms) {
+        const lease = await viewer.sessionLease(room);
+        outcomes.push({ room, lease });
+        if (lease && lease.wsUrl !== '') {
+            leaseOutcome('success');
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(lease));
+            return;
+        }
+    }
+    // Phase 2: capture the tab-less, breaker-eligible rooms in order. A thrown
+    // capture or a resolved-but-empty one moves to the next candidate; both
+    // accrue breaker failures so a dead room's cooldown paces it.
+    let lastError = '';
+    const captureCandidates = async (rooms) => {
+        for (const room of rooms) {
+            if (viewer.hasTab(room) || breaker.isRefused(room))
+                continue;
+            try {
+                const capture = await viewer.captureRoom(room);
+                if (capture.wsUrl === '') {
+                    breaker.recordFailure(room);
+                    leaseOutcome('capture_failed');
+                    continue;
+                }
+                breaker.recordSuccess(room);
+                const lease = await viewer.sessionLease(room);
+                if (lease && lease.wsUrl !== '') {
+                    leaseOutcome('captured');
+                    return lease;
+                }
+            }
+            catch (error) {
+                breaker.recordFailure(room);
+                leaseOutcome('capture_failed');
+                lastError = error.message;
+            }
+        }
+        return undefined;
+    };
+    const captured = await captureCandidates(warmRooms);
+    if (captured) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(captured));
+        return;
+    }
+    // Phase 3: recovery pass. Close the tabs whose phase-1 lease could not
+    // serve (dead page or empty wsUrl) — unless a relay subscriber is
+    // attached — then cold-capture exactly the dropped rooms. This is the
+    // only path that clears a dead registered entry: hasTab stays true
+    // otherwise, so no capture is reachable, and pinned rooms never idle-evict.
+    const dropped = [];
+    for (const { room, lease } of outcomes) {
+        if (!viewer.hasTab(room))
+            continue;
+        if (lease && lease.wsUrl !== '')
+            continue; // servable; another room may serve later
+        if (relay?.hasSubscribers(room))
+            continue; // live SSE stream; never killed
+        if (viewer.closeTab(room))
+            dropped.push(room);
+    }
+    const recovered = dropped.length > 0 ? await captureCandidates(dropped) : undefined;
+    if (recovered) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(recovered));
+        return;
+    }
+    // Phase 4: no servable lease. Retryable: the breaker paces the rooms,
+    // closed tabs re-capture cold, dead entries were cleared.
+    leaseOutcome('no_session');
+    res.writeHead(503, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+        error: 'no_warm_session',
+        ...(lastError ? { message: lastError } : {})
+    }));
 }
 //# sourceMappingURL=api.js.map

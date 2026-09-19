@@ -46,16 +46,28 @@
 /**
  * Who signs the webcast WebSocket URL.
  *
- * - `euler`  — Euler Stream only. The pre-#698 behaviour, and the default.
- * - `shadow` — Euler signs the connection we actually use, but our own signer runs against the
- *              same room in parallel and the outcome is recorded. Nothing user-visible depends
- *              on our signature succeeding. This is how we earn the right to `self`: step 2 of
- *              the issue's sequence asks for a measured success rate before we trust it.
- * - `self`   — We sign. Euler is used only if our signer throws and `selfSignFallback` is on.
+ * - `euler`      — Euler Stream only. The pre-#698 behaviour, and the default.
+ * - `shadow`     — Euler signs the connection we actually use, but our own signer runs against
+ *                  the same room in parallel and the outcome is recorded. Nothing user-visible
+ *                  depends on our signature succeeding. This is how we earn the right to `self`:
+ *                  step 2 of the issue's sequence asks for a measured success rate before we
+ *                  trust it.
+ * - `self`       — We sign via the signer service's page capture. Euler is used only if our
+ *                  signer throws and `selfSignFallback` is on.
+ * - `pure-node`  — We lease the signer's shared WS session (GET /v1/session: a warm classic
+ *                  room's wsUrl + cookie jar, cross-room entry per target room) and synthesize
+ *                  the initial fetch result in-process. No Euler, no per-room capture. The
+ *                  connect budget (maxWsConnectsPerHour) is PER POD: the leased session's
+ *                  flag budget is shared by every pod leasing it, so N connect-capable
+ *                  replicas enforce N x the per-pod cap — keep ONE connect-capable replica
+ *                  in pure-node rollouts or divide the cap accordingly (PR 4 deployment
+ *                  assumption). The premium fallback tier is ON in this mode: promotion
+ *                  warms the target-room tab on the signer before attaching the relay
+ *                  (PR 3, sign/warm-target-tab.ts).
  */
-export type SignerMode = 'euler' | 'shadow' | 'self';
+export type SignerMode = 'euler' | 'shadow' | 'self' | 'pure-node';
 
-export const SIGNER_MODES: readonly SignerMode[] = ['euler', 'shadow', 'self'];
+export const SIGNER_MODES: readonly SignerMode[] = ['euler', 'shadow', 'self', 'pure-node'];
 
 export interface SignConfiguration {
   /** Who signs the webcast WebSocket URL. */
@@ -162,5 +174,9 @@ export function eulerStillReachableForSignature(config: SignConfiguration): bool
       return true;
     case 'self':
       return config.selfSignFallback;
+    case 'pure-node':
+      // No Euler leg exists on this path — selfSignFallback does not
+      // apply; the capture-based fallback tier is PR 3's machinery.
+      return false;
   }
 }
