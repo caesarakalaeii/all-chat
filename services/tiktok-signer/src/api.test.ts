@@ -204,9 +204,7 @@ describe('sign metrics path split', () => {
 });
 
 
-// ---------------------------------------------------------------------------
-// GET /v1/session
-//
+
 // The stub viewer models the pool's contract the handler consumes:
 // sessionLease / hasTab / closeTab / captureRoom. The breaker is real so
 // refusal/fallthrough behavior is exercised, not mocked.
