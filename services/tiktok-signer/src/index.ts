@@ -26,7 +26,7 @@
 import { createServer } from './api.js';
 import { RelayHub } from './signing/relay.js';
 import { SigningSession } from './signing/session.js';
-import { ViewerPool } from './signing/viewer.js';
+import { ViewerPool, findDualListedRooms } from './signing/viewer.js';
 import { fetchWebshareProxies } from './signing/webshare.js';
 // Stealth-plugin page hooks race lane/browser shutdown: rotateLaneProfile and
 // refreshProxies close the browser while the plugin's onPageCreated hook is
@@ -104,6 +104,30 @@ const staticProxyHosts = (process.env.SIGNER_PROXY_HOSTS || '')
   .filter(Boolean);
 let proxyUser = process.env.SIGNER_PROXY_USER;
 let proxyPass = process.env.SIGNER_PROXY_PASS;
+/** Comma-separated room list from env, one canonical lowercase form (the
+ * canary set, warm rooms, pool tabs, breaker and relay subscriber keys all
+ * compare on this form — a mixed-case entry must not fork identity). */
+function parseRoomList(env: string | undefined): string[] {
+  return (env || '')
+    .split(',')
+    .map((r) => r.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+// Warm rooms (pure-Node transport PR 1): the classic rooms whose captured
+// WS session GET /v1/session leases to the listener.
+const warmRooms = parseRoomList(process.env.SIGNER_WARM_ROOMS);
+// Canary isolation (PR 1 item 6): canary rooms capture on their own
+// profiles so a flag earned on a primary jar cannot blind the canary.
+const canaryRooms = new Set(parseRoomList(process.env.SIGNER_RELAY_CANARY_ROOMS));
+const dualListed = findDualListedRooms(canaryRooms, warmRooms);
+if (dualListed.length > 0) {
+  // Refuse to start: a dual-listed room's canary jar would be leased as the
+  // primary session — invisible in logs, while a crash-looping pod is
+  // GitOps- and alert-visible. Deliberate config-validation exit.
+  console.error(`SIGNER_WARM_ROOMS and SIGNER_RELAY_CANARY_ROOMS overlap: ${dualListed.join(', ')}`);
+  process.exit(1);
+}
 const viewer = viewerMode
   ? new ViewerPool({
       proxyHosts: staticProxyHosts,
@@ -111,12 +135,21 @@ const viewer = viewerMode
       proxyPass,
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
       userDataDir: userDataDir + '-viewer',
+      canaryProfileDir:
+        process.env.SIGNER_CANARY_PROFILE || userDataDir + '-viewer-canary',
+      canaryRooms,
+      pinnedRooms: new Set(warmRooms),
       display: process.env.SIGNER_DISPLAY,
       maxLaneAttempts: parseInt(process.env.SIGNER_MAX_LANE_ATTEMPTS || '2', 10),
       logger: { info: logger.info, warn: logger.warn }
     })
   : undefined;
 
+// Premium fallback gate (2026-09-16 transport plan, phase 3): when on,
+// GET /v1/stream/:username serves any room with a warm tab, not just the
+// canary set — the listener's premium-fallback tier promotes rooms onto
+// the relay after their primary WS exhausts flap retries.
+const relayFallbackEnabled = (process.env.SIGNER_RELAY_FALLBACK || '').trim().toLowerCase() === 'on';
 // Refresh the proxy list from webshare hourly: replacements and removals in
 // the dashboard propagate without a redeploy. Surviving lanes keep their
 // browsers and pinned rooms (see ViewerPool.refreshProxies).
@@ -144,28 +177,11 @@ async function refreshProxiesFromWebshare(): Promise<void> {
   }
 }
 
-
-
-// Canary relay (2026-09-16 transport plan, phase 2): rooms listed in
-// SIGNER_RELAY_CANARY_ROOMS get GET /v1/stream/:username — an SSE feed of
-// the viewer tab's own WS frames. The hub pins subscribed tabs against
-// idle eviction via the pool's tab refresh; decode stays with the listener.
-const canaryRooms = new Set(
-  (process.env.SIGNER_RELAY_CANARY_ROOMS || '')
-    .split(',')
-    .map((r) => r.trim().toLowerCase())
-    .filter(Boolean)
-);
-// Premium fallback gate (2026-09-16 transport plan, phase 3): when on,
-// GET /v1/stream/:username serves any room with a warm tab, not just the
-// canary set — the listener's premium-fallback tier promotes rooms onto
-// the relay after their primary WS exhausts flap retries.
-const relayFallbackEnabled = (process.env.SIGNER_RELAY_FALLBACK || '').trim().toLowerCase() === 'on';
 const relay = viewer
   ? new RelayHub((username) => { viewer.pinTab(username); }, { logger })
   : undefined;
 
-const server = createServer({ port: PORT, session, viewer, relay, canaryRooms, relayFallbackEnabled, logger });
+const server = createServer({ port: PORT, session, viewer, relay, canaryRooms, relayFallbackEnabled, warmRooms, logger });
 
 server.listen(PORT, () => {
   logger.info('tiktok-signer listening', { port: PORT });

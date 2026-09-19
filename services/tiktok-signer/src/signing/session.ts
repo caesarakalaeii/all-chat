@@ -39,30 +39,16 @@ import type { Browser, Page } from 'puppeteer';
 // Typed import of the vendored encoder. Plain relative path so tsc copies the
 // dependency-free module as-is and NodeNext resolves it next to the build.
 import { encode as encodeXGnarly } from '../../vendor/xgnarly.mjs';
+import { SIGNING_IDENTITY, type SignerIdentity } from './identity.js';
 
 const puppeteer = puppeteerExtra as unknown as PuppeteerExtra;
 puppeteer.use(StealthPlugin());
 
 /** Stable identity the signer presents to TikTok. Exposed via GET /identity. */
-export interface SignerIdentity {
-  userAgent: string;
-  browserPlatform: string;
-  os: string;
-  screenWidth: number;
-  screenHeight: number;
-}
+export type { SignerIdentity } from './identity.js';
 
-const IDENTITY: SignerIdentity = {
-  // Safari on macOS. Everything TikTok sees (User-Agent, browser_* query
-  // params, the fingerprint X-Gnarly encodes) must agree with this, so it is
-  // one object and callers read it from /identity instead of guessing.
-  userAgent:
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15',
-  browserPlatform: 'MacIntel',
-  os: 'mac',
-  screenWidth: 1920,
-  screenHeight: 1080
-};
+/** The Safari/macOS identity the signing session presents; see identity.ts. */
+const IDENTITY = SIGNING_IDENTITY;
 
 export interface SignedUrl {
   signedUrl: string;
@@ -418,12 +404,12 @@ export class SigningSession {
           width: IDENTITY.screenWidth,
           height: IDENTITY.screenHeight
         });
-        await page.evaluateOnNewDocument(() => {
+        await page.evaluateOnNewDocument((platform: string) => {
           Object.defineProperty(navigator, 'platform', {
-            get: () => 'MacIntel',
+            get: () => platform,
             configurable: true
           });
-        });
+        }, IDENTITY.browserPlatform);
         await page.setRequestInterception(true);
 
         if (this.options.proxyUser && this.options.proxyPass) {

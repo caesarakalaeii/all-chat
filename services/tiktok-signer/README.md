@@ -55,9 +55,10 @@ Both vendored files are MIT, from
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /v1/sign` | The webcast WebSocket seam. Body `{ roomId, username?, cursor?, cookieHeader? }` — the optional `username` routes the request to a real viewer tab when viewer mode is on. Returns `{ fetchResult (base64 protobuf), fetchResultCookieHeader, fetchResultRoomId? }`. Called by `tiktok-listener`'s `SelfSigner`. |
+| `POST /v1/sign` | The webcast WebSocket seam. Body `{ roomId, username?, cursor?, cookieHeader? }` — the optional `username` routes the request to a real viewer tab when viewer mode is on. Returns `{ fetchResult (base64 protobuf), fetchResultCookieHeader, fetchResultRoomId? }`. Called by `tiktok-listener`'s `SelfSigner`, and by its pure-node mode as a tab warm (PR 3 of the pure-Node transport): the listener POSTs `{ roomId: 'unused', username }` before attaching the relay for a canary mirror or a premium-fallback promotion — the viewer-path capture registers the target room's tab, the response body is discarded. |
 | `POST /v1/sign-url` | The generic HTTP URL seam (gift list). Body `{ url, method? }`, `webcast.tiktok.com` URLs only. Returns `{ response: { signedUrl, userAgent } }`. |
-| `GET /v1/identity` | The stable browser identity (User-Agent, platform, screen). The listener pins its connector device presets to this so the fetch and the WebSocket handshake describe the same browser. |
+| `GET /v1/identity` | The stable browser identity (User-Agent, platform, screen). The listener pins its connector device presets to this so the fetch and the WebSocket handshake describe the same browser. Under viewer mode this is the viewer identity (Linux Chrome/144) — the browser that captured the session. |
+| `GET /v1/session` | Shared WS session lease (pure-Node transport, PR 1 of the 2026-09-18 plan): the warm classic room's webcast push WS URL + freshly re-read cookie jar, `{ wsUrl, cookieHeader, roomId, userAgent, proxyHost, capturedAt }`. The listener consumes this in `pure-node` signer mode (`TIKTOK_SIGNER_MODE=pure-node`, `src/sign/pure-node.ts`): it synthesizes the connector's initial fetch result — forwarding the wsUrl's recorded identity params (handshake-load-bearing), cursor `0`, the cookie jar — and enters the target room cross-room. No capture cadence — a capture runs only on request (TikTok request-budget discipline). Flow: warm lease with a non-empty `wsUrl` is served; otherwise the first tab-less, breaker-eligible room is cold-captured; otherwise unservable warm tabs (dead page or empty `wsUrl`) are closed — never ones with an active relay subscriber — and the freed rooms cold-captured, ending on the first served lease or a retryable 503 `no_warm_session`. Errors the consumer's classification keys on: 401 without the bearer, 404 `session_endpoint_disabled` when `SIGNER_WARM_ROOMS` is empty, 503 `viewer mode not enabled` without page mode, 503 `no_warm_session` when every phase is exhausted. Metric: `signer_session_leases_total{outcome}`. |
 | `GET /v1/stream/:username` | Relay SSE stream of the room's viewer-tab WS frames — opaque base64 `PushFrame`s the listener decodes with its own connector schemas; heartbeat comment every 15s, `state` events (`capture`/`open`/`ws_closed`/`recapture`) alongside `frame` events. Rooms must be in `SIGNER_RELAY_CANARY_ROOMS`, or any warm-tab room when `SIGNER_RELAY_FALLBACK=on` (ADR-0058); 404 otherwise. Requires the room to have a warm tab (run a `/v1/sign` capture first). |
 | `GET /health/live` | Liveness. |
 
@@ -78,9 +79,30 @@ behind the default-deny NetworkPolicy).
 | `SIGNER_WEBSHARE_TOKEN` | empty | Webshare API token: the proxy list is fetched from the API at startup and refreshed hourly, so dashboard-side rotations propagate without touching the cluster. **Preferred** over the static list. |
 | `SIGNER_PROXY_HOSTS` | empty | Static comma-separated residential proxy list (`host:port,...`) for the viewer lanes, used when no webshare token is set. One browser per proxy, rooms pinned to their lane, failing lanes benched for a cooldown. **Required for page mode in production**: TikTok gates the chat bootstrap on IP reputation; the datacenter IP never receives im/fetch. |
 | `SIGNER_PROXY_HOST` | empty | Singular proxy for the signature session (X-Bogus fetch path). |
-| `SIGNER_PROXY_USER` / `SIGNER_PROXY_PASS` | empty | Shared proxy credentials (static-list pools). Webshare pools use per-proxy credentials from the API instead — webshare issues one pair per proxy, and the lane's own pair always wins. |
-| `SIGNER_RELAY_CANARY_ROOMS` | empty | Comma-separated room list whose viewer tabs can be relayed via `GET /v1/stream/:username` (the canary of the 2026-09-16 transport plan). Empty disables the endpoint entirely. |
+| `SIGNER_RELAY_CANARY_ROOMS` | empty | Comma-separated room list whose viewer tabs can be relayed via `GET /v1/stream/:username` (the canary of the 2026-09-16 transport plan). Empty disables the endpoint entirely. Canary rooms capture on their own browser profiles (see `SIGNER_CANARY_PROFILE`): a flag TikTok earned on a primary jar cannot blind the canary. |
 | `SIGNER_RELAY_FALLBACK` | `off` | `on` opens `GET /v1/stream/:username` to any room with a warm tab, not just the canary set — the listener's premium-fallback tier (ADR-0058) promotes rooms onto the relay after their primary WS exhausts flap retries. The canary set stays the read-only mirror cohort. |
+| `SIGNER_WARM_ROOMS` | empty | Comma-separated classic rooms (lowercased) whose captured WS sessions `GET /v1/session` leases; empty disables the endpoint. **Must list classic, verified-live rooms only**: only classic rooms emit the harvestable im/fetch (the page variant is per-room — check for im/fetch on a harvest before trusting a room). Their tabs are pinned against idle eviction, and the capture breaker paces a dead or live_new room's retries. A room listed both here and in `SIGNER_RELAY_CANARY_ROOMS` is a misconfiguration whose canary jar would be leased as the primary session — the service refuses to start. |
+| `SIGNER_CANARY_PROFILE` | `$SIGNER_USER_DATA_DIR-viewer-canary` | Profile directory base for canary lanes; the primary lanes use `$SIGNER_USER_DATA_DIR-viewer`. Each proxy hosts one primary and one canary browser, launched lazily, so isolation costs a second browser only while canary rooms are actually captured. |
+
+### Identity invariant
+
+One module (`src/signing/identity.ts`) defines the two identities the
+service presents: `SIGNING_IDENTITY` (Safari/macOS, the X-Bogus signing
+session) and `VIEWER_IDENTITY` (Linux Chrome/144, the page captures and WS
+sessions). TikTok silently empty-200s any request whose User-Agent
+disagrees with the URL's self-describing params — measured 2026-09-18, both
+a version drift and a platform swap are rejected — so `imFetchParams`
+derives `browser_platform`/`browser_version`/`os`/`screen_*` from the
+identity it is handed (never hardcoded), the signing session pins its page
+UA, viewport and `navigator.platform` to it, and `/v1/identity` reports it
+for the listener to pin its connector presets to.
+
+`capturedAt` on a session lease stamps the capture of the served `wsUrl`
+(a kept wsUrl keeps its original stamp), so a consumer's freshness budget
+keys on the URL's true age. The session lease is the credential source for
+the pure-Node delivery tier the listener builds next (its mode value and
+tier table land with that change).
+
 
 ## Scripts
 

@@ -73,6 +73,7 @@ import {
 import { CanaryConsumer } from './canary/canary-consumer.js';
 import { FallbackConsumer } from './canary/fallback-consumer.js';
 import { PremiumChecker } from './fallback/premium.js';
+import { warmTargetTab } from './sign/warm-target-tab.js';
 
 // Import coordination modules (leadership-based)
 import { SourceManagerClient } from './coordination/client.js';
@@ -86,7 +87,9 @@ import { loadSignConfiguration } from './sign/config.js';
 import { installSignConfiguration } from './sign/installer.js';
 import { EulerSigner } from './sign/euler.js';
 import { fetchWebshareCredentials } from './sign/webshare.js';
-import { SelfSigner } from './sign/self.js';
+import { fallbackPromotionAvailable, pickSignClients } from './sign/sign-clients.js';
+import type { PureNodeSigner } from './sign/pure-node.js';
+import type { SelfSigner } from './sign/self.js';
 import { pickAvatarUrl, tiktokAvatarUrl } from './avatar.js';
 import {
   hasTikTokChestPayload,
@@ -476,6 +479,11 @@ class TikTokListenerService {
   // same lane. Undefined when self signing is not configured.
   private selfSigner?: SelfSigner;
 
+  // The pure-node session signer (PR 2): set only in pure-node mode, where
+  // the pre-sign reads the leased session's proxyHost instead of driving a
+  // page capture. Exactly one of selfSigner/pureNodeSigner is ever set.
+  private pureNodeSigner?: PureNodeSigner;
+
 
   // Pre-sign no-lane negative cache (see NoLaneCache): pool-wide, not per-room.
   private readonly noLaneCache = new NoLaneCache();
@@ -569,11 +577,17 @@ class TikTokListenerService {
     // Apply the Euler Stream retirement configuration to the connector's global route registry
     // (issue #698). Must happen before any TikTokLiveConnection is constructed, because the
     // connector reads these module-level singletons at connect time and caches its Euler client.
-    //
-    // By default this only switches the room-id and is-live composites off Euler's fallback leg,
-    // which is free of risk: those composites try TikTok directly first and reach for Euler only
-    // when both direct routes have already failed. Signing stays with Euler unless
-    // TIKTOK_SIGNER_MODE says otherwise.
+    // Mode-gated signer construction (PR 2 plan ruling 6): euler/shadow
+    // keep SelfSigner whenever a signer URL is configured (k8s default
+    // relies on it for lane pinning and relay promotion); pure-node gets
+    // the PureNodeSigner and no SelfSigner.
+    const signClients = pickSignClients(SIGN_CONFIG.signerMode, {
+      signerBaseUrl: SIGN_CONFIG.signerBaseUrl,
+      authToken: TIKTOK_SIGNER_AUTH_TOKEN || undefined,
+      selfTimeoutMs: TIKTOK_SIGNER_TIMEOUT_MS
+    });
+    this.selfSigner = signClients.selfSigner;
+    this.pureNodeSigner = signClients.pureNodeSigner;
     installSignConfiguration(
       {
         routeConfig: RouteConfig,
@@ -582,19 +596,11 @@ class TikTokListenerService {
         signConfig: SignConfig
       },
       SIGN_CONFIG,
-      // The self signer exists now (services/tiktok-signer, ADR-0052 step 1):
-      // construct it whenever a signer URL is configured. Without the URL,
-      // shadow and self still degrade to Euler with a warning rather than
-      // failing to start.
+      // Signer construction is mode-gated (pickSignClients, see above).
       {
         euler: new EulerSigner(RouteConfig.fetchSignedWebSocketFromProvider as never),
-        self: SIGN_CONFIG.signerBaseUrl
-          ? (this.selfSigner = new SelfSigner({
-              baseUrl: SIGN_CONFIG.signerBaseUrl,
-              authToken: TIKTOK_SIGNER_AUTH_TOKEN || undefined,
-              timeoutMs: TIKTOK_SIGNER_TIMEOUT_MS
-            }))
-          : undefined
+        self: signClients.selfSigner,
+        pureNode: signClients.pureNodeSigner
       },
       this.metrics,
       logger
@@ -1260,10 +1266,16 @@ class TikTokListenerService {
       // returns in milliseconds. Skipped when self signing is off (Euler
       // signs in its own cloud and rides its own proxy already).
       let wsAgent: WsEgressAgent | undefined;
-      if (this.selfSigner && this.proxyCredentials && !this.noLaneCache.skipActive()) {
+      // The lane-pin pre-sign keys on whichever mode-specific signer is
+      // configured: SelfSigner's capture names the capture lane,
+      // PureNodeSigner's lease names the session lane (a cache hit after
+      // the first fetch). The proxyCredentials and noLaneCache conditions
+      // are unchanged.
+      const signClient = this.pureNodeSigner ?? this.selfSigner;
+      if (signClient && this.proxyCredentials && !this.noLaneCache.skipActive()) {
         try {
           const preSignStartedAt = Date.now();
-          const preSign = await this.selfSigner.sign({
+          const preSign = await signClient.sign({
             roomId: 'unused',
             username,
             userAgent: 'ws-pin'
@@ -1594,10 +1606,34 @@ class TikTokListenerService {
       logger.warn('Canary room configured but signer URL unknown; canary off', { username });
       return;
     }
+    // Pure-node mode: the leased session never creates a target-room tab,
+    // so the relay would 409 forever. The consumer runs this warm at most
+    // once per stint — each call is one signer-side capture against the
+    // single-digit-per-hour budget. Self/euler/shadow keep no warm
+    // callback: the connect-time pre-sign already holds the tab.
+    const warm =
+      SIGN_CONFIG.signerMode === 'pure-node'
+        ? () => {
+            this.metrics.recordCanaryWarm('attempted');
+            return warmTargetTab({
+              signerUrl,
+              authToken: TIKTOK_SIGNER_AUTH_TOKEN || undefined,
+              username
+            }).then((result) => {
+              if (result.ok) {
+                this.metrics.recordCanaryWarm('warmed');
+                return true;
+              }
+              this.metrics.recordCanaryWarm(result.reason);
+              return false;
+            });
+          }
+        : undefined;
     const consumer = new CanaryConsumer({
       username,
       signerUrl,
       signerAuthToken: TIKTOK_SIGNER_AUTH_TOKEN || undefined,
+      warm,
       logger: {
         info: (msg, meta) => logger.info(msg, { ...meta }),
         warn: (msg, meta) => logger.warn(msg, { ...meta })
@@ -1631,8 +1667,10 @@ class TikTokListenerService {
    * Premium fallback (phase 3): after the primary WS exhausted its flap
    * retry budget, try to switch this room's delivery to the signer's
    * viewer-tab relay. Promotion is premium-only (a tab is ~150MB in the
-   * signer pod), gated by TIKTOK_PREMIUM_FALLBACK, and requires self
-   * signing (the relay endpoint lives on the signer).
+   * signer pod), gated by TIKTOK_PREMIUM_FALLBACK, and requires a signer
+   * URL: self/euler/shadow modes get their target-room tab from the
+   * connect-time pre-sign, and pure-node mode warms it here (PR 3,
+   * sign/warm-target-tab.ts) — one capture per promotion attempt.
    *
    * The connection handed in stays DISCONNECTED: its listeners were wired
    * in connectToStream before the primary attempt failed, and the fallback
@@ -1651,7 +1689,13 @@ class TikTokListenerService {
     if (!TIKTOK_FALLBACK_ENABLED) return false;
     if (this.fallbackConsumers.has(username)) return true;
     const signerUrl = SIGN_CONFIG.signerBaseUrl;
-    if (!signerUrl || !this.selfSigner) {
+    if (
+      !fallbackPromotionAvailable(
+        signerUrl,
+        { selfSigner: this.selfSigner, pureNodeSigner: this.pureNodeSigner },
+        SIGN_CONFIG.signerMode
+      )
+    ) {
       // No signer, no relay: nothing to promote to.
       this.metrics.recordFallbackPromotion(username, 'relay_unavailable');
       return false;
@@ -1670,10 +1714,26 @@ class TikTokListenerService {
       logger.info('Flap exhausted but room is not premium; staying on primary tier', { username });
       return false;
     }
-
     // A warm tab must exist for the relay to attach (the signer answers
-    // 409 otherwise). The pre-sign at the top of connectToStream just ran
-    // one, so the tab is as warm as this process can make it.
+    // 409 otherwise). Self/euler/shadow: the pre-sign at the top of
+    // connectToStream just ran one. Pure-node: warm it now — one capture,
+    // premium-gated so non-premium rooms never pay it.
+    if (SIGN_CONFIG.signerMode === 'pure-node') {
+      const warm = await warmTargetTab({
+        signerUrl,
+        authToken: TIKTOK_SIGNER_AUTH_TOKEN || undefined,
+        username
+      });
+      if (!warm.ok) {
+        this.metrics.recordFallbackPromotion(username, 'relay_unavailable');
+        logger.warn('Premium fallback warm failed; staying on primary tier', {
+          username,
+          reason: warm.reason
+        });
+        return false;
+      }
+    }
+
     const consumer = new FallbackConsumer({
       username,
       signerUrl,
