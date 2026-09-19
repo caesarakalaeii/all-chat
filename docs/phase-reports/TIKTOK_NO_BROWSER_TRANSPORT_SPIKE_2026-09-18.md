@@ -636,3 +636,52 @@ re-run (documented pre-existing, not in this diff).
 Rig restored: lab-listener recreated with the rig-default env (flap
 retries 3, canary dan2dxo, PR 3 dist), lab DB sources back to
 zaganovakov/kyle.toynbee/bigjaygaming01.
+
+## PR 4 — 48h lab soak STARTED (2026-09-19 08:08 UTC, PR 3 dist)
+
+Rig: signer-lab on the PR 1 image recreated for the soak with
+`SIGNER_WARM_ROOMS=justin.playback` (classic-verified: viewer capture ok,
+8.1 s) and `SIGNER_RELAY_CANARY_ROOMS=kaeptn_4.0,markusmeyer681,batya.rinka`;
+lab-listener on the PR 3 dist, `TIKTOK_SIGNER_MODE=pure-node`,
+`TIKTOK_PREMIUM_FALLBACK=on`, `TIKTOK_FLAP_MAX_FAST_RETRIES=0` (PR 3's
+open promotion proof armed: any natural flap on the premium-flagged seed
+overlay promotes), all three soak rooms in `TIKTOK_CANARY_ROOMS`.
+A host-side watcher (`/tmp/soak-watch.sh`) republishes the demand
+snapshot every 15 min and appends a metrics snapshot every 30 min to
+`/tmp/soak-snapshots.log`; all soak rooms are seeded into the lab DB.
+
+Connect phase (08:08 UTC): all three rooms connected on the leased
+session first try (zero flaps); each canary 409'd exactly once before
+its warm (`tiktok_canary_warms_total{attempted,warm}=3`, three viewer
+captures 12.8-19.5 s) and attached. Warm-room session lease healthy.
+
+First 10 minutes of divergence data:
+
+- `frame_rate` x2 — both startup artifacts: the canary joins a 60s
+  comparison window ~15s late (warm capture + tap attach), so its first
+  window is structurally short. None in steady state.
+- `method_set` x3 — exclusively page-bootstrap classes the viewer
+  tab's own browser receives and a pure-node connection never does:
+  `WebcastLinkMicBattleItemCard`, `WebcastGiftGalleryMessage`,
+  `WebcastAISummaryMessage`. No chat/gift/member/social envelope method
+  has appeared canary-only. Benign class; the soak watches it stays
+  that way.
+
+Soak pass criteria (to be judged at 48h, 2026-09-21 ~08:00 UTC):
+
+1. Zero missed-chat divergence: no `stalled` or `decode_failure_rate`
+   firing, and `method_set` never lists a chat/gift/member/social class.
+2. Zero session flags: zero 403s on either surface, capture breaker
+   quiet, lease budget (8/h) not exceeded.
+3. Rooms stay delivered through natural room-end/restart cycles
+   (offline backoff → reconnect) without operator intervention, or
+   failures are recorded honestly with the rig-swap they needed.
+4. Any natural flap on the premium-flagged rooms fires the PR 3
+   promotion chain (flap_exhausted → warm → promoted → delivered) —
+   the promotion proof PR 3's live window could not produce.
+5. The warm-room end-of-stream hazard is expected to surface: when
+   justin.playback's stream ends, cold connects 503 until the room is
+   live again (no spare warm room configured). Record how the listener
+   behaves rather than fixing the rig mid-soak.
+
+Result pending — this section is completed when the window closes.
