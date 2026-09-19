@@ -667,8 +667,11 @@ First 10 minutes of divergence data:
   has appeared canary-only. Benign class; the soak watches it stays
   that way.
 
-Soak pass criteria (to be judged at 48h, 2026-09-21 ~08:00 UTC):
-
+Soak pass criteria (to be judged at 24h, 2026-09-20 ~08:00 UTC — the
+window was shortened from the plan's 48h to 24h: the lab machine cannot
+stay up through the full window, operator travels at ~38h; the criteria
+are unchanged, only the observation window shrinks, and room-churn
+coverage is reduced accordingly):
 1. Zero missed-chat divergence: no `stalled` or `decode_failure_rate`
    firing, and `method_set` never lists a chat/gift/member/social class.
 2. Zero session flags: zero 403s on either surface, capture breaker
@@ -684,4 +687,5 @@ Soak pass criteria (to be judged at 48h, 2026-09-21 ~08:00 UTC):
    live again (no spare warm room configured). Record how the listener
    behaves rather than fixing the rig mid-soak.
 
-Result pending — this section is completed when the window closes.
+Result pending — this section is completed when the window closes
+(2026-09-20 ~08:00 UTC).
