@@ -726,8 +726,8 @@ async function handleSessionLease(
     room: string;
     lease: SessionLease | undefined;
   }
-  // Phase 1: warm leases. The per-room outcome (undefined lease = dead page,
-  // empty wsUrl = unservable) feeds the recovery pass.
+  // The per-room outcome (undefined lease = dead page, empty wsUrl =
+  // unservable) feeds the recovery pass below.
   const outcomes: RoomOutcome[] = [];
   for (const room of warmRooms) {
     const lease = await viewer.sessionLease(room);
@@ -740,9 +740,9 @@ async function handleSessionLease(
     }
   }
 
-  // Phase 2: capture the tab-less, breaker-eligible rooms in order. A thrown
-  // capture or a resolved-but-empty one moves to the next candidate; both
-  // accrue breaker failures so a dead room's cooldown paces it.
+  // A thrown capture or a resolved-but-empty one moves to the next
+  // candidate; both accrue breaker failures so a dead room's cooldown
+  // paces it.
   let lastError = '';
   const captureCandidates = async (rooms: string[]): Promise<SessionLease | undefined> => {
     for (const room of rooms) {
@@ -776,11 +776,11 @@ async function handleSessionLease(
     return;
   }
 
-  // Phase 3: recovery pass. Close the tabs whose phase-1 lease could not
-  // serve (dead page or empty wsUrl) — unless a relay subscriber is
-  // attached — then cold-capture exactly the dropped rooms. This is the
-  // only path that clears a dead registered entry: hasTab stays true
-  // otherwise, so no capture is reachable, and pinned rooms never idle-evict.
+  // Close the tabs whose warm lease could not serve (dead page or empty
+  // wsUrl) — unless a relay subscriber is attached — then cold-capture
+  // exactly the dropped rooms. This is the only path that clears a dead
+  // registered entry: hasTab stays true otherwise, so no capture is
+  // reachable, and pinned rooms never idle-evict.
   const dropped: string[] = [];
   for (const { room, lease } of outcomes) {
     if (!viewer.hasTab(room)) continue;
@@ -795,8 +795,8 @@ async function handleSessionLease(
     return;
   }
 
-  // Phase 4: no servable lease. Retryable: the breaker paces the rooms,
-  // closed tabs re-capture cold, dead entries were cleared.
+  // No servable lease. Retryable: the breaker paces the rooms, closed
+  // tabs re-capture cold, dead entries were cleared.
   leaseOutcome('no_session');
   res.writeHead(503, { 'Content-Type': 'application/json' });
   res.end(
