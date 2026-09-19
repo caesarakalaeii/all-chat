@@ -56,6 +56,7 @@ import {
   type LocalizationTranslation,
   type SubmitRow,
 } from '@/lib/api/localization'
+import { ApiError } from '@/lib/api/client'
 
 // The catalog is the key source of truth; the backend never sends keys.
 
@@ -97,6 +98,17 @@ const TOOL_NAMESPACES = [
 ] as const
 
 
+// apiErrorDetail appends the server's own error text when present: the
+// translate page's catch blocks used to swallow it, so every 400
+// (invalid locale code, locale not approved) surfaced as an identical
+// generic toast and the contributor could not tell why.
+function apiErrorDetail(err: unknown, fallback: string): string {
+  if (err instanceof ApiError && typeof err.data?.error === 'string') {
+    return `${fallback} — ${err.data.error}`
+  }
+  return fallback
+}
+
 function TranslatePageInner() {
   const t = useTranslations()
 
@@ -115,7 +127,7 @@ function TranslatePageInner() {
   const locale = locales?.find((l) => l.code === localeCode) ?? null
   const namespace = TOOL_NAMESPACES.find((n) => n === namespaceId)
   const nsKeys = useMemo(
-    () => (namespace ? Object.keys(flatten(enMessages[namespace])) : []),
+    () => (namespace ? Object.keys(flatten(enMessages[namespace], namespace)) : []),
     [namespace]
   )
 
@@ -200,7 +212,12 @@ function TranslatePageInner() {
         for (const row of rows) byKey[row.key] = row
         setMine(byKey)
       })
-      .catch(() => toastManager.add({ title: t('translate.saveFailedToast'), type: 'error' }))
+      .catch((err: unknown) =>
+        toastManager.add({
+          title: apiErrorDetail(err, t('translate.saveFailedToast')),
+          type: 'error',
+        })
+      )
       .finally(() => setSaving(false))
   }
 
@@ -219,8 +236,11 @@ function TranslatePageInner() {
         setReqEnglishName('')
         setReqNativeName('')
       })
-      .catch(() =>
-        toastManager.add({ title: t('translate.localeRequestFailedToast'), type: 'error' })
+      .catch((err: unknown) =>
+        toastManager.add({
+          title: apiErrorDetail(err, t('translate.localeRequestFailedToast')),
+          type: 'error',
+        })
       )
       .finally(() => setRequesting(false))
   }
