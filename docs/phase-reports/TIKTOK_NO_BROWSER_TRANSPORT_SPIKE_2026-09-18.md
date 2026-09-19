@@ -732,3 +732,31 @@ A gate watcher (/tmp/gate-watch.sh on the lab machine) polls the prod
 signer's counters every 10 min and exits loudly on the first success.
 Update this section when the gate opens (or when the wait decision is
 revisited).
+
+**RESOLVED 2026-09-19 ~11:50 UTC** (root cause found while mitigating):
+the fresh-IP move (#111, caesar3 → caesar4) plus the actual missing
+piece — the tiktok-signer's `limits.cpu: 3` line (#112). #109 had
+raised the quota and written the comment describing the 3-core
+limit, but the manifest never carried the `cpu:` value, so the pod
+ran at 500m since that merge: llvmpipe software-rendering the live
+page on half a core while Xvfb and the signature browser competed.
+On caesar4 the starvation showed up explicitly as Protocol error
+(Page.navigate): Target closed and lane-busy failures; the likeliest
+reading of the original caesar3 gate is the same starvation driving
+a half-broken browser into TikTok's session scoring (45 failing
+captures in ~30 min).
+
+After #112 rolled out: warm captures landing in 4.5-9 s (billybongjr
+x3, the lab-healthy shape), session leases served (captured 5 /
+success 2), and the listener connected its first prod streams through
+pure-node (bawitabaa, ryzzislive) — prod TikTok ingest restored on
+the pure-Node transport, cross-room delivery from one warm session,
+Euler fully off the path in prod. The listener's own per-pod connect
+budget (12/h) exhausted itself during the outage window and resets
+hourly — expected transient, not a fault.
+
+Standing follow-ups: the caesar4 pin stays until the gate is
+understood (remove per #111's comment); the two replica pods share
+the leased session's connect budget at 12/h each (fine at current
+room count, revisit before cohort growth); the PR 4 soak judgment
+stands at 2026-09-20 08:00 UTC.
