@@ -122,7 +122,7 @@ func (r *LocalizationRepository) ListApprovedLocales(ctx context.Context) ([]Loc
 	}
 	defer rows.Close()
 
-	var locales []Locale
+	locales := make([]Locale, 0)
 	for rows.Next() {
 		var l Locale
 		if err := rows.Scan(&l.Code, &l.EnglishName, &l.NativeName); err != nil {
@@ -146,7 +146,7 @@ func (r *LocalizationRepository) ListRequestedLocales(ctx context.Context) ([]Lo
 	}
 	defer rows.Close()
 
-	var locales []Locale
+	locales := make([]Locale, 0)
 	for rows.Next() {
 		var l Locale
 		if err := rows.Scan(&l.Code, &l.EnglishName, &l.NativeName, &l.RequestedBy); err != nil {
@@ -240,14 +240,14 @@ func (r *LocalizationRepository) UpsertTranslation(ctx context.Context, locale, 
 // ListTranslations returns the caller's rows for a locale. Statuses:
 // 'pending' (awaiting review), 'approved', 'rejected' (with review_note —
 // the contributor revises and resubmits, overwriting the row).
-func (r *LocalizationRepository) ListTranslations(ctx context.Context, locale string) ([]Translation, error) {
+func (r *LocalizationRepository) ListTranslations(ctx context.Context, locale, submittedBy string) ([]Translation, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT key, value, status, COALESCE(submitted_by::text, ''), review_note,
 		        to_char(updated_at, 'YYYY-MM-DD"T"HH24:MI:SSZ')
 		 FROM localization_translations
 		 WHERE locale = $1 AND submitted_by = $2::uuid
 		 ORDER BY key`,
-		locale)
+		locale, submittedBy)
 	if err != nil {
 		r.logger.Error("Failed to list translations", zap.String("locale", locale), zap.Error(err))
 		return nil, fmt.Errorf("failed to list translations: %w", err)
@@ -258,7 +258,7 @@ func (r *LocalizationRepository) ListTranslations(ctx context.Context, locale st
 
 // scanTranslations drains a translation result set.
 func scanTranslations(rows pgx.Rows) ([]Translation, error) {
-	var out []Translation
+	out := make([]Translation, 0)
 	for rows.Next() {
 		var t Translation
 		if err := rows.Scan(&t.Key, &t.Value, &t.Status, &t.SubmittedBy, &t.ReviewNote, &t.UpdatedAt); err != nil {
@@ -371,7 +371,7 @@ func (r *LocalizationRepository) ListLocaleProgress(ctx context.Context) ([]Loca
 	}
 	defer rows.Close()
 
-	var out []LocaleProgress
+	out := make([]LocaleProgress, 0)
 	for rows.Next() {
 		var p LocaleProgress
 		if err := rows.Scan(&p.Code, &p.Pending, &p.Approved, &p.Rejected); err != nil {
