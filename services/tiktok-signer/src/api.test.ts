@@ -320,6 +320,59 @@ describe('GET /v1/session', () => {
     });
   });
 
+  it('skips an offline warm room before capturing and serves the next live one', async () => {
+    // 2026-09-20 WarmCaptureFailing alert: the offline half of a warm
+    // pair burned a ~90s capture (plus breaker churn) on every cold
+    // lease fetch. The liveness pre-check must skip it entirely.
+    const { viewer, calls } = stubbedViewer({
+      leases: {},
+      hasTabs: { rooma: false, roomb: false },
+      captures: { roomb: { lease: lease() } }
+    });
+    const probed: string[] = [];
+    await withServer(
+      {
+        viewer,
+        warmRooms: ['rooma', 'roomb'],
+        warmRoomIsLive: async (username) => {
+          probed.push(username);
+          return username === 'roomb'; // rooma's stream ended
+        }
+      },
+      async (base) => {
+        const res = await getJson(base, '/v1/session');
+        expect(res.status).toBe(200);
+        expect(res.body.wsUrl).toBe('wss://webcast-ws.example/ws');
+        expect(probed).toEqual(['rooma', 'roomb']);
+        expect(calls.captures).toEqual(['roomb']); // rooma never captured
+      }
+    );
+  });
+
+  it('still attempts the capture when the liveness probe fails', async () => {
+    // A liveness-route outage must not make warm rooms uncapturable:
+    // the probe erroring (or answering an unknown shape) means TRUE.
+    const { viewer, calls } = stubbedViewer({
+      leases: {},
+      hasTabs: { rooma: false },
+      captures: { rooma: { lease: lease() } }
+    });
+    await withServer(
+      {
+        viewer,
+        warmRooms: ['rooma'],
+        warmRoomIsLive: async () => {
+          throw new Error('liveness route down');
+        }
+      },
+      async (base) => {
+        const res = await getJson(base, '/v1/session');
+        expect(res.status).toBe(200);
+        expect(calls.captures).toEqual(['rooma']);
+      }
+    );
+  });
+
   it('falls through to the next candidate when a capture throws, accruing breaker failures', async () => {
     const breaker = new CaptureBreaker();
     const { viewer, calls } = stubbedViewer({
