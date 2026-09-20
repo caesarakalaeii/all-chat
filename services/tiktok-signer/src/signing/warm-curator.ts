@@ -85,8 +85,6 @@ const MAX_ACQUISITIONS = 2;
 const BENCH_ON_403_MS = 60 * 60_000;
 /** Candidates that failed verification wait this long before re-trying. */
 const FAILED_COOLDOWN_MS = 6 * 60 * 60_000;
-/** How many feed handles one discovery pass keeps as candidates. */
-const DISCOVERY_CANDIDATE_CAP = 12;
 
 /** One live-feed discovery pass on the pool's own lane page. */
 async function discoverViaFeed(viewer: ViewerPool): Promise<string[] | undefined> {
@@ -104,7 +102,7 @@ async function discoverViaFeed(viewer: ViewerPool): Promise<string[] | undefined
           hrefs.push(href.slice(2, -5).toLowerCase());
         }
       }
-      return [...new Set(hrefs)].slice(0, DISCOVERY_CANDIDATE_CAP);
+      return [...new Set(hrefs)].slice(0, 12);
     });
     return handles;
   });
