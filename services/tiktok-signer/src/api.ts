@@ -40,8 +40,45 @@ import { request as undiciRequest } from 'undici';
 import { SigningSession, type SignerIdentity } from './signing/session.js';
 import { CaptureBreaker } from './signing/capture-breaker.js';
 import { type ViewerPool, type SessionLease } from './signing/viewer.js';
-import { VIEWER_IDENTITY, browserVersionFromUserAgent } from './signing/identity.js';
+import { VIEWER_IDENTITY, VIEWER_UA, browserVersionFromUserAgent } from './signing/identity.js';
 import { RelayHub, type RelayLogger, type RelayMessage } from './signing/relay.js';
+
+/**
+ * Is the streamer live right now, per TikTok's own user route (user.status
+ * === 2, the mapping the listener's is-live composites use)? A plain GET
+ * with the viewer UA + Referer — no capture, no browser, one cheap request.
+ *
+ * The lease endpoint's cold-capture path consults this BEFORE spending a
+ * capture on a warm room: an offline warm room can never produce an
+ * im/fetch, and paying its ~90s capture timeout per cold lease fetch was
+ * the 2026-09-20 WarmCaptureFailing alert's cost (breaker churn on a room
+ * that was simply not streaming). On a fetch error the answer is TRUE —
+ * a liveness-route outage must not make warm rooms uncapturable.
+ */
+async function warmRoomIsLive(username: string, fetchImpl: typeof undiciRequest = undiciRequest): Promise<boolean> {
+  try {
+    const response = await fetchImpl(
+      `https://www.tiktok.com/api-live/user/room/?uniqueId=${encodeURIComponent(username)}&sourceType=54&aid=1988`,
+      {
+        headers: {
+          'User-Agent': VIEWER_UA,
+          Referer: 'https://www.tiktok.com/'
+        },
+        bodyTimeout: 5_000,
+        headersTimeout: 5_000
+      }
+    );
+    if (response.statusCode !== 200) return true;
+    const text = await response.body.text();
+    const user = (JSON.parse(text) as { data?: { user?: { status?: number } } }).data?.user;
+    // Unknown shape = do not skip the capture; only a clear offline answer
+    // (status !== 2) with a parsable body saves the capture budget.
+    if (typeof user?.status !== 'number') return true;
+    return user.status === 2;
+  } catch {
+    return true;
+  }
+}
 
 const register = new Registry();
 collectDefaultMetrics({ register });
@@ -419,6 +456,12 @@ export interface ServerOptions {
    */
   relayFallbackEnabled?: boolean;
   /**
+   * Warm-room liveness probe for the lease endpoint's cold-capture path
+   * (warmRoomIsLive). Injectable for tests; defaults to TikTok's own
+   * api-live user route with the viewer UA.
+   */
+  warmRoomIsLive?: (username: string) => Promise<boolean>;
+  /**
    * Warm rooms (SIGNER_WARM_ROOMS): the classic rooms whose captured WS
    * sessions GET /v1/session leases. Empty disables the endpoint.
    */
@@ -548,7 +591,7 @@ export function createServer(options: ServerOptions): http.Server {
         res.end(JSON.stringify({ error: 'viewer mode not enabled' }));
         return;
       }
-      await handleSessionLease(res, viewer, warmRooms, captureBreaker, relay);
+      await handleSessionLease(res, viewer, warmRooms, captureBreaker, relay, options.warmRoomIsLive);
       return;
     }
 
@@ -720,7 +763,8 @@ async function handleSessionLease(
   viewer: ViewerPool,
   warmRooms: string[],
   breaker: CaptureBreaker,
-  relay: RelayHub | undefined
+  relay: RelayHub | undefined,
+  isLive: (username: string) => Promise<boolean> = warmRoomIsLive
 ): Promise<void> {
   interface RoomOutcome {
     room: string;
@@ -742,11 +786,15 @@ async function handleSessionLease(
 
   // A thrown capture or a resolved-but-empty one moves to the next
   // candidate; both accrue breaker failures so a dead room's cooldown
-  // paces it.
+  // paces it. Offline warm rooms are skipped BEFORE their capture: an
+  // im/fetch never arrives for a stream that is not running, and paying
+  // the ~90s capture timeout per cold lease fetch on the offline half of
+  // a warm pair was the 2026-09-20 WarmCaptureFailing alert's real cost.
   let lastError = '';
   const captureCandidates = async (rooms: string[]): Promise<SessionLease | undefined> => {
     for (const room of rooms) {
       if (viewer.hasTab(room) || breaker.isRefused(room)) continue;
+      if (!(await isLive(room).catch(() => true))) continue;
       try {
         const capture = await viewer.captureRoom(room);
         if (capture.wsUrl === '') {
