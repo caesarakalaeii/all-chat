@@ -689,3 +689,74 @@ coverage is reduced accordingly):
 
 Result pending — this section is completed when the window closes
 (2026-09-20 ~08:00 UTC).
+
+## Prod incident 2026-09-19: capture gate, pure-node cutover, egress diagnosis
+
+Timeline and measurements (all read-only against prod; changes went
+through caesar-deployment PR #110):
+
+- ~09:00 UTC: prod tiktok-signer's viewer-capture surface starts
+  refusing every capture: `im/fetch 200 not captured within 90000ms`
+  and navigation timeouts, 45 sign requests / 0 success / 45
+  tiktok_rejected across three rooms, per-room breaker trips piling
+  up. Zero connected TikTok streams. The alert that prompted the
+  merge (#915) was this.
+- The lab rig — same PR 1 signer code, different egress — captured
+  all three prod-failing rooms in ~5-6 s each (lejoe_tiktok 5.6s,
+  billybongjr 5.8s, biancaglitters 5.4s). Same code, same rooms:
+  the gate scores the prod pod's environment, not our code. #903's
+  player-selector fix was in the deployed image throughout.
+- 10:39 UTC: prod switched to pure-node (PR #110 merged):
+  TIKTOK_SIGNER_MODE=pure-node, TIKTOK_PREMIUM_FALLBACK=on,
+  SIGNER_WARM_ROOMS=lejoe_tiktok,billybongjr,
+  SIGNER_RELAY_FALLBACK=on. Mode installed cleanly, lease attempts
+  classified and backed off correctly — but every warm-room capture
+  fails from the prod pod (12 capture_failed, 22+ no_session, 0
+  success at time of writing), so no lease exists and delivery stays
+  down. The pure-node architecture held: the failure narrowed to a
+  single surface (warm-room capture) instead of N per-room captures.
+- Fresh-browser-profile hypothesis ruled out by inspection:
+  SIGNER_USER_DATA_DIR is an emptyDir and the mounted dir is empty —
+  every pod restart is already a fresh profile, and the 10:00
+  restart's captures failed identically. The gate is keyed on the
+  pod's egress IP / ASN or an in-memory session property, not the
+  profile.
+- Operator decision: wait out the gate (2026-09-16 precedent: gates
+  flap and re-open on cooldown). Pure-node is armed — the first
+  successful capture self-restores delivery for every room with no
+  further changes. Webshare re-introduction remains an explicit
+  operator decision away (dropped per #104/#106; today's
+  measurement inverts its premise but does not un-drop it).
+
+A gate watcher (/tmp/gate-watch.sh on the lab machine) polls the prod
+signer's counters every 10 min and exits loudly on the first success.
+Update this section when the gate opens (or when the wait decision is
+revisited).
+
+**RESOLVED 2026-09-19 ~11:50 UTC** (root cause found while mitigating):
+the fresh-IP move (#111, caesar3 → caesar4) plus the actual missing
+piece — the tiktok-signer's `limits.cpu: 3` line (#112). #109 had
+raised the quota and written the comment describing the 3-core
+limit, but the manifest never carried the `cpu:` value, so the pod
+ran at 500m since that merge: llvmpipe software-rendering the live
+page on half a core while Xvfb and the signature browser competed.
+On caesar4 the starvation showed up explicitly as Protocol error
+(Page.navigate): Target closed and lane-busy failures; the likeliest
+reading of the original caesar3 gate is the same starvation driving
+a half-broken browser into TikTok's session scoring (45 failing
+captures in ~30 min).
+
+After #112 rolled out: warm captures landing in 4.5-9 s (billybongjr
+x3, the lab-healthy shape), session leases served (captured 5 /
+success 2), and the listener connected its first prod streams through
+pure-node (bawitabaa, ryzzislive) — prod TikTok ingest restored on
+the pure-Node transport, cross-room delivery from one warm session,
+Euler fully off the path in prod. The listener's own per-pod connect
+budget (12/h) exhausted itself during the outage window and resets
+hourly — expected transient, not a fault.
+
+Standing follow-ups: the caesar4 pin stays until the gate is
+understood (remove per #111's comment); the two replica pods share
+the leased session's connect budget at 12/h each (fine at current
+room count, revisit before cohort growth); the PR 4 soak judgment
+stands at 2026-09-20 08:00 UTC.
