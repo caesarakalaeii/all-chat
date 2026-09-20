@@ -760,3 +760,108 @@ understood (remove per #111's comment); the two replica pods share
 the leased session's connect budget at 12/h each (fine at current
 room count, revisit before cohort growth); the PR 4 soak judgment
 stands at 2026-09-20 08:00 UTC.
+
+## PR 4 soak judgment (2026-09-20, window closed 08:00 UTC)
+
+**Verdict: PASS — on prod evidence, not lab soak evidence.**
+
+The lab soak itself produced only ~1 h of usable data: the soak rooms all
+ended their streams by ~09:10 UTC on 09-19, and no replacement cohort was
+started (discovering fresh classic rooms cost captures from the same
+budget the soak was measuring). The lab was never going to be the
+deciding instrument at this room churn rate.
+
+What actually carried the judgment was prod: pure-node ran ~24 h through
+the 09-19 outage, the cutover, a node move, and heavy room churn (22
+distinct rooms connected in the 24 h to 08:00 UTC on 09-20), with the
+listener holding streams and the lease endpoint serving cold captures in
+the lab-healthy 4.5-9 s shape once #112's CPU limit landed. A controlled
+lab soak adds nothing over two days of that; PR 4's cohort flip is
+declared done by the de-facto state: prod IS the cohort, and has been
+since 10:39 UTC on 09-19.
+
+## Operational resilience hardening (2026-09-20)
+
+The 24 h also surfaced the operational gaps, each closed same-day:
+
+- **Three capacity alerts** (caesar #113, `allchat-warning-alerts`):
+  `TikTokPureNodeConnectBudgetExhausted` (>3 rate_limit sign
+  failures/15 m), `TikTokPureNodeNoWarmSession` (>2 no_session/15 m),
+  `TikTokPureNodeWarmCaptureFailing` (>3 capture_failed/30 m).
+  Overnight triage validated all three fire on real signal: the budget
+  alert caught ~77 refusals/12 h from ~8 churny rooms saturating the
+  24-connects/h budget (the first hard datum for the session-sharding
+  follow-up), and the capture alert caught the pod-move cold-start.
+- **Offline-warm-room capture waste** (all-chat #916): the 09-20 capture
+  alert fired on a warm room that had gone offline — every cold lease
+  fetch burned its ~90 s capture timeout before falling through, the
+  breaker churning on a room that could never answer. Fix: the lease
+  endpoint liveness-checks warm rooms (api-live user route,
+  `user.status === 2`, viewer UA) BEFORE spending a capture, fail-open
+  (probe errors still attempt the capture — a liveness-route outage must
+  not make warm rooms uncapturable). Signer suite 65/65.
+- **Warm-room schedule diversity** (caesar #115, then #116): 2 → 4 → 6
+  rooms. The two-room set's failure mode (both streamers offline at
+  once) was exactly the 09-20 alert scenario; the four-room morning set
+  left the 23-06 UTC window uncovered, so the listener's 24 h connect
+  log supplied two high-frequency overnight rooms (stonesinmykidney 4x
+  at 02-03 UTC, claudinhoclt 3x at 23 UTC) — chosen from real streaming
+  schedules rather than a one-shot discovery scan.
+- **Unrelated-but-same-window cluster work**: the
+  `KubeDaemonSetRolloutStuck` alert (kured + svclb) root-caused to a
+  kube-controller-manager node-view desync from caesar4's overnight OOM
+  flap (all DSs were actually ready; `numberMisscheduled` stuck at 1) —
+  fixed by restarting k3s on the lease holder. The tempo stack was
+  pinned off caesar4 (caesar #117): the 4 GB node had been re-accruing
+  unconstrained tempo pods after every restart.
+
+## Warm-room auto-curator (2026-09-20, all-chat #917 + caesar #118)
+
+The static warm list was the remaining flimsy piece: handles verified at
+audit time are stale in hours (this day alone needed two manual
+re-audits). The curator automates the audit with the manual process's
+own safety rules encoded: liveness probe every 30 min (fail-open; warm
+tabs count as coverage — a captured session outlives its stream);
+under a coverage floor of 2, ONE live-feed discovery pass on a
+pool-lane page (same UA and request blocking as a capture's page),
+filtered (never canary, never listed, 6 h cooldown on failed
+verification), liveness-checked, capture-verified at most 2 — the
+capture IS the classic-ness test, and a passing capture leaves the
+room warm, which is the point. Any 403 benches all acquisition for an
+hour, the operator's manual budget rule since 09-19, now in code.
+Add-only: removal stays a human call (breaker + NoWarmSession alert
+cover failing rooms).
+
+Ship sequence: #917 merged (71/71 signer tests), soaked ~7 h in prod
+with the flag off (29 lease successes, cold-capture fallthrough
+healthy), then flipped in caesar #118. Two defects shipped in that
+window, both caught same-day: #118's diff dropped the
+`SIGNER_WARM_ROOMS` value line (caught before Argo synced it; prod
+never served the broken manifest; restored in #119), and the first
+live tick exposed `DISCOVERY_CANDIDATE_CAP is not defined` —
+`page.evaluate` serializes its callback into the browser context
+where module constants don't exist (fixed in all-chat #918; the
+injected-discovery test seam structurally cannot catch evaluate-body
+bugs, noted for future triage).
+
+After the fix, the first real cycle worked end to end: coverage 1/6
+(one seed live), discovery ran, `heav3nn.ow` captured in 7.6 s and
+`mwambi09` in 18.1 s, both acquired and lease-servable immediately
+(one live Set shared by the lease endpoint, the pool's pinned rooms
+and the curator — no restart). The warm list now self-heals.
+
+## Closeout state (2026-09-20)
+
+- Prod TikTok ingest: pure-node, cross-room from warm leases, Euler
+  fully off the path. Listener 2 replicas, `TIKTOK_PREMIUM_FALLBACK=on`,
+  canary rooms empty.
+- Signer: caesar3 (20 GB node), `cpu: 3` / `memory: 6Gi`, six-room seed
+  list, `SIGNER_WARM_AUTOCURATE=on`, `SIGNER_RELAY_FALLBACK=on`.
+- Open follow-ups, in priority order: (1) session sharding for
+  connect-budget capacity — ~8-10 churning rooms saturate 24
+  connects/h, the first measured hard limit of the single-session
+  design; (2) caesar4 needs RAM or swap, or a deliberate
+  redis-node-2 volume migration (its local-path PV pins it);
+  (3) `TikTokPureNodeNoWarmSession`'s >2/15 m floor may ride just
+  under a long no-warm soak at the listener's lease cadence — wait for
+  one real occurrence before tuning.
