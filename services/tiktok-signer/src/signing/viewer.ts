@@ -552,6 +552,34 @@ export class ViewerPool {
   }
 
   /**
+   * Run a callback with a fresh page on the first available lane's browser
+   * (warm-curator discovery: one navigation of the public live feed, no
+   * im/fetch tap, no tab registration). The page carries the lane's UA,
+   * request blocking and proxy auth, so the navigation reads exactly like
+   * a capture's page to TikTok. Closes the page after; the lane keeps its
+   * browser. Undefined when no lane has a live browser (pool starting up).
+   */
+  async withDiscoveryPage<T>(run: (page: Page) => Promise<T>): Promise<T | undefined> {
+    for (const key of this.laneOrder) {
+      const lane = this.lanes.get(key);
+      if (!lane || lane.klass !== 'primary' || lane.detached) continue;
+      let browser: Browser;
+      try {
+        browser = await this.ensureBrowser(lane);
+      } catch {
+        continue;
+      }
+      const page = await this.newLanePage(lane, browser);
+      try {
+        return await run(page);
+      } finally {
+        void page.close().catch(() => undefined);
+      }
+    }
+    return undefined;
+  }
+
+  /**
    * Capture the initial fetch exchange for a live room. Resolves when the
    * page's player receives a non-trivial /im/fetch/ response; rejects after
    * `timeoutMs` overall. The first attempt runs alone on the pinned or
