@@ -27,6 +27,7 @@ import { createServer } from './api.js';
 import { RelayHub } from './signing/relay.js';
 import { SigningSession } from './signing/session.js';
 import { ViewerPool, findDualListedRooms } from './signing/viewer.js';
+import { WarmCurator } from './signing/warm-curator.js';
 import { fetchWebshareProxies } from './signing/webshare.js';
 // Stealth-plugin page hooks race lane/browser shutdown: rotateLaneProfile and
 // refreshProxies close the browser while the plugin's onPageCreated hook is
@@ -117,6 +118,7 @@ function parseRoomList(env: string | undefined): string[] {
 // Warm rooms (pure-Node transport PR 1): the classic rooms whose captured
 // WS session GET /v1/session leases to the listener.
 const warmRooms = parseRoomList(process.env.SIGNER_WARM_ROOMS);
+const warmRoomSet = new Set(warmRooms);
 // Canary isolation (PR 1 item 6): canary rooms capture on their own
 // profiles so a flag earned on a primary jar cannot blind the canary.
 const canaryRooms = new Set(parseRoomList(process.env.SIGNER_RELAY_CANARY_ROOMS));
@@ -138,12 +140,28 @@ const viewer = viewerMode
       canaryProfileDir:
         process.env.SIGNER_CANARY_PROFILE || userDataDir + '-viewer-canary',
       canaryRooms,
-      pinnedRooms: new Set(warmRooms),
+      pinnedRooms: warmRoomSet,
       display: process.env.SIGNER_DISPLAY,
       maxLaneAttempts: parseInt(process.env.SIGNER_MAX_LANE_ATTEMPTS || '2', 10),
       logger: { info: logger.info, warn: logger.warn }
     })
   : undefined;
+
+// Warm-room auto-curator (2026-09-20): SIGNER_WARM_ROOMS seeds the list;
+// when live coverage drops the curator discovers, verifies and ADDS
+// rooms on its own (see warm-curator.ts). It never removes. Off by
+// default until the caesar flag flip - the seed list alone must keep
+// serving, and an off-curve curator can simply be turned off.
+const autocurate = (process.env.SIGNER_WARM_AUTOCURATE || '').trim().toLowerCase() === 'on';
+const curator = autocurate && viewer
+  ? new WarmCurator({
+      warmRooms: warmRoomSet,
+      canaryRooms,
+      viewer,
+      logger: { info: logger.info, warn: logger.warn }
+    })
+  : undefined;
+if (curator) curator.start();
 
 // Premium fallback gate (2026-09-16 transport plan, phase 3): when on,
 // GET /v1/stream/:username serves any room with a warm tab, not just the
@@ -181,7 +199,7 @@ const relay = viewer
   ? new RelayHub((username) => { viewer.pinTab(username); }, { logger })
   : undefined;
 
-const server = createServer({ port: PORT, session, viewer, relay, canaryRooms, relayFallbackEnabled, warmRooms, logger });
+const server = createServer({ port: PORT, session, viewer, relay, canaryRooms, relayFallbackEnabled, warmRooms: [...warmRoomSet], logger });
 
 server.listen(PORT, () => {
   logger.info('tiktok-signer listening', { port: PORT });

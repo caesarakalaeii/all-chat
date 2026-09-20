@@ -55,7 +55,7 @@ import { RelayHub, type RelayLogger, type RelayMessage } from './signing/relay.j
  * that was simply not streaming). On a fetch error the answer is TRUE —
  * a liveness-route outage must not make warm rooms uncapturable.
  */
-async function warmRoomIsLive(username: string, fetchImpl: typeof undiciRequest = undiciRequest): Promise<boolean> {
+export async function warmRoomIsLive(username: string, fetchImpl: typeof undiciRequest = undiciRequest): Promise<boolean> {
   try {
     const response = await fetchImpl(
       `https://www.tiktok.com/api-live/user/room/?uniqueId=${encodeURIComponent(username)}&sourceType=54&aid=1988`,
