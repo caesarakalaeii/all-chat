@@ -163,11 +163,12 @@ describe('NoLaneCache', () => {
   });
 
   it('skips the pre-sign for the TTL after a no-lane answer', () => {
+    const now = Date.now();
     const cache = new NoLaneCache();
-    cache.markNoLane();
-    expect(cache.skipActive()).toBe(true);
-    expect(cache.skipActive(Date.now() + NO_LANE_CACHE_TTL_MS - 1)).toBe(true);
-    expect(cache.skipActive(Date.now() + NO_LANE_CACHE_TTL_MS)).toBe(false);
+    cache.markNoLane(now);
+    expect(cache.skipActive(now)).toBe(true);
+    expect(cache.skipActive(now + NO_LANE_CACHE_TTL_MS - 1)).toBe(true);
+    expect(cache.skipActive(now + NO_LANE_CACHE_TTL_MS)).toBe(false);
   });
 
   it('re-arms pinning immediately after a lane answer', () => {
