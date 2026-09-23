@@ -150,25 +150,56 @@ describe('BackoffManager budget-refusal parking', () => {
 
     const state = mgr.getState('user')!;
     expect(state.nextCheckTime).toBe(1_000_000 + 3_600_000);
+    expect(state.currentBackoffMs).toBe(0);
     expect(mgr.shouldCheckNow('user')).toBe(false);
     expect(mgr.getTimeUntilNextCheck('user')).toBe(3_600_000);
   });
 
-  it('does not escalate consecutiveErrors', () => {
+  it('parks through the stuck-recovery threshold without looking stuck', () => {
+    // recoverStuckChannels (poller.ts) treats currentBackoffMs >= 180000
+    // with a 5-minute-old lastCheckTime as stuck and force-removes the
+    // state — which would defeat an hour-long park 5 minutes in. The park
+    // must ride nextCheckTime alone; currentBackoffMs is derived state the
+    // next record* call recomputes anyway.
     vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
     vi.spyOn(Math, 'random').mockReturnValue(0.5);
 
     const mgr = new BackoffManager(noopLogger);
     mgr.recordBudgetRefusal('user', 3_600_000);
-    expect(mgr.getState('user')!.consecutiveErrors).toBe(0);
-    mgr.recordBudgetRefusal('user', 3_600_000);
-    expect(mgr.getState('user')!.consecutiveErrors).toBe(0);
 
-    // The next REAL error still starts the exponential curve at step 1 (2s),
-    // not wherever the parking happened to leave the counter.
-    mgr.recordConnectionError('user', new Error('boom'));
-    expect(mgr.getState('user')!.currentBackoffMs).toBe(2000);
-    expect(mgr.getState('user')!.consecutiveErrors).toBe(1);
+    const state = mgr.getState('user')!;
+    expect(state.currentBackoffMs).toBe(0);
+    expect(state.lastCheckTime).toBe(1_000_000);
+  });
+
+  it('does not touch consecutiveErrors mid-curve', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    const mgr = new BackoffManager(noopLogger);
+    mgr.recordConnectionError('user', new Error('first'));
+    mgr.recordConnectionError('user', new Error('second'));
+    expect(mgr.getState('user')!.consecutiveErrors).toBe(2);
+
+    // A budget refusal between two genuine errors must neither increment
+    // nor reset the streak: the refusal is not the room's fault, and the
+    // next genuine error resumes the curve where it left off (4s, step 3).
+    mgr.recordBudgetRefusal('user', 3_600_000);
+    expect(mgr.getState('user')!.consecutiveErrors).toBe(2);
+    expect(mgr.getState('user')!.currentBackoffMs).toBe(4000); // untouched: still the step-2 error value
+
+    mgr.recordConnectionError('user', new Error('third'));
+    expect(mgr.getState('user')!.currentBackoffMs).toBe(8000);
+    expect(mgr.getState('user')!.consecutiveErrors).toBe(3);
+  });
+
+  it('clamps a negative retryAfterMs to an immediate re-check, never a past park', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    const mgr = new BackoffManager(noopLogger);
+    mgr.recordBudgetRefusal('user', -5_000);
+    expect(mgr.getState('user')!.nextCheckTime).toBe(1_000_000);
   });
 
   it('parks at the stated time even when it is shorter than the error curve would be', () => {
