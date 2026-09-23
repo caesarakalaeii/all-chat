@@ -1485,12 +1485,14 @@ class TikTokListenerService {
       emitter.on('error', (err: Error) => {
         logger.error('TikTok stream error', { username, error: err });
 
-        // A budget refusal reaches this handler too (the connector emits
-        // 'error' before connect() rethrows): park it, never escalate —
-        // the refusal is not the room's fault. Re-park only if this pod
-        // still leads the stream: an 'error' can fire during the teardown
-        // of a rebalanced or lost stream, and a lease-less poller target
-        // only burns status checks (onLive would skip it anyway).
+        // A budget refusal reaches this handler too, wrapped in the
+        // connector's { info, exception } envelope (handleError emits
+        // that before connect() rethrows the raw error): park it, never
+        // escalate — the refusal is not the room's fault. Re-park only
+        // if this pod still leads the stream: an 'error' can fire during
+        // the teardown of a rebalanced or lost stream, and a lease-less
+        // poller target only burns status checks (onLive would skip it
+        // anyway). The catch in connectToStream handles the raw throw.
         if (isBudgetRefusalError(err)) {
           this.backoffManager.recordBudgetRefusal(username, budgetRefusalRetryAfterMs(err));
         } else {
