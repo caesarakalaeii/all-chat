@@ -62,7 +62,9 @@ import { PrometheusMetrics } from './metrics/prometheus.js';
 import { HeartbeatMonitor } from './reliability/heartbeat-monitor.js';
 import { MessageDeduplicator } from './deduplication/message-deduplicator.js';
 import {
+  budgetRefusalRetryAfterMs,
   connectionCeilingReached,
+  isBudgetRefusalError,
   isWsFlapError,
   nextFlapRetryDelayMs,
   NoLaneCache,
@@ -1545,8 +1547,16 @@ class TikTokListenerService {
     } catch (error) {
       logger.error('Failed to connect to TikTok stream', { username, error });
 
-      // Record error for backoff
-      this.backoffManager.recordConnectionError(username, error as Error);
+      // A self-imposed budget refusal is not an error: the sign cannot
+      // succeed until the signer's rolling hour slides, so the room is
+      // parked for exactly that long. The escalating error curve would
+      // re-sign every few seconds, get refused again, and spin the failure
+      // counter that fired the budget-exhausted alert flaps.
+      if (isBudgetRefusalError(error)) {
+        this.backoffManager.recordBudgetRefusal(username, budgetRefusalRetryAfterMs(error));
+      } else {
+        this.backoffManager.recordConnectionError(username, error as Error);
+      }
 
       // Only schedule a retry if the stream is still demanded. If demand was pulled
       // while we were connecting, re-parking it in the poller would re-create the
