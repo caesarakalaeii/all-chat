@@ -22,7 +22,7 @@
  * constructed in a unit test). Each function answers one question the incident
  * mitigations depend on.
  */
-import { SignatureFailure } from '../sign/signer.js';
+import { BUDGET_REFUSAL_SIGNATURE, SignatureFailure } from '../sign/signer.js';
 
 /**
  * Whether a pod at `liveConnectionCount` active+connecting WebSocket
@@ -121,7 +121,7 @@ export function isWsFlapError(error: unknown): boolean {
  * the failure counter that fired the 2026-09-23 budget-exhausted alert flap.
  */
 export function isBudgetRefusalError(error: unknown): boolean {
-  return error instanceof Error && error.message.includes('budget exhausted');
+  return error instanceof Error && error.message.includes(BUDGET_REFUSAL_SIGNATURE);
 }
 
 /** Time until the signer's window slides, 0 when the error does not say. */
