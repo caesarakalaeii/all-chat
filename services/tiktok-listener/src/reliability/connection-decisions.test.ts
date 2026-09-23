@@ -219,4 +219,23 @@ describe('isBudgetRefusalError', () => {
     expect(budgetRefusalRetryAfterMs(new SignatureFailure('pure-node', 'WS connect budget exhausted'))).toBe(0);
     expect(budgetRefusalRetryAfterMs(new Error('budget exhausted'))).toBe(0);
   });
+
+  it('detects a budget refusal wrapped in the connector error envelope', () => {
+    // tiktok-live-connector's handleError emits { info, exception } rather
+    // than the raw Error, so the emitter.on('error') handler in index.ts
+    // sees the envelope; a matcher that only accepted real Errors was dead
+    // code there (2026-09-23 council round 2).
+    const wrapped = {
+      info: 'Error while connecting',
+      exception: new SignatureFailure('pure-node', 'WS connect budget exhausted', undefined, 45_000),
+    };
+    expect(isBudgetRefusalError(wrapped)).toBe(true);
+    expect(budgetRefusalRetryAfterMs(wrapped)).toBe(45_000);
+  });
+
+  it('does not match a connector envelope without a budget refusal inside', () => {
+    const wrapped = { info: 'WebSocket Error after connecting', exception: new Error('socket hang up') };
+    expect(isBudgetRefusalError(wrapped)).toBe(false);
+    expect(budgetRefusalRetryAfterMs(wrapped)).toBe(0);
+  });
 });
