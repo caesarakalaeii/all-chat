@@ -121,12 +121,26 @@ export function isWsFlapError(error: unknown): boolean {
  * the failure counter that fired the 2026-09-23 budget-exhausted alert flap.
  */
 export function isBudgetRefusalError(error: unknown): boolean {
-  return error instanceof Error && error.message.includes(BUDGET_REFUSAL_SIGNATURE);
+  const cause = unwrapConnectorError(error);
+  return cause instanceof Error
+    && cause.message.includes(BUDGET_REFUSAL_SIGNATURE);
 }
 
 /** Time until the signer's window slides, 0 when the error does not say. */
 export function budgetRefusalRetryAfterMs(error: unknown): number {
-  return isBudgetRefusalError(error) && (error as SignatureFailure).retryAfterMs !== undefined
-    ? (error as SignatureFailure).retryAfterMs!
+  const cause = unwrapConnectorError(error);
+  return isBudgetRefusalError(error) && cause instanceof SignatureFailure
+    ? cause.retryAfterMs ?? 0
     : 0;
+}
+
+/**
+ * tiktok-live-connector's handleError emits its 'error' events as
+ * `{ info, exception }`, not as the raw Error — the emitter.on('error')
+ * handler in index.ts receives that envelope, while the connect() catch
+ * receives the raw throw. Unwrap so both paths classify identically.
+ */
+function unwrapConnectorError(error: unknown): unknown {
+  const candidate = (error as { exception?: unknown } | null | undefined)?.exception;
+  return candidate !== undefined ? candidate : error;
 }
