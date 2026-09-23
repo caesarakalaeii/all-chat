@@ -269,6 +269,64 @@ describe('PureNodeSigner WS-connect budget', () => {
   });
 });
 
+describe('PureNodeSigner budget refusal classification', () => {
+  it('the exhausted WS-connect budget refuses with reason budget and a window-slide retryAfterMs', async () => {
+    vi.useFakeTimers();
+    try {
+      const { signer } = await leasedSigner({ maxWsConnectsPerHour: 2 });
+      const start = Date.now();
+      await signer.sign(signRequest({ roomId: 'a' }));
+      vi.setSystemTime(new Date(start + 30_000));
+      await signer.sign(signRequest({ roomId: 'b' }));
+      vi.setSystemTime(new Date(start + 60_000));
+
+      let refusal: unknown;
+      try {
+        await signer.sign(signRequest({ roomId: 'c' }));
+      } catch (error) {
+        refusal = error;
+      }
+
+      expect(refusal).toBeInstanceOf(SignatureFailure);
+      expect(classifySignatureFailure(refusal)).toBe('budget');
+      // Window slides 1h after the OLDEST retained connect (start); at
+      // start+60s the room must wait the remaining 59 minutes.
+      expect((refusal as SignatureFailure).retryAfterMs).toBe(59 * 60_000);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('the exhausted lease budget refuses with reason budget and its own retryAfterMs', async () => {
+    vi.useFakeTimers();
+    try {
+      const impl = vi.fn(async () => ({
+        statusCode: 200,
+        headers: {},
+        body: { text: async () => JSON.stringify(leaseResponse()) }
+      }));
+      const signer = new PureNodeSigner({ baseUrl: 'http://signer', staleAfterMs: 1, maxLeasesPerHour: 1, fetchImpl: impl as never });
+      const start = Date.now();
+      await signer.sign(signRequest({ roomId: 'a' }));
+      vi.setSystemTime(new Date(start + 30_000));
+      // Lease stale (staleAfterMs: 1) → a second fetch is demanded, but the
+      // lease budget (1/h) is already consumed.
+      let refusal: unknown;
+      try {
+        await signer.sign(signRequest({ roomId: 'b' }));
+      } catch (error) {
+        refusal = error;
+      }
+      expect(refusal).toBeInstanceOf(SignatureFailure);
+      expect(classifySignatureFailure(refusal)).toBe('budget');
+      // Lease window opened at start; 30s later the room waits 59.5 minutes.
+      expect((refusal as SignatureFailure).retryAfterMs).toBe(3_600_000 - 30_000);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe('PureNodeSigner pre-sign tolerance', () => {
   it("serves the lane-pin pre-sign's fake roomId from the cached lease without fetching", async () => {
     const { signer, impl } = await leasedSigner();

@@ -135,3 +135,50 @@ describe('BackoffManager scheduling jitter', () => {
     expect(progression).toEqual([20000, 40000, 80000, 160000, 180000, 180000]);
   });
 });
+
+describe('BackoffManager budget-refusal parking', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('parks the room for the stated window-slide time, not the error curve', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    vi.spyOn(Math, 'random').mockReturnValue(0.5); // no jitter
+
+    const mgr = new BackoffManager(noopLogger);
+    mgr.recordBudgetRefusal('user', 3_600_000);
+
+    const state = mgr.getState('user')!;
+    expect(state.nextCheckTime).toBe(1_000_000 + 3_600_000);
+    expect(mgr.shouldCheckNow('user')).toBe(false);
+    expect(mgr.getTimeUntilNextCheck('user')).toBe(3_600_000);
+  });
+
+  it('does not escalate consecutiveErrors', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    const mgr = new BackoffManager(noopLogger);
+    mgr.recordBudgetRefusal('user', 3_600_000);
+    expect(mgr.getState('user')!.consecutiveErrors).toBe(0);
+    mgr.recordBudgetRefusal('user', 3_600_000);
+    expect(mgr.getState('user')!.consecutiveErrors).toBe(0);
+
+    // The next REAL error still starts the exponential curve at step 1 (2s),
+    // not wherever the parking happened to leave the counter.
+    mgr.recordConnectionError('user', new Error('boom'));
+    expect(mgr.getState('user')!.currentBackoffMs).toBe(2000);
+    expect(mgr.getState('user')!.consecutiveErrors).toBe(1);
+  });
+
+  it('parks at the stated time even when it is shorter than the error curve would be', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    const mgr = new BackoffManager(noopLogger);
+    // A nearly-slid window: waiting 5s is correct, error backoff would say 2s
+    // but hammering a window with 5s left is still a refusal loop.
+    mgr.recordBudgetRefusal('user', 5_000);
+    expect(mgr.getState('user')!.nextCheckTime).toBe(1_000_000 + 5_000);
+  });
+});

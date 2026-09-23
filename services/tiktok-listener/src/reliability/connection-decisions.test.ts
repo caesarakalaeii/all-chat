@@ -19,6 +19,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   connectionCeilingReached,
+  budgetRefusalRetryAfterMs,
+  isBudgetRefusalError,
   isWsFlapError,
   nextFlapRetryDelayMs,
   NoLaneCache,
@@ -28,6 +30,7 @@ import {
   WS_FLAP_MAX_FAST_RETRIES,
   WS_FLAP_RETRY_DELAY_MS
 } from './connection-decisions.js';
+import { SignatureFailure } from '../sign/signer.js';
 
 describe('connectionCeilingReached', () => {
   // The ceiling check is what stops a pod from opening more Euler-proxied
@@ -178,5 +181,41 @@ describe('NoLaneCache', () => {
     const cache = new NoLaneCache();
     cache.markNoLane(Date.now());
     expect(cache.skipActive(Date.now() + NO_LANE_CACHE_TTL_MS + 1)).toBe(false);
+  });
+});
+
+describe('isBudgetRefusalError', () => {
+  // A budget refusal is the signer deliberately refusing a connect sign
+  // because the pod burned its hourly allowance. It is self-protection, not
+  // an external rate limit: the retry cannot succeed until the rolling hour
+  // slides, so the connect loop must park the room until then instead of
+  // entering the escalating error backoff (which re-signs, fails, and
+  // re-signs at 4s/8s/16s... — the 2026-09-23 alert flap).
+
+  it('detects a WS-connect budget refusal', () => {
+    expect(isBudgetRefusalError(new SignatureFailure('pure-node', 'WS connect budget exhausted: too many connects this hour'))).toBe(true);
+  });
+
+  it('detects a lease budget refusal', () => {
+    expect(isBudgetRefusalError(new SignatureFailure('pure-node', 'session lease rate limited: lease budget exhausted for this hour'))).true;
+  });
+
+  it('does not match an external rate limit', () => {
+    expect(isBudgetRefusalError(new SignatureFailure('self', 'sign service rate limited: TikTok rate limited the sign target'))).toBe(false);
+  });
+
+  it('does not match an arbitrary error', () => {
+    expect(isBudgetRefusalError(new Error('Unexpected server response: 200'))).toBe(false);
+    expect(isBudgetRefusalError(undefined)).toBe(false);
+  });
+
+  it('extracts retryAfterMs from a SignatureFailure that carries it', () => {
+    const err = new SignatureFailure('pure-node', 'WS connect budget exhausted', undefined, 123_000);
+    expect(budgetRefusalRetryAfterMs(err)).toBe(123_000);
+  });
+
+  it('returns 0 retryAfterMs when the error carries none', () => {
+    expect(budgetRefusalRetryAfterMs(new SignatureFailure('pure-node', 'WS connect budget exhausted'))).toBe(0);
+    expect(budgetRefusalRetryAfterMs(new Error('budget exhausted'))).toBe(0);
   });
 });
