@@ -141,6 +141,29 @@ export class BackoffManager {
   }
 
   /**
+   * Record a self-imposed sign-budget refusal. The retry cannot succeed
+   * until the signer's rolling hour slides, so the room is parked for
+   * exactly that long — the escalating error curve would re-sign, get
+   * refused again, and spin the failure counter that fired the
+   * 2026-09-23 budget-exhausted alert flap.
+   *
+   * @param username TikTok username
+   * @param retryAfterMs ms until the window slides, from the refusal error
+   */
+  recordBudgetRefusal(username: string, retryAfterMs: number): void {
+    const state = this.getOrCreateState(username);
+    state.lastCheckTime = Date.now();
+    state.currentBackoffMs = Math.max(0, retryAfterMs);
+    state.nextCheckTime = Date.now() + state.currentBackoffMs;
+
+    this.logger.warn('Sign budget refused - parking until window slides', {
+      username,
+      next_check_in_ms: state.currentBackoffMs,
+      next_check_in_minutes: Math.round(state.currentBackoffMs / 60000)
+    });
+  }
+
+  /**
    * Record successful connection (stream detected and connected)
    * Resets all backoff counters
    *

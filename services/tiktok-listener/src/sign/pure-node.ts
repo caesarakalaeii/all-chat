@@ -130,7 +130,9 @@ export class PureNodeSigner implements WebcastSigner {
       if (this.wsConnectHours.length >= this.maxWsConnectsPerHour) {
         throw new SignatureFailure(
           this.name,
-          'WS connect budget exhausted: too many connects this hour (rate limiting self-imposed)'
+          'WS connect budget exhausted: too many connects this hour (rate limiting self-imposed)',
+          undefined,
+          Math.max(0, this.wsConnectHours[0]! + 3_600_000 - now)
         );
       }
       this.wsConnectHours.push(now);
@@ -168,7 +170,9 @@ export class PureNodeSigner implements WebcastSigner {
     if (this.leaseFetchHours.length >= this.maxLeasesPerHour) {
       throw new SignatureFailure(
         this.name,
-        'session lease rate limited: lease budget exhausted for this hour'
+        'session lease rate limited: lease budget exhausted for this hour',
+        undefined,
+        Math.max(0, this.leaseFetchHours[0]! + 3_600_000 - now)
       );
     }
 

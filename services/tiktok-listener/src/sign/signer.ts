@@ -129,12 +129,15 @@ export interface WebcastSigner {
 export class SignatureFailure extends Error {
   readonly signer: string;
   override readonly cause?: unknown;
+  /** For self-imposed budget refusals: ms until the rolling window slides and the signer can succeed again. */
+  readonly retryAfterMs?: number;
 
-  constructor(signer: string, message: string, cause?: unknown) {
+  constructor(signer: string, message: string, cause?: unknown, retryAfterMs?: number) {
     super(`[${signer}] ${message}`);
     this.name = 'SignatureFailure';
     this.signer = signer;
     this.cause = cause;
+    this.retryAfterMs = retryAfterMs;
   }
 }
 
@@ -151,6 +154,8 @@ export class SignatureFailure extends Error {
  *  - `signature`   — our signature was produced but TikTok rejected it. This is the arms-race
  *                    signal, and the one that should page.
  *  - `network`     — transport failure reaching whoever signs. Usually not our algorithm's fault.
+ *  - `budget`      — our own hourly sign budget refusing to protect the session. Self-protection,
+ *                    not an external limit: the retry cannot succeed until the window slides.
  *  - `unknown`     — everything else.
  *
  * @param error The thrown value, of any shape.
@@ -179,6 +184,7 @@ export function classifySignatureFailure(error: unknown): string {
   // upgrade, which is the worst possible time to lose it.
   if (message.includes('retry-after') && message.includes('undefined')) return 'rate_limit';
 
+  if (message.includes('budget exhausted')) return 'budget';
   if (message.includes('rate limit') || message.includes('too many')) return 'rate_limit';
   if (message.includes('business plan') || message.includes('premium')) return 'paywall';
   if (
