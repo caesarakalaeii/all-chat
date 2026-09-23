@@ -147,19 +147,26 @@ export class BackoffManager {
    * refused again, and spin the failure counter that fired the
    * 2026-09-23 budget-exhausted alert flap.
    *
+   * The park rides nextCheckTime alone: recoverStuckChannels (poller.ts)
+   * force-resets any state whose currentBackoffMs is at max with a
+   * 5-minute-old lastCheckTime, and currentBackoffMs is derived state the
+   * next record* call recomputes anyway. consecutiveErrors is likewise
+   * untouched — a budget refusal is not the room's fault, and the next
+   * genuine error resumes the error curve where it left off.
+   *
    * @param username TikTok username
    * @param retryAfterMs ms until the window slides, from the refusal error
    */
   recordBudgetRefusal(username: string, retryAfterMs: number): void {
     const state = this.getOrCreateState(username);
+    const parkMs = Math.max(0, retryAfterMs);
     state.lastCheckTime = Date.now();
-    state.currentBackoffMs = Math.max(0, retryAfterMs);
-    state.nextCheckTime = Date.now() + state.currentBackoffMs;
+    state.nextCheckTime = Date.now() + parkMs;
 
     this.logger.warn('Sign budget refused - parking until window slides', {
       username,
-      next_check_in_ms: state.currentBackoffMs,
-      next_check_in_minutes: Math.round(state.currentBackoffMs / 60000)
+      next_check_in_ms: parkMs,
+      next_check_in_minutes: Math.round(parkMs / 60000)
     });
   }
 

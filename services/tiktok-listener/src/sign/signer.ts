@@ -120,6 +120,13 @@ export interface WebcastSigner {
 }
 
 /**
+ * Message token identifying a self-imposed budget refusal (WS-connect or lease).
+ * Shared with the connect loop's detection (connection-decisions.ts) so the
+ * classifier and the detector cannot drift apart on a reworded message.
+ */
+export const BUDGET_REFUSAL_SIGNATURE = 'budget exhausted';
+
+/**
  * Raised when a signer cannot produce a signature.
  *
  * Carries the signer's name so the fallback path can say which one failed without the caller
@@ -184,7 +191,10 @@ export function classifySignatureFailure(error: unknown): string {
   // upgrade, which is the worst possible time to lose it.
   if (message.includes('retry-after') && message.includes('undefined')) return 'rate_limit';
 
-  if (message.includes('budget exhausted')) return 'budget';
+  // BUDGET_REFUSAL_SIGNATURE must win over rate_limit: both self-imposed
+  // refusal messages deliberately contain "rate limiting"/"rate limited"
+  // tokens, and a reorder would silently re-bucket them into the alert.
+  if (message.includes(BUDGET_REFUSAL_SIGNATURE)) return 'budget';
   if (message.includes('rate limit') || message.includes('too many')) return 'rate_limit';
   if (message.includes('business plan') || message.includes('premium')) return 'paywall';
   if (
