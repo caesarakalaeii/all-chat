@@ -268,8 +268,13 @@ and `tiktok_sign_duration_seconds`. Filter to `load_bearing="true"` for real ava
 sum(rate(tiktok_sign_attempts_total{signer="self",outcome="success",load_bearing="false"}[1h]))
   / sum(rate(tiktok_sign_attempts_total{signer="self",load_bearing="false"}[1h]))
 
-# Are we still hitting Euler's free-tier ceiling?
+# Are we still hitting an external rate limit (Euler's free tier, TikTok)?
 sum(rate(tiktok_sign_attempts_total{reason="rate_limit"}[5m]))
+
+# How often are we refusing ourselves on the pure-node hourly budgets
+# (WS connects, leases)? A refused room is parked until the window
+# slides — this is capacity signal, not an external fault.
+sum(rate(tiktok_sign_attempts_total{reason="budget"}[5m]))
 ```
 
 ### Transport tiers and the premium fallback (ADR-0058)

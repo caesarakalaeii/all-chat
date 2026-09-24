@@ -19,6 +19,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   connectionCeilingReached,
+  budgetRefusalRetryAfterMs,
+  isBudgetRefusalError,
   isWsFlapError,
   nextFlapRetryDelayMs,
   NoLaneCache,
@@ -28,6 +30,7 @@ import {
   WS_FLAP_MAX_FAST_RETRIES,
   WS_FLAP_RETRY_DELAY_MS
 } from './connection-decisions.js';
+import { SignatureFailure } from '../sign/signer.js';
 
 describe('connectionCeilingReached', () => {
   // The ceiling check is what stops a pod from opening more Euler-proxied
@@ -160,11 +163,12 @@ describe('NoLaneCache', () => {
   });
 
   it('skips the pre-sign for the TTL after a no-lane answer', () => {
+    const now = Date.now();
     const cache = new NoLaneCache();
-    cache.markNoLane();
-    expect(cache.skipActive()).toBe(true);
-    expect(cache.skipActive(Date.now() + NO_LANE_CACHE_TTL_MS - 1)).toBe(true);
-    expect(cache.skipActive(Date.now() + NO_LANE_CACHE_TTL_MS)).toBe(false);
+    cache.markNoLane(now);
+    expect(cache.skipActive(now)).toBe(true);
+    expect(cache.skipActive(now + NO_LANE_CACHE_TTL_MS - 1)).toBe(true);
+    expect(cache.skipActive(now + NO_LANE_CACHE_TTL_MS)).toBe(false);
   });
 
   it('re-arms pinning immediately after a lane answer', () => {
@@ -178,5 +182,60 @@ describe('NoLaneCache', () => {
     const cache = new NoLaneCache();
     cache.markNoLane(Date.now());
     expect(cache.skipActive(Date.now() + NO_LANE_CACHE_TTL_MS + 1)).toBe(false);
+  });
+});
+
+describe('isBudgetRefusalError', () => {
+  // A budget refusal is the signer deliberately refusing a connect sign
+  // because the pod burned its hourly allowance. It is self-protection, not
+  // an external rate limit: the retry cannot succeed until the rolling hour
+  // slides, so the connect loop must park the room until then instead of
+  // entering the escalating error backoff (which re-signs, fails, and
+  // re-signs at 4s/8s/16s... — the 2026-09-23 alert flap).
+
+  it('detects a WS-connect budget refusal', () => {
+    expect(isBudgetRefusalError(new SignatureFailure('pure-node', 'WS connect budget exhausted: too many connects this hour'))).toBe(true);
+  });
+
+  it('detects a lease budget refusal', () => {
+    expect(isBudgetRefusalError(new SignatureFailure('pure-node', 'session lease rate limited: lease budget exhausted for this hour'))).true;
+  });
+
+  it('does not match an external rate limit', () => {
+    expect(isBudgetRefusalError(new SignatureFailure('self', 'sign service rate limited: TikTok rate limited the sign target'))).toBe(false);
+  });
+
+  it('does not match an arbitrary error', () => {
+    expect(isBudgetRefusalError(new Error('Unexpected server response: 200'))).toBe(false);
+    expect(isBudgetRefusalError(undefined)).toBe(false);
+  });
+
+  it('extracts retryAfterMs from a SignatureFailure that carries it', () => {
+    const err = new SignatureFailure('pure-node', 'WS connect budget exhausted', undefined, 123_000);
+    expect(budgetRefusalRetryAfterMs(err)).toBe(123_000);
+  });
+
+  it('returns 0 retryAfterMs when the error carries none', () => {
+    expect(budgetRefusalRetryAfterMs(new SignatureFailure('pure-node', 'WS connect budget exhausted'))).toBe(0);
+    expect(budgetRefusalRetryAfterMs(new Error('budget exhausted'))).toBe(0);
+  });
+
+  it('detects a budget refusal wrapped in the connector error envelope', () => {
+    // tiktok-live-connector's handleError emits { info, exception } rather
+    // than the raw Error, so the emitter.on('error') handler in index.ts
+    // sees the envelope; a matcher that only accepted real Errors was dead
+    // code there (2026-09-23 council round 2).
+    const wrapped = {
+      info: 'Error while connecting',
+      exception: new SignatureFailure('pure-node', 'WS connect budget exhausted', undefined, 45_000),
+    };
+    expect(isBudgetRefusalError(wrapped)).toBe(true);
+    expect(budgetRefusalRetryAfterMs(wrapped)).toBe(45_000);
+  });
+
+  it('does not match a connector envelope without a budget refusal inside', () => {
+    const wrapped = { info: 'WebSocket Error after connecting', exception: new Error('socket hang up') };
+    expect(isBudgetRefusalError(wrapped)).toBe(false);
+    expect(budgetRefusalRetryAfterMs(wrapped)).toBe(0);
   });
 });
