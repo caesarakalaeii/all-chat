@@ -269,8 +269,8 @@ processor_messages_consumed_total                         // From Redis Stream
 processor_messages_processed_total{result="success|error"}
 processor_stage_duration_seconds{stage}                   // Per-stage latency
 processor_message_duration_seconds                        // End-to-end latency
-processor_emote_cache_hits_total                          // Emote cache efficiency
-processor_emote_cache_misses_total
+processor_emote_cache_operations_total{operation}        // Emote cache efficiency
+processor_emote_lookups_total{provider,result}           // Synthetic messages excluded from both
 ```
 
 ### Infrastructure Metrics

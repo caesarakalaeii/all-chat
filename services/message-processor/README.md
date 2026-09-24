@@ -225,8 +225,13 @@ GET /metrics
 - `processor_messages_processed_total{result="success|error"}` - Processing results
 - `processor_stage_duration_seconds{stage="normalize|avatar|badge|emote"}` - Per-stage latency
 - `processor_message_duration_seconds` - End-to-end processing time
-- `processor_emote_cache_hits_total` - Emote cache efficiency
-- `processor_emote_cache_misses_total` - Cache misses requiring API calls
+- `processor_emote_cache_operations_total{operation="hit|miss"}` - Emote cache efficiency
+- `processor_emote_lookups_total{service,provider,result}` - Emote provider API lookups
+
+Both emote counters exclude synthetic messages (overlay-editor mocks,
+`metadata.mock`, and the test-stream generator, `metadata.test_stream`): they
+still get emote enrichment, but operator test traffic cannot tip the
+cache-efficiency or rate-anomaly alerts.
 
 ---
 
@@ -512,7 +517,7 @@ rate(processor_messages_processed_total{result="success"}[5m])
 histogram_quantile(0.95, rate(processor_message_duration_seconds_bucket[5m]))
 
 # Emote cache efficiency
-rate(processor_emote_cache_hits_total[5m]) / (rate(processor_emote_cache_hits_total[5m]) + rate(processor_emote_cache_misses_total[5m]))
+rate(processor_emote_cache_operations_total{operation="hit"}[5m]) / rate(processor_emote_cache_operations_total[5m])
 
 # Consumer lag (pending messages)
 redis_xpending{stream="chat:raw", group="message-processors"}
@@ -597,7 +602,7 @@ redis-cli SUBSCRIBE overlay:{overlay-id}
 
 **Check cache hit rate**:
 ```bash
-curl http://localhost:8087/metrics | grep emote_cache
+curl http://localhost:8087/metrics | grep emote_cache_operations
 
 # Target: >95% hit rate
 # If <90%, investigate:
