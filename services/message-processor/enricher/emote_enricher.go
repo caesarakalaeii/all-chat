@@ -222,9 +222,17 @@ func (e *Enricher) Enrich(ctx context.Context, msg *models.UnifiedChatMessage) e
 			seventvSetID = s
 		}
 	}
+	// Synthetic messages (overlay-editor mocks and the public test stream)
+	// enrich through the same cache path but must not record cache-operation or
+	// provider-lookup metrics: a short editor test burst is enough to push the
+	// AllChatEmoteCacheEfficiencyDeclining and AllChatMessageRateAnomaly alerts
+	// over their thresholds, because the alert windows are small and baseline
+	// traffic is low. Synthetic volume stays observable through api-gateway
+	// request logs and testgen counters instead.
+	synthetic := isSynthetic(msg.Metadata)
 
 	// Fetch emotes for the channel (with user context if available)
-	thirdPartyEmotes, err := e.fetchEmotes(ctx, channelIdentifier, msg.Platform, msg.User.ID, twitchChannel, seventvSetID)
+	thirdPartyEmotes, err := e.fetchEmotes(ctx, channelIdentifier, msg.Platform, msg.User.ID, twitchChannel, seventvSetID, synthetic)
 	if err != nil {
 		// Don't fail the message if emote enrichment fails
 		e.logger.Warn("Failed to fetch emotes, skipping enrichment",
@@ -271,7 +279,7 @@ func (e *Enricher) Enrich(ctx context.Context, msg *models.UnifiedChatMessage) e
 	return nil
 }
 
-func (e *Enricher) fetchEmotes(ctx context.Context, channel, platform, userID, twitchChannel, seventvSetID string) ([]cache.CachedEmote, error) {
+func (e *Enricher) fetchEmotes(ctx context.Context, channel, platform, userID, twitchChannel, seventvSetID string, synthetic bool) ([]cache.CachedEmote, error) {
 	// When a per-overlay 7TV override is set, the cache key would need to include
 	// it to stay correct. Overrides are rare per request volume — bypass the cache
 	// entirely for these calls and skip cache writes too. The emote-service still
@@ -298,7 +306,7 @@ func (e *Enricher) fetchEmotes(ctx context.Context, channel, platform, userID, t
 				zap.Int("count", len(entry.Emotes)),
 				zap.Bool("stale", entry.Stale),
 			)
-			if e.processorMetrics != nil {
+			if e.processorMetrics != nil && !synthetic {
 				e.processorMetrics.RecordEmoteCacheOperation("message-processor", "hit", "all")
 			}
 			if entry.Stale {
@@ -316,17 +324,17 @@ func (e *Enricher) fetchEmotes(ctx context.Context, channel, platform, userID, t
 
 	// True cache miss (no entry at all) — record and fetch from the emote service
 	// synchronously, since we have nothing to serve yet.
-	if e.processorMetrics != nil {
+	if e.processorMetrics != nil && !synthetic {
 		e.processorMetrics.RecordEmoteCacheOperation("message-processor", "miss", "all")
 	}
 
-	return e.fetchFromService(ctx, channel, platform, userID, twitchChannel, seventvSetID, useCache)
+	return e.fetchFromService(ctx, channel, platform, userID, twitchChannel, seventvSetID, useCache, synthetic)
 }
 
 // fetchFromService fetches emotes from the emote service, records lookup metrics,
 // and (when writeCache is set) populates the cache. It is shared by the blocking
 // cache-miss path and the background stale-refresh path.
-func (e *Enricher) fetchFromService(ctx context.Context, channel, platform, userID, twitchChannel, seventvSetID string, writeCache bool) ([]cache.CachedEmote, error) {
+func (e *Enricher) fetchFromService(ctx context.Context, channel, platform, userID, twitchChannel, seventvSetID string, writeCache, synthetic bool) ([]cache.CachedEmote, error) {
 	var thirdPartyEmotes []EmoteServiceEmote
 	var err error
 
@@ -341,7 +349,7 @@ func (e *Enricher) fetchFromService(ctx context.Context, channel, platform, user
 	}
 
 	// Record per-provider lookup results
-	if e.processorMetrics != nil {
+	if e.processorMetrics != nil && !synthetic {
 		providersSeen := make(map[string]bool)
 		for _, emote := range thirdPartyEmotes {
 			provider := strings.ToLower(emote.Provider)
@@ -420,7 +428,10 @@ func (e *Enricher) refreshAsync(channel, platform, userID, twitchChannel string)
 
 		// seventvSetID is always empty here: stale-while-revalidate only runs for
 		// cacheable lookups, and per-overlay overrides bypass the cache entirely.
-		if _, err := e.fetchFromService(ctx, channel, platform, userID, twitchChannel, "", true); err != nil {
+		// Refreshes keep counting as real cache traffic: they run against the same
+		// key a real message would have served, so provider lookups here reflect
+		// genuine cache health.
+		if _, err := e.fetchFromService(ctx, channel, platform, userID, twitchChannel, "", true, false); err != nil {
 			e.logger.Warn("Background emote cache refresh failed",
 				zap.String("channel", channel),
 				zap.String("user_id", userID),
@@ -433,6 +444,27 @@ func (e *Enricher) refreshAsync(channel, platform, userID, twitchChannel string)
 			)
 		}
 	}()
+}
+
+// isSynthetic reports whether a message originates from a synthetic source —
+// the overlay-editor mock messages or the public test-stream generator. Both
+// set a metadata flag at build time (buildMockMessage in cmd/main.go,
+// newMessage in testgen/content.go).
+func isSynthetic(metadata map[string]interface{}) bool {
+	if metadata == nil {
+		return false
+	}
+	if v, ok := metadata["mock"]; ok {
+		if b, ok := v.(bool); ok && b {
+			return true
+		}
+	}
+	if v, ok := metadata["test_stream"]; ok {
+		if b, ok := v.(bool); ok && b {
+			return true
+		}
+	}
+	return false
 }
 
 func convertToCached(emotes []EmoteServiceEmote) []cache.CachedEmote {
