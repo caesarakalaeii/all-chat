@@ -189,7 +189,7 @@ func TestFetchEmotesUsesCache(t *testing.T) {
 	}
 
 	enricher := NewEnricher(client, store, zap.NewNop())
-	got, err := enricher.fetchEmotes(context.Background(), "123", "twitch", "", "", "")
+	got, err := enricher.fetchEmotes(context.Background(), "123", "twitch", "", "", "", false)
 	if err != nil {
 		t.Fatalf("fetchEmotes returned error: %v", err)
 	}
@@ -218,7 +218,7 @@ func TestFetchEmotesDoesNotCacheEmptyResult(t *testing.T) {
 	enricher := NewEnricher(client, store, zap.NewNop())
 
 	// Channel-level lookup (no user id).
-	got, err := enricher.fetchEmotes(context.Background(), "caesarlp", "twitch", "", "", "")
+	got, err := enricher.fetchEmotes(context.Background(), "caesarlp", "twitch", "", "", "", false)
 	if err != nil {
 		t.Fatalf("fetchEmotes returned error: %v", err)
 	}
@@ -230,7 +230,7 @@ func TestFetchEmotesDoesNotCacheEmptyResult(t *testing.T) {
 	}
 
 	// User-specific lookup (the mock-message path that triggered the regression).
-	if _, err := enricher.fetchEmotes(context.Background(), "caesarlp", "twitch", "mock-user", "", ""); err != nil {
+	if _, err := enricher.fetchEmotes(context.Background(), "caesarlp", "twitch", "mock-user", "", "", false); err != nil {
 		t.Fatalf("fetchEmotes (with user) returned error: %v", err)
 	}
 	if store.setCallCount() != 0 {
@@ -248,7 +248,7 @@ func TestFetchEmotesStaleServesImmediatelyAndRefreshes(t *testing.T) {
 	}
 
 	enricher := NewEnricher(client, store, zap.NewNop())
-	got, err := enricher.fetchEmotes(context.Background(), "123", "twitch", "", "", "")
+	got, err := enricher.fetchEmotes(context.Background(), "123", "twitch", "", "", "", false)
 	if err != nil {
 		t.Fatalf("fetchEmotes returned error: %v", err)
 	}
@@ -280,7 +280,7 @@ func TestFetchEmotesStaleRefreshIsRateLimited(t *testing.T) {
 	// must not kick off a second one.
 	enricher.refreshing.Store("123\x00", struct{}{})
 
-	if _, err := enricher.fetchEmotes(context.Background(), "123", "twitch", "", "", ""); err != nil {
+	if _, err := enricher.fetchEmotes(context.Background(), "123", "twitch", "", "", "", false); err != nil {
 		t.Fatalf("fetchEmotes returned error: %v", err)
 	}
 
@@ -312,7 +312,7 @@ func TestFetchEmotesCachesAfterMiss(t *testing.T) {
 	}
 
 	enricher := NewEnricher(client, store, zap.NewNop())
-	got, err := enricher.fetchEmotes(context.Background(), "123", "twitch", "", "", "")
+	got, err := enricher.fetchEmotes(context.Background(), "123", "twitch", "", "", "", false)
 	if err != nil {
 		t.Fatalf("fetchEmotes returned error: %v", err)
 	}
