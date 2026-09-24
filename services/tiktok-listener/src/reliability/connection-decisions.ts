@@ -22,6 +22,7 @@
  * constructed in a unit test). Each function answers one question the incident
  * mitigations depend on.
  */
+import { BUDGET_REFUSAL_SIGNATURE, SignatureFailure } from '../sign/signer.js';
 
 /**
  * Whether a pod at `liveConnectionCount` active+connecting WebSocket
@@ -109,4 +110,37 @@ export class NoLaneCache {
 
 export function isWsFlapError(error: unknown): boolean {
   return error instanceof Error && error.message.includes(WS_FLAP_SIGNATURE);
+}
+
+/**
+ * Our own hourly sign budget refusing a connect (PureNodeSigner WS-connect
+ * or lease budget). Distinct from an external rate limit: the refusal is
+ * self-protection and carries the time until the rolling window slides,
+ * so the connect loop parks the room until then instead of entering the
+ * escalating error backoff — which re-signs, gets refused again, and spins
+ * the failure counter that fired the 2026-09-23 budget-exhausted alert flap.
+ */
+export function isBudgetRefusalError(error: unknown): boolean {
+  const cause = unwrapConnectorError(error);
+  return cause instanceof Error
+    && cause.message.includes(BUDGET_REFUSAL_SIGNATURE);
+}
+
+/** Time until the signer's window slides, 0 when the error does not say. */
+export function budgetRefusalRetryAfterMs(error: unknown): number {
+  const cause = unwrapConnectorError(error);
+  return isBudgetRefusalError(error) && cause instanceof SignatureFailure
+    ? cause.retryAfterMs ?? 0
+    : 0;
+}
+
+/**
+ * tiktok-live-connector's handleError emits its 'error' events as
+ * `{ info, exception }`, not as the raw Error — the emitter.on('error')
+ * handler in index.ts receives that envelope, while the connect() catch
+ * receives the raw throw. Unwrap so both paths classify identically.
+ */
+function unwrapConnectorError(error: unknown): unknown {
+  const candidate = (error as { exception?: unknown } | null | undefined)?.exception;
+  return candidate !== undefined ? candidate : error;
 }

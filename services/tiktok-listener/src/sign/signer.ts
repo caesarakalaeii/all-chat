@@ -120,6 +120,13 @@ export interface WebcastSigner {
 }
 
 /**
+ * Message token identifying a self-imposed budget refusal (WS-connect or lease).
+ * Shared with the connect loop's detection (connection-decisions.ts) so the
+ * classifier and the detector cannot drift apart on a reworded message.
+ */
+export const BUDGET_REFUSAL_SIGNATURE = 'budget exhausted';
+
+/**
  * Raised when a signer cannot produce a signature.
  *
  * Carries the signer's name so the fallback path can say which one failed without the caller
@@ -129,12 +136,15 @@ export interface WebcastSigner {
 export class SignatureFailure extends Error {
   readonly signer: string;
   override readonly cause?: unknown;
+  /** For self-imposed budget refusals: ms until the rolling window slides and the signer can succeed again. */
+  readonly retryAfterMs?: number;
 
-  constructor(signer: string, message: string, cause?: unknown) {
+  constructor(signer: string, message: string, cause?: unknown, retryAfterMs?: number) {
     super(`[${signer}] ${message}`);
     this.name = 'SignatureFailure';
     this.signer = signer;
     this.cause = cause;
+    this.retryAfterMs = retryAfterMs;
   }
 }
 
@@ -151,6 +161,8 @@ export class SignatureFailure extends Error {
  *  - `signature`   — our signature was produced but TikTok rejected it. This is the arms-race
  *                    signal, and the one that should page.
  *  - `network`     — transport failure reaching whoever signs. Usually not our algorithm's fault.
+ *  - `budget`      — our own hourly sign budget refusing to protect the session. Self-protection,
+ *                    not an external limit: the retry cannot succeed until the window slides.
  *  - `unknown`     — everything else.
  *
  * @param error The thrown value, of any shape.
@@ -179,6 +191,10 @@ export function classifySignatureFailure(error: unknown): string {
   // upgrade, which is the worst possible time to lose it.
   if (message.includes('retry-after') && message.includes('undefined')) return 'rate_limit';
 
+  // BUDGET_REFUSAL_SIGNATURE must win over rate_limit: both self-imposed
+  // refusal messages deliberately contain "rate limiting"/"rate limited"
+  // tokens, and a reorder would silently re-bucket them into the alert.
+  if (message.includes(BUDGET_REFUSAL_SIGNATURE)) return 'budget';
   if (message.includes('rate limit') || message.includes('too many')) return 'rate_limit';
   if (message.includes('business plan') || message.includes('premium')) return 'paywall';
   if (
