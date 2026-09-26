@@ -42,14 +42,19 @@ type KickOAuth struct {
 	// tokenURL is Kick's token endpoint, overridable as a test seam (a test can point the
 	// exchange at a stub server). Defaults to kickTokenURL; there is a test pinning that.
 	tokenURL string
+	// channelsURL is Kick's channels endpoint, same test-seam pattern as tokenURL.
+	// Defaults to kickChannelsURL.
+	channelsURL string
 }
 
-// Kick OAuth endpoints
 const (
-	kickAuthURL  = "https://id.kick.com/oauth/authorize"
-	kickTokenURL = "https://id.kick.com/oauth/token"
-	kickUserURL  = "https://api.kick.com/public/v1/users"
+	kickAuthURL     = "https://id.kick.com/oauth/authorize"
+	kickTokenURL    = "https://id.kick.com/oauth/token"
+	kickUserURL     = "https://api.kick.com/public/v1/users"
+	kickChannelsURL = "https://api.kick.com/public/v1/channels"
 )
+
+// Kick OAuth endpoints (see the const block above for their values)
 
 // NewKickOAuth creates a new Kick OAuth handler
 func NewKickOAuth(clientID, clientSecret, redirectURL string) *KickOAuth {
@@ -59,6 +64,7 @@ func NewKickOAuth(clientID, clientSecret, redirectURL string) *KickOAuth {
 		redirectURL:  redirectURL,
 		client:       &http.Client{Timeout: 10 * time.Second},
 		tokenURL:     kickTokenURL,
+		channelsURL:  kickChannelsURL,
 	}
 }
 
@@ -237,6 +243,30 @@ func (k *KickOAuth) GetAuthURLWithPKCE(state string) (authURL string, codeVerifi
 	return authURL, codeVerifier
 }
 
+// GetAuthURLWithChannelScopePKCE generates the add-source consent URL with the
+// channel:read scope added on top of user:read. The add-source flow must resolve
+// the streamer's actual channel slug (GET /public/v1/channels with no parameters
+// returns the authenticated user's channel) because the /public/v1/users `name`
+// field is the account DISPLAY name, not the channel slug — the two differ for
+// any user whose display name is not their slug, and storing the display name
+// made the kick-listener 404 forever on the channel lookup (prod incident:
+// overlay 36847b00, "Kick nothing"). See ADR-0012 for why channel:read was
+// originally dropped ("no caller") — this is that caller now.
+func (k *KickOAuth) GetAuthURLWithChannelScopePKCE(state string) (authURL string, codeVerifier string) {
+	codeVerifier = generateCodeVerifier()
+
+	params := url.Values{}
+	params.Set("client_id", k.clientID)
+	params.Set("response_type", "code")
+	params.Set("redirect_uri", k.redirectURL)
+	params.Set("state", state)
+	params.Set("scope", "user:read channel:read")
+	params.Set("code_challenge", generateCodeChallenge(codeVerifier))
+	params.Set("code_challenge_method", "S256")
+
+	return kickAuthURL + "?" + params.Encode(), codeVerifier
+}
+
 // ExchangeCode exchanges authorization code for tokens using PKCE
 func (k *KickOAuth) ExchangeCode(ctx context.Context, code string) (*oauth2.Token, error) {
 	// Note: This method signature doesn't support code_verifier parameter
@@ -349,9 +379,62 @@ func (k *KickOAuth) GetUserInfoKick(ctx context.Context, accessToken string) (*m
 		// Log the actual response body for debugging
 		return nil, fmt.Errorf("failed to decode response (status %d, body preview: %.200s...): %w", resp.StatusCode, string(body), err)
 	}
-
 	if len(response.Data) == 0 {
 		return nil, fmt.Errorf("kick API returned empty user array")
+	}
+
+	return &response.Data[0], nil
+}
+
+// KickChannelInfo is the subset of Kick's GetChannel response the add-source flow
+// needs: the channel slug (what overlay_chat_sources.channel_id must hold) and the
+// broadcaster's numeric user id for attribution.
+type KickChannelInfo struct {
+	BroadcasterUserID int    `json:"broadcaster_user_id"`
+	Slug              string `json:"slug"`
+}
+
+// GetChannelInfo resolves the authenticated user's own channel via
+// GET /public/v1/channels with no parameters (Kick returns the current user's
+// channel). Requires the channel:read scope, which the add-source flow requests
+// (GetAuthURLWithChannelScopePKCE). The users endpoint's `name` is the display
+// name, not the slug — this call is how the flow stores the identifier the
+// kick-listener can actually look up.
+func (k *KickOAuth) GetChannelInfo(ctx context.Context, accessToken string) (*KickChannelInfo, error) {
+	channelsURL := k.channelsURL
+	if channelsURL == "" {
+		channelsURL = kickChannelsURL
+	}
+	req, err := http.NewRequestWithContext(ctx, "GET", channelsURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create channel request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := k.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch channel info: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return nil, fmt.Errorf("failed to read channel response: %w", readErr)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("kick channels API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var response struct {
+		Data []KickChannelInfo `json:"data"`
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to decode channel response: %w", err)
+	}
+	if len(response.Data) == 0 {
+		return nil, fmt.Errorf("kick channels API returned no channel for the authenticated user")
 	}
 
 	return &response.Data[0], nil

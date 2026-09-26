@@ -246,7 +246,7 @@ func (m *Manager) TriggerSync() {
 // It publishes on a background goroutine with its own timeout: callers hold m.mu (it is invoked
 // from reconcileChatLocked / SyncChannels), and the publisher retries with backoff on Redis
 // failure, so a synchronous call would hold the manager lock across that retry window.
-func (m *Manager) publishChatOffline(login string) {
+func (m *Manager) publishChatOffline(login string, authError string) {
 	if m.statusPublisher == nil || login == "" {
 		return
 	}
@@ -254,9 +254,10 @@ func (m *Manager) publishChatOffline(login string) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		m.statusPublisher.Publish(ctx, status.Message{
-			Platform:  "twitch",
-			ChannelID: strings.ToLower(login),
-			Status:    "offline",
+			Platform:     "twitch",
+			ChannelID:    strings.ToLower(login),
+			Status:       "offline",
+			ErrorMessage: authError,
 		})
 	}()
 }
@@ -492,6 +493,13 @@ func (m *Manager) reconcileChatLocked(demanded map[string]listener.DemandedSourc
 		case want && !ch.ChatActive:
 			if err := m.callback(broadcasterID, ch.AccessToken, "subscribe_chat"); err != nil {
 				m.logger.Warn("Failed to subscribe chat", zap.String("broadcaster_id", broadcasterID), zap.Error(err))
+				// The subscription does not exist. ChatActive stays false so the
+				// repair pass keeps retrying (bounded by ChatSubscriptionReconcileInterval)
+				// and refreshClaims never writes an ownership claim for a channel whose
+				// chat we are not actually serving. Tell the overlay why: an "offline"
+				// status whose message names the OAuth re-auth the streamer must do —
+				// the frontend renders that as the red Auth Required indicator.
+				m.publishChatOffline(ch.BroadcasterName, "OAuth re-authorization required (chat scopes revoked)")
 				continue
 			}
 			ch.ChatActive = true
@@ -504,7 +512,7 @@ func (m *Manager) reconcileChatLocked(demanded map[string]listener.DemandedSourc
 			// EventSub stopped serving this channel — drop the claim so IRC can resume it without
 			// waiting out the TTL, and clear its overlay indicator.
 			m.releaseClaim(ch.BroadcasterName)
-			m.publishChatOffline(ch.BroadcasterName)
+			m.publishChatOffline(ch.BroadcasterName, "")
 		}
 	}
 }
@@ -745,6 +753,9 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 							zap.String("broadcaster_id", broadcasterID),
 							zap.Error(err),
 						)
+						// ChatActive stays false (reconcileChatLocked retries on its
+						// interval) and the overlay sees the re-auth hint instead of silence.
+						m.publishChatOffline(fresh.BroadcasterName, "OAuth re-authorization required (chat scopes revoked)")
 					} else {
 						fresh.ChatActive = true
 					}
@@ -788,7 +799,7 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 			// the indicator.
 			if ch.ChatActive {
 				m.releaseClaim(ch.BroadcasterName)
-				m.publishChatOffline(ch.BroadcasterName)
+				m.publishChatOffline(ch.BroadcasterName, "")
 			}
 
 			delete(m.channels, broadcasterID)

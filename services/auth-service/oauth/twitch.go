@@ -317,6 +317,50 @@ func (t *TwitchOAuth) GetUserInfo(ctx context.Context, accessToken string) (Plat
 	}, nil
 }
 
+// TokenValidation is the live view of a user access token as Twitch reports it.
+// Returned by ValidateToken; a dead or revoked token yields ok=false and no scopes,
+// which is the signal callers need to stop trusting the stored granted_scopes.
+type TokenValidation struct {
+	Login  string   `json:"login"`
+	UserID string   `json:"user_id"`
+	Scopes []string `json:"scopes"`
+}
+
+// ValidateToken asks Twitch's authorization service what a user access token can
+// actually do right now (https://id.twitch.tv/oauth2/validate). This is the only
+// source of truth for whether the chat scopes are still granted: a user can
+// disconnect the app (or Twitch can revoke the grant) at any time, after which the
+// users.granted_scopes recorded at consent time is stale — it still lists scopes the
+// token no longer carries. 401 means invalid/revoked; any other failure is a
+// transient error the caller should treat as "cannot verify".
+func (t *TwitchOAuth) ValidateToken(ctx context.Context, accessToken string) (validation TokenValidation, ok bool, err error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", "https://id.twitch.tv/oauth2/validate", nil)
+	if err != nil {
+		return TokenValidation{}, false, fmt.Errorf("failed to create validate request: %w", err)
+	}
+	req.Header.Set("Authorization", "OAuth "+accessToken)
+
+	resp, err := t.client.Do(req)
+	if err != nil {
+		return TokenValidation{}, false, fmt.Errorf("failed to validate token: %w", err)
+	}
+	defer resp.Body.Close()
+
+	switch {
+	case resp.StatusCode == http.StatusOK:
+		if err := json.NewDecoder(resp.Body).Decode(&validation); err != nil {
+			return TokenValidation{}, false, fmt.Errorf("failed to decode validate response: %w", err)
+		}
+		return validation, true, nil
+	case resp.StatusCode == http.StatusUnauthorized:
+		// The token is invalid or was revoked — expected, not an error.
+		return TokenValidation{}, false, nil
+	default:
+		body, _ := io.ReadAll(resp.Body)
+		return TokenValidation{}, false, fmt.Errorf("validate returned status %d: %s", resp.StatusCode, string(body))
+	}
+}
+
 // RefreshToken refreshes an OAuth token
 func (t *TwitchOAuth) RefreshToken(ctx context.Context, refreshToken string) (*oauth2.Token, error) {
 	token := &oauth2.Token{
