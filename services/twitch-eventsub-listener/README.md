@@ -387,7 +387,12 @@ GET /status
 - `eventsub_notifications_received{type}` - Notifications received
 - `eventsub_subscriptions_active` - Active subscriptions
 - `eventsub_websocket_reconnects` - Reconnection count
-- `eventsub_leadership_status` - Current leadership status (1=leader, 0=follower)
+- `listener_eventsub_revocations_total{platform,service,broadcaster_id,type}` - Twitch-initiated
+  subscription revocations. `AllChatTwitchSubscriptionMassRevocation` (caesar-deployment) rates this
+  per broadcaster: a burst on one `broadcaster_id` is the user disconnecting the app, which with
+  enforce-mode IRC (ADR-0026) stops that channel's chat entirely until re-consent. This alert did
+  not exist during the 2026-09-26 silent-chat-loss incident and the same event produced nothing
+  but a log line.
 
 ## Troubleshooting
 
