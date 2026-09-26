@@ -999,12 +999,11 @@ func TestGiftPurchase(t *testing.T) {
 						ID:                      "gift-purchase-1",
 						AuthorExternalChannelID: "UC_gifter",
 						TimestampUsec:           "1640000000000000",
-						Header: LiveChatSponsorshipsHeaderRenderer{
-							AuthorName:   SimpleText{SimpleText: "GenerousGifter"},
-							AuthorPhoto:  Thumbnails{Thumbnails: []Thumbnail{{URL: "https://example.com/avatar.png"}}},
-							PrimaryText:  MessageContent{Runs: []MessageRun{{Text: "GenerousGifter just gifted 5 memberships"}},
-							},
-						},
+						Header: SponsorshipsHeader{Inner: LiveChatSponsorshipsHeaderRenderer{
+							AuthorName:  SimpleText{SimpleText: "GenerousGifter"},
+							AuthorPhoto: Thumbnails{Thumbnails: []Thumbnail{{URL: "https://example.com/avatar.png"}}},
+							PrimaryText: MessageContent{Runs: []MessageRun{{Text: "GenerousGifter just gifted 5 memberships"}}},
+						}},
 					},
 				},
 			},
@@ -1135,9 +1134,11 @@ func TestGiftPurchaseFromRawJSON(t *testing.T) {
 					"authorExternalChannelId": "UC_gifter",
 					"timestampUsec": "1640000000000000",
 					"header": {
-						"authorName": {"simpleText": "Gifter"},
-						"primaryText": {"runs": [{"text": "Gifter just gifted 5 memberships"}]},
-						"authorPhoto": {"thumbnails": [{"url": "https://example.com/a.png"}]}
+						"liveChatSponsorshipsHeaderRenderer": {
+							"authorName": {"simpleText": "Gifter"},
+							"primaryText": {"runs": [{"text": "Gifter just gifted 5 memberships"}]},
+							"authorPhoto": {"thumbnails": [{"url": "https://example.com/a.png"}]}
+						}
 					}
 				}
 			}

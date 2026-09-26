@@ -402,7 +402,7 @@ func parseGiftPurchase(renderer *LiveChatSponsorshipsGiftPurchaseAnnouncementRen
 	}
 
 	// Primary text carries the announcement, e.g. "Alice just gifted 5 memberships"
-	text, _ := extractMessageText(renderer.Header.PrimaryText)
+	text, _ := extractMessageText(renderer.Header.Inner.PrimaryText)
 
 	giftCount := extractGiftCount(text)
 
@@ -411,7 +411,7 @@ func parseGiftPurchase(renderer *LiveChatSponsorshipsGiftPurchaseAnnouncementRen
 	}
 
 	// Strip @ prefix from username if present (YouTube returns @username)
-	username := renderer.Header.AuthorName.SimpleText
+	username := renderer.Header.Inner.AuthorName.SimpleText
 	if len(username) > 0 && username[0] == '@' {
 		username = username[1:]
 	}
@@ -430,7 +430,7 @@ func parseGiftPurchase(renderer *LiveChatSponsorshipsGiftPurchaseAnnouncementRen
 		EventData: eventData,
 	}
 
-	if avatarURL := bestThumbnailURL(renderer.Header.AuthorPhoto); avatarURL != "" {
+	if avatarURL := bestThumbnailURL(renderer.Header.Inner.AuthorPhoto); avatarURL != "" {
 		msg.Tags["profile_image"] = avatarURL
 	}
 

@@ -169,13 +169,21 @@ type LiveChatSponsorshipsHeaderRenderer struct {
 	Image               Thumbnails           `json:"image,omitempty"`
 }
 
+// SponsorshipsHeader wraps the header block of a sponsorship announcement under
+// its wire key: the real payload is "header": {"liveChatSponsorshipsHeaderRenderer": {...}}.
+// In gift purchases the header carries the author identity plus the primary text
+// ("Alice gifted 5 memberships").
+type SponsorshipsHeader struct {
+	Inner LiveChatSponsorshipsHeaderRenderer `json:"liveChatSponsorshipsHeaderRenderer,omitempty"`
+}
+
 // LiveChatSponsorshipsGiftPurchaseAnnouncementRenderer is emitted when a viewer
 // gifts channel memberships to others ("Alice just gifted 5 memberships").
 type LiveChatSponsorshipsGiftPurchaseAnnouncementRenderer struct {
-	ID                      string                             `json:"id,omitempty"`
-	Header                  LiveChatSponsorshipsHeaderRenderer `json:"header"`
-	AuthorExternalChannelID string                             `json:"authorExternalChannelId"`
-	TimestampUsec           string                             `json:"timestampUsec"`
+	ID                      string            `json:"id,omitempty"`
+	Header                  SponsorshipsHeader `json:"header"`
+	AuthorExternalChannelID string            `json:"authorExternalChannelId"`
+	TimestampUsec           string            `json:"timestampUsec"`
 }
 
 // LiveChatSponsorshipsGiftRedemptionAnnouncementRenderer is emitted when a viewer
