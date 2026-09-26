@@ -26,10 +26,12 @@
 //     interval decays 60s -> 2m -> 5m -> 15m -> 30m while no new subscribers
 //     appear, and resets on the first new one.
 //   - Tokens are read via shared/youtubetoken.ResolveByChannel (channel id, no
-//     user context). Refresh is reactive only (401 -> refresh once -> retry
-//     once); token-refresh-service owns scheduled freshness. An invalid_grant
-//     opts the channel out for the rest of the stream — the refresh service's
-//     permanently-failed marking and re-auth alert own the recovery.
+//     user context). Routine freshness is owned by the scheduled
+//     token-refresh service; this loop only refreshes proactively when the
+//     credential is within leadTime of expiry and reactively once on a 401.
+//     An invalid_grant opts the channel out for the rest of the stream — the
+//     refresh service's permanently-failed marking and re-auth alert own the
+//     recovery.
 package subscribers
 
 import (
@@ -39,7 +41,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
 	"github.com/caesar/all-chat/shared/youtubetoken"
@@ -80,16 +81,15 @@ type Poller struct {
 	api      SubscriberAPI
 	quota    QuotaReserver
 	announce Announcer
-	redis    *redis.Client
 	logger   *zap.Logger
 	metrics  *Metrics
 
-	// stateMu guards watermark and interval; the loop is single-goroutine but
-	// Close can be called from another goroutine.
+	// stateMu guards watermark, seeding and interval; the loop is single-goroutine
+	// but Stop can be called from another goroutine.
 	stateMu    sync.Mutex
 	watermark  time.Time // newest publishedAt already seen/announced (zero value: unset)
+	seeded     bool      // baseline committed: seed ok, or first successful poll after retry
 	decayIndex int
-	closed     bool
 
 	// tokenFailures records a dead credential so the loop stops retrying it
 	// for the rest of the stream. Set once, read-only afterwards.
@@ -112,7 +112,7 @@ type SubscriberAPI interface {
 
 // Subscriber is one entry of subscriptions.list?myRecentSubscribers=true.
 type Subscriber struct {
-	SubscriptionID string    // subscription resource id — the diff key
+	SubscriptionID string    // subscription resource id (informational)
 	Title          string    // subscriberSnippet.title
 	ChannelID      string    // subscriberSnippet.channelId
 	AvatarURL      string    // subscriberSnippet.thumbnails.default.url
@@ -130,7 +130,6 @@ type QuotaReserver interface {
 // PollerOptions configures a Poller.
 type PollerOptions struct {
 	VideoID  string
-	Redis    *redis.Client
 	LeadTime time.Duration // proactive-refresh lead; default 5m
 }
 
@@ -152,7 +151,6 @@ func NewPoller(
 		api:       api,
 		quota:     quota,
 		announce:  announce,
-		redis:     opts.Redis,
 		logger:    logger,
 		metrics:   metrics,
 		leadTime:  opts.LeadTime,
@@ -210,50 +208,72 @@ func (p *Poller) pollOnce(ctx context.Context) {
 	}
 
 	subs, err := p.api.ListRecentSubscribers(ctx, token)
+	p.metrics.Polls.WithLabelValues(p.channelID).Inc()
 	if err != nil {
 		_ = p.quota.Rollback(ctx, 1)
-		// A 401 means the access token expired between resolve and call:
-		// refresh once and retry once. Anything else is a normal error.
-		if errors.Is(err, ErrUnauthorized) {
-			if refreshErr := p.refreshToken(ctx); refreshErr != nil {
-				p.metrics.TokenErrors.WithLabelValues(p.channelID, errorClass(refreshErr)).Inc()
-				if isInvalidGrant(refreshErr) {
-					p.tokenDead = true
-					p.logger.Warn("subscriber credential revoked; disabling subscriber polling for this stream",
-						zap.String("channel_id", p.channelID))
-				}
-				return
-			}
-			token, err = p.accessToken(ctx)
-			if err != nil {
-				return
-			}
-			subs, err = p.api.ListRecentSubscribers(ctx, token)
-			if err != nil {
-				_ = p.quota.Rollback(ctx, 1)
-				p.metrics.APIErrors.WithLabelValues(p.channelID, errorClass(err)).Inc()
-				return
-			}
-			// The retry spent a second unit.
-			ok, err := p.quota.Reserve(ctx, 1)
-			if err != nil || !ok {
-				p.metrics.QuotaSkips.WithLabelValues(p.channelID).Inc()
-				// The call already succeeded and was paid for by the first
-				// rollback's replacement below; confirm what we spent and move on.
-				_ = p.quota.Confirm(ctx, 1)
-				return
-			}
-		} else {
+		if !errors.Is(err, ErrUnauthorized) {
 			p.metrics.APIErrors.WithLabelValues(p.channelID, errorClass(err)).Inc()
 			// An errored poll decays like a quiet one: repeated failures back
 			// the channel down the ladder instead of hammering the API.
 			p.decay()
 			return
 		}
+
+		// A 401 means the access token expired between resolve and call:
+		// refresh once, reserve quota for the retry, and retry once.
+		if refreshErr := p.refreshToken(ctx); refreshErr != nil {
+			p.metrics.TokenErrors.WithLabelValues(p.channelID, errorClass(refreshErr)).Inc()
+			if isInvalidGrant(refreshErr) {
+				p.tokenDead = true
+				p.logger.Warn("subscriber credential revoked; disabling subscriber polling for this stream",
+					zap.String("channel_id", p.channelID))
+			}
+			return
+		}
+		if token, err = p.accessToken(ctx); err != nil {
+			return
+		}
+		if ok, err := p.quota.Reserve(ctx, 1); err != nil || !ok {
+			p.metrics.QuotaSkips.WithLabelValues(p.channelID).Inc()
+			// No reservation held for the retry: skip the call and drop the
+			// fetched data; nothing rolls back, nothing confirms.
+			return
+		}
+		subs, err = p.api.ListRecentSubscribers(ctx, token)
+		if err != nil {
+			_ = p.quota.Rollback(ctx, 1)
+			p.metrics.APIErrors.WithLabelValues(p.channelID, errorClass(err)).Inc()
+			return
+		}
 	}
 	if err := p.quota.Confirm(ctx, 1); err != nil {
 		// The call happened; a confirm failure must not re-announce.
 		p.logger.Warn("quota confirm failed", zap.String("channel_id", p.channelID), zap.Error(err))
+	}
+
+	// Seeding gate: a stream start must never announce a backlog. When the
+	// silent seed succeeded the watermark is armed; when a seed failed and this
+	// first successful poll becomes the baseline instead, it commits the
+	// watermark without announcing — otherwise a seed failure would turn into a
+	// burst of historical subscribers on the next healthy poll.
+	p.stateMu.Lock()
+	seeded := p.seeded
+	p.stateMu.Unlock()
+	if !seeded {
+		var newest time.Time
+		for _, s := range subs {
+			if s.PublishedAt.After(newest) {
+				newest = s.PublishedAt
+			}
+		}
+		p.stateMu.Lock()
+		if newest.After(p.watermark) {
+			p.watermark = newest
+		}
+		p.seeded = true
+		p.stateMu.Unlock()
+		p.decay()
+		return
 	}
 
 	if len(subs) == 0 {
@@ -285,8 +305,7 @@ func (p *Poller) processSubscribers(ctx context.Context, subs []Subscriber) (tim
 		if s.PublishedAt.After(newest) {
 			newest = s.PublishedAt
 		}
-		// Only announce what is newer than the watermark AND not in the future
-		// beyond clock skew tolerance.
+		// Only announce items strictly newer than the watermark.
 		if !s.PublishedAt.After(watermark) {
 			continue
 		}
@@ -346,6 +365,7 @@ func (p *Poller) seedWatermark(ctx context.Context) {
 	}
 	p.stateMu.Lock()
 	p.watermark = newest
+	p.seeded = true
 	p.stateMu.Unlock()
 	p.logger.Debug("subscriber watermark seeded",
 		zap.String("channel_id", p.channelID),

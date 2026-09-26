@@ -371,3 +371,14 @@ func TestClassifyListenerDeprecationNotice(t *testing.T) {
 	assert.Equal(t, "high", tier)
 	assert.Equal(t, 60, duration)
 }
+
+// YouTube moderation events are low-priority, not on-stream alerts.
+func TestClassifyYouTubeMessageDeleted(t *testing.T) {
+	tier, duration := ClassifyEvent("youtube", "message_deleted", nil)
+	assert.Equal(t, "low", tier)
+	assert.Equal(t, 8, duration)
+
+	tier, duration = ClassifyEvent("youtube", "user_banned", nil)
+	assert.Equal(t, "low", tier)
+	assert.Equal(t, 8, duration)
+}

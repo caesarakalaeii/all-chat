@@ -45,8 +45,9 @@ type Runner struct {
 
 // runningChannel is one live per-channel poll loop.
 type runningChannel struct {
-	cancel context.CancelFunc
-	done   chan struct{}
+	videoID string // generation token for StopChannel
+	cancel  context.CancelFunc
+	done    chan struct{}
 }
 
 // NewRunner builds a Runner. All dependencies must be non-nil; build it only
@@ -90,7 +91,7 @@ func (r *Runner) StartChannel(channelID, videoID string) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	rc := &runningChannel{cancel: cancel, done: make(chan struct{})}
+	rc := &runningChannel{videoID: videoID, cancel: cancel, done: make(chan struct{})}
 	r.running[channelID] = rc
 
 	p := NewPoller(channelID, r.tokens, r.api, r.quota, r.announce, r.logger, r.metrics, PollerOptions{VideoID: videoID})
@@ -105,15 +106,21 @@ func (r *Runner) StartChannel(channelID, videoID string) {
 		zap.String("video_id", videoID))
 }
 
-// StopChannel stops a channel's poll loop and waits for it to exit.
-func (r *Runner) StopChannel(channelID string) {
+// StopChannel stops the poll loop started for videoID and waits for it to
+// exit. The video ID is the generation token: when a stream is rediscovered,
+// the old loop must not kill the new one. Callers that end a specific stream
+// pass that stream's video id; cleanup paths that end the channel wholesale
+// pass "".
+func (r *Runner) StopChannel(channelID, videoID string) {
 	if r == nil {
 		return
 	}
 	r.mu.Lock()
 	rc, exists := r.running[channelID]
-	if exists {
+	if exists && (videoID == "" || rc.videoID == videoID) {
 		delete(r.running, channelID)
+	} else {
+		exists = false
 	}
 	r.mu.Unlock()
 
@@ -122,7 +129,9 @@ func (r *Runner) StopChannel(channelID string) {
 	}
 	rc.cancel()
 	<-rc.done
-	r.logger.Info("Subscriber polling stopped", zap.String("channel_id", channelID))
+	r.logger.Info("Subscriber polling stopped",
+		zap.String("channel_id", channelID),
+		zap.String("video_id", videoID))
 }
 
 // StopAll stops every running channel (shutdown path).
@@ -138,6 +147,6 @@ func (r *Runner) StopAll() {
 	r.mu.Unlock()
 
 	for _, ch := range channels {
-		r.StopChannel(ch)
+		r.StopChannel(ch, "")
 	}
 }

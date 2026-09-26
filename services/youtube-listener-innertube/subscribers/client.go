@@ -19,7 +19,6 @@ package subscribers
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -125,5 +124,3 @@ func (c *Client) ListRecentSubscribers(ctx context.Context, accessToken string) 
 
 // Compile-time guard: the client satisfies the poller's API interface.
 var _ SubscriberAPI = (*Client)(nil)
-
-var _ = errors.New

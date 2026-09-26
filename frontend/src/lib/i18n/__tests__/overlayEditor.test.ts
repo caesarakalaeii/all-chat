@@ -1257,7 +1257,7 @@ describe('event display settings page copy', () => {
     )
     expect(t('overlayEditor.eventSettings.youtubeSubscribersLabel')).toBe('Subscribers')
     expect(t('overlayEditor.eventSettings.youtubeSubscribersDescription')).toBe(
-      'New channel subscribers'
+      'New public channel subscribers (private subscriptions do not trigger an alert)'
     )
   })
 

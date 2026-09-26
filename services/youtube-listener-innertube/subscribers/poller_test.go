@@ -18,10 +18,12 @@ package subscribers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
 
+	"github.com/caesar/all-chat/services/message-processor/models"
 	"github.com/caesar/all-chat/shared/youtubetoken"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -110,8 +112,11 @@ func (f *fakeAnnouncer) AnnounceSubscriber(_ context.Context, ev Event) error {
 	return nil
 }
 
+// newTestPoller builds a poller whose baseline seed already ran (seeded=true):
+// most tests exercise steady-state announcing. Tests for the baseline path
+// flip seeded back to false explicitly.
 func newTestPoller(api SubscriberAPI, tokens TokenSource, q QuotaReserver, ann Announcer) *Poller {
-	return NewPoller(
+	p := NewPoller(
 		"UC_test",
 		tokens,
 		api,
@@ -121,6 +126,8 @@ func newTestPoller(api SubscriberAPI, tokens TokenSource, q QuotaReserver, ann A
 		NopMetrics(),
 		PollerOptions{VideoID: "vid-1"},
 	)
+	p.seeded = true
+	return p
 }
 
 func liveCred() *youtubetoken.YouTubeCredential {
@@ -321,4 +328,87 @@ func TestBuildEventMessage_FallbackTitle(t *testing.T) {
 	assert.Equal(t, "Someone", msg.Username)
 	assert.Equal(t, "Someone just subscribed", msg.Text)
 	assert.Equal(t, "Someone", msg.EventData["subscriber_title"])
+}
+
+// The producer-side wire contract with the message-processor must round-trip
+// through the processor's own RawChatMessage type: a tag renames on either
+// side must fail here, the same reason TestGiftPurchaseFromRawJSON exists for
+// the InnerTube side.
+func TestBuildEventMessage_ProcessorRoundTrip(t *testing.T) {
+	ev := Event{
+		ChannelID: "UC_chan", StreamID: "vid-9",
+		Title: "CoolViewer", UserID: "UC_cool",
+		AvatarURL: "https://example.com/a.png",
+		SubAt:     time.Now().UTC().Truncate(time.Second),
+	}
+	raw := BuildEventMessage(ev, time.Now())
+
+	payload, err := json.Marshal(raw)
+	require.NoError(t, err)
+
+	var decoded models.RawChatMessage
+	require.NoError(t, json.Unmarshal(payload, &decoded))
+
+	assert.Equal(t, "youtube", decoded.Platform)
+	assert.Equal(t, "subscriber", decoded.EventType)
+	assert.Equal(t, "UC_chan", decoded.ChannelID)
+	assert.Equal(t, "UC_cool", decoded.UserID)
+	assert.Equal(t, "CoolViewer", decoded.Username)
+	assert.Equal(t, "CoolViewer just subscribed", decoded.Text)
+	assert.Equal(t, "CoolViewer", decoded.Tags["display_name"])
+	assert.Equal(t, "https://example.com/a.png", decoded.Tags["profile_image"])
+	assert.Equal(t, "CoolViewer", decoded.EventData["subscriber_title"])
+	assert.Equal(t, "UC_cool", decoded.EventData["subscriber_channel_id"])
+	assert.Equal(t, "https://example.com/a.png", decoded.EventData["subscriber_avatar_url"])
+	assert.NotEmpty(t, decoded.MessageID)
+}
+
+// A silent baseline seed: the first poll after a failed seed commits the
+// watermark without announcing, so a stream start does not burst historical
+// subscribers onto the overlay.
+func TestPollOnce_FirstPollAfterFailedSeedIsBaseline(t *testing.T) {
+	older := time.Now().Add(-2 * time.Hour)
+	api := &fakeAPI{subs: []Subscriber{
+		{SubscriptionID: "s1", Title: "OldFan", ChannelID: "UC_fan1", PublishedAt: older},
+	}}
+	tokens := &fakeTokens{cred: liveCred()}
+	q := &fakeQuota{reserveOK: true}
+	ann := &fakeAnnouncer{}
+
+	p := newTestPoller(api, tokens, q, ann)
+	p.seeded = false // simulate a failed seed: the first poll becomes the baseline
+
+	p.pollOnce(context.Background())
+
+	assert.Empty(t, ann.events, "a baseline poll announces nothing")
+	assert.Equal(t, older, p.watermark, "the baseline commits the watermark")
+	assert.True(t, p.seeded, "baseline marks the channel seeded")
+
+	// Second poll with a new subscriber announces normally.
+	api.subs = append(api.subs, Subscriber{SubscriptionID: "s2", Title: "NewFan", ChannelID: "UC_fan2", PublishedAt: time.Now()})
+	p.pollOnce(context.Background())
+	require.Len(t, ann.events, 1, "after the baseline, new subscribers announce")
+	assert.Equal(t, "NewFan", ann.events[0].Title)
+}
+
+// An announce failure must NOT move the watermark backwards — a lost event is
+// logged, not re-announced on every subsequent poll.
+func TestProcessSubscribers_AnnounceErrorAdvancesWatermark(t *testing.T) {
+	older := time.Now().Add(-1 * time.Hour)
+	newer := time.Now().Add(-10 * time.Minute)
+	api := &fakeAPI{}
+	tokens := &fakeTokens{cred: liveCred()}
+	q := &fakeQuota{reserveOK: true}
+	ann := &fakeAnnouncer{err: assert.AnError}
+
+	p := newTestPoller(api, tokens, q, ann)
+	p.watermark = older
+
+	newest, announced := p.processSubscribers(context.Background(), []Subscriber{
+		{SubscriptionID: "s1", Title: "Fan1", ChannelID: "UC_f1", PublishedAt: newer},
+	})
+
+	assert.Equal(t, 0, announced, "nothing announces on announcer error")
+	assert.Equal(t, newer, newest, "the newest seen is still returned")
+	assert.Equal(t, newer, p.watermark, "watermark ADVANCES past a failed announce: the event is lost, not spammed")
 }

@@ -840,10 +840,9 @@ func (m *Manager) startPoller(ctx context.Context, channelID, videoID, overlayID
 		}
 		m.mu.Unlock()
 
-		// The chat poller is gone, so the subscriber loop stops with it — even
-		// when the replacement race means this poller was not the registered one
-		// (a fresh startPoller re-starts the channel loop idempotently).
-		m.subscriberRunner.StopChannel(channelID)
+		// The chat poller is gone, so the subscriber loop stops with it — keyed
+		// by this poller's video id, so a rediscovered stream's loop survives.
+		m.subscriberRunner.StopChannel(channelID, videoID)
 
 		// Stream ended — drop the live-chat-id cache now so a streamer send no longer
 		// targets a dead chat (the heartbeat TTL would otherwise expire it within ~2m).
@@ -1006,8 +1005,11 @@ func (m *Manager) stopPollerAfterDebounce(channelID string, delay time.Duration)
 				delete(m.pollers, videoID)
 				delete(m.activeStreams, videoID)
 
-				// The subscriber loop shares this lifecycle.
-				m.subscriberRunner.StopChannel(channelID)
+				// The subscriber loop shares this lifecycle. Async: the stop
+				// waits on an in-flight poll and must not stall the manager
+				// lock; the runner deletes the map entry first, so a fresh
+				// start of a different stream is unaffected.
+				go m.subscriberRunner.StopChannel(channelID, videoID)
 
 				// Release leadership
 				if m.leader != nil {
@@ -1168,8 +1170,9 @@ func (m *Manager) handleLeadershipLoss(ctx context.Context, videoID string) {
 	delete(m.activeStreams, videoID)
 
 	// Another instance owns this stream now; stop spending quota on it here.
+	// Async: the stop waits on an in-flight poll and must not stall the lock.
 	if channelID != "" {
-		m.subscriberRunner.StopChannel(channelID)
+		go m.subscriberRunner.StopChannel(channelID, videoID)
 	}
 
 	// Cleanup batch detector state for this channel

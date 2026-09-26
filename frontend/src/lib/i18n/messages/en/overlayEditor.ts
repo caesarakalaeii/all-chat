@@ -800,7 +800,7 @@ export const overlayEditor = {
     youtubeMemberGiftsLabel: 'Membership Gifts',
     youtubeMemberGiftsDescription: 'Gifted memberships',
     youtubeSubscribersLabel: 'Subscribers',
-    youtubeSubscribersDescription: 'New channel subscribers',
+    youtubeSubscribersDescription: 'New public channel subscribers (private subscriptions do not trigger an alert)',
     kickSubsLabel: 'Subscriptions',
     kickSubsDescription: 'Kick channel subscriptions',
     // The render site spelled the ampersand &amp;; a catalog string is not HTML.

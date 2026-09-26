@@ -249,10 +249,10 @@ All-Chat is a **cloud-native microservices platform** for aggregating and displa
 - **Scaling**: 1-3 replicas (lightweight, coordination only)
 - **→ Documentation**: [services/source-manager/README.md](../../services/source-manager/README.md)
 
-**Token Refresh Service** (background job)
-- **Purpose**: Refresh OAuth tokens before expiry
+**Token Refresh Service** (background service)
+- **Purpose**: Refresh OAuth tokens before expiry (internal 5-minute ticker)
 - **Features**: Platform-specific refresh flows, retry logic, error handling
-- **Scaling**: 1 replica (CronJob)
+- **Scaling**: 1 replica (always-on Deployment; prevents duplicate refreshes)
 - **→ Documentation**: [services/token-refresh-service/README.md](../../services/token-refresh-service/README.md)
 
 **Share Service** (`:8094`)
