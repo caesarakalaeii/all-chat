@@ -799,6 +799,8 @@ export const overlayEditor = {
     youtubeMemberMilestonesDescription: 'Membership anniversary celebrations',
     youtubeMemberGiftsLabel: 'Membership Gifts',
     youtubeMemberGiftsDescription: 'Gifted memberships',
+    youtubeSubscribersLabel: 'Subscribers',
+    youtubeSubscribersDescription: 'New channel subscribers',
     kickSubsLabel: 'Subscriptions',
     kickSubsDescription: 'Kick channel subscriptions',
     // The render site spelled the ampersand &amp;; a catalog string is not HTML.

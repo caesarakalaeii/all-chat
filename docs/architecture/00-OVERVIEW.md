@@ -223,8 +223,8 @@ All-Chat is a **cloud-native microservices platform** for aggregating and displa
 - **→ Documentation**: [services/twitch-eventsub-listener/README.md](../../services/twitch-eventsub-listener/README.md)
 
 **YouTube Listener InnerTube** (`:8093`)
-- **Purpose**: Poll YouTube via InnerTube API (no quota cost)
-- **Protocol**: HTTP polling (InnerTube internal API)
+- **Purpose**: Poll YouTube via InnerTube API (chat ingestion at no quota cost; optional subscriber-alert polling spends accounted Data API units)
+- **Protocol**: HTTP polling (InnerTube internal API; Data API for subscriber alerts)
 - **→ Documentation**: [services/youtube-listener-innertube/README.md](../../services/youtube-listener-innertube/README.md)
 
 ### Processing Layer

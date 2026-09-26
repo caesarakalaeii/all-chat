@@ -66,6 +66,25 @@ spec:
                 secretKeyRef:
                   name: postgres-credentials
                   key: password
+            # Subscriber alerts (see subscribers/ in the service): polls the
+            # channel's recent subscribers while a stream is live on this
+            # leader and announces new ones to chat:raw. Any missing variable
+            # disables the feature at startup — chat ingestion is unaffected.
+            - name: YOUTUBE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: allchat-secrets
+                  key: YOUTUBE_CLIENT_ID
+            - name: YOUTUBE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: allchat-secrets
+                  key: YOUTUBE_CLIENT_SECRET
+            - name: TOKEN_ENCRYPTION_KEY_V1
+              valueFrom:
+                secretKeyRef:
+                  name: allchat-secrets
+                  key: TOKEN_ENCRYPTION_KEY_V1
           resources:
             requests:
               cpu: 200m

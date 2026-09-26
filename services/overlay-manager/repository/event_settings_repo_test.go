@@ -38,18 +38,21 @@ import (
 // treasureChestMigration is the file that adds enable_tiktok_treasure_chests.
 const treasureChestMigration = "084_tiktok_treasure_chest_event_setting.sql"
 
+// subscribersMigration is the file that adds enable_youtube_subscribers.
+const subscribersMigration = "098_youtube_subscribers_event_setting.sql"
+
 // TestEventSettingsTreasureChestBackfillsExistingOverlays applies the migration
 // set in two passes with an overlay created in between, so 084 runs against a
 // POPULATED overlay_event_settings table — exactly what a production deploy
 // does. A NOT NULL column added without a default would fail outright there,
-// and a nullable one would make the 27-column Scan blow up on every existing
-// overlay, so this asserts existing rows come out of the migration with coin
-// chests enabled.
+// and a nullable one would make the Scan blow up on every existing overlay,
+// so this asserts existing rows come out of the migration with coin chests
+// enabled.
 func TestEventSettingsTreasureChestBackfillsExistingOverlays(t *testing.T) {
 	pool, cleanup := setupEventSettingsTestDB(t)
 	defer cleanup()
 
-	before, fromChest := splitAtTreasureChestMigration(t, loadUpMigrations(t))
+	before, fromChest := splitAtMigrations(t, loadUpMigrations(t), treasureChestMigration)
 	runMigrations(t, pool, before)
 
 	// An overlay that predates the column, i.e. every streamer already on prod.
@@ -66,12 +69,39 @@ func TestEventSettingsTreasureChestBackfillsExistingOverlays(t *testing.T) {
 		"existing overlays must come out of migration 084 with coin chests enabled — the events never reached an overlay before, so enabling them is the fix")
 }
 
+// TestEventSettingsSubscribersBackfillsExistingOverlays is the same production
+// deploy shape for migration 098: an overlay created before the column exists,
+// the migration applied over it, then a read through the real repository. The
+// SELECT now names enable_youtube_subscribers, so a migration without
+// NOT NULL DEFAULT TRUE would surface here as a failed Scan on the existing
+// row, and a missing default as false on first read.
+func TestEventSettingsSubscribersBackfillsExistingOverlays(t *testing.T) {
+	pool, cleanup := setupEventSettingsTestDB(t)
+	defer cleanup()
+
+	before, fromSubscribers := splitAtMigrations(t, loadUpMigrations(t), subscribersMigration)
+	runMigrations(t, pool, before)
+
+	overlayID := seedOverlayWithEventSettings(t, pool, "subscribers_backfill_canary")
+
+	runMigrations(t, pool, fromSubscribers)
+
+	repo := NewEventSettingsRepositoryFromPool(pool)
+	settings, err := repo.GetByOverlayID(context.Background(), overlayID)
+	require.NoError(t, err)
+	require.NotNil(t, settings)
+
+	assert.True(t, settings.EnableYouTubeSubscribers,
+		"existing overlays must come out of migration 098 with YouTube subscriber alerts enabled — the events never reached an overlay before, so enabling them is the fix")
+}
+
 // TestEventSettingsUpdateRoundTripKeepsEveryTogglePositioned is the guard for
-// the placeholder renumbering that inserting enable_tiktok_treasure_chests into
-// the middle of the UPDATE required: a shifted $N binds a value to a
-// NEIGHBOURING column, which silently flips an unrelated event toggle for the
-// streamer. The written pattern alternates on/off so any single-position shift
-// changes the round-tripped value and fails the comparison.
+// the placeholder renumbering that inserting a column into the middle of the
+// UPDATE requires (084 treasure chests, 098 YouTube subscribers): a shifted $N
+// binds a value to a NEIGHBOURING column, which silently flips an unrelated
+// event toggle for the streamer. The written pattern alternates on/off so any
+// single-position shift changes the round-tripped value and fails the
+// comparison.
 func TestEventSettingsUpdateRoundTripKeepsEveryTogglePositioned(t *testing.T) {
 	pool, cleanup := setupEventSettingsTestDB(t)
 	defer cleanup()
@@ -99,6 +129,7 @@ func TestEventSettingsUpdateRoundTripKeepsEveryTogglePositioned(t *testing.T) {
 	settings.EnableYouTubeMembers = true
 	settings.EnableYouTubeMemberMilestones = false
 	settings.EnableYouTubeMemberGifts = true
+	settings.EnableYouTubeSubscribers = false
 	settings.EnableKickSubs = false
 	settings.EnableKickGifts = true
 	settings.EnableTikTokLikes = false
@@ -135,6 +166,7 @@ func TestEventSettingsUpdateRoundTripKeepsEveryTogglePositioned(t *testing.T) {
 		&reloaded.EnableTwitchFollows, &reloaded.EnableTwitchWatchStreaks,
 		&reloaded.EnableYouTubeSuperChat, &reloaded.EnableYouTubeSuperSticker, &reloaded.EnableYouTubeMembers,
 		&reloaded.EnableYouTubeMemberMilestones, &reloaded.EnableYouTubeMemberGifts,
+		&reloaded.EnableYouTubeSubscribers,
 		&reloaded.EnableKickSubs, &reloaded.EnableKickGifts,
 		&reloaded.EnableTikTokLikes, &reloaded.EnableTikTokGifts, &reloaded.EnableTikTokFollows,
 		&reloaded.EnableTikTokShares, &reloaded.EnableTikTokTreasureChests, &reloaded.EnableTokenWarnings,
@@ -177,6 +209,7 @@ func eventToggles(s *models.EventSettings) map[string]bool {
 		"enable_youtube_members":           s.EnableYouTubeMembers,
 		"enable_youtube_member_milestones": s.EnableYouTubeMemberMilestones,
 		"enable_youtube_member_gifts":      s.EnableYouTubeMemberGifts,
+		"enable_youtube_subscribers":       s.EnableYouTubeSubscribers,
 		"enable_kick_subs":                 s.EnableKickSubs,
 		"enable_kick_gifts":                s.EnableKickGifts,
 		"enable_tiktok_likes":              s.EnableTikTokLikes,
@@ -212,20 +245,22 @@ func seedOverlayWithEventSettings(t *testing.T, pool *pgxpool.Pool, username str
 	return overlayID
 }
 
-// splitAtTreasureChestMigration splits the ordered migration set into the files
-// that precede 084 and 084 plus everything after it.
-func splitAtTreasureChestMigration(t *testing.T, migrations []migrationFile) (before, fromChest []migrationFile) {
+// splitAtMigrations splits the ordered migration set at the named boundary:
+// everything strictly before it, and it plus everything after it. The second
+// slice's first entry is required to be the named migration, so a missing file
+// fails here instead of as a confusing column-does-not-exist later.
+func splitAtMigrations(t *testing.T, migrations []migrationFile, boundary string) (before, from []migrationFile) {
 	t.Helper()
 	for _, m := range migrations {
-		if m.name < treasureChestMigration {
+		if m.name < boundary {
 			before = append(before, m)
 			continue
 		}
-		fromChest = append(fromChest, m)
+		from = append(from, m)
 	}
-	require.NotEmpty(t, before, "no migrations before %s — wrong path?", treasureChestMigration)
-	require.Equal(t, treasureChestMigration, fromChest[0].name, "%s is missing from migrations/", treasureChestMigration)
-	return before, fromChest
+	require.NotEmpty(t, before, "no migrations before %s — wrong path?", boundary)
+	require.Equal(t, boundary, from[0].name, "%s is missing from migrations/", boundary)
+	return before, from
 }
 
 type migrationFile struct {

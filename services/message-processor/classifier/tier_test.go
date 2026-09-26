@@ -163,6 +163,12 @@ func TestClassifyYouTubeNewSponsor(t *testing.T) {
 	assert.Equal(t, 30, duration)
 }
 
+func TestClassifyYouTubeSubscriber(t *testing.T) {
+	tier, duration := ClassifyEvent("youtube", "subscriber", nil)
+	assert.Equal(t, "medium", tier)
+	assert.Equal(t, 15, duration)
+}
+
 func TestClassifyYouTubeMemberMilestone_LongTime(t *testing.T) {
 	value := &models.EventValue{
 		Amount:   36, // 36 months = 3 years

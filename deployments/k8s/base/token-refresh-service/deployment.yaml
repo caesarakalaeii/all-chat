@@ -131,7 +131,7 @@ spec:
         - name: TOKEN_REFRESH_INTERVAL
           value: "5m"
         - name: TOKEN_REFRESH_BUFFER
-          value: "10m"
+          value: "30m"
         - name: TOKEN_REFRESH_BATCH_SIZE
           value: "100"
         - name: TOKEN_REFRESH_RETRY_ATTEMPTS

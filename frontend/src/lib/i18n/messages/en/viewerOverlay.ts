@@ -301,6 +301,7 @@ export const viewerOverlay = {
     eventYoutubeMembers: 'YouTube Members',
     eventYoutubeMemberMilestones: 'Member Milestones',
     eventYoutubeMemberGifts: 'Member Gifts',
+    eventYoutubeSubscribers: 'YouTube Subscribers',
     eventKickSubs: 'Kick Subs',
     eventKickGifts: 'Kick Gifts',
     eventTiktokLikes: 'TikTok Likes',
