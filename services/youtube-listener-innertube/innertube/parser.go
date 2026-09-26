@@ -134,6 +134,10 @@ func ParseMessages(actions []ChatAction, channelID string) ([]*RawChatMessage, e
 			msg, err = parseMembershipMessage(item.LiveChatMembershipItemRenderer, channelID)
 		} else if item.LiveChatPaidStickerRenderer != nil {
 			msg, err = parsePaidSticker(item.LiveChatPaidStickerRenderer, channelID)
+		} else if item.LiveChatSponsorshipsGiftPurchaseAnnouncementRenderer != nil {
+			msg, err = parseGiftPurchase(item.LiveChatSponsorshipsGiftPurchaseAnnouncementRenderer, channelID)
+		} else if item.LiveChatSponsorshipsGiftRedemptionAnnouncementRenderer != nil {
+			msg, err = parseGiftRedemption(item.LiveChatSponsorshipsGiftRedemptionAnnouncementRenderer, channelID)
 		} else {
 			// Unknown message type - skip
 			continue
@@ -386,6 +390,107 @@ func parsePaidSticker(renderer *LiveChatPaidStickerRenderer, channelID string) (
 	addContextMenuTags(msg.Tags, renderer.ID, renderer.ContextMenuEndpoint)
 
 	return msg, nil
+}
+
+// parseGiftPurchase converts a LiveChatSponsorshipsGiftPurchaseAnnouncementRenderer
+// (viewer gifting memberships to others) to RawChatMessage with the same
+// membership_gift contract as the official listener.
+func parseGiftPurchase(renderer *LiveChatSponsorshipsGiftPurchaseAnnouncementRenderer, channelID string) (*RawChatMessage, error) {
+	timestamp, err := parseTimestampUsec(renderer.TimestampUsec)
+	if err != nil {
+		return nil, fmt.Errorf("parse timestamp: %w", err)
+	}
+
+	// Primary text carries the announcement, e.g. "Alice just gifted 5 memberships"
+	text, _ := extractMessageText(renderer.Header.PrimaryText)
+
+	giftCount := extractGiftCount(text)
+
+	eventData := map[string]interface{}{
+		"gift_count": giftCount,
+	}
+
+	// Strip @ prefix from username if present (YouTube returns @username)
+	username := renderer.Header.AuthorName.SimpleText
+	if len(username) > 0 && username[0] == '@' {
+		username = username[1:]
+	}
+
+	msg := &RawChatMessage{
+		MessageID: uuid.New().String(),
+		Platform:  "youtube",
+		ChannelID: channelID,
+		StreamID:  "",
+		UserID:    renderer.AuthorExternalChannelID,
+		Username:  username,
+		Text:      text,
+		Timestamp: timestamp,
+		Tags:      make(map[string]string),
+		EventType: "membership_gift",
+		EventData: eventData,
+	}
+
+	if avatarURL := bestThumbnailURL(renderer.Header.AuthorPhoto); avatarURL != "" {
+		msg.Tags["profile_image"] = avatarURL
+	}
+
+	return msg, nil
+}
+
+// parseGiftRedemption converts a LiveChatSponsorshipsGiftRedemptionAnnouncementRenderer
+// (viewer receiving a gifted membership) to RawChatMessage with the same
+// gift_received contract as the official listener.
+func parseGiftRedemption(renderer *LiveChatSponsorshipsGiftRedemptionAnnouncementRenderer, channelID string) (*RawChatMessage, error) {
+	timestamp, err := parseTimestampUsec(renderer.TimestampUsec)
+	if err != nil {
+		return nil, fmt.Errorf("parse timestamp: %w", err)
+	}
+
+	// Message carries the announcement, e.g. "Bob received a gift membership from Alice"
+	text, _ := extractMessageText(renderer.Message)
+
+	eventData := map[string]interface{}{
+		"gift": 1,
+	}
+
+	// Strip @ prefix from username if present (YouTube returns @username)
+	username := renderer.AuthorName.SimpleText
+	if len(username) > 0 && username[0] == '@' {
+		username = username[1:]
+	}
+
+	msg := &RawChatMessage{
+		MessageID: uuid.New().String(),
+		Platform:  "youtube",
+		ChannelID: channelID,
+		StreamID:  "",
+		UserID:    renderer.AuthorExternalChannelID,
+		Username:  username,
+		Text:      text,
+		Timestamp: timestamp,
+		Tags:      make(map[string]string),
+		EventType: "gift_received",
+		EventData: eventData,
+	}
+
+	if avatarURL := bestThumbnailURL(renderer.AuthorPhoto); avatarURL != "" {
+		msg.Tags["profile_image"] = avatarURL
+	}
+
+	return msg, nil
+}
+
+// extractGiftCount pulls the gifted-membership count out of the announcement
+// text, e.g. "Alice just gifted 5 memberships" -> 5. Returns 1 when no count
+// is found (single-gift announcements have no number).
+func extractGiftCount(text string) int {
+	words := strings.Fields(text)
+	for _, w := range words {
+		if count, err := strconv.Atoi(w); err == nil && count > 0 {
+			return count
+		}
+	}
+	return 1
 }
 
 // parseTickerEvent converts a AddLiveChatTickerItem (pinned events) to RawChatMessage

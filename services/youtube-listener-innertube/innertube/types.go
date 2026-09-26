@@ -89,10 +89,12 @@ type AddLiveChatTickerItem struct {
 
 // ChatItem can contain different message types
 type ChatItem struct {
-	LiveChatTextMessageRenderer           *LiveChatTextMessageRenderer           `json:"liveChatTextMessageRenderer,omitempty"`
-	LiveChatPaidMessageRenderer           *LiveChatPaidMessageRenderer           `json:"liveChatPaidMessageRenderer,omitempty"`
-	LiveChatMembershipItemRenderer        *LiveChatMembershipItemRenderer        `json:"liveChatMembershipItemRenderer,omitempty"`
-	LiveChatPaidStickerRenderer           *LiveChatPaidStickerRenderer           `json:"liveChatPaidStickerRenderer,omitempty"`
+	LiveChatTextMessageRenderer                            *LiveChatTextMessageRenderer                            `json:"liveChatTextMessageRenderer,omitempty"`
+	LiveChatPaidMessageRenderer                            *LiveChatPaidMessageRenderer                            `json:"liveChatPaidMessageRenderer,omitempty"`
+	LiveChatMembershipItemRenderer                         *LiveChatMembershipItemRenderer                         `json:"liveChatMembershipItemRenderer,omitempty"`
+	LiveChatPaidStickerRenderer                            *LiveChatPaidStickerRenderer                            `json:"liveChatPaidStickerRenderer,omitempty"`
+	LiveChatSponsorshipsGiftPurchaseAnnouncementRenderer   *LiveChatSponsorshipsGiftPurchaseAnnouncementRenderer   `json:"liveChatSponsorshipsGiftPurchaseAnnouncementRenderer,omitempty"`
+	LiveChatSponsorshipsGiftRedemptionAnnouncementRenderer *LiveChatSponsorshipsGiftRedemptionAnnouncementRenderer `json:"liveChatSponsorshipsGiftRedemptionAnnouncementRenderer,omitempty"`
 }
 
 // ContextMenuEndpoint contains the opaque params token used to fetch
@@ -153,6 +155,39 @@ type LiveChatPaidStickerRenderer struct {
 	Sticker              StickerContent      `json:"sticker,omitempty"`
 	AmountMicros         int64               `json:"purchaseAmountMicros,omitempty"` // For sorting by amount
 	ContextMenuEndpoint  *ContextMenuEndpoint `json:"contextMenuEndpoint,omitempty"`
+}
+
+// LiveChatSponsorshipsHeaderRenderer is the header block of a sponsorship announcement.
+// In gift purchases it carries the author identity plus the primary text
+// ("Alice gifted 5 memberships").
+type LiveChatSponsorshipsHeaderRenderer struct {
+	AuthorName          SimpleText           `json:"authorName"`
+	AuthorPhoto         Thumbnails           `json:"authorPhoto,omitempty"`
+	AuthorBadges        []AuthorBadge        `json:"authorBadges,omitempty"`
+	PrimaryText         MessageContent       `json:"primaryText,omitempty"`
+	ContextMenuEndpoint *ContextMenuEndpoint `json:"contextMenuEndpoint,omitempty"`
+	Image               Thumbnails           `json:"image,omitempty"`
+}
+
+// LiveChatSponsorshipsGiftPurchaseAnnouncementRenderer is emitted when a viewer
+// gifts channel memberships to others ("Alice just gifted 5 memberships").
+type LiveChatSponsorshipsGiftPurchaseAnnouncementRenderer struct {
+	ID                      string                             `json:"id,omitempty"`
+	Header                  LiveChatSponsorshipsHeaderRenderer `json:"header"`
+	AuthorExternalChannelID string                             `json:"authorExternalChannelId"`
+	TimestampUsec           string                             `json:"timestampUsec"`
+}
+
+// LiveChatSponsorshipsGiftRedemptionAnnouncementRenderer is emitted when a viewer
+// receives a gifted membership ("Bob received a gift membership from Alice").
+type LiveChatSponsorshipsGiftRedemptionAnnouncementRenderer struct {
+	ID                      string               `json:"id,omitempty"`
+	Message                 MessageContent       `json:"message,omitempty"`
+	AuthorName              SimpleText           `json:"authorName"`
+	AuthorExternalChannelID string               `json:"authorExternalChannelId"`
+	TimestampUsec           string               `json:"timestampUsec"`
+	AuthorPhoto             Thumbnails           `json:"authorPhoto,omitempty"`
+	ContextMenuEndpoint     *ContextMenuEndpoint `json:"contextMenuEndpoint,omitempty"`
 }
 
 // MessageContent represents the message text with runs (segments)

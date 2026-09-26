@@ -987,6 +987,229 @@ func TestTickerEventSuperChat(t *testing.T) {
 	}
 }
 
+// TestGiftPurchase tests membership gifting announcement parsing
+func TestGiftPurchase(t *testing.T) {
+	channelID := "UC_test_channel"
+
+	actions := []ChatAction{
+		{
+			AddChatItemAction: &AddChatItemAction{
+				Item: ChatItem{
+					LiveChatSponsorshipsGiftPurchaseAnnouncementRenderer: &LiveChatSponsorshipsGiftPurchaseAnnouncementRenderer{
+						ID:                      "gift-purchase-1",
+						AuthorExternalChannelID: "UC_gifter",
+						TimestampUsec:           "1640000000000000",
+						Header: LiveChatSponsorshipsHeaderRenderer{
+							AuthorName:   SimpleText{SimpleText: "GenerousGifter"},
+							AuthorPhoto:  Thumbnails{Thumbnails: []Thumbnail{{URL: "https://example.com/avatar.png"}}},
+							PrimaryText:  MessageContent{Runs: []MessageRun{{Text: "GenerousGifter just gifted 5 memberships"}},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	messages, err := ParseMessages(actions, channelID)
+	if err != nil {
+		t.Fatalf("ParseMessages() error = %v", err)
+	}
+
+	if len(messages) != 1 {
+		t.Fatalf("ParseMessages() returned %d messages, want 1", len(messages))
+	}
+
+	msg := messages[0]
+	if msg.EventType != "membership_gift" {
+		t.Errorf("EventType = %v, want membership_gift", msg.EventType)
+	}
+
+	if msg.UserID != "UC_gifter" {
+		t.Errorf("UserID = %v, want UC_gifter", msg.UserID)
+	}
+
+	if msg.Username != "GenerousGifter" {
+		t.Errorf("Username = %v, want GenerousGifter", msg.Username)
+	}
+
+	if giftCount, ok := msg.EventData["gift_count"].(int); !ok || giftCount != 5 {
+		t.Errorf("EventData[gift_count] = %v, want 5", msg.EventData["gift_count"])
+	}
+
+	if avatar := msg.Tags["profile_image"]; avatar != "https://example.com/avatar.png" {
+		t.Errorf("Tags[profile_image] = %v, want 'https://example.com/avatar.png'", avatar)
+	}
+}
+
+// TestGiftRedemption tests gift membership received announcement parsing
+func TestGiftRedemption(t *testing.T) {
+	channelID := "UC_test_channel"
+
+	actions := []ChatAction{
+		{
+			AddChatItemAction: &AddChatItemAction{
+				Item: ChatItem{
+					LiveChatSponsorshipsGiftRedemptionAnnouncementRenderer: &LiveChatSponsorshipsGiftRedemptionAnnouncementRenderer{
+						ID:                      "gift-redemption-1",
+						AuthorExternalChannelID: "UC_recipient",
+						TimestampUsec:           "1640000000000000",
+						AuthorName:              SimpleText{SimpleText: "LuckyRecipient"},
+						Message:                 MessageContent{Runs: []MessageRun{{Text: "LuckyRecipient received a gift membership from GenerousGifter"}},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	messages, err := ParseMessages(actions, channelID)
+	if err != nil {
+		t.Fatalf("ParseMessages() error = %v", err)
+	}
+
+	if len(messages) != 1 {
+		t.Fatalf("ParseMessages() returned %d messages, want 1", len(messages))
+	}
+
+	msg := messages[0]
+	if msg.EventType != "gift_received" {
+		t.Errorf("EventType = %v, want gift_received", msg.EventType)
+	}
+
+	if msg.UserID != "UC_recipient" {
+		t.Errorf("UserID = %v, want UC_recipient", msg.UserID)
+	}
+
+	if msg.Username != "LuckyRecipient" {
+		t.Errorf("Username = %v, want LuckyRecipient", msg.Username)
+	}
+
+	if text := msg.Text; text != "LuckyRecipient received a gift membership from GenerousGifter" {
+		t.Errorf("Text = %v, want announcement text", text)
+	}
+}
+
+// TestExtractGiftCount tests gift count extraction from announcement text
+func TestExtractGiftCount(t *testing.T) {
+	tests := []struct {
+		name string
+		text string
+		want int
+	}{
+		{
+			name: "multiple gifts",
+			text: "GenerousGifter just gifted 5 memberships",
+			want: 5,
+		},
+		{
+			name: "single gift without count",
+			text: "GenerousGifter just gifted a membership",
+			want: 1,
+		},
+		{
+			name: "empty text",
+			text: "",
+			want: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := extractGiftCount(tt.text); got != tt.want {
+				t.Errorf("extractGiftCount(%q) = %v, want %v", tt.text, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestGiftPurchaseFromRawJSON verifies the wire-format JSON tags decode into
+// the gift purchase renderer. Struct-built tests never exercise the tags;
+// a typo there silently drops every real gift event.
+func TestGiftPurchaseFromRawJSON(t *testing.T) {
+	raw := `{
+		"addChatItemAction": {
+			"item": {
+				"liveChatSponsorshipsGiftPurchaseAnnouncementRenderer": {
+					"id": "gift-1",
+					"authorExternalChannelId": "UC_gifter",
+					"timestampUsec": "1640000000000000",
+					"header": {
+						"authorName": {"simpleText": "Gifter"},
+						"primaryText": {"runs": [{"text": "Gifter just gifted 5 memberships"}]},
+						"authorPhoto": {"thumbnails": [{"url": "https://example.com/a.png"}]}
+					}
+				}
+			}
+		}
+	}`
+
+	var action ChatAction
+	if err := json.Unmarshal([]byte(raw), &action); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if action.AddChatItemAction == nil || action.AddChatItemAction.Item.LiveChatSponsorshipsGiftPurchaseAnnouncementRenderer == nil {
+		t.Fatal("gift purchase renderer did not decode from wire JSON")
+	}
+
+	messages, err := ParseMessages([]ChatAction{action}, "UC_test_channel")
+	if err != nil {
+		t.Fatalf("ParseMessages() error = %v", err)
+	}
+	if len(messages) != 1 {
+		t.Fatalf("ParseMessages() returned %d messages, want 1", len(messages))
+	}
+	msg := messages[0]
+	if msg.EventType != "membership_gift" {
+		t.Errorf("EventType = %v, want membership_gift", msg.EventType)
+	}
+	if count, ok := msg.EventData["gift_count"].(int); !ok || count != 5 {
+		t.Errorf("EventData[gift_count] = %v, want 5", msg.EventData["gift_count"])
+	}
+}
+
+// TestGiftRedemptionFromRawJSON verifies the wire-format JSON tags decode into
+// the gift redemption renderer.
+func TestGiftRedemptionFromRawJSON(t *testing.T) {
+	raw := `{
+		"addChatItemAction": {
+			"item": {
+				"liveChatSponsorshipsGiftRedemptionAnnouncementRenderer": {
+					"id": "gift-2",
+					"authorExternalChannelId": "UC_recipient",
+					"timestampUsec": "1640000000000000",
+					"authorName": {"simpleText": "Recipient"},
+					"message": {"runs": [{"text": "Recipient received a gift membership"}]},
+					"authorPhoto": {"thumbnails": [{"url": "https://example.com/b.png"}]}
+				}
+			}
+		}
+	}`
+
+	var action ChatAction
+	if err := json.Unmarshal([]byte(raw), &action); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if action.AddChatItemAction == nil || action.AddChatItemAction.Item.LiveChatSponsorshipsGiftRedemptionAnnouncementRenderer == nil {
+		t.Fatal("gift redemption renderer did not decode from wire JSON")
+	}
+
+	messages, err := ParseMessages([]ChatAction{action}, "UC_test_channel")
+	if err != nil {
+		t.Fatalf("ParseMessages() error = %v", err)
+	}
+	if len(messages) != 1 {
+		t.Fatalf("ParseMessages() returned %d messages, want 1", len(messages))
+	}
+	msg := messages[0]
+	if msg.EventType != "gift_received" {
+		t.Errorf("EventType = %v, want gift_received", msg.EventType)
+	}
+	if msg.Username != "Recipient" {
+		t.Errorf("Username = %v, want Recipient", msg.Username)
+	}
+}
+
 // TestExtractMilestoneMonths tests the milestone month extraction function
 func TestExtractMilestoneMonths(t *testing.T) {
 	tests := []struct {
