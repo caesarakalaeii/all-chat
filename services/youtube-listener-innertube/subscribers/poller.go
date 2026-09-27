@@ -388,6 +388,15 @@ func (p *Poller) accessToken(ctx context.Context) (string, error) {
 		}
 		return "", err
 	}
+	// A credential with no refresh token can never be renewed: once its
+	// access token is within leadTime of expiry it is spent. Retrying every
+	// poll would only re-fail the same refresh exchange.
+	if cred.RefreshToken == "" && time.Until(cred.ExpiresAt) < p.leadTime {
+		p.tokenDead = true
+		p.logger.Info("subscriber credential spent (no refresh token, access token expiring); subscriber alerts off for this stream",
+			zap.String("channel_id", p.channelID))
+		return "", errSpentCredential
+	}
 	if time.Until(cred.ExpiresAt) < p.leadTime {
 		if err := p.refreshToken(ctx); err != nil {
 			// Proactive refresh failure is not fatal: the token may still work
@@ -450,6 +459,8 @@ func errorClass(err error) string {
 		return "unauthorized"
 	case errors.Is(err, youtubetoken.ErrNoCredential):
 		return "no_credential"
+	case errors.Is(err, errSpentCredential):
+		return "spent_credential"
 	case isInvalidGrant(err):
 		return "invalid_grant"
 	case err != nil && strings.Contains(err.Error(), "429"):
@@ -467,3 +478,7 @@ func isInvalidGrant(err error) bool {
 // ErrUnauthorized is returned by SubscriberAPI implementations when the
 // platform answers 401.
 var ErrUnauthorized = errors.New("subscribers: access token unauthorized")
+
+// errSpentCredential marks a resolved credential whose access token is expiring
+// with no refresh token to renew it. Not retryable for the rest of the stream.
+var errSpentCredential = errors.New("subscribers: credential spent (no refresh token, access token expiring)")

@@ -167,13 +167,21 @@ func (s *YouTubeSource) Resolve(ctx context.Context, userID, channelID string) (
 		return nil, fmt.Errorf("resolve youtube credential: %w", err)
 	}
 
-	access, err := s.cipher.DecryptString(encAccess)
-	if err != nil {
-		return nil, fmt.Errorf("decrypt access token: %w", err)
+	// Same empty-column guard as ResolveByChannel: an absent token decrypts
+	// to empty rather than failing the whole credential.
+	access := ""
+	if encAccess != "" {
+		access, err = s.cipher.DecryptString(encAccess)
+		if err != nil {
+			return nil, fmt.Errorf("decrypt access token: %w", err)
+		}
 	}
-	refresh, err := s.cipher.DecryptString(encRefresh)
-	if err != nil {
-		return nil, fmt.Errorf("decrypt refresh token: %w", err)
+	refresh := ""
+	if encRefresh != "" {
+		refresh, err = s.cipher.DecryptString(encRefresh)
+		if err != nil {
+			return nil, fmt.Errorf("decrypt refresh token: %w", err)
+		}
 	}
 
 	return &YouTubeCredential{
@@ -214,13 +222,23 @@ func (s *YouTubeSource) ResolveByChannel(ctx context.Context, channelID string) 
 		return nil, fmt.Errorf("resolve youtube credential by channel: %w", err)
 	}
 
-	access, err := s.cipher.DecryptString(encAccess)
-	if err != nil {
-		return nil, fmt.Errorf("decrypt access token: %w", err)
+	// Empty columns decrypt to empty: 39% of rows carry no refresh token and
+	// the sweeper historically wrote empty strings for absent columns. Passing
+	// "" through the cipher fails the whole chain ("no key in chain") and
+	// turns a live access token into an undecryptable credential.
+	access := ""
+	if encAccess != "" {
+		access, err = s.cipher.DecryptString(encAccess)
+		if err != nil {
+			return nil, fmt.Errorf("decrypt access token: %w", err)
+		}
 	}
-	refresh, err := s.cipher.DecryptString(encRefresh)
-	if err != nil {
-		return nil, fmt.Errorf("decrypt refresh token: %w", err)
+	refresh := ""
+	if encRefresh != "" {
+		refresh, err = s.cipher.DecryptString(encRefresh)
+		if err != nil {
+			return nil, fmt.Errorf("decrypt refresh token: %w", err)
+		}
 	}
 
 	return &YouTubeCredential{
