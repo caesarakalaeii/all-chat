@@ -91,13 +91,17 @@ healthy channel costs a map lookup and no API call, and only genuine recreations
 **Scope failures are errors, not quiet fallbacks.** When Twitch rejects `channel.chat.message` with a
 403 (the owner's chat-scope grant was revoked or never existed Twitch-side, e.g. after disconnecting
 the app in Twitch settings), `subscribe_chat`/`ensure_chat` return an error and log the raw Twitch
-response. The channel stays `ChatActive = false`: the sync tick (`ChannelSyncInterval`) keeps
-retrying — the `ensure_chat` repair pass only re-asserts chat-active channels — no ownership claim is
-written, and an `offline` platform:status carrying an OAuth re-auth hint is
-published so the overlay shows the red "Auth Required" indicator. Returning `nil` here — with IRC in
-enforce mode (ADR-0026) as the only fallback — was the prod incident behind overlay `36847b00`: the
-channel looked chat-active, claimed ownership, and silently dropped all Twitch chat for days while
-the repair pass suppressed its own error.
+response. A channel that fails at creation stays `ChatActive = false`: the sync tick
+(`ChannelSyncInterval`) keeps retrying — the `ensure_chat` repair pass only re-asserts chat-active
+channels — no ownership claim is written, and an `offline` platform:status carrying an OAuth re-auth
+hint is published so the overlay shows the red "Auth Required" indicator. A channel revoked
+mid-life (already `ChatActive` when the grant died) is caught by the same sentinel on the repair
+pass: it is flipped back to `ChatActive = false`, its ownership claim released, and the re-auth
+hint published — so `refreshClaims`/heartbeat stop asserting liveness for a channel whose
+subscription cannot exist, and the sync tick owns the bounded retry. Returning `nil` here — with
+IRC in enforce mode (ADR-0026) as the only fallback — was the prod incident behind overlay
+`36847b00`: the channel looked chat-active, claimed ownership, and silently dropped all Twitch
+chat for days while the repair pass suppressed its own error.
 
 Notices are routed by `notice_type` (any `shared_chat_` prefix is stripped first, since the payload
 arrives under a prefixed key too):

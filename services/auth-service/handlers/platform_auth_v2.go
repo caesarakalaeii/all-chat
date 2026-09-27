@@ -817,9 +817,10 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 			}
 		}
 
-		// Kick add-source: resolve the streamer's actual channel slug. The /public/v1/users
-		// kick-listener looks the channel up BY SLUG (GET /api/v2/channels/{channel_id}) —
-		// storing the display name there made every sync 404 and auto-deactivate the
+		// Kick add-source: resolve the streamer's actual channel slug (GET /public/v1/channels).
+		// The /public/v1/users `name` field is the account DISPLAY name, which the kick-listener
+		// cannot look up — it queries channels BY SLUG (GET /api/v2/channels/{channel_id}) —
+		// so storing the display name made every sync 404 and auto-deactivate the
 		// source (prod incident: overlay 36847b00). Only the add-source consent carries
 		// channel:read (GetAuthURLWithChannelScopePKCE), so login never reaches this call.
 		if platform == oauth.PlatformKick && oauthState.IsAddSource() {

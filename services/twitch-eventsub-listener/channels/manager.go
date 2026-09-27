@@ -469,13 +469,36 @@ func (m *Manager) reconcileChatSubscriptions(ctx context.Context) {
 			return
 		}
 		if err := m.callback(t.broadcasterID, t.accessToken, "ensure_chat"); err != nil {
-			// Non-fatal: chat itself keeps flowing, and the next pass retries. Logged at Warn
-			// because a persistent failure here is exactly the silent-loss case this pass exists
-			// to surface.
-			m.logger.Warn("Failed to re-assert chat subscription set",
-				zap.String("broadcaster_id", t.broadcasterID),
-				zap.Error(err),
-			)
+			if errors.Is(err, ErrChatScopesMissing) {
+				// Mid-life revocation: the channel was legitimately ChatActive and the grant
+				// died underneath it (the incident's own shape — every repair-pass 403 after
+				// the mass revocation). Flipping ChatActive=false here makes refreshClaims
+				// and heartbeatActiveSources stop re-asserting liveness for a channel whose
+				// subscription cannot exist, drops the ownership claim (IRC is in enforce
+				// mode, ADR-0026, so the release matters for the claim store, not for IRC),
+				// and hands the channel to reconcileChatLocked's sync-tick retry, which keeps
+				// re-attempting subscribe_chat until the streamer re-consents. The overlay
+				// gets the re-auth hint, not silence.
+				m.mu.Lock()
+				login := ""
+				if ch, ok := m.channels[t.broadcasterID]; ok && ch.ChatActive {
+					ch.ChatActive = false
+					login = ch.BroadcasterName
+				}
+				m.mu.Unlock()
+				if login != "" {
+					m.releaseClaim(login)
+					m.publishChatOffline(login, errChatScopesMissingMessage)
+				}
+			} else {
+				// Non-fatal: chat itself keeps flowing, and the next pass retries. Logged at Warn
+				// because a persistent failure here is exactly the silent-loss case this pass exists
+				// to surface.
+				m.logger.Warn("Failed to re-assert chat subscription set",
+					zap.String("broadcaster_id", t.broadcasterID),
+					zap.Error(err),
+				)
+			}
 		}
 	}
 }

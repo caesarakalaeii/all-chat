@@ -413,6 +413,45 @@ func TestHandleAddSource_TwitchShortCircuit_NarrowedLiveGrantFallsThrough(t *tes
 	assert.NotContains(t, scopes, "user:read:chat")
 }
 
+// Scenario: Twitch's validate endpoint is down (5xx). The short-circuit must
+// NOT reuse the token — "never reuse unverified credentials" — and must fall
+// through to the consent flow. Unlike the revoked/narrowed verdicts, the
+// stored scope record is NOT touched: nothing proved it stale.
+func TestHandleAddSource_TwitchShortCircuit_TransientValidateFailureFallsThrough(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration")
+	}
+	pool := setupAddSourceDB(t)
+	repo := repository.NewUserRepository(pool, nil)
+	userID := seedUser(t, pool, "maybe-live-token", time.Now().Add(time.Hour),
+		[]string{"user:read:chat", "user:bot", "channel:bot"})
+
+	stub := newAddSourceStub(t)
+	stub.validateHandler = func(_ string) (int, string) {
+		return http.StatusInternalServerError, `{"error":"server exploded"}`
+	}
+
+	rdb := redis.NewClient(&redis.Options{Addr: miniredis.RunT(t).Addr()})
+	h := newTwitchHandler(t, stub, repo, rdb)
+
+	c, w := ginContext(t, userID, "36847b00-5329-44f2-9008-81daa1a34991")
+	h.HandleAddSource(oauth.PlatformTwitch)(c)
+
+	var body map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	_, hasConsentURL := body["auth_url"]
+	assert.True(t, hasConsentURL, "an unverifiable token must fall through to consent, got: %s", w.Body.String())
+	assert.Equal(t, 0, stub.overlayCallCount(), "an unverifiable token must never reach overlay-manager")
+
+	// The stored record is not cleared on this branch: Twitch being down proves
+	// nothing about the grant, and wiping the record would gate EventSub off a
+	// grant that may still be live.
+	scopes, err := repo.GetGrantedScopes(context.Background(), userID)
+	require.NoError(t, err)
+	assert.Contains(t, scopes, "user:read:chat",
+		"a transient validate failure must not clear the stored scope record")
+}
+
 // Scenario (Kick): the OAuth callback must store the streamer's REAL channel
 // slug from GET /public/v1/channels, not the users-endpoint display name. The
 // names differ for any streamer whose display name is not their slug — and

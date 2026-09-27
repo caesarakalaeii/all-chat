@@ -385,11 +385,9 @@ func (k *KickOAuth) GetUserInfoKick(ctx context.Context, accessToken string) (*m
 }
 
 // KickChannelInfo is the subset of Kick's GetChannel response the add-source flow
-// needs: the channel slug (what overlay_chat_sources.channel_id must hold) and the
-// broadcaster's numeric user id for attribution.
+// needs: the channel slug (what overlay_chat_sources.channel_id must hold).
 type KickChannelInfo struct {
-	BroadcasterUserID int    `json:"broadcaster_user_id"`
-	Slug              string `json:"slug"`
+	Slug string `json:"slug"`
 }
 
 // GetChannelInfo resolves the authenticated user's own channel via

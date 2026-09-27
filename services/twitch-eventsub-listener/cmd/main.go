@@ -486,7 +486,7 @@ func main() {
 							zap.String("broadcaster_id", broadcasterID),
 							zap.Bool("repairing", repairing),
 							zap.Error(err))
-						return fmt.Errorf("broadcaster %s: %w", broadcasterID, channels.ErrChatScopesMissing)
+						return wrapChatScopeError(broadcasterID)
 					} else {
 						return err
 					}
@@ -655,6 +655,16 @@ func main() {
 func isScopeError(err error) bool {
 	return strings.Contains(err.Error(), "missing proper authorization") ||
 		strings.Contains(err.Error(), "403")
+}
+
+// wrapChatScopeError is the single seam where a Twitch scope-403 becomes the
+// sentinel the channels.Manager gates its re-auth-hinted offline status on:
+// the raw 403 was already Warn-logged by the caller, and only the sentinel
+// reaches the manager. Extracted from the callback closure so a regression to
+// the pre-incident `return err` shape fails a test instead of silently
+// dropping the re-auth hint for every streamer with a dead grant.
+func wrapChatScopeError(broadcasterID string) error {
+	return fmt.Errorf("broadcaster %s: %w", broadcasterID, channels.ErrChatScopesMissing)
 }
 
 func startHTTPServer(log *zap.Logger, port string, isLeaderFn func() bool, webhookHandler *webhooks.Handler, db *pgxpool.Pool, redis *redis.Client, tracingEnabled bool) {

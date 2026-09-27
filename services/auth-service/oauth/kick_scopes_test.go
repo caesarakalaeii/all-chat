@@ -123,7 +123,6 @@ func TestGetChannelInfoReturnsSlugNotDisplayName(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "scuffed-onigiri", info.Slug,
 		"the channel slug — not the users-endpoint display name — must be stored as channel_id")
-	assert.Equal(t, 130554250, info.BroadcasterUserID)
 }
 
 // The channels URL seam must default to Kick's real endpoint so a stale copy of
