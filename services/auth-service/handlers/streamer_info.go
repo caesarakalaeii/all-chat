@@ -49,12 +49,17 @@ func NewStreamerInfoHandler(log *zap.Logger, userRepo UserRepositoryInterface, d
 	}
 }
 
-// PlatformInfo represents information about a platform for a streamer
+// PlatformInfo represents information about a platform for a streamer.
+//
+// Pentest F1: channel_id and is_active were removed from the wire format —
+// neither is consumed by the extension (the Twitch entry's channel_name is
+// the only field emote autocomplete reads), and channel_id disclosed
+// non-public YouTube channel identifiers to any anonymous caller. The
+// channel_id lookup above still runs in SQL, so lookup-by-UC-id keeps
+// working; only the response payload is narrowed.
 type PlatformInfo struct {
 	Platform    string `json:"platform"`
-	ChannelID   string `json:"channel_id"`
 	ChannelName string `json:"channel_name"`
-	IsActive    bool   `json:"is_active"`
 }
 
 // StreamerInfoResponse is the response for streamer info
@@ -193,9 +198,7 @@ func (h *StreamerInfoHandler) HandleGetStreamerInfo(c *gin.Context) {
 	query := `
 		SELECT DISTINCT
 			ocs.platform,
-			ocs.channel_id,
-			ocs.channel_name,
-			ocs.is_active
+			ocs.channel_name
 		FROM overlay_chat_sources ocs
 		INNER JOIN overlays o ON ocs.overlay_id = o.id
 		WHERE o.user_id = $1 AND o.is_public_for_viewers = true
@@ -213,7 +216,7 @@ func (h *StreamerInfoHandler) HandleGetStreamerInfo(c *gin.Context) {
 	platforms := make([]PlatformInfo, 0)
 	for rows.Next() {
 		var p PlatformInfo
-		if err := rows.Scan(&p.Platform, &p.ChannelID, &p.ChannelName, &p.IsActive); err != nil {
+		if err := rows.Scan(&p.Platform, &p.ChannelName); err != nil {
 			h.log.Error("Failed to scan platform info", zap.Error(err))
 			continue
 		}

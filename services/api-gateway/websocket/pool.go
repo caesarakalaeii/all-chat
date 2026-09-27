@@ -108,6 +108,13 @@ type BroadcastFilter struct {
 	// contains the full text AutoMod withheld from chat, and the overlay socket
 	// accepts anonymous OBS browser sources.
 	OwnerOnly bool
+
+	// ExcludeViewers drops the frame from viewer sockets entirely. Set it for
+	// platform_status frames: they carry the streamer's configured channel IDs
+	// and upstream error detail, which the public viewer path has no consumer
+	// for (pentest F2b) — the extension handles only chat, engagement and
+	// connected frames.
+	ExcludeViewers bool
 }
 
 // BroadcastFiltered sends to all connections the filter admits. Returns the number of
@@ -120,6 +127,13 @@ func (p *Pool) BroadcastFiltered(message []byte, filter BroadcastFilter) int {
 	for conn := range p.connections {
 		// Engagement-only sockets only ever receive poll/prediction updates.
 		if conn.IsEngagementOnly() && !filter.EngagementFrame {
+			continue
+		}
+
+		// Viewer sockets never receive platform_status: the frame names the
+		// streamer's configured channels and upstream error state, which no
+		// extension consumer reads (pentest F2b).
+		if filter.ExcludeViewers && conn.IsViewer() {
 			continue
 		}
 

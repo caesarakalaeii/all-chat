@@ -56,11 +56,9 @@ func (r *platformRows) Scan(dest ...interface{}) error {
 	}
 	e := r.entries[r.index]
 	r.index++
-	if len(dest) >= 4 {
+	if len(dest) >= 2 {
 		*dest[0].(*string) = e.Platform
-		*dest[1].(*string) = e.ChannelID
-		*dest[2].(*string) = e.ChannelName
-		*dest[3].(*bool) = e.IsActive
+		*dest[1].(*string) = e.ChannelName
 	}
 	return nil
 }
@@ -135,7 +133,7 @@ func getStreamerInfo(t *testing.T, router *gin.Engine) (*httptest.ResponseRecord
 // reports viewer_public: true.
 func TestHandleGetStreamerInfo_ViewerPublicTrue(t *testing.T) {
 	db := &viewerPublicDB{
-		platforms:    []PlatformInfo{{Platform: "twitch", ChannelID: "c1", ChannelName: "Chan", IsActive: true}},
+		platforms:    []PlatformInfo{{Platform: "twitch", ChannelName: "Chan"}},
 		viewerPublic: true,
 	}
 	w, body := getStreamerInfo(t, newViewerPublicRouter(t, db))
@@ -156,7 +154,7 @@ func TestHandleGetStreamerInfo_ViewerPublicTrue(t *testing.T) {
 // can distinguish "explicitly not public" from "field absent / old gateway".
 func TestHandleGetStreamerInfo_ViewerPublicFalseIsSerialised(t *testing.T) {
 	db := &viewerPublicDB{
-		platforms:    []PlatformInfo{{Platform: "kick", ChannelID: "c2", ChannelName: "Chan2", IsActive: false}},
+		platforms:    []PlatformInfo{{Platform: "kick", ChannelName: "Chan2"}},
 		viewerPublic: false,
 	}
 	w, body := getStreamerInfo(t, newViewerPublicRouter(t, db))
@@ -178,7 +176,7 @@ func TestHandleGetStreamerInfo_ViewerPublicFalseIsSerialised(t *testing.T) {
 // treat a false from anything other than a healthy 200 as a transport problem.
 func TestHandleGetStreamerInfo_ViewerPublicProbeErrorDegradesToFalse(t *testing.T) {
 	db := &viewerPublicDB{
-		platforms:    []PlatformInfo{{Platform: "twitch", ChannelID: "c1", ChannelName: "Chan", IsActive: true}},
+		platforms:    []PlatformInfo{{Platform: "twitch", ChannelName: "Chan"}},
 		viewerPubErr: errors.New("connection refused"),
 	}
 	w, body := getStreamerInfo(t, newViewerPublicRouter(t, db))

@@ -243,7 +243,8 @@ func main() {
 	// the browser reaches (for building obs_url links).
 	ttsConfigRepo := repository.NewTTSConfigRepository(dbPool)
 	publicBaseURL := getEnv("OVERLAY_PUBLIC_BASE_URL", "https://allch.at")
-	ttsHandler := handlers.NewTTSHandler(ttsConfigRepo, overlayRepo, tokenCipher, publicBaseURL, log)
+	// WithRateRedis: cluster-wide TTS rate window (pentest F5).
+	ttsHandler := handlers.NewTTSHandler(ttsConfigRepo, overlayRepo, tokenCipher, publicBaseURL, log).WithRateRedis(redisClient)
 
 	// YouTube helper
 	youtubeAPIKey := getEnv("YOUTUBE_API_KEY", "")
