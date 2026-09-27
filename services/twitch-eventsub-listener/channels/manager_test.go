@@ -20,6 +20,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -140,6 +142,108 @@ func TestReconcileChat_UnsubscribesAndPublishesOffline(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("expected an offline platform:status publish, got none")
+	}
+}
+
+// TestReconcileChat_ScopeFailureKeepsChatInactive verifies the prod-incident behavior
+// (overlay 36847b00): when subscribe_chat fails — a Twitch 403 scope rejection surfacing
+// as a callback error — the channel must NOT be marked ChatActive. Marking it active with
+// no subscription wrote a chat-ownership claim, excluded IRC (enforce mode), and silently
+// dropped all Twitch chat; the repair pass also suppressed its own error. ChatActive must
+// stay false so the repair pass keeps retrying, and an "offline" status carrying the
+// re-auth hint must be published so the overlay shows the red Auth Required indicator.
+func TestReconcileChat_ScopeFailureKeepsChatInactive(t *testing.T) {
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mr.Close()
+	rc := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer rc.Close()
+
+	sub := rc.Subscribe(context.Background(), status.PlatformStatusChannel)
+	defer sub.Close()
+	if _, err := sub.Receive(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	msgs := sub.Channel()
+
+	cb := &recordingCallback{err: fmt.Errorf("broadcaster 1532957417: %w", ErrChatScopesMissing)}
+	m := NewManager(nil, zap.NewNop(), &countingResolver{}, nil, time.Minute)
+	m.SetSubscriptionCallback(cb.fn)
+	m.SetStatusPublisher(status.NewPublisher(rc, zap.NewNop()))
+
+	m.channels["111"] = &Channel{BroadcasterID: "111", BroadcasterName: "scopedchan", SourceIDs: []string{"s1"}, HasChatScope: true, ChatActive: false}
+
+	m.mu.Lock()
+	m.reconcileChatLocked(demandFor("s1"))
+	m.mu.Unlock()
+
+	if got := cb.snapshot(); len(got) != 1 || got[0] != "subscribe_chat:111" {
+		t.Fatalf("want exactly [subscribe_chat:111], got %v", got)
+	}
+	if m.channels["111"].ChatActive {
+		t.Fatal("channel with a failed chat subscription must NOT be marked ChatActive (prod incident 36847b00)")
+	}
+
+	select {
+	case msg := <-msgs:
+		var sm status.Message
+		if err := json.Unmarshal([]byte(msg.Payload), &sm); err != nil {
+			t.Fatalf("bad status payload: %v", err)
+		}
+		if sm.Platform != "twitch" || sm.ChannelID != "scopedchan" || sm.Status != "offline" {
+			t.Fatalf("want twitch/scopedchan/offline, got %v", sm)
+		}
+		if !strings.Contains(strings.ToLower(sm.ErrorMessage), "oauth") {
+			t.Fatalf("offline status must carry the OAuth re-auth hint, got %q", sm.ErrorMessage)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("expected an offline status message after subscribe_chat failure")
+	}
+}
+
+// TestReconcileChat_TransientFailurePublishesNoAuthMessage verifies the companion
+// rule for the same path: a generic callback error (Twitch 5xx, 429, network) must
+// NOT publish the OAuth-hinted offline status. During a Twitch outage every channel
+// fails subscribe at once, and a streamer told to re-auth when their grant is fine
+// can never fix anything — that is how a platform hiccup turns into support tickets.
+func TestReconcileChat_TransientFailurePublishesNoAuthMessage(t *testing.T) {
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mr.Close()
+	rc := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer rc.Close()
+
+	sub := rc.Subscribe(context.Background(), status.PlatformStatusChannel)
+	defer sub.Close()
+	if _, err := sub.Receive(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	msgs := sub.Channel()
+
+	cb := &recordingCallback{err: errors.New("twitch api: 503 service unavailable")}
+	m := NewManager(nil, zap.NewNop(), &countingResolver{}, nil, time.Minute)
+	m.SetSubscriptionCallback(cb.fn)
+	m.SetStatusPublisher(status.NewPublisher(rc, zap.NewNop()))
+
+	m.channels["111"] = &Channel{BroadcasterID: "111", BroadcasterName: "scopedchan", SourceIDs: []string{"s1"}, HasChatScope: true, ChatActive: false}
+
+	m.mu.Lock()
+	m.reconcileChatLocked(demandFor("s1"))
+	m.mu.Unlock()
+
+	if m.channels["111"].ChatActive {
+		t.Fatal("a transient failure must not be marked ChatActive either")
+	}
+
+	select {
+	case msg := <-msgs:
+		t.Fatalf("a transient failure must not publish a status, got %s", msg.Payload)
+	case <-time.After(300 * time.Millisecond):
+		// expected: nothing published
 	}
 }
 

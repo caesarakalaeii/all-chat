@@ -41,6 +41,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -299,6 +301,21 @@ func (h *Handler) handleNotification(c *gin.Context, body []byte, messageID stri
 	c.Status(http.StatusNoContent)
 }
 
+// revocationsTotal counts Twitch-initiated subscription revocations per broadcaster and
+// type. The alert rules in caesar-deployment watch the per-broadcaster rate: when a
+// user disconnects the app (or Twitch revokes the grant), EVERY subscription for that
+// broadcaster is revoked within seconds — a burst on one broadcaster_id that no
+// aggregate counter can isolate. Mass-revocation was the leading edge of the
+// silent-chat-loss incident (overlay 36847b00): the event was logged and nothing
+// alerted, and the streamer's chat died without any operator signal.
+var revocationsTotal = promauto.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "listener_eventsub_revocations_total",
+		Help: "Twitch-initiated EventSub subscription revocations, by broadcaster and subscription type. A burst on one broadcaster_id means the user's app authorization was revoked (app disconnect or Twitch-side revocation) — chat for that channel stops until they re-consent.",
+	},
+	[]string{"platform", "service", "broadcaster_id", "type"},
+)
+
 // handleRevocation logs subscription revocations
 func (h *Handler) handleRevocation(c *gin.Context, body []byte) {
 	var revocation struct {
@@ -318,6 +335,13 @@ func (h *Handler) handleRevocation(c *gin.Context, body []byte) {
 	)
 
 	bid := conditionBroadcasterID(revocation.Subscription.Condition)
+
+	if bid != "" {
+		revocationsTotal.WithLabelValues("twitch-eventsub", "twitch-eventsub-listener", bid, revocation.Subscription.Type).Inc()
+		if h.listenerMetrics != nil {
+			h.listenerMetrics.RecordSourceEvent("twitch-eventsub", "twitch-eventsub-listener", "revoked")
+		}
+	}
 
 	// Drop the revoked subscription from the cache. This applies to EVERY type, not just chat: the
 	// cached id is stale the moment Twitch revokes it, and a cache hit makes every subsequent

@@ -98,3 +98,23 @@ Trivial — re-add a string to the appropriate `Scopes` slice and redeploy. Exis
 
 - Extension v1.6.0 release (commits `b76b1c3` CSP fix for emote APIs, `b98d309` popout SW relay, tag `v1.6.0`)
 - Future ADR (TBD): removal of dead viewer-side send handlers from `auth-service`
+
+---
+
+**2026-09-26 amendment (Kick streamer `channel:read` restored in the add-source flow only).**
+
+ADR-0012's verification for `channel:read` (Kick) said "no consumer found — channel info
+fetched via unauthenticated public Kick API in kick-listener". That consumer now exists:
+the add-source flow must resolve the streamer's *actual channel slug* via Kick's
+authenticated `GET /public/v1/channels` (no parameters = the consenting user's channel),
+because the `/public/v1/users` `name` field is the account **display name, not the slug**
+(Kick's own OpenAPI spec models it as "John Doe"). The kick-listener looks channels up
+by slug (`GET /api/v2/channels/{channel_id}`); for any streamer whose display name
+differs from their slug, storing the name made every sync 404 and auto-deactivate the
+source — permanently silent "Kick nothing" with no error shown to the streamer (prod
+incident, overlay `36847b00`).
+
+Scope: the streamer **add-source** consent requests `user:read channel:read`
+(`KickOAuth.GetAuthURLWithChannelScopePKCE`); login and the viewer flow stay at
+`user:read` as ADR-0012 decided. This is a genuine caller, not scope creep: the
+resolution call is required to store a working channel identifier at all.

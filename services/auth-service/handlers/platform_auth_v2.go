@@ -204,21 +204,25 @@ func (h *PlatformAuthHandlerV2) HandleAddSource(platform oauth.Platform) gin.Han
 			}
 			hasChatScope := containsScope(grantedScopes, "user:read:chat")
 
-			if user.TwitchID != nil && *user.TwitchID != "" && user.AuthProvider == string(oauth.PlatformTwitch) && hasChatScope {
-				// Check if token is expired and refresh if needed
+			shortCircuitOK := user.TwitchID != nil && *user.TwitchID != "" && user.AuthProvider == string(oauth.PlatformTwitch) && hasChatScope
+			if shortCircuitOK {
+				twitchProvider, ok := provider.(*oauth.TwitchOAuth)
+				if !ok {
+					h.logger.Error("Failed to get Twitch provider")
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+					return
+				}
+
+				// Check if token is expired and refresh if needed. This MUST happen
+				// before the live-scope validation below: /oauth2/validate answers 401
+				// for an *expired* token too, not only a revoked one, so validating a
+				// stale token first would treat a refreshable grant as revoked. Refresh
+				// grants never widen scopes, so the fresh token carries the same grant.
 				if time.Now().After(user.TokenExpiresAt) {
 					h.logger.Info("Token expired, refreshing before adding source",
 						zap.String("user_id", user.ID),
 						zap.Time("expired_at", user.TokenExpiresAt),
 					)
-
-					// Refresh the token
-					twitchProvider, ok := provider.(*oauth.TwitchOAuth)
-					if !ok {
-						h.logger.Error("Failed to get Twitch provider")
-						c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
-						return
-					}
 
 					newToken, err := twitchProvider.RefreshToken(c.Request.Context(), user.RefreshToken)
 					if err != nil {
@@ -253,6 +257,43 @@ func (h *PlatformAuthHandlerV2) HandleAddSource(platform oauth.Platform) gin.Han
 					)
 				}
 
+				// The stored granted_scopes is a record of the last consent, not a live
+				// fact: Twitch revokes grants (user disconnects the app, Twitch-side
+				// revocation) without telling us, and users.granted_scopes keeps listing
+				// scopes the token no longer carries. That made this short-circuit reuse
+				// a dead token forever — the streamer's "re-add the source" never showed a
+				// consent screen and could never recover their chat (prod incident:
+				// overlay 36847b00, chat silent for days). Ask Twitch what the token can
+				// actually do; only short-circuit on a validated live grant.
+				validation, valid, validateErr := twitchProvider.ValidateToken(c.Request.Context(), user.AccessToken)
+				if validateErr != nil {
+					// Transient failure to verify — do not silently reuse stale
+					// credentials; fall through to the consent flow, which either
+					// re-establishes the grant or fails loudly.
+					h.logger.Warn("Cannot verify Twitch token before add-source short-circuit; falling through to OAuth flow",
+						zap.String("user_id", user.ID),
+						zap.Error(validateErr),
+					)
+					shortCircuitOK = false
+				} else if !valid || !containsScope(validation.Scopes, "user:read:chat") {
+					h.logger.Info("Twitch token no longer carries the chat scopes; falling through to OAuth flow",
+						zap.String("user_id", user.ID),
+						zap.Bool("token_valid", valid),
+					)
+					// The stored scope record is stale — clear it so every other
+					// scope-gated decision (partition predicate, eventsub gating, this
+					// short-circuit) stops believing the dead grant until re-consent.
+					if clearErr := h.userRepo.UpdateGrantedScopes(c.Request.Context(), user.ID, validation.Scopes); clearErr != nil {
+						h.logger.Warn("Failed to clear stale granted scopes",
+							zap.String("user_id", user.ID),
+							zap.Error(clearErr),
+						)
+					}
+					shortCircuitOK = false
+				}
+			}
+
+			if shortCircuitOK {
 				authHeader := strings.TrimSpace(c.GetHeader("Authorization"))
 				jwtToken := strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer"))
 				if jwtToken == "" {
@@ -531,9 +572,15 @@ func (h *PlatformAuthHandlerV2) generateAuthURL(
 			return "", fmt.Errorf("kick provider type assertion failed")
 		}
 
-		// Generate auth URL with PKCE
+		// Generate auth URL with PKCE. The add-source flow additionally requests
+		// channel:read so the callback can resolve the streamer's real channel
+		// slug; login keeps the minimal user:read set (see GetAuthURLWithChannelScopePKCE).
 		var codeVerifier string
-		authURL, codeVerifier = kickProvider.GetAuthURLWithPKCE(stateStr)
+		if withChatScopes {
+			authURL, codeVerifier = kickProvider.GetAuthURLWithChannelScopePKCE(stateStr)
+		} else {
+			authURL, codeVerifier = kickProvider.GetAuthURLWithPKCE(stateStr)
+		}
 
 		// Store code verifier in Redis for later use during token exchange
 		verifierKey := fmt.Sprintf("oauth_verifier:%s:%s", platform, csrfToken)
@@ -767,6 +814,36 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 				// For login flow, skip channel resolution to save quota
 				h.logger.Info("Skipping YouTube channel resolution during login (will fetch when adding source)",
 					zap.String("platform_user_id", platformUser.GetID()))
+			}
+		}
+
+		// Kick add-source: resolve the streamer's actual channel slug (GET /public/v1/channels).
+		// The /public/v1/users `name` field is the account DISPLAY name, which the kick-listener
+		// cannot look up — it queries channels BY SLUG (GET /api/v2/channels/{channel_id}) —
+		// so storing the display name made every sync 404 and auto-deactivate the
+		// source (prod incident: overlay 36847b00). Only the add-source consent carries
+		// channel:read (GetAuthURLWithChannelScopePKCE), so login never reaches this call.
+		if platform == oauth.PlatformKick && oauthState.IsAddSource() {
+			kickProvider, ok := provider.(*oauth.KickOAuth)
+			if !ok {
+				h.logger.Error("Kick provider assertion failed")
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Kick provider misconfigured"})
+				return
+			}
+			channelInfo, channelErr := kickProvider.GetChannelInfo(c.Request.Context(), token.AccessToken)
+			if channelErr != nil {
+				// Fall back to the legacy behaviour (display name as channel id): it is
+				// correct for every user whose display name IS their slug, and failing the
+				// whole add over a channel-resolution hiccup would block those users.
+				h.logger.Warn("Failed to resolve Kick channel slug; storing the users-endpoint name as channel id",
+					zap.String("platform", string(platform)),
+					zap.String("platform_user_id", platformUser.GetID()),
+					zap.Error(channelErr))
+			} else {
+				sourceDetails = &OverlaySourceDetails{
+					ChannelID:   channelInfo.Slug,
+					ChannelName: channelInfo.Slug,
+				}
 			}
 		}
 

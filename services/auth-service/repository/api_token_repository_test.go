@@ -203,7 +203,11 @@ func TestResolveAPIToken_ExpiredTokenIsRejected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GenerateAPIToken: %v", err)
 	}
-	past := time.Now().Add(-time.Hour)
+	// A UTC timestamp, not time.Now(): pgx sends a time.Time carrying its local zone,
+	// and "now minus an hour" in a zone ahead of UTC can land in the FUTURE once
+	// stored — the container's Postgres runs in UTC, so the expiry predicate
+	// legitimately matched and this test failed for hosts in e.g. CEST.
+	past := time.Now().UTC().Add(-time.Hour)
 	if _, err := repo.CreateAPIToken(ctx, userID, "expired", hash, []string{middleware.ScopeChatWrite}, &past); err != nil {
 		t.Fatalf("CreateAPIToken: %v", err)
 	}
