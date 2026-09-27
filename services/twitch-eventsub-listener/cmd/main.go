@@ -469,20 +469,24 @@ func main() {
 			// "created" distinguishable from "no-op" — otherwise every pass would claim to have
 			// recreated every subscription.
 			if !repairing || !subscriptionMgr.HasSubscription(broadcasterID, "channel.chat.message") {
-				// A scope error is non-fatal: return nil so the manager marks chat active and
-				// doesn't retry-spam; that channel just won't get EventSub chat (it stays on IRC
-				// unless/until the owner grants the missing scope).
 				if _, err := subscriptionMgr.SubscribeToChatMessages(ctx, broadcasterID); err != nil {
 					if strings.Contains(err.Error(), "subscription already exists") {
 						// Already subscribed — fall through to ensure the companions exist too.
 					} else if isScopeError(err) {
-						if !repairing {
-							log.Info("Chat message subscription requires user:read:chat + user:bot scopes",
-								zap.String("broadcaster_id", broadcasterID))
-						}
-						// No chat sub → the companions (same scope) would fail too. The channel
-						// stays on IRC, which still handles its deletions.
-						return nil
+						// The broadcaster's chat-scope grant is gone (revoked, or never granted
+						// Twitch-side despite our stored record — see the add-source
+						// short-circuit in auth-service). This MUST be an error, not nil:
+						// returning nil made the manager mark the channel ChatActive with no
+						// subscription, publish a chat-ownership claim, and — with the IRC
+						// listener retired (ADR-0026) — silently drop all Twitch chat for the
+						// channel forever. The sync tick retries every ChannelSyncInterval
+						// (the ensure_chat repair pass skips ChatActive=false channels),
+						// which is bounded, not spam.
+						log.Warn("Chat message subscription rejected: broadcaster must re-auth with the chat scopes (user:read:chat + user:bot)",
+							zap.String("broadcaster_id", broadcasterID),
+							zap.Bool("repairing", repairing),
+							zap.Error(err))
+						return wrapChatScopeError(broadcasterID)
 					} else {
 						return err
 					}
@@ -651,6 +655,16 @@ func main() {
 func isScopeError(err error) bool {
 	return strings.Contains(err.Error(), "missing proper authorization") ||
 		strings.Contains(err.Error(), "403")
+}
+
+// wrapChatScopeError is the single seam where a Twitch scope-403 becomes the
+// sentinel the channels.Manager gates its re-auth-hinted offline status on:
+// the raw 403 was already Warn-logged by the caller, and only the sentinel
+// reaches the manager. Extracted from the callback closure so a regression to
+// the pre-incident `return err` shape fails a test instead of silently
+// dropping the re-auth hint for every streamer with a dead grant.
+func wrapChatScopeError(broadcasterID string) error {
+	return fmt.Errorf("broadcaster %s: %w", broadcasterID, channels.ErrChatScopesMissing)
 }
 
 func startHTTPServer(log *zap.Logger, port string, isLeaderFn func() bool, webhookHandler *webhooks.Handler, db *pgxpool.Pool, redis *redis.Client, tracingEnabled bool) {
