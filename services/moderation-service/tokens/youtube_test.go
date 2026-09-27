@@ -120,6 +120,49 @@ func TestYouTubeResolve_LinkedWrongChannelIsNoCredential(t *testing.T) {
 	assert.ErrorIs(t, err, ErrNoCredential)
 }
 
+// ResolveByChannel is the listener's entry point: a channel id and no user. Any
+// youtube_oauth_tokens row keyed on the channel is the owner's own credential.
+func TestYouTubeResolveByChannel_LinkedChannelCredential(t *testing.T) {
+	src, _, cleanup := setupYouTubeSource(t)
+	defer cleanup()
+
+	cred, err := src.ResolveByChannel(context.Background(), "UClinked")
+	require.NoError(t, err)
+	assert.Equal(t, "laccLinked", cred.AccessToken, "channel-keyed token resolves without a user")
+	assert.Equal(t, "lrefLinked", cred.RefreshToken)
+	assert.Contains(t, cred.GrantedScopes, ytForceSSL)
+}
+
+func TestYouTubeResolveByChannel_UnknownChannelIsNoCredential(t *testing.T) {
+	src, _, cleanup := setupYouTubeSource(t)
+	defer cleanup()
+
+	_, err := src.ResolveByChannel(context.Background(), "UCnotlinked")
+	assert.ErrorIs(t, err, ErrNoCredential)
+}
+
+// A refresh on a channel-resolved credential must write back to the channel's row
+// and leave granted_scopes untouched — the mangling guard, on the listener's path.
+func TestYouTubeResolveByChannel_RefreshWritesBackAndKeepsScopes(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"chanYNewAcc","expires_in":3599}`))
+	}))
+	defer srv.Close()
+	src, _, cleanup := setupYouTubeSource(t, WithTokenURL(srv.URL))
+	defer cleanup()
+
+	cred, err := src.ResolveByChannel(context.Background(), "UClinked")
+	require.NoError(t, err)
+	require.NoError(t, src.Refresh(context.Background(), cred))
+
+	reread, err := src.ResolveByChannel(context.Background(), "UClinked")
+	require.NoError(t, err)
+	assert.Equal(t, "chanYNewAcc", reread.AccessToken, "refresh wrote back to youtube_oauth_tokens via the channel-resolved row")
+	assert.Contains(t, reread.GrantedScopes, ytForceSSL, "a refresh must not clobber granted_scopes")
+	assert.Equal(t, "lrefLinked", reread.RefreshToken, "an omitted refresh_token keeps the existing one")
+}
+
 func TestYouTubeRefresh_LinkedPersistsToLinkedRow(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

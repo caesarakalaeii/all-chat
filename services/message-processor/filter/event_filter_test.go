@@ -74,6 +74,7 @@ func TestMapEventTypeToColumn_YouTube(t *testing.T) {
 		{"member_milestone", "enable_youtube_member_milestones"},
 		{"membership_gift", "enable_youtube_member_gifts"},
 		{"gift_received", "enable_youtube_member_gifts"},
+		{"subscriber", "enable_youtube_subscribers"},
 		{"unknown", ""},
 	}
 

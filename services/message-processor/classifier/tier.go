@@ -190,6 +190,10 @@ func classifyYouTubeEvent(eventType string, value *models.EventValue) (tier stri
 		// Receiving a gift membership is medium value
 		return "medium", 15
 
+	case "subscriber":
+		// A free subscription is below new_sponsor's high tier, but still worth a notice
+		return "medium", 15
+
 	case "message_deleted", "user_banned":
 		// Moderation events are low priority
 		return "low", 8

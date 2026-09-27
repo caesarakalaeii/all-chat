@@ -223,8 +223,8 @@ All-Chat is a **cloud-native microservices platform** for aggregating and displa
 - **→ Documentation**: [services/twitch-eventsub-listener/README.md](../../services/twitch-eventsub-listener/README.md)
 
 **YouTube Listener InnerTube** (`:8093`)
-- **Purpose**: Poll YouTube via InnerTube API (no quota cost)
-- **Protocol**: HTTP polling (InnerTube internal API)
+- **Purpose**: Poll YouTube via InnerTube API (chat ingestion at no quota cost; optional subscriber-alert polling spends accounted Data API units)
+- **Protocol**: HTTP polling (InnerTube internal API; Data API for subscriber alerts)
 - **→ Documentation**: [services/youtube-listener-innertube/README.md](../../services/youtube-listener-innertube/README.md)
 
 ### Processing Layer
@@ -249,10 +249,10 @@ All-Chat is a **cloud-native microservices platform** for aggregating and displa
 - **Scaling**: 1-3 replicas (lightweight, coordination only)
 - **→ Documentation**: [services/source-manager/README.md](../../services/source-manager/README.md)
 
-**Token Refresh Service** (background job)
-- **Purpose**: Refresh OAuth tokens before expiry
+**Token Refresh Service** (background service)
+- **Purpose**: Refresh OAuth tokens before expiry (internal 5-minute ticker)
 - **Features**: Platform-specific refresh flows, retry logic, error handling
-- **Scaling**: 1 replica (CronJob)
+- **Scaling**: 1 replica (always-on Deployment; prevents duplicate refreshes)
 - **→ Documentation**: [services/token-refresh-service/README.md](../../services/token-refresh-service/README.md)
 
 **Share Service** (`:8094`)

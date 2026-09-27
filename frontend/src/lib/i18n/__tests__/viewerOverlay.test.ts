@@ -494,7 +494,7 @@ describe('observability summary copy', () => {
     )
   })
 
-  it('keeps all 21 configured-event labels', () => {
+  it('keeps all 22 configured-event labels', () => {
     expect(t('viewerOverlay.observability.eventTwitchSubs')).toBe('Twitch Subs')
     expect(t('viewerOverlay.observability.eventTwitchResubs')).toBe('Twitch Resubs')
     expect(t('viewerOverlay.observability.eventTwitchGiftSubs')).toBe('Twitch Gift Subs')
@@ -508,6 +508,7 @@ describe('observability summary copy', () => {
     expect(t('viewerOverlay.observability.eventYoutubeMembers')).toBe('YouTube Members')
     expect(t('viewerOverlay.observability.eventYoutubeMemberMilestones')).toBe('Member Milestones')
     expect(t('viewerOverlay.observability.eventYoutubeMemberGifts')).toBe('Member Gifts')
+    expect(t('viewerOverlay.observability.eventYoutubeSubscribers')).toBe('YouTube Subscribers')
     expect(t('viewerOverlay.observability.eventKickSubs')).toBe('Kick Subs')
     expect(t('viewerOverlay.observability.eventKickGifts')).toBe('Kick Gifts')
     expect(t('viewerOverlay.observability.eventTiktokLikes')).toBe('TikTok Likes')
