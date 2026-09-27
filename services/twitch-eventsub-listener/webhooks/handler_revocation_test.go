@@ -126,6 +126,14 @@ func TestHandleRevocation_IncrementsRevocationsMetric(t *testing.T) {
 	if afterOther != beforeOther {
 		t.Fatalf("revocations_total for an unrelated broadcaster changed: %v -> %v", beforeOther, afterOther)
 	}
+
+	// The name must be pinned as a literal string — that is how caesar-deployment's
+	// alert rule selects the metric. ToFloat64/WithLabelValues compile against the Go
+	// variable only, so a rename of the metric would leave the alert silently
+	// unfirable with the suite green; CollectAndCount with the name filter reads 0.
+	if got := testutil.CollectAndCount(revocationsTotal, "listener_eventsub_revocations_total"); got == 0 {
+		t.Fatal("metric name changed: alert rule selects listener_eventsub_revocations_total by string")
+	}
 }
 
 // A revocation without a broadcaster id cannot be attributed; it must not invent a

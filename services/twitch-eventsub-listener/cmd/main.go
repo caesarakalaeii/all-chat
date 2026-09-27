@@ -479,13 +479,14 @@ func main() {
 						// returning nil made the manager mark the channel ChatActive with no
 						// subscription, publish a chat-ownership claim, and — with the IRC
 						// listener retired (ADR-0026) — silently drop all Twitch chat for the
-						// channel forever. The repair pass retries every
-						// ChatSubscriptionReconcileInterval, which is bounded, not spam.
+						// channel forever. The sync tick retries every ChannelSyncInterval
+						// (the ensure_chat repair pass skips ChatActive=false channels),
+						// which is bounded, not spam.
 						log.Warn("Chat message subscription rejected: broadcaster must re-auth with the chat scopes (user:read:chat + user:bot)",
 							zap.String("broadcaster_id", broadcasterID),
 							zap.Bool("repairing", repairing),
 							zap.Error(err))
-						return fmt.Errorf("chat scopes missing for broadcaster %s: %w", broadcasterID, err)
+						return fmt.Errorf("broadcaster %s: %w", broadcasterID, channels.ErrChatScopesMissing)
 					} else {
 						return err
 					}

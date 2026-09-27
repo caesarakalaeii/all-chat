@@ -47,14 +47,13 @@ type KickOAuth struct {
 	channelsURL string
 }
 
+// Kick OAuth endpoints
 const (
 	kickAuthURL     = "https://id.kick.com/oauth/authorize"
 	kickTokenURL    = "https://id.kick.com/oauth/token"
 	kickUserURL     = "https://api.kick.com/public/v1/users"
 	kickChannelsURL = "https://api.kick.com/public/v1/channels"
 )
-
-// Kick OAuth endpoints (see the const block above for their values)
 
 // NewKickOAuth creates a new Kick OAuth handler
 func NewKickOAuth(clientID, clientSecret, redirectURL string) *KickOAuth {
@@ -66,6 +65,16 @@ func NewKickOAuth(clientID, clientSecret, redirectURL string) *KickOAuth {
 		tokenURL:     kickTokenURL,
 		channelsURL:  kickChannelsURL,
 	}
+}
+
+// WithHTTPClient returns a copy using the given HTTP client for every Kick
+// call (token exchange, user info, channel resolution, refresh). Test seam for
+// stubbing production endpoints without touching endpoint constants; the
+// tokenURL/channelsURL seams carry over.
+func (k *KickOAuth) WithHTTPClient(client *http.Client) *KickOAuth {
+	copy := *k
+	copy.client = client
+	return &copy
 }
 
 // WithRedirectURL returns a copy that redirects to redirectURL instead. Used to
@@ -243,28 +252,17 @@ func (k *KickOAuth) GetAuthURLWithPKCE(state string) (authURL string, codeVerifi
 	return authURL, codeVerifier
 }
 
-// GetAuthURLWithChannelScopePKCE generates the add-source consent URL with the
-// channel:read scope added on top of user:read. The add-source flow must resolve
-// the streamer's actual channel slug (GET /public/v1/channels with no parameters
-// returns the authenticated user's channel) because the /public/v1/users `name`
-// field is the account DISPLAY name, not the channel slug — the two differ for
-// any user whose display name is not their slug, and storing the display name
-// made the kick-listener 404 forever on the channel lookup (prod incident:
-// overlay 36847b00, "Kick nothing"). See ADR-0012 for why channel:read was
-// originally dropped ("no caller") — this is that caller now.
+// GetAuthURLWithChannelScopePKCE generates the add-source consent URL carrying
+// channel:read on top of the base user:read identity scope. The add-source flow
+// must resolve the streamer's actual channel slug (GET /public/v1/channels with
+// no parameters returns the authenticated user's channel) because the
+// /public/v1/users `name` field is the account DISPLAY name, not the channel
+// slug — the two differ for any user whose display name is not their slug, and
+// storing the display name made the kick-listener 404 forever on the channel
+// lookup (prod incident: overlay 36847b00, "Kick nothing"). See ADR-0012 for
+// why channel:read was originally dropped ("no caller") — this is that caller now.
 func (k *KickOAuth) GetAuthURLWithChannelScopePKCE(state string) (authURL string, codeVerifier string) {
-	codeVerifier = generateCodeVerifier()
-
-	params := url.Values{}
-	params.Set("client_id", k.clientID)
-	params.Set("response_type", "code")
-	params.Set("redirect_uri", k.redirectURL)
-	params.Set("state", state)
-	params.Set("scope", "user:read channel:read")
-	params.Set("code_challenge", generateCodeChallenge(codeVerifier))
-	params.Set("code_challenge_method", "S256")
-
-	return kickAuthURL + "?" + params.Encode(), codeVerifier
+	return k.GetAuthURLWithScopesPKCE(state, []string{"channel:read"})
 }
 
 // ExchangeCode exchanges authorization code for tokens using PKCE

@@ -91,8 +91,9 @@ healthy channel costs a map lookup and no API call, and only genuine recreations
 **Scope failures are errors, not quiet fallbacks.** When Twitch rejects `channel.chat.message` with a
 403 (the owner's chat-scope grant was revoked or never existed Twitch-side, e.g. after disconnecting
 the app in Twitch settings), `subscribe_chat`/`ensure_chat` return an error and log the raw Twitch
-response. The channel stays `ChatActive = false`: the repair pass keeps retrying on its interval, no
-ownership claim is written, and an `offline` platform:status carrying an OAuth re-auth hint is
+response. The channel stays `ChatActive = false`: the sync tick (`ChannelSyncInterval`) keeps
+retrying — the `ensure_chat` repair pass only re-asserts chat-active channels — no ownership claim is
+written, and an `offline` platform:status carrying an OAuth re-auth hint is
 published so the overlay shows the red "Auth Required" indicator. Returning `nil` here — with IRC in
 enforce mode (ADR-0026) as the only fallback — was the prod incident behind overlay `36847b00`: the
 channel looked chat-active, claimed ownership, and silently dropped all Twitch chat for days while

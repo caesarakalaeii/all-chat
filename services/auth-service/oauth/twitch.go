@@ -70,6 +70,16 @@ func NewTwitchOAuth(clientID, clientSecret, redirectURL string) *TwitchOAuth {
 	}
 }
 
+// WithHTTPClient returns a copy using the given HTTP client for every Twitch
+// call (GetUserInfo, ValidateToken, and — via the RefreshToken context injection
+// — the oauth2-library refresh). Test seam for stubbing production endpoints
+// without touching endpoint constants.
+func (t *TwitchOAuth) WithHTTPClient(client *http.Client) *TwitchOAuth {
+	copy := *t
+	copy.client = client
+	return &copy
+}
+
 // WithRedirectURL returns a copy that redirects to redirectURL instead. Used to
 // point one deployment's OAuth flow at a second frontend origin (beta.allch.at)
 // whose callback URI is registered separately with the provider.
@@ -367,6 +377,11 @@ func (t *TwitchOAuth) RefreshToken(ctx context.Context, refreshToken string) (*o
 		RefreshToken: refreshToken,
 	}
 
+	// The oauth2 library reads its HTTP client from the context (DefaultClient if
+	// absent). Force the provider's own client: every other Twitch call in this
+	// type already goes through it, so a splitter would mean a single point in the
+	// flow where tests (which stub t.client) cannot observe or intercept traffic.
+	ctx = context.WithValue(ctx, oauth2.HTTPClient, t.client)
 	tokenSource := t.config.TokenSource(ctx, token)
 	newToken, err := tokenSource.Token()
 	if err != nil {

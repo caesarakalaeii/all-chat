@@ -18,6 +18,7 @@ package channels
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -493,13 +494,17 @@ func (m *Manager) reconcileChatLocked(demanded map[string]listener.DemandedSourc
 		case want && !ch.ChatActive:
 			if err := m.callback(broadcasterID, ch.AccessToken, "subscribe_chat"); err != nil {
 				m.logger.Warn("Failed to subscribe chat", zap.String("broadcaster_id", broadcasterID), zap.Error(err))
-				// The subscription does not exist. ChatActive stays false so the
-				// repair pass keeps retrying (bounded by ChatSubscriptionReconcileInterval)
-				// and refreshClaims never writes an ownership claim for a channel whose
-				// chat we are not actually serving. Tell the overlay why: an "offline"
-				// status whose message names the OAuth re-auth the streamer must do —
-				// the frontend renders that as the red Auth Required indicator.
-				m.publishChatOffline(ch.BroadcasterName, "OAuth re-authorization required (chat scopes revoked)")
+				// The subscription does not exist. ChatActive stays false so the sync tick
+				// retries (bounded by ChannelSyncInterval) and refreshClaims never writes
+				// an ownership claim for a channel whose chat we are not actually serving.
+				if errors.Is(err, ErrChatScopesMissing) {
+					// Tell the overlay why: an "offline" status whose message names the
+					// OAuth re-auth the streamer must do — the frontend renders that as
+					// the red Auth Required indicator. Gated on the actual scope failure:
+					// a transient Twitch 5xx/429 must not tell the streamer to re-auth
+					// when their grant is fine.
+					m.publishChatOffline(ch.BroadcasterName, errChatScopesMissingMessage)
+				}
 				continue
 			}
 			ch.ChatActive = true
@@ -753,9 +758,12 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 							zap.String("broadcaster_id", broadcasterID),
 							zap.Error(err),
 						)
-						// ChatActive stays false (reconcileChatLocked retries on its
-						// interval) and the overlay sees the re-auth hint instead of silence.
-						m.publishChatOffline(fresh.BroadcasterName, "OAuth re-authorization required (chat scopes revoked)")
+						// ChatActive stays false (the sync tick retries) and the overlay
+						// sees the re-auth hint instead of silence — only for the actual
+						// scope failure, never a transient platform error.
+						if errors.Is(err, ErrChatScopesMissing) {
+							m.publishChatOffline(fresh.BroadcasterName, errChatScopesMissingMessage)
+						}
 					} else {
 						fresh.ChatActive = true
 					}

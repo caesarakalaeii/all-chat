@@ -213,45 +213,11 @@ func (h *PlatformAuthHandlerV2) HandleAddSource(platform oauth.Platform) gin.Han
 					return
 				}
 
-				// The stored granted_scopes is a record of the last consent, not a live
-				// fact: Twitch revokes grants (user disconnects the app, Twitch-side
-				// revocation) without telling us, and users.granted_scopes keeps listing
-				// scopes the token no longer carries. That made this short-circuit reuse
-				// a dead token forever — the streamer's "re-add the source" never showed a
-				// consent screen and could never recover their chat (prod incident:
-				// overlay 36847b00, chat silent for days). Ask Twitch what the token can
-				// actually do; only short-circuit on a validated live grant.
-				validation, valid, validateErr := twitchProvider.ValidateToken(c.Request.Context(), user.AccessToken)
-				if validateErr != nil {
-					// Transient failure to verify — do not silently reuse stale
-					// credentials; fall through to the consent flow, which either
-					// re-establishes the grant or fails loudly.
-					h.logger.Warn("Cannot verify Twitch token before add-source short-circuit; falling through to OAuth flow",
-						zap.String("user_id", user.ID),
-						zap.Error(validateErr),
-					)
-					shortCircuitOK = false
-				} else if !valid || !containsScope(validation.Scopes, "user:read:chat") {
-					h.logger.Info("Twitch token no longer carries the chat scopes; falling through to OAuth flow",
-						zap.String("user_id", user.ID),
-						zap.Bool("token_valid", valid),
-					)
-					// The stored scope record is stale — clear it so every other
-					// scope-gated decision (partition predicate, eventsub gating, this
-					// short-circuit) stops believing the dead grant until re-consent.
-					if clearErr := h.userRepo.UpdateGrantedScopes(c.Request.Context(), user.ID, validation.Scopes); clearErr != nil {
-						h.logger.Warn("Failed to clear stale granted scopes",
-							zap.String("user_id", user.ID),
-							zap.Error(clearErr),
-						)
-					}
-					shortCircuitOK = false
-				}
-			}
-
-			if shortCircuitOK {
-				twitchProvider := provider.(*oauth.TwitchOAuth)
-				// Check if token is expired and refresh if needed
+				// Check if token is expired and refresh if needed. This MUST happen
+				// before the live-scope validation below: /oauth2/validate answers 401
+				// for an *expired* token too, not only a revoked one, so validating a
+				// stale token first would treat a refreshable grant as revoked. Refresh
+				// grants never widen scopes, so the fresh token carries the same grant.
 				if time.Now().After(user.TokenExpiresAt) {
 					h.logger.Info("Token expired, refreshing before adding source",
 						zap.String("user_id", user.ID),
@@ -291,6 +257,43 @@ func (h *PlatformAuthHandlerV2) HandleAddSource(platform oauth.Platform) gin.Han
 					)
 				}
 
+				// The stored granted_scopes is a record of the last consent, not a live
+				// fact: Twitch revokes grants (user disconnects the app, Twitch-side
+				// revocation) without telling us, and users.granted_scopes keeps listing
+				// scopes the token no longer carries. That made this short-circuit reuse
+				// a dead token forever — the streamer's "re-add the source" never showed a
+				// consent screen and could never recover their chat (prod incident:
+				// overlay 36847b00, chat silent for days). Ask Twitch what the token can
+				// actually do; only short-circuit on a validated live grant.
+				validation, valid, validateErr := twitchProvider.ValidateToken(c.Request.Context(), user.AccessToken)
+				if validateErr != nil {
+					// Transient failure to verify — do not silently reuse stale
+					// credentials; fall through to the consent flow, which either
+					// re-establishes the grant or fails loudly.
+					h.logger.Warn("Cannot verify Twitch token before add-source short-circuit; falling through to OAuth flow",
+						zap.String("user_id", user.ID),
+						zap.Error(validateErr),
+					)
+					shortCircuitOK = false
+				} else if !valid || !containsScope(validation.Scopes, "user:read:chat") {
+					h.logger.Info("Twitch token no longer carries the chat scopes; falling through to OAuth flow",
+						zap.String("user_id", user.ID),
+						zap.Bool("token_valid", valid),
+					)
+					// The stored scope record is stale — clear it so every other
+					// scope-gated decision (partition predicate, eventsub gating, this
+					// short-circuit) stops believing the dead grant until re-consent.
+					if clearErr := h.userRepo.UpdateGrantedScopes(c.Request.Context(), user.ID, validation.Scopes); clearErr != nil {
+						h.logger.Warn("Failed to clear stale granted scopes",
+							zap.String("user_id", user.ID),
+							zap.Error(clearErr),
+						)
+					}
+					shortCircuitOK = false
+				}
+			}
+
+			if shortCircuitOK {
 				authHeader := strings.TrimSpace(c.GetHeader("Authorization"))
 				jwtToken := strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer"))
 				if jwtToken == "" {
