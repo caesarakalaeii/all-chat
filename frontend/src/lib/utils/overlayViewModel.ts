@@ -46,6 +46,13 @@ export interface ModEntryData {
   username?: string
   targetUserId?: string
   targetUuid?: string
+  /**
+   * The deleted message's platform-native id, when the frame carried one. On
+   * Twitch a single-message delete reaches this view twice — as a
+   * `message_deletion` and as a `channel.moderate` mod_action carrying the
+   * acting moderator — and this id is the join key between the two rows.
+   */
+  targetMsgId?: string
   banDuration?: number
   source: 'replay' | 'live'
   at: number
@@ -153,6 +160,7 @@ export function toModEntry(
     username: meta.target_username,
     targetUserId: meta.target_user_id,
     targetUuid: meta.target_uuid,
+    targetMsgId: meta.target_msg_id,
     banDuration: meta.ban_duration,
     source,
     at,
@@ -212,6 +220,7 @@ export function toModActionEntry(
     action,
     username: metadataString(metadata, 'target_login'),
     targetUserId: metadataString(metadata, 'target_user_id'),
+    targetMsgId: metadataString(metadata, 'message_id'),
     banDuration: metadataNumber(metadata, 'ban_duration'),
     moderator: metadataString(metadata, 'moderator_login'),
     reason: metadataString(metadata, 'reason'),
@@ -248,6 +257,54 @@ export function mergeAutoModResolution<T extends ModEntryData>(log: T[], entry: 
   const next = [...log]
   next[index] = { ...log[index], resolution: entry.resolution, resolvedBy: entry.resolvedBy }
   return next
+}
+
+/**
+ * Append or fold a deletion/mod_action pair for the same single-message
+ * delete, so one delete renders as one row regardless of frame arrival
+ * order.
+ *
+ * On Twitch one delete reaches this view as two frames: the
+ * `message_deletion` (what was removed) and the `channel.moderate` mod_action
+ * (who removed it). They are one action to a moderator and must render as
+ * one row — the earlier row, enriched with the other frame's moderator,
+ * username, target ids — never two, and never the bare unattributed row.
+ * The folded row keeps its original `at` so it does not jump position when
+ * the second frame lands. `targetMsgId` — Twitch's native message id,
+ * carried by both frames — is the join key; a deletion-derived row (from
+ * this view's own optimistic action, or from the WS deletion frame) and a
+ * mod_action row for the same id are always the same removal. On other
+ * platforms, or when either frame is missing its id, the entry appends.
+ *
+ * This is the single append-or-fold decision for an incoming frame — the
+ * caller must pass the log WITHOUT the entry already appended.
+ */
+export function mergeDeletionPair<T extends ModEntryData>(log: T[], entry: T): T[] {
+  if (entry.kind !== 'delete' || !entry.targetMsgId) return [...log, entry]
+  // Which frame is incoming decides the match rule. A mod_action frame folds
+  // only into a deletion-derived row (this view's optimistic row, or the WS
+  // deletion frame) — never into another mod_action row, so a Twitch
+  // double-send of the same webhook stays visible as its own row. A
+  // deletion-derived frame folds into any row with the same native id,
+  // including the mod_action row that already carries the moderator.
+  const modActionFrame = entry.action === 'delete'
+  const index = log.findIndex(
+    (other) =>
+      other.targetMsgId === entry.targetMsgId &&
+      (!modActionFrame || other.action !== 'delete')
+  )
+  if (index === -1) return [...log, entry]
+  return log.map((other, i) =>
+    i === index
+      ? {
+          ...other,
+          moderator: other.moderator || entry.moderator,
+          username: other.username || entry.username,
+          targetUserId: other.targetUserId || entry.targetUserId,
+          targetUuid: other.targetUuid || entry.targetUuid,
+        }
+      : other
+  )
 }
 
 /**

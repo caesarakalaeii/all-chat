@@ -29,10 +29,12 @@ import {
   matchesUserFilter,
   mergeAutoModResolution,
   mergeByAgg,
+  mergeDeletionPair,
   partitionItems,
   shouldAutoScroll,
   toModActionEntry,
   toModEntry,
+  type ModEntry,
   type ModEntryData,
   userFilterFor,
   type ViewItem,
@@ -272,6 +274,195 @@ describe('mergeAutoModResolution', () => {
       at: 200,
     }
     expect(mergeAutoModResolution([hold], orphan)).toHaveLength(2)
+  })
+})
+
+describe('mergeDeletionPair — one Twitch delete, one row', () => {
+  // A Twitch single-message delete reaches the view twice: as a message_deletion
+  // (what was removed, resolved to the internal uuid) and as a channel.moderate
+  // mod_action (who removed it). Both carry the native message id, which is the
+  // only join key — the deletion row knows the internal uuid, the mod_action
+  // row knows the moderator, and neither knows both. mergeDeletionPair is the
+  // single append-or-fold decision for EITHER frame; the log never already
+  // contains the entry.
+  const deletion: ModEntryData = {
+    kind: 'delete',
+    targetUuid: 'internal-1',
+    targetMsgId: 'native-1',
+    source: 'live',
+    at: 100,
+  }
+  const modAction: ModEntryData = {
+    kind: 'delete',
+    action: 'delete',
+    moderator: 'modperson',
+    username: 'spammer',
+    targetUserId: '9001',
+    targetMsgId: 'native-1',
+    source: 'live',
+    at: 105,
+  }
+
+  it('a mod_action after its deletion folds in, adding the moderator', () => {
+    const merged = mergeDeletionPair([{ id: 1, ...deletion }], { id: 2, ...modAction })
+    expect(merged).toHaveLength(1)
+    expect(merged[0]).toMatchObject({
+      id: 1,
+      kind: 'delete',
+      targetUuid: 'internal-1',
+      targetMsgId: 'native-1',
+      moderator: 'modperson',
+      username: 'spammer',
+      at: 100,
+    })
+  })
+
+  it('a deletion after its mod_action folds in, keeping the moderator', () => {
+    const merged = mergeDeletionPair([{ id: 1, ...modAction }], { id: 2, ...deletion })
+    expect(merged).toHaveLength(1)
+    expect(merged[0]).toMatchObject({
+      id: 1,
+      action: 'delete',
+      moderator: 'modperson',
+      targetUuid: 'internal-1',
+      at: 105,
+    })
+  })
+
+  it('folds into this view’s optimistic row, which has no action field', () => {
+    // runModeration builds its optimistic entry with toModEntry: kind 'delete',
+    // no action. The Twitch echo arriving after the reflect-back consumed the
+    // pending signature must still fold here, not append a second row.
+    const optimistic: ModEntryData = {
+      kind: 'delete',
+      targetUuid: 'internal-1',
+      targetMsgId: 'native-1',
+      clientId: 'c1',
+      source: 'live',
+      at: 99,
+    }
+    const merged = mergeDeletionPair([{ id: 1, ...optimistic }], { id: 2, ...modAction })
+    expect(merged).toHaveLength(1)
+    expect(merged[0]).toMatchObject({ clientId: 'c1', moderator: 'modperson' })
+  })
+
+  it('a second mod_action for the same id never folds into a mod_action row', () => {
+    // A mod_action row is never a fold target: two frames with action 'delete'
+    // and the same id would mean Twitch sent the same webhook twice, and the
+    // second must stay visible as its own row rather than silently vanish.
+    const echo = { ...modAction, at: 110 }
+    const merged = mergeDeletionPair([{ id: 1, ...modAction }], { id: 2, ...echo })
+    expect(merged).toHaveLength(2)
+  })
+
+  it('non-delete entries and non-matching ids append', () => {
+    const otherDelete = { ...modAction, targetMsgId: 'native-2' }
+    const timeout = { ...modAction, action: 'timeout', kind: 'timeout' as const }
+    expect(mergeDeletionPair([{ id: 1, ...deletion }], { id: 2, ...otherDelete })).toHaveLength(2)
+    expect(mergeDeletionPair([{ id: 1, ...deletion }], { id: 2, ...timeout })).toHaveLength(2)
+  })
+
+  it('deletions without a native id (other platforms, replay buffer) still append', () => {
+    const noId = { ...deletion, targetMsgId: undefined }
+    expect(mergeDeletionPair([{ id: 1, ...modAction }], { id: 2, ...noId })).toHaveLength(2)
+  })
+})
+
+describe('page composition — the onModAction append-or-fold chain', () => {
+  // The exact sequence page.tsx runs per mod_action frame: an AutoMod
+  // resolution first tries the hold fold, and only when that did NOT consume
+  // the frame does the delete pair fold run. The council found the original
+  // composition appended every frame twice; this pins the fixed one.
+  const deletion: ModEntryData = {
+    kind: 'delete',
+    targetUuid: 'internal-1',
+    targetMsgId: 'native-1',
+    source: 'live',
+    at: 100,
+  }
+  const modAction: ModEntryData = {
+    kind: 'delete',
+    action: 'delete',
+    moderator: 'modperson',
+    username: 'spammer',
+    targetUserId: '9001',
+    targetMsgId: 'native-1',
+    source: 'live',
+    at: 105,
+  }
+  const hold: ModEntryData = {
+    kind: 'automod',
+    action: 'automod_hold',
+    heldMessageId: 'h1',
+    heldText: 'something rude',
+    source: 'live',
+    at: 100,
+  }
+
+  /** What page.tsx onModAction does with a mod_action frame. */
+  function onModAction(prev: ModEntry[], entry: ModEntryData): ModEntry[] {
+    const withId = { id: 1, ...entry }
+    const log = mergeAutoModResolution(prev, withId)
+    if (log.length === prev.length) return log
+    return mergeDeletionPair(prev, withId)
+  }
+
+  it('S1: a Twitch native delete logs exactly one row, either arrival order', () => {
+    const deletionFirst = onModAction([{ id: 0, ...deletion }], modAction)
+    expect(deletionFirst).toHaveLength(1)
+    expect(deletionFirst[0]).toMatchObject({ moderator: 'modperson', targetUuid: 'internal-1' })
+
+    const modActionFirst = onModAction([{ id: 0, ...modAction }], deletion)
+    expect(modActionFirst).toHaveLength(1)
+    expect(modActionFirst[0]).toMatchObject({ moderator: 'modperson', action: 'delete' })
+  })
+
+  it('S2: a monitor-initiated delete echoes through with no third row', () => {
+    // Optimistic row (no action), reflect-back consumed the pending
+    // signature, then the Twitch message_deletion echo and the
+    // channel.moderate echo arrive. Both must fold into the optimistic row.
+    const optimistic: ModEntryData = {
+      kind: 'delete',
+      targetUuid: 'internal-1',
+      targetMsgId: 'native-1',
+      clientId: 'c1',
+      source: 'live',
+      at: 99,
+    }
+    let log: ModEntry[] = [{ id: 0, ...optimistic }]
+    log = mergeDeletionPair(log, { ...deletion, id: 1 } as ModEntry)
+    log = onModAction(log, modAction)
+    expect(log).toHaveLength(1)
+    expect(log[0]).toMatchObject({ clientId: 'c1', moderator: 'modperson' })
+  })
+
+  it('S4: an AutoMod resolution folds into its hold, one row', () => {
+    const resolution: ModEntryData = {
+      kind: 'automod',
+      action: 'automod_resolved',
+      heldMessageId: 'h1',
+      resolution: 'denied',
+      resolvedBy: 'modperson',
+      source: 'live',
+      at: 200,
+    }
+    const log = onModAction([{ id: 0, ...hold }], resolution)
+    expect(log).toHaveLength(1)
+    expect(log[0]).toMatchObject({ resolution: 'denied', resolvedBy: 'modperson', at: 100 })
+  })
+
+  it('S4b: an unmatched timeout frame appends exactly once', () => {
+    const timeout: ModEntryData = {
+      kind: 'timeout',
+      action: 'timeout',
+      moderator: 'modperson',
+      username: 'spammer',
+      banDuration: 600,
+      source: 'live',
+      at: 105,
+    }
+    const log = onModAction([], timeout)
+    expect(log).toHaveLength(1)
   })
 })
 

@@ -174,6 +174,12 @@ Like every event subscription here, these are created once when a channel is fir
 grant made afterwards takes effect on the next channel (re)sync — a leader change, pod restart, or
 the channel being re-added (ADR-0030 known limitation).
 
+**Delete actions carry the native message id.** The `delete` action's payload includes the removed
+message's `message_id` (EventData key `message_id`) — the same native id `channel.chat.message_delete`
+reports as `target_msg_id`. The monitor view receives a single-message delete as both frames and uses
+this id to fold them into one attributed log row; without it one delete renders as two rows, one with
+the acting moderator and one without.
+
 ### Platform Status Indicators
 
 The listener publishes the chat channel's connection state to the `platform:status` Redis Pub/Sub
