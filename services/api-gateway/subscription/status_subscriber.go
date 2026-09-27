@@ -243,11 +243,14 @@ func (s *StatusSubscriber) handleStatusMessage(ctx context.Context, payload stri
 }
 
 // broadcastStatusToRelevantOverlays sends a status message only to overlays
-// that have the matching platform+channel configured. Falls back to BroadcastToAll
-// if no source resolver is set.
+// that have the matching platform+channel configured. Falls back to an
+// untargeted (but viewer-excluded) broadcast if no source resolver is set.
 func (s *StatusSubscriber) broadcastStatusToRelevantOverlays(ctx context.Context, statusData models.PlatformStatusData, msgJSON []byte) int {
+	// The resolver is nil only in tests; production wiring always sets it
+	// (cmd/main.go). Kept filtered here too so the fallback cannot leak
+	// platform_status into viewer sockets even in that wiring.
 	if s.sourceResolver == nil {
-		return s.wsManager.BroadcastToAll(msgJSON)
+		return s.wsManager.BroadcastFiltered(msgJSON, statusBroadcastFilter)
 	}
 
 	overlayIDs := s.wsManager.GetConnectedOverlayIDs()
@@ -276,7 +279,8 @@ func (s *StatusSubscriber) broadcastStatusToRelevantOverlays(ctx context.Context
 // engagement-only ones — a status frame is not a poll/prediction update.
 var statusBroadcastFilter = websocket.BroadcastFilter{ExcludeViewers: true}
 
-// overlayHasSource reports whether the status frame's platform+channel is
+// overlayHasSource reports whether the status frame's platform+channel matches
+// any of the overlay's configured sources.
 //
 // Pentest F2a: the match must be platform AND channel. Platform-only matching
 // broadcast every other streamer's source statuses into every overlay that

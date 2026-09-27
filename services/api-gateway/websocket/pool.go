@@ -66,35 +66,6 @@ func (p *Pool) Remove(conn *Connection) {
 	)
 }
 
-// Broadcast sends a message to all connections in the pool
-// Returns the number of successful sends
-// For viewer connections, overlay_id is stripped from the message
-func (p *Pool) Broadcast(message []byte) int {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
-	successCount := 0
-	for conn := range p.connections {
-		// Strip overlay_id from message if this is a viewer connection
-		messageToSend := message
-		if conn.IsViewer() {
-			messageToSend = stripOverlayID(message)
-		}
-
-		if conn.Send(messageToSend) {
-			successCount++
-		}
-	}
-
-	p.logger.Debug("Broadcast to pool",
-		zap.String("overlay_id", p.overlayID),
-		zap.Int("pool_size", len(p.connections)),
-		zap.Int("success_count", successCount),
-	)
-
-	return successCount
-}
-
 // BroadcastFilter selects which connections in a pool a frame may reach.
 // The zero value means "every connection except engagement-only ones", which is
 // the rule for ordinary chat.
@@ -130,9 +101,6 @@ func (p *Pool) BroadcastFiltered(message []byte, filter BroadcastFilter) int {
 			continue
 		}
 
-		// Viewer sockets never receive platform_status: the frame names the
-		// streamer's configured channels and upstream error state, which no
-		// extension consumer reads (pentest F2b).
 		if filter.ExcludeViewers && conn.IsViewer() {
 			continue
 		}

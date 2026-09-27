@@ -198,32 +198,23 @@ func (h *TTSHandler) checkOwnership(c *gin.Context) (string, string, bool) {
 	return uid, overlayID, true
 }
 
-// checkRateLimit returns true if the request is allowed. Fixed 60-second
-// (INCR + expire); otherwise the in-process map applies, whose limit is only
-// correct for a single replica (pentest F5).
+// checkRateLimit returns true if the request is allowed. With Redis set, the
+// window is a fixed 60-second bucket in Redis (INCR + expire); otherwise the
+// in-process map applies, whose limit is only correct for a single replica
+// (pentest F5).
 func (h *TTSHandler) checkRateLimit(overlayID string) bool {
 	if h.rateRedis != nil {
 		return h.checkRateLimitRedis(overlayID)
 	}
-	h.rateMu.Lock()
-	defer h.rateMu.Unlock()
-	now := time.Now()
-	b, ok := h.rateBuckets[overlayID]
-	if !ok || now.Sub(b.windowStart) >= time.Minute {
-		h.rateBuckets[overlayID] = &rateBucket{count: 1, windowStart: now}
-		return true
-	}
-	if b.count >= ttsRateLimitPerMinute {
-		return false
-	}
-	b.count++
-	return true
+	return h.checkRateLimitLocal(overlayID)
 }
 
 // checkRateLimitRedis is the cluster-wide fixed window: one shared counter per
 // 60-second epoch bucket, so N replicas enforce the SAME per-minute cap rather
-// than N× it. Redis errors fail open to the in-process limiter — a limiter
-// outage must not take TTS down with it, and the local bucket is still a cap.
+// than N× it (a request at a bucket boundary can span two windows, so the
+// instantaneous rate is up to 2× the cap — acceptable for a billing cap).
+// Redis errors fail open to the in-process limiter — a limiter outage must not
+// take TTS down with it, and the local bucket is still a cap.
 func (h *TTSHandler) checkRateLimitRedis(overlayID string) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -236,7 +227,10 @@ func (h *TTSHandler) checkRateLimitRedis(overlayID string) bool {
 		return h.checkRateLimitLocal(overlayID)
 	}
 	if count == 1 {
-		h.rateRedis.Expire(ctx, key, 2*time.Minute)
+		if err := h.rateRedis.Expire(ctx, key, 2*time.Minute).Err(); err != nil {
+			h.logger.Warn("tts: redis rate limit expire failed; bucket key may linger",
+				zap.String("overlay_id", overlayID), zap.Error(err))
+		}
 	}
 	return count <= int64(ttsRateLimitPerMinute)
 }

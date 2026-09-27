@@ -148,6 +148,22 @@ func TestHandleGetStreamerInfo_ViewerPublicTrue(t *testing.T) {
 	if _, present := body["overlay_id"]; present {
 		t.Error("overlay_id must not appear in the streamer-info response")
 	}
+
+	// Pentest F1: channel_id (non-public YouTube channel identifiers) and
+	// is_active must never leave the database on this anonymous path.
+	platforms, ok := body["platforms"].([]any)
+	if !ok || len(platforms) != 1 {
+		t.Fatalf("expected exactly one platform entry, got %#v", body["platforms"])
+	}
+	entry, ok := platforms[0].(map[string]any)
+	if !ok {
+		t.Fatalf("platform entry is not an object: %#v", platforms[0])
+	}
+	for _, field := range []string{"channel_id", "is_active"} {
+		if _, present := entry[field]; present {
+			t.Errorf("%s must not appear in the public streamer-info response", field)
+		}
+	}
 }
 
 // viewer_public must always be on the wire, including when false, so a client
