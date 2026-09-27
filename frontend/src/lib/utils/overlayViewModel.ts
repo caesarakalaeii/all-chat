@@ -46,6 +46,13 @@ export interface ModEntryData {
   username?: string
   targetUserId?: string
   targetUuid?: string
+  /**
+   * The deleted message's platform-native id, when the frame carried one. On
+   * Twitch a single-message delete reaches this view twice — as a
+   * `message_deletion` and as a `channel.moderate` mod_action carrying the
+   * acting moderator — and this id is the join key between the two rows.
+   */
+  targetMsgId?: string
   banDuration?: number
   source: 'replay' | 'live'
   at: number
@@ -60,6 +67,8 @@ export interface ModEntryData {
   reason?: string
   /** Join key between an AutoMod hold and the resolution that closes it. */
   heldMessageId?: string
+  /** Login of the message author a channel.moderate delete acted on. */
+  targetMsgUsername?: string
   heldText?: string
   automodCategory?: string
   automodLevel?: number
@@ -153,6 +162,7 @@ export function toModEntry(
     username: meta.target_username,
     targetUserId: meta.target_user_id,
     targetUuid: meta.target_uuid,
+    targetMsgId: meta.target_msg_id,
     banDuration: meta.ban_duration,
     source,
     at,
@@ -212,6 +222,7 @@ export function toModActionEntry(
     action,
     username: metadataString(metadata, 'target_login'),
     targetUserId: metadataString(metadata, 'target_user_id'),
+    targetMsgId: metadataString(metadata, 'message_id'),
     banDuration: metadataNumber(metadata, 'ban_duration'),
     moderator: metadataString(metadata, 'moderator_login'),
     reason: metadataString(metadata, 'reason'),
@@ -248,6 +259,69 @@ export function mergeAutoModResolution<T extends ModEntryData>(log: T[], entry: 
   const next = [...log]
   next[index] = { ...log[index], resolution: entry.resolution, resolvedBy: entry.resolvedBy }
   return next
+}
+
+/**
+ * Append a deletion-derived entry, folding the Twitch `channel.moderate` frame
+ * for the same single-message delete into the row that already logged it.
+ *
+ * One delete reaches this view as two frames: the `message_deletion` (what was
+ * removed) and the `channel.moderate` mod_action (who removed it). They are one
+ * action to a moderator and must render as one row — the deletion row, enriched
+ * with the acting moderator — never two, and never the bare unattributed row.
+ * The deletion keeps its original `at` so the row does not jump when the
+ * (typically slightly later) mod_action lands. `targetMsgId` — Twitch's native
+ * message id, carried by both frames — is the join key; on other platforms, or
+ * when either frame is missing its id, both rows simply render.
+ */
+export function mergeDeletionIntoModAction<T extends ModEntryData>(
+  log: T[],
+  modAction: T
+): T[] {
+  if (modAction.action !== 'delete' || !modAction.targetMsgId) return [...log, modAction]
+  const index = log.findIndex(
+    (entry) => entry.targetMsgId === modAction.targetMsgId && entry.action !== 'delete'
+  )
+  if (index === -1) return [...log, modAction]
+  return log.map((entry, i) =>
+    i === index
+      ? {
+          ...entry,
+          moderator: entry.moderator || modAction.moderator,
+          username: entry.username || modAction.username,
+          targetUserId: entry.targetUserId || modAction.targetUserId,
+          targetUuid: entry.targetUuid || modAction.targetUuid,
+        }
+      : entry
+  )
+}
+
+/**
+ * The other arrival order: a `channel.moderate` delete frame landed first and
+ * the `message_deletion` for the same native message id arrives second. The
+ * mod_action row already carries the acting moderator, so the deletion folds
+ * in without erasing it.
+ */
+export function mergeModActionIntoDeletion<T extends ModEntryData>(
+  log: T[],
+  deletion: T
+): T[] {
+  if (deletion.kind !== 'delete' || !deletion.targetMsgId) return [...log, deletion]
+  const index = log.findIndex(
+    (entry) => entry.targetMsgId === deletion.targetMsgId && entry.action === 'delete'
+  )
+  if (index === -1) return [...log, deletion]
+  return log.map((entry, i) =>
+    i === index
+      ? {
+          ...entry,
+          moderator: entry.moderator || deletion.moderator,
+          username: entry.username || deletion.username,
+          targetUserId: entry.targetUserId || deletion.targetUserId,
+          targetUuid: entry.targetUuid || deletion.targetUuid,
+        }
+      : entry
+  )
 }
 
 /**

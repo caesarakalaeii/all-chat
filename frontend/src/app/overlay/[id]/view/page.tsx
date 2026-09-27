@@ -91,6 +91,8 @@ import {
   isAudienceEvent,
   mergeAutoModResolution,
   mergeByAgg,
+  mergeDeletionIntoModAction,
+  mergeModActionIntoDeletion,
   partitionItems,
   toModActionEntry,
   toModEntry,
@@ -213,10 +215,10 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
     const sig = deletionSignature(deletion)
     if (pendingDeletionsRef.current.delete(sig)) return
     setModerationLog((prev) =>
-      [
-        ...prev,
-        { id: (modSeqRef.current += 1), ...toModEntry(deletion, source, Date.now()) },
-      ].slice(-MAX_MOD_LOG)
+      mergeModActionIntoDeletion(
+        prev,
+        { id: (modSeqRef.current += 1), ...toModEntry(deletion, source, Date.now()) }
+      ).slice(-MAX_MOD_LOG)
     )
   }, [])
 
@@ -228,9 +230,11 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
     (metadata: Record<string, unknown>, source: 'replay' | 'live') => {
       const entry = toModActionEntry(metadata, source, Date.now())
       if (!entry) return
-      setModerationLog((prev) =>
-        mergeAutoModResolution(prev, { id: (modSeqRef.current += 1), ...entry }).slice(-MAX_MOD_LOG)
-      )
+      setModerationLog((prev) => {
+        const withId = { id: (modSeqRef.current += 1), ...entry }
+        const log = mergeAutoModResolution(prev, withId)
+        return mergeDeletionIntoModAction(log, withId).slice(-MAX_MOD_LOG)
+      })
     },
     []
   )

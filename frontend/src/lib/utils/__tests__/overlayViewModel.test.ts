@@ -29,6 +29,8 @@ import {
   matchesUserFilter,
   mergeAutoModResolution,
   mergeByAgg,
+  mergeDeletionIntoModAction,
+  mergeModActionIntoDeletion,
   partitionItems,
   shouldAutoScroll,
   toModActionEntry,
@@ -274,6 +276,82 @@ describe('mergeAutoModResolution', () => {
     expect(mergeAutoModResolution([hold], orphan)).toHaveLength(2)
   })
 })
+
+describe('delete/mod_action join — one Twitch delete, one row', () => {
+  // A Twitch single-message delete reaches the view twice: as a message_deletion
+  // (what was removed, resolved to the internal uuid) and as a channel.moderate
+  // mod_action (who removed it). Both carry the native message id, which is the
+  // only join key — the deletion row knows the internal uuid, the mod_action
+  // row knows the moderator, and neither knows both.
+  const deletion: ModEntryData = {
+    kind: 'delete',
+    targetUuid: 'internal-1',
+    targetMsgId: 'native-1',
+    source: 'live',
+    at: 100,
+  }
+  const modAction: ModEntryData = {
+    kind: 'delete',
+    action: 'delete',
+    moderator: 'modperson',
+    username: 'spammer',
+    targetUserId: '9001',
+    targetMsgId: 'native-1',
+    source: 'live',
+    at: 105,
+  }
+
+  it('a mod_action after its deletion folds into the row, adding the moderator', () => {
+    const merged = mergeDeletionIntoModAction([{ id: 1, ...deletion }], {
+      id: 2,
+      ...modAction,
+    })
+    expect(merged).toHaveLength(1)
+    expect(merged[0]).toMatchObject({
+      id: 1,
+      kind: 'delete',
+      targetUuid: 'internal-1',
+      targetMsgId: 'native-1',
+      moderator: 'modperson',
+      username: 'spammer',
+      at: 100,
+    })
+  })
+
+  it('a deletion after its mod_action folds into the row, keeping the moderator', () => {
+    const merged = mergeModActionIntoDeletion([{ id: 1, ...modAction }], {
+      id: 2,
+      ...deletion,
+    })
+    expect(merged).toHaveLength(1)
+    expect(merged[0]).toMatchObject({
+      id: 1,
+      action: 'delete',
+      moderator: 'modperson',
+      targetUuid: 'internal-1',
+      at: 105,
+    })
+  })
+
+  it('unrelated mod_actions still append (no id match, or a non-delete action)', () => {
+    const otherDelete = { ...modAction, targetMsgId: 'native-2' }
+    const timeout = { ...modAction, action: 'timeout', kind: 'timeout' as const }
+    expect(
+      mergeDeletionIntoModAction([{ id: 1, ...deletion }], { id: 2, ...otherDelete })
+    ).toHaveLength(2)
+    expect(mergeDeletionIntoModAction([{ id: 1, ...deletion }], { id: 2, ...timeout })).toHaveLength(
+      2
+    )
+  })
+
+  it('deletions without a native id (other platforms, replay buffer) still append', () => {
+    const noId = { ...deletion, targetMsgId: undefined }
+    expect(
+      mergeModActionIntoDeletion([{ id: 1, ...modAction }], { id: 2, ...noId })
+    ).toHaveLength(2)
+  })
+})
+
 
 describe('isDeletionTarget', () => {
   it('single matches by message uuid', () => {

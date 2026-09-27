@@ -1349,6 +1349,13 @@ func buildModerationAction(e *eventsub.ChannelModerateEvent) *models.RawChatMess
 		timeoutDuration = timeoutSeconds(e.Timeout.ExpiresAt)
 		eventData["ban_duration"] = timeoutDuration
 	}
+	// The delete action's native message id is the join key the monitor uses to fold
+	// this frame into the channel.chat.message_delete row for the same removal —
+	// without it the one action renders as two log entries, one with attribution
+	// and one without.
+	if e.Delete != nil && e.Delete.MessageID != "" {
+		eventData["message_id"] = e.Delete.MessageID
+	}
 
 	return &models.RawChatMessage{
 		MessageID: uuid.New().String(),
