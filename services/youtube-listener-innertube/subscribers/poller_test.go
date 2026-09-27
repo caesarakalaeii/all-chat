@@ -412,3 +412,40 @@ func TestProcessSubscribers_AnnounceErrorAdvancesWatermark(t *testing.T) {
 	assert.Equal(t, newer, newest, "the newest seen is still returned")
 	assert.Equal(t, newer, p.watermark, "watermark ADVANCES past a failed announce: the event is lost, not spammed")
 }
+
+// A resolved credential with no refresh token and an access token inside the
+// refresh lead time is spent: one log line, token dead for the stream, no API
+// call, no quota. The alternative — retrying every poll — re-fails the same
+// impossible refresh exchange forever (regression: 39% of live rows carry an
+// empty refresh_token).
+func TestPollOnce_SpentCredentialDisablesPolling(t *testing.T) {
+	api := &fakeAPI{}
+	spent := &youtubetoken.YouTubeCredential{
+		AccessToken:  "stale-token",
+		RefreshToken: "",
+		ExpiresAt:    time.Now().Add(-1 * time.Hour),
+	}
+	tokens := &fakeTokens{cred: spent}
+	q := &fakeQuota{reserveOK: true}
+	ann := &fakeAnnouncer{}
+
+	p := newTestPoller(api, tokens, q, ann)
+
+	p.pollOnce(context.Background())
+	assert.True(t, p.tokenDead, "expiring credential with no refresh token marks the token dead")
+	assert.Equal(t, 0, api.calls, "no API call is made on a spent credential")
+	assert.Equal(t, 0, q.reserved, "no quota is spent on a spent credential")
+	assert.Equal(t, 0, tokens.refreshes, "no refresh is attempted without a refresh token")
+
+	// A fresh-enough access token without a refresh token still polls this
+	// stream: the credential is only spent once the access token ages out.
+	freshNoRefresh := &youtubetoken.YouTubeCredential{
+		AccessToken:  "still-valid",
+		RefreshToken: "",
+		ExpiresAt:    time.Now().Add(1 * time.Hour),
+	}
+	p2 := newTestPoller(api, &fakeTokens{cred: freshNoRefresh}, q, ann)
+	p2.pollOnce(context.Background())
+	assert.False(t, p2.tokenDead, "fresh access token without refresh token keeps polling")
+	assert.Equal(t, 1, api.calls, "the fresh access token is used for the poll")
+}
