@@ -91,8 +91,7 @@ import {
   isAudienceEvent,
   mergeAutoModResolution,
   mergeByAgg,
-  mergeDeletionIntoModAction,
-  mergeModActionIntoDeletion,
+  mergeDeletionPair,
   partitionItems,
   toModActionEntry,
   toModEntry,
@@ -215,25 +214,31 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
     const sig = deletionSignature(deletion)
     if (pendingDeletionsRef.current.delete(sig)) return
     setModerationLog((prev) =>
-      mergeModActionIntoDeletion(
-        prev,
-        { id: (modSeqRef.current += 1), ...toModEntry(deletion, source, Date.now()) }
-      ).slice(-MAX_MOD_LOG)
+      mergeDeletionPair(prev, {
+        id: (modSeqRef.current += 1),
+        ...toModEntry(deletion, source, Date.now()),
+      }).slice(-MAX_MOD_LOG)
     )
   }, [])
 
   // Twitch moderation-log / AutoMod frames. No optimistic dedup: unlike the
   // deletion path, this client never produces a mod_action itself, so every
-  // frame here is news. An AutoMod resolution folds into the hold it closes
-  // rather than adding a row.
+  // frame here is news. Exactly one append-or-fold decision per frame: an
+  // AutoMod resolution folds into the hold it closes; a delete action folds
+  // into the deletion-derived row for the same native message id (the
+  // `message_deletion` frame, or this view's optimistic row); everything
+  // else appends. A frame is never appended twice.
   const onModAction = useCallback(
     (metadata: Record<string, unknown>, source: 'replay' | 'live') => {
       const entry = toModActionEntry(metadata, source, Date.now())
       if (!entry) return
       setModerationLog((prev) => {
         const withId = { id: (modSeqRef.current += 1), ...entry }
+        // An AutoMod resolution consumed by the hold it closed never reaches
+        // the delete fold (length unchanged means it folded).
         const log = mergeAutoModResolution(prev, withId)
-        return mergeDeletionIntoModAction(log, withId).slice(-MAX_MOD_LOG)
+        if (log.length === prev.length) return log.slice(-MAX_MOD_LOG)
+        return mergeDeletionPair(prev, withId).slice(-MAX_MOD_LOG)
       })
     },
     []
