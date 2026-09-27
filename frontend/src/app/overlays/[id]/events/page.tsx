@@ -52,6 +52,7 @@ interface EventSettings {
   enable_youtube_members: boolean
   enable_youtube_member_milestones: boolean
   enable_youtube_member_gifts: boolean
+  enable_youtube_subscribers: boolean
   // Kick
   enable_kick_subs: boolean
   enable_kick_gifts: boolean
@@ -112,6 +113,7 @@ const EVENT_TOGGLES = {
     { key: 'enable_youtube_members', messageStem: 'youtubeMembers' },
     { key: 'enable_youtube_member_milestones', messageStem: 'youtubeMemberMilestones' },
     { key: 'enable_youtube_member_gifts', messageStem: 'youtubeMemberGifts' },
+    { key: 'enable_youtube_subscribers', messageStem: 'youtubeSubscribers' },
   ],
   kick: [
     { key: 'enable_kick_subs', messageStem: 'kickSubs' },

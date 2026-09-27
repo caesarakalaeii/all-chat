@@ -44,6 +44,9 @@ type EventSettings struct {
 	EnableYouTubeMembers          bool `json:"enable_youtube_members" db:"enable_youtube_members"`
 	EnableYouTubeMemberMilestones bool `json:"enable_youtube_member_milestones" db:"enable_youtube_member_milestones"`
 	EnableYouTubeMemberGifts      bool `json:"enable_youtube_member_gifts" db:"enable_youtube_member_gifts"`
+	// Free subscribes surface only while a stream is live, via the listener's
+	// subscriptions.list?myRecentSubscribers polling — hence a dedicated toggle.
+	EnableYouTubeSubscribers bool `json:"enable_youtube_subscribers" db:"enable_youtube_subscribers"`
 
 	// Kick Events
 	EnableKickSubs  bool `json:"enable_kick_subs" db:"enable_kick_subs"`

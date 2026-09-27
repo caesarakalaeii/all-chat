@@ -31,6 +31,7 @@ import (
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/poller"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/publisher"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/status"
+	"github.com/caesar/all-chat/services/youtube-listener-innertube/subscribers"
 	"github.com/caesar/all-chat/shared/sourcemanager"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -94,6 +95,11 @@ type Manager struct {
 	statusPublisher  *status.Publisher
 	batchDetector    *deletion.BatchDetector  // Batch deletion detector for cleanup
 	deletionBuffer   *deletion.DeletionBuffer // Deletion event buffer for cleanup
+
+	// subscriberRunner starts/stops the per-channel subscriber poll loop on the
+	// same lifecycle boundaries as the chat poller. nil = subscriber alerts
+	// disabled (credentials not configured); every call is a no-op then.
+	subscriberRunner *subscribers.Runner
 
 	mu                       sync.RWMutex
 	activeStreams            map[string]*Stream             // videoID → stream state
@@ -160,6 +166,13 @@ func NewManager(
 		demandStopTimers:         make(map[string]*time.Timer),
 		stopChan:                 make(chan struct{}),
 	}
+}
+
+// SetSubscriberRunner wires the per-channel subscriber poll loop. Nil (the
+// default) disables subscriber alerts entirely; a nil-receiver Runner is also
+// a no-op, so every call site below is unconditional.
+func (m *Manager) SetSubscriberRunner(r *subscribers.Runner) {
+	m.subscriberRunner = r
 }
 
 // Start begins managing streams (non-blocking)
@@ -787,6 +800,10 @@ func (m *Manager) startPoller(ctx context.Context, channelID, videoID, overlayID
 	m.activeStreams[videoID] = stream
 	m.pollers[videoID] = p
 
+	// Subscriber alerts share the chat poller's lifecycle: quota is spent only
+	// while the stream is live on this leader.
+	m.subscriberRunner.StartChannel(channelID, videoID)
+
 	// Notify overlay: channel is now connected
 	m.statusPublisher.Publish(context.Background(), status.Message{
 		Platform:  "youtube",
@@ -822,6 +839,10 @@ func (m *Manager) startPoller(ctx context.Context, channelID, videoID, overlayID
 			)
 		}
 		m.mu.Unlock()
+
+		// The chat poller is gone, so the subscriber loop stops with it — keyed
+		// by this poller's video id, so a rediscovered stream's loop survives.
+		m.subscriberRunner.StopChannel(channelID, videoID)
 
 		// Stream ended — drop the live-chat-id cache now so a streamer send no longer
 		// targets a dead chat (the heartbeat TTL would otherwise expire it within ~2m).
@@ -970,8 +991,6 @@ func (m *Manager) stopPollerAfterDebounce(channelID string, delay time.Duration)
 		)
 		return
 	}
-
-	// Find and stop poller for this channel
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -985,6 +1004,12 @@ func (m *Manager) stopPollerAfterDebounce(channelID string, delay time.Duration)
 				p.Stop()
 				delete(m.pollers, videoID)
 				delete(m.activeStreams, videoID)
+
+				// The subscriber loop shares this lifecycle. Async: the stop
+				// waits on an in-flight poll and must not stall the manager
+				// lock; the runner deletes the map entry first, so a fresh
+				// start of a different stream is unaffected.
+				go m.subscriberRunner.StopChannel(channelID, videoID)
 
 				// Release leadership
 				if m.leader != nil {
@@ -1143,6 +1168,12 @@ func (m *Manager) handleLeadershipLoss(ctx context.Context, videoID string) {
 		delete(m.pollers, videoID)
 	}
 	delete(m.activeStreams, videoID)
+
+	// Another instance owns this stream now; stop spending quota on it here.
+	// Async: the stop waits on an in-flight poll and must not stall the lock.
+	if channelID != "" {
+		go m.subscriberRunner.StopChannel(channelID, videoID)
+	}
 
 	// Cleanup batch detector state for this channel
 	if channelID != "" && m.batchDetector != nil {
@@ -1660,6 +1691,10 @@ func (m *Manager) Shutdown(ctx context.Context) error {
 	m.pollers = make(map[string]*poller.Poller)
 	m.activeStreams = make(map[string]*Stream)
 	m.mu.Unlock()
+
+	// Stop the subscriber loops after releasing the maps (their own stops wait
+	// for in-flight polls, which must not run under m.mu).
+	m.subscriberRunner.StopAll()
 
 	// Mark all active sources inactive so admin panel reflects actual state after restart.
 	if m.smClient != nil {

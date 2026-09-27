@@ -109,6 +109,8 @@ export function EventContent({ message }: { message: ChatMessage }) {
         return '🎂'
       case 'membership_gift':
         return '🎁'
+      case 'subscriber':
+        return '🔔'
       case 'token_expiration_warning':
         return '⚠️'
       case 'source_permission_error':
@@ -167,6 +169,8 @@ export function EventContent({ message }: { message: ChatMessage }) {
         return 'Member Milestone!'
       case 'membership_gift':
         return 'Membership Gift!'
+      case 'subscriber':
+        return 'New Subscriber!'
       case 'gift':
         return 'Gift Received!'
       case 'follow':

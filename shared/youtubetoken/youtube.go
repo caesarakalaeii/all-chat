@@ -186,6 +186,53 @@ func (s *YouTubeSource) Resolve(ctx context.Context, userID, channelID string) (
 	}, nil
 }
 
+// ResolveByChannel returns the decrypted YouTube credential for a channel, without a
+// user context. The listener services have a channel id and no acting user; the
+// per-channel youtube_oauth_tokens row IS the channel owner's own credential (Google
+// issued it for that channel's account), so any row keyed on the channel proves the
+// link. Multiple users linking the same channel carry equivalent rows; the newest
+// write wins, which also means this read sees the freshest access token after the
+// token-refresh-service's write-back.
+func (s *YouTubeSource) ResolveByChannel(ctx context.Context, channelID string) (*YouTubeCredential, error) {
+	var (
+		encAccess, encRefresh string
+		expiresAt             time.Time
+		scopes                []string
+		rowID                 string
+	)
+	err := s.db.QueryRow(ctx, `
+		SELECT y.access_token, y.refresh_token, y.expiry, y.granted_scopes, y.id::text
+		FROM youtube_oauth_tokens y
+		WHERE y.channel_id = $1
+		ORDER BY y.updated_at DESC
+		LIMIT 1
+	`, channelID).Scan(&encAccess, &encRefresh, &expiresAt, &scopes, &rowID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNoCredential
+	}
+	if err != nil {
+		return nil, fmt.Errorf("resolve youtube credential by channel: %w", err)
+	}
+
+	access, err := s.cipher.DecryptString(encAccess)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt access token: %w", err)
+	}
+	refresh, err := s.cipher.DecryptString(encRefresh)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt refresh token: %w", err)
+	}
+
+	return &YouTubeCredential{
+		AccessToken:   access,
+		RefreshToken:  refresh,
+		GrantedScopes: scopes,
+		ExpiresAt:     expiresAt,
+		origin:        originLinked,
+		rowID:         rowID,
+	}, nil
+}
+
 // Refresh exchanges the credential's refresh token for a new access token via Google's
 // OAuth endpoint, persists the re-encrypted tokens to the origin row, and updates cred in
 // place. Google does not reissue the refresh token on refresh, so the existing one is

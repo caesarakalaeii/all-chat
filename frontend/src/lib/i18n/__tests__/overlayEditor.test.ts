@@ -1255,6 +1255,10 @@ describe('event display settings page copy', () => {
     expect(t('overlayEditor.eventSettings.youtubeMemberGiftsDescription')).toBe(
       'Gifted memberships'
     )
+    expect(t('overlayEditor.eventSettings.youtubeSubscribersLabel')).toBe('Subscribers')
+    expect(t('overlayEditor.eventSettings.youtubeSubscribersDescription')).toBe(
+      'New public channel subscribers (private subscriptions do not trigger an alert)'
+    )
   })
 
   it('keeps the Kick event toggles and the reverse-engineering caveat', () => {

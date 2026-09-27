@@ -10,7 +10,7 @@ Drop-in replacement for the official YouTube Listener using the InnerTube API in
 
 InnerTube-based YouTube chat listener that provides quota-free message ingestion as a drop-in replacement for the official API-based listener. Maintains identical RawChatMessage contract for seamless integration with message-processor.
 
-> **Note on quota**: message *ingestion* is fully quota-free. When `YOUTUBE_API_KEY` is configured, the listener additionally spends a single Data API unit per stream start (`videos.list`) to resolve the official `activeLiveChatId` for the streamer-send / moderation cache — see [Environment Variables](#environment-variables) and ADR-0025. This is optional and negligible; without the key the listener stays fully quota-free.
+> **Note on quota**: message *ingestion* is fully quota-free. When `YOUTUBE_API_KEY` is configured, the listener additionally spends a single Data API unit per stream start (`videos.list`) to resolve the official `activeLiveChatId` for the streamer-send / moderation cache — see [Environment Variables](#environment-variables) and ADR-0025. When subscriber alerts are enabled (`YOUTUBE_CLIENT_ID`/`YOUTUBE_CLIENT_SECRET` + `DATABASE_PASSWORD` + cipher key), the `subscribers/` loop spends 1 Data API unit per poll (adaptive: 60s on active channels, decaying to a 30m cap on quiet ones, only while a stream is live on this leader), accounted against the shared `youtube_quota_usage` table. Both are optional; without them the listener stays fully quota-free.
 
 ## Key Differences from Official Listener
 
@@ -77,6 +77,9 @@ directly — `get_live_chat` rejects it with HTTP 400.
 | `YOUTUBE_CANARY_POLL_INTERVAL` | No | `2s` | Floor between canary `get_live_chat` calls; YouTube's own recommended timeout wins when longer. Unlike production, the canary sleeps this interval after *every* poll (`AlwaysSleep`), so it is a real rate floor — production skips the sleep after a non-empty poll to keep viewer latency low, which on a busy canary channel would mean never sleeping at all. |
 | `YOUTUBE_CANARY_REDISCOVER_INTERVAL` | No | `10m` | How long a canary target that is not polling waits before retrying / re-pinning. |
 | `YOUTUBE_API_KEY` | No | - | YouTube **Data API** key. When set, the listener resolves each live stream's official `activeLiveChatId` (one `videos.list` call, 1 quota unit per stream) and publishes it to the `youtube:stream:state` cache so auth-service (streamer chat send) and moderation-service can target the chat. Unset ⇒ cache disabled; sends fall back to the unreliable `search.list` path. See ADR-0025. |
+| `YOUTUBE_CLIENT_ID` / `YOUTUBE_CLIENT_SECRET` | No | - | Google OAuth app credentials. Both set (plus `DATABASE_PASSWORD` and the token cipher key) ⇒ the `subscribers/` loop is enabled: while a stream is live on this leader, it polls the channel's recent subscribers via the official Data API (`subscriptions.list?myRecentSubscribers`, the streamer's `youtube.readonly` token from `youtube_oauth_tokens`) and announces new ones to `chat:raw` as `event_type: "subscriber"`. Adaptive interval: 60s armed, decaying to a 30m cap while quiet, rearmed by activity. 1 quota unit per poll, reserve-confirm-rollback against `youtube_quota_usage`. Any unset ⇒ subscriber alerts off, chat ingestion unaffected. |
+| `DATABASE_PASSWORD` | No | - | Required only for subscriber alerts (token resolution + quota accounting). `DATABASE_HOST`/`PORT`/`USER`/`NAME` default to `localhost`/`5432`/`allchat`/`allchat`. |
+| `TOKEN_ENCRYPTION_KEY_V1` | No | - | Required only for subscriber alerts: decrypts the streamer's stored YouTube tokens (`shared/encryption`). |
 
 ### Capture canary
 

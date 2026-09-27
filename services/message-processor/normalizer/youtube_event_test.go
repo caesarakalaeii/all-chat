@@ -175,6 +175,61 @@ func TestNormalizeEvent_YouTubeMembershipGift(t *testing.T) {
 	assert.Contains(t, unified.Event.Value.DisplayText, "10 gift")
 }
 
+func TestNormalizeEvent_YouTubeSubscriber(t *testing.T) {
+	normalizer := NewYouTubeNormalizer()
+
+	raw := &models.RawChatMessage{
+		MessageID: "yt-msg-6",
+		Platform:  "youtube",
+		ChannelID: "UC1234567890",
+		UserID:    "UC5555555555",
+		Username:  "FreshSubscriber",
+		Text:      "just subscribed",
+		Timestamp: time.Now(),
+		Tags:      map[string]string{},
+		EventType: "subscriber",
+		EventData: map[string]interface{}{
+			"subscriber_title":      "FreshSubscriber",
+			"subscriber_channel_id": "UC5555555555",
+			"subscriber_avatar_url": "https://example.com/avatar.png",
+			"published_at":          "2026-09-24T12:00:00Z",
+		},
+	}
+
+	unified, err := normalizer.NormalizeEvent(raw, "overlay-yt-6")
+	require.NoError(t, err)
+
+	assert.Equal(t, "subscriber", unified.Event.Type)
+	assert.Equal(t, "medium", unified.Event.Tier)
+	assert.Equal(t, 15, unified.Event.Duration)
+	assert.Equal(t, float64(1), unified.Event.Value.Amount)
+	assert.Equal(t, "subscribers", unified.Event.Value.Currency)
+	assert.Equal(t, "FreshSubscriber just subscribed", unified.Event.Value.DisplayText)
+}
+
+func TestNormalizeEvent_YouTubeSubscriberNoTitle(t *testing.T) {
+	normalizer := NewYouTubeNormalizer()
+
+	raw := &models.RawChatMessage{
+		MessageID: "yt-msg-7",
+		Platform:  "youtube",
+		ChannelID: "UC1234567890",
+		UserID:    "UC5555555555",
+		Username:  "FreshSubscriber",
+		Text:      "just subscribed",
+		Timestamp: time.Now(),
+		Tags:      map[string]string{},
+		EventType: "subscriber",
+		EventData: map[string]interface{}{},
+	}
+
+	unified, err := normalizer.NormalizeEvent(raw, "overlay-yt-7")
+	require.NoError(t, err)
+
+	assert.Equal(t, "subscriber", unified.Event.Type)
+	assert.Equal(t, "New subscriber", unified.Event.Value.DisplayText)
+}
+
 func TestNormalizeEvent_YouTubeWrongPlatform(t *testing.T) {
 	normalizer := NewYouTubeNormalizer()
 

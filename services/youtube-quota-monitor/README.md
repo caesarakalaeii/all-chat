@@ -5,9 +5,11 @@ Single-owner observability for the shared YouTube Data API quota.
 ## Why
 
 The quota-based `youtube-listener` is no longer deployed (the listener path moved to
-InnerTube, which costs no quota). But two services still spend official quota against the
-shared `youtube_quota_usage` table: `moderation-service` (bans, 50 units) and
-`auth-service` (streamer sends, 5 units), both via reserve-confirm-rollback (ADR-0006).
+InnerTube, whose chat ingestion costs no quota). But three services still spend official
+quota against the shared `youtube_quota_usage` table: `moderation-service` (bans, 50 units),
+`auth-service` (streamer sends, 5 units), and `youtube-listener-innertube` (subscriber
+alerts, 1 unit per poll when enabled — adaptive interval, only while live), all via
+reserve-confirm-rollback (ADR-0006).
 
 Nothing was left to *observe* that usage — the listener used to export the Prometheus
 quota gauge and publish alert events. This service restores both, reading the shared

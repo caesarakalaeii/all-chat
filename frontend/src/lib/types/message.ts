@@ -57,6 +57,7 @@ export type EventType =
   | 'member_milestone'
   | 'membership_gift'
   | 'gift_received'
+  | 'subscriber'
   | 'message_deleted'
   | 'user_banned'
   // Kick
