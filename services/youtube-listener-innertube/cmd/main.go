@@ -215,7 +215,7 @@ func main() {
 	// instance's chat poller holds the stream) and announces new ones to
 	// chat:raw. Fully env-gated: without DB + cipher + Google OAuth creds it
 	// stays disabled and the listener behaves exactly as before.
-	setupSubscribers(streamManager, streamPublisher, redisClient, logger)
+	setupSubscribers(streamManager, streamPublisher, logger)
 
 	// Canary poller.
 	//

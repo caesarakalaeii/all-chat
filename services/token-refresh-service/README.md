@@ -285,6 +285,7 @@ severity: info
 ```bash
 kubectl exec -n allchat allchat-cluster-1 -- psql -U allchat -c "
   SELECT platform, COUNT(*) as count, MIN(expiry) as soonest_expiry
+  FROM oauth_tokens
   WHERE expiry < NOW() + INTERVAL '24 hours'
   GROUP BY platform;
 "

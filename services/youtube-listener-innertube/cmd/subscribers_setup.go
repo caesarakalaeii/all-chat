@@ -44,7 +44,6 @@ import (
 func setupSubscribers(
 	streamManager *streams.Manager,
 	streamPublisher *publisher.StreamPublisher,
-	_ interface{}, // redisClient reserved for future watermark persistence
 	logger *zap.Logger,
 ) {
 	clientID := listener.Env("YOUTUBE_CLIENT_ID", "")

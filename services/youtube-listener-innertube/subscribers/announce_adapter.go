@@ -24,9 +24,9 @@ import (
 
 // RawPublisher publishes a pre-serialised chat:raw payload.
 // *publisher.StreamPublisher's ring-buffer Publish path is adapted to this
-// by cmd/main.go's announceAdapter; the interface keeps subscribers free of a
-// publisher import (the publisher imports innertube, which subscribers
-// deliberately does not depend on beyond the wire struct).
+// by rawPublishAdapter in cmd/subscribers_setup.go; the interface keeps
+// subscribers free of a publisher import (the publisher imports innertube,
+// which this package deliberately does not depend on beyond the wire struct).
 type RawPublisher interface {
 	PublishRaw(ctx context.Context, payload []byte) error
 }
