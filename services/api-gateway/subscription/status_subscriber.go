@@ -243,11 +243,14 @@ func (s *StatusSubscriber) handleStatusMessage(ctx context.Context, payload stri
 }
 
 // broadcastStatusToRelevantOverlays sends a status message only to overlays
-// that have the matching platform+channel configured. Falls back to BroadcastToAll
-// if no source resolver is set.
+// that have the matching platform+channel configured. Falls back to an
+// untargeted (but viewer-excluded) broadcast if no source resolver is set.
 func (s *StatusSubscriber) broadcastStatusToRelevantOverlays(ctx context.Context, statusData models.PlatformStatusData, msgJSON []byte) int {
+	// The resolver is nil only in tests; production wiring always sets it
+	// (cmd/main.go). Kept filtered here too so the fallback cannot leak
+	// platform_status into viewer sockets even in that wiring.
 	if s.sourceResolver == nil {
-		return s.wsManager.BroadcastToAll(msgJSON)
+		return s.wsManager.BroadcastFiltered(msgJSON, statusBroadcastFilter)
 	}
 
 	overlayIDs := s.wsManager.GetConnectedOverlayIDs()
@@ -256,22 +259,41 @@ func (s *StatusSubscriber) broadcastStatusToRelevantOverlays(ctx context.Context
 	for _, overlayID := range overlayIDs {
 		sources, err := s.sourceResolver.GetOverlaySources(ctx, overlayID)
 		if err != nil {
-			s.logger.Warn("Failed to get overlay sources, sending status anyway",
+			// Sending anyway would route one foreign channel's status to an
+			// unrelated overlay — the exact cross-tenant leak F2a closes.
+			s.logger.Warn("Failed to get overlay sources, skipping status delivery",
 				zap.String("overlay_id", overlayID),
 				zap.Error(err))
-			totalSent += s.wsManager.BroadcastToOverlay(overlayID, msgJSON)
 			continue
 		}
 
-		for _, src := range sources {
-			if src.Platform == statusData.Platform {
-				totalSent += s.wsManager.BroadcastToOverlay(overlayID, msgJSON)
-				break
-			}
+		if overlayHasSource(sources, statusData) {
+			totalSent += s.wsManager.BroadcastToOverlayFiltered(overlayID, msgJSON, statusBroadcastFilter)
 		}
 	}
 
 	return totalSent
+}
+
+// statusBroadcastFilter is the delivery rule for platform_status frames:
+// every socket except viewer ones (pentest F2b) and, per the zero value,
+// engagement-only ones — a status frame is not a poll/prediction update.
+var statusBroadcastFilter = websocket.BroadcastFilter{ExcludeViewers: true}
+
+// overlayHasSource reports whether the status frame's platform+channel matches
+// any of the overlay's configured sources.
+//
+// Pentest F2a: the match must be platform AND channel. Platform-only matching
+// broadcast every other streamer's source statuses into every overlay that
+// merely shared the platform — a cross-tenant leak of channel IDs and upstream
+// error detail into viewer sockets.
+func overlayHasSource(sources []OverlaySource, statusData models.PlatformStatusData) bool {
+	for _, src := range sources {
+		if src.Platform == statusData.Platform && src.ChannelID == statusData.ChannelID {
+			return true
+		}
+	}
+	return false
 }
 
 // GetPlatformStatus retrieves the current status for a platform and channel

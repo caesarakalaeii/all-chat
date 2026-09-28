@@ -25,17 +25,20 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/caesar/all-chat/services/overlay-manager/models"
 	"github.com/caesar/all-chat/services/overlay-manager/repository"
 	ttspkg "github.com/caesar/all-chat/services/overlay-manager/tts"
 	"github.com/caesar/all-chat/shared/encryption"
 	sharedMiddleware "github.com/caesar/all-chat/shared/middleware"
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -1356,3 +1359,130 @@ func TestSaveVoiceRejectsInvalidVoiceID(t *testing.T) {
 // Ensure the file compiles under the handlers package even if downstream
 // consumers rename interfaces — referencing io.Copy keeps the dep.
 var _ = io.Copy
+
+// Pentest F5: the Redis fixed window is cluster-wide, so the cap holds over the
+// 60-second epoch bucket regardless of which replica serves the request. These
+// tests pin the Redis path itself; TestHandleTTSRateLimited pins the local one.
+func TestCheckRateLimitRedis_ClusterWideCapAndFallback(t *testing.T) {
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer rdb.Close()
+	f := newTestHandler(t, nil)
+	f.handler = f.handler.WithRateRedis(rdb)
+
+	// Two handler instances share one Redis: two "replicas" of the same
+	// overlay must jointly see the same counter, not 60 each.
+	replicaA := f.handler
+	replicaB := NewTTSHandler(f.repo, f.overlays, f.cipher, "https://allch.at", zap.NewNop()).WithRateRedis(rdb)
+
+	for i := 0; i < ttsRateLimitPerMinute; i++ {
+		if !replicaA.checkRateLimit("ov-shared") {
+			t.Fatalf("request %d within the cap was denied", i+1)
+		}
+	}
+	if replicaB.checkRateLimit("ov-shared") {
+		t.Error("a second replica saw an independent budget: N replicas would enforce N×60/min")
+	}
+
+	// The 61st from the first replica is also over the shared cap.
+	if replicaA.checkRateLimit("ov-shared") {
+		t.Error("request over the shared cap was allowed")
+	}
+
+	// A different overlay has its own bucket.
+	if !replicaA.checkRateLimit("ov-other") {
+		t.Error("a different overlay should have an independent budget")
+	}
+}
+
+// Redis going away must fail open to the in-process limiter: the request is
+// still capped, but a limiter outage does not take TTS down with it.
+func TestCheckRateLimitRedis_RedisFailureFallsBackToLocalCap(t *testing.T) {
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer rdb.Close()
+	f := newTestHandler(t, nil)
+	h := f.handler.WithRateRedis(rdb)
+
+	if !h.checkRateLimit("ov-fb") {
+		t.Fatal("first request with live Redis was denied")
+	}
+
+	mr.Close()
+
+	// With Redis down, the request must still be served — by the local
+	// limiter, which is the fail-open contract: a limiter outage must not
+	// take TTS down with it. (Driving the local bucket all the way to its
+	// cap through this path costs a 2s dial timeout per request, so the
+	// cap itself is pinned by TestHandleTTSRateLimited on the same
+	// checkRateLimitLocal; here we pin the routing.)
+	if !h.checkRateLimit("ov-fb") {
+		t.Fatal("a Redis outage must fall back to the local limiter and still serve the request")
+	}
+	h.rateMu.Lock()
+	b, ok := h.rateBuckets["ov-fb"]
+	h.rateMu.Unlock()
+	if !ok || b.count != 1 {
+		t.Errorf("fallback did not route through the local limiter: bucket = %#v", b)
+	}
+}
+
+// The first INCR of a bucket sets the key's TTL, so counters do not linger
+// forever in Redis.
+func TestCheckRateLimitRedis_BucketKeysExpire(t *testing.T) {
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer rdb.Close()
+	f := newTestHandler(t, nil)
+	h := f.handler.WithRateRedis(rdb)
+
+	if !h.checkRateLimit("ov-ttl") {
+		t.Fatal("first request denied")
+	}
+
+	var bucketKey string
+	for _, key := range mr.Keys() {
+		if len(key) > len("tts:ratelimit:ov-ttl:") && key[:len("tts:ratelimit:ov-ttl:")] == "tts:ratelimit:ov-ttl:" {
+			bucketKey = key
+			break
+		}
+	}
+	if bucketKey == "" {
+		t.Fatal("no rate-limit bucket key found in Redis")
+	}
+	ttl := mr.TTL(bucketKey)
+	if ttl <= 0 || ttl > 2*time.Minute {
+		t.Errorf("bucket key TTL = %v, want a positive TTL of at most 2 minutes", ttl)
+	}
+}
+
+// The bucket key embeds the current 60-second epoch (unix/60): counters roll
+// to a fresh key at each minute boundary instead of one key growing forever,
+// and the /60 in the key is what makes the window cluster-identical across
+// replicas (a raw unix timestamp would give every second its own bucket).
+func TestCheckRateLimitRedis_EpochBucketKey(t *testing.T) {
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer rdb.Close()
+	f := newTestHandler(t, nil)
+	h := f.handler.WithRateRedis(rdb)
+
+	epochBefore := time.Now().Unix() / 60
+	if !h.checkRateLimit("ov-epoch") {
+		t.Fatal("first request denied")
+	}
+	epochAfter := time.Now().Unix() / 60
+
+	prefix := "tts:ratelimit:ov-epoch:"
+	for _, key := range mr.Keys() {
+		if len(key) > len(prefix) && key[:len(prefix)] == prefix {
+			suffix := key[len(prefix):]
+			if suffix != strconv.FormatInt(epochBefore, 10) && suffix != strconv.FormatInt(epochAfter, 10) {
+				t.Errorf("bucket key suffix = %s, want the current 60s epoch (%d or %d)",
+					suffix, epochBefore, epochAfter)
+			}
+			return
+		}
+	}
+	t.Fatalf("no %s* key found in Redis", prefix)
+}
