@@ -66,35 +66,6 @@ func (p *Pool) Remove(conn *Connection) {
 	)
 }
 
-// Broadcast sends a message to all connections in the pool
-// Returns the number of successful sends
-// For viewer connections, overlay_id is stripped from the message
-func (p *Pool) Broadcast(message []byte) int {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
-	successCount := 0
-	for conn := range p.connections {
-		// Strip overlay_id from message if this is a viewer connection
-		messageToSend := message
-		if conn.IsViewer() {
-			messageToSend = stripOverlayID(message)
-		}
-
-		if conn.Send(messageToSend) {
-			successCount++
-		}
-	}
-
-	p.logger.Debug("Broadcast to pool",
-		zap.String("overlay_id", p.overlayID),
-		zap.Int("pool_size", len(p.connections)),
-		zap.Int("success_count", successCount),
-	)
-
-	return successCount
-}
-
 // BroadcastFilter selects which connections in a pool a frame may reach.
 // The zero value means "every connection except engagement-only ones", which is
 // the rule for ordinary chat.
@@ -108,6 +79,13 @@ type BroadcastFilter struct {
 	// contains the full text AutoMod withheld from chat, and the overlay socket
 	// accepts anonymous OBS browser sources.
 	OwnerOnly bool
+
+	// ExcludeViewers drops the frame from viewer sockets entirely. Set it for
+	// platform_status frames: they carry the streamer's configured channel IDs
+	// and upstream error detail, which the public viewer path has no consumer
+	// for (pentest F2b) — the extension handles only chat, engagement and
+	// connected frames.
+	ExcludeViewers bool
 }
 
 // BroadcastFiltered sends to all connections the filter admits. Returns the number of
@@ -120,6 +98,10 @@ func (p *Pool) BroadcastFiltered(message []byte, filter BroadcastFilter) int {
 	for conn := range p.connections {
 		// Engagement-only sockets only ever receive poll/prediction updates.
 		if conn.IsEngagementOnly() && !filter.EngagementFrame {
+			continue
+		}
+
+		if filter.ExcludeViewers && conn.IsViewer() {
 			continue
 		}
 

@@ -134,12 +134,14 @@ func NewManager(logger *zap.Logger, m *metrics.GatewayMetrics, redisClient *redi
 		zap.Duration("disconnect_linger_ttl", disconnectLingerTTL),
 	)
 
+	// A typed nil *pgxpool.Pool stored in the dbExecer interface would defeat
+	// the m.db == nil guards below (interface holds a non-nil type), so only
+	// assign when a real pool was passed.
 	mgr := &Manager{
 		pools:                 make(map[string]*Pool),
 		logger:                logger,
 		metrics:               m,
 		redisClient:           redisClient,
-		db:                    db,
 		gracePeriodTimers:     make(map[string]*time.Timer),
 		disconnectGracePeriod: gracePeriod,
 		heartbeatInterval:     heartbeatInterval,
@@ -148,6 +150,9 @@ func NewManager(logger *zap.Logger, m *metrics.GatewayMetrics, redisClient *redi
 		stopHeartbeat:         make(chan struct{}),
 		sessionManager:        sessions.NewSessionManager(redisClient, db, logger, gracePeriod),
 		noDemandOverlays:      make(map[string]bool),
+	}
+	if db != nil {
+		mgr.db = db
 	}
 
 	// Start heartbeat goroutine to refresh connection TTLs
@@ -482,19 +487,6 @@ func (m *Manager) startDisconnectGracePeriod(overlayID string) {
 	m.gracePeriodTimers[overlayID] = timer
 }
 
-// BroadcastToOverlay sends a message to all connections in an overlay pool
-func (m *Manager) BroadcastToOverlay(overlayID string, message []byte) int {
-	m.mu.RLock()
-	pool, exists := m.pools[overlayID]
-	m.mu.RUnlock()
-
-	if !exists {
-		return 0
-	}
-
-	return pool.Broadcast(message)
-}
-
 // BroadcastToOverlayFiltered sends a message to all connections in an overlay
 // pool that the filter admits: engagement-only connections are skipped for
 // frames that are not poll/prediction updates, so a participate tab never
@@ -511,8 +503,9 @@ func (m *Manager) BroadcastToOverlayFiltered(overlayID string, message []byte, f
 	return pool.BroadcastFiltered(message, filter)
 }
 
-// BroadcastToAll sends a message to all connected clients (all overlays)
-func (m *Manager) BroadcastToAll(message []byte) int {
+// BroadcastFiltered sends a message to all connections in every overlay pool
+// that the filter admits.
+func (m *Manager) BroadcastFiltered(message []byte, filter BroadcastFilter) int {
 	m.mu.RLock()
 	pools := make([]*Pool, 0, len(m.pools))
 	for _, pool := range m.pools {
@@ -522,7 +515,7 @@ func (m *Manager) BroadcastToAll(message []byte) int {
 
 	totalSent := 0
 	for _, pool := range pools {
-		totalSent += pool.Broadcast(message)
+		totalSent += pool.BroadcastFiltered(message, filter)
 	}
 
 	return totalSent

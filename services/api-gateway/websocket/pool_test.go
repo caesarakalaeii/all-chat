@@ -109,3 +109,37 @@ func TestBroadcastFiltered_EngagementOnlyOwnerGetsNoModFrame(t *testing.T) {
 		t.Errorf("engagement-only owner socket received a mod_action frame: %s", got)
 	}
 }
+
+// A platform_status frame names the streamer's configured channel IDs and
+// upstream error state (pentest F2b). Viewer sockets — the anonymous public
+// path — have no consumer for it, so ExcludeViewers must drop it there while
+// the OBS overlay sockets (owner and anonymous) still receive it: the web
+// frontend's source-recovery logic depends on the overlay snapshot.
+func TestBroadcastFiltered_StatusFrameExcludedFromViewerSockets(t *testing.T) {
+	pool := NewPool("ov", zap.NewNop())
+
+	owner := newPoolTestConnection("owner-user")
+	owner.SetOwner(true)
+	anonymous := newPoolTestConnection("obs")
+	viewer := NewViewerConnection(nil, "ov", "viewer-user", nil, zap.NewNop())
+
+	pool.Add(owner)
+	pool.Add(anonymous)
+	pool.Add(viewer)
+
+	statusFrame := `{"type":"platform_status","platform":"twitch","channel_id":"UC-secret","status":"connected"}`
+	filter := BroadcastFilter{ExcludeViewers: true}
+
+	if sent := pool.BroadcastFiltered([]byte(statusFrame), filter); sent != 2 {
+		t.Fatalf("platform_status should reach both overlay sockets but no viewer socket, reached %d", sent)
+	}
+	if got := receivedFrame(t, owner); got == "" {
+		t.Error("owner overlay socket received no platform_status frame; the web overlay's source indicators would never populate")
+	}
+	if got := receivedFrame(t, anonymous); got == "" {
+		t.Error("anonymous OBS overlay socket received no platform_status frame; the OBS overlay's source indicators would never populate")
+	}
+	if got := receivedFrame(t, viewer); got != "" {
+		t.Errorf("viewer socket received a platform_status frame carrying a channel ID: %s", got)
+	}
+}

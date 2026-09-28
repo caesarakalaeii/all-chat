@@ -84,7 +84,7 @@ export const docs = {
     exampleSubscriptionHeading: 'Example (Twitch subscription)',
     statusHeading: 'Status & control messages',
     statusBody:
-      'On connect the server sends a {connected} frame, then a {status} frame per configured source so your UI can show indicators immediately. {status} data:',
+      'On connect the server sends a {connected} frame, then a {status} frame per configured source so your UI can show indicators immediately. {status} is delivered on the overlay WebSocket only — the anonymous viewer path never receives it. {status} data:',
     reconnectHeading: 'Reconnecting & heartbeats',
     reconnectPing:
       'The server periodically sends {ping}. Reply with {pong}. (Most WebSocket libraries also answer low-level ping frames automatically.)',
