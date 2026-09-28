@@ -55,8 +55,8 @@ func NewStreamerInfoHandler(log *zap.Logger, userRepo UserRepositoryInterface, d
 // neither is consumed by the extension (the Twitch entry's channel_name is
 // the only field emote autocomplete reads), and channel_id disclosed
 // non-public YouTube channel identifiers to any anonymous caller. The
-// channel_id lookup in HandleGetStreamerInfo still runs in SQL, so lookup-by-UC-id keeps
-// working; only the response payload is narrowed.
+// channel_id lookup in HandleGetStreamerInfo still runs in SQL, so
+// lookup-by-UC-id keeps working; only the response payload is narrowed.
 type PlatformInfo struct {
 	Platform    string `json:"platform"`
 	ChannelName string `json:"channel_name"`

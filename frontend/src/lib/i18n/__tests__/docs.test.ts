@@ -162,7 +162,7 @@ describe('developer API reference copy', () => {
   it('keeps the status-messages section', () => {
     expect(t('docs.api.statusHeading')).toBe('Status & control messages')
     expect(t('docs.api.statusBody', { connected: 'connected', status: 'platform_status' })).toBe(
-      'On connect the server sends a connected frame, then a platform_status frame per configured source so your UI can show indicators immediately. platform_status data:'
+      'On connect the server sends a connected frame, then a platform_status frame per configured source so your UI can show indicators immediately. platform_status is delivered on the overlay WebSocket only — the anonymous viewer path never receives it. platform_status data:'
     )
   })
 

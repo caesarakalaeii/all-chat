@@ -25,6 +25,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -1453,4 +1454,35 @@ func TestCheckRateLimitRedis_BucketKeysExpire(t *testing.T) {
 	if ttl <= 0 || ttl > 2*time.Minute {
 		t.Errorf("bucket key TTL = %v, want a positive TTL of at most 2 minutes", ttl)
 	}
+}
+
+// The bucket key embeds the current 60-second epoch (unix/60): counters roll
+// to a fresh key at each minute boundary instead of one key growing forever,
+// and the /60 in the key is what makes the window cluster-identical across
+// replicas (a raw unix timestamp would give every second its own bucket).
+func TestCheckRateLimitRedis_EpochBucketKey(t *testing.T) {
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer rdb.Close()
+	f := newTestHandler(t, nil)
+	h := f.handler.WithRateRedis(rdb)
+
+	epochBefore := time.Now().Unix() / 60
+	if !h.checkRateLimit("ov-epoch") {
+		t.Fatal("first request denied")
+	}
+	epochAfter := time.Now().Unix() / 60
+
+	prefix := "tts:ratelimit:ov-epoch:"
+	for _, key := range mr.Keys() {
+		if len(key) > len(prefix) && key[:len(prefix)] == prefix {
+			suffix := key[len(prefix):]
+			if suffix != strconv.FormatInt(epochBefore, 10) && suffix != strconv.FormatInt(epochAfter, 10) {
+				t.Errorf("bucket key suffix = %s, want the current 60s epoch (%d or %d)",
+					suffix, epochBefore, epochAfter)
+			}
+			return
+		}
+	}
+	t.Fatalf("no %s* key found in Redis", prefix)
 }

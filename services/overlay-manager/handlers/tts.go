@@ -213,24 +213,28 @@ func (h *TTSHandler) checkRateLimit(overlayID string) bool {
 // 60-second epoch bucket, so N replicas enforce the SAME per-minute cap rather
 // than N× it (a request at a bucket boundary can span two windows, so the
 // instantaneous rate is up to 2× the cap — acceptable for a billing cap).
-// Redis errors fail open to the in-process limiter — a limiter outage must not
-// take TTS down with it, and the local bucket is still a cap.
+// INCR and EXPIRE run as one atomic Lua script so a crash between them cannot
+// leave a TTL-less key behind. Redis errors fail open to the in-process
+// limiter — a limiter outage must not take TTS down with it, and the local
+// bucket is still a cap.
+var incrWithExpire = redis.NewScript(`
+local count = redis.call('INCR', KEYS[1])
+if count == 1 then
+	redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+return count
+`)
+
 func (h *TTSHandler) checkRateLimitRedis(overlayID string) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	bucket := time.Now().Unix() / 60
 	key := fmt.Sprintf("tts:ratelimit:%s:%d", overlayID, bucket)
-	count, err := h.rateRedis.Incr(ctx, key).Result()
+	count, err := incrWithExpire.Run(ctx, h.rateRedis, []string{key}, 120).Int64()
 	if err != nil {
 		h.logger.Warn("tts: redis rate limit check failed, falling back to in-process",
 			zap.String("overlay_id", overlayID), zap.Error(err))
 		return h.checkRateLimitLocal(overlayID)
-	}
-	if count == 1 {
-		if err := h.rateRedis.Expire(ctx, key, 2*time.Minute).Err(); err != nil {
-			h.logger.Warn("tts: redis rate limit expire failed; bucket key may linger",
-				zap.String("overlay_id", overlayID), zap.Error(err))
-		}
 	}
 	return count <= int64(ttsRateLimitPerMinute)
 }

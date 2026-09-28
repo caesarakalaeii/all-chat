@@ -259,10 +259,11 @@ func (s *StatusSubscriber) broadcastStatusToRelevantOverlays(ctx context.Context
 	for _, overlayID := range overlayIDs {
 		sources, err := s.sourceResolver.GetOverlaySources(ctx, overlayID)
 		if err != nil {
-			s.logger.Warn("Failed to get overlay sources, sending status anyway",
+			// Sending anyway would route one foreign channel's status to an
+			// unrelated overlay — the exact cross-tenant leak F2a closes.
+			s.logger.Warn("Failed to get overlay sources, skipping status delivery",
 				zap.String("overlay_id", overlayID),
 				zap.Error(err))
-			totalSent += s.wsManager.BroadcastToOverlayFiltered(overlayID, msgJSON, statusBroadcastFilter)
 			continue
 		}
 

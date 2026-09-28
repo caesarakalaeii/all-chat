@@ -134,12 +134,14 @@ func NewManager(logger *zap.Logger, m *metrics.GatewayMetrics, redisClient *redi
 		zap.Duration("disconnect_linger_ttl", disconnectLingerTTL),
 	)
 
+	// A typed nil *pgxpool.Pool stored in the dbExecer interface would defeat
+	// the m.db == nil guards below (interface holds a non-nil type), so only
+	// assign when a real pool was passed.
 	mgr := &Manager{
 		pools:                 make(map[string]*Pool),
 		logger:                logger,
 		metrics:               m,
 		redisClient:           redisClient,
-		db:                    db,
 		gracePeriodTimers:     make(map[string]*time.Timer),
 		disconnectGracePeriod: gracePeriod,
 		heartbeatInterval:     heartbeatInterval,
@@ -148,6 +150,9 @@ func NewManager(logger *zap.Logger, m *metrics.GatewayMetrics, redisClient *redi
 		stopHeartbeat:         make(chan struct{}),
 		sessionManager:        sessions.NewSessionManager(redisClient, db, logger, gracePeriod),
 		noDemandOverlays:      make(map[string]bool),
+	}
+	if db != nil {
+		mgr.db = db
 	}
 
 	// Start heartbeat goroutine to refresh connection TTLs
