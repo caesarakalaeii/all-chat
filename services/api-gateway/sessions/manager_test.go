@@ -18,7 +18,9 @@ package sessions
 
 import (
 	"context"
+	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -163,9 +165,10 @@ func TestRefreshTTLs(t *testing.T) {
 // TestEnsureSession_ConcurrentCallsCreateExactlyOneSession is the regression
 // test for the two-WebSockets-at-once race: both callers used to pass the
 // exists-check before either wrote the hash, and the second INSERT left an
-// orphaned ACTIVE stream_sessions row that nothing ever completes. With the
-// HSetNX claim, N concurrent calls must converge on ONE session_id and one
-// started_at — the winner's values, untouched by the losers.
+// orphaned ACTIVE stream_sessions row that nothing ever completes. The claim
+// guarantees exactly one well-formed hash and (via the nil pool) at most one
+// DB insert; the per-caller values are interchangeable, so the assertions
+// check shape, not which caller won.
 func TestEnsureSession_ConcurrentCallsCreateExactlyOneSession(t *testing.T) {
 	mr := miniredis.RunT(t)
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
@@ -196,11 +199,10 @@ func TestEnsureSession_ConcurrentCallsCreateExactlyOneSession(t *testing.T) {
 		}
 	}
 	key := SessionKeyPrefix + "race-overlay"
-	// The winner's Redis hash must be the only session state: exactly one
-	// session_id / started_at pair, the winner's values, untouched by the
-	// losers. A loser overwriting either would reset the "connected since"
-	// timestamp and (worse) write its own session_id, producing the
-	// orphaned second DB row this test guards against.
+	// Exactly one well-formed session hash must exist (see the doc comment:
+	// per-caller values are interchangeable, so shape is the contract). A
+	// second writer would leave extra fields or clobber state; a loser that
+	// reached the DB path would have panicked on the nil pool above.
 	fields, err := client.HGetAll(ctx, key).Result()
 	if err != nil {
 		t.Fatalf("session hash must be readable: %v", err)
@@ -218,5 +220,71 @@ func TestEnsureSession_ConcurrentCallsCreateExactlyOneSession(t *testing.T) {
 	}
 	if fields["started_at"] == "" || fields["event_count"] != "0" {
 		t.Fatalf("winner's started_at and event_count must survive: %v", fields)
+	}
+}
+
+// TestEnsureSession_ReleasesClaimWhenPipelineFails guards the cleanup path:
+// the claim wins, then the session-hash pipeline fails (here: Redis errors
+// are injected between HSetNX and the pipeline via a go-redis hook, since
+// miniredis cannot fail a command on demand for the second call only). The
+// half-written key must be deleted, and the next call must be able to claim
+// and complete a fresh session. Without the release Del the key would strand
+// forever with session_id and no TTL — the exact stuck state the pipeline-
+// failure cleanup exists to prevent.
+func TestEnsureSession_ReleasesClaimWhenPipelineFails(t *testing.T) {
+	mr := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer client.Close()
+	sm := NewSessionManager(client, nil, zap.NewNop(), time.Minute)
+	ctx := context.Background()
+	key := SessionKeyPrefix + "fail-overlay"
+
+	var failPipeline atomic.Bool
+	client.AddHook(&releaseTestHook{fail: &failPipeline})
+
+	// First call: claim succeeds, then the pipeline fails.
+	failPipeline.Store(true)
+	if err := sm.EnsureSession(ctx, "fail-overlay"); err == nil {
+		t.Fatal("expected error when session pipeline fails")
+	}
+	if mr.Exists(key) {
+		t.Fatal("half-written session key must be deleted after pipeline failure")
+	}
+
+	// Second call: Redis works again; a full session must be claimable.
+	failPipeline.Store(false)
+	if err := sm.EnsureSession(ctx, "fail-overlay"); err != nil {
+		t.Fatalf("expected retry to succeed after cleanup, got %v", err)
+	}
+	if !mr.Exists(key) {
+		t.Fatal("session key must exist after successful retry")
+	}
+	if state := mr.HGet(key, "state"); state != "ACTIVE" {
+		t.Fatalf("retried session must be ACTIVE, got %q", state)
+	}
+}
+
+// releaseTestHook fails the first pipeline after the HSetNX claim so the
+// cleanup path runs. EnsureSession issues: Exists, HGet, HSetNX, then a
+// pipeline (HSet x3 + Expire). Failing every PipelineExec call while the
+// flag is set deterministically breaks only the pipeline.
+type releaseTestHook struct {
+	fail *atomic.Bool
+}
+
+func (h *releaseTestHook) DialHook(next redis.DialHook) redis.DialHook {
+	return next
+}
+
+func (h *releaseTestHook) ProcessHook(next redis.ProcessHook) redis.ProcessHook {
+	return next
+}
+
+func (h *releaseTestHook) ProcessPipelineHook(next redis.ProcessPipelineHook) redis.ProcessPipelineHook {
+	return func(ctx context.Context, cmds []redis.Cmder) error {
+		if h.fail.Load() {
+			return fmt.Errorf("injected pipeline failure")
+		}
+		return next(ctx, cmds)
 	}
 }
