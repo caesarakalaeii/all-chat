@@ -29,7 +29,12 @@ const (
 	// KindInvalidRequest is 400/404/422 — a malformed request. Not retryable; it
 	// fails identically on retry.
 	KindInvalidRequest
-	// KindRetryable is a transient HTTP status (429/5xx). Retryable.
+	// KindBusy is 429 — the gateway deliberately refuses hobby-project traffic
+	// while production load is high. Not retried: the condition lasts minutes to
+	// hours, far beyond what a backoff loop spans, and retrying would defeat the
+	// point of the gate.
+	KindBusy
+	// KindRetryable is a transient HTTP status (408/425/5xx). Retryable.
 	KindRetryable
 	// KindUnavailable is a transport-level failure (connection refused, timeout).
 	// Retryable.
@@ -42,6 +47,8 @@ func (k Kind) String() string {
 		return "auth"
 	case KindInvalidRequest:
 		return "invalid_request"
+	case KindBusy:
+		return "busy"
 	case KindRetryable:
 		return "retryable"
 	case KindUnavailable:
@@ -73,6 +80,8 @@ func mapStatus(status int, maskedBody string) *APIError {
 		return &APIError{Kind: KindAuth, Status: status, Message: maskedBody}
 	case status == 400 || status == 404 || status == 422:
 		return &APIError{Kind: KindInvalidRequest, Status: status, Message: maskedBody}
+	case status == 429:
+		return &APIError{Kind: KindBusy, Status: status, Message: maskedBody}
 	case isRetryableStatus(status):
 		return &APIError{Kind: KindRetryable, Status: status, Message: maskedBody}
 	default:
@@ -83,7 +92,7 @@ func mapStatus(status int, maskedBody string) *APIError {
 // isRetryableStatus reports whether an HTTP status warrants a retry.
 func isRetryableStatus(s int) bool {
 	switch s {
-	case 408, 425, 429, 500, 502, 503, 504:
+	case 408, 425, 500, 502, 503, 504:
 		return true
 	}
 	return false
