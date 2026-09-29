@@ -170,9 +170,12 @@ func TestEnsureSession_ConcurrentCallsCreateExactlyOneSession(t *testing.T) {
 	mr := miniredis.RunT(t)
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	defer client.Close()
-	// db is nil on purpose: a live Postgres is out of reach here (no
-	// testcontainers in this module), and the DB write only happens for the
-	// claim winner — what the Redis hash proves below.
+	// db is nil on purpose and LOAD-BEARING: a live Postgres is out of reach
+	// here (no testcontainers in this module), and on pre-fix code every
+	// goroutine that wins the exists-check race reaches sm.db.Exec — the nil
+	// pool is what panics and fails the test. The Redis hash below proves
+	// what the winner wrote; do not swap db for a mock without asserting
+	// insert counts instead.
 	sm := NewSessionManager(client, nil, zap.NewNop(), time.Minute)
 	ctx := context.Background()
 
@@ -193,16 +196,27 @@ func TestEnsureSession_ConcurrentCallsCreateExactlyOneSession(t *testing.T) {
 		}
 	}
 	key := SessionKeyPrefix + "race-overlay"
-	sessionID := mr.HGet(key, "session_id")
+	// The winner's Redis hash must be the only session state: exactly one
+	// session_id / started_at pair, the winner's values, untouched by the
+	// losers. A loser overwriting either would reset the "connected since"
+	// timestamp and (worse) write its own session_id, producing the
+	// orphaned second DB row this test guards against.
+	fields, err := client.HGetAll(ctx, key).Result()
+	if err != nil {
+		t.Fatalf("session hash must be readable: %v", err)
+	}
+	if len(fields) != 4 {
+		t.Fatalf("session hash must have exactly 4 fields (session_id, started_at, state, event_count), got %d: %v", len(fields), fields)
+	}
+	sessionID := fields["session_id"]
 	if sessionID == "" {
 		t.Fatal("session_id must be set by the claim winner")
 	}
-
-	// The winner's started_at must survive: a loser overwriting it would reset
-	// the "connected since" timestamp and (worse) write its own session_id,
-	// producing the orphaned second DB row this test guards against.
-	startedAt := mr.HGet(key, "started_at")
-	if startedAt == "" {
-		t.Fatal("started_at must be set once by the winner")
+	state := fields["state"]
+	if state != "ACTIVE" {
+		t.Fatalf("state must be the winner's ACTIVE, got %q", state)
+	}
+	if fields["started_at"] == "" || fields["event_count"] != "0" {
+		t.Fatalf("winner's started_at and event_count must survive: %v", fields)
 	}
 }
