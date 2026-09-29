@@ -89,8 +89,11 @@ spec:
               value: "1485959612334346342"
             - name: DISCORD_GUILD_ID
               value: "1441528700259663884"
-            # --- Local LLM (OpenAI-compatible). Point BASE_URL at your in-cluster model
-            #     server; MODEL must be a model that server serves. API key optional. ---
+            # --- Local LLM (vLLM, OpenAI-compatible). BASE_URL is the vLLM server root
+            #     (client appends /v1/chat/completions); MODEL must be one of the
+            #     --served-model-name values. API key = vLLM access key, sent as
+            #     "Authorization: Bearer <key>"; make the key REQUIRED once the key
+            #     exists and drop `optional: true` below. ---
             - name: LOCAL_LLM_BASE_URL
               value: "http://local-llm.allchat.svc.cluster.local:8000"
             - name: LOCAL_LLM_MODEL
