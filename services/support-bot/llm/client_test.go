@@ -159,3 +159,25 @@ func TestNewRejectsBadAPIKey(t *testing.T) {
 		t.Fatal("API key with newline should be rejected")
 	}
 }
+
+// The gateway 429s hobby-project traffic deliberately (production load gate).
+// It must come back immediately as a KindBusy APIError, not be retried: the
+// condition lasts minutes-to-hours and retrying would hammer the gate.
+func TestChatDoesNotRetry429(t *testing.T) {
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"error":{"message":"hobby traffic paused"}}`))
+	}))
+	defer srv.Close()
+
+	_, err := testClient(t, srv.URL).Chat(context.Background(), ChatRequest{Messages: []Message{TextMessage(RoleUser, "hi")}})
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) || apiErr.Kind != KindBusy || apiErr.Status != http.StatusTooManyRequests {
+		t.Fatalf("expected KindBusy 429 APIError, got %v", err)
+	}
+	if n := atomic.LoadInt32(&calls); n != 1 {
+		t.Fatalf("429 must not be retried, got %d calls", n)
+	}
+}

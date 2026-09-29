@@ -335,6 +335,10 @@ func (b *Bot) answer(uid, channelID, question string, history []string) string {
 			if errors.Is(err, context.DeadlineExceeded) {
 				return fmt.Sprintf("Sorry, I could not finish your question within my %s limit. Please narrow the question, split it into smaller asks, or ask for the research to be budgeted across several answers.", b.cfg.OverallTimeout)
 			}
+			var apiErr *llm.APIError
+			if errors.As(err, &apiErr) && apiErr.Kind == llm.KindBusy {
+				return "The AI backend is currently pausing hobby-project traffic because the production system is under load. Nothing is wrong — please try again later, when capacity frees up."
+			}
 			return "Sorry, something went wrong while processing your question. Please try again, or check the bot logs."
 		}
 	}

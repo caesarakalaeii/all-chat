@@ -52,6 +52,19 @@ func newTestBot(t *testing.T, client llm.ChatClient) *Bot {
 	}
 }
 
+// The gateway 429s hobby-project traffic while production load is high; that is a
+// capacity pause, and the reply must say so instead of claiming something broke.
+func TestAnswerReportsBusyAsCapacityPause(t *testing.T) {
+	b := newTestBot(t, &failingClient{err: &llm.APIError{Kind: llm.KindBusy, Status: 429, Message: "too many requests"}})
+	got := b.answer("1", "c", "question", nil)
+	if !strings.Contains(got, "under load") {
+		t.Fatalf("expected capacity-pause reply, got: %q", got)
+	}
+	if strings.Contains(got, "something went wrong") {
+		t.Fatalf("busy misreported as unknown fault: %q", got)
+	}
+}
+
 // A deadline-exceeded run must be reported as a timeout with the limit in the
 // reply, not as an unknown fault (the failure #818 fixed for the old TS bot).
 func TestAnswerReportsTimeoutAsTimeout(t *testing.T) {
