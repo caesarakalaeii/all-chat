@@ -201,8 +201,10 @@ finding independently verified, surfaced 7 defects — all fixed and regression-
 ## Rollout ordering
 
 1. Merge this all-chat PR → CI builds `ghcr.io/caesarakalaeii/allchat-support-bot:main`.
-2. Add the `SUPPORT_BOT_LLM_API_KEY` secret (if used) and confirm the local LLM service is
-   reachable in-cluster at the configured `LOCAL_LLM_BASE_URL`.
+2. Add the `SUPPORT_BOT_LLM_API_KEY` secret (the vLLM access key, sent as
+   `Authorization: Bearer <key>`) and confirm the vLLM service is reachable in-cluster at
+   the configured `LOCAL_LLM_BASE_URL`, with `LOCAL_LLM_MODEL` matching one of its
+   `--served-model-name` values.
 3. Merge the caesar-deployment PR → ArgoCD syncs the new env/probes; Keel rolls the image.
 4. Verify: `/support` answers as support (redacted), an allow-listed maintainer gets admin
    tools, and `github_write` opens a PR (never a push to `main`).

@@ -53,7 +53,7 @@ the full list. Key variables:
 | Variable | Purpose |
 |---|---|
 | `DISCORD_BOT_TOKEN` / `DISCORD_CLIENT_ID` / `DISCORD_GUILD_ID` | Discord bot + slash-command registration |
-| `LOCAL_LLM_BASE_URL` / `LOCAL_LLM_MODEL` / `LOCAL_LLM_API_KEY` | OpenAI-compatible endpoint (API key optional) |
+| `LOCAL_LLM_BASE_URL` / `LOCAL_LLM_MODEL` / `LOCAL_LLM_API_KEY` | vLLM endpoint (OpenAI-compatible); key sent as `Authorization: Bearer <key>` |
 | `SUPPORT_BOT_ADMIN_DISCORD_IDS` | Comma-separated maintainer UIDs → ADMIN |
 | `GITHUB_TOKEN` / `GITHUB_OWNER` / `GITHUB_BOT_LOGIN` | GitHub tools (owner default `caesarakalaeii`) |
 | `GRAFANA_URL` / `GRAFANA_SERVICE_ACCOUNT_TOKEN` | Enables the Grafana tools |

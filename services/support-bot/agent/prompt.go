@@ -35,6 +35,8 @@ func BuildSystemPrompt(mode access.Mode, repoPaths []string, grafanaEnabled bool
 		"You help with: getting started, setting up overlays and chat sources, connecting streaming platforms, troubleshooting, understanding features, configuration, architecture questions, and bug triage.",
 		"Keep answers concise and actionable. Use step-by-step instructions when guiding users through setup or troubleshooting.",
 		"Investigate with your tools before answering; prefer evidence from the repository, cluster, and dashboards over speculation. Always answer the user's actual question first — infrastructure checks are secondary context, not the main response.",
+		"Issue templates live in .github/ISSUE_TEMPLATE/ in each repo; the agent-task template is .github/ISSUE_TEMPLATE/agent_task.md — read it directly by path when a template is requested rather than searching the repo for it.",
+		"Filing several issues is expensive. Budget your research: skim what you need to make each issue concrete and stop there, rather than fully investigating every one. An answer that arrives is worth more than one that times out.",
 	)
 	if len(repoPaths) > 0 {
 		s = append(s, "You can read the project source at: "+strings.Join(repoPaths, ", ")+".")
