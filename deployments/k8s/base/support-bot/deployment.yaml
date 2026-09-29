@@ -112,7 +112,7 @@ spec:
             - name: GITHUB_OWNER
               value: "caesarakalaeii"
             - name: GITHUB_BOT_LOGIN
-              value: "REPLACE_WITH_BOT_GITHUB_LOGIN"
+              value: "caesarakalaeii"
             - name: ALL_CHAT_REPO_PATH
               value: "/repos/all-chat"
             - name: ALL_CHAT_EXTENSION_REPO_PATH
