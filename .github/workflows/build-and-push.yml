@@ -323,6 +323,7 @@ jobs:
           # Every Go service under services/ belongs here. tiktok-listener is
           # deliberately absent: it is a Node service and has no go.mod. Verify with:
           #   for d in services/*/; do [ -f "$d/go.mod" ] && basename "$d"; done
+          - support-bot
 
     steps:
       - uses: actions/checkout@v7
@@ -340,61 +341,6 @@ jobs:
           cd services/${{ matrix.service }}
           go mod download
           go test -v -short ./...
-
-  test-node:
-    runs-on: ubuntu-latest
-    needs: detect-changes
-    if: github.event_name == 'pull_request' && needs.detect-changes.outputs.code == 'true'
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: '22'
-          cache: 'npm'
-          cache-dependency-path: services/support-bot/package-lock.json
-
-      - name: Run tests for support-bot
-        run: |
-          cd services/support-bot
-          npm ci
-          npm test
-
-  # TikTok Node suites (tiktok-listener, tiktok-signer). Separate job rather
-  # than a test-node matrix: test-node is a required branch-protection context
-  # and a matrix would rename it to `test-node (<service>)`, leaving the bare
-  # check forever pending (same trap the Go test matrix comment above avoids).
-  test-tiktok-node:
-    runs-on: ubuntu-latest
-    needs: detect-changes
-    if: github.event_name == 'pull_request' && needs.detect-changes.outputs.code == 'true'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # tiktok-listener mirrors Chrome's TLS ClientHello via
-          # tls-impersonate; the full extension set needs Node >= 26.4
-          # (its Dockerfile floor). tiktok-signer stays on its image's Node 22.
-          - service: tiktok-listener
-            node: '26'
-          - service: tiktok-signer
-            node: '22'
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: ${{ matrix.node }}
-          cache: 'npm'
-          cache-dependency-path: services/${{ matrix.service }}/package-lock.json
-
-      - name: Run tests for ${{ matrix.service }}
-        run: |
-          cd services/${{ matrix.service }}
-          npm ci
-          npm test
 
   # engagement-service authz/durability regression tests (idor_test, round5_test,
   # native_mirror_test) are `//go:build integration` and need a real Postgres with the
