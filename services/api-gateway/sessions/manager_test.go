@@ -242,7 +242,15 @@ func TestEnsureSession_ReleasesClaimWhenPipelineFails(t *testing.T) {
 	var failPipeline atomic.Bool
 	client.AddHook(&releaseTestHook{fail: &failPipeline})
 
-	// First call: claim succeeds, then the pipeline fails.
+	// Warm the connection before arming the flag: go-redis routes its
+	// connection-init handshake through ProcessPipelineHook too, so on a
+	// cold client the injected failure would kill the very first Exists
+	// command and EnsureSession would never reach the claim.
+	if err := client.Exists(ctx, "warmup").Err(); err != nil {
+		t.Fatalf("connection warm-up failed: %v", err)
+	}
+
+	// First call: claim succeeds, then the session pipeline fails.
 	failPipeline.Store(true)
 	if err := sm.EnsureSession(ctx, "fail-overlay"); err == nil {
 		t.Fatal("expected error when session pipeline fails")
@@ -264,10 +272,11 @@ func TestEnsureSession_ReleasesClaimWhenPipelineFails(t *testing.T) {
 	}
 }
 
-// releaseTestHook fails the first pipeline after the HSetNX claim so the
-// cleanup path runs. EnsureSession issues: Exists, HGet, HSetNX, then a
-// pipeline (HSet x3 + Expire). Failing every PipelineExec call while the
-// flag is set deterministically breaks only the pipeline.
+// releaseTestHook fails every pipeline while the flag is set, so the test
+// can break the session-hash pipeline right after a successful HSetNX claim
+// (single commands pass through untouched). The connection must already be
+// warm when the flag is armed — the go-redis init handshake also runs
+// through ProcessPipelineHook.
 type releaseTestHook struct {
 	fail *atomic.Bool
 }
