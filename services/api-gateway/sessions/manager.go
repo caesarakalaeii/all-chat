@@ -156,6 +156,9 @@ func (sm *SessionManager) EnsureSession(ctx context.Context, overlayID string) e
 
 	sessionJSON, err := json.Marshal(session)
 	if err != nil {
+		// Unreachable for SessionInfo (plain string/time/int fields), but
+		// the claim is already held: release it so the key cannot strand.
+		sm.redis.Del(context.WithoutCancel(ctx), key)
 		return fmt.Errorf("failed to marshal session: %w", err)
 	}
 
@@ -173,7 +176,9 @@ func (sm *SessionManager) EnsureSession(ctx context.Context, overlayID string) e
 		// started_at, state or TTL) and every later call would treat the key
 		// as an active session forever. Deleting lets the next reconnect
 		// claim again.
-		if delErr := sm.redis.Del(ctx, key).Err(); delErr != nil {
+		// context.WithoutCancel: if Exec failed because ctx was cancelled,
+		// the cleanup Del must still run or the half-written key sticks.
+		if delErr := sm.redis.Del(context.WithoutCancel(ctx), key).Err(); delErr != nil {
 			sm.logger.Error("Failed to release session claim after Redis write failure",
 				zap.String("overlay_id", overlayID),
 				zap.Error(delErr),
