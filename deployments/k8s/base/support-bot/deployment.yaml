@@ -96,7 +96,7 @@ spec:
             - name: LOCAL_LLM_BASE_URL
               value: "https://coding-gateway.tools.sipgate.net"
             - name: LOCAL_LLM_MODEL
-              value: "sipgate-coding-pro"
+              value: "zai-org/GLM-5.3-verda"
             - name: LOCAL_LLM_API_KEY
               valueFrom:
                 secretKeyRef:
