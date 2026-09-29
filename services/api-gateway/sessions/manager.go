@@ -102,7 +102,13 @@ func NewSessionManager(redis *redis.Client, db *pgxpool.Pool, logger *zap.Logger
 	}
 }
 
-// EnsureSession creates a session if none exists for this overlay
+// EnsureSession creates a session if none exists for this overlay.
+//
+// Creation is claimed atomically with HSetNX on session_id, so two concurrent
+// calls for the same overlay (e.g. two WebSockets connecting at once) produce
+// exactly one session: the loser sees the winner's claim and returns without
+// touching Redis or the database. Without the claim both calls raced the
+// exists-check and left a second orphaned ACTIVE row in stream_sessions.
 func (sm *SessionManager) EnsureSession(ctx context.Context, overlayID string) error {
 	key := SessionKeyPrefix + overlayID
 
@@ -127,9 +133,9 @@ func (sm *SessionManager) EnsureSession(ctx context.Context, overlayID string) e
 	startedAt := time.Now().UTC()
 
 	session := SessionInfo{
-		SessionID: sessionID,
-		StartedAt: startedAt,
-		State:     "ACTIVE",
+		SessionID:  sessionID,
+		StartedAt:  startedAt,
+		State:      "ACTIVE",
 		EventCount: 0,
 	}
 
@@ -138,9 +144,23 @@ func (sm *SessionManager) EnsureSession(ctx context.Context, overlayID string) e
 		return fmt.Errorf("failed to marshal session: %w", err)
 	}
 
-	// Store session in Redis as hash
+	// Atomically claim creation: only the first caller to arrive at an empty key
+	// wins. A concurrent EnsureSession that already claimed the field returns 0
+	// here and takes the loser path below.
+	claimed, err := sm.redis.HSetNX(ctx, key, "session_id", sessionID).Result()
+	if err != nil {
+		return fmt.Errorf("failed to claim session: %w", err)
+	}
+	if !claimed {
+		// Lost the race: the winner (or an interloper between the Exists check
+		// and the claim) owns the session. Nothing to write.
+		return nil
+	}
+
+	// Store session in Redis as hash. session_id is already set by the claim;
+	// these writes only happen on the winner, so they cannot clobber another
+	// caller's session.
 	pipe := sm.redis.Pipeline()
-	pipe.HSet(ctx, key, "session_id", sessionID)
 	pipe.HSet(ctx, key, "started_at", startedAt.Format(time.RFC3339))
 	pipe.HSet(ctx, key, "state", "ACTIVE")
 	pipe.HSet(ctx, key, "event_count", 0)
@@ -149,19 +169,19 @@ func (sm *SessionManager) EnsureSession(ctx context.Context, overlayID string) e
 	if _, err := pipe.Exec(ctx); err != nil {
 		return fmt.Errorf("failed to create session in Redis: %w", err)
 	}
-
-	// Create session record in database
-	query := `
-		INSERT INTO stream_sessions (id, overlay_id, started_at, state)
-		VALUES ($1, $2, $3, $4)
-	`
-	if _, err := sm.db.Exec(ctx, query, sessionID, overlayID, startedAt, "ACTIVE"); err != nil {
-		sm.logger.Error("Failed to create session in database",
-			zap.String("session_id", sessionID),
-			zap.String("overlay_id", overlayID),
-			zap.Error(err),
-		)
-		// Continue even if DB insert fails - Redis is source of truth
+	if sm.db != nil {
+		query := `
+			INSERT INTO stream_sessions (id, overlay_id, started_at, state)
+			VALUES ($1, $2, $3, $4)
+		`
+		if _, err := sm.db.Exec(ctx, query, sessionID, overlayID, startedAt, "ACTIVE"); err != nil {
+			sm.logger.Error("Failed to create session in database",
+				zap.String("session_id", sessionID),
+				zap.String("overlay_id", overlayID),
+				zap.Error(err),
+			)
+			// Continue even if DB insert fails - Redis is source of truth
+		}
 	}
 
 	sm.logger.Info("Created new session",

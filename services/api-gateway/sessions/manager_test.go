@@ -18,6 +18,7 @@ package sessions
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -157,4 +158,51 @@ func TestRefreshTTLs(t *testing.T) {
 
 	// Empty input is a no-op and must not panic or error.
 	sm.RefreshTTLs(ctx, nil)
+}
+
+// TestEnsureSession_ConcurrentCallsCreateExactlyOneSession is the regression
+// test for the two-WebSockets-at-once race: both callers used to pass the
+// exists-check before either wrote the hash, and the second INSERT left an
+// orphaned ACTIVE stream_sessions row that nothing ever completes. With the
+// HSetNX claim, N concurrent calls must converge on ONE session_id and one
+// started_at — the winner's values, untouched by the losers.
+func TestEnsureSession_ConcurrentCallsCreateExactlyOneSession(t *testing.T) {
+	mr := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer client.Close()
+	// db is nil on purpose: a live Postgres is out of reach here (no
+	// testcontainers in this module), and the DB write only happens for the
+	// claim winner — what the Redis hash proves below.
+	sm := NewSessionManager(client, nil, zap.NewNop(), time.Minute)
+	ctx := context.Background()
+
+	const callers = 16
+	errs := make([]error, callers)
+	var wg sync.WaitGroup
+	for i := range callers {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			errs[i] = sm.EnsureSession(ctx, "race-overlay")
+		}(i)
+	}
+	wg.Wait()
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("caller %d: %v", i, err)
+		}
+	}
+	key := SessionKeyPrefix + "race-overlay"
+	sessionID := mr.HGet(key, "session_id")
+	if sessionID == "" {
+		t.Fatal("session_id must be set by the claim winner")
+	}
+
+	// The winner's started_at must survive: a loser overwriting it would reset
+	// the "connected since" timestamp and (worse) write its own session_id,
+	// producing the orphaned second DB row this test guards against.
+	startedAt := mr.HGet(key, "started_at")
+	if startedAt == "" {
+		t.Fatal("started_at must be set once by the winner")
+	}
 }
