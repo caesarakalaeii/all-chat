@@ -497,7 +497,7 @@ All services have detailed READMEs: [services/*/README.md](../../services/)
 ## Current Status
 
 **Production** (2026-05-27):
-- ✅ 17 services in `services/` (14 Go services + 3 TypeScript/Node services: `discord-bot`, `support-bot`, `tiktok-listener`)
+- ✅ 17 services in `services/` (15 Go services + 2 TypeScript/Node services: `discord-bot`, `tiktok-listener`; `support-bot` was rewritten TypeScript → Go)
 - ✅ Twitch (IRC + EventSub), YouTube (Data API + InnerTube), Kick, TikTok, Discord integrations live
 - ✅ CloudNativePG deployed
 - ✅ LGTM observability stack (Loki, Grafana, Prometheus, Tempo)
