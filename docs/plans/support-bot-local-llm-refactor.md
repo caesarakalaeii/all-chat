@@ -211,8 +211,9 @@ finding independently verified, surfaced 7 defects — all fixed and regression-
 
 ## Residual risks / follow-ups
 
-- **`LOCAL_LLM_BASE_URL` / `LOCAL_LLM_MODEL` are placeholders** in the manifests — set to the
-  real in-cluster model service before deploy.
+- **vLLM endpoint**: `LOCAL_LLM_BASE_URL=https://coding-gateway.tools.sipgate.net`,
+  `LOCAL_LLM_MODEL=sipgate-coding-pro`. The access key is the sealed
+  `SUPPORT_BOT_LLM_API_KEY` (caesar-deployment: `support-bot-llm-api-key`).
 - **`push_file` content is not auto-redacted** (redacting code risks corrupting it); it relies
   on admin trust + PR review + GitHub secret scanning. Human text (titles/bodies/comments) is
   redacted.
