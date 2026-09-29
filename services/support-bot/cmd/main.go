@@ -106,7 +106,6 @@ func main() {
 		gf = grafana.New(cfg.GrafanaURL, cfg.GrafanaToken, log)
 	}
 
-	// Tool registry.
 	reg := tool.NewRegistry()
 	tools.RegisterAll(reg, tools.Deps{
 		GH:             gh,
@@ -151,7 +150,6 @@ func main() {
 	defer func() { _ = bot.Close() }()
 	log.Info("Discord bot connected")
 
-	// Health server.
 	srv := startHealthServer(cfg, dbPool, log)
 
 	quit := make(chan os.Signal, 1)

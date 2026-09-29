@@ -56,7 +56,6 @@ type Config struct {
 	LLMAPIKey    string // optional; many local servers need none
 	LLMMaxTokens int
 
-	// GitHub
 	GitHubToken    string
 	GitHubOwner    string
 	GitHubBotLogin string // login the bot authenticates as; used for edit/close authorship checks

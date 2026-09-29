@@ -82,11 +82,9 @@ func (r *Registry) canonical(name string) (string, bool) {
 }
 
 // Dispatch resolves, gates, and executes a tool call, returning a wrapped result.
-// Order is load-bearing:
-//  1. unknown name -> fail closed,
-//  2. not allowed in this mode -> fail closed (never invoked),
-//  3. invoke; any error becomes a redacted, boundary-wrapped error result,
-//  4. success -> (support mode) redact -> boundary-wrap.
+// Resolution and mode-gating happen before any invocation, so an unknown name or a
+// mode-denied tool fails closed without running; a successful result is redacted in
+// support mode and boundary-wrapped either way.
 //
 // It never returns a Go error: a tool failure or denial is data for the model, not a
 // fatal condition for the loop.
