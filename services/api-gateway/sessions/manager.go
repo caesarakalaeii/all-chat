@@ -92,7 +92,9 @@ type SessionManager struct {
 	gracePeriod time.Duration
 }
 
-// NewSessionManager creates a new session manager
+// NewSessionManager creates a new session manager. db may be nil — DB writes
+// are then skipped (this module has no testcontainers harness, so the tests
+// construct the manager without a pool); Redis is the source of truth either way.
 func NewSessionManager(redis *redis.Client, db *pgxpool.Pool, logger *zap.Logger, gracePeriod time.Duration) *SessionManager {
 	return &SessionManager{
 		redis:       redis,
@@ -139,11 +141,6 @@ func (sm *SessionManager) EnsureSession(ctx context.Context, overlayID string) e
 		EventCount: 0,
 	}
 
-	sessionJSON, err := json.Marshal(session)
-	if err != nil {
-		return fmt.Errorf("failed to marshal session: %w", err)
-	}
-
 	// Atomically claim creation: only the first caller to arrive at an empty key
 	// wins. A concurrent EnsureSession that already claimed the field returns 0
 	// here and takes the loser path below.
@@ -157,6 +154,11 @@ func (sm *SessionManager) EnsureSession(ctx context.Context, overlayID string) e
 		return nil
 	}
 
+	sessionJSON, err := json.Marshal(session)
+	if err != nil {
+		return fmt.Errorf("failed to marshal session: %w", err)
+	}
+
 	// Store session in Redis as hash. session_id is already set by the claim;
 	// these writes only happen on the winner, so they cannot clobber another
 	// caller's session.
@@ -167,6 +169,16 @@ func (sm *SessionManager) EnsureSession(ctx context.Context, overlayID string) e
 	pipe.Expire(ctx, key, SessionTTL)
 
 	if _, err := pipe.Exec(ctx); err != nil {
+		// Release the claim: the hash is half-written (session_id without
+		// started_at, state or TTL) and every later call would treat the key
+		// as an active session forever. Deleting lets the next reconnect
+		// claim again.
+		if delErr := sm.redis.Del(ctx, key).Err(); delErr != nil {
+			sm.logger.Error("Failed to release session claim after Redis write failure",
+				zap.String("overlay_id", overlayID),
+				zap.Error(delErr),
+			)
+		}
 		return fmt.Errorf("failed to create session in Redis: %w", err)
 	}
 	if sm.db != nil {
