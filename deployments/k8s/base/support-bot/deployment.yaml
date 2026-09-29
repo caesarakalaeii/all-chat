@@ -92,12 +92,11 @@ spec:
             # --- Local LLM (vLLM, OpenAI-compatible). BASE_URL is the vLLM server root
             #     (client appends /v1/chat/completions); MODEL must be one of the
             #     --served-model-name values. API key = vLLM access key, sent as
-            #     "Authorization: Bearer <key>"; make the key REQUIRED once the key
-            #     exists and drop `optional: true` below. ---
+            #     "Authorization: Bearer <key>". ---
             - name: LOCAL_LLM_BASE_URL
-              value: "http://local-llm.allchat.svc.cluster.local:8000"
+              value: "https://coding-gateway.tools.sipgate.net"
             - name: LOCAL_LLM_MODEL
-              value: "REPLACE_WITH_SERVED_MODEL_NAME"
+              value: "sipgate-coding-pro"
             - name: LOCAL_LLM_API_KEY
               valueFrom:
                 secretKeyRef:
