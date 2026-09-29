@@ -18,6 +18,9 @@ package sessions
 
 import (
 	"context"
+	"fmt"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -157,4 +160,140 @@ func TestRefreshTTLs(t *testing.T) {
 
 	// Empty input is a no-op and must not panic or error.
 	sm.RefreshTTLs(ctx, nil)
+}
+
+// TestEnsureSession_ConcurrentCallsCreateExactlyOneSession is the regression
+// test for the two-WebSockets-at-once race: both callers used to pass the
+// exists-check before either wrote the hash, and the second INSERT left an
+// orphaned ACTIVE stream_sessions row that nothing ever completes. The claim
+// guarantees exactly one well-formed hash and (via the nil pool) at most one
+// DB insert; the per-caller values are interchangeable, so the assertions
+// check shape, not which caller won.
+func TestEnsureSession_ConcurrentCallsCreateExactlyOneSession(t *testing.T) {
+	mr := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer client.Close()
+	// db is nil on purpose and LOAD-BEARING: a live Postgres is out of reach
+	// here (no testcontainers in this module), and on pre-fix code every
+	// goroutine that wins the exists-check race reaches sm.db.Exec — the nil
+	// pool is what panics and fails the test. The Redis hash below proves
+	// what the winner wrote; do not swap db for a mock without asserting
+	// insert counts instead.
+	sm := NewSessionManager(client, nil, zap.NewNop(), time.Minute)
+	ctx := context.Background()
+
+	const callers = 16
+	errs := make([]error, callers)
+	var wg sync.WaitGroup
+	for i := range callers {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			errs[i] = sm.EnsureSession(ctx, "race-overlay")
+		}(i)
+	}
+	wg.Wait()
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("caller %d: %v", i, err)
+		}
+	}
+	key := SessionKeyPrefix + "race-overlay"
+	// Exactly one well-formed session hash must exist (see the doc comment:
+	// per-caller values are interchangeable, so shape is the contract). A
+	// second writer would leave extra fields or clobber state; a loser that
+	// reached the DB path would have panicked on the nil pool above.
+	fields, err := client.HGetAll(ctx, key).Result()
+	if err != nil {
+		t.Fatalf("session hash must be readable: %v", err)
+	}
+	if len(fields) != 4 {
+		t.Fatalf("session hash must have exactly 4 fields (session_id, started_at, state, event_count), got %d: %v", len(fields), fields)
+	}
+	sessionID := fields["session_id"]
+	if sessionID == "" {
+		t.Fatal("session_id must be set by the claim winner")
+	}
+	state := fields["state"]
+	if state != "ACTIVE" {
+		t.Fatalf("state must be the winner's ACTIVE, got %q", state)
+	}
+	if fields["started_at"] == "" || fields["event_count"] != "0" {
+		t.Fatalf("winner's started_at and event_count must survive: %v", fields)
+	}
+}
+
+// TestEnsureSession_ReleasesClaimWhenPipelineFails guards the cleanup path:
+// the claim wins, then the session-hash pipeline fails (here: Redis errors
+// are injected between HSetNX and the pipeline via a go-redis hook, since
+// miniredis cannot fail a command on demand for the second call only). The
+// half-written key must be deleted, and the next call must be able to claim
+// and complete a fresh session. Without the release Del the key would strand
+// forever with session_id and no TTL — the exact stuck state the pipeline-
+// failure cleanup exists to prevent.
+func TestEnsureSession_ReleasesClaimWhenPipelineFails(t *testing.T) {
+	mr := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer client.Close()
+	sm := NewSessionManager(client, nil, zap.NewNop(), time.Minute)
+	ctx := context.Background()
+	key := SessionKeyPrefix + "fail-overlay"
+
+	var failPipeline atomic.Bool
+	client.AddHook(&releaseTestHook{fail: &failPipeline})
+
+	// Warm the connection before arming the flag: go-redis routes its
+	// connection-init handshake through ProcessPipelineHook too, so on a
+	// cold client the injected failure would kill the very first Exists
+	// command and EnsureSession would never reach the claim.
+	if err := client.Exists(ctx, "warmup").Err(); err != nil {
+		t.Fatalf("connection warm-up failed: %v", err)
+	}
+
+	// First call: claim succeeds, then the session pipeline fails.
+	failPipeline.Store(true)
+	if err := sm.EnsureSession(ctx, "fail-overlay"); err == nil {
+		t.Fatal("expected error when session pipeline fails")
+	}
+	if mr.Exists(key) {
+		t.Fatal("half-written session key must be deleted after pipeline failure")
+	}
+
+	// Second call: Redis works again; a full session must be claimable.
+	failPipeline.Store(false)
+	if err := sm.EnsureSession(ctx, "fail-overlay"); err != nil {
+		t.Fatalf("expected retry to succeed after cleanup, got %v", err)
+	}
+	if !mr.Exists(key) {
+		t.Fatal("session key must exist after successful retry")
+	}
+	if state := mr.HGet(key, "state"); state != "ACTIVE" {
+		t.Fatalf("retried session must be ACTIVE, got %q", state)
+	}
+}
+
+// releaseTestHook fails every pipeline while the flag is set, so the test
+// can break the session-hash pipeline right after a successful HSetNX claim
+// (single commands pass through untouched). The connection must already be
+// warm when the flag is armed — the go-redis init handshake also runs
+// through ProcessPipelineHook.
+type releaseTestHook struct {
+	fail *atomic.Bool
+}
+
+func (h *releaseTestHook) DialHook(next redis.DialHook) redis.DialHook {
+	return next
+}
+
+func (h *releaseTestHook) ProcessHook(next redis.ProcessHook) redis.ProcessHook {
+	return next
+}
+
+func (h *releaseTestHook) ProcessPipelineHook(next redis.ProcessPipelineHook) redis.ProcessPipelineHook {
+	return func(ctx context.Context, cmds []redis.Cmder) error {
+		if h.fail.Load() {
+			return fmt.Errorf("injected pipeline failure")
+		}
+		return next(ctx, cmds)
+	}
 }
