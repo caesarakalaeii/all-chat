@@ -24,6 +24,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -47,11 +48,14 @@ const (
 
 // Result is the outcome of a loop run. Text is the best-effort final answer even on
 // non-EndTurn stops; Effects lists side-effecting tool actions in execution order.
+// Messages is the transcript at the point the loop returned, so a caller that parks
+// a busy run can resume it instead of starting over.
 type Result struct {
 	Text       string
 	Effects    []tool.ToolEffect
 	Stop       StopReason
 	Iterations int
+	Messages   []llm.Message
 }
 
 // Config tunes the loop.
@@ -66,6 +70,13 @@ type Config struct {
 	NoProgressAbort   int
 	MaxInLoopMessages int
 	Log               *zap.Logger
+
+	// Busy handling: on a 429 (KindBusy) the loop sleeps BusyRetryDelay and
+	// re-issues the same request, at most BusyMaxWaits times, before returning
+	// the error with the transcript. A BusyMaxWaits of 0 means do not wait
+	// in-loop (the caller owns the retry).
+	BusyRetryDelay time.Duration
+	BusyMaxWaits   int
 }
 
 func (c Config) withDefaults() Config {
@@ -102,14 +113,15 @@ func Run(ctx context.Context, cfg Config, client llm.ChatClient, reg *tool.Regis
 	det := newLoopDetector(cfg.LoopWindow, cfg.RepeatThreshold)
 
 	var (
-		lastText string
-		effects  []tool.ToolEffect
-		noText   int
+		lastText  string
+		effects   []tool.ToolEffect
+		noText    int
+		busyWaits int
 	)
 
 	for iter := 0; iter < cfg.MaxIterations; iter++ {
 		if err := ctx.Err(); err != nil {
-			return Result{Text: lastText, Effects: effects, Stop: StopCancelled, Iterations: iter}, err
+			return Result{Text: lastText, Effects: effects, Stop: StopCancelled, Iterations: iter, Messages: messages}, err
 		}
 
 		req := llm.ChatRequest{Model: cfg.Model, Messages: messages, MaxTokens: cfg.MaxTokens}
@@ -121,12 +133,31 @@ func Run(ctx context.Context, cfg Config, client llm.ChatClient, reg *tool.Regis
 		resp, err := client.Chat(callCtx, req)
 		cancel()
 		if err != nil {
-			return Result{Text: lastText, Effects: effects, Stop: StopError, Iterations: iter}, err
+			// Busy (429): the gateway is refusing hobby traffic while production
+			// load is high. Sleep and re-issue the SAME request — the transcript,
+			// including any tool results, stays intact — until the waits budget
+			// runs out; then surface the error with the transcript so the caller
+			// can park and resume rather than restart.
+			var apiErr *llm.APIError
+			if errors.As(err, &apiErr) && apiErr.Kind == llm.KindBusy && busyWaits < cfg.BusyMaxWaits {
+				busyWaits++
+				if cfg.Log != nil {
+					cfg.Log.Warn("llm busy; pausing mid-session",
+						zap.Int("wait", busyWaits), zap.Int("max_waits", cfg.BusyMaxWaits))
+				}
+				if serr := sleepCtx(ctx, cfg.BusyRetryDelay); serr != nil {
+					return Result{Text: lastText, Effects: effects, Stop: StopCancelled, Iterations: iter, Messages: messages}, serr
+				}
+				iter-- // this iteration produced nothing; do not burn the budget
+				continue
+			}
+			return Result{Text: lastText, Effects: effects, Stop: StopError, Iterations: iter, Messages: messages}, err
 		}
 		if len(resp.Choices) == 0 {
-			return Result{Text: lastText, Effects: effects, Stop: StopError, Iterations: iter},
+			return Result{Text: lastText, Effects: effects, Stop: StopError, Iterations: iter, Messages: messages},
 				fmt.Errorf("llm returned no choices")
 		}
+		busyWaits = 0 // capacity returned; reset the budget for the next pause
 
 		choice := resp.Choices[0]
 		msg := choice.Message
@@ -141,10 +172,10 @@ func Run(ctx context.Context, cfg Config, client llm.ChatClient, reg *tool.Regis
 		if len(msg.ToolCalls) == 0 {
 			if strings.TrimSpace(text) == "" &&
 				(choice.FinishReason == llm.FinishLength || choice.FinishReason == llm.FinishMaxTokens) {
-				return Result{Text: lastText, Effects: effects, Stop: StopError, Iterations: iter + 1},
+				return Result{Text: lastText, Effects: effects, Stop: StopError, Iterations: iter + 1, Messages: messages},
 					fmt.Errorf("llm response truncated (max_tokens) with no content")
 			}
-			return Result{Text: lastText, Effects: effects, Stop: StopEndTurn, Iterations: iter + 1}, nil
+			return Result{Text: lastText, Effects: effects, Stop: StopEndTurn, Iterations: iter + 1, Messages: messages}, nil
 		}
 
 		// Track no-progress (tool calls but no assistant text).
@@ -189,14 +220,29 @@ func Run(ctx context.Context, cfg Config, client llm.ChatClient, reg *tool.Regis
 				cfg.Log.Warn("agent loop aborting: no textual progress",
 					zap.Int("iterations", iter+1), zap.Int("no_text_iters", noText))
 			}
-			return Result{Text: lastText, Effects: effects, Stop: StopNoProgress, Iterations: iter + 1}, nil
+			return Result{Text: lastText, Effects: effects, Stop: StopNoProgress, Iterations: iter + 1, Messages: messages}, nil
 		}
 	}
 
 	if cfg.Log != nil {
 		cfg.Log.Warn("agent loop hit max iterations", zap.Int("max", cfg.MaxIterations))
 	}
-	return Result{Text: lastText, Effects: effects, Stop: StopMaxIterations, Iterations: cfg.MaxIterations}, nil
+	return Result{Text: lastText, Effects: effects, Stop: StopMaxIterations, Iterations: cfg.MaxIterations, Messages: messages}, nil
+}
+
+// sleepCtx waits for d or until ctx is cancelled.
+func sleepCtx(ctx context.Context, d time.Duration) error {
+	if d <= 0 {
+		return ctx.Err()
+	}
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-t.C:
+		return nil
+	}
 }
 
 // wrapErr mirrors the registry's error-result wrapping for loop-internal errors

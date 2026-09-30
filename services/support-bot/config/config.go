@@ -83,6 +83,14 @@ type Config struct {
 	PerCallTimeout  time.Duration
 	OverallTimeout  time.Duration
 	MaxParallelTool int
+
+	// Busy (429) handling: the gateway refuses hobby traffic while production load
+	// is high. The agent loop pauses mid-session and resumes the same transcript;
+	// requests that stay busy past MaxWaits are parked in a queue and resumed by a
+	// background worker until BusyQueueTTL expires.
+	BusyRetryDelay time.Duration
+	BusyMaxWaits   int
+	BusyQueueTTL   time.Duration
 }
 
 // Load reads configuration from the environment, applying defaults. Required secrets
@@ -121,6 +129,10 @@ func Load() *Config {
 		GrafanaLokiDS:  getEnv("GRAFANA_LOKI_DATASOURCE", "Loki"),
 		GrafanaPromDS:  getEnv("GRAFANA_PROM_DATASOURCE", "Prometheus"),
 		GrafanaLogTail: getEnvDuration("GRAFANA_LOG_TAIL", 15*time.Minute),
+
+		BusyRetryDelay: getEnvDuration("SUPPORT_BOT_BUSY_RETRY_DELAY", time.Minute),
+		BusyMaxWaits:   getEnvInt("SUPPORT_BOT_BUSY_MAX_WAITS", 5),
+		BusyQueueTTL:   getEnvDuration("SUPPORT_BOT_BUSY_QUEUE_TTL", 4*time.Hour),
 
 		KubeNamespace: getEnv("KUBE_NAMESPACE", "allchat"),
 

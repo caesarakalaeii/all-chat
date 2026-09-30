@@ -121,13 +121,14 @@ func main() {
 
 	policy := access.NewPolicy(cfg.AdminDiscordIDs)
 	redactor := redact.NewRedactor()
-
 	agentCfg := agent.Config{
 		Model:            cfg.LLMModel,
 		MaxTokens:        cfg.LLMMaxTokens,
 		MaxIterations:    cfg.MaxIterations,
 		PerCallTimeout:   cfg.PerCallTimeout,
 		MaxParallelTools: cfg.MaxParallelTool,
+		BusyRetryDelay:   cfg.BusyRetryDelay,
+		BusyMaxWaits:     cfg.BusyMaxWaits,
 		Log:              log,
 	}
 
