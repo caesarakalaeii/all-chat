@@ -133,7 +133,9 @@ Every hop, with the file that owns it.
 9. **View model.** `toModActionEntry`
    (`frontend/src/lib/utils/overlayViewModel.ts`) turns the untyped metadata map into
    a `ModEntryData`, and `mergeAutoModResolution` appends it — folding a resolution
-   into the hold it closes.
+   into the hold it closes. A `channel.moderate` delete, timeout, ban or clear then
+   runs `mergeDeletionPair` (see "Joining an action to its effects" below), folding
+   into the `message_deletion` row for the same action.
 10. **Render.** `ActivityPanel`
     (`frontend/src/components/overlay/ActivityPanel.tsx`) merges the moderation log
     with events and system notices into one newest-first list; `ModRow` renders the
@@ -192,6 +194,49 @@ waiting" unreadable.
 `held_message_id` must be byte-identical between the two frames or step 2 fails and
 the panel shows a stale `held` row forever. Both builders take it from Twitch's
 `message_id` unmodified for that reason.
+
+## Joining an action to its effects
+
+Every Twitch moderation action in this list reaches the monitor as **two frames**:
+the `channel.moderate` mod_action (who acted) and the `channel.chat.*` deletion event
+(what was removed — one message, a user's history, or the whole chat). One action
+must render as **one** row; without the fold the Activity feed shows the same
+timeout twice, once with attribution and once mislabeled as a ban (the deletion event
+carries no duration — see ADR-0015).
+
+`mergeDeletionPair` (`frontend/src/lib/utils/overlayViewModel.ts`) folds the pair,
+whichever frame arrives first, keeping the earlier row's position and enriching it
+with the other frame's moderator, username, target ids and duration:
+
+- **delete** joins on the native message id (`target_msg_id` / `message_id`), matching
+  the oldest row with that id.
+- **timeout/ban** join on the moderated user's id (`target_user_id`), matching the
+  newest row inside a two-minute window. The fold matches across the `timeout`/`ban`
+  kinds (the deletion frame cannot tell them apart) and upgrades the row's kind to
+  `timeout` when the mod_action frame carries a duration.
+- **clear** has no target on either frame; the newest clear row inside the same
+  two-minute window is the match.
+
+Two rules keep distinct actions distinct:
+
+- A mod_action frame folds only into a row that has not yet consumed its mod_action
+  half, and only a mod_action fold marks the row `paired` — a deletion frame folding
+  in first leaves the pair open, so the pair's own mod_action echo still folds
+  whichever order the two webhooks arrive in. A Twitch double-send of a mod_action
+  still shows as its own row, and a moderator who times a user out and then bans them
+  a minute later gets two rows, one per action.
+- A deletion frame carries no new attribution, so it also folds into a completed
+  pair — its echo of the second action enriches the earlier row harmlessly, and the
+  second action's mod_action echo then appends.
+
+Frames without the join key (other platforms' deletions, replay-buffered rows)
+append, exactly as before. The monitor's own optimistic row — the entry a
+moderator's button click logs before the platform confirms — is a fold target too,
+so a monitor-initiated timeout renders as one row end to end.
+
+Known gap: on platforms whose deletions carry a `target_user_id` but have no
+mod_action half (YouTube's `batch` deletions), two distinct actions against the same
+user inside the fold window fold into one row.
 
 ## Troubleshooting
 

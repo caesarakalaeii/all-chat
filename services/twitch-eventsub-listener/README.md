@@ -148,6 +148,8 @@ which displayed message to remove and buffers the deletion until it expires.
 
 > **Limitation:** `channel.chat.clear_user_messages` carries no duration, so a timeout is reported as
 > a ban (the messages are removed either way; only the moderation-log label differs). See ADR-0015.
+> When the mod-log scopes are granted, the `channel.moderate` timeout frame supplies the duration
+> and the monitor folds the pair into one correctly labeled row (see below).
 
 ### Moderation Log (channel.moderate + AutoMod)
 
@@ -174,11 +176,16 @@ Like every event subscription here, these are created once when a channel is fir
 grant made afterwards takes effect on the next channel (re)sync — a leader change, pod restart, or
 the channel being re-added (ADR-0030 known limitation).
 
-**Delete actions carry the native message id.** The `delete` action's payload includes the removed
-message's `message_id` (EventData key `message_id`) — the same native id `channel.chat.message_delete`
-reports as `target_msg_id`. The monitor view receives a single-message delete as both frames and uses
-this id to fold them into one attributed log row; without it one delete renders as two rows, one with
-the acting moderator and one without.
+**Every action pairs with a deletion frame; the monitor folds them.** A single-message
+delete, a timeout/ban, and a full clear each reach the monitor view as two frames: the
+`channel.moderate` mod_action (who acted) and the matching `channel.chat.*` deletion
+event (what was removed). The `delete` action's payload includes the removed message's
+`message_id` (EventData key `message_id`) — the same native id
+`channel.chat.message_delete` reports as `target_msg_id` — and the `timeout`/`ban`
+actions carry `target_user_id`, the same id `channel.chat.clear_user_messages`
+reports. The monitor uses these ids to fold each pair into one attributed log row;
+without the fold one action renders as two rows (a timeout even mislabels its second
+row as a ban, since the deletion frame carries no duration).
 
 ### Platform Status Indicators
 
