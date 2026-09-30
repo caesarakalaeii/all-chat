@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tiktok-signer
+  namespace: allchat
+  labels:
+    app: tiktok-signer
+    component: signer
+    platform: tiktok
+    version: beta
+spec:
+  # Single instance: one headless browser holds the signing session, and the
+  # sign queue is sequential anyway. Scale-out needs session-sticky routing,
+  # which nothing here needs yet (ADR-0052's ceiling analysis was about the
+  # *third-party* cap, not ours).
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tiktok-signer
+  template:
+    metadata:
+      labels:
+        app: tiktok-signer
+        component: signer
+        platform: tiktok
+        version: beta
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: tiktok-signer
+        image: allchat/tiktok-signer:latest
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          # Chromium inside the container runs with --no-sandbox because the
+          # pod is already non-root with a RuntimeDefault seccomp profile and
+          # all caps dropped; the setuid sandbox cannot work here anyway.
+          capabilities:
+            drop:
+              - ALL
+          readOnlyRootFilesystem: true
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: profile
+          mountPath: /home/signer/.chrome-profile
+        ports:
+        - containerPort: 8092
+          name: http
+          protocol: TCP
+        env:
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: LOG_LEVEL
+        - name: APP_VERSION
+          value: "0.1.0-beta"
+        - name: PORT
+          value: "8092"
+        # Residential proxy support: TikTok blocks datacenter IPs. Wire these
+        # via the secret mechanism of choice when sign success rates drop.
+        - name: SIGNER_PROXY_HOST
+          value: ""
+        - name: SIGNER_PROXY_USER
+          value: ""
+        - name: SIGNER_PROXY_PASS
+          value: ""
+        resources:
+          # Chromium is the floor: a signing session idles around 250-300MiB
+          # and spikes during warm-up navigation.
+          requests:
+            memory: "512Mi"
+            cpu: "200m"
+          limits:
+            memory: "1Gi"
+            cpu: "1"
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8092
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          # The identity endpoint needs no browser session; readiness reflects
+          # the HTTP layer only. Sign availability is observed through the
+          # listener's tiktok_sign_attempts_total metrics instead.
+          httpGet:
+            path: /v1/identity
+            port: 8092
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: profile
+        emptyDir: {}
+      restartPolicy: Always

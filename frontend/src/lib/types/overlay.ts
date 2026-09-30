@@ -123,6 +123,7 @@ export interface EventSettings {
   enable_youtube_members: boolean
   enable_youtube_member_milestones: boolean
   enable_youtube_member_gifts: boolean
+  enable_youtube_subscribers: boolean
   // Kick
   enable_kick_subs: boolean
   enable_kick_gifts: boolean

@@ -141,6 +141,7 @@ const EVENT_TYPES_BY_PLATFORM = [
       'member_milestone',
       'membership_gift',
       'gift_received',
+      'subscriber',
     ],
   },
   {

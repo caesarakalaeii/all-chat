@@ -210,6 +210,13 @@ func main() {
 		logger.Fatal("Failed to start stream manager", zap.Error(err))
 	}
 
+	// Subscriber alerts: per-channel loop that polls the channel's recent
+	// subscribers via the official Data API (1 unit/poll, only while this
+	// instance's chat poller holds the stream) and announces new ones to
+	// chat:raw. Fully env-gated: without DB + cipher + Google OAuth creds it
+	// stays disabled and the listener behaves exactly as before.
+	setupSubscribers(streamManager, streamPublisher, logger)
+
 	// Canary poller.
 	//
 	// Polls channels that are live 24/7 with continuously busy chat, through the

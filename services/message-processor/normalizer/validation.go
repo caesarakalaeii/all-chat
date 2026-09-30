@@ -22,7 +22,7 @@ import (
 	"regexp"
 )
 
-var channelIDPattern = regexp.MustCompile(`^[A-Za-z0-9_\-]+$`)
+var channelIDPattern = regexp.MustCompile(`^[A-Za-z0-9_\-]+(?:\.[A-Za-z0-9_\-]+)*$`)
 
 func validateChannelID(channelID string) error {
 	if channelID == "" {

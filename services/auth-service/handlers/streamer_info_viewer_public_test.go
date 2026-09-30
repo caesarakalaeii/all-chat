@@ -29,6 +29,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/mock"
 	"go.uber.org/zap"
 )
@@ -40,6 +41,7 @@ type platformRows struct {
 }
 
 func (r *platformRows) Close()                                       {}
+func (r *platformRows) TypeMap() *pgtype.Map                         { return nil }
 func (r *platformRows) Err() error                                   { return nil }
 func (r *platformRows) CommandTag() pgconn.CommandTag                { return pgconn.CommandTag{} }
 func (r *platformRows) FieldDescriptions() []pgconn.FieldDescription { return nil }
@@ -54,11 +56,9 @@ func (r *platformRows) Scan(dest ...interface{}) error {
 	}
 	e := r.entries[r.index]
 	r.index++
-	if len(dest) >= 4 {
+	if len(dest) >= 2 {
 		*dest[0].(*string) = e.Platform
-		*dest[1].(*string) = e.ChannelID
-		*dest[2].(*string) = e.ChannelName
-		*dest[3].(*bool) = e.IsActive
+		*dest[1].(*string) = e.ChannelName
 	}
 	return nil
 }
@@ -133,7 +133,7 @@ func getStreamerInfo(t *testing.T, router *gin.Engine) (*httptest.ResponseRecord
 // reports viewer_public: true.
 func TestHandleGetStreamerInfo_ViewerPublicTrue(t *testing.T) {
 	db := &viewerPublicDB{
-		platforms:    []PlatformInfo{{Platform: "twitch", ChannelID: "c1", ChannelName: "Chan", IsActive: true}},
+		platforms:    []PlatformInfo{{Platform: "twitch", ChannelName: "Chan"}},
 		viewerPublic: true,
 	}
 	w, body := getStreamerInfo(t, newViewerPublicRouter(t, db))
@@ -148,13 +148,29 @@ func TestHandleGetStreamerInfo_ViewerPublicTrue(t *testing.T) {
 	if _, present := body["overlay_id"]; present {
 		t.Error("overlay_id must not appear in the streamer-info response")
 	}
+
+	// Pentest F1: channel_id (non-public YouTube channel identifiers) and
+	// is_active must never leave the database on this anonymous path.
+	platforms, ok := body["platforms"].([]any)
+	if !ok || len(platforms) != 1 {
+		t.Fatalf("expected exactly one platform entry, got %#v", body["platforms"])
+	}
+	entry, ok := platforms[0].(map[string]any)
+	if !ok {
+		t.Fatalf("platform entry is not an object: %#v", platforms[0])
+	}
+	for _, field := range []string{"channel_id", "is_active"} {
+		if _, present := entry[field]; present {
+			t.Errorf("%s must not appear in the public streamer-info response", field)
+		}
+	}
 }
 
 // viewer_public must always be on the wire, including when false, so a client
 // can distinguish "explicitly not public" from "field absent / old gateway".
 func TestHandleGetStreamerInfo_ViewerPublicFalseIsSerialised(t *testing.T) {
 	db := &viewerPublicDB{
-		platforms:    []PlatformInfo{{Platform: "kick", ChannelID: "c2", ChannelName: "Chan2", IsActive: false}},
+		platforms:    []PlatformInfo{{Platform: "kick", ChannelName: "Chan2"}},
 		viewerPublic: false,
 	}
 	w, body := getStreamerInfo(t, newViewerPublicRouter(t, db))
@@ -176,7 +192,7 @@ func TestHandleGetStreamerInfo_ViewerPublicFalseIsSerialised(t *testing.T) {
 // treat a false from anything other than a healthy 200 as a transport problem.
 func TestHandleGetStreamerInfo_ViewerPublicProbeErrorDegradesToFalse(t *testing.T) {
 	db := &viewerPublicDB{
-		platforms:    []PlatformInfo{{Platform: "twitch", ChannelID: "c1", ChannelName: "Chan", IsActive: true}},
+		platforms:    []PlatformInfo{{Platform: "twitch", ChannelName: "Chan"}},
 		viewerPubErr: errors.New("connection refused"),
 	}
 	w, body := getStreamerInfo(t, newViewerPublicRouter(t, db))

@@ -42,7 +42,7 @@ import Image from 'next/image'
 import { use, useEffect, useMemo, useState, useRef, useCallback } from 'react'
 import clsx from 'clsx'
 import { toastManager } from '@/lib/toast'
-import type { ChatMessage, EventTier, DeletionMetadata } from '@/lib/types/message'
+import type { ChatMessage, DeletionMetadata } from '@/lib/types/message'
 import { renderMessageContent } from '@/lib/renderMessage'
 import PlatformStatusIndicators from '@/components/PlatformStatusIndicators'
 import { useOverlayStream } from '@/hooks/useOverlayStream'
@@ -60,7 +60,8 @@ import {
 } from '@/lib/utils/bubbleSlot'
 import { getBundledTheme } from '@/lib/theme-marketplace/bundled-themes'
 import { rewriteThemeFontImports } from '@/lib/theme-marketplace/font-proxy'
-import { chatBubbleStyle, overlayContainerStyle } from '@/lib/utils/visual-inline-styles'
+import { wrapThemeCss } from '@/lib/theme-marketplace/wrap-theme-css'
+import { overlayContainerStyle, userBubbleStyle } from '@/lib/utils/visual-inline-styles'
 import { isDisplayVisible } from '@/lib/utils/displayVisibility'
 import {
   DEFAULT_FEED_ANCHOR,
@@ -71,6 +72,7 @@ import {
   type FeedAnchor,
 } from '@/lib/utils/feedAnchor'
 import {
+  isBubbleColorFromUser,
   isMessageAnimation,
   MESSAGE_ANIMATION_CLASS,
   type MessageAnimation,
@@ -82,6 +84,7 @@ import { createSoundPlayer } from '@/lib/utils/soundPlayer'
 import type { SoundPlayer, SoundSettings } from '@/lib/utils/soundPlayer'
 import { createTTSPlayer } from '@/lib/utils/ttsPlayer'
 import type { TTSPlayer, TTSSettings } from '@/lib/utils/ttsPlayer'
+import { messageExpiry, nextFadeDelayMs } from '@/lib/utils/messageFade'
 
 // Fonts are proxied through /font-proxy/css so end-user IPs never reach Google
 // (DSGVO / "Google Fonts Urteil" LG München 2022-01-20, Az. 3 O 17493/20).
@@ -117,7 +120,9 @@ import { PremiumBadge } from '@/components/PremiumBadge'
 import { EventContent } from '@/components/overlay/EventContent'
 import { MessageAttachments } from '@/components/overlay/MessageAttachments'
 import { SharedChatOrigin } from '@/components/overlay/SharedChatOrigin'
+import { PronounPill } from '@/components/overlay/PronounPill'
 import { formatTime, useTranslations } from '@/lib/i18n'
+import { LegacyFontSizeStyle } from '@/components/overlay/LegacyFontSizeStyle'
 import { resolveUsernameColor } from '@/lib/utils/usernameColor'
 import '@/styles/events.css'
 
@@ -129,27 +134,11 @@ const KICK_GLYPH = 'K'
 // the preview embed's constant of the same name.
 const GOODGAME_GLYPH = 'GG'
 
-// Default display duration (seconds) for an event based on its tier. Pure
-// helper hoisted to module scope so the fade effect can reference it safely.
-function getTierDuration(tier: EventTier): number {
-  switch (tier) {
-    case 'high':
-      return 30
-    case 'medium':
-      return 15
-    case 'low':
-      return 8
-    default:
-      return 15
-  }
-}
-
 export default function OBSOverlayPage({ params }: { params: Promise<{ id: string }> }) {
   const t = useTranslations()
   const { id } = use(params)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [maxMessages, setMaxMessages] = useState(50)
-  const [fontSize, setFontSize] = useState(16)
   const [messageDuration, setMessageDuration] = useState(15)
   const [disableMessageFade, setDisableMessageFade] = useState(false)
   const [customCss, setCustomCss] = useState('')
@@ -158,21 +147,29 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   // (no theme_id) leave this empty and still render via custom_css.
   const [themeCss, setThemeCss] = useState('')
   const [visualSettingsCss, setVisualSettingsCss] = useState('')
-  // Body font-size for message text. Prefer the visual-customizer `fontSize`
-  // (e.g. "18px") when set, otherwise fall back to the legacy display-settings
-  // `font_size` (number, applied as px). Applied inline rather than via CSS var
-  // so it doesn't get clobbered by the layered visual-customizer rules.
-  const [messageFontSizeCss, setMessageFontSizeCss] = useState('')
-  // Background fills (overlay container + chat bubbles), shadow and max-width.
-  // Applied inline ONLY when set so they don't clobber the per-variant Tailwind
-  // defaults (slate/purple bubbles, transparent overlay) — see visual-inline-styles.
+  // Legacy display-settings `font_size` (number, applied as px). Emitted as
+  // the `--chat-legacy-font-size` custom property so it feeds the same layered
+  // `.break-words` rule as the GUI `fontSize` control (which arrives via
+  // `--chat-font-size`), instead of an inline style that no manual CSS could
+  // override.
+  const [legacyFontSize, setLegacyFontSize] = useState<number | null>(null)
+  // Background fill for the overlay container and max-width. Applied inline
+  // ONLY when set so they don't clobber the per-variant Tailwind defaults
+  // (transparent overlay) — see visual-inline-styles. The chat-bubble fill is
+  // delivered as a rule by visualSettingsToCss instead, so it can lose to the
+  // palette/platform fills and the username-colour mode in the cascade.
   const [containerStyle, setContainerStyle] = useState<React.CSSProperties>({})
-  const [bubbleStyle, setBubbleStyle] = useState<React.CSSProperties>({})
   const [platformBadgePosition, setPlatformBadgePosition] = useState<'before' | 'after'>('before')
   const [platformBadgeStyle, setPlatformBadgeStyle] = useState<'text' | 'icon'>('text')
   // Entry animation for new chat bubbles; null keeps the default fade + slide-up
   const [messageAnimation, setMessageAnimation] = useState<MessageAnimation | null>(null)
   const [showPlatformBadge, setShowPlatformBadge] = useState(true)
+  // Bubble colour from the username colour. The CSS rule (userBubbleRules) and
+  // the per-row values (userBubbleStyle) both key off this mode + opacity.
+  const [bubbleColorFromUser, setBubbleColorFromUser] = useState<'none' | 'background' | 'border'>(
+    'none'
+  )
+  const [bubbleUserColorOpacity, setBubbleUserColorOpacity] = useState('0.85')
   const [showPlatformIndicators, setShowPlatformIndicators] = useState(true)
   // Visibility toggles whose CSS rules are scoped to `.overlay-preview-body`
   // (preview/embed only). The live OBS overlay lacks that scope hook, so it
@@ -253,7 +250,30 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   // Keep a ref so the stream callbacks always see the latest value without
   // maxMessages needing to be a dependency.
   const maxMessagesRef = useRef<number>(50)
+  // Client-side arrival time per message id, feeding the fade timer below.
+  // Keyed by id (not index) so an in-place update or a redelivery cannot
+  // restart a row's clock. The pruning effect keeps it down to the rows on
+  // screen, so it cannot outgrow the feed it shadows.
+  const arrivalTimesRef = useRef<Map<string, number>>(new Map())
+  const noteArrival = useCallback((id: string) => {
+    const times = arrivalTimesRef.current
+    if (times.has(id)) return
+    times.set(id, Date.now())
+  }, [])
 
+  // Whether the last fade-effect run saw fade disabled — the transition back
+  // to enabled re-stamps arrivals (see the fade effect).
+  const fadeDisabledRef = useRef(true)
+  // Drop arrival times for rows that left the feed — faded, moderated, or
+  // evicted by maxMessages — so the map tracks exactly the live rows.
+  useEffect(() => {
+    const times = arrivalTimesRef.current
+    if (times.size === 0) return
+    const live = new Set(messages.map((m) => m.id))
+    for (const id of times.keys()) {
+      if (!live.has(id)) times.delete(id)
+    }
+  }, [messages])
   // Keep filterSettingsRef in sync so the onChat callback always reads the latest value
   useEffect(() => {
     filterSettingsRef.current = filterSettings
@@ -282,48 +302,69 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   // useOverlayStream owns the connection, replay, dedup and enrichment; the
   // overlay applies its own filter → sound → TTS → append+fade policy here.
 
-  const onChat = useCallback((message: ChatMessage) => {
-    if (shouldFilterMessage(message, filterSettingsRef.current)) return
-    // Sound and TTS are independent: both fire for a message that survives the
-    // filter, neither fires for one that does not (D-42).
-    soundPlayerRef.current?.play()
-    ttsPlayerRef.current?.speak(message)
-    // Arrival order for the bubble palette (idempotent per id, so a
-    // double-invoked updater cannot burn a number).
-    setBubbleSlots((prev) => admitBubbleSlot(prev, message.id, maxMessagesRef.current * 2))
-    setMessages((prev) =>
-      // Ignore a redelivery of a message already on screen. The render key is
-      // `message.id`, so a duplicate id would be a duplicate React key (and the
-      // deletion path already assumes ids are unique — it removes every row
-      // matching `target_uuid`). A WebSocket reconnect that replays the tail is
-      // the realistic source.
-      prev.some((m) => m.id === message.id)
-        ? prev
-        : [...prev, message].slice(-maxMessagesRef.current)
-    )
-  }, [])
+  const onChat = useCallback(
+    (message: ChatMessage) => {
+      if (shouldFilterMessage(message, filterSettingsRef.current)) return
+      // Sound and TTS are independent: both fire for a message that survives the
+      // filter, neither fires for one that does not (D-42).
+      soundPlayerRef.current?.play()
+      noteArrival(message.id)
+      ttsPlayerRef.current?.speak(message)
+      // Arrival order for the bubble palette (idempotent per id, so a
+      // double-invoked updater cannot burn a number).
+      setBubbleSlots((prev) => admitBubbleSlot(prev, message.id, maxMessagesRef.current * 2))
+      setMessages((prev) =>
+        // Ignore a redelivery of a message already on screen. The render key is
+        // `message.id`, so a duplicate id would be a duplicate React key (and the
+        // deletion path already assumes ids are unique — it removes every row
+        // matching `target_uuid`). A WebSocket reconnect that replays the tail is
+        // the realistic source.
+        prev.some((m) => m.id === message.id)
+          ? prev
+          : [...prev, message].slice(-maxMessagesRef.current)
+      )
+    },
+    [noteArrival]
+  )
 
-  const onMessageUpdate = useCallback((updatedMessage: ChatMessage) => {
-    setBubbleSlots((prev) => admitBubbleSlot(prev, updatedMessage.id, maxMessagesRef.current * 2))
-    setMessages((prev) => {
-      // Find existing message by aggregation_id (TikTok like aggregates), then
-      // by id — an update that carries a live row's id has to REPLACE that row.
-      // Appending it would put the same id on screen twice, and the render key
-      // is the id (see onChat).
-      const aggregationId = updatedMessage.event?.aggregation_id
-      const index = aggregationId
-        ? prev.findIndex((m) => m.event?.aggregation_id === aggregationId)
-        : prev.findIndex((m) => m.id === updatedMessage.id)
-      if (index === -1) {
-        // Original message already faded away, treat as new
-        return [...prev, updatedMessage].slice(-maxMessagesRef.current)
-      }
-      // Update existing message in place
-      const updated = [...prev]
-      updated[index] = updatedMessage
-      return updated
-    })
-  }, [])
+  const onMessageUpdate = useCallback(
+    (updatedMessage: ChatMessage) => {
+      setBubbleSlots((prev) => admitBubbleSlot(prev, updatedMessage.id, maxMessagesRef.current * 2))
+      noteArrival(updatedMessage.id)
+      setMessages((prev) => {
+        // Find existing message by aggregation_id (TikTok like aggregates), then
+        // by id — an update that carries a live row's id has to REPLACE that row.
+        // Appending it would put the same id on screen twice, and the render key
+        // is the id (see onChat).
+        const aggregationId = updatedMessage.event?.aggregation_id
+        const index = aggregationId
+          ? prev.findIndex((m) => m.event?.aggregation_id === aggregationId)
+          : prev.findIndex((m) => m.id === updatedMessage.id)
+        if (index !== -1) {
+          // An aggregate update replaces the row under a NEW id, so inherit the
+          // replaced row's arrival — the visual row's clock must not restart on
+          // every like-count refresh. The match is only knowable against `prev`
+          // (two updates can land in one batch), which is why this runs here;
+          // it is idempotent under a double-invoked updater: same prev, same
+          // inherited value. An unstamped live row falls back to 0, matching the
+          // expire-don't-linger policy of messageExpiry.
+          arrivalTimesRef.current.set(
+            updatedMessage.id,
+            arrivalTimesRef.current.get(prev[index].id) ?? 0
+          )
+        }
+        if (index === -1) {
+          // Original message already faded away, treat as new
+          return [...prev, updatedMessage].slice(-maxMessagesRef.current)
+        }
+        // Update existing message in place
+        const updated = [...prev]
+        updated[index] = updatedMessage
+        return updated
+      })
+    },
+    [noteArrival]
+  )
 
   const onDeletion = useCallback((deletion: DeletionMetadata) => {
     setMessages((prev) => {
@@ -378,7 +419,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
       maxMessagesRef.current = display.max_messages
     }
     if (typeof display.font_size === 'number') {
-      setFontSize(display.font_size)
+      setLegacyFontSize(display.font_size)
     }
     if (typeof display.message_duration === 'number') {
       setMessageDuration(display.message_duration)
@@ -412,22 +453,31 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
     }
 
     setCustomCss(typeof config.custom_css === 'string' ? config.custom_css : '')
+    // The theme ships with `!important` declarations meant to beat other
+    // unlayered styles. Wrapping it into `@layer marketplace-themes` (and
+    // stripping those importants) puts the whole theme one tier below the GUI
+    // layer and two below the user's unlayered manual CSS, where it belongs.
     setThemeCss(
       typeof config.theme_id === 'string' && config.theme_id
-        ? rewriteThemeFontImports(getBundledTheme(config.theme_id)?.css ?? '')
+        ? wrapThemeCss(rewriteThemeFontImports(getBundledTheme(config.theme_id)?.css ?? ''))
         : ''
     )
-
     if (config.visual_settings && typeof config.visual_settings === 'object') {
       const vs = config.visual_settings as Partial<VisualSettings>
       setVisualSettingsCss(visualSettingsToCss(vs))
-      // Body font-size override from the visual customizer (see state decl).
-      setMessageFontSizeCss(typeof vs.fontSize === 'string' && vs.fontSize ? vs.fontSize : '')
-      // Background fills / shadow / max-width (see state decl).
+      // Background fill / max-width for the overlay container (see state decl);
+      // the bubble fill now rides in the CSS above.
       setContainerStyle(overlayContainerStyle(vs))
-      setBubbleStyle(chatBubbleStyle(vs))
       // Unconditional: clearing the palette has to drop the slot attributes too.
       setBubblePalette(resolveBubblePalette(vs))
+      // Same for the by-username mode; also cleared unconditionally so a
+      // saved 'none'/absence restores plain bubbles on reload.
+      setBubbleColorFromUser(
+        isBubbleColorFromUser(vs.bubbleColorFromUser) ? vs.bubbleColorFromUser : 'none'
+      )
+      if (typeof vs.bubbleUserColorOpacity === 'string') {
+        setBubbleUserColorOpacity(vs.bubbleUserColorOpacity)
+      }
       for (const key of ['fontFamily', 'usernameFontFamily', 'timestampFontFamily'] as const) {
         if (typeof vs[key] === 'string') ensureGoogleFontLoaded(vs[key]!)
       }
@@ -611,24 +661,41 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }, [messages, feedLayout])
 
-  // Auto-remove old messages based on duration (if fade is enabled)
-  // Events have tier-based durations, chat uses configured duration
+  // Auto-remove messages once their own display duration elapses. Each row's
+  // expiry is anchored to its arrival time (arrivalTimesRef), so a reschedule
+  // on append — which is every incoming message — can never extend an older
+  // row's lifetime: under continuous chat the head row still leaves at its own
+  // deadline instead of being pushed forward forever.
   useEffect(() => {
-    if (messages.length === 0 || disableMessageFade) return
-
-    const firstMessage = messages[0]
-
-    // Determine display duration
-    let duration = messageDuration // Default from settings
-
-    if (firstMessage.event) {
-      // Event: use event-specific duration or tier-based default
-      duration = firstMessage.event.duration || getTierDuration(firstMessage.event.tier)
+    // The 30s config refresh can flip disable_message_fade back on after it
+    // was off for a while; every row's arrival then predates the new expiry
+    // horizon and the first sweep would clear the whole feed at once. Re-stamp
+    // the surviving rows at the toggle so the clock restarts with the feature.
+    if (disableMessageFade) {
+      fadeDisabledRef.current = true
+      return
     }
+    if (fadeDisabledRef.current) {
+      fadeDisabledRef.current = false
+      for (const m of messages) {
+        arrivalTimesRef.current.set(m.id, Date.now())
+      }
+    }
+    if (messages.length === 0) return
+
+    const arrivalTimes = arrivalTimesRef.current
+    const delay = nextFadeDelayMs(messages, arrivalTimes, messageDuration, Date.now())
+    if (delay === null) return
 
     const timer = setTimeout(() => {
-      setMessages((prev) => prev.slice(1))
-    }, duration * 1000)
+      // Sweep, not pop: a throttled background tab fires this once for many
+      // overdue rows, and all of them must leave together. Pure filter — the
+      // arrival-time pruning effect removes the swept ids on the same commit.
+      const now = Date.now()
+      setMessages((prev) =>
+        prev.filter((m) => messageExpiry(m, arrivalTimes.get(m.id), messageDuration) > now)
+      )
+    }, delay)
 
     return () => clearTimeout(timer)
   }, [messages, messageDuration, disableMessageFade])
@@ -871,6 +938,9 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
       {visualSettingsCss.length > 0 && (
         <style dangerouslySetInnerHTML={{ __html: visualSettingsCss }} />
       )}
+      {/* Legacy display-settings font-size, delivered by the shared component
+          so the property name and unit match the preview. */}
+      <LegacyFontSizeStyle fontSize={legacyFontSize} />
       {/* Bundled theme CSS first, then the user's raw custom_css overrides it. */}
       {themeCss.length > 0 && <style dangerouslySetInnerHTML={{ __html: themeCss }} />}
       {customCss.trim().length > 0 && <style dangerouslySetInnerHTML={{ __html: customCss }} />}
@@ -887,15 +957,15 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
       {/* text-shadow inherits to every text node below, which is how the setting
           reaches nodes no rule names (pronoun pill, shared-chat tag, event body).
           It is NOT what makes the setting stick: this is a normal inline style,
-          and every bundled theme declares `text-shadow: … !important` on the
-          message text, which beats it. The authoritative delivery is the
-          `!important` rule visualSettingsToCss emits inside
-          `@layer visual-customizer` (see OVERRIDE_RULES). Gradient usernames
+          so any theme declaration beats it. The authoritative delivery is the
+          rule visualSettingsToCss emits inside `@layer visual-customizer` (see
+          OVERRIDE_RULES), which outranks the theme layer. Gradient usernames
           force the shadow off locally with an important inline style, which
           outranks both. */}
       {/* `mt-auto` (feedAnchor 'bottom') sits on the list itself, never on its
-          children: `.overlay-live-body > * + *` in events.css is `!important`
-          inside a cascade layer and would beat any child-level rule. */}
+          children: `.overlay-live-body > * + *` in events.css shares this
+          layer and would beat any child-level margin rule at equal
+          specificity. */}
       <div
         className={clsx(
           'overlay-live-body space-y-3',
@@ -917,7 +987,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
             /* The key must be POSITION-INDEPENDENT. It used to be
                `${message.id}-${index}`, and every path that shifts an index —
                `invert_message_order` (a prepend moves every row), the
-               `max_messages` cap, the fade timer's `slice(1)` — changed every
+               `max_messages` cap, the fade sweep's filter — changed every
                key at once, so React unmounted and remounted the whole feed and
                every row replayed its entry animation on every new message.
                `onChat` keeps ids unique, which is what makes the bare id safe. */
@@ -934,6 +1004,10 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                 [BUBBLE_SLOT_ATTR]: isEvent
                   ? undefined
                   : bubbleSlot(bubbleSlots, message.id, bubblePalette.length),
+                // Marks the row for the by-username bubble rule
+                // (userBubbleRules); the colour itself rides in the style
+                // below as custom properties.
+                'data-user-bubble': isEvent || bubbleColorFromUser === 'none' ? undefined : '',
               }}
               className={clsx(
                 isEvent
@@ -948,7 +1022,19 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                         : 'bg-slate-900/90',
                     ]
               )}
-              style={isEvent ? undefined : bubbleStyle}
+              style={
+                isEvent
+                  ? undefined
+                  : {
+                      ...(bubbleColorFromUser !== 'none'
+                        ? userBubbleStyle(
+                            message.user,
+                            { bubbleUserColorOpacity },
+                            bubbleColorFromUser
+                          )
+                        : {}),
+                    }
+              }
             >
               <div className="flex items-start gap-3">
                 {/* Avatar */}
@@ -1008,15 +1094,13 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                       )}
 
                     {/* Phase 9: Pronoun pill - before username */}
-                    {showPronouns && message.user?.pronouns && pronounPosition === 'before' && (
-                      <span
-                        className="inline-flex items-center rounded-full px-2 py-1 text-[11px] leading-none font-semibold text-white"
-                        style={{ backgroundColor: pronounColor }}
-                      >
-                        {message.user.pronouns}
-                      </span>
-                    )}
-
+                    <PronounPill
+                      showPronouns={showPronouns}
+                      pronouns={message.user?.pronouns}
+                      position={pronounPosition}
+                      targetPosition="before"
+                      color={pronounColor}
+                    />
                     {/* Username */}
                     {showUsername &&
                       (message.user?.name_gradient ? (
@@ -1050,7 +1134,9 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                         <span
                           className="chat-username text-sm font-semibold"
                           style={{
-                            color: resolveUsernameColor(message.user),
+                            color: resolveUsernameColor(message.user, {
+                              staticColor: bubbleColorFromUser !== 'none',
+                            }),
                           }}
                         >
                           {message.user?.display_name || message.user?.username}
@@ -1058,14 +1144,13 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                       ))}
 
                     {/* Phase 9: Pronoun pill - after username */}
-                    {showPronouns && message.user?.pronouns && pronounPosition === 'after' && (
-                      <span
-                        className="inline-flex items-center rounded-full px-2 py-1 text-[11px] leading-none font-semibold text-white"
-                        style={{ backgroundColor: pronounColor }}
-                      >
-                        {message.user.pronouns}
-                      </span>
-                    )}
+                    <PronounPill
+                      showPronouns={showPronouns}
+                      pronouns={message.user?.pronouns}
+                      position={pronounPosition}
+                      targetPosition="after"
+                      color={pronounColor}
+                    />
 
                     {/* Platform badge after username (original position) */}
                     {showPlatformBadge && platformBadgePosition === 'after' && (
@@ -1139,10 +1224,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                   </div>
 
                   {/* Message Text with Emotes (or Event Content) */}
-                  <div
-                    className="break-words text-white"
-                    style={{ fontSize: messageFontSizeCss || `${fontSize}px` }}
-                  >
+                  <div className="break-words text-white">
                     {message.event ? renderEventContent(message) : renderMessageContent(message)}
                   </div>
 

@@ -35,6 +35,10 @@ import { Logger } from '../types/logger.js';
 const RENEWAL_INTERVAL_MS = 5000;    // 5 seconds, matches Go
 const RETRY_DELAYS_MS = [100, 200, 400]; // Exponential backoff for renewal retries
 const MAX_CONSECUTIVE_FAILURES = 2;  // Grace period before declaring leadership lost
+// ADR-0007 stabilization gate: releasing leases before the fleet view settles
+// during a scale event makes released streams bounce between pods. Mirrors
+// rebalanceStabilizationPeriod in shared/sourcemanager/coordinator.go.
+const REBALANCE_STABILIZATION_MS = 30_000;
 
 interface LeaseEntry {
   streamID: string;
@@ -44,12 +48,50 @@ interface LeaseEntry {
   stopped: boolean;
 }
 
+interface RebalanceState {
+  lastPeerCount: number;
+  peerCountStableAt: number;
+}
+
+/**
+ * Which of `leases` to give up when this pod must shed `excess` of them.
+ *
+ * Release order is by room freshness, oldest messages first: a hot room (a
+ * message within HOT_ROOM_THRESHOLD_SECONDS) must survive its receiving pod
+ * a full reconnect cycle (re-handshake, flap exposure) for a move that buys
+ * nothing between healthy pods, while an idle room was likely already
+ * reconnecting. A room with no freshness entry (never connected, fresh
+ * demand) counts as maximally releasable so cold-start rooms still flow to
+ * the least-loaded pod. Ties break alphabetically, matching the Go
+ * coordinator: both coordinators facing the same fleet state shed the same
+ * streams.
+ */
+export const HOT_ROOM_THRESHOLD_SECONDS = 60;
+
+export function selectLeasesToRelease(
+  leases: string[],
+  excess: number,
+  secondsSinceLastMessage: (streamID: string) => number | undefined
+): string[] {
+  // Most-releasable first: oldest message, a missing monitor entry (never
+  // connected) counting as infinitely old, alphabetical on ties so both
+  // coordinators shed the same streams for the same fleet state.
+  const ranked = [...leases].sort((a, b) => {
+    const freshnessA = secondsSinceLastMessage(a) ?? Number.POSITIVE_INFINITY;
+    const freshnessB = secondsSinceLastMessage(b) ?? Number.POSITIVE_INFINITY;
+    if (freshnessA !== freshnessB) return freshnessB - freshnessA;
+    return a.localeCompare(b);
+  });
+  return ranked.slice(0, excess).sort();
+}
+
 export class LeadershipCoordinator {
   private platform: string;
   private callerID: string;
   private client: SourceManagerClient;
   private logger: Logger;
   private leases: Map<string, LeaseEntry> = new Map();
+  private rebalanceState?: RebalanceState;
 
   constructor(platform: string, client: SourceManagerClient, logger: Logger) {
     this.platform = platform;
@@ -63,6 +105,7 @@ export class LeadershipCoordinator {
       renewal_interval_ms: RENEWAL_INTERVAL_MS,
     });
   }
+
 
   /**
    * EnsureLeadership claims leadership for a stream and starts a renewal loop.
@@ -179,6 +222,105 @@ export class LeadershipCoordinator {
    */
   getLeaseCount(): number {
     return this.leases.size;
+  }
+
+  /**
+   * ADR-0007 rebalancing, ported from shared/sourcemanager/coordinator.go.
+   *
+   * Registers this pod as a peer, then sheds leases in excess of
+   * min(ceil(totalStreams / peerCount), maxPerPod). Release selection ranks
+   * by room freshness when `secondsSinceLastMessage` is provided — idle
+   * rooms first, hot rooms (message within HOT_ROOM_THRESHOLD_SECONDS)
+   * last — because a moved hot room must re-handshake on the receiving pod
+   * while an idle room was likely already reconnecting; without the
+   * accessor the selection falls back to alphabetical, the Go coordinator's
+   * behaviour. Returns the released stream IDs so the caller can disconnect
+   * them and exclude them from re-acquisition for a cycle.
+   *
+   * maxPerPod carries the caller's hard connection ceiling
+   * (TIKTOK_MAX_STREAMS_PER_POD): the Euler proxy caps concurrent proxied
+   * WebSockets (ADR-0052), so a pod must never hold more leases than it can
+   * connect — a leased-but-unconnectable stream is deaf everywhere, because no
+   * other pod may claim it. The Go coordinator has no such parameter because
+   * no Go listener connects through the Euler proxy.
+   *
+   * The stabilization gate prevents the release→re-acquire oscillation during
+   * scale events: the first call after a peer-count change only records the new
+   * count; releases happen once the count has been stable for
+   * REBALANCE_STABILIZATION_MS.
+   */
+  async rebalance(
+    totalStreams: number,
+    maxPerPod?: number,
+    secondsSinceLastMessage?: (streamID: string) => number | undefined
+  ): Promise<string[]> {
+    let peerCount: number;
+    try {
+      peerCount = await this.client.registerPeer(this.platform, this.callerID);
+    } catch (err) {
+      this.logger.warn('Failed to register peer for rebalancing', {
+        platform: this.platform,
+        error: String(err),
+      });
+      return [];
+    }
+
+    if (peerCount <= 0) peerCount = 1;
+
+    const now = Date.now();
+    if (!this.rebalanceState || this.rebalanceState.lastPeerCount !== peerCount) {
+      this.rebalanceState = {
+        lastPeerCount: peerCount,
+        peerCountStableAt: now + REBALANCE_STABILIZATION_MS,
+      };
+
+      this.logger.info('Peer count changed, waiting for stabilization before rebalancing', {
+        platform: this.platform,
+        peer_count: peerCount,
+        stabilization_period_ms: REBALANCE_STABILIZATION_MS,
+      });
+      return [];
+    }
+    if (now < this.rebalanceState.peerCountStableAt) return [];
+
+    const fairShare = Math.ceil(totalStreams / peerCount);
+    const targetLeases = maxPerPod !== undefined ? Math.min(fairShare, maxPerPod) : fairShare;
+    const currentCount = this.leases.size;
+    const excess = currentCount - targetLeases;
+    if (excess <= 0) return [];
+
+    const candidates = [...this.leases.keys()];
+    const toRelease = secondsSinceLastMessage
+      ? selectLeasesToRelease(candidates, excess, secondsSinceLastMessage)
+      : candidates.sort().slice(targetLeases);
+
+    this.logger.debug('rebalance candidates', {
+      candidates: candidates.map((streamID) => ({
+        stream_id: streamID,
+        last_message_seconds_ago: secondsSinceLastMessage?.(streamID) ?? null,
+      })),
+    });
+
+
+    // One release path for demand removal, leadership loss and rebalancing.
+    // Fire-and-forget per stream (void, matching the Go coordinator's
+    // asynchronous release): a failed release lets the lease expire
+    // server-side, so rebalancing must not stall on one slow request.
+    for (const streamID of toRelease) {
+      void this.release(streamID);
+    }
+
+    this.logger.info('Rebalanced leadership leases', {
+      platform: this.platform,
+      peer_count: peerCount,
+      total_streams: totalStreams,
+      max_per_pod: targetLeases,
+      had: currentCount,
+      released: toRelease.length,
+      kept: currentCount - toRelease.length,
+    });
+
+    return toRelease;
   }
 
   /**

@@ -11,6 +11,21 @@ The `LeadershipCoordinator` uses per-stream Redis locks (`SET NX EX`) to split c
 
 This affects twitch-listener, kick-listener, and youtube-listener-innertube.
 
+> **Update 2026-09-15**: tiktok-listener now ports this scheme to its TypeScript
+> coordinator (`src/coordination/leadership.ts`, `rebalance()`), driven from its
+> 25s demand safety-net poll — below the 30s peer TTL, so a pod's peer
+> registration does not expire between polls and the stabilization gate can
+> actually open. The original omission mattered: on 2026-09-14 one tiktok pod
+> held 43 of ~48 leases, overran the Euler free tier's concurrent WebSocket
+> proxy cap, and every channel on it went silently deaf (ADR-0052 context). The
+> TS port adds the same 30s peer-count stabilization gate as the Go
+> coordinator, keeps the Go callers' rebalanced-out exclusion (released
+> streams are skipped for one demand cycle so this pod does not immediately
+> re-claim them), and takes a `maxPerPod` parameter the service sets to
+> `TIKTOK_MAX_STREAMS_PER_POD` (default 20): a pod must never hold more
+> leases than it can connect, because a leased-but-unconnectable stream is
+> deaf everywhere — no other pod may claim it.
+
 ## Decision
 
 Implement peer-aware rebalancing in the shared `LeadershipCoordinator`:

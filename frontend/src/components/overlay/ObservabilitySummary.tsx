@@ -43,6 +43,7 @@ const EVENT_TOGGLES = [
   { key: 'enable_youtube_members', messageStem: 'YoutubeMembers' },
   { key: 'enable_youtube_member_milestones', messageStem: 'YoutubeMemberMilestones' },
   { key: 'enable_youtube_member_gifts', messageStem: 'YoutubeMemberGifts' },
+  { key: 'enable_youtube_subscribers', messageStem: 'YoutubeSubscribers' },
   { key: 'enable_kick_subs', messageStem: 'KickSubs' },
   { key: 'enable_kick_gifts', messageStem: 'KickGifts' },
   { key: 'enable_tiktok_likes', messageStem: 'TiktokLikes' },

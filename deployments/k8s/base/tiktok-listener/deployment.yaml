@@ -115,6 +115,11 @@ spec:
           value: "60000"  # Clean up expired entries every minute
         - name: TIKTOK_DEDUP_MAX_CACHE_SIZE
           value: "10000"  # Max 10k messages in dedup cache
+        # Self-signing (ADR-0052). Default mode is euler; flip to shadow, then
+        # self, via the configmap once the signer service is deployed and its
+        # success rate is measured.
+        - name: TIKTOK_SIGNER_URL
+          value: "http://tiktok-signer:8092"
         resources:
           requests:
             memory: "256Mi"  # Increased from 128Mi

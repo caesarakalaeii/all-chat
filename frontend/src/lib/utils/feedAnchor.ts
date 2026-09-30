@@ -69,12 +69,13 @@ export interface FeedAnchorLayout {
    * Classes for the message list itself (`.overlay-live-body` /
    * `.overlay-preview-body`).
    *
-   * `mt-auto` is deliberately on the list, NOT on its children:
-   * `.overlay-live-body > * + * { margin-top: ... !important }` in events.css
-   * (`@layer visual-customizer`) would win over any child rule. Note that
-   * `.scroll-anchor`'s own `margin: 0 !important` in globals.css does NOT win
-   * against it — for IMPORTANT declarations a cascade layer outranks unlayered
-   * styles — which is why events.css excludes the sentinel by selector.
+   * `mt-auto` is deliberately on the list, NOT on its children: the sibling
+   * gap rule in events.css (`@layer visual-customizer`, normal weight) can
+   * be beaten by unlayered manual CSS, so a child-level rule is not a
+   * reliable place to rely on. `.scroll-anchor`'s unlayered `margin: 0
+   * !important` in globals.css does win against that normal-weight layer
+   * rule — but only because the rule excludes the sentinel by selector, so
+   * neither path ever competes.
    *
    * When the content is taller than the wrapper the auto margin resolves to
    * `0`, so a busy chat behaves exactly as it does today — the mode is a no-op

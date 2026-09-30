@@ -187,7 +187,7 @@ func (h *LocalizationHandler) SubmitTranslations(c *gin.Context) {
 		Key   string `json:"key"`
 		Error string `json:"error"`
 	}
-	var failed []rowError
+	failed := make([]rowError, 0, len(req.Translations))
 	accepted := 0
 
 	for _, tr := range req.Translations {

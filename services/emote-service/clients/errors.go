@@ -25,10 +25,10 @@ import (
 )
 
 // ErrNotFound signals that a provider has no emotes for the requested channel — an HTTP
-// 404 / unknown-channel response. This is the NORMAL case for most channels on BTTV and
-// FFZ (few streamers have those sets) and for channels without a 7TV set, so callers
-// classify it as a benign "not_found" miss rather than a real API failure. Wrap it with
-// %w so callers can detect it via errors.Is.
+// 404 / unknown-channel response. With global sets merged into every channel lookup,
+// BTTV/FFZ/7TV no longer surface this from FetchEmotes (a channel 404 falls back to the
+// global set). Today it escapes to the handler only from the Twitch user lookup.
+// Wrap it with %w so callers can detect it via errors.Is.
 var ErrNotFound = errors.New("emotes not found for channel")
 
 // ErrRateLimited signals that a provider throttled us (HTTP 429). This is a transient,

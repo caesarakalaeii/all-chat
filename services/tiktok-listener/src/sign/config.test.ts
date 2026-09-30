@@ -66,6 +66,15 @@ describe('loadSignConfiguration', () => {
     expect(loadSignConfiguration({ TIKTOK_SIGNER_MODE: 'euler' }).signerMode).toBe('euler');
     expect(loadSignConfiguration({ TIKTOK_SIGNER_MODE: 'shadow' }).signerMode).toBe('shadow');
     expect(loadSignConfiguration({ TIKTOK_SIGNER_MODE: 'self' }).signerMode).toBe('self');
+    expect(loadSignConfiguration({ TIKTOK_SIGNER_MODE: 'pure-node' }).signerMode).toBe('pure-node');
+  });
+
+  it('pure-node retires Euler for signatures and keeps gift info off', () => {
+    const config = loadSignConfiguration({ TIKTOK_SIGNER_MODE: 'pure-node' });
+    expect(eulerStillReachableForSignature(config)).toBe(false);
+    // The gift seam's URL signing keys on the self signer; pure-node
+    // declares gifts-off rather than re-instating the Business-plan error.
+    expect(config.enableExtendedGiftInfo).toBe(false);
   });
 
   it('normalises case and surrounding whitespace in the signer mode', () => {

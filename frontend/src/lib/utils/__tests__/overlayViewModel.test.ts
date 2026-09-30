@@ -29,10 +29,12 @@ import {
   matchesUserFilter,
   mergeAutoModResolution,
   mergeByAgg,
+  mergeDeletionPair,
   partitionItems,
   shouldAutoScroll,
   toModActionEntry,
   toModEntry,
+  type ModEntry,
   type ModEntryData,
   userFilterFor,
   type ViewItem,
@@ -226,6 +228,17 @@ describe('toModActionEntry', () => {
     })
   })
 
+  // The fold's clear pair relies on this mapping: a channel.moderate clear
+  // action must reach the log as kind 'clear' (not the generic 'action'
+  // fallback), or the pair never matches and one clear renders two rows.
+  it('maps a clear to the clear kind', () => {
+    expect(toModActionEntry({ action: 'clear', moderator_login: 'modperson' }, 'live', 1)).toMatchObject({
+      kind: 'clear',
+      action: 'clear',
+      moderator: 'modperson',
+    })
+  })
+
   it('returns null when the action is missing or not a string', () => {
     expect(toModActionEntry({}, 'live', 1)).toBeNull()
     expect(toModActionEntry({ action: 7 }, 'live', 1)).toBeNull()
@@ -272,6 +285,422 @@ describe('mergeAutoModResolution', () => {
       at: 200,
     }
     expect(mergeAutoModResolution([hold], orphan)).toHaveLength(2)
+  })
+})
+
+describe('mergeDeletionPair — one Twitch delete, one row', () => {
+  // A Twitch single-message delete reaches the view twice: as a message_deletion
+  // (what was removed, resolved to the internal uuid) and as a channel.moderate
+  // mod_action (who removed it). Both carry the native message id, which is the
+  // only join key — the deletion row knows the internal uuid, the mod_action
+  // row knows the moderator, and neither knows both. mergeDeletionPair is the
+  // single append-or-fold decision for EITHER frame; the log never already
+  // contains the entry.
+  const deletion: ModEntryData = {
+    kind: 'delete',
+    targetUuid: 'internal-1',
+    targetMsgId: 'native-1',
+    source: 'live',
+    at: 100,
+  }
+  const modAction: ModEntryData = {
+    kind: 'delete',
+    action: 'delete',
+    moderator: 'modperson',
+    username: 'spammer',
+    targetUserId: '9001',
+    targetMsgId: 'native-1',
+    source: 'live',
+    at: 105,
+  }
+
+  it('a mod_action after its deletion folds in, adding the moderator', () => {
+    const merged = mergeDeletionPair([{ id: 1, ...deletion }], { id: 2, ...modAction })
+    expect(merged).toHaveLength(1)
+    expect(merged[0]).toMatchObject({
+      id: 1,
+      kind: 'delete',
+      targetUuid: 'internal-1',
+      targetMsgId: 'native-1',
+      moderator: 'modperson',
+      username: 'spammer',
+      at: 100,
+    })
+  })
+
+  it('a deletion after its mod_action folds in, keeping the moderator', () => {
+    const merged = mergeDeletionPair([{ id: 1, ...modAction }], { id: 2, ...deletion })
+    expect(merged).toHaveLength(1)
+    expect(merged[0]).toMatchObject({
+      id: 1,
+      action: 'delete',
+      moderator: 'modperson',
+      targetUuid: 'internal-1',
+      at: 105,
+    })
+  })
+
+  it('folds into this view’s optimistic row, which has no action field', () => {
+    // runModeration builds its optimistic entry with toModEntry: kind 'delete',
+    // no action. The Twitch echo arriving after the reflect-back consumed the
+    // pending signature must still fold here, not append a second row.
+    const optimistic: ModEntryData = {
+      kind: 'delete',
+      targetUuid: 'internal-1',
+      targetMsgId: 'native-1',
+      clientId: 'c1',
+      source: 'live',
+      at: 99,
+    }
+    const merged = mergeDeletionPair([{ id: 1, ...optimistic }], { id: 2, ...modAction })
+    expect(merged).toHaveLength(1)
+    expect(merged[0]).toMatchObject({ clientId: 'c1', moderator: 'modperson' })
+  })
+
+  it('a second mod_action for the same id never folds into a mod_action row', () => {
+    // A mod_action row is never a fold target: two frames with action 'delete'
+    // and the same id would mean Twitch sent the same webhook twice, and the
+    // second must stay visible as its own row rather than silently vanish.
+    const echo = { ...modAction, at: 110 }
+    const merged = mergeDeletionPair([{ id: 1, ...modAction }], { id: 2, ...echo })
+    expect(merged).toHaveLength(2)
+  })
+
+  it('non-delete entries and non-matching ids append', () => {
+    const otherDelete = { ...modAction, targetMsgId: 'native-2' }
+    const timeout = { ...modAction, action: 'timeout', kind: 'timeout' as const }
+    expect(mergeDeletionPair([{ id: 1, ...deletion }], { id: 2, ...otherDelete })).toHaveLength(2)
+    expect(mergeDeletionPair([{ id: 1, ...deletion }], { id: 2, ...timeout })).toHaveLength(2)
+  })
+
+  it('deletions without a native id (other platforms, replay buffer) still append', () => {
+    const noId = { ...deletion, targetMsgId: undefined }
+    expect(mergeDeletionPair([{ id: 1, ...modAction }], { id: 2, ...noId })).toHaveLength(2)
+  })
+})
+
+describe('mergeDeletionPair — timeout, ban and clear, one row each', () => {
+  // The same two-frame problem as a delete, with two twists. The join key is
+  // the moderated user's id, and the deletion frame (channel.chat.clear_user_messages)
+  // carries no duration, so it reads as kind 'ban' even when the action was a
+  // timeout — the fold must match across timeout/ban and upgrade the kind.
+  const batchDeletion: ModEntryData = {
+    kind: 'ban', // no duration on the wire => reads as a ban
+    username: 'spammer',
+    targetUserId: '9001',
+    source: 'live',
+    at: 100,
+  }
+  const timeoutAction: ModEntryData = {
+    kind: 'timeout',
+    action: 'timeout',
+    moderator: 'modperson',
+    username: 'spammer',
+    targetUserId: '9001',
+    banDuration: 600,
+    source: 'live',
+    at: 105,
+  }
+
+  it('a timeout mod_action folds into the durationless batch row, recovering kind and duration', () => {
+    const merged = mergeDeletionPair([{ id: 1, ...batchDeletion }], { id: 2, ...timeoutAction })
+    expect(merged).toHaveLength(1)
+    expect(merged[0]).toMatchObject({
+      kind: 'timeout',
+      moderator: 'modperson',
+      banDuration: 600,
+      at: 100,
+    })
+  })
+
+  it('a batch deletion after its timeout mod_action folds in, keeping attribution', () => {
+    const merged = mergeDeletionPair([{ id: 1, ...timeoutAction }], { id: 2, ...batchDeletion })
+    expect(merged).toHaveLength(1)
+    expect(merged[0]).toMatchObject({ kind: 'timeout', moderator: 'modperson', banDuration: 600 })
+  })
+
+  it('folds a monitor timeout echo chain into the optimistic row', () => {
+    // Monitor-initiated timeout: optimistic row, then the Twitch pair — the
+    // channel.moderate timeout echo and the clear_user_messages echo (which
+    // the pending-signature dedup does NOT consume: its signature carries no
+    // duration, the optimistic one does). All three frames are one action.
+    const optimistic: ModEntryData = {
+      kind: 'timeout',
+      username: 'spammer',
+      targetUserId: '9001',
+      banDuration: 600,
+      clientId: 'c1',
+      source: 'live',
+      at: 99,
+    }
+    let log: ModEntry[] = [{ id: 1, ...optimistic }]
+    log = mergeDeletionPair(log, { id: 2, ...timeoutAction }) as ModEntry[]
+    log = mergeDeletionPair(log, { id: 3, ...batchDeletion }) as ModEntry[]
+    expect(log).toHaveLength(1)
+    expect(log[0]).toMatchObject({ clientId: 'c1', moderator: 'modperson', banDuration: 600 })
+  })
+
+  it('a second timeout of the same user minutes later appends, not folds', () => {
+    const earlier: ModEntryData = { ...timeoutAction, at: 100 }
+    // Repeat action far outside the fold window: its pair must not merge into
+    // the earlier row.
+    const repeat: ModEntryData = { ...timeoutAction, at: 100 + 120_000 + 1000 }
+    expect(mergeDeletionPair([{ id: 1, ...earlier }], { id: 2, ...repeat })).toHaveLength(2)
+  })
+
+  it('folds at the exact fold-window boundary (120s apart is still a pair)', () => {
+    // The scan uses `>`: a second frame exactly PAIR_FOLD_WINDOW_MS after the
+    // first is the same pair, one millisecond later is a new action.
+    const later: ModEntryData = { ...timeoutAction, at: 100 + 120_000 }
+    expect(mergeDeletionPair([{ id: 1, ...batchDeletion }], { id: 2, ...later })).toHaveLength(1)
+  })
+
+  it('folds a monitor echo chain whose deletion frame arrives before its mod_action', () => {
+    // The blocking council case: channel.moderate and channel.chat.clear_user_messages
+    // are independent EventSub subscriptions, so the deletion echo can land
+    // first. Its fold must NOT complete the pair (it is not the mod_action
+    // half), or the timeout echo would be rejected as a duplicate and the
+    // action would render as two rows, one without attribution.
+    const optimistic: ModEntryData = {
+      kind: 'timeout',
+      username: 'spammer',
+      targetUserId: '9001',
+      banDuration: 600,
+      clientId: 'c1',
+      source: 'live',
+      at: 99,
+    }
+    let log: ModEntry[] = [{ id: 1, ...optimistic }]
+    log = mergeDeletionPair(log, { id: 2, ...batchDeletion }) as ModEntry[]
+    expect(log).toHaveLength(1)
+    expect(log[0]).not.toMatchObject({ paired: true })
+    log = mergeDeletionPair(log, { id: 3, ...timeoutAction }) as ModEntry[]
+    expect(log).toHaveLength(1)
+    expect(log[0]).toMatchObject({
+      clientId: 'c1',
+      moderator: 'modperson',
+      banDuration: 600,
+      kind: 'timeout',
+    })
+  })
+
+  it('a deletion double-send folding first still leaves the mod_action foldable', () => {
+    // Twitch double-sends the deletion webhook: the first appends, the second
+    // folds. Neither is the mod_action half, so the real channel.moderate echo
+    // must still fold into the row instead of appending a duplicate.
+    let log: ModEntry[] = [{ id: 1, ...batchDeletion }]
+    log = mergeDeletionPair(log, { id: 2, ...batchDeletion, at: 110 }) as ModEntry[]
+    expect(log).toHaveLength(1)
+    log = mergeDeletionPair(log, { id: 3, ...timeoutAction }) as ModEntry[]
+    expect(log).toHaveLength(1)
+    expect(log[0]).toMatchObject({ kind: 'timeout', moderator: 'modperson', banDuration: 600 })
+  })
+
+  it('clear: the mod_action folds into the newest of two candidate clear rows', () => {
+    // Two clear rows inside the window (an unpaired echo plus a fresh deletion):
+    // the backwards scan must pick the newest, not the oldest.
+    const oldClear: ModEntryData = { kind: 'clear', source: 'live', at: 100 }
+    const newClear: ModEntryData = { kind: 'clear', source: 'live', at: 100 + 50_000 }
+    const clearAction: ModEntryData = {
+      kind: 'clear',
+      action: 'clear',
+      moderator: 'modperson',
+      source: 'live',
+      at: 100 + 50_005,
+    }
+    const merged = mergeDeletionPair(
+      [
+        { id: 1, ...oldClear },
+        { id: 2, ...newClear },
+      ],
+      { id: 3, ...clearAction }
+    )
+    expect(merged).toHaveLength(2)
+    expect(merged[1]).toMatchObject({ kind: 'clear', moderator: 'modperson', at: 100 + 50_000 })
+  })
+
+  it('a second mod_action for the same user never folds into a mod_action row', () => {
+    // Mirrors the delete case: two timeout mod_action frames with the same
+    // target would mean Twitch double-sent the webhook, and both must stay
+    // visible rather than silently vanish.
+    const echo = { ...timeoutAction, at: 110 }
+    expect(mergeDeletionPair([{ id: 1, ...timeoutAction }], { id: 2, ...echo })).toHaveLength(2)
+  })
+
+  it('clear: a repeat clear outside the fold window appends as its own row', () => {
+    const first: ModEntryData = { kind: 'clear', source: 'live', at: 100 }
+    const second: ModEntryData = { kind: 'clear', source: 'live', at: 100 + 120_000 + 1000 }
+    expect(mergeDeletionPair([{ id: 1, ...first }], { id: 2, ...second })).toHaveLength(2)
+  })
+
+  it('ban pairs fold by target user id, both arrival orders', () => {
+    const banAction: ModEntryData = {
+      kind: 'ban',
+      action: 'ban',
+      moderator: 'modperson',
+      username: 'spammer',
+      targetUserId: '9001',
+      source: 'live',
+      at: 100,
+    }
+    const batchBan: ModEntryData = { ...batchDeletion, at: 105 }
+    expect(mergeDeletionPair([{ id: 1, ...banAction }], { id: 2, ...batchBan })).toHaveLength(1)
+    expect(mergeDeletionPair([{ id: 1, ...batchBan }], { id: 2, ...banAction })).toHaveLength(1)
+  })
+
+  it('timeout and delete rows never cross-fold despite shared targets', () => {
+    // A timeout of the author of a deleted message is two actions; the kind
+    // group keeps them apart.
+    const timeoutRow: ModEntryData = { ...timeoutAction, at: 100 }
+    const deleteRow: ModEntryData = {
+      kind: 'delete',
+      targetMsgId: 'native-9',
+      targetUserId: '9001',
+      source: 'live',
+      at: 105,
+    }
+    expect(mergeDeletionPair([{ id: 1, ...timeoutRow }], { id: 2, ...deleteRow })).toHaveLength(2)
+  })
+
+  it('a ban inside the window after a completed timeout appends, not folds', () => {
+    // Escalation is two actions: a mod times a user out, then bans them a
+    // minute later. The timeout's pair is complete (paired), so the ban's
+    // mod_action must not fold into it.
+    const completed: ModEntryData = { ...timeoutAction, at: 100, paired: true }
+    const banAction: ModEntryData = {
+      kind: 'ban',
+      action: 'ban',
+      moderator: 'modperson',
+      username: 'spammer',
+      targetUserId: '9001',
+      at: 100 + 60_000,
+      source: 'live',
+    }
+    const merged = mergeDeletionPair([{ id: 1, ...completed }], { id: 2, ...banAction })
+    expect(merged).toHaveLength(2)
+    expect(merged[1]).toMatchObject({ kind: 'ban', moderator: 'modperson' })
+  })
+
+  it('two actions on one user inside the window still render as two rows', () => {
+    // A timeout, then a ban 60s later. The ban's deletion frame folds into the
+    // completed timeout pair (a deletion frame carries no new attribution, so
+    // the fold is a no-op enrichment of the same user's row), and the ban's
+    // mod_action echo then appends because the pair flag blocks it — two
+    // actions, two rows, in the right order.
+    const completed: ModEntryData = { ...timeoutAction, at: 100, paired: true }
+    const secondBatch: ModEntryData = { ...batchDeletion, at: 100 + 60_000 }
+    const banAction: ModEntryData = {
+      kind: 'ban',
+      action: 'ban',
+      moderator: 'modperson',
+      username: 'spammer',
+      targetUserId: '9001',
+      at: 100 + 60_005,
+      source: 'live',
+    }
+    let merged: ModEntry[] = mergeDeletionPair([{ id: 1, ...completed }], { id: 2, ...secondBatch })
+    expect(merged).toHaveLength(1)
+    merged = mergeDeletionPair(merged, { id: 3, ...banAction })
+    expect(merged).toHaveLength(2)
+    expect(merged[1]).toMatchObject({ kind: 'ban', moderator: 'modperson', action: 'ban' })
+  })
+})
+
+describe('page composition — the onModAction append-or-fold chain', () => {
+  // The exact sequence page.tsx runs per mod_action frame: an AutoMod
+  // resolution first tries the hold fold, and only when that did NOT consume
+  // the frame does the delete pair fold run. The council found the original
+  // composition appended every frame twice; this pins the fixed one.
+  const deletion: ModEntryData = {
+    kind: 'delete',
+    targetUuid: 'internal-1',
+    targetMsgId: 'native-1',
+    source: 'live',
+    at: 100,
+  }
+  const modAction: ModEntryData = {
+    kind: 'delete',
+    action: 'delete',
+    moderator: 'modperson',
+    username: 'spammer',
+    targetUserId: '9001',
+    targetMsgId: 'native-1',
+    source: 'live',
+    at: 105,
+  }
+  const hold: ModEntryData = {
+    kind: 'automod',
+    action: 'automod_hold',
+    heldMessageId: 'h1',
+    heldText: 'something rude',
+    source: 'live',
+    at: 100,
+  }
+
+  /** What page.tsx onModAction does with a mod_action frame. */
+  function onModAction(prev: ModEntry[], entry: ModEntryData): ModEntry[] {
+    const withId = { id: 1, ...entry }
+    const log = mergeAutoModResolution(prev, withId)
+    if (log.length === prev.length) return log
+    return mergeDeletionPair(prev, withId)
+  }
+
+  it('S1: a Twitch native delete logs exactly one row, either arrival order', () => {
+    const deletionFirst = onModAction([{ id: 0, ...deletion }], modAction)
+    expect(deletionFirst).toHaveLength(1)
+    expect(deletionFirst[0]).toMatchObject({ moderator: 'modperson', targetUuid: 'internal-1' })
+
+    const modActionFirst = onModAction([{ id: 0, ...modAction }], deletion)
+    expect(modActionFirst).toHaveLength(1)
+    expect(modActionFirst[0]).toMatchObject({ moderator: 'modperson', action: 'delete' })
+  })
+
+  it('S2: a monitor-initiated delete echoes through with no third row', () => {
+    // Optimistic row (no action), reflect-back consumed the pending
+    // signature, then the Twitch message_deletion echo and the
+    // channel.moderate echo arrive. Both must fold into the optimistic row.
+    const optimistic: ModEntryData = {
+      kind: 'delete',
+      targetUuid: 'internal-1',
+      targetMsgId: 'native-1',
+      clientId: 'c1',
+      source: 'live',
+      at: 99,
+    }
+    let log: ModEntry[] = [{ id: 0, ...optimistic }]
+    log = mergeDeletionPair(log, { ...deletion, id: 1 } as ModEntry)
+    log = onModAction(log, modAction)
+    expect(log).toHaveLength(1)
+    expect(log[0]).toMatchObject({ clientId: 'c1', moderator: 'modperson' })
+  })
+
+  it('S4: an AutoMod resolution folds into its hold, one row', () => {
+    const resolution: ModEntryData = {
+      kind: 'automod',
+      action: 'automod_resolved',
+      heldMessageId: 'h1',
+      resolution: 'denied',
+      resolvedBy: 'modperson',
+      source: 'live',
+      at: 200,
+    }
+    const log = onModAction([{ id: 0, ...hold }], resolution)
+    expect(log).toHaveLength(1)
+    expect(log[0]).toMatchObject({ resolution: 'denied', resolvedBy: 'modperson', at: 100 })
+  })
+
+  it('S4b: an unmatched timeout frame appends exactly once', () => {
+    const timeout: ModEntryData = {
+      kind: 'timeout',
+      action: 'timeout',
+      moderator: 'modperson',
+      username: 'spammer',
+      banDuration: 600,
+      source: 'live',
+      at: 105,
+    }
+    const log = onModAction([], timeout)
+    expect(log).toHaveLength(1)
   })
 })
 

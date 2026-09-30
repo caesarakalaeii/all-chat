@@ -105,10 +105,11 @@ Each service has a detailed README:
 - [twitch-listener](./services/twitch-listener/README.md) - IRC client, channel management
 - [twitch-eventsub-listener](./services/twitch-eventsub-listener/README.md) - EventSub webhooks (channel points, moderation)
 - [youtube-listener](./services/youtube-listener/README.md) - HTTP polling, quota tracking
-- [youtube-listener-innertube](./services/youtube-listener-innertube/README.md) - InnerTube API polling (no quota cost)
+- [youtube-listener-innertube](./services/youtube-listener-innertube/README.md) - InnerTube API polling (quota-free chat ingestion; optional subscriber-alert polling spends accounted Data API units)
 - [youtube-quota-monitor](./services/youtube-quota-monitor/README.md) - Reads the shared YouTube quota table; exports the quota metric + publishes `quota:alerts` for the discord-bot (ADR-0023)
 - [kick-listener](./services/kick-listener/README.md) - Pusher WebSocket client
 - [tiktok-listener](./services/tiktok-listener/README.md) - Unofficial TikTok Live library
+- [tiktok-signer](./services/tiktok-signer/README.md) - Self-hosted TikTok webcast signing (X-Bogus/X-Gnarly via TikTok's own SDK in a headless browser; replaces Euler Stream, ADR-0052)
 - discord-listener — Discord channel chat relay (`services/discord-listener/`, no README yet)
 - [owncast-listener](./services/owncast-listener/README.md) - Self-hosted Owncast instances; one websocket per instance URL (ADR-0058)
 - [goodgame-listener](./services/goodgame-listener/README.md) - GoodGame.ru chat websocket; resolves channel key to numeric chat id
@@ -125,7 +126,7 @@ Each service has a detailed README:
 - [token-refresh-service](./services/token-refresh-service/README.md) - OAuth token refresh
 - [discord-bot](./services/discord-bot/README.md) - TypeScript Discord bot (community ops, not a listener)
 - [engagement-service](./services/engagement-service/README.md) - Cross-platform polls, predictions, and per-overlay viewer points economy (#523)
-- support-bot - Discord support/admin agent (`services/support-bot/`, no README yet)
+- [support-bot](./services/support-bot/README.md) - Discord support/admin agent over a locally hosted OpenAI-compatible LLM (Go, replaces the old claude-CLI TypeScript bot)
 
 ### Development Guides
 

@@ -56,6 +56,7 @@ export const overlayEditor = {
     borderWidth: 'Border width',
     padding: 'Padding',
     messageGap: 'Message gap',
+    avatarGap: 'Avatar gap',
     backdropBlur: 'Backdrop blur',
   },
   colors: {
@@ -156,6 +157,15 @@ export const overlayEditor = {
     charsUnit: ' chars',
   },
   bubbleColors: {
+    userColorHeading: 'Colour bubbles by username',
+    userColorBody:
+      'Each message takes its chatter’s username colour on the bubble. Colourless chatters get an auto-assigned colour.',
+    userColorToggle: 'Use username colours',
+    userColorModeBackground: 'Fill',
+    userColorModeBorder: 'Outline',
+    userColorOpacity: 'Fill opacity',
+    userColorOpacityNote:
+      'Applies to flat colours; gradient names fill the bubble opaque. Outline always uses its own 2px width.',
     lockedNotice:
       'Different bubble colours per platform, or a palette cycled down the feed, are a {emphasis} feature.',
     lockedNoticeEmphasis: 'Premium',
@@ -804,6 +814,8 @@ export const overlayEditor = {
     youtubeMemberMilestonesDescription: 'Membership anniversary celebrations',
     youtubeMemberGiftsLabel: 'Membership Gifts',
     youtubeMemberGiftsDescription: 'Gifted memberships',
+    youtubeSubscribersLabel: 'Subscribers',
+    youtubeSubscribersDescription: 'New public channel subscribers (private subscriptions do not trigger an alert)',
     kickSubsLabel: 'Subscriptions',
     kickSubsDescription: 'Kick channel subscriptions',
     // The render site spelled the ampersand &amp;; a catalog string is not HTML.

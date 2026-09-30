@@ -1,15 +1,15 @@
 # Token Refresh Service
 
-The Token Refresh Service is a background job (Kubernetes CronJob) that refreshes expiring OAuth tokens for YouTube, Kick, and other platforms before they expire. It prevents service interruptions from expired tokens.
+The Token Refresh Service is an always-on Deployment whose internal ticker (default 5 minutes, `TOKEN_REFRESH_INTERVAL`) refreshes OAuth tokens for YouTube, Kick, and other platforms before they expire. It prevents service interruptions from expired tokens. It is the single owner of scheduled token freshness — consumer services (moderation, the youtube-listener-innertube subscriber loop) only refresh reactively on a 401 as a fallback.
 
-**Schedule**: Every 6 hours (Kubernetes CronJob)
+**Refresh cadence**: every 5 minutes, picking up tokens expiring within `TOKEN_REFRESH_BUFFER` (30m default — safely below the shortest access-token lifetime, ~1h for Google/YouTube). Worst case a token is refreshed ~35 minutes before expiry; no consumer service routinely sees a stale token.
 **Status**: ✅ Production Ready
 
 ---
 
 ## Features
 
-- **Automated Token Refresh**: Refreshes OAuth tokens 24 hours before expiry
+- **Automated Token Refresh**: Refreshes OAuth tokens within `TOKEN_REFRESH_BUFFER` of expiry (30m default)
 - **Multi-Platform Support**: Twitch, YouTube, Kick token refresh flows
 - **Error Handling**: Retries with exponential backoff, alerts on repeated failures
 - **Database Updates**: Updates token expiry timestamps after successful refresh
@@ -21,12 +21,12 @@ The Token Refresh Service is a background job (Kubernetes CronJob) that refreshe
 ## Architecture
 
 ```
-Kubernetes CronJob (every 6 hours)
+Kubernetes Deployment (internal ticker, every 5 minutes by default)
   ↓
 Token Refresh Service
   ↓ query expiring tokens
 PostgreSQL (oauth_tokens table)
-  ↓ tokens expiring in <24 hours
+  ↓ tokens expiring within TOKEN_REFRESH_BUFFER (30m default)
 Platform OAuth APIs (Twitch, YouTube, Kick)
   ↓ POST /oauth2/token (refresh_token grant)
 New Access Token + Refresh Token
@@ -110,28 +110,22 @@ go run ./cmd
 # 4. Exit (0 = success, 1 = failures occurred)
 ```
 
-### Kubernetes CronJob
+### Kubernetes Deployment
+
+The service runs as a single-replica Deployment with an internal ticker (see
+`deployments/k8s/base/token-refresh-service/deployment.yaml`):
 
 ```yaml
-apiVersion: batch/v1
-kind: CronJob
+apiVersion: apps/v1
+kind: Deployment
 metadata:
-  name: token-refresh
+  name: token-refresh-service
   namespace: allchat
 spec:
-  schedule: "0 */6 * * *"  # Every 6 hours
-  jobTemplate:
-    spec:
-      template:
-        spec:
-          containers:
-          - name: token-refresh
-            image: ghcr.io/caesarakalaeii/allchat-token-refresh:main
-            env:
-            - name: DATABASE_HOST
-              value: allchat-cluster-rw
-            # ... other env vars from secrets
-          restartPolicy: OnFailure
+  replicas: 1  # Single replica to prevent duplicate refreshes
+  # ... template with env vars:
+  #   TOKEN_REFRESH_INTERVAL: "5m"
+  #   TOKEN_REFRESH_BUFFER: "30m"
 ```
 
 ---
@@ -164,7 +158,7 @@ rewrites `granted_scopes` — a periodic job must not be able to narrow what som
 ```sql
 SELECT id, user_id, platform, refresh_token, expiry
 FROM oauth_tokens
-WHERE expiry < NOW() + INTERVAL '24 hours'  -- Expiring within 24 hours
+WHERE expiry < NOW() + INTERVAL '30 minutes'  -- Expiring within TOKEN_REFRESH_BUFFER (30m)
   AND refresh_token IS NOT NULL               -- Has refresh token
 ORDER BY expiry ASC;                          -- Refresh soonest first
 ```
@@ -285,7 +279,7 @@ severity: info
 
 ### Refresh Tokens Failing
 
-**Symptom**: CronJob logs show 400/401 errors from OAuth APIs
+**Symptom**: Service logs show 400/401 errors from OAuth APIs
 
 **Check tokens**:
 ```bash
@@ -307,24 +301,21 @@ kubectl exec -n allchat allchat-cluster-1 -- psql -U allchat -c "
 Email/Slack: "Your YouTube connection expired. Please re-authorize at https://allchat.example.com/settings"
 ```
 
-**File**: `refresh/youtube.go:RefreshToken()`, `refresh/twitch.go:RefreshToken()`
+**File**: `refresher/manager.go` (batch loop; platform refresh via `services/auth-service/oauth/`)
 
 ---
 
 ## Production Considerations
 
-1. **CronJob Schedule**: Run every 6 hours (4× per day) to catch tokens expiring within 24 hours
+1. **Refresh cadence**: `TOKEN_REFRESH_INTERVAL` (5m) with `TOKEN_REFRESH_BUFFER` (30m) keeps the worst-case refresh ~35 minutes ahead of expiry — no consumer service should routinely see a stale token. Each batch touches only in-window tokens, so cadence multiplies batch overhead, not total refreshes.
 2. **Retry Limits**: Max 3 retries with exponential backoff
 3. **Alert Integration**: Configure `ALERT_WEBHOOK_URL` for Slack/PagerDuty
 4. **Token Encryption**: Tokens encrypted at rest via AES-256-GCM (`shared/encryption/`)
 5. **Audit Logging**: Log all token refresh attempts (success/failure) for compliance
-6. **Failed Jobs**: Monitor CronJob failures in Kubernetes (alert if job fails 3× consecutively)
-
----
+6. **Failed Batches**: Alert if the batch error metric (`token_refresh_attempts_total{result="error"}`) stays non-zero across consecutive ticker runs.
 
 ## Related Services
 
-- **Auth Service**: Issues initial OAuth tokens
 - **YouTube Listener**: Uses refreshed YouTube tokens to poll Live Chat API
 - **PostgreSQL**: Stores OAuth tokens with expiry timestamps
 

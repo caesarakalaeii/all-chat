@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
 // revocationBody builds the payload Twitch sends when it revokes a subscription.
@@ -94,6 +95,61 @@ func TestHandleRevocation_EvictsCachedSubscription(t *testing.T) {
 				t.Fatalf("forget calls = %v, want [12345:%s]", got, subType)
 			}
 		})
+	}
+}
+
+// Every revocation must land in listener_eventsub_revocations_total keyed by
+// broadcaster_id — the series the caesar-deployment mass-revocation alert rates over.
+// The metric name is referenced as a string by the alert rule, so a rename here would
+// leave it silently unfirable: pin the name the same way payment-service pins its
+// alert-consumed metric names.
+func TestHandleRevocation_IncrementsRevocationsMetric(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	_, _, h := newStatusTestHandler(t)
+
+	before := testutil.ToFloat64(revocationsTotal.WithLabelValues(
+		"twitch-eventsub", "twitch-eventsub-listener", "1532957417", "channel.chat.message"))
+	beforeOther := testutil.ToFloat64(revocationsTotal.WithLabelValues(
+		"twitch-eventsub", "twitch-eventsub-listener", "999", "channel.follow"))
+
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	h.handleRevocation(c, revocationBody(t, "channel.chat.message", "1532957417"))
+
+	after := testutil.ToFloat64(revocationsTotal.WithLabelValues(
+		"twitch-eventsub", "twitch-eventsub-listener", "1532957417", "channel.chat.message"))
+	afterOther := testutil.ToFloat64(revocationsTotal.WithLabelValues(
+		"twitch-eventsub", "twitch-eventsub-listener", "999", "channel.follow"))
+
+	if after-before != 1 {
+		t.Fatalf("revocations_total for 1532957417/channel.chat.message = %v, want +1", after-before)
+	}
+	if afterOther != beforeOther {
+		t.Fatalf("revocations_total for an unrelated broadcaster changed: %v -> %v", beforeOther, afterOther)
+	}
+
+	// The name must be pinned as a literal string — that is how caesar-deployment's
+	// alert rule selects the metric. ToFloat64/WithLabelValues compile against the Go
+	// variable only, so a rename of the metric would leave the alert silently
+	// unfirable with the suite green; CollectAndCount with the name filter reads 0.
+	if got := testutil.CollectAndCount(revocationsTotal, "listener_eventsub_revocations_total"); got == 0 {
+		t.Fatal("metric name changed: alert rule selects listener_eventsub_revocations_total by string")
+	}
+}
+
+// A revocation without a broadcaster id cannot be attributed; it must not invent a
+// series (a "" broadcaster_id label would poison the per-broadcaster alert grouping).
+func TestHandleRevocation_NoBroadcasterIDDoesNotIncrementMetric(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	_, _, h := newStatusTestHandler(t)
+
+	before := testutil.CollectAndCount(revocationsTotal)
+
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	h.handleRevocation(c, revocationBody(t, "channel.follow", ""))
+
+	after := testutil.CollectAndCount(revocationsTotal)
+	if after != before {
+		t.Fatalf("series count = %d, want unchanged %d (no empty broadcaster_id series)", after, before)
 	}
 }
 

@@ -161,6 +161,8 @@ func mapEventTypeToColumn(platform, eventType string) string {
 			return "enable_youtube_member_milestones"
 		case "membership_gift", "gift_received":
 			return "enable_youtube_member_gifts"
+		case "subscriber":
+			return "enable_youtube_subscribers"
 		default:
 			return ""
 		}

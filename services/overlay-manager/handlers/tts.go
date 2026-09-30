@@ -34,6 +34,7 @@ import (
 	"github.com/caesar/all-chat/services/overlay-manager/repository"
 	ttspkg "github.com/caesar/all-chat/services/overlay-manager/tts"
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
@@ -135,6 +136,11 @@ type TTSHandler struct {
 	// access. Production code uses defaultElevenLabsBaseURL.
 	elevenLabsBaseURL string
 
+	// rateRedis, when set, makes checkRateLimit a cluster-wide fixed window in
+	// Redis (pentest F5): the in-process map below multiplied the effective
+	// limit by the replica count, and every replica fronts the same quota.
+	// Nil falls back to the in-process limiter (tests, single-binary dev).
+	rateRedis   redis.Cmdable
 	rateMu      sync.Mutex
 	rateBuckets map[string]*rateBucket
 }
@@ -153,14 +159,22 @@ func NewTTSHandler(repo ttsConfigStore, overlays overlayOwnershipChecker, cipher
 	}
 	return &TTSHandler{
 		repo:              repo,
+		logger:            logger,
 		overlays:          overlays,
 		cipher:            cipher,
 		httpClient:        &http.Client{Timeout: ttsHTTPTimeout},
-		logger:            logger,
 		publicBaseURL:     publicBaseURL,
 		elevenLabsBaseURL: defaultElevenLabsBaseURL,
 		rateBuckets:       make(map[string]*rateBucket),
 	}
+}
+
+// WithRateRedis switches the per-overlay TTS rate limit to a cluster-wide
+// fixed window in Redis (pentest F5). Call it after NewTTSHandler in wiring.
+// Nil keeps the in-process limiter.
+func (h *TTSHandler) WithRateRedis(rdb redis.Cmdable) *TTSHandler {
+	h.rateRedis = rdb
+	return h
 }
 
 // checkOwnership returns (userID, overlayID, ok). On failure it writes the
@@ -184,10 +198,50 @@ func (h *TTSHandler) checkOwnership(c *gin.Context) (string, string, bool) {
 	return uid, overlayID, true
 }
 
-// checkRateLimit returns true if the request is allowed. Window is a fixed
-// 60-second epoch per overlay. When the window elapses the bucket resets.
-// Reset-on-restart is acceptable (T-13-04).
+// checkRateLimit returns true if the request is allowed. With Redis set, the
+// window is a fixed 60-second bucket in Redis (INCR + expire); otherwise the
+// in-process map applies, whose limit is only correct for a single replica
+// (pentest F5).
 func (h *TTSHandler) checkRateLimit(overlayID string) bool {
+	if h.rateRedis != nil {
+		return h.checkRateLimitRedis(overlayID)
+	}
+	return h.checkRateLimitLocal(overlayID)
+}
+
+// checkRateLimitRedis is the cluster-wide fixed window: one shared counter per
+// 60-second epoch bucket, so N replicas enforce the SAME per-minute cap rather
+// than N× it (a request at a bucket boundary can span two windows, so the
+// instantaneous rate is up to 2× the cap — acceptable for a billing cap).
+// INCR and EXPIRE run as one atomic Lua script so a crash between them cannot
+// leave a TTL-less key behind. Redis errors fail open to the in-process
+// limiter — a limiter outage must not take TTS down with it, and the local
+// bucket is still a cap.
+var incrWithExpire = redis.NewScript(`
+local count = redis.call('INCR', KEYS[1])
+if count == 1 then
+	redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+return count
+`)
+
+func (h *TTSHandler) checkRateLimitRedis(overlayID string) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	bucket := time.Now().Unix() / 60
+	key := fmt.Sprintf("tts:ratelimit:%s:%d", overlayID, bucket)
+	count, err := incrWithExpire.Run(ctx, h.rateRedis, []string{key}, 120).Int64()
+	if err != nil {
+		h.logger.Warn("tts: redis rate limit check failed, falling back to in-process",
+			zap.String("overlay_id", overlayID), zap.Error(err))
+		return h.checkRateLimitLocal(overlayID)
+	}
+	return count <= int64(ttsRateLimitPerMinute)
+}
+
+// checkRateLimitLocal is the original in-process bucket, kept as the no-Redis
+// and Redis-failure path.
+func (h *TTSHandler) checkRateLimitLocal(overlayID string) bool {
 	h.rateMu.Lock()
 	defer h.rateMu.Unlock()
 	now := time.Now()

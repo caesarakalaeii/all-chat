@@ -24,6 +24,12 @@ go.work
 
 # Dependency directories
 vendor/
+# Exception: tiktok-signer vendors TikTok's own signing SDK (MIT, from
+# carcabot/tiktok-signature; see services/tiktok-signer/vendor/PROVENANCE.md).
+# These files are source, not dependency-manager output, and the image build
+# COPYs them — see ADR-0052.
+!services/tiktok-signer/vendor/
+!services/tiktok-signer/vendor/**
 
 # Build artifacts and binaries
 # LSP and build cache directories

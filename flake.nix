@@ -103,6 +103,13 @@
         # scripts/k8s-make-user-admin.sh, plus the kubectl invocations in
         # deployments/ansible/.
         pkgs.kubectl
+        # kubeconform: NOT the manifests verb -- the flake check is
+        # sandboxed without network and kubeconform needs to download
+        # schemas (see the manifests command text). The offline gate is
+        # scripts/validate-manifests.py. kubeconform stays here for
+        # ad-hoc online validation with -strict, which does catch
+        # spec-field drift.
+        pkgs.kubeconform
 
         # ---- shell conveniences ----
         # The Makefile is the repo's documented entrypoint (`make docker-up`,
@@ -258,8 +265,9 @@
       # Deliberately NOT covered by any verb, so the map stays honest:
       #   * scripts/quick-start-frontend.sh (`make frontend-quick`) asks a
       #     `read -r` question, so it can only be run by a human.
-      #   * the `storybook` vitest project (frontend/vitest.config.ts) and
-      #     frontend/tests/e2e/ drive a real Chromium through Playwright. Those
+      #   * the `storybook` and `browser` vitest projects
+      #     (frontend/vitest.config.ts) and frontend/tests/e2e/ drive a real
+      #     Chromium through Playwright. Those
       #     downloaded browsers are FHS-linked binaries that need a host ldso
       #     (see block 2), and the nixpkgs alternative,
       #     playwright-driver.browsers, has a 2.30 GB closure (2304223264 bytes,

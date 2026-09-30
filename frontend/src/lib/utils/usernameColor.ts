@@ -51,8 +51,15 @@ export interface UsernameColorUser {
  * Note the ordering constraint this encodes: the auto color must NOT be folded
  * into `color` upstream, or the streamer's setting could never apply.
  */
-export function resolveUsernameColor(user: UsernameColorUser | undefined): string {
-  if (user?.color) {
+export function resolveUsernameColor(
+  user: UsernameColorUser | undefined,
+  opts?: { staticColor?: boolean }
+): string {
+  // staticColor: the bubble is already carrying the username colour, so the
+  // name itself goes static (the streamer's picker / auto palette) to keep the
+  // row readable. Skips the `color` short-circuit; gradient usernames are
+  // unaffected — callers branch on name_gradient before reaching here.
+  if (user?.color && !opts?.staticColor) {
     return user.color
   }
   return `var(--chat-username-color, ${user?.auto_color || '#FFFFFF'})`

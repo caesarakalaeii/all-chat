@@ -54,6 +54,9 @@ type discordFlowState struct {
 	// Return is an allowlisted key naming where to send the browser afterwards — a key, never a
 	// URL, so this can never become an open redirect.
 	Return string `json:"return,omitempty"`
+	// Origin is the allowlisted frontend origin the flow started from, redirecting the
+	// callback back to the host the user began on (beta.allch.at as well as allch.at).
+	Origin string `json:"origin,omitempty"`
 }
 
 // discordReturnPaths is the closed allowlist of post-link destinations. A streamer links from
@@ -104,6 +107,8 @@ func (h *DiscordHandler) HandleIdentityConnect(c *gin.Context) {
 	}
 	userID := fmt.Sprintf("%v", userIDRaw)
 
+	origin := requestFrontendOrigin(c)
+
 	returnKey := c.Query("return")
 	if _, ok := discordReturnPaths[returnKey]; !ok {
 		returnKey = defaultDiscordReturn
@@ -119,6 +124,7 @@ func (h *DiscordHandler) HandleIdentityConnect(c *gin.Context) {
 		Kind:   discordFlowIdentity,
 		UserID: userID,
 		Return: returnKey,
+		Origin: origin,
 	})
 	if err != nil {
 		h.log.Error("discord identity: failed to encode state", zap.Error(err))
@@ -131,7 +137,7 @@ func (h *DiscordHandler) HandleIdentityConnect(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"auth_url": h.oauth.GetIdentityAuthURL(state)})
+	c.JSON(http.StatusOK, gin.H{"auth_url": h.originProvider(origin).GetIdentityAuthURL(state)})
 }
 
 // completeIdentityLink finishes the account link. Called from the shared callback once the stored
@@ -146,17 +152,20 @@ func (h *DiscordHandler) completeIdentityLink(c *gin.Context, flow discordFlowSt
 		return
 	}
 
-	token, err := h.oauth.ExchangeCode(ctx, code)
+	origin := h.flowOrigin(flow)
+	provider := h.originProvider(origin)
+
+	token, err := provider.ExchangeCode(ctx, code)
 	if err != nil {
 		h.log.Error("discord identity: code exchange failed", zap.Error(err))
-		h.redirectIdentity(c, flow.Return, "error=exchange_failed")
+		h.redirectIdentity(c, origin, flow.Return, "error=exchange_failed")
 		return
 	}
 
 	identity, err := h.oauth.GetIdentity(ctx, token.AccessToken)
 	if err != nil {
 		h.log.Error("discord identity: identity read failed", zap.Error(err))
-		h.redirectIdentity(c, flow.Return, "error=identity_unavailable")
+		h.redirectIdentity(c, origin, flow.Return, "error=identity_unavailable")
 		return
 	}
 
@@ -167,11 +176,11 @@ func (h *DiscordHandler) completeIdentityLink(c *gin.Context, flow discordFlowSt
 		// user round the consent loop forever.
 		h.log.Warn("discord identity: account already linked to another user",
 			zap.String("user_id", flow.UserID))
-		h.redirectIdentity(c, flow.Return, "error=already_linked")
+		h.redirectIdentity(c, origin, flow.Return, "error=already_linked")
 		return
 	case err != nil:
 		h.log.Error("discord identity: failed to store link", zap.String("user_id", flow.UserID), zap.Error(err))
-		h.redirectIdentity(c, flow.Return, "error=save_failed")
+		h.redirectIdentity(c, origin, flow.Return, "error=save_failed")
 		return
 	}
 
@@ -179,16 +188,17 @@ func (h *DiscordHandler) completeIdentityLink(c *gin.Context, flow discordFlowSt
 	// on Discord — every write is the bot — so retaining the token would be a credential held for
 	// no purpose.
 	h.log.Info("discord identity: linked", zap.String("user_id", flow.UserID))
-	h.redirectIdentity(c, flow.Return, "discord_account=linked")
+	h.redirectIdentity(c, origin, flow.Return, "discord_account=linked")
 }
 
-// redirectIdentity sends the browser back to the allowlisted return path with a result marker.
-func (h *DiscordHandler) redirectIdentity(c *gin.Context, returnKey, query string) {
+// redirectIdentity sends the browser back to the allowlisted return path on the origin
+// the flow started from, with a result marker.
+func (h *DiscordHandler) redirectIdentity(c *gin.Context, origin, returnKey, query string) {
 	path, ok := discordReturnPaths[returnKey]
 	if !ok {
 		path = discordReturnPaths[defaultDiscordReturn]
 	}
-	c.Redirect(http.StatusFound, strings.TrimSuffix(h.frontendURL, "/")+path+"?"+query)
+	c.Redirect(http.StatusFound, origin+path+"?"+query)
 }
 
 // HandleGetIdentity reports whether the caller has linked a Discord account.

@@ -18,7 +18,9 @@ Done! Your chat now has that sweet 90s nostalgia.
 
 ## Step 3: Customize (Optional)
 
-Want to hide certain elements? Open `win98-theme.css` in a text editor and find the section titled:
+> `!important` is stripped at injection when a theme is applied, so the
+> snippets below work either way — plain declarations are enough
+> ([README.md](./README.md) § Tips & Best Practices).
 
 ```
 OPTIONAL: HIDE ELEMENTS
@@ -95,7 +97,7 @@ Find the "ADDITIONAL CUSTOMIZATION OPTIONS" section and uncomment:
 .space-y-3 > div {
   transform: scale(1.2);
   transform-origin: left top;
-  margin-bottom: 16px !important;
+  margin-bottom: 16px;
 }
 ```
 
@@ -105,7 +107,7 @@ Change `1.2` to `1.5` for even bigger messages, or `0.8` for smaller.
 
 ```css
 .space-y-3 > div {
-  background: #008080 !important; /* Teal */
+  background: #008080; /* Teal */
 }
 ```
 
@@ -126,7 +128,7 @@ If messages sliding in is too distracting:
 
 ```css
 .space-y-3 > div {
-  animation: none !important;
+  animation: none;
 }
 ```
 

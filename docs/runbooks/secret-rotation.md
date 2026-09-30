@@ -132,7 +132,11 @@ TOKEN\_ENCRYPTION\_KEY protects OAuth access and refresh tokens stored in the da
 | key-rotator (Job/CronJob) | TOKEN\_ENCRYPTION\_KEY\_V1 | token-encryption-key-v1 |
 | key-rotator (Job/CronJob) | YOUTUBE\_TOKEN\_ENCRYPTION\_KEY | youtube-token-encryption-key |
 
-Note: `youtube-listener-innertube` does NOT use the encryption key (no token writes).
+Note: `youtube-listener-innertube` uses the encryption key only when subscriber alerts
+are enabled (it reads `youtube_oauth_tokens` to poll the channel's recent subscribers and
+refreshes reactively on 401). When it is a consumer, mount both keys on it too:
+| youtube-listener-innertube | TOKEN\_ENCRYPTION\_KEY | token-encryption-key |
+| youtube-listener-innertube | TOKEN\_ENCRYPTION\_KEY\_V1 | token-encryption-key-v1 |
 `tiktok-listener` is Node.js scope — deferred (D-17 partial).
 
 ### Step 1 — Determine the current latest kid

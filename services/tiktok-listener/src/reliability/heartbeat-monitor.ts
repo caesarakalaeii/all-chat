@@ -24,7 +24,7 @@
  * connection state.
  *
  * Only forces reconnection when BOTH conditions are true:
- * 1. Library reports connection is established (isConnected && upgradedToWebsocket)
+ * 1. Library reports connection is established (isConnected)
  * 2. No messages received within timeout period (indicating silent failure)
  *
  * This prevents unnecessary reconnections that trigger TikTok's anti-bot
@@ -32,7 +32,7 @@
  */
 
 import { Logger } from '../types/logger.js';
-import { TikTokLiveConnection } from 'tiktok-live-connector';
+import { TikTokLiveConnection, TikTokLiveConnectionState } from 'tiktok-live-connector';
 import { PrometheusMetrics } from '../metrics/prometheus.js';
 
 interface MonitorState {
@@ -46,6 +46,12 @@ export class HeartbeatMonitor {
   private logger: Logger;
   private metrics: PrometheusMetrics;
   private monitors: Map<string, MonitorState> = new Map();
+  // Consecutive heartbeat-forced disconnects without a delivered message in
+  // between (noteSilentFailureHealing resets it). >1 means reconnecting did
+  // not fix the silence, so the reconnect loop must back off instead of
+  // hammering Euler every ~2 minutes per channel — the churn that kept the
+  // 2026-09-14 incident wedged for a day.
+  private silentFailureStreaks = new Map<string, number>();
 
   private readonly HEARTBEAT_INTERVAL: number;
   private readonly HEARTBEAT_TIMEOUT: number;
@@ -110,7 +116,10 @@ export class HeartbeatMonitor {
   }
 
   /**
-   * Record that a message was received
+   * Record wire liveness: a decodable frame arrived. Fed from the
+   * decodedData hook (any method), not only the five delivery handlers, so
+   * a live-but-quiet stream stays connected on its RoomUserSeq traffic.
+   * Streak healing stays stricter — it requires a delivered message.
    *
    * @param username TikTok username
    */
@@ -131,6 +140,18 @@ export class HeartbeatMonitor {
       username,
       timestamp: new Date(now).toISOString()
     });
+  }
+
+  /**
+   * Mark a username's silent-failure streak as healed. Called only when a
+   * message is actually delivered downstream — not from recordMessage, which
+   * fires on every inbound frame including reconnect replay bursts that are
+   * then dropped as duplicates. A replay that never delivers must not reset
+   * the streak, or a permanently deaf connection reconnects at full speed
+   * forever.
+   */
+  noteSilentFailureHealing(username: string): void {
+    this.silentFailureStreaks.delete(username);
   }
 
   /**
@@ -175,10 +196,9 @@ export class HeartbeatMonitor {
 
     if (silenceDuration > this.HEARTBEAT_TIMEOUT) {
       // Check library's internal connection state before forcing reconnection
-      let libraryState: any;
+      let libraryState: TikTokLiveConnectionState;
       try {
-        // Note: getState() exists but isn't in TypeScript definitions, so we cast to any
-        libraryState = (state.connection as any).getState();
+        libraryState = state.connection.state;
       } catch (error) {
         this.logger.warn('Failed to get connection state from library', {
           username,
@@ -190,12 +210,11 @@ export class HeartbeatMonitor {
 
       // Only force reconnection if library thinks it's connected but we know it's not receiving data
       // This prevents unnecessary reconnections during normal disconnections or connection attempts
-      if (!libraryState.isConnected || !libraryState.upgradedToWebsocket) {
+      if (!libraryState.isConnected) {
         this.logger.debug('Heartbeat timeout but library reports connection not established - skipping forced reconnection', {
           username,
           silence_duration_ms: silenceDuration,
-          library_is_connected: libraryState.isConnected,
-          library_upgraded_to_websocket: libraryState.upgradedToWebsocket
+          library_is_connected: libraryState.isConnected
         });
         return;
       }
@@ -209,13 +228,13 @@ export class HeartbeatMonitor {
         timeout_threshold_ms: this.HEARTBEAT_TIMEOUT,
         library_state: {
           is_connected: libraryState.isConnected,
-          upgraded_to_websocket: libraryState.upgradedToWebsocket,
           room_id: libraryState.roomId
         }
       });
 
       // Record timeout in metrics
       this.metrics.recordHeartbeatTimeout(username);
+      this.silentFailureStreaks.set(username, (this.silentFailureStreaks.get(username) ?? 0) + 1);
 
       // Force disconnection to trigger reconnection flow
       try {
@@ -237,6 +256,21 @@ export class HeartbeatMonitor {
         last_message_time: new Date(state.lastMessageTime).toISOString()
       });
     }
+  }
+
+  /**
+   * How many silent-failure disconnects in a row this username has had without
+   * a delivered message in between. 0 = last connection was healthy.
+   */
+  getSilentFailureStreak(username: string): number {
+    return this.silentFailureStreaks.get(username) ?? 0;
+  }
+
+  /**
+   * Drop a username's silent-failure streak (e.g. when its demand is removed).
+   */
+  clearSilentFailureStreak(username: string): void {
+    this.silentFailureStreaks.delete(username);
   }
 
   /**

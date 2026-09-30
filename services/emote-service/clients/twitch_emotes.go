@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -211,25 +210,4 @@ func parseScale(value string) float64 {
 		return 0
 	}
 	return parsed
-}
-
-func mergeEmoteSets(global, channel []models.Emote) []models.Emote {
-	index := make(map[string]models.Emote)
-	for _, emote := range global {
-		index[strings.ToLower(emote.Code)] = emote
-	}
-	for _, emote := range channel {
-		index[strings.ToLower(emote.Code)] = emote
-	}
-
-	merged := make([]models.Emote, 0, len(index))
-	for _, emote := range index {
-		merged = append(merged, emote)
-	}
-
-	sort.Slice(merged, func(i, j int) bool {
-		return strings.ToLower(merged[i].Code) < strings.ToLower(merged[j].Code)
-	})
-
-	return merged
 }

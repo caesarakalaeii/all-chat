@@ -2,20 +2,77 @@
 
 ## Status
 
-Proposed — steps 3–4 implemented behind flags; step 1 (the signature itself) not
-started, and scoped at two seams rather than one (see "There are two Euler
-signing seams").
+Accepted — step 1 (the signature itself) is implemented as
+`services/tiktok-signer`, a self-hosted sign service that computes X-Bogus with
+TikTok's own web SDK in a headless browser (vendored from the MIT-licensed
+carcabot/tiktok-signature; see its `vendor/PROVENANCE.md`) and X-Gnarly with a
+vendored encoder, then signs *and executes* `/webcast/im/fetch/` exactly as
+Euler's `/webcast/fetch` did. The listener wires it in behind the existing
+flags: `SelfSigner` (`src/sign/self.ts`) is constructed when
+`TIKTOK_SIGNER_URL` is set, connections pin their device presets to the
+signer's browser identity, and under `self` the second seam
+(`fetchWebcastSignatureFromProvider`) is repointed at the service as well.
 
-Step 4 (lever 1) is **verified live**, not merely implemented:
+Step 4 (lever 1) remains **verified live**, not merely implemented:
 `src/sign/euler-free.live.test.ts` resolves room IDs for three accounts and
 answers is-live with `SignConfig.basePath` pointed at a closed port, so Euler
 demonstrably is not on that path. Opt-in via `TIKTOK_LIVE_TESTS=1`.
 
-Neither acceptance criterion of the issue — the connection-rate ceiling and gift
-enrichment — is met yet; both depend on the unstarted signing work. The ceiling
-is unchanged because it is a *sign* limit, and every connect still signs through
-Euler; lever 1 reduces free-tier calls but does not raise the concurrent-room
-ceiling.
+Not yet retired: the default signer mode is still `euler`. Walk
+`shadow` (measure) → `self` (cutover, Euler fallback on) →
+`TIKTOK_SELF_SIGN_FALLBACK=false` (retire) per the listener README. The
+connection-rate ceiling and gift enrichment acceptance criteria land with
+that rollout, not with the code.
+
+> **Update 2026-09-15** (incident follow-up): the ceiling bit us in production
+> before the signing work landed. On 2026-09-14 one tiktok-listener pod held 43
+> of ~48 leases and overran the free tier's concurrent *WebSocket proxy* cap
+> (every connection is proxied via `ws-fallback.eulerstream.com` with
+> `ws_direct=0`); above the cap the proxy accepts the handshake and replays the
+> initial fetch, then silently withholds live push. Two mitigations shipped that
+> stay within this ADR's levers: ADR-0007 rebalancing ported to the service's
+> TypeScript coordinator, and a per-pod connection ceiling
+> (`TIKTOK_MAX_STREAMS_PER_POD`, default 20). Neither raises the ceiling; both
+> keep us visibly under it until self-signing retires Euler entirely.
+
+> **Update 2026-09-15, later the same day** (TikTok-side escalation): Euler's
+> sign API went dark (`Route '/api/v1/sign_webcast' DNE`), and the same day the
+> community established the common cause (zerodytrash/TikTok-Live-Connector#329,
+> isaackogan/TikTokLive#376): since 2026-09-09 TikTok gates webcast data
+> endpoints on browser-grade sessions — anonymous, non-browser fetchers get an
+> empty 200 or a 403 regardless of signature quality. Measured against the
+> same live room: our signed fetch (undici, X-Bogus) → 200 with 0 bytes; the
+> same fetch in-page from a headless/Xvfb Chromium → 403; the same Chromium
+> on a real display → 200 with a full `ProtoMessageFetchResult` (~5s, ~60KB,
+> pushServer/cursor/internalExt intact). The signature is accepted; the
+> *session* is what TikTok judges. The signer therefore grew a page-viewer
+> mode (`src/signing/viewer.ts`, `SIGNER_VIEWER_MODE=page`): a non-headless
+> browser tab per room on the streamer's live page, capturing the SDK-signed
+> im/fetch the player itself receives, and returning the same
+> `{fetchResult, fetchResultCookieHeader}` contract. It requires a real
+> rendering stack (Xvfb was measured insufficient) — see the signer README
+> for the deployment requirements. `shadow`/`self`/fallback flags are
+> unchanged; the viewer path is how `self` keeps working under the new
+> TikTok regime.
+
+> **Update 2026-09-16** (signing lab, diagnosis + hardening): the page-mode
+> viewer fleet went 100% `viewer_capture_failed` across every lane and room.
+> In-cluster A/B (same lane, same live room, same Chromium) isolated the
+> cause to the ANGLE-on-Vulkan/lavapipe renderer args added to
+> `ensureBrowser` that morning: with them the page never makes a single
+> webcast call (no room/enter, no im/fetch, 0 requests in 240s); without
+> them, plain default GL on Xvfb+llvmpipe boots the player and captures
+> im/fetch 200 with full payloads (2613 bytes in the lab) on every attempt —
+> direct, through residential lanes, and with media interception. The
+> renderer spoof stopped matching real driver behaviour after the image's
+> Chromium update and now reads as the bot tell it was avoiding; the args and
+> the mesa-vulkan-drivers they needed are removed. Also shipped same day:
+> the listener's push WebSocket now mirrors Chrome's TLS ClientHello
+> (`tls-impersonate`, `src/ws/chrome-tls.ts`; JA4 cipher/extension segments
+> verified against a reference fingerprint service through the CONNECT
+> tunnel), closing the last leg where the connection described itself as
+> Node. Runtime: node:20-alpine → node:26-bookworm-slim (glibc prebuilds,
+> full Chrome extension set).
 
 The licence obstacle the issue describes does **not** apply to the version we
 pin (see "Licence"): 2.4.0 is MIT.

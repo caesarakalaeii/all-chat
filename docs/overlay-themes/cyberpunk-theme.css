@@ -23,6 +23,13 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Share+Tech+Mono&display=swap');
 
+/* Font-size intent: the customizer's consumer rule reads --theme-font-size
+   when its slider is unset, so the message text keeps this 17px instead of
+   the 1rem platform default. */
+:root {
+  --theme-font-size: 17px;
+}
+
 /* ============================================================
    CORE STYLES
    ============================================================ */

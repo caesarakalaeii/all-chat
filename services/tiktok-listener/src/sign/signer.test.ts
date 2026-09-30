@@ -106,6 +106,35 @@ describe('classifySignatureFailure', () => {
     });
   });
 
+  describe('self-imposed budget refusals', () => {
+    it('classifies the pure-node WS-connect budget refusal as budget, not rate_limit', () => {
+      // Both refusal messages previously landed `rate_limit` via the "too
+      // many"/"rate limit" token match — which fed the
+      // TikTokPureNodeConnectBudgetExhausted alert even though the budget
+      // doing the refusing is ours, not TikTok's or Euler's. The alert
+      // needs to track our budget specifically, so it gets its own reason.
+      expect(
+        classifySignatureFailure(
+          new Error('WS connect budget exhausted: too many connects this hour (rate limiting self-imposed)')
+        )
+      ).toBe('budget');
+    });
+
+    it('classifies the lease budget refusal as budget', () => {
+      expect(
+        classifySignatureFailure(
+          new Error('session lease rate limited: lease budget exhausted for this hour')
+        )
+      ).toBe('budget');
+    });
+
+    it('keeps an external rate limit at rate_limit', () => {
+      expect(
+        classifySignatureFailure(new Error('sign service rate limited: TikTok rate limited the sign target'))
+      ).toBe('rate_limit');
+    });
+  });
+
   describe('inputs that are not well-formed errors', () => {
     it('returns unknown for an unrecognised message', () => {
       expect(classifySignatureFailure(new Error('the sky is falling'))).toBe('unknown');
@@ -123,7 +152,14 @@ describe('classifySignatureFailure', () => {
     });
 
     it('returns a bounded set of values, since these become metric labels', () => {
-      const permitted = new Set(['rate_limit', 'paywall', 'signature', 'network', 'unknown']);
+      const permitted: Record<string, true> = {
+        rate_limit: true,
+        paywall: true,
+        signature: true,
+        network: true,
+        budget: true,
+        unknown: true
+      };
       const samples: unknown[] = [
         named('SignatureRateLimitError'),
         named('PremiumFeatureError'),
@@ -131,13 +167,13 @@ describe('classifySignatureFailure', () => {
         new TypeError("Cannot read properties of undefined (reading 'retry-after')"),
         new Error('socket hang up'),
         new Error('Sign Error'),
+        new Error('WS connect budget exhausted'),
         new Error('???'),
         undefined,
         'nonsense'
       ];
-
       for (const sample of samples) {
-        expect(permitted).toContain(classifySignatureFailure(sample));
+        expect(permitted[classifySignatureFailure(sample)]).toBe(true);
       }
     });
   });
@@ -162,5 +198,15 @@ describe('SignatureFailure', () => {
 
     expect(failure).toBeInstanceOf(Error);
     expect(failure.name).toBe('SignatureFailure');
+  });
+});
+
+describe('SignatureFailure.retryAfterMs', () => {
+  it('defaults to undefined so existing constructions stay binary-safe', () => {
+    expect(new SignatureFailure('self', 'x').retryAfterMs).toBeUndefined();
+  });
+
+  it('carries the time until the signer can succeed again', () => {
+    expect(new SignatureFailure('pure-node', 'budget', undefined, 300_000).retryAfterMs).toBe(300_000);
   });
 });

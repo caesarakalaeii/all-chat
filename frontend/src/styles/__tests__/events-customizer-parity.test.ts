@@ -45,9 +45,9 @@ const LIVE_EXCEPTIONS = new Set<string>([
   '--chat-show-badges',
   '--chat-show-username',
   '--chat-show-timestamps',
-  // Body font-size: applied inline in React (visual `fontSize` ?? legacy
-  // `display.font_size`) so it doesn't clobber the legacy display-settings path.
-  '--chat-font-size',
+  // Body font-size used to live here as an exception (inline React delivery);
+  // it is now consumed by the layered `.overlay-live-body .break-words` rule,
+  // so it must stay unlisted for parity to hold.
   // Overlay padding: the live overlay owns its outer padding (`p-4`); this is not
   // a user-facing customizer control.
   '--chat-overlay-padding',
@@ -130,14 +130,14 @@ describe('events.css visual-customizer scope parity', () => {
   })
 
   /**
-   * The bubble-forcing block uses `!important` inside a cascade layer, which
-   * beats a theme's unlayered `!important` — nothing a theme author writes can
-   * override it. While it matched `.event-message` it pinned every event to the
-   * chat bubble's border/padding: the tier borders never rendered, and themes
-   * had no way to restyle the event card. Events take those values as defaults
-   * (via `--event-*` in marketplace-themes) where a theme can still win.
+   * The bubble-forcing block is normal-weight inside the top cascade layer, so
+   * nothing a theme author writes (layered or `!important`-stripped at
+   * injection) can override it. While it matched `.event-message` it pinned
+   * every event to the chat bubble's fill: the tier borders never rendered, and
+   * themes had no way to restyle the event card. Events take those values as
+   * defaults (via `--event-*` in marketplace-themes) where a theme still wins.
    */
-  it('excludes events from the unbeatable bubble-forcing rules', () => {
+  it('excludes events from the inescapable bubble-forcing rules', () => {
     const forcing = CSS.match(/\.overlay-(preview|live)-body > div[^{]*\{/g) ?? []
     expect(forcing.length).toBe(2)
     for (const rule of forcing) {
@@ -177,10 +177,40 @@ describe('events.css visual-customizer scope parity', () => {
 
   it('lets plain-text messages use the unfloored line-height', () => {
     const baseLineHeight = CSS.match(
-      /line-height:\s*calc\(var\(--chat-line-height, 1\.5\) \* 1em\)\s*!important/g
+      /line-height:\s*calc\(var\(--chat-line-height, 1\.5\) \* 1em\)/g
     )
-    // one per scope (preview + live), in the base `.break-words` rule
+    // one per scope (preview + live), in the base `.break-words` rule; normal
+    // weight — the layer order, not !important, ranks it above utilities
     expect(baseLineHeight?.length).toBe(2)
+  })
+
+  /**
+   * Every customizer-consumed `--chat-*` with a theme-intent step must read it
+   * through the `var(--theme-*, platform default)` fallback, so a theme states
+   * its intent by declaring `--theme-*` and themes that declare nothing keep
+   * the platform default. The avatar gap is the newest member of that family:
+   * the chain was added with no bundled theme declaring the variable yet, so
+   * a dropped fallback would go unnoticed.
+   */
+  it('reads theme intent for the avatar gap on both scopes', () => {
+    const gapChains = CSS.match(
+      /gap:\s*var\(--chat-avatar-gap, var\(--theme-avatar-gap, 0\.75rem\)\)/g
+    )
+    expect(gapChains?.length).toBe(2)
+  })
+
+  /**
+   * The message font-size chain carries the same theme-intent step: without
+   * `var(--theme-font-size, …)` between the GUI control and the legacy
+   * default, every bundled theme whose size differs from 1rem is flattened
+   * to the platform default the moment the Font Size control is unset —
+   * the exact symptom ccfee1a5 fixed.
+   */
+  it('reads theme intent for the message font-size on both scopes', () => {
+    const fontSizeChains = CSS.match(
+      /font-size:\s*var\(\s*--chat-font-size,\s*var\(--theme-font-size, var\(--chat-legacy-font-size, 1rem\)\)\s*\)/g
+    )
+    expect(fontSizeChains?.length).toBe(2)
   })
 })
 
@@ -216,9 +246,10 @@ describe('overlay event-renderer parity', () => {
 
   /**
    * Event chrome is theme-owned, so its size/colour/indent must live in
-   * events.css where a theme can reach it — not in unlayered Tailwind utilities
-   * that a theme can only fight with `!important`. This is what made an event
-   * pop up in default styling on top of a themed overlay.
+   * events.css where a theme can reach it — not in unlayered Tailwind
+   * utilities, which outrank every layer and leave a theme no way back in.
+   * This is what made an event pop up in default styling on top of a themed
+   * overlay.
    */
   it('leaves event size/colour/indent to events.css, not Tailwind utilities', () => {
     // Comments stripped: the file explains this rule by naming the utilities it
@@ -238,6 +269,30 @@ describe('overlay event-renderer parity', () => {
         renderer,
         `EventContent should not hardcode "${utility}" — express it as an --event-* token in events.css`
       ).not.toContain(utility)
+    }
+  })
+
+  /**
+   * Manual CSS and themes key their chat-row rules on `.chat-message` (the
+   * frozen public API in CSS_CUSTOMIZATION.md), and the pronoun pill is the
+   * shared <PronounPill> component — a surface that inlines either one drifts
+   * from its sibling and from the docs.
+   */
+  it('keeps the chat-message class and the shared pill/font-size tags on both surfaces', () => {
+    for (const [name, src] of [
+      ['live overlay', live],
+      ['preview/embed', preview],
+    ] as const) {
+      expect(src, `${name} must tag chat rows with the public .chat-message class`).toContain(
+        "'chat-message "
+      )
+      expect(src, `${name} must render pronoun pills via the shared PronounPill`).toContain(
+        '<PronounPill'
+      )
+      expect(
+        src,
+        `${name} must deliver the legacy font size via the shared <LegacyFontSizeStyle>`
+      ).toContain('<LegacyFontSizeStyle')
     }
   })
 })

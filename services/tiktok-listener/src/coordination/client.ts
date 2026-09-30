@@ -155,7 +155,7 @@ export class SourceManagerClient {
 
   /**
    * GetDemand queries for the current demanded sources.
-   * Used by the 60s safety-net poll to restore state after missed Pub/Sub events.
+   * Used by the demand safety-net poll to restore state after missed Pub/Sub events.
    */
   async getDemand(platform?: string): Promise<{ source_id: string; channel_id: string; platform: string; overlay_id: string }[]> {
     const url = platform
