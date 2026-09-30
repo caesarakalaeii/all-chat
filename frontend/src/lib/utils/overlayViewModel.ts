@@ -74,10 +74,12 @@ export interface ModEntryData {
   /** Login of whoever resolved a hold. Empty when the hold simply expired. */
   resolvedBy?: string
   /**
-   * Set once this row has consumed the `channel.moderate` half of its action
-   * pair (timeout/ban/clear), so a second action against the same user inside
-   * the fold window appends instead of folding into a completed pair. Not used
-   * for delete, whose join key (one native id, one removal) cannot recur.
+   * Set once this row has folded in the `channel.moderate` half of its action
+   * pair (timeout/ban/clear) — only a mod_action fold sets it, so a
+   * deletion-frame fold into this row first does not complete the pair. Keeps
+   * a second action against the same user inside the fold window appending
+   * instead of folding into a completed pair. Not used for delete, whose join
+   * key (one native id, one removal) cannot recur.
    */
   paired?: boolean
   /**
@@ -298,16 +300,20 @@ export function mergeAutoModResolution<T extends ModEntryData>(log: T[], entry: 
  * join key, including the mod_action row that already carries the moderator.
  * For delete the match is the first (oldest) row with the same id — one
  * native message id is one removal, so an older unmatched row always belongs
- * to this pair. For timeout/ban and clear the pair is recognized by state, not
- * order: a mod_action frame matches only a row that has not yet consumed its
- * mod_action half (no `paired` flag), and the fold sets the flag — so a mod
- * timing out a user and then banning them inside the fold window still
- * produces two rows, one per action. A deletion frame carries no new
- * attribution, so it folds into a completed pair too; the later mod_action
- * echo of the second action then appends, which keeps two actions at two
- * rows regardless of arrival order. Rows older than the fold window are never
- * match candidates: a pair lands seconds apart, and anything later than that
- * is a new action.
+ * to this pair, and there is no fold window at all. For timeout/ban and
+ * clear the pair is recognized by state, not order: a mod_action frame
+ * matches only a row that has not yet consumed its mod_action half (no
+ * `paired` flag), and only a mod_action fold sets the flag — a
+ * deletion-frame fold leaves it alone, so the pair's own mod_action echo
+ * still folds when its deletion frame arrived first (the two EventSub
+ * subscriptions deliver independently, in either order). That keeps one
+ * action at one row and two actions at two rows, regardless of arrival
+ * order: a mod timing out a user and then banning them inside the fold
+ * window gets one row per action, while a deletion frame folding into a
+ * completed pair (it carries no new attribution) leaves the second
+ * action's mod_action echo to append. Timeout/ban and clear matches are
+ * bounded by the fold window — a pair lands seconds apart, and anything
+ * later than that is a new action.
  *
  * This is the single append-or-fold decision for an incoming frame — the
  * caller must pass the log WITHOUT the entry already appended.
@@ -389,9 +395,10 @@ export function mergeDeletionPair<T extends ModEntryData>(log: T[], entry: T): T
           targetUserId: other.targetUserId || entry.targetUserId,
           targetUuid: other.targetUuid || entry.targetUuid,
           banDuration: other.banDuration || entry.banDuration,
-          // The fold consumed the mod_action half of the pair; mark it so a
-          // later action against the same target appends (see matches).
-          paired: entry.kind === 'delete' ? other.paired : true,
+          // Only a mod_action fold consumes the pair's mod_action half — a
+          // deletion-frame fold must leave the flag alone so the mod_action
+          // echo still folds when it arrives after its deletion frame.
+          paired: entry.kind === 'delete' || !modActionFrame ? other.paired : true,
         }
       : other
   )

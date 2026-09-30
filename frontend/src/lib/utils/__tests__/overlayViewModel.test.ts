@@ -228,6 +228,17 @@ describe('toModActionEntry', () => {
     })
   })
 
+  // The fold's clear pair relies on this mapping: a channel.moderate clear
+  // action must reach the log as kind 'clear' (not the generic 'action'
+  // fallback), or the pair never matches and one clear renders two rows.
+  it('maps a clear to the clear kind', () => {
+    expect(toModActionEntry({ action: 'clear', moderator_login: 'modperson' }, 'live', 1)).toMatchObject({
+      kind: 'clear',
+      action: 'clear',
+      moderator: 'modperson',
+    })
+  })
+
   it('returns null when the action is missing or not a string', () => {
     expect(toModActionEntry({}, 'live', 1)).toBeNull()
     expect(toModActionEntry({ action: 7 }, 'live', 1)).toBeNull()
@@ -437,26 +448,83 @@ describe('mergeDeletionPair — timeout, ban and clear, one row each', () => {
     expect(mergeDeletionPair([{ id: 1, ...earlier }], { id: 2, ...repeat })).toHaveLength(2)
   })
 
+  it('folds at the exact fold-window boundary (120s apart is still a pair)', () => {
+    // The scan uses `>`: a second frame exactly PAIR_FOLD_WINDOW_MS after the
+    // first is the same pair, one millisecond later is a new action.
+    const later: ModEntryData = { ...timeoutAction, at: 100 + 120_000 }
+    expect(mergeDeletionPair([{ id: 1, ...batchDeletion }], { id: 2, ...later })).toHaveLength(1)
+  })
+
+  it('folds a monitor echo chain whose deletion frame arrives before its mod_action', () => {
+    // The blocking council case: channel.moderate and channel.chat.clear_user_messages
+    // are independent EventSub subscriptions, so the deletion echo can land
+    // first. Its fold must NOT complete the pair (it is not the mod_action
+    // half), or the timeout echo would be rejected as a duplicate and the
+    // action would render as two rows, one without attribution.
+    const optimistic: ModEntryData = {
+      kind: 'timeout',
+      username: 'spammer',
+      targetUserId: '9001',
+      banDuration: 600,
+      clientId: 'c1',
+      source: 'live',
+      at: 99,
+    }
+    let log: ModEntry[] = [{ id: 1, ...optimistic }]
+    log = mergeDeletionPair(log, { id: 2, ...batchDeletion }) as ModEntry[]
+    expect(log).toHaveLength(1)
+    expect(log[0]).not.toMatchObject({ paired: true })
+    log = mergeDeletionPair(log, { id: 3, ...timeoutAction }) as ModEntry[]
+    expect(log).toHaveLength(1)
+    expect(log[0]).toMatchObject({
+      clientId: 'c1',
+      moderator: 'modperson',
+      banDuration: 600,
+      kind: 'timeout',
+    })
+  })
+
+  it('a deletion double-send folding first still leaves the mod_action foldable', () => {
+    // Twitch double-sends the deletion webhook: the first appends, the second
+    // folds. Neither is the mod_action half, so the real channel.moderate echo
+    // must still fold into the row instead of appending a duplicate.
+    let log: ModEntry[] = [{ id: 1, ...batchDeletion }]
+    log = mergeDeletionPair(log, { id: 2, ...batchDeletion, at: 110 }) as ModEntry[]
+    expect(log).toHaveLength(1)
+    log = mergeDeletionPair(log, { id: 3, ...timeoutAction }) as ModEntry[]
+    expect(log).toHaveLength(1)
+    expect(log[0]).toMatchObject({ kind: 'timeout', moderator: 'modperson', banDuration: 600 })
+  })
+
+  it('clear: the mod_action folds into the newest of two candidate clear rows', () => {
+    // Two clear rows inside the window (an unpaired echo plus a fresh deletion):
+    // the backwards scan must pick the newest, not the oldest.
+    const oldClear: ModEntryData = { kind: 'clear', source: 'live', at: 100 }
+    const newClear: ModEntryData = { kind: 'clear', source: 'live', at: 100 + 50_000 }
+    const clearAction: ModEntryData = {
+      kind: 'clear',
+      action: 'clear',
+      moderator: 'modperson',
+      source: 'live',
+      at: 100 + 50_005,
+    }
+    const merged = mergeDeletionPair(
+      [
+        { id: 1, ...oldClear },
+        { id: 2, ...newClear },
+      ],
+      { id: 3, ...clearAction }
+    )
+    expect(merged).toHaveLength(2)
+    expect(merged[1]).toMatchObject({ kind: 'clear', moderator: 'modperson', at: 100 + 50_000 })
+  })
+
   it('a second mod_action for the same user never folds into a mod_action row', () => {
     // Mirrors the delete case: two timeout mod_action frames with the same
     // target would mean Twitch double-sent the webhook, and both must stay
     // visible rather than silently vanish.
     const echo = { ...timeoutAction, at: 110 }
     expect(mergeDeletionPair([{ id: 1, ...timeoutAction }], { id: 2, ...echo })).toHaveLength(2)
-  })
-
-  it('clear: the mod_action folds into the newest clear deletion row', () => {
-    const clearDeletion: ModEntryData = { kind: 'clear', source: 'live', at: 100 }
-    const clearAction: ModEntryData = {
-      kind: 'clear',
-      action: 'clear',
-      moderator: 'modperson',
-      source: 'live',
-      at: 105,
-    }
-    const merged = mergeDeletionPair([{ id: 1, ...clearDeletion }], { id: 2, ...clearAction })
-    expect(merged).toHaveLength(1)
-    expect(merged[0]).toMatchObject({ kind: 'clear', moderator: 'modperson', at: 100 })
   })
 
   it('clear: a repeat clear outside the fold window appends as its own row', () => {

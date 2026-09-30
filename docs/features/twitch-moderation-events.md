@@ -220,18 +220,23 @@ with the other frame's moderator, username, target ids and duration:
 Two rules keep distinct actions distinct:
 
 - A mod_action frame folds only into a row that has not yet consumed its mod_action
-  half (the folded row is marked `paired`). A Twitch double-send of the same webhook
+  half, and only a mod_action fold marks the row `paired` — a deletion frame folding
+  in first leaves the pair open, so the pair's own mod_action echo still folds
+  whichever order the two webhooks arrive in. A Twitch double-send of a mod_action
   still shows as its own row, and a moderator who times a user out and then bans them
   a minute later gets two rows, one per action.
 - A deletion frame carries no new attribution, so it also folds into a completed
   pair — its echo of the second action enriches the earlier row harmlessly, and the
-  second action's mod_action echo then appends. Two actions render as two rows
-  regardless of frame arrival order.
+  second action's mod_action echo then appends.
 
 Frames without the join key (other platforms' deletions, replay-buffered rows)
 append, exactly as before. The monitor's own optimistic row — the entry a
 moderator's button click logs before the platform confirms — is a fold target too,
 so a monitor-initiated timeout renders as one row end to end.
+
+Known gap: on platforms whose deletions carry a `target_user_id` but have no
+mod_action half (YouTube's `batch` deletions), two distinct actions against the same
+user inside the fold window fold into one row.
 
 ## Troubleshooting
 
