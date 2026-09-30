@@ -45,6 +45,14 @@ Guardrails: fail-closed permissioning, repeat/no-progress detection, prompt-inje
 sanitization, XML boundary tags on tool output, and a code-level leak redactor applied
 at both the tool-output and final-answer boundaries.
 
+**Busy (429) handling**: the LLM gateway pauses hobby-project traffic while
+production load is high, so a 429 is capacity, not failure. Mid-session the loop
+waits (`SUPPORT_BOT_BUSY_RETRY_DELAY`, up to `SUPPORT_BOT_BUSY_MAX_WAITS`) and
+re-issues the same transcript — tool results and partial answers are preserved
+and side effects never replay. Beyond that the request is parked in a queue and
+resumed by a background worker until capacity returns or
+`SUPPORT_BOT_BUSY_QUEUE_TTL` expires; the user is told their ask is queued.
+
 ## Configuration
 
 Required: `DISCORD_BOT_TOKEN`, `LOCAL_LLM_MODEL`. See [.env.example](./.env.example) for

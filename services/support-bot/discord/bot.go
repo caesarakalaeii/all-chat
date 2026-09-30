@@ -79,6 +79,8 @@ type Bot struct {
 
 	botThreads sync.Map // channelID -> struct{}: threads the bot manages
 	queues     *serialQueues
+	busyQ      *busyQueue
+	busyCancel context.CancelFunc
 }
 
 // New builds a Bot (does not connect).
@@ -101,23 +103,31 @@ func New(d Deps) (*Bot, error) {
 		log:      d.Log,
 		queues:   newSerialQueues(),
 	}
+	b.busyQ = newBusyQueue(b)
 	session.AddHandler(b.onReady)
 	session.AddHandler(b.onMessageCreate)
 	session.AddHandler(b.onInteractionCreate)
 	return b, nil
 }
 
-// Start opens the gateway connection and registers the /support slash command.
+// Start opens the gateway connection, registers the /support slash command, and
+// starts the busy-queue worker that resumes parked requests.
 func (b *Bot) Start() error {
 	if err := b.session.Open(); err != nil {
 		return err
 	}
 	b.registerCommands()
+	ctx, cancel := context.WithCancel(context.Background())
+	b.busyCancel = cancel
+	go b.busyQ.run(ctx)
 	return nil
 }
 
-// Close disconnects the session.
+// Close stops the busy worker and disconnects.
 func (b *Bot) Close() error {
+	if b.busyCancel != nil {
+		b.busyCancel()
+	}
 	return b.session.Close()
 }
 
@@ -209,7 +219,7 @@ func (b *Bot) handleMessage(s *discordgo.Session, m *discordgo.MessageCreate, in
 		return
 	}
 
-	answer := b.answer(authorID, channelID, question, history)
+	answer := b.answer(s, authorID, channelID, question, history)
 
 	if inThread {
 		b.deliver(s, channelID, answer)
@@ -253,7 +263,7 @@ func (b *Bot) onInteractionCreate(s *discordgo.Session, i *discordgo.Interaction
 	})
 
 	uid := interactionUserID(i)
-	answer := b.answer(uid, i.ChannelID, question, nil)
+	answer := b.answer(s, uid, i.ChannelID, question, nil)
 
 	chunks := chunkMessage(answer)
 	first := answer
@@ -289,7 +299,9 @@ func (b *Bot) onInteractionCreate(s *discordgo.Session, i *discordgo.Interaction
 }
 
 // answer runs the agent loop for a question and returns the delivery-ready text.
-func (b *Bot) answer(uid, channelID, question string, history []string) string {
+// A busy (429) failure parks the request instead of discarding it; busyReply is
+// returned immediately in that case.
+func (b *Bot) answer(s *discordgo.Session, uid, channelID, question string, history []string) string {
 	mode := b.policy.ModeFor(uid)
 
 	var memStrings []string
@@ -310,6 +322,77 @@ func (b *Bot) answer(uid, channelID, question string, history []string) string {
 		llm.TextMessage(llm.RoleUser, userContent),
 	}
 
+	res, err := b.runAgent(mode, uid, channelID, messages)
+	if err != nil {
+		if out, handled := b.busyOrError(err, res, mode, uid, channelID, s); handled {
+			return out
+		}
+	}
+	return b.finalize(mode, res)
+}
+
+// busyOrError distinguishes a busy failure (park + busyReply) from other errors.
+// It reports handled=true when it produced a reply.
+func (b *Bot) busyOrError(err error, res agent.Result, mode access.Mode, uid, channelID string, s *discordgo.Session) (string, bool) {
+	var apiErr *llm.APIError
+	if errors.As(err, &apiErr) && apiErr.Kind == llm.KindBusy {
+		b.log.Warn("llm busy; parking request", zap.String("channel", channelID))
+		b.busyQ.park(s, &parkedRequest{
+			uid: uid, channelID: channelID, mode: mode,
+			messages: res.Messages, // transcript so far; may be the initial prompt
+		})
+		return busyReply, true
+	}
+	if strings.TrimSpace(res.Text) == "" {
+		return b.fallbackReply(err), true
+	}
+	return "", false
+}
+
+// resumeParked retries a parked request. expired set means the TTL was hit and the
+// expiry reply is delivered regardless of the LLM state; otherwise a still-busy
+// resume re-parks (the user is not re-notified).
+func (b *Bot) resumeParked(ctx context.Context, r *parkedRequest, expired bool) {
+	send := func(text string) {
+		if b.session != nil {
+			b.deliver(b.session, r.channelID, text)
+		}
+	}
+	if expired {
+		send(busyExpiryReply)
+		return
+	}
+	res, err := b.runAgentCtx(ctx, r.mode, r.uid, r.channelID, r.messages)
+	if err != nil {
+		var apiErr *llm.APIError
+		if errors.As(err, &apiErr) && apiErr.Kind == llm.KindBusy {
+			b.busyQ.requeue(r)
+			return
+		}
+		send(b.fallbackReply(err))
+		return
+	}
+	send(b.finalize(r.mode, res))
+}
+
+// fallbackReply maps non-busy errors to the user-facing failure text.
+func (b *Bot) fallbackReply(err error) string {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return fmt.Sprintf("Sorry, I could not finish your question within my %s limit. Please narrow the question, split it into smaller asks, or ask for the research to be budgeted across several answers.", b.cfg.OverallTimeout)
+	}
+	return "Sorry, something went wrong while processing your question. Please try again, or check the bot logs."
+}
+
+// runAgent runs the loop with the bot's overall timeout.
+func (b *Bot) runAgent(mode access.Mode, uid, channelID string, messages []llm.Message) (agent.Result, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), b.cfg.OverallTimeout)
+	defer cancel()
+	return b.runAgentCtx(ctx, mode, uid, channelID, messages)
+}
+
+// runAgentCtx runs the loop against a caller-owned context (the busy worker
+// owns the lifecycle for resumed requests).
+func (b *Bot) runAgentCtx(ctx context.Context, mode access.Mode, uid, channelID string, messages []llm.Message) (agent.Result, error) {
 	tctx := &tool.ToolCtx{
 		Mode:       mode,
 		DiscordUID: uid,
@@ -319,30 +402,16 @@ func (b *Bot) answer(uid, channelID, question string, history []string) string {
 		Redactor:   b.redactor,
 		Log:        b.log,
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), b.cfg.OverallTimeout)
-	defer cancel()
-
 	b.log.Info("handling question",
 		zap.String("mode", mode.String()),
 		zap.String("discord_uid", uid),
-		zap.Int("question_len", len(question)))
+		zap.Int("transcript_len", len(messages)))
+	return agent.Run(ctx, b.agentCfg, b.llm, b.reg, tctx, messages)
+}
 
-	res, err := agent.Run(ctx, b.agentCfg, b.llm, b.reg, tctx, messages)
-	if err != nil {
-		b.log.Error("agent run failed", zap.Error(err), zap.String("stop", string(res.Stop)))
-		if strings.TrimSpace(res.Text) == "" {
-			if errors.Is(err, context.DeadlineExceeded) {
-				return fmt.Sprintf("Sorry, I could not finish your question within my %s limit. Please narrow the question, split it into smaller asks, or ask for the research to be budgeted across several answers.", b.cfg.OverallTimeout)
-			}
-			var apiErr *llm.APIError
-			if errors.As(err, &apiErr) && apiErr.Kind == llm.KindBusy {
-				return "The AI backend is currently pausing hobby-project traffic because the production system is under load. Nothing is wrong — please try again later, when capacity frees up."
-			}
-			return "Sorry, something went wrong while processing your question. Please try again, or check the bot logs."
-		}
-	}
-
+// finalize turns a loop result into the delivery-ready text (redaction in support
+// mode, effects list, partial-answer marker, lead-dev ping).
+func (b *Bot) finalize(mode access.Mode, res agent.Result) string {
 	answer := sanitize.StripInternalScaffolds(res.Text)
 	if mode == access.ModeSupport {
 		answer = b.redactor.Redact(answer)
