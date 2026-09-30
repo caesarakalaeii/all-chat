@@ -74,6 +74,13 @@ export interface ModEntryData {
   /** Login of whoever resolved a hold. Empty when the hold simply expired. */
   resolvedBy?: string
   /**
+   * Set once this row has consumed the `channel.moderate` half of its action
+   * pair (timeout/ban/clear), so a second action against the same user inside
+   * the fold window appends instead of folding into a completed pair. Not used
+   * for delete, whose join key (one native id, one removal) cannot recur.
+   */
+  paired?: boolean
+  /**
    * Set on entries created optimistically by a moderator action in this view,
    * so the matching server-pushed deletion can be deduped and the entry can be
    * rolled back if the action fails. Absent on entries derived purely from WS.
@@ -188,6 +195,8 @@ function modActionKind(action: string): ModKind {
       return 'ban'
     case 'delete':
       return 'delete'
+    case 'clear':
+      return 'clear'
     case 'automod_hold':
     case 'automod_resolved':
       return 'automod'
@@ -260,48 +269,129 @@ export function mergeAutoModResolution<T extends ModEntryData>(log: T[], entry: 
 }
 
 /**
- * Append or fold a deletion/mod_action pair for the same single-message
- * delete, so one delete renders as one row regardless of frame arrival
- * order.
+ * Append or fold a pair of frames that describe one moderation action, so a
+ * single delete, timeout, ban or clear renders as one row regardless of frame
+ * arrival order.
  *
- * On Twitch one delete reaches this view as two frames: the
- * `message_deletion` (what was removed) and the `channel.moderate` mod_action
- * (who removed it). They are one action to a moderator and must render as
- * one row — the earlier row, enriched with the other frame's moderator,
- * username, target ids — never two, and never the bare unattributed row.
- * The folded row keeps its original `at` so it does not jump position when
- * the second frame lands. `targetMsgId` — Twitch's native message id,
- * carried by both frames — is the join key; a deletion-derived row (from
- * this view's own optimistic action, or from the WS deletion frame) and a
- * mod_action row for the same id are always the same removal. On other
- * platforms, or when either frame is missing its id, the entry appends.
+ * On Twitch one action reaches this view as two frames: a `message_deletion`
+ * (what was removed, derived via {@link toModEntry}) and a `channel.moderate`
+ * mod_action (who did it, derived via {@link toModActionEntry}). They are one
+ * action to a moderator and must render as one row — the earlier row,
+ * enriched with the other frame's moderator, username, target ids, duration —
+ * never two, and never the bare unattributed row. The folded row keeps its
+ * original `at` so it does not jump position when the second frame lands.
+ * Per kind, the join key is:
+ *
+ * - delete: `targetMsgId`, Twitch's native message id, carried by both frames.
+ * - timeout/ban: `targetUserId`, the moderated user's Twitch id. The deletion
+ *   frame (channel.chat.clear_user_messages) carries no duration, so it reads
+ *   as kind `ban` even when the action was a timeout; the fold matches across
+ *   `timeout`/`ban` and upgrades the kind, recovering the duration only the
+ *   mod_action frame knows.
+ * - clear: both frames carry no target, so kind alone identifies the pair.
+ *
+ * Which frame is incoming decides the match rule, and it is deliberately
+ * asymmetric. A mod_action frame folds only into a deletion-derived row (this
+ * view's optimistic row, or the WS deletion frame) — never into another
+ * mod_action row, so a Twitch double-send of the same webhook stays visible as
+ * its own row. A deletion-derived frame folds into any row holding the same
+ * join key, including the mod_action row that already carries the moderator.
+ * For delete the match is the first (oldest) row with the same id — one
+ * native message id is one removal, so an older unmatched row always belongs
+ * to this pair. For timeout/ban and clear the pair is recognized by state, not
+ * order: a mod_action frame matches only a row that has not yet consumed its
+ * mod_action half (no `paired` flag), and the fold sets the flag — so a mod
+ * timing out a user and then banning them inside the fold window still
+ * produces two rows, one per action. A deletion frame carries no new
+ * attribution, so it folds into a completed pair too; the later mod_action
+ * echo of the second action then appends, which keeps two actions at two
+ * rows regardless of arrival order. Rows older than the fold window are never
+ * match candidates: a pair lands seconds apart, and anything later than that
+ * is a new action.
  *
  * This is the single append-or-fold decision for an incoming frame — the
  * caller must pass the log WITHOUT the entry already appended.
  */
+
+/** How long after an earlier row the second frame of an action pair may arrive. */
+const PAIR_FOLD_WINDOW_MS = 120_000
+
 export function mergeDeletionPair<T extends ModEntryData>(log: T[], entry: T): T[] {
-  if (entry.kind !== 'delete' || !entry.targetMsgId) return [...log, entry]
-  // Which frame is incoming decides the match rule. A mod_action frame folds
-  // only into a deletion-derived row (this view's optimistic row, or the WS
-  // deletion frame) — never into another mod_action row, so a Twitch
-  // double-send of the same webhook stays visible as its own row. A
-  // deletion-derived frame folds into any row with the same native id,
-  // including the mod_action row that already carries the moderator.
-  const modActionFrame = entry.action === 'delete'
-  const index = log.findIndex(
-    (other) =>
-      other.targetMsgId === entry.targetMsgId &&
-      (!modActionFrame || other.action !== 'delete')
-  )
+  if (entry.kind !== 'delete' && entry.kind !== 'timeout' && entry.kind !== 'ban' && entry.kind !== 'clear') {
+    return [...log, entry]
+  }
+  // The pair's join key: the native message id for a delete, the moderated
+  // user's id for a timeout/ban. A clear has no target on either frame, so
+  // null means "kind alone identifies the pair".
+  const joinKey =
+    entry.kind === 'delete'
+      ? entry.targetMsgId
+      : entry.kind === 'timeout' || entry.kind === 'ban'
+        ? entry.targetUserId
+        : null
+  if (joinKey === undefined) return [...log, entry]
+  const modActionFrame = entry.action !== undefined
+  // A timeout and a ban of the same user are two frames of one action pair
+  // (clear_user_messages cannot distinguish them), so kind matching is by
+  // group, not by exact kind — except delete and clear, which pair only with
+  // themselves.
+  const kindGroup = (kind: ModKind): 'delete' | 'user' | 'clear' | 'other' =>
+    kind === 'delete'
+      ? 'delete'
+      : kind === 'timeout' || kind === 'ban'
+        ? 'user'
+        : kind === 'clear'
+          ? 'clear'
+          : 'other'
+
+  const matches = (other: ModEntryData): boolean => {
+    if (kindGroup(other.kind) !== kindGroup(entry.kind)) return false
+    // A mod_action frame folds only into a row that has not yet consumed its
+    // mod_action half — never into another mod_action row (a Twitch
+    // double-send of the same webhook stays visible as its own row), and
+    // never into a completed pair (a second action against the same user is a
+    // new action: a timeout followed by a ban must render as two rows).
+    if (modActionFrame && (other.action !== undefined || other.paired)) return false
+    // A deletion frame carries no new attribution, so it also folds into a
+    // completed pair: within the window a repeat clear_user_messages/clear is
+    // the same action's echo, not a second action.
+    if (joinKey === null) return true
+    const otherKey = other.kind === 'delete' ? other.targetMsgId : other.targetUserId
+    return otherKey === joinKey
+  }
+  // Delete: first (oldest) match — one native message id is one removal.
+  // Timeout/ban/clear: newest match inside the fold window — the pair lands
+  // seconds apart, but a repeat action minutes later must append as its own
+  // row.
+  let index = -1
+  if (entry.kind === 'delete') {
+    index = log.findIndex(matches)
+  } else {
+    for (let i = log.length - 1; i >= 0; i--) {
+      if (!matches(log[i])) continue
+      if (entry.at - log[i].at > PAIR_FOLD_WINDOW_MS) break
+      index = i
+      break
+    }
+  }
   if (index === -1) return [...log, entry]
+  // The mod_action frame knows the real action name and duration; the
+  // deletion frame knows the internal uuid. Keep the more specific of each.
+  const mergeKind = (oldKind: ModKind): ModKind =>
+    oldKind === 'ban' && entry.kind === 'timeout' ? 'timeout' : oldKind
   return log.map((other, i) =>
     i === index
       ? {
           ...other,
+          kind: mergeKind(other.kind),
           moderator: other.moderator || entry.moderator,
           username: other.username || entry.username,
           targetUserId: other.targetUserId || entry.targetUserId,
           targetUuid: other.targetUuid || entry.targetUuid,
+          banDuration: other.banDuration || entry.banDuration,
+          // The fold consumed the mod_action half of the pair; mark it so a
+          // later action against the same target appends (see matches).
+          paired: entry.kind === 'delete' ? other.paired : true,
         }
       : other
   )
