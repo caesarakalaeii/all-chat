@@ -43,9 +43,12 @@ import {
   RouteConfig,
   SignConfig,
   TikTokLiveConnection,
-  WebcastEvent
+  WebcastEvent,
+  userAgentToDevicePreset
 } from 'tiktok-live-connector';
 import { createClient, RedisClientType } from 'redis';
+import { request } from 'undici';
+import { createChromeTlsProxyAgent, type WsEgressAgent } from './ws/chrome-tls.js';
 import { Pool } from 'pg';
 import { randomUUID } from 'crypto';
 import http from 'http';
@@ -58,6 +61,21 @@ import { LiveStreamPoller } from './livestream/poller.js';
 import { PrometheusMetrics } from './metrics/prometheus.js';
 import { HeartbeatMonitor } from './reliability/heartbeat-monitor.js';
 import { MessageDeduplicator } from './deduplication/message-deduplicator.js';
+import {
+  budgetRefusalRetryAfterMs,
+  connectionCeilingReached,
+  isBudgetRefusalError,
+  isWsFlapError,
+  nextFlapRetryDelayMs,
+  NoLaneCache,
+  shouldBackOffReconnect,
+  WS_FLAP_MAX_FAST_RETRIES,
+  WS_FLAP_RETRY_DELAY_MS
+} from './reliability/connection-decisions.js';
+import { CanaryConsumer } from './canary/canary-consumer.js';
+import { FallbackConsumer } from './canary/fallback-consumer.js';
+import { PremiumChecker } from './fallback/premium.js';
+import { warmTargetTab } from './sign/warm-target-tab.js';
 
 // Import coordination modules (leadership-based)
 import { SourceManagerClient } from './coordination/client.js';
@@ -70,6 +88,10 @@ import { DemandSubscriber, DemandSource } from './demand/subscriber.js';
 import { loadSignConfiguration } from './sign/config.js';
 import { installSignConfiguration } from './sign/installer.js';
 import { EulerSigner } from './sign/euler.js';
+import { fetchWebshareCredentials } from './sign/webshare.js';
+import { fallbackPromotionAvailable, pickSignClients } from './sign/sign-clients.js';
+import type { PureNodeSigner } from './sign/pure-node.js';
+import type { SelfSigner } from './sign/self.js';
 import { pickAvatarUrl, tiktokAvatarUrl } from './avatar.js';
 import {
   hasTikTokChestPayload,
@@ -97,7 +119,18 @@ if (!DATABASE_PASSWORD) {
 }
 const DATABASE_NAME = process.env.DATABASE_NAME || 'allchat';
 const HTTP_PORT = parseInt(process.env.PORT || '8089');
-const DEMAND_SAFETY_INTERVAL_MS = parseInt(process.env.DEMAND_SAFETY_INTERVAL_MS || '60000'); // 60 seconds
+// 25s, below source-manager's 30s PeerTTL (election/leader.go): each poll both
+// re-registers this pod as a peer and drives rebalancing, so the poll interval
+// must stay under the TTL or this pod's registration expires between polls and
+// the observed peer count never stabilizes (the ADR-0007 gate then never opens).
+// The Go listeners run the same loop at 30s (their syncInterval), which only
+// works because their PeerTTL window has a full interval of slack; 25s gives the
+// same margin without going full-second-fast.
+const DEMAND_SAFETY_INTERVAL_MS = parseInt(process.env.DEMAND_SAFETY_INTERVAL_MS || '25000'); // 25 seconds
+// How long a pod refuses to re-claim a lease it shed in rebalancing. One
+// demand cycle is enough for another pod to take it; matching the poll
+// interval keeps the hold from expiring before the next poll cycle arrives.
+const REBALANCE_HOLD_MS = DEMAND_SAFETY_INTERVAL_MS;
 
 // Coordinator configuration (Phase 6)
 const COORDINATOR_URL = process.env.COORDINATOR_URL || 'http://source-manager:8088';
@@ -114,6 +147,15 @@ const TIKTOK_MAX_ERROR_BACKOFF_MS = parseInt(process.env.TIKTOK_MAX_ERROR_BACKOF
 const TIKTOK_HEARTBEAT_INTERVAL_MS = parseInt(process.env.TIKTOK_HEARTBEAT_INTERVAL_MS || '30000');
 const TIKTOK_HEARTBEAT_TIMEOUT_MS = parseInt(process.env.TIKTOK_HEARTBEAT_TIMEOUT_MS || '90000');
 
+// Hard ceiling on concurrent WebSocket connections this pod will open. The Euler
+// free tier proxies every connection through ws-fallback.eulerstream.com and caps
+// concurrent cloud WebSockets (~25); above that the proxy still accepts the
+// handshake but silently withholds live push, which looks exactly like a healthy
+// connection to the library (ADR-0052; 2026-09-14 incident). Staying under it
+// converts that failure mode into a visible skip here. Raise alongside a paid
+// Euler plan, and remove when self-signing retires Euler entirely.
+const TIKTOK_MAX_STREAMS_PER_POD = parseInt(process.env.TIKTOK_MAX_STREAMS_PER_POD || '20');
+
 // Hard cap on internal admin HTTP request bodies (/api/retry, /api/reset-backoff).
 // These accept small JSON payloads; capping prevents an oversized POST from spiking
 // process memory and risking an OOMKill.
@@ -127,6 +169,94 @@ const TIKTOK_DEDUP_MAX_CACHE_SIZE = parseInt(process.env.TIKTOK_DEDUP_MAX_CACHE_
 // Euler Stream retirement configuration (issue #698). Read once at module load so every
 // connection site agrees on it.
 const SIGN_CONFIG = loadSignConfiguration();
+
+// Bearer token for the tiktok-signer service, when it runs with auth enabled.
+const TIKTOK_SIGNER_AUTH_TOKEN = (process.env.TIKTOK_SIGNER_AUTH_TOKEN || '').trim();
+
+// Premium fallback (2026-09-16 transport plan, phase 3): when a room's
+// primary WS attempt exhausts flap retries and the room's streamer is
+// premium, delivery switches to the signer's viewer-tab relay. Off by
+// default; requires self-signing (the relay endpoint lives on the signer).
+const TIKTOK_FALLBACK_ENABLED =
+  (process.env.TIKTOK_PREMIUM_FALLBACK || 'off').trim().toLowerCase() === 'on';
+// Ceiling for one fallback stint. The fallback is a bridge: past this the
+// room returns to the poller and retries the primary WS with a fresh flap
+// budget, so no room can silently live on the relay tier forever.
+const TIKTOK_FALLBACK_MAX_DURATION_MS = parseInt(
+  process.env.TIKTOK_FALLBACK_MAX_DURATION_MS || '21600000', // 6 hours
+  10
+);
+
+// WS flap fast-retry budget (2026-09-16 transport plan, phase 1). Lab
+// measured 3x1s clearing by attempt 3; prod 2026-09-17 saw walls clearing on
+// attempt 4-8, so the budget is env-tunable to keep that inside the fast
+// path without a redeploy. Defaults live in connection-decisions.ts.
+const TIKTOK_FLAP_MAX_FAST_RETRIES = parseInt(
+  process.env.TIKTOK_FLAP_MAX_FAST_RETRIES || String(WS_FLAP_MAX_FAST_RETRIES),
+  10
+);
+const TIKTOK_FLAP_RETRY_DELAY_MS = parseInt(
+  process.env.TIKTOK_FLAP_RETRY_DELAY_MS || String(WS_FLAP_RETRY_DELAY_MS),
+  10
+);
+
+// Canary rooms (2026-09-16 transport plan, phase 2): rooms whose primary WS
+// connection is mirrored against the signer's viewer-tab relay. The
+// consumer compares per-method decoded frames; divergence is logged and
+// counted but never affects the primary connection.
+const TIKTOK_CANARY_ROOMS = new Set(
+  (process.env.TIKTOK_CANARY_ROOMS || '')
+    .split(',')
+    .map((r) => r.trim().toLowerCase())
+    .filter(Boolean)
+);
+
+// Per-request timeout for calls to the tiktok-signer service. Page-viewer mode
+// may need to try several proxy lanes inside one request: navigation (~10-30s)
+// plus im/fetch capture bootstrap, times 2-3 lanes. Default in SelfSigner
+// covers this; the env knob exists for tuning without a redeploy.
+const TIKTOK_SIGNER_TIMEOUT_MS = parseInt(process.env.TIKTOK_SIGNER_TIMEOUT_MS || '180000', 10);
+
+// Webshare API token for fetching the current residential-proxy credentials.
+// The signed session TikTok issues is bound to the residential egress IP the
+// signer's viewer captured it through, so the WebSocket handshake must
+// egress via the same proxy. Reading credentials from the API (not a secret)
+// keeps a redeploy out of webshare's dashboard-side rotations.
+const SIGNER_WEBSHARE_TOKEN = (process.env.SIGNER_WEBSHARE_TOKEN || '').trim();
+
+
+
+/**
+ * Tag the connection's internal web client with the streamer handle. The
+ * connector's sign route bag passes the web client (not the connection), so
+ * this is the channel the route handler reads the handle from: viewer-mode
+ * signers navigate to the room's live page by handle, not by room ID.
+ * Per-connection state, safe under concurrent connects.
+ */
+function setConnectionUniqueId(connection: unknown, username: string): void {
+  if (
+    typeof connection === 'object' &&
+    connection !== null &&
+    '_webClient' in connection &&
+    typeof connection._webClient === 'object' &&
+    connection._webClient !== null
+  ) {
+    const webClient: { uniqueId?: string } = connection._webClient;
+    webClient.uniqueId = username;
+  }
+}
+
+type ClientPresets = {
+  device: {
+    user_agent: string;
+    browser_name: string;
+    browser_version: string;
+    browser_platform: string;
+    os: string;
+  };
+  screen: { screen_width: number; screen_height: number };
+  location: { lang: string; lang_country: string; country: string; tz_name: string };
+};
 
 // Import logger interface
 import { Logger } from './types/logger.js';
@@ -327,13 +457,56 @@ class TikTokListenerService {
   // orphan (a live WebSocket + leadership lease with no downstream consumer).
   private demandedUsernames: Set<string> = new Set();
 
+  // Streams this pod just shed in ADR-0007 rebalancing, with the timestamp of
+  // the release. handleDemandUpdate refuses to re-claim these for
+  // REBALANCE_HOLD_MS so a pod does not take back what it just released —
+  // whichever path the demand snapshot arrives on (25s poll or Redis Pub/Sub).
+  // The Go listeners need no such map because they claim from a single sync
+  // loop; this service claims from two, and an overlay connect/disconnect can
+  // republish the demand snapshot seconds after a release.
+  private rebalanceHolds: Map<string, number> = new Map();
+
   // Leadership coordination
   private sourceManagerClient?: SourceManagerClient;
   private leadershipCoordinator?: LeadershipCoordinator;
 
+  // Signer identity (user agent + fingerprint the signer's signatures are bound
+  // to), fetched once from the signer service when self signing is configured.
+  // Connections pin their device presets to it so the /im/fetch/ identity, the
+  // signature and the WebSocket handshake all describe the same browser.
+  private signerPresets?: ClientPresets;
+
+  // The self signer, kept as a field so a connection can pre-sign to learn
+  // which proxy lane the capture rode and pin its WebSocket egress to the
+  // same lane. Undefined when self signing is not configured.
+  private selfSigner?: SelfSigner;
+
+  // The pure-node session signer (PR 2): set only in pure-node mode, where
+  // the pre-sign reads the leased session's proxyHost instead of driving a
+  // page capture. Exactly one of selfSigner/pureNodeSigner is ever set.
+  private pureNodeSigner?: PureNodeSigner;
+
+
+  // Pre-sign no-lane negative cache (see NoLaneCache): pool-wide, not per-room.
+  private readonly noLaneCache = new NoLaneCache();
+  // Canary consumers per room (phase 2): only rooms in TIKTOK_CANARY_ROOMS
+  // get one; divergence is logged + counted, never load-bearing.
+  private canaryConsumers: Map<string, CanaryConsumer> = new Map();
+  // Premium fallback stints (phase 3): rooms whose delivery switched from
+  // the primary WS to the signer relay after flap exhaustion. Keyed by
+  // username; presence means the relay is the delivered stream right now.
+  private fallbackConsumers: Map<string, FallbackConsumer> = new Map();
+  private premiumChecker: PremiumChecker;
+
+  // Current webshare proxy credentials for WS pinning, refreshed hourly.
+  // Undefined until the first successful fetch; WS pinning stays off until
+  // then (connections proceed unpinned).
+  private proxyCredentials?: { username: string; password: string };
+  private proxyCredentialsRefresh?: NodeJS.Timeout;
+
   // Demand subscriber (Phase 5)
   private demandSubscriber: DemandSubscriber | null = null;
-  private demandSafetyInterval: ReturnType<typeof setInterval> | null = null;
+  private demandSafetyInterval: NodeJS.Timeout | null = null;
   private livePollerRunning: boolean = false;
 
   constructor() {
@@ -384,22 +557,39 @@ class TikTokListenerService {
       { pollIntervalMs: TIKTOK_POLLER_INTERVAL_MS }
     );
 
-    // Set up callback for when poller detects a live stream
+    // Set up callback for when poller detects a live stream. The lease check is
+    // not redundant with handleDemandUpdate's: a poller target survives demand
+    // snapshots this pod does not own (they are claimed by other pods), and
+    // this callback fires from the poller's own 30s cycle — connecting without
+    // holding the lease would open a second live connection to a room another
+    // pod is already serving, against the same Euler concurrent cap.
     this.livePoller.setOnLiveCallback(async (username: string, overlayId: string) => {
+      if (this.leadershipCoordinator && !this.leadershipCoordinator.hasLeadership(username)) {
+        logger.debug('Skipping poller live callback (no leadership lease)', { username, overlay_id: overlayId });
+        this.livePoller.removeTarget(username);
+        return;
+      }
       await this.connectToStream(username, overlayId);
     });
 
     // Initialize Prometheus metrics
+    this.premiumChecker = new PremiumChecker({ db: this.db, logger });
     this.metrics = new PrometheusMetrics(logger);
 
     // Apply the Euler Stream retirement configuration to the connector's global route registry
     // (issue #698). Must happen before any TikTokLiveConnection is constructed, because the
     // connector reads these module-level singletons at connect time and caches its Euler client.
-    //
-    // By default this only switches the room-id and is-live composites off Euler's fallback leg,
-    // which is free of risk: those composites try TikTok directly first and reach for Euler only
-    // when both direct routes have already failed. Signing stays with Euler unless
-    // TIKTOK_SIGNER_MODE says otherwise.
+    // Mode-gated signer construction (PR 2 plan ruling 6): euler/shadow
+    // keep SelfSigner whenever a signer URL is configured (k8s default
+    // relies on it for lane pinning and relay promotion); pure-node gets
+    // the PureNodeSigner and no SelfSigner.
+    const signClients = pickSignClients(SIGN_CONFIG.signerMode, {
+      signerBaseUrl: SIGN_CONFIG.signerBaseUrl,
+      authToken: TIKTOK_SIGNER_AUTH_TOKEN || undefined,
+      selfTimeoutMs: TIKTOK_SIGNER_TIMEOUT_MS
+    });
+    this.selfSigner = signClients.selfSigner;
+    this.pureNodeSigner = signClients.pureNodeSigner;
     installSignConfiguration(
       {
         routeConfig: RouteConfig,
@@ -408,13 +598,33 @@ class TikTokListenerService {
         signConfig: SignConfig
       },
       SIGN_CONFIG,
-      // No self signer yet: the webcast signature spike (step 1 of #698's sequence) has not
-      // landed. Until it does, `shadow` and `self` degrade to Euler with a warning rather than
-      // failing to start, so the flag can be set ahead of the implementation.
-      { euler: new EulerSigner(RouteConfig.fetchSignedWebSocketFromProvider as never) },
+      // Signer construction is mode-gated (pickSignClients, see above).
+      {
+        euler: new EulerSigner(RouteConfig.fetchSignedWebSocketFromProvider as never),
+        self: signClients.selfSigner,
+        pureNode: signClients.pureNodeSigner
+      },
       this.metrics,
       logger
     );
+
+    // Fetch the current webshare proxy credentials for WS-lane pinning, then
+    // refresh hourly. Dashboard-side rotations of user/pass propagate without
+    // a redeploy; the API token is stable. Disabled silently without a token.
+    if (SIGNER_WEBSHARE_TOKEN) {
+      const refresh = async (): Promise<void> => {
+        try {
+          this.proxyCredentials = await fetchWebshareCredentials(SIGNER_WEBSHARE_TOKEN);
+          logger.info('Webshare proxy credentials refreshed');
+        } catch (error) {
+          logger.warn('Webshare proxy credential refresh failed; keeping previous', {
+            error: (error as Error).message
+          });
+        }
+      };
+      void refresh();
+      this.proxyCredentialsRefresh = setInterval(refresh, 60 * 60_000);
+    }
 
     // Initialize heartbeat monitor
     this.heartbeatMonitor = new HeartbeatMonitor(
@@ -474,6 +684,24 @@ class TikTokListenerService {
         logger.warn('Leadership coordination disabled (SERVICE_JWT_SECRET not set)');
       }
 
+      // When signing for ourselves, fetch the signer's browser identity once so
+      // connections can pin their presets to it (see connectToStream). Failure
+      // is not fatal: shadow mode does not need it, and self mode surfaces the
+      // problem per-connection with a classified signature failure.
+      if (SIGN_CONFIG.signerBaseUrl) {
+        try {
+          this.signerPresets = await this.fetchSignerPresets(SIGN_CONFIG.signerBaseUrl);
+          logger.info('Pinned connector presets to signer identity', {
+            signer_url: SIGN_CONFIG.signerBaseUrl,
+            user_agent: this.signerPresets.device.user_agent
+          });
+        } catch (error) {
+          logger.warn('Could not fetch signer identity; connections will use random presets', {
+            signer_url: SIGN_CONFIG.signerBaseUrl,
+            error: (error as Error).message
+          });
+        }
+      }
       // Wire Redis client to livePoller for lifecycle event publishing (EXPIRY-06)
       this.livePoller.setRedisClient(this.redis);
 
@@ -498,7 +726,9 @@ class TikTokListenerService {
       await this.demandSubscriber.subscribe();
       logger.info('Demand subscriber started');
 
-      // Start 60s safety-net poll to restore state after Redis reconnect / missed events
+      // Safety-net poll to restore state after Redis reconnect / missed events.
+      // Also re-registers this pod as a peer (must stay under the 30s peer TTL,
+      // see DEMAND_SAFETY_INTERVAL_MS above).
       this.demandSafetyInterval = setInterval(async () => {
         try {
           await this.pollDemandFallback();
@@ -517,6 +747,36 @@ class TikTokListenerService {
       logger.error('Failed to start service', { error });
       throw error;
     }
+  }
+
+  /**
+   * Fetch the signer service's browser identity (GET /v1/identity) and turn it
+   * into connector clientPresets. The signer's signatures are computed inside a
+   * browser with this exact user agent and fingerprint; if the connector's
+   * presets disagreed, TikTok would see a fetch from one browser and a
+   * WebSocket handshake from another.
+   */
+  private async fetchSignerPresets(baseUrl: string): Promise<ClientPresets> {
+    const response = await request(`${baseUrl.replace(/\/+$/, '')}/v1/identity`, {
+      headers: TIKTOK_SIGNER_AUTH_TOKEN
+        ? { Authorization: `Bearer ${TIKTOK_SIGNER_AUTH_TOKEN}` }
+        : undefined
+    });
+    if (response.statusCode !== 200) {
+      throw new Error(`signer identity endpoint returned ${response.statusCode}`);
+    }
+    const identity = JSON.parse(await response.body.text()) as {
+      userAgent: string;
+      browserPlatform: string;
+      os: string;
+      screenWidth: number;
+      screenHeight: number;
+    };
+    return {
+      device: userAgentToDevicePreset(identity.userAgent),
+      screen: { screen_width: identity.screenWidth, screen_height: identity.screenHeight },
+      location: { lang: 'en', lang_country: 'en-US', country: 'US', tz_name: 'UTC' }
+    };
   }
 
   /**
@@ -726,11 +986,19 @@ class TikTokListenerService {
    * Called on every DemandUpdate received via Redis Pub/Sub "source:demand".
    * Full-replacement snapshot: connects new streams, disconnects removed ones.
    * Goes fully idle (stops LiveStreamPoller) when demand is empty.
+   *
+   * A stream on a live rebalanceHold (see rebalanceHolds) is skipped: this
+   * pod shed it in ADR-0007 rebalancing and must not take it back while
+   * another pod has the chance to claim it. The hold is consulted here —
+   * not passed in by the caller — because demand snapshots arrive on two
+   * paths (the 25s poll and Redis Pub/Sub republishes on every overlay
+   * connect/disconnect), and the pod must not re-claim on either.
    */
   private async handleDemandUpdate(demanded: Map<string, DemandSource>): Promise<void> {
     if (this.isShuttingDown) return;
 
     logger.info('Demand update received', { demanded_count: demanded.size });
+    const now = Date.now();
 
     // Record the authoritative demand snapshot first, so any connection attempt
     // already in flight (suspended on its async live-status pre-check) sees the
@@ -760,6 +1028,10 @@ class TikTokListenerService {
       if (this.activeStreams.has(username)) {
         await this.disconnectFromStream(username);
       }
+      // Drop any silent-failure streak: a stale streak from a since-removed
+      // overlay would give a re-added channel error backoff after one future
+      // heartbeat timeout.
+      this.heartbeatMonitor.clearSilentFailureStreak(username);
     }
 
     // Go fully idle when there is no demand: stop the poller entirely.
@@ -779,8 +1051,20 @@ class TikTokListenerService {
       logger.info('LiveStreamPoller started (demand present)');
     }
 
-    // Claim leadership and connect new demanded streams
+    // Claim leadership and connect new demanded streams. Prune expired
+    // rebalance holds first so the map cannot grow without bound.
+    for (const [username, heldUntil] of this.rebalanceHolds) {
+      if (heldUntil <= now) this.rebalanceHolds.delete(username);
+    }
     for (const [username, source] of demanded.entries()) {
+      // Rebalancing shed this lease recently: skip while the hold is live so
+      // another pod takes it. Re-claiming here would recreate the hoard
+      // rebalancing just shed — this pod is the guaranteed first claimant,
+      // because its release already landed.
+      if (this.rebalanceHolds.has(username)) {
+        logger.debug('Skipping stream (rebalanced away recently)', { username });
+        continue;
+      }
       // Skip if already active, connecting, or waiting in the poller for live status
       if (!this.activeStreams.has(username) && !this.connectingStreams.has(username) && !this.livePoller.isTargetActive(username)) {
         // Try to claim leadership — if another pod holds it, skip
@@ -809,8 +1093,10 @@ class TikTokListenerService {
 
   /**
    * Safety-net poll that queries source-manager GET /demand endpoint.
-   * Runs every 60s to restore correct state after Redis reconnect / missed Pub/Sub events.
-   * Only runs when coordinator integration is enabled.
+   * Restores correct state after Redis reconnect / missed Pub/Sub events.
+   * Only runs when coordinator integration is enabled. Also drives ADR-0007 lease
+   * rebalancing (see the rebalance call inside) — each poll re-registers this
+   * pod as a peer, so the interval must stay under source-manager's 30s PeerTTL.
    */
   private async pollDemandFallback(): Promise<void> {
     if (this.isShuttingDown) return;
@@ -822,12 +1108,52 @@ class TikTokListenerService {
       for (const source of sources) {
         demanded.set(source.channel_id, source);
       }
+
+      // ADR-0007: shed leases in excess of min(ceil(total/peers), ceiling) so a
+      // pod that grabbed every lease at boot cannot hoard the fleet, and cannot
+      // hold more leases than TIKTOK_MAX_STREAMS_PER_POD connections (the
+      // 2026-09-14 incident: one pod held 43 of 48, overran the Euler proxy's
+      // concurrent cap, and every channel on it went deaf). Runs before
+      // handleDemandUpdate, which consults the rebalance holds this sets so
+      // another pod can claim the released streams — without the hold this
+      // pod would re-acquire everything it just shed, from the poll path or
+      // from a Pub/Sub demand republish.
+      if (this.leadershipCoordinator) {
+        // Rank release candidates by wire freshness so a rebalance sheds
+        // idle rooms first: a moved hot room pays a full re-handshake (and
+        // flap exposure) on the receiving pod for nothing.
+        const freshness = new Map(
+          this.heartbeatMonitor
+            .getStats()
+            .usernames.map((u) => [u.username, u.last_message_seconds_ago] as const)
+        );
+        const released = await this.leadershipCoordinator.rebalance(
+          demanded.size,
+          TIKTOK_MAX_STREAMS_PER_POD,
+          (username) => freshness.get(username)
+        );
+        // Set every hold synchronously before any teardown awaits: a Pub/Sub
+        // snapshot can arrive mid-teardown, and a lease released by rebalance()
+        // but not yet held would be re-claimable in that window.
+        for (const username of released) {
+          this.rebalanceHolds.set(username, Date.now() + REBALANCE_HOLD_MS);
+        }
+        for (const username of released) {
+          // Drop all local tracking for the released stream, including a
+          // poller target for an offline-but-demanded room: the poller's
+          // onLive callback connects without a lease check, so a surviving
+          // target would reconnect a stream whose lease another pod now holds.
+          // A later demand cycle re-adds it under a fresh lease.
+          this.livePoller.removeTarget(username);
+          await this.disconnectFromStream(username);
+        }
+      }
+
       await this.handleDemandUpdate(demanded);
     } catch (err) {
       logger.error('Demand fallback poll error', { error: String(err) });
     }
   }
-
 
   /**
    * Handle migration event from coordinator (Phase 6).
@@ -849,6 +1175,32 @@ class TikTokListenerService {
         overlay_id: overlayId,
         reason: usernameCheck.reason,
       });
+      return;
+    }
+
+    // Connection ceiling (see TIKTOK_MAX_STREAMS_PER_POD). Checked before the
+    // connectingStreams bookkeeping so the early return needs no cleanup, and
+    // before the live-status pre-check so a full pod spends no Euler budget on
+    // a stream it cannot connect anyway.
+    //
+    // The lease must be released before re-parking: a leased-but-unconnected
+    // stream is deaf everywhere, because no other pod may claim it (the exact
+    // failure of the 2026-09-14 incident). Rebalancing normally keeps leases
+    // under the same ceiling, so this is the last-resort guard when pods
+    // scale down between cycles.
+    const liveConnectionCount = this.activeStreams.size + this.connectingStreams.size;
+    if (connectionCeilingReached(liveConnectionCount, TIKTOK_MAX_STREAMS_PER_POD)) {
+      logger.warn('Connection ceiling reached, re-parking stream', {
+        username,
+        overlay_id: overlayId,
+        ceiling: TIKTOK_MAX_STREAMS_PER_POD,
+        active: this.activeStreams.size,
+        connecting: this.connectingStreams.size,
+      });
+      if (this.leadershipCoordinator) {
+        await this.leadershipCoordinator.release(username);
+      }
+      this.livePoller.addTarget(username, overlayId);
       return;
     }
 
@@ -904,16 +1256,95 @@ class TikTokListenerService {
 
       logger.info('User is live, proceeding with connection', { username, overlay_id: overlayId });
 
+      // Pre-sign to learn which proxy lane the signer's viewer captured this
+      // room on. The signed session TikTok issues is bound to that egress IP,
+      // so the WebSocket handshake must egress via the same proxy — the
+      // 2026-09-16 "Unexpected server response: 200" failures were the
+      // connector dialling the push server from the pod's datacenter IP
+      // while the session was captured via residential.
+      //
+      // This is a real sign round trip; the connector's own sign call at
+      // connect time hits the signer's pinned warm tab for this room and
+      // returns in milliseconds. Skipped when self signing is off (Euler
+      // signs in its own cloud and rides its own proxy already).
+      let wsAgent: WsEgressAgent | undefined;
+      // The lane-pin pre-sign keys on whichever mode-specific signer is
+      // configured: SelfSigner's capture names the capture lane,
+      // PureNodeSigner's lease names the session lane (a cache hit after
+      // the first fetch). The proxyCredentials and noLaneCache conditions
+      // are unchanged.
+      const signClient = this.pureNodeSigner ?? this.selfSigner;
+      if (signClient && this.proxyCredentials && !this.noLaneCache.skipActive()) {
+        try {
+          const preSignStartedAt = Date.now();
+          const preSign = await signClient.sign({
+            roomId: 'unused',
+            username,
+            userAgent: 'ws-pin'
+          });
+          if (preSign.fetchResultProxyHost) {
+            // Lanes are back: re-arm pinning for every subsequent connect.
+            this.noLaneCache.markLane();
+            const { username: proxyUser, password: proxyPass } = this.proxyCredentials;
+            wsAgent = createChromeTlsProxyAgent(
+              `http://${proxyUser}:${proxyPass}@${preSign.fetchResultProxyHost}`
+            );
+            this.metrics.recordLanePinOutcome('pinned');
+            logger.info('Pinning WebSocket egress to capture lane', {
+              username,
+              lane: preSign.fetchResultProxyHost,
+              presign_ms: Date.now() - preSignStartedAt
+            });
+          } else {
+            // The signer answered but named no lane (direct capture or an
+            // older signer): the WS dial defaults to pod egress, which is
+            // exactly the shape that produced the 2026-09-16 flaps. Under
+            // direct egress the lane is never coming back per-connect, so
+            // park the pre-sign for the cache TTL instead of paying its
+            // ~50s capture round-trip on every retry.
+            this.noLaneCache.markNoLane();
+            this.metrics.recordLanePinOutcome('unpinned_no_lane');
+            logger.warn('Pre-sign returned no proxy lane; connecting unpinned', { username });
+          }
+        } catch (error) {
+          // Do not fail the connect on a pre-sign error: the connector's own
+          // sign call will surface the same problem with a proper SignatureFailure.
+          // A sign failure never touches the no-lane cache — it is an
+          // availability problem, not a lane state.
+          this.metrics.recordLanePinOutcome('failed');
+          logger.warn('Pre-sign for WS lane pinning failed; connecting unpinned', {
+            username,
+            error: (error as Error).message
+          });
+        }
+      } else {
+        // Euler path, credentials not yet fetched, or the no-lane cache is
+        // holding: pinning is off.
+        this.metrics.recordLanePinOutcome('skipped');
+      }
+
+
       const connection = new TikTokLiveConnection(username, {
         processInitialData: false, // Don't process historical messages
+        // Pin the connection's device/screen presets to the signer's browser
+        // identity when we sign for ourselves, so every request TikTok sees
+        // from this connection describes the same browser as the signature.
+        // Undefined keeps the connector's randomized defaults (Euler path).
+        clientPresets: this.signerPresets,
         // Gift enrichment fetches the room's gift list. The library already asks TikTok directly
         // for it (`fetchRoomGiftsRoute` -> `webcast/gift/list/`), but that request is signed, and
         // signing an HTTP URL goes through Euler's `fetchWebcastSignatureFromProvider` — which is
         // the call Euler paywalls, not the gift data itself. So this only becomes viable once we
         // sign for ourselves, and loadSignConfiguration defaults it on exactly then.
         // See ADR-0052, "There are two Euler signing seams".
-        enableExtendedGiftInfo: SIGN_CONFIG.enableExtendedGiftInfo
+        enableExtendedGiftInfo: SIGN_CONFIG.enableExtendedGiftInfo,
+        wsClientOptions: wsAgent ? { agent: wsAgent } : undefined
       });
+
+      // The sign route bag carries the web client, not the connection, so the
+      // streamer handle rides on the web client for the route handler to read
+      // (viewer-mode signers open the room's live page by handle, not room ID).
+      setConnectionUniqueId(connection, username);
 
       // Set up event handlers
       connection.on(WebcastEvent.CHAT, (data) => {
@@ -959,6 +1390,16 @@ class TikTokListenerService {
       // question that took a prod investigation to answer the first time.
       emitter.on('decodedData', (method: string) => {
         this.metrics.recordWireMessage(method);
+        // Any decodable frame is wire liveness. A live-but-quiet stream pushes
+        // RoomUserSeq/ControlMessage continuously but may go minutes without a
+        // chat/gift/social/member/envelope message, which would otherwise let
+        // the 90s heartbeat kill a healthy connection and churn the room into
+        // flap exhaustion (prod-measured 2026-09-17: connect → silent → kill
+        // → reconnect every ~2 min on low-traffic rooms). Ack-only frames decode
+        // to nothing and never reach this hook, so the floor stays room
+        // liveness, not socket liveness.
+        this.heartbeatMonitor.recordMessage(username);
+        this.canaryConsumers.get(username)?.notePrimaryFrame(method);
       });
 
       emitter.on('connected', (state: { roomId?: string }) => {
@@ -985,9 +1426,13 @@ class TikTokListenerService {
         // Update database: stream is live and source is active
         this.updateStreamHistory(username, true);
         this.setSourceActive(username, true);
-      });
 
+        // Canary (phase 2): mirror this room against the signer relay when
+        // configured. Never load-bearing — divergence only logs + counts.
+        this.startCanary(username);
+      });
       emitter.on('disconnected', () => {
+        this.stopCanary(username);
         logger.warn('TikTok stream disconnected', { username });
         const stream = this.activeStreams.get(username);
         if (stream) {
@@ -1000,9 +1445,30 @@ class TikTokListenerService {
         // Publish lifecycle:stream_end event for share expiry (EXPIRY-06)
         this.livePoller.publishStreamEnd(username);
 
-        // Stream ended - reset to quick re-check
-        this.backoffManager.recordDisconnection(username);
-        this.livePoller.addTarget(username, overlayId);
+        // A heartbeat-forced disconnect means the connection went silently deaf;
+        // if reconnects keep landing in the same state (streak > 1), back off
+        // progressively instead of resetting to the 60s base. The instant
+        // reconnect loop re-entered ~43 rooms every 2 minutes from one pod for
+        // days (2026-09-14 incident), burning the Euler free tier and keeping
+        // the proxy wedged. A genuinely-ended stream stays at streak 0 via
+        // recordMessage having fired on its last real messages.
+        if (shouldBackOffReconnect(this.heartbeatMonitor.getSilentFailureStreak(username))) {
+          this.backoffManager.recordConnectionError(
+            username,
+            new Error(`Silent connection failure x${this.heartbeatMonitor.getSilentFailureStreak(username)}`)
+          );
+        } else {
+          // Stream ended - reset to quick re-check
+          this.backoffManager.recordDisconnection(username);
+        }
+        // Only re-park a stream this pod still leads. The disconnect may be the
+        // asynchronous tail of a rebalance/leadership-loss teardown, and a
+        // lease-less poller target is either another pod's job or nobody's —
+        // its onLive callback would skip anyway, but the poller would keep
+        // spending status checks on it forever.
+        if (!this.leadershipCoordinator || this.leadershipCoordinator.hasLeadership(username)) {
+          this.livePoller.addTarget(username, overlayId);
+        }
 
         // Publish reconnecting status so overlay indicators show the retry state
         const backoffState = this.backoffManager.getState(username);
@@ -1019,9 +1485,22 @@ class TikTokListenerService {
       emitter.on('error', (err: Error) => {
         logger.error('TikTok stream error', { username, error: err });
 
-        // Connection error - record for backoff
-        this.backoffManager.recordConnectionError(username, err);
-        this.livePoller.addTarget(username, overlayId);
+        // A budget refusal reaches this handler too, wrapped in the
+        // connector's { info, exception } envelope (handleError emits
+        // that before connect() rethrows the raw error): park it, never
+        // escalate — the refusal is not the room's fault. Re-park only
+        // if this pod still leads the stream: an 'error' can fire during
+        // the teardown of a rebalanced or lost stream, and a lease-less
+        // poller target only burns status checks (onLive would skip it
+        // anyway). The catch in connectToStream handles the raw throw.
+        if (isBudgetRefusalError(err)) {
+          this.backoffManager.recordBudgetRefusal(username, budgetRefusalRetryAfterMs(err));
+        } else {
+          this.backoffManager.recordConnectionError(username, err);
+        }
+        if (!this.leadershipCoordinator || this.leadershipCoordinator.hasLeadership(username)) {
+          this.livePoller.addTarget(username, overlayId);
+        }
       });
 
       // Store before connecting
@@ -1032,13 +1511,60 @@ class TikTokListenerService {
         is_connected: false
       });
 
-      // Connect
-      await connection.connect();
+      // Connect. A WS flap ("Unexpected server response: 200") is retried
+      // immediately and outside normal error backoff: lab-measured 2026-09-16
+      // it clears by attempt 3, while the escalating backoff would park the
+      // room for minutes over a transient. Prod 2026-09-17 saw walls clear on
+      // attempt 4-8, so the budget and base delay are env-tunable
+      // (TIKTOK_FLAP_MAX_FAST_RETRIES / TIKTOK_FLAP_RETRY_DELAY_MS). The
+      // connector resets its state to DISCONNECTED on a failed connect, so
+      // the same connection object can be re-dialled. Any other error
+      // propagates to the catch below, which keeps the poller's backoff
+      // semantics for real failures.
+      for (let attempt = 1; ; attempt++) {
+        try {
+          await connection.connect();
+          break;
+        } catch (error) {
+          if (!isWsFlapError(error)) throw error;
+          this.metrics.recordWsFlap(username);
+          if (attempt > TIKTOK_FLAP_MAX_FAST_RETRIES) {
+            this.metrics.recordWsFlapExhausted(username);
+            logger.warn('WS flap did not clear after fast retries', {
+              username,
+              attempts: attempt
+            });
+            // Premium fallback (phase 3): the primary tier failed its
+            // retry budget; a premium room's delivery can switch to the
+            // signer relay instead of parking in error backoff.
+            if (await this.tryPromoteFallback(username, overlayId, connection)) {
+              return; // delivery switched to the relay; skip normal error backoff
+            }
+            throw error;
+          }
+          this.metrics.recordWsFlapRetry(username);
+          const retryDelayMs = nextFlapRetryDelayMs(attempt, TIKTOK_FLAP_RETRY_DELAY_MS);
+          logger.info('WS connect flap; retrying immediately', {
+            username,
+            attempt,
+            retry_in_ms: retryDelayMs
+          });
+          await new Promise<void>((resolve) => setTimeout(resolve, retryDelayMs));
+        }
+      }
     } catch (error) {
       logger.error('Failed to connect to TikTok stream', { username, error });
 
-      // Record error for backoff
-      this.backoffManager.recordConnectionError(username, error as Error);
+      // A self-imposed budget refusal is not an error: the sign cannot
+      // succeed until the signer's rolling hour slides, so the room is
+      // parked for exactly that long. The escalating error curve would
+      // re-sign every few seconds, get refused again, and spin the failure
+      // counter that fired the budget-exhausted alert flap.
+      if (isBudgetRefusalError(error)) {
+        this.backoffManager.recordBudgetRefusal(username, budgetRefusalRetryAfterMs(error));
+      } else {
+        this.backoffManager.recordConnectionError(username, error as Error);
+      }
 
       // Only schedule a retry if the stream is still demanded. If demand was pulled
       // while we were connecting, re-parking it in the poller would re-create the
@@ -1055,13 +1581,14 @@ class TikTokListenerService {
       this.connectingStreams.delete(username);
     }
   }
-
   private async disconnectFromStream(username: string): Promise<void> {
     const stream = this.activeStreams.get(username);
     if (!stream) return;
 
     try {
       logger.info('Disconnecting from TikTok stream', { username });
+      this.stopCanary(username);
+      this.stopFallback(username);
       stream.connection.disconnect();
       this.activeStreams.delete(username);
 
@@ -1069,12 +1596,221 @@ class TikTokListenerService {
       this.livePoller.removeTarget(username);
       this.backoffManager.removeState(username);
       this.statusChecker.clearCache(username);
+      // The heartbeat-forced path does not come through here (it disconnects
+      // directly and reads the streak in the disconnected handler), so clearing
+      // here only affects deliberate teardown — leadership loss, rebalance
+      // release, demand removal — where the stream gets a fresh start
+      // wherever it reconnects next.
+      this.heartbeatMonitor.clearSilentFailureStreak(username);
 
       // Publish offline status so overlay indicators reflect the disconnected state
       this.publishPlatformStatus(username, 'offline');
     } catch (error) {
       logger.error('Failed to disconnect from TikTok stream', { username, error });
     }
+  }
+
+  /**
+   * Start the canary mirror for a room, if it is in the canary set and not
+   * already running. The consumer decodes the signer relay's frames with
+   * the connector's schemas and compares against this pod's own WS counts;
+   * divergence is logged and counted, never acted on by the connect path.
+   */
+  private startCanary(username: string): void {
+    if (!TIKTOK_CANARY_ROOMS.has(username.toLowerCase())) return;
+    if (this.canaryConsumers.has(username)) return;
+    const signerUrl = SIGN_CONFIG.signerBaseUrl;
+    if (!signerUrl) {
+      logger.warn('Canary room configured but signer URL unknown; canary off', { username });
+      return;
+    }
+    // Pure-node mode: the leased session never creates a target-room tab,
+    // so the relay would 409 forever. The consumer runs this warm at most
+    // once per stint — each call is one signer-side capture against the
+    // single-digit-per-hour budget. Self/euler/shadow keep no warm
+    // callback: the connect-time pre-sign already holds the tab.
+    const warm =
+      SIGN_CONFIG.signerMode === 'pure-node'
+        ? () => {
+            this.metrics.recordCanaryWarm('attempted');
+            return warmTargetTab({
+              signerUrl,
+              authToken: TIKTOK_SIGNER_AUTH_TOKEN || undefined,
+              username
+            }).then((result) => {
+              if (result.ok) {
+                this.metrics.recordCanaryWarm('warmed');
+                return true;
+              }
+              this.metrics.recordCanaryWarm(result.reason);
+              return false;
+            });
+          }
+        : undefined;
+    const consumer = new CanaryConsumer({
+      username,
+      signerUrl,
+      signerAuthToken: TIKTOK_SIGNER_AUTH_TOKEN || undefined,
+      warm,
+      logger: {
+        info: (msg, meta) => logger.info(msg, { ...meta }),
+        warn: (msg, meta) => logger.warn(msg, { ...meta })
+      }
+    });
+    consumer.on('divergence', (divergence) => {
+      this.metrics.recordCanaryDivergence(divergence.kind);
+      logger.warn('TikTok canary divergence', {
+        username,
+        kind: divergence.kind,
+        detail: divergence.detail
+      });
+    });
+    consumer.on('error', (error: Error) => {
+      logger.warn('TikTok canary relay error', { username, error: error.message });
+    });
+    this.canaryConsumers.set(username, consumer);
+    consumer.start();
+    logger.info('Canary mirror started for room', { username });
+  }
+
+  private stopCanary(username: string): void {
+    const consumer = this.canaryConsumers.get(username);
+    if (!consumer) return;
+    consumer.stop();
+    this.canaryConsumers.delete(username);
+    logger.info('Canary mirror stopped for room', { username });
+  }
+
+  /**
+   * Premium fallback (phase 3): after the primary WS exhausted its flap
+   * retry budget, try to switch this room's delivery to the signer's
+   * viewer-tab relay. Promotion is premium-only (a tab is ~150MB in the
+   * signer pod), gated by TIKTOK_PREMIUM_FALLBACK, and requires a signer
+   * URL: self/euler/shadow modes get their target-room tab from the
+   * connect-time pre-sign, and pure-node mode warms it here (PR 3,
+   * sign/warm-target-tab.ts) — one capture per promotion attempt.
+   *
+   * The connection handed in stays DISCONNECTED: its listeners were wired
+   * in connectToStream before the primary attempt failed, and the fallback
+   * replays relay frames through them via processProtoMessageFetchResult.
+   * Keeping it disconnected also keeps the heartbeat monitor from timing
+   * it out — recordMessage fires from the same listeners the replay
+   * drives, which is the honest signal: frames delivered, connection live.
+   *
+   * Returns true when the room is now delivered by the relay.
+   */
+  private async tryPromoteFallback(
+    username: string,
+    overlayId: string,
+    connection: TikTokLiveConnection
+  ): Promise<boolean> {
+    if (!TIKTOK_FALLBACK_ENABLED) return false;
+    if (this.fallbackConsumers.has(username)) return true;
+    const signerUrl = SIGN_CONFIG.signerBaseUrl;
+    if (
+      !fallbackPromotionAvailable(
+        signerUrl,
+        { selfSigner: this.selfSigner, pureNodeSigner: this.pureNodeSigner },
+        SIGN_CONFIG.signerMode
+      )
+    ) {
+      // No signer, no relay: nothing to promote to.
+      this.metrics.recordFallbackPromotion(username, 'relay_unavailable');
+      return false;
+    }
+
+    let premium: boolean;
+    try {
+      premium = await this.premiumChecker.isPremiumRoom(username);
+    } catch {
+      // isPremiumRoom already fails closed; this is its contract held at
+      // the call site in case the shape ever changes.
+      premium = false;
+    }
+    if (!premium) {
+      this.metrics.recordFallbackPromotion(username, 'not_premium');
+      logger.info('Flap exhausted but room is not premium; staying on primary tier', { username });
+      return false;
+    }
+    // A warm tab must exist for the relay to attach (the signer answers
+    // 409 otherwise). Self/euler/shadow: the pre-sign at the top of
+    // connectToStream just ran one. Pure-node: warm it now — one capture,
+    // premium-gated so non-premium rooms never pay it.
+    if (SIGN_CONFIG.signerMode === 'pure-node') {
+      const warm = await warmTargetTab({
+        signerUrl,
+        authToken: TIKTOK_SIGNER_AUTH_TOKEN || undefined,
+        username
+      });
+      if (!warm.ok) {
+        this.metrics.recordFallbackPromotion(username, 'relay_unavailable');
+        logger.warn('Premium fallback warm failed; staying on primary tier', {
+          username,
+          reason: warm.reason
+        });
+        return false;
+      }
+    }
+
+    const consumer = new FallbackConsumer({
+      username,
+      signerUrl,
+      connection,
+      signerAuthToken: TIKTOK_SIGNER_AUTH_TOKEN || undefined,
+      maxDurationMs: TIKTOK_FALLBACK_MAX_DURATION_MS,
+      logger: {
+        info: (msg, meta) => logger.info(msg, { ...meta }),
+        warn: (msg, meta) => logger.warn(msg, { ...meta })
+      }
+    });
+    consumer.on('delivered', (outcome) => {
+      this.metrics.recordFallbackDelivery(username, outcome);
+    });
+    consumer.on('error', (error: Error) => {
+      logger.warn('TikTok fallback relay error', { username, error: error.message });
+    });
+    consumer.on('ended', (reason) => {
+      this.demoteFallback(username, overlayId, reason);
+    });
+
+    this.fallbackConsumers.set(username, consumer);
+    consumer.start();
+    this.metrics.recordFallbackPromotion(username, 'promoted');
+    logger.warn('Premium fallback: room delivery switched to signer relay', {
+      username,
+      overlay_id: overlayId
+    });
+    return true;
+  }
+
+  /**
+   * End a fallback stint: hand the room back to the primary tier. The
+   * stream ended (relay ws_closed), the tab died (tap_error), the signer
+   * refuses the room (rejected), or the stint hit its ceiling. In every
+   * case the poller re-evaluates liveness and connectToStream retries the
+   * primary WS with a fresh flap budget; a still-demanded live room whose
+   * primary also recovers simply stays there.
+   */
+  private demoteFallback(username: string, overlayId: string, reason: string): void {
+    if (!this.fallbackConsumers.delete(username)) return;
+    logger.info('Premium fallback stint ended; returning room to primary tier', {
+      username,
+      overlay_id: overlayId,
+      reason
+    });
+    this.backoffManager.recordDisconnection(username);
+    if (!this.leadershipCoordinator || this.leadershipCoordinator.hasLeadership(username)) {
+      this.livePoller.addTarget(username, overlayId);
+    }
+    this.publishPlatformStatus(username, 'reconnecting');
+  }
+
+  private stopFallback(username: string): void {
+    const consumer = this.fallbackConsumers.get(username);
+    if (!consumer) return;
+    consumer.stop();
+    this.fallbackConsumers.delete(username);
+    logger.info('Premium fallback stopped for room', { username });
   }
 
   private async updateStreamHistory(username: string, isLive: boolean): Promise<void> {
@@ -1184,6 +1920,13 @@ class TikTokListenerService {
         });
         return; // Skip publishing duplicate
       }
+
+      // Delivered (not replay): the connection is provably receiving live
+      // push, so any silent-failure streak for it is healed. CHAT is the only
+      // dedup-gated handler, so it is the only one that needs the call: the
+      // other event types publish unconditionally after recordMessage, which
+      // already prevents the heartbeat timeout that grows a streak.
+      this.heartbeatMonitor.noteSilentFailureHealing(username);
 
       // Create raw message in standardized format
       const rawMessage: RawChatMessage = {
@@ -1686,7 +2429,6 @@ class TikTokListenerService {
 
     return usernames.length;
   }
-
 
   async stop(): Promise<void> {
     this.isShuttingDown = true;

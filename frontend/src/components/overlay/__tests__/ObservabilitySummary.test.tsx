@@ -59,6 +59,7 @@ function eventSettings(over: Partial<EventSettings> = {}): EventSettings {
     enable_youtube_members: false,
     enable_youtube_member_milestones: false,
     enable_youtube_member_gifts: false,
+    enable_youtube_subscribers: true,
     enable_kick_subs: false,
     enable_kick_gifts: false,
     enable_tiktok_likes: false,
@@ -123,6 +124,7 @@ describe('ObservabilitySummary', () => {
     )
     expect(screen.getByText('Twitch Subs')).toBeInTheDocument()
     expect(screen.getByText('Twitch Bits')).toBeInTheDocument()
+    expect(screen.getByText('YouTube Subscribers')).toBeInTheDocument()
     expect(screen.getByText('TikTok Coin Chests')).toBeInTheDocument()
     expect(screen.getByText('Token Warnings')).toBeInTheDocument()
   })

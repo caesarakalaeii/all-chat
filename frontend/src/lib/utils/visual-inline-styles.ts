@@ -17,18 +17,20 @@
  */
 
 import type { CSSProperties } from 'react'
+import type { UserInfo } from '@/lib/types/message'
 import type { VisualSettings } from '@/lib/types/visual-settings'
+import { buildGradientCSS } from '@/lib/utils/gradient'
 import { normalizeHex } from '@/lib/utils/hex-alpha'
 
 /**
- * Background / shadow / max-width customizer settings that can't be driven by a
+ * Background / max-width customizer settings that can't be driven by a
  * blanket CSS rule:
  *
  * - Background colors resolve to a single `rgba()`. The opacity rides in the
- *   color itself as an 8-digit hex (ADR-0050); the legacy sibling `*BgOpacity`
- *   field is still honoured for settings saved before that. A layered
- *   `!important` CSS rule for these would clobber the per-variant Tailwind
- *   defaults (normal `bg-slate-900/90`, shared-chat `bg-purple-900/40`,
+ *   color itself as an 8-digit hex (ADR-0050); the legacy sibling
+ *   `overlayBgOpacity` field is still honoured for settings saved before that.
+ *   A layered `!important` CSS rule for these would clobber the per-variant
+ *   Tailwind defaults (normal `bg-slate-900/90`, shared-chat `bg-purple-900/40`,
  *   transparent overlay). Applying them as inline styles *only when set* leaves
  *   those defaults intact when the user hasn't configured them.
  *
@@ -72,11 +74,39 @@ export function overlayContainerStyle(vs: Partial<VisualSettings>): CSSPropertie
   return style
 }
 
-/** Inline style for an individual chat bubble (background fill + shadow). */
-export function chatBubbleStyle(vs: Partial<VisualSettings>): CSSProperties {
-  const style: CSSProperties = {}
-  const bg = hexToRgba(vs.bubbleBgColor, vs.bubbleBgOpacity)
-  if (bg) style.backgroundColor = bg
-  if (vs.bubbleShadow) style.boxShadow = vs.bubbleShadow
-  return style
+/**
+ * Per-row custom properties carrying a chatter's username colour onto their
+ * bubble. The receiver is the [data-user-bubble] rule userBubbleRules emits in
+ * the visual-customizer layer (see visual-settings-to-css): these inline
+ * values are only declarations, so the generated rule's consumption wins the
+ * cascade the moment the row carries the attribute.
+ *
+ * Gradients are applied opaque: buildGradientCSS cannot fade a whole gradient,
+ * so bubbleUserColorOpacity is honoured for flat colours only.
+ */
+export function userBubbleStyle(
+  user: UserInfo | undefined,
+  vs: Partial<VisualSettings>,
+  mode: 'background' | 'border'
+): CSSProperties {
+  const gradient =
+    user?.name_gradient && buildGradientCSS(user.name_gradient) !== ''
+      ? user.name_gradient
+      : undefined
+  if (mode === 'background') {
+    if (gradient) return { '--row-user-bg-image': buildGradientCSS(gradient) } as CSSProperties
+    const fill = hexToRgba(user?.color || user?.auto_color, vs.bubbleUserColorOpacity)
+    if (fill) return { '--row-user-bg': fill } as CSSProperties
+    return {}
+  }
+  // Border mode. A gradient border has no faithful outline equivalent, so the
+  // first stop stands in for the gradient; it is the colour the viewer most
+  // associates with the name. Width is deliberately this mode's own 2px, not
+  // bubbleBorderWidth — a border nobody sized would never appear.
+  const borderColor = gradient ? gradient.colors[0] : user?.color || user?.auto_color
+  if (!borderColor || !normalizeHex(borderColor)) return {}
+  return {
+    '--row-user-border-color': borderColor,
+    '--row-user-border-width': '2px',
+  } as CSSProperties
 }

@@ -58,7 +58,8 @@ This service uses the **unofficial** [TikTok-Live-Connector](https://github.com/
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 26.4+ (tls-impersonate's Chrome ClientHello needs the native addon
+  and an OpenSSL new enough for the full extension set; see `src/ws/chrome-tls.ts`)
 - Redis (for message publishing)
 - PostgreSQL (for active stream tracking)
 
@@ -104,9 +105,73 @@ TIKTOK_ENVELOPE_TRACE=                # Set to any value to log businessType, th
 TIKTOK_DISABLE_EULER_FALLBACKS=true   # Skip Euler's leg of the room-id and is-live composites
 TIKTOK_SIGNER_MODE=euler              # euler | shadow | self
 TIKTOK_SELF_SIGN_FALLBACK=true        # Under `self`, fall back to Euler when our signer fails
-TIKTOK_SIGNER_URL=                    # Empty = sign in-process; a URL points at a sign service
+TIKTOK_SIGNER_URL=                    # tiktok-signer service URL; empty = no self signer
+TIKTOK_SIGNER_AUTH_TOKEN=             # Bearer token if the signer service runs with auth
+TIKTOK_SIGNER_TIMEOUT_MS=180000       # Self-signer HTTP timeout; signer rotates lanes inside one request
 TIKTOK_EXTENDED_GIFT_INFO=            # Defaults on only under `self` (see below)
 SIGN_API_KEY=                         # Euler Stream API key; empty means the free tier
+
+# Heartbeat (silent-failure watchdog). Liveness is wire liveness: any frame
+# the connector decodes (e.g. the RoomUserSeq a live-but-quiet stream still
+# pushes) resets the timer, so a low-traffic room is not killed for silence.
+# A connection whose frames never decode (acks only) is treated as deaf and
+# reconnected. The timeout is room liveness, not socket liveness; soften it
+# for launch-day streams rather than disabling monitoring.
+TIKTOK_HEARTBEAT_INTERVAL_MS=30000     # How often to check (default)
+TIKTOK_HEARTBEAT_TIMEOUT_MS=90000      # Silence before a forced reconnect (default)
+
+# WS connect flap (2026-09-16 transport plan): TikTok answering the upgrade
+# with HTTP 200 is a transient flap; connect retries immediately up to
+# TIKTOK_FLAP_MAX_FAST_RETRIES before falling into normal error backoff.
+# Retries 1-2 wait TIKTOK_FLAP_RETRY_DELAY_MS, retries 3+ wait 3x that —
+# prod flaps (2026-09-17) are session-scoring artifacts that ease with
+# spacing. Defaults: 3 x 1000ms (lab-measured). Metrics: tiktok_ws_flap_total,
+# tiktok_ws_flap_retries_total, tiktok_ws_flap_exhausted_total.
+TIKTOK_FLAP_MAX_FAST_RETRIES=3
+TIKTOK_FLAP_RETRY_DELAY_MS=1000
+
+# Pre-sign lane pinning (WS egress): when the signer answers a pre-sign with
+# no proxy lane (direct egress), the pre-sign is skipped for 10 minutes —
+# its ~50s capture round-trip cannot pin anything. The first answer that
+# does carry a lane re-enables pinning immediately.
+
+# Canary rooms (phase 2): rooms mirrored against the signer's viewer-tab
+# relay (signer: SIGNER_RELAY_CANARY_ROOMS). Divergence logs +
+# tiktok_canary_divergences_total; never affects the primary connection.
+# In pure-node mode the relay has no target-room tab to attach to, so the
+# consumer warms one on the signer (POST /v1/sign viewer path) at most once
+# per stint — tiktok_canary_warms_total{outcome} audits that budget.
+TIKTOK_CANARY_ROOMS=                   # Comma-separated usernames; empty = no canary
+
+# Premium fallback (ADR-0064, off by default): on flap-retry exhaustion a
+# premium room's delivery switches to the signer's viewer-tab relay
+# (signer: SIGNER_RELAY_FALLBACK=on). A stint ends on stream end, tab death,
+# signer refusal, or TIKTOK_FALLBACK_MAX_DURATION_MS (default 6h), and the
+# room returns to the primary tier with a fresh flap budget. In pure-node
+# mode the promotion warms the target-room tab first (one capture,
+# premium-gated). Metrics: tiktok_fallback_promotions_total,
+# tiktok_fallback_deliveries_total.
+TIKTOK_PREMIUM_FALLBACK=off           # on | off
+TIKTOK_FALLBACK_MAX_DURATION_MS=21600000
+
+# Demand poll and rebalancing (ADR-0007)
+DEMAND_SAFETY_INTERVAL_MS=25000       # Demand safety-net poll; also re-registers this pod as a
+                                      # peer and drives lease rebalancing. Must stay below
+                                      # source-manager's 30s peer TTL or the observed peer count
+                                      # never stabilizes and rebalancing never fires
+                                      # Release selection ranks by wire freshness (heartbeat
+                                      # monitor): idle rooms are released first, hot rooms
+                                      # (message <60s ago) last — a moved hot room must re-handshake
+                                      # on the receiving pod for nothing.
+# Connection ceiling per pod
+TIKTOK_MAX_STREAMS_PER_POD=20         # Hard cap on concurrent WebSocket connections. The Euler
+                                      # free tier proxies every connection and caps concurrent ones
+                                      # (~25); above that it accepts the handshake but withholds live
+                                      # push (2026-09-14 incident). Also caps the leases a pod
+                                      # holds during rebalancing: a leased-but-unconnectable stream
+                                      # is deaf everywhere, since no other pod may claim it.
+                                      # Raise with a paid plan; remove when self-signing retires
+                                      # Euler (ADR-0052)
 ```
 
 ### WebSocket signing
@@ -136,29 +201,63 @@ TIKTOK_LIVE_TESTS=1 npx vitest run src/sign/euler-free.live.test.ts
 instead of quietly working. It resolves room IDs for three accounts and answers is-live with
 Euler black-holed. It is opt-in and skipped by default: CI must not depend on tiktok.com being
 reachable, or a TikTok outage reads as our regression.
-
 **`TIKTOK_SIGNER_MODE`** (default `euler`, risky). The signature has no direct-to-TikTok route in
-the library, so this is the part we have to build:
+the library, so this is the part we had to build. The signer now exists:
+[`services/tiktok-signer`](../tiktok-signer/) signs and executes `/webcast/im/fetch/` with
+TikTok's own SDK in a headless browser. Set `TIKTOK_SIGNER_URL` to its address (the k8s
+deployment defaults it to `http://tiktok-signer:8092`) and the mode's signer is constructed at
+startup; without the URL, `shadow`, `self` and `pure-node` log a warning and stay on Euler.
 
 | Mode | Who signs the connection | Purpose |
 |---|---|---|
 | `euler` | Euler Stream | Unchanged behaviour. Our code is not on the connect path. |
 | `shadow` | Euler | Our signer runs in parallel against the same room; its outcome is recorded and discarded. Cannot change connection behaviour. |
 | `self` | Us | Euler catches failures while `TIKTOK_SELF_SIGN_FALLBACK` is on. |
+| `pure-node` | Us (leased session) | No Euler, no per-room page capture: the signer's warm classic room leases its WS session (`GET /v1/session`), and every room enters on it cross-room. |
 
 Walk them in that order. `shadow` exists so the success rate of our own signer can be measured
 against Euler's, on live rooms, before anything depends on it — after cutover, a TikTok change to
 the signing algorithm takes TikTok ingest down until we fix it, where today it is Euler's problem.
+That break-fix cycle lands on the signer service; see its README for the update procedure.
 
-Until the signer itself is implemented, `shadow` and `self` log a warning and fall back to Euler,
-so the flag can be set ahead of the code.
+`pure-node` details (PR 2 of the pure-Node transport, measured 2026-09-18):
+the signer leases a **shared WS session** — one warm classic room's
+webcast URL + cookie jar, freshness-stamped — and the listener
+synthesizes the connector's initial fetch result in-process
+(`src/sign/pure-node.ts`): every recorded identity param is forwarded
+(they are handshake-load-bearing; the bare push origin is rejected),
+`cursor=0` rides the WS query (validated on the wire), and the room's
+chat arrives via the connector's own `im_enter_room`. Two budgets pace
+it (constraint: ~15 WS connects/hour flags the session): successful
+lease fetches ≤ 8/hour (10-min cache, single-flight) and WS connect
+signs ≤ 12/hour **per pod** — the session's flag budget is shared by
+every pod leasing it, so keep ONE connect-capable replica in pure-node
+rollouts or divide the cap accordingly. The premium **fallback tier is
+ON** in this mode (PR 3 of the pure-Node transport): promotion warms the
+target-room tab on the signer (`POST /v1/sign` viewer path, one capture
+per attempt, premium-gated) before attaching the relay, and the canary
+mirror attaches the same way — one warm per canary stint, paced by the
+signer's per-room capture breaker (`tiktok_canary_warms_total{outcome}`).
+Gifts stay off (`enableExtendedGiftInfo` is self-only — the URL-signing
+seam keys on the self signer).
+
+When `TIKTOK_SIGNER_URL` is set the listener also fetches the signer's browser identity
+(`GET /v1/identity`) once at startup and pins every connection's device presets to it, so the
+signed fetch, the signature and the WebSocket handshake all describe the same browser. The
+WebSocket egress goes one step further: its TLS handshake mirrors Chrome's ClientHello
+(`src/ws/chrome-tls.ts`, verified against a reference fingerprint service through the CONNECT
+tunnel), so the connection is Chrome at every layer TikTok can see — TLS, HTTP headers, and
+signed payload. On runtimes where the impersonation addon cannot load, the plain Node
+handshake is used, which is the pre-hardening behaviour. Under
+`self`, the second Euler seam (`fetchWebcastSignatureFromProvider`, generic HTTP URL signing) is
+repointed at the signer service too.
 
 `TIKTOK_EXTENDED_GIFT_INFO` defaults on **only** under `self`. The reason is narrower than it
 looks: the library already fetches the gift list from TikTok directly (`gift/list/`), but that
 request is signed, and signing an HTTP URL goes through a *second* Euler seam
-(`fetchWebcastSignatureFromProvider`). Euler paywalls the signing call, not the gift data.
-Enabling this any earlier just reinstates the Business-plan error on every connect — and note that
-implementing only the WebSocket signature will not unblock it either.
+(`fetchWebcastSignatureFromProvider`). Under `self` mode that seam routes to our signer service,
+so the gift list unblocks; enabling it any earlier reinstates Euler's Business-plan error on
+every connect.
 
 Signature outcomes are exported as `tiktok_sign_attempts_total{signer,outcome,reason,load_bearing}`
 and `tiktok_sign_duration_seconds`. Filter to `load_bearing="true"` for real availability, and to
@@ -169,9 +268,52 @@ and `tiktok_sign_duration_seconds`. Filter to `load_bearing="true"` for real ava
 sum(rate(tiktok_sign_attempts_total{signer="self",outcome="success",load_bearing="false"}[1h]))
   / sum(rate(tiktok_sign_attempts_total{signer="self",load_bearing="false"}[1h]))
 
-# Are we still hitting Euler's free-tier ceiling?
+# Are we still hitting an external rate limit (Euler's free tier, TikTok)?
 sum(rate(tiktok_sign_attempts_total{reason="rate_limit"}[5m]))
+
+# How often are we refusing ourselves on the pure-node hourly budgets
+# (WS connects, leases)? A refused room is parked until the window
+# slides — this is capacity signal, not an external fault.
+sum(rate(tiktok_sign_attempts_total{reason="budget"}[5m]))
 ```
+
+### Transport tiers and the premium fallback (ADR-0064)
+
+The primary transport is this service's own Node WebSocket. Two auxiliary
+paths share the signer's viewer-tab relay (`GET /v1/stream/:username`, SSE):
+
+- **Canary (phase 2)**: rooms in `TIKTOK_CANARY_ROOMS` are mirrored —
+  relay frames are decoded and *compared* against the primary WS per
+  method; divergence logs and counts (`tiktok_canary_divergences_total`)
+  but never affects the connection. In pure-node mode the consumer warms
+  the room's tab on the signer when the relay answers 409 (no warm tab):
+  at most once per stint, `tiktok_canary_warms_total{outcome}`.
+- **Premium fallback (ADR-0064)**: with `TIKTOK_PREMIUM_FALLBACK=on`, a
+  room whose flap retries are exhausted **and** whose streamer is premium
+  (`users.is_premium` via overlay ownership, TTL-cached, fail-closed)
+  switches delivery to the relay. Frames are decoded with the connector's
+  own schemas and replayed into the room's connection, so all handlers,
+  dedup and heartbeat run exactly as on the primary. A stint ends on
+  stream end, tab death, signer refusal, or
+  `TIKTOK_FALLBACK_MAX_DURATION_MS` (default 6h) — not on "primary
+  health", which is unobservable while the fallback delivers — and the
+  room returns to the poller with a fresh flap budget. Metrics:
+  `tiktok_fallback_promotions_total{outcome}`, `tiktok_fallback_deliveries_total{outcome}`.
+  In pure-node mode the promotion first warms the target-room tab on the
+  signer (`POST /v1/sign` viewer path, one capture, premium-gated); a
+  failed warm reports `relay_unavailable` and the room stays on the
+  primary tier's error backoff.
+
+  The signer side needs `SIGNER_RELAY_FALLBACK=on` for the endpoint to
+  serve non-canary rooms.
+
+Every promotion alerts (`TikTokFallbackPromoted` in
+`deployments/k8s/monitoring/alerts/allchat-warning-alerts.yaml`, fires on
+any `outcome="promoted"`): the promoted users are the breakage canary for
+the whole transport — they are the first to feel whatever TikTok changed,
+before non-premium rooms go dark. Treat an alert as "investigate the
+primary tier", not "fallback working as intended".
+
 
 ## Development
 

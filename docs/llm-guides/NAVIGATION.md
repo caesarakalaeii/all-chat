@@ -203,13 +203,13 @@ Five rollout listeners, each premium-gated per ADR-0008 (`platform_*` feature ga
 
 ---
 
-### Token Refresh Service (CronJob) ✅
+### Token Refresh Service ✅
 
-**Purpose**: Background job to refresh OAuth tokens before expiry
+**Purpose**: Always-on Deployment whose internal ticker (5m default) refreshes OAuth tokens before expiry
 
 **Key Files**:
-- `services/token-refresh-service/cmd/main.go` - CronJob entry point
-- `services/token-refresh-service/refresh/` - Platform-specific refresh logic
+- `services/token-refresh-service/cmd/main.go` - Service entry point
+- `services/token-refresh-service/refresher/` - Ticker loop + platform-specific refresh logic
 
 **Read When**: Working on OAuth token refresh, expiry handling, or alert integration.
 

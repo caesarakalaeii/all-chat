@@ -48,6 +48,7 @@ const EVENT_TITLE: Partial<Record<EventType, string>> = {
   member_milestone: 'Member Milestone',
   membership_gift: 'Membership Gift',
   gift_received: 'Gift Received',
+  subscriber: 'Subscriber',
   kick_subscription: 'Kick Sub',
   kick_gift_subscription: 'Kick Gift Sub',
   kick_donation: 'Kick Donation',

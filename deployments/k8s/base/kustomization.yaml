@@ -44,7 +44,6 @@ resources:
 
   # Phase 5 - Discord Listener (v1.5)
   - discord-listener/deployment.yaml
-  - discord-listener/hpa.yaml
   - discord-listener/servicemonitor.yaml
   # Rumble Listener (ADR-0061, internal chat pop-up SSE)
   - rumble-listener/deployment.yaml
@@ -63,6 +62,10 @@ resources:
   - owncast-listener/hpa.yaml
   # Instagram Listener (ADR-0062, live-comments polling)
   - instagram-listener/deployment.yaml
+
+  # TikTok self-signing (ADR-0052): replaces Euler Stream on the signing path.
+  - tiktok-signer/deployment.yaml
+  - tiktok-signer/service.yaml
 
 commonLabels:
   project: allchat
@@ -123,4 +126,6 @@ images:
     newTag: main
   - name: allchat-instagram-listener:latest
     newName: ghcr.io/caesarakalaeii/allchat-instagram-listener
+  - name: allchat-tiktok-signer:latest
+    newName: ghcr.io/caesarakalaeii/allchat-tiktok-signer
     newTag: main

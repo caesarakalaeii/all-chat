@@ -267,6 +267,15 @@ func (p *StreamPublisher) Stop() {
 	}
 }
 
+// PublishRaw publishes a pre-serialised chat:raw JSON payload through the
+// ring buffer. Used by the subscribers package, whose RawChatMessage wire
+// struct is byte-compatible with innertube.RawChatMessage. Routing through
+// the ring buffer keeps the LI-02 guarantee (no silent loss on a Redis blip)
+// for subscriber events too.
+func (p *StreamPublisher) PublishRaw(ctx context.Context, payload []byte) error {
+	return p.ringBuffer.Publish(ctx, payload)
+}
+
 // Ping checks if Redis connection is alive.
 // Used by readiness probe to verify Redis connectivity.
 func (p *StreamPublisher) Ping(ctx context.Context) error {

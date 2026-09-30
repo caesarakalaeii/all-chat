@@ -124,6 +124,7 @@ describe('appearance control copy', () => {
     expect(t('overlayEditor.background.borderWidth')).toBe('Border width')
     expect(t('overlayEditor.background.padding')).toBe('Padding')
     expect(t('overlayEditor.background.messageGap')).toBe('Message gap')
+    expect(t('overlayEditor.background.avatarGap')).toBe('Avatar gap')
     expect(t('overlayEditor.background.backdropBlur')).toBe('Backdrop blur')
   })
 
@@ -311,6 +312,20 @@ describe('bubble colours group copy', () => {
       'Reset Twitch bubble colour'
     )
   })
+
+  it('keeps the by-username section copy', () => {
+    expect(t('overlayEditor.bubbleColors.userColorHeading')).toBe('Colour bubbles by username')
+    expect(t('overlayEditor.bubbleColors.userColorBody')).toBe(
+      'Each message takes its chatter’s username colour on the bubble. Colourless chatters get an auto-assigned colour.'
+    )
+    expect(t('overlayEditor.bubbleColors.userColorToggle')).toBe('Use username colours')
+    expect(t('overlayEditor.bubbleColors.userColorModeBackground')).toBe('Fill')
+    expect(t('overlayEditor.bubbleColors.userColorModeBorder')).toBe('Outline')
+    expect(t('overlayEditor.bubbleColors.userColorOpacity')).toBe('Fill opacity')
+    expect(t('overlayEditor.bubbleColors.userColorOpacityNote')).toBe(
+      'Applies to flat colours; gradient names fill the bubble opaque. Outline always uses its own 2px width.'
+    )
+   })
 
   it('keeps the palette section copy', () => {
     expect(t('overlayEditor.bubbleColors.paletteHeading')).toBe('Palette')
@@ -1239,6 +1254,10 @@ describe('event display settings page copy', () => {
     expect(t('overlayEditor.eventSettings.youtubeMemberGiftsLabel')).toBe('Membership Gifts')
     expect(t('overlayEditor.eventSettings.youtubeMemberGiftsDescription')).toBe(
       'Gifted memberships'
+    )
+    expect(t('overlayEditor.eventSettings.youtubeSubscribersLabel')).toBe('Subscribers')
+    expect(t('overlayEditor.eventSettings.youtubeSubscribersDescription')).toBe(
+      'New public channel subscribers (private subscriptions do not trigger an alert)'
     )
   })
 

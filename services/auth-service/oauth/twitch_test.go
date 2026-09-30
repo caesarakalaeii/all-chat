@@ -274,6 +274,85 @@ func TestTwitchOAuth_RefreshToken(t *testing.T) {
 	// Integration tests should validate the actual OAuth flow.
 }
 
+func TestTwitchOAuth_ValidateToken(t *testing.T) {
+	t.Run("valid token with chat scopes returns scopes", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("Authorization") != "OAuth live_token" {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"client_id": "test_id",
+				"login":     "scuffedonigiri",
+				"user_id":   "1532957417",
+				"scopes":    []string{"user:read:chat", "user:bot", "channel:bot"},
+			})
+		}))
+		defer server.Close()
+
+		client := NewTwitchOAuth("test_id", "test_secret", "http://localhost:8080/callback")
+		client.client = &http.Client{Timeout: 10 * time.Second, Transport: &mockTransport{server: server}}
+
+		validation, ok, err := client.ValidateToken(context.Background(), "live_token")
+		if err != nil || !ok {
+			t.Fatalf("ValidateToken() = (%v, %v, %v), want (validation, true, nil)", validation, ok, err)
+		}
+		if !twitchTestScopesContain(validation.Scopes, "user:read:chat") {
+			t.Errorf("scopes = %v, want user:read:chat present", validation.Scopes)
+		}
+		if validation.UserID != "1532957417" {
+			t.Errorf("UserID = %v, want 1532957417", validation.UserID)
+		}
+	})
+
+	t.Run("revoked token yields ok=false without error", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]interface{}{"status": 401, "message": "invalid access token"})
+		}))
+		defer server.Close()
+
+		client := NewTwitchOAuth("test_id", "test_secret", "http://localhost:8080/callback")
+		client.client = &http.Client{Timeout: 10 * time.Second, Transport: &mockTransport{server: server}}
+
+		validation, ok, err := client.ValidateToken(context.Background(), "dead_token")
+		if err != nil {
+			t.Fatalf("a revoked token is expected, not an error: %v", err)
+		}
+		if ok {
+			t.Fatal("a revoked token must report ok=false so callers stop trusting stored scopes")
+		}
+		if len(validation.Scopes) != 0 {
+			t.Errorf("scopes = %v, want none for a revoked token", validation.Scopes)
+		}
+	})
+
+	t.Run("server error surfaces as error", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer server.Close()
+
+		client := NewTwitchOAuth("test_id", "test_secret", "http://localhost:8080/callback")
+		client.client = &http.Client{Timeout: 10 * time.Second, Transport: &mockTransport{server: server}}
+
+		_, _, err := client.ValidateToken(context.Background(), "any")
+		if err == nil {
+			t.Fatal("a 5xx from the validate endpoint must surface as an error, not ok=false")
+		}
+	})
+}
+
+func twitchTestScopesContain(scopes []string, want string) bool {
+	for _, s := range scopes {
+		if s == want {
+			return true
+		}
+	}
+	return false
+}
+
 // TestTwitchOAuth_GetAuthURLWithPKCE verifies that PKCE challenge params are present
 // in the generated auth URL (audit L4).
 func TestTwitchOAuth_GetAuthURLWithPKCE(t *testing.T) {

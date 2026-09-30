@@ -71,6 +71,18 @@ The middle two steps use CSS custom-property fallback syntax
 actually picks one, so an unset setting falls through to the auto colour at paint
 time with no extra plumbing.
 
+### Amendment (2026-09): bubble-colour mode resolves usernames statically
+
+When the streamer turns on "Use username colours" for bubbles (Appearance →
+Bubble colors), the bubble itself carries the chatter's colour, so repeating it
+on the name would hide the name against its own fill. `resolveUsernameColor`
+gained a `staticColor` option that skips the `user.color` short-circuit and
+returns the `var(--chat-username-color, <auto_color>)` chain unconditionally:
+every username in the feed resolves to the streamer's picker colour (or the auto
+palette) while the mode is on. Gradient usernames are unaffected — callers
+branch on `name_gradient` before reaching the resolver. Colorless chatters whose
+bubbles fall back to `auto_color` keep a legible name for the same reason.
+
 ## Consequences
 
 **Positive**

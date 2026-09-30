@@ -43,6 +43,7 @@ export interface ConnectorGlobals {
    */
   routeConfig: {
     fetchSignedWebSocketFromProvider: (args: never) => Promise<unknown>;
+    fetchWebcastSignatureFromProvider?: (args: never) => Promise<unknown>;
   };
   /** Composite-route switches controlling whether Euler is consulted as a last resort. */
   roomIdRouteConfig: { skipFetchRoomIdFromEulerRoute: boolean };
@@ -85,15 +86,23 @@ export function asRouteHandler(signer: WebcastSigner) {
     roomId: string;
     cursor?: string;
     authenticateWs?: boolean;
-    webClient: {
-      clientHeaders: Record<string, string>;
-      cookieJar: { getCookieString(): Promise<string> };
-    };
+     webClient: {
+       clientHeaders: Record<string, string>;
+       cookieJar: {
+        getCookieString(): Promise<string>;
+        /** Present on the connector's WebcastCookieJar: absorbs one Set-Cookie pair. */
+        setCookie?(rawCookie: string): Promise<void> | void;
+       };
+      /** Set by the listener (setConnectionUniqueId in index.ts): the streamer
+       * handle for this connection, for signers that need it. */
+      uniqueId?: string;
+     };
   }): Promise<SignResult> => {
     const cookieHeader = (await args.webClient.cookieJar.getCookieString()) || undefined;
 
-    return signer.sign({
+    const result = await signer.sign({
       roomId: args.roomId,
+      username: args.webClient.uniqueId,
       cursor: args.cursor,
       userAgent: args.webClient.clientHeaders['User-Agent'],
       // Only bind the signature to the session when the caller actually asked for an
@@ -101,6 +110,26 @@ export function asRouteHandler(signer: WebcastSigner) {
       // credential-exposure problem in #698 happens in the first place.
       cookieHeader: args.authenticateWs ? cookieHeader : undefined
     });
+
+    // The connector's own processSetCookieHeader absorbs only the FIRST
+    // name=value pair of a multi-cookie header (lib-YL2P_UWg.js:703-706:
+    // split(";")[0]), but the session jar is many cookies and the WS
+    // handshake's Cookie header is the jar's whole string (:1935). Seed
+    // every pair here so the later one-pair absorption is a no-op. One
+    // malformed pair must not fail the connect — the jar's unguarded
+    // decodeURIComponent throws on a stray '%'.
+    if (result.fetchResultCookieHeader && args.webClient.cookieJar.setCookie) {
+      for (const pair of result.fetchResultCookieHeader.split('; ')) {
+        if (!pair) continue;
+        try {
+          await args.webClient.cookieJar.setCookie(pair);
+        } catch {
+          // A bad pair is skipped, not fatal.
+        }
+      }
+    }
+
+    return result;
   };
 }
 
@@ -109,7 +138,6 @@ export function asRouteHandler(signer: WebcastSigner) {
  *
  * The central finding of #698's investigation is that none of this needs a fork. The connector
  * exposes three module-level mutable objects that between them cover every Euler call site:
- *
  *  - `RouteConfig.fetchSignedWebSocketFromProvider` — the signature itself, and the only one
  *    with no direct-to-TikTok alternative.
  *  - `RoomIdRouteConfig.skipFetchRoomIdFromEulerRoute` and the same field on
@@ -133,7 +161,7 @@ export function asRouteHandler(signer: WebcastSigner) {
 export function installSignConfiguration(
   globals: ConnectorGlobals,
   config: SignConfiguration,
-  signers: { euler: WebcastSigner; self?: WebcastSigner },
+  signers: { euler: WebcastSigner; self?: WebcastSigner; pureNode?: WebcastSigner },
   observer: SignObserver,
   logger: InstallerLogger
 ): InstallReport {
@@ -204,21 +232,55 @@ export function installSignConfiguration(
           : 'we sign, with no Euler fallback'
       );
       break;
+
+    case 'pure-node':
+      if (!signers.pureNode) {
+        notes.push('pure-node mode requested without a pure-node signer; staying on Euler');
+        logger.warn('Pure-node sign mode requested but no pure-node signer supplied; staying on Euler');
+        break;
+      }
+      // No Euler fallback: the entire point of the mode is that the
+      // leased session replaces the Euler signature. The capture-based
+      // fallback tier is PR 3's machinery.
+      installed = new MeasuredSigner(signers.pureNode, observer);
+      notes.push('we lease the shared WS session; no Euler on this path');
+      break;
   }
+
 
   if (installed) {
     globals.routeConfig.fetchSignedWebSocketFromProvider = asRouteHandler(
       installed
     ) as unknown as (args: never) => Promise<unknown>;
+
+    // The second Euler seam: generic HTTP URL signing, reached whenever the
+    // connector sends `signRequest: true` (gift list, currently). The self
+    // signer's signUrl posts to the sign service's /v1/sign-url, which returns
+    // the `response.signedUrl` shape WebcastHttpClient.request reads. Without
+    // this, `self` mode would still hit Euler for every signed HTTP request.
+    const selfSigner = signers.self as
+      | (WebcastSigner & { signUrl?: (url: string, method?: string) => Promise<unknown> })
+      | undefined;
+    if (selfSigner?.signUrl) {
+      const signUrl = selfSigner.signUrl.bind(selfSigner);
+      globals.routeConfig.fetchWebcastSignatureFromProvider = (async (
+        args: { url: string; method?: string }
+      ) => signUrl(args.url, args.method ?? 'GET')) as unknown as (
+        args: never
+      ) => Promise<unknown>;
+      notes.push('generic HTTP URL signing also routes to the self signer');
+    }
   }
 
   const report: InstallReport = {
     signerName: installed?.name,
     eulerFallbacksDisabled: config.disableEulerFallbacks,
     eulerReachableForSignature:
-      // A mode that asked for a self signer but did not get one has silently stayed on Euler,
-      // so report the effective state rather than the requested one.
-      config.signerMode !== 'euler' && !signers.self
+      // A mode that asked for its own signer but did not get one has
+      // silently stayed on Euler, so report the effective state rather
+      // than the requested one. pure-node counts as having its signer
+      // only when it was actually supplied.
+      config.signerMode !== 'euler' && !signers.self && !signers.pureNode
         ? true
         : eulerStillReachableForSignature(config),
     notes

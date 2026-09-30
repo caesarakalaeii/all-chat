@@ -1,0 +1,241 @@
+/**
+ * This file is part of All-Chat.
+ * Copyright (C) 2026 caesarakalaeii
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+import { describe, expect, it } from 'vitest';
+import {
+  connectionCeilingReached,
+  budgetRefusalRetryAfterMs,
+  isBudgetRefusalError,
+  isWsFlapError,
+  nextFlapRetryDelayMs,
+  NoLaneCache,
+  NO_LANE_CACHE_TTL_MS,
+  shouldBackOffReconnect,
+  SILENT_FAILURE_STREAK_THRESHOLD,
+  WS_FLAP_MAX_FAST_RETRIES,
+  WS_FLAP_RETRY_DELAY_MS
+} from './connection-decisions.js';
+import { SignatureFailure } from '../sign/signer.js';
+
+describe('connectionCeilingReached', () => {
+  // The ceiling check is what stops a pod from opening more Euler-proxied
+  // WebSockets than the free tier serves (ADR-0052). Off-by-one here
+  // reintroduces the 2026-09-14 incident: too low strands demanded streams,
+  // too high deafens every channel on the pod.
+
+  it('blocks a further connection when the pod is at the ceiling', () => {
+    expect(connectionCeilingReached(20, 20)).toBe(true);
+  });
+
+  it('blocks a further connection when the pod is over the ceiling', () => {
+    expect(connectionCeilingReached(21, 20)).toBe(true);
+  });
+
+  it('allows a connection when the pod is below the ceiling', () => {
+    expect(connectionCeilingReached(19, 20)).toBe(false);
+  });
+
+  it('treats zero live connections as under any positive ceiling', () => {
+    expect(connectionCeilingReached(0, 20)).toBe(false);
+  });
+
+  it('blocks the very first connection when the ceiling is zero', () => {
+    expect(connectionCeilingReached(0, 0)).toBe(true);
+  });
+});
+
+describe('shouldBackOffReconnect', () => {
+  // The threshold decides whether a heartbeat-forced disconnect takes growing
+  // error backoff or the fast reconnect path. Flipping the comparison to >=
+  // would put every normally-ended stream on error backoff; dropping the
+  // threshold to 0 would never damp the deaf-room reconnect churn the
+  // 2026-09-14 incident was made of.
+
+  it('reconnects quickly on the first silent failure (streak 1)', () => {
+    expect(shouldBackOffReconnect(1)).toBe(false);
+  });
+
+  it('reconnects quickly when the stream was healthy (streak 0)', () => {
+    expect(shouldBackOffReconnect(0)).toBe(false);
+  });
+
+  it('backs off once reconnecting did not fix the silence (streak 2)', () => {
+    expect(shouldBackOffReconnect(2)).toBe(true);
+  });
+
+  it('backs off on long streaks', () => {
+    expect(shouldBackOffReconnect(7)).toBe(true);
+  });
+
+  it('is exclusive of the threshold, so streak and threshold stay decoupled', () => {
+    // If someone tunes the threshold constant, the boundary must follow it —
+    // pinning a literal 1 in the comparisons above would hide a change here.
+    expect(SILENT_FAILURE_STREAK_THRESHOLD).toBe(1);
+    expect(shouldBackOffReconnect(SILENT_FAILURE_STREAK_THRESHOLD)).toBe(false);
+    expect(shouldBackOffReconnect(SILENT_FAILURE_STREAK_THRESHOLD + 1)).toBe(true);
+  });
+});
+
+describe('isWsFlapError', () => {
+  // The classifier decides which connect failures get the immediate-retry
+  // loop in connectToStream. Too narrow and a real flap (ws wording changes
+  // slightly) goes into escalating backoff, parking a healthy room for
+  // minutes; too wide and genuine connect failures (room offline, signer
+  // down) get hammered with fast retries.
+
+  it('classifies the ws library flap message', () => {
+    expect(isWsFlapError(new Error('Unexpected server response: 200'))).toBe(true);
+  });
+
+  it('classifies the flap when the message carries trailing context', () => {
+    // The ws library appends the response body to the message; the signature
+    // must match on the prefix, not the exact string.
+    expect(isWsFlapError(new Error('Unexpected server response: 200 {"code":10000}'))).toBe(true);
+  });
+
+  it('does not classify a non-200 upgrade rejection', () => {
+    expect(isWsFlapError(new Error('Unexpected server response: 403'))).toBe(false);
+  });
+
+  it('does not classify unrelated connect errors', () => {
+    expect(isWsFlapError(new Error('ETIMEDOUT'))).toBe(false);
+    expect(isWsFlapError(new Error('fetchRoomId failed'))).toBe(false);
+  });
+
+  it('does not classify non-Error values', () => {
+    expect(isWsFlapError('Unexpected server response: 200')).toBe(false);
+    expect(isWsFlapError(undefined)).toBe(false);
+  });
+
+  it('bounds the fast-retry budget so a wall eventually backs off', () => {
+    // Lab flap cleared on attempt 3; the budget must cover that with slack
+    // but stay small enough that a persistent refusal reaches the poller's
+    // normal backoff within seconds, not minutes.
+    expect(WS_FLAP_MAX_FAST_RETRIES).toBeGreaterThanOrEqual(3);
+    expect(WS_FLAP_MAX_FAST_RETRIES).toBeLessThanOrEqual(5);
+    expect(WS_FLAP_RETRY_DELAY_MS).toBeGreaterThanOrEqual(1000);
+    expect(WS_FLAP_RETRY_DELAY_MS).toBeLessThanOrEqual(2000);
+  });
+});
+
+describe('nextFlapRetryDelayMs', () => {
+  // The first two retries stay at the base delay (a flap usually clears
+  // fast); beyond that the wait triples, because prod flaps are
+  // session-scoring artifacts that ease with spacing and a 1s hammer just
+  // burns handshakes.
+  it('keeps the base delay for the first two retries', () => {
+    expect(nextFlapRetryDelayMs(1, 1000)).toBe(1000);
+    expect(nextFlapRetryDelayMs(2, 1000)).toBe(1000);
+  });
+
+  it('triples the delay from the third retry on', () => {
+    expect(nextFlapRetryDelayMs(3, 1000)).toBe(3000);
+    expect(nextFlapRetryDelayMs(6, 1000)).toBe(3000);
+  });
+
+  it('scales with a tuned base delay', () => {
+    expect(nextFlapRetryDelayMs(4, 2000)).toBe(6000);
+  });
+});
+
+describe('NoLaneCache', () => {
+  // Under direct egress the pre-sign cannot pin anything, so its ~50s
+  // capture round-trip must be skipped for the TTL — and the first answer
+  // carrying a lane must re-arm pinning immediately.
+
+  it('is inactive before any sign answer', () => {
+    expect(new NoLaneCache().skipActive()).toBe(false);
+  });
+
+  it('skips the pre-sign for the TTL after a no-lane answer', () => {
+    const now = Date.now();
+    const cache = new NoLaneCache();
+    cache.markNoLane(now);
+    expect(cache.skipActive(now)).toBe(true);
+    expect(cache.skipActive(now + NO_LANE_CACHE_TTL_MS - 1)).toBe(true);
+    expect(cache.skipActive(now + NO_LANE_CACHE_TTL_MS)).toBe(false);
+  });
+
+  it('re-arms pinning immediately after a lane answer', () => {
+    const cache = new NoLaneCache();
+    cache.markNoLane();
+    cache.markLane();
+    expect(cache.skipActive()).toBe(false);
+  });
+
+  it('stays re-armed after the TTL expires on its own', () => {
+    const cache = new NoLaneCache();
+    cache.markNoLane(Date.now());
+    expect(cache.skipActive(Date.now() + NO_LANE_CACHE_TTL_MS + 1)).toBe(false);
+  });
+});
+
+describe('isBudgetRefusalError', () => {
+  // A budget refusal is the signer deliberately refusing a connect sign
+  // because the pod burned its hourly allowance. It is self-protection, not
+  // an external rate limit: the retry cannot succeed until the rolling hour
+  // slides, so the connect loop must park the room until then instead of
+  // entering the escalating error backoff (which re-signs, fails, and
+  // re-signs at 4s/8s/16s... — the 2026-09-23 alert flap).
+
+  it('detects a WS-connect budget refusal', () => {
+    expect(isBudgetRefusalError(new SignatureFailure('pure-node', 'WS connect budget exhausted: too many connects this hour'))).toBe(true);
+  });
+
+  it('detects a lease budget refusal', () => {
+    expect(isBudgetRefusalError(new SignatureFailure('pure-node', 'session lease rate limited: lease budget exhausted for this hour'))).true;
+  });
+
+  it('does not match an external rate limit', () => {
+    expect(isBudgetRefusalError(new SignatureFailure('self', 'sign service rate limited: TikTok rate limited the sign target'))).toBe(false);
+  });
+
+  it('does not match an arbitrary error', () => {
+    expect(isBudgetRefusalError(new Error('Unexpected server response: 200'))).toBe(false);
+    expect(isBudgetRefusalError(undefined)).toBe(false);
+  });
+
+  it('extracts retryAfterMs from a SignatureFailure that carries it', () => {
+    const err = new SignatureFailure('pure-node', 'WS connect budget exhausted', undefined, 123_000);
+    expect(budgetRefusalRetryAfterMs(err)).toBe(123_000);
+  });
+
+  it('returns 0 retryAfterMs when the error carries none', () => {
+    expect(budgetRefusalRetryAfterMs(new SignatureFailure('pure-node', 'WS connect budget exhausted'))).toBe(0);
+    expect(budgetRefusalRetryAfterMs(new Error('budget exhausted'))).toBe(0);
+  });
+
+  it('detects a budget refusal wrapped in the connector error envelope', () => {
+    // tiktok-live-connector's handleError emits { info, exception } rather
+    // than the raw Error, so the emitter.on('error') handler in index.ts
+    // sees the envelope; a matcher that only accepted real Errors was dead
+    // code there (2026-09-23 council round 2).
+    const wrapped = {
+      info: 'Error while connecting',
+      exception: new SignatureFailure('pure-node', 'WS connect budget exhausted', undefined, 45_000),
+    };
+    expect(isBudgetRefusalError(wrapped)).toBe(true);
+    expect(budgetRefusalRetryAfterMs(wrapped)).toBe(45_000);
+  });
+
+  it('does not match a connector envelope without a budget refusal inside', () => {
+    const wrapped = { info: 'WebSocket Error after connecting', exception: new Error('socket hang up') };
+    expect(isBudgetRefusalError(wrapped)).toBe(false);
+    expect(budgetRefusalRetryAfterMs(wrapped)).toBe(0);
+  });
+});

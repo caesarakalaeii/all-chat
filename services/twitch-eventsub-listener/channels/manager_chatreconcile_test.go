@@ -19,9 +19,14 @@ package channels
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/caesar/all-chat/services/twitch-eventsub-listener/status"
+	"github.com/caesar/all-chat/shared/twitchchat"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
@@ -140,5 +145,72 @@ func TestSetChatReconcileInterval(t *testing.T) {
 		if m.chatReconcileInterval != 30*time.Second {
 			t.Fatalf("interval %v was accepted; non-positive values must be ignored", bad)
 		}
+	}
+}
+
+// TestReconcileChatSubscriptions_ScopeFailureDeactivatesChat pins the mid-life revocation
+// contract (council finding, the incident's own shape): a channel that was legitimately
+// ChatActive whose grant died underneath it gets the sentinel from ensure_chat. The repair
+// pass must flip ChatActive=false — so refreshClaims and heartbeatActiveSources stop
+// re-asserting liveness for a channel whose subscription cannot exist — release the
+// ownership claim, and publish the re-auth-hinted offline status the frontend renders as
+// the red Auth Required indicator.
+func TestReconcileChatSubscriptions_ScopeFailureDeactivatesChat(t *testing.T) {
+	mr, claims := newClaimTestStore(t)
+	rc := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer rc.Close()
+
+	sub := rc.Subscribe(context.Background(), status.PlatformStatusChannel)
+	defer sub.Close()
+	if _, err := sub.Receive(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	msgs := sub.Channel()
+
+	// Seed a live claim as if the channel had been served by EventSub.
+	if err := claims.Claim(context.Background(), "revokedchan", "111"); err != nil {
+		t.Fatal(err)
+	}
+
+	cb := &recordingCallback{err: fmt.Errorf("broadcaster 111: %w", ErrChatScopesMissing)}
+	m := NewManager(nil, zap.NewNop(), &countingResolver{}, nil, time.Minute)
+	m.SetSubscriptionCallback(cb.fn)
+	m.SetClaimStore(claims)
+	m.SetStatusPublisher(status.NewPublisher(rc, zap.NewNop()))
+	m.SetLeaderFunc(func() bool { return true })
+	m.channels["111"] = &Channel{BroadcasterID: "111", BroadcasterName: "revokedchan", ChatActive: true}
+
+	m.reconcileChatSubscriptions(context.Background())
+
+	if m.channels["111"].ChatActive {
+		t.Fatal("a scope-failed channel must be deactivated: refreshClaims and heartbeat would keep re-asserting liveness for a dead subscription")
+	}
+	if mr.Exists(twitchchat.ClaimKey("revokedchan")) {
+		t.Fatal("the ownership claim must be released so the dead channel stops holding IRC off (enforce mode, ADR-0026)")
+	}
+	select {
+	case msg := <-msgs:
+		if !strings.Contains(msg.Payload, errChatScopesMissingMessage) {
+			t.Fatalf("published status %q does not carry the re-auth hint %q", msg.Payload, errChatScopesMissingMessage)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("expected the re-auth-hinted offline status after a mid-life scope failure")
+	}
+}
+
+// A transient failure on the repair pass must NOT deactivate the channel: chat itself keeps
+// flowing, the next pass retries, and telling the streamer to re-auth over a Twitch 5xx
+// would turn a platform hiccup into support tickets.
+func TestReconcileChatSubscriptions_TransientFailureKeepsChatActive(t *testing.T) {
+	cb := &recordingCallback{err: errors.New("twitch api: 503 service unavailable")}
+	m := NewManager(nil, zap.NewNop(), &countingResolver{}, nil, time.Minute)
+	m.SetSubscriptionCallback(cb.fn)
+	m.SetLeaderFunc(func() bool { return true })
+	m.channels["111"] = &Channel{BroadcasterID: "111", BroadcasterName: "flaky", ChatActive: true}
+
+	m.reconcileChatSubscriptions(context.Background())
+
+	if !m.channels["111"].ChatActive {
+		t.Fatal("a transient failure must keep the channel ChatActive — chat still flows and the next pass retries")
 	}
 }

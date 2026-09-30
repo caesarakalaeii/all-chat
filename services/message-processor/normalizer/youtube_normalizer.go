@@ -349,6 +349,18 @@ func (n *YouTubeNormalizer) NormalizeEvent(raw *models.RawChatMessage, overlayID
 			Currency:    "gift",
 			DisplayText: "Received gift membership",
 		}
+
+	case "subscriber":
+		title := "New subscriber"
+		if t, ok := raw.EventData["subscriber_title"].(string); ok && t != "" {
+			title = t + " just subscribed"
+		}
+
+		eventValue = &models.EventValue{
+			Amount:      1,
+			Currency:    "subscribers",
+			DisplayText: title,
+		}
 	}
 
 	// Classify event tier and duration

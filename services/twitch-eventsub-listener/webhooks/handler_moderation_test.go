@@ -151,6 +151,43 @@ func TestRouteEvent_ChannelModerateTimeout(t *testing.T) {
 	}
 }
 
+// A single-message delete must carry the native message id, so the monitor can fold this frame
+// into the channel.chat.message_delete row for the same removal — without it one delete renders
+// as two log rows, and the moderator's name is the only thing distinguishing them.
+func TestRouteEvent_ChannelModerateDeleteCarriesMessageID(t *testing.T) {
+	const payload = `{
+		"broadcaster_user_id": "1971641",
+		"broadcaster_user_login": "Streamer",
+		"broadcaster_user_name": "Streamer",
+		"moderator_user_id": "1339",
+		"moderator_user_login": "ModPerson",
+		"moderator_user_name": "ModPerson",
+		"action": "delete",
+		"delete": {
+			"user_id": "9001",
+			"user_login": "Spammer",
+			"user_name": "Spammer",
+			"message_id": "nativedeleteid-1234",
+			"message_body": "gone"
+		}
+	}`
+
+	data := routeModerationEvent(t, "channel.moderate", payload)
+
+	if data["action"] != "delete" {
+		t.Errorf("action = %v, want delete", data["action"])
+	}
+	if data["message_id"] != "nativedeleteid-1234" {
+		t.Errorf("message_id = %v, want the deleted message's native id", data["message_id"])
+	}
+	if data["moderator_login"] != "modperson" {
+		t.Errorf("moderator_login = %v, want modperson", data["moderator_login"])
+	}
+	if data["target_login"] != "spammer" {
+		t.Errorf("target_login = %v, want spammer", data["target_login"])
+	}
+}
+
 // Twitch adds moderation actions over time. An action this code has never seen must still reach the
 // overlay as an unrecognised-but-visible row rather than be dropped by a whitelist.
 func TestRouteEvent_ChannelModerateUnknownActionPassesThrough(t *testing.T) {

@@ -45,18 +45,29 @@ export function Code({ children }: { children: ReactNode }) {
 }
 
 export function Pre({ children, lang }: { children: string; lang?: CodeLang }) {
+  // getTranslations, not useTranslations: Server Component (see FieldTable).
+  const t = getTranslations()
   const className =
     'my-4 overflow-x-auto border-2 border-white bg-black p-4 text-sm leading-relaxed'
+  // role="tabpanel" makes the axe scrollable-region-focusable fix lint-clean:
+  // with a widget role the region is keyboard-scrollable by design (the exact
+  // situation tabIndex=0 exists for), so no-noninteractive-tabindex passes it
+  // as an interactive role. aria-label names the panel for screen readers.
+  const a11yProps = {
+    role: 'tabpanel' as const,
+    'aria-label': t('docs.prose.codeSample'),
+    tabIndex: 0,
+  }
   if (!lang) {
     return (
-      <pre className={className}>
+      <pre className={className} {...a11yProps}>
         <code>{children}</code>
       </pre>
     )
   }
   const highlighted = hljs.highlight(children, { language: lang, ignoreIllegals: true }).value
   return (
-    <pre className={className}>
+    <pre className={className} {...a11yProps}>
       <code className="hljs" dangerouslySetInnerHTML={{ __html: highlighted }} />
     </pre>
   )

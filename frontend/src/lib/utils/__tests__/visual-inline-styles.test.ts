@@ -17,7 +17,21 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { chatBubbleStyle, hexToRgba, overlayContainerStyle } from '../visual-inline-styles'
+import {
+  hexToRgba,
+  overlayContainerStyle,
+  userBubbleStyle,
+} from '../visual-inline-styles'
+import type { UserInfo } from '@/lib/types/message'
+
+/** Only the colour fields matter here; the rest of UserInfo is payload. */
+const user = (fields: Partial<UserInfo> = {}): UserInfo => ({
+  id: 'u1',
+  username: 'someone',
+  display_name: 'someone',
+  badges: [],
+  ...fields,
+})
 
 describe('hexToRgba', () => {
   it('combines a 6-digit hex with a 0–1 opacity', () => {
@@ -71,23 +85,65 @@ describe('overlayContainerStyle', () => {
   })
 })
 
-describe('chatBubbleStyle', () => {
-  it('is empty when nothing is configured', () => {
-    expect(chatBubbleStyle({})).toEqual({})
+describe('userBubbleStyle', () => {
+  it('background mode resolves a flat colour through the opacity setting', () => {
+    expect(
+      userBubbleStyle(user({ color: '#DAA520' }), { bubbleUserColorOpacity: '0.85' }, 'background')
+    ).toEqual({ '--row-user-bg': 'rgba(218, 165, 32, 0.85)' })
   })
 
-  it('renders a fully transparent bubble from an alpha-carrying color', () => {
-    expect(chatBubbleStyle({ bubbleBgColor: '#1a1a2e00' })).toEqual({
-      backgroundColor: 'rgba(26, 26, 46, 0)',
+  it('background mode falls back to the auto colour when no manual colour', () => {
+    expect(userBubbleStyle(user({ auto_color: '#5B8DEF' }), {}, 'background')).toEqual({
+      '--row-user-bg': 'rgba(91, 141, 239, 1)',
     })
   })
 
-  it('emits background + shadow only for set values', () => {
-    expect(chatBubbleStyle({ bubbleBgColor: '#1a1a2e', bubbleBgOpacity: '0.85' })).toEqual({
-      backgroundColor: 'rgba(26, 26, 46, 0.85)',
+  it('background mode applies a gradient opaque, ignoring the opacity', () => {
+    expect(
+      userBubbleStyle(
+        user({ name_gradient: { type: 'linear', colors: ['#ff0000', '#0000ff'], angle: 90 } }),
+        { bubbleUserColorOpacity: '0.2' },
+        'background'
+      )
+    ).toEqual({ '--row-user-bg-image': 'linear-gradient(90deg, #ff0000, #0000ff)' })
+  })
+
+  it('background mode returns empty for a colourless chatter or a rejected gradient', () => {
+    expect(userBubbleStyle(user(), {}, 'background')).toEqual({})
+    expect(userBubbleStyle(undefined, {}, 'background')).toEqual({})
+    // Invalid stops are rejected by buildGradientCSS; no partial fill leaks.
+    expect(
+      userBubbleStyle(
+        user({ name_gradient: { type: 'linear', colors: ['red('], angle: 90 } }),
+        {},
+        'background'
+      )
+    ).toEqual({})
+  })
+
+  it('border mode emits colour plus its own 2px width', () => {
+    expect(userBubbleStyle(user({ color: '#DAA520' }), {}, 'border')).toEqual({
+      '--row-user-border-color': '#DAA520',
+      '--row-user-border-width': '2px',
     })
-    expect(chatBubbleStyle({ bubbleShadow: '0 0 8px red' })).toEqual({
-      boxShadow: '0 0 8px red',
+    expect(userBubbleStyle(user({ auto_color: '#5B8DEF' }), {}, 'border')).toEqual({
+      '--row-user-border-color': '#5B8DEF',
+      '--row-user-border-width': '2px',
     })
+  })
+
+  it('border mode uses the gradient’s first stop for a gradient name', () => {
+    expect(
+      userBubbleStyle(
+        user({ name_gradient: { type: 'linear', colors: ['#ff0000', '#0000ff'], angle: 90 } }),
+        {},
+        'border'
+      )
+    ).toEqual({ '--row-user-border-color': '#ff0000', '--row-user-border-width': '2px' })
+  })
+
+  it('border mode returns empty for a colourless chatter', () => {
+    expect(userBubbleStyle(user(), {}, 'border')).toEqual({})
+    expect(userBubbleStyle(undefined, {}, 'border')).toEqual({})
   })
 })

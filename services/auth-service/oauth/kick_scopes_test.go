@@ -81,6 +81,57 @@ func TestGetAuthURLWithScopesPKCE(t *testing.T) {
 	assert.Equal(t, 1, count, "a scope present in both base and extra must appear once")
 }
 
+// The add-source consent must carry channel:read so the callback can resolve the
+// streamer's real channel slug. The /public/v1/users `name` field is the account
+// display name, not the slug — without this scope the callback cannot call
+// GET /public/v1/channels and the flow stores a name the kick-listener can never
+// resolve (prod incident: overlay 36847b00, "Kick nothing").
+func TestGetAuthURLWithChannelScopePKCE(t *testing.T) {
+	o := NewKickOAuth("cid", "secret", "http://localhost/cb")
+
+	raw, verifier := o.GetAuthURLWithChannelScopePKCE("state123")
+	require.NotEmpty(t, verifier, "the PKCE verifier must be returned for the caller to store")
+
+	u, err := url.Parse(raw)
+	require.NoError(t, err)
+	q := u.Query()
+
+	scopes := strings.Fields(q.Get("scope"))
+	assert.Contains(t, scopes, "user:read", "base identity scope is still requested")
+	assert.Contains(t, scopes, "channel:read", "add-source must be able to resolve the channel slug")
+	assert.Equal(t, "S256", q.Get("code_challenge_method"))
+}
+
+// GetChannelInfo returns the authenticated user's channel — the SLUG is what
+// overlay_chat_sources.channel_id must hold, because the kick-listener looks
+// the channel up by slug (GET /api/v2/channels/{channel_id}). The fixture
+// mirrors the incident: the users-endpoint name was "Scuffed_Onigiri" while
+// the real slug is "scuffed-onigiri", so storing the name made every listener
+// sync 404 and auto-deactivate the source.
+func TestGetChannelInfoReturnsSlugNotDisplayName(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "Bearer tok", r.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"broadcaster_user_id":130554250,"slug":"scuffed-onigiri"}],"message":"OK"}`))
+	}))
+	defer srv.Close()
+
+	o := NewKickOAuth("cid", "secret", "http://localhost/cb")
+	o.channelsURL = srv.URL
+
+	info, err := o.GetChannelInfo(context.Background(), "tok")
+	require.NoError(t, err)
+	assert.Equal(t, "scuffed-onigiri", info.Slug,
+		"the channel slug — not the users-endpoint display name — must be stored as channel_id")
+}
+
+// The channels URL seam must default to Kick's real endpoint so a stale copy of
+// the struct cannot silently point the flow elsewhere.
+func TestKickOAuthDefaultsToTheRealChannelsEndpoint(t *testing.T) {
+	o := NewKickOAuth("cid", "secret", "http://localhost/cb")
+	assert.Equal(t, kickChannelsURL, o.channelsURL)
+}
+
 // The Kick token exchange must surface the granted scope where ExtractGrantedScopes reads it.
 //
 // This was a live bug rather than a hypothetical: the response field was parsed and dropped, so

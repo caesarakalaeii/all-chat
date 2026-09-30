@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
@@ -478,6 +479,58 @@ func TestHandleDiscordCallback_StoresGuild(t *testing.T) {
 	location := w.Header().Get("Location")
 	if !containsString(location, "discord=connected") {
 		t.Errorf("redirect Location %q must contain 'discord=connected'", location)
+	}
+}
+
+// TestHandleDiscordConnect_BetaOriginSwapsRedirectURI: an invite started from the beta
+// frontend must carry the beta callback URI in the invite URL and record the beta origin
+// in the stored state, so the shared callback sends the streamer back to beta.
+func TestHandleDiscordConnect_BetaOriginSwapsRedirectURI(t *testing.T) {
+	t.Setenv("FRONTEND_URL", "https://allch.at")
+	t.Setenv("FRONTEND_URLS", "https://beta.allch.at")
+	gin.SetMode(gin.TestMode)
+
+	provider := oauth.NewDiscordOAuth("id", "secret", "https://allch.at/api/v1/auth/discord/callback")
+	handler := newTestDiscordHandlerNoRedis(provider, &mockDiscordRepo{}, "https://allch.at")
+
+	router := gin.New()
+	router.GET("/discord/connect", func(c *gin.Context) {
+		c.Set("user_id", "user-123")
+		handler.HandleConnect(c)
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/discord/connect", nil)
+	req.Header.Set("X-Forwarded-Host", "beta.allch.at")
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	inviteURL, err := url.Parse(resp["bot_invite_url"])
+	if err != nil {
+		t.Fatalf("bot_invite_url is not a URL: %v", err)
+	}
+	if got := inviteURL.Query().Get("redirect_uri"); got != "https://beta.allch.at/api/v1/auth/discord/callback" {
+		t.Errorf("invite redirect_uri %q does not point at the beta callback", got)
+	}
+
+	store := handler.stateStore.(*memStateStore)
+	if len(store.states) != 1 {
+		t.Fatalf("expected exactly one stored state, got %d", len(store.states))
+	}
+	for _, stored := range store.states {
+		flow := parseDiscordFlowState(stored)
+		if flow.Origin != "https://beta.allch.at" {
+			t.Errorf("state origin %q does not record the beta frontend", flow.Origin)
+		}
+		if flow.Kind != "" {
+			t.Errorf("a connect state must be a bot invite, got kind %q", flow.Kind)
+		}
 	}
 }
 

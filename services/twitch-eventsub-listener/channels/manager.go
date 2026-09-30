@@ -18,6 +18,7 @@ package channels
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -246,7 +247,7 @@ func (m *Manager) TriggerSync() {
 // It publishes on a background goroutine with its own timeout: callers hold m.mu (it is invoked
 // from reconcileChatLocked / SyncChannels), and the publisher retries with backoff on Redis
 // failure, so a synchronous call would hold the manager lock across that retry window.
-func (m *Manager) publishChatOffline(login string) {
+func (m *Manager) publishChatOffline(login string, authError string) {
 	if m.statusPublisher == nil || login == "" {
 		return
 	}
@@ -254,9 +255,10 @@ func (m *Manager) publishChatOffline(login string) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		m.statusPublisher.Publish(ctx, status.Message{
-			Platform:  "twitch",
-			ChannelID: strings.ToLower(login),
-			Status:    "offline",
+			Platform:     "twitch",
+			ChannelID:    strings.ToLower(login),
+			Status:       "offline",
+			ErrorMessage: authError,
 		})
 	}()
 }
@@ -467,13 +469,36 @@ func (m *Manager) reconcileChatSubscriptions(ctx context.Context) {
 			return
 		}
 		if err := m.callback(t.broadcasterID, t.accessToken, "ensure_chat"); err != nil {
-			// Non-fatal: chat itself keeps flowing, and the next pass retries. Logged at Warn
-			// because a persistent failure here is exactly the silent-loss case this pass exists
-			// to surface.
-			m.logger.Warn("Failed to re-assert chat subscription set",
-				zap.String("broadcaster_id", t.broadcasterID),
-				zap.Error(err),
-			)
+			if errors.Is(err, ErrChatScopesMissing) {
+				// Mid-life revocation: the channel was legitimately ChatActive and the grant
+				// died underneath it (the incident's own shape — every repair-pass 403 after
+				// the mass revocation). Flipping ChatActive=false here makes refreshClaims
+				// and heartbeatActiveSources stop re-asserting liveness for a channel whose
+				// subscription cannot exist, drops the ownership claim (IRC is in enforce
+				// mode, ADR-0026, so the release matters for the claim store, not for IRC),
+				// and hands the channel to reconcileChatLocked's sync-tick retry, which keeps
+				// re-attempting subscribe_chat until the streamer re-consents. The overlay
+				// gets the re-auth hint, not silence.
+				m.mu.Lock()
+				login := ""
+				if ch, ok := m.channels[t.broadcasterID]; ok && ch.ChatActive {
+					ch.ChatActive = false
+					login = ch.BroadcasterName
+				}
+				m.mu.Unlock()
+				if login != "" {
+					m.releaseClaim(login)
+					m.publishChatOffline(login, errChatScopesMissingMessage)
+				}
+			} else {
+				// Non-fatal: chat itself keeps flowing, and the next pass retries. Logged at Warn
+				// because a persistent failure here is exactly the silent-loss case this pass exists
+				// to surface.
+				m.logger.Warn("Failed to re-assert chat subscription set",
+					zap.String("broadcaster_id", t.broadcasterID),
+					zap.Error(err),
+				)
+			}
 		}
 	}
 }
@@ -492,6 +517,17 @@ func (m *Manager) reconcileChatLocked(demanded map[string]listener.DemandedSourc
 		case want && !ch.ChatActive:
 			if err := m.callback(broadcasterID, ch.AccessToken, "subscribe_chat"); err != nil {
 				m.logger.Warn("Failed to subscribe chat", zap.String("broadcaster_id", broadcasterID), zap.Error(err))
+				// The subscription does not exist. ChatActive stays false so the sync tick
+				// retries (bounded by ChannelSyncInterval) and refreshClaims never writes
+				// an ownership claim for a channel whose chat we are not actually serving.
+				if errors.Is(err, ErrChatScopesMissing) {
+					// Tell the overlay why: an "offline" status whose message names the
+					// OAuth re-auth the streamer must do — the frontend renders that as
+					// the red Auth Required indicator. Gated on the actual scope failure:
+					// a transient Twitch 5xx/429 must not tell the streamer to re-auth
+					// when their grant is fine.
+					m.publishChatOffline(ch.BroadcasterName, errChatScopesMissingMessage)
+				}
 				continue
 			}
 			ch.ChatActive = true
@@ -504,7 +540,7 @@ func (m *Manager) reconcileChatLocked(demanded map[string]listener.DemandedSourc
 			// EventSub stopped serving this channel — drop the claim so IRC can resume it without
 			// waiting out the TTL, and clear its overlay indicator.
 			m.releaseClaim(ch.BroadcasterName)
-			m.publishChatOffline(ch.BroadcasterName)
+			m.publishChatOffline(ch.BroadcasterName, "")
 		}
 	}
 }
@@ -745,6 +781,12 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 							zap.String("broadcaster_id", broadcasterID),
 							zap.Error(err),
 						)
+						// ChatActive stays false (the sync tick retries) and the overlay
+						// sees the re-auth hint instead of silence — only for the actual
+						// scope failure, never a transient platform error.
+						if errors.Is(err, ErrChatScopesMissing) {
+							m.publishChatOffline(fresh.BroadcasterName, errChatScopesMissingMessage)
+						}
 					} else {
 						fresh.ChatActive = true
 					}
@@ -788,7 +830,7 @@ func (m *Manager) SyncChannels(ctx context.Context) error {
 			// the indicator.
 			if ch.ChatActive {
 				m.releaseClaim(ch.BroadcasterName)
-				m.publishChatOffline(ch.BroadcasterName)
+				m.publishChatOffline(ch.BroadcasterName, "")
 			}
 
 			delete(m.channels, broadcasterID)

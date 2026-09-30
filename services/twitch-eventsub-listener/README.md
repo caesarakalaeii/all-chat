@@ -88,6 +88,21 @@ and a leader-gated repair pass (`ensure_chat`, every `ChatSubscriptionReconcileI
 re-asserts the set for every chat-active channel. The pass checks `HasSubscription` first, so a
 healthy channel costs a map lookup and no API call, and only genuine recreations are logged.
 
+**Scope failures are errors, not quiet fallbacks.** When Twitch rejects `channel.chat.message` with a
+403 (the owner's chat-scope grant was revoked or never existed Twitch-side, e.g. after disconnecting
+the app in Twitch settings), `subscribe_chat`/`ensure_chat` return an error and log the raw Twitch
+response. A channel that fails at creation stays `ChatActive = false`: the sync tick
+(`ChannelSyncInterval`) keeps retrying — the `ensure_chat` repair pass only re-asserts chat-active
+channels — no ownership claim is written, and an `offline` platform:status carrying an OAuth re-auth
+hint is published so the overlay shows the red "Auth Required" indicator. A channel revoked
+mid-life (already `ChatActive` when the grant died) is caught by the same sentinel on the repair
+pass: it is flipped back to `ChatActive = false`, its ownership claim released, and the re-auth
+hint published — so `refreshClaims`/heartbeat stop asserting liveness for a channel whose
+subscription cannot exist, and the sync tick owns the bounded retry. Returning `nil` here — with
+IRC in enforce mode (ADR-0026) as the only fallback — was the prod incident behind overlay
+`36847b00`: the channel looked chat-active, claimed ownership, and silently dropped all Twitch
+chat for days while the repair pass suppressed its own error.
+
 Notices are routed by `notice_type` (any `shared_chat_` prefix is stripped first, since the payload
 arrives under a prefixed key too):
 
@@ -133,6 +148,8 @@ which displayed message to remove and buffers the deletion until it expires.
 
 > **Limitation:** `channel.chat.clear_user_messages` carries no duration, so a timeout is reported as
 > a ban (the messages are removed either way; only the moderation-log label differs). See ADR-0015.
+> When the mod-log scopes are granted, the `channel.moderate` timeout frame supplies the duration
+> and the monitor folds the pair into one correctly labeled row (see below).
 
 ### Moderation Log (channel.moderate + AutoMod)
 
@@ -158,6 +175,17 @@ there is no approve/deny call anywhere in it.
 Like every event subscription here, these are created once when a channel is first tracked, so a
 grant made afterwards takes effect on the next channel (re)sync — a leader change, pod restart, or
 the channel being re-added (ADR-0030 known limitation).
+
+**Every action pairs with a deletion frame; the monitor folds them.** A single-message
+delete, a timeout/ban, and a full clear each reach the monitor view as two frames: the
+`channel.moderate` mod_action (who acted) and the matching `channel.chat.*` deletion
+event (what was removed). The `delete` action's payload includes the removed message's
+`message_id` (EventData key `message_id`) — the same native id
+`channel.chat.message_delete` reports as `target_msg_id` — and the `timeout`/`ban`
+actions carry `target_user_id`, the same id `channel.chat.clear_user_messages`
+reports. The monitor uses these ids to fold each pair into one attributed log row;
+without the fold one action renders as two rows (a timeout even mislabels its second
+row as a ban, since the deletion frame carries no duration).
 
 ### Platform Status Indicators
 
@@ -377,7 +405,12 @@ GET /status
 - `eventsub_notifications_received{type}` - Notifications received
 - `eventsub_subscriptions_active` - Active subscriptions
 - `eventsub_websocket_reconnects` - Reconnection count
-- `eventsub_leadership_status` - Current leadership status (1=leader, 0=follower)
+- `listener_eventsub_revocations_total{platform,service,broadcaster_id,type}` - Twitch-initiated
+  subscription revocations. `AllChatTwitchSubscriptionMassRevocation` (caesar-deployment) rates this
+  per broadcaster: a burst on one `broadcaster_id` is the user disconnecting the app, which with
+  enforce-mode IRC (ADR-0026) stops that channel's chat entirely until re-consent. This alert did
+  not exist during the 2026-09-26 silent-chat-loss incident and the same event produced nothing
+  but a log line.
 
 ## Troubleshooting
 

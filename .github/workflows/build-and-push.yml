@@ -42,6 +42,7 @@ jobs:
       youtube-quota-monitor: ${{ steps.changes.outputs.youtube-quota-monitor }}
       kick-listener: ${{ steps.changes.outputs.kick-listener }}
       tiktok-listener: ${{ steps.changes.outputs.tiktok-listener }}
+      tiktok-signer: ${{ steps.changes.outputs.tiktok-signer }}
       message-processor: ${{ steps.changes.outputs.message-processor }}
       source-manager: ${{ steps.changes.outputs.source-manager }}
       token-refresh-service: ${{ steps.changes.outputs.token-refresh-service }}
@@ -102,6 +103,8 @@ jobs:
               - 'shared/**'
             tiktok-listener:
               - 'services/tiktok-listener/**'
+            tiktok-signer:
+              - 'services/tiktok-signer/**'
             message-processor:
               - 'services/message-processor/**'
               - 'shared/**'
@@ -213,6 +216,9 @@ jobs:
           - name: tiktok-listener
             changed: ${{ needs.detect-changes.outputs.tiktok-listener }}
             path: services/tiktok-listener
+          - name: tiktok-signer
+            changed: ${{ needs.detect-changes.outputs.tiktok-signer }}
+            path: services/tiktok-signer
           - name: message-processor
             changed: ${{ needs.detect-changes.outputs.message-processor }}
             path: services/message-processor
@@ -364,6 +370,7 @@ jobs:
           # Every Go service under services/ belongs here. tiktok-listener is
           # deliberately absent: it is a Node service and has no go.mod. Verify with:
           #   for d in services/*/; do [ -f "$d/go.mod" ] && basename "$d"; done
+          - support-bot
 
     steps:
       - uses: actions/checkout@v7
@@ -381,26 +388,6 @@ jobs:
           cd services/${{ matrix.service }}
           go mod download
           go test -v -short ./...
-
-  test-node:
-    runs-on: ubuntu-latest
-    needs: detect-changes
-    if: github.event_name == 'pull_request' && needs.detect-changes.outputs.code == 'true'
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: '22'
-          cache: 'npm'
-          cache-dependency-path: services/support-bot/package-lock.json
-
-      - name: Run tests for support-bot
-        run: |
-          cd services/support-bot
-          npm ci
-          npm test
 
   # engagement-service authz/durability regression tests (idor_test, round5_test,
   # native_mirror_test) are `//go:build integration` and need a real Postgres with the

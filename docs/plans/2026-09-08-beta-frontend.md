@@ -68,9 +68,15 @@ no longer routed.
   never override it.
 - Not a blocker after all: `token-refresh-service` only refreshes tokens —
   no `redirect_uri` is involved — and needs no change.
-- Known gap, deliberately out of scope: the Discord account-link/bot-invite
-  callback (`handlers/discord.go:297`) still redirects to the canonical
-  FRONTEND_URL. A beta user linking Discord lands on allch.at/settings.
+- Discord bot-invite and account-link flows (`handlers/discord.go`,
+  `handlers/discord_identity.go`) follow the same pattern through their own
+  plumbing: `discordFlowState.Origin` records the allowlisted origin in the
+  server-side state, `flowOrigin()` re-checks the allowlist at the callback,
+  and `originProvider()` swaps `DiscordOAuth.WithRedirectURL()` so the invite
+  URL, the identity consent URL and the code exchange agree on the
+  origin-specific callback. Operator prerequisite: register
+  `https://beta.allch.at/api/v1/auth/discord/callback` as a second redirect
+  URI in the Discord developer app.
 - payment-service / share / device-link stay canonical per the "no beta
   overlay links" decision.
 
@@ -96,6 +102,10 @@ match, no wildcards).
   fallback), `stateOrigin` trust rules, `WithRedirectURL` swap, and two
   end-to-end `HandleLogin` tests (beta origin recorded in state +
   `redirect_uri`; unknown host stays canonical).
+- `discord_test.go` / `discord_identity_test.go` — beta-origin connect
+  carries the beta `redirect_uri` and records the origin in state; both
+  callback branches redirect to the flow origin; a non-allowlisted state
+  origin stays canonical.
 - `services/api-gateway/handlers/websocket_firstparty_test.go` —
   `loadFirstPartyWSOrigins` env variants.
 - `services/api-gateway/handlers/proxy_test.go` — original host forwarded,
