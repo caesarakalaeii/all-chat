@@ -259,6 +259,58 @@ func TestHandleGetPublicConfig_ReturnsOverlayType(t *testing.T) {
 		"the unauthenticated render page routes on the kind and has no other way to learn it")
 }
 
+func TestHandleGetConfig_TypedOverlayCarriesItsKind(t *testing.T) {
+	for _, kind := range []string{
+		models.OverlayTypeAlerts, models.OverlayTypeGoal, models.OverlayTypeList,
+	} {
+		t.Run(kind, func(t *testing.T) {
+			overlays := &stubOverlayRepo{
+				owned:   true,
+				overlay: &models.Overlay{ID: "o1", UserID: "u1", OverlayType: kind},
+			}
+			h := NewConfigHandler(&capturingConfigRepo{cfg: storedConfig(nil)}, overlays, &stubSourceRepo{}, nil, nil)
+
+			gin.SetMode(gin.TestMode)
+			router := gin.New()
+			router.Use(func(c *gin.Context) { c.Set("user_id", "u1") })
+			router.GET("/:id/config", h.HandleGetConfig)
+
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/o1/config", nil))
+
+			require.Equal(t, http.StatusOK, w.Code)
+			body := decodeOverlayBody(t, w)
+			assert.Equal(t, kind, body["overlay_type"],
+				"a typed overlay's config must carry its actual kind, not the chat default")
+		})
+	}
+}
+
+func TestHandleGetPublicConfig_TypedOverlayCarriesItsKind(t *testing.T) {
+	for _, kind := range []string{
+		models.OverlayTypeAlerts, models.OverlayTypeGoal, models.OverlayTypeList,
+	} {
+		t.Run(kind, func(t *testing.T) {
+			overlays := &stubOverlayRepo{
+				overlay: &models.Overlay{ID: "o1", UserID: "u1", OverlayType: kind},
+			}
+			h := NewConfigHandler(&capturingConfigRepo{cfg: storedConfig(nil)}, overlays, &stubSourceRepo{}, nil, nil)
+
+			gin.SetMode(gin.TestMode)
+			router := gin.New()
+			router.GET("/public/:id/config", h.HandleGetPublicConfig)
+
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/public/o1/config", nil))
+
+			require.Equal(t, http.StatusOK, w.Code)
+			body := decodeOverlayBody(t, w)
+			assert.Equal(t, kind, body["overlay_type"],
+				"the unauthenticated render page routes on the kind and must see the real one")
+		})
+	}
+}
+
 // stubAdminOverlayStore hands the admin handler a fixed overlay list for both
 // of its listing routes, standing in for the owner-join repository queries.
 type stubAdminOverlayStore struct {
