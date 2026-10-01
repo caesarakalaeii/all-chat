@@ -521,9 +521,19 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 	overlayID := c.Param("id")
 
 	// Verify user owns this overlay
-	_, err := h.overlayRepo.GetByIDAndUserID(c.Request.Context(), overlayID, userID.(string))
+	overlay, err := h.overlayRepo.GetByIDAndUserID(c.Request.Context(), overlayID, userID.(string))
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "overlay not found"})
+		return
+	}
+
+	// Chat sources are the chat overlay's pipeline: an alerts/goal/list overlay
+	// (ADR-0064) has nothing that reads them, so the row would be inert data
+	// that still shows up in admin listings and source counts.
+	if overlay.Kind() != models.OverlayTypeChat {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": fmt.Sprintf("chat sources can only be added to chat overlays, but this overlay is of type '%s'", overlay.Kind()),
+		})
 		return
 	}
 
@@ -871,9 +881,18 @@ func (h *SourcesHandler) HandleAddSourceAuto(c *gin.Context) {
 	overlayID := c.Param("id")
 
 	// Verify user owns this overlay
-	_, err := h.overlayRepo.GetByIDAndUserID(c.Request.Context(), overlayID, userID.(string))
+	overlay, err := h.overlayRepo.GetByIDAndUserID(c.Request.Context(), overlayID, userID.(string))
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "overlay not found"})
+		return
+	}
+
+	// Same chat-only gate as the manual route: the OAuth callback must not
+	// strand a chat source on an alerts/goal/list overlay either.
+	if overlay.Kind() != models.OverlayTypeChat {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": fmt.Sprintf("chat sources can only be added to chat overlays, but this overlay is of type '%s'", overlay.Kind()),
+		})
 		return
 	}
 

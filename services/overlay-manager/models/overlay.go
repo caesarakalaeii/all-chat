@@ -57,6 +57,18 @@ type Overlay struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
+// Kind returns the overlay's kind, resolving an empty value to chat. Read
+// paths use this rather than the raw field: the DB column is NOT NULL with a
+// default, but an in-memory Overlay that skipped Validate (internal callers,
+// mocks) would otherwise leak "" to JSON consumers and gates that route on
+// the kind.
+func (o *Overlay) Kind() string {
+	if o.OverlayType == "" {
+		return OverlayTypeChat
+	}
+	return o.OverlayType
+}
+
 // Validate validates the overlay fields
 func (o *Overlay) Validate() error {
 	if o.UserID == "" {
