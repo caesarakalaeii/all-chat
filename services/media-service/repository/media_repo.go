@@ -22,18 +22,32 @@ import (
 	"fmt"
 
 	"github.com/caesar/all-chat/services/media-service/models"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
+
+// Querier is the subset of *pgxpool.Pool the repository issues queries
+// through. Narrowing the constructor to this seam lets the repository tests
+// drive the SQL with pgxmock instead of a live Postgres: the acceptance
+// runner has no docker, so the sibling testcontainers convention would
+// silently skip there and the owner scoping in DeleteByOwner would go
+// unverified.
+type Querier interface {
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
 
 // MediaRepository is the Postgres implementation of handlers.MediaRegistry.
 type MediaRepository struct {
-	db *pgxpool.Pool
+	db Querier
 }
 
 // NewMediaRepository creates the media_objects repository. Errors are
 // returned, not logged: the handler layer logs every failure it turns into
-// a 5xx.
-func NewMediaRepository(db *pgxpool.Pool) *MediaRepository {
+// a 5xx. It takes the Querier seam rather than *pgxpool.Pool so tests can
+// pass a pgxmock pool; a real pgxpool.Pool satisfies it.
+func NewMediaRepository(db Querier) *MediaRepository {
 	return &MediaRepository{db: db}
 }
 
