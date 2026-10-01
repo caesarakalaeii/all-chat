@@ -41,7 +41,7 @@ import { CreateOverlayDialog } from '@/components/onboarding/CreateOverlayDialog
 import { useOnboardingStore } from '@/lib/stores/onboarding-store'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { useTranslations } from '@/lib/i18n'
-import type { ChatSource, Overlay } from '@/lib/types/overlay'
+import type { ChatSource, OverlayType } from '@/lib/types/overlay'
 import { resolveOverlayKind } from '@/lib/utils/overlayKind'
 import { OverlayKindBadge } from '@/components/overlays/OverlayKindBadge'
 
@@ -50,7 +50,7 @@ interface OverlayWithSources {
   id: string
   name: string
   is_public_for_viewers: boolean
-  overlay_type?: Overlay['overlay_type']
+  overlay_type?: OverlayType
   sources?: ChatSource[]
 }
 

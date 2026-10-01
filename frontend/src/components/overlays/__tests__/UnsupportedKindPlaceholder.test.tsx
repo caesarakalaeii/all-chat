@@ -39,7 +39,6 @@ describe('UnsupportedKindPlaceholder', () => {
     // An OBS browser source must not paint a background: the stream shows
     // through wherever the placeholder is not.
     const { container } = render(<UnsupportedKindPlaceholder kind="goal" />)
-    // bg-transparent, never a paint: the stream shows through.
     expect(container.firstElementChild).toHaveClass('bg-transparent')
     expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
   })
