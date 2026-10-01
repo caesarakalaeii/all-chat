@@ -81,11 +81,14 @@ func (h *AdminHandler) ListOverlays(c *gin.Context) {
 	}
 
 	response := make([]OverlayResponse, len(overlays))
+
+	// Kind() resolves an absent type to chat, matching every other response
+	// path; the column is NOT NULL so this only matters for pre-column rows.
 	for i, overlay := range overlays {
 		response[i] = OverlayResponse{
 			ID:               overlay.ID,
 			Name:             overlay.Name,
-			OverlayType:      overlay.OverlayType,
+			OverlayType:      overlay.Kind(),
 			UserID:           overlay.UserID,
 			OwnerUsername:    overlay.OwnerUsername,
 			OwnerDisplayName: overlay.OwnerDisplayName,
@@ -180,7 +183,7 @@ func (h *AdminHandler) GetUserOverlays(c *gin.Context) {
 		response[i] = OverlayResponse{
 			ID:               overlay.ID,
 			Name:             overlay.Name,
-			OverlayType:      overlay.OverlayType,
+			OverlayType:      overlay.Kind(),
 			UserID:           overlay.UserID,
 			OwnerUsername:    overlay.OwnerUsername,
 			OwnerDisplayName: overlay.OwnerDisplayName,
