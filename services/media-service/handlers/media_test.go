@@ -38,33 +38,16 @@ const otherUserID = "user-2"
 
 // mockRegistry is an in-memory MediaRegistry.
 type mockRegistry struct {
-	objects []models.MediaObject
-
-	// countOverride, when non-nil, is returned by CountByUser instead of
-	// len(objects), so quota tests can simulate a full quota without
-	// seeding rows.
-	countOverride *int
-
-	createErr error
-	countErr  error
+	objects   []models.MediaObject
 	deleteErr error
 }
 
 func (m *mockRegistry) Create(_ context.Context, obj *models.MediaObject) error {
-	if m.createErr != nil {
-		return m.createErr
-	}
 	m.objects = append(m.objects, *obj)
 	return nil
 }
 
 func (m *mockRegistry) CountByUser(_ context.Context, userID string) (int, error) {
-	if m.countErr != nil {
-		return 0, m.countErr
-	}
-	if m.countOverride != nil {
-		return *m.countOverride, nil
-	}
 	n := 0
 	for _, o := range m.objects {
 		if o.UserID == userID {
@@ -261,15 +244,19 @@ func TestPresign_SanitizesFilenamePathSeparators(t *testing.T) {
 }
 
 func TestPresign_EnforcesPerUserQuota(t *testing.T) {
-	full := 2
-	reg := &mockRegistry{countOverride: &full}
+	// Two registered objects against MaxObjectsPerUser: 2 — the quota is
+	// checked through the registry count, so seed real rows.
+	reg := &mockRegistry{objects: []models.MediaObject{
+		{UserID: testUserID, ObjectKey: testUserID + "/uuid1/a.mp3", Filename: "a.mp3", ContentType: "audio/mpeg", SizeBytes: 1},
+		{UserID: testUserID, ObjectKey: testUserID + "/uuid2/b.mp3", Filename: "b.mp3", ContentType: "audio/mpeg", SizeBytes: 1},
+	}}
 	store := &mockStore{available: true, presignURL: "https://minio.local/upload"}
 	w := doJSON(mediaRouter(reg, store, testConfig()), http.MethodPost, "/api/v1/media/presign",
 		`{"filename":"extra.mp3","content_type":"audio/mpeg","size":10}`)
 
 	assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
 	assert.Contains(t, w.Body.String(), "quota")
-	assert.Empty(t, reg.objects, "quota rejection must not create a registry row")
+	assert.Len(t, reg.objects, 2, "quota rejection must not create a registry row")
 	assert.Empty(t, store.presignedKey, "quota rejection must not presign an upload")
 }
 
