@@ -240,9 +240,13 @@ func (h *MediaHandler) Delete(c *gin.Context) {
 	}
 
 	// The route is a wildcard (object keys contain slashes); gin hands the
-	// param over with a leading slash.
+	// param over with a leading slash. Only emptiness is rejected here:
+	// keys this service issues may contain ".." (a plain filename like
+	// "a..b.png" has no path separators), and the key is only ever used
+	// as an opaque MinIO key and an exact-match SQL predicate, so there
+	// is no traversal to guard against.
 	objectKey := strings.TrimPrefix(c.Param("object_key"), "/")
-	if objectKey == "" || strings.Contains(objectKey, "..") {
+	if objectKey == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "object key is required"})
 		return
 	}
