@@ -406,6 +406,39 @@ services:
       - allchat
     restart: unless-stopped
 
+  # Media Service (issue #949) — presigned alert-media uploads to MinIO.
+  # The MinIO service itself is not in compose yet (infra issue #948);
+  # until it lands, the service starts fine and media routes serve 503
+  # (no MINIO_ENDPOINT wired below once MinIO exists, point it at
+  # `minio:9000` and set MINIO_USE_SSL=false).
+  media-service:
+    build:
+      context: ../
+      dockerfile: services/media-service/Dockerfile
+    container_name: allchat-media
+    environment:
+      PORT: "8094"
+      LOG_LEVEL: "info"
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: allchat
+      DATABASE_USER: allchat
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+    ports:
+      - "127.0.0.1:8094:8094"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - allchat
+    restart: unless-stopped
+
 volumes:
   postgres_data:
     driver: local
