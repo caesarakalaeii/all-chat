@@ -43,12 +43,12 @@ var supportedOverlayTypes = map[string]bool{
 
 // Overlay represents an overlay configuration
 type Overlay struct {
-	ID                 string    `json:"id"`
-	UserID             string    `json:"user_id"`
-	Name               string    `json:"name"`
-	Description        string    `json:"description"`
-	IsActive           bool      `json:"is_active"`
-	IsPublicForViewers bool      `json:"is_public_for_viewers"`
+	ID                 string `json:"id"`
+	UserID             string `json:"user_id"`
+	Name               string `json:"name"`
+	Description        string `json:"description"`
+	IsActive           bool   `json:"is_active"`
+	IsPublicForViewers bool   `json:"is_public_for_viewers"`
 	// OverlayType is one of the four kinds above. Overlays created before the
 	// column existed return it as the SQL default; an in-memory zero value is
 	// resolved to chat by Validate.

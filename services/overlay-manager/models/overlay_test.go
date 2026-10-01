@@ -17,21 +17,118 @@
 package models
 
 import (
+	"strings"
 	"testing"
+	"time"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/google/uuid"
 )
 
-// validOverlay returns the smallest Overlay that passes Validate, so each
-// case below varies only the field under test.
-func validOverlay() *Overlay {
-	return &Overlay{
-		UserID: "11111111-1111-1111-1111-111111111111",
-		Name:   "My Overlay",
+func TestOverlay_Validate(t *testing.T) {
+	tests := []struct {
+		name    string
+		overlay *Overlay
+		wantErr bool
+	}{
+		{
+			name: "valid overlay",
+			overlay: &Overlay{
+				ID:          uuid.New().String(),
+				UserID:      uuid.New().String(),
+				Name:        "My Overlay",
+				Description: "Test description",
+				IsActive:    true,
+				CreatedAt:   time.Now(),
+				UpdatedAt:   time.Now(),
+			},
+			wantErr: false,
+		},
+		{
+			name: "missing user_id",
+			overlay: &Overlay{
+				ID:       uuid.New().String(),
+				UserID:   "",
+				Name:     "My Overlay",
+				IsActive: true,
+			},
+			wantErr: true,
+		},
+		{
+			name: "missing name",
+			overlay: &Overlay{
+				ID:       uuid.New().String(),
+				UserID:   uuid.New().String(),
+				Name:     "",
+				IsActive: true,
+			},
+			wantErr: true,
+		},
+		{
+			name: "name too short",
+			overlay: &Overlay{
+				ID:       uuid.New().String(),
+				UserID:   uuid.New().String(),
+				Name:     "",
+				IsActive: true,
+			},
+			wantErr: true,
+		},
+		{
+			name: "name too long (over 100 chars)",
+			overlay: &Overlay{
+				ID:       uuid.New().String(),
+				UserID:   uuid.New().String(),
+				Name:     "a very long name that exceeds the maximum allowed length of 100 characters and should fail validation check",
+				IsActive: true,
+			},
+			wantErr: true,
+		},
+		{
+			name: "description too long (over 500 chars)",
+			overlay: &Overlay{
+				ID:          uuid.New().String(),
+				UserID:      uuid.New().String(),
+				Name:        "Valid Name",
+				Description: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam.",
+				IsActive:    true,
+			},
+			wantErr: true,
+		},
+		{
+			name: "valid overlay with empty description (optional)",
+			overlay: &Overlay{
+				ID:          uuid.New().String(),
+				UserID:      uuid.New().String(),
+				Name:        "My Overlay",
+				Description: "",
+				IsActive:    true,
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.overlay.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Overlay.Validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
 	}
 }
 
-func TestOverlayValidateOverlayType(t *testing.T) {
+// overlay_type (ADR-0064): the four kinds Validate accepts, the default an
+// absent kind resolves to, and what must be rejected.
+func TestOverlay_ValidateOverlayType(t *testing.T) {
+	// The smallest Overlay that passes Validate, so each case below varies only
+	// the field under test.
+	validOverlay := func() *Overlay {
+		return &Overlay{
+			UserID: uuid.New().String(),
+			Name:   "My Overlay",
+		}
+	}
+
 	supported := []string{OverlayTypeChat, OverlayTypeAlerts, OverlayTypeGoal, OverlayTypeList}
 
 	for _, overlayType := range supported {
@@ -39,32 +136,45 @@ func TestOverlayValidateOverlayType(t *testing.T) {
 			overlay := validOverlay()
 			overlay.OverlayType = overlayType
 
-			assert.NoError(t, overlay.Validate())
-			assert.Equal(t, overlayType, overlay.OverlayType, "a supported type must survive validation unchanged")
+			if err := overlay.Validate(); err != nil {
+				t.Fatalf("supported kind %q rejected: %v", overlayType, err)
+			}
+			if overlay.OverlayType != overlayType {
+				t.Errorf("a supported kind must survive validation unchanged, got %q", overlay.OverlayType)
+			}
 		})
 	}
 
-	t.Run("absent type resolves to chat", func(t *testing.T) {
+	t.Run("absent kind resolves to chat", func(t *testing.T) {
 		overlay := validOverlay()
 
-		assert.NoError(t, overlay.Validate())
-		assert.Equal(t, OverlayTypeChat, overlay.OverlayType, "an overlay created before the column existed must validate as chat")
+		if err := overlay.Validate(); err != nil {
+			t.Fatalf("an overlay created before the column existed must still validate: %v", err)
+		}
+		if overlay.OverlayType != OverlayTypeChat {
+			t.Errorf("absent kind resolved to %q, want %q", overlay.OverlayType, OverlayTypeChat)
+		}
 	})
 
-	t.Run("rejects unknown type", func(t *testing.T) {
+	t.Run("rejects unknown kind", func(t *testing.T) {
 		overlay := validOverlay()
 		overlay.OverlayType = "webcam"
 
 		err := overlay.Validate()
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "overlay_type")
-		assert.Contains(t, err.Error(), "webcam")
+		if err == nil {
+			t.Fatal("an unknown kind must be rejected")
+		}
+		if !strings.Contains(err.Error(), "overlay_type") || !strings.Contains(err.Error(), "webcam") {
+			t.Errorf("error must name the field and the bad value, got: %v", err)
+		}
 	})
 
 	t.Run("rejects case variant", func(t *testing.T) {
 		overlay := validOverlay()
 		overlay.OverlayType = "Chat"
 
-		assert.Error(t, overlay.Validate(), "types are wire values, not free text: 'Chat' must not silently become a chat overlay")
+		if err := overlay.Validate(); err == nil {
+			t.Fatal("kinds are wire values, not free text: 'Chat' must not silently become a chat overlay")
+		}
 	})
 }
