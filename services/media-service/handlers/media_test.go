@@ -36,18 +36,29 @@ import (
 const testUserID = "user-1"
 const otherUserID = "user-2"
 
-// mockRegistry is an in-memory MediaRegistry.
+// mockRegistry is an in-memory MediaRegistry. The *Err fields inject a
+// failure into the corresponding method so the handler's 500 branches can
+// be exercised without a database.
 type mockRegistry struct {
 	objects   []models.MediaObject
+	createErr error
+	countErr  error
+	listErr   error
 	deleteErr error
 }
 
 func (m *mockRegistry) Create(_ context.Context, obj *models.MediaObject) error {
+	if m.createErr != nil {
+		return m.createErr
+	}
 	m.objects = append(m.objects, *obj)
 	return nil
 }
 
 func (m *mockRegistry) CountByUser(_ context.Context, userID string) (int, error) {
+	if m.countErr != nil {
+		return 0, m.countErr
+	}
 	n := 0
 	for _, o := range m.objects {
 		if o.UserID == userID {
@@ -58,6 +69,9 @@ func (m *mockRegistry) CountByUser(_ context.Context, userID string) (int, error
 }
 
 func (m *mockRegistry) ListByUser(_ context.Context, userID string) ([]models.MediaObject, error) {
+	if m.listErr != nil {
+		return nil, m.listErr
+	}
 	var out []models.MediaObject
 	for _, o := range m.objects {
 		if o.UserID == userID {
@@ -364,4 +378,69 @@ func TestDelete_MinioErrorStillDeletesRegistryRow(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.Empty(t, reg.objects, "registry row must be deleted despite the MinIO error")
 	assert.Len(t, store.removedKeys, 1, "the removal was still attempted")
+}
+
+func TestPresign_RegistryCountErrorIs500(t *testing.T) {
+	reg := &mockRegistry{countErr: errors.New("db down")}
+	store := &mockStore{available: true, presignURL: "https://minio.local/upload"}
+	w := doJSON(mediaRouter(reg, store, testConfig()), http.MethodPost, "/api/v1/media/presign",
+		`{"filename":"a.mp3","content_type":"audio/mpeg","size":10}`)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, w.Body.String(), "failed to check media quota")
+	assert.Empty(t, reg.objects, "no registry row without a successful quota check")
+	assert.Empty(t, store.presignedKey, "no upload presigned without a successful quota check")
+}
+
+func TestPresign_RegistryCreateErrorIs500(t *testing.T) {
+	reg := &mockRegistry{createErr: errors.New("db down")}
+	store := &mockStore{available: true, presignURL: "https://minio.local/upload"}
+	w := doJSON(mediaRouter(reg, store, testConfig()), http.MethodPost, "/api/v1/media/presign",
+		`{"filename":"a.mp3","content_type":"audio/mpeg","size":10}`)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, w.Body.String(), "failed to register media object")
+	assert.NotEmpty(t, store.presignedKey, "the presign happened before the failed registry write")
+}
+
+func TestList_RegistryErrorIs500(t *testing.T) {
+	reg := &mockRegistry{listErr: errors.New("db down")}
+	store := &mockStore{available: true}
+	w := doJSON(mediaRouter(reg, store, testConfig()), http.MethodGet, "/api/v1/media", "")
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, w.Body.String(), "failed to list media")
+}
+
+func TestDelete_RegistryErrorIs500(t *testing.T) {
+	objectKey := testUserID + "/uuid1/a.mp3"
+	reg := &mockRegistry{objects: []models.MediaObject{
+		{ID: "id-1", UserID: testUserID, ObjectKey: objectKey, Filename: "a.mp3", ContentType: "audio/mpeg", SizeBytes: 10, CreatedAt: time.Unix(1000, 0).UTC()},
+	}, deleteErr: errors.New("db down")}
+	store := &mockStore{available: true}
+	w := doJSON(mediaRouter(reg, store, testConfig()), http.MethodDelete, "/api/v1/media/"+objectKey, "")
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, w.Body.String(), "failed to delete media")
+	assert.Len(t, reg.objects, 1, "the registry row must survive a failed delete")
+	assert.Empty(t, store.removedKeys, "no MinIO removal when the registry delete failed")
+}
+
+func TestDelete_RejectsTraversalAndEmptyObjectKeys(t *testing.T) {
+	reg := &mockRegistry{}
+	store := &mockStore{available: true}
+	r := mediaRouter(reg, store, testConfig())
+
+	// The `..` guard exists for depth, not reachability: keys like
+	// "../bucket/x" would still miss in the DB, but a malformed key must
+	// be rejected before any registry or MinIO call.
+	w := doJSON(r, http.MethodDelete, "/api/v1/media/..", "")
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	// The wildcard hands over a bare slash, which trims to an empty key.
+	w = doJSON(r, http.MethodDelete, "/api/v1/media/", "")
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	assert.Empty(t, reg.objects)
+	assert.Empty(t, store.removedKeys, "no MinIO removal for a rejected key")
 }
