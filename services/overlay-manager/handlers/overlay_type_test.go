@@ -25,6 +25,7 @@ import (
 	"testing"
 
 	"github.com/caesar/all-chat/services/overlay-manager/models"
+	"github.com/caesar/all-chat/services/overlay-manager/repository"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -256,4 +257,79 @@ func TestHandleGetPublicConfig_ReturnsOverlayType(t *testing.T) {
 	body := decodeOverlayBody(t, w)
 	assert.Equal(t, models.OverlayTypeChat, body["overlay_type"],
 		"the unauthenticated render page routes on the kind and has no other way to learn it")
+}
+
+// stubAdminOverlayStore hands the admin handler a fixed overlay list for both
+// of its listing routes, standing in for the owner-join repository queries.
+type stubAdminOverlayStore struct {
+	overlays []*repository.OverlayWithSourceCount
+}
+
+func (s *stubAdminOverlayStore) GetAllOverlaysWithSourceCount(context.Context) ([]*repository.OverlayWithSourceCount, error) {
+	return s.overlays, nil
+}
+
+func (s *stubAdminOverlayStore) ListByUserIDWithSourceCount(_ context.Context, _ string) ([]*repository.OverlayWithSourceCount, error) {
+	return s.overlays, nil
+}
+
+// The admin listing responses must say each overlay's kind: the review of the
+// overlay_type work found these were the only responses with no test at all,
+// so a refactor could drop the field with every gate still green. An empty
+// type (a row written before the column existed, should one ever surface)
+// must resolve to chat, like every other response path does.
+func TestHandleAdminListOverlays_OverlayType(t *testing.T) {
+	tests := []struct {
+		name     string
+		rowType  string
+		wantType string
+	}{
+		{name: "chat", rowType: models.OverlayTypeChat, wantType: models.OverlayTypeChat},
+		{name: "alerts", rowType: models.OverlayTypeAlerts, wantType: models.OverlayTypeAlerts},
+		{name: "goal", rowType: models.OverlayTypeGoal, wantType: models.OverlayTypeGoal},
+		{name: "list", rowType: models.OverlayTypeList, wantType: models.OverlayTypeList},
+		{name: "empty resolves to chat", rowType: "", wantType: models.OverlayTypeChat},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &stubAdminOverlayStore{overlays: []*repository.OverlayWithSourceCount{{
+				Overlay: models.Overlay{ID: "overlay-1", UserID: "user-1", Name: "Their overlay", OverlayType: tt.rowType},
+			}}}
+			h := NewAdminHandler(repo, nil, zap.NewNop())
+
+			gin.SetMode(gin.TestMode)
+			router := gin.New()
+			router.GET("/admin/overlays", h.ListOverlays)
+
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/admin/overlays", nil))
+
+			require.Equal(t, http.StatusOK, w.Code)
+			var body []map[string]any
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body), "body: %s", w.Body.String())
+			require.Len(t, body, 1)
+			assert.Equal(t, tt.wantType, body[0]["overlay_type"])
+		})
+	}
+}
+
+func TestHandleAdminGetUserOverlays_OverlayType(t *testing.T) {
+	repo := &stubAdminOverlayStore{overlays: []*repository.OverlayWithSourceCount{{
+		Overlay: models.Overlay{ID: "overlay-1", UserID: "user-1", Name: "Their overlay", OverlayType: models.OverlayTypeAlerts},
+	}}}
+	h := NewAdminHandler(repo, nil, zap.NewNop())
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.GET("/admin/user-overlays/:id", h.GetUserOverlays)
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/admin/user-overlays/user-1", nil))
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var body []map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body), "body: %s", w.Body.String())
+	require.Len(t, body, 1)
+	assert.Equal(t, models.OverlayTypeAlerts, body[0]["overlay_type"])
 }
