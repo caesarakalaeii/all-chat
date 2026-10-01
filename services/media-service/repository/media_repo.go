@@ -23,18 +23,18 @@ import (
 
 	"github.com/caesar/all-chat/services/media-service/models"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"go.uber.org/zap"
 )
 
 // MediaRepository is the Postgres implementation of handlers.MediaRegistry.
 type MediaRepository struct {
-	db     *pgxpool.Pool
-	logger *zap.Logger
+	db *pgxpool.Pool
 }
 
-// NewMediaRepository creates the media_objects repository.
-func NewMediaRepository(db *pgxpool.Pool, logger *zap.Logger) *MediaRepository {
-	return &MediaRepository{db: db, logger: logger}
+// NewMediaRepository creates the media_objects repository. Errors are
+// returned, not logged: the handler layer logs every failure it turns into
+// a 5xx.
+func NewMediaRepository(db *pgxpool.Pool) *MediaRepository {
+	return &MediaRepository{db: db}
 }
 
 // Create inserts a registry row. Called at presign time, before the client

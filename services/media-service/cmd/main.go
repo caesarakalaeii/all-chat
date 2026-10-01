@@ -120,7 +120,7 @@ func main() {
 		}
 	}
 
-	mediaRepo := repository.NewMediaRepository(dbPool, log)
+	mediaRepo := repository.NewMediaRepository(dbPool)
 	mediaHandler := handlers.NewMediaHandler(mediaRepo, objectStore, handlers.MediaConfig{
 		PublicBaseURL:     storageCfg.PublicBaseURL,
 		PresignExpiry:     storageCfg.PresignExpiry,
