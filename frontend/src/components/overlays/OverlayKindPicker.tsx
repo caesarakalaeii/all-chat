@@ -42,23 +42,27 @@ export function OverlayKindPicker({
       <legend className="mb-2 text-sm font-medium text-text">
         {t('overlayEditor.create.kindLabel')}
       </legend>
+      {/* The two text spans sit directly under the <label> (grid rows 1 and 2,
+          radio spanning both): jsx-a11y/label-has-associated-control does not
+          find accessible text through a wrapper element, so the picker cannot
+          use a single wrapping span for the text column. */}
       {OVERLAY_KINDS.map((kind) => (
         <label
           key={kind}
-          className="flex cursor-pointer items-start gap-2 rounded-lg border border-border bg-surface p-3 text-sm transition-colors has-checked:border-primary has-checked:bg-primary/5"
+          className="grid cursor-pointer grid-cols-[auto_1fr] items-start gap-x-2 gap-y-0.5 rounded-lg border border-border bg-surface p-3 text-sm transition-colors has-checked:border-primary has-checked:bg-primary/5"
         >
           <input
             type="radio"
             name="overlay-type"
-            className="mt-0.5 accent-primary"
+            className="col-start-1 row-span-2 mt-0.5 accent-primary"
             checked={value === kind}
             onChange={() => onChange(kind)}
           />
-          <span>
-            <span className="block font-medium text-text">
-              {t(`common.overlayKinds.${kind}`)}
-            </span>
-            <span className="block text-text-sub">{t(`overlayEditor.createKindDescriptions.${kind}`)}</span>
+          <span className="col-start-2 font-medium text-text">
+            {t(`common.overlayKinds.${kind}`)}
+          </span>
+          <span className="col-start-2 text-text-sub">
+            {t(`overlayEditor.createKindDescriptions.${kind}`)}
           </span>
         </label>
       ))}
