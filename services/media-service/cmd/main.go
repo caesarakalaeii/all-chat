@@ -112,11 +112,12 @@ func main() {
 			// rest of the stack does not depend on this service.
 			log.Error("Failed to build MinIO client — media routes will serve 503", zap.Error(err))
 			objectStore = storage.DisabledStore{}
+		} else {
+			log.Info("MinIO object store configured",
+				zap.String("endpoint", storageCfg.Endpoint),
+				zap.String("bucket", storageCfg.Bucket),
+			)
 		}
-		log.Info("MinIO object store configured",
-			zap.String("endpoint", storageCfg.Endpoint),
-			zap.String("bucket", storageCfg.Bucket),
-		)
 	}
 
 	mediaRepo := repository.NewMediaRepository(dbPool, log)
