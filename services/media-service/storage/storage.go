@@ -20,7 +20,29 @@ package storage
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
 	"time"
+
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
+)
+
+// Env var names, documented in services/media-service/README.md.
+const (
+	envEndpoint    = "MINIO_ENDPOINT"
+	envAccessKey   = "MINIO_MEDIA_USER"
+	envSecretKey   = "MINIO_MEDIA_PASSWORD"
+	envUseSSL      = "MINIO_USE_SSL"
+	envBucket      = "MINIO_BUCKET"
+	envPublicBase  = "MEDIA_PUBLIC_URL"
+	envPresignTTL  = "MEDIA_PRESIGN_EXPIRY"
+	envMaxObjects  = "MEDIA_MAX_OBJECTS_PER_USER"
+	defaultBucket  = "allchat-media"
+	defaultBaseURL = "https://media.allch.at"
 )
 
 // Config is the media-service storage configuration, from the environment.
@@ -35,35 +57,104 @@ type Config struct {
 	MaxObjectsPerUser int
 }
 
-// LoadConfig reads the storage settings from the environment.
+// LoadConfig reads the storage settings from the environment. An empty
+// Endpoint is NOT an error: it means MinIO is not deployed (or not wired to
+// this service yet) and the media routes answer 503 — same env-gating pattern
+// as youtube-listener-innertube's optional subscribers. Everything else
+// defaults to the ADR-0064 values; unparsable overrides are errors, because a
+// silently-ignored MEDIA_MAX_OBJECTS_PER_USER is a quota that isn't enforced.
 func LoadConfig() (Config, error) {
-	return Config{}, nil
+	cfg := Config{
+		Endpoint:      strings.TrimSpace(os.Getenv(envEndpoint)),
+		AccessKey:     os.Getenv(envAccessKey),
+		SecretKey:     os.Getenv(envSecretKey),
+		UseSSL:        envDefault(envUseSSL, "true") == "true",
+		Bucket:        envDefault(envBucket, defaultBucket),
+		PublicBaseURL: strings.TrimSuffix(envDefault(envPublicBase, defaultBaseURL), "/"),
+	}
+
+	expiry, err := time.ParseDuration(envDefault(envPresignTTL, "5m"))
+	if err != nil {
+		return Config{}, fmt.Errorf("%s: %w", envPresignTTL, err)
+	}
+	cfg.PresignExpiry = expiry
+
+	maxObjects, err := strconv.Atoi(envDefault(envMaxObjects, "100"))
+	if err != nil {
+		return Config{}, fmt.Errorf("%s: %w", envMaxObjects, err)
+	}
+	cfg.MaxObjectsPerUser = maxObjects
+
+	return cfg, nil
 }
 
-// MinioStore talks to MinIO for the media bucket.
-type MinioStore struct{}
+func envDefault(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
+// ErrDisabled is returned by DisabledStore operations; they are unreachable
+// behind the RequireStore gate but must not pretend to succeed if a future
+// route forgets the gate.
+var ErrDisabled = errors.New("media storage is not configured")
+
+// MinioStore talks to MinIO for the media bucket. Thin on purpose: all policy
+// (validation, quota, ownership) lives in the handlers so it can be tested
+// without a bucket.
+type MinioStore struct {
+	client *minio.Client
+	bucket string
+}
+
+// NewMinioStore connects to MinIO. It does not create the bucket: the bucket
+// is provisioned with the MinIO instance itself (issue #948), and a service
+// pod must not own cluster state.
+func NewMinioStore(cfg Config) (*MinioStore, error) {
+	client, err := minio.New(cfg.Endpoint, &minio.Options{
+		Creds:  credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, ""),
+		Secure: cfg.UseSSL,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("minio client: %w", err)
+	}
+	return &MinioStore{client: client, bucket: cfg.Bucket}, nil
+}
 
 // Available reports whether the store is usable.
-func (s *MinioStore) Available() bool { return true }
+func (s *MinioStore) Available() bool { return s != nil }
 
-// PresignPut returns a presigned PUT URL for objectKey.
-func (s *MinioStore) PresignPut(_ context.Context, _ string, _ time.Duration) (string, error) {
-	return "", nil
+// PresignPut returns a presigned PUT URL for objectKey, valid for expiry.
+// The URL does not pin the content type or size — those are validated at
+// presign time and not enforced by single-node MinIO after the fact.
+func (s *MinioStore) PresignPut(ctx context.Context, objectKey string, expiry time.Duration) (string, error) {
+	url, err := s.client.PresignedPutObject(ctx, s.bucket, objectKey, expiry)
+	if err != nil {
+		return "", fmt.Errorf("presigned put %s/%s: %w", s.bucket, objectKey, err)
+	}
+	return url.String(), nil
 }
 
 // Remove deletes objectKey from the bucket.
-func (s *MinioStore) Remove(_ context.Context, _ string) error { return nil }
+func (s *MinioStore) Remove(ctx context.Context, objectKey string) error {
+	if err := s.client.RemoveObject(ctx, s.bucket, objectKey, minio.RemoveObjectOptions{}); err != nil {
+		return fmt.Errorf("remove %s/%s: %w", s.bucket, objectKey, err)
+	}
+	return nil
+}
 
-// DisabledStore is the no-MinIO fallback: media routes serve 503.
+// DisabledStore is the no-MinIO fallback: every media route serves 503
+// through it.
 type DisabledStore struct{}
 
 // Available reports whether the store is usable.
-func (s DisabledStore) Available() bool { return true }
+func (s DisabledStore) Available() bool { return false }
 
-// PresignPut returns a presigned PUT URL for objectKey.
+// PresignPut always fails: there is no bucket to upload to.
 func (s DisabledStore) PresignPut(_ context.Context, _ string, _ time.Duration) (string, error) {
-	return "", nil
+	return "", ErrDisabled
 }
 
-// Remove deletes objectKey from the bucket.
-func (s DisabledStore) Remove(_ context.Context, _ string) error { return nil }
+// Remove always fails: there is no bucket to remove from.
+func (s DisabledStore) Remove(_ context.Context, _ string) error { return ErrDisabled }
