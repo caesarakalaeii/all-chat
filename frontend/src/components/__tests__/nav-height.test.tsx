@@ -65,6 +65,19 @@ vi.mock('@/lib/stores/viewer-auth-store', () => ({
 // path on mount; jsdom implements no SVG geometry. Same stub as ChatRow.test.tsx.
 ;(SVGElement.prototype as unknown as { getTotalLength: () => number }).getTotalLength = () => 0
 
+// InfinityLogo's reduced-motion gate reads matchMedia, which jsdom lacks.
+// Static non-matching stub, same as ChatRow.test.tsx.
+;(window as unknown as { matchMedia: typeof window.matchMedia }).matchMedia = (query) => ({
+  matches: false,
+  media: query,
+  onchange: null,
+  addEventListener: () => {},
+  removeEventListener: () => {},
+  addListener: () => {},
+  removeListener: () => {},
+  dispatchEvent: () => false,
+})
+
 afterEach(cleanup)
 
 describe('sticky nav height', () => {

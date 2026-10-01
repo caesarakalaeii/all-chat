@@ -32,6 +32,19 @@ import { DockSignIn } from '../DockSignIn'
 // InfinityLogo animates an SVG path; jsdom has no path geometry.
 ;(SVGElement.prototype as unknown as { getTotalLength: () => number }).getTotalLength = () => 0
 
+// InfinityLogo's reduced-motion gate reads matchMedia, which jsdom lacks.
+// Static non-matching stub, same as ChatRow.test.tsx.
+;(window as unknown as { matchMedia: typeof window.matchMedia }).matchMedia = (query) => ({
+  matches: false,
+  media: query,
+  onchange: null,
+  addEventListener: () => {},
+  removeEventListener: () => {},
+  addListener: () => {},
+  removeListener: () => {},
+  dispatchEvent: () => false,
+})
+
 beforeEach(() => {
   vi.stubGlobal('sessionStorage', { setItem: vi.fn(), getItem: () => null, removeItem: vi.fn() })
 })

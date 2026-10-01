@@ -20,6 +20,8 @@
 
 import { useEffect, useRef } from 'react'
 
+import { useReducedMotion } from '@/hooks/useReducedMotion'
+
 /**
  * InfinityLogo — animated 4-colour infinity snake inside a chat bubble.
  * Used in AppNav, AdminNav, landing page, and loading screens.
@@ -27,8 +29,14 @@ import { useEffect, useRef } from 'react'
 export function InfinityLogo({ size = 36 }: { size?: number }) {
   const svgRef = useRef<SVGSVGElement>(null)
   const rafRef = useRef<number>(0)
+  // The snake is JS-driven (rAF mutating stroke-dashoffset), so CSS
+  // animation gating does not reach it — gate it here, like every other
+  // JS animation in the app (useReducedMotion's contract). Under reduced
+  // motion the static gradient paths below carry the mark.
+  const reducedMotion = useReducedMotion()
 
   useEffect(() => {
+    if (reducedMotion) return
     const svg = svgRef.current
     if (!svg) return
     const segs = svg.querySelectorAll<SVGPathElement>('.inf-seg')
@@ -59,7 +67,7 @@ export function InfinityLogo({ size = 36 }: { size?: number }) {
 
     rafRef.current = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(rafRef.current)
-  }, [])
+  }, [reducedMotion])
 
   const inf = 'M6 10c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8'
 
