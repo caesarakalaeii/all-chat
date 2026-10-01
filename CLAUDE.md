@@ -135,6 +135,7 @@ Each service has a detailed README:
 - [Testing Guide](./docs/TESTING_COMPREHENSIVE.md) - Unit, integration, E2E tests
 - [Accessibility](./docs/ACCESSIBILITY.md) - WCAG 2.2 AA scope, CI gates (shrink-only ratchets), contracts for new UI code
 - [Frontend i18n](./docs/frontend/I18N.md) - the UI string catalog: how to add a string, placeholder syntax, why there is no provider and no locale in the URL
+- [Agent UI verification](./docs/frontend/AGENT_UI_VERIFICATION.md) - the screenshot ritual and pixel-baseline gate every UI change must pass before "done"; [Onlook pilot](./docs/frontend/ONLOOK_PILOT.md) for visual editing
 - [Design System](./frontend/DESIGN_SYSTEM.md) - shadcn primitives, design tokens, and the CI gates that keep the UI consistent (ADR-0056). Agents: use the `shadcn-ui` skill
 
 ---

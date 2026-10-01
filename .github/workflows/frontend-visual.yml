@@ -1,0 +1,114 @@
+name: Frontend Visual Gate
+
+# Pixel-baseline gate for app chrome (frontend/tests/e2e/visual-regression.spec.ts).
+#
+# Why a separate workflow: the Chromatic step that used to carry visual
+# regression lives in frontend-quality.yml, which is workflow_dispatch-only —
+# a gate that never runs on a PR. Every layout-class UI defect that reached
+# production sailed past it. This workflow runs on every PR, like
+# frontend-a11y.yml, and uses the same paths-filter skip shim so backend-only
+# PRs report present-but-skipped (branch protection treats that as passing —
+# see the rationale in frontend-a11y.yml, ADR-0033 / PR #577).
+#
+# Baselines are generated HERE, never on a dev host: the committed PNGs must
+# come from the exact browser/font stack CI pins. To update baselines after a
+# deliberate visual change, dispatch this workflow on your branch with
+# update_snapshots=true, download the artifact, and commit the new PNGs in
+# the same PR as the change that justifies them.
+#
+# The first run on a branch will fail on missing baselines (that is the gate
+# biting). Baselines are committed under
+# frontend/tests/e2e/__screenshots__/ — see the dispatch instructions in
+# docs/frontend/AGENT_UI_VERIFICATION.md.
+
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      update_snapshots:
+        description: 'Regenerate baselines instead of asserting them'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            frontend:
+              - 'frontend/**'
+              - '.github/workflows/frontend-visual.yml'
+
+  visual-baselines:
+    name: Pixel baselines (chrome routes)
+    needs: changes
+    # Dispatch runs even without frontend changes so baselines can be
+    # regenerated deliberately; PRs only run when frontend changed.
+    if: needs.changes.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Bounded retry, same rationale as frontend-a11y.yml: this install
+      # normally takes ~40s but has stalled for 11 minutes; a hang is worse
+      # than a failure (required contexts never report).
+      - name: Install Playwright Chromium
+        timeout-minutes: 16
+        run: |
+          for attempt in 1 2 3; do
+            if timeout --kill-after=30s 5m npx playwright install --with-deps chromium; then
+              exit 0
+            fi
+            echo "::warning::Chromium install attempt $attempt stalled or failed; retrying"
+            sleep 10
+          done
+          echo "::error::Chromium install failed after 3 attempts"
+          exit 1
+
+      - name: Assert pixel baselines
+        if: ${{ github.event_name != 'workflow_dispatch' || !inputs.update_snapshots }}
+        run: npm run test:visual
+
+      - name: Regenerate pixel baselines
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.update_snapshots }}
+        run: npm run test:visual:update
+
+      - name: Upload baselines artifact
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.update_snapshots }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: visual-baselines
+          path: frontend/tests/e2e/__screenshots__/
+          retention-days: 7
+
+      - name: Upload diff report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: visual-diff-report
+          path: frontend/test-results/
+          retention-days: 14

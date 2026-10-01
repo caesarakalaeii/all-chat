@@ -52,6 +52,19 @@ import { OverlayViewGuard } from '../OverlayViewGuard'
 // no SVG geometry, so force a getTotalLength stub to let it mount.
 ;(SVGElement.prototype as unknown as { getTotalLength: () => number }).getTotalLength = () => 0
 
+// InfinityLogo's reduced-motion gate reads matchMedia, which jsdom lacks.
+// Static non-matching stub, same as ChatRow.test.tsx.
+;(window as unknown as { matchMedia: typeof window.matchMedia }).matchMedia = (query) => ({
+  matches: false,
+  media: query,
+  onchange: null,
+  addEventListener: () => {},
+  removeEventListener: () => {},
+  addListener: () => {},
+  removeListener: () => {},
+  dispatchEvent: () => false,
+})
+
 afterEach(() => {
   cleanup()
   push.mockClear()
