@@ -325,11 +325,11 @@ func (s *stubAdminOverlayStore) ListByUserIDWithSourceCount(_ context.Context, _
 	return s.overlays, nil
 }
 
-// The admin listing responses must say each overlay's kind: the review of the
-// overlay_type work found these were the only responses with no test at all,
-// so a refactor could drop the field with every gate still green. An empty
-// type (a row written before the column existed, should one ever surface)
-// must resolve to chat, like every other response path does.
+// The admin listing responses must say each overlay's kind: they are the only
+// responses with no test of their own, so a refactor could drop the field with
+// every gate still green. An empty type (a row written before the column
+// existed, should one ever surface) must resolve to chat, like every other
+// response path does.
 func TestHandleAdminListOverlays_OverlayType(t *testing.T) {
 	tests := []struct {
 		name     string
