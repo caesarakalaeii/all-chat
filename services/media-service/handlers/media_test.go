@@ -426,19 +426,40 @@ func TestDelete_RegistryErrorIs500(t *testing.T) {
 	assert.Empty(t, store.removedKeys, "no MinIO removal when the registry delete failed")
 }
 
-func TestDelete_RejectsTraversalAndEmptyObjectKeys(t *testing.T) {
+func TestDelete_AcceptsKeysPresignCreates(t *testing.T) {
+	// Presign's sanitizeFilename keeps filenames that merely contain two
+	// dots ("a..b.png" has no path separators), so the key Delete receives
+	// back can contain "..". The key is only ever used as an opaque S3 key
+	// and an exact-match SQL predicate — there is no traversal to guard —
+	// so Delete must accept every key this service hands out, or the row
+	// is registered, counts against quota, and can never be deleted.
+	reg := &mockRegistry{}
+	store := &mockStore{available: true, presignURL: "https://minio.local/upload"}
+	r := mediaRouter(reg, store, testConfig())
+
+	w := doJSON(r, http.MethodPost, "/api/v1/media/presign",
+		`{"filename":"a..b.png","content_type":"image/png","size":100}`)
+	require.Equal(t, http.StatusCreated, w.Code, "presign must accept a..b.png")
+	objectKey, _ := decode(t, w)["object_key"].(string)
+	parts := strings.Split(objectKey, "/")
+	require.Len(t, parts, 3, "object_key must be user/uuid/filename, got %q", objectKey)
+	require.Equal(t, testUserID, parts[0])
+	require.Equal(t, "a..b.png", parts[2])
+
+	w = doJSON(r, http.MethodDelete, "/api/v1/media/"+objectKey, "")
+	require.Equal(t, http.StatusOK, w.Code, "delete must accept the key presign issued")
+	assert.Empty(t, reg.objects, "registry row must be deleted")
+	assert.Equal(t, []string{objectKey}, store.removedKeys, "MinIO object must be removed")
+}
+
+func TestDelete_RejectsEmptyObjectKey(t *testing.T) {
 	reg := &mockRegistry{}
 	store := &mockStore{available: true}
 	r := mediaRouter(reg, store, testConfig())
 
-	// The `..` guard exists for depth, not reachability: keys like
-	// "../bucket/x" would still miss in the DB, but a malformed key must
-	// be rejected before any registry or MinIO call.
-	w := doJSON(r, http.MethodDelete, "/api/v1/media/..", "")
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-
-	// The wildcard hands over a bare slash, which trims to an empty key.
-	w = doJSON(r, http.MethodDelete, "/api/v1/media/", "")
+	// The wildcard hands over a bare slash, which trims to an empty key;
+	// that must be rejected before any registry or MinIO call.
+	w := doJSON(r, http.MethodDelete, "/api/v1/media/", "")
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 
 	assert.Empty(t, reg.objects)
