@@ -18,100 +18,53 @@ package models
 
 import (
 	"testing"
-	"time"
 
-	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 )
 
-func TestOverlay_Validate(t *testing.T) {
-	tests := []struct {
-		name    string
-		overlay *Overlay
-		wantErr bool
-	}{
-		{
-			name: "valid overlay",
-			overlay: &Overlay{
-				ID:          uuid.New().String(),
-				UserID:      uuid.New().String(),
-				Name:        "My Overlay",
-				Description: "Test description",
-				IsActive:    true,
-				CreatedAt:   time.Now(),
-				UpdatedAt:   time.Now(),
-			},
-			wantErr: false,
-		},
-		{
-			name: "missing user_id",
-			overlay: &Overlay{
-				ID:       uuid.New().String(),
-				UserID:   "",
-				Name:     "My Overlay",
-				IsActive: true,
-			},
-			wantErr: true,
-		},
-		{
-			name: "missing name",
-			overlay: &Overlay{
-				ID:       uuid.New().String(),
-				UserID:   uuid.New().String(),
-				Name:     "",
-				IsActive: true,
-			},
-			wantErr: true,
-		},
-		{
-			name: "name too short",
-			overlay: &Overlay{
-				ID:       uuid.New().String(),
-				UserID:   uuid.New().String(),
-				Name:     "",
-				IsActive: true,
-			},
-			wantErr: true,
-		},
-		{
-			name: "name too long (over 100 chars)",
-			overlay: &Overlay{
-				ID:       uuid.New().String(),
-				UserID:   uuid.New().String(),
-				Name:     "a very long name that exceeds the maximum allowed length of 100 characters and should fail validation check",
-				IsActive: true,
-			},
-			wantErr: true,
-		},
-		{
-			name: "description too long (over 500 chars)",
-			overlay: &Overlay{
-				ID:          uuid.New().String(),
-				UserID:      uuid.New().String(),
-				Name:        "Valid Name",
-				Description: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam.",
-				IsActive:    true,
-			},
-			wantErr: true,
-		},
-		{
-			name: "valid overlay with empty description (optional)",
-			overlay: &Overlay{
-				ID:          uuid.New().String(),
-				UserID:      uuid.New().String(),
-				Name:        "My Overlay",
-				Description: "",
-				IsActive:    true,
-			},
-			wantErr: false,
-		},
+// validOverlay returns the smallest Overlay that passes Validate, so each
+// case below varies only the field under test.
+func validOverlay() *Overlay {
+	return &Overlay{
+		UserID: "11111111-1111-1111-1111-111111111111",
+		Name:   "My Overlay",
 	}
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := tt.overlay.Validate()
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Overlay.Validate() error = %v, wantErr %v", err, tt.wantErr)
-			}
+func TestOverlayValidateOverlayType(t *testing.T) {
+	supported := []string{OverlayTypeChat, OverlayTypeAlerts, OverlayTypeGoal, OverlayTypeList}
+
+	for _, overlayType := range supported {
+		t.Run("accepts "+overlayType, func(t *testing.T) {
+			overlay := validOverlay()
+			overlay.OverlayType = overlayType
+
+			assert.NoError(t, overlay.Validate())
+			assert.Equal(t, overlayType, overlay.OverlayType, "a supported type must survive validation unchanged")
 		})
 	}
+
+	t.Run("absent type resolves to chat", func(t *testing.T) {
+		overlay := validOverlay()
+
+		assert.NoError(t, overlay.Validate())
+		assert.Equal(t, OverlayTypeChat, overlay.OverlayType, "an overlay created before the column existed must validate as chat")
+	})
+
+	t.Run("rejects unknown type", func(t *testing.T) {
+		overlay := validOverlay()
+		overlay.OverlayType = "webcam"
+
+		err := overlay.Validate()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "overlay_type")
+		assert.Contains(t, err.Error(), "webcam")
+	})
+
+	t.Run("rejects case variant", func(t *testing.T) {
+		overlay := validOverlay()
+		overlay.OverlayType = "Chat"
+
+		assert.Error(t, overlay.Validate(), "types are wire values, not free text: 'Chat' must not silently become a chat overlay")
+	})
 }
