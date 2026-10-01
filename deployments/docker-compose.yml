@@ -83,10 +83,21 @@ services:
   # MinIO object storage — alert media (ADR-0064). The k8s twin is
   # apps/workloads/all-chat/minio-*.yaml in caesar-deployment; create the
   # bucket locally with `make minio-setup`.
+  #
+  # NOT minio/minio: MinIO stopped serving its images anonymously in
+  # Aug 2025 (Hub repo removed, quay login-gated), so a pull of the
+  # official tag fails and the container never starts. bitnamilegacy/minio
+  # is the last anonymously-pullable build of the same binary; its
+  # entrypoint execs `minio "$@"` when the first arg is "server", so the
+  # official single-node command below is unchanged.
   minio:
-    image: minio/minio:RELEASE.2025-10-15T17-29-55Z
+    image: bitnamilegacy/minio:2025.7.23-debian-12-r5
     container_name: allchat-minio
     command: server /data --console-address ":9001"
+    # The bitnami image defaults to UID 1001, but a fresh named volume is
+    # root-owned; the official minio image ran as root too, so keep that
+    # trust model instead of fighting the volume ownership.
+    user: root
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
@@ -95,8 +106,8 @@ services:
       - "127.0.0.1:9001:9001"
     volumes:
       - minio_data:/data
-    # The image ships a static curl (see its Dockerfile.release); the
-    # health endpoints are unauthenticated.
+    # The image ships curl (/usr/bin/curl); the health endpoints are
+    # unauthenticated.
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 10s
