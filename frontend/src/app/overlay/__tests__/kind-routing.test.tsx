@@ -118,7 +118,7 @@ describe('overlay render route kind dispatch', () => {
       render(<OBSOverlayPage params={resolvedParams('test')} />)
       await act(async () => {})
 
-      expect(screen.getByText(/not yet/i)).toBeInTheDocument()
+      expect(screen.getByText(/not supported yet/i)).toBeInTheDocument()
     },
   )
 })

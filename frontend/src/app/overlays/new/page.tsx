@@ -31,6 +31,8 @@ import { useOverlayStore } from '@/lib/stores/overlay-store'
 import { trackEvent } from '@/lib/analytics'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { useTranslations } from '@/lib/i18n'
+import { OverlayKindPicker } from '@/components/overlays/OverlayKindPicker'
+import type { OverlayType } from '@/lib/types/overlay'
 
 function NewOverlayContent() {
   const t = useTranslations()
@@ -39,6 +41,7 @@ function NewOverlayContent() {
 
   const [name, setName] = useState('')
   const [nameError, setNameError] = useState('')
+  const [kind, setKind] = useState<OverlayType>('chat')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
@@ -50,7 +53,7 @@ function NewOverlayContent() {
     setNameError('')
     setIsSubmitting(true)
     try {
-      const overlay = await createOverlay({ name: name.trim() })
+      const overlay = await createOverlay({ name: name.trim(), overlay_type: kind })
       trackEvent('overlay_created')
       toastManager.add({
         title: t('overlayEditor.toasts.created', { name: overlay.name }),
@@ -97,6 +100,7 @@ function NewOverlayContent() {
                 </p>
               )}
             </div>
+            <OverlayKindPicker value={kind} onChange={setKind} />
             <div className="flex justify-end gap-3">
               <Button variant="outline" type="button" onClick={() => router.back()}>
                 {t('overlayEditor.create.cancel')}

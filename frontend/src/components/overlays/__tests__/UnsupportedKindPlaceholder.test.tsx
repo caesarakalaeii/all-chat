@@ -32,14 +32,15 @@ describe('UnsupportedKindPlaceholder', () => {
   it('names the kind that is not supported yet', () => {
     render(<UnsupportedKindPlaceholder kind="alerts" />)
     expect(screen.getByText(/Alerts/)).toBeVisible()
-    expect(screen.getByText(/not yet/i)).toBeInTheDocument()
+    expect(screen.getByText(/not supported yet/i)).toBeInTheDocument()
   })
 
   it('renders on a transparent page without app chrome', () => {
     // An OBS browser source must not paint a background: the stream shows
     // through wherever the placeholder is not.
     const { container } = render(<UnsupportedKindPlaceholder kind="goal" />)
-    expect(container.firstElementChild).not.toHaveClass(/bg-/)
+    // bg-transparent, never a paint: the stream shows through.
+    expect(container.firstElementChild).toHaveClass('bg-transparent')
     expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
   })
 })
