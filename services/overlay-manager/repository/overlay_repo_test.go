@@ -581,6 +581,11 @@ func TestOverlayRepository_OverlayTypeRoundTrip(t *testing.T) {
 		assert.Equal(t, models.OverlayTypeChat, fetched.OverlayType)
 	})
 
+	// The listing subtest needs its own user: ListByUserID sees every overlay
+	// the user owns, so a kind created by an earlier subtest (the legacy chat
+	// overlay below) would collide with the same kind in the created map.
+	typedUserID := uuid.New().String()
+
 	t.Run("each supported type persists and reads back", func(t *testing.T) {
 		created := map[string]string{}
 		for _, overlayType := range []string{
@@ -590,7 +595,7 @@ func TestOverlayRepository_OverlayTypeRoundTrip(t *testing.T) {
 			models.OverlayTypeList,
 		} {
 			overlay := &models.Overlay{
-				UserID:      userID,
+				UserID:      typedUserID,
 				Name:        "Typed " + overlayType,
 				OverlayType: overlayType,
 			}
@@ -598,7 +603,7 @@ func TestOverlayRepository_OverlayTypeRoundTrip(t *testing.T) {
 			created[overlayType] = overlay.ID
 		}
 
-		listed, err := repo.ListByUserID(ctx, userID)
+		listed, err := repo.ListByUserID(ctx, typedUserID)
 		require.NoError(t, err)
 		byType := map[string]string{}
 		for _, overlay := range listed {
@@ -607,7 +612,7 @@ func TestOverlayRepository_OverlayTypeRoundTrip(t *testing.T) {
 		assert.Equal(t, created, byType, "ListByUserID must return the kind of every overlay")
 
 		for overlayType, id := range created {
-			ownerFetched, err := repo.GetByIDAndUserID(ctx, id, userID)
+			ownerFetched, err := repo.GetByIDAndUserID(ctx, id, typedUserID)
 			require.NoError(t, err)
 			assert.Equal(t, overlayType, ownerFetched.OverlayType)
 		}
