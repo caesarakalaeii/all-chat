@@ -509,6 +509,21 @@ func (h *SourcesHandler) annotateParkedDiscovery(ctx context.Context, sources []
 	}
 }
 
+// rejectNonChatOverlay writes the 400 that keeps chat sources off
+// alerts/goal/list overlays (ADR-0064): their pipelines have nothing that
+// reads a chat source, so an attached row would be inert data that still
+// shows up in admin listings and source counts. Returns true when the
+// request was rejected, so callers can `return`.
+func (h *SourcesHandler) rejectNonChatOverlay(c *gin.Context, overlay *models.Overlay) bool {
+	if overlay.Kind() == models.OverlayTypeChat {
+		return false
+	}
+	c.JSON(http.StatusBadRequest, gin.H{
+		"error": fmt.Sprintf("chat sources can only be added to chat overlays, but this overlay is of type '%s'", overlay.Kind()),
+	})
+	return true
+}
+
 // HandleAddSource handles POST /:id/sources
 func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 	// Get user ID from context
@@ -527,13 +542,7 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 		return
 	}
 
-	// Chat sources are the chat overlay's pipeline: an alerts/goal/list overlay
-	// (ADR-0064) has nothing that reads them, so the row would be inert data
-	// that still shows up in admin listings and source counts.
-	if overlay.Kind() != models.OverlayTypeChat {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": fmt.Sprintf("chat sources can only be added to chat overlays, but this overlay is of type '%s'", overlay.Kind()),
-		})
+	if h.rejectNonChatOverlay(c, overlay) {
 		return
 	}
 
@@ -887,12 +896,7 @@ func (h *SourcesHandler) HandleAddSourceAuto(c *gin.Context) {
 		return
 	}
 
-	// Same chat-only gate as the manual route: the OAuth callback must not
-	// strand a chat source on an alerts/goal/list overlay either.
-	if overlay.Kind() != models.OverlayTypeChat {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": fmt.Sprintf("chat sources can only be added to chat overlays, but this overlay is of type '%s'", overlay.Kind()),
-		})
+	if h.rejectNonChatOverlay(c, overlay) {
 		return
 	}
 
