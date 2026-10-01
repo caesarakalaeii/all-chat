@@ -107,8 +107,8 @@ type mockStore struct {
 	removedKeys []string
 	removeErr   error
 
-	presignedKey   string
-	presignExpiry  time.Duration
+	presignedKey  string
+	presignExpiry time.Duration
 }
 
 func (m *mockStore) Available() bool { return m.available }

@@ -26,7 +26,7 @@ import "time"
 type MediaObject struct {
 	ID          string    `json:"id"`
 	UserID      string    `json:"user_id"`
-	ObjectKey    string    `json:"object_key"`
+	ObjectKey   string    `json:"object_key"`
 	Filename    string    `json:"filename"`
 	ContentType string    `json:"content_type"`
 	SizeBytes   int64     `json:"size_bytes"`

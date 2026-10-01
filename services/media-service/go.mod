@@ -4,6 +4,7 @@ go 1.25.6
 
 require (
 	github.com/gin-gonic/gin v1.12.0
+	github.com/google/uuid v1.6.0
 	github.com/stretchr/testify v1.12.1
 	go.uber.org/zap v1.28.0
 )
