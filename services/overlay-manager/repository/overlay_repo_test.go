@@ -66,6 +66,7 @@ func setupTestDatabase(t *testing.T) (*OverlayRepository, func()) {
 			description TEXT,
 			is_active BOOLEAN DEFAULT TRUE,
 			is_public_for_viewers BOOLEAN NOT NULL DEFAULT false,
+			overlay_type VARCHAR(20) NOT NULL DEFAULT 'chat',
 			created_at TIMESTAMP DEFAULT NOW(),
 			updated_at TIMESTAMP DEFAULT NOW()
 		);
@@ -559,4 +560,97 @@ func TestOverlayRepository_GetByIDAndUserID(t *testing.T) {
 			}
 		})
 	}
+}
+
+// The overlay_type column (ADR-0064) must round-trip through every read the
+// repo offers, and an overlay created without a kind must read back as chat —
+// that is what every pre-existing overlay resolves to.
+func TestOverlayRepository_OverlayTypeRoundTrip(t *testing.T) {
+	repo, cleanup := setupTestDatabase(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	userID := uuid.New().String()
+
+	t.Run("absent type persists as chat", func(t *testing.T) {
+		overlay := &models.Overlay{UserID: userID, Name: "Legacy Shape"}
+		require.NoError(t, repo.Create(ctx, overlay))
+
+		fetched, err := repo.GetByID(ctx, overlay.ID)
+		require.NoError(t, err)
+		assert.Equal(t, models.OverlayTypeChat, fetched.OverlayType)
+	})
+
+	// The listing subtest needs its own user: ListByUserID sees every overlay
+	// the user owns, so a kind created by an earlier subtest (the legacy chat
+	// overlay below) would collide with the same kind in the created map.
+	typedUserID := uuid.New().String()
+
+	t.Run("each supported type persists and reads back", func(t *testing.T) {
+		created := map[string]string{}
+		for _, overlayType := range []string{
+			models.OverlayTypeChat,
+			models.OverlayTypeAlerts,
+			models.OverlayTypeGoal,
+			models.OverlayTypeList,
+		} {
+			overlay := &models.Overlay{
+				UserID:      typedUserID,
+				Name:        "Typed " + overlayType,
+				OverlayType: overlayType,
+			}
+			require.NoError(t, repo.Create(ctx, overlay))
+			created[overlayType] = overlay.ID
+		}
+
+		listed, err := repo.ListByUserID(ctx, typedUserID)
+		require.NoError(t, err)
+		byType := map[string]string{}
+		for _, overlay := range listed {
+			byType[overlay.OverlayType] = overlay.ID
+		}
+		assert.Equal(t, created, byType, "ListByUserID must return the kind of every overlay")
+
+		for overlayType, id := range created {
+			ownerFetched, err := repo.GetByIDAndUserID(ctx, id, typedUserID)
+			require.NoError(t, err)
+			assert.Equal(t, overlayType, ownerFetched.OverlayType)
+		}
+	})
+
+	t.Run("Update keeps the kind", func(t *testing.T) {
+		overlay := &models.Overlay{
+			UserID:      userID,
+			Name:        "Goal Overlay",
+			OverlayType: models.OverlayTypeGoal,
+		}
+		require.NoError(t, repo.Create(ctx, overlay))
+
+		overlay.Name = "Renamed Goal Overlay"
+		require.NoError(t, repo.Update(ctx, overlay))
+
+		fetched, err := repo.GetByID(ctx, overlay.ID)
+		require.NoError(t, err)
+		assert.Equal(t, models.OverlayTypeGoal, fetched.OverlayType)
+		assert.Equal(t, "Renamed Goal Overlay", fetched.Name)
+	})
+
+	t.Run("admin owner-join query carries the kind", func(t *testing.T) {
+		overlay := &models.Overlay{
+			UserID:      userID,
+			Name:        "Alerts Overlay",
+			OverlayType: models.OverlayTypeAlerts,
+		}
+		require.NoError(t, repo.Create(ctx, overlay))
+
+		all, err := repo.GetAllOverlaysWithSourceCount(ctx)
+		require.NoError(t, err)
+		for _, o := range all {
+			if o.ID == overlay.ID {
+				assert.Equal(t, models.OverlayTypeAlerts, o.OverlayType)
+				return
+			}
+		}
+		t.Fatal("created overlay missing from GetAllOverlaysWithSourceCount")
+	})
 }

@@ -17,22 +17,38 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 
+	"github.com/caesar/all-chat/services/overlay-manager/models"
 	"github.com/caesar/all-chat/services/overlay-manager/repository"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
 
+// adminOverlayStore and adminSourceStore are the narrow slices of the
+// repositories the admin read endpoints use. Interfaces rather than the
+// concrete types keep the handler testable without a database, the same way
+// every other handler in this package takes its repositories.
+type adminOverlayStore interface {
+	GetAllOverlaysWithSourceCount(ctx context.Context) ([]*repository.OverlayWithSourceCount, error)
+	ListByUserIDWithSourceCount(ctx context.Context, userID string) ([]*repository.OverlayWithSourceCount, error)
+}
+
+type adminSourceStore interface {
+	GetAllSourcesWithOverlay(ctx context.Context) ([]*repository.SourceWithOverlay, error)
+	ListByOverlayID(ctx context.Context, overlayID string) ([]*models.ChatSource, error)
+}
+
 // AdminHandler handles admin-specific endpoints
 type AdminHandler struct {
-	overlayRepo *repository.OverlayRepository
-	sourceRepo  *repository.SourceRepository
+	overlayRepo adminOverlayStore
+	sourceRepo  adminSourceStore
 	logger      *zap.Logger
 }
 
 // NewAdminHandler creates a new admin handler
-func NewAdminHandler(overlayRepo *repository.OverlayRepository, sourceRepo *repository.SourceRepository, logger *zap.Logger) *AdminHandler {
+func NewAdminHandler(overlayRepo adminOverlayStore, sourceRepo adminSourceStore, logger *zap.Logger) *AdminHandler {
 	return &AdminHandler{
 		overlayRepo: overlayRepo,
 		sourceRepo:  sourceRepo,
@@ -55,6 +71,7 @@ func (h *AdminHandler) ListOverlays(c *gin.Context) {
 	type OverlayResponse struct {
 		ID               string `json:"id"`
 		Name             string `json:"name"`
+		OverlayType      string `json:"overlay_type"`
 		UserID           string `json:"user_id"`
 		OwnerUsername    string `json:"owner_username"`
 		OwnerDisplayName string `json:"owner_display_name"`
@@ -64,10 +81,14 @@ func (h *AdminHandler) ListOverlays(c *gin.Context) {
 	}
 
 	response := make([]OverlayResponse, len(overlays))
+
+	// Kind() resolves an absent type to chat, matching every other response
+	// path; the column is NOT NULL so this only matters for pre-column rows.
 	for i, overlay := range overlays {
 		response[i] = OverlayResponse{
 			ID:               overlay.ID,
 			Name:             overlay.Name,
+			OverlayType:      overlay.Kind(),
 			UserID:           overlay.UserID,
 			OwnerUsername:    overlay.OwnerUsername,
 			OwnerDisplayName: overlay.OwnerDisplayName,
@@ -148,6 +169,7 @@ func (h *AdminHandler) GetUserOverlays(c *gin.Context) {
 	type OverlayResponse struct {
 		ID               string `json:"id"`
 		Name             string `json:"name"`
+		OverlayType      string `json:"overlay_type"`
 		UserID           string `json:"user_id"`
 		OwnerUsername    string `json:"owner_username"`
 		OwnerDisplayName string `json:"owner_display_name"`
@@ -161,6 +183,7 @@ func (h *AdminHandler) GetUserOverlays(c *gin.Context) {
 		response[i] = OverlayResponse{
 			ID:               overlay.ID,
 			Name:             overlay.Name,
+			OverlayType:      overlay.Kind(),
 			UserID:           overlay.UserID,
 			OwnerUsername:    overlay.OwnerUsername,
 			OwnerDisplayName: overlay.OwnerDisplayName,
