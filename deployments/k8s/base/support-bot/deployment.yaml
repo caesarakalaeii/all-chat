@@ -96,7 +96,7 @@ spec:
             - name: LOCAL_LLM_BASE_URL
               value: "https://coding-gateway.tools.sipgate.net"
             - name: LOCAL_LLM_MODEL
-              value: "zai-org/GLM-5.3-verda"
+              value: "XiaomiMiMo/MiMo-V2.6-Pro-verda"
             - name: LOCAL_LLM_API_KEY
               valueFrom:
                 secretKeyRef:
