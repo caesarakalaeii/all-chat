@@ -32,6 +32,7 @@ import (
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/middleware"
+	"github.com/caesar/all-chat/shared/tracing"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
@@ -231,4 +232,10 @@ func getEnv(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+// tracingConfigFromEnv is a stub: it ignores the environment. The
+// implementation lands in the next commit.
+func tracingConfigFromEnv() tracing.Config {
+	return tracing.Config{}
 }
