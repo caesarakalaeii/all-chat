@@ -27,8 +27,7 @@ import (
 
 // ttEmoteEntry mirrors the emote_data tag entries the tiktok-listener
 // serializes from a chat payload's native emotes (the same shape as the
-// YouTube listener's EmoteEntry). Duplicated here to avoid coupling services
-// via a shared module.
+// YouTube listener's EmoteEntry).
 type ttEmoteEntry struct {
 	Code string `json:"code"` // visible token in the message text, e.g. "[laughcry]"
 	URL  string `json:"url"`
