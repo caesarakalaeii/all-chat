@@ -29,6 +29,7 @@ import (
 	"github.com/caesar/all-chat/services/media-service/storage"
 	sharedauth "github.com/caesar/all-chat/shared/auth"
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -132,19 +133,26 @@ func mintUserToken(t *testing.T, kid, secret string) string {
 	return token
 }
 
-// newTestRouter wires the media routes exactly as main() does — through
-// registerMediaRoutes, not a parallel router — over an in-memory registry and
-// the given object store.
-func newTestRouter(t *testing.T, kc *sharedauth.KeyChain, store handlers.ObjectStore) (*gin.Engine, *fakeRegistry) {
-	t.Helper()
-	gin.SetMode(gin.TestMode)
-	registry := &fakeRegistry{objects: []models.MediaObject{{
+// newRouteRegistry is the seeded in-memory registry the wiring tests run
+// against: one owned object for routeUserID, enough for the delete route to
+// have something to delete.
+func newRouteRegistry() *fakeRegistry {
+	return &fakeRegistry{objects: []models.MediaObject{{
 		UserID:      routeUserID,
 		ObjectKey:   routeSeededKey,
 		Filename:    "horn.mp3",
 		ContentType: "audio/mpeg",
 		SizeBytes:   12345,
 	}}}
+}
+
+// newTestRouter wires the media routes exactly as main() does — through
+// registerMediaRoutes, not a parallel router — over an in-memory registry and
+// the given object store.
+func newTestRouter(t *testing.T, kc *sharedauth.KeyChain, store handlers.ObjectStore) (*gin.Engine, *fakeRegistry) {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	registry := newRouteRegistry()
 	router := gin.New()
 	registerMediaRoutes(router, kc, nil,
 		handlers.NewMediaHandler(registry, store, routeMediaConfig, zap.NewNop()))
@@ -171,6 +179,26 @@ var mediaRouteCases = []struct {
 	{"presign", http.MethodPost, "/api/v1/media/presign", routePresignBody},
 	{"list", http.MethodGet, "/api/v1/media", ""},
 	{"delete", http.MethodDelete, "/api/v1/media/" + routeSeededKey, ""},
+}
+
+// mediaRouteSuccessCases pairs each registered route with the success answer
+// its handler must produce. A router missing the JWT guard answers 401 on
+// these (no user_id reaches the handler) and a router missing the route
+// answers 404, so hitting these answers is the accept-side discriminator.
+var mediaRouteSuccessCases = []struct {
+	name       string
+	method     string
+	path       string
+	body       string
+	wantStatus int
+	wantBody   string
+}{
+	{"presign", http.MethodPost, "/api/v1/media/presign", routePresignBody,
+		http.StatusCreated, `"object_key":"` + routeUserID + "/"},
+	{"list", http.MethodGet, "/api/v1/media", "",
+		http.StatusOK, `"media"`},
+	{"delete", http.MethodDelete, "/api/v1/media/" + routeSeededKey, "",
+		http.StatusOK, `"deleted"`},
 }
 
 func TestRegisterMediaRoutes_RefusesRequestsWithoutAValidJWT(t *testing.T) {
@@ -229,31 +257,54 @@ func TestRegisterMediaRoutes_AuthenticatedRequestsReachHandlers(t *testing.T) {
 	token := mintUserToken(t, kc.LatestKid(), string(kc.LatestSecret()))
 	router, _ := newTestRouter(t, kc, &fakeStore{})
 
-	// Each expectation is the registered handler's success answer. A router
-	// missing the JWT guard answers 401 here (no user_id reaches the handler),
-	// a router missing a route answers 404, and a router missing RequireStore
-	// fails the 503 cases above.
-	cases := []struct {
-		name       string
-		method     string
-		path       string
-		body       string
-		wantStatus int
-		wantBody   string
-	}{
-		{"presign", http.MethodPost, "/api/v1/media/presign", routePresignBody,
-			http.StatusCreated, `"object_key":"` + routeUserID + "/"},
-		{"list", http.MethodGet, "/api/v1/media", "",
-			http.StatusOK, `"media"`},
-		{"delete", http.MethodDelete, "/api/v1/media/" + routeSeededKey, "",
-			http.StatusOK, `"deleted"`},
-	}
-
-	for _, tc := range cases {
+	for _, tc := range mediaRouteSuccessCases {
 		t.Run(tc.name, func(t *testing.T) {
 			w := doRouteRequest(router, tc.method, tc.path, "Bearer "+token, tc.body)
 
 			assert.Equal(t, tc.wantStatus, w.Code)
+			assert.Contains(t, w.Body.String(), tc.wantBody)
+		})
+	}
+}
+
+// TestRegisterMediaRoutes_TypedNilRevocationClientDegradesToFailOpen pins the
+// shape main() built when Redis was unreachable at startup: after
+// `redisClient = nil`, the nil *redis.Client was handed to registerMediaRoutes
+// as a redis.UniversalClient — a NON-nil interface wrapping a nil pointer (the
+// classic Go typed-nil trap). shared/middleware's `rdb != nil` "is a
+// revocation client wired?" guard therefore passed and its first rdb.Exists
+// call nil-dereferenced, which gin.Recovery turned into a 500 on every media
+// route for as long as Redis stayed down — the exact opposite of the
+// documented degradation ("a Redis outage cannot lock users out of media
+// management"). Reproduced against go-redis v9.22.0.
+//
+// The untyped `nil` literal the other wiring tests pass is the safe shape and
+// cannot catch this; this test feeds the unsafe one.
+func TestRegisterMediaRoutes_TypedNilRevocationClientDegradesToFailOpen(t *testing.T) {
+	kc := newTestKeyChain(t)
+	token := mintUserToken(t, kc.LatestKid(), string(kc.LatestSecret()))
+
+	var nilClient *redis.Client
+	var revocationClient redis.UniversalClient = nilClient
+	// Plain comparison on purpose: testify's Nil matcher treats a typed nil as
+	// nil and would accept either shape, so it cannot guard this setup.
+	if revocationClient == nil {
+		t.Fatal("test setup: expected a typed-nil box, which does not compare == nil")
+	}
+
+	// Mirror main()'s router (gin.New + gin.Recovery) so the defect surfaces as
+	// the 500 production serves rather than a panic that kills the test run.
+	router := gin.New()
+	router.Use(gin.Recovery())
+	registerMediaRoutes(router, kc, revocationClient,
+		handlers.NewMediaHandler(newRouteRegistry(), &fakeStore{}, routeMediaConfig, zap.NewNop()))
+
+	for _, tc := range mediaRouteSuccessCases {
+		t.Run(tc.name, func(t *testing.T) {
+			w := doRouteRequest(router, tc.method, tc.path, "Bearer "+token, tc.body)
+
+			assert.Equal(t, tc.wantStatus, w.Code,
+				"an unusable revocation client must degrade to fail-open (skip the blacklist), not 500 every media request")
 			assert.Contains(t, w.Body.String(), tc.wantBody)
 		})
 	}
