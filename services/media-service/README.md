@@ -24,11 +24,13 @@ All require a user JWT; `user_id` is resolved from the token, never from the req
 `object_key` is `{user_id}/{uuid}/{filename}`: the random uuid segment makes public-read URLs
 unguessable (ADR-0064), and the user_id prefix scopes the delete's owner check. The filename is
 reduced to its bare base name before it reaches the key, so no path component can travel through
-it.
+it, and a base of `.` or `..` is rejected outright (URL clients normalize dot segments away, so
+such a key could be neither played nor deleted).
 
 `upload_url` is a presigned PUT valid for `MEDIA_PRESIGN_EXPIRY` (default 5 minutes); the client
 performs the upload with it directly against MinIO. `public_url` is `MEDIA_PUBLIC_URL` + `/` +
-`object_key` — the URL an alert (or the frontend) plays.
+the key with each segment percent-escaped (`#`, `?`, `%` and friends in a filename stay raw in the
+key but must be escaped in the URL) — the URL an alert (or the frontend) plays.
 
 ### Validation and quota
 

@@ -22,6 +22,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"path"
 	"strings"
 	"time"
@@ -277,8 +278,17 @@ func sanitizeFilename(raw string) (string, error) {
 		return "", fmt.Errorf("filename is required")
 	}
 	filename = path.Base(filename)
-	if filename == "." || filename == "/" || filename == `\` {
+	if filename == "/" || filename == `\` {
 		return "", fmt.Errorf("filename is required")
+	}
+	// "." and ".." are dot path segments, not names: every URL client
+	// normalizes them away before sending, so a key ending in one could be
+	// neither played through public_url nor deleted through the route.
+	// Percent-escaping cannot rescue them either — "%2e%2e" normalizes the
+	// same way — so reject the degenerate name instead of registering an
+	// unreachable object. Names merely containing dots stay legal.
+	if filename == "." || filename == ".." {
+		return "", fmt.Errorf("filename must be a name, not a path segment")
 	}
 	if len(filename) > maxFilenameLength {
 		return "", fmt.Errorf("filename exceeds %d characters", maxFilenameLength)
@@ -286,6 +296,17 @@ func sanitizeFilename(raw string) (string, error) {
 	return filename, nil
 }
 
+// publicURL builds the play URL for an object key. Each key segment is
+// percent-escaped: the key itself stays raw in MinIO and in the registry,
+// but a raw "#" or "?" in a URL truncates it into a fragment or query
+// string and a bare "%" is an invalid escape, so the advertised URL would
+// miss the object it names even though the upload succeeded. S3 decodes the
+// request path back to the raw key, so the escaped URL addresses the
+// uploaded object.
 func (h *MediaHandler) publicURL(objectKey string) string {
-	return strings.TrimSuffix(h.cfg.PublicBaseURL, "/") + "/" + objectKey
+	segments := strings.Split(objectKey, "/")
+	for i, segment := range segments {
+		segments[i] = url.PathEscape(segment)
+	}
+	return strings.TrimSuffix(h.cfg.PublicBaseURL, "/") + "/" + strings.Join(segments, "/")
 }
