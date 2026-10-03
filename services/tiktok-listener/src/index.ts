@@ -93,6 +93,7 @@ import { fallbackPromotionAvailable, pickSignClients } from './sign/sign-clients
 import type { PureNodeSigner } from './sign/pure-node.js';
 import type { SelfSigner } from './sign/self.js';
 import { pickAvatarUrl, tiktokAvatarUrl } from './avatar.js';
+import { serializeEmoteData } from './emotes.js';
 import {
   hasTikTokChestPayload,
   isTikTokCoinChest,
@@ -362,11 +363,23 @@ interface TikTokCommon {
   displayText?: TikTokDisplayText;
 }
 
+// One native emote embedded in the chat text (v3 proto `EmoteWithIndex`;
+// older schemas called the start offset `placeInComment`). The visible token
+// in `content` is recovered from this index — see ./emotes.
+interface TikTokChatEmote {
+  index?: number; // start of the emote's "[token]" in `content`
+  emote?: {
+    emoteId?: string;
+    image?: TikTokImageModel;
+  };
+}
+
 interface TikTokChatData {
   common?: TikTokCommon;
   user?: TikTokUser;
   userIdentity?: TikTokUserIdentity;
   content?: string; // message text (was `comment`)
+  emotes?: TikTokChatEmote[]; // native emotes embedded as "[token]" in content
 }
 
 interface TikTokGift {
@@ -1928,6 +1941,13 @@ class TikTokListenerService {
       // already prevents the heartbeat timeout that grows a streak.
       this.heartbeatMonitor.noteSilentFailureHealing(username);
 
+      // Native TikTok emotes ride to the pipeline as a serialized emote_data
+      // tag (contract with the message-processor TikTok normalizer, mirroring
+      // the YouTube InnerTube listener). Omitted entirely when the message
+      // carries no extractable emotes, so downstream keeps its empty-slice
+      // behaviour for plain messages.
+      const emoteData = serializeEmoteData(text, data.emotes);
+
       // Create raw message in standardized format
       const rawMessage: RawChatMessage = {
         message_id: msgId || randomUUID(), // Use TikTok's msgId, fallback to UUID
@@ -1949,6 +1969,10 @@ class TikTokListenerService {
           native_create_time: createTime || '' // Store native timestamp for reference
         }
       };
+
+      if (emoteData !== undefined) {
+        rawMessage.tags.emote_data = emoteData;
+      }
 
       // Publish to Redis Stream (MAXLEN ~100000 keeps stream bounded)
       await this.redis.xAdd('chat:raw', '*', {
