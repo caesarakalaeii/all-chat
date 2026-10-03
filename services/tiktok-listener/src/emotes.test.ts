@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { serializeEmoteData } from './emotes.js';
+import { emote_dataTag, serializeEmoteData } from './emotes.js';
 
 const WAVE_URL = 'https://tt.emote/i/wave.png';
 const LAUGHCRY_URL = 'https://tt.emote/i/laughcry.png';
@@ -144,5 +144,33 @@ describe('serializeEmoteData', () => {
     expect(
       serializeEmoteData('hey [wave]!', [{ index: 4, emote: undefined }])
     ).toBeUndefined();
+  });
+});
+
+describe('emote_dataTag', () => {
+  it('lands the emote_data tag on the message tags from the payload emotes', () => {
+    // Assembled the way handleChatMessage builds a raw message's tags.
+    const tags = {
+      overlay_id: 'ov1',
+      user_unique_id: 'user1',
+      ...emote_dataTag('hey [laughcry]!', [
+        { index: 4, emote: { emoteId: '7123', image: { urlList: [LAUGHCRY_URL] } } },
+      ]),
+    };
+
+    // Exact string: this tag is the wire contract with the message-processor
+    // TikTok normalizer (same shape as the YouTube listener's emote_data).
+    expect(tags.emote_data).toBe(
+      `[{"code":"[laughcry]","url":"${LAUGHCRY_URL}","id":"7123"}]`
+    );
+  });
+
+  it('omits the emote_data tag when the message carries no emotes', () => {
+    const tags = {
+      overlay_id: 'ov1',
+      ...emote_dataTag('hello world', []),
+    };
+
+    expect(tags).toEqual({ overlay_id: 'ov1' });
   });
 });
