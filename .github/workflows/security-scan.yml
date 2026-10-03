@@ -52,6 +52,7 @@ jobs:
           - services/youtube-listener-innertube
           - services/youtube-quota-monitor
           - services/support-bot
+          - services/media-service
           # Shared modules
           - shared
           - shared/ratelimit
