@@ -149,14 +149,14 @@ func newRouteRegistry() *fakeRegistry {
 // newTestRouter wires the media routes exactly as main() does — through
 // registerMediaRoutes, not a parallel router — over an in-memory registry and
 // the given object store.
-func newTestRouter(t *testing.T, kc *sharedauth.KeyChain, store handlers.ObjectStore) (*gin.Engine, *fakeRegistry) {
+func newTestRouter(t *testing.T, kc *sharedauth.KeyChain, store handlers.ObjectStore) *gin.Engine {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	registry := newRouteRegistry()
 	router := gin.New()
 	registerMediaRoutes(router, kc, nil,
 		handlers.NewMediaHandler(registry, store, routeMediaConfig, zap.NewNop()))
-	return router, registry
+	return router
 }
 
 func doRouteRequest(router *gin.Engine, method, path, authHeader, body string) *httptest.ResponseRecorder {
@@ -203,7 +203,7 @@ var mediaRouteSuccessCases = []struct {
 
 func TestRegisterMediaRoutes_RefusesRequestsWithoutAValidJWT(t *testing.T) {
 	kc := newTestKeyChain(t)
-	router, _ := newTestRouter(t, kc, &fakeStore{})
+	router := newTestRouter(t, kc, &fakeStore{})
 
 	// Signed with the right shape but a secret the key chain does not hold:
 	// must be refused like a garbage token, not admitted as some user.
@@ -239,7 +239,7 @@ func TestRegisterMediaRoutes_GatesMediaRoutesOnObjectStore(t *testing.T) {
 	token := mintUserToken(t, kc.LatestKid(), string(kc.LatestSecret()))
 	// storage.DisabledStore is exactly what main() serves with MINIO_ENDPOINT
 	// unset; every media route must answer 503 through RequireStore.
-	router, _ := newTestRouter(t, kc, storage.DisabledStore{})
+	router := newTestRouter(t, kc, storage.DisabledStore{})
 
 	for _, route := range mediaRouteCases {
 		t.Run(route.name, func(t *testing.T) {
@@ -255,7 +255,7 @@ func TestRegisterMediaRoutes_GatesMediaRoutesOnObjectStore(t *testing.T) {
 func TestRegisterMediaRoutes_AuthenticatedRequestsReachHandlers(t *testing.T) {
 	kc := newTestKeyChain(t)
 	token := mintUserToken(t, kc.LatestKid(), string(kc.LatestSecret()))
-	router, _ := newTestRouter(t, kc, &fakeStore{})
+	router := newTestRouter(t, kc, &fakeStore{})
 
 	for _, tc := range mediaRouteSuccessCases {
 		t.Run(tc.name, func(t *testing.T) {

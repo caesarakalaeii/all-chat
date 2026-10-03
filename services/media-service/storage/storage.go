@@ -45,7 +45,6 @@ const (
 	defaultBaseURL = "https://media.allch.at"
 )
 
-// Config is the media-service storage configuration, from the environment.
 type Config struct {
 	Endpoint          string
 	AccessKey         string

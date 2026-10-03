@@ -81,7 +81,6 @@ type MediaConfig struct {
 	MaxObjectsPerUser int
 }
 
-// MediaHandler serves the /media routes.
 type MediaHandler struct {
 	registry MediaRegistry
 	store    ObjectStore
