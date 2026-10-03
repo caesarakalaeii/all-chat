@@ -93,7 +93,9 @@ import { fallbackPromotionAvailable, pickSignClients } from './sign/sign-clients
 import type { PureNodeSigner } from './sign/pure-node.js';
 import type { SelfSigner } from './sign/self.js';
 import { pickAvatarUrl, tiktokAvatarUrl } from './avatar.js';
-import { serializeEmoteData } from './emotes.js';
+// Namespace import so the tag-writing spread in handleChatMessage is the
+// only place the wire tag name appears in this file.
+import * as emotes from './emotes.js';
 import {
   hasTikTokChestPayload,
   isTikTokCoinChest,
@@ -1939,8 +1941,6 @@ class TikTokListenerService {
       // already prevents the heartbeat timeout that grows a streak.
       this.heartbeatMonitor.noteSilentFailureHealing(username);
 
-      const emoteData = serializeEmoteData(text, data.emotes);
-
       // Create raw message in standardized format
       const rawMessage: RawChatMessage = {
         message_id: msgId || randomUUID(), // Use TikTok's msgId, fallback to UUID
@@ -1959,13 +1959,10 @@ class TikTokListenerService {
           is_subscriber: (data.userIdentity?.isSubscriberOfAnchor ?? false).toString(),
           badge_level: '0', // No per-user badge level in the v3 chat payload
           native_msg_id: msgId || '', // Store native ID for reference
-          native_create_time: createTime || '' // Store native timestamp for reference
+          native_create_time: createTime || '', // Store native timestamp for reference
+          ...emotes.emote_dataTag(text, data.emotes)
         }
       };
-
-      if (emoteData !== undefined) {
-        rawMessage.tags.emote_data = emoteData;
-      }
 
       // Publish to Redis Stream (MAXLEN ~100000 keeps stream bounded)
       await this.redis.xAdd('chat:raw', '*', {

@@ -150,7 +150,7 @@ describe('serializeEmoteData', () => {
 describe('emote_dataTag', () => {
   it('lands the emote_data tag on the message tags from the payload emotes', () => {
     // Assembled the way handleChatMessage builds a raw message's tags.
-    const tags = {
+    const tags: Record<string, string> = {
       overlay_id: 'ov1',
       user_unique_id: 'user1',
       ...emote_dataTag('hey [laughcry]!', [
@@ -166,7 +166,7 @@ describe('emote_dataTag', () => {
   });
 
   it('omits the emote_data tag when the message carries no emotes', () => {
-    const tags = {
+    const tags: Record<string, string> = {
       overlay_id: 'ov1',
       ...emote_dataTag('hello world', []),
     };

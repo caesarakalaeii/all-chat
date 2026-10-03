@@ -86,6 +86,21 @@ export function serializeEmoteData(
 }
 
 /**
+ * The tags-map fragment carrying a message's native emotes: either
+ * `{ emote_data: <json> }` or `{}`, so spreading it into a message's tags
+ * omits the tag entirely for plain messages and downstream keeps its
+ * empty-slice behaviour. The name carries the wire tag name verbatim so the
+ * call site is the one place the contract name appears.
+ */
+export function emote_dataTag(
+  content: string,
+  emotes: TikTokChatEmoteView[] | undefined
+): Record<string, string> {
+  const serialized = serializeEmoteData(content, emotes);
+  return serialized === undefined ? {} : { emote_data: serialized };
+}
+
+/**
  * Recovers the visible token (e.g. "[laughcry]") the emote occupies in the
  * comment text, or null when no single token can be trusted. See the unit
  * caveat in the file header: every plausible unit of `index` is tried and the
