@@ -53,6 +53,7 @@ jobs:
       discord-bot: ${{ steps.changes.outputs.discord-bot }}
       discord-listener: ${{ steps.changes.outputs.discord-listener }}
       support-bot: ${{ steps.changes.outputs.support-bot }}
+      media-service: ${{ steps.changes.outputs.media-service }}
       frontend: ${{ steps.changes.outputs.frontend }}
       shared: ${{ steps.changes.outputs.shared }}
       migrations: ${{ steps.changes.outputs.migrations }}
@@ -130,6 +131,9 @@ jobs:
               - 'shared/**'
             support-bot:
               - 'services/support-bot/**'
+            media-service:
+              - 'services/media-service/**'
+              - 'shared/**'
             frontend:
               - 'frontend/**'
             shared:
@@ -226,6 +230,9 @@ jobs:
           - name: support-bot
             changed: ${{ needs.detect-changes.outputs.support-bot }}
             path: services/support-bot
+          - name: media-service
+            changed: ${{ needs.detect-changes.outputs.media-service }}
+            path: services/media-service
           - name: frontend
             changed: ${{ needs.detect-changes.outputs.frontend }}
             path: frontend
@@ -320,6 +327,7 @@ jobs:
           - payment-service
           - engagement-service
           - discord-listener
+          - media-service
           # Every Go service under services/ belongs here. tiktok-listener is
           # deliberately absent: it is a Node service and has no go.mod. Verify with:
           #   for d in services/*/; do [ -f "$d/go.mod" ] && basename "$d"; done

@@ -550,6 +550,12 @@ When TikTok releases an official Live Chat API:
 - `winston` - Logging
 - `typescript` - Type safety
 
+One transitive dependency is vendored rather than installed from npm:
+`http-cache-semantics`, patched for
+[GHSA-ch52-4w7c-c8xp](https://github.com/advisories/GHSA-ch52-4w7c-c8xp)
+because no fixed release exists. Wiring and drop condition:
+`vendor/http-cache-semantics/README.md`.
+
 ## Docker
 
 See `Dockerfile` for containerization details.
