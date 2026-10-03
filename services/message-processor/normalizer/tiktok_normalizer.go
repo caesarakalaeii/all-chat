@@ -17,12 +17,23 @@
 package normalizer
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/caesar/all-chat/services/message-processor/classifier"
 	"github.com/caesar/all-chat/services/message-processor/models"
 )
+
+// ttEmoteEntry mirrors the emote_data tag entries the tiktok-listener
+// serializes from a chat payload's native emotes (the same shape as the
+// YouTube listener's EmoteEntry). Duplicated here to avoid coupling services
+// via a shared module.
+type ttEmoteEntry struct {
+	Code string `json:"code"` // visible token in the message text, e.g. "[laughcry]"
+	URL  string `json:"url"`  // emote image URL
+	ID   string `json:"id"`   // TikTok emoteId
+}
 
 // TikTokNormalizer normalizes TikTok raw messages to unified format
 // Note: Uses data from unofficial TikTok-Live-Connector library
@@ -46,9 +57,12 @@ func (n *TikTokNormalizer) Normalize(raw *models.RawChatMessage, overlayID strin
 	// Extract user info from tags
 	userInfo := n.extractUserInfo(raw)
 
-	// TikTok native emotes - currently not extracted by unofficial library
-	// This will be populated by the emote enricher
-	emotes := make([]models.Emote, 0)
+	// TikTok native emotes arrive as the emote_data tag the tiktok-listener
+	// serializes from the chat payload's emotes array. They are platform-native
+	// (like Twitch native emotes), so extraction happens here rather than in the
+	// emote enricher, which only resolves third-party emote sets (7TV/BTTV/FFZ/
+	// Twitch global) and would leave TikTok tokens as literal text.
+	emotes := n.extractTTEmotes(raw)
 
 	// Create unified message
 	unified := &models.UnifiedChatMessage{
@@ -67,6 +81,35 @@ func (n *TikTokNormalizer) Normalize(raw *models.RawChatMessage, overlayID strin
 	}
 
 	return unified, nil
+}
+
+// extractTTEmotes parses the emote_data tag from a TikTok chat message into
+// Emote entries. Returns empty slice when tag is absent, empty, or invalid JSON.
+func (n *TikTokNormalizer) extractTTEmotes(raw *models.RawChatMessage) []models.Emote {
+	// Listener serializes one entry per emote occurrence in wire order; the
+	// entries carry no offsets, so spans are found by substring search. That
+	// keeps Positions byte-exact regardless of the unit (bytes, runes or UTF-16
+	// code units) TikTok's emote start index counts, which the listener had to
+	// resolve when it recovered each visible token from the comment text.
+	emoteDataJSON, ok := raw.Tags["emote_data"]
+	if !ok || emoteDataJSON == "" {
+		return []models.Emote{}
+	}
+	var entries []ttEmoteEntry
+	if err := json.Unmarshal([]byte(emoteDataJSON), &entries); err != nil {
+		// Invalid JSON from tag — graceful degradation, no error propagated
+		return []models.Emote{}
+	}
+	emotes := make([]models.Emote, 0, len(entries))
+	for _, e := range entries {
+		emotes = append(emotes, models.Emote{
+			Code:      e.Code,
+			Provider:  "tiktok",
+			URL:       e.URL,
+			Positions: findAllPositions(raw.Text, e.Code),
+		})
+	}
+	return emotes
 }
 
 // extractUserInfo extracts user information from tags
