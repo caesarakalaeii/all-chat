@@ -32,11 +32,11 @@ import (
 // so an upstream model swap needs no manifest edit and no rollout. The pin wins
 // while it is still served; discovery only picks a replacement when it is not.
 //
-// Resolution order:
-//  1. pin set AND listed          -> pin
-//  2. pin set but NOT listed      -> warn, fall through to discovery
-//  3. exactly 1 model             -> it; >1 -> lexicographically smallest, warn
-//  4. list fetch fails            -> pin set: warn, use pin; no pin: error
+// A set pin that the gateway still lists wins outright. A stale pin warns and
+// falls through to whatever the list offers; several candidates settle
+// lexicographically so the pick is deterministic rather than a coin flip of
+// gateway response order, and none is a hard error. When the list cannot be
+// fetched at all a set pin is kept, since the gateway may well still serve it.
 //
 // Only the model id is resolved here; contextWindow/maxTokens stay pinned config.
 func DiscoverModel(ctx context.Context, cfg Config, log *zap.Logger) (string, error) {
