@@ -76,10 +76,8 @@ type ObjectStore interface {
 type MediaConfig struct {
 	// PublicBaseURL is the prefix public URLs are built from
 	// (public_url = PublicBaseURL + "/" + object_key).
-	PublicBaseURL string
-	// PresignExpiry is how long a presigned PUT URL stays valid.
-	PresignExpiry time.Duration
-	// MaxObjectsPerUser is the per-user quota on registered media.
+	PublicBaseURL     string
+	PresignExpiry     time.Duration
 	MaxObjectsPerUser int
 }
 

@@ -128,7 +128,6 @@ func NewMinioStore(cfg Config) (*MinioStore, error) {
 	return &MinioStore{client: client, bucket: cfg.Bucket}, nil
 }
 
-// Available reports whether the store is usable.
 func (s *MinioStore) Available() bool { return s != nil }
 
 // PresignPut returns a presigned PUT URL for objectKey, valid for expiry.
@@ -142,7 +141,6 @@ func (s *MinioStore) PresignPut(ctx context.Context, objectKey string, expiry ti
 	return url.String(), nil
 }
 
-// Remove deletes objectKey from the bucket.
 func (s *MinioStore) Remove(ctx context.Context, objectKey string) error {
 	if err := s.client.RemoveObject(ctx, s.bucket, objectKey, minio.RemoveObjectOptions{}); err != nil {
 		return fmt.Errorf("remove %s/%s: %w", s.bucket, objectKey, err)
@@ -154,7 +152,6 @@ func (s *MinioStore) Remove(ctx context.Context, objectKey string) error {
 // through it.
 type DisabledStore struct{}
 
-// Available reports whether the store is usable.
 func (s DisabledStore) Available() bool { return false }
 
 // PresignPut always fails: there is no bucket to upload to.

@@ -58,8 +58,7 @@ type fakeQuerier struct {
 
 	row fakeRow
 
-	rows     fakeRows
-	queryErr error
+	rows fakeRows
 }
 
 func (f *fakeQuerier) Exec(_ context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
@@ -74,9 +73,6 @@ func (f *fakeQuerier) QueryRow(_ context.Context, sql string, args ...any) pgx.R
 
 func (f *fakeQuerier) Query(_ context.Context, sql string, args ...any) (pgx.Rows, error) {
 	f.queries = append(f.queries, recordedQuery{sql: sql, args: args})
-	if f.queryErr != nil {
-		return nil, f.queryErr
-	}
 	return &f.rows, nil
 }
 

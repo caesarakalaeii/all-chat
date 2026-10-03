@@ -84,7 +84,6 @@ func (r *MediaRepository) CountByUser(ctx context.Context, userID string) (int, 
 	return count, nil
 }
 
-// ListByUser returns the user's registered media, newest first.
 func (r *MediaRepository) ListByUser(ctx context.Context, userID string) ([]models.MediaObject, error) {
 	query := `
 		SELECT id, user_id, object_key, filename, content_type, size_bytes, created_at

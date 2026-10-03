@@ -216,7 +216,6 @@ func main() {
 	log.Info("Server exited")
 }
 
-// Config holds application configuration
 type Config struct {
 	Port             string
 	GinMode          string
@@ -227,7 +226,6 @@ type Config struct {
 	DatabaseName     string
 }
 
-// loadConfig loads configuration from environment variables
 func loadConfig() *Config {
 	return &Config{
 		Port:             getEnv("PORT", "8094"), // Media service port
@@ -240,7 +238,6 @@ func loadConfig() *Config {
 	}
 }
 
-// getEnv gets an environment variable with a default value
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
