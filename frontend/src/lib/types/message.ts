@@ -182,7 +182,7 @@ export interface MessageInfo {
 
 export interface Emote {
   code: string
-  provider: 'twitch' | '7tv' | 'bttv' | 'ffz' | 'youtube' | 'discord'
+  provider: 'twitch' | '7tv' | 'bttv' | 'ffz' | 'youtube' | 'discord' | 'tiktok'
   url: string
   positions: number[][]
 }
