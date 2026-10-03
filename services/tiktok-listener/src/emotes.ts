@@ -59,8 +59,8 @@ export interface TikTokChatEmoteView {
 /** One entry of the emote_data tag (mirrors the YouTube listener's shape). */
 interface EmoteDataEntry {
   code: string; // visible token in the comment, e.g. "[laughcry]"
-  url: string; // emote image URL
-  id: string; // TikTok emoteId
+  url: string;
+  id: string;
 }
 
 /**
@@ -126,7 +126,6 @@ function candidateOffsets(content: string, index: number): number[] {
   return offsets.filter((offset): offset is number => offset !== null);
 }
 
-/** Maps a count of `unit`s from the start of the text to a JS string offset. */
 function offsetForUnit(
   content: string,
   index: number,
@@ -144,7 +143,6 @@ function offsetForUnit(
   return count === index ? content.length : null;
 }
 
-/** Length of a code point when encoded as UTF-8. */
 function utf8Length(point: number): number {
   if (point < 0x80) return 1;
   if (point < 0x800) return 2;
@@ -152,10 +150,6 @@ function utf8Length(point: number): number {
   return 4;
 }
 
-/**
- * The emote token at `offset`: a bracketed run "[...]" with a non-empty name.
- * Returns null when the offset does not start a well-formed token.
- */
 function bracketedTokenAt(content: string, offset: number): string | null {
   if (content[offset] !== '[') {
     return null;
@@ -168,9 +162,8 @@ function bracketedTokenAt(content: string, offset: number): string | null {
 }
 
 /**
- * The emote image URL: the first usable entry of the image model's urlList.
  * Empty strings are skipped (mirroring pickAvatarUrl) so a malformed entry
- * cannot suppress a usable one. Returns '' when the model carries none.
+ * cannot suppress a usable one.
  */
 function firstImageUrl(image: { urlList?: string[] } | undefined): string {
   return image?.urlList?.find((url) => typeof url === 'string' && url.length > 0) ?? '';

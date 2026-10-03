@@ -363,9 +363,7 @@ interface TikTokCommon {
   displayText?: TikTokDisplayText;
 }
 
-// One native emote embedded in the chat text (v3 proto `EmoteWithIndex`;
-// older schemas called the start offset `placeInComment`). The visible token
-// in `content` is recovered from this index — see ./emotes.
+// One native emote embedded in the chat text (v3 proto `EmoteWithIndex`) — see ./emotes.
 interface TikTokChatEmote {
   index?: number; // start of the emote's "[token]" in `content`
   emote?: {
@@ -1941,11 +1939,6 @@ class TikTokListenerService {
       // already prevents the heartbeat timeout that grows a streak.
       this.heartbeatMonitor.noteSilentFailureHealing(username);
 
-      // Native TikTok emotes ride to the pipeline as a serialized emote_data
-      // tag (contract with the message-processor TikTok normalizer, mirroring
-      // the YouTube InnerTube listener). Omitted entirely when the message
-      // carries no extractable emotes, so downstream keeps its empty-slice
-      // behaviour for plain messages.
       const emoteData = serializeEmoteData(text, data.emotes);
 
       // Create raw message in standardized format

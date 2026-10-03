@@ -31,8 +31,8 @@ import (
 // via a shared module.
 type ttEmoteEntry struct {
 	Code string `json:"code"` // visible token in the message text, e.g. "[laughcry]"
-	URL  string `json:"url"`  // emote image URL
-	ID   string `json:"id"`   // TikTok emoteId
+	URL  string `json:"url"`
+	ID   string `json:"id"`
 }
 
 // TikTokNormalizer normalizes TikTok raw messages to unified format
