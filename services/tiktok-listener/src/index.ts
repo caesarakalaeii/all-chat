@@ -93,6 +93,10 @@ import { fallbackPromotionAvailable, pickSignClients } from './sign/sign-clients
 import type { PureNodeSigner } from './sign/pure-node.js';
 import type { SelfSigner } from './sign/self.js';
 import { pickAvatarUrl, tiktokAvatarUrl } from './avatar.js';
+// Namespace import so the tag-writing spread in handleChatMessage is the
+// only place the wire tag name appears in this file.
+import * as emotes from './emotes.js';
+import type { TikTokChatEmoteView } from './emotes.js';
 import {
   hasTikTokChestPayload,
   isTikTokCoinChest,
@@ -367,6 +371,7 @@ interface TikTokChatData {
   user?: TikTokUser;
   userIdentity?: TikTokUserIdentity;
   content?: string; // message text (was `comment`)
+  emotes?: TikTokChatEmoteView[]; // native emotes embedded as "[token]" in content
 }
 
 interface TikTokGift {
@@ -1946,7 +1951,8 @@ class TikTokListenerService {
           is_subscriber: (data.userIdentity?.isSubscriberOfAnchor ?? false).toString(),
           badge_level: '0', // No per-user badge level in the v3 chat payload
           native_msg_id: msgId || '', // Store native ID for reference
-          native_create_time: createTime || '' // Store native timestamp for reference
+          native_create_time: createTime || '', // Store native timestamp for reference
+          ...emotes.emote_dataTag(text, data.emotes)
         }
       };
 
