@@ -52,7 +52,7 @@ export interface TikTokEmoteModelView {
 
 /** Minimal structural view of one v3 `EmoteWithIndex` chat emote entry. */
 export interface TikTokChatEmoteView {
-  index?: number;
+  index?: number; // start of the emote's "[token]" in the comment text
   emote?: TikTokEmoteModelView;
 }
 

@@ -96,6 +96,7 @@ import { pickAvatarUrl, tiktokAvatarUrl } from './avatar.js';
 // Namespace import so the tag-writing spread in handleChatMessage is the
 // only place the wire tag name appears in this file.
 import * as emotes from './emotes.js';
+import type { TikTokChatEmoteView } from './emotes.js';
 import {
   hasTikTokChestPayload,
   isTikTokCoinChest,
@@ -365,21 +366,12 @@ interface TikTokCommon {
   displayText?: TikTokDisplayText;
 }
 
-// One native emote embedded in the chat text (v3 proto `EmoteWithIndex`) — see ./emotes.
-interface TikTokChatEmote {
-  index?: number; // start of the emote's "[token]" in `content`
-  emote?: {
-    emoteId?: string;
-    image?: TikTokImageModel;
-  };
-}
-
 interface TikTokChatData {
   common?: TikTokCommon;
   user?: TikTokUser;
   userIdentity?: TikTokUserIdentity;
   content?: string; // message text (was `comment`)
-  emotes?: TikTokChatEmote[]; // native emotes embedded as "[token]" in content
+  emotes?: TikTokChatEmoteView[]; // native emotes embedded as "[token]" in content
 }
 
 interface TikTokGift {
