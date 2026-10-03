@@ -62,13 +62,19 @@ type Config struct {
 // this service yet) and the media routes answer 503 — same env-gating pattern
 // as youtube-listener-innertube's optional subscribers. Everything else
 // defaults to the ADR-0064 values; unparsable overrides are errors, because a
-// silently-ignored MEDIA_MAX_OBJECTS_PER_USER is a quota that isn't enforced.
+// silently-ignored MEDIA_MAX_OBJECTS_PER_USER is a quota that isn't enforced
+// and a silently-ignored MINIO_USE_SSL is TLS that isn't on.
 func LoadConfig() (Config, error) {
+	useSSL, err := strconv.ParseBool(envDefault(envUseSSL, "true"))
+	if err != nil {
+		return Config{}, fmt.Errorf("%s: %w", envUseSSL, err)
+	}
+
 	cfg := Config{
 		Endpoint:      strings.TrimSpace(os.Getenv(envEndpoint)),
 		AccessKey:     os.Getenv(envAccessKey),
 		SecretKey:     os.Getenv(envSecretKey),
-		UseSSL:        envDefault(envUseSSL, "true") == "true",
+		UseSSL:        useSSL,
 		Bucket:        envDefault(envBucket, defaultBucket),
 		PublicBaseURL: strings.TrimSuffix(envDefault(envPublicBase, defaultBaseURL), "/"),
 	}
