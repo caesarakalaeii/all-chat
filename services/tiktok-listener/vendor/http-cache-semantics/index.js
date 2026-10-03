@@ -425,7 +425,13 @@ module.exports = class CachePolicy {
         if (this.stale()) {
             // If a value is present, then the client is willing to accept a response that has
             // exceeded its freshness lifetime by no more than the specified number of seconds
-            const allowsStaleWithoutRevalidation = 'max-stale' in requestCC &&
+            // PATCH (GHSA-ch52-4w7c-c8xp), not upstream: max-stale relaxes expiry,
+            // but it must not override the deliberate zeroing — a client could
+            // otherwise resurrect another user's cached Set-Cookie by asking for a
+            // stale-enough entry.
+            const allowsStaleWithoutRevalidation =
+                !this._freshnessZeroedForSecurity() &&
+                'max-stale' in requestCC &&
                 (true === requestCC['max-stale'] || requestCC['max-stale'] > this.age() - this.maxAge());
 
             if (allowsStaleWithoutRevalidation) {
@@ -603,12 +609,7 @@ module.exports = class CachePolicy {
 
         // Shared responses with cookies are cacheable according to the RFC, but IMHO it'd be unwise to do so by default
         // so this implementation requires explicit opt-in via public header
-        if (
-            this._isShared &&
-            (this._resHeaders['set-cookie'] &&
-                !this._rescc.public &&
-                !this._rescc.immutable)
-        ) {
+        if (this._freshnessZeroedForSecurity()) {
             return 0;
         }
 
@@ -654,6 +655,26 @@ module.exports = class CachePolicy {
         }
 
         return defaultMinTtl;
+    }
+
+    /**
+     * PATCH (GHSA-ch52-4w7c-c8xp), not upstream: whether `maxAge()` deliberately
+     * zeroed the freshness of this entry to keep a Set-Cookie response out of a
+     * shared cache. Such entries must be revalidated before reuse, so the
+     * client-controlled max-stale shortcut in `evaluateRequest()` must not
+     * override the zeroing — that override is what disclosed one user's cached
+     * Set-Cookie to another.
+     *
+     * @returns {boolean} `true` if the response carries Set-Cookie in a shared
+     *   cache without the `public`/`immutable` opt-in.
+     */
+    _freshnessZeroedForSecurity() {
+        return Boolean(
+            this._isShared &&
+                this._resHeaders['set-cookie'] &&
+                !this._rescc.public &&
+                !this._rescc.immutable
+        );
     }
 
     /**

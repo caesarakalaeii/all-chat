@@ -1,6 +1,6 @@
 {
     "name": "http-cache-semantics",
-    "version": "4.2.0",
+    "version": "4.2.1",
     "description": "Parses Cache-Control and other headers. Vendored copy of upstream 4.2.0; see README.md for why it lives here and when to delete it",
     "repository": {
         "type": "git",
