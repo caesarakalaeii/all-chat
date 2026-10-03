@@ -267,6 +267,48 @@ func TestRegisterMediaRoutes_AuthenticatedRequestsReachHandlers(t *testing.T) {
 	}
 }
 
+// recordingRevocationClient is a redis.UniversalClient whose only live method
+// is Exists — the single call shared/middleware's logout-blacklist check
+// makes. The embedded interface stays nil on purpose: any other call
+// nil-derefs loudly instead of silently passing.
+type recordingRevocationClient struct {
+	redis.UniversalClient
+	existsCalls int
+}
+
+func (r *recordingRevocationClient) Exists(_ context.Context, _ ...string) *redis.IntCmd {
+	r.existsCalls++
+	return redis.NewIntResult(0, nil)
+}
+
+// TestRegisterMediaRoutes_WiredRevocationClientIsConsulted pins the other half
+// of usableRedisClient: a live client must still reach the middleware and see
+// the blacklist check run. Without this, turning usableRedisClient into
+// "always nil" silently disables logout revocation on the whole media API —
+// the same invisible-wiring defect class as the deleted auth guard — with
+// every other test still green, because they all exercise the no-client and
+// typed-nil paths.
+func TestRegisterMediaRoutes_WiredRevocationClientIsConsulted(t *testing.T) {
+	kc := newTestKeyChain(t)
+	token := mintUserToken(t, kc.LatestKid(), string(kc.LatestSecret()))
+	revocation := &recordingRevocationClient{}
+
+	router := gin.New()
+	router.Use(gin.Recovery())
+	registerMediaRoutes(router, kc, revocation,
+		handlers.NewMediaHandler(newRouteRegistry(), &fakeStore{}, routeMediaConfig, zap.NewNop()))
+
+	for _, tc := range mediaRouteSuccessCases {
+		t.Run(tc.name, func(t *testing.T) {
+			w := doRouteRequest(router, tc.method, tc.path, "Bearer "+token, tc.body)
+
+			require.Equal(t, tc.wantStatus, w.Code)
+			assert.Positive(t, revocation.existsCalls,
+				"a wired revocation client must be consulted on the logout blacklist before the handler runs")
+		})
+	}
+}
+
 // TestRegisterMediaRoutes_TypedNilRevocationClientDegradesToFailOpen pins the
 // shape main() built when Redis was unreachable at startup: after
 // `redisClient = nil`, the nil *redis.Client was handed to registerMediaRoutes
