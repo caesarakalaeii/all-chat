@@ -17,15 +17,17 @@ All require a user JWT; `user_id` is resolved from the token, never from the req
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/presign` | `{ filename, content_type, size }` → **201** `{ object_key, upload_url, public_url }` |
-| `GET`  | `/`      | the caller's registered media, from the DB registry (never a bucket listing) |
-| `DELETE` | `/:object_key` | owner-checked delete of the registry row and the MinIO object |
+| `POST` | `/api/v1/media/presign` | `{ filename, content_type, size }` → **201** `{ object_key, upload_url, public_url }` |
+| `GET`  | `/api/v1/media` | the caller's registered media, from the DB registry (never a bucket listing) |
+| `DELETE` | `/api/v1/media/*object_key` | owner-checked delete of the registry row and the MinIO object |
 
 `object_key` is `{user_id}/{uuid}/{filename}`: the random uuid segment makes public-read URLs
 unguessable (ADR-0064), and the user_id prefix scopes the delete's owner check. The filename is
 reduced to its bare base name before it reaches the key, so no path component can travel through
 it, and a base of `.` or `..` is rejected outright (URL clients normalize dot segments away, so
-such a key could be neither played nor deleted).
+such a key could be neither played nor deleted). Delete takes the key as the rest of the URL path
+(the route is a wildcard because keys contain `/`) — percent-escape each segment as in `public_url`,
+not the whole key into one segment.
 
 `upload_url` is a presigned PUT valid for `MEDIA_PRESIGN_EXPIRY` (default 5 minutes); the client
 performs the upload with it directly against MinIO. `public_url` is `MEDIA_PUBLIC_URL` + `/` +
