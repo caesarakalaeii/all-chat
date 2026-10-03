@@ -175,15 +175,7 @@ func main() {
 
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
-	// Media routes. All JWT-authenticated; user_id comes from the token,
-	// never from the request. Anonymous reads of media go straight to MinIO
-	// (media.allch.at), never through this service.
-	api := router.Group("/api/v1")
-	api.Use(middleware.JWTAuthWithRevocation(userKeyChain, redisClient))
-	media := api.Group("/media", mediaHandler.RequireStore)
-	media.POST("/presign", mediaHandler.Presign)
-	media.GET("", mediaHandler.List)
-	media.DELETE("/*object_key", mediaHandler.Delete)
+	registerMediaRoutes(router, userKeyChain, redisClient, mediaHandler)
 
 	srv := &http.Server{
 		Addr:         ":" + config.Port,

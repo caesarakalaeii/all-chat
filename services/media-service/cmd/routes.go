@@ -19,19 +19,25 @@ package main
 import (
 	"github.com/caesar/all-chat/services/media-service/handlers"
 	sharedauth "github.com/caesar/all-chat/shared/auth"
+	"github.com/caesar/all-chat/shared/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 )
 
-// registerMediaRoutes wires the /api/v1/media route group.
+// registerMediaRoutes wires the /api/v1/media route group. All routes are
+// JWT-authenticated; user_id comes from the token, never from the request.
+// Anonymous reads of media go straight to MinIO (media.allch.at), never
+// through this service.
 //
-// RED STUB — do not ship. This is the unguarded wiring on purpose: the routes
-// are registered WITHOUT JWTAuthWithRevocation and WITHOUT RequireStore, i.e.
-// exactly the router the review council produced by deleting the auth guard.
-// routes_test.go is watched failing against this shape before the guarded
-// wiring lands in the next commit.
+// Kept out of main() so the security wiring is testable: routes_test.go drives
+// this function over HTTP and fails if either guard is dropped. The handler
+// tests inject user_id in a parallel router, so without this seam an unguarded
+// router builds, vets and tests green — the defect the review council found
+// by deleting the auth guard.
 func registerMediaRoutes(router *gin.Engine, keyChain *sharedauth.KeyChain, redisClient redis.UniversalClient, mediaHandler *handlers.MediaHandler) {
-	media := router.Group("/api/v1/media")
+	api := router.Group("/api/v1")
+	api.Use(middleware.JWTAuthWithRevocation(keyChain, redisClient))
+	media := api.Group("/media", mediaHandler.RequireStore)
 	media.POST("/presign", mediaHandler.Presign)
 	media.GET("", mediaHandler.List)
 	media.DELETE("/*object_key", mediaHandler.Delete)
