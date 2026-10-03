@@ -45,8 +45,7 @@ type MediaRepository struct {
 
 // NewMediaRepository creates the media_objects repository. Errors are
 // returned, not logged: the handler layer logs every failure it turns into
-// a 5xx. It takes the Querier seam rather than *pgxpool.Pool so tests can
-// pass a pgxmock pool; a real pgxpool.Pool satisfies it.
+// a 5xx.
 func NewMediaRepository(db Querier) *MediaRepository {
 	return &MediaRepository{db: db}
 }

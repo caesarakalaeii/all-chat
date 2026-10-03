@@ -51,8 +51,7 @@ func main() {
 		zap.String("version", getEnv("APP_VERSION", "0.1.0")),
 	)
 
-	// Initialize OpenTelemetry tracing, like every other Go service in the
-	// fleet: the k8s manifest sets OTEL_ENABLED and the exporter variables.
+	// Initialize OpenTelemetry tracing
 	tracingCfg := tracingConfigFromEnv()
 	tracingEnabled := tracingCfg.Enabled
 	if tracingEnabled {
@@ -228,7 +227,7 @@ type Config struct {
 
 func loadConfig() *Config {
 	return &Config{
-		Port:             getEnv("PORT", "8094"), // Media service port
+		Port:             getEnv("PORT", "8094"),
 		GinMode:          getEnv("GIN_MODE", "debug"),
 		DatabaseHost:     getEnv("DATABASE_HOST", "localhost"),
 		DatabasePort:     getEnv("DATABASE_PORT", "5432"),
