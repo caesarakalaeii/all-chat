@@ -71,6 +71,29 @@ func TestLoadConfig_RejectsInvalidValues(t *testing.T) {
 	assert.Error(t, err, "an unparsable quota must not silently fall back to the default")
 }
 
+func TestLoadConfig_RejectsUnparsableUseSSL(t *testing.T) {
+	// MINIO_USE_SSL controls TLS to the object store: silently reading a typo
+	// like "flase" as false would downgrade the connection to plaintext. The
+	// function's contract is that unparsable overrides are errors.
+	t.Setenv("MINIO_USE_SSL", "flase")
+
+	_, err := LoadConfig()
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "MINIO_USE_SSL")
+}
+
+func TestLoadConfig_ParsesBoolShorthandsForUseSSL(t *testing.T) {
+	// strconv.ParseBool semantics, like the bool env parsing in auth-service
+	// and api-gateway: "1" is true, not a value quietly read as false.
+	t.Setenv("MINIO_USE_SSL", "1")
+
+	cfg, err := LoadConfig()
+
+	require.NoError(t, err)
+	assert.True(t, cfg.UseSSL)
+}
+
 func TestDisabledStore_IsUnavailableAndFailsLoudly(t *testing.T) {
 	s := DisabledStore{}
 
