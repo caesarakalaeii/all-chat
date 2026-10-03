@@ -71,6 +71,9 @@ and deleting a row only logs a failed MinIO removal rather than failing the requ
 | `MEDIA_PUBLIC_URL` | `https://media.allch.at` | base for `public_url`; include the bucket path if MinIO serves it under one |
 | `MEDIA_PRESIGN_EXPIRY` | `5m` | presigned PUT lifetime (Go duration) |
 | `MEDIA_MAX_OBJECTS_PER_USER` | `100` | per-user quota on registered media |
+| `OTEL_ENABLED` | `false` | OpenTelemetry tracing; the k8s manifest sets `true` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `localhost:4317` | OTLP collector endpoint |
+| `ENVIRONMENT` | `development` | environment recorded on spans |
 
 ## Kubernetes
 

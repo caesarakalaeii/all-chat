@@ -51,6 +51,20 @@ func main() {
 		zap.String("version", getEnv("APP_VERSION", "0.1.0")),
 	)
 
+	// Initialize OpenTelemetry tracing, like every other Go service in the
+	// fleet: the k8s manifest sets OTEL_ENABLED and the exporter variables.
+	tracingCfg := tracingConfigFromEnv()
+	tracingEnabled := tracingCfg.Enabled
+	if tracingEnabled {
+		shutdownTracer, err := tracing.InitTracer(tracingCfg, log)
+		if err != nil {
+			log.Error("Failed to initialize tracer (continuing without tracing)", zap.Error(err))
+		} else {
+			defer shutdownTracer(context.Background())
+			log.Info("OpenTelemetry tracing enabled")
+		}
+	}
+
 	config := loadConfig()
 	if config.DatabasePassword == "" {
 		log.Fatal("DATABASE_PASSWORD must be set")
@@ -71,7 +85,7 @@ func main() {
 		config.DatabasePort,
 		config.DatabaseName,
 	)
-	dbPool, err := database.NewPostgresPool(connString)
+	dbPool, err := database.NewPostgresPoolWithTracing(connString, tracingEnabled)
 	if err != nil {
 		log.Fatal("Failed to connect to database", zap.Error(err))
 	}
@@ -234,8 +248,17 @@ func getEnv(key, defaultValue string) string {
 	return defaultValue
 }
 
-// tracingConfigFromEnv is a stub: it ignores the environment. The
-// implementation lands in the next commit.
+// tracingConfigFromEnv reads the OTEL block that the deployment manifest sets
+// (caesar-deployment apps/workloads/all-chat/media-service-deployment.yaml)
+// into a tracing.Config, mirroring the other Go services. Kept out of main()
+// so the wiring is testable: a typo in a variable name would otherwise be
+// dead config advertising telemetry the service does not emit.
 func tracingConfigFromEnv() tracing.Config {
-	return tracing.Config{}
+	return tracing.Config{
+		ServiceName:    "media-service",
+		ServiceVersion: getEnv("APP_VERSION", "0.1.0"),
+		Environment:    getEnv("ENVIRONMENT", "development"),
+		OTLPEndpoint:   getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317"),
+		Enabled:        getEnv("OTEL_ENABLED", "false") == "true",
+	}
 }
