@@ -94,6 +94,16 @@ func main() {
 	// Redis for the JWT logout-blacklist check. Optional: an unreachable
 	// Redis degrades to skipping the blacklist (middleware fail-open), so a
 	// Redis outage cannot lock users out of media management.
+	//
+	// Held as the redis.UniversalClient INTERFACE and assigned only after a
+	// successful Ping: a nil *redis.Client boxed into that interface does not
+	// compare == nil, so the middleware's "is a client wired?" guard would pass
+	// and rdb.Exists would nil-deref on every request — 500s on all three media
+	// routes for as long as Redis is down, the exact outage the paragraph above
+	// promises cannot happen (review council repro against go-redis v9.22.0).
+	// The degraded path leaves authRedis a true nil interface, which the
+	// middleware skips.
+	var authRedis redis.UniversalClient
 	redisClient := redis.NewClient(&redis.Options{
 		Addr:     fmt.Sprintf("%s:%s", getEnv("REDIS_HOST", "localhost"), getEnv("REDIS_PORT", "6379")),
 		Password: getEnv("REDIS_PASSWORD", ""),
@@ -101,9 +111,9 @@ func main() {
 	if err := redisClient.Ping(context.Background()).Err(); err != nil {
 		log.Warn("Failed to connect to Redis (logout blacklist check disabled)", zap.Error(err))
 		redisClient.Close()
-		redisClient = nil
 	} else {
 		log.Info("Connected to Redis")
+		authRedis = redisClient
 		defer redisClient.Close()
 	}
 
@@ -175,7 +185,7 @@ func main() {
 
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
-	registerMediaRoutes(router, userKeyChain, redisClient, mediaHandler)
+	registerMediaRoutes(router, userKeyChain, authRedis, mediaHandler)
 
 	srv := &http.Server{
 		Addr:         ":" + config.Port,
