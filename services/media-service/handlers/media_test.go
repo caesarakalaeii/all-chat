@@ -22,6 +22,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -255,6 +256,59 @@ func TestPresign_SanitizesFilenamePathSeparators(t *testing.T) {
 	objectKey, _ := body["object_key"].(string)
 	assert.NotContains(t, objectKey, "..", "path traversal must not reach the object key")
 	assert.True(t, strings.HasSuffix(objectKey, "/passwd"), "filename must be reduced to its base name, got %q", objectKey)
+}
+
+func TestPresign_PublicURLAddressesTheObjectItAdvertises(t *testing.T) {
+	// public_url is what an alert plays. A filename with URL-reserved
+	// characters must not turn it into a URL that resolves somewhere else:
+	// "a#b.png" truncates at a fragment, "what?.mp3" at a query string, and
+	// a bare "%" is an invalid escape — the object uploads fine and the
+	// advertised URL 404s.
+	for _, filename := range []string{"a#b.png", "what?.mp3", "100%_horn.mp3", "my sound.mp3"} {
+		t.Run(filename, func(t *testing.T) {
+			reg := &mockRegistry{}
+			store := &mockStore{available: true, presignURL: "https://minio.local/upload"}
+			w := doJSON(mediaRouter(reg, store, testConfig()), http.MethodPost, "/api/v1/media/presign",
+				`{"filename":"`+filename+`","content_type":"image/png","size":10}`)
+
+			require.Equal(t, http.StatusCreated, w.Code)
+			body := decode(t, w)
+			objectKey, _ := body["object_key"].(string)
+			require.True(t, strings.HasSuffix(objectKey, "/"+filename),
+				"the object key must keep the raw filename, got %q", objectKey)
+
+			publicURL, _ := body["public_url"].(string)
+			parsed, err := url.Parse(publicURL)
+			require.NoError(t, err, "public_url must be a parseable URL, got %q", publicURL)
+			assert.Empty(t, parsed.Fragment, "public_url must not be truncated by a fragment")
+			assert.Empty(t, parsed.RawQuery, "public_url must not be truncated by a query string")
+			decodedPath, err := url.PathUnescape(parsed.EscapedPath())
+			require.NoError(t, err, "public_url path must be a valid escape")
+			assert.Equal(t, "/"+objectKey, decodedPath,
+				"fetching public_url must request the uploaded object")
+		})
+	}
+}
+
+func TestPresign_RejectsDotSegmentFilenames(t *testing.T) {
+	// A filename that reduces to "." or ".." cannot be carried in a URL:
+	// every client normalizes dot segments away before sending, so the
+	// public URL would address the wrong path and the DELETE route could
+	// never be reached with the key. Reject it instead of storing it.
+	// (Names merely containing dots — "a..b.png" — stay legal; see
+	// TestDelete_AcceptsKeysPresignCreates.)
+	for _, filename := range []string{".", "..", "sub/.."} {
+		t.Run(filename, func(t *testing.T) {
+			reg := &mockRegistry{}
+			store := &mockStore{available: true}
+			w := doJSON(mediaRouter(reg, store, testConfig()), http.MethodPost, "/api/v1/media/presign",
+				`{"filename":"`+filename+`","content_type":"image/png","size":10}`)
+
+			assert.Equal(t, http.StatusBadRequest, w.Code)
+			assert.Empty(t, reg.objects, "no registry row for a rejected filename")
+			assert.Empty(t, store.presignedKey, "no presigned upload for a rejected filename")
+		})
+	}
 }
 
 func TestPresign_EnforcesPerUserQuota(t *testing.T) {
