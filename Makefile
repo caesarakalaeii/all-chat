@@ -1,4 +1,4 @@
-.PHONY: help build build-all test lint-comments clean docker-up docker-down migrate deps frontend-dev test-stream test-stream-stop
+.PHONY: help build build-all test lint-comments clean docker-up docker-down migrate deps frontend-dev test-stream test-stream-stop minio-setup
 
 # Default target
 help:
@@ -16,6 +16,7 @@ help:
 	@echo "  make docker-down   - Stop all services"
 	@echo "  make docker-logs   - View logs"
 	@echo "  make docker-restart - Restart all services"
+	@echo "  make minio-setup   - Create the alert-media bucket on local MinIO"
 	@echo ""
 	@echo "Frontend Development:"
 	@echo "  make frontend-quick      - Quick start (all-in-one: start + seed + verify)"
@@ -184,6 +185,32 @@ docker-restart:
 docker-build:
 	@echo "Building Docker images..."
 	cd deployments && docker-compose build
+
+# Create the alert-media bucket (allchat-media, ADR-0064) on the local
+# MinIO with public-read policy — the compose twin of the k8s bucket Job
+# (apps/workloads/all-chat/minio-bucket-job.yaml in caesar-deployment).
+# Needs the compose minio service running (`make docker-up`). Credentials
+# come from the environment, falling back to deployments/.env — the same
+# values the compose service reads. The ${VAR:-...} first-wins shape and
+# the deployments/.env fallback are pinned by check_minio_setup in
+# caesar-deployment's scripts/test-minio.py — change both together.
+minio-setup:
+	@if ! command -v mc >/dev/null 2>&1; then \
+		echo "mc (MinIO client) not found. Install it, then re-run:"; \
+		echo "  curl -sSL -o /usr/local/bin/mc https://github.com/minio/mc/releases/download/RELEASE.2025-08-13T08-35-41Z/mc.linux-amd64.RELEASE.2025-08-13T08-35-41Z && chmod +x /usr/local/bin/mc"; \
+		echo "  (or pick the latest release for your platform: https://github.com/minio/mc/releases)"; \
+		exit 1; \
+	fi
+	@user=$${MINIO_ROOT_USER:-$$(grep -hs '^MINIO_ROOT_USER=' deployments/.env 2>/dev/null | head -n1 | cut -d= -f2-)}; \
+	password=$${MINIO_ROOT_PASSWORD:-$$(grep -hs '^MINIO_ROOT_PASSWORD=' deployments/.env 2>/dev/null | head -n1 | cut -d= -f2-)}; \
+	bucket=$${MINIO_BUCKET:-allchat-media}; \
+	if [ -z "$$user" ] || [ -z "$$password" ]; then \
+		echo "MINIO_ROOT_USER / MINIO_ROOT_PASSWORD not set (export them or add them to deployments/.env)"; \
+		exit 1; \
+	fi; \
+	mc alias set local http://127.0.0.1:9000 "$$user" "$$password" >/dev/null && \
+	mc mb --ignore-existing "local/$$bucket" && \
+	mc anonymous set download "local/$$bucket"
 
 # Database migrations
 migrate:
