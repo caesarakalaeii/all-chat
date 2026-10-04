@@ -191,7 +191,9 @@ docker-build:
 # (apps/workloads/all-chat/minio-bucket-job.yaml in caesar-deployment).
 # Needs the compose minio service running (`make docker-up`). Credentials
 # come from the environment, falling back to deployments/.env — the same
-# values the compose service reads.
+# values the compose service reads. The ${VAR:-...} first-wins shape and
+# the deployments/.env fallback are pinned by check_minio_setup in
+# caesar-deployment's scripts/test-minio.py — change both together.
 minio-setup:
 	@if ! command -v mc >/dev/null 2>&1; then \
 		echo "mc (MinIO client) not found. Install it, then re-run:"; \
