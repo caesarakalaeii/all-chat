@@ -13,6 +13,8 @@ version: '3.9'
 #   TOKEN_ENCRYPTION_KEY        AES-GCM master key (16/24/32 bytes)
 #   MESSAGE_PROCESSOR_API_KEY   shared API key for message-processor
 #   SERVICE_JWT_SECRET           service-to-service JWT signing secret
+#   MINIO_ROOT_USER             MinIO root user (alert-media storage)
+#   MINIO_ROOT_PASSWORD         MinIO root password (alert-media storage)
 #   TWITCH_CLIENT_ID / TWITCH_CLIENT_SECRET
 #   TWITCH_BOT_USERNAME / TWITCH_BOT_OAUTH
 #   YOUTUBE_CLIENT_ID / YOUTUBE_CLIENT_SECRET
@@ -77,6 +79,43 @@ services:
       retries: 5
     networks:
       - allchat
+
+  # MinIO object storage — alert media (ADR-0064). The k8s twin is
+  # apps/workloads/all-chat/minio-*.yaml in caesar-deployment; create the
+  # bucket locally with `make minio-setup`.
+  #
+  # NOT minio/minio: MinIO stopped serving its images anonymously in
+  # Aug 2025 (Hub repo removed, quay login-gated), so a pull of the
+  # official tag fails and the container never starts. bitnamilegacy/minio
+  # is the last anonymously-pullable build of the same binary; its
+  # entrypoint execs `minio "$@"` when the first arg is "server", so the
+  # official single-node command below is unchanged.
+  minio:
+    image: bitnamilegacy/minio:2025.7.23-debian-12-r5
+    container_name: allchat-minio
+    command: server /data --console-address ":9001"
+    # The bitnami image defaults to UID 1001, but a fresh named volume is
+    # root-owned; the official minio image ran as root too, so keep that
+    # trust model instead of fighting the volume ownership.
+    user: root
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - minio_data:/data
+    # The image ships curl (/usr/bin/curl); the health endpoints are
+    # unauthenticated.
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - allchat
+    restart: unless-stopped
 
   # Auth Service (Phase 1)
   auth-service:
@@ -443,6 +482,8 @@ volumes:
   postgres_data:
     driver: local
   redis_data:
+    driver: local
+  minio_data:
     driver: local
 
 networks:
