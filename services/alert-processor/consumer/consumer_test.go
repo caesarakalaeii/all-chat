@@ -58,6 +58,13 @@ func newTestConsumer(t *testing.T, handler Handler) (*miniredis.Miniredis, *redi
 	return mr, rdb, c, logs
 }
 
+// createGroup puts the stream into the state a running deployment is in:
+// listeners have XADDed (the stream exists) and the group has been created.
+func createGroup(t *testing.T, rdb *redis.Client) {
+	t.Helper()
+	require.NoError(t, rdb.XGroupCreateMkStream(context.Background(), StreamKey, ConsumerGroup, "0").Err())
+}
+
 func seed(t *testing.T, rdb *redis.Client, msg *mpmodels.RawChatMessage) string {
 	t.Helper()
 	data, err := json.Marshal(msg)
@@ -96,6 +103,7 @@ func pendingCount(t *testing.T, rdb *redis.Client, group string) int64 {
 func TestReadAndProcess_SkipsChatAndDeletions(t *testing.T) {
 	handler := &recordingHandler{}
 	mr, rdb, c, _ := newTestConsumer(t, handler)
+	createGroup(t, rdb)
 
 	emptyType := seedChat("hello")
 	explicitChat := seedChat("hi")
@@ -129,6 +137,7 @@ func TestReadAndProcess_SkipsChatAndDeletions(t *testing.T) {
 func TestReadAndProcess_AcksOnlyAfterHandlerSucceeds(t *testing.T) {
 	handler := &recordingHandler{err: errors.New("publish failed")}
 	mr, rdb, c, _ := newTestConsumer(t, handler)
+	createGroup(t, rdb)
 
 	event := seedChat("")
 	event.EventType = "bits"
@@ -157,6 +166,7 @@ func TestReadAndProcess_AcksOnlyAfterHandlerSucceeds(t *testing.T) {
 func TestReadAndProcess_DropsUndecodableEntries(t *testing.T) {
 	handler := &recordingHandler{}
 	mr, rdb, c, _ := newTestConsumer(t, handler)
+	createGroup(t, rdb)
 	_ = mr
 
 	id, err := rdb.XAdd(context.Background(), &redis.XAddArgs{
@@ -193,7 +203,7 @@ func TestEnsureGroup_ToleratesMissingStream(t *testing.T) {
 	seed(t, rdb, seedChat("hello"))
 	require.NoError(t, c.ensureGroup(context.Background()))
 	require.NoError(t, c.ensureGroup(context.Background()))
-	assert.GreaterOrEqual(t, logs.Len(), 1, "success after the logged failure must not add noise")
+	assert.Equal(t, 1, logs.Len(), "success after the logged failure must not add noise")
 }
 
 // TestReclaimStale_RedeliversOnlyOwnGroupPending: reclaim must move entries
@@ -208,7 +218,7 @@ func TestReclaimStale_RedeliversOnlyOwnGroupPending(t *testing.T) {
 	event.EventType = "bits"
 	seed(t, rdb, event)
 
-	require.NoError(t, rdb.XGroupCreateMkStream(context.Background(), StreamKey, ConsumerGroup, "0").Err())
+	createGroup(t, rdb)
 	require.NoError(t, rdb.XGroupCreateMkStream(context.Background(), StreamKey, "message-processor", "0").Err())
 
 	// The message-processor group reads the entry; our group has not seen it.
