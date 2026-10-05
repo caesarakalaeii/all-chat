@@ -69,9 +69,7 @@ func (f *fakeQuerier) assertIssued(t *testing.T, wantSQLFragment string, wantArg
 	require.Len(t, f.queries, 1, "the repository must issue exactly one statement")
 	q := f.queries[0]
 	assert.Contains(t, q.sql, wantSQLFragment)
-	if wantArgs != nil {
-		assert.Equal(t, wantArgs, q.args, "arguments must be passed in the statement's placeholder order")
-	}
+	assert.Equal(t, wantArgs, q.args, "arguments must be passed in the statement's placeholder order")
 }
 
 type fakeRows struct {
