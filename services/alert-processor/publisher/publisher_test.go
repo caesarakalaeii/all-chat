@@ -28,7 +28,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 // TestChannel_Naming pins the Pub/Sub channel contract with the API gateway /
@@ -63,7 +62,7 @@ func TestPublish_DeliversAlertEnvelopeToOverlayChannel(t *testing.T) {
 		OccurredAt: time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC),
 	}
 
-	p := New(rdb, zap.NewNop())
+	p := New(rdb)
 	require.NoError(t, p.Publish(context.Background(), alert))
 
 	select {
@@ -86,7 +85,7 @@ func TestPublish_PropagatesRedisError(t *testing.T) {
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = rdb.Close() })
 
-	p := New(rdb, zap.NewNop())
+	p := New(rdb)
 	mr.Close() // simulate Redis going away mid-pipeline
 
 	err = p.Publish(context.Background(), &models.Alert{OverlayID: "overlay-a"})
