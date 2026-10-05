@@ -60,3 +60,18 @@ func NewAlertID(platform, channelID, messageID, overlayID string) string {
 	identity := strings.Join([]string{"all-chat:alert", platform, channelID, messageID, overlayID}, "\x00")
 	return uuid.NewSHA1(uuid.NameSpaceURL, []byte(identity)).String()
 }
+
+// AlertUserFrom maps the message-processor's normalized sender onto the alert
+// envelope's user. The display name is what the viewer recognizes; platforms
+// that supply none (or normalize to the raw handle) fall back to the username.
+func AlertUserFrom(user mpmodels.UserInfo) AlertUser {
+	name := user.DisplayName
+	if name == "" {
+		name = user.Username
+	}
+	return AlertUser{
+		ID:        user.ID,
+		Name:      name,
+		AvatarURL: user.AvatarURL,
+	}
+}
