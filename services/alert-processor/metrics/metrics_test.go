@@ -29,9 +29,9 @@ import (
 // so assertions read the delta around the call.
 func TestCounters_LabelAndIncrement(t *testing.T) {
 	cases := []struct {
-		name     string
-		counter  *prometheus.CounterVec
-		record   func()
+		name    string
+		counter *prometheus.CounterVec
+		record  func()
 	}{
 		{"consumed", eventsConsumed, func() { RecordConsumed("twitch", "bits") }},
 		{"routed", eventsRouted, func() { RecordRouted("twitch", "bits") }},
