@@ -308,6 +308,36 @@ services:
       - allchat
     restart: unless-stopped
 
+  # Alert Processor (ADR-0064, issue #951) — event-typed chat:raw entries to
+  # alert/goal/list overlays. It only reads the stream (consumer group
+  # alert-processors) and never touches the message-processor's chat path.
+  alert-processor:
+    build:
+      context: ../
+      dockerfile: services/alert-processor/Dockerfile
+    container_name: allchat-alert-processor
+    environment:
+      PORT: "8095"
+      LOG_LEVEL: "info"
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: allchat
+      DATABASE_USER: allchat
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    ports:
+      - "127.0.0.1:8095:8095"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - allchat
+    restart: unless-stopped
+
   # Source Manager (Phase 4)
   source-manager:
     build:
