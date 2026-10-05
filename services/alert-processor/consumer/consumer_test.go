@@ -102,7 +102,7 @@ func pendingCount(t *testing.T, rdb *redis.Client, group string) int64 {
 // content. Skipped entries are ACKed so they never accumulate in the PEL.
 func TestReadAndProcess_SkipsChatAndDeletions(t *testing.T) {
 	handler := &recordingHandler{}
-	mr, rdb, c, _ := newTestConsumer(t, handler)
+	_, rdb, c, _ := newTestConsumer(t, handler)
 	createGroup(t, rdb)
 
 	emptyType := seedChat("hello")
@@ -122,7 +122,6 @@ func TestReadAndProcess_SkipsChatAndDeletions(t *testing.T) {
 	for _, msg := range []*mpmodels.RawChatMessage{emptyType, explicitChat, deletion, event} {
 		seed(t, rdb, msg)
 	}
-	_ = mr
 
 	require.NoError(t, c.readAndProcess(context.Background()))
 
@@ -136,14 +135,13 @@ func TestReadAndProcess_SkipsChatAndDeletions(t *testing.T) {
 // forever, because Pub/Sub never re-sends.
 func TestReadAndProcess_AcksOnlyAfterHandlerSucceeds(t *testing.T) {
 	handler := &recordingHandler{err: errors.New("publish failed")}
-	mr, rdb, c, _ := newTestConsumer(t, handler)
+	_, rdb, c, _ := newTestConsumer(t, handler)
 	createGroup(t, rdb)
 
 	event := seedChat("")
 	event.EventType = "bits"
 	event.EventData = map[string]interface{}{"badge_tier": 100}
 	seed(t, rdb, event)
-	_ = mr
 
 	require.NoError(t, c.readAndProcess(context.Background()),
 		"a handler failure is left for redelivery, not a consume-loop error")
@@ -165,9 +163,8 @@ func TestReadAndProcess_AcksOnlyAfterHandlerSucceeds(t *testing.T) {
 // it unacked would redeliver it forever.
 func TestReadAndProcess_DropsUndecodableEntries(t *testing.T) {
 	handler := &recordingHandler{}
-	mr, rdb, c, _ := newTestConsumer(t, handler)
+	_, rdb, c, _ := newTestConsumer(t, handler)
 	createGroup(t, rdb)
-	_ = mr
 
 	id, err := rdb.XAdd(context.Background(), &redis.XAddArgs{
 		Stream: StreamKey,
@@ -211,8 +208,7 @@ func TestEnsureGroup_ToleratesMissingStream(t *testing.T) {
 // other consumer group (message-processor's) still owns alone.
 func TestReclaimStale_RedeliversOnlyOwnGroupPending(t *testing.T) {
 	handler := &recordingHandler{}
-	mr, rdb, c, _ := newTestConsumer(t, handler)
-	_ = mr
+	_, rdb, c, _ := newTestConsumer(t, handler)
 
 	event := seedChat("")
 	event.EventType = "bits"

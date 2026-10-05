@@ -58,11 +58,7 @@ func TestAlertJSONSchema(t *testing.T) {
 	require.NoError(t, json.Unmarshal(raw, &envelope))
 
 	wantKeys := []string{"alert_id", "overlay_id", "platform", "event_type", "event_data", "user", "occurred_at"}
-	gotKeys := make([]string, 0, len(envelope))
-	for k := range envelope {
-		gotKeys = append(gotKeys, k)
-	}
-	assert.ElementsMatch(t, wantKeys, gotKeys, "alert envelope keys must match the documented schema exactly")
+	assert.ElementsMatch(t, wantKeys, keysOf(envelope), "alert envelope keys must match the documented schema exactly")
 
 	var user map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(envelope["user"], &user))

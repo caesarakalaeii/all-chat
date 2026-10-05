@@ -48,18 +48,12 @@ type fakeQuerier struct {
 
 	execErr error
 
-	row  fakeRow
 	rows fakeRows
 }
 
 func (f *fakeQuerier) Exec(_ context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
 	f.queries = append(f.queries, recordedQuery{sql: sql, args: args})
 	return pgconn.CommandTag{}, f.execErr
-}
-
-func (f *fakeQuerier) QueryRow(_ context.Context, sql string, args ...any) pgx.Row {
-	f.queries = append(f.queries, recordedQuery{sql: sql, args: args})
-	return &f.row
 }
 
 func (f *fakeQuerier) Query(_ context.Context, sql string, args ...any) (pgx.Rows, error) {
@@ -79,12 +73,6 @@ func (f *fakeQuerier) assertIssued(t *testing.T, wantSQLFragment string, wantArg
 		assert.Equal(t, wantArgs, q.args, "arguments must be passed in the statement's placeholder order")
 	}
 }
-
-type fakeRow struct {
-	values []any
-}
-
-func (r *fakeRow) Scan(dest ...any) error { return scanInto(r.values, dest) }
 
 type fakeRows struct {
 	rows [][]any

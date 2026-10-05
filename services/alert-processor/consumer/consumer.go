@@ -72,7 +72,6 @@ type Consumer struct {
 	// Tunables with production defaults, fields so tests can shrink them.
 	blockFor     time.Duration
 	claimMinIdle time.Duration
-	reclaimEvery time.Duration
 
 	groupErrMu     sync.Mutex
 	groupErrLogged bool
@@ -89,7 +88,6 @@ func New(client *redis.Client, log *zap.Logger, handler Handler, consumerName st
 		stopCh:       make(chan struct{}),
 		blockFor:     ReadBlockTime,
 		claimMinIdle: claimMinIdle,
-		reclaimEvery: reclaimInterval,
 	}
 }
 
@@ -162,7 +160,7 @@ func (c *Consumer) consumeLoop(ctx context.Context) {
 }
 
 func (c *Consumer) reclaimLoop(ctx context.Context) {
-	ticker := time.NewTicker(c.reclaimEvery)
+	ticker := time.NewTicker(reclaimInterval)
 	defer ticker.Stop()
 	for {
 		select {
