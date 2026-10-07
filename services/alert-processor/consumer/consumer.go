@@ -185,9 +185,17 @@ func (c *Consumer) readAndProcess(ctx context.Context) error {
 			return nil // timeout, no messages
 		}
 		// NOGROUP: stream or group missing (fresh deployment, or Redis was
-		// reset). Recreate lazily and continue.
+		// reset). Recreate lazily — but first wait out the block time: XREADGROUP
+		// validates the group before honoring Block, so this error returns
+		// immediately and without the explicit wait the consume loop would
+		// busy-spin at full CPU until the stream first appears.
 		if strings.Contains(err.Error(), "NOGROUP") {
 			_ = c.ensureGroup(ctx)
+			select {
+			case <-time.After(c.blockFor):
+			case <-c.stopCh:
+			case <-ctx.Done():
+			}
 			return nil
 		}
 		return err
