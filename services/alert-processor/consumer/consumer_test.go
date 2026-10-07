@@ -25,6 +25,7 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 	mpmodels "github.com/caesar/all-chat/services/message-processor/models"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -94,6 +95,66 @@ func pendingCount(t *testing.T, rdb *redis.Client, group string) int64 {
 	pending, err := rdb.XPending(context.Background(), StreamKey, group).Result()
 	require.NoError(t, err)
 	return pending.Count
+}
+
+// counterValue reads one labelled counter off the default registry, the way a
+// Prometheus scrape would. The metrics package's counter vars are unexported,
+// so a test outside it cannot call WithLabelValues; asserting on the gathered
+// registry is also the stronger form — it proves the value a scrape would
+// actually return, not a child a test conjured by asking for it.
+func counterValue(t *testing.T, name, platform, eventType string) float64 {
+	t.Helper()
+	families, err := prometheus.DefaultGatherer.Gather()
+	require.NoError(t, err)
+	for _, family := range families {
+		if family.GetName() != name {
+			continue
+		}
+		for _, metric := range family.GetMetric() {
+			var gotPlatform, gotType string
+			for _, label := range metric.GetLabel() {
+				switch label.GetName() {
+				case "platform":
+					gotPlatform = label.GetValue()
+				case "event_type":
+					gotType = label.GetValue()
+				}
+			}
+			if gotPlatform == platform && gotType == eventType {
+				return metric.GetCounter().GetValue()
+			}
+		}
+	}
+	return 0
+}
+
+// TestProcessMessage_CountsConsumedEntries: the consumed counter is the only
+// per-event-type volume signal the service has; dropping the RecordConsumed
+// call keeps the pipeline correct while dashboards show a dead consumer.
+// Chat lines count too — the consumed/routed delta is exactly the chat volume
+// the alert path deliberately does not touch.
+func TestProcessMessage_CountsConsumedEntries(t *testing.T) {
+	handler := &recordingHandler{}
+	_, rdb, c, _ := newTestConsumer(t, handler)
+	createGroup(t, rdb)
+
+	event := seedChat("")
+	event.MessageID = "msg-1"
+	event.EventType = "bits"
+	event.EventData = map[string]interface{}{"badge_tier": 100}
+	seed(t, rdb, event)
+	seed(t, rdb, seedChat("hello"))
+
+	const consumed = "alert_processor_events_consumed_total"
+	beforeBits := counterValue(t, consumed, "twitch", "bits")
+	beforeChat := counterValue(t, consumed, "twitch", "chat")
+
+	require.NoError(t, c.readAndProcess(context.Background()))
+
+	assert.Equal(t, beforeBits+1, counterValue(t, consumed, "twitch", "bits"),
+		"an event entry must be counted as consumed")
+	assert.Equal(t, beforeChat+1, counterValue(t, consumed, "twitch", "chat"),
+		"a skipped chat line is still consumed; it must count")
 }
 
 // TestReadAndProcess_SkipsChatAndDeletions: pure chat (event_type empty or
@@ -205,6 +266,43 @@ func TestReadAndProcess_MissingStreamBacksOff(t *testing.T) {
 	require.NoError(t, c.readAndProcess(context.Background()))
 	assert.Less(t, time.Since(start), 60*time.Millisecond,
 		"a stopped consumer must not sit out the backoff")
+}
+
+// TestEnsureGroup_ColdStartDeliversBufferedEvents: ensureGroup creates the
+// group at offset "0", not "$" — the listeners may already have buffered
+// events into chat:raw before this service's first deployment, and a "$" cold
+// start would silently skip every one of them. This drives the production
+// creation path; the other tests create the group themselves (via
+// XGroupCreateMkStream) and so never pin the offset production code uses.
+func TestEnsureGroup_ColdStartDeliversBufferedEvents(t *testing.T) {
+	handler := &recordingHandler{}
+	_, rdb, c, _ := newTestConsumer(t, handler)
+
+	bits := seedChat("")
+	bits.MessageID = "msg-1"
+	bits.EventType = "bits"
+	bits.EventData = map[string]interface{}{"badge_tier": 100}
+	follow := seedChat("")
+	follow.MessageID = "msg-2"
+	follow.EventType = "follow"
+	for _, msg := range []*mpmodels.RawChatMessage{bits, follow} {
+		seed(t, rdb, msg)
+	}
+
+	require.NoError(t, c.ensureGroup(context.Background()))
+	require.NoError(t, c.readAndProcess(context.Background()))
+
+	require.Len(t, handler.calls, 2,
+		"events buffered before the group existed must be delivered, not skipped by a '$' cold start")
+}
+
+// TestConsumerGroup_NamedAsSpecified: the spec pins the group name to
+// "alert-processors" (distinct from the message-processor's group). Every
+// other test and the production code reference the constant, so a typo'd or
+// renamed constant would keep the suite green while breaking the documented
+// group identity — this pins the literal.
+func TestConsumerGroup_NamedAsSpecified(t *testing.T) {
+	assert.Equal(t, "alert-processors", ConsumerGroup)
 }
 
 // TestEnsureGroup_ToleratesMissingStream: in a fresh deployment the alert
