@@ -178,6 +178,35 @@ func TestReadAndProcess_DropsUndecodableEntries(t *testing.T) {
 	assert.Equal(t, int64(0), pendingCount(t, rdb, ConsumerGroup), "undecodable entries must be ACKed and dropped")
 }
 
+// TestReadAndProcess_MissingStreamBacksOff: XREADGROUP validates the
+// consumer group before honoring Block, so on a fresh deployment (chat:raw
+// not yet created by any listener) the read returns NOGROUP immediately.
+// Without an explicit backoff the consume loop busy-spins at full CPU issuing
+// XREADGROUP + XGROUP CREATE pairs until the first chat message ever
+// arrives — exactly the missing-stream scenario the service must tolerate.
+// The NOGROUP path must wait out the block time instead, and it must not
+// create the stream on its way past.
+func TestReadAndProcess_MissingStreamBacksOff(t *testing.T) {
+	handler := &recordingHandler{}
+	mr, _, c, _ := newTestConsumer(t, handler)
+	c.blockFor = 60 * time.Millisecond
+
+	start := time.Now()
+	require.NoError(t, c.readAndProcess(context.Background()),
+		"a missing stream is a wait-and-retry state, not a consume-loop error")
+	assert.GreaterOrEqual(t, time.Since(start), 60*time.Millisecond,
+		"the NOGROUP path must back off instead of busy-spinning")
+	assert.Empty(t, handler.calls)
+	assert.False(t, mr.Exists(StreamKey), "the consumer must not create chat:raw itself")
+
+	// Stop must not hang on the backoff: the wait is interruptible.
+	c.Stop()
+	start = time.Now()
+	require.NoError(t, c.readAndProcess(context.Background()))
+	assert.Less(t, time.Since(start), 60*time.Millisecond,
+		"a stopped consumer must not sit out the backoff")
+}
+
 // TestEnsureGroup_ToleratesMissingStream: in a fresh deployment the alert
 // processor can start before any listener has XADDed to chat:raw. It must not
 // create the stream itself (that is the listeners' job) and must not crash —
