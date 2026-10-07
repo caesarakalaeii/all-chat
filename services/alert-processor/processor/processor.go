@@ -63,11 +63,12 @@ func New(store Store, pub *publisher.Publisher, boards *leaderboard.Client, log 
 //
 // Per-overlay ordering is persist → publish → leaderboard on purpose: the
 // persist is idempotent (deterministic alert id + ON CONFLICT), so a
-// redelivery after a later failure cannot double-write history; and when a
-// redelivery follows a failed ZINCRBY, scores stay exact. A publish before
-// persist would animate overlays on an event history does not record. The
-// remaining duplicate window is the usual at-least-once one — a redelivered
-// alert can reach subscribers twice — which the spec accepts.
+// redelivery after a later failure cannot double-write history, and the
+// leaderboard write is claimed once per alert id, so a redelivery cannot
+// double-count a board that already scored. A publish before persist would
+// animate overlays on an event history does not record. The remaining
+// duplicate window is the usual at-least-once one — a redelivered alert can
+// reach subscribers twice — which the spec accepts.
 func (p *Processor) Handle(ctx context.Context, raw *mpmodels.RawChatMessage) error {
 	info, user, err := normalizer.Normalize(raw)
 	if err != nil {
@@ -108,7 +109,7 @@ func (p *Processor) Handle(ctx context.Context, raw *mpmodels.RawChatMessage) er
 		}
 
 		if overlay.OverlayType == "list" {
-			if err := p.recordLeaderboardAmount(ctx, overlay, raw, info, user.ID); err != nil {
+			if err := p.recordLeaderboardAmount(ctx, alert); err != nil {
 				return err
 			}
 		}
@@ -120,21 +121,22 @@ func (p *Processor) Handle(ctx context.Context, raw *mpmodels.RawChatMessage) er
 // recordLeaderboardAmount scores amount-bearing events on the 'list'
 // overlay's board. Leaderboards are list-only: 'alerts' and 'goal' overlays
 // render events but do not rank their senders.
-func (p *Processor) recordLeaderboardAmount(ctx context.Context, overlay repository.AlertOverlay, raw *mpmodels.RawChatMessage, info *mpmodels.EventInfo, userID string) error {
-	category, ok := leaderboard.Category(raw.EventType)
+func (p *Processor) recordLeaderboardAmount(ctx context.Context, alert *models.Alert) error {
+	category, ok := leaderboard.Category(alert.EventType)
 	if !ok {
 		return nil
 	}
-	if info.Value == nil || info.Value.Amount <= 0 {
+	info := alert.EventData
+	if info == nil || info.Value == nil || info.Value.Amount <= 0 {
 		return nil // not an amount-bearing delivery (e.g. a 0-gift mystery gift)
 	}
-	if userID == "" {
+	if alert.User.ID == "" {
 		return nil // unattributable spend cannot rank a user
 	}
 
-	member := leaderboard.Member(raw.Platform, userID)
-	if err := p.leaderboard.RecordAmount(ctx, overlay.OverlayID, category, member, info.Value.Amount); err != nil {
-		return fmt.Errorf("record leaderboard amount for overlay %s: %w", overlay.OverlayID, err)
+	member := leaderboard.Member(alert.Platform, alert.User.ID)
+	if err := p.leaderboard.RecordAmount(ctx, alert.OverlayID, category, member, info.Value.Amount, alert.AlertID); err != nil {
+		return fmt.Errorf("record leaderboard amount for overlay %s: %w", alert.OverlayID, err)
 	}
 	return nil
 }

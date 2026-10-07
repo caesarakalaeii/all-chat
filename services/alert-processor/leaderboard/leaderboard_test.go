@@ -83,11 +83,11 @@ func TestRecordAmount_AccumulatesPerOverlayAndCategory(t *testing.T) {
 	mr, c := newTestClient(t)
 	ctx := context.Background()
 
-	require.NoError(t, c.RecordAmount(ctx, "overlay-a", "gifts", "twitch:alice", 5))
-	require.NoError(t, c.RecordAmount(ctx, "overlay-a", "gifts", "twitch:alice", 3))
-	require.NoError(t, c.RecordAmount(ctx, "overlay-a", "gifts", "twitch:bob", 10))
-	require.NoError(t, c.RecordAmount(ctx, "overlay-a", "bits", "twitch:alice", 100))
-	require.NoError(t, c.RecordAmount(ctx, "overlay-b", "gifts", "twitch:alice", 1))
+	require.NoError(t, c.RecordAmount(ctx, "overlay-a", "gifts", "twitch:alice", 5, "alert-1"))
+	require.NoError(t, c.RecordAmount(ctx, "overlay-a", "gifts", "twitch:alice", 3, "alert-2"))
+	require.NoError(t, c.RecordAmount(ctx, "overlay-a", "gifts", "twitch:bob", 10, "alert-3"))
+	require.NoError(t, c.RecordAmount(ctx, "overlay-a", "bits", "twitch:alice", 100, "alert-4"))
+	require.NoError(t, c.RecordAmount(ctx, "overlay-b", "gifts", "twitch:alice", 1, "alert-5"))
 
 	alice, err := mr.ZScore("overlay:overlay-a:leaderboard:gifts", "twitch:alice")
 	require.NoError(t, err)
@@ -114,7 +114,7 @@ func TestRecordAmount_RefreshesTTL(t *testing.T) {
 	ctx := context.Background()
 	key := "overlay:overlay-a:leaderboard:gifts"
 
-	require.NoError(t, c.RecordAmount(ctx, "overlay-a", "gifts", "twitch:alice", 5))
+	require.NoError(t, c.RecordAmount(ctx, "overlay-a", "gifts", "twitch:alice", 5, "alert-1"))
 
 	ttl := mr.TTL(key)
 	assert.InDelta(t, (30 * 24 * time.Hour).Seconds(), ttl.Seconds(), 60, "fresh board TTL must be ~30 days")
@@ -122,7 +122,7 @@ func TestRecordAmount_RefreshesTTL(t *testing.T) {
 	// Age the board almost to expiry, then write again: the write must extend
 	// the life back to ~30 days.
 	mr.FastForward(29 * 24 * time.Hour)
-	require.NoError(t, c.RecordAmount(ctx, "overlay-a", "gifts", "twitch:alice", 1))
+	require.NoError(t, c.RecordAmount(ctx, "overlay-a", "gifts", "twitch:alice", 1, "alert-2"))
 
 	ttl = mr.TTL(key)
 	assert.InDelta(t, (30 * 24 * time.Hour).Seconds(), ttl.Seconds(), 60, "a write must refresh the 30-day TTL")
@@ -130,4 +130,38 @@ func TestRecordAmount_RefreshesTTL(t *testing.T) {
 	// With no further writes the board expires entirely.
 	mr.FastForward(31 * 24 * time.Hour)
 	assert.False(t, mr.Exists(key), "an untouched board must expire after 30 days")
+}
+
+// TestRecordAmount_ScoresOncePerAlert: ZINCRBY is additive and the consumer
+// group is at-least-once, so the same alert must move a board exactly once —
+// the redelivery is absorbed by the per-alert claim. A different alert from
+// the same member must still accumulate, and the claim itself must not
+// outlive the board by more than the same 30-day window.
+func TestRecordAmount_ScoresOncePerAlert(t *testing.T) {
+	mr, c := newTestClient(t)
+	ctx := context.Background()
+	key := "overlay:overlay-a:leaderboard:gifts"
+
+	require.NoError(t, c.RecordAmount(ctx, "overlay-a", "gifts", "twitch:alice", 5, "alert-1"))
+	require.NoError(t, c.RecordAmount(ctx, "overlay-a", "gifts", "twitch:alice", 5, "alert-1"))
+
+	score, err := mr.ZScore(key, "twitch:alice")
+	require.NoError(t, err)
+	assert.InDelta(t, 5.0, score, 1e-9, "a redelivered alert must not double-count its amount")
+
+	require.NoError(t, c.RecordAmount(ctx, "overlay-a", "gifts", "twitch:alice", 3, "alert-2"))
+	score, err = mr.ZScore(key, "twitch:alice")
+	require.NoError(t, err)
+	assert.InDelta(t, 8.0, score, 1e-9, "a different alert from the same member must still add")
+
+	claimTTL := mr.TTL("overlay:overlay-a:lb-scored:alert-1")
+	assert.InDelta(t, (30 * 24 * time.Hour).Seconds(), claimTTL.Seconds(), 60,
+		"the claim key must not outlive the board it guards")
+
+	// The claim is scoped per overlay: the same alert scores each list overlay
+	// it is routed to exactly once.
+	require.NoError(t, c.RecordAmount(ctx, "overlay-b", "gifts", "twitch:alice", 5, "alert-1"))
+	other, err := mr.ZScore("overlay:overlay-b:leaderboard:gifts", "twitch:alice")
+	require.NoError(t, err)
+	assert.InDelta(t, 5.0, other, 1e-9, "the claim must be scoped per overlay, not global")
 }

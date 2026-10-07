@@ -60,6 +60,31 @@ func Key(overlayID, category string) string {
 	return fmt.Sprintf("overlay:%s:leaderboard:%s", overlayID, category)
 }
 
+// claimedKey is the once-per-alert claim that guards a board against the
+// consumer group's at-least-once redeliveries.
+func claimedKey(overlayID, alertID string) string {
+	return fmt.Sprintf("overlay:%s:lb-scored:%s", overlayID, alertID)
+}
+
+// scoreOnceScript claims the alert's board contribution and scores it as one
+// atomic step. ZINCRBY is additive and the consumer group is at-least-once,
+// so the same alert can reach a board twice (a redelivery after another
+// overlay's step failed, or a crash before the stream ACK) — without the
+// SET NX claim the second delivery would permanently double-count the
+// amount. Atomicity matters in the other direction too: a claim-then-score
+// split across two calls could crash in between and silently under-count the
+// amount instead. The claim key's TTL matches the board's, so claims for
+// long-expired boards do not accumulate.
+var scoreOnceScript = redis.NewScript(`
+if redis.call('SETNX', KEYS[1], '1') == 0 then
+	return 0
+end
+redis.call('EXPIRE', KEYS[1], ARGV[3])
+redis.call('ZINCRBY', KEYS[2], ARGV[1], ARGV[2])
+redis.call('EXPIRE', KEYS[2], ARGV[3])
+return 1
+`)
+
 // Client writes leaderboard scores to Redis.
 type Client struct {
 	rdb redis.UniversalClient
@@ -70,16 +95,16 @@ func New(rdb redis.UniversalClient) *Client {
 	return &Client{rdb: rdb}
 }
 
-// RecordAmount adds amount to the member's running score on the board and
-// refreshes the board's 30-day TTL. ZINCRBY and EXPIRE go through one pipeline
-// so a crash between them cannot leave a score with no TTL (a key that would
-// then live forever).
-func (c *Client) RecordAmount(ctx context.Context, overlayID, category, member string, amount float64) error {
+// RecordAmount adds amount to the member's running score on the board, but
+// only the first time this alert is scored on this overlay's board — the
+// per-alert claim inside scoreOnceScript absorbs redeliveries. Both the
+// board and the claim carry the 30-day rolling TTL.
+func (c *Client) RecordAmount(ctx context.Context, overlayID, category, member string, amount float64, alertID string) error {
 	key := Key(overlayID, category)
-	pipe := c.rdb.TxPipeline()
-	pipe.ZIncrBy(ctx, key, amount, member)
-	pipe.Expire(ctx, key, TTL)
-	if _, err := pipe.Exec(ctx); err != nil {
+	_, err := scoreOnceScript.Run(ctx, c.rdb,
+		[]string{claimedKey(overlayID, alertID), key},
+		amount, member, int64(TTL/time.Second)).Result()
+	if err != nil {
 		return fmt.Errorf("failed to record leaderboard amount for %s: %w", key, err)
 	}
 	return nil
