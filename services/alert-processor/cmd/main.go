@@ -118,27 +118,11 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"status": "alive"})
 	})
 
-	router.GET("/health/ready", func(c *gin.Context) {
-		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
-		defer cancel()
-		if err := dbPool.Ping(ctx); err != nil {
-			log.Error("Health check failed: database unavailable", zap.Error(err))
-			c.JSON(http.StatusServiceUnavailable, gin.H{
-				"status": "unavailable",
-				"reason": "database connection failed",
-			})
-			return
-		}
-		if err := redisClient.Ping(ctx).Err(); err != nil {
-			log.Error("Health check failed: redis unavailable", zap.Error(err))
-			c.JSON(http.StatusServiceUnavailable, gin.H{
-				"status": "unavailable",
-				"reason": "redis connection failed",
-			})
-			return
-		}
-		c.JSON(http.StatusOK, gin.H{"status": "ready"})
-	})
+	router.GET("/health/ready", gin.WrapH(readinessHandler(
+		dbPool.Ping,
+		func(ctx context.Context) error { return redisClient.Ping(ctx).Err() },
+		log,
+	)))
 
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
