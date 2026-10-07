@@ -137,6 +137,15 @@ func TestFindAlertOverlays_RoutesOnlyAlertCapableOverlays(t *testing.T) {
 	// overlay_router UNION: direct sources plus accepted share_requests.
 	assert.Contains(t, db.queries[0].sql, "UNION", "routing must include the shared_overlay fan-out branch")
 	assert.Contains(t, db.queries[0].sql, "share_requests", "routing must join share_requests for the fan-out branch")
+	// The remaining routing conditions live only in the SQL text (no row can
+	// show them being dropped), so each is pinned here: a saboteur deleting any
+	// one of them must fail this assertion, not ship silently.
+	assert.Contains(t, db.queries[0].sql, "sr.status = 'accepted'",
+		"alerts must fan out only through accepted share requests, never pending or rejected ones")
+	assert.Contains(t, db.queries[0].sql, "o.is_active = true",
+		"deactivated overlays must not receive alerts")
+	assert.Contains(t, db.queries[0].sql, "ocs.is_active = true",
+		"a deactivated source subscription must not route alerts to the overlay")
 }
 
 // TestFindAlertOverlays_PropagatesQueryError: a failed route lookup must fail
