@@ -21,7 +21,6 @@ package consumer
 import (
 	"context"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/caesar/all-chat/services/alert-processor/metrics"
@@ -73,7 +72,8 @@ type Consumer struct {
 	blockFor     time.Duration
 	claimMinIdle time.Duration
 
-	groupErrMu     sync.Mutex
+	// groupErrLogged is only ever touched by the consume loop, which is the
+	// sole caller of ensureGroup.
 	groupErrLogged bool
 }
 
@@ -124,11 +124,8 @@ func (c *Consumer) ensureGroup(ctx context.Context) error {
 		return nil
 	}
 
-	c.groupErrMu.Lock()
-	firstFailure := !c.groupErrLogged
-	c.groupErrLogged = true
-	c.groupErrMu.Unlock()
-	if firstFailure {
+	if !c.groupErrLogged {
+		c.groupErrLogged = true
 		c.log.Warn("Cannot create consumer group yet (chat:raw missing?); will retry lazily",
 			zap.String("stream", StreamKey),
 			zap.String("group", ConsumerGroup),
