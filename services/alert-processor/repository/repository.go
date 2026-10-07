@@ -38,7 +38,6 @@ type Querier interface {
 // leaderboards, while all three types receive the alert event itself.
 type AlertOverlay struct {
 	OverlayID   string
-	UserID      string
 	OverlayType string
 }
 

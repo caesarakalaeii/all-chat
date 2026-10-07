@@ -116,9 +116,9 @@ func collectAlerts(t *testing.T, rdb *redis.Client, overlayIDs []string) <-chan 
 // alert carries its own overlay id and its own deterministic alert id.
 func TestHandle_FansOutToEveryAlertCapableOverlay(t *testing.T) {
 	store := &fakeStore{overlays: []repository.AlertOverlay{
-		{OverlayID: "overlay-a", UserID: "owner-1", OverlayType: "alerts"},
-		{OverlayID: "overlay-b", UserID: "owner-2", OverlayType: "goal"},
-		{OverlayID: "overlay-c", UserID: "owner-3", OverlayType: "list"},
+		{OverlayID: "overlay-a", OverlayType: "alerts"},
+		{OverlayID: "overlay-b", OverlayType: "goal"},
+		{OverlayID: "overlay-c", OverlayType: "list"},
 	}}
 	_, rdb, p := newHarness(t, store)
 

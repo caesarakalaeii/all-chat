@@ -118,9 +118,9 @@ func scanInto(values, dest []any) error {
 // so the assertion is on the statement text as well as the scanned rows.
 func TestFindAlertOverlays_RoutesOnlyAlertCapableOverlays(t *testing.T) {
 	db := &fakeQuerier{rows: fakeRows{rows: [][]any{
-		{"overlay-a", "user-1", "alerts"},
-		{"overlay-b", "user-2", "goal"},
-		{"overlay-c", "user-3", "list"},
+		{"overlay-a", "alerts"},
+		{"overlay-b", "goal"},
+		{"overlay-c", "list"},
 	}}}
 
 	repo := NewRepository(db)
@@ -128,9 +128,9 @@ func TestFindAlertOverlays_RoutesOnlyAlertCapableOverlays(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, overlays, 3)
 
-	assert.Equal(t, AlertOverlay{OverlayID: "overlay-a", UserID: "user-1", OverlayType: "alerts"}, overlays[0])
-	assert.Equal(t, AlertOverlay{OverlayID: "overlay-b", UserID: "user-2", OverlayType: "goal"}, overlays[1])
-	assert.Equal(t, AlertOverlay{OverlayID: "overlay-c", UserID: "user-3", OverlayType: "list"}, overlays[2])
+	assert.Equal(t, AlertOverlay{OverlayID: "overlay-a", OverlayType: "alerts"}, overlays[0])
+	assert.Equal(t, AlertOverlay{OverlayID: "overlay-b", OverlayType: "goal"}, overlays[1])
+	assert.Equal(t, AlertOverlay{OverlayID: "overlay-c", OverlayType: "list"}, overlays[2])
 
 	db.assertIssued(t, "o.overlay_type IN ('alerts','goal','list')", []any{"twitch", "12345"})
 	// The fan-out must cover both source shapes, like the message-processor's

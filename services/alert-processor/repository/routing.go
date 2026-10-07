@@ -34,7 +34,7 @@ import (
 func (r *Repository) FindAlertOverlays(ctx context.Context, platform, channelID string) ([]AlertOverlay, error) {
 	query := `
 		-- Direct platform sources (alert overlays that have this platform/channel directly)
-		SELECT DISTINCT o.id, o.user_id, o.overlay_type
+		SELECT DISTINCT o.id, o.overlay_type
 		FROM overlays o
 		JOIN overlay_chat_sources ocs ON o.id = ocs.overlay_id
 		WHERE o.is_active = true
@@ -46,7 +46,7 @@ func (r *Repository) FindAlertOverlays(ctx context.Context, platform, channelID 
 		UNION
 
 		-- Shared overlay fan-out: recipient alert overlays that subscribed to sender overlay
-		SELECT DISTINCT o.id, o.user_id, o.overlay_type
+		SELECT DISTINCT o.id, o.overlay_type
 		FROM overlays o
 		JOIN overlay_chat_sources ocs
 		    ON o.id = ocs.overlay_id
@@ -77,7 +77,7 @@ func (r *Repository) FindAlertOverlays(ctx context.Context, platform, channelID 
 	var overlays []AlertOverlay
 	for rows.Next() {
 		var target AlertOverlay
-		if err := rows.Scan(&target.OverlayID, &target.UserID, &target.OverlayType); err != nil {
+		if err := rows.Scan(&target.OverlayID, &target.OverlayType); err != nil {
 			return nil, fmt.Errorf("failed to scan alert overlay row: %w", err)
 		}
 		overlays = append(overlays, target)
