@@ -150,7 +150,7 @@ func (c *Consumer) consumeLoop(ctx context.Context) {
 					return
 				}
 				c.log.Error("Error reading messages", zap.Error(err))
-				time.Sleep(1 * time.Second) // back off on error
+				time.Sleep(1 * time.Second)
 			}
 		}
 	}
