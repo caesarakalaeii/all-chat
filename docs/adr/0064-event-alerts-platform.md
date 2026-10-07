@@ -2,7 +2,7 @@
 
 **Date**: 2026-10-01
 **Status**: Accepted
-**Decifiers**: All-Chat Platform Team
+**Deciders**: All-Chat Platform Team
 
 ## Context and Problem Statement
 

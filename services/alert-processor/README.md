@@ -98,11 +98,16 @@ in `alert_events.event_data` as the normalized event):
   "user": {
     "id": "12345678",
     "name": "SomeChatter",
-    "avatar_url": "https://static-cdn.jtvnw.net/jtv_user_pictures/...png"
+    "avatar_url": ""
   },
   "occurred_at": "2026-03-01T12:00:00Z"
 }
 ```
+
+`user.avatar_url` is empty for Twitch events: the message-processor's avatar
+enricher runs in the chat pipeline only, and this service does not re-run it.
+TikTok, YouTube and Discord events carry the avatar the platform supplies.
+Alert overlays should render a fallback rather than assume a URL is present.
 
 `alert_id` is a **deterministic UUIDv5** of (platform, channel id, message id,
 overlay id) — stable across at-least-once re-deliveries so `ON CONFLICT (id) DO

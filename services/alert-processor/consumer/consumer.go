@@ -260,13 +260,17 @@ func (c *Consumer) processMessage(ctx context.Context, msg redis.XMessage) error
 	data, ok := msg.Values["data"].(string)
 	if !ok {
 		// No payload can ever become valid — ACK and drop rather than poison
-		// the PEL forever.
+		// the PEL forever. The message-processor parks its copy of the same
+		// entry in a DLQ; this service deliberately does not duplicate that:
+		// the entry is already parked for humans to inspect, and an alert-side
+		// DLQ would only ever replay the same undecodable bytes.
 		c.log.Warn("Dropping stream entry without a data field", zap.String("stream_id", msg.ID))
 		return c.ack(ctx, msg.ID)
 	}
 
 	raw, err := mpmodels.ParseRawMessage([]byte(data))
 	if err != nil {
+		// Same reasoning: the chat pipeline's DLQ already holds the bytes.
 		c.log.Warn("Dropping undecodable stream entry",
 			zap.String("stream_id", msg.ID),
 			zap.Error(err),
