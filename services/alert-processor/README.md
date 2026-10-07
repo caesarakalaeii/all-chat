@@ -12,7 +12,7 @@ filter/demote path is untouched, and this service's consumer group never sees
 the message-processor's pending entries (ADR-0002 consumer-group pattern).
 
 **Port**: 8095
-**Status**: ✅ Production Ready
+**Deployment**: GitOps repo (`caesar-deployment/apps/workloads/all-chat/alert-processor-deployment.yaml`), two replicas, Prometheus-scraped metrics
 
 ---
 
