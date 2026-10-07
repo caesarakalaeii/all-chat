@@ -41,7 +41,10 @@ type fakeStore struct {
 	overlays  []repository.AlertOverlay
 	routeErr  error
 	insertErr error
-	inserts   []*models.Alert
+	// failInsertOverlay, when set, fails the persist for that one overlay —
+	// how a multi-overlay fan-out is made to fail partway through.
+	failInsertOverlay string
+	inserts           []*models.Alert
 }
 
 func (f *fakeStore) FindAlertOverlays(_ context.Context, _, _ string) ([]repository.AlertOverlay, error) {
@@ -54,6 +57,9 @@ func (f *fakeStore) FindAlertOverlays(_ context.Context, _, _ string) ([]reposit
 func (f *fakeStore) InsertAlertEvent(_ context.Context, alert *models.Alert) error {
 	if f.insertErr != nil {
 		return f.insertErr
+	}
+	if f.failInsertOverlay != "" && alert.OverlayID == f.failInsertOverlay {
+		return errors.New("db down")
 	}
 	f.inserts = append(f.inserts, alert)
 	return nil
@@ -182,6 +188,39 @@ func TestHandle_LeaderboardOnlyForListOverlays(t *testing.T) {
 	score, err = mr.ZScore("overlay:overlay-c:leaderboard:gifts", "twitch:u1")
 	require.NoError(t, err)
 	assert.InDelta(t, 5.0, score, 1e-9, "a zero-amount event must not change scores")
+}
+
+// TestHandle_LeaderboardScoreIsIdempotentOnRedelivery: the consumer group is
+// at-least-once, so a routed alert is redelivered whenever a later step
+// failed — here overlay B's persist fails after overlay A already scored.
+// ZINCRBY is additive, so without an idempotency guard the redelivery would
+// double-count A's amount permanently (until the board's 30-day TTL).
+func TestHandle_LeaderboardScoreIsIdempotentOnRedelivery(t *testing.T) {
+	store := &fakeStore{overlays: []repository.AlertOverlay{
+		{OverlayID: "overlay-a", OverlayType: "list"},
+		{OverlayID: "overlay-b", OverlayType: "list"},
+	}}
+	mr, _, p := newHarness(t, store)
+
+	event := bitsEvent()
+	event.EventType = "mystery_gift"
+	event.EventData = map[string]interface{}{"gift_count": 5}
+
+	// First delivery: overlay A scores, then overlay B's persist fails and the
+	// entry stays pending for redelivery.
+	store.failInsertOverlay = "overlay-b"
+	assert.Error(t, p.Handle(context.Background(), event))
+
+	// Redelivery: both overlays succeed.
+	store.failInsertOverlay = ""
+	require.NoError(t, p.Handle(context.Background(), event))
+
+	for _, overlayID := range []string{"overlay-a", "overlay-b"} {
+		score, err := mr.ZScore("overlay:"+overlayID+":leaderboard:gifts", "twitch:u1")
+		require.NoError(t, err, "overlay %s's board must carry the gift", overlayID)
+		assert.InDelta(t, 5.0, score, 1e-9,
+			"overlay %s must carry the amount exactly once, not once per delivery", overlayID)
+	}
 }
 
 // TestHandle_PersistFailureStopsBeforePublish: if history cannot be written,
