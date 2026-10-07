@@ -28,6 +28,7 @@ import (
 	"github.com/caesar/all-chat/services/alert-processor/publisher"
 	"github.com/caesar/all-chat/services/alert-processor/repository"
 	mpmodels "github.com/caesar/all-chat/services/message-processor/models"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -285,6 +286,91 @@ func TestHandle_NoOverlaysIsNoop(t *testing.T) {
 
 	assert.NoError(t, p.Handle(context.Background(), bitsEvent()))
 	assert.Empty(t, store.inserts)
+}
+
+// counterValue reads one labelled counter off the default registry, the way a
+// Prometheus scrape would. The metrics package's counter vars are unexported,
+// so a test outside it cannot call WithLabelValues; asserting on the gathered
+// registry is also the stronger form — it proves the value a scrape would
+// actually return, not a child a test conjured by asking for it.
+func counterValue(t *testing.T, name, platform, eventType string) float64 {
+	t.Helper()
+	families, err := prometheus.DefaultGatherer.Gather()
+	require.NoError(t, err)
+	for _, family := range families {
+		if family.GetName() != name {
+			continue
+		}
+		for _, metric := range family.GetMetric() {
+			var gotPlatform, gotType string
+			for _, label := range metric.GetLabel() {
+				switch label.GetName() {
+				case "platform":
+					gotPlatform = label.GetValue()
+				case "event_type":
+					gotType = label.GetValue()
+				}
+			}
+			if gotPlatform == platform && gotType == eventType {
+				return metric.GetCounter().GetValue()
+			}
+		}
+	}
+	return 0
+}
+
+// TestHandle_CountersTrackThePipeline: the routed/persisted/publish-error
+// counters are the operational story of one event (persisted-before-published
+// is visible as routed ≥ persisted). Dropping any Record* call keeps the
+// pipeline correct while silently blinding dashboards — these assertions pin
+// the wiring, not the counters themselves (metrics_test covers those).
+func TestHandle_CountersTrackThePipeline(t *testing.T) {
+	store := &fakeStore{overlays: []repository.AlertOverlay{
+		{OverlayID: "overlay-a", OverlayType: "alerts"},
+	}}
+	_, rdb, p := newHarness(t, store)
+
+	const (
+		routed    = "alert_processor_events_routed_total"
+		persisted = "alert_processor_events_persisted_total"
+	)
+	beforeRouted := counterValue(t, routed, "twitch", "bits")
+	beforePersisted := counterValue(t, persisted, "twitch", "bits")
+	beforePublishErrors := counterValue(t, "alert_processor_publish_errors_total", "twitch", "bits")
+
+	deliveries := collectAlerts(t, rdb, []string{"overlay-a"})
+	require.NoError(t, p.Handle(context.Background(), bitsEvent()))
+	select {
+	case <-deliveries:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the alert never arrived")
+	}
+
+	assert.Equal(t, beforeRouted+1, counterValue(t, routed, "twitch", "bits"),
+		"routing to an overlay must count one routed event")
+	assert.Equal(t, beforePersisted+1, counterValue(t, persisted, "twitch", "bits"),
+		"a successful persist must count one persisted event")
+	assert.Equal(t, beforePublishErrors, counterValue(t, "alert_processor_publish_errors_total", "twitch", "bits"),
+		"a successful publish must not count a publish error")
+}
+
+// TestHandle_PublishError_CountsPublishError: the publish-error counter is
+// how an overlay population silently going blind becomes visible; the
+// RecordPublishError call must sit on the failure path, not merely exist.
+func TestHandle_PublishError_CountsPublishError(t *testing.T) {
+	store := &fakeStore{overlays: []repository.AlertOverlay{
+		{OverlayID: "overlay-a", OverlayType: "alerts"},
+	}}
+	mr, _, p := newHarness(t, store)
+	mr.Close() // the publish must fail: Redis is gone
+
+	const publishErrors = "alert_processor_publish_errors_total"
+	before := counterValue(t, publishErrors, "twitch", "bits")
+
+	assert.Error(t, p.Handle(context.Background(), bitsEvent()),
+		"a publish failure must still propagate for redelivery")
+	assert.Equal(t, before+1, counterValue(t, publishErrors, "twitch", "bits"),
+		"a failed publish must count one publish error")
 }
 
 // TestHandle_RouteFailurePropagates: a failed routing lookup must redeliver,
