@@ -24,7 +24,7 @@
  * fetchIsLive() method for efficient status checking.
  */
 
-import { TikTokLiveConnection } from 'tiktok-live-connector';
+import { InvalidResponseCompositeError, TikTokLiveConnection } from 'tiktok-live-connector';
 import { Logger } from '../types/logger.js';
 import { assertValidTikTokUsername } from '../types/validation.js';
 
@@ -142,16 +142,17 @@ export class TikTokStatusChecker {
 
       return { isLive, roomId };
     } catch (error) {
-      // tiktok-live-connector's FetchIsLiveError calls super() with no message,
-      // so error.message is always "". Extract the sub-errors from error.errors[] for diagnostics.
-      const subErrors = (error as any)?.errors;
-      const errorDetail = Array.isArray(subErrors) && subErrors.length > 0
+      // fetchIsLive() throws InvalidResponseCompositeError whose message only says
+      // "all sources" failed; the per-source causes (e.g. user_not_found for a wrong
+      // username) live in config.requestErrs.
+      const subErrors = error instanceof InvalidResponseCompositeError ? (error.config.requestErrs ?? []) : [];
+      const errorDetail = subErrors.length > 0
         ? subErrors.map((e: unknown) => (e instanceof Error ? e.message : String(e))).filter(Boolean).join(' | ')
         : (error instanceof Error ? error.message : String(error));
 
       this.logger.error('Failed to check live status', {
         username,
-        error: errorDetail || 'unknown (FetchIsLiveError with no sub-errors)',
+        error: errorDetail || 'unknown (no sub-errors reported)',
         error_type: error instanceof Error ? error.constructor.name : typeof error,
         stack: error instanceof Error ? error.stack : undefined
       });
