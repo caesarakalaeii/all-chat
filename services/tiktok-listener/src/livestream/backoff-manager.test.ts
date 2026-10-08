@@ -202,6 +202,25 @@ describe('BackoffManager budget-refusal parking', () => {
     expect(mgr.getState('user')!.nextCheckTime).toBe(1_000_000);
   });
 
+  it('reports the remaining budget park, never an ordinary error backoff', () => {
+    // The rebalance hold extends by this value: an error backoff must not
+    // read as a budget park, or a shed room would be withheld from this pod
+    // for no budget reason.
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    const mgr = new BackoffManager(noopLogger);
+    mgr.recordConnectionError('erroring', new Error('boom'));
+    expect(mgr.budgetParkRemainingMs('erroring')).toBe(0);
+    expect(mgr.budgetParkRemainingMs('unknown')).toBe(0);
+
+    mgr.recordBudgetRefusal('parked', 600_000);
+    now.mockReturnValue(1_000_000 + 200_000);
+    expect(mgr.budgetParkRemainingMs('parked')).toBe(400_000);
+    now.mockReturnValue(1_000_000 + 700_000);
+    expect(mgr.budgetParkRemainingMs('parked')).toBe(0);
+  });
+
   it('parks at the stated time even when it is shorter than the error curve would be', () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
     vi.spyOn(Math, 'random').mockReturnValue(0.5);
