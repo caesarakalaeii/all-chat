@@ -91,7 +91,7 @@ describe('docs metadata', () => {
 
 describe('upgrade metadata', () => {
   it('keeps the upgrade title and description', () => {
-    expect(t('metadata.upgrade.title')).toBe('Upgrade to Premium | All-Chat')
+    expect(t('metadata.upgrade.title')).toBe('Upgrade to Premium')
     expect(t('metadata.upgrade.description')).toBe(
       'Back All-Chat on Patreon to unlock premium features: moderate from your overlay, ElevenLabs TTS, YouTube stream selection, shared chat, and viewer flairs.'
     )
@@ -100,9 +100,9 @@ describe('upgrade metadata', () => {
 
 describe('overlay metadata', () => {
   it('keeps the OBS browser-source titles and descriptions', () => {
-    expect(t('metadata.overlay.title')).toBe('All-Chat Overlay')
+    expect(t('metadata.overlay.title')).toBe('Overlay')
     expect(t('metadata.overlay.description')).toBe('Chat overlay for OBS Browser Source')
-    expect(t('metadata.overlayMonitor.title')).toBe('All-Chat Monitor')
+    expect(t('metadata.overlayMonitor.title')).toBe('Chat Monitor')
     expect(t('metadata.overlayMonitor.description')).toBe(
       'Readable chat & activity monitor for streamers'
     )

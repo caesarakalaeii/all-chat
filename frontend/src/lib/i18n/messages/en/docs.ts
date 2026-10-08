@@ -195,6 +195,7 @@ export const docs = {
     tocWhatIsAllChat: 'What is All-Chat',
     tocGettingStarted: 'Get your overlay live',
     tocIrl: '24/7 & IRL streams',
+    tocTiktok: 'TikTok: how it works and its limits',
     tocMonitor: 'The chat monitor',
     tocModeration: 'Moderate your chat',
     tocEngagement: 'Polls, predictions & points',
@@ -220,6 +221,8 @@ export const docs = {
     startObsEmphasis: 'Browser Source',
     startDemandDriven:
       'Sources are demand-driven: All-Chat starts listening when the overlay is open and winds down when nothing is connected, so you never pay for idle listeners.',
+    startMultipleOverlays:
+      'One account can run several overlays, each with its own mix of chat sources, its own theme and its own OBS URL. For example, one overlay for Twitch and TikTok on a gaming stream and a YouTube-only one for a podcast.',
     irlHeading: '24/7 & IRL streams',
     irlIntro:
       "Running an OBS instance around the clock — a common setup for IRL streamers who want disconnect protection — needs one extra step so YouTube chat behaves. Add {passiveParam} to your overlay's browser-source URL:",
@@ -239,6 +242,17 @@ export const docs = {
       "A plain browser-source refresh does {negation} restart a parked YouTube channel — use the monitor's {rediscover} button. While a channel is parked, its platform dot shows an {paused} state (waiting for you to trigger it), not a red error.",
     irlRefreshNoteNegationEmphasis: 'not',
     irlRefreshNotePausedEmphasis: 'indigo “paused”',
+    tiktokHeading: 'TikTok: how it works and its limits',
+    tiktokNoApi:
+      "TikTok has no public API for LIVE chat. Every tool that shows TikTok LIVE chat, All-Chat included, reads it the way TikTok's own web player does. Add a TikTok source by username, and chat appears while you are LIVE.",
+    tiktokSigner:
+      'That connection has to be signed. All-Chat maintains its own open-source signing service instead of depending only on a third-party sign server. When TikTok moved to browser-grade session checks on 2026-09-09, All-Chat tracked the change the same week. The design and its updates are written up in {adr}.',
+    tiktokAdrLinkText: 'ADR-0052 on GitHub',
+    tiktokFallback:
+      'Premium rooms get a second delivery path, used when TikTok refuses the main connection.',
+    tiktokLimit:
+      '{limit} TikTok is the platform most likely to see short interruptions when TikTok changes its web player. TikTok also has no send or moderation API, so the monitor cannot reply or moderate there.',
+    tiktokLimitEmphasis: 'The limit:',
     monitorHeading: 'The chat monitor',
     monitorIntro:
       "Open {monitorView} from the overlay editor for a live control room, separate from the OBS overlay. It shows every message in one panel with an activity feed beside it, and it's where you send messages and moderate.",
@@ -253,6 +267,12 @@ export const docs = {
     monitorDisplay:
       "{display} settings toggle what you see (avatars, badges, pronouns, timestamps, platform icons, moderation controls). These are your personal monitor preferences and don't change the OBS overlay.",
     monitorDisplayEmphasis: 'Display',
+    monitorDockHeading: 'Dock the monitor in OBS',
+    monitorDockIntro:
+      'The monitor also works as an OBS Custom Browser Dock, so chat sits beside your mixer instead of in a second window. In the overlay editor, click {copyDock}. It copies the monitor link with dock mode on:',
+    monitorDockSteps:
+      'In OBS, open {menu}, give the dock a name, paste the link and click Apply. The dock keeps its own browser profile, so it asks you to sign in once inside the panel. Streamlabs Desktop accepts the same link as a custom browser dock.',
+    monitorDockMenu: 'View > Docks > Custom Browser Docks',
     moderationHeading: 'Moderate your chat',
     moderationBody:
       'With {controls} on in the monitor, hover a message to {del} it, or open a chatter to {timeout}, {ban} or {unban} them — applied on the source platform: Twitch, Kick and Discord do delete, timeout, ban and unban; YouTube does timeout and ban; TikTok has no moderation API.',

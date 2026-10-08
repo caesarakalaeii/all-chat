@@ -139,7 +139,9 @@ describe('wedge band', () => {
     expect(t('marketing.wedge.them1')).toBe(
       'download a desktop app first — your chat tool should weigh one URL, not 200 MB'
     )
-    expect(t('marketing.wedge.us1')).toBe('nothing to install — it is a URL')
+    expect(t('marketing.wedge.us1')).toBe(
+      'nothing to install: it is a URL. the extension is optional'
+    )
   })
 })
 

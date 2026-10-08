@@ -35,6 +35,7 @@ const EXPECTED_NAMESPACES = [
   'dashboard',
   'docs',
   'errors',
+  'guides',
   'legal',
   'maintenanceBanner',
   'marketing',

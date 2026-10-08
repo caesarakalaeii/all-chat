@@ -18,13 +18,15 @@
 
 import type { MetadataRoute } from 'next'
 
+// No lastModified: stamping every URL with the request time on every fetch is
+// a value crawlers learn to ignore, which also discards it on the day a page
+// really did change. Omitting it is honest until there is a real per-page date.
 export default function sitemap(): MetadataRoute.Sitemap {
   const baseUrl = 'https://allch.at'
 
   return [
     {
       url: baseUrl,
-      lastModified: new Date(),
       changeFrequency: 'weekly',
       priority: 1,
     },
@@ -32,37 +34,56 @@ export default function sitemap(): MetadataRoute.Sitemap {
     // previously absent from the sitemap, so they were under-crawled.
     {
       url: `${baseUrl}/docs`,
-      lastModified: new Date(),
       changeFrequency: 'weekly',
       priority: 0.8,
     },
     {
       url: `${baseUrl}/docs/api`,
-      lastModified: new Date(),
       changeFrequency: 'monthly',
       priority: 0.6,
     },
     {
       url: `${baseUrl}/upgrade`,
-      lastModified: new Date(),
+      changeFrequency: 'monthly',
+      priority: 0.7,
+    },
+    {
+      url: `${baseUrl}/obs-chat-overlay`,
+      changeFrequency: 'monthly',
+      priority: 0.8,
+    },
+    {
+      url: `${baseUrl}/obs-chat-dock`,
+      changeFrequency: 'monthly',
+      priority: 0.8,
+    },
+    {
+      url: `${baseUrl}/tiktok-live-chat-overlay`,
+      changeFrequency: 'monthly',
+      priority: 0.8,
+    },
+    {
+      url: `${baseUrl}/multistream-chat`,
+      changeFrequency: 'monthly',
+      priority: 0.8,
+    },
+    {
+      url: `${baseUrl}/compare`,
       changeFrequency: 'monthly',
       priority: 0.7,
     },
     {
       url: `${baseUrl}/legal/privacy`,
-      lastModified: new Date(),
       changeFrequency: 'monthly',
       priority: 0.3,
     },
     {
       url: `${baseUrl}/legal/terms`,
-      lastModified: new Date(),
       changeFrequency: 'monthly',
       priority: 0.3,
     },
     {
       url: `${baseUrl}/legal/impressum`,
-      lastModified: new Date(),
       changeFrequency: 'monthly',
       priority: 0.3,
     },

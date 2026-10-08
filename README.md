@@ -24,6 +24,8 @@ No bots. No IRC tokens. No complicated setup.
 - **No Setup Required** — Sign in, create an overlay, paste the URL into OBS. That's it.
 - **Every Emote Works** — 7TV, BTTV, FFZ, plus native Twitch and YouTube emotes all render correctly
 - **16 Themes + Full CSS** — Built-in themes from Win98 retro to cyberpunk neon, or write your own CSS
+- **Dock It in OBS**: the chat monitor runs as an OBS Custom Browser Dock (**View > Docks > Custom Browser Docks**), a readable view beside your mixer
+- **Multiple Overlays**: one account runs several overlays, each with its own mix of chat sources and its own theme
 - **Real-Time Delivery** — Messages arrive via WebSocket — no 5-second delay
 - **Smart Polling** — Listeners only run when your overlay is actually visible (see [How it works](#demand-driven-listeners))
 - **Browser Extension** — Replace native site chat with All-Chat on Twitch, YouTube, and Kick
@@ -35,7 +37,7 @@ No bots. No IRC tokens. No complicated setup.
 
 ### 1. Create your overlay
 
-1. Visit **[allch.at](https://allch.at)** and sign in with Twitch
+1. Visit **[allch.at](https://allch.at)** and sign in with Twitch, YouTube or Kick
 2. Create a new overlay
 3. Add chat sources — Twitch channels, YouTube streams, Kick channels, etc.
 4. Tweak display settings (font, message duration, animations)
@@ -58,9 +60,19 @@ The OBS overlay is built for compositing on stream, not for reading. For a **rea
 https://allch.at/overlay/YOUR_OVERLAY_ID/view
 ```
 
-A Twitch-dashboard-inspired monitor with a **resizable live Chat panel + Activity feed**, per-platform connection indicators, a config summary, and its own **light/dark mode**. Scrolling up **pauses the chat feed** on what you're reading (a pill shows how many new messages are waiting), and **clicking a username filters chat to that person**: a 1:1 conversation view that keeps up even when chat is flying by. It ignores the overlay's themes and animations — purely for observability — and even keeps moderated messages visible (struck-through) with a moderation log. No login required; it reuses the same public overlay link.
+A Twitch-dashboard-inspired monitor with a **resizable live Chat panel + Activity feed**, per-platform connection indicators, a config summary, and its own **light/dark mode**. Scrolling up **pauses the chat feed** on what you're reading (a pill shows how many new messages are waiting), and **clicking a username filters chat to that person**: a 1:1 conversation view that keeps up even when chat is flying by. It ignores the overlay's themes and animations, because it is purely for observability, and it keeps moderated messages visible (struck-through) with a moderation log. You need to be signed in to open it.
 
 You can also open it from your overlay's settings page (or its preview page) via the **Monitor View** button.
+
+**Dock it in OBS.** The monitor also works as an OBS Custom Browser Dock, so chat sits beside your mixer instead of in a second window. In the overlay editor, click **Copy dock URL**. It copies the monitor link with dock mode on:
+
+```
+https://allch.at/overlay/YOUR_OVERLAY_ID/view?dock=1
+```
+
+In OBS, open **View > Docks > Custom Browser Docks**, give the dock a name, paste the link and click **Apply**. The dock keeps its own browser profile, so it asks you to sign in once inside the panel. Streamlabs Desktop accepts the same link as a custom browser dock.
+
+**One account, several overlays.** Each overlay has its own mix of chat sources, its own theme, its own OBS URL and its own monitor. For example, one overlay for Twitch and TikTok on a gaming stream and a YouTube-only one for a podcast.
 
 **Your moderators can use it too.** Under **Moderators** in the overlay editor you can invite the
 people who already moderate for you (Premium). You get a private link to send them; they accept it
@@ -137,7 +149,7 @@ The [All-Chat Browser Extension](https://github.com/caesarakalaeii/all-chat-exte
 | **Twitch** | IRC + EventSub webhooks | Chat, emotes (native + 7TV/BTTV/FFZ), chat GIFs, badges, colors, channel points, raids, follows, chat notices (watch streaks, announcements, charity donations) |
 | **YouTube** | HTTP polling + InnerTube API | Chat, Super Chat, member badges, multi-stream selection (public, currently live streams only) |
 | **Kick** | Pusher WebSocket | Chat, emotes, badges, message deletion |
-| **TikTok** | Unofficial live connector library | Chat messages, username-based display |
+| **TikTok** | Reads LIVE chat the way TikTok's own web player does; All-Chat maintains its own open-source signing service | Chat, gifts, follows and likes; add a channel by username |
 | **Discord** | Bot gateway + webhook relay | Channel chat relay to overlay |
 | **Owncast** *(rolling out)* | Chat websocket, one connection per instance | Chat from any self-hosted Owncast instance; add the instance URL as a source |
 | **GoodGame** *(rolling out)* | Chat websocket | Chat from GoodGame.ru channels; add the channel key as a source |
@@ -148,6 +160,8 @@ The [All-Chat Browser Extension](https://github.com/caesarakalaeii/all-chat-exte
 > YouTube has two listener modes: the official **YouTube Data API** (quota-tracked with reserve-confirm-rollback) and an **InnerTube poller** that costs zero quota. Both are production-ready.
 >
 > **Note:** Only public, currently live YouTube streams are supported. Unlisted streams, private streams, and scheduled (upcoming) streams do not work. Stream discovery relies on YouTube's public search API (`search.list` with `eventType=live`), which only returns streams that are both public and actively broadcasting.
+>
+> **TikTok:** TikTok has no public API for LIVE chat. Every tool that shows TikTok LIVE chat, All-Chat included, reads it the way TikTok's own web player does. All-Chat maintains its own open-source signing service ([`tiktok-signer`](./services/tiktok-signer/README.md), [ADR-0052](./docs/adr/0052-retiring-euler-stream-for-tiktok-signing.md)) instead of depending only on a third-party sign server, and tracked TikTok's 2026-09-09 move to browser-grade session checks the same week. Premium rooms get a second delivery path when the main connection is refused ([ADR-0064](./docs/adr/0064-tiktok-transport-tiers-by-entitlement.md)). The limit: TikTok is the platform most likely to see short interruptions when TikTok changes its web player.
 
 ---
 
@@ -205,7 +219,8 @@ Platform Listeners (Twitch IRC, YouTube API, Kick Pusher, TikTok WS, Discord Bot
 | `youtube-listener-innertube` | YouTube InnerTube API polling (zero quota cost) |
 | `youtube-quota-monitor` | Reads the shared YouTube quota table; exports the quota metric + publishes `quota:alerts` for the discord-bot (ADR-0023) |
 | `kick-listener` | Kick chat via Pusher WebSocket |
-| `tiktok-listener` | TikTok live chat via unofficial connector |
+| `tiktok-listener` | TikTok LIVE chat and audience events, read the way TikTok's own web player does |
+| `tiktok-signer` | Self-hosted TikTok webcast signing via TikTok's own SDK in a headless browser (ADR-0052) |
 | `discord-listener` | Discord channel chat relay |
 | `message-processor` | Message normalization, emote enrichment, overlay routing |
 | `overlay-manager` | Overlay CRUD, source configuration, settings |
