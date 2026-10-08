@@ -134,6 +134,12 @@ async function stubEmotes(page: Page) {
   )
 }
 
+// The Next dev-server indicator (bottom-left "N Issues" pill) appears
+// whenever an unmocked request errors in the dev proxy, which depends on
+// timing, not on the page under test. It is dev-only chrome, so it is
+// hidden in every shot instead of being baselined.
+const HIDE_DEV_CHROME = 'nextjs-portal { display: none !important; }'
+
 /**
  * Wait for the page's rendered pixels to stop moving. Real pages keep
  * settling seconds after `networkidle`: webfonts swap in late and reflow
@@ -173,6 +179,7 @@ async function expectBaseline(
   options: { fullPage?: boolean } = {}
 ) {
   const fullPage = options.fullPage ?? false
+  await page.addStyleTag({ content: HIDE_DEV_CHROME })
   for (const viewport of WIDTHS) {
     await page.setViewportSize({ width: viewport.width, height: viewport.height })
     await anchor()
@@ -191,6 +198,10 @@ test.describe('visual baselines (chrome)', () => {
     // Monaco loads its CSS from cdn.jsdelivr.net, which the dev CSP rejects;
     // the async failure flakes the shot. Block it outright.
     await page.route('https://cdn.jsdelivr.net/**', (route) => route.abort())
+    // The cookie banner mounts 1s after load. Whether the shot lands before
+    // or after that depends on runner speed, so mark it acknowledged before
+    // the app boots.
+    await page.addInitScript(() => localStorage.setItem('cookieBannerAcknowledged', 'true'))
   })
 
   test('landing', async ({ page }) => {
