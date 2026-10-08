@@ -640,7 +640,7 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 	}
 
 	// Rollout gate (ADR-0008): the expansion platforms (owncast, goodgame, picarto,
-	// facebook, rumble) ship behind a per-platform feature_gates row seeded
+	// facebook, instagram) ship behind a per-platform feature_gates row seeded
 	// premium-only, so a new listener rolls out to a cohort instead of every
 	// overlay at once. Fail closed on a lookup error: "cannot verify" must never
 	// read as "allowed".

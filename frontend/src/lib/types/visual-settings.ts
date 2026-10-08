@@ -140,7 +140,6 @@ export interface VisualSettings {
   picartoBubbleBg?: string
   facebookBubbleBg?: string
   instagramBubbleBg?: string
-  rumbleBubbleBg?: string
 
   // Visibility toggles ('inline' | 'none' for inline elements; 'block' | 'none' for block)
   showAvatars?: 'inline' | 'none' // --chat-show-avatars
@@ -194,7 +193,6 @@ export interface VisualSettings {
   picartoAccent?: string // --platform-picarto-accent
   facebookAccent?: string // --platform-facebook-accent
   instagramAccent?: string // --platform-instagram-accent
-  rumbleAccent?: string // --platform-rumble-accent
 
   // Event visibility
   showSuperChat?: 'block' | 'none' // --chat-show-super-chat

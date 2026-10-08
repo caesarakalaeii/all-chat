@@ -66,7 +66,6 @@ describe('PLATFORM_COLORS', () => {
       'kick',
       'owncast',
       'picarto',
-      'rumble',
       'system',
       'tiktok',
       'twitch',

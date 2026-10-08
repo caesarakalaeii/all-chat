@@ -11,7 +11,6 @@ Generate customized quick reference guide for adding a new streaming platform.
 ```
 
 **Examples**:
-- `/doc-add-platform rumble`
 - `/doc-add-platform facebook-gaming`
 - `/doc-add-platform dlive`
 
@@ -206,17 +205,17 @@ Next steps:
 
 ## Example Output
 
-For `/doc-add-platform rumble` (WebSocket-based):
+For `/doc-add-platform dlive` (WebSocket-based):
 
 **Generated guide includes**:
 - Template choice: kick-listener (WebSocket)
-- Rumble WebSocket connection code (adapted from Kick Pusher client)
-- Rumble message format → unified format normalizer
-- Specific Rumble API endpoints and authentication
-- Testing with actual Rumble chat room
-- Kubernetes deployment for rumble-listener
+- DLive WebSocket connection code (adapted from Kick Pusher client)
+- DLive message format → unified format normalizer
+- Specific DLive API endpoints and authentication
+- Testing with actual DLive chat room
+- Kubernetes deployment for dlive-listener
 
-**File location**: `/tmp/claude-<session>/add-rumble-guide.md` (~180 lines)
+**File location**: `/tmp/claude-<session>/add-dlive-guide.md` (~180 lines)
 
 ---
 

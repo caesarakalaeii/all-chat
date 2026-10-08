@@ -137,7 +137,6 @@ export interface ChatMessage {
     | 'picarto'
     | 'facebook'
     | 'instagram'
-    | 'rumble'
     | 'discord'
     | 'system' // Primary platform
   /**
@@ -228,7 +227,6 @@ export interface PlatformStatus {
     | 'picarto'
     | 'facebook'
     | 'instagram'
-    | 'rumble'
     | 'discord'
   channel_id: string
   channel_name?: string

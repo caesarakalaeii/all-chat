@@ -39,7 +39,6 @@ const PLATFORMS: Array<{ field: keyof VisualSettings; label: string; brandDefaul
   { field: 'picartoAccent', label: 'Picarto', brandDefault: '#1AA455' },
   { field: 'facebookAccent', label: 'Facebook', brandDefault: '#1877F2' },
   { field: 'instagramAccent', label: 'Instagram', brandDefault: '#E1306C' },
-  { field: 'rumbleAccent', label: 'Rumble', brandDefault: '#85C742' },
   { field: 'discordAccent', label: 'Discord', brandDefault: '#5865F2' },
 ]
 export function PlatformColorsGroup({

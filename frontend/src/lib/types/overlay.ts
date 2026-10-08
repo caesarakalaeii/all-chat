@@ -232,7 +232,6 @@ export interface ChatSource {
     | 'picarto'
     | 'facebook'
     | 'instagram'
-    | 'rumble'
     | 'shared_overlay'
     | 'discord'
   channel_id: string
@@ -298,7 +297,6 @@ export interface AddSourceRequest {
     | 'picarto'
     | 'facebook'
     | 'instagram'
-    | 'rumble'
     | 'shared_overlay'
     | 'discord'
   channel_id: string
