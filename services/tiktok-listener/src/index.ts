@@ -1139,9 +1139,13 @@ class TikTokListenerService {
         );
         // Set every hold synchronously before any teardown awaits: a Pub/Sub
         // snapshot can arrive mid-teardown, and a lease released by rebalance()
-        // but not yet held would be re-claimable in that window.
+        // but not yet held would be re-claimable in that window. A room parked
+        // on this pod's sign budget is held until the park ends: the teardown
+        // below drops its backoff state, and an earlier re-claim would re-dial
+        // into the same refusal. Another pod, with its own budget, may claim it.
         for (const username of released) {
-          this.rebalanceHolds.set(username, Date.now() + REBALANCE_HOLD_MS);
+          const holdMs = Math.max(REBALANCE_HOLD_MS, this.backoffManager.budgetParkRemainingMs(username));
+          this.rebalanceHolds.set(username, Date.now() + holdMs);
         }
         for (const username of released) {
           // Drop all local tracking for the released stream, including a
