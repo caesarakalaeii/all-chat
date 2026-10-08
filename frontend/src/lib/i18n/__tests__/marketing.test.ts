@@ -69,6 +69,7 @@ describe('lanes hero, logged out', () => {
       tiktok: 'flowTiktok',
       kick: 'flowKick',
       discord: 'flowDiscord',
+      pride: 'flowPride',
     } as const
     for (const group of Object.values(platforms)) {
       for (let i = 1; i <= 22; i++) {
