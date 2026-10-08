@@ -87,9 +87,11 @@ export function ProtectedRoute({ children, requireAdmin = false, requireBetaTest
 
     if (!user) {
       // A caller with a fallback renders it in place; navigating away would
-      // discard the surface that explains how to sign in.
+      // discard the surface that explains how to sign in. Everyone else lands
+      // on the homepage sign-in band, not the hero, so the bounce reads as
+      // "sign in first" instead of a silent trip to the marketing page.
       if (!hasFallback) {
-        router.push('/')
+        router.push('/#get-started')
       }
       return
     }

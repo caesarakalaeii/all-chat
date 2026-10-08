@@ -39,11 +39,14 @@ export default function LegalLayout({ title, lastUpdated, children }: LegalLayou
     >
       <AppNav />
       <div className="mx-auto max-w-4xl px-4 py-12">
-        <div className="lanes-panel p-8 md:p-12">
-          <div className="mb-8 flex items-start justify-between">
-            <div className="space-y-2">
+        <div className="lanes-panel p-5 sm:p-8 md:p-12">
+          <div className="mb-8 flex items-start justify-between gap-4">
+            {/* min-w-0 + break-words: the German half of the title
+                ("(NUTZUNGSBEDINGUNGEN)") is one unbreakable uppercase word that
+                pushed the page ~280px past a 375px viewport. */}
+            <div className="min-w-0 space-y-2">
               <span className="mono-label">{t('legal.layout.eyebrow')}</span>
-              <h1 className="text-3xl">{title}</h1>
+              <h1 className="text-2xl break-words sm:text-3xl">{title}</h1>
               <p className="text-dim text-sm">
                 {t('legal.layout.lastUpdated', { date: lastUpdated })}
               </p>

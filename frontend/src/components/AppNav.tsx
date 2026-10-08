@@ -19,7 +19,7 @@
  */
 
 import Link from 'next/link'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { useViewerAuthStore } from '@/lib/stores/viewer-auth-store'
@@ -126,10 +126,16 @@ export function AppNav() {
           <DiscordIcon className="h-4 w-4 text-discord" />
           <span className="sr-only sm:not-sr-only">{t('common.platforms.discord')}</span>
         </a>
-        {isLoggedIn && (
+        {isLoggedIn ? (
           <Button onClick={handleLogout} variant="ghost">
             {t('common.appNav.logOut')}
           </Button>
+        ) : (
+          // Signed-out visitors reach app pages from shared links and the docs;
+          // without this the nav offered no way back into an account.
+          <Link href="/#get-started" className={buttonVariants({ variant: 'ghost' })}>
+            {t('common.appNav.signIn')}
+          </Link>
         )}
       </div>
     </nav>

@@ -72,14 +72,14 @@ afterEach(() => {
 })
 
 describe('OverlayViewGuard', () => {
-  it('redirects anonymous visitors home and does not render children', async () => {
+  it('redirects anonymous visitors to the homepage sign-in band and does not render children', async () => {
     render(
       <OverlayViewGuard>
         <div data-testid="protected-child">secret monitor</div>
       </OverlayViewGuard>
     )
 
-    await waitFor(() => expect(push).toHaveBeenCalledWith('/'))
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/#get-started'))
     expect(screen.queryByTestId('protected-child')).not.toBeInTheDocument()
   })
 
@@ -103,7 +103,7 @@ describe('OverlayViewGuard', () => {
     expect(screen.queryByTestId('protected-child')).not.toBeInTheDocument()
   })
 
-  it('still redirects home for a dock value that is not truthy', async () => {
+  it('still redirects to sign-in for a dock value that is not truthy', async () => {
     searchParams = new URLSearchParams('dock=0')
 
     render(
@@ -112,6 +112,6 @@ describe('OverlayViewGuard', () => {
       </OverlayViewGuard>
     )
 
-    await waitFor(() => expect(push).toHaveBeenCalledWith('/'))
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/#get-started'))
   })
 })

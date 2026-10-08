@@ -34,13 +34,15 @@
    Facebook #3B93F5 (lightened from brand #1877F2 — the raw brand lands at
    ~2.9:1 over surface-2, below AA),
    Instagram #ED6FA4 (lightened from brand #E1306C — the raw brand lands at
-   4.59:1 over surface-2, below AA). */
+   4.59:1 over surface-2, below AA),
+   Discord #737DF6 (lightened from blurple #5865F2 — the raw brand sits at
+   4.32-4.50:1 and is used as link and chip text). */
   --color-owncast: #9b7ff5;
   --color-goodgame: #7fa3d1;
   --color-picarto: #27b756;
   --color-facebook: #3b93f5;
   --color-instagram: #ed6fa4;
-  --color-discord: #5865f2;
+  --color-discord: #737df6;
   /* Neutral scale — oklch with constant chroma ~0.007, hue 270 */
   --color-neutral-950: oklch(0.09 0.007 270); /* #020204 — bg */
   --color-neutral-900: oklch(0.11 0.009 270); /* #040407 — surface */
@@ -806,6 +808,16 @@ span.font-semibold.text-sm.username-gradient {
   transform: translateY(calc(var(--hero-progress, 0) * -60px));
   opacity: calc(1 - var(--hero-progress, 0) * 0.55);
 }
+/* Lane track: the lanes and the canvas that paints them, and nothing else.
+ * The CTA bar is a sibling, so the canvas's unit stack and the flex lanes
+ * divide the same height. */
+.lanes-track {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 .lanes-canvas {
   position: absolute;
   inset: 0;
@@ -820,7 +832,15 @@ span.font-semibold.text-sm.username-gradient {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  min-height: 28px;
+  /* Zero basis + size containment: a lane's height is its weight share of
+   * the track and nothing else. With the default content basis, the marquee
+   * rows padded every lane (twitch carries three) and the DOM lanes drifted
+   * off the canvas bands, so the text sat off-center on its fill. The
+   * container also lets the wordmark size itself to the lane (cqh). The
+   * 10% LANE_FLOOR keeps every lane taller than its rows. */
+  flex: 1 1 0;
+  min-height: 0;
+  container-type: size;
   /* Lane heights follow the canvas waves (LanesHero writes flexGrow every
    * frame); the transition smooths the stepped fallback only. */
   transition: flex-grow 2.5s ease-in-out;
@@ -922,14 +942,21 @@ span.font-semibold.text-sm.username-gradient {
 }
 
 /* Giant tone-on-tone wordmark per lane — the page near-black at a low
- * alpha so it reads as watermark texture on the solid brand fill. */
+ * alpha so it reads as watermark texture on the solid brand fill. Sized to
+ * its lane, never past it: the old 80px floor overflowed every lane thinner
+ * than ~110px and the name read as clipped text. 100cqh of cap-trimmed
+ * glyphs leaves the caps at ~72% of the lane, centered by the trim (without
+ * it the line box carries descender space and the caps ride high). */
 .wordmark {
   position: absolute;
-  right: -0.05em;
+  right: 0.12em;
   top: 50%;
   transform: translateY(-50%);
   font-family: var(--font-archivo-black), sans-serif;
-  font-size: clamp(80px, 16vh, 220px);
+  font-size: min(16vh, 220px, 100cqh);
+  line-height: 1;
+  text-box: trim-both cap alphabetic;
+  white-space: nowrap;
   letter-spacing: -0.02em;
   pointer-events: none;
   user-select: none;
@@ -1265,7 +1292,9 @@ span.font-semibold.text-sm.username-gradient {
 .step .stepnum {
   font-family: var(--font-archivo-black), sans-serif;
   font-size: 15px;
-  color: rgba(244, 243, 239, 0.4);
+  /* 0.5, not lower: 15px is not WCAG large text, and 0.5 is the first step
+   * of the warm-white ramp that clears 4.5:1 on the page black (4.88:1). */
+  color: rgba(244, 243, 239, 0.5);
 }
 .step h3 {
   margin-top: 12px;
@@ -1318,7 +1347,15 @@ span.font-semibold.text-sm.username-gradient {
   justify-content: center;
   gap: 14px;
 }
-.final-signin {
+/* "Sign in with <platform>" (PlatformSignInButton, homepage + viewer page).
+ * Google's sign-in pattern: a neutral button, light label, full-color
+ * official logo. Label and fill never change color on hover — only the
+ * neutral wash does — so no state paints a platform in another's color.
+ * Logo and border use each platform's official color, not the desaturated
+ * lane palette: Twitch allows its Glitch only in #9146FF, white or black;
+ * YouTube's icon is #FF0033 with a white triangle (2024 refresh); Kick's
+ * mark is #53FC18. All three clear 3:1 as non-text on the dark bands. */
+.lanes-signin {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1328,62 +1365,41 @@ span.font-semibold.text-sm.username-gradient {
   font-size: 13px;
   letter-spacing: 0.02em;
   padding: 14px 24px;
+  min-height: 48px;
   border: 1px solid rgba(244, 243, 239, 0.4);
   border-radius: 0;
+  background: #000;
   cursor: pointer;
   color: #f4f3ef;
   transition: background 0.15s;
 }
-.final-signin:hover {
+.lanes-signin:hover {
   background: rgba(255, 255, 255, 0.12);
 }
-.final-signin:focus-visible {
-  outline: 2px solid var(--lanes-kick);
+.lanes-signin:focus-visible {
+  outline: 2px solid #f4f3ef;
   outline-offset: 2px;
 }
-.final-signin[data-p='twitch'] {
-  border-color: var(--lanes-twitch);
-  color: var(--lanes-twitch);
+.lanes-signin[data-p='twitch'] {
+  border-color: #9146ff;
 }
-.final-signin[data-p='twitch']:hover {
-  background: var(--lanes-twitch);
-  color: #0a0a0e;
+.lanes-signin[data-p='twitch'] svg {
+  color: #9146ff;
 }
-.final-signin[data-p='youtube'] {
-  /* Official YouTube red (2025 refresh: #FF0033, replacing pure RGB #FF0000)
-   * per the yt-ringo2-svg served on youtube.com. Scoped to the sign-in button:
-   * the lane art keeps the desaturated --lanes-youtube so the five lanes
-   * side by side don't read as neon stripes. */
+.lanes-signin[data-p='youtube'] {
   border-color: #ff0033;
-  color: #ff0033;
 }
-/* Full-color icon: red rounded rect, white triangle (official spec). The
- * button text stays brand red on the dark band. */
-.final-signin[data-p='youtube'] .yt-icon-rect {
+.lanes-signin[data-p='youtube'] .yt-icon-rect {
   fill: #ff0033;
 }
-.final-signin[data-p='youtube'] .yt-icon-tri {
+.lanes-signin[data-p='youtube'] .yt-icon-tri {
   fill: #ffffff;
 }
-.final-signin[data-p='youtube']:hover {
-  background: #ff0033;
-  color: #0a0a0e;
+.lanes-signin[data-p='kick'] {
+  border-color: #53fc18;
 }
-/* On the red hover fill the full-color icon would vanish: switch to the
- * official monochrome-white variant (white rect, knocked-out triangle). */
-.final-signin[data-p='youtube']:hover .yt-icon-rect {
-  fill: #ffffff;
-}
-.final-signin[data-p='youtube']:hover .yt-icon-tri {
-  fill: #0a0a0e;
-}
-.final-signin[data-p='kick'] {
-  border-color: var(--lanes-kick);
-  color: var(--lanes-kick);
-}
-.final-signin[data-p='kick']:hover {
-  background: var(--lanes-kick);
-  color: #000;
+.lanes-signin[data-p='kick'] svg {
+  color: #53fc18;
 }
 @media (max-width: 800px) {
   .numbers,
@@ -1392,11 +1408,10 @@ span.font-semibold.text-sm.username-gradient {
   .wedge-grid {
     grid-template-columns: 1fr;
   }
-  /* The tone-on-tone wordmarks are decorative; at phone widths the Archivo
-   * Black platform name overflows its lane and reads as clipped text. Scale
-   * by the lane, not the viewport height, and let it hide what does not fit. */
+  /* At phone widths the 16vh cap is wider than the screen; the width cap
+   * takes over, and the lane-height cap still keeps it inside its lane. */
   .wordmark {
-    font-size: 13vw;
+    font-size: min(13vw, 100cqh);
   }
   .ctabar {
     grid-template-columns: 1fr;
@@ -1592,7 +1607,12 @@ span.font-semibold.text-sm.username-gradient {
 /* The kicker/eyebrow label above a heading. Same cut as the homepage's
  * mono-label but self-contained so app pages don't import hero CSS. */
 .lanes-app .mono-label {
-  display: inline-block;
+  /* inline-flex, not inline-block: this unlayered rule beats a call site's
+   * Tailwind `inline-flex`, and as a block the icon in the /upgrade badge
+   * (preflight makes svg display:block) stacked above its label. */
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.18em;
@@ -1637,10 +1657,6 @@ span.font-semibold.text-sm.username-gradient {
   background: var(--lanes-kick);
   border-color: var(--lanes-kick);
 }
-.lanes-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
 .lanes-btn:focus-visible {
   outline: 2px solid var(--lanes-kick);
   outline-offset: 2px;
@@ -1665,6 +1681,35 @@ span.font-semibold.text-sm.username-gradient {
   background: #a02017;
   border-color: #a02017;
 }
+/* Disabled: an outlined, dimmed button rather than 45% of a white one. The
+ * old opacity left the label near-invisible on the black panels and still
+ * took the kick-green hover, so a dead button looked live. Listed after the
+ * variants and repeated with :hover so it outranks every variant's hover. */
+.lanes-btn:disabled,
+.lanes-btn:disabled:hover {
+  background: transparent;
+  border-color: rgba(244, 243, 239, 0.25);
+  color: rgba(244, 243, 239, 0.6);
+  cursor: not-allowed;
+}
+/* The shadcn Switch inside lanes pages: square, kick-green when on, same
+ * outline focus as .lanes-btn — the stock primitive is a purple pill, the
+ * retired brand accent, and was the one rounded control on these pages. */
+.lanes-app [data-slot='switch'] {
+  border-radius: 0;
+  background: rgba(244, 243, 239, 0.2);
+}
+.lanes-app [data-slot='switch'][data-checked] {
+  background: var(--lanes-kick);
+}
+.lanes-app [data-slot='switch']:focus-visible {
+  outline: 2px solid var(--lanes-kick);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+.lanes-app [data-slot='switch-thumb'] {
+  border-radius: 0;
+}
 .lanes-input,
 .lanes-app input:not([type='checkbox']):not([type='radio']),
 .lanes-app select,
@@ -1685,7 +1730,7 @@ span.font-semibold.text-sm.username-gradient {
 }
 .lanes-app input::placeholder,
 .lanes-app textarea::placeholder {
-  color: rgba(244, 243, 239, 0.4);
+  color: rgba(244, 243, 239, 0.5);
 }
 
 /* Headings: Archivo Black, uppercase, tight. Sizes come from utilities. */

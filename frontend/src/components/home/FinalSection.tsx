@@ -26,6 +26,7 @@
 
 'use client'
 
+import { PlatformSignInButton } from '@/components/PlatformSignInButton'
 import { useTranslations } from '@/lib/i18n'
 
 export interface FinalSectionProps {
@@ -72,63 +73,16 @@ export function FinalSection({
         <span className="accent">{t('marketing.final.line3')}</span>
       </h2>
 
-      {/* Sign-in buttons — same three providers as before, restyled into the
-          lanes vocabulary (square mono buttons, brand-colored fills) so the
-          band matches the rest of the redesigned homepage. */}
       <div className="final-signins">
-        <button type="button" className="final-signin" data-p="twitch" onClick={onTwitchLogin}>
-          <svg
-            className="h-5 w-5 shrink-0"
-            viewBox="0 0 24 24"
-            xmlns="http://www.w3.org/2000/svg"
-            aria-hidden="true"
-          >
-            <path
-              fill="currentColor"
-              d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z"
-            />
-          </svg>
+        <PlatformSignInButton platform="twitch" onClick={onTwitchLogin}>
           {t('marketing.lanes.signInWith', { platform: t('common.platforms.twitch') })}
-        </button>
-
-        <button type="button" className="final-signin" data-p="youtube" onClick={onYouTubeLogin}>
-          {/* Official full-color YouTube Icon: #FF0033 rect, white triangle
-              (brand.youtube/youtube-icon: "The triangle in the full-color
-              red icon must always be white"). On hover the button fills with
-              the brand red, so CSS swaps to the official monochrome-white
-              variant (knocked-out triangle) to keep the icon visible. */}
-          <svg
-            className="h-8 w-8 shrink-0"
-            viewBox="0 0 24 24"
-            xmlns="http://www.w3.org/2000/svg"
-            aria-hidden="true"
-          >
-            <path
-              className="yt-icon-rect"
-              d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814z"
-            />
-            <path
-              className="yt-icon-tri"
-              d="M9.545 15.568V8.432L15.818 12l-6.273 3.568z"
-            />
-          </svg>
+        </PlatformSignInButton>
+        <PlatformSignInButton platform="youtube" onClick={onYouTubeLogin}>
           {t('marketing.lanes.signInWith', { platform: t('common.platforms.youtube') })}
-        </button>
-
-        <button type="button" className="final-signin" data-p="kick" onClick={onKickLogin}>
-          <svg
-            className="h-5 w-5 shrink-0"
-            viewBox="0 0 512 512"
-            xmlns="http://www.w3.org/2000/svg"
-            aria-hidden="true"
-          >
-            <path
-              fill="currentColor"
-              d="M37 .036h164.448v113.621h54.71v-56.82h54.731V.036h164.448v170.777h-54.73v56.82h-54.711v56.8h54.71v56.82h54.73V512.03H310.89v-56.82h-54.73v-56.8h-54.711v113.62H37V.036z"
-            />
-          </svg>
+        </PlatformSignInButton>
+        <PlatformSignInButton platform="kick" onClick={onKickLogin}>
           {t('marketing.lanes.signInWith', { platform: t('common.platforms.kick') })}
-        </button>
+        </PlatformSignInButton>
       </div>
 
       <p className="micro">{t('marketing.final.micro')}</p>
