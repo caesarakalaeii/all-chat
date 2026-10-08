@@ -656,7 +656,7 @@ function StreamSelectionPanel({
           >
             {t('overlayEditor.streamSelection.strategyLabel')}
           </label>
-          <p id={strategyHintId} className="mb-2 text-xs text-text-sub/70">
+          <p id={strategyHintId} className="mb-2 text-xs text-text-sub">
             {t('overlayEditor.streamSelection.strategyHint')}
           </p>
           <select
@@ -680,7 +680,7 @@ function StreamSelectionPanel({
             ))}
           </select>
           {selectedStrategy && (
-            <p className="mt-1 text-xs text-text-sub/60">
+            <p className="mt-1 text-xs text-text-sub">
               {t(`overlayEditor.streamSelection.${selectedStrategy.messageStem}Description`)}
             </p>
           )}
@@ -1835,7 +1835,7 @@ function AddSourceForm({
                 {youtubeResolved.custom_url && (
                   <span className="text-text-sub">{youtubeResolved.custom_url}</span>
                 )}
-                <span className="ml-auto font-mono text-[10px] text-text-sub">
+                <span className="ml-auto font-mono text-[11px] text-text-sub">
                   {youtubeResolved.channel_id}
                 </span>
               </div>
@@ -3409,7 +3409,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                     {t('overlayEditor.page.extensionHeading')}
                   </p>
                   {isPublicForViewers && (
-                    <span className="inline-flex items-center rounded border border-twitch/30 bg-twitch/15 px-1.5 py-0.5 text-[10px] font-semibold text-twitch">
+                    <span className="inline-flex items-center rounded border border-twitch/30 bg-twitch/15 px-1.5 py-0.5 text-[11px] font-semibold text-twitch">
                       {t('overlayEditor.page.extensionActive')}
                     </span>
                   )}
@@ -3954,7 +3954,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           <p className="mb-1 text-xs text-text-sub">
                             {t('overlayEditor.messages.seventvOverrideLabel')}
                           </p>
-                          <p className="mb-2 text-[11px] text-text-sub/70">
+                          <p className="mb-2 text-[11px] text-text-sub">
                             {t('overlayEditor.messages.seventvOverrideHint')}
                           </p>
                           {/* Saved-state pill: shows what's actually attached right now,

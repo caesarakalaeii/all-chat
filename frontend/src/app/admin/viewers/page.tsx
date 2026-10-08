@@ -392,7 +392,7 @@ export default function AdminViewersPage() {
             className="truncate text-sm font-medium text-text"
           />
           <div className="truncate text-xs text-text-sub">@{viewer.username}</div>
-          <div className="truncate font-mono text-[0.65rem] text-text-dim">
+          <div className="truncate font-mono text-xs text-text-dim">
             {viewer.platform_user_id}
           </div>
         </div>
@@ -556,7 +556,7 @@ export default function AdminViewersPage() {
                             )}
                           </div>
                         ) : (
-                          <span className="inline-flex items-center rounded bg-kick/10 px-2 py-0.5 text-xs font-medium text-kick">
+                          <span className="inline-flex items-center rounded bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
                             {t('admin.viewers.badgeActive')}
                           </span>
                         )}
@@ -580,7 +580,7 @@ export default function AdminViewersPage() {
                       {t('admin.viewers.badgeBanned')}
                     </span>
                   ) : (
-                    <span className="inline-flex shrink-0 items-center rounded bg-kick/10 px-2 py-0.5 text-xs font-medium text-kick">
+                    <span className="inline-flex shrink-0 items-center rounded bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
                       {t('admin.viewers.badgeActive')}
                     </span>
                   )}

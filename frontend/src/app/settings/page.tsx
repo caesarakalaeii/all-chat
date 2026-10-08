@@ -260,7 +260,7 @@ function SettingsContent() {
           <h2 className="mb-4 text-lg">{t('settings.index.premiumHeading')}</h2>
           <div className="flex items-center justify-between gap-4">
             <p className="text-sub text-sm">{t('settings.index.premiumBody')}</p>
-            <Link href="/settings/premium" className="lanes-btn ghost">
+            <Link href="/settings/premium" className="lanes-btn ghost shrink-0 whitespace-nowrap">
               {t('settings.index.premiumManage')}
             </Link>
           </div>

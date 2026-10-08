@@ -445,7 +445,7 @@ export default function SourcesPage() {
                       </td>
                       <td className="px-4 py-3">
                         {source.is_active ? (
-                          <span className="inline-flex items-center rounded-full bg-kick/10 px-2 py-0.5 text-xs font-medium text-kick">
+                          <span className="inline-flex items-center rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
                             {t('admin.sources.statusActive')}
                           </span>
                         ) : (
@@ -503,7 +503,7 @@ export default function SourcesPage() {
                   )}
                   <span>{formatDate(new Date(source.created_at))}</span>
                   {source.is_active ? (
-                    <span className="inline-flex items-center rounded-full bg-kick/10 px-2 py-0.5 font-medium text-kick">
+                    <span className="inline-flex items-center rounded-full bg-success/10 px-2 py-0.5 font-medium text-success">
                       {t('admin.sources.statusActive')}
                     </span>
                   ) : (

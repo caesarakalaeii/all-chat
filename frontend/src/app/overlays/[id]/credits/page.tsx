@@ -35,6 +35,7 @@
 
 import { use, useEffect, useId, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { overlaysApi } from '@/lib/api/overlays'
@@ -207,9 +208,9 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
         <div className="flex items-center justify-center pt-32">
           <div className="text-center">
             <p className="text-lg text-destructive">{t('overlayEditor.credits.notFound')}</p>
-            <a href="/dashboard" className="mt-4 inline-block">
+            <Link href="/dashboard" className="lanes-btn ghost mt-4">
               {t('overlayEditor.credits.returnToDashboard')}
-            </a>
+            </Link>
           </div>
         </div>
       </div>
