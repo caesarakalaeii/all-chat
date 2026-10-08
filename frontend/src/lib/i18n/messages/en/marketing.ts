@@ -47,6 +47,9 @@ export const marketing = {
     // Two display lines of one headline, not two sentences.
     titleTop: 'EVERY CHAT.',
     titleBottom: 'ONE URL.',
+    // Small type inside the same h1, naming the category the display lines leave out.
+    titleCategory:
+      'Free multistream chat overlay and OBS dock for Twitch, YouTube, Kick, TikTok and Discord',
     // The multistream objection, answered in the same voice: one merged
     // chat means one community, and one mod queue means no extra load.
     // Two keys = the two display lines (feedback: a soft wrap broke the
@@ -256,14 +259,14 @@ export const marketing = {
     themTitle: 'THEM',
     usTitle: 'ALL·CHAT',
     them1: 'download a desktop app first — your chat tool should weigh one URL, not 200 MB',
-    them2: 'install a browser extension and hand it your tabs',
+    them2: 'a browser extension required just to merge your chats',
     them3: 'a subscription to read your own chat — rent-seeking on infrastructure',
     them4: 'closed source — "trust us, bro"',
-    them5: 'a dashboard you read, not what your viewers see',
-    us1: 'nothing to install — it is a URL',
+    them5: 'one tool for the overlay, another to read and moderate chat',
+    us1: 'nothing to install: it is a URL. the extension is optional',
     us2: 'free — merged chat is infrastructure, not a premium tier',
     us3: 'AGPL-3.0 — audit it, fork it, self-host it',
-    us4: '5 platforms, Discord included',
+    us4: '5 platforms, Discord included, one feed for overlay and monitor',
     us5: 'emotes are the language: 7TV · BTTV · FFZ, native and animated',
   },
   numbers: {
@@ -313,6 +316,11 @@ export const marketing = {
     privacy: 'Privacy Policy',
     terms: 'Terms of Service',
     impressum: 'Impressum',
+    obsOverlay: 'OBS chat overlay',
+    obsDock: 'OBS chat dock',
+    tiktokLiveChat: 'TikTok LIVE chat',
+    multistreamChat: 'Multistream chat',
+    compare: 'Compare',
   },
   // Rendered twice: by FaqSection, and verbatim into the FAQPage JSON-LD on the
   // home route. Google requires the structured text to match the visible
@@ -323,9 +331,18 @@ export const marketing = {
     platformsQuestion: 'Which platforms can I combine?',
     platformsAnswer:
       'Twitch, YouTube, Kick, TikTok, and Discord — in any combination, all in a single overlay.',
+    tiktokQuestion: 'Is TikTok LIVE chat reliable?',
+    tiktokAnswer:
+      "TikTok has no public API for LIVE chat, so every tool that shows it, All-Chat included, reads chat the way TikTok's own web player does. All-Chat maintains its own open-source signing service instead of depending only on a third-party sign server, and premium rooms get a second delivery path when the main connection is refused. The limit: TikTok is the platform most likely to see short interruptions when TikTok changes its web player.",
     obsQuestion: 'How do I add All-Chat to OBS?',
     obsAnswer:
       'Create an overlay, add your chat sources, then paste the overlay URL into an OBS Browser Source. No plugins or bots required.',
+    obsDockQuestion: 'Can I dock the chat inside OBS?',
+    obsDockAnswer:
+      'Yes. The chat monitor runs as an OBS dock beside your mixer, a readable view for you rather than something your viewers see. In the overlay editor, click Copy dock URL to copy https://allch.at/overlay/<overlay-id>/view?dock=1. In OBS, open View > Docks > Custom Browser Docks, name the dock, paste the link and click Apply. The dock asks you to sign in once. Streamlabs Desktop takes the same link.',
+    overlaysQuestion: 'Can I run more than one overlay?',
+    overlaysAnswer:
+      'Yes. One account can create several overlays, each with its own mix of chat sources, its own theme and its own OBS URL. For example, one overlay for Twitch and TikTok on a gaming stream and a YouTube-only one for a podcast.',
     freeQuestion: 'Is All-Chat free?',
     freeAnswer: 'Yes. All-Chat is free and open source under the AGPL-3.0 license.',
     premiumQuestion: 'Why are some features premium?',

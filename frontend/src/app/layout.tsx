@@ -43,7 +43,12 @@ import { DEFAULT_LOCALE, getTranslations } from '@/lib/i18n'
 // server before any component runs.
 const t = getTranslations()
 import { cn } from '@/lib/utils'
-import { DISCORD_INVITE_URL } from '@/lib/constants'
+import {
+  DISCORD_INVITE_URL,
+  EXTENSION_CHROME_URL,
+  EXTENSION_FIREFOX_URL,
+  PATREON_PAGE_URL,
+} from '@/lib/constants'
 
 const barlow = Barlow({
   subsets: ['latin'],
@@ -112,14 +117,22 @@ export const viewport: Viewport = {
 }
 
 // Site-wide structured data. Emitted from the (server) root layout so it lands in
-// the initial HTML on every page. `sameAs` mirrors the links in the landing footer.
+// the initial HTML on every page. `sameAs` lists every profile that is
+// unambiguously All-Chat, so search engines and LLMs can join them to this site.
 const organizationLd = {
   '@context': 'https://schema.org',
   '@type': 'Organization',
   name: 'All-Chat',
   url: 'https://allch.at',
   logo: 'https://allch.at/icon.svg',
-  sameAs: ['https://github.com/caesarakalaeii/all-chat', DISCORD_INVITE_URL],
+  description: t('metadata.site.description'),
+  sameAs: [
+    'https://github.com/caesarakalaeii/all-chat',
+    DISCORD_INVITE_URL,
+    PATREON_PAGE_URL,
+    EXTENSION_CHROME_URL,
+    EXTENSION_FIREFOX_URL,
+  ],
 }
 
 const webSiteLd = {
