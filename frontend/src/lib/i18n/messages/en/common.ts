@@ -68,7 +68,6 @@ export const common = {
     picarto: 'Picarto',
     facebook: 'Facebook',
     instagram: 'Instagram',
-    rumble: 'Rumble',
     discord: 'Discord',
   },
   // The Patreon connect flow. /settings/premium and /settings/viewer/premium

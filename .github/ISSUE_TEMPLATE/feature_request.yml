@@ -38,7 +38,7 @@ body:
       label: Feature Type
       description: What kind of feature is this?
       options:
-        - New Platform Support (e.g., Rumble, Discord)
+        - New Platform Support
         - Overlay Customization
         - Performance Improvement
         - Security Enhancement

@@ -86,7 +86,6 @@ describe('visualSettingsToCss', () => {
       picartoBubbleBg: '#1b3d26',
       facebookBubbleBg: '#1b2940',
       instagramBubbleBg: '#2b1220',
-      rumbleBubbleBg: '#2b3d1b',
       messageGap: '8px',
       avatarGap: '4px',
       backdropBlur: '0px',
@@ -111,7 +110,6 @@ describe('visualSettingsToCss', () => {
       picartoAccent: '#1aa455',
       facebookAccent: '#1877f2',
       instagramAccent: '#e1306c',
-      rumbleAccent: '#85c742',
       showSuperChat: 'block',
       showSubscriptions: 'block',
       showRaids: 'block',
@@ -143,7 +141,6 @@ describe('visualSettingsToCss', () => {
     expect(result).toContain('--platform-twitch-accent: #9146ff;')
     expect(result).toContain('--platform-discord-accent: #5865f2;')
     expect(result).toContain('--platform-owncast-accent: #9b7ff5;')
-    expect(result).toContain('--platform-rumble-accent: #85c742;')
     expect(result).toContain('--chat-show-super-chat: block;')
     expect(result).toContain('--chat-bits-size-modifier: 1;')
     expect(result).toContain('--chat-membership-gift-size-modifier: 1.2;')
@@ -153,9 +150,9 @@ describe('visualSettingsToCss', () => {
     // messageAnimation is applied as a .msg-anim-* class, never as a CSS property
     expect(result).not.toContain('messageAnimation')
     expect(result).not.toContain('fly-left')
-    // All 59 CSS properties present (53 + 6 platform accents; the platform
+    // All 58 CSS properties present (53 + 5 platform accents; the platform
     // bubble fills are rules-only and never counted here)
-    expect((result.match(/--chat-|--platform-/g) ?? []).length).toBe(59)
+    expect((result.match(/--chat-|--platform-/g) ?? []).length).toBe(58)
     // The by-username mode emits its [data-user-bubble] rule, not variables.
     // Background mode emits only the fill half; the border half is emitted only
     // when the mode is border (see the test below).

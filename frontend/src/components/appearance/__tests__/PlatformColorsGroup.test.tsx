@@ -28,7 +28,7 @@ afterEach(() => {
 })
 
 describe('PlatformColorsGroup', () => {
-  it('renders 11 platform labels', () => {
+  it('renders 10 platform labels', () => {
     const onChange = vi.fn()
     render(<PlatformColorsGroup visualSettings={{}} onChange={onChange} />)
     expect(screen.getByText('Twitch')).toBeDefined()
@@ -39,14 +39,14 @@ describe('PlatformColorsGroup', () => {
     expect(screen.getByText('Instagram')).toBeDefined()
   })
 
-  it('renders 11 color swatches', () => {
+  it('renders 10 color swatches', () => {
     const onChange = vi.fn()
     render(<PlatformColorsGroup visualSettings={{}} onChange={onChange} />)
     const swatches = document.querySelectorAll('[data-testid="color-swatch"]')
-    expect(swatches).toHaveLength(11)
+    expect(swatches).toHaveLength(10)
   })
 
-  it('renders 11 reset buttons with correct aria-labels', () => {
+  it('renders 10 reset buttons with correct aria-labels', () => {
     const onChange = vi.fn()
     render(<PlatformColorsGroup visualSettings={{}} onChange={onChange} />)
     expect(screen.getByLabelText(/reset twitch accent/i)).toBeDefined()
@@ -59,7 +59,6 @@ describe('PlatformColorsGroup', () => {
     expect(screen.getByLabelText(/reset picarto accent/i)).toBeDefined()
     expect(screen.getByLabelText(/reset facebook accent/i)).toBeDefined()
     expect(screen.getByLabelText(/reset instagram accent/i)).toBeDefined()
-    expect(screen.getByLabelText(/reset rumble accent/i)).toBeDefined()
   })
 
   it('clicking Twitch reset button calls onChange with { twitchAccent: undefined }', () => {

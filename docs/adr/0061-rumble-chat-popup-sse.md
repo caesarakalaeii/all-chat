@@ -1,7 +1,7 @@
 # ADR-0061: Rumble chat via the internal chat pop-up SSE endpoint
 
 **Date**: 2026-09-08
-**Status**: Accepted
+**Status**: Withdrawn (2026-10-08). Rumble support was removed: there is no API that can read arbitrary channels, and Rumble's political affiliations are ones we do not want to support. Migration 099 drops the platform row, gate and sources.
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement

@@ -177,13 +177,6 @@ const InstagramIcon = () => (
   </svg>
 )
 
-const RumbleIcon = () => (
-  <svg viewBox="0 0 24 24" className="h-5 w-5">
-    <circle cx="12" cy="12" r="9" fill="none" stroke="#85C742" strokeWidth="2" />
-    <path fill="#85C742" d="M10 8.5v7l6-3.5z" />
-  </svg>
-)
-
  // The letter the Kick mark draws. A brand glyph, not copy.
  const KICK_GLYPH = 'K'
 
@@ -203,7 +196,6 @@ const GOODGAME_GLYPH = 'GG'
   picarto: { icon: PicartoIcon, nameKey: 'common.platforms.picarto' },
   facebook: { icon: FacebookIcon, nameKey: 'common.platforms.facebook' },
   instagram: { icon: InstagramIcon, nameKey: 'common.platforms.instagram' },
-  rumble: { icon: RumbleIcon, nameKey: 'common.platforms.rumble' },
    discord: { icon: DiscordIcon, nameKey: 'common.platforms.discord' },
  } as const satisfies Record<string, { icon: React.FC; nameKey: MessageKey }>
 

@@ -92,8 +92,8 @@ const (
 
 	// The platform_ gates (ADR-0008) gate ADDING A SOURCE on a rollout platform:
 	// platform_owncast, platform_goodgame, platform_picarto, platform_facebook,
-	// platform_rumble, platform_instagram. Each ships seeded is_premium=TRUE
-	// (migrations 091-096) so a new listener cannot reach every overlay at
+	// platform_instagram. Each ships seeded is_premium=TRUE (migrations 091-094,
+	// 096) so a new listener cannot reach every overlay at
 	// once; flip a row to is_premium=false via the feature-gate admin endpoint
 	// to graduate a platform with no redeploy. Sources created while the gate
 	// is open keep working after it closes — the gate only ever blocks new
@@ -103,7 +103,6 @@ const (
 	GatePlatformGoodGame  = "platform_goodgame"
 	GatePlatformPicarto   = "platform_picarto"
 	GatePlatformFacebook  = "platform_facebook"
-	GatePlatformRumble    = "platform_rumble"
 	GatePlatformInstagram = "platform_instagram"
 
 	// GateLocalizationContribution is the feature key for the beta-tester
@@ -122,7 +121,6 @@ var rolloutPlatformGates = map[string]string{
 	"goodgame":  GatePlatformGoodGame,
 	"picarto":   GatePlatformPicarto,
 	"facebook":  GatePlatformFacebook,
-	"rumble":    GatePlatformRumble,
 	"instagram": GatePlatformInstagram,
 }
 

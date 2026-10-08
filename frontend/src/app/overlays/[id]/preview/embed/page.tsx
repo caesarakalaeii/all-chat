@@ -122,8 +122,6 @@ const getPlatformColor = (platform: string): string => {
       return 'text-picarto'
     case 'facebook':
       return 'text-facebook'
-    case 'rumble':
-      return 'text-rumble'
     case 'instagram':
       return 'text-instagram'
     default:
@@ -228,14 +226,6 @@ const PlatformIcon = ({ platform }: { platform: string }) => {
             fill="#3B93F5"
             d="M12 2a10 10 0 1 0-1.6 19.9v-7h-2.5V12h2.5V9.8c0-2.5 1.5-3.9 3.8-3.9 1.1 0 2.2.2 2.2.2v2.4h-1.2c-1.2 0-1.6.8-1.6 1.6V12h2.7l-.4 2.9h-2.3v7A10 10 0 0 0 12 2z"
           />
-        </svg>
-      )
-    case 'rumble':
-      // Rumble mark: play triangle in a ring (functional glyph).
-      return (
-        <svg viewBox="0 0 24 24" className={iconClass}>
-          <circle cx="12" cy="12" r="9" fill="none" stroke="#85C742" strokeWidth="2" />
-          <path fill="#85C742" d="M10 8.5v7l6-3.5z" />
         </svg>
       )
     case 'instagram':
@@ -373,7 +363,6 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
       'goodgame',
       'picarto',
       'facebook',
-      'rumble',
       'discord',
     ],
   })
@@ -746,7 +735,6 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                 'goodgame',
                 'picarto',
                 'facebook',
-                'rumble',
                 'discord',
               ],
         }
