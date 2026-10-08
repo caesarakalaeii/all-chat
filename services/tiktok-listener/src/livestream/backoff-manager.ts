@@ -148,12 +148,12 @@ export class BackoffManager {
    * refused again, and spin the failure counter that fired the
    * 2026-09-23 budget-exhausted alert flap.
    *
-   * The park rides nextCheckTime alone: recoverStuckChannels (poller.ts)
-   * force-resets any state whose currentBackoffMs is at max with a
-   * 5-minute-old lastCheckTime, and currentBackoffMs is derived state the
-   * next record* call recomputes anyway. consecutiveErrors is likewise
-   * untouched — a budget refusal is not the room's fault, and the next
-   * genuine error resumes the error curve where it left off.
+   * The park rides nextCheckTime; currentBackoffMs is derived state the
+   * next record* call recomputes anyway, and recoverStuckChannels
+   * (poller.ts) skips a room while budgetParkRemainingMs is positive.
+   * consecutiveErrors is untouched: a budget refusal is not the room's
+   * fault, and the next genuine error resumes the error curve where it
+   * left off.
    *
    * @param username TikTok username
    * @param retryAfterMs ms until the window slides, from the refusal error

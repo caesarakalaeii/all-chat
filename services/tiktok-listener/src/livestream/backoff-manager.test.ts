@@ -155,23 +155,6 @@ describe('BackoffManager budget-refusal parking', () => {
     expect(mgr.getTimeUntilNextCheck('user')).toBe(3_600_000);
   });
 
-  it('parks through the stuck-recovery threshold without looking stuck', () => {
-    // recoverStuckChannels (poller.ts) treats currentBackoffMs >= 180000
-    // with a 5-minute-old lastCheckTime as stuck and force-removes the
-    // state — which would defeat an hour-long park 5 minutes in. The park
-    // must ride nextCheckTime alone; currentBackoffMs is derived state the
-    // next record* call recomputes anyway.
-    vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
-    vi.spyOn(Math, 'random').mockReturnValue(0.5);
-
-    const mgr = new BackoffManager(noopLogger);
-    mgr.recordBudgetRefusal('user', 3_600_000);
-
-    const state = mgr.getState('user')!;
-    expect(state.currentBackoffMs).toBe(0);
-    expect(state.lastCheckTime).toBe(1_000_000);
-  });
-
   it('does not touch consecutiveErrors mid-curve', () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
     vi.spyOn(Math, 'random').mockReturnValue(0.5);
