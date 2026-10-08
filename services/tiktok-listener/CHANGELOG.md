@@ -3,6 +3,8 @@
 ## [Unreleased] - Resource Optimization & Message Deduplication
 
 ### Fixed
+- **Pure-node lease cache never hit**: `PureNodeSigner` keyed its 10-minute lease reuse window on the signer's `capturedAt`, which is the age of the warm tab's URL and is routinely hours old. Every sign, the lane-pin pre-sign included, re-fetched the lease, so the 8/hour lease budget refused connects after about 4 of them and fired `TikTokPureNodeConnectBudgetExhausted`. The window now counts from the listener's own fetch.
+- **Budget park lost on rebalance**: a room parked on this pod's sign budget lost its park when rebalancing shed its lease (the teardown drops backoff state), and the pod re-claimed and re-dialled it about 40 seconds later into the same refusal. The re-claim hold now lasts until the park ends; another pod, with its own budget, can still claim the room.
 - **Duplicated gift events**: Streakable gifts (`gift.type === 1`) fire the `GIFT` event repeatedly while the combo is in progress; only the final frame carries the full `repeatCount`. The handler now skips intermediate frames (`repeatEnd` falsy) so a single streakable gift is published once instead of twice.
 - **Timestamp Issue**: Messages now use TikTok's native `createTime` timestamp instead of generating new ones on receipt
   - Prevents messages from appearing "fresh" when they're actually old/replayed
