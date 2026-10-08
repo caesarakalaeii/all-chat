@@ -245,12 +245,6 @@ All-Chat is a **cloud-native microservices platform** for aggregating and displa
 - **Rollout**: premium-gated (`platform_picarto`, migration 093)
 - **→ Documentation**: [services/picarto-listener/README.md](../../services/picarto-listener/README.md)
 
-**Rumble Listener** (`:8098`) — ADR-0061
-- **Purpose**: Read chat from Rumble live streams via the internal chat pop-up API (parser isolated to one file; anonymous reads)
-- **Protocol**: Server-Sent Events (chat pop-up stream)
-- **Rollout**: premium-gated (`platform_rumble`, migration 095)
-- **→ Documentation**: [services/rumble-listener/README.md](../../services/rumble-listener/README.md)
-
 **Facebook Listener** (`:8099`) — ADR-0060
 - **Purpose**: Poll the streamer's Facebook Page live-video comments; moderation write path (delete/hide comment, ban/unban viewer) via moderation-service with the stored Page token
 - **Protocol**: Graph API HTTP polling (no public realtime comment API)
@@ -262,7 +256,7 @@ All-Chat is a **cloud-native microservices platform** for aggregating and displa
 **Message Processor** (`:8087`)
 - **Purpose**: Normalize, enrich, and route messages
 - **Features**:
-  - Platform-specific normalizers (Twitch, YouTube, Kick, TikTok, Discord, Owncast, GoodGame, Picarto, Facebook, Rumble)
+  - Platform-specific normalizers (Twitch, YouTube, Kick, TikTok, Discord, Owncast, GoodGame, Picarto, Facebook)
   - Emote enrichment (7TV, BTTV, FFZ)
   - Message age filtering (60s cutoff)
   - Publish to overlay-specific Redis Pub/Sub channels

@@ -34,14 +34,12 @@
    Facebook #3B93F5 (lightened from brand #1877F2 — the raw brand lands at
    ~2.9:1 over surface-2, below AA),
    Instagram #ED6FA4 (lightened from brand #E1306C — the raw brand lands at
-   4.59:1 over surface-2, below AA),
-    Rumble #85C742 (brand green from the rumble play glyph, passes as-is). */
+   4.59:1 over surface-2, below AA). */
   --color-owncast: #9b7ff5;
   --color-goodgame: #7fa3d1;
   --color-picarto: #27b756;
   --color-facebook: #3b93f5;
   --color-instagram: #ed6fa4;
-  --color-rumble: #85c742;
   --color-discord: #5865f2;
   /* Neutral scale — oklch with constant chroma ~0.007, hue 270 */
   --color-neutral-950: oklch(0.09 0.007 270); /* #020204 — bg */

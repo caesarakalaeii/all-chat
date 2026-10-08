@@ -1203,11 +1203,11 @@ function AddSourceForm({
 
   // Discord dialog state
   // A channel-name or instance-URL dialog for the no-OAuth platforms:
-  // GoodGame/Picarto/Rumble key a channel; Owncast's "channel" is the base URL
-  // of the instance (one stream per server). One dialog serves all four; the
+  // GoodGame/Picarto key a channel; Owncast's "channel" is the base URL
+  // of the instance (one stream per server). One dialog serves all three; the
   // label and placeholder come from the catalog per platform.
   const [channelDialog, setChannelDialogOpen] = useState<
-    'owncast' | 'goodgame' | 'picarto' | 'rumble' | null
+    'owncast' | 'goodgame' | 'picarto' | null
   >(null)
   const [channelValue, setChannelValue] = useState('')
   // Discord dialog state
@@ -1475,7 +1475,7 @@ function AddSourceForm({
           {t('overlayEditor.addSource.connectOwncast')}
         </Button>
 
-        {/* GoodGame / Picarto / Rumble — channel-name dialogs, same shape as TikTok. */}
+        {/* GoodGame / Picarto — channel-name dialogs, same shape as TikTok. */}
         <Button
           onClick={() => setChannelDialogOpen('goodgame')}
           size="lg"
@@ -1512,19 +1512,6 @@ function AddSourceForm({
             <circle cx="14.5" cy="15" r="1.4" fill="#FFFFFF" />
           </svg>
           {t('overlayEditor.addSource.connectPicarto')}
-        </Button>
-
-        <Button
-          onClick={() => setChannelDialogOpen('rumble')}
-          size="lg"
-          className="gap-2.5 text-bg"
-          style={{ backgroundColor: 'var(--color-rumble)' }}
-        >
-          <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="12" r="9" fill="none" stroke="#85C742" strokeWidth="2" />
-            <path fill="#85C742" d="M10 8.5v7l6-3.5z" />
-          </svg>
-          {t('overlayEditor.addSource.connectRumble')}
         </Button>
 
         {/* Facebook — connect-first OAuth like YouTube: the source is the
@@ -1694,7 +1681,7 @@ function AddSourceForm({
       </Dialog.Root>
 
       {/* No-OAuth platform input dialog — Owncast asks for the instance's base
-          URL, GoodGame/Picarto/Rumble for a channel name. Kept beside the
+          URL, GoodGame/Picarto for a channel name. Kept beside the
           TikTok dialog rather than merged into it so TikTok's copy stays its
           own (the body copy differs by more than the platform name). */}
       <Dialog.Root
@@ -1816,7 +1803,6 @@ function AddSourceForm({
                 <option value="goodgame">{t('common.platforms.goodgame')}</option>
                 <option value="picarto">{t('common.platforms.picarto')}</option>
                 <option value="facebook">{t('common.platforms.facebook')}</option>
-                <option value="rumble">{t('common.platforms.rumble')}</option>
               </select>
               <Input
                 value={adminChannelId}
@@ -4256,7 +4242,6 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           <option value="picarto">{t('common.platforms.picarto')}</option>
                           <option value="facebook">{t('common.platforms.facebook')}</option>
                           <option value="instagram">{t('common.platforms.instagram')}</option>
-                          <option value="rumble">{t('common.platforms.rumble')}</option>
                           <option value="twitch">{t('common.platforms.twitch')}</option>
                           <option value="youtube">{t('common.platforms.youtube')}</option>
                           <option value="kick">{t('common.platforms.kick')}</option>

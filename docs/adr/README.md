@@ -690,7 +690,7 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ### ADR-0061: Rumble chat via the internal chat pop-up SSE endpoint
 
-**Status**: Accepted (2026-09-08)
+**Status**: Withdrawn (2026-10-08) — Rumble support removed: no API that can read arbitrary channels, and Rumble's political affiliations are ones we do not want to support. Migration 099 drops the platform row, gate and sources. Accepted 2026-09-08.
 **Problem**: The product model requires reading chat from arbitrary channels a streamer adds as sources, but Rumble's official Live Stream API reports only the creator's own streams and embeds the stream key in its URL — it cannot address arbitrary channels, so it was ruled out by the spike.
 **Decision**: Read via Rumble's internal chat API — the same SSE endpoint (`GET .../chat/api/chat/<chat_id>/stream`) the official pop-up page drives. Verified live: anonymous reads work, the `<chat_id>` is the numeric chat room id, the shape is pinned as test fixtures from a live capture. The id becomes the stored channel identifier, validated numeric, never resolved through an API. Parser isolation: everything protocol-specific lives in one file. ToS grey zone accepted knowingly — read-only, low rate, standard browser headers; deletions surface as `is_deleted`, rants as donation events, stray event types are logged and dropped.
 **Impact**: Expect breakage without notice: a Rumble chat upgrade can silence this listener, and the fix is a one-file re-spike against a fresh capture. No auth-service changes; migration 095 seeds the gate.

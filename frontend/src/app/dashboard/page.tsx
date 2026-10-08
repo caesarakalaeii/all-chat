@@ -63,7 +63,6 @@ const PLATFORM_HEX: Record<string, string> = {
   picarto: '#27B756',
   facebook: '#3B93F5',
   instagram: '#ED6FA4',
-  rumble: '#85C742',
 }
 
 function getTopBorderStyle(sources: Array<{ platform: string }>): React.CSSProperties {
@@ -134,7 +133,6 @@ function DashboardEmptyState({ onCreateClick }: { onCreateClick: () => void }) {
             'picarto',
             'facebook',
             'instagram',
-            'rumble',
           ] as const
         ).map((p) => (
           <PlatformBadge key={p} platform={p} size="sm" />

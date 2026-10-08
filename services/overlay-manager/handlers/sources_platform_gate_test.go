@@ -31,7 +31,7 @@ import (
 )
 
 // The ADR-0008 platform rollout gate: adding a source on an expansion platform
-// (owncast, goodgame, picarto, facebook, rumble) is refused while the gate is
+// (owncast, goodgame, picarto, facebook, instagram) is refused while the gate is
 // closed for the caller, allowed once it graduates, and fails closed on a
 // lookup error. A nil gate (direct struct construction) must read as open.
 

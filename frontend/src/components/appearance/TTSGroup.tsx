@@ -100,7 +100,6 @@ const ALL_PLATFORMS = [
   'picarto',
   'facebook',
   'instagram',
-  'rumble',
   'discord',
 ] as const
 

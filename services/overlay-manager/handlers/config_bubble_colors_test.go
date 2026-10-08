@@ -197,7 +197,6 @@ func TestBubbleColorSettingsCoversEveryGatedField(t *testing.T) {
 		"goodgameBubbleBg",
 		"picartoBubbleBg",
 		"facebookBubbleBg",
-		"rumbleBubbleBg",
 		"discordBubbleBg",
 		"instagramBubbleBg",
 	}, bubbleColorSettings)
