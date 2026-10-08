@@ -315,6 +315,23 @@ func TestHandleAddSource_NonDiscord_UnaffectedByGuard(t *testing.T) {
 	assert.NotNil(t, captured)
 }
 
+// TikTok lookups are case-sensitive, so a handle typed as "SoyabonTV" must be stored as
+// "soyabontv" or the listener never finds the account.
+func TestHandleAddSource_TikTok_LowercasesHandle(t *testing.T) {
+	var captured *models.ChatSource
+	h := discordTestHandler(nil, nil, &captured)
+
+	w := postDiscordSource(h, map[string]interface{}{
+		"platform":   "tiktok",
+		"channel_id": " SoyabonTV ",
+	})
+
+	assert.Equal(t, http.StatusCreated, w.Code)
+	if assert.NotNil(t, captured) {
+		assert.Equal(t, "soyabontv", captured.ChannelID)
+	}
+}
+
 // The internal auto-add endpoint exists for the OAuth callback (twitch/youtube/kick) and has
 // no legitimate Discord caller. It writes no registry key, but a row alone is enough to make
 // a channel moderatable, so it must refuse Discord outright.

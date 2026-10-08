@@ -583,6 +583,12 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 		}
 	}
 
+	// TikTok handles are lowercase, and TikTok's lookups are case-sensitive: "MrBeast"
+	// returns user_not_found where "mrbeast" resolves, so a mixed-case handle is never live.
+	if req.Platform == "tiktok" {
+		channelID = strings.ToLower(strings.TrimSpace(channelID))
+	}
+
 	// For Kick, validate that channel_id is a valid slug (not a numeric ID)
 	// Kick channel IDs should be usernames like "xqc", not numeric IDs like "52390613"
 	if req.Platform == "kick" {
@@ -934,6 +940,11 @@ func (h *SourcesHandler) HandleAddSourceAuto(c *gin.Context) {
 				return
 			}
 		}
+	}
+
+	// See HandleAddSource: TikTok lookups are case-sensitive and handles are lowercase.
+	if req.Platform == "tiktok" {
+		channelID = strings.ToLower(strings.TrimSpace(channelID))
 	}
 
 	// For Kick, validate that channel_id is a valid slug (not a numeric ID)
