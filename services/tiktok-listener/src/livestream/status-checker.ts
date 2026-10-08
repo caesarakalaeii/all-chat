@@ -27,6 +27,7 @@
 import { InvalidResponseCompositeError, TikTokLiveConnection } from 'tiktok-live-connector';
 import { Logger } from '../types/logger.js';
 import { assertValidTikTokUsername } from '../types/validation.js';
+import type { UsRelay } from './us-relay.js';
 
 /**
  * Result of a live status check
@@ -42,6 +43,7 @@ export interface LiveStatusResult {
  */
 interface CachedStatus {
   isLive: boolean;
+  roomId?: string;
   timestamp: number;
   ttlMs: number; // Dynamic TTL based on result type
 }
@@ -54,6 +56,10 @@ export class TikTokStatusChecker {
   private logger: Logger;
   private statusCache: Map<string, CachedStatus> = new Map();
   private readonly cacheTTLMs: number; // Kept for backwards compatibility
+  private readonly relay?: UsRelay;
+  // Handles the EU lookup cannot see but the US relay can. Checked through the
+  // relay first so they do not pay for three failing EU requests every time.
+  private readonly relayOnly: Set<string> = new Set();
 
   // Dynamic TTL based on result type
   private readonly liveTTLMs: number = 5000;     // 5 seconds - stream could end
@@ -63,10 +69,12 @@ export class TikTokStatusChecker {
   /**
    * @param logger Winston logger instance
    * @param cacheTTLMs Cache TTL in milliseconds (default: 10 seconds) - used as fallback
+   * @param relay US lookup relay, consulted when TikTok answers user_not_found from here
    */
-  constructor(logger: Logger, cacheTTLMs: number = 10000) {
+  constructor(logger: Logger, cacheTTLMs: number = 10000, relay?: UsRelay) {
     this.logger = logger;
     this.cacheTTLMs = cacheTTLMs;
+    this.relay = relay;
   }
 
   /**
@@ -90,7 +98,17 @@ export class TikTokStatusChecker {
         age_ms: Date.now() - cached.timestamp,
         ttl_ms: cached.ttlMs
       });
-      return { isLive: cached.isLive };
+      return { isLive: cached.isLive, roomId: cached.roomId };
+    }
+
+    if (this.relay && this.relayOnly.has(username)) {
+      try {
+        const viaRelay = await this.checkViaRelay(username);
+        if (viaRelay) return viaRelay;
+        this.relayOnly.delete(username);
+      } catch (error) {
+        return this.recordError(username, error, 'relay lookup failed');
+      }
     }
 
     try {
@@ -146,29 +164,61 @@ export class TikTokStatusChecker {
       // "all sources" failed; the per-source causes (e.g. user_not_found for a wrong
       // username) live in config.requestErrs.
       const subErrors = error instanceof InvalidResponseCompositeError ? (error.config.requestErrs ?? []) : [];
-      const errorDetail = subErrors.length > 0
-        ? subErrors.map((e: unknown) => (e instanceof Error ? e.message : String(e))).filter(Boolean).join(' | ')
-        : (error instanceof Error ? error.message : String(error));
+      const subMessages = subErrors.map((e: unknown) => (e instanceof Error ? e.message : String(e))).filter(Boolean);
 
-      this.logger.error('Failed to check live status', {
-        username,
-        error: errorDetail || 'unknown (no sub-errors reported)',
-        error_type: error instanceof Error ? error.constructor.name : typeof error,
-        stack: error instanceof Error ? error.stack : undefined
-      });
+      if (this.relay && subMessages.some((m) => m.includes('user_not_found'))) {
+        try {
+          const viaRelay = await this.checkViaRelay(username);
+          if (viaRelay) {
+            this.relayOnly.add(username);
+            this.logger.info('Handle only resolvable from the US, using relay', { username });
+            return viaRelay;
+          }
+        } catch (relayError) {
+          this.logger.warn('US relay lookup failed', {
+            username,
+            error: relayError instanceof Error ? relayError.message : String(relayError)
+          });
+        }
+      }
 
-      // Cache error result with short TTL (2 seconds) to retry quickly
-      this.statusCache.set(username, {
-        isLive: false,
-        timestamp: Date.now(),
-        ttlMs: this.errorTTLMs
-      });
-
-      return {
-        isLive: false,
-        error: error as Error
-      };
+      return this.recordError(username, error, subMessages.join(' | '));
     }
+  }
+
+  /** Undefined when the relay does not know the handle either. */
+  private async checkViaRelay(username: string): Promise<LiveStatusResult | undefined> {
+    const result = await this.relay!.lookup(username);
+    if (!result.found) return undefined;
+    const roomId = result.live ? result.roomId : undefined;
+    this.statusCache.set(username, {
+      isLive: result.live,
+      roomId,
+      timestamp: Date.now(),
+      ttlMs: result.live ? this.liveTTLMs : this.offlineTTLMs
+    });
+    return { isLive: result.live, roomId };
+  }
+
+  private recordError(username: string, error: unknown, detail: string): LiveStatusResult {
+    this.logger.error('Failed to check live status', {
+      username,
+      error: detail || (error instanceof Error ? error.message : String(error)) || 'unknown (no sub-errors reported)',
+      error_type: error instanceof Error ? error.constructor.name : typeof error,
+      stack: error instanceof Error ? error.stack : undefined
+    });
+
+    // Cache error result with short TTL (2 seconds) to retry quickly
+    this.statusCache.set(username, {
+      isLive: false,
+      timestamp: Date.now(),
+      ttlMs: this.errorTTLMs
+    });
+
+    return {
+      isLive: false,
+      error: error instanceof Error ? error : new Error(String(error))
+    };
   }
 
   /**
