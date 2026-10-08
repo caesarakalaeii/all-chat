@@ -45,6 +45,9 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+// Literal colors, not CSS custom properties: the GL context cannot resolve
+// those, and the literals pin what the pre-hydration CSS fills painted.
+import { LANE_COLORS, PRIDE_LANE_COLORS } from '@/components/home/lanePalette'
 
 /** Fixed platform count; the shaders hardcode this. */
 export const LANE_COUNT = 5
@@ -116,18 +119,6 @@ export function laneWeight(base: number, laneIndex: number, x: number, seconds: 
     (Math.sin(phase) + 0.5 * Math.sin(phase * 2))
   return base + flex * wave * WAVE_AMPLITUDES[laneIndex % WAVE_AMPLITUDES.length]
 }
-
-// Lane colors duplicated from the .lanes-home palette (globals.css): the
-// GL context cannot resolve CSS custom properties, and a literal pins the
-// values the pre-hydration CSS background already painted, so canvas and
-// fallback agree exactly.
-const LANE_COLORS = ['#8464d6', '#d95c50', '#62aeb4', '#56b847', '#6a72c9'] as const
-
-// Pride month palette, top lane to bottom: red, orange, yellow, green,
-// violet — a five-band rainbow, mirrored from the --lanes-pride-* fills in
-// globals.css. Desaturated like the brand set above, and each keeps the
-// near-black marquee ink at WCAG AA.
-const PRIDE_LANE_COLORS = ['#d95c50', '#e08a3c', '#dcc24a', '#56b847', '#8464d6'] as const
 
 // Per-lane tint opacity. 0.24 matches the 24% color-mix the CSS fallback
 // paints, but over near-black every color is worth a different fraction:

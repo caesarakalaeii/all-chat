@@ -716,7 +716,7 @@ span.font-semibold.text-sm.username-gradient {
   --lanes-kick: #56b847;
   --lanes-discord: #6a72c9;
   /* Pride month rainbow (LanesHero data-pride), top lane to bottom.
-   * Mirrored in useLaneWaves PRIDE_LANE_COLORS for the WebGL fills. */
+   * Mirrors PRIDE_LANE_COLORS in components/home/lanePalette.ts. */
   --lanes-pride-1: #d95c50;
   --lanes-pride-2: #e08a3c;
   --lanes-pride-3: #dcc24a;
