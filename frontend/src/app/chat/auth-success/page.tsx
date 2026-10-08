@@ -36,6 +36,7 @@
 import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { buttonVariants } from '@/components/ui/button'
 import { useViewerAuthStore } from '@/lib/stores/viewer-auth-store'
 import { viewerApi } from '@/lib/api/viewer'
 import { isAllowedExternalRedirect } from '@/lib/auth/redirect-allowlist'
@@ -200,17 +201,14 @@ function AuthSuccessContent() {
       ) : !error && window.opener ? (
         <div className="text-center">
           <div className="mb-4 text-6xl">{SUCCESS_GLYPH}</div>
-          <p className="mb-4 text-lg text-kick">{t('auth.viewerSuccess.succeeded')}</p>
+          <p className="mb-4 text-lg text-success">{t('auth.viewerSuccess.succeeded')}</p>
           <p className="text-sm text-text-sub">{t('auth.viewerSuccess.closeWindow')}</p>
         </div>
       ) : error ? (
         <div className="text-center">
           <div className="mb-4 text-6xl">{WARNING_GLYPH}</div>
-          <p className="mb-4 text-lg text-youtube">{error}</p>
-          <Link
-            href="/"
-            className="inline-block rounded-lg bg-twitch px-6 py-2 font-semibold text-bg transition-colors hover:bg-twitch/80"
-          >
+          <p className="mb-4 text-lg text-destructive">{error}</p>
+          <Link href="/" className={buttonVariants()}>
             {t('auth.callback.returnHome')}
           </Link>
         </div>

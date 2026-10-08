@@ -29,12 +29,25 @@ import { AddSourceModal } from './components/AddSourceModal'
 import { toastManager } from '@/lib/toast'
 import { useTranslations } from '@/lib/i18n'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { AppNav } from '@/components/AppNav'
+import { ProtectedRoute } from '@/components/ProtectedRoute'
 
+// Same guard and nav as /dashboard: without them a signed-out visitor got a
+// page with no way out and an empty list where the real answer was "sign in".
 export default function ShareRequestsPage() {
+  return (
+    <ProtectedRoute>
+      <ShareRequestsContent />
+    </ProtectedRoute>
+  )
+}
+
+function ShareRequestsContent() {
   const t = useTranslations()
   const [requests, setRequests] = useState<ShareRequest[]>([])
   const [filter, setFilter] = useState<'pending' | 'history'>('pending')
   const [loading, setLoading] = useState(true)
+  const [loadFailed, setLoadFailed] = useState(false)
   const [unseenAcceptances, setUnseenAcceptances] = useState<ShareRequest[]>([])
   const [showUnseenPrompt, setShowUnseenPrompt] = useState(false)
 
@@ -46,11 +59,12 @@ export default function ShareRequestsPage() {
   async function fetchRequests() {
     try {
       setLoading(true)
+      setLoadFailed(false)
       const data = await sharesApi.fetchIncoming()
       setRequests(data)
     } catch (error) {
       console.error('Failed to fetch share requests:', error)
-      toastManager.add({ title: t('dashboard.shares.loadRequestsFailed'), type: 'error' })
+      setLoadFailed(true)
     } finally {
       setLoading(false)
     }
@@ -124,7 +138,8 @@ export default function ShareRequestsPage() {
 
   return (
     <div className={cn('lanes-app min-h-screen', archivoBlack.variable, spaceMono.variable)}>
-      <div className="mx-auto max-w-6xl px-4 py-6">
+      <AppNav />
+      <main id="main-content" tabIndex={-1} className="mx-auto max-w-6xl px-4 py-6">
         {/* Add Source Modal for unseen acceptances */}
         {showUnseenPrompt && unseenAcceptances.length > 0 && (
           <AddSourceModal
@@ -162,8 +177,18 @@ export default function ShareRequestsPage() {
           </div>
         )}
 
+        {/* Error state: an empty list would claim there are no requests. */}
+        {!loading && loadFailed && (
+          <div role="alert" className="space-y-3 py-8 text-center">
+            <p className="text-sm text-destructive">{t('dashboard.shares.loadRequestsFailed')}</p>
+            <button type="button" className="lanes-btn ghost" onClick={() => void fetchRequests()}>
+              {t('dashboard.shares.retry')}
+            </button>
+          </div>
+        )}
+
         {/* Empty state */}
-        {!loading && sortedRequests.length === 0 && (
+        {!loading && !loadFailed && sortedRequests.length === 0 && (
           <div className="text-sub py-8 text-center">
             {filter === 'pending'
               ? t('dashboard.shares.emptyPending')
@@ -179,7 +204,7 @@ export default function ShareRequestsPage() {
             ))}
           </div>
         )}
-      </div>
+      </main>
     </div>
   )
 }

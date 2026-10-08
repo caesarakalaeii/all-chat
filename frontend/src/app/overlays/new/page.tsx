@@ -22,7 +22,6 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AppNav } from '@/components/AppNav'
 import { Input } from '@/components/ui/input'
-import { Skeleton } from '@/components/ui/skeleton'
 import { toastManager } from '@/lib/toast'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { useOverlayStore } from '@/lib/stores/overlay-store'
@@ -102,13 +101,7 @@ function NewOverlayContent() {
                 {t('overlayEditor.create.cancel')}
               </button>
               <button type="submit" className="lanes-btn" disabled={isSubmitting || !name.trim()}>
-                {isSubmitting ? (
-                  <span className="flex items-center gap-2">
-                    <Skeleton className="h-4 w-24 rounded-none bg-white/20" />
-                  </span>
-                ) : (
-                  t('overlayEditor.create.submit')
-                )}
+                {t(isSubmitting ? 'overlayEditor.create.submitting' : 'overlayEditor.create.submit')}
               </button>
             </div>
           </form>

@@ -30,8 +30,8 @@ export interface PlatformColorsGroupProps {
 }
 
 const PLATFORMS: Array<{ field: keyof VisualSettings; label: string; brandDefault: string }> = [
-  { field: 'twitchAccent', label: 'Twitch', brandDefault: '#9147FF' },
-  { field: 'youtubeAccent', label: 'YouTube', brandDefault: '#FF0000' },
+  { field: 'twitchAccent', label: 'Twitch', brandDefault: '#9146FF' },
+  { field: 'youtubeAccent', label: 'YouTube', brandDefault: '#FF0033' },
   { field: 'kickAccent', label: 'Kick', brandDefault: '#53FC18' },
   { field: 'tiktokAccent', label: 'TikTok', brandDefault: '#000000' },
   { field: 'owncastAccent', label: 'Owncast', brandDefault: '#9B7FF5' },

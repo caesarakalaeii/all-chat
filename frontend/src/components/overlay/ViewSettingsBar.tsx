@@ -92,7 +92,7 @@ export function ViewSettingsBar({ prefs, onChange, onTestActivitySound }: ViewSe
 
       {open && (
         <div className="absolute right-0 z-50 mt-2 w-64 rounded-lg border border-border bg-surface p-3 shadow-lg">
-          <p className="mb-2 text-[10px] font-semibold tracking-wide text-text-dim uppercase">
+          <p className="mb-2 text-[11px] font-semibold tracking-wide text-text-dim uppercase">
             {t('viewerOverlay.viewSettings.heading')}
           </p>
           <div className="flex flex-col gap-2.5">
@@ -107,7 +107,7 @@ export function ViewSettingsBar({ prefs, onChange, onTestActivitySound }: ViewSe
           </div>
 
           <div className="mt-3 border-t border-border pt-3">
-            <p className="mb-2 text-[10px] font-semibold tracking-wide text-text-dim uppercase">
+            <p className="mb-2 text-[11px] font-semibold tracking-wide text-text-dim uppercase">
               {t('viewerOverlay.viewSettings.chatOrderHeading')}
             </p>
             <ToggleSwitch
@@ -121,7 +121,7 @@ export function ViewSettingsBar({ prefs, onChange, onTestActivitySound }: ViewSe
           </div>
 
           <div className="mt-3 border-t border-border pt-3">
-            <p className="mb-2 text-[10px] font-semibold tracking-wide text-text-dim uppercase">
+            <p className="mb-2 text-[11px] font-semibold tracking-wide text-text-dim uppercase">
               {t('viewerOverlay.viewSettings.activitySoundHeading')}
             </p>
             <ToggleSwitch

@@ -116,8 +116,10 @@ type LaneMessageKey = Extract<
 /** One item of a marquee row: `<b>user</b> message` with an optional emote. */
 type MarqueeItem = { user: string; messageKey: LaneMessageKey; emote?: EmoteToken }
 
-/** One marquee row: items plus its drift duration/direction. */
-type MarqueeRow = { items: MarqueeItem[]; duration: number; reverse: boolean }
+/** One marquee row: items plus its drift duration. Every row drifts right to
+ * left (reading direction): rows that ran the other way had to be read
+ * backwards against the eye (feedback: "hard to read"). */
+type MarqueeRow = { items: MarqueeItem[]; duration: number }
 
 // Decorative emote tokens per lane — mockup fixtures like the usernames
 // above, deliberately not in the catalog. Real emote names (feedback: the
@@ -237,7 +239,6 @@ function buildMarqueeRows(
         return {
           items,
           duration: 90 + ((laneIndex * 7 + rowIndex * 13) % 40),
-          reverse: (laneIndex + rowIndex) % 2 === 1,
         }
       }),
     }
@@ -405,6 +406,10 @@ export function LanesHero({
               } as React.CSSProperties)
         }
       >
+        {/* The track holds exactly the lanes: the canvas spans it and nothing
+            else, so its bands and the DOM lanes share one height (the CTA bar
+            below used to sit inside the canvas and skew every boundary). */}
+        <div className="lanes-track">
         {/* WebGL lane fills; the DOM lanes below carry only text. */}
         <canvas className="lanes-canvas" ref={canvasRef} aria-hidden="true" />
         {marqueeRows.map(({ platform, rows }, laneIndex) => (
@@ -420,15 +425,12 @@ export function LanesHero({
             <div className="wordmark" aria-hidden="true">
               {platform.toUpperCase()}
             </div>
-            {rows.map(({ items, duration, reverse }, i) => (
+            {rows.map(({ items, duration }, i) => (
               <div
                 key={i}
                 className="flow"
                 aria-hidden="true"
-                style={{
-                  animationDuration: `${duration}s`,
-                  ...(reverse ? { animationDirection: 'reverse' } : {}),
-                }}
+                style={{ animationDuration: `${duration}s` }}
               >
                 {items.map((item, j) => (
                   <span key={j}>
@@ -465,6 +467,7 @@ export function LanesHero({
             ))}
           </div>
         ))}
+        </div>
 
         {/* Headline chips over the lanes. */}
         <div className="lanes-headline">
