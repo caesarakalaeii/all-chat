@@ -24,13 +24,11 @@
 
 export const metadata = {
   // The generated social card. Its text ships as an image, so the alt is the
-  // only version a screen reader ever reaches; both are copy.
+  // only version a screen reader ever reaches; both are copy. The card's
+  // brand, kicker and headline reuse the hero's marketing.lanes keys.
   socialCard: {
-    alt: 'All-Chat — Every chat. One overlay.',
-    title: 'All-Chat',
-    subtitle: 'Every chat. One overlay.',
-    emoteProviders: '7TV + BTTV + FFZ Emotes',
-    tagline: 'One overlay. Every chat. All platforms.',
+    alt: 'All-Chat — Every chat. One URL.',
+    emoteProviders: '7TV + BTTV + FFZ EMOTES',
   },
   // layout.tsx, inherited by every route that does not override it.
   site: {

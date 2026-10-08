@@ -36,11 +36,8 @@ describe('social card copy', () => {
   it('keeps the alt text and every line the card draws', () => {
     // The card is a generated PNG, so its text ships as an image and its alt is
     // the only version a screen reader ever reaches. Both are copy.
-    expect(t('metadata.socialCard.alt')).toBe('All-Chat \u2014 Every chat. One overlay.')
-    expect(t('metadata.socialCard.title')).toBe('All-Chat')
-    expect(t('metadata.socialCard.subtitle')).toBe('Every chat. One overlay.')
-    expect(t('metadata.socialCard.emoteProviders')).toBe('7TV + BTTV + FFZ Emotes')
-    expect(t('metadata.socialCard.tagline')).toBe('One overlay. Every chat. All platforms.')
+    expect(t('metadata.socialCard.alt')).toBe('All-Chat \u2014 Every chat. One URL.')
+    expect(t('metadata.socialCard.emoteProviders')).toBe('7TV + BTTV + FFZ EMOTES')
   })
 })
 
