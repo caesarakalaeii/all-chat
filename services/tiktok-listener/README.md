@@ -111,6 +111,13 @@ TIKTOK_SIGNER_TIMEOUT_MS=180000       # Self-signer HTTP timeout; signer rotates
 TIKTOK_EXTENDED_GIFT_INFO=            # Defaults on only under `self` (see below)
 SIGN_API_KEY=                         # Euler Stream API key; empty means the free tier
 
+# US lookup relay (services/tiktok-relay). Some accounts are hosted by TikTok's
+# US entity and answer the lookup by handle with user_not_found from the EU.
+# On user_not_found the live check asks the relay instead, and connects with the
+# room ID it returns; everything after the lookup still runs from here.
+TIKTOK_US_RELAY_URL=                  # Cloud Run URL of tiktok-relay; empty disables the fallback
+TIKTOK_US_RELAY_TOKEN=                # Shared secret, sent as X-Relay-Token
+
 # Heartbeat (silent-failure watchdog). Liveness is wire liveness: any frame
 # the connector decodes (e.g. the RoomUserSeq a live-but-quiet stream still
 # pushes) resets the timer, so a low-traffic room is not killed for silence.

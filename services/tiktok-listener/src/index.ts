@@ -58,6 +58,7 @@ import { EventEmitter } from 'events';
 import { TikTokStatusChecker } from './livestream/status-checker.js';
 import { BackoffManager } from './livestream/backoff-manager.js';
 import { LiveStreamPoller } from './livestream/poller.js';
+import { createUsRelay } from './livestream/us-relay.js';
 import { PrometheusMetrics } from './metrics/prometheus.js';
 import { HeartbeatMonitor } from './reliability/heartbeat-monitor.js';
 import { MessageDeduplicator } from './deduplication/message-deduplicator.js';
@@ -144,6 +145,9 @@ const POD_NAME = process.env.HOSTNAME || 'tiktok-listener-unknown';
 // New TikTok live detection configuration
 const TIKTOK_STATUS_CHECK_CACHE_TTL_MS = parseInt(process.env.TIKTOK_STATUS_CHECK_CACHE_TTL_MS || '10000');
 const TIKTOK_POLLER_INTERVAL_MS = parseInt(process.env.TIKTOK_POLLER_INTERVAL_MS || '30000');
+// services/tiktok-relay on Cloud Run (US). Unset disables the US fallback.
+const TIKTOK_US_RELAY_URL = (process.env.TIKTOK_US_RELAY_URL || '').trim();
+const TIKTOK_US_RELAY_TOKEN = (process.env.TIKTOK_US_RELAY_TOKEN || '').trim();
 const TIKTOK_BASE_OFFLINE_BACKOFF_MS = parseInt(process.env.TIKTOK_BASE_OFFLINE_BACKOFF_MS || '60000');
 const TIKTOK_MAX_OFFLINE_BACKOFF_MS = parseInt(process.env.TIKTOK_MAX_OFFLINE_BACKOFF_MS || '600000');
 const TIKTOK_ERROR_BACKOFF_MS = parseInt(process.env.TIKTOK_ERROR_BACKOFF_MS || '2000');
@@ -548,7 +552,11 @@ class TikTokListenerService {
     });
 
     // Initialize live detection modules
-    this.statusChecker = new TikTokStatusChecker(logger, TIKTOK_STATUS_CHECK_CACHE_TTL_MS);
+    this.statusChecker = new TikTokStatusChecker(
+      logger,
+      TIKTOK_STATUS_CHECK_CACHE_TTL_MS,
+      createUsRelay(TIKTOK_US_RELAY_URL, TIKTOK_US_RELAY_TOKEN)
+    );
     this.backoffManager = new BackoffManager(logger, {
       baseOfflineBackoffMs: TIKTOK_BASE_OFFLINE_BACKOFF_MS,
       maxOfflineBackoffMs: TIKTOK_MAX_OFFLINE_BACKOFF_MS,
@@ -1532,7 +1540,9 @@ class TikTokListenerService {
       // semantics for real failures.
       for (let attempt = 1; ; attempt++) {
         try {
-          await connection.connect();
+          // A room ID from the status check skips the connector's own lookup
+          // by handle, which fails for handles only the US relay can resolve.
+          await connection.connect(statusResult.roomId);
           break;
         } catch (error) {
           if (!isWsFlapError(error)) throw error;

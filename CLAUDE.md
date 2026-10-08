@@ -109,6 +109,7 @@ Each service has a detailed README:
 - [kick-listener](./services/kick-listener/README.md) - Pusher WebSocket client
 - [tiktok-listener](./services/tiktok-listener/README.md) - Unofficial TikTok Live library
 - [tiktok-signer](./services/tiktok-signer/README.md) - Self-hosted TikTok webcast signing (X-Bogus/X-Gnarly via TikTok's own SDK in a headless browser; replaces Euler Stream, ADR-0052)
+- [tiktok-relay](./services/tiktok-relay/README.md) - US-region relay for TikTok's live lookup by handle (Cloud Run, not in the cluster); used by tiktok-listener for accounts that only resolve from the US
 - discord-listener — Discord channel chat relay (`services/discord-listener/`, no README yet)
 - [message-processor](./services/message-processor/README.md) - Normalization, emote enrichment
 - [overlay-manager](./services/overlay-manager/README.md) - Overlay CRUD, source configuration
