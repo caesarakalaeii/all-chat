@@ -123,6 +123,12 @@ export function laneWeight(base: number, laneIndex: number, x: number, seconds: 
 // fallback agree exactly.
 const LANE_COLORS = ['#8464d6', '#d95c50', '#62aeb4', '#56b847', '#6a72c9'] as const
 
+// Pride month palette, top lane to bottom: red, orange, yellow, green,
+// violet — a five-band rainbow, mirrored from the --lanes-pride-* fills in
+// globals.css. Desaturated like the brand set above, and each keeps the
+// near-black marquee ink at WCAG AA.
+const PRIDE_LANE_COLORS = ['#d95c50', '#e08a3c', '#dcc24a', '#56b847', '#8464d6'] as const
+
 // Per-lane tint opacity. 0.24 matches the 24% color-mix the CSS fallback
 // paints, but over near-black every color is worth a different fraction:
 // green and indigo darken to a murmur at the same alpha that leaves red
@@ -220,6 +226,8 @@ export interface LaneWavesOptions {
   bases: readonly number[]
   /** Current prefers-reduced-motion resolution. */
   reducedMotion: boolean
+  /** Paint the pride rainbow instead of the platform colors. */
+  pride: boolean
 }
 
 /**
@@ -231,7 +239,7 @@ export interface LaneWavesOptions {
  */
 export function useLaneWaves(
   canvasRef: React.RefObject<HTMLCanvasElement | null>,
-  { bases, reducedMotion }: LaneWavesOptions
+  { bases, reducedMotion, pride }: LaneWavesOptions
 ): {
   weightsRef: React.RefObject<number[]>
   activeRef: React.RefObject<boolean>
@@ -239,7 +247,7 @@ export function useLaneWaves(
   const weightsRef = useRef<number[]>([...bases])
   const activeRef = useRef(false)
   // bases arrive as a prop; mirror into a ref so a stats refetch never
-  // re-creates the GL context (effect deps stay [canvasRef, reducedMotion]).
+  // re-creates the GL context (effect deps stay [canvasRef, reducedMotion, pride]).
   const basesRef = useRef(bases)
   basesRef.current = bases
 
@@ -282,8 +290,9 @@ export function useLaneWaves(
     const uAmps = gl.getUniformLocation(prog, 'u_amps')
     const uColors = gl.getUniformLocation(prog, 'u_colors')
     const uAlphas = gl.getUniformLocation(prog, 'u_alphas')
-    const colors = new Float32Array(LANE_COLORS.length * 3)
-    LANE_COLORS.forEach((hex, i) => {
+    const palette = pride ? PRIDE_LANE_COLORS : LANE_COLORS
+    const colors = new Float32Array(palette.length * 3)
+    palette.forEach((hex, i) => {
       colors[i * 3] = parseInt(hex.slice(1, 3), 16) / 255
       colors[i * 3 + 1] = parseInt(hex.slice(3, 5), 16) / 255
       colors[i * 3 + 2] = parseInt(hex.slice(5, 7), 16) / 255
@@ -362,7 +371,11 @@ export function useLaneWaves(
       gl.deleteBuffer(buf)
       gl.deleteVertexArray(vao)
     }
-  }, [canvasRef, reducedMotion])
+    // pride flips at most once per visit (right after hydration), so it
+    // rebuilds the program rather than re-uploading colors per frame —
+    // reduced motion draws a single frame and would otherwise keep the old
+    // palette.
+  }, [canvasRef, reducedMotion, pride])
 
   return { weightsRef, activeRef }
 }

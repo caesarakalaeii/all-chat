@@ -715,6 +715,13 @@ span.font-semibold.text-sm.username-gradient {
   --lanes-tiktok: #62aeb4;
   --lanes-kick: #56b847;
   --lanes-discord: #6a72c9;
+  /* Pride month rainbow (LanesHero data-pride), top lane to bottom.
+   * Mirrored in useLaneWaves PRIDE_LANE_COLORS for the WebGL fills. */
+  --lanes-pride-1: #d95c50;
+  --lanes-pride-2: #e08a3c;
+  --lanes-pride-3: #dcc24a;
+  --lanes-pride-4: #56b847;
+  --lanes-pride-5: #8464d6;
   background: var(--lanes-bg);
   color: var(--lanes-text);
   font-family: var(--font-space-mono), monospace;
@@ -834,6 +841,25 @@ span.font-semibold.text-sm.username-gradient {
 }
 .lane[data-p='discord'] {
   background: var(--lanes-discord);
+}
+/* Pride month: the CSS fallback fills follow the rainbow too, so a visitor
+ * without WebGL2 still sees it. Keyed on lane order, not platform.
+ * :not(.gl) keeps these off once the canvas paints — at this specificity
+ * they would otherwise beat the `.gl .lane` reset below and cover it. */
+.lanes-stage[data-pride]:not(.gl) .lane[data-p='twitch'] {
+  background: var(--lanes-pride-1);
+}
+.lanes-stage[data-pride]:not(.gl) .lane[data-p='youtube'] {
+  background: var(--lanes-pride-2);
+}
+.lanes-stage[data-pride]:not(.gl) .lane[data-p='tiktok'] {
+  background: var(--lanes-pride-3);
+}
+.lanes-stage[data-pride]:not(.gl) .lane[data-p='kick'] {
+  background: var(--lanes-pride-4);
+}
+.lanes-stage[data-pride]:not(.gl) .lane[data-p='discord'] {
+  background: var(--lanes-pride-5);
 }
 /* The lanes are a stacked area chart and read by their block colors, so
  * the fills are solid brand colors (feedback: the translucent-tint

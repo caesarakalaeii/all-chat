@@ -34,11 +34,15 @@
  * visibly jumps on every parent render. The seeds below walk both pools
  * deterministically instead of Math.random(), so the generated markup is
  * stable and identical on server and client — hydration never mismatches.
+ *
+ * Pride month (June, in the visitor's own calendar) repaints the lanes as
+ * a rainbow and swaps every lane's chatter for the flowPride pool. The
+ * prerender is always the brand version; the client switches on hydration.
  */
 
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { type MessageKey, formatNumber, useTranslations } from '@/lib/i18n'
 import { DISCORD_INVITE_URL } from '@/lib/constants'
 import { useReducedMotion } from '@/hooks/useReducedMotion'
@@ -96,9 +100,16 @@ const MARQUEE_USERS = {
 
 type LanePlatform = keyof typeof MARQUEE_MESSAGE_COUNTS
 
+// Pride month chatter: one pool shared by every lane (marketing.flowPride).
+const PRIDE_GROUP = 'flowPride'
+const PRIDE_MESSAGE_COUNT = 22
+
 // The message-stem keys of one lane, pulled out of the literal MessageKey
 // union — dynamic `m${n}` templates are not part of that union.
-type LaneMessageKey = Extract<MessageKey, `marketing.${(typeof FLOW_GROUPS)[LanePlatform]}.`>
+type LaneMessageKey = Extract<
+  MessageKey,
+  `marketing.${(typeof FLOW_GROUPS)[LanePlatform] | typeof PRIDE_GROUP}.`
+>
 
 /** One item of a marquee row: `<b>user</b> message` with an optional emote. */
 type MarqueeItem = { user: string; messageKey: LaneMessageKey; emote?: EmoteToken }
@@ -190,12 +201,14 @@ const LANES: ReadonlyArray<{ platform: LanePlatform; rows: number }> = [
 // 6; emotes 12, 10, 9, 10, 9; messages 22 everywhere), or a stride would
 // cycle through only a fraction of a pool. 137 is prime and larger than every
 // pool, and 29 is coprime to all, so both strides walk full pools.
-const MARQUEE_ROWS: ReadonlyArray<{ platform: LanePlatform; rows: MarqueeRow[] }> = LANES.map(
-  ({ platform, rows }, laneIndex) => {
+function buildMarqueeRows(
+  pride: boolean
+): ReadonlyArray<{ platform: LanePlatform; rows: MarqueeRow[] }> {
+  return LANES.map(({ platform, rows }, laneIndex) => {
     const users = MARQUEE_USERS[platform]
     const emotes = MARQUEE_EMOTES[platform]
-    const messageCount = MARQUEE_MESSAGE_COUNTS[platform]
-    const group = FLOW_GROUPS[platform]
+    const messageCount = pride ? PRIDE_MESSAGE_COUNT : MARQUEE_MESSAGE_COUNTS[platform]
+    const group = pride ? PRIDE_GROUP : FLOW_GROUPS[platform]
     return {
       platform,
       rows: Array.from({ length: rows }, (_, rowIndex) => {
@@ -226,8 +239,17 @@ const MARQUEE_ROWS: ReadonlyArray<{ platform: LanePlatform; rows: MarqueeRow[] }
         }
       }),
     }
-  }
-)
+  })
+}
+
+const MARQUEE_ROWS = buildMarqueeRows(false)
+const PRIDE_MARQUEE_ROWS = buildMarqueeRows(true)
+
+// Pride month is June. Month index 5 = June in Date's 0-based months.
+const isPrideMonth = () => new Date().getMonth() === 5
+// The month never changes under a mounted hero, so there is nothing to
+// subscribe to; the store exists for its server snapshot.
+const subscribeNever = () => () => {}
 
 export interface LanesHeroProps {
   /** Ticking all-time count (shared with Numbers; formatted locally). */
@@ -260,6 +282,11 @@ export function LanesHero({
 }: LanesHeroProps) {
   const t = useTranslations()
   const reducedMotion = useReducedMotion()
+  // Server snapshot false: the prerendered markup is always the brand
+  // version (it may have been built in another month), and the client
+  // re-renders into pride right after hydration without a mismatch.
+  const pride = useSyncExternalStore(subscribeNever, isPrideMonth, () => false)
+  const marqueeRows = pride ? PRIDE_MARQUEE_ROWS : MARQUEE_ROWS
   const stageRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -288,6 +315,7 @@ export function LanesHero({
   const { weightsRef, activeRef } = useLaneWaves(canvasRef, {
     bases: laneBases,
     reducedMotion,
+    pride,
   })
 
   // Hero scroll effect (feedback: "reveal + hero scroll"): as the hero
@@ -373,6 +401,7 @@ export function LanesHero({
       <header
         className="lanes-stage"
         ref={stageRef}
+        data-pride={pride ? '' : undefined}
         style={
           reducedMotion
             ? undefined
@@ -385,7 +414,7 @@ export function LanesHero({
       >
         {/* WebGL lane fills; the DOM lanes below carry only text. */}
         <canvas className="lanes-canvas" ref={canvasRef} aria-hidden="true" />
-        {MARQUEE_ROWS.map(({ platform, rows }, laneIndex) => (
+        {marqueeRows.map(({ platform, rows }, laneIndex) => (
           <div
             key={platform}
             ref={(el) => {
