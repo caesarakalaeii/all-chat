@@ -132,7 +132,7 @@ export function EventSubMigrationBanner({
         <button
           onClick={handleDismiss}
           aria-label={t('common.eventSubMigration.dismissLabel')}
-          className="rounded p-0.5 text-text-sub opacity-60 transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:ring-current focus-visible:outline-none"
+          className="rounded p-1.5 text-text-sub transition-colors hover:text-text focus-visible:ring-2 focus-visible:ring-current focus-visible:outline-none"
         >
           <X className="size-3.5" />
         </button>

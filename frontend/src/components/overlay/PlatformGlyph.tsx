@@ -20,9 +20,6 @@ import type { ReactElement } from 'react'
 
 import { useTranslations, type TFunction } from '@/lib/i18n'
 
-// The letter the Kick icon's SVG draws — a brand mark, not text.
-const KICK_GLYPH = 'K'
-
 /**
  * The single per-platform SVG switch, factored out so both the single-glyph
  * `PlatformGlyph` and the combined `PlatformGlyphs` share one source of truth
@@ -51,30 +48,18 @@ function platformSvg(t: TFunction, platform: string, className: string): ReactEl
       )
     case 'kick':
       return (
-        <svg
-          viewBox="0 0 24 24"
-          className={className}
-          style={{ imageRendering: 'pixelated' }}
-          aria-label={t('common.platforms.kick')}
-        >
-          <text
-            x="12"
-            y="18"
-            fontSize="20"
-            fontWeight="bold"
+        <svg viewBox="0 0 512 512" className={className} aria-label={t('common.platforms.kick')}>
+          <path
             fill="#53FC18"
-            textAnchor="middle"
-            fontFamily="monospace"
-          >
-            {KICK_GLYPH}
-          </text>
+            d="M37 .036h164.448v113.621h54.71v-56.82h54.731V.036h164.448v170.777h-54.73v56.82h-54.711v56.8h54.71v56.82h54.73V512.03H310.89v-56.82h-54.73v-56.8h-54.711v113.62H37V.036z"
+          />
         </svg>
       )
     case 'tiktok':
       return (
         <svg viewBox="0 0 24 24" className={className} aria-label={t('common.platforms.tiktok')}>
           <path
-            fill="#69C9D0"
+            fill="#FFFFFF"
             d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"
           />
         </svg>

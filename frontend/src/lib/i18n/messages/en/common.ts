@@ -45,6 +45,7 @@ export const common = {
     // "translate".
     translate: 'Translate',
     logOut: 'Log out',
+    signIn: 'Sign in',
   },
   // The soundPlayer presets. Read by the overlay editor's on-stream notification
   // sounds and by the monitor view's private activity sound. Casing rules are

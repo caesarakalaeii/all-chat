@@ -59,7 +59,7 @@ export function EditorNav({
           <div key={group.id} className="contents @md:block">
             <p
               aria-hidden="true"
-              className="hidden pt-4 pb-1 pl-2.5 text-[10px] font-medium tracking-widest text-text-sub uppercase select-none @md:block @md:first-of-type:pt-0"
+              className="hidden pt-4 pb-1 pl-2.5 text-[11px] font-medium tracking-widest text-text-sub uppercase select-none @md:block @md:first-of-type:pt-0"
             >
               {group.label}
             </p>

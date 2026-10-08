@@ -847,6 +847,7 @@ export const overlayEditor = {
     nameRequired: 'Overlay name is required',
     cancel: 'Cancel',
     submit: 'Create Overlay',
+    submitting: 'Creating…',
   },
   // /overlays/[id]/preview/embed. Chat message content is never copy — only the
   // chrome around it, which here is one empty state.

@@ -100,7 +100,7 @@ export function ObservabilitySummary({
                   <span className="min-w-0 flex-1 truncate">{s.channelName}</span>
                   <span
                     className={clsx(
-                      'shrink-0 rounded px-1.5 text-[10px] font-semibold uppercase',
+                      'shrink-0 rounded px-1.5 text-[11px] font-semibold uppercase',
                       isLive ? 'bg-kick/15 text-kick' : 'bg-surface-2 text-text-dim'
                     )}
                   >
@@ -138,7 +138,7 @@ export function ObservabilitySummary({
             {Array.from(observedEventTypes).map((t) => (
               <span
                 key={t}
-                className="rounded bg-surface-2 px-1.5 py-0.5 text-[10px] text-text-sub"
+                className="rounded bg-surface-2 px-1.5 py-0.5 text-[11px] text-text-sub"
               >
                 {t}
               </span>
@@ -192,7 +192,7 @@ export function ObservabilitySummary({
                 : t('viewerOverlay.observability.no')}
             </dd>
           </div>
-          <p className="pt-1 text-[10px] text-text-dim">
+          <p className="pt-1 text-[11px] text-text-dim">
             {t('viewerOverlay.observability.filtersNote')}
           </p>
         </dl>

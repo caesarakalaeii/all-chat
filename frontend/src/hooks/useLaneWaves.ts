@@ -108,14 +108,16 @@ const WAVE_AMPLITUDES = [0.16, 0.2, 0.24, 0.28, 0.32] as const
  * there evaluates the same time-only wave the center column paints and
  * the DOM text lanes trace their fill; toward the edges the x terms pull
  * each lane's curve out of phase with the center, which is what makes
- * the boundaries undulate horizontally.
+ * the boundaries undulate horizontally. The x frequencies stay low on
+ * purpose: the marquee rows are straight lines sized at the center, and
+ * steeper slopes left them riding the band edges at the screen sides.
  */
 export function laneWeight(base: number, laneIndex: number, x: number, seconds: number): number {
   const flex = Math.max(base - LANE_FLOOR, 0)
   const phase = laneIndex * 1.3
   const wave =
-    Math.sin(seconds * 0.45 + phase + x * 1.6) +
-    0.5 * Math.sin(seconds * 1.15 + phase * 2 - x * 2.4) -
+    Math.sin(seconds * 0.45 + phase + x * 0.8) +
+    0.5 * Math.sin(seconds * 1.15 + phase * 2 - x * 1.2) -
     (Math.sin(phase) + 0.5 * Math.sin(phase * 2))
   return base + flex * wave * WAVE_AMPLITUDES[laneIndex % WAVE_AMPLITUDES.length]
 }
@@ -168,8 +170,8 @@ float laneWeight(float base, int lane, float x, float s) {
   float flex = max(base - FLOOR, 0.0);
   float phase = float(lane) * 1.3;
   float wave =
-    sin(s * 0.45 + phase + x * 1.6) +
-    0.5 * sin(s * 1.15 + phase * 2.0 - x * 2.4) -
+    sin(s * 0.45 + phase + x * 0.8) +
+    0.5 * sin(s * 1.15 + phase * 2.0 - x * 1.2) -
     (sin(phase) + 0.5 * sin(phase * 2.0));
   return base + flex * wave * u_amps[lane];
 }

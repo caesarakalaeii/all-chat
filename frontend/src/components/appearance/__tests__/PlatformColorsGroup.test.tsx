@@ -68,14 +68,14 @@ describe('PlatformColorsGroup', () => {
     expect(onChange).toHaveBeenCalledWith({ twitchAccent: undefined })
   })
 
-  it('color picker displays brand default "#9147FF" when twitchAccent is undefined', () => {
+  it('color picker displays brand default "#9146FF" when twitchAccent is undefined', () => {
     const onChange = vi.fn()
     render(<PlatformColorsGroup visualSettings={{}} onChange={onChange} />)
     const swatches = document.querySelectorAll('[data-testid="color-swatch"]')
     const twitchSwatch = swatches[0] as HTMLElement
-    // rgb(145, 71, 255) is #9147FF
+    // rgb(145, 70, 255) is #9146FF
     expect(twitchSwatch.style.backgroundColor).toBeTruthy()
-    expect(twitchSwatch.getAttribute('style')).toContain('rgb(145, 71, 255)')
+    expect(twitchSwatch.getAttribute('style')).toContain('rgb(145, 70, 255)')
   })
 
   it('color picker displays set value when twitchAccent is "#ff0000"', () => {

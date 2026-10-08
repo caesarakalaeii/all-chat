@@ -82,6 +82,14 @@ const PRIDE_COOKIE_FLAGS: readonly (readonly string[])[] = [
   ['#4a4a4a', '#bcc4c7', '#ffffff', '#b7f684', '#ffffff', '#bcc4c7', '#4a4a4a'],
 ]
 
+const LANES_ROUTE_PREFIXES = [
+  '/dashboard',
+  '/docs',
+  '/legal',
+  '/settings',
+  '/upgrade',
+] as const
+
 export default function CookieBanner() {
   const t = useTranslations()
   const isHydrated = useHydrated()
@@ -91,15 +99,19 @@ export default function CookieBanner() {
   const [prideFlag] = useState(
     () => PRIDE_COOKIE_FLAGS[Math.floor(Math.random() * PRIDE_COOKIE_FLAGS.length)]
   )
-  // The lanes homepage has its own art direction; the banner picks it up so
-  // it doesn't clash with the design. Root layout mounts us outside the
-  // .lanes-home wrapper, so the variant is applied here directly.
-  const lanes = pathname === '/'
+  // Lanes-styled routes get the lanes variant so the banner doesn't clash
+  // with the page. Root layout mounts us outside the .lanes-home/.lanes-app
+  // wrappers, so the variant is applied here directly; keep this list in
+  // step with the routes that wrap themselves in .lanes-app.
+  const lanes =
+    pathname === '/' || LANES_ROUTE_PREFIXES.some((prefix) => pathname.startsWith(prefix))
 
   useEffect(() => {
     if (!isHydrated) return // Wait for hydration
 
-    // Do not render the banner on public overlays where it obstructs the chat view
+    // Do not render the banner on public overlays where it obstructs the chat
+    // view. The prefix also covers /overlays, whose preview embed renders in
+    // an iframe inside the editor and must stay banner-free too.
     if (window.location.pathname.startsWith('/overlay')) {
       return
     }

@@ -32,7 +32,7 @@ export function EditorSectionHeader({ id }: { id: EditorSectionId }): React.Reac
   const group = EDITOR_GROUPS.find((g) => g.id === section.group)
   return (
     <div className="mb-4">
-      <p className="text-[10px] font-medium tracking-widest text-text-sub uppercase">
+      <p className="text-[11px] font-medium tracking-widest text-text-sub uppercase">
         {group?.label}
       </p>
       <h2 className="mt-0.5 text-lg font-semibold text-text">{section.title}</h2>

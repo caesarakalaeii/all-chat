@@ -93,12 +93,6 @@ import { joinPreviewCss, scopeCustomCss } from '@/lib/theme-marketplace/scope-cs
 import '@/styles/events.css'
 import { formatTime, useTranslations } from '@/lib/i18n'
 
-/**
- * Kick's logo is the letter K drawn as SVG text. A brand mark, not copy, so it
- * stays out of the catalog where a translator would see it as a word.
- */
-const KICK_GLYPH = 'K'
-
 // GoodGame has no official monogram; the GG the icon's SVG draws is a brand
 // mark, not copy, so it stays out of the catalog.
 const GOODGAME_GLYPH = 'GG'
@@ -154,25 +148,18 @@ const PlatformIcon = ({ platform }: { platform: string }) => {
       )
     case 'kick':
       return (
-        <svg viewBox="0 0 24 24" className={iconClass} style={{ imageRendering: 'pixelated' }}>
-          <text
-            x="12"
-            y="18"
-            fontSize="20"
-            fontWeight="bold"
-            fill="#00E701"
-            textAnchor="middle"
-            fontFamily="monospace"
-          >
-            {KICK_GLYPH}
-          </text>
+        <svg viewBox="0 0 512 512" className={iconClass}>
+          <path
+            fill="#53FC18"
+            d="M37 .036h164.448v113.621h54.71v-56.82h54.731V.036h164.448v170.777h-54.73v56.82h-54.711v56.8h54.71v56.82h54.73V512.03H310.89v-56.82h-54.73v-56.8h-54.711v113.62H37V.036z"
+          />
         </svg>
       )
     case 'tiktok':
       return (
         <svg viewBox="0 0 24 24" className={iconClass}>
           <path
-            fill="#000000"
+            fill="#FFFFFF"
             d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"
           />
         </svg>
